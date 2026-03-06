@@ -25,6 +25,8 @@ FIELDS = [
     "state_topk",
     "complex_key_roots",
     "complex_key_radius_bins",
+    "complex_rerank_mode",
+    "complex_rerank_lambda",
     "sector_mode",
     "phase_dims",
     "phase4_dims",
@@ -117,7 +119,8 @@ def build_row(j: Dict, default_log_file: str) -> Dict:
 
     for k in [
         "seed", "mode", "retrieval_backend", "query_repeats", "dynamic_state_mode", "candidate_mode", "route_key_mode", "flow_step", "flow_scale", "flow_weight",
-        "state_topk", "complex_key_roots", "complex_key_radius_bins", "sector_mode", "phase_dims", "phase4_dims", "complex_dims",
+        "state_topk", "complex_key_roots", "complex_key_radius_bins", "complex_rerank_mode", "complex_rerank_lambda",
+        "sector_mode", "phase_dims", "phase4_dims", "complex_dims",
         "time_pressure_lambda", "scale_mode", "radial_bins", "learn_so8", "learn_scale",
         "fast_dev", "extra_budget", "max_slots_per_bucket", "chart_beta", "chart_iters",
     ]:

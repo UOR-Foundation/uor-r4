@@ -289,6 +289,23 @@
     - close RR-057 negative
     - do not spend more time on candidate-expansion backfill
     - queue RR-058 exact-bucket rerank as the next translated recall branch
+165. Committed RR-057 closure on `codex/RR-057-product-complex-backfill`:
+    - commit `501ade0`
+166. Created and switched to branch `codex/RR-058-product-complex-rerank`.
+167. Implemented no-expansion rerank controls in `tasks/router_retrieval_eval.py`:
+    - `complex_rerank_mode`
+    - `complex_rerank_lambda`
+168. Added a unit test proving the complex-plane rerank can flip ordering without changing candidate count.
+169. Created `configs/proxy_transfer_inc0058_product_complex_rerank_screen.json`.
+170. Ran the RR-058 2-seed screen.
+171. RR-058 result:
+    - candidate fraction stayed fixed as intended
+    - small lambdas were neutral or slightly worse
+    - large lambda improved top-1 only marginally and at unacceptable cost
+172. Decision:
+    - close RR-058 negative
+    - stop local translated patching for now
+    - queue RR-059 coupled `H^4 x H^4` polar flow as the next branch
     - `docs/agents/packets/PACKET_PRODUCT_H4X4_AGENT.md`
 146. Added RR-055 screen config:
     - `configs/proxy_transfer_inc0055_product_h4x4_retrieval_field_screen.json`

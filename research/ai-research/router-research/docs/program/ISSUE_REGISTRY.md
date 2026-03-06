@@ -8,11 +8,11 @@ Use this file as the local GitHub-style issue list for router research.
   - Branch: `codex/RR-050-dynamic-h4-state`
   - Canonical doc: `docs/research/increments/INC_0050_dynamic_h4_state.md`
   - Goal: carry dynamic geometry from Slice A confirm into the next implementation slice
-- `RR-058` `[research][translation][active-next]`
-  - Title: Recover translated top-1 with exact-bucket complex rerank
-  - Branch: `codex/RR-058-product-complex-rerank`
-  - Depends on: `RR-056`, `RR-057`
-  - Goal: keep the translated complex-key pruning gain while repairing local ordering without candidate expansion
+- `RR-059` `[research][dynamic-geometry][active-next]`
+  - Title: Couple the product `H^4 x H^4` branch as a polar flow field
+  - Branch: `codex/RR-059-h4x4-polar-flow`
+  - Depends on: `RR-050`, `RR-055`, `RR-056`, `RR-058`
+  - Goal: let the second `H^4` act as a real coupled geometric field instead of only a key or rerank helper
 
 ## Queued
 - `RR-053` `[systems][translation][queued]`
@@ -22,6 +22,11 @@ Use this file as the local GitHub-style issue list for router research.
   - Goal: turn the amortized crossover into a reusable systems path with persistent offline index artifacts
 
 ## Recently Closed
+- `RR-058` `[research][translation][done]`
+  - Title: Recover translated top-1 with exact-bucket complex rerank
+  - Branch: `codex/RR-058-product-complex-rerank`
+  - Canonical doc: `docs/research/increments/INC_0058_product_complex_rerank.md`
+  - Result: simple in-bucket complex-plane reranking kept candidate fraction fixed but did not rescue translated quality cleanly enough to justify promotion
 - `RR-057` `[research][translation][done]`
   - Title: Recover top-1 with hierarchical complex-key backfill
   - Branch: `codex/RR-057-product-complex-backfill`

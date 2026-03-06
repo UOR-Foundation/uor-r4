@@ -1,17 +1,17 @@
 # Current Direction
 
 ## Latest Update
-- `INC-0057` is now closed negative.
+- `INC-0058` is now closed negative.
 - `HOPF_RET_CPX_P1_Q24` remains the translated complex-key efficiency reference:
-  - broad coarse backfill stayed too expensive
-  - low-margin backfill over-triggered and destroyed cost
-  - small-bucket backfill was nearly inert and did not improve top-1
+  - coarse backfill was the wrong recall path
+  - simple exact-bucket complex-plane reranking was also too weak
+  - the next meaningful branch should use the second `H^4` as a coupled geometric field, not as a local patch
 - Current primary action:
   - treat discrete complex / imaginary route-key storage as evidence-positive in both product and translated retrieval settings
   - keep the second factor explicitly live as a hyperbolic polar field, not a flat auxiliary embedding
   - keep the live product object as `H^4 x H^4` in hyperbolic polar structure on both factors
-  - move next to exact-bucket reranking rather than candidate expansion
-  - treat the remaining translated gap as a local ordering problem unless new evidence contradicts that
+  - move next to a coupled `H^4 x H^4` polar-flow branch rather than more translated local patching
+  - treat the current translated complex branch as strong evidence for discrete addressing, not as the end-state architecture
 
 ## Current Best-Known Routes
 - Synthetic lead: `R5B`
@@ -101,6 +101,10 @@
   - low-margin selective backfill over-triggers and is operationally dead
   - small-bucket selective backfill is too inert to justify the added path
   - the next recall branch should avoid candidate expansion entirely
+- `INC-0058` also closed narrowly local repair:
+  - simple complex-plane reranking keeps candidate fraction fixed, which is good
+  - but it does not reliably improve top-1 or MSE at useful cost points
+  - the next live question is therefore whether the second `H^4` should become a true coupled flow/retrieval field instead of a key-only or rerank-only field
 
 ## Current Risk
 - The win is still proxy-harness evidence, not an end-to-end model claim.

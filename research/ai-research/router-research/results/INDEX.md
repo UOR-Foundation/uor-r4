@@ -772,3 +772,12 @@ Use this file to map each run batch to parsed summaries and decision records.
 - Summary row range: rows where `run_tag` contains `inc0057_product_complex_backfill_smallbucket_screen`
 - Decision note: `docs/governance/gates/gate_20260306_135217.md`
 - Note: the earlier mixed selective screen was stopped after low-margin backfill showed pathological trigger frequency and cost; its partial logs remain in `results/raw/` for forensics only.
+
+## Batch B105
+- Batch ID: `B105_inc0058_product_complex_rerank_screen`
+- Config: `configs/proxy_transfer_inc0058_product_complex_rerank_screen.json`
+- Logs: `results/raw/inc0058_product_complex_rerank_screen_*.log`
+- Parsed files: matching `results/parsed/inc0058_product_complex_rerank_screen_*.json`
+- Analysis: `results/analysis/inc0058_product_complex_rerank_screen.json`
+- Summary row range: rows where `run_tag` contains `inc0058_product_complex_rerank_screen`
+- Decision note: `docs/governance/gates/gate_20260306_140424.md`

@@ -70,6 +70,8 @@ def parse_args():
     ap.add_argument("--complex_backfill_mode", type=str, default="always", choices=["always", "small_bucket", "low_margin"])
     ap.add_argument("--complex_backfill_max_exact", type=int, default=0)
     ap.add_argument("--complex_backfill_margin_threshold", type=float, default=0.0)
+    ap.add_argument("--complex_rerank_mode", type=str, default="none", choices=["none", "complex_plane"])
+    ap.add_argument("--complex_rerank_lambda", type=float, default=0.0)
 
     ap.add_argument("--K", type=int, default=8)
     ap.add_argument("--delta_r", type=float, default=3.0)
@@ -203,6 +205,24 @@ def topk_reduce(
     return yhat, pred_tok
 
 
+def maybe_blend_complex_scores(
+    sim: np.ndarray,
+    eval_z: np.ndarray,
+    train_z: np.ndarray,
+    dim_i: int,
+    dim_j: int,
+    blend_lambda: float,
+    mode: str,
+) -> np.ndarray:
+    if mode == "none" or abs(float(blend_lambda)) <= 1e-12:
+        return sim
+    eval_complex = _normalize_rows(eval_z[:, [dim_i, dim_j]])
+    train_complex = _normalize_rows(train_z[:, [dim_i, dim_j]])
+    if mode == "complex_plane":
+        return sim + float(blend_lambda) * (eval_complex @ train_complex.T)
+    return sim
+
+
 def dense_retrieval(
     train_z: np.ndarray,
     train_y: np.ndarray,
@@ -277,6 +297,10 @@ def routed_retrieval_grouped_same_bucket(
     complex_backfill_mode: str = "always",
     complex_backfill_max_exact: int = 0,
     complex_backfill_margin_threshold: float = 0.0,
+    complex_rerank_mode: str = "none",
+    complex_rerank_lambda: float = 0.0,
+    complex_dim_i: int = 0,
+    complex_dim_j: int = 1,
 ) -> Tuple[np.ndarray, np.ndarray, float, float, float, float, float, float]:
     bucket_to_train_idx = build_bucket_index(train_keys)
     bucket_to_eval_idx = build_bucket_index(eval_keys)
@@ -309,6 +333,15 @@ def routed_retrieval_grouped_same_bucket(
                 cand_idx = full_idx
                 fallback[ev_idx] = 1.0
             sim = ev_u[ev_idx] @ tr_u[cand_idx].T
+            sim = maybe_blend_complex_scores(
+                sim,
+                eval_z[ev_idx],
+                train_z[cand_idx],
+                dim_i=complex_dim_i,
+                dim_j=complex_dim_j,
+                blend_lambda=complex_rerank_lambda,
+                mode=complex_rerank_mode,
+            )
             y_block, tok_block = topk_reduce(sim, train_y[cand_idx], train_tok[cand_idx], topk=topk)
             yhat[ev_idx] = y_block
             pred_tok[ev_idx] = tok_block
@@ -320,6 +353,15 @@ def routed_retrieval_grouped_same_bucket(
             cand_idx_row = full_idx
             fallback[ev_idx] = 1.0
             sim = ev_u[ev_idx] @ tr_u[cand_idx_row].T
+            sim = maybe_blend_complex_scores(
+                sim,
+                eval_z[ev_idx],
+                train_z[cand_idx_row],
+                dim_i=complex_dim_i,
+                dim_j=complex_dim_j,
+                blend_lambda=complex_rerank_lambda,
+                mode=complex_rerank_mode,
+            )
             y_block, tok_block = topk_reduce(sim, train_y[cand_idx_row], train_tok[cand_idx_row], topk=topk)
             yhat[ev_idx] = y_block
             pred_tok[ev_idx] = tok_block
@@ -328,6 +370,15 @@ def routed_retrieval_grouped_same_bucket(
         if cand_idx is None or cand_idx.size == 0:
             fallback[ev_idx] = 1.0
             sim = ev_u[ev_idx] @ tr_u[base_idx].T
+            sim = maybe_blend_complex_scores(
+                sim,
+                eval_z[ev_idx],
+                train_z[base_idx],
+                dim_i=complex_dim_i,
+                dim_j=complex_dim_j,
+                blend_lambda=complex_rerank_lambda,
+                mode=complex_rerank_mode,
+            )
             y_block, tok_block = topk_reduce(sim, train_y[base_idx], train_tok[base_idx], topk=topk)
             yhat[ev_idx] = y_block
             pred_tok[ev_idx] = tok_block
@@ -335,6 +386,15 @@ def routed_retrieval_grouped_same_bucket(
             continue
         extra_pool = extra_pool_by_key.get(key)
         sim_exact = ev_u[ev_idx] @ tr_u[cand_idx].T
+        sim_exact = maybe_blend_complex_scores(
+            sim_exact,
+            eval_z[ev_idx],
+            train_z[cand_idx],
+            dim_i=complex_dim_i,
+            dim_j=complex_dim_j,
+            blend_lambda=complex_rerank_lambda,
+            mode=complex_rerank_mode,
+        )
         y_block, tok_block = topk_reduce(sim_exact, train_y[cand_idx], train_tok[cand_idx], topk=topk)
         yhat[ev_idx] = y_block
         pred_tok[ev_idx] = tok_block
@@ -361,6 +421,15 @@ def routed_retrieval_grouped_same_bucket(
         backfill_n = min(int(complex_backfill_items), int(extra_pool.size))
         chosen_eval_idx = ev_idx[trigger_mask]
         extra_sim = ev_u[chosen_eval_idx] @ tr_u[extra_pool].T
+        extra_sim = maybe_blend_complex_scores(
+            extra_sim,
+            eval_z[chosen_eval_idx],
+            train_z[extra_pool],
+            dim_i=complex_dim_i,
+            dim_j=complex_dim_j,
+            blend_lambda=complex_rerank_lambda,
+            mode=complex_rerank_mode,
+        )
         extra_idx = np.argpartition(-extra_sim, kth=backfill_n - 1, axis=1)[:, :backfill_n]
         part = np.take_along_axis(extra_sim, extra_idx, axis=1)
         order = np.argsort(-part, axis=1)
@@ -368,6 +437,15 @@ def routed_retrieval_grouped_same_bucket(
         for local_row, row_idx in enumerate(chosen_eval_idx):
             cand_idx_row = np.unique(np.concatenate([cand_idx, extra_pool[extra_idx[local_row]]]))
             sim = ev_u[row_idx:row_idx + 1] @ tr_u[cand_idx_row].T
+            sim = maybe_blend_complex_scores(
+                sim,
+                eval_z[row_idx:row_idx + 1],
+                train_z[cand_idx_row],
+                dim_i=complex_dim_i,
+                dim_j=complex_dim_j,
+                blend_lambda=complex_rerank_lambda,
+                mode=complex_rerank_mode,
+            )
             y_block, tok_block = topk_reduce(sim, train_y[cand_idx_row], train_tok[cand_idx_row], topk=topk)
             yhat[row_idx:row_idx + 1] = y_block
             pred_tok[row_idx] = tok_block[0]
@@ -400,6 +478,10 @@ def routed_retrieval(
     complex_backfill_mode: str = "always",
     complex_backfill_max_exact: int = 0,
     complex_backfill_margin_threshold: float = 0.0,
+    complex_rerank_mode: str = "none",
+    complex_rerank_lambda: float = 0.0,
+    complex_dim_i: int = 0,
+    complex_dim_j: int = 1,
 ):
     bucket_to_idx = build_bucket_index(train_keys)
     bucket_keys = list(bucket_to_idx.keys())
@@ -419,6 +501,10 @@ def routed_retrieval(
             complex_backfill_mode=complex_backfill_mode,
             complex_backfill_max_exact=complex_backfill_max_exact,
             complex_backfill_margin_threshold=complex_backfill_margin_threshold,
+            complex_rerank_mode=complex_rerank_mode,
+            complex_rerank_lambda=complex_rerank_lambda,
+            complex_dim_i=complex_dim_i,
+            complex_dim_j=complex_dim_j,
         )
 
     tr_u = _normalize_rows(train_z)
@@ -450,6 +536,15 @@ def routed_retrieval(
         else:
             cand_idx = np.unique(np.concatenate(cand_parts))
         local_sim = tr_u[cand_idx] @ q
+        local_sim = maybe_blend_complex_scores(
+            local_sim[None, :],
+            eval_z[i:i + 1],
+            train_z[cand_idx],
+            dim_i=complex_dim_i,
+            dim_j=complex_dim_j,
+            blend_lambda=complex_rerank_lambda,
+            mode=complex_rerank_mode,
+        )[0]
         kk = min(topk, cand_idx.shape[0])
         best = np.argpartition(-local_sim, kth=kk - 1)[:kk]
         best = best[np.argsort(-local_sim[best])]
@@ -735,6 +830,10 @@ def main():
                 complex_backfill_mode=args.complex_backfill_mode,
                 complex_backfill_max_exact=args.complex_backfill_max_exact,
                 complex_backfill_margin_threshold=args.complex_backfill_margin_threshold,
+                complex_rerank_mode=args.complex_rerank_mode,
+                complex_rerank_lambda=args.complex_rerank_lambda,
+                complex_dim_i=complex_dim_i,
+                complex_dim_j=complex_dim_j,
             )
             retrieval_search_sec = time.perf_counter() - t_retr
             return {

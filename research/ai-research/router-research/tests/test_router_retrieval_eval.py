@@ -245,6 +245,53 @@ class RouterRetrievalEvalTest(unittest.TestCase):
         self.assertAlmostEqual(with_backfill[6], 0.5)
         self.assertGreater(with_backfill[7], 0.0)
 
+    def test_complex_rerank_can_change_in_bucket_order_without_expanding_candidates(self):
+        train_keys = [(0, 0, 0), (0, 0, 0)]
+        eval_keys = [(0, 0, 0)]
+        train_z = np.array([
+            [1.0, 0.0, 0.1, 0.1],
+            [0.7, 0.0, 0.0, 1.0],
+        ], dtype=np.float64)
+        train_y = np.array([
+            [1.0, 0.0],
+            [0.0, 1.0],
+        ], dtype=np.float64)
+        train_tok = np.array([10, 20], dtype=np.int32)
+        eval_z = np.array([[1.0, 0.0, 0.0, 0.4]], dtype=np.float64)
+
+        base = routed_retrieval(
+            train_keys,
+            eval_keys,
+            train_z,
+            train_y,
+            train_tok,
+            eval_z,
+            topk=1,
+            probe_buckets=1,
+            complex_rerank_mode="none",
+            complex_dim_i=2,
+            complex_dim_j=3,
+        )
+        reranked = routed_retrieval(
+            train_keys,
+            eval_keys,
+            train_z,
+            train_y,
+            train_tok,
+            eval_z,
+            topk=1,
+            probe_buckets=1,
+            complex_rerank_mode="complex_plane",
+            complex_rerank_lambda=0.5,
+            complex_dim_i=2,
+            complex_dim_j=3,
+        )
+
+        self.assertEqual(base[1].tolist(), [10])
+        self.assertEqual(reranked[1].tolist(), [20])
+        self.assertAlmostEqual(base[2], reranked[2])
+        self.assertAlmostEqual(base[3], reranked[3])
+
     def test_amortized_retrieval_metrics_scale_with_repeat_count(self):
         online_per_repeat, amortized = compute_amortized_retrieval_metrics(offline_total=8.0, online_total=4.0, query_repeats=4)
         self.assertAlmostEqual(online_per_repeat, 1.0)

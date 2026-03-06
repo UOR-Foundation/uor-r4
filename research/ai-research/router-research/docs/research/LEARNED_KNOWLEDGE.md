@@ -75,3 +75,7 @@ This file stores durable mathematical and architectural findings that should sur
   - low-margin selective backfill over-triggers and becomes operationally dead
   - small-bucket selective backfill triggers too rarely to change top-1
   - this suggests recall repair should avoid candidate expansion and prefer reranking or other no-expansion local repair inside the exact complex bucket
+- `INC-0058` refinement:
+  - simple exact-bucket complex-plane reranking keeps candidate fraction fixed, which is good
+  - but the obvious blended-score version does not rescue top-1 or MSE cleanly enough
+  - this suggests the second `H^4` should probably be promoted into a coupled geometric field rather than used only as a local rerank term

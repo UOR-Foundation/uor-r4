@@ -1123,3 +1123,23 @@ Add new entries below.
   - small-bucket backfill is almost inert
   - low-margin backfill over-triggers and is operationally dead
   - the remaining translated gap is better modeled as a within-bucket ordering problem than a missing-candidate problem
+
+## 2026-03-06 - RR-058 exact-bucket rerank is closed negative
+- Branch / issue: `RR-058`
+- Canonical increment: `docs/research/increments/INC_0058_product_complex_rerank.md`
+- Evidence:
+  - `results/analysis/inc0058_product_complex_rerank_screen.json`
+  - `docs/governance/gates/gate_20260306_140424.md`
+- Decision:
+  - keep `HOPF_RET_CPX_P1_Q24` as the translated complex-key efficiency reference
+  - kill simple exact-bucket complex-plane reranking as the primary translated rescue path
+  - move next to a coupled `H^4 x H^4` polar-flow branch
+- Screen means:
+  - `HOPF_RET_CPX_P1_Q24`: `mse=0.00432337`, `top1=0.04767`, `total=13.074s`, `amortized=0.5233s`, `cand_frac=0.20754`
+  - `R025`: `0.00432341`, `0.04767`, `13.402s`, `0.5347s`, `cand_frac=0.20754`
+  - `R050`: `0.00432431`, `0.04750`, `12.599s`, `0.5028s`, `cand_frac=0.20754`
+  - `R075`: `0.00432388`, `0.04783`, `17.449s`, `0.7014s`, `cand_frac=0.20754`
+- Reading:
+  - keeping candidate fraction fixed was necessary and succeeded
+  - the obvious rerank law still failed to cash in a meaningful quality improvement
+  - the second `H^4` likely needs a deeper coupled role than a local score correction

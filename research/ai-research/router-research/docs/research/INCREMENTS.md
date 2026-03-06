@@ -62,6 +62,7 @@ Each increment is hypothesis-driven and result-gated.
 - `INC_0056_product_complex_translation.md`
 - `INC_0057_product_complex_backfill.md`
 - `INC_0058_product_complex_rerank.md`
+- `INC_0059_h4x4_polar_flow.md`
 
 ## Controls
 - `CTRL_0001_seedmajor_lead.md`
@@ -213,8 +214,11 @@ Each increment is hypothesis-driven and result-gated.
   - completed
   - killed coarse backfill as the preferred translated recall-repair path
 - `INC-0058`: product complex exact-bucket rerank
+  - completed
+  - simple reranking kept candidate fraction fixed, but did not rescue quality cleanly enough
+- `INC-0059`: coupled `H^4 x H^4` polar flow
   - queued
-  - next recall branch because the remaining translated gap now looks like local ordering, not missing candidates
+  - next dynamic branch because both candidate expansion and local reranking have now failed as translated repair strategies
 - `INC-0025`: sparse / quantized phase-gated shell pilot
   - secondary fallback only if the deeper `H4` / `chi` route still fails or if a cheaper local correction becomes preferable
 - `INC-0027`: chart-cost decomposition

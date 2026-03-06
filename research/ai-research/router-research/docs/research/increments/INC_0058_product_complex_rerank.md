@@ -1,7 +1,7 @@
 # INC-0058: Product Complex Exact-Bucket Rerank
 
 ## Status
-Active next.
+Closed negative.
 
 ## Trigger
 `INC-0057` showed that hierarchical backfill is the wrong recall repair path for the translated complex-key branch:
@@ -43,3 +43,42 @@ This is consistent with the broader project direction:
 - global alignment from the hyperbolic / Poincare structure
 - discrete addressing from the complex route key
 - local repair from the same secondary geometric field, not from coarse candidate inflation
+
+## Result
+The simple complex-plane rerank did not rescue the translated branch cleanly.
+
+Artifacts:
+- `configs/proxy_transfer_inc0058_product_complex_rerank_screen.json`
+- `results/analysis/inc0058_product_complex_rerank_screen.json`
+- `docs/governance/gates/gate_20260306_140424.md`
+
+2-seed screen means:
+- `HOPF_RET_CPX_P1_Q24`
+  - `mse=0.00432337`
+  - `top1=0.04767`
+  - `total=13.074s`
+  - `amortized=0.5233s`
+  - `cand_frac=0.20754`
+- `HOPF_RET_CPX_R025_P1_Q24`
+  - `mse=0.00432341`
+  - `top1=0.04767`
+  - `total=13.402s`
+  - `amortized=0.5347s`
+  - `cand_frac=0.20754`
+- `HOPF_RET_CPX_R050_P1_Q24`
+  - `mse=0.00432431`
+  - `top1=0.04750`
+  - `total=12.599s`
+  - `amortized=0.5028s`
+  - `cand_frac=0.20754`
+- `HOPF_RET_CPX_R075_P1_Q24`
+  - `mse=0.00432388`
+  - `top1=0.04783`
+  - `total=17.449s`
+  - `amortized=0.7014s`
+  - `cand_frac=0.20754`
+
+## Decision
+- Keep `HOPF_RET_CPX_P1_Q24` as the translated complex-key efficiency reference.
+- Kill simple exact-bucket complex-plane reranking as a primary rescue path.
+- Move next to a coupled `H^4 x H^4` polar-flow branch instead of more local retrieval patching.

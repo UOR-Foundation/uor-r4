@@ -1,20 +1,20 @@
 # Live Worklog
 
 ## Latest Update
-Completed `INC-0057` translated complex backfill screen.
+Completed `INC-0058` translated complex rerank screen.
 Result:
-  - broad coarse backfill remained too expensive
-  - low-margin backfill over-triggered and became operationally dead
-  - small-bucket backfill stayed nearly inert and did not improve top-1
+  - exact-bucket complex-plane reranking kept candidate fraction fixed
+  - small lambda reranks were effectively neutral or slightly regressive
+  - only the largest lambda nudged top-1 upward, but at unacceptable cost
   - exact translated complex addressing remains the live efficiency reference
 Decision:
-  - close `INC-0057` negative
-  - move next to no-expansion recall repair via exact-bucket reranking
+  - close `INC-0058` negative
+  - move next to coupled `H^4 x H^4` polar flow instead of more translated local repair
   - keep discrete complex / imaginary routing as part of the live `H^4 x H^4` architecture
 
 ## Current State
-- Latest closed increment: `INC-0057`.
-- Next increment: `INC-0058`.
+- Latest closed increment: `INC-0058`.
+- Next increment: `INC-0059`.
 - Current transfer control baseline: `R0`.
 - Current operational routed lead: `HOPF_K25_BASE_IT40_P2_STATIC`.
 - Current hardware-efficiency routed lead: `HOPF_PHI2_BAND_IT40_P2_STATIC`.
@@ -25,7 +25,7 @@ Decision:
 - The cheap routed frontier was strong enough to translate.
 - The first translated harness is live, coherent, and still useful as an evaluation path.
 - The translated systems branch did not clear operational confirm.
-- The next responsible move is exact-bucket reranking, not more candidate expansion.
+- The next responsible move is coupled product geometry, not more translated local repair.
 
 ## If Session Gets Cut
 1. Read:
@@ -81,3 +81,18 @@ Decision:
   - amortized cost exploded
 - Current reading:
   - translated recall repair should be treated as an in-bucket ordering problem, not a candidate-expansion problem
+
+## 2026-03-06 (research increment INC-0058)
+- Implemented no-expansion translated rerank controls in `tasks/router_retrieval_eval.py`:
+  - `complex_rerank_mode`
+  - `complex_rerank_lambda`
+- Added direct unit coverage proving the complex-plane rerank can flip an in-bucket ordering without changing candidate count.
+- Ran `configs/proxy_transfer_inc0058_product_complex_rerank_screen.json`.
+- 2-seed screen result:
+  - `HOPF_RET_CPX_P1_Q24`: `top1=0.04767`, `mse=0.00432337`, `amortized=0.5233s`
+  - `R025`: `0.04767`, `0.00432341`, `0.5347s`
+  - `R050`: `0.04750`, `0.00432431`, `0.5028s`
+  - `R075`: `0.04783`, `0.00432388`, `0.7014s`
+- Reading:
+  - the obvious rerank law is too weak at useful cost points
+  - the second `H^4` remains important, but it likely needs a more coupled geometric role
