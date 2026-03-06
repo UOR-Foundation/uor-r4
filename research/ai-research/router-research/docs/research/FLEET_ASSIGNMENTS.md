@@ -78,7 +78,9 @@
   - hand the lead back to the deep geometry branch
   - report quality, runtime, and route-health deltas
   - next assignment:
-    - be ready to test `INC-0054` against the current cheap routed frontier once a dynamic route law exists
+    - treat `INC-0056` as positive translated evidence for discrete complex / imaginary route-key storage
+    - move next to `INC-0057` hierarchical complex backfill
+    - preserve the translated harness as the main evaluation path for retrieval-addressing branches
 
 ## Skeptical Review Team
 - Mission: attack weak conclusions before they harden into doctrine.
@@ -104,3 +106,4 @@
     - preserve ordered-window evaluation behavior in this branch
     - preserve `candidate_mode=global_knn|static_bucket_knn` and the bucket-locality metrics added in `INC-0054`
     - preserve `route_key_mode=hopf_bucket|hopf_plus_complex` and the secondary-key metrics added in `INC-0055`
+    - preserve the translated retrieval support for `route_key_mode=hopf_bucket|hopf_plus_complex` added in `INC-0056`

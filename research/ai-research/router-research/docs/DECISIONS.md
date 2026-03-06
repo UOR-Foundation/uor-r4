@@ -1082,3 +1082,24 @@ Add new entries below.
 - Decision:
   - close `INC-0055` as a positive product retrieval-field pilot
   - promote translation/integration of the complex key law as the next branch
+
+## 2026-03-06 - RR-056 translated complex-key branch is positive
+- Branch / issue: `RR-056`
+- Canonical increment: `docs/research/increments/INC_0056_product_complex_translation.md`
+- Evidence:
+  - `results/analysis/inc0056_product_complex_translation_screen.json`
+  - `results/analysis/inc0056_product_complex_translation_confirm.json`
+  - `docs/governance/gates/gate_20260306_131055.md`
+  - `docs/governance/gates/gate_20260306_131507.md`
+- Decision:
+  - treat discrete complex / imaginary route-key storage as evidence-positive in the translated retrieval harness
+  - promote `HOPF_RET_CPX_P1_Q24` to the translated retrieval efficiency frontier
+  - do not over-promote it as complete, because top-1 still trails dense exact and plain Hopf slightly
+  - queue hierarchical coarse-backfill as the next retrieval branch
+- Confirm means:
+  - `DENSE_Q24`: `mse=0.004321788`, `top1=0.04867`, `total=16.113s`, `amortized=0.6573s`
+  - `HOPF_RET_P1_Q24`: `0.004324992`, `0.04683`, `16.679s`, `0.6685s`, `cand_frac=0.3511`
+  - `HOPF_RET_CPX_P1_Q24`: `0.004324266`, `0.04592`, `15.447s`, `0.6129s`, `cand_frac=0.2095`, `fallback=0.0000`
+- Reading:
+  - the complex key is now a real translated-addressing mechanism, not just a product-state surrogate
+  - the remaining weakness is recall/backfill, not address collapse or fallback instability

@@ -1,39 +1,40 @@
 # Current Research Handoff
 
 ## Latest Closed Increment
-- `INC-0055` confirm is complete and closed.
+- `INC-0056` confirm is complete and closed.
 - Evidence:
-  - `configs/proxy_transfer_inc0055_product_h4x4_retrieval_field_confirm.json`
-  - `results/analysis/inc0055_product_h4x4_retrieval_field_confirm.json`
-  - `docs/governance/gates/gate_20260306_125455.md`
+  - `configs/proxy_transfer_inc0056_product_complex_translation_confirm.json`
+  - `results/analysis/inc0056_product_complex_translation_confirm.json`
+  - `docs/governance/gates/gate_20260306_131507.md`
 - Reading:
-  - plain product bucket remains the quality/top-1 reference
-  - product complex route keys reduce candidate fraction and runtime with low fallback
-  - the result is positive for retrieval/discrete-key efficiency, not for main MSE
-- the next live branch is translation/integration of the product complex-key law
+  - translated complex route keys reduce candidate fraction materially with zero fallback
+  - online and amortized translated retrieval cost improve versus plain Hopf translated retrieval
+  - MSE improves slightly, but top-1 drops slightly
+  - the result is positive for translated discrete-key efficiency, not yet a complete recall solution
+- the next live branch is hierarchical complex backfill
 
 ## Current In-Progress Increment
-- `INC-0056` is the active next branch.
+- `INC-0057` is the active next branch.
 - Setup artifacts:
-  - `docs/research/increments/INC_0056_product_complex_translation.md`
+  - `docs/research/increments/INC_0057_product_complex_backfill.md`
   - `docs/research/MATH_REVIEW_DYNAMIC_H4_STATE_20260306.md`
   - `docs/research/LEARNED_KNOWLEDGE.md`
-  - `tasks/dynamic_h4_state_eval.py`
+  - `tasks/router_retrieval_eval.py`
 - Branch reading to preserve:
   - `TXH4_W050` is still the tangent Slice A main-objective winner
   - `H4XH4_BUCKET_W025` is the product quality/top-1 reference
   - `H4XH4_CPX13_W025` is the product complex-key efficiency reference
-  - `INC-0055` says the complex-key law should be translated into the retrieval harness next
+  - `HOPF_RET_CPX_P1_Q24` is the translated complex-key efficiency reference
 - Next preferred work:
-  - translate the product complex-key law into the retrieval harness
-  - use the second `H^4` as a retrieval / imaginary field candidate
-  - keep discrete complex storage as the keying law under test
+  - keep the complex key as the primary discrete address field
+  - add a small coarse-bucket backfill path to recover top-1
+  - preserve the pruning gain while testing whether recall can be repaired cheaply
 
 ## Exact Current State
 - Latest closed increment:
-  - `docs/research/increments/INC_0055_product_h4x4_retrieval_field.md`
-- Active next increment:
   - `docs/research/increments/INC_0056_product_complex_translation.md`
+- Active next increment:
+  - `docs/research/increments/INC_0057_product_complex_backfill.md`
 - Current transfer control baseline:
   - `R0`
 - Current operational routed lead:
@@ -42,21 +43,21 @@
   - `HOPF_PHI2_BAND_IT40_P2_STATIC`
 - Current translated retrieval control:
   - matched `DENSE_Q24` / `DENSE_Q32`
-- Current translated retrieval fast candidate:
-  - `HOPF_RET_P1`
-  - translated pruning-positive family, but not operationally promoted
+- Current translated retrieval efficiency lead:
+  - `HOPF_RET_CPX_P1_Q24`
+  - translated complex-key branch with lower total and amortized cost than both plain Hopf translated retrieval and dense exact retrieval in confirm
 
 ## What Changed Most Recently
-`INC-0055` 4-seed confirm means:
-- `H4XH4_BUCKET_W025`: `mse=0.004318471`, `top1=0.03333`, `total=7.729s`, `cand_frac=0.3344`
-- `H4XH4_CPX13_W025`: `0.004336934`, `0.03167`, `7.088s`, `0.2672`, `fallback=0.0070`
-- `STATIC_BUCKET`: `0.004327840`, `0.02558`, `7.794s`, `0.3344`
+`INC-0056` 4-seed confirm means:
+- `DENSE_Q24`: `mse=0.004321788`, `top1=0.04867`, `total=16.113s`, `amortized=0.6573s`
+- `HOPF_RET_P1_Q24`: `0.004324992`, `0.04683`, `16.679s`, `0.6685s`, `cand_frac=0.3511`
+- `HOPF_RET_CPX_P1_Q24`: `0.004324266`, `0.04592`, `15.447s`, `0.6129s`, `cand_frac=0.2095`, `fallback=0.0000`
 
 ## Why The Queue Changed
-The product branch now has a positive efficiency signal of its own.
+The complex key law now has a translated efficiency signal of its own.
 The next question is:
-- whether the complex key law survives translation into the more model-like retrieval harness
-- whether the discrete key should be treated as a pure address field or a mixed address-plus-ordering field
+- whether a small coarse-bucket backfill can recover top-1 without undoing the pruning gain
+- whether the discrete key should remain a pure address field or become a hierarchical address-plus-recall field
 
 ## Resume Rule
 Default resume path is:
@@ -64,6 +65,9 @@ Default resume path is:
 2. read `results/analysis/inc0055_product_h4x4_retrieval_field_confirm.json`
 3. read `docs/governance/gates/gate_20260306_125455.md`
 4. read `docs/research/increments/INC_0056_product_complex_translation.md`
-5. read `docs/research/MATH_REVIEW_DYNAMIC_H4_STATE_20260306.md`
-6. read `docs/research/LEARNED_KNOWLEDGE.md`
-7. resume with `INC-0056`
+5. read `results/analysis/inc0056_product_complex_translation_confirm.json`
+6. read `docs/governance/gates/gate_20260306_131507.md`
+7. read `docs/research/increments/INC_0057_product_complex_backfill.md`
+8. read `docs/research/MATH_REVIEW_DYNAMIC_H4_STATE_20260306.md`
+9. read `docs/research/LEARNED_KNOWLEDGE.md`
+10. resume with `INC-0057`

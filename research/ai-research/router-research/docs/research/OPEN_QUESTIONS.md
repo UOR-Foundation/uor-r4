@@ -210,3 +210,8 @@
 - Priority: medium
 - Why it matters: research value increases sharply if the route can plug into token routing, retrieval, or memory systems without rewriting everything.
 - Current owner: Lead Researcher
+
+## Q2aa: Can a hierarchical coarse-Hopf backfill recover top-1 on top of the translated complex key without giving back most of the pruning gain?
+- Priority: highest
+- Why it matters: `INC-0056` showed that discrete complex / imaginary route keys survive translation and improve candidate fraction, online cost, amortized cost, and proxy MSE, but they still pay a small top-1 penalty.
+- Current owner: Geometry Theory Team

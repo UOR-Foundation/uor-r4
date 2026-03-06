@@ -1161,3 +1161,34 @@ Measure hardware-efficiency impact of geometric routing vs dense baseline.
   - pure chart isometry recovered global alignment exactly
   - pure chart isometry still over-compressed the route and paid too much runtime
   - the next credible transfer branch is an isometric base coordinate plus explicit widening, not pure isometry by itself
+
+## Translated Complex-Key Translation
+- Increment doc:
+  - `docs/research/increments/INC_0056_product_complex_translation.md`
+- Analyses:
+  - `results/analysis/inc0056_product_complex_translation_screen.json`
+  - `results/analysis/inc0056_product_complex_translation_confirm.json`
+- Gate notes:
+  - `docs/governance/gates/gate_20260306_131055.md`
+  - `docs/governance/gates/gate_20260306_131507.md`
+- 4-seed confirm means:
+  - `DENSE_Q24`
+    - `test_mse_after=0.004321788`
+    - `test_top1_after=0.04867`
+    - `retrieval_total_amortized_per_repeat_sec=0.6573`
+    - `retrieval_candidate_fraction_mean=1.0`
+  - `HOPF_RET_P1_Q24`
+    - `test_mse_after=0.004324992`
+    - `test_top1_after=0.04683`
+    - `retrieval_total_amortized_per_repeat_sec=0.6685`
+    - `retrieval_candidate_fraction_mean=0.3511`
+  - `HOPF_RET_CPX_P1_Q24`
+    - `test_mse_after=0.004324266`
+    - `test_top1_after=0.04592`
+    - `retrieval_total_amortized_per_repeat_sec=0.6129`
+    - `retrieval_candidate_fraction_mean=0.2095`
+    - `retrieval_bucket_fallback_rate=0.0000`
+- Current reading:
+  - the discrete complex / imaginary key survives translation into the routed retrieval harness
+  - the branch materially improves translated addressing efficiency
+  - the remaining weakness is a small top-1 penalty, which now looks like a recall/backfill problem rather than a routing-collapse problem

@@ -39,3 +39,23 @@
   - `results/analysis/inc0055_product_h4x4_retrieval_field_confirm.json`
   - `docs/governance/gates/gate_20260306_125455.md`
 3. Resume with `INC-0056` product complex translation.
+
+## 2026-03-06 (research increment INC-0056)
+- Implemented translated discrete complex route-key storage in `tasks/router_retrieval_eval.py`:
+  - `route_key_mode=hopf_bucket|hopf_plus_complex`
+  - `complex_key_roots`
+  - `complex_key_radius_bins`
+- Added translated retrieval metrics:
+  - `retrieval_bucket_fallback_rate`
+  - `retrieval_secondary_key_count`
+- 4-seed confirm result:
+  - `DENSE_Q24`: `mse=0.004321788`, `top1=0.04867`, `total=16.113s`, `amortized=0.6573s`
+  - `HOPF_RET_P1_Q24`: `0.004324992`, `0.04683`, `16.679s`, `0.6685s`, `cand_frac=0.3511`
+  - `HOPF_RET_CPX_P1_Q24`: `0.004324266`, `0.04592`, `15.447s`, `0.6129s`, `cand_frac=0.2095`, `fallback=0.0000`
+- Reading:
+  - the complex key survives translation and materially improves address efficiency
+  - the branch slightly improves proxy MSE versus plain Hopf translated retrieval
+  - the branch still pays a small top-1 penalty
+- Decision:
+  - close `INC-0056` as positive
+  - move next to hierarchical complex-key backfill (`INC-0057`)

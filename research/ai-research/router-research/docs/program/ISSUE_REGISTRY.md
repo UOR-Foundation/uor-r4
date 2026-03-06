@@ -8,11 +8,11 @@ Use this file as the local GitHub-style issue list for router research.
   - Branch: `codex/RR-050-dynamic-h4-state`
   - Canonical doc: `docs/research/increments/INC_0050_dynamic_h4_state.md`
   - Goal: carry dynamic geometry from Slice A confirm into the next implementation slice
-- `RR-056` `[research][translation][active-next]`
-  - Title: Translate product complex-key retrieval field
-  - Branch: `codex/RR-056-product-complex-translation`
-  - Depends on: `RR-055`
-  - Goal: test the product complex-key law inside the translated retrieval harness
+- `RR-057` `[research][translation][active-next]`
+  - Title: Recover top-1 with hierarchical complex-key backfill
+  - Branch: `codex/RR-057-product-complex-backfill`
+  - Depends on: `RR-056`
+  - Goal: keep the translated complex-key pruning gain while repairing recall with a small coarse Hopf backfill
 
 ## Queued
 - `RR-053` `[systems][translation][queued]`
@@ -22,6 +22,11 @@ Use this file as the local GitHub-style issue list for router research.
   - Goal: turn the amortized crossover into a reusable systems path with persistent offline index artifacts
 
 ## Recently Closed
+- `RR-056` `[research][translation][done]`
+  - Title: Translate product complex-key retrieval field
+  - Branch: `codex/RR-056-product-complex-translation`
+  - Canonical doc: `docs/research/increments/INC_0056_product_complex_translation.md`
+  - Result: the discrete complex / imaginary key survived translation, cut candidate fraction from about `0.351` to `0.210`, improved translated online and amortized cost, and slightly improved proxy MSE versus plain Hopf while paying a small top-1 penalty
 - `RR-055` `[research][dynamic-geometry][done]`
   - Title: Product `H^4 x H^4` retrieval-field pilot
   - Branch: `codex/RR-055-product-h4x4-retrieval-field`

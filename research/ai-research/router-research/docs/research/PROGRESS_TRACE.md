@@ -277,3 +277,39 @@
 153. Decision:
     - close RR-055 as a positive product retrieval-field branch
     - promote translation/integration of the complex key law as the next slice
+154. Committed RR-055 on branch `codex/RR-055-product-h4x4-retrieval-field`:
+    - commit `2cc10f7`
+155. Created and checked out `codex/RR-056-product-complex-translation`.
+156. Extended `tasks/router_retrieval_eval.py` with translated complex route-key support:
+    - `route_key_mode=hopf_bucket|hopf_plus_complex`
+    - `complex_key_roots`
+    - `complex_key_radius_bins`
+157. Generalized translated retrieval keys from 2-tuples to generic tuple keys.
+158. Added translated complex-key helpers:
+    - `complex_key_ids`
+    - `augment_route_keys_with_complex`
+159. Added translated retrieval metrics:
+    - `retrieval_bucket_fallback_rate`
+    - `retrieval_secondary_key_count`
+160. Added translated unit coverage in `tests/test_router_retrieval_eval.py`.
+161. Ran targeted verification:
+    - `py_compile`
+    - `python -m unittest tests.test_router_retrieval_eval tests.test_proxy_sweep -v`
+162. Added RR-056 screen config:
+    - `configs/proxy_transfer_inc0056_product_complex_translation_screen.json`
+163. Ran RR-056 2-seed screen.
+164. Screen reading:
+    - `HOPF_RET_CPX_P1_Q24` cut candidate fraction from `0.3488` to `0.2075`
+    - online cost improved from `0.2935s` to `0.2698s` per repeat
+    - fallback stayed at `0.0000`
+    - MSE improved slightly versus plain Hopf translated retrieval
+165. Promoted `HOPF_RET_CPX_P1_Q24` to 4-seed confirm.
+166. Added RR-056 confirm config:
+    - `configs/proxy_transfer_inc0056_product_complex_translation_confirm.json`
+167. Ran RR-056 4-seed confirm.
+168. Confirm result:
+    - `HOPF_RET_CPX_P1_Q24` beat plain Hopf translated retrieval on candidate fraction, online cost, amortized cost, and proxy MSE
+    - dense exact still kept a small top-1 edge
+169. Decision:
+    - close RR-056 as a positive translated complex-key branch
+    - queue hierarchical complex backfill as RR-057 to repair top-1 without giving back pruning

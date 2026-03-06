@@ -43,3 +43,17 @@ Resume or extend the `H^4 x H^4` retrieval-field branch without re-deriving the 
 - do not flatten this into Euclidean `R^8`
 - do not erase the distinction between tangent flow and product geometry
 - do not treat complex route-key storage as the whole geometry; it is a routing/storage law on top of the second `H^4`
+
+## Translation Update
+- `INC-0056` is now complete and positive.
+- The product complex-key law survived translation into `tasks/router_retrieval_eval.py`.
+- New translated reference:
+  - `HOPF_RET_CPX_P1_Q24`
+  - `cand_frac=0.2095`
+  - `amortized=0.6129s`
+  - `fallback=0.0000`
+- Current reading:
+  - the complex / imaginary key is not confined to the product-state evaluator
+  - the main remaining weakness is recall/top-1, not fallback or candidate explosion
+- Next preferred work:
+  - hierarchical complex-key backfill to recover top-1 while preserving pruning

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import json
+import math
 import os
 import sys
 import time
@@ -62,6 +63,9 @@ def parse_args():
     ap.add_argument("--topk", type=int, default=8)
     ap.add_argument("--probe_buckets", type=int, default=1)
     ap.add_argument("--query_repeats", type=int, default=1)
+    ap.add_argument("--route_key_mode", type=str, default="hopf_bucket", choices=["hopf_bucket", "hopf_plus_complex"])
+    ap.add_argument("--complex_key_roots", type=int, default=8)
+    ap.add_argument("--complex_key_radius_bins", type=int, default=1)
 
     ap.add_argument("--K", type=int, default=8)
     ap.add_argument("--delta_r", type=float, default=3.0)
@@ -148,7 +152,7 @@ def load_token_targets(tokens_input: str, proxy_meta_path: str, eval_split: str)
     return y_train_tok.astype(np.int32), y_eval_tok.astype(np.int32)
 
 
-def key_stats(keys: Sequence[Tuple[int, int]]) -> Tuple[float, float, float, int, int, int]:
+def key_stats(keys: Sequence[Tuple[int, ...]]) -> Tuple[float, float, float, int, int, int]:
     if not keys:
         return 0.0, 0.0, 0.0, 0, 0, 0
     sh = np.array([k[0] for k in keys], dtype=np.int64)
@@ -217,22 +221,51 @@ def dense_retrieval(
     return yhat, pred_tok, candidate_count, candidate_count / max(1.0, float(train_z.shape[0]))
 
 
-def build_bucket_index(keys: Sequence[Tuple[int, int]]) -> Dict[Tuple[int, int], np.ndarray]:
-    bucket_to_idx: Dict[Tuple[int, int], List[int]] = {}
+def build_bucket_index(keys: Sequence[Tuple[int, ...]]) -> Dict[Tuple[int, ...], np.ndarray]:
+    bucket_to_idx: Dict[Tuple[int, ...], List[int]] = {}
     for i, key in enumerate(keys):
         bucket_to_idx.setdefault(key, []).append(i)
     return {k: np.array(v, dtype=np.int64) for k, v in bucket_to_idx.items()}
 
 
+def complex_key_ids(field: np.ndarray, dim_i: int, dim_j: int, roots: int, radius_bins: int) -> np.ndarray:
+    roots = max(1, int(roots))
+    radius_bins = max(1, int(radius_bins))
+    qi = field[:, dim_i]
+    qj = field[:, dim_j]
+    theta = np.mod(np.arctan2(qj, qi), 2.0 * math.pi)
+    angle_ids = np.minimum((theta * (float(roots) / (2.0 * math.pi))).astype(np.int64), roots - 1)
+    if radius_bins <= 1 or field.shape[0] == 0:
+        radius_ids = np.zeros((field.shape[0],), dtype=np.int64)
+    else:
+        radius = np.sqrt(qi * qi + qj * qj)
+        edges = np.quantile(radius, np.linspace(0.0, 1.0, radius_bins + 1)[1:-1])
+        radius_ids = np.searchsorted(edges, radius, side="right").astype(np.int64)
+    return angle_ids + roots * radius_ids
+
+
+def augment_route_keys_with_complex(
+    base_keys: Sequence[Tuple[int, int]],
+    field: np.ndarray,
+    dim_i: int,
+    dim_j: int,
+    roots: int,
+    radius_bins: int,
+) -> Tuple[List[Tuple[int, int, int]], int]:
+    complex_ids = complex_key_ids(field, dim_i=dim_i, dim_j=dim_j, roots=roots, radius_bins=radius_bins)
+    keys = [(int(key[0]), int(key[1]), int(complex_ids[i])) for i, key in enumerate(base_keys)]
+    return keys, int(len(np.unique(complex_ids))) if complex_ids.size else 0
+
+
 def routed_retrieval_grouped_same_bucket(
-    train_keys: Sequence[Tuple[int, int]],
-    eval_keys: Sequence[Tuple[int, int]],
+    train_keys: Sequence[Tuple[int, ...]],
+    eval_keys: Sequence[Tuple[int, ...]],
     train_z: np.ndarray,
     train_y: np.ndarray,
     train_tok: np.ndarray,
     eval_z: np.ndarray,
     topk: int,
-) -> Tuple[np.ndarray, np.ndarray, float, float, float]:
+) -> Tuple[np.ndarray, np.ndarray, float, float, float, float]:
     bucket_to_train_idx = build_bucket_index(train_keys)
     bucket_to_eval_idx = build_bucket_index(eval_keys)
     tr_u = _normalize_rows(train_z)
@@ -240,10 +273,14 @@ def routed_retrieval_grouped_same_bucket(
     yhat = np.zeros((ev_u.shape[0], train_y.shape[1]), dtype=np.float64)
     pred_tok = np.zeros((ev_u.shape[0],), dtype=np.int32)
     candidate_counts = np.zeros((ev_u.shape[0],), dtype=np.float64)
+    fallback = np.zeros((ev_u.shape[0],), dtype=np.float64)
 
     full_idx = np.arange(train_z.shape[0], dtype=np.int64)
     for key, ev_idx in bucket_to_eval_idx.items():
-        cand_idx = bucket_to_train_idx.get(key, full_idx)
+        cand_idx = bucket_to_train_idx.get(key)
+        if cand_idx is None or cand_idx.size == 0:
+            cand_idx = full_idx
+            fallback[ev_idx] = 1.0
         sim = ev_u[ev_idx] @ tr_u[cand_idx].T
         y_block, tok_block = topk_reduce(sim, train_y[cand_idx], train_tok[cand_idx], topk=topk)
         yhat[ev_idx] = y_block
@@ -256,12 +293,13 @@ def routed_retrieval_grouped_same_bucket(
         float(np.mean(candidate_counts)),
         float(np.mean(candidate_counts) / max(1.0, float(train_z.shape[0]))),
         1.0,
+        float(np.mean(fallback)),
     )
 
 
 def routed_retrieval(
-    train_keys: Sequence[Tuple[int, int]],
-    eval_keys: Sequence[Tuple[int, int]],
+    train_keys: Sequence[Tuple[int, ...]],
+    eval_keys: Sequence[Tuple[int, ...]],
     train_z: np.ndarray,
     train_y: np.ndarray,
     train_tok: np.ndarray,
@@ -272,7 +310,8 @@ def routed_retrieval(
     bucket_to_idx = build_bucket_index(train_keys)
     bucket_keys = list(bucket_to_idx.keys())
     if not bucket_keys:
-        return dense_retrieval(train_z, train_y, train_tok, eval_z, topk=topk)
+        yhat, pred_tok, cand_mean, cand_frac = dense_retrieval(train_z, train_y, train_tok, eval_z, topk=topk)
+        return yhat, pred_tok, cand_mean, cand_frac, 0.0, 1.0
     if probe_buckets <= 1:
         return routed_retrieval_grouped_same_bucket(
             train_keys, eval_keys, train_z, train_y, train_tok, eval_z, topk=topk
@@ -286,6 +325,7 @@ def routed_retrieval(
     pred_tok = np.zeros((ev_u.shape[0],), dtype=np.int32)
     candidate_counts = np.zeros((ev_u.shape[0],), dtype=np.float64)
     probe_counts = np.zeros((ev_u.shape[0],), dtype=np.float64)
+    fallback = np.zeros((ev_u.shape[0],), dtype=np.float64)
 
     for i in range(ev_u.shape[0]):
         q = ev_u[i]
@@ -302,6 +342,7 @@ def routed_retrieval(
         cand_parts = [bucket_to_idx[k] for k in selected if k in bucket_to_idx]
         if not cand_parts:
             cand_idx = np.arange(train_z.shape[0], dtype=np.int64)
+            fallback[i] = 1.0
         else:
             cand_idx = np.unique(np.concatenate(cand_parts))
         local_sim = tr_u[cand_idx] @ q
@@ -320,6 +361,7 @@ def routed_retrieval(
         float(np.mean(candidate_counts)),
         float(np.mean(candidate_counts) / max(1.0, float(train_z.shape[0]))),
         float(np.mean(probe_counts)),
+        float(np.mean(fallback)),
     )
 
 
@@ -387,14 +429,16 @@ def main():
     C_used = None
     z_tr = v_tr
     z_ev = v_ev
-    keys_tr: List[Tuple[int, int]] = []
-    keys_ev: List[Tuple[int, int]] = []
+    keys_tr: List[Tuple[int, ...]] = []
+    keys_ev: List[Tuple[int, ...]] = []
 
     yhat = np.zeros((v_ev.shape[0], dy), dtype=np.float64)
     pred_tok = np.zeros((v_ev.shape[0],), dtype=np.int32)
     candidate_count_mean = 0.0
     candidate_fraction_mean = 1.0
     probe_bucket_mean = 0.0
+    bucket_fallback_rate = 0.0
+    secondary_key_count = 0
 
     if args.retrieval_backend == "routed_probe":
         if args.sector_mode == "kmeans":
@@ -504,6 +548,16 @@ def main():
         )
         timings["route_index_build"] = time.perf_counter() - t_route_tr
         keys_tr = [hr.make_bucket_key(int(shell_tr[i]), int(sector_tr[i])) for i in range(shell_tr.shape[0])]
+        if args.route_key_mode == "hopf_plus_complex":
+            keys_tr, secondary_key_count_tr = augment_route_keys_with_complex(
+                base_keys=keys_tr,
+                field=z_tr,
+                dim_i=complex_dim_i,
+                dim_j=complex_dim_j,
+                roots=args.complex_key_roots,
+                radius_bins=args.complex_key_radius_bins,
+            )
+            secondary_key_count = max(secondary_key_count, int(secondary_key_count_tr))
         train_key_set = set(keys_tr)
 
         def run_routed_query_pass():
@@ -545,8 +599,18 @@ def main():
             )
             query_route_sec = time.perf_counter() - t_route_ev
             keys_ev_local = [hr.make_bucket_key(int(shell_ev[i]), int(sector_ev[i])) for i in range(shell_ev.shape[0])]
+            secondary_key_count_local = 0
+            if args.route_key_mode == "hopf_plus_complex":
+                keys_ev_local, secondary_key_count_local = augment_route_keys_with_complex(
+                    base_keys=keys_ev_local,
+                    field=z_ev_local,
+                    dim_i=complex_dim_i,
+                    dim_j=complex_dim_j,
+                    roots=args.complex_key_roots,
+                    radius_bins=args.complex_key_radius_bins,
+                )
             t_retr = time.perf_counter()
-            yhat_local, pred_tok_local, candidate_count_local, candidate_fraction_local, probe_bucket_local = routed_retrieval(
+            yhat_local, pred_tok_local, candidate_count_local, candidate_fraction_local, probe_bucket_local, fallback_local = routed_retrieval(
                 keys_tr, keys_ev_local, z_tr, y_tr, y_tr_tok, z_ev_local, topk=args.topk, probe_buckets=args.probe_buckets
             )
             retrieval_search_sec = time.perf_counter() - t_retr
@@ -562,6 +626,8 @@ def main():
                 "candidate_count_mean": candidate_count_local,
                 "candidate_fraction_mean": candidate_fraction_local,
                 "probe_bucket_mean": probe_bucket_local,
+                "bucket_fallback_rate": fallback_local,
+                "secondary_key_count": secondary_key_count_local,
             }
 
         first_pass = run_routed_query_pass()
@@ -572,6 +638,8 @@ def main():
         candidate_count_mean = float(first_pass["candidate_count_mean"])
         candidate_fraction_mean = float(first_pass["candidate_fraction_mean"])
         probe_bucket_mean = float(first_pass["probe_bucket_mean"])
+        bucket_fallback_rate = float(first_pass["bucket_fallback_rate"])
+        secondary_key_count = max(int(secondary_key_count), int(first_pass["secondary_key_count"]))
         timings["query_route"] += float(first_pass["query_route_sec"])
         timings["retrieval_search"] += float(first_pass["retrieval_search_sec"])
 
@@ -658,6 +726,8 @@ def main():
             repeat_pass = run_routed_query_pass()
             timings["query_route"] += float(repeat_pass["query_route_sec"])
             timings["retrieval_search"] += float(repeat_pass["retrieval_search_sec"])
+            bucket_fallback_rate = float(max(bucket_fallback_rate, float(repeat_pass["bucket_fallback_rate"])))
+            secondary_key_count = max(int(secondary_key_count), int(repeat_pass["secondary_key_count"]))
     else:
         unseen_rate = 0.0
         pmax_after = 1.0
@@ -724,6 +794,8 @@ def main():
             "retrieval_candidate_count_mean": float(candidate_count_mean),
             "retrieval_candidate_fraction_mean": float(candidate_fraction_mean),
             "retrieval_probe_bucket_mean": float(probe_bucket_mean),
+            "retrieval_bucket_fallback_rate": float(bucket_fallback_rate),
+            "retrieval_secondary_key_count": int(secondary_key_count),
             "retrieval_train_items": int(v_tr.shape[0]),
             "retrieval_eval_items": int(v_ev.shape[0]),
             "retrieval_query_repeats": int(args.query_repeats),

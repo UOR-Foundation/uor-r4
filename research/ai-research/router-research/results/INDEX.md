@@ -744,3 +744,21 @@ Use this file to map each run batch to parsed summaries and decision records.
 - Analysis: `results/analysis/inc0055_product_h4x4_retrieval_field_confirm.json`
 - Summary row range: rows where `run_tag` contains `inc0055_product_h4x4_retrieval_field_confirm`
 - Decision note: `docs/governance/gates/gate_20260306_125455.md`
+
+## Batch B102
+- Batch ID: `B102_inc0056_product_complex_translation_screen`
+- Config: `configs/proxy_transfer_inc0056_product_complex_translation_screen.json`
+- Logs: `results/raw/inc0056_product_complex_translation_screen_*.log`
+- Parsed files: matching `results/parsed/inc0056_product_complex_translation_screen_*.json`
+- Analysis: `results/analysis/inc0056_product_complex_translation_screen.json`
+- Summary row range: rows where `run_tag` contains `inc0056_product_complex_translation_screen`
+- Decision note: `docs/governance/gates/gate_20260306_131055.md`
+
+## Batch B103
+- Batch ID: `B103_inc0056_product_complex_translation_confirm`
+- Config: `configs/proxy_transfer_inc0056_product_complex_translation_confirm.json`
+- Logs: `results/raw/inc0056_product_complex_translation_confirm_*.log`
+- Parsed files: matching `results/parsed/inc0056_product_complex_translation_confirm_*.json`
+- Analysis: `results/analysis/inc0056_product_complex_translation_confirm.json`
+- Summary row range: rows where `run_tag` contains `inc0056_product_complex_translation_confirm`
+- Decision note: `docs/governance/gates/gate_20260306_131507.md`

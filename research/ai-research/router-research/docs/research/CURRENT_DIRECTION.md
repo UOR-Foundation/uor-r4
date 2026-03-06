@@ -1,16 +1,18 @@
 # Current Direction
 
 ## Latest Update
-- `INC-0055` product retrieval-field pilot is complete.
-- `H4XH4_CPX13_W025` is the new product discrete-key efficiency branch:
-  - candidate fraction dropped from `0.3344` to `0.2672`
-  - total runtime dropped from `7.729s` to `7.088s`
-  - fallback stayed low at `0.0070`
-  - quality regressed slightly vs plain product bucket
+- `INC-0056` product complex-key translation is complete.
+- `HOPF_RET_CPX_P1_Q24` is the new translated complex-key efficiency branch:
+  - candidate fraction dropped from `0.3511` to `0.2095` versus plain Hopf translated retrieval
+  - online cost dropped from `0.3245s` to `0.2976s` per repeat
+  - amortized cost dropped from `0.6685s` to `0.6129s` per repeat
+  - fallback stayed at `0.0000`
+  - proxy MSE improved slightly versus plain Hopf
+  - top-1 regressed slightly versus plain Hopf and dense exact retrieval
 - Current primary action:
-  - move to translated evaluation of the product complex-key law
+  - treat discrete complex / imaginary route-key storage as evidence-positive in both product and translated retrieval settings
   - keep the second factor explicitly live as a hyperbolic polar field, not a flat auxiliary embedding
-  - treat discrete complex / imaginary route-key storage as evidence-positive inside that second field
+  - move next to hierarchical complex backfill rather than abandoning the key law after the first top-1 penalty
 
 ## Current Best-Known Routes
 - Synthetic lead: `R5B`
@@ -30,13 +32,17 @@
   - `DENSE`
   - exact dense token-memory retrieval over the LM proxy contexts
 - Current translated retrieval candidates:
-  - `HOPF_RET_P1`
-    - translated retrieval family with the cleanest pruning-preserving systems result
-    - not operationally promotable after 4-seed amortization confirm
+  - `HOPF_RET_CPX_P1_Q24`
+    - translated complex-key efficiency lead
+    - lower total and amortized cost than dense exact retrieval in the 4-seed confirm
+    - stronger pruning than plain Hopf translated retrieval
+    - slight top-1 penalty remains
+  - `HOPF_RET_P1_Q24`
+    - plain Hopf translated reference
+    - now superseded on cost and candidate pruning by the complex-key translation
   - `HOPF_PHI2_RET_P1`
-    - still prunes slightly harder than `HOPF_RET_P1`
-    - did not cash in the pruning signal under amortization
-  - both still lose single-batch total wall-clock because offline chart/index cost dominates
+    - historical widened translated family
+    - not the current frontier
 - Historical cheap static references:
   - `HOPF_PHI2_BAND_IT48_P3_STATIC`
   - `HOPF_K25_BASE_IT60_P4_STATIC`
@@ -86,16 +92,21 @@
 - `INC-0055` upgraded that sub-hypothesis:
   - the second `H^4` can carry a useful discrete complex route-key field
   - the branch is retrieval-efficiency positive even though it is not the main MSE winner
+- `INC-0056` strengthened it further:
+  - the discrete complex key survives translation into the routed retrieval harness
+  - the gain is not limited to the product-state evaluator
+  - the remaining weakness is not fallback or candidate explosion
+  - the remaining weakness is a small top-1 loss that now looks like a backfill / recall problem
 
 ## Current Risk
 - The win is still proxy-harness evidence, not an end-to-end model claim.
 - The cheap routed proxy lead is stable enough to carry forward.
-- The translated retrieval harness no longer fails mainly on routed local search.
-- It currently fails on single-batch total wall-clock because the offline build is paid every run.
+- The translated retrieval harness is now positive on discrete complex addressing, but that does not yet prove end-to-end model savings.
+- The current translated complex branch still trades some top-1 for efficiency.
 - The widened fast lead remains useful as a second routed family, but pure Hopf is still the clean primary lead.
 
 ## Current Stop Conditions
-- The translated integration path has now failed operational confirm.
-- Reopen geometry, but keep the translated retrieval harness as a future evaluation target.
+- Do not overstate the translated complex-key result as a full model win.
+- Do not throw away the complex key law because of a small top-1 penalty; it has now passed both product and translated efficiency checks.
 - Do not describe this as dense-model replacement from proxy evidence alone.
 - Do not treat `R0` as healthy even when used as a speed control; it remains shell-collapsed.

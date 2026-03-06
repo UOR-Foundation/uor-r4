@@ -42,6 +42,16 @@ This file stores durable mathematical and architectural findings that should sur
   - runtime improved materially
   - fallback remained low
   - the tradeoff is bounded quality loss, not route failure
+- `INC-0056` showed that the same law survives translation into the routed retrieval harness:
+  - translated candidate fraction dropped from about `0.351` to `0.210`
+  - translated online and amortized retrieval cost improved
+  - fallback stayed at zero
+  - plain Hopf and dense still hold a small top-1 advantage
+- Current reading:
+  - discrete complex / imaginary keys are now evidence-positive at two levels:
+    - product `H^4 x H^4` retrieval-state evaluation
+    - translated routed retrieval
+  - the main remaining weakness is recall/backfill, not address collapse
 - Current reading:
   - plain product bucket is the quality/top-1 reference
   - product complex key is the discrete-key efficiency reference
