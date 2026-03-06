@@ -1046,3 +1046,23 @@ Add new entries below.
   - keep product `H^4 x H^4` alive as a distinct secondary branch because its strongest signal is top-1 / discrete decision quality
   - interpret the full target as hyperbolic polar structure on both `H^4` factors, not Euclidean 8D polar coordinates
   - queue `INC-0054` and `INC-0055` as the next two dynamic slices
+
+## 2026-03-06 (research increment INC-0054)
+- Implemented bucketed dynamic retrieval on top of static Hopf route keys:
+  - `candidate_mode=global_knn|static_bucket_knn`
+  - same-bucket candidate restriction in `tasks/dynamic_h4_state_eval.py`
+- First screen attempt was invalid because the global baseline failed to emit a summary after a variable-name bug; fixed and reran.
+- Corrected screen result:
+  - `STATIC_GLOBAL`: `mse=0.004315002`, `top1=0.02400`, `total=7.674s`, `cand_frac=1.0000`
+  - `STATIC_BUCKET`: `0.004329264`, `0.02317`, `7.196s`, `0.3408`
+  - `TXH4_BUCKET_W050`: `0.004320435`, `0.02717`, `7.275s`, `0.3408`
+  - `H4XH4_BUCKET_W025`: `0.004318685`, `0.03300`, `8.855s`, `0.3408`
+- Reading:
+  - static Hopf bucket keys are strong enough to prune about two-thirds of candidates without fallback
+  - same-bucket restriction alone loses MSE
+  - tangent flow repairs part of the loss but not enough to beat the global dynamic baseline
+  - product `H^4 x H^4` remains the stronger retrieval/discrete-decision clue because it keeps the top-1 lead under routed locality
+- Decision:
+  - close `INC-0054` without confirm
+  - promote `INC-0055` as the next live branch
+  - carry forward the new sub-hypothesis that route keys may belong in a discrete complex / imaginary field attached to the second `H^4`

@@ -43,9 +43,12 @@
     - treat tangent surrogate `H^4 + T_xH^4` as the primary dynamic branch
     - keep product `H^4 x H^4` as a distinct secondary branch with likely retrieval/top-1 emphasis
   - next assignment:
-    - design `INC-0054` tangent-flow route law
-    - explain how flow should alter shell or sector choice without erasing current Hopf alignment
+    - use `INC-0054` as negative evidence:
+      - same-bucket Hopf locality is real
+      - tangent flow does not yet justify a promoted bucketed route law
     - formalize the intended `H^4 x H^4` object as hyperbolic polar on both factors, not Euclidean 8D polar
+    - design `INC-0055` as a retrieval/discrete-key branch
+    - explain whether the second `H^4` should store route keys in a discrete complex / imaginary field
 
 ## Experimental Validation Team
 - Mission: test lead candidates under robust synthetic conditions.
@@ -97,3 +100,4 @@
   - dynamic-state support is now active:
     - maintain `tasks/dynamic_h4_state_eval.py`
     - preserve ordered-window evaluation behavior in this branch
+    - preserve `candidate_mode=global_knn|static_bucket_knn` and the bucket-locality metrics added in `INC-0054`

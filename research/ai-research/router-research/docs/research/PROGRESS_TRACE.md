@@ -225,3 +225,29 @@
    - `INC_0055_product_h4x4_retrieval_field.md`
 129. Added agent handoff packet:
    - `docs/agents/packets/PACKET_DYNAMIC_STATE_AGENT.md`
+130. Switched to branch `codex/RR-054-tangent-flow-route-law`.
+131. Read `INC_0054_tangent_flow_route_law.md`, `CURRENT_DIRECTION.md`, and `PACKET_DYNAMIC_STATE_AGENT.md`.
+132. Implemented `candidate_mode=global_knn|static_bucket_knn` in `tasks/dynamic_h4_state_eval.py`.
+133. Added same-bucket dynamic retrieval metrics:
+    - `retrieval_candidate_count_mean`
+    - `retrieval_candidate_fraction_mean`
+    - `retrieval_probe_bucket_mean`
+    - `retrieval_bucket_fallback_rate`
+134. Added RR-054 test coverage in `tests/test_dynamic_h4_state_eval.py`.
+135. Added config `configs/proxy_transfer_inc0054_tangent_flow_route_law_screen.json`.
+136. First RR-054 screen failed because `STATIC_GLOBAL` referenced `train_pos` instead of `pos_tr`; baseline logs were invalid.
+137. Fixed the evaluator bug in `tasks/dynamic_h4_state_eval.py`.
+138. Re-ran targeted validation:
+    - `py_compile` passed
+    - `python -m unittest tests.test_dynamic_h4_state_eval -v` passed
+139. Re-ran the full RR-054 screen successfully.
+140. RR-054 corrected result:
+    - static Hopf bucket keys cut candidate fraction to about `0.34`
+    - bucket fallback stayed `0.0`
+    - `STATIC_GLOBAL` kept best MSE
+    - `TXH4_BUCKET_W050` became the best bucketed runtime/MSE branch
+    - `H4XH4_BUCKET_W025` kept the best bucketed top-1
+141. Decision:
+    - close RR-054 without confirm
+    - promote RR-055 as the next dynamic branch
+    - carry forward the hypothesis that the second `H^4` may store route keys in a discrete complex / imaginary field

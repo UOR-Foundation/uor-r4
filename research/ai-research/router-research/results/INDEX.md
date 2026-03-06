@@ -709,3 +709,20 @@ Use this file to map each run batch to parsed summaries and decision records.
 - Analysis: `results/analysis/inc0050_dynamic_h4_confirm.json`
 - Summary row range: rows where `run_tag` contains `inc0050_dynamic_h4_confirm`
 - Decision note: `docs/governance/gates/gate_20260306_122733.md`
+
+## Batch B098
+- Batch ID: `B098_inc0054_tangent_flow_route_law_screen_invalid`
+- Config: `configs/proxy_transfer_inc0054_tangent_flow_route_law_screen.json`
+- Logs: `results/raw/inc0054_tangent_flow_route_law_screen_*.log`
+- Analysis: `results/analysis/inc0054_tangent_flow_route_law_screen.json`
+- Decision note: `docs/governance/gates/gate_20260306_124108.md`
+- Note: first screen attempt was invalid because `STATIC_GLOBAL` failed to emit a summary after an evaluator bug.
+
+## Batch B099
+- Batch ID: `B099_inc0054_tangent_flow_route_law_screen`
+- Config: `configs/proxy_transfer_inc0054_tangent_flow_route_law_screen.json`
+- Logs: `results/raw/inc0054_tangent_flow_route_law_screen_*.log`
+- Parsed files: matching `results/parsed/inc0054_tangent_flow_route_law_screen_*.json`
+- Analysis: `results/analysis/inc0054_tangent_flow_route_law_screen.json`
+- Summary row range: rows where `run_tag` contains `inc0054_tangent_flow_route_law_screen`
+- Decision note: `docs/governance/gates/gate_20260306_124322.md`

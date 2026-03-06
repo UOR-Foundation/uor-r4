@@ -4,7 +4,7 @@ import json
 import os
 import sys
 import time
-from typing import Dict, Tuple
+from typing import Dict, Sequence, Tuple
 
 import numpy as np
 
@@ -65,6 +65,13 @@ def pairwise_sqeuclidean(X: np.ndarray, Y: np.ndarray) -> np.ndarray:
     return np.maximum(x2 + y2 - 2.0 * dot, 0.0)
 
 
+def build_bucket_index(keys: Sequence[Tuple[int, int]]) -> Dict[Tuple[int, int], np.ndarray]:
+    bucket_to_idx: Dict[Tuple[int, int], list] = {}
+    for idx, key in enumerate(keys):
+        bucket_to_idx.setdefault(key, []).append(idx)
+    return {key: np.asarray(idxs, dtype=np.int64) for key, idxs in bucket_to_idx.items()}
+
+
 def pointwise_state_distance(
     pos_a: np.ndarray,
     pos_b: np.ndarray,
@@ -121,6 +128,30 @@ def topk_predict_from_distances(
     return yhat, pred, knn_dist
 
 
+def state_distance_matrix(
+    eval_pos: np.ndarray,
+    train_pos: np.ndarray,
+    eval_flow: np.ndarray,
+    train_flow: np.ndarray,
+    eval_flow_ball: np.ndarray,
+    train_flow_ball: np.ndarray,
+    dynamic_state_mode: str,
+    flow_weight: float,
+) -> np.ndarray:
+    d_pos = pairwise_poincare_distance(eval_pos, train_pos)
+    if dynamic_state_mode == "static_h4":
+        return d_pos
+    if dynamic_state_mode == "tangent_h4":
+        eval_flow_sq = np.sum(eval_flow * eval_flow, axis=1, keepdims=True)
+        train_flow_sq = np.sum(train_flow * train_flow, axis=1, keepdims=True).T
+        d_flow_sq = np.maximum(eval_flow_sq + train_flow_sq - 2.0 * (eval_flow @ train_flow.T), 0.0)
+        return np.sqrt(np.maximum((d_pos * d_pos) + float(flow_weight) * d_flow_sq, 0.0))
+    if dynamic_state_mode == "product_h4x_h4":
+        d_flow = pairwise_poincare_distance(eval_flow_ball, train_flow_ball)
+        return np.sqrt(np.maximum((d_pos * d_pos) + float(flow_weight) * (d_flow * d_flow), 0.0))
+    raise ValueError(f"Unknown dynamic_state_mode: {dynamic_state_mode}")
+
+
 def knn_state_predict(
     train_pos: np.ndarray,
     train_flow: np.ndarray,
@@ -138,30 +169,85 @@ def knn_state_predict(
     pred = np.zeros((eval_pos.shape[0],), dtype=np.int64)
     knn_dist = np.zeros((eval_pos.shape[0],), dtype=np.float64)
 
-    train_flow_sq = np.sum(train_flow * train_flow, axis=1, keepdims=True).T
-    train_pos_ball = train_pos
-    train_flow_ball_x = train_flow_ball
-
     for start in range(0, eval_pos.shape[0], block_size):
         stop = min(start + block_size, eval_pos.shape[0])
-        d_pos = pairwise_poincare_distance(eval_pos[start:stop], train_pos_ball)
-        if dynamic_state_mode == "static_h4":
-            dist = d_pos
-        elif dynamic_state_mode == "tangent_h4":
-            eval_flow_blk = eval_flow[start:stop]
-            eval_flow_sq = np.sum(eval_flow_blk * eval_flow_blk, axis=1, keepdims=True)
-            d_flow_sq = np.maximum(eval_flow_sq + train_flow_sq - 2.0 * (eval_flow_blk @ train_flow.T), 0.0)
-            dist = np.sqrt(np.maximum((d_pos * d_pos) + float(flow_weight) * d_flow_sq, 0.0))
-        elif dynamic_state_mode == "product_h4x_h4":
-            d_flow = pairwise_poincare_distance(eval_flow_ball[start:stop], train_flow_ball_x)
-            dist = np.sqrt(np.maximum((d_pos * d_pos) + float(flow_weight) * (d_flow * d_flow), 0.0))
-        else:
-            raise ValueError(f"Unknown dynamic_state_mode: {dynamic_state_mode}")
+        dist = state_distance_matrix(
+            eval_pos=eval_pos[start:stop],
+            train_pos=train_pos,
+            eval_flow=eval_flow[start:stop],
+            train_flow=train_flow,
+            eval_flow_ball=eval_flow_ball[start:stop],
+            train_flow_ball=train_flow_ball,
+            dynamic_state_mode=dynamic_state_mode,
+            flow_weight=flow_weight,
+        )
         y_block, pred_block, knn_block = topk_predict_from_distances(dist, train_y, topk=topk)
         yhat[start:stop] = y_block
         pred[start:stop] = pred_block
         knn_dist[start:stop] = knn_block
     return yhat, pred, float(np.mean(knn_dist))
+
+
+def knn_state_predict_bucketed(
+    train_pos: np.ndarray,
+    train_flow: np.ndarray,
+    train_flow_ball: np.ndarray,
+    train_y: np.ndarray,
+    train_keys: Sequence[Tuple[int, int]],
+    eval_pos: np.ndarray,
+    eval_flow: np.ndarray,
+    eval_flow_ball: np.ndarray,
+    eval_keys: Sequence[Tuple[int, int]],
+    dynamic_state_mode: str,
+    flow_weight: float,
+    topk: int,
+    block_size: int,
+) -> Tuple[np.ndarray, np.ndarray, float, float, float, float, float]:
+    yhat = np.zeros((eval_pos.shape[0], train_y.shape[1]), dtype=np.float64)
+    pred = np.zeros((eval_pos.shape[0],), dtype=np.int64)
+    knn_dist = np.zeros((eval_pos.shape[0],), dtype=np.float64)
+    candidate_counts = np.zeros((eval_pos.shape[0],), dtype=np.float64)
+    used_bucket = np.zeros((eval_pos.shape[0],), dtype=np.float64)
+    fallback = np.zeros((eval_pos.shape[0],), dtype=np.float64)
+
+    bucket_to_train = build_bucket_index(train_keys)
+    grouped_eval = build_bucket_index(eval_keys)
+    global_idx = np.arange(train_pos.shape[0], dtype=np.int64)
+
+    for key, eval_group in grouped_eval.items():
+        cand_idx = bucket_to_train.get(key)
+        bucket_hit = cand_idx is not None and cand_idx.size > 0
+        if not bucket_hit:
+            cand_idx = global_idx
+        candidate_counts[eval_group] = float(cand_idx.shape[0])
+        used_bucket[eval_group] = 1.0 if bucket_hit else 0.0
+        fallback[eval_group] = 0.0 if bucket_hit else 1.0
+        for start in range(0, eval_group.shape[0], block_size):
+            block_idx = eval_group[start:start + block_size]
+            dist = state_distance_matrix(
+                eval_pos=eval_pos[block_idx],
+                train_pos=train_pos[cand_idx],
+                eval_flow=eval_flow[block_idx],
+                train_flow=train_flow[cand_idx],
+                eval_flow_ball=eval_flow_ball[block_idx],
+                train_flow_ball=train_flow_ball[cand_idx],
+                dynamic_state_mode=dynamic_state_mode,
+                flow_weight=flow_weight,
+            )
+            y_block, pred_block, knn_block = topk_predict_from_distances(dist, train_y[cand_idx], topk=topk)
+            yhat[block_idx] = y_block
+            pred[block_idx] = pred_block
+            knn_dist[block_idx] = knn_block
+
+    return (
+        yhat,
+        pred,
+        float(np.mean(knn_dist)),
+        float(np.mean(candidate_counts)),
+        float(np.mean(candidate_counts) / max(1.0, float(train_pos.shape[0]))),
+        float(np.mean(used_bucket)),
+        float(np.mean(fallback)),
+    )
 
 
 def sample_random_pair_indices(n: int, max_pairs: int, seed: int) -> Tuple[np.ndarray, np.ndarray]:
@@ -286,6 +372,7 @@ def parse_args():
     ap.add_argument("--seed", type=int, default=0)
 
     ap.add_argument("--dynamic_state_mode", type=str, default="static_h4", choices=["static_h4", "tangent_h4", "product_h4x_h4"])
+    ap.add_argument("--candidate_mode", type=str, default="global_knn", choices=["global_knn", "static_bucket_knn"])
     ap.add_argument("--flow_step", type=int, default=1)
     ap.add_argument("--flow_scale", type=float, default=1.0)
     ap.add_argument("--flow_weight", type=float, default=0.5)
@@ -556,38 +643,51 @@ def main():
     flow_tr, flow_ball_tr, flow_norm_q95_tr = build_flow_state(z_tr, idx_tr, args.flow_step, args.flow_scale)
     flow_ev, flow_ball_ev, flow_norm_q95_ev = build_flow_state(z_ev, idx_ev, args.flow_step, args.flow_scale)
 
-    yhat, pred_idx, knn_dist_mean = knn_state_predict(
-        train_pos=pos_tr,
-        train_flow=flow_tr,
-        train_flow_ball=flow_ball_tr,
-        train_y=y_tr,
-        eval_pos=pos_ev,
-        eval_flow=flow_ev,
-        eval_flow_ball=flow_ball_ev,
-        dynamic_state_mode=args.dynamic_state_mode,
-        flow_weight=args.flow_weight,
-        topk=args.state_topk,
-        block_size=args.state_block_size,
+    shell_tr, sector_tr, _, _ = hr.route_addresses(
+        v=v_tr,
+        delta_r=args.delta_r,
+        C=None,
+        chart=chart,
+        sector_mode=args.sector_mode,
+        phase_dim_i=phase_dim_i,
+        phase_dim_j=phase_dim_j,
+        phase4_dim_i=phase4_dim_i,
+        phase4_dim_j=phase4_dim_j,
+        phase4_dim_k=phase4_dim_k,
+        phase4_dim_l=phase4_dim_l,
+        complex_dim_i=complex_dim_i,
+        complex_dim_j=complex_dim_j,
+        K=args.K,
+        time_pressure_lambda=0.0,
+        tau=1.0,
+        adaptive_min_pair_bins=args.adaptive_min_pair_bins,
+        adaptive_time_growth=args.adaptive_time_growth,
+        adaptive_balance=args.adaptive_balance,
+        adaptive_angle_growth=args.adaptive_angle_growth,
+        adaptive_shell_growth=args.adaptive_shell_growth,
+        adaptive_shell_balance=args.adaptive_shell_balance,
+        adaptive_converge_lambda=args.adaptive_converge_lambda,
+        adaptive_converge_target=args.adaptive_converge_target,
+        adaptive_converge_hysteresis=args.adaptive_converge_hysteresis,
+        adaptive_converge_mode=args.adaptive_converge_mode,
+        fib_rung_gate_threshold=args.fib_rung_gate_threshold,
+        route_scale_lambda=args.route_scale_lambda,
+        memory_coord_mode=args.memory_coord_mode,
+        shell_mode=args.shell_mode,
+        shell_phase_coupling=args.shell_phase_coupling,
+        hopf_chi_bins=args.hopf_chi_bins,
+        hopf_blend_lambda=args.hopf_blend_lambda,
+        hopf_blend_chi_weight=args.hopf_blend_chi_weight,
+        hopf_blend_shell_weight=args.hopf_blend_shell_weight,
+        hybrid_local_k=args.hybrid_local_k,
+        hybrid_complex_roots=args.hybrid_complex_roots,
+        hybrid_local_min_k=args.hybrid_local_min_k,
+        hybrid_local_target=args.hybrid_local_target,
+        hybrid_local_hysteresis=args.hybrid_local_hysteresis,
+        hybrid_local_converge_lambda=args.hybrid_local_converge_lambda,
     )
-    timings["routing_eval"] = time.perf_counter() - t2
+    keys_tr = [hr.make_bucket_key(int(shell_tr[i]), int(sector_tr[i])) for i in range(len(shell_tr))]
 
-    true_idx = np.argmax(y_ev, axis=1).astype(np.int64)
-    mse_before = global_mean_mse(y_tr, y_ev)
-    err = yhat - y_ev
-    mse_after = float(np.mean(err * err))
-    top1_after = float(np.mean((pred_idx == true_idx).astype(np.float64)))
-
-    coherence = state_coherence_metrics(
-        pos=pos_ev,
-        flow=flow_ev,
-        flow_ball=flow_ball_ev,
-        dynamic_state_mode=args.dynamic_state_mode,
-        flow_weight=args.flow_weight,
-        max_pairs=args.state_pair_samples,
-        seed=args.seed + 101,
-    )
-
-    alignment = hr.poincare_alignment_diagnostics(v_ev, z_ev, max_pairs=args.state_pair_samples, seed=args.seed + 201)
     shell_ev, sector_ev, _, _ = hr.route_addresses(
         v=v_ev,
         delta_r=args.delta_r,
@@ -631,6 +731,68 @@ def main():
         hybrid_local_hysteresis=args.hybrid_local_hysteresis,
         hybrid_local_converge_lambda=args.hybrid_local_converge_lambda,
     )
+    keys_ev = [hr.make_bucket_key(int(shell_ev[i]), int(sector_ev[i])) for i in range(len(shell_ev))]
+    if args.candidate_mode == "static_bucket_knn":
+        (
+            yhat,
+            pred_idx,
+            knn_dist_mean,
+            candidate_count_mean,
+            candidate_fraction_mean,
+            probe_bucket_mean,
+            bucket_fallback_rate,
+        ) = knn_state_predict_bucketed(
+            train_pos=pos_tr,
+            train_flow=flow_tr,
+            train_flow_ball=flow_ball_tr,
+            train_y=y_tr,
+            train_keys=keys_tr,
+            eval_pos=pos_ev,
+            eval_flow=flow_ev,
+            eval_flow_ball=flow_ball_ev,
+            eval_keys=keys_ev,
+            dynamic_state_mode=args.dynamic_state_mode,
+            flow_weight=args.flow_weight,
+            topk=args.state_topk,
+            block_size=args.state_block_size,
+        )
+    else:
+        yhat, pred_idx, knn_dist_mean = knn_state_predict(
+            train_pos=pos_tr,
+            train_flow=flow_tr,
+            train_flow_ball=flow_ball_tr,
+            train_y=y_tr,
+            eval_pos=pos_ev,
+            eval_flow=flow_ev,
+            eval_flow_ball=flow_ball_ev,
+            dynamic_state_mode=args.dynamic_state_mode,
+            flow_weight=args.flow_weight,
+            topk=args.state_topk,
+            block_size=args.state_block_size,
+        )
+        candidate_count_mean = float(pos_tr.shape[0])
+        candidate_fraction_mean = 1.0
+        probe_bucket_mean = 0.0
+        bucket_fallback_rate = 0.0
+    timings["routing_eval"] = time.perf_counter() - t2
+
+    true_idx = np.argmax(y_ev, axis=1).astype(np.int64)
+    mse_before = global_mean_mse(y_tr, y_ev)
+    err = yhat - y_ev
+    mse_after = float(np.mean(err * err))
+    top1_after = float(np.mean((pred_idx == true_idx).astype(np.float64)))
+
+    coherence = state_coherence_metrics(
+        pos=pos_ev,
+        flow=flow_ev,
+        flow_ball=flow_ball_ev,
+        dynamic_state_mode=args.dynamic_state_mode,
+        flow_weight=args.flow_weight,
+        max_pairs=args.state_pair_samples,
+        seed=args.seed + 101,
+    )
+
+    alignment = hr.poincare_alignment_diagnostics(v_ev, z_ev, max_pairs=args.state_pair_samples, seed=args.seed + 201)
     key_hash = shell_ev.astype(np.int64) * 1000003 + sector_ev.astype(np.int64)
     _, key_counts = np.unique(key_hash, return_counts=True)
     shell_counts = np.unique(shell_ev.astype(np.int64), return_counts=True)[1]
@@ -652,6 +814,10 @@ def main():
         "shell_entropy": hr.entropy_from_counts(shell_counts) if len(shell_counts) else 0.0,
         "sector_entropy": hr.entropy_from_counts(sector_counts) if len(sector_counts) else 0.0,
         "dynamic_knn_distance_mean": float(knn_dist_mean),
+        "retrieval_candidate_count_mean": float(candidate_count_mean),
+        "retrieval_candidate_fraction_mean": float(candidate_fraction_mean),
+        "retrieval_probe_bucket_mean": float(probe_bucket_mean),
+        "retrieval_bucket_fallback_rate": float(bucket_fallback_rate),
         "dynamic_flow_norm_mean": float(np.mean(hr.safe_norm(flow_ev, axis=1, keepdims=False))),
         "dynamic_flow_norm_q95": float(np.quantile(hr.safe_norm(flow_ev, axis=1, keepdims=False), 0.95)),
         "dynamic_flow_ball_radius_mean": float(np.mean(hr.poincare_radius(flow_ball_ev))),

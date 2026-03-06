@@ -151,6 +151,16 @@
 - Why it matters: `INC-0050` Slice A showed that the product surrogate is not dead; it appears more retrieval/discrete-decision oriented than regression oriented, and that distinction should guide where it is tested next.
 - Current owner: Geometry Theory Team
 
+## Q2w: Should the second `H^4` store route keys in a discrete complex / imaginary field?
+- Priority: highest
+- Why it matters: `INC-0054` showed that same-bucket Hopf locality is real, but the product branch still looks more retrieval-like than regression-like. A discrete complex storage law for route keys may fit the second hyperbolic factor better than another continuous surrogate.
+- Current owner: Geometry Theory Team
+
+## Q2x: Why does same-bucket Hopf pruning preserve locality but lose MSE unless dynamic state compensates?
+- Priority: highest
+- Why it matters: `INC-0054` cut candidate fraction to about `0.34` with zero fallback, but the global dynamic baseline still won MSE. The project needs to know whether the loss comes from bucket granularity, metric mismatch, or missing second-field structure.
+- Current owner: Geometry Theory Team
+
 ## Q3: Why does the radial optimum move from `3.0` (fixed) to `3.2` (`phi_ladder`) to `3.6` (`PHI_PHI_PHI`)?
 - Priority: highest
 - Why it matters: the shell-width term is clearly part of the routing law, and the optimum moves as the family becomes more self-consistent.

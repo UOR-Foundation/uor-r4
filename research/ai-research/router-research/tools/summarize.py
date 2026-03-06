@@ -17,6 +17,7 @@ FIELDS = [
     "retrieval_backend",
     "query_repeats",
     "dynamic_state_mode",
+    "candidate_mode",
     "flow_step",
     "flow_scale",
     "flow_weight",
@@ -108,7 +109,7 @@ def build_row(j: Dict, default_log_file: str) -> Dict:
     git = j.get("git", {}) if isinstance(j.get("git", {}), dict) else {}
 
     for k in [
-        "seed", "mode", "retrieval_backend", "query_repeats", "dynamic_state_mode", "flow_step", "flow_scale", "flow_weight",
+        "seed", "mode", "retrieval_backend", "query_repeats", "dynamic_state_mode", "candidate_mode", "flow_step", "flow_scale", "flow_weight",
         "state_topk", "sector_mode", "phase_dims", "phase4_dims", "complex_dims",
         "time_pressure_lambda", "scale_mode", "radial_bins", "learn_so8", "learn_scale",
         "fast_dev", "extra_budget", "max_slots_per_bucket", "chart_beta", "chart_iters",

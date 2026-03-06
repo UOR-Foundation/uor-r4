@@ -1,12 +1,18 @@
 # Current Direction
 
 ## Latest Update
-- `INC-0050` Slice A screen and confirm are complete.
-- Tangent surrogate `H^4 + T_xH^4` is the current dynamic winner on proxy MSE and runtime.
-- Product surrogate `H^4 x H^4` stays alive as a secondary branch because it improved top-1 over static `H^4`.
+- `INC-0054` tangent-flow route-law pilot is closed at screen stage.
+- Same-bucket Hopf restriction is real locality:
+  - candidate fraction dropped to about `0.34`
+  - bucket fallback stayed at `0.0`
+- But the main-objective result stayed with the global baseline:
+  - `STATIC_GLOBAL`: best MSE
+  - `TXH4_BUCKET_W050`: best bucketed runtime/MSE tradeoff
+  - `H4XH4_BUCKET_W025`: best bucketed top-1
 - Current primary action:
-  - promote tangent flow to the next implementation slice
-  - keep `H^4 x H^4` alive as a retrieval/discrete-decision branch, not as the first route-law rewrite
+  - move to the product `H^4 x H^4` retrieval-field pilot
+  - keep the second factor explicitly live as a hyperbolic polar field, not a flat auxiliary embedding
+  - carry forward the new suggestion that route keys may want discrete complex / imaginary storage inside that second field
 
 ## Current Best-Known Routes
 - Synthetic lead: `R5B`
@@ -75,6 +81,11 @@
   - product `H^4 x H^4` is not dead; its signal is stronger on top-1 than on MSE
 - Do not flatten this branch into “just use `R^8`”.
 - The intended full product branch is `H^4 x H^4` in hyperbolic polar structure on both factors, not Euclidean polar coordinates in 8D.
+- `INC-0054` clarifies the next split:
+  - static Hopf route keys are strong enough to prune candidates without fallback
+  - tangent flow alone does not yet justify rewriting the route law around bucketed locality
+  - product `H^4 x H^4` remains the stronger next branch for retrieval/discrete routing behavior
+- The new live sub-hypothesis is that the second `H^4` may want to store route keys in a discrete complex / imaginary field rather than as only another continuous regression space.
 
 ## Current Risk
 - The win is still proxy-harness evidence, not an end-to-end model claim.

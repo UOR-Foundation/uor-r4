@@ -8,19 +8,13 @@ Use this file as the local GitHub-style issue list for router research.
   - Branch: `codex/RR-050-dynamic-h4-state`
   - Canonical doc: `docs/research/increments/INC_0050_dynamic_h4_state.md`
   - Goal: carry dynamic geometry from Slice A confirm into the next implementation slice
-
-## Queued
-- `RR-054` `[research][dynamic-geometry][queued]`
-  - Title: Tangent-flow route law pilot
-  - Branch: `codex/RR-054-tangent-flow-route-law`
-  - Depends on: `RR-050`
-  - Goal: turn the `H^4 + T_xH^4` Slice A win into a route-law or retrieval-law pilot
-- `RR-055` `[research][dynamic-geometry][queued]`
+- `RR-055` `[research][dynamic-geometry][active]`
   - Title: Product `H^4 x H^4` retrieval-field pilot
   - Branch: `codex/RR-055-product-h4x4-retrieval-field`
   - Depends on: `RR-050`
-  - Goal: test whether the second hyperbolic factor is primarily a retrieval / discrete-decision field
+  - Goal: test whether the second hyperbolic factor is primarily a retrieval / discrete-decision field, including discrete complex / imaginary route-key storage
 
+## Queued
 - `RR-053` `[systems][translation][queued]`
   - Title: Package routed retrieval index reuse if amortization confirm passes
   - Branch: `codex/RR-053-index-reuse-packaging`
@@ -28,6 +22,11 @@ Use this file as the local GitHub-style issue list for router research.
   - Goal: turn the amortized crossover into a reusable systems path with persistent offline index artifacts
 
 ## Recently Closed
+- `RR-054` `[research][dynamic-geometry][done]`
+  - Title: Tangent-flow route law pilot
+  - Branch: `codex/RR-054-tangent-flow-route-law`
+  - Canonical doc: `docs/research/increments/INC_0054_tangent_flow_route_law.md`
+  - Result: same-bucket locality was real, but the bucketed tangent branch did not beat the global dynamic baseline on MSE
 - `RR-052` `[research][systems][confirm][done]`
   - Title: Confirm translated retrieval amortization crossover
   - Branch: `codex/RR-052-retrieval-amortization-confirm`

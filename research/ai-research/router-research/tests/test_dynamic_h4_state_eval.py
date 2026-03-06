@@ -6,7 +6,12 @@ import unittest
 
 import numpy as np
 
-from tasks.dynamic_h4_state_eval import build_flow_state, pairwise_poincare_distance, pointwise_state_distance
+from tasks.dynamic_h4_state_eval import (
+    build_flow_state,
+    knn_state_predict_bucketed,
+    pairwise_poincare_distance,
+    pointwise_state_distance,
+)
 
 
 class DynamicH4StateEvalTest(unittest.TestCase):
@@ -45,6 +50,52 @@ class DynamicH4StateEvalTest(unittest.TestCase):
             d = pointwise_state_distance(pos_a, pos_b, flow_a, flow_b, flow_ball_a, flow_ball_b, mode, 0.5)
             self.assertEqual(d.shape, (2,))
             self.assertTrue(np.all(d >= 0.0))
+
+    def test_bucketed_knn_reduces_candidate_fraction(self):
+        train_pos = np.array(
+            [
+                [0.01, 0.00],
+                [0.02, 0.00],
+                [0.40, 0.00],
+                [0.41, 0.00],
+            ],
+            dtype=np.float64,
+        )
+        eval_pos = np.array(
+            [
+                [0.015, 0.00],
+                [0.405, 0.00],
+            ],
+            dtype=np.float64,
+        )
+        train_flow = np.zeros_like(train_pos)
+        eval_flow = np.zeros_like(eval_pos)
+        train_flow_ball = np.zeros_like(train_pos)
+        eval_flow_ball = np.zeros_like(eval_pos)
+        train_y = np.eye(4, dtype=np.float64)
+        train_keys = [(0, 0), (0, 0), (0, 1), (0, 1)]
+        eval_keys = [(0, 0), (0, 1)]
+
+        _, pred, _, cand_mean, cand_frac, probe_mean, fallback_rate = knn_state_predict_bucketed(
+            train_pos=train_pos,
+            train_flow=train_flow,
+            train_flow_ball=train_flow_ball,
+            train_y=train_y,
+            train_keys=train_keys,
+            eval_pos=eval_pos,
+            eval_flow=eval_flow,
+            eval_flow_ball=eval_flow_ball,
+            eval_keys=eval_keys,
+            dynamic_state_mode="static_h4",
+            flow_weight=0.0,
+            topk=1,
+            block_size=8,
+        )
+        self.assertEqual(pred.shape, (2,))
+        self.assertLess(cand_mean, float(train_pos.shape[0]))
+        self.assertLess(cand_frac, 1.0)
+        self.assertEqual(probe_mean, 1.0)
+        self.assertEqual(fallback_rate, 0.0)
 
     def test_script_emits_json_summary(self):
         rs = np.random.RandomState(0)
@@ -85,6 +136,8 @@ class DynamicH4StateEvalTest(unittest.TestCase):
                 "1",
                 "--sector_mode",
                 "phase4d_hopf",
+                "--candidate_mode",
+                "static_bucket_knn",
                 "--dynamic_state_mode",
                 "product_h4x_h4",
             ]
@@ -98,6 +151,8 @@ class DynamicH4StateEvalTest(unittest.TestCase):
             self.assertEqual(payload["task"], "dynamic_h4_state_eval")
             self.assertIn("test_mse_after", payload["metrics"])
             self.assertIn("dynamic_step_to_random_ratio", payload["metrics"])
+            self.assertIn("retrieval_candidate_count_mean", payload["metrics"])
+            self.assertIn("retrieval_candidate_fraction_mean", payload["metrics"])
 
 
 if __name__ == "__main__":
