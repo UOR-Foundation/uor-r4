@@ -9,7 +9,25 @@
 - Reading:
   - the amortized translated retrieval crossover did not survive 4-seed confirm
   - plain Hopf still preserves useful pruning signal under translation
-  - the next live branch is deeper dynamic geometry, not more translated packaging
+- the next live branch is deeper dynamic geometry, not more translated packaging
+
+## Current In-Progress Increment
+- `INC-0050` remains active, but Slice A is complete.
+- Slice A artifacts:
+  - `docs/research/MATH_REVIEW_DYNAMIC_H4_STATE_20260306.md`
+  - `docs/research/LEARNED_KNOWLEDGE.md`
+  - `tasks/dynamic_h4_state_eval.py`
+  - screen config: `configs/proxy_transfer_inc0050_dynamic_h4_screen.json`
+  - confirm config: `configs/proxy_transfer_inc0050_dynamic_h4_confirm.json`
+  - screen analysis: `results/analysis/inc0050_dynamic_h4_screen.json`
+  - confirm analysis: `results/analysis/inc0050_dynamic_h4_confirm.json`
+  - gate note: `docs/governance/gates/gate_20260306_122733.md`
+- Slice A result:
+  - `TXH4_W050` wins on proxy MSE and runtime over static `H^4`
+  - `H4XH4_W025` stays alive because it improves top-1 more strongly than the static branch
+- Next preferred work:
+  - `INC-0054` tangent-flow route law pilot
+  - `INC-0055` product `H^4 x H^4` retrieval-field pilot
 
 ## Exact Current State
 - Latest closed increment:
@@ -29,17 +47,16 @@
   - translated pruning-positive family, but not operationally promoted
 
 ## What Changed Most Recently
-`INC-0052` 4-seed amortization confirm means:
-- `DENSE_Q24`: `mse=0.004321788`, `amortized=0.5051s`
-- `HOPF_RET_P1_Q24`: `0.004324992`, `amortized=0.5938s`, `cand_frac=0.3511`
-- `DENSE_Q32`: `mse=0.004321788`, `amortized=0.5586s`
-- `HOPF_RET_P1_Q32`: `0.004324992`, `amortized=0.6544s`, `cand_frac=0.3511`
+`INC-0050` Slice A 4-seed confirm means:
+- `STATIC_H4`: `mse=0.004314443`, `top1=0.02758`, `total=8.569s`
+- `TXH4_W050`: `0.004303599`, `0.03200`, `8.458s`
+- `H4XH4_W025`: `0.004305430`, `0.03767`, `8.454s`
 
 ## Why The Queue Changed
-The first translation path is now timing-decomposed and confirmed as non-promotable operationally.
+The first dynamic-state confirm is now positive enough to split the branch.
 The next question is:
-- whether the next meaningful gain requires dynamic geometry rather than more translated-systems tuning
-- whether `H^4 + T_xH^4` or `H^4 x H^4` is the right next object
+- how to turn the tangent-flow win into a real route-law or retrieval-law pilot
+- whether the product branch is better treated as a retrieval/discrete-decision field than a main proxy-MSE branch
 
 ## Resume Rule
 Default resume path is:
@@ -47,4 +64,6 @@ Default resume path is:
 2. read `results/analysis/inc0052_retrieval_amortization_confirm.json`
 3. read `docs/governance/gates/gate_20260306_115931.md`
 4. read `docs/research/increments/INC_0050_dynamic_h4_state.md`
-5. reopen the next dynamic geometry branch
+5. read `docs/research/MATH_REVIEW_DYNAMIC_H4_STATE_20260306.md`
+6. read `docs/research/LEARNED_KNOWLEDGE.md`
+7. resume with `INC-0054` first unless the user explicitly wants to prioritize the product branch

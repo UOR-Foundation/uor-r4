@@ -127,6 +127,12 @@ def summarize_route(route_id: str, summaries: List[Dict[str, Any]]) -> Dict[str,
         "mean_poincare_alignment_pair_mae": metric_mean(summaries, "poincare_alignment_pair_mae"),
         "mean_poincare_alignment_pair_rel_mean": metric_mean(summaries, "poincare_alignment_pair_rel_mean"),
         "mean_poincare_alignment_pair_corr": metric_mean(summaries, "poincare_alignment_pair_corr"),
+        "mean_dynamic_knn_distance": metric_mean(summaries, "dynamic_knn_distance_mean"),
+        "mean_dynamic_flow_norm": metric_mean(summaries, "dynamic_flow_norm_mean"),
+        "mean_dynamic_flow_ball_radius": metric_mean(summaries, "dynamic_flow_ball_radius_mean"),
+        "mean_dynamic_step_dist": metric_mean(summaries, "dynamic_step_dist_mean"),
+        "mean_dynamic_random_pair_dist": metric_mean(summaries, "dynamic_random_pair_dist_mean"),
+        "mean_dynamic_step_to_random_ratio": metric_mean(summaries, "dynamic_step_to_random_ratio"),
         "mean_retrieval_candidate_count": metric_mean(summaries, "retrieval_candidate_count_mean"),
         "mean_retrieval_candidate_fraction": metric_mean(summaries, "retrieval_candidate_fraction_mean"),
         "mean_retrieval_probe_bucket": metric_mean(summaries, "retrieval_probe_bucket_mean"),
@@ -282,7 +288,11 @@ def write_gate_note(path: str, config_path: str, route_stats: List[Dict[str, Any
             f"probe_mean={stats['mean_retrieval_probe_bucket']:.3f}, "
             f"align_radial_mae={stats['mean_poincare_alignment_radial_mae']:.6f}, "
             f"align_pair_mae={stats['mean_poincare_alignment_pair_mae']:.6f}, "
-            f"align_pair_corr={stats['mean_poincare_alignment_pair_corr']:.6f}"
+            f"align_pair_corr={stats['mean_poincare_alignment_pair_corr']:.6f}, "
+            f"dyn_knn={stats['mean_dynamic_knn_distance']:.6f}, "
+            f"dyn_flow={stats['mean_dynamic_flow_norm']:.6f}, "
+            f"dyn_step={stats['mean_dynamic_step_dist']:.6f}, "
+            f"dyn_step_ratio={stats['mean_dynamic_step_to_random_ratio']:.6f}"
             f"{gate_suffix}"
         )
     lines.extend([

@@ -39,6 +39,13 @@
   - keep sparse / quantized shell-phase coupling as a fallback correction, not the primary next branch
   - explain why `local_min_k=2` rescues `phase4d_complex_local` even though local drive stays weak
   - derive a cheaper local law before any larger hybrid branch
+  - `INC-0050` Slice A is now complete:
+    - treat tangent surrogate `H^4 + T_xH^4` as the primary dynamic branch
+    - keep product `H^4 x H^4` as a distinct secondary branch with likely retrieval/top-1 emphasis
+  - next assignment:
+    - design `INC-0054` tangent-flow route law
+    - explain how flow should alter shell or sector choice without erasing current Hopf alignment
+    - formalize the intended `H^4 x H^4` object as hyperbolic polar on both factors, not Euclidean 8D polar
 
 ## Experimental Validation Team
 - Mission: test lead candidates under robust synthetic conditions.
@@ -65,6 +72,8 @@
   - the translated systems branch has now failed operational confirm
   - hand the lead back to the deep geometry branch
   - report quality, runtime, and route-health deltas
+  - next assignment:
+    - be ready to test `INC-0054` against the current cheap routed frontier once a dynamic route law exists
 
 ## Skeptical Review Team
 - Mission: attack weak conclusions before they harden into doctrine.
@@ -85,3 +94,6 @@
   - translated retrieval amortization is now killed as a promotion branch
   - keep the harness available for future evaluation of new geometry families
   - keep timing decomposition live so chart, routing, and update costs cannot drift back into one opaque number
+  - dynamic-state support is now active:
+    - maintain `tasks/dynamic_h4_state_eval.py`
+    - preserve ordered-window evaluation behavior in this branch

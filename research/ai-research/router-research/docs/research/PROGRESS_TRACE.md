@@ -183,3 +183,45 @@
 ### `INC-0052` run launch
 102. Created `configs/proxy_transfer_inc0052_retrieval_amortization_confirm.json`.
 103. Next command: `python tools/proxy_sweep.py --config configs/proxy_transfer_inc0052_retrieval_amortization_confirm.json`.
+
+### `INC-0050` reopening
+107. Verified git branch and clean state on `codex/RR-050-dynamic-h4-state`.
+108. Read `INC_0050_dynamic_h4_state.md`, `CURRENT_DIRECTION.md`, `HANDOFF_CURRENT.md`, and the prior geometry reviews.
+109. Confirmed the dynamic branch should be executed as a new ordered-sequence diagnostic, not by reusing the randomized proxy evaluator.
+110. Wrote `docs/research/MATH_REVIEW_DYNAMIC_H4_STATE_20260306.md`.
+111. Created `docs/research/LEARNED_KNOWLEDGE.md` as a durable mathematical knowledge file.
+112. Added `tasks/dynamic_h4_state_eval.py` for Slice A:
+   - static `H^4`
+   - tangent surrogate `H^4 + T_xH^4`
+   - product surrogate `H^4 x H^4`
+113. Extended summary/export support for dynamic metrics in `tools/summarize.py` and `tools/proxy_sweep.py`.
+114. Added `tests/test_dynamic_h4_state_eval.py`.
+115. Ran targeted validation:
+   - `py_compile` passed
+   - `python -m unittest tests.test_dynamic_h4_state_eval tests.test_proxy_sweep -v` passed
+116. Updated `INC_0050_dynamic_h4_state.md`, `CURRENT_DIRECTION.md`, `HANDOFF_CURRENT.md`, and `LIVE_WORKLOG.md` to reflect Slice A in progress.
+117. Pending next action: create `configs/proxy_transfer_inc0050_dynamic_h4_screen.json` and run the 2-seed screen.
+118. Created `configs/proxy_transfer_inc0050_dynamic_h4_screen.json`.
+119. Ran `python tools/proxy_sweep.py --config configs/proxy_transfer_inc0050_dynamic_h4_screen.json`.
+120. Screen analysis landed at `results/analysis/inc0050_dynamic_h4_screen.json`.
+121. Screen result:
+   - `TXH4_W050` beat static `H^4` on proxy MSE and runtime
+   - product `H^4 x H^4` branches improved top-1 but not main MSE
+122. Promotion decision:
+   - confirm `TXH4_W050`
+   - keep one restrained product comparator (`H4XH4_W025`)
+123. Created `configs/proxy_transfer_inc0050_dynamic_h4_confirm.json`.
+124. Ran `python tools/proxy_sweep.py --config configs/proxy_transfer_inc0050_dynamic_h4_confirm.json`.
+125. Confirm analysis landed at `results/analysis/inc0050_dynamic_h4_confirm.json`.
+126. Confirm result:
+   - `STATIC_H4`: `0.004314443`, `top1=0.02758`, `8.569s`
+   - `TXH4_W050`: `0.004303599`, `top1=0.03200`, `8.458s`
+   - `H4XH4_W025`: `0.004305430`, `top1=0.03767`, `8.454s`
+127. Decision:
+   - tangent surrogate `H^4 + T_xH^4` becomes the primary dynamic implementation path
+   - product `H^4 x H^4` stays alive as a secondary top-1 / retrieval field branch
+128. Added next queued increments:
+   - `INC_0054_tangent_flow_route_law.md`
+   - `INC_0055_product_h4x4_retrieval_field.md`
+129. Added agent handoff packet:
+   - `docs/agents/packets/PACKET_DYNAMIC_STATE_AGENT.md`

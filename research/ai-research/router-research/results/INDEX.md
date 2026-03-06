@@ -691,3 +691,21 @@ Use this file to map each run batch to parsed summaries and decision records.
 - Analysis: `results/analysis/inc0052_retrieval_amortization_confirm.json`
 - Summary row range: rows where `run_tag` contains `inc0052_retrieval_amortization_confirm`
 - Decision note: `docs/governance/gates/gate_20260306_115931.md`
+
+## Batch B096
+- Batch ID: `B096_inc0050_dynamic_h4_screen`
+- Config: `configs/proxy_transfer_inc0050_dynamic_h4_screen.json`
+- Logs: `results/raw/inc0050_dynamic_h4_screen_*.log`
+- Parsed files: matching `results/parsed/inc0050_dynamic_h4_screen_*.json`
+- Analysis: `results/analysis/inc0050_dynamic_h4_screen.json`
+- Summary row range: rows where `run_tag` contains `inc0050_dynamic_h4_screen`
+- Decision note: `docs/governance/gates/gate_20260306_122447.md`
+
+## Batch B097
+- Batch ID: `B097_inc0050_dynamic_h4_confirm`
+- Config: `configs/proxy_transfer_inc0050_dynamic_h4_confirm.json`
+- Logs: `results/raw/inc0050_dynamic_h4_confirm_*.log`
+- Parsed files: matching `results/parsed/inc0050_dynamic_h4_confirm_*.json`
+- Analysis: `results/analysis/inc0050_dynamic_h4_confirm.json`
+- Summary row range: rows where `run_tag` contains `inc0050_dynamic_h4_confirm`
+- Decision note: `docs/governance/gates/gate_20260306_122733.md`

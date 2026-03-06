@@ -141,6 +141,16 @@
   - convergence/divergence control field
 - Current owner: Geometry Theory Team
 
+## Q2u: How should tangent flow alter shell/sector allocation without breaking the current Hopf lead?
+- Priority: highest
+- Why it matters: `INC-0050` Slice A confirmed that the tangent surrogate wins the main dynamic proxy objective, so the next practical question is how to inject that signal into a real route law.
+- Current owner: Geometry Theory Team
+
+## Q2v: Why does product `H^4 x H^4` help top-1 more than proxy MSE?
+- Priority: highest
+- Why it matters: `INC-0050` Slice A showed that the product surrogate is not dead; it appears more retrieval/discrete-decision oriented than regression oriented, and that distinction should guide where it is tested next.
+- Current owner: Geometry Theory Team
+
 ## Q3: Why does the radial optimum move from `3.0` (fixed) to `3.2` (`phi_ladder`) to `3.6` (`PHI_PHI_PHI`)?
 - Priority: highest
 - Why it matters: the shell-width term is clearly part of the routing law, and the optimum moves as the family becomes more self-consistent.

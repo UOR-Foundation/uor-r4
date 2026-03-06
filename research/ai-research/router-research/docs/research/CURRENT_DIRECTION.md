@@ -1,11 +1,12 @@
 # Current Direction
 
 ## Latest Update
-- `INC-0052` confirm is complete.
-- The translated routed-retrieval crossover did not survive confirm.
-- Next primary action:
-  - `INC-0050`
-  - reopen the dynamic geometry branch (`H^4 + T_xH^4` vs `H^4 x H^4`).
+- `INC-0050` Slice A screen and confirm are complete.
+- Tangent surrogate `H^4 + T_xH^4` is the current dynamic winner on proxy MSE and runtime.
+- Product surrogate `H^4 x H^4` stays alive as a secondary branch because it improved top-1 over static `H^4`.
+- Current primary action:
+  - promote tangent flow to the next implementation slice
+  - keep `H^4 x H^4` alive as a retrieval/discrete-decision branch, not as the first route-law rewrite
 
 ## Current Best-Known Routes
 - Synthetic lead: `R5B`
@@ -65,9 +66,15 @@
   - `R0`: `chart_opt=11.659s`, `training_ema=15.907s`, `total=31.826s`
 - The translated frontier is still evidence-positive but operationally incomplete.
 - The next question is whether a dynamic hyperbolic state geometry can lower translated cost enough to matter.
-- The next deep geometry branch is still queued behind systems rescue, but it is now sharper:
-  - compare `H^4 + T_xH^4` against `H^4 x H^4`
-  - do not flatten this into “just use `R^8`”
+- `INC-0050` Slice A is now result-positive:
+  - `STATIC_H4`: `mse=0.004314443`, `top1=0.02758`, `total=8.569s`
+  - `TXH4_W050`: `0.004303599`, `0.03200`, `8.458s`
+  - `H4XH4_W025`: `0.004305430`, `0.03767`, `8.454s`
+- Reading:
+  - tangent flow is the cleaner main-objective winner
+  - product `H^4 x H^4` is not dead; its signal is stronger on top-1 than on MSE
+- Do not flatten this branch into “just use `R^8`”.
+- The intended full product branch is `H^4 x H^4` in hyperbolic polar structure on both factors, not Euclidean polar coordinates in 8D.
 
 ## Current Risk
 - The win is still proxy-harness evidence, not an end-to-end model claim.

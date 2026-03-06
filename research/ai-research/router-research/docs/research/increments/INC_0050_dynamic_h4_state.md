@@ -1,7 +1,7 @@
 # INC-0050: Dynamic H4 State
 
 ## Status
-Queued.
+In progress.
 
 ## Trigger
 The current route still treats time mostly as a scalar schedule parameter. If the geometry itself is evolving, a static shell/sector law may be the wrong mathematical object.
@@ -45,12 +45,49 @@ That would still give 8 real coordinates, but with hyperbolic structure on both 
 2. Write the formal route law for:
    - `H^4 + T_xH^4`
    - `H^4 x H^4`
-3. Define what divergence/convergence means in each formulation.
-4. Decide whether the second `H^4` should represent:
+3. Build a Slice A surrogate diagnostic on the ordered LM-proxy stream:
+   - static `H^4`
+   - tangent surrogate `H^4 + T_xH^4`
+   - product surrogate `H^4 x H^4`
+4. Define what divergence/convergence means in each formulation.
+5. Decide whether the second `H^4` should represent:
    - flow / momentum
    - memory pressure
    - imaginary / retrieval field
-5. Only then decide whether it needs a code pilot.
+6. Only then decide whether it needs a route-law code pilot.
+
+## Slice A Artifacts
+- Formalism:
+  - `docs/research/MATH_REVIEW_DYNAMIC_H4_STATE_20260306.md`
+- Learned knowledge:
+  - `docs/research/LEARNED_KNOWLEDGE.md`
+- Evaluator:
+  - `tasks/dynamic_h4_state_eval.py`
+- Planned screen:
+  - `configs/proxy_transfer_inc0050_dynamic_h4_screen.json`
+
+## Slice A Result
+- Screen:
+  - `results/analysis/inc0050_dynamic_h4_screen.json`
+  - `docs/governance/gates/gate_20260306_122447.md`
+- Confirm:
+  - `results/analysis/inc0050_dynamic_h4_confirm.json`
+  - `docs/governance/gates/gate_20260306_122733.md`
+
+4-seed confirm means:
+- `STATIC_H4`: `mse=0.004314443`, `top1=0.02758`, `total=8.569s`
+- `TXH4_W050`: `0.004303599`, `0.03200`, `8.458s`
+- `H4XH4_W025`: `0.004305430`, `0.03767`, `8.454s`
+
+## Reading
+- Dynamic state is real on the ordered LM-proxy stream.
+- The tangent surrogate `H^4 + T_xH^4` is the cleaner primary winner on the main MSE objective.
+- The product surrogate `H^4 x H^4` is not dead; its clearer signal is top-1 rather than best MSE.
+- The intended full product branch should still be understood as hyperbolic polar on both `H^4` factors, not Euclidean 8D polar.
+
+## Next Preferred Work
+1. `INC-0054` tangent-flow route law pilot
+2. `INC-0055` product `H^4 x H^4` retrieval-field pilot
 
 ## Decision Rule
 - Promote this branch only if the formalism explains a failure that the current static route cannot explain cleanly.

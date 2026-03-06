@@ -16,6 +16,11 @@ FIELDS = [
     "mode",
     "retrieval_backend",
     "query_repeats",
+    "dynamic_state_mode",
+    "flow_step",
+    "flow_scale",
+    "flow_weight",
+    "state_topk",
     "sector_mode",
     "phase_dims",
     "phase4_dims",
@@ -55,6 +60,17 @@ FIELDS = [
     "poincare_alignment_pair_mae",
     "poincare_alignment_pair_rel_mean",
     "poincare_alignment_pair_corr",
+    "dynamic_knn_distance_mean",
+    "dynamic_flow_norm_mean",
+    "dynamic_flow_norm_q95",
+    "dynamic_flow_ball_radius_mean",
+    "dynamic_flow_ball_radius_q95",
+    "dynamic_train_flow_norm_q95",
+    "dynamic_eval_flow_norm_q95",
+    "dynamic_step_dist_mean",
+    "dynamic_step_dist_std",
+    "dynamic_random_pair_dist_mean",
+    "dynamic_step_to_random_ratio",
     "dataset_sec",
     "chart_opt_sec",
     "routing_eval_sec",
@@ -92,7 +108,8 @@ def build_row(j: Dict, default_log_file: str) -> Dict:
     git = j.get("git", {}) if isinstance(j.get("git", {}), dict) else {}
 
     for k in [
-        "seed", "mode", "retrieval_backend", "query_repeats", "sector_mode", "phase_dims", "phase4_dims", "complex_dims",
+        "seed", "mode", "retrieval_backend", "query_repeats", "dynamic_state_mode", "flow_step", "flow_scale", "flow_weight",
+        "state_topk", "sector_mode", "phase_dims", "phase4_dims", "complex_dims",
         "time_pressure_lambda", "scale_mode", "radial_bins", "learn_so8", "learn_scale",
         "fast_dev", "extra_budget", "max_slots_per_bucket", "chart_beta", "chart_iters",
     ]:
@@ -111,6 +128,17 @@ def build_row(j: Dict, default_log_file: str) -> Dict:
         "poincare_alignment_pair_mae",
         "poincare_alignment_pair_rel_mean",
         "poincare_alignment_pair_corr",
+        "dynamic_knn_distance_mean",
+        "dynamic_flow_norm_mean",
+        "dynamic_flow_norm_q95",
+        "dynamic_flow_ball_radius_mean",
+        "dynamic_flow_ball_radius_q95",
+        "dynamic_train_flow_norm_q95",
+        "dynamic_eval_flow_norm_q95",
+        "dynamic_step_dist_mean",
+        "dynamic_step_dist_std",
+        "dynamic_random_pair_dist_mean",
+        "dynamic_step_to_random_ratio",
     ]:
         row[k] = metrics.get(k, "")
 

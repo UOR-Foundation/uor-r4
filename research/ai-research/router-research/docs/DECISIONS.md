@@ -1014,3 +1014,35 @@ Add new entries below.
   - kill translated retrieval promotion for now
   - reopen the next deep geometry branch
   - keep the translated retrieval harness as an evaluation target for future geometry families
+
+## 2026-03-06 (research increment INC-0050 Slice A)
+- Implemented the first dynamic-state evaluator:
+  - `tasks/dynamic_h4_state_eval.py`
+- Wrote the branch formalism and durable knowledge capture:
+  - `docs/research/MATH_REVIEW_DYNAMIC_H4_STATE_20260306.md`
+  - `docs/research/LEARNED_KNOWLEDGE.md`
+- Ran screen:
+  - `configs/proxy_transfer_inc0050_dynamic_h4_screen.json`
+  - analysis: `results/analysis/inc0050_dynamic_h4_screen.json`
+  - gate note: `docs/governance/gates/gate_20260306_122447.md`
+- Screen reading:
+  - `TXH4_W050`: `mse=0.004317236`, `top1=0.0312`, `total=7.621s`
+  - `STATIC_H4`: `0.004325269`, `0.0272`, `7.964s`
+  - `H4XH4_W025`: `0.004335376`, `0.0394`, `7.649s`
+- Promotion decision:
+  - confirm the tangent winner
+  - keep one restrained product comparator because the product branch improved top-1
+- Ran confirm:
+  - `configs/proxy_transfer_inc0050_dynamic_h4_confirm.json`
+  - analysis: `results/analysis/inc0050_dynamic_h4_confirm.json`
+  - gate note: `docs/governance/gates/gate_20260306_122733.md`
+- Confirm reading:
+  - `TXH4_W050`: `mse=0.004303599`, `top1=0.03200`, `total=8.458s`
+  - `H4XH4_W025`: `0.004305430`, `0.03767`, `8.454s`
+  - `STATIC_H4`: `0.004314443`, `0.02758`, `8.569s`
+- Decision:
+  - dynamic state is now evidence-positive, not just theoretical
+  - treat tangent surrogate `H^4 + T_xH^4` as the primary next dynamic implementation path
+  - keep product `H^4 x H^4` alive as a distinct secondary branch because its strongest signal is top-1 / discrete decision quality
+  - interpret the full target as hyperbolic polar structure on both `H^4` factors, not Euclidean 8D polar coordinates
+  - queue `INC-0054` and `INC-0055` as the next two dynamic slices

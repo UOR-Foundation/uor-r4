@@ -9,6 +9,13 @@
 - Decision:
   - close the translated systems branch without promotion
   - reopen the dynamic geometry branch
+- `INC-0050` Slice A is complete:
+  - formal dynamic-state review written
+  - learned-knowledge file created
+  - ordered-sequence evaluator added at `tasks/dynamic_h4_state_eval.py`
+  - screen and confirm completed through the sweep pipeline
+  - tangent-flow is the current primary dynamic signal
+  - product `H^4 x H^4` stays alive as a secondary top-1/retrieval signal
 
 ## Current State
 - Latest closed increment: `INC-0052` confirm.
@@ -29,9 +36,11 @@
 1. Read:
   - `docs/research/increments/INC_0052_retrieval_amortization_confirm.md`
   - `docs/research/increments/INC_0050_dynamic_h4_state.md`
+  - `docs/research/MATH_REVIEW_DYNAMIC_H4_STATE_20260306.md`
+  - `docs/research/LEARNED_KNOWLEDGE.md`
   - `docs/research/HANDOFF_CURRENT.md`
 2. Inspect:
   - `results/analysis/inc0052_retrieval_amortization_confirm.json`
   - `docs/governance/gates/gate_20260306_115931.md`
   - `docs/research/INTEGRATION_TRANSLATION_PLAN.md`
-3. Resume with `INC-0050`.
+3. Resume with `INC-0054` tangent-flow route law or `INC-0055` product retrieval-field pilot.

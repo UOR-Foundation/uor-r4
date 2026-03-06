@@ -57,6 +57,8 @@ Each increment is hypothesis-driven and result-gated.
 - `INC_0051_retrieval_amortization.md`
 - `INC_0052_retrieval_amortization_confirm.md`
 - `INC_0050_dynamic_h4_state.md`
+- `INC_0054_tangent_flow_route_law.md`
+- `INC_0055_product_h4x4_retrieval_field.md`
 
 ## Controls
 - `CTRL_0001_seedmajor_lead.md`
@@ -192,8 +194,15 @@ Each increment is hypothesis-driven and result-gated.
   - completed
   - the narrow `Q24/Q32` crossover did not survive 4 seeds
 - `INC-0050`: dynamic `H^4` state
-  - active next branch
-  - test whether the missing geometry is really 8D position-plus-flow state rather than another static shell law
+  - Slice A completed
+  - `TXH4_W050` beat static `H^4` on proxy MSE and runtime
+  - `H4XH4_W025` stayed alive by improving top-1 more strongly than static `H^4`
+- `INC-0054`: tangent-flow route law
+  - queued
+  - primary next branch after `INC-0050` Slice A confirm
+- `INC-0055`: product `H^4 x H^4` retrieval field
+  - queued
+  - secondary next branch after `INC-0050` Slice A confirm
 - `INC-0025`: sparse / quantized phase-gated shell pilot
   - secondary fallback only if the deeper `H4` / `chi` route still fails or if a cheaper local correction becomes preferable
 - `INC-0027`: chart-cost decomposition
