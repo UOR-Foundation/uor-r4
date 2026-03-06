@@ -59,3 +59,13 @@
 - Decision:
   - close `INC-0056` as positive
   - move next to hierarchical complex-key backfill (`INC-0057`)
+
+## 2026-03-06 (research increment INC-0057, partial)
+- Implemented `complex_backfill_items` in `tasks/router_retrieval_eval.py`.
+- Added translated unit coverage proving bounded coarse backfill can recover a coarse neighbor in a controlled case.
+- First RR-057 screen attempt showed a pathologically slow naive implementation because the coarse extra pool was recomputed per query.
+- Optimized the backfill path by precomputing coarse extra pools per composite key and reran the screen under a v2 config.
+- Live observation before stopping the screen:
+  - `BF4` remained materially heavier than exact complex addressing even after the optimization.
+- Current reading:
+  - the next recall-repair step likely needs selective or cached backfill rather than a broad fixed-size coarse augmentation.

@@ -13,6 +13,7 @@
   - treat discrete complex / imaginary route-key storage as evidence-positive in both product and translated retrieval settings
   - keep the second factor explicitly live as a hyperbolic polar field, not a flat auxiliary embedding
   - move next to hierarchical complex backfill rather than abandoning the key law after the first top-1 penalty
+  - prefer selective or cached backfill over broad fixed-size coarse augmentation
 
 ## Current Best-Known Routes
 - Synthetic lead: `R5B`
@@ -97,6 +98,9 @@
   - the gain is not limited to the product-state evaluator
   - the remaining weakness is not fallback or candidate explosion
   - the remaining weakness is a small top-1 loss that now looks like a backfill / recall problem
+- `INC-0057` early implementation reading:
+  - naive coarse backfill is materially expensive even after removing the obvious per-query set-diff bug
+  - the next recall branch should be selective, not broad
 
 ## Current Risk
 - The win is still proxy-harness evidence, not an end-to-end model claim.

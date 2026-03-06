@@ -137,6 +137,34 @@ class RouterRetrievalEvalTest(unittest.TestCase):
         self.assertAlmostEqual(fallback, 0.0)
         self.assertGreater(yhat[0, 1], yhat[0, 0])
 
+    def test_complex_backfill_can_recover_coarse_neighbor(self):
+        train_keys = [(0, 0, 0), (0, 0, 1), (0, 0, 1)]
+        eval_keys = [(0, 0, 0)]
+        train_z = np.array([
+            [1.0, 0.0],
+            [0.95, 0.05],
+            [0.90, 0.10],
+        ], dtype=np.float64)
+        train_y = np.array([
+            [1.0, 0.0],
+            [0.0, 1.0],
+            [0.0, 1.0],
+        ], dtype=np.float64)
+        train_tok = np.array([10, 20, 20], dtype=np.int32)
+        eval_z = np.array([[0.97, 0.03]], dtype=np.float64)
+
+        no_backfill = routed_retrieval(
+            train_keys, eval_keys, train_z, train_y, train_tok, eval_z, topk=1, probe_buckets=1, complex_backfill_items=0
+        )
+        with_backfill = routed_retrieval(
+            train_keys, eval_keys, train_z, train_y, train_tok, eval_z, topk=1, probe_buckets=1, complex_backfill_items=1
+        )
+
+        self.assertEqual(no_backfill[1].tolist(), [10])
+        self.assertEqual(with_backfill[1].tolist(), [20])
+        self.assertGreater(with_backfill[2], no_backfill[2])
+        self.assertAlmostEqual(with_backfill[5], 0.0)
+
     def test_amortized_retrieval_metrics_scale_with_repeat_count(self):
         online_per_repeat, amortized = compute_amortized_retrieval_metrics(offline_total=8.0, online_total=4.0, query_repeats=4)
         self.assertAlmostEqual(online_per_repeat, 1.0)

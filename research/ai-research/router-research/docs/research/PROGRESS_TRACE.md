@@ -313,3 +313,25 @@
 169. Decision:
     - close RR-056 as a positive translated complex-key branch
     - queue hierarchical complex backfill as RR-057 to repair top-1 without giving back pruning
+170. Committed RR-056 on branch `codex/RR-056-product-complex-translation`:
+    - commit `2a4c6e6`
+171. Created and checked out `codex/RR-057-product-complex-backfill`.
+172. Implemented `complex_backfill_items` in `tasks/router_retrieval_eval.py`.
+173. Added unit coverage for translated hierarchical backfill in `tests/test_router_retrieval_eval.py`.
+174. Ran targeted RR-057 verification:
+    - `py_compile`
+    - `python -m unittest tests.test_router_retrieval_eval -v`
+175. Added RR-057 screen config:
+    - `configs/proxy_transfer_inc0057_product_complex_backfill_screen.json`
+176. First RR-057 screen attempt exposed a pathologically slow naive backfill path.
+177. Root cause:
+    - coarse extra pools were being recomputed per query.
+178. Killed the first RR-057 screen and optimized backfill by precomputing coarse extra pools per composite key.
+179. Added optimized rerun config:
+    - `configs/proxy_transfer_inc0057_product_complex_backfill_screen_v2.json`
+180. Reran RR-057 screen under v2.
+181. Partial reading from live observation:
+    - `BF4` remained materially heavier than exact complex addressing even after the optimization.
+182. Decision for current checkpoint:
+    - keep RR-057 open
+    - treat selective or cached backfill as the likely next refinement, not broad fixed-size coarse augmentation

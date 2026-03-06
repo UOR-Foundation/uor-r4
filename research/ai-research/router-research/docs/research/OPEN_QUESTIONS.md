@@ -215,3 +215,8 @@
 - Priority: highest
 - Why it matters: `INC-0056` showed that discrete complex / imaginary route keys survive translation and improve candidate fraction, online cost, amortized cost, and proxy MSE, but they still pay a small top-1 penalty.
 - Current owner: Geometry Theory Team
+
+## Q2ab: What is the cheapest selective backfill policy that recovers top-1 on top of the translated complex key?
+- Priority: highest
+- Why it matters: `INC-0057` showed that broad fixed-size coarse backfill is materially expensive even after implementation cleanup, so recall repair likely needs a gated or cached policy rather than simple coarse augmentation.
+- Current owner: Systems and Performance Team

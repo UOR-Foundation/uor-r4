@@ -66,6 +66,7 @@ def parse_args():
     ap.add_argument("--route_key_mode", type=str, default="hopf_bucket", choices=["hopf_bucket", "hopf_plus_complex"])
     ap.add_argument("--complex_key_roots", type=int, default=8)
     ap.add_argument("--complex_key_radius_bins", type=int, default=1)
+    ap.add_argument("--complex_backfill_items", type=int, default=0)
 
     ap.add_argument("--K", type=int, default=8)
     ap.add_argument("--delta_r", type=float, default=3.0)
@@ -257,6 +258,10 @@ def augment_route_keys_with_complex(
     return keys, int(len(np.unique(complex_ids))) if complex_ids.size else 0
 
 
+def primary_route_key(key: Tuple[int, ...]) -> Tuple[int, int]:
+    return int(key[0]), int(key[1])
+
+
 def routed_retrieval_grouped_same_bucket(
     train_keys: Sequence[Tuple[int, ...]],
     eval_keys: Sequence[Tuple[int, ...]],
@@ -265,6 +270,7 @@ def routed_retrieval_grouped_same_bucket(
     train_tok: np.ndarray,
     eval_z: np.ndarray,
     topk: int,
+    complex_backfill_items: int = 0,
 ) -> Tuple[np.ndarray, np.ndarray, float, float, float, float]:
     bucket_to_train_idx = build_bucket_index(train_keys)
     bucket_to_eval_idx = build_bucket_index(eval_keys)
@@ -276,16 +282,70 @@ def routed_retrieval_grouped_same_bucket(
     fallback = np.zeros((ev_u.shape[0],), dtype=np.float64)
 
     full_idx = np.arange(train_z.shape[0], dtype=np.int64)
+    use_backfill = int(complex_backfill_items) > 0 and bool(train_keys) and len(train_keys[0]) > 2
+    primary_to_train_idx = build_bucket_index([primary_route_key(k) for k in train_keys]) if use_backfill else {}
+    extra_pool_by_key: Dict[Tuple[int, ...], np.ndarray] = {}
+    if use_backfill:
+        for key, exact_idx in bucket_to_train_idx.items():
+            if len(key) <= 2:
+                continue
+            base_idx = primary_to_train_idx.get(primary_route_key(key))
+            if base_idx is None or base_idx.size == 0:
+                extra_pool_by_key[key] = np.zeros((0,), dtype=np.int64)
+            else:
+                extra_pool_by_key[key] = np.setdiff1d(base_idx, exact_idx, assume_unique=False)
     for key, ev_idx in bucket_to_eval_idx.items():
         cand_idx = bucket_to_train_idx.get(key)
-        if cand_idx is None or cand_idx.size == 0:
-            cand_idx = full_idx
+        if not use_backfill:
+            if cand_idx is None or cand_idx.size == 0:
+                cand_idx = full_idx
+                fallback[ev_idx] = 1.0
+            sim = ev_u[ev_idx] @ tr_u[cand_idx].T
+            y_block, tok_block = topk_reduce(sim, train_y[cand_idx], train_tok[cand_idx], topk=topk)
+            yhat[ev_idx] = y_block
+            pred_tok[ev_idx] = tok_block
+            candidate_counts[ev_idx] = float(cand_idx.shape[0])
+            continue
+
+        base_idx = primary_to_train_idx.get(primary_route_key(key))
+        if base_idx is None or base_idx.size == 0:
+            cand_idx_row = full_idx
             fallback[ev_idx] = 1.0
-        sim = ev_u[ev_idx] @ tr_u[cand_idx].T
-        y_block, tok_block = topk_reduce(sim, train_y[cand_idx], train_tok[cand_idx], topk=topk)
-        yhat[ev_idx] = y_block
-        pred_tok[ev_idx] = tok_block
-        candidate_counts[ev_idx] = float(cand_idx.shape[0])
+            sim = ev_u[ev_idx] @ tr_u[cand_idx_row].T
+            y_block, tok_block = topk_reduce(sim, train_y[cand_idx_row], train_tok[cand_idx_row], topk=topk)
+            yhat[ev_idx] = y_block
+            pred_tok[ev_idx] = tok_block
+            candidate_counts[ev_idx] = float(cand_idx_row.shape[0])
+            continue
+        if cand_idx is None or cand_idx.size == 0:
+            fallback[ev_idx] = 1.0
+            sim = ev_u[ev_idx] @ tr_u[base_idx].T
+            y_block, tok_block = topk_reduce(sim, train_y[base_idx], train_tok[base_idx], topk=topk)
+            yhat[ev_idx] = y_block
+            pred_tok[ev_idx] = tok_block
+            candidate_counts[ev_idx] = float(base_idx.shape[0])
+            continue
+        extra_pool = extra_pool_by_key.get(key)
+        if extra_pool is None or extra_pool.size == 0:
+            sim = ev_u[ev_idx] @ tr_u[cand_idx].T
+            y_block, tok_block = topk_reduce(sim, train_y[cand_idx], train_tok[cand_idx], topk=topk)
+            yhat[ev_idx] = y_block
+            pred_tok[ev_idx] = tok_block
+            candidate_counts[ev_idx] = float(cand_idx.shape[0])
+            continue
+        backfill_n = min(int(complex_backfill_items), int(extra_pool.size))
+        extra_sim = ev_u[ev_idx] @ tr_u[extra_pool].T
+        extra_idx = np.argpartition(-extra_sim, kth=backfill_n - 1, axis=1)[:, :backfill_n]
+        part = np.take_along_axis(extra_sim, extra_idx, axis=1)
+        order = np.argsort(-part, axis=1)
+        extra_idx = np.take_along_axis(extra_idx, order, axis=1)
+        for local_row, row_idx in enumerate(ev_idx):
+            cand_idx_row = np.unique(np.concatenate([cand_idx, extra_pool[extra_idx[local_row]]]))
+            sim = ev_u[row_idx:row_idx + 1] @ tr_u[cand_idx_row].T
+            y_block, tok_block = topk_reduce(sim, train_y[cand_idx_row], train_tok[cand_idx_row], topk=topk)
+            yhat[row_idx:row_idx + 1] = y_block
+            pred_tok[row_idx] = tok_block[0]
+            candidate_counts[row_idx] = float(cand_idx_row.shape[0])
 
     return (
         yhat,
@@ -306,6 +366,7 @@ def routed_retrieval(
     eval_z: np.ndarray,
     topk: int,
     probe_buckets: int,
+    complex_backfill_items: int = 0,
 ):
     bucket_to_idx = build_bucket_index(train_keys)
     bucket_keys = list(bucket_to_idx.keys())
@@ -314,7 +375,7 @@ def routed_retrieval(
         return yhat, pred_tok, cand_mean, cand_frac, 0.0, 1.0
     if probe_buckets <= 1:
         return routed_retrieval_grouped_same_bucket(
-            train_keys, eval_keys, train_z, train_y, train_tok, eval_z, topk=topk
+            train_keys, eval_keys, train_z, train_y, train_tok, eval_z, topk=topk, complex_backfill_items=complex_backfill_items
         )
 
     tr_u = _normalize_rows(train_z)
@@ -611,7 +672,10 @@ def main():
                 )
             t_retr = time.perf_counter()
             yhat_local, pred_tok_local, candidate_count_local, candidate_fraction_local, probe_bucket_local, fallback_local = routed_retrieval(
-                keys_tr, keys_ev_local, z_tr, y_tr, y_tr_tok, z_ev_local, topk=args.topk, probe_buckets=args.probe_buckets
+                keys_tr, keys_ev_local, z_tr, y_tr, y_tr_tok, z_ev_local,
+                topk=args.topk,
+                probe_buckets=args.probe_buckets,
+                complex_backfill_items=args.complex_backfill_items,
             )
             retrieval_search_sec = time.perf_counter() - t_retr
             return {
