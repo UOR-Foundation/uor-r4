@@ -136,6 +136,8 @@ def summarize_route(route_id: str, summaries: List[Dict[str, Any]]) -> Dict[str,
         "mean_retrieval_candidate_count": metric_mean(summaries, "retrieval_candidate_count_mean"),
         "mean_retrieval_candidate_fraction": metric_mean(summaries, "retrieval_candidate_fraction_mean"),
         "mean_retrieval_probe_bucket": metric_mean(summaries, "retrieval_probe_bucket_mean"),
+        "mean_retrieval_bucket_fallback_rate": metric_mean(summaries, "retrieval_bucket_fallback_rate"),
+        "mean_retrieval_secondary_key_count": metric_mean(summaries, "retrieval_secondary_key_count"),
     }
 
 
@@ -286,6 +288,8 @@ def write_gate_note(path: str, config_path: str, route_stats: List[Dict[str, Any
             f"cand_mean={stats['mean_retrieval_candidate_count']:.3f}, "
             f"cand_frac={stats['mean_retrieval_candidate_fraction']:.6f}, "
             f"probe_mean={stats['mean_retrieval_probe_bucket']:.3f}, "
+            f"fallback={stats['mean_retrieval_bucket_fallback_rate']:.6f}, "
+            f"secondary_keys={stats['mean_retrieval_secondary_key_count']:.3f}, "
             f"align_radial_mae={stats['mean_poincare_alignment_radial_mae']:.6f}, "
             f"align_pair_mae={stats['mean_poincare_alignment_pair_mae']:.6f}, "
             f"align_pair_corr={stats['mean_poincare_alignment_pair_corr']:.6f}, "

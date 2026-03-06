@@ -726,3 +726,21 @@ Use this file to map each run batch to parsed summaries and decision records.
 - Analysis: `results/analysis/inc0054_tangent_flow_route_law_screen.json`
 - Summary row range: rows where `run_tag` contains `inc0054_tangent_flow_route_law_screen`
 - Decision note: `docs/governance/gates/gate_20260306_124322.md`
+
+## Batch B100
+- Batch ID: `B100_inc0055_product_h4x4_retrieval_field_screen`
+- Config: `configs/proxy_transfer_inc0055_product_h4x4_retrieval_field_screen.json`
+- Logs: `results/raw/inc0055_product_h4x4_retrieval_field_screen_*.log`
+- Parsed files: matching `results/parsed/inc0055_product_h4x4_retrieval_field_screen_*.json`
+- Analysis: `results/analysis/inc0055_product_h4x4_retrieval_field_screen.json`
+- Summary row range: rows where `run_tag` contains `inc0055_product_h4x4_retrieval_field_screen`
+- Decision note: `docs/governance/gates/gate_20260306_125229.md`
+
+## Batch B101
+- Batch ID: `B101_inc0055_product_h4x4_retrieval_field_confirm`
+- Config: `configs/proxy_transfer_inc0055_product_h4x4_retrieval_field_confirm.json`
+- Logs: `results/raw/inc0055_product_h4x4_retrieval_field_confirm_*.log`
+- Parsed files: matching `results/parsed/inc0055_product_h4x4_retrieval_field_confirm_*.json`
+- Analysis: `results/analysis/inc0055_product_h4x4_retrieval_field_confirm.json`
+- Summary row range: rows where `run_tag` contains `inc0055_product_h4x4_retrieval_field_confirm`
+- Decision note: `docs/governance/gates/gate_20260306_125455.md`

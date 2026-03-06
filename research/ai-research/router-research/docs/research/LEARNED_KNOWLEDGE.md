@@ -37,6 +37,14 @@ This file stores durable mathematical and architectural findings that should sur
 - New live hypothesis:
   - route keys may want discrete storage in a complex / imaginary field associated with the second `H^4`
   - that is a better fit for the product branch than for the tangent-flow branch
+- `INC-0055` turned that hypothesis into evidence:
+  - discrete complex route-key storage on the second `H^4` cut candidate fraction further, from about `0.334` to `0.267`
+  - runtime improved materially
+  - fallback remained low
+  - the tradeoff is bounded quality loss, not route failure
+- Current reading:
+  - plain product bucket is the quality/top-1 reference
+  - product complex key is the discrete-key efficiency reference
 
 ## Systems
 - Route-health failures in `R0` can make it look fast while still being geometrically unhealthy.

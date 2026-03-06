@@ -1,18 +1,16 @@
 # Current Direction
 
 ## Latest Update
-- `INC-0054` tangent-flow route-law pilot is closed at screen stage.
-- Same-bucket Hopf restriction is real locality:
-  - candidate fraction dropped to about `0.34`
-  - bucket fallback stayed at `0.0`
-- But the main-objective result stayed with the global baseline:
-  - `STATIC_GLOBAL`: best MSE
-  - `TXH4_BUCKET_W050`: best bucketed runtime/MSE tradeoff
-  - `H4XH4_BUCKET_W025`: best bucketed top-1
+- `INC-0055` product retrieval-field pilot is complete.
+- `H4XH4_CPX13_W025` is the new product discrete-key efficiency branch:
+  - candidate fraction dropped from `0.3344` to `0.2672`
+  - total runtime dropped from `7.729s` to `7.088s`
+  - fallback stayed low at `0.0070`
+  - quality regressed slightly vs plain product bucket
 - Current primary action:
-  - move to the product `H^4 x H^4` retrieval-field pilot
+  - move to translated evaluation of the product complex-key law
   - keep the second factor explicitly live as a hyperbolic polar field, not a flat auxiliary embedding
-  - carry forward the new suggestion that route keys may want discrete complex / imaginary storage inside that second field
+  - treat discrete complex / imaginary route-key storage as evidence-positive inside that second field
 
 ## Current Best-Known Routes
 - Synthetic lead: `R5B`
@@ -85,7 +83,9 @@
   - static Hopf route keys are strong enough to prune candidates without fallback
   - tangent flow alone does not yet justify rewriting the route law around bucketed locality
   - product `H^4 x H^4` remains the stronger next branch for retrieval/discrete routing behavior
-- The new live sub-hypothesis is that the second `H^4` may want to store route keys in a discrete complex / imaginary field rather than as only another continuous regression space.
+- `INC-0055` upgraded that sub-hypothesis:
+  - the second `H^4` can carry a useful discrete complex route-key field
+  - the branch is retrieval-efficiency positive even though it is not the main MSE winner
 
 ## Current Risk
 - The win is still proxy-harness evidence, not an end-to-end model claim.

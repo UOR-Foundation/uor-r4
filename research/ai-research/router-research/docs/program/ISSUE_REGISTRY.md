@@ -8,11 +8,11 @@ Use this file as the local GitHub-style issue list for router research.
   - Branch: `codex/RR-050-dynamic-h4-state`
   - Canonical doc: `docs/research/increments/INC_0050_dynamic_h4_state.md`
   - Goal: carry dynamic geometry from Slice A confirm into the next implementation slice
-- `RR-055` `[research][dynamic-geometry][active]`
-  - Title: Product `H^4 x H^4` retrieval-field pilot
-  - Branch: `codex/RR-055-product-h4x4-retrieval-field`
-  - Depends on: `RR-050`
-  - Goal: test whether the second hyperbolic factor is primarily a retrieval / discrete-decision field, including discrete complex / imaginary route-key storage
+- `RR-056` `[research][translation][active-next]`
+  - Title: Translate product complex-key retrieval field
+  - Branch: `codex/RR-056-product-complex-translation`
+  - Depends on: `RR-055`
+  - Goal: test the product complex-key law inside the translated retrieval harness
 
 ## Queued
 - `RR-053` `[systems][translation][queued]`
@@ -22,6 +22,11 @@ Use this file as the local GitHub-style issue list for router research.
   - Goal: turn the amortized crossover into a reusable systems path with persistent offline index artifacts
 
 ## Recently Closed
+- `RR-055` `[research][dynamic-geometry][done]`
+  - Title: Product `H^4 x H^4` retrieval-field pilot
+  - Branch: `codex/RR-055-product-h4x4-retrieval-field`
+  - Canonical doc: `docs/research/increments/INC_0055_product_h4x4_retrieval_field.md`
+  - Result: discrete complex route-key storage became the product efficiency lead, while plain product bucket stayed the quality/top-1 reference
 - `RR-054` `[research][dynamic-geometry][done]`
   - Title: Tangent-flow route law pilot
   - Branch: `codex/RR-054-tangent-flow-route-law`

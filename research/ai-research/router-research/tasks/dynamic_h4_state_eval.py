@@ -65,11 +65,42 @@ def pairwise_sqeuclidean(X: np.ndarray, Y: np.ndarray) -> np.ndarray:
     return np.maximum(x2 + y2 - 2.0 * dot, 0.0)
 
 
-def build_bucket_index(keys: Sequence[Tuple[int, int]]) -> Dict[Tuple[int, int], np.ndarray]:
-    bucket_to_idx: Dict[Tuple[int, int], list] = {}
+def build_bucket_index(keys: Sequence[Tuple[int, ...]]) -> Dict[Tuple[int, ...], np.ndarray]:
+    bucket_to_idx: Dict[Tuple[int, ...], list] = {}
     for idx, key in enumerate(keys):
         bucket_to_idx.setdefault(key, []).append(idx)
     return {key: np.asarray(idxs, dtype=np.int64) for key, idxs in bucket_to_idx.items()}
+
+
+def complex_key_ids(field: np.ndarray, dim_i: int, dim_j: int, roots: int, radius_bins: int) -> np.ndarray:
+    roots = max(1, int(roots))
+    radius_bins = max(1, int(radius_bins))
+    qi = field[:, dim_i]
+    qj = field[:, dim_j]
+    theta = np.mod(np.arctan2(qj, qi), 2.0 * np.pi)
+    angle_ids = np.minimum((theta * (float(roots) / (2.0 * np.pi))).astype(np.int64), roots - 1)
+    if radius_bins <= 1 or field.shape[0] == 0:
+        radius_ids = np.zeros((field.shape[0],), dtype=np.int64)
+    else:
+        radius = np.sqrt(qi * qi + qj * qj)
+        edges = np.quantile(radius, np.linspace(0.0, 1.0, radius_bins + 1)[1:-1])
+        radius_ids = np.searchsorted(edges, radius, side="right").astype(np.int64)
+    return angle_ids + roots * radius_ids
+
+
+def augment_route_keys_with_complex(
+    base_keys: Sequence[Tuple[int, int]],
+    field: np.ndarray,
+    dim_i: int,
+    dim_j: int,
+    roots: int,
+    radius_bins: int,
+) -> Tuple[list, int]:
+    complex_ids = complex_key_ids(field, dim_i=dim_i, dim_j=dim_j, roots=roots, radius_bins=radius_bins)
+    return (
+        [(int(key[0]), int(key[1]), int(complex_ids[i])) for i, key in enumerate(base_keys)],
+        int(len(np.unique(complex_ids))) if complex_ids.size else 0,
+    )
 
 
 def pointwise_state_distance(
@@ -193,11 +224,11 @@ def knn_state_predict_bucketed(
     train_flow: np.ndarray,
     train_flow_ball: np.ndarray,
     train_y: np.ndarray,
-    train_keys: Sequence[Tuple[int, int]],
+    train_keys: Sequence[Tuple[int, ...]],
     eval_pos: np.ndarray,
     eval_flow: np.ndarray,
     eval_flow_ball: np.ndarray,
-    eval_keys: Sequence[Tuple[int, int]],
+    eval_keys: Sequence[Tuple[int, ...]],
     dynamic_state_mode: str,
     flow_weight: float,
     topk: int,
@@ -373,12 +404,15 @@ def parse_args():
 
     ap.add_argument("--dynamic_state_mode", type=str, default="static_h4", choices=["static_h4", "tangent_h4", "product_h4x_h4"])
     ap.add_argument("--candidate_mode", type=str, default="global_knn", choices=["global_knn", "static_bucket_knn"])
+    ap.add_argument("--route_key_mode", type=str, default="hopf_bucket", choices=["hopf_bucket", "hopf_plus_complex"])
     ap.add_argument("--flow_step", type=int, default=1)
     ap.add_argument("--flow_scale", type=float, default=1.0)
     ap.add_argument("--flow_weight", type=float, default=0.5)
     ap.add_argument("--state_topk", type=int, default=8)
     ap.add_argument("--state_block_size", type=int, default=256)
     ap.add_argument("--state_pair_samples", type=int, default=512)
+    ap.add_argument("--complex_key_roots", type=int, default=8)
+    ap.add_argument("--complex_key_radius_bins", type=int, default=1)
 
     ap.add_argument("--K", type=int, default=25)
     ap.add_argument("--delta_r", type=float, default=3.6)
@@ -732,6 +766,25 @@ def main():
         hybrid_local_converge_lambda=args.hybrid_local_converge_lambda,
     )
     keys_ev = [hr.make_bucket_key(int(shell_ev[i]), int(sector_ev[i])) for i in range(len(shell_ev))]
+    secondary_key_count = 0
+    if args.route_key_mode == "hopf_plus_complex":
+        keys_tr, secondary_key_count_tr = augment_route_keys_with_complex(
+            base_keys=keys_tr,
+            field=flow_ball_tr,
+            dim_i=complex_dim_i,
+            dim_j=complex_dim_j,
+            roots=args.complex_key_roots,
+            radius_bins=args.complex_key_radius_bins,
+        )
+        keys_ev, secondary_key_count_ev = augment_route_keys_with_complex(
+            base_keys=keys_ev,
+            field=flow_ball_ev,
+            dim_i=complex_dim_i,
+            dim_j=complex_dim_j,
+            roots=args.complex_key_roots,
+            radius_bins=args.complex_key_radius_bins,
+        )
+        secondary_key_count = int(max(secondary_key_count_tr, secondary_key_count_ev))
     if args.candidate_mode == "static_bucket_knn":
         (
             yhat,
@@ -818,6 +871,7 @@ def main():
         "retrieval_candidate_fraction_mean": float(candidate_fraction_mean),
         "retrieval_probe_bucket_mean": float(probe_bucket_mean),
         "retrieval_bucket_fallback_rate": float(bucket_fallback_rate),
+        "retrieval_secondary_key_count": int(secondary_key_count),
         "dynamic_flow_norm_mean": float(np.mean(hr.safe_norm(flow_ev, axis=1, keepdims=False))),
         "dynamic_flow_norm_q95": float(np.quantile(hr.safe_norm(flow_ev, axis=1, keepdims=False), 0.95)),
         "dynamic_flow_ball_radius_mean": float(np.mean(hr.poincare_radius(flow_ball_ev))),

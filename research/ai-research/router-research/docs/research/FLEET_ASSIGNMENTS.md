@@ -47,8 +47,10 @@
       - same-bucket Hopf locality is real
       - tangent flow does not yet justify a promoted bucketed route law
     - formalize the intended `H^4 x H^4` object as hyperbolic polar on both factors, not Euclidean 8D polar
-    - design `INC-0055` as a retrieval/discrete-key branch
-    - explain whether the second `H^4` should store route keys in a discrete complex / imaginary field
+    - use `INC-0055` as positive evidence:
+      - the second `H^4` can support a useful discrete complex / imaginary key field
+    - design `INC-0056` around translation/integration of that key field
+    - explain whether the second-field complex key should be a pure address law or also affect ordering
 
 ## Experimental Validation Team
 - Mission: test lead candidates under robust synthetic conditions.
@@ -101,3 +103,4 @@
     - maintain `tasks/dynamic_h4_state_eval.py`
     - preserve ordered-window evaluation behavior in this branch
     - preserve `candidate_mode=global_knn|static_bucket_knn` and the bucket-locality metrics added in `INC-0054`
+    - preserve `route_key_mode=hopf_bucket|hopf_plus_complex` and the secondary-key metrics added in `INC-0055`

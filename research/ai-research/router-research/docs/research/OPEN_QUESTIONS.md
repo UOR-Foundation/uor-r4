@@ -161,6 +161,16 @@
 - Why it matters: `INC-0054` cut candidate fraction to about `0.34` with zero fallback, but the global dynamic baseline still won MSE. The project needs to know whether the loss comes from bucket granularity, metric mismatch, or missing second-field structure.
 - Current owner: Geometry Theory Team
 
+## Q2y: What is the right discrete complex key law for the second `H^4`?
+- Priority: highest
+- Why it matters: `INC-0055` showed that discrete complex route-key storage is evidence-positive, but the current `13`-root law still pays a bounded quality cost. The project needs a mathematically cleaner key law than “just pick a root count.”
+- Current owner: Geometry Theory Team
+
+## Q2z: Should the second-field complex key be a pure address field or a mixed address-plus-ordering field?
+- Priority: highest
+- Why it matters: `INC-0055` improved candidate pruning and runtime, but the product baseline still won quality. The next branch has to decide whether the complex field should only choose candidates or also modify within-bucket ordering.
+- Current owner: Geometry Theory Team
+
 ## Q3: Why does the radial optimum move from `3.0` (fixed) to `3.2` (`phi_ladder`) to `3.6` (`PHI_PHI_PHI`)?
 - Priority: highest
 - Why it matters: the shell-width term is clearly part of the routing law, and the optimum moves as the family becomes more self-consistent.

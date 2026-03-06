@@ -7,6 +7,7 @@ import unittest
 import numpy as np
 
 from tasks.dynamic_h4_state_eval import (
+    augment_route_keys_with_complex,
     build_flow_state,
     knn_state_predict_bucketed,
     pairwise_poincare_distance,
@@ -97,6 +98,28 @@ class DynamicH4StateEvalTest(unittest.TestCase):
         self.assertEqual(probe_mean, 1.0)
         self.assertEqual(fallback_rate, 0.0)
 
+    def test_complex_route_key_augmentation_adds_secondary_component(self):
+        base_keys = [(0, 0), (0, 0), (1, 2)]
+        field = np.array(
+            [
+                [0.5, 0.0],
+                [0.0, 0.5],
+                [-0.5, 0.0],
+            ],
+            dtype=np.float64,
+        )
+        keys, n_secondary = augment_route_keys_with_complex(
+            base_keys=base_keys,
+            field=field,
+            dim_i=0,
+            dim_j=1,
+            roots=4,
+            radius_bins=1,
+        )
+        self.assertEqual(len(keys[0]), 3)
+        self.assertGreaterEqual(n_secondary, 2)
+        self.assertNotEqual(keys[0], keys[1])
+
     def test_script_emits_json_summary(self):
         rs = np.random.RandomState(0)
         x_train = rs.normal(size=(96, 16)).astype(np.float32)
@@ -138,6 +161,10 @@ class DynamicH4StateEvalTest(unittest.TestCase):
                 "phase4d_hopf",
                 "--candidate_mode",
                 "static_bucket_knn",
+                "--route_key_mode",
+                "hopf_plus_complex",
+                "--complex_key_roots",
+                "4",
                 "--dynamic_state_mode",
                 "product_h4x_h4",
             ]
@@ -153,6 +180,7 @@ class DynamicH4StateEvalTest(unittest.TestCase):
             self.assertIn("dynamic_step_to_random_ratio", payload["metrics"])
             self.assertIn("retrieval_candidate_count_mean", payload["metrics"])
             self.assertIn("retrieval_candidate_fraction_mean", payload["metrics"])
+            self.assertIn("retrieval_secondary_key_count", payload["metrics"])
 
 
 if __name__ == "__main__":

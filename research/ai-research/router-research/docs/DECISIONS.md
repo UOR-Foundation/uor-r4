@@ -1066,3 +1066,19 @@ Add new entries below.
   - close `INC-0054` without confirm
   - promote `INC-0055` as the next live branch
   - carry forward the new sub-hypothesis that route keys may belong in a discrete complex / imaginary field attached to the second `H^4`
+
+## 2026-03-06 (research increment INC-0055)
+- Implemented discrete complex route-key storage on top of the product `H^4 x H^4` surrogate:
+  - `route_key_mode=hopf_plus_complex`
+  - `complex_key_roots`
+  - `complex_key_radius_bins`
+- 4-seed confirm result:
+  - `H4XH4_BUCKET_W025`: `mse=0.004318471`, `top1=0.03333`, `total=7.729s`, `cand_frac=0.3344`
+  - `H4XH4_CPX13_W025`: `0.004336934`, `0.03167`, `7.088s`, `0.2672`, `fallback=0.0070`
+- Reading:
+  - the second `H^4` can carry a useful discrete complex / imaginary key field
+  - the branch is efficiency-positive on candidate pruning and runtime
+  - the branch is not the quality leader; plain product bucket keeps that role
+- Decision:
+  - close `INC-0055` as a positive product retrieval-field pilot
+  - promote translation/integration of the complex key law as the next branch

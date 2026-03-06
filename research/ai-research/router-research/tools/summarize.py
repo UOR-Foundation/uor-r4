@@ -18,10 +18,13 @@ FIELDS = [
     "query_repeats",
     "dynamic_state_mode",
     "candidate_mode",
+    "route_key_mode",
     "flow_step",
     "flow_scale",
     "flow_weight",
     "state_topk",
+    "complex_key_roots",
+    "complex_key_radius_bins",
     "sector_mode",
     "phase_dims",
     "phase4_dims",
@@ -49,6 +52,8 @@ FIELDS = [
     "retrieval_candidate_count_mean",
     "retrieval_candidate_fraction_mean",
     "retrieval_probe_bucket_mean",
+    "retrieval_bucket_fallback_rate",
+    "retrieval_secondary_key_count",
     "retrieval_query_repeats",
     "retrieval_offline_total_sec",
     "retrieval_online_total_sec",
@@ -109,8 +114,8 @@ def build_row(j: Dict, default_log_file: str) -> Dict:
     git = j.get("git", {}) if isinstance(j.get("git", {}), dict) else {}
 
     for k in [
-        "seed", "mode", "retrieval_backend", "query_repeats", "dynamic_state_mode", "candidate_mode", "flow_step", "flow_scale", "flow_weight",
-        "state_topk", "sector_mode", "phase_dims", "phase4_dims", "complex_dims",
+        "seed", "mode", "retrieval_backend", "query_repeats", "dynamic_state_mode", "candidate_mode", "route_key_mode", "flow_step", "flow_scale", "flow_weight",
+        "state_topk", "complex_key_roots", "complex_key_radius_bins", "sector_mode", "phase_dims", "phase4_dims", "complex_dims",
         "time_pressure_lambda", "scale_mode", "radial_bins", "learn_so8", "learn_scale",
         "fast_dev", "extra_budget", "max_slots_per_bucket", "chart_beta", "chart_iters",
     ]:
@@ -120,6 +125,7 @@ def build_row(j: Dict, default_log_file: str) -> Dict:
         "test_mse_before", "test_mse_after", "test_top1_after", "train_label_sse_per", "test_label_sse_per",
         "test_unseen_rate", "buckets", "slots_used", "new_slots", "accepted_splits",
         "retrieval_candidate_count_mean", "retrieval_candidate_fraction_mean", "retrieval_probe_bucket_mean",
+        "retrieval_bucket_fallback_rate", "retrieval_secondary_key_count",
         "retrieval_query_repeats", "retrieval_offline_total_sec", "retrieval_online_total_sec",
         "retrieval_online_total_per_repeat_sec", "retrieval_total_amortized_per_repeat_sec",
         "poincare_alignment_pairs_used",
