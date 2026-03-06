@@ -1103,3 +1103,23 @@ Add new entries below.
 - Reading:
   - the complex key is now a real translated-addressing mechanism, not just a product-state surrogate
   - the remaining weakness is recall/backfill, not address collapse or fallback instability
+
+## 2026-03-06 - RR-057 hierarchical backfill is closed negative
+- Branch / issue: `RR-057`
+- Canonical increment: `docs/research/increments/INC_0057_product_complex_backfill.md`
+- Evidence:
+  - `results/analysis/inc0057_product_complex_backfill_smallbucket_screen.json`
+  - `docs/governance/gates/gate_20260306_135217.md`
+  - interrupted low-margin live evidence stored in raw logs under `results/raw/inc0057_product_complex_backfill_selective_screen_*`
+- Decision:
+  - keep `HOPF_RET_CPX_P1_Q24` as the translated complex-key efficiency reference
+  - kill coarse-backfill rescue as the preferred translated recall path
+  - move next to exact-bucket reranking instead of candidate expansion
+- Small-bucket screen means:
+  - `HOPF_RET_CPX_P1_Q24`: `mse=0.00432337`, `top1=0.04767`, `total=14.123s`, `amortized=0.5652s`, `cand_frac=0.20754`
+  - `HOPF_RET_CPX_SB1_BF2_P1_Q24`: `0.00432294`, `0.04767`, `13.767s`, `0.5482s`, `cand_frac=0.20754`, `trigger=0.0005`
+  - `HOPF_RET_CPX_SB2_BF2_P1_Q24`: `0.00432261`, `0.04767`, `13.245s`, `0.5261s`, `cand_frac=0.20754`, `trigger=0.0008`
+- Reading:
+  - small-bucket backfill is almost inert
+  - low-margin backfill over-triggers and is operationally dead
+  - the remaining translated gap is better modeled as a within-bucket ordering problem than a missing-candidate problem

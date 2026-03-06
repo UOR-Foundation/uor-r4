@@ -137,6 +137,8 @@ def summarize_route(route_id: str, summaries: List[Dict[str, Any]]) -> Dict[str,
         "mean_retrieval_candidate_fraction": metric_mean(summaries, "retrieval_candidate_fraction_mean"),
         "mean_retrieval_probe_bucket": metric_mean(summaries, "retrieval_probe_bucket_mean"),
         "mean_retrieval_bucket_fallback_rate": metric_mean(summaries, "retrieval_bucket_fallback_rate"),
+        "mean_retrieval_backfill_trigger_rate": metric_mean(summaries, "retrieval_backfill_trigger_rate"),
+        "mean_retrieval_backfill_extra_candidates": metric_mean(summaries, "retrieval_backfill_extra_candidates_mean"),
         "mean_retrieval_secondary_key_count": metric_mean(summaries, "retrieval_secondary_key_count"),
     }
 

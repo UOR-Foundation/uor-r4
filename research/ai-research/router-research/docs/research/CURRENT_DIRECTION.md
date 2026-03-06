@@ -1,19 +1,17 @@
 # Current Direction
 
 ## Latest Update
-- `INC-0056` product complex-key translation is complete.
-- `HOPF_RET_CPX_P1_Q24` is the new translated complex-key efficiency branch:
-  - candidate fraction dropped from `0.3511` to `0.2095` versus plain Hopf translated retrieval
-  - online cost dropped from `0.3245s` to `0.2976s` per repeat
-  - amortized cost dropped from `0.6685s` to `0.6129s` per repeat
-  - fallback stayed at `0.0000`
-  - proxy MSE improved slightly versus plain Hopf
-  - top-1 regressed slightly versus plain Hopf and dense exact retrieval
+- `INC-0057` is now closed negative.
+- `HOPF_RET_CPX_P1_Q24` remains the translated complex-key efficiency reference:
+  - broad coarse backfill stayed too expensive
+  - low-margin backfill over-triggered and destroyed cost
+  - small-bucket backfill was nearly inert and did not improve top-1
 - Current primary action:
   - treat discrete complex / imaginary route-key storage as evidence-positive in both product and translated retrieval settings
   - keep the second factor explicitly live as a hyperbolic polar field, not a flat auxiliary embedding
-  - move next to hierarchical complex backfill rather than abandoning the key law after the first top-1 penalty
-  - prefer selective or cached backfill over broad fixed-size coarse augmentation
+  - keep the live product object as `H^4 x H^4` in hyperbolic polar structure on both factors
+  - move next to exact-bucket reranking rather than candidate expansion
+  - treat the remaining translated gap as a local ordering problem unless new evidence contradicts that
 
 ## Current Best-Known Routes
 - Synthetic lead: `R5B`
@@ -98,9 +96,11 @@
   - the gain is not limited to the product-state evaluator
   - the remaining weakness is not fallback or candidate explosion
   - the remaining weakness is a small top-1 loss that now looks like a backfill / recall problem
-- `INC-0057` early implementation reading:
+- `INC-0057` closed that hypothesis:
   - naive coarse backfill is materially expensive even after removing the obvious per-query set-diff bug
-  - the next recall branch should be selective, not broad
+  - low-margin selective backfill over-triggers and is operationally dead
+  - small-bucket selective backfill is too inert to justify the added path
+  - the next recall branch should avoid candidate expansion entirely
 
 ## Current Risk
 - The win is still proxy-harness evidence, not an end-to-end model claim.

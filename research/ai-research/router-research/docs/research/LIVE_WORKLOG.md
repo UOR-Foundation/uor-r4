@@ -1,32 +1,31 @@
 # Live Worklog
 
 ## Latest Update
-- Completed `INC-0055` product retrieval-field confirm.
-- Result:
-  - discrete complex route-key storage in the second `H^4` is evidence-positive
-  - candidate fraction dropped from `0.3344` to `0.2672`
-  - total runtime dropped from `7.729s` to `7.088s`
-  - fallback stayed low at `0.0070`
-  - plain product bucket still kept the quality/top-1 lead
-- Decision:
-  - close `INC-0055` as a positive branch
-  - move next to translation/integration of the product complex-key law
-  - treat discrete complex/imaginary route-key storage as part of the live `H^4 x H^4` architecture
+Completed `INC-0057` translated complex backfill screen.
+Result:
+  - broad coarse backfill remained too expensive
+  - low-margin backfill over-triggered and became operationally dead
+  - small-bucket backfill stayed nearly inert and did not improve top-1
+  - exact translated complex addressing remains the live efficiency reference
+Decision:
+  - close `INC-0057` negative
+  - move next to no-expansion recall repair via exact-bucket reranking
+  - keep discrete complex / imaginary routing as part of the live `H^4 x H^4` architecture
 
 ## Current State
-- Latest closed increment: `INC-0055`.
-- Next increment: `INC-0056`.
+- Latest closed increment: `INC-0057`.
+- Next increment: `INC-0058`.
 - Current transfer control baseline: `R0`.
 - Current operational routed lead: `HOPF_K25_BASE_IT40_P2_STATIC`.
 - Current hardware-efficiency routed lead: `HOPF_PHI2_BAND_IT40_P2_STATIC`.
 - Current translated retrieval control: matched `DENSE_Q24` / `DENSE_Q32`.
-- Current translated retrieval family reference: `HOPF_RET_P1`.
+- Current translated retrieval family reference: `HOPF_RET_CPX_P1_Q24`.
 
 ## Current Interpretation
 - The cheap routed frontier was strong enough to translate.
 - The first translated harness is live, coherent, and still useful as an evaluation path.
 - The translated systems branch did not clear operational confirm.
-- The next responsible move is product-complex translation, not more local key tuning.
+- The next responsible move is exact-bucket reranking, not more candidate expansion.
 
 ## If Session Gets Cut
 1. Read:
@@ -60,12 +59,25 @@
   - close `INC-0056` as positive
   - move next to hierarchical complex-key backfill (`INC-0057`)
 
-## 2026-03-06 (research increment INC-0057, partial)
+## 2026-03-06 (research increment INC-0057)
 - Implemented `complex_backfill_items` in `tasks/router_retrieval_eval.py`.
 - Added translated unit coverage proving bounded coarse backfill can recover a coarse neighbor in a controlled case.
 - First RR-057 screen attempt showed a pathologically slow naive implementation because the coarse extra pool was recomputed per query.
 - Optimized the backfill path by precomputing coarse extra pools per composite key and reran the screen under a v2 config.
-- Live observation before stopping the screen:
-  - `BF4` remained materially heavier than exact complex addressing even after the optimization.
+- Added selective/gated backfill controls:
+  - `complex_backfill_mode`
+  - `complex_backfill_max_exact`
+  - `complex_backfill_margin_threshold`
+- Added translated metrics:
+  - `retrieval_backfill_trigger_rate`
+  - `retrieval_backfill_extra_candidates_mean`
+- Completed the selective small-bucket screen:
+  - exact complex addressing stayed the efficiency reference
+  - `SB1/SB2` backfill triggered at about `0.0005-0.0008`
+  - top-1 stayed unchanged at `0.04767`
+  - candidate fraction stayed unchanged at about `0.20754`
+- Killed low-margin backfill after live seed-0 evidence:
+  - `trigger=0.7170`
+  - amortized cost exploded
 - Current reading:
-  - the next recall-repair step likely needs selective or cached backfill rather than a broad fixed-size coarse augmentation.
+  - translated recall repair should be treated as an in-bucket ordering problem, not a candidate-expansion problem

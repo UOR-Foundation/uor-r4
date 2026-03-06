@@ -72,4 +72,6 @@ This file stores durable mathematical and architectural findings that should sur
 - Deep math branches should first prove signal with a minimal surrogate before rewriting the main route law.
 - `INC-0057` partial result:
   - naive hierarchical coarse backfill on top of the exact complex key remains materially expensive even after removing the obvious repeated set-diff bug
-  - this suggests recall repair should be selective, cached, or gated rather than implemented as a broad per-query coarse augmentation
+  - low-margin selective backfill over-triggers and becomes operationally dead
+  - small-bucket selective backfill triggers too rarely to change top-1
+  - this suggests recall repair should avoid candidate expansion and prefer reranking or other no-expansion local repair inside the exact complex bucket

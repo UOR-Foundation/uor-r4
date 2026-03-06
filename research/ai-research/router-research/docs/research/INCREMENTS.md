@@ -59,6 +59,9 @@ Each increment is hypothesis-driven and result-gated.
 - `INC_0050_dynamic_h4_state.md`
 - `INC_0054_tangent_flow_route_law.md`
 - `INC_0055_product_h4x4_retrieval_field.md`
+- `INC_0056_product_complex_translation.md`
+- `INC_0057_product_complex_backfill.md`
+- `INC_0058_product_complex_rerank.md`
 
 ## Controls
 - `CTRL_0001_seedmajor_lead.md`
@@ -203,6 +206,15 @@ Each increment is hypothesis-driven and result-gated.
 - `INC-0055`: product `H^4 x H^4` retrieval field
   - queued
   - secondary next branch after `INC-0050` Slice A confirm
+- `INC-0056`: product complex translation
+  - completed
+  - translated the product complex route-key law into the routed retrieval harness
+- `INC-0057`: product complex backfill
+  - completed
+  - killed coarse backfill as the preferred translated recall-repair path
+- `INC-0058`: product complex exact-bucket rerank
+  - queued
+  - next recall branch because the remaining translated gap now looks like local ordering, not missing candidates
 - `INC-0025`: sparse / quantized phase-gated shell pilot
   - secondary fallback only if the deeper `H4` / `chi` route still fails or if a cheaper local correction becomes preferable
 - `INC-0027`: chart-cost decomposition

@@ -8,11 +8,11 @@ Use this file as the local GitHub-style issue list for router research.
   - Branch: `codex/RR-050-dynamic-h4-state`
   - Canonical doc: `docs/research/increments/INC_0050_dynamic_h4_state.md`
   - Goal: carry dynamic geometry from Slice A confirm into the next implementation slice
-- `RR-057` `[research][translation][active-next]`
-  - Title: Recover top-1 with hierarchical complex-key backfill
-  - Branch: `codex/RR-057-product-complex-backfill`
-  - Depends on: `RR-056`
-  - Goal: keep the translated complex-key pruning gain while repairing recall with a small coarse Hopf backfill
+- `RR-058` `[research][translation][active-next]`
+  - Title: Recover translated top-1 with exact-bucket complex rerank
+  - Branch: `codex/RR-058-product-complex-rerank`
+  - Depends on: `RR-056`, `RR-057`
+  - Goal: keep the translated complex-key pruning gain while repairing local ordering without candidate expansion
 
 ## Queued
 - `RR-053` `[systems][translation][queued]`
@@ -22,6 +22,11 @@ Use this file as the local GitHub-style issue list for router research.
   - Goal: turn the amortized crossover into a reusable systems path with persistent offline index artifacts
 
 ## Recently Closed
+- `RR-057` `[research][translation][done]`
+  - Title: Recover top-1 with hierarchical complex-key backfill
+  - Branch: `codex/RR-057-product-complex-backfill`
+  - Canonical doc: `docs/research/increments/INC_0057_product_complex_backfill.md`
+  - Result: broad and margin-triggered backfill were too expensive, while small-bucket backfill was almost inert; the next recall branch should rerank inside the exact complex bucket instead of adding candidates
 - `RR-056` `[research][translation][done]`
   - Title: Translate product complex-key retrieval field
   - Branch: `codex/RR-056-product-complex-translation`

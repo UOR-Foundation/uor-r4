@@ -67,6 +67,9 @@ def parse_args():
     ap.add_argument("--complex_key_roots", type=int, default=8)
     ap.add_argument("--complex_key_radius_bins", type=int, default=1)
     ap.add_argument("--complex_backfill_items", type=int, default=0)
+    ap.add_argument("--complex_backfill_mode", type=str, default="always", choices=["always", "small_bucket", "low_margin"])
+    ap.add_argument("--complex_backfill_max_exact", type=int, default=0)
+    ap.add_argument("--complex_backfill_margin_threshold", type=float, default=0.0)
 
     ap.add_argument("--K", type=int, default=8)
     ap.add_argument("--delta_r", type=float, default=3.0)
@@ -271,7 +274,10 @@ def routed_retrieval_grouped_same_bucket(
     eval_z: np.ndarray,
     topk: int,
     complex_backfill_items: int = 0,
-) -> Tuple[np.ndarray, np.ndarray, float, float, float, float]:
+    complex_backfill_mode: str = "always",
+    complex_backfill_max_exact: int = 0,
+    complex_backfill_margin_threshold: float = 0.0,
+) -> Tuple[np.ndarray, np.ndarray, float, float, float, float, float, float]:
     bucket_to_train_idx = build_bucket_index(train_keys)
     bucket_to_eval_idx = build_bucket_index(eval_keys)
     tr_u = _normalize_rows(train_z)
@@ -280,6 +286,8 @@ def routed_retrieval_grouped_same_bucket(
     pred_tok = np.zeros((ev_u.shape[0],), dtype=np.int32)
     candidate_counts = np.zeros((ev_u.shape[0],), dtype=np.float64)
     fallback = np.zeros((ev_u.shape[0],), dtype=np.float64)
+    backfill_trigger = np.zeros((ev_u.shape[0],), dtype=np.float64)
+    backfill_added = np.zeros((ev_u.shape[0],), dtype=np.float64)
 
     full_idx = np.arange(train_z.shape[0], dtype=np.int64)
     use_backfill = int(complex_backfill_items) > 0 and bool(train_keys) and len(train_keys[0]) > 2
@@ -326,26 +334,46 @@ def routed_retrieval_grouped_same_bucket(
             candidate_counts[ev_idx] = float(base_idx.shape[0])
             continue
         extra_pool = extra_pool_by_key.get(key)
+        sim_exact = ev_u[ev_idx] @ tr_u[cand_idx].T
+        y_block, tok_block = topk_reduce(sim_exact, train_y[cand_idx], train_tok[cand_idx], topk=topk)
+        yhat[ev_idx] = y_block
+        pred_tok[ev_idx] = tok_block
+        candidate_counts[ev_idx] = float(cand_idx.shape[0])
         if extra_pool is None or extra_pool.size == 0:
-            sim = ev_u[ev_idx] @ tr_u[cand_idx].T
-            y_block, tok_block = topk_reduce(sim, train_y[cand_idx], train_tok[cand_idx], topk=topk)
-            yhat[ev_idx] = y_block
-            pred_tok[ev_idx] = tok_block
-            candidate_counts[ev_idx] = float(cand_idx.shape[0])
+            continue
+        if complex_backfill_mode == "small_bucket":
+            max_exact = max(1, int(complex_backfill_max_exact))
+            trigger_mask = np.full((ev_idx.shape[0],), cand_idx.shape[0] <= max_exact, dtype=bool)
+        elif complex_backfill_mode == "low_margin":
+            if cand_idx.shape[0] <= 1:
+                trigger_mask = np.ones((ev_idx.shape[0],), dtype=bool)
+            else:
+                top2 = min(2, cand_idx.shape[0])
+                best2 = np.argpartition(-sim_exact, kth=top2 - 1, axis=1)[:, :top2]
+                top2_vals = np.take_along_axis(sim_exact, best2, axis=1)
+                top2_vals.sort(axis=1)
+                margins = top2_vals[:, -1] - top2_vals[:, -2]
+                trigger_mask = margins <= float(complex_backfill_margin_threshold)
+        else:
+            trigger_mask = np.ones((ev_idx.shape[0],), dtype=bool)
+        if not np.any(trigger_mask):
             continue
         backfill_n = min(int(complex_backfill_items), int(extra_pool.size))
-        extra_sim = ev_u[ev_idx] @ tr_u[extra_pool].T
+        chosen_eval_idx = ev_idx[trigger_mask]
+        extra_sim = ev_u[chosen_eval_idx] @ tr_u[extra_pool].T
         extra_idx = np.argpartition(-extra_sim, kth=backfill_n - 1, axis=1)[:, :backfill_n]
         part = np.take_along_axis(extra_sim, extra_idx, axis=1)
         order = np.argsort(-part, axis=1)
         extra_idx = np.take_along_axis(extra_idx, order, axis=1)
-        for local_row, row_idx in enumerate(ev_idx):
+        for local_row, row_idx in enumerate(chosen_eval_idx):
             cand_idx_row = np.unique(np.concatenate([cand_idx, extra_pool[extra_idx[local_row]]]))
             sim = ev_u[row_idx:row_idx + 1] @ tr_u[cand_idx_row].T
             y_block, tok_block = topk_reduce(sim, train_y[cand_idx_row], train_tok[cand_idx_row], topk=topk)
             yhat[row_idx:row_idx + 1] = y_block
             pred_tok[row_idx] = tok_block[0]
             candidate_counts[row_idx] = float(cand_idx_row.shape[0])
+            backfill_trigger[row_idx] = 1.0
+            backfill_added[row_idx] = float(cand_idx_row.shape[0] - cand_idx.shape[0])
 
     return (
         yhat,
@@ -354,6 +382,8 @@ def routed_retrieval_grouped_same_bucket(
         float(np.mean(candidate_counts) / max(1.0, float(train_z.shape[0]))),
         1.0,
         float(np.mean(fallback)),
+        float(np.mean(backfill_trigger)),
+        float(np.mean(backfill_added)),
     )
 
 
@@ -367,15 +397,28 @@ def routed_retrieval(
     topk: int,
     probe_buckets: int,
     complex_backfill_items: int = 0,
+    complex_backfill_mode: str = "always",
+    complex_backfill_max_exact: int = 0,
+    complex_backfill_margin_threshold: float = 0.0,
 ):
     bucket_to_idx = build_bucket_index(train_keys)
     bucket_keys = list(bucket_to_idx.keys())
     if not bucket_keys:
         yhat, pred_tok, cand_mean, cand_frac = dense_retrieval(train_z, train_y, train_tok, eval_z, topk=topk)
-        return yhat, pred_tok, cand_mean, cand_frac, 0.0, 1.0
+        return yhat, pred_tok, cand_mean, cand_frac, 0.0, 1.0, 0.0, 0.0
     if probe_buckets <= 1:
         return routed_retrieval_grouped_same_bucket(
-            train_keys, eval_keys, train_z, train_y, train_tok, eval_z, topk=topk, complex_backfill_items=complex_backfill_items
+            train_keys,
+            eval_keys,
+            train_z,
+            train_y,
+            train_tok,
+            eval_z,
+            topk=topk,
+            complex_backfill_items=complex_backfill_items,
+            complex_backfill_mode=complex_backfill_mode,
+            complex_backfill_max_exact=complex_backfill_max_exact,
+            complex_backfill_margin_threshold=complex_backfill_margin_threshold,
         )
 
     tr_u = _normalize_rows(train_z)
@@ -423,6 +466,8 @@ def routed_retrieval(
         float(np.mean(candidate_counts) / max(1.0, float(train_z.shape[0]))),
         float(np.mean(probe_counts)),
         float(np.mean(fallback)),
+        0.0,
+        0.0,
     )
 
 
@@ -499,6 +544,8 @@ def main():
     candidate_fraction_mean = 1.0
     probe_bucket_mean = 0.0
     bucket_fallback_rate = 0.0
+    backfill_trigger_rate = 0.0
+    backfill_extra_candidates_mean = 0.0
     secondary_key_count = 0
 
     if args.retrieval_backend == "routed_probe":
@@ -671,11 +718,23 @@ def main():
                     radius_bins=args.complex_key_radius_bins,
                 )
             t_retr = time.perf_counter()
-            yhat_local, pred_tok_local, candidate_count_local, candidate_fraction_local, probe_bucket_local, fallback_local = routed_retrieval(
+            (
+                yhat_local,
+                pred_tok_local,
+                candidate_count_local,
+                candidate_fraction_local,
+                probe_bucket_local,
+                fallback_local,
+                backfill_trigger_local,
+                backfill_added_local,
+            ) = routed_retrieval(
                 keys_tr, keys_ev_local, z_tr, y_tr, y_tr_tok, z_ev_local,
                 topk=args.topk,
                 probe_buckets=args.probe_buckets,
                 complex_backfill_items=args.complex_backfill_items,
+                complex_backfill_mode=args.complex_backfill_mode,
+                complex_backfill_max_exact=args.complex_backfill_max_exact,
+                complex_backfill_margin_threshold=args.complex_backfill_margin_threshold,
             )
             retrieval_search_sec = time.perf_counter() - t_retr
             return {
@@ -691,6 +750,8 @@ def main():
                 "candidate_fraction_mean": candidate_fraction_local,
                 "probe_bucket_mean": probe_bucket_local,
                 "bucket_fallback_rate": fallback_local,
+                "backfill_trigger_rate": backfill_trigger_local,
+                "backfill_extra_candidates_mean": backfill_added_local,
                 "secondary_key_count": secondary_key_count_local,
             }
 
@@ -703,6 +764,8 @@ def main():
         candidate_fraction_mean = float(first_pass["candidate_fraction_mean"])
         probe_bucket_mean = float(first_pass["probe_bucket_mean"])
         bucket_fallback_rate = float(first_pass["bucket_fallback_rate"])
+        backfill_trigger_rate = float(first_pass["backfill_trigger_rate"])
+        backfill_extra_candidates_mean = float(first_pass["backfill_extra_candidates_mean"])
         secondary_key_count = max(int(secondary_key_count), int(first_pass["secondary_key_count"]))
         timings["query_route"] += float(first_pass["query_route_sec"])
         timings["retrieval_search"] += float(first_pass["retrieval_search_sec"])
@@ -791,6 +854,8 @@ def main():
             timings["query_route"] += float(repeat_pass["query_route_sec"])
             timings["retrieval_search"] += float(repeat_pass["retrieval_search_sec"])
             bucket_fallback_rate = float(max(bucket_fallback_rate, float(repeat_pass["bucket_fallback_rate"])))
+            backfill_trigger_rate = float(max(backfill_trigger_rate, float(repeat_pass["backfill_trigger_rate"])))
+            backfill_extra_candidates_mean = float(max(backfill_extra_candidates_mean, float(repeat_pass["backfill_extra_candidates_mean"])))
             secondary_key_count = max(int(secondary_key_count), int(repeat_pass["secondary_key_count"]))
     else:
         unseen_rate = 0.0
@@ -803,6 +868,8 @@ def main():
         eval_sectors = 1
         alignment = hr.poincare_alignment_diagnostics(v_ev, v_ev)
         notes.append("dense exact retrieval baseline")
+        backfill_trigger_rate = 0.0
+        backfill_extra_candidates_mean = 0.0
         for _ in range(args.query_repeats):
             t_retr = time.perf_counter()
             yhat, pred_tok, candidate_count_mean, candidate_fraction_mean = dense_retrieval(
@@ -859,6 +926,8 @@ def main():
             "retrieval_candidate_fraction_mean": float(candidate_fraction_mean),
             "retrieval_probe_bucket_mean": float(probe_bucket_mean),
             "retrieval_bucket_fallback_rate": float(bucket_fallback_rate),
+            "retrieval_backfill_trigger_rate": float(backfill_trigger_rate),
+            "retrieval_backfill_extra_candidates_mean": float(backfill_extra_candidates_mean),
             "retrieval_secondary_key_count": int(secondary_key_count),
             "retrieval_train_items": int(v_tr.shape[0]),
             "retrieval_eval_items": int(v_ev.shape[0]),

@@ -258,6 +258,37 @@
     - `complex_key_radius_bins`
     - `retrieval_secondary_key_count`
 145. Added product branch packet:
+146. Switched to branch `codex/RR-056-product-complex-translation` and completed translated complex-key confirm.
+147. Closed RR-056 as positive and moved next to RR-057 hierarchical backfill.
+148. Switched to branch `codex/RR-057-product-complex-backfill`.
+149. Implemented bounded coarse backfill in `tasks/router_retrieval_eval.py`.
+150. Added `test_complex_backfill_can_recover_coarse_neighbor` in `tests/test_router_retrieval_eval.py`.
+151. First RR-057 screen showed broad backfill was pathologically slow because coarse extras were recomputed per query.
+152. Optimized RR-057 by precomputing coarse extra pools per composite key.
+153. Observed that broad `BF4/BF8` remained materially heavier than exact complex addressing even after that fix.
+154. Started selective RR-057 work:
+    - `complex_backfill_mode=always|small_bucket|low_margin`
+    - `complex_backfill_max_exact`
+    - `complex_backfill_margin_threshold`
+155. Extended translated metrics with:
+    - `retrieval_backfill_trigger_rate`
+    - `retrieval_backfill_extra_candidates_mean`
+156. Updated retrieval tests, sweep summaries, and summary CSV support for the new metrics.
+157. Validated the interrupted retrieval path fix with compile plus targeted unit tests.
+158. Launched a mixed selective screen including small-bucket and low-margin routes.
+159. Read live seed-0 summaries during the run and identified low-margin over-trigger as the failure mode.
+160. Killed the mixed screen once `M002` showed pathological amortized cost and `M005` was entering the same path.
+161. Created the narrowed small-bucket-only screen config:
+    - `configs/proxy_transfer_inc0057_product_complex_backfill_smallbucket_screen.json`
+162. Ran the narrowed 2-seed screen to completion.
+163. Result:
+    - `SB1/SB2` preserved the complex-key pruning gain
+    - triggers stayed near zero
+    - top-1 did not improve at all
+164. Decision:
+    - close RR-057 negative
+    - do not spend more time on candidate-expansion backfill
+    - queue RR-058 exact-bucket rerank as the next translated recall branch
     - `docs/agents/packets/PACKET_PRODUCT_H4X4_AGENT.md`
 146. Added RR-055 screen config:
     - `configs/proxy_transfer_inc0055_product_h4x4_retrieval_field_screen.json`
