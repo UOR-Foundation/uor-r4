@@ -1,0 +1,185 @@
+# Progress Trace
+
+## 2026-03-06
+
+### Resume after `INC-0044`
+1. Read `INC_0045_static_chart_floor.md` and `HANDOFF_CURRENT.md`.
+2. Verified the queued next branch was still `INC-0045`.
+3. Checked the existing resume/update protocol in `docs/research/UPDATE_PROTOCOL.md`.
+
+### Compaction-resilience work
+4. Added this progress trace file as an explicit step-by-step session record.
+5. Planned to keep this file updated before and after long-running sweeps and after any branch decision.
+
+### `INC-0045` staging
+6. Marked `INC_0045_static_chart_floor.md` as the active next branch in current docs.
+7. Defined the branch target:
+   - `HOPF_PHI2_BAND_IT48_P3_STATIC`
+   - `HOPF_PHI2_BAND_IT40_P2_STATIC`
+   - `HOPF_K25_BASE_IT40_P2_STATIC`
+   - `R0`
+8. Kept `train_route_mode=final_static` fixed for routed branches.
+9. Kept the larger-subset proxy workload fixed.
+10. Chose chart-pressure only as the live axis.
+
+### Pending next action
+11. Create `configs/proxy_transfer_inc0045_static_chart_floor_screen.json`.
+12. Run the 2-seed screen.
+13. If the screen is live, promote a single cheaper branch to 4-seed confirm.
+
+### `INC-0045` screen launch
+14. Created the screen config for the chart-floor test.
+15. Next command: `python tools/proxy_sweep.py --config configs/proxy_transfer_inc0045_static_chart_floor_screen.json`.
+
+### `INC-0045` screen result
+16. Screen analysis landed at `results/analysis/inc0045_static_chart_floor_screen.json`.
+17. `HOPF_K25_BASE_IT40_P2_STATIC` beat cheap `R0` on both quality and runtime and passed the health gate.
+18. `HOPF_PHI2_BAND_IT40_P2_STATIC` also passed and beat cheap `R0` on both quality and runtime.
+19. Promotion decision: confirm `HOPF_K25_BASE_IT40_P2_STATIC` and `HOPF_PHI2_BAND_IT40_P2_STATIC`, with `R0` as control.
+
+### `INC-0045` confirm result
+20. Confirm analysis landed at `results/analysis/inc0045_static_chart_floor_confirm.json`.
+21. `HOPF_K25_BASE_IT40_P2_STATIC` beat cheap `R0` on both quality and runtime across 4 seeds and passed the health gate.
+22. `HOPF_PHI2_BAND_IT40_P2_STATIC` also beat cheap `R0` on both quality and runtime across 4 seeds and passed the health gate.
+23. Promotion decision: `HOPF_K25_BASE_IT40_P2_STATIC` becomes the operational routed lead.
+24. Next queued branch: `INC-0046` static scale robustness.
+
+### `INC-0046` staging
+25. Marked `INC_0046_static_scale_robustness.md` as in progress.
+26. Chose the next larger subset step at `max_train=8000`, `max_eval=4000`.
+27. Kept the cheap chart schedule fixed at `IT40_P2` and kept geometry fixed.
+28. Next command: `python tools/proxy_sweep.py --config configs/proxy_transfer_inc0046_static_scale_robustness_screen.json`.
+
+### `INC-0046` screen result
+29. Screen analysis landed at `results/analysis/inc0046_static_scale_robustness_screen.json`.
+30. `HOPF_K25_BASE_IT40_P2_STATIC` stayed ahead of `R0` on both quality and runtime at the larger subset step.
+31. `HOPF_PHI2_BAND_IT40_P2_STATIC` also stayed ahead of `R0` and was the faster routed branch.
+32. Promotion decision: confirm both routed branches against `R0` to resolve quality-vs-runtime leadership.
+
+### `INC-0046` confirm result
+33. Confirm analysis landed at `results/analysis/inc0046_static_scale_robustness_confirm.json`.
+34. `HOPF_K25_BASE_IT40_P2_STATIC` stayed ahead of `R0` on both quality and runtime across 4 seeds at the larger subset step.
+35. `HOPF_PHI2_BAND_IT40_P2_STATIC` also stayed ahead of `R0` and remained the faster routed branch within quality tolerance.
+36. Promotion decision: keep the cheap routed frontier and move next to `INC-0047` near-full-proxy scale.
+
+### `INC-0047` staging
+37. Marked `INC_0047_near_full_proxy_scale.md` as in progress.
+38. Chose the near-full-proxy step at `max_train=12000`, `max_eval=6000`.
+39. Kept the cheap `IT40_P2` chart schedule and static training-route reuse fixed.
+40. Next command: `python tools/proxy_sweep.py --config configs/proxy_transfer_inc0047_near_full_proxy_scale_screen.json`.
+
+### `INC-0047` screen result
+41. Screen analysis landed at `results/analysis/inc0047_near_full_proxy_scale_screen.json`.
+42. `HOPF_K25_BASE_IT40_P2_STATIC` stayed ahead of `R0` on both quality and runtime near full proxy scale.
+43. `HOPF_PHI2_BAND_IT40_P2_STATIC` also stayed ahead of `R0` and remained the faster routed branch.
+44. Promotion decision: confirm both routed branches against `R0` at near-full-proxy scale.
+
+### `INC-0047` confirm result
+45. Confirm analysis landed at `results/analysis/inc0047_near_full_proxy_scale_confirm.json`.
+46. `HOPF_K25_BASE_IT40_P2_STATIC` beat `R0` on both quality and runtime across 4 seeds near full proxy scale.
+47. `HOPF_PHI2_BAND_IT40_P2_STATIC` also beat `R0` on both quality and runtime across 4 seeds near full proxy scale.
+48. Promotion decision: keep the cheap routed frontier and move next to `INC-0048` integration translation.
+
+### `INC-0048` translation staging
+49. Read `HANDOFF_CURRENT.md`, `CURRENT_DIRECTION.md`, and `INC_0048_integration_translation.md`.
+50. Chose the first translation target as routed token-memory retrieval preselection, not expert preselection or another regression harness.
+51. Reused the existing JSON-summary contract instead of opening a second parser pipeline.
+52. Added `tasks/router_retrieval_eval.py` as the new translation harness.
+53. Extended `tools/proxy_sweep.py` so config can pick `task_script` and `baseline_route_id`.
+54. Extended `tools/summarize.py` with retrieval-specific columns.
+55. Added a non-`R0` baseline test to `tests/test_proxy_sweep.py`.
+56. Ran compile and sweep-unit smoke; both passed.
+57. Ran direct smoke commands for:
+   - `smoke_dense_retrieval`
+   - `smoke_hopf_retrieval`
+58. Dense smoke returned a valid JSON summary.
+59. Routed Hopf smoke returned a valid JSON summary.
+60. Wrote `docs/research/INTEGRATION_TRANSLATION_PLAN.md`.
+61. Wrote `configs/proxy_transfer_inc0048_retrieval_translation_screen.json`.
+62. Updated `INC_0048_integration_translation.md` from queued to in progress.
+
+### Pending next action
+63. Run `python tools/proxy_sweep.py --config configs/proxy_transfer_inc0048_retrieval_translation_screen.json`.
+64. If the screen is live, promote at most one routed retrieval branch to confirm.
+
+### `INC-0048` screen result
+65. Screen analysis landed at `results/analysis/inc0048_retrieval_translation_screen.json`.
+66. Dense exact retrieval stayed operationally dominant on both MSE and wall-clock.
+67. The translated routed branches still showed real candidate pruning:
+   - `HOPF_RET_P1`: `cand_frac≈0.349`
+   - `HOPF_PHI2_RET_P1`: `cand_frac≈0.341`
+68. Multi-bucket probing improved quality slightly but made runtime worse.
+69. Decision: keep translation alive, but move next to retrieval cost rescue instead of confirm.
+70. Queued `INC_0049_retrieval_cost_rescue.md`.
+
+### Dynamic-state geometry note
+71. Recorded the new geometry hypothesis that the missing object may be 8D position-plus-flow state rather than another static shell law.
+72. Queued `INC_0050_dynamic_h4_state.md` as a math branch to revisit only after the current retrieval systems rescue path.
+73. Refined the geometry note: keep `H^4 x H^4` live as a stronger alternative to `H^4 + T_xH^4`, not just as another way to say “8 variables”.
+
+### `INC-0049` staging
+74. Read `INC_0049_retrieval_cost_rescue.md` and kept geometry fixed.
+75. Implemented grouped same-bucket retrieval for `probe_buckets=1` in `tasks/router_retrieval_eval.py`.
+76. Added offline/online timing decomposition fields for translated retrieval runs.
+77. Updated `tools/summarize.py` and `tools/proxy_sweep.py` to carry the new retrieval timing fields.
+78. Added grouped retrieval coverage to `tests/test_router_retrieval_eval.py`.
+79. Wrote `configs/proxy_transfer_inc0049_retrieval_cost_rescue_screen.json`.
+80. Updated `INC_0049_retrieval_cost_rescue.md` from queued to in progress.
+
+### Pending next action
+81. Run `python tools/proxy_sweep.py --config configs/proxy_transfer_inc0049_retrieval_cost_rescue_screen.json`.
+82. Decide whether vectorized same-bucket retrieval rescues the translated path enough to justify a confirm.
+
+### `INC-0049` screen result
+83. Screen analysis landed at `results/analysis/inc0049_retrieval_cost_rescue_screen.json`.
+84. `HOPF_RET_P1` and `HOPF_PHI2_RET_P1` kept the same pruning signal while vectorized same-bucket retrieval cut routed online cost sharply.
+85. `HOPF_PHI2_RET_P1` became the translated routed online-speed lead:
+   - `offline=7.664s`
+   - `online=0.299s`
+   - `cand_frac=0.3415`
+86. `DENSE` kept the single-batch wall-clock lead because it pays no offline route/index build:
+   - `offline=0.000s`
+   - `online=0.879s`
+   - `total=1.332s`
+87. Decision: keep translated retrieval alive under amortization; do not promote on single-batch total wall-clock.
+88. Queued `INC_0051_retrieval_amortization.md`.
+
+### `INC-0051` staging
+89. Updated direction, handoff, and live worklog to make amortization the next active question.
+90. Next implementation target: add repeated-query evaluation over one offline routed index.
+91. Planned next config: `configs/proxy_transfer_inc0051_retrieval_amortization_screen.json`.
+
+### `INC-0051` run launch
+92. Created `configs/proxy_transfer_inc0051_retrieval_amortization_screen.json`.
+93. Next command: `python tools/proxy_sweep.py --config configs/proxy_transfer_inc0051_retrieval_amortization_screen.json`.
+
+### `INC-0051` run result
+94. Ran `python tools/proxy_sweep.py --config configs/proxy_transfer_inc0051_retrieval_amortization_screen.json`.
+95. Screen analysis landed at `results/analysis/inc0051_retrieval_amortization_screen.json`.
+96. `HOPF_RET_P1_Q24` became the first translated routed branch to beat matched dense on amortized per-repeat cost:
+   - `HOPF_RET_P1_Q24`: `0.5399s`
+   - `DENSE_Q24`: `0.5545s`
+97. `HOPF_PHI2_RET_P1_Q24` stayed slower than dense on amortized cost despite slightly stronger pruning.
+98. Decision: keep plain Hopf as the live translated retrieval branch; demote widened Hopf for this task.
+99. Queued `INC_0052_retrieval_amortization_confirm.md`.
+
+### `INC-0052` staging
+100. Next target is a 4-seed confirm around the narrow amortized crossover band.
+101. Planned compare set:
+   - `DENSE_Q24`
+   - `DENSE_Q32`
+   - `HOPF_RET_P1_Q24`
+   - `HOPF_RET_P1_Q32`
+102. Created `configs/proxy_transfer_inc0052_retrieval_amortization_confirm.json`.
+103. Ran `python tools/proxy_sweep.py --config configs/proxy_transfer_inc0052_retrieval_amortization_confirm.json`.
+104. Confirm analysis landed at `results/analysis/inc0052_retrieval_amortization_confirm.json`.
+105. The `Q24/Q32` crossover did not survive 4 seeds:
+   - `DENSE_Q24`: `0.5051s`
+   - `HOPF_RET_P1_Q24`: `0.5938s`
+   - `DENSE_Q32`: `0.5586s`
+   - `HOPF_RET_P1_Q32`: `0.6544s`
+106. Decision: close the translated systems branch without promotion and return next to the dynamic geometry branch.
+
+### `INC-0052` run launch
+102. Created `configs/proxy_transfer_inc0052_retrieval_amortization_confirm.json`.
+103. Next command: `python tools/proxy_sweep.py --config configs/proxy_transfer_inc0052_retrieval_amortization_confirm.json`.
