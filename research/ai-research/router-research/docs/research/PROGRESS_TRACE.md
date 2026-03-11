@@ -54,6 +54,13 @@
     - shell-only equal-mass correction is too aggressive
     - health breaks through shell explosion
     - next correction must be bounded/shared-state and likely paired with angular measure correction
+22. Added a bounded shell follow-up:
+    - `shell_mode=h4_mass_phi`
+23. Ran the bounded shell screen.
+24. Read the result:
+    - bounded shell mass still fails route health when used alone
+    - shell-only correction has now failed twice
+    - next correction should shift to the actual Hopf base coordinates `(eta, delta)` and keep `alpha` as fiber phase
 
 ### Imported guidance integration
 1. User clarified that the intended new files were in the project base directory, not the git root.

@@ -76,7 +76,7 @@ def parse_args():
     ap.add_argument("--adaptive_converge_target", type=float, default=1.0)
     ap.add_argument("--adaptive_converge_hysteresis", type=float, default=0.1)
     ap.add_argument("--adaptive_converge_mode", type=str, default="fixed", choices=["fixed", "phi_ratio", "phi_ladder"])
-    ap.add_argument("--shell_mode", type=str, default="linear", choices=["linear", "phi_log", "phi_phase", "h4_mass"])
+    ap.add_argument("--shell_mode", type=str, default="linear", choices=["linear", "phi_log", "phi_phase", "h4_mass", "h4_mass_phi"])
     ap.add_argument("--shell_phase_coupling", type=float, default=0.0)
     ap.add_argument("--fib_rung_gate_threshold", type=float, default=0.0)
     ap.add_argument("--route_scale_lambda", type=float, default=1.0)

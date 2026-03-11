@@ -6,6 +6,7 @@
 - `RR-061` Derive a measure-consistent `H^4` / Hopf route law
 
 ## Next
+- `RR-062` Derive the Hopf-base angular route law
 - `RR-053` Package routed retrieval index reuse only if a future translated branch clears confirm
 
 ## Done Recently

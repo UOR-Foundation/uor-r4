@@ -129,6 +129,12 @@ This file stores durable mathematical and architectural findings that should sur
   - raw equal-mass `H^4` shells are too aggressive on their own
   - they open many shells, worsen route health, and degrade neighborhood preservation
   - measure correction likely needs bounded/shared-state shell control and angular correction together
+- `INC-0061` bounded follow-up added a stronger constraint:
+  - even `phi`-bounded `H^4` mass shells are not enough by themselves
+  - shell-only correction is now weak enough that the next move should target the Hopf base law directly
+  - the likely next correction is:
+    - coarse routing on `(eta, delta)`
+    - keep `alpha` as the fiber phase
 - Every new branch should leave enough math and implementation context that another session can resume without re-deriving the branch intent.
 - Deep math branches should first prove signal with a minimal surrogate before rewriting the main route law.
 - Imported guidance files added at the project base should be copied into canonical context immediately through:

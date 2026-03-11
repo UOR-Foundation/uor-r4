@@ -66,9 +66,10 @@
   - `H4XH4_CPX13_W025` is the product complex-key efficiency reference
   - `HOPF_RET_CPX_P1_Q24` is the translated complex-key efficiency reference
 - Next preferred work:
-  - keep `RR-061` open after the first shell-only pilot
-  - replace raw equal-mass shells with bounded/shared-state shell mass control
-  - derive a measure-consistent Hopf angular law alongside shell correction
+  - close out shell-only correction inside `RR-061`
+  - move next to a Hopf-base angular law:
+    - coarse routing on base coordinates
+    - fiber phase kept separate
   - keep geometry routing as the only active near-term goal
   - defer gated-intelligence/event-style branches until this correction is tested
 

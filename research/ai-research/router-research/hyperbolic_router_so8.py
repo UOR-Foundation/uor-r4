@@ -704,6 +704,11 @@ def inverse_h4_cumulative_mass(target_mass: np.ndarray) -> np.ndarray:
     return 0.5 * (lo + hi)
 
 
+def h4_mass_step(delta_r: float) -> float:
+    delta_r_safe = max(float(delta_r), 1e-9)
+    return float(h4_cumulative_mass(np.asarray(2.0 * delta_r_safe, dtype=np.float64)))
+
+
 def shell_boundary_tangent(shell_idx: np.ndarray, delta_r: float, shell_mode: str) -> np.ndarray:
     idx = np.asarray(shell_idx, dtype=np.float64)
     delta_r_safe = max(float(delta_r), 1e-9)
@@ -712,8 +717,13 @@ def shell_boundary_tangent(shell_idx: np.ndarray, delta_r: float, shell_mode: st
     if shell_mode in ("phi_log", "phi_phase"):
         return delta_r_safe * (np.power(PHI, idx) - 1.0)
     if shell_mode == "h4_mass":
-        mass_step = float(h4_cumulative_mass(np.asarray(2.0 * delta_r_safe, dtype=np.float64)))
+        mass_step = h4_mass_step(delta_r_safe)
         geo_boundary = inverse_h4_cumulative_mass(idx * mass_step)
+        return 0.5 * geo_boundary
+    if shell_mode == "h4_mass_phi":
+        mass_step = h4_mass_step(delta_r_safe)
+        target_mass = mass_step * (np.power(PHI, idx) - 1.0)
+        geo_boundary = inverse_h4_cumulative_mass(target_mass)
         return 0.5 * geo_boundary
     raise ValueError(f"unsupported shell_mode={shell_mode!r}")
 
@@ -1813,11 +1823,14 @@ def shell_metric_components(
         shell_cont = np.log1p(r_eff_clip / delta_r_safe) / max(LOG_PHI, 1e-9)
         shell_cont = np.maximum(shell_cont + phase_bias, 0.0)
     elif shell_mode == "h4_mass":
-        mass_step = float(h4_cumulative_mass(np.asarray(2.0 * delta_r_safe, dtype=np.float64)))
+        mass_step = h4_mass_step(delta_r_safe)
         shell_cont = h4_cumulative_mass(2.0 * r_eff_clip) / max(mass_step, 1e-12)
+    elif shell_mode == "h4_mass_phi":
+        mass_step = h4_mass_step(delta_r_safe)
+        shell_cont = np.log1p(h4_cumulative_mass(2.0 * r_eff_clip) / max(mass_step, 1e-12)) / max(LOG_PHI, 1e-9)
     else:
         raise ValueError(f"unsupported shell_mode={shell_mode!r}")
-    shell = np.floor(shell_cont).astype(np.int64)
+    shell = np.floor(shell_cont + 1e-12).astype(np.int64)
     shell_frac = np.clip(shell_cont - shell.astype(np.float64), 0.0, 1.0 - 1e-12)
     return shell, shell_frac, shell_cont
 
@@ -4437,7 +4450,7 @@ def parse_args():
     ap.add_argument("--adaptive_converge_mode", type=str, default="fixed",
                     choices=["fixed", "phi_ratio", "phi_ladder"],
                     help="shell convergence controller for phase4d_adaptive")
-    ap.add_argument("--shell_mode", type=str, default="linear", choices=["linear", "phi_log", "phi_phase", "h4_mass"],
+    ap.add_argument("--shell_mode", type=str, default="linear", choices=["linear", "phi_log", "phi_phase", "h4_mass", "h4_mass_phi"],
                     help="shell metric: linear, phi-spaced log, or phase-coupled phi shells")
     ap.add_argument("--shell_phase_coupling", type=float, default=0.0,
                     help="signed phase-pressure shift applied to phi-based shells when shell_mode=phi_phase")

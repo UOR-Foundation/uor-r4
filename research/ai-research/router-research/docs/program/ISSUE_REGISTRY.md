@@ -28,6 +28,12 @@ Use this file as the local GitHub-style issue list for router research.
   - Depends on: `RR-060`
   - Canonical doc: `docs/research/increments/INC_0061_measure_consistent_route_law.md`
   - Goal: correct shell and angular laws before phase or event-driven branches reopen
+- `RR-062` `[research][hopf-base][queued-next]`
+  - Title: Derive the Hopf-base angular route law
+  - Branch: `codex/RR-062-hopf-base-angular-law`
+  - Depends on: `RR-061`
+  - Canonical doc: `docs/research/increments/INC_0062_hopf_base_angular_law.md`
+  - Goal: route coarse sectors on Hopf-base coordinates and leave `alpha` as fiber phase
 
 ## Queued
 - `RR-053` `[systems][translation][queued]`

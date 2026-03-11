@@ -90,3 +90,38 @@ Key means:
   - bounded/shared-state shell mass control
   - and likely shell+angular measure correction together
   - not shell-only equal-mass expansion
+
+## Second Screen Result
+Artifacts:
+- `configs/proxy_transfer_inc0061_h4_mass_phi_screen.json`
+- `results/analysis/inc0061_h4_mass_phi_screen.json`
+- `docs/governance/gates/gate_20260310_231855.md`
+
+What was tested next:
+- bounded `H^4` shell mass through the project’s discrete `phi` ladder:
+  - `shell_mode=h4_mass_phi`
+
+Reading:
+- bounded shell mass is still not sufficient by itself
+- it improves proxy MSE slightly in some cases, but still breaks route health
+- shell-only work is now exhausted enough to justify shifting the correction toward the actual Hopf base law
+
+Key means:
+- `HOPF_K25_BASE_H4MPHI`
+  - `mse=0.0038954`
+  - `total=6.344s`
+  - `shell_mass_l1=1.9054`
+  - `eval_shells=12.5`
+  - fail
+- `HOPF_PHI2_BAND_H4MPHI`
+  - `mse=0.0039005`
+  - `total=6.954s`
+  - `shell_mass_l1=0.9334`
+  - `eval_shells=6.5`
+  - fail
+
+## Updated Decision
+- Keep `RR-061` open only long enough to document that shell-only measure fixes failed twice.
+- Next structural correction should target the Hopf base directly:
+  - route on `(eta, delta)` or equivalent Hopf-base coordinates
+  - keep `alpha` as the fiber phase, not the coarse routing variable

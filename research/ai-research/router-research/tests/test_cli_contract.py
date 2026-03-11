@@ -56,7 +56,7 @@ class TestCLIContract(unittest.TestCase):
         self.assertIn("{fixed,phi_ratio,phi_ladder}", out)
         self.assertIn("{dynamic,final_static}", out)
         self.assertIn("{route_chart,full_chart}", out)
-        self.assertIn("{linear,phi_log,phi_phase,h4_mass}", out)
+        self.assertIn("{linear,phi_log,phi_phase,h4_mass,h4_mass_phi}", out)
 
 
 if __name__ == "__main__":
