@@ -1,0 +1,107 @@
+import unittest
+
+import numpy as np
+
+import hyperbolic_router_so8 as hr
+
+
+class MeasureDiagnosticsTest(unittest.TestCase):
+    def test_shell_boundary_tangent_matches_linear_and_phi_modes(self):
+        shell_ids = np.array([0.0, 1.0, 2.0, 3.0], dtype=np.float64)
+        linear = hr.shell_boundary_tangent(shell_ids, delta_r=3.0, shell_mode="linear")
+        phi_log = hr.shell_boundary_tangent(shell_ids, delta_r=3.0, shell_mode="phi_log")
+        phi_phase = hr.shell_boundary_tangent(shell_ids, delta_r=3.0, shell_mode="phi_phase")
+
+        np.testing.assert_allclose(linear, np.array([0.0, 3.0, 6.0, 9.0], dtype=np.float64))
+        np.testing.assert_allclose(phi_log, 3.0 * (np.power(hr.PHI, shell_ids) - 1.0))
+        np.testing.assert_allclose(phi_phase, phi_log)
+
+    def test_shell_measure_diagnostics_tracks_h4_mass_profile(self):
+        shell_ids = np.arange(4, dtype=np.int64)
+        lower = hr.shell_boundary_tangent(shell_ids, delta_r=0.15, shell_mode="linear")
+        upper = hr.shell_boundary_tangent(shell_ids + 1, delta_r=0.15, shell_mode="linear")
+        expected_mass = hr.h4_shell_mass(2.0 * lower, 2.0 * upper)
+        counts = np.maximum(1, np.round(4000.0 * expected_mass / np.sum(expected_mass)).astype(np.int64))
+        shell = np.repeat(shell_ids, counts)
+
+        diag = hr.shell_measure_diagnostics(shell, delta_r=0.15, shell_mode="linear")
+
+        self.assertEqual(diag["shell_mass_shells_used"], 4)
+        self.assertLess(diag["shell_mass_error_l1"], 0.03)
+        self.assertLess(diag["shell_mass_error_max"], 0.02)
+        self.assertLess(diag["shell_mass_kl"], 0.01)
+        self.assertGreater(diag["shell_mass_corr"], 0.999)
+
+    def test_hopf_angular_measure_diagnostics_detects_uniform_bins(self):
+        chi_bins = 4
+        theta_bins = 8
+        rows = []
+        for c_idx in range(chi_bins):
+            chi_u = (c_idx + 0.5) / chi_bins
+            chi = np.arcsin(np.sqrt(chi_u))
+            for t1_idx in range(theta_bins):
+                theta1 = -np.pi + (2.0 * np.pi) * (t1_idx + 0.5) / theta_bins
+                for t2_idx in range(theta_bins):
+                    theta2 = -np.pi + (2.0 * np.pi) * (t2_idx + 0.5) / theta_bins
+                    rho1 = np.cos(chi)
+                    rho2 = np.sin(chi)
+                    rows.append(
+                        [
+                            rho1 * np.cos(theta1),
+                            rho1 * np.sin(theta1),
+                            rho2 * np.cos(theta2),
+                            rho2 * np.sin(theta2),
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                        ]
+                    )
+        z = np.asarray(rows, dtype=np.float64)
+        diag = hr.hopf_angular_measure_diagnostics(
+            z,
+            dim_i=0,
+            dim_j=1,
+            dim_k=2,
+            dim_l=3,
+            chi_bins=chi_bins,
+            theta_bins=theta_bins,
+        )
+
+        self.assertLess(diag["hopf_chi_mass_error"], 1e-10)
+        self.assertLess(diag["hopf_theta1_mass_error"], 1e-10)
+        self.assertLess(diag["hopf_theta2_mass_error"], 1e-10)
+        self.assertLess(diag["hopf_angular_mass_error"], 1e-10)
+        self.assertAlmostEqual(diag["hopf_theta1_entropy"], np.log(theta_bins), places=6)
+        self.assertAlmostEqual(diag["hopf_theta2_entropy"], np.log(theta_bins), places=6)
+
+    def test_route_entropy_radius_diagnostics_detects_increasing_entropy(self):
+        shell = np.repeat(np.array([0, 1, 2, 3], dtype=np.int64), 40)
+        sector = np.concatenate(
+            [
+                np.zeros(40, dtype=np.int64),
+                np.tile(np.array([0, 1], dtype=np.int64), 20),
+                np.tile(np.array([0, 1, 2, 3], dtype=np.int64), 10),
+                np.tile(np.arange(8, dtype=np.int64), 5),
+            ]
+        )
+
+        diag = hr.route_entropy_radius_diagnostics(shell, sector)
+
+        self.assertEqual(diag["route_entropy_shells_used"], 4)
+        self.assertGreater(diag["route_entropy_radius_corr"], 0.95)
+        self.assertGreater(diag["route_entropy_radius_slope"], 0.1)
+
+    def test_geodesic_neighborhood_diagnostics_is_identity_for_same_coordinates(self):
+        rs = np.random.RandomState(7)
+        v = 0.15 * rs.randn(64, 8)
+        diag = hr.geodesic_neighborhood_diagnostics(v, v.copy(), max_points=64, k=6, seed=5)
+
+        self.assertEqual(diag["geodesic_knn_points_used"], 64)
+        self.assertEqual(diag["geodesic_knn_overlap_k"], 6.0)
+        self.assertAlmostEqual(diag["geodesic_knn_overlap_mean"], 1.0, places=7)
+        self.assertAlmostEqual(diag["geodesic_knn_jaccard_mean"], 1.0, places=7)
+
+
+if __name__ == "__main__":
+    unittest.main()

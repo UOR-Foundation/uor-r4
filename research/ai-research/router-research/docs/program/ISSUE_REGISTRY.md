@@ -8,11 +8,26 @@ Use this file as the local GitHub-style issue list for router research.
   - Branch: `codex/RR-050-dynamic-h4-state`
   - Canonical doc: `docs/research/increments/INC_0050_dynamic_h4_state.md`
   - Goal: carry dynamic geometry from Slice A confirm into the next implementation slice
-- `RR-059` `[research][dynamic-geometry][active-next]`
-  - Title: Couple the product `H^4 x H^4` branch as a polar flow field
+- `RR-059` `[research][dynamic-geometry][active]`
+  - Title: Lock the coupled `H^4 x H^4` branch contract
   - Branch: `codex/RR-059-h4x4-polar-flow`
   - Depends on: `RR-050`, `RR-055`, `RR-056`, `RR-058`
-  - Goal: let the second `H^4` act as a real coupled geometric field instead of only a key or rerank helper
+  - Goal: keep the product branch asymmetric:
+    - first factor = routing geometry
+    - second factor = discrete complex-value field
+    - geometry-induced phase transport
+- `RR-060` `[research][measure][done]`
+  - Title: Add `H^4` / Hopf measure diagnostics to the routed frontier
+  - Branch: `codex/RR-060-h4-hopf-measure-diagnostics`
+  - Depends on: `RR-059`
+  - Canonical doc: `docs/research/increments/INC_0060_h4_hopf_measure_diagnostics.md`
+  - Goal: gate the current frontier with geometry-specific shell, angular, entropy, and geodesic-neighborhood diagnostics
+- `RR-061` `[research][measure][active-next]`
+  - Title: Derive a measure-consistent `H^4` / Hopf route law
+  - Branch: `codex/RR-061-measure-consistent-route-law`
+  - Depends on: `RR-060`
+  - Canonical doc: `docs/research/increments/INC_0061_measure_consistent_route_law.md`
+  - Goal: correct shell and angular laws before phase or event-driven branches reopen
 
 ## Queued
 - `RR-053` `[systems][translation][queued]`

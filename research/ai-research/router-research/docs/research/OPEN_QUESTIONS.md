@@ -5,6 +5,41 @@
 - Why it matters: `INC-0043` solved the large-subset training-route bottleneck, so chart optimization is now the dominant remaining routed cost term.
 - Current owner: Systems and Performance Team
 
+## Q0d: Do large hierarchical embeddings remain stable as the problem scale increases?
+- Priority: highest
+- Why it matters: the imported external guidance makes embedding-stability failure the first real falsification gate; if curved embedding quality degrades with scale, the whole geometric architecture needs revision before more routing detail work.
+- Current owner: Geometry Theory Team
+
+## Q0e: Does routing overhead stay below sparsity gain under realistic hardware-cost accounting?
+- Priority: highest
+- Why it matters: the imported external guidance makes hardware-cost simulation a terminal gate, not a nice-to-have. Sparse routing only matters if routing overhead stays below the compute it saves.
+- Current owner: Systems and Performance Team
+
+## Q0f: Can the project demonstrate measurable spectral structure rather than only geometric sparsity?
+- Priority: highest
+- Why it matters: the imported guidance elevates spectral emergence from a side theory to a central architectural claim. If no stable spectral structure appears, the project should narrow its claims to routing only.
+- Current owner: Geometry Theory Team
+
+## Q0g: Can sparse event-driven routing remain trainable end-to-end once event thresholds become real rather than proxy abstractions?
+- Priority: highest
+- Why it matters: the imported guidance treats event-driven computation as an end-state mechanism. That means threshold stability and gradient viability need their own kill tests.
+- Current owner: Systems and Performance Team
+
+## Q0h: Can the routing law be made measure-consistent with `H^4` and Hopf angular measure without requiring repair heuristics?
+- Priority: highest
+- Why it matters: the broader top-level theory corpus repeatedly points to measure mismatch as the likely reason pressure terms, widening, and local rescue rules keep reappearing.
+- Current owner: Geometry Theory Team
+
+## Q0i: Which current routed family is closest to the intended `H^4` / Hopf measure law?
+- Priority: highest
+- Why it matters: before the next routing-law rewrite, the project needs direct evidence on whether pure Hopf, widened Hopf, or the dense control is actually closest to the desired shell and angular mass behavior.
+- Current owner: Geometry Theory Team
+
+## Q0j: Can a measure-consistent route law preserve the current routed task win while reducing shell-mass and Hopf angular error?
+- Priority: highest
+- Why it matters: `INC-0060` showed that routing works well enough to keep, but the shell and angular laws are still far from the intended `H^4` / Hopf measure behavior.
+- Current owner: Geometry Theory Team
+
 ## Q0a: Does `train_route_mode=final_static` stay valid as sample count increases further?
 - Priority: highest
 - Why it matters: the current operational win is real on the larger-subset proxy harness, but it still needs scale robustness before it can be treated as stable doctrine.
@@ -169,6 +204,61 @@
 ## Q2z: Should the second-field complex key be a pure address field or a mixed address-plus-ordering field?
 - Priority: highest
 - Why it matters: `INC-0055` improved candidate pruning and runtime, but the product baseline still won quality. The next branch has to decide whether the complex field should only choose candidates or also modify within-bucket ordering.
+- Current owner: Geometry Theory Team
+
+## Q2ac: Is measurable spectral structure actually emerging from the routing manifold, or are we only imposing geometric sparsity by hand?
+- Priority: highest
+- Why it matters: the imported hypothesis notes make spectral structure a central architectural claim. If no spectral modes or stable operator structure show up, the theory needs to be narrowed sharply.
+- Current owner: Geometry Theory Team
+
+## Q2ad: Does phase transport provide a necessary computational signal or just an optional geometric decoration?
+- Priority: highest
+- Why it matters: the imported notes make phase transport a core mechanism candidate. The repo already carries phase/Hopf clues, but they still need a cleaner necessity test instead of incremental tuning.
+- Current owner: Geometry Theory Team
+
+## Q2ae: Can sparse event-driven computation remain trainable end-to-end once the routing law becomes more geometric?
+- Priority: highest
+- Why it matters: the imported notes frame sparse event firing as a core end-state, not just a retrieval optimization. That means trainability under thresholded or event-driven routing becomes a first-class kill test.
+- Current owner: Systems and Performance Team
+
+## Q2af: What specific role should the second factor in `H^4 x H^4` play in the imported coupled-field picture?
+- Priority: highest
+- Why it matters: the imported theory sketch explicitly allows coupled fields, correction fields, and retrieval fields. The live product branch needs a narrower mathematical assignment for the second `H^4` than “auxiliary geometry.”
+- Current owner: Geometry Theory Team
+
+## Q2ag: Which branches are actually testing phase transport necessity rather than just using phase-shaped coordinates?
+- Priority: highest
+- Why it matters: the imported guidance distinguishes phase transport from generic angular parameterization. The project needs a necessity test, not just more phase-based routing variants.
+- Current owner: Geometry Theory Team
+
+## Q2ah: Can spectral modes be measured on the current routed manifolds before more architectural complexity is added?
+- Priority: highest
+- Why it matters: multiple project-base files argue that oscillatory or modal behavior may emerge from geometry itself. The repo still lacks a direct operator/spectrum measurement branch.
+- Current owner: Geometry Theory Team
+
+## Q2ai: Is the correct second-factor role in `H^4 x H^4` a transport field, retrieval field, correction field, or some mixture?
+- Priority: highest
+- Why it matters: the top-level corpus repeatedly distinguishes routing geometry from transport or key fields. The second factor cannot stay semantically vague if the product branch is going to mature.
+- Current owner: Geometry Theory Team
+
+## Q2aj: Can the second `H^4` be formalized as a discrete complex-value scaling field rather than a generic auxiliary latent?
+- Priority: highest
+- Why it matters: current user guidance narrows the intended product mechanism. If the second factor is really a structured complex field, the branch should stop pretending the role is still open-ended.
+- Current owner: Geometry Theory Team
+
+## Q2ak: Can phase shifts be derived from the geometry/connection law itself rather than introduced as an external scoring term?
+- Priority: highest
+- Why it matters: this is now the core theoretical bar for the product branch. If geometry does not force the phase behavior, the architecture remains heuristic rather than structural.
+- Current owner: Geometry Theory Team
+
+## Q2am: What is the correct coupling law by which the discrete complex-value `H^4` scales with the routing `H^4`?
+- Priority: highest
+- Why it matters: the current user guidance is no longer “have a second field somewhere.” It is specifically that the second factor should scale with the first, and both should move through phase shifts. That coupling law is now the central missing definition.
+- Current owner: Geometry Theory Team
+
+## Q2al: Does the routed manifold support measurable geometry-induced spectral structure before any explicit oscillatory mechanism is added?
+- Priority: highest
+- Why it matters: the current thesis is moving beyond “better routing” toward “geometry induces spectral fields.” This needs a direct test before stronger claims are made.
 - Current owner: Geometry Theory Team
 
 ## Q3: Why does the radial optimum move from `3.0` (fixed) to `3.2` (`phi_ladder`) to `3.6` (`PHI_PHI_PHI`)?

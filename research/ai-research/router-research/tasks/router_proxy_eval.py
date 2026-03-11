@@ -529,6 +529,42 @@ def main():
     poincare_alignment_pair_mae = float(alignment["poincare_alignment_pair_mae"])
     poincare_alignment_pair_rel_mean = float(alignment["poincare_alignment_pair_rel_mean"])
     poincare_alignment_pair_corr = float(alignment["poincare_alignment_pair_corr"])
+    shell_measure = hr.shell_measure_diagnostics(shell_ev, delta_r=args.delta_r, shell_mode=args.shell_mode)
+    shell_mass_error_l1 = float(shell_measure["shell_mass_error_l1"])
+    shell_mass_error_max = float(shell_measure["shell_mass_error_max"])
+    shell_mass_kl = float(shell_measure["shell_mass_kl"])
+    shell_mass_corr = float(shell_measure["shell_mass_corr"])
+    shell_mass_shells_used = int(shell_measure["shell_mass_shells_used"])
+    route_entropy = hr.route_entropy_radius_diagnostics(shell_ev, sector_ev)
+    route_entropy_radius_corr = float(route_entropy["route_entropy_radius_corr"])
+    route_entropy_radius_slope = float(route_entropy["route_entropy_radius_slope"])
+    route_entropy_shells_used = int(route_entropy["route_entropy_shells_used"])
+    hopf_measure = hr.hopf_angular_measure_diagnostics(
+        route_z_ev,
+        dim_i=phase4_dim_i,
+        dim_j=phase4_dim_j,
+        dim_k=phase4_dim_k,
+        dim_l=phase4_dim_l,
+        chi_bins=max(2, int(args.hopf_chi_bins)),
+        theta_bins=12,
+    )
+    hopf_angular_mass_error = float(hopf_measure["hopf_angular_mass_error"])
+    hopf_chi_mass_error = float(hopf_measure["hopf_chi_mass_error"])
+    hopf_theta1_mass_error = float(hopf_measure["hopf_theta1_mass_error"])
+    hopf_theta2_mass_error = float(hopf_measure["hopf_theta2_mass_error"])
+    hopf_theta1_entropy = float(hopf_measure["hopf_theta1_entropy"])
+    hopf_theta2_entropy = float(hopf_measure["hopf_theta2_entropy"])
+    geodesic_neighbors = hr.geodesic_neighborhood_diagnostics(
+        v_ev,
+        route_z_ev,
+        max_points=256,
+        k=8,
+        seed=args.seed + 977,
+    )
+    geodesic_knn_overlap_k = float(geodesic_neighbors["geodesic_knn_overlap_k"])
+    geodesic_knn_overlap_mean = float(geodesic_neighbors["geodesic_knn_overlap_mean"])
+    geodesic_knn_jaccard_mean = float(geodesic_neighbors["geodesic_knn_jaccard_mean"])
+    geodesic_knn_points_used = int(geodesic_neighbors["geodesic_knn_points_used"])
     adaptive_k1_mean = 0.0
     adaptive_k2_mean = 0.0
     adaptive_k1_max = 0
@@ -1052,6 +1088,24 @@ def main():
         f"pair_rel={poincare_alignment_pair_rel_mean:.6f} "
         f"pair_corr={poincare_alignment_pair_corr:.6f}"
     )
+    print(
+        "measure_consistency="
+        f"shell_l1={shell_mass_error_l1:.6f} "
+        f"shell_max={shell_mass_error_max:.6f} "
+        f"shell_kl={shell_mass_kl:.6f} "
+        f"shell_corr={shell_mass_corr:.6f} "
+        f"hopf_mass={hopf_angular_mass_error:.6f} "
+        f"chi_mass={hopf_chi_mass_error:.6f} "
+        f"theta1_mass={hopf_theta1_mass_error:.6f} "
+        f"theta2_mass={hopf_theta2_mass_error:.6f} "
+        f"theta1_H={hopf_theta1_entropy:.6f} "
+        f"theta2_H={hopf_theta2_entropy:.6f} "
+        f"route_H_r_corr={route_entropy_radius_corr:.6f} "
+        f"route_H_r_slope={route_entropy_radius_slope:.6f} "
+        f"knn_k={geodesic_knn_overlap_k:.0f} "
+        f"knn_overlap={geodesic_knn_overlap_mean:.6f} "
+        f"knn_jaccard={geodesic_knn_jaccard_mean:.6f}"
+    )
     if args.sector_mode in ("phase4d_adaptive", "phase4d_hopf", "phase4d_hopf_iso", "phase4d_hopf_ball", "phase4d_hopf_chi", "phase4d_hopf_fib", "phase4d_hopf_fib_rung", "phase4d_hopf_fib_band", "phase4d_hopf_fib_band_iso", "phase4d_hopf_fib_band_bound", "phase4d_hopf_blend", "phase4d_complex_local"):
         print(
             "adaptive_shell="
@@ -1166,6 +1220,24 @@ def main():
             "poincare_alignment_pair_mae": float(poincare_alignment_pair_mae),
             "poincare_alignment_pair_rel_mean": float(poincare_alignment_pair_rel_mean),
             "poincare_alignment_pair_corr": float(poincare_alignment_pair_corr),
+            "shell_mass_error_l1": float(shell_mass_error_l1),
+            "shell_mass_error_max": float(shell_mass_error_max),
+            "shell_mass_kl": float(shell_mass_kl),
+            "shell_mass_corr": float(shell_mass_corr),
+            "shell_mass_shells_used": int(shell_mass_shells_used),
+            "hopf_angular_mass_error": float(hopf_angular_mass_error),
+            "hopf_chi_mass_error": float(hopf_chi_mass_error),
+            "hopf_theta1_mass_error": float(hopf_theta1_mass_error),
+            "hopf_theta2_mass_error": float(hopf_theta2_mass_error),
+            "hopf_theta1_entropy": float(hopf_theta1_entropy),
+            "hopf_theta2_entropy": float(hopf_theta2_entropy),
+            "route_entropy_radius_corr": float(route_entropy_radius_corr),
+            "route_entropy_radius_slope": float(route_entropy_radius_slope),
+            "route_entropy_shells_used": int(route_entropy_shells_used),
+            "geodesic_knn_overlap_k": float(geodesic_knn_overlap_k),
+            "geodesic_knn_overlap_mean": float(geodesic_knn_overlap_mean),
+            "geodesic_knn_jaccard_mean": float(geodesic_knn_jaccard_mean),
+            "geodesic_knn_points_used": int(geodesic_knn_points_used),
             "adaptive_k1_mean": float(adaptive_k1_mean),
             "adaptive_k2_mean": float(adaptive_k2_mean),
             "adaptive_k1_max": int(adaptive_k1_max),

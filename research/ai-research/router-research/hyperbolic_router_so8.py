@@ -672,6 +672,207 @@ def poincare_alignment_diagnostics(
     }
 
 
+def shell_boundary_tangent(shell_idx: np.ndarray, delta_r: float, shell_mode: str) -> np.ndarray:
+    idx = np.asarray(shell_idx, dtype=np.float64)
+    delta_r_safe = max(float(delta_r), 1e-9)
+    if shell_mode == "linear":
+        return idx * delta_r_safe
+    if shell_mode in ("phi_log", "phi_phase"):
+        return delta_r_safe * (np.power(PHI, idx) - 1.0)
+    raise ValueError(f"unsupported shell_mode={shell_mode!r}")
+
+
+def h4_shell_mass(lower_geo: np.ndarray, upper_geo: np.ndarray) -> np.ndarray:
+    lower = np.asarray(lower_geo, dtype=np.float64)
+    upper = np.asarray(upper_geo, dtype=np.float64)
+    return ((np.cosh(upper) ** 3 - np.cosh(lower) ** 3) / 3.0) - (np.cosh(upper) - np.cosh(lower))
+
+
+def shell_measure_diagnostics(
+    shell: np.ndarray,
+    delta_r: float,
+    shell_mode: str,
+) -> Dict[str, float]:
+    shell = np.asarray(shell, dtype=np.int64).reshape(-1)
+    if shell.size == 0:
+        return {
+            "shell_mass_error_l1": 0.0,
+            "shell_mass_error_max": 0.0,
+            "shell_mass_kl": 0.0,
+            "shell_mass_corr": 0.0,
+            "shell_mass_shells_used": 0,
+        }
+
+    max_shell = int(np.max(shell))
+    shell_ids = np.arange(max_shell + 1, dtype=np.int64)
+    counts = np.bincount(shell, minlength=max_shell + 1).astype(np.float64)
+    obs = counts / max(np.sum(counts), 1.0)
+
+    lower_tan = shell_boundary_tangent(shell_ids, delta_r=delta_r, shell_mode=shell_mode)
+    upper_tan = shell_boundary_tangent(shell_ids + 1, delta_r=delta_r, shell_mode=shell_mode)
+    expected_mass = h4_shell_mass(2.0 * lower_tan, 2.0 * upper_tan)
+    expected = expected_mass / max(float(np.sum(expected_mass)), 1e-12)
+
+    return {
+        "shell_mass_error_l1": float(np.sum(np.abs(obs - expected))),
+        "shell_mass_error_max": float(np.max(np.abs(obs - expected))),
+        "shell_mass_kl": float(np.sum(obs * np.log((obs + 1e-12) / (expected + 1e-12)))),
+        "shell_mass_corr": safe_corrcoef_1d(obs, expected),
+        "shell_mass_shells_used": int(len(shell_ids)),
+    }
+
+
+def hopf_coordinate_components(
+    z: np.ndarray,
+    dim_i: int,
+    dim_j: int,
+    dim_k: int,
+    dim_l: int,
+) -> Dict[str, np.ndarray]:
+    a = z[:, dim_i]
+    b = z[:, dim_j]
+    c = z[:, dim_k]
+    d = z[:, dim_l]
+    rho1 = np.sqrt(a * a + b * b)
+    rho2 = np.sqrt(c * c + d * d)
+    denom = np.maximum(np.sqrt(rho1 * rho1 + rho2 * rho2), 1e-12)
+    cos_chi = rho1 / denom
+    sin_chi = rho2 / denom
+    chi_u = np.clip(sin_chi * sin_chi, 0.0, 1.0 - 1e-12)
+    theta1 = wrap_to_pi(np.arctan2(b, a))
+    theta2 = wrap_to_pi(np.arctan2(d, c))
+    return {
+        "rho1": rho1,
+        "rho2": rho2,
+        "chi_u": chi_u,
+        "theta1": theta1,
+        "theta2": theta2,
+    }
+
+
+def hopf_angular_measure_diagnostics(
+    z: np.ndarray,
+    dim_i: int,
+    dim_j: int,
+    dim_k: int,
+    dim_l: int,
+    chi_bins: int = HOPF_CHI_BINS,
+    theta_bins: int = 12,
+) -> Dict[str, float]:
+    if z.shape[0] == 0:
+        return {
+            "hopf_angular_mass_error": 0.0,
+            "hopf_chi_mass_error": 0.0,
+            "hopf_theta1_mass_error": 0.0,
+            "hopf_theta2_mass_error": 0.0,
+            "hopf_theta1_entropy": 0.0,
+            "hopf_theta2_entropy": 0.0,
+        }
+
+    comp = hopf_coordinate_components(z, dim_i=dim_i, dim_j=dim_j, dim_k=dim_k, dim_l=dim_l)
+    chi_bins = max(2, int(chi_bins))
+    theta_bins = max(4, int(theta_bins))
+
+    chi_ids = np.minimum((comp["chi_u"] * chi_bins).astype(np.int64), chi_bins - 1)
+    chi_counts = np.bincount(chi_ids, minlength=chi_bins).astype(np.float64)
+    chi_obs = chi_counts / max(np.sum(chi_counts), 1.0)
+    chi_exp = np.full((chi_bins,), 1.0 / float(chi_bins), dtype=np.float64)
+    chi_mass_error = float(np.sum(np.abs(chi_obs - chi_exp)))
+
+    theta1_hist, _ = np.histogram(comp["theta1"], bins=theta_bins, range=(-np.pi, np.pi))
+    theta2_hist, _ = np.histogram(comp["theta2"], bins=theta_bins, range=(-np.pi, np.pi))
+    theta1_obs = theta1_hist.astype(np.float64) / max(np.sum(theta1_hist), 1.0)
+    theta2_obs = theta2_hist.astype(np.float64) / max(np.sum(theta2_hist), 1.0)
+    theta_exp = np.full((theta_bins,), 1.0 / float(theta_bins), dtype=np.float64)
+
+    theta1_mass_error = float(np.sum(np.abs(theta1_obs - theta_exp)))
+    theta2_mass_error = float(np.sum(np.abs(theta2_obs - theta_exp)))
+    theta1_entropy = entropy_from_counts(theta1_hist) if np.sum(theta1_hist) > 0 else 0.0
+    theta2_entropy = entropy_from_counts(theta2_hist) if np.sum(theta2_hist) > 0 else 0.0
+
+    return {
+        "hopf_angular_mass_error": float(np.mean([chi_mass_error, theta1_mass_error, theta2_mass_error])),
+        "hopf_chi_mass_error": chi_mass_error,
+        "hopf_theta1_mass_error": theta1_mass_error,
+        "hopf_theta2_mass_error": theta2_mass_error,
+        "hopf_theta1_entropy": float(theta1_entropy),
+        "hopf_theta2_entropy": float(theta2_entropy),
+    }
+
+
+def route_entropy_radius_diagnostics(shell: np.ndarray, sector: np.ndarray) -> Dict[str, float]:
+    shell = np.asarray(shell, dtype=np.int64).reshape(-1)
+    sector = np.asarray(sector, dtype=np.int64).reshape(-1)
+    if shell.size == 0:
+        return {
+            "route_entropy_radius_corr": 0.0,
+            "route_entropy_radius_slope": 0.0,
+            "route_entropy_shells_used": 0,
+        }
+    shell_ids = np.unique(shell)
+    entropies = []
+    for sid in shell_ids:
+        counts = np.unique(sector[shell == sid], return_counts=True)[1]
+        entropies.append(entropy_from_counts(counts) if len(counts) else 0.0)
+    ent = np.asarray(entropies, dtype=np.float64)
+    if shell_ids.size < 2:
+        slope = 0.0
+    else:
+        slope = float(np.polyfit(shell_ids.astype(np.float64), ent, deg=1)[0])
+    return {
+        "route_entropy_radius_corr": safe_corrcoef_1d(shell_ids.astype(np.float64), ent),
+        "route_entropy_radius_slope": slope,
+        "route_entropy_shells_used": int(shell_ids.size),
+    }
+
+
+def geodesic_neighborhood_diagnostics(
+    v: np.ndarray,
+    z: np.ndarray,
+    max_points: int = 256,
+    k: int = 8,
+    seed: int = 0,
+) -> Dict[str, float]:
+    if v.shape != z.shape:
+        raise ValueError(f"Shape mismatch for neighborhood diagnostics: {v.shape} vs {z.shape}")
+    n = int(v.shape[0])
+    if n < 2:
+        return {
+            "geodesic_knn_overlap_k": float(k),
+            "geodesic_knn_overlap_mean": 0.0,
+            "geodesic_knn_jaccard_mean": 0.0,
+            "geodesic_knn_points_used": n,
+        }
+    rs = np.random.RandomState(int(seed))
+    take = min(n, max(2, int(max_points)))
+    idx = rs.choice(n, size=take, replace=False)
+    x_v = exp_map0(v[idx])
+    x_z = exp_map0(z[idx])
+    dist_v = poincare_distance(x_v[:, None, :], x_v[None, :, :])
+    dist_z = poincare_distance(x_z[:, None, :], x_z[None, :, :])
+    np.fill_diagonal(dist_v, np.inf)
+    np.fill_diagonal(dist_z, np.inf)
+    k_eff = min(max(1, int(k)), take - 1)
+    nn_v = np.argsort(dist_v, axis=1)[:, :k_eff]
+    nn_z = np.argsort(dist_z, axis=1)[:, :k_eff]
+
+    overlap = []
+    jaccard = []
+    for a, b in zip(nn_v, nn_z):
+        sa = set(int(x) for x in a.tolist())
+        sb = set(int(x) for x in b.tolist())
+        inter = len(sa & sb)
+        union = len(sa | sb)
+        overlap.append(float(inter) / float(k_eff))
+        jaccard.append(float(inter) / float(max(union, 1)))
+    return {
+        "geodesic_knn_overlap_k": float(k_eff),
+        "geodesic_knn_overlap_mean": float(np.mean(overlap)),
+        "geodesic_knn_jaccard_mean": float(np.mean(jaccard)),
+        "geodesic_knn_points_used": int(take),
+    }
+
+
 # ----------------------------
 # Synthetic hierarchical data generator
 # ----------------------------

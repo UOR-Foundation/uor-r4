@@ -1,6 +1,27 @@
 # Current Research Handoff
 
 ## Latest Closed Increment
+- `INC-0060` is complete.
+- Evidence:
+  - `configs/proxy_transfer_inc0060_measure_diag_screen.json`
+  - `results/analysis/inc0060_measure_diag_screen.json`
+  - `docs/governance/gates/gate_20260310_230415.md`
+- Reading:
+  - routed Hopf geometry is real enough to keep
+  - shell and angular laws are still measure-inconsistent
+  - widened Hopf preserved geodesic neighborhoods best
+  - the next branch should be a measure-consistent route law, not a gated-intelligence branch
+
+## Contract State
+- `INC-0059` is now locked as the umbrella coupled-field contract.
+- It is not a closed experiment run; it is the canonical branch contract for:
+  - asymmetric `H^4 x H^4`
+  - first factor = routing geometry
+  - second factor = discrete complex-value field
+  - geometry-induced phase transport
+- First live implementation slice moved to `INC-0060`.
+
+## Latest Completed Experiment
 - `INC-0058` is complete and closed negative.
 - Evidence:
   - `configs/proxy_transfer_inc0058_product_complex_rerank_screen.json`
@@ -12,22 +33,42 @@
   - the next live branch should elevate the second `H^4` into a coupled geometric role, not another local retrieval patch
 - the next live branch is coupled `H^4 x H^4` polar flow
 
+## Imported Guidance Update
+- The full top-level markdown corpus at the project base has now been scanned.
+- Primary imported files:
+  - `EVIDENCE_SUMMARY.md`
+  - `GEOMETRIC_COMPUTATION_HYPOTHESIS.md`
+  - `NEXT_CRITICAL_EXPERIMENTS.md`
+  - `THEORY_SKETCH.md`
+- Additional theory context was also read and folded in where durable:
+  - Hopf / measure-consistency review
+  - phase-transport notes
+  - spectral-emergence notes
+  - kill-test protocol
+  - product/coupled-field theory notes
+- Canonical import record:
+  - `docs/research/IMPORTED_GUIDANCE_20260310.md`
+- Resume assumption:
+  - treat these as standing context for all future math decisions
+  - especially the staged falsification ladder and the stronger geometry/spectral/phase/sparse framing
+
 ## Current In-Progress Increment
-- `INC-0059` is the active next branch.
+- `INC-0061` is the active next implementation slice.
 - Setup artifacts:
   - `docs/research/increments/INC_0059_h4x4_polar_flow.md`
-  - `docs/research/MATH_REVIEW_DYNAMIC_H4_STATE_20260306.md`
-  - `docs/research/LEARNED_KNOWLEDGE.md`
+  - `docs/research/increments/INC_0060_h4_hopf_measure_diagnostics.md`
+  - `docs/research/increments/INC_0061_measure_consistent_route_law.md`
+  - `docs/research/MECHANISM_FIRST_PLAN.md`
 - Branch reading to preserve:
   - `TXH4_W050` is still the tangent Slice A main-objective winner
   - `H4XH4_BUCKET_W025` is the product quality/top-1 reference
   - `H4XH4_CPX13_W025` is the product complex-key efficiency reference
   - `HOPF_RET_CPX_P1_Q24` is the translated complex-key efficiency reference
 - Next preferred work:
-  - keep the complex key as evidence, not as the final form
-  - couple the two `H^4` factors more directly
-  - let the second factor act as a real flow / retrieval manifold
-  - prefer a geometrically meaningful coupled score or diagnostic over more local retrieval heuristics
+  - derive a measure-consistent shell law from `H^4`
+  - derive a measure-consistent Hopf angular law
+  - keep geometry routing as the only active near-term goal
+  - defer gated-intelligence/event-style branches until this correction is tested
 
 ## Exact Current State
 - Latest closed increment:
@@ -66,15 +107,10 @@ The next question is:
 
 ## Resume Rule
 Default resume path is:
-1. read `docs/research/increments/INC_0056_product_complex_translation.md`
-2. read `results/analysis/inc0056_product_complex_translation_confirm.json`
-3. read `docs/governance/gates/gate_20260306_131507.md`
-4. read `docs/research/increments/INC_0057_product_complex_backfill.md`
-5. read `results/analysis/inc0057_product_complex_backfill_smallbucket_screen.json`
-6. read `docs/research/increments/INC_0058_product_complex_rerank.md`
-7. read `results/analysis/inc0058_product_complex_rerank_screen.json`
-8. read `docs/governance/gates/gate_20260306_140424.md`
-9. read `docs/research/increments/INC_0059_h4x4_polar_flow.md`
-10. read `docs/research/MATH_REVIEW_DYNAMIC_H4_STATE_20260306.md`
-11. read `docs/research/LEARNED_KNOWLEDGE.md`
-12. resume with `INC-0059`
+1. read `docs/research/MECHANISM_FIRST_PLAN.md`
+2. read `docs/research/increments/INC_0059_h4x4_polar_flow.md`
+3. read `docs/research/increments/INC_0060_h4_hopf_measure_diagnostics.md`
+4. read `docs/research/increments/INC_0061_measure_consistent_route_law.md`
+5. read `docs/research/LEARNED_KNOWLEDGE.md`
+6. read `docs/research/CURRENT_DIRECTION.md`
+7. resume with `INC-0061`

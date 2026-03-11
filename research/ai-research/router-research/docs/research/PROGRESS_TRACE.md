@@ -1,5 +1,85 @@
 # Progress Trace
 
+## 2026-03-10
+
+### Mechanism-first recenter
+1. Read the imported top-level theory corpus again with emphasis on the lowercase theory files.
+2. Confirmed the coupled-field direction is distributed across:
+   - `hyperbolic_router_math_review.md`
+   - `geometric_routing_architecture_summary.md`
+   - `phase_transport_hypothesis.md`
+   - `event_driven_geometric_routing_model.md`
+   - `geometric_routing_kill_tests.md`
+   - `minimal_theorem_for_spectral_emergence.md`
+3. Extracted the durable coupled-field contract:
+   - asymmetric `H^4 x H^4`
+   - first factor = routing geometry
+   - second factor = discrete complex-value field
+   - geometry-induced phase transport
+4. Re-centered the project around the mechanism-first kill ladder.
+5. Split the first implementation slice into branch `codex/RR-060-h4-hopf-measure-diagnostics`.
+6. Added direct `H^4` / Hopf measure diagnostics to the router and proxy harness:
+   - shell-mass error
+   - Hopf angular mass error
+   - route entropy vs radius
+   - geodesic neighborhood preservation
+7. Added dedicated unit coverage in `tests/test_measure_diagnostics.py`.
+8. Verified compile and targeted unit tests passed before running the first diagnostic screen.
+9. Ran the first `INC-0060` screen and hit a harness bug:
+   - `router_proxy_eval.py` referenced nonexistent `shell_te`, `sector_te`, `route_z_te`, and `v_te` variables
+10. Fixed the bug to use the existing eval-set variables:
+   - `shell_ev`
+   - `sector_ev`
+   - `route_z_ev`
+   - `v_ev`
+11. Re-ran compile and targeted tests after the fix.
+12. Re-ran `INC-0060` successfully.
+13. Read the geometry results:
+   - routed Hopf families still beat `R0`
+   - widened Hopf preserved kNN structure best
+   - shell mass mismatch and angular concentration remain strong
+14. Queued `INC-0061` as the next route-law correction.
+
+### Imported guidance integration
+1. User clarified that the intended new files were in the project base directory, not the git root.
+2. Rescanned `/Users/adminamn/ai-router/router-research` for recent project-base markdown files.
+3. Identified the four plausible new files by timestamp and location:
+   - `EVIDENCE_SUMMARY.md`
+   - `GEOMETRIC_COMPUTATION_HYPOTHESIS.md`
+   - `NEXT_CRITICAL_EXPERIMENTS.md`
+   - `THEORY_SKETCH.md`
+4. Read all four files directly.
+5. Integrated them into canonical docs:
+   - `docs/PROJECT_CONTEXT.md`
+   - `docs/research/CURRENT_DIRECTION.md`
+   - `docs/research/OPEN_QUESTIONS.md`
+   - `docs/research/LEARNED_KNOWLEDGE.md`
+   - `docs/research/HANDOFF_CURRENT.md`
+6. Added a dedicated import record:
+   - `docs/research/IMPORTED_GUIDANCE_20260310.md`
+7. Preserved the imported doctrine that future branches must stay accountable to:
+   - spectral structure
+   - phase transport usefulness
+   - sparse event trainability
+   - hardware-efficiency proof
+8. User then clarified that there were more than four files.
+9. Read every top-level markdown file in `/Users/adminamn/ai-router/router-research`.
+10. Expanded the import from “four-file guidance note” to “project-base theory corpus.”
+11. Integrated the additional durable signals:
+    - Hopf angular structure as the dominant angular hypothesis
+    - measure consistency as a likely missing shell/sector law
+    - spectral emergence as a future direct measurement target
+    - `H^4 x H^4` as a coupled-field model, not duplicated capacity
+12. Kept speculative moonshot hardware notes as secondary context instead of roadmap doctrine.
+13. User clarified the intended `H^4 x H^4` mechanism:
+    - one factor for routing geometry
+    - one factor for the discrete complex-value field
+    - the second should scale with the first
+    - both factors should scale through phase shifts
+    - phase should ideally be forced by the geometry
+    - the deeper claim is geometry-induced spectral structure, not just a better local router
+14. Wrote that clarification into the active increment, current direction, learned knowledge, open questions, and handoff docs.
+
 ## 2026-03-06
 
 ### Resume after `INC-0044`

@@ -1,6 +1,41 @@
 # Current Direction
 
 ## Latest Update
+- `INC-0060` is complete.
+- Reading:
+  - geometry routing in the current infinite hyperbolic/Hopf space is real enough to keep pursuing
+  - both routed Hopf families beat the collapsed `R0` control on the proxy task
+  - widened Hopf preserved neighborhood structure better than pure Hopf
+  - current shell and angular laws are still measure-inconsistent
+- Immediate next action:
+  - `docs/research/increments/INC_0061_measure_consistent_route_law.md`
+- Explicit deferral:
+  - gated-intelligence / synapse-style branches stay deferred until geometry routing survives the measure-consistency correction
+- The project is now explicitly re-centered on the mechanism-first kill ladder in:
+  - `docs/research/MECHANISM_FIRST_PLAN.md`
+- `RR-059` now acts as the canonical coupled-field contract:
+  - asymmetric `H^4 x H^4`
+  - first factor = routing geometry
+  - second factor = discrete complex-value field
+  - phase should be geometry-induced
+- `RR-060` is the active implementation slice:
+  - `docs/research/increments/INC_0060_h4_hopf_measure_diagnostics.md`
+  - first target is direct `H^4` / Hopf measure diagnostics on the current routed frontier
+- Imported the full project-base markdown theory corpus into canonical context:
+  - `EVIDENCE_SUMMARY.md`
+  - `GEOMETRIC_COMPUTATION_HYPOTHESIS.md`
+  - `NEXT_CRITICAL_EXPERIMENTS.md`
+  - `THEORY_SKETCH.md`
+  - plus the top-level theory extensions on Hopf geometry, phase transport, spectral emergence, kill tests, theory-of-mind routing, and adaptive field computing
+- Canonical import record:
+  - `docs/research/IMPORTED_GUIDANCE_20260310.md`
+- These strengthen the program framing around:
+  - spectral structure
+  - phase transport
+  - sparse event-driven computation
+  - staged falsification rather than open-ended exploration
+  - measure-consistent shell/sector laws
+  - explicit coupled-field interpretations for `H^4 x H^4`
 - `INC-0058` is now closed negative.
 - `HOPF_RET_CPX_P1_Q24` remains the translated complex-key efficiency reference:
   - coarse backfill was the wrong recall path
@@ -10,8 +45,17 @@
   - treat discrete complex / imaginary route-key storage as evidence-positive in both product and translated retrieval settings
   - keep the second factor explicitly live as a hyperbolic polar field, not a flat auxiliary embedding
   - keep the live product object as `H^4 x H^4` in hyperbolic polar structure on both factors
+  - interpret the second factor asymmetrically:
+    - the second `H^4` is the discrete complex-value field
+    - it should scale with the first factor
+    - both factors should scale through phase shifts
   - move next to a coupled `H^4 x H^4` polar-flow branch rather than more translated local patching
   - treat the current translated complex branch as strong evidence for discrete addressing, not as the end-state architecture
+  - preserve imported hypothesis scope so future branches remain accountable to:
+    - spectral structure
+    - phase transport necessity
+    - sparse event trainability
+    - hardware-efficiency proof
 
 ## Current Best-Known Routes
 - Synthetic lead: `R5B`
@@ -105,6 +149,34 @@
   - simple complex-plane reranking keeps candidate fraction fixed, which is good
   - but it does not reliably improve top-1 or MSE at useful cost points
   - the next live question is therefore whether the second `H^4` should become a true coupled flow/retrieval field instead of a key-only or rerank-only field
+- Imported strategic notes also sharpen the nonnegotiable kill sequence:
+  - embedding stability
+  - shell/neighborhood preservation
+  - spectral structure
+  - phase usefulness
+  - sparse trainability
+  - hardware efficiency
+- The imported theory sketch also gives a cleaner abstraction for future route-law reviews:
+  - if a branch cannot be explained as structured interaction on a manifold with coupled fields, it is likely another local heuristic rather than a real geometric advance
+- The broader top-level theory corpus further narrows the mathematical direction:
+  - Hopf angular coordinates should remain the default structured angular hypothesis
+  - measure consistency should remain the default explanation for many prior repair heuristics
+  - `H^4 x H^4` should be treated as a coupled-field model, not symmetric duplicate capacity
+  - spectral and phase claims should eventually be tested directly, not left as narrative framing only
+- The active execution order is now:
+  1. embedding stability
+  2. measure-consistent shell routing
+  3. Hopf angular correctness
+  4. phase transport necessity
+  5. spectral emergence measurement
+  6. sparse event-driven trainability
+  7. hardware-efficiency confirmation
+- User clarification further sharpens the product interpretation:
+  - the second factor is not “more latent room”
+  - it is the discrete complex-value field
+  - it should scale with the routing factor
+  - both factors should admit geometry-induced phase shifting
+  - if that works, the architecture may move away from linear dense matrix routing toward geometry-induced spectral and phase behavior
 
 ## Current Risk
 - The win is still proxy-harness evidence, not an end-to-end model claim.
@@ -112,6 +184,8 @@
 - The translated retrieval harness is now positive on discrete complex addressing, but that does not yet prove end-to-end model savings.
 - The current translated complex branch still trades some top-1 for efficiency.
 - The widened fast lead remains useful as a second routed family, but pure Hopf is still the clean primary lead.
+- The imported guidance raises the bar further:
+  - proxy routing wins are not enough unless they also support a credible path to spectral utility, phase utility, sparse computation, and real hardware savings
 
 ## Current Stop Conditions
 - Do not overstate the translated complex-key result as a full model win.

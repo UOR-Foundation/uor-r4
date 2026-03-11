@@ -127,6 +127,18 @@ def summarize_route(route_id: str, summaries: List[Dict[str, Any]]) -> Dict[str,
         "mean_poincare_alignment_pair_mae": metric_mean(summaries, "poincare_alignment_pair_mae"),
         "mean_poincare_alignment_pair_rel_mean": metric_mean(summaries, "poincare_alignment_pair_rel_mean"),
         "mean_poincare_alignment_pair_corr": metric_mean(summaries, "poincare_alignment_pair_corr"),
+        "mean_shell_mass_error_l1": metric_mean(summaries, "shell_mass_error_l1"),
+        "mean_shell_mass_error_max": metric_mean(summaries, "shell_mass_error_max"),
+        "mean_shell_mass_kl": metric_mean(summaries, "shell_mass_kl"),
+        "mean_shell_mass_corr": metric_mean(summaries, "shell_mass_corr"),
+        "mean_hopf_angular_mass_error": metric_mean(summaries, "hopf_angular_mass_error"),
+        "mean_hopf_chi_mass_error": metric_mean(summaries, "hopf_chi_mass_error"),
+        "mean_hopf_theta1_mass_error": metric_mean(summaries, "hopf_theta1_mass_error"),
+        "mean_hopf_theta2_mass_error": metric_mean(summaries, "hopf_theta2_mass_error"),
+        "mean_route_entropy_radius_corr": metric_mean(summaries, "route_entropy_radius_corr"),
+        "mean_route_entropy_radius_slope": metric_mean(summaries, "route_entropy_radius_slope"),
+        "mean_geodesic_knn_overlap": metric_mean(summaries, "geodesic_knn_overlap_mean"),
+        "mean_geodesic_knn_jaccard": metric_mean(summaries, "geodesic_knn_jaccard_mean"),
         "mean_dynamic_knn_distance": metric_mean(summaries, "dynamic_knn_distance_mean"),
         "mean_dynamic_flow_norm": metric_mean(summaries, "dynamic_flow_norm_mean"),
         "mean_dynamic_flow_ball_radius": metric_mean(summaries, "dynamic_flow_ball_radius_mean"),
@@ -295,6 +307,11 @@ def write_gate_note(path: str, config_path: str, route_stats: List[Dict[str, Any
             f"align_radial_mae={stats['mean_poincare_alignment_radial_mae']:.6f}, "
             f"align_pair_mae={stats['mean_poincare_alignment_pair_mae']:.6f}, "
             f"align_pair_corr={stats['mean_poincare_alignment_pair_corr']:.6f}, "
+            f"shell_mass_l1={stats['mean_shell_mass_error_l1']:.6f}, "
+            f"shell_mass_corr={stats['mean_shell_mass_corr']:.6f}, "
+            f"hopf_mass={stats['mean_hopf_angular_mass_error']:.6f}, "
+            f"route_H_r_corr={stats['mean_route_entropy_radius_corr']:.6f}, "
+            f"knn_overlap={stats['mean_geodesic_knn_overlap']:.6f}, "
             f"dyn_knn={stats['mean_dynamic_knn_distance']:.6f}, "
             f"dyn_flow={stats['mean_dynamic_flow_norm']:.6f}, "
             f"dyn_step={stats['mean_dynamic_step_dist']:.6f}, "

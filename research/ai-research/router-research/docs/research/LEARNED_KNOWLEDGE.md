@@ -3,6 +3,13 @@
 This file stores durable mathematical and architectural findings that should survive across sessions, branches, and handoffs.
 
 ## Geometry
+- The current canonical object is asymmetric `H^4 x H^4`:
+  - first factor = routing geometry
+  - second factor = discrete complex-value field
+  - both factors can scale through phase shifts, but phase should be geometry-induced
+- The immediate project goal is narrower than the moonshot theory files:
+  - first prove geometry routing in the intended infinite space
+  - only then reopen gated-intelligence / synapse-style computation branches
 - Poincare-ball global alignment is foundational, not an optional visualization detail.
 - Pure Hopf-aware routing repeatedly carries the cleanest routed-quality signal.
 - `phase4_dims=0,2,4,6` is a stable clue, not a random projection choice.
@@ -11,6 +18,22 @@ This file stores durable mathematical and architectural findings that should sur
 - Hyperbolic / exponential law belongs to continuous radial growth.
 - `phi` helps most as a discrete branching/control constant, not as a universal replacement constant.
 - `log(phi)` is meaningful for additive ladder-like shell or convergence pressure.
+- The imported project-base guidance sharpens the macro-theory:
+  - routing is only one layer of the intended architecture
+  - the larger claim is geometry -> spectral structure -> phase transport -> sparse event-driven computation
+  - that larger claim is still unproven and should remain falsifiable in stages
+- The wider top-level markdown corpus adds three durable lessons:
+  - Hopf / `S^3` angular structure is not a niche branch; it is the dominant repeated angular hypothesis across the theory notes
+  - measure-consistent shell and sector laws are likely more fundamental than pressure-style repairs
+  - spectral/operator structure should eventually be measured directly instead of being inferred from routing behavior alone
+- The imported kill order is now durable doctrine:
+  - embedding stability
+  - measure-consistent shell routing
+  - Hopf angular correctness
+  - phase transport necessity
+  - spectral emergence measurement
+  - sparse event trainability
+  - hardware-efficiency improvement
 
 ## Dynamic Geometry
 - The project should not collapse the next dynamic branch into plain `R^8`.
@@ -55,6 +78,23 @@ This file stores durable mathematical and architectural findings that should sur
 - Current reading:
   - plain product bucket is the quality/top-1 reference
   - product complex key is the discrete-key efficiency reference
+- The project should treat `H^4 x H^4` as compatible with the imported coupled-field framework:
+  - one factor for primary routing geometry
+  - one factor for transport, retrieval, correction, or imaginary-field structure
+  - both still in hyperbolic polar structure, not flattened Euclidean replacements
+- The top-level theory files consistently treat the second factor or coupled field as asymmetric:
+  - the second `H^4` should have a distinct job
+  - it should not be treated as duplicated routing capacity without mechanism
+- User clarification narrows the intended mechanism:
+  - one `H^4` is the routing geometry
+  - the other `H^4` is the discrete complex-value field
+  - the second factor should scale with the first
+  - both factors should scale through phase shifts
+  - the desired end-state is that geometry itself induces phase behavior and spectral structure
+  - phase should be forced by the geometry if the formulation is correct, not patched in externally
+- Notation discipline:
+  - avoid vague `U^4` language in branch planning
+  - the likely useful group structure is `U(1)`, `U(1)^2`, or `SU(2)` on top of hyperbolic geometry, depending on whether the branch uses fibers or full Hopf transport
 
 ## Systems
 - Route-health failures in `R0` can make it look fast while still being geometrically unhealthy.
@@ -67,9 +107,30 @@ This file stores durable mathematical and architectural findings that should sur
   - `retrieval_bucket_fallback_rate`
 
 ## Research Discipline
+- Mechanism-first execution now takes priority over ad hoc family exploration.
+- The first live gate after embedding is measure consistency, not another controller repair.
+- Event-driven / gated-intelligence ideas remain explicitly deferred until geometry routing survives the measure gate.
 - Results need to be recorded in docs and structured artifacts immediately, not reconstructed later from memory.
+
+## Measure Diagnostics
+- `INC-0060` established that current geometry routing is real enough to keep:
+  - both routed Hopf families beat the collapsed `R0` control on the proxy task
+- `INC-0060` also established that the current route law is still mathematically off:
+  - shell mass mismatch is large
+  - Hopf angular mass remains concentrated
+- Widened Hopf currently preserves geodesic neighborhoods better than pure Hopf and is therefore the better reference family for a measure-consistent route-law correction.
 - Every new branch should leave enough math and implementation context that another session can resume without re-deriving the branch intent.
 - Deep math branches should first prove signal with a minimal surrogate before rewriting the main route law.
+- Imported guidance files added at the project base should be copied into canonical context immediately through:
+  - `docs/PROJECT_CONTEXT.md`
+  - `docs/research/CURRENT_DIRECTION.md`
+  - `docs/research/OPEN_QUESTIONS.md`
+  - `docs/research/LEARNED_KNOWLEDGE.md`
+  - `docs/research/IMPORTED_GUIDANCE_*.md`
+- When the project base contains many theory notes, integrate them as a corpus:
+  - primary claims into canonical docs
+  - speculative moonshots retained as secondary context
+  - avoid letting speculative hardware notes silently override nearer-term falsification discipline
 - `INC-0057` partial result:
   - naive hierarchical coarse backfill on top of the exact complex key remains materially expensive even after removing the obvious repeated set-diff bug
   - low-margin selective backfill over-triggers and becomes operationally dead
