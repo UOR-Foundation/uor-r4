@@ -672,6 +672,38 @@ def poincare_alignment_diagnostics(
     }
 
 
+def h4_mass_antiderivative(geo_r: np.ndarray) -> np.ndarray:
+    geo_r = np.asarray(geo_r, dtype=np.float64)
+    return (np.cosh(geo_r) ** 3) / 3.0 - np.cosh(geo_r)
+
+
+def h4_cumulative_mass(geo_r: np.ndarray) -> np.ndarray:
+    geo_r = np.asarray(geo_r, dtype=np.float64)
+    return h4_mass_antiderivative(geo_r) - h4_mass_antiderivative(np.asarray(0.0, dtype=np.float64))
+
+
+def inverse_h4_cumulative_mass(target_mass: np.ndarray) -> np.ndarray:
+    target = np.maximum(np.asarray(target_mass, dtype=np.float64), 0.0)
+    if target.size == 0:
+        return target
+    lo = np.zeros_like(target)
+    hi = np.ones_like(target)
+    flat_hi = hi.reshape(-1)
+    flat_target = target.reshape(-1)
+    for idx, tgt in enumerate(flat_target):
+        while float(h4_cumulative_mass(np.asarray(flat_hi[idx], dtype=np.float64))) < float(tgt):
+            flat_hi[idx] *= 2.0
+            if flat_hi[idx] > 1e6:
+                break
+    hi = flat_hi.reshape(target.shape)
+    for _ in range(48):
+        mid = 0.5 * (lo + hi)
+        mid_mass = h4_cumulative_mass(mid)
+        lo = np.where(mid_mass < target, mid, lo)
+        hi = np.where(mid_mass < target, hi, mid)
+    return 0.5 * (lo + hi)
+
+
 def shell_boundary_tangent(shell_idx: np.ndarray, delta_r: float, shell_mode: str) -> np.ndarray:
     idx = np.asarray(shell_idx, dtype=np.float64)
     delta_r_safe = max(float(delta_r), 1e-9)
@@ -679,13 +711,17 @@ def shell_boundary_tangent(shell_idx: np.ndarray, delta_r: float, shell_mode: st
         return idx * delta_r_safe
     if shell_mode in ("phi_log", "phi_phase"):
         return delta_r_safe * (np.power(PHI, idx) - 1.0)
+    if shell_mode == "h4_mass":
+        mass_step = float(h4_cumulative_mass(np.asarray(2.0 * delta_r_safe, dtype=np.float64)))
+        geo_boundary = inverse_h4_cumulative_mass(idx * mass_step)
+        return 0.5 * geo_boundary
     raise ValueError(f"unsupported shell_mode={shell_mode!r}")
 
 
 def h4_shell_mass(lower_geo: np.ndarray, upper_geo: np.ndarray) -> np.ndarray:
     lower = np.asarray(lower_geo, dtype=np.float64)
     upper = np.asarray(upper_geo, dtype=np.float64)
-    return ((np.cosh(upper) ** 3 - np.cosh(lower) ** 3) / 3.0) - (np.cosh(upper) - np.cosh(lower))
+    return h4_mass_antiderivative(upper) - h4_mass_antiderivative(lower)
 
 
 def shell_measure_diagnostics(
@@ -1776,6 +1812,9 @@ def shell_metric_components(
         phase_bias = 0.0 if shell_phase_bias is None else np.asarray(shell_phase_bias, dtype=np.float64)
         shell_cont = np.log1p(r_eff_clip / delta_r_safe) / max(LOG_PHI, 1e-9)
         shell_cont = np.maximum(shell_cont + phase_bias, 0.0)
+    elif shell_mode == "h4_mass":
+        mass_step = float(h4_cumulative_mass(np.asarray(2.0 * delta_r_safe, dtype=np.float64)))
+        shell_cont = h4_cumulative_mass(2.0 * r_eff_clip) / max(mass_step, 1e-12)
     else:
         raise ValueError(f"unsupported shell_mode={shell_mode!r}")
     shell = np.floor(shell_cont).astype(np.int64)
@@ -4398,7 +4437,7 @@ def parse_args():
     ap.add_argument("--adaptive_converge_mode", type=str, default="fixed",
                     choices=["fixed", "phi_ratio", "phi_ladder"],
                     help="shell convergence controller for phase4d_adaptive")
-    ap.add_argument("--shell_mode", type=str, default="linear", choices=["linear", "phi_log", "phi_phase"],
+    ap.add_argument("--shell_mode", type=str, default="linear", choices=["linear", "phi_log", "phi_phase", "h4_mass"],
                     help="shell metric: linear, phi-spaced log, or phase-coupled phi shells")
     ap.add_argument("--shell_phase_coupling", type=float, default=0.0,
                     help="signed phase-pressure shift applied to phi-based shells when shell_mode=phi_phase")

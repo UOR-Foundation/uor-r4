@@ -1,7 +1,7 @@
 # INC-0061: Measure-Consistent `H^4` / Hopf Route Law
 
 ## Status
-Queued next.
+In progress.
 
 ## Trigger
 `INC-0060` established that geometry routing is real enough to keep pursuing:
@@ -42,3 +42,51 @@ without giving back the current routed task win.
 ## Scope Guardrail
 - Do not open the event-driven / gated-intelligence branch yet.
 - Do not move to spectral claims until the measure-consistent route law is tested.
+
+## First Screen Result
+Artifacts:
+- `configs/proxy_transfer_inc0061_h4_mass_shell_screen.json`
+- `results/analysis/inc0061_h4_mass_shell_screen.json`
+- `docs/governance/gates/gate_20260310_231241.md`
+
+What was tested first:
+- a shell-only correction:
+  - `shell_mode=h4_mass`
+
+Reading:
+- naive equal-mass `H^4` shells are not sufficient by themselves
+- they reduce shell-mass mismatch locally, but they over-open shell states and break route health
+- the current phi-shell references remain stronger operationally
+
+Key means:
+- `HOPF_K25_BASE_PHI`
+  - `mse=0.0039027`
+  - `total=6.681s`
+  - `shell_mass_l1=1.1416`
+  - pass
+- `HOPF_K25_BASE_H4M`
+  - `mse=0.0039045`
+  - `total=6.626s`
+  - `shell_mass_l1=1.4784`
+  - `eval_shells=85`
+  - fail
+- `HOPF_PHI2_BAND_PHI`
+  - `mse=0.0039048`
+  - `total=6.487s`
+  - `shell_mass_l1=1.1140`
+  - `knn_overlap=0.8806`
+  - pass
+- `HOPF_PHI2_BAND_H4M`
+  - `mse=0.0039177`
+  - `total=6.906s`
+  - `shell_mass_l1=0.9846`
+  - `eval_shells=27`
+  - fail
+
+## Interim Decision
+- Keep `RR-061` open.
+- Do not promote raw `h4_mass` shells.
+- Next correction inside this branch should be:
+  - bounded/shared-state shell mass control
+  - and likely shell+angular measure correction together
+  - not shell-only equal-mass expansion

@@ -1,6 +1,13 @@
 # Current Direction
 
 ## Latest Update
+- `INC-0061` is now in progress and has its first negative-but-useful screen result.
+- First measure-consistent shell pilot:
+  - `shell_mode=h4_mass`
+- Reading:
+  - raw equal-mass `H^4` shells over-open the route and break health
+  - pure and widened phi-shell Hopf references remain the operational geometry leaders
+  - next correction should be bounded/shared-state shell mass control plus angular work, not raw shell-only expansion
 - Canonical equation extract added:
   - `docs/research/MATH_CONTRACT_H4XH4_PHASE_SPECTRAL_20260310.md`
 - This keeps the repo aligned with the local theory files:

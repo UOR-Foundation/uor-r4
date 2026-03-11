@@ -16,6 +16,16 @@ class MeasureDiagnosticsTest(unittest.TestCase):
         np.testing.assert_allclose(phi_log, 3.0 * (np.power(hr.PHI, shell_ids) - 1.0))
         np.testing.assert_allclose(phi_phase, phi_log)
 
+    def test_h4_mass_shell_metric_matches_its_boundaries(self):
+        delta_r = 0.35
+        shell_ids = np.array([0.0, 1.0, 2.0, 3.0], dtype=np.float64)
+        boundaries = hr.shell_boundary_tangent(shell_ids, delta_r=delta_r, shell_mode="h4_mass")
+        shell, shell_frac, shell_cont = hr.shell_metric_components(boundaries, delta_r=delta_r, shell_mode="h4_mass")
+
+        np.testing.assert_array_equal(shell, shell_ids.astype(np.int64))
+        np.testing.assert_allclose(shell_cont, shell_ids, atol=1e-6)
+        np.testing.assert_allclose(shell_frac, 0.0, atol=1e-6)
+
     def test_shell_measure_diagnostics_tracks_h4_mass_profile(self):
         shell_ids = np.arange(4, dtype=np.int64)
         lower = hr.shell_boundary_tangent(shell_ids, delta_r=0.15, shell_mode="linear")
@@ -31,6 +41,17 @@ class MeasureDiagnosticsTest(unittest.TestCase):
         self.assertLess(diag["shell_mass_error_max"], 0.02)
         self.assertLess(diag["shell_mass_kl"], 0.01)
         self.assertGreater(diag["shell_mass_corr"], 0.999)
+
+    def test_shell_measure_diagnostics_is_uniform_under_h4_mass_shells(self):
+        shell_ids = np.arange(5, dtype=np.int64)
+        shell = np.repeat(shell_ids, 200)
+        diag = hr.shell_measure_diagnostics(shell, delta_r=0.25, shell_mode="h4_mass")
+
+        self.assertEqual(diag["shell_mass_shells_used"], 5)
+        self.assertLess(diag["shell_mass_error_l1"], 1e-10)
+        self.assertLess(diag["shell_mass_error_max"], 1e-10)
+        self.assertLess(diag["shell_mass_kl"], 1e-10)
+        self.assertGreater(diag["shell_mass_corr"], 0.999999)
 
     def test_hopf_angular_measure_diagnostics_detects_uniform_bins(self):
         chi_bins = 4

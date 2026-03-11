@@ -45,6 +45,15 @@
 17. Preserved the sequencing rule:
     - geometry first
     - then phase/spectral tests on top of corrected geometry
+18. Started `RR-061` with the first structural correction:
+    - added `shell_mode=h4_mass`
+    - equal-mass shells under the `H^4` radial law
+19. Added tests for the new shell mode and updated CLI coverage.
+20. Ran `INC-0061` shell-only screen.
+21. Read the result:
+    - shell-only equal-mass correction is too aggressive
+    - health breaks through shell explosion
+    - next correction must be bounded/shared-state and likely paired with angular measure correction
 
 ### Imported guidance integration
 1. User clarified that the intended new files were in the project base directory, not the git root.

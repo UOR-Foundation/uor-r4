@@ -125,6 +125,10 @@ This file stores durable mathematical and architectural findings that should sur
   - shell mass mismatch is large
   - Hopf angular mass remains concentrated
 - Widened Hopf currently preserves geodesic neighborhoods better than pure Hopf and is therefore the better reference family for a measure-consistent route-law correction.
+- `INC-0061` added the next durable constraint:
+  - raw equal-mass `H^4` shells are too aggressive on their own
+  - they open many shells, worsen route health, and degrade neighborhood preservation
+  - measure correction likely needs bounded/shared-state shell control and angular correction together
 - Every new branch should leave enough math and implementation context that another session can resume without re-deriving the branch intent.
 - Deep math branches should first prove signal with a minimal surrogate before rewriting the main route law.
 - Imported guidance files added at the project base should be copied into canonical context immediately through:
