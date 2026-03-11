@@ -59,6 +59,7 @@
   - `docs/research/increments/INC_0060_h4_hopf_measure_diagnostics.md`
   - `docs/research/increments/INC_0061_measure_consistent_route_law.md`
   - `docs/research/MECHANISM_FIRST_PLAN.md`
+  - `docs/research/MATH_CONTRACT_H4XH4_PHASE_SPECTRAL_20260310.md`
 - Branch reading to preserve:
   - `TXH4_W050` is still the tangent Slice A main-objective winner
   - `H4XH4_BUCKET_W025` is the product quality/top-1 reference

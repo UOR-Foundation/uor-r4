@@ -1,6 +1,12 @@
 # Current Direction
 
 ## Latest Update
+- Canonical equation extract added:
+  - `docs/research/MATH_CONTRACT_H4XH4_PHASE_SPECTRAL_20260310.md`
+- This keeps the repo aligned with the local theory files:
+  - phase and spectral claims remain core targets
+  - they are not being discarded
+  - they are being sequenced behind measure-consistent geometry so later phase/spectral evidence is attributable to the manifold
 - `INC-0060` is complete.
 - Reading:
   - geometry routing in the current infinite hyperbolic/Hopf space is real enough to keep pursuing

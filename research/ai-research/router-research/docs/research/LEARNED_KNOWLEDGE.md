@@ -10,6 +10,12 @@ This file stores durable mathematical and architectural findings that should sur
 - The immediate project goal is narrower than the moonshot theory files:
   - first prove geometry routing in the intended infinite space
   - only then reopen gated-intelligence / synapse-style computation branches
+- Phase and spectral claims remain core target claims, not discarded ideas.
+- The local theory corpus now has a canonical equation extract in:
+  - `docs/research/MATH_CONTRACT_H4XH4_PHASE_SPECTRAL_20260310.md`
+- The practical rule is:
+  - use that equation set to drive route-law and coupled-field design
+  - do not reopen phase/spectral claims through loose heuristics
 - Poincare-ball global alignment is foundational, not an optional visualization detail.
 - Pure Hopf-aware routing repeatedly carries the cleanest routed-quality signal.
 - `phase4_dims=0,2,4,6` is a stable clue, not a random projection choice.

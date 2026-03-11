@@ -39,6 +39,12 @@
    - widened Hopf preserved kNN structure best
    - shell mass mismatch and angular concentration remain strong
 14. Queued `INC-0061` as the next route-law correction.
+15. User clarified that phase and spectral claims are core targets, not optional backlog.
+16. Re-read the local theory equations and consolidated them into:
+    - `docs/research/MATH_CONTRACT_H4XH4_PHASE_SPECTRAL_20260310.md`
+17. Preserved the sequencing rule:
+    - geometry first
+    - then phase/spectral tests on top of corrected geometry
 
 ### Imported guidance integration
 1. User clarified that the intended new files were in the project base directory, not the git root.
