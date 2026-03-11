@@ -1,18 +1,25 @@
 # Current Direction
 
 ## Latest Update
-- `INC-0061` is now in progress and has its first negative-but-useful screen result.
-- `INC-0061` now has a second shell-law result:
-  - `h4_mass_phi`
-- First measure-consistent shell pilot:
-  - `shell_mode=h4_mass`
-- Second bounded shell pilot:
-  - `shell_mode=h4_mass_phi`
-- Reading:
-  - raw equal-mass `H^4` shells over-open the route and break health
-  - bounded `H^4`-mass shells also fail route health when used alone
-  - pure and widened phi-shell Hopf references remain the operational geometry leaders
-  - next correction should target the actual Hopf base coordinates rather than continuing shell-only fixes
+- `INC-0062` is complete.
+- New branch result:
+  - `sector_mode=phase4d_hopf_base`
+  - coarse routing on Hopf base coordinates `(chi, delta)`
+  - common fiber phase `alpha` excluded from the coarse address
+- 4-seed confirm reading:
+  - `phase4d_hopf_base` is real, healthy, and fast
+  - it is the fastest healthy routed branch in the confirm
+  - it did not beat pure Hopf on quality
+  - it did not prove the stronger angular-correction hypothesis by itself
+- Durable interpretation:
+  - `phase4d_hopf_base` is now the correct no-fiber-phase coarse-address control
+  - pure `phase4d_hopf` remains the routed quality lead
+  - widened `phase4d_hopf_fib_band` remains the widened healthy comparator
+  - the next branch should be phase-transport necessity, using base-space routing as the no-phase control
+- Important diagnostic lesson:
+  - the current Hopf-base mass metrics are mostly coordinate-distribution diagnostics on the shared charted manifold
+  - they are not enough by themselves to distinguish same-chart route laws
+  - route-occupancy and task metrics remain necessary for angular-law evaluation
 - Canonical equation extract added:
   - `docs/research/MATH_CONTRACT_H4XH4_PHASE_SPECTRAL_20260310.md`
 - This keeps the repo aligned with the local theory files:
@@ -79,16 +86,21 @@
 - Synthetic lead: `R5B`
 - Transfer control baseline: `R0`
   - still shell-collapsed and health-failing on strict gate
-- Current operational routed lead: `HOPF_K25_BASE_IT40_P2_STATIC`
+- Current routed quality lead: `HOPF_K25_BASE_PHI`
   - `phase4d_hopf`
-  - `train_route_mode=final_static`
-  - `chart_iters=40`, `so8_candidates=2`, `scale_candidates=2`
-  - 4-seed confirm beats `R0` on both quality and runtime near full proxy scale
-- Current hardware-efficiency routed lead: `HOPF_PHI2_BAND_IT40_P2_STATIC`
+  - cheap static proxy schedule
+  - 4-seed confirm: `mse=0.003895`, `total=6.763s`
+  - still the cleanest quality reference for later phase work
+- Current fastest healthy routed control: `HOPF_BASE_K25_PHI`
+  - `phase4d_hopf_base`
+  - coarse routing on base coordinates only
+  - 4-seed confirm: `mse=0.003906`, `total=6.412s`
+  - use this as the no-fiber-phase baseline for phase-necessity testing
+- Current widened healthy comparator: `HOPF_PHI2_BAND_PHI`
   - `phase4d_hopf_fib_band`
-  - `train_route_mode=final_static`
-  - 4-seed confirm also beats `R0` on both quality and runtime near full proxy scale
-  - slightly worse than pure Hopf on MSE and slightly slower on total at confirm, so it remains the widened systems lead, not the primary one
+  - cheap static proxy schedule
+  - 4-seed confirm: `mse=0.003903`, `total=6.503s`
+  - still preserves the strongest neighborhood structure of the three routed families
 - Current translated retrieval control:
   - `DENSE`
   - exact dense token-memory retrieval over the LM proxy contexts

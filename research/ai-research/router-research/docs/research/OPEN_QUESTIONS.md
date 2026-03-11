@@ -40,6 +40,11 @@
 - Why it matters: `INC-0060` showed that routing works well enough to keep, but the shell and angular laws are still far from the intended `H^4` / Hopf measure behavior.
 - Current owner: Geometry Theory Team
 
+## Q0k: Is transported phase actually necessary once coarse routing is restricted to the Hopf base?
+- Priority: highest
+- Why it matters: `INC-0062` created the right no-fiber-phase control. The next branch must prove whether geometry-induced phase transport beats both that control and raw Hopf phase routing.
+- Current owner: Geometry Theory Team
+
 ## Q0a: Does `train_route_mode=final_static` stay valid as sample count increases further?
 - Priority: highest
 - Why it matters: the current operational win is real on the larger-subset proxy harness, but it still needs scale robustness before it can be treated as stable doctrine.

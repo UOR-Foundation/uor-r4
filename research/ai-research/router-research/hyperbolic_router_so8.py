@@ -16,6 +16,7 @@ Routing options:
   - sector_mode = "phase2" : polar phase bins in a fixed 2D plane of charted tangent z
   - sector_mode = "phase4d_adaptive" : time-expanding anisotropic 4D phase routing with phi/pi widening
   - sector_mode = "phase4d_hopf" : Hopf-aware shell-capacity pilot derived from H4 diagnostics
+  - sector_mode = "phase4d_hopf_base" : coarse routing on the Hopf base (chi, delta) with fiber phase alpha excluded from the address
   - sector_mode = "phase4d_hopf_iso" : Hopf-aware routing from a rotation-only near-isometric chart coordinate
   - sector_mode = "phase4d_hopf_ball" : Hopf-aware routing with shells anchored to original-ball geodesic radius
   - sector_mode = "phase4d_hopf_fib" : Hopf-aware routing with Fibonacci-constrained shell/chi/phase lattice
@@ -785,14 +786,63 @@ def hopf_coordinate_components(
     cos_chi = rho1 / denom
     sin_chi = rho2 / denom
     chi_u = np.clip(sin_chi * sin_chi, 0.0, 1.0 - 1e-12)
+    chi = np.arcsin(np.clip(sin_chi, 0.0, 1.0))
     theta1 = wrap_to_pi(np.arctan2(b, a))
     theta2 = wrap_to_pi(np.arctan2(d, c))
+    delta = wrap_to_pi(theta1 - theta2)
+    alpha = wrap_to_pi(0.5 * (theta1 + theta2))
     return {
         "rho1": rho1,
         "rho2": rho2,
+        "chi": chi,
         "chi_u": chi_u,
         "theta1": theta1,
         "theta2": theta2,
+        "delta": delta,
+        "alpha": alpha,
+    }
+
+
+def hopf_base_measure_diagnostics(
+    z: np.ndarray,
+    dim_i: int,
+    dim_j: int,
+    dim_k: int,
+    dim_l: int,
+    chi_bins: int = HOPF_CHI_BINS,
+    delta_bins: int = 12,
+    alpha_bins: int = 12,
+) -> Dict[str, float]:
+    if z.shape[0] == 0:
+        return {
+            "hopf_base_mass_error": 0.0,
+            "hopf_delta_mass_error": 0.0,
+            "hopf_alpha_entropy": 0.0,
+        }
+
+    comp = hopf_coordinate_components(z, dim_i=dim_i, dim_j=dim_j, dim_k=dim_k, dim_l=dim_l)
+    chi_bins = max(2, int(chi_bins))
+    delta_bins = max(4, int(delta_bins))
+    alpha_bins = max(4, int(alpha_bins))
+
+    chi_ids = np.minimum((comp["chi_u"] * chi_bins).astype(np.int64), chi_bins - 1)
+    chi_counts = np.bincount(chi_ids, minlength=chi_bins).astype(np.float64)
+    chi_obs = chi_counts / max(np.sum(chi_counts), 1.0)
+    chi_exp = np.full((chi_bins,), 1.0 / float(chi_bins), dtype=np.float64)
+    chi_mass_error = float(np.sum(np.abs(chi_obs - chi_exp)))
+
+    delta_hist, _ = np.histogram(comp["delta"], bins=delta_bins, range=(-np.pi, np.pi))
+    delta_obs = delta_hist.astype(np.float64) / max(np.sum(delta_hist), 1.0)
+    delta_exp = np.full((delta_bins,), 1.0 / float(delta_bins), dtype=np.float64)
+    delta_mass_error = float(np.sum(np.abs(delta_obs - delta_exp)))
+
+    alpha_hist, _ = np.histogram(comp["alpha"], bins=alpha_bins, range=(-np.pi, np.pi))
+    alpha_entropy = entropy_from_counts(alpha_hist) if np.sum(alpha_hist) > 0 else 0.0
+
+    return {
+        "hopf_base_mass_error": float(np.mean([chi_mass_error, delta_mass_error])),
+        "hopf_delta_mass_error": delta_mass_error,
+        "hopf_alpha_entropy": float(alpha_entropy),
     }
 
 
@@ -1184,6 +1234,32 @@ def assign_sectors_phase4d_hopf(
     b2 = np.minimum((u2 * k2).astype(np.int64), np.maximum(k2 - 1, 0))
     sector = b1 * k2 + b2
     return sector.astype(np.int64), k1.astype(np.int64), k2.astype(np.int64)
+
+
+def assign_sectors_phase4d_hopf_base(
+    z: np.ndarray,
+    K: int,
+    dim_i: int,
+    dim_j: int,
+    dim_k: int,
+    dim_l: int,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    comp = hopf_coordinate_components(z, dim_i=dim_i, dim_j=dim_j, dim_k=dim_k, dim_l=dim_l)
+    kchi = max(1, int(np.floor(np.sqrt(max(int(K), 1)))))
+    kdelta = max(1, int(np.ceil(float(max(int(K), 1)) / float(kchi))))
+
+    u_chi = comp["chi_u"]
+    u_delta = (comp["delta"] + np.pi) / (2.0 * np.pi)
+
+    bchi = np.minimum((u_chi * float(kchi)).astype(np.int64), max(kchi - 1, 0))
+    bdelta = np.minimum((u_delta * float(kdelta)).astype(np.int64), max(kdelta - 1, 0))
+
+    sector = (bchi * kdelta + bdelta) % max(int(K), 1)
+    return (
+        sector.astype(np.int64),
+        np.full(z.shape[0], kchi, dtype=np.int64),
+        np.full(z.shape[0], kdelta, dtype=np.int64),
+    )
 
 
 def assign_sectors_phase4d_hopf_chi(
@@ -2230,7 +2306,7 @@ def route_addresses(
     else:
         r_eff = shell_r_base
 
-    if sector_mode in ("phase4d_adaptive", "phase4d_hopf", "phase4d_hopf_iso", "phase4d_hopf_ball", "phase4d_hopf_chi", "phase4d_hopf_fib", "phase4d_hopf_fib_rung", "phase4d_hopf_fib_band", "phase4d_hopf_fib_band_iso", "phase4d_hopf_fib_band_bound", "phase4d_hopf_blend", "phase4d_complex_local"):
+    if sector_mode in ("phase4d_adaptive", "phase4d_hopf", "phase4d_hopf_base", "phase4d_hopf_iso", "phase4d_hopf_ball", "phase4d_hopf_chi", "phase4d_hopf_fib", "phase4d_hopf_fib_rung", "phase4d_hopf_fib_band", "phase4d_hopf_fib_band_iso", "phase4d_hopf_fib_band_bound", "phase4d_hopf_blend", "phase4d_complex_local"):
         comp = phase4d_adaptive_components(
             z=route_z,
             K=K,
@@ -2255,7 +2331,7 @@ def route_addresses(
         r_eff = r_eff * comp["shell_multiplier"]
 
     shell_phase_bias = None
-    if sector_mode in ("phase4d_adaptive", "phase4d_hopf", "phase4d_hopf_iso", "phase4d_hopf_ball", "phase4d_hopf_chi", "phase4d_hopf_fib", "phase4d_hopf_fib_rung", "phase4d_hopf_fib_band", "phase4d_hopf_fib_band_iso", "phase4d_hopf_fib_band_bound", "phase4d_hopf_blend", "phase4d_complex_local") and shell_mode == "phi_phase":
+    if sector_mode in ("phase4d_adaptive", "phase4d_hopf", "phase4d_hopf_base", "phase4d_hopf_iso", "phase4d_hopf_ball", "phase4d_hopf_chi", "phase4d_hopf_fib", "phase4d_hopf_fib_rung", "phase4d_hopf_fib_band", "phase4d_hopf_fib_band_iso", "phase4d_hopf_fib_band_bound", "phase4d_hopf_blend", "phase4d_complex_local") and shell_mode == "phi_phase":
         shell_phase_bias = comp["shell_phase_bias"]
     shell, _, _ = shell_metric_components(
         r_eff,
@@ -2302,6 +2378,16 @@ def route_addresses(
             adaptive_time_growth=adaptive_time_growth,
             adaptive_balance=adaptive_balance,
             adaptive_angle_growth=adaptive_angle_growth,
+        )
+        return shell, sector, memory_u, memory_z
+    if sector_mode == "phase4d_hopf_base":
+        sector, _, _ = assign_sectors_phase4d_hopf_base(
+            route_z,
+            K=K,
+            dim_i=phase4_dim_i,
+            dim_j=phase4_dim_j,
+            dim_k=phase4_dim_k,
+            dim_l=phase4_dim_l,
         )
         return shell, sector, memory_u, memory_z
     if sector_mode == "phase4d_hopf_chi":
@@ -3719,7 +3805,7 @@ def run_full(args: argparse.Namespace):
     hybrid_local_k_eff_mean = 0.0
     hybrid_local_k_eff_max = 0
     diag_z_te = route_z_te if args.memory_coord_mode == "full_chart" else z_te
-    if args.sector_mode in ("phase4d_adaptive", "phase4d_hopf", "phase4d_hopf_iso", "phase4d_hopf_ball", "phase4d_hopf_chi", "phase4d_hopf_fib", "phase4d_hopf_fib_rung", "phase4d_hopf_fib_band", "phase4d_hopf_fib_band_iso", "phase4d_hopf_fib_band_bound", "phase4d_hopf_blend", "phase4d_complex_local"):
+    if args.sector_mode in ("phase4d_adaptive", "phase4d_hopf", "phase4d_hopf_base", "phase4d_hopf_iso", "phase4d_hopf_ball", "phase4d_hopf_chi", "phase4d_hopf_fib", "phase4d_hopf_fib_rung", "phase4d_hopf_fib_band", "phase4d_hopf_fib_band_iso", "phase4d_hopf_fib_band_bound", "phase4d_hopf_blend", "phase4d_complex_local"):
         comp = phase4d_adaptive_components(
             z=diag_z_te,
             K=args.K,
@@ -4097,7 +4183,7 @@ def run_full(args: argparse.Namespace):
         f"time_pressure_lambda={args.time_pressure_lambda} "
         f"train_route_mode={args.train_route_mode} fast_dev={args.fast_dev}"
     )
-    if args.sector_mode in ("phase4d_adaptive", "phase4d_hopf", "phase4d_hopf_iso", "phase4d_hopf_ball", "phase4d_hopf_chi", "phase4d_hopf_fib", "phase4d_hopf_fib_rung", "phase4d_hopf_fib_band", "phase4d_hopf_fib_band_iso", "phase4d_hopf_fib_band_bound", "phase4d_hopf_blend", "phase4d_complex_local"):
+    if args.sector_mode in ("phase4d_adaptive", "phase4d_hopf", "phase4d_hopf_base", "phase4d_hopf_iso", "phase4d_hopf_ball", "phase4d_hopf_chi", "phase4d_hopf_fib", "phase4d_hopf_fib_rung", "phase4d_hopf_fib_band", "phase4d_hopf_fib_band_iso", "phase4d_hopf_fib_band_bound", "phase4d_hopf_blend", "phase4d_complex_local"):
         print(
             "adaptive_phase4d="
             f"min_pair_bins={args.adaptive_min_pair_bins} "
@@ -4160,7 +4246,7 @@ def run_full(args: argparse.Namespace):
 
     print("--- routing diagnostics (eval keys) ---")
     print(f"test_unseen_rate={unseen_rate:.6f}")
-    if args.sector_mode in ("phase4d_adaptive", "phase4d_hopf", "phase4d_hopf_iso", "phase4d_hopf_ball", "phase4d_hopf_chi", "phase4d_hopf_fib", "phase4d_hopf_fib_rung", "phase4d_hopf_fib_band", "phase4d_hopf_fib_band_iso", "phase4d_hopf_fib_band_bound", "phase4d_hopf_blend", "phase4d_complex_local"):
+    if args.sector_mode in ("phase4d_adaptive", "phase4d_hopf", "phase4d_hopf_base", "phase4d_hopf_iso", "phase4d_hopf_ball", "phase4d_hopf_chi", "phase4d_hopf_fib", "phase4d_hopf_fib_rung", "phase4d_hopf_fib_band", "phase4d_hopf_fib_band_iso", "phase4d_hopf_fib_band_bound", "phase4d_hopf_blend", "phase4d_complex_local"):
         print(
             "adaptive_shell="
             f"drive_mean={adaptive_shell_drive_mean:.6f} "
@@ -4409,7 +4495,7 @@ def parse_args():
     ap.add_argument("--min_split_gain", type=float, default=1e-4)
 
     # Routing mode: sectors
-    ap.add_argument("--sector_mode", type=str, default="kmeans", choices=["kmeans", "phase2", "phase4d", "phase4d_adaptive", "phase4d_hopf", "phase4d_hopf_iso", "phase4d_hopf_ball", "phase4d_hopf_chi", "phase4d_hopf_fib", "phase4d_hopf_fib_rung", "phase4d_hopf_fib_band", "phase4d_hopf_fib_band_iso", "phase4d_hopf_fib_band_bound", "phase4d_hopf_blend", "phase4d_complex_local", "complex2"],
+    ap.add_argument("--sector_mode", type=str, default="kmeans", choices=["kmeans", "phase2", "phase4d", "phase4d_adaptive", "phase4d_hopf", "phase4d_hopf_base", "phase4d_hopf_iso", "phase4d_hopf_ball", "phase4d_hopf_chi", "phase4d_hopf_fib", "phase4d_hopf_fib_rung", "phase4d_hopf_fib_band", "phase4d_hopf_fib_band_iso", "phase4d_hopf_fib_band_bound", "phase4d_hopf_blend", "phase4d_complex_local", "complex2"],
                     help="how to compute sector index")
     ap.add_argument("--phase_dims", type=str, default="0,1",
                     help="two dims i,j used for phase2 sectoring, e.g. '0,1'")

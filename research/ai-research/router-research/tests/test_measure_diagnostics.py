@@ -121,6 +121,53 @@ class MeasureDiagnosticsTest(unittest.TestCase):
         self.assertAlmostEqual(diag["hopf_theta1_entropy"], np.log(theta_bins), places=6)
         self.assertAlmostEqual(diag["hopf_theta2_entropy"], np.log(theta_bins), places=6)
 
+    def test_hopf_base_measure_diagnostics_detects_uniform_base_bins(self):
+        chi_bins = 4
+        delta_bins = 8
+        alpha_bins = 8
+        rows = []
+        chi_edges = np.linspace(0.0, 1.0, chi_bins + 1)
+        delta_edges = np.linspace(-np.pi, np.pi, delta_bins + 1)
+        alpha_edges = np.linspace(-np.pi, np.pi, alpha_bins + 1)
+        for c_idx in range(chi_bins):
+            chi_u = 0.5 * (chi_edges[c_idx] + chi_edges[c_idx + 1])
+            chi = np.arcsin(np.sqrt(chi_u))
+            for d_idx in range(delta_bins):
+                delta = 0.5 * (delta_edges[d_idx] + delta_edges[d_idx + 1])
+                for a_idx in range(alpha_bins):
+                    alpha = 0.5 * (alpha_edges[a_idx] + alpha_edges[a_idx + 1])
+                    theta1 = hr.wrap_to_pi(alpha + 0.5 * delta)
+                    theta2 = hr.wrap_to_pi(alpha - 0.5 * delta)
+                    rho1 = np.cos(chi)
+                    rho2 = np.sin(chi)
+                    rows.append(
+                        [
+                            rho1 * np.cos(theta1),
+                            rho1 * np.sin(theta1),
+                            rho2 * np.cos(theta2),
+                            rho2 * np.sin(theta2),
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                        ]
+                    )
+        z = np.asarray(rows, dtype=np.float64)
+        diag = hr.hopf_base_measure_diagnostics(
+            z,
+            dim_i=0,
+            dim_j=1,
+            dim_k=2,
+            dim_l=3,
+            chi_bins=chi_bins,
+            delta_bins=delta_bins,
+            alpha_bins=alpha_bins,
+        )
+
+        self.assertLess(diag["hopf_base_mass_error"], 1e-10)
+        self.assertLess(diag["hopf_delta_mass_error"], 1e-10)
+        self.assertGreater(diag["hopf_alpha_entropy"], np.log(alpha_bins) - 0.2)
+
     def test_route_entropy_radius_diagnostics_detects_increasing_entropy(self):
         shell = np.repeat(np.array([0, 1, 2, 3], dtype=np.int64), 40)
         sector = np.concatenate(

@@ -56,7 +56,7 @@ def parse_args():
     ap.add_argument("--split_rounds", type=int, default=128)
     ap.add_argument("--min_split_gain", type=float, default=1e-4)
 
-    ap.add_argument("--sector_mode", type=str, default="kmeans", choices=["kmeans", "phase2", "phase4d", "phase4d_adaptive", "phase4d_hopf", "phase4d_hopf_iso", "phase4d_hopf_ball", "phase4d_hopf_chi", "phase4d_hopf_fib", "phase4d_hopf_fib_rung", "phase4d_hopf_fib_band", "phase4d_hopf_fib_band_iso", "phase4d_hopf_fib_band_bound", "phase4d_hopf_blend", "phase4d_complex_local", "complex2"])
+    ap.add_argument("--sector_mode", type=str, default="kmeans", choices=["kmeans", "phase2", "phase4d", "phase4d_adaptive", "phase4d_hopf", "phase4d_hopf_base", "phase4d_hopf_iso", "phase4d_hopf_ball", "phase4d_hopf_chi", "phase4d_hopf_fib", "phase4d_hopf_fib_rung", "phase4d_hopf_fib_band", "phase4d_hopf_fib_band_iso", "phase4d_hopf_fib_band_bound", "phase4d_hopf_blend", "phase4d_complex_local", "complex2"])
     ap.add_argument("--phase_dims", type=str, default="0,1")
     ap.add_argument("--phase4_dims", type=str, default="0,2,4,6")
     ap.add_argument("--complex_dims", type=str, default="0,1")
@@ -554,6 +554,19 @@ def main():
     hopf_theta2_mass_error = float(hopf_measure["hopf_theta2_mass_error"])
     hopf_theta1_entropy = float(hopf_measure["hopf_theta1_entropy"])
     hopf_theta2_entropy = float(hopf_measure["hopf_theta2_entropy"])
+    hopf_base_measure = hr.hopf_base_measure_diagnostics(
+        route_z_ev,
+        dim_i=phase4_dim_i,
+        dim_j=phase4_dim_j,
+        dim_k=phase4_dim_k,
+        dim_l=phase4_dim_l,
+        chi_bins=max(2, int(args.hopf_chi_bins)),
+        delta_bins=12,
+        alpha_bins=12,
+    )
+    hopf_base_mass_error = float(hopf_base_measure["hopf_base_mass_error"])
+    hopf_delta_mass_error = float(hopf_base_measure["hopf_delta_mass_error"])
+    hopf_alpha_entropy = float(hopf_base_measure["hopf_alpha_entropy"])
     geodesic_neighbors = hr.geodesic_neighborhood_diagnostics(
         v_ev,
         route_z_ev,
@@ -643,7 +656,7 @@ def main():
     hybrid_local_k_eff_mean = 0.0
     hybrid_local_k_eff_max = 0
     diag_z_ev = route_z_ev if args.memory_coord_mode == "full_chart" else z_ev
-    if args.sector_mode in ("phase4d_adaptive", "phase4d_hopf", "phase4d_hopf_iso", "phase4d_hopf_ball", "phase4d_hopf_chi", "phase4d_hopf_fib", "phase4d_hopf_fib_rung", "phase4d_hopf_fib_band", "phase4d_hopf_fib_band_iso", "phase4d_hopf_fib_band_bound", "phase4d_hopf_blend", "phase4d_complex_local"):
+    if args.sector_mode in ("phase4d_adaptive", "phase4d_hopf", "phase4d_hopf_base", "phase4d_hopf_iso", "phase4d_hopf_ball", "phase4d_hopf_chi", "phase4d_hopf_fib", "phase4d_hopf_fib_rung", "phase4d_hopf_fib_band", "phase4d_hopf_fib_band_iso", "phase4d_hopf_fib_band_bound", "phase4d_hopf_blend", "phase4d_complex_local"):
         comp = hr.phase4d_adaptive_components(
             z=diag_z_ev,
             K=args.K,
@@ -668,6 +681,18 @@ def main():
         k1_dbg = comp["k1"]
         k2_dbg = comp["k2"]
         chi_ids = np.minimum((comp["chi_u"] * max(1, int(args.hopf_chi_bins))).astype(np.int64), max(max(1, int(args.hopf_chi_bins)) - 1, 0))
+        if args.sector_mode == "phase4d_hopf_base":
+            _, kchi_dbg, kdelta_dbg = hr.assign_sectors_phase4d_hopf_base(
+                z=diag_z_ev,
+                K=args.K,
+                dim_i=phase4_dim_i,
+                dim_j=phase4_dim_j,
+                dim_k=phase4_dim_k,
+                dim_l=phase4_dim_l,
+            )
+            k1_dbg = kchi_dbg
+            k2_dbg = kdelta_dbg
+            chi_ids = np.minimum((comp["chi_u"] * kchi_dbg.astype(np.float64)).astype(np.int64), np.maximum(kchi_dbg - 1, 0))
         if args.sector_mode == "phase4d_hopf_fib":
             _, kchi_dbg, k1_dbg, k2_dbg, fib_total_dbg = hr.assign_sectors_phase4d_hopf_fib(
                 z=diag_z_ev,
@@ -1041,7 +1066,7 @@ def main():
         f"time_pressure_lambda={args.time_pressure_lambda} "
         f"train_route_mode={args.train_route_mode} fast_dev={args.fast_dev}"
     )
-    if args.sector_mode in ("phase4d_adaptive", "phase4d_hopf", "phase4d_hopf_iso", "phase4d_hopf_ball", "phase4d_hopf_chi", "phase4d_hopf_fib", "phase4d_hopf_fib_rung", "phase4d_hopf_fib_band", "phase4d_hopf_fib_band_iso", "phase4d_hopf_fib_band_bound", "phase4d_hopf_blend", "phase4d_complex_local"):
+    if args.sector_mode in ("phase4d_adaptive", "phase4d_hopf", "phase4d_hopf_base", "phase4d_hopf_iso", "phase4d_hopf_ball", "phase4d_hopf_chi", "phase4d_hopf_fib", "phase4d_hopf_fib_rung", "phase4d_hopf_fib_band", "phase4d_hopf_fib_band_iso", "phase4d_hopf_fib_band_bound", "phase4d_hopf_blend", "phase4d_complex_local"):
         print(
             "adaptive_phase4d="
             f"min_pair_bins={args.adaptive_min_pair_bins} "
@@ -1095,9 +1120,12 @@ def main():
         f"shell_kl={shell_mass_kl:.6f} "
         f"shell_corr={shell_mass_corr:.6f} "
         f"hopf_mass={hopf_angular_mass_error:.6f} "
+        f"hopf_base_mass={hopf_base_mass_error:.6f} "
         f"chi_mass={hopf_chi_mass_error:.6f} "
+        f"delta_mass={hopf_delta_mass_error:.6f} "
         f"theta1_mass={hopf_theta1_mass_error:.6f} "
         f"theta2_mass={hopf_theta2_mass_error:.6f} "
+        f"alpha_H={hopf_alpha_entropy:.6f} "
         f"theta1_H={hopf_theta1_entropy:.6f} "
         f"theta2_H={hopf_theta2_entropy:.6f} "
         f"route_H_r_corr={route_entropy_radius_corr:.6f} "
@@ -1106,7 +1134,7 @@ def main():
         f"knn_overlap={geodesic_knn_overlap_mean:.6f} "
         f"knn_jaccard={geodesic_knn_jaccard_mean:.6f}"
     )
-    if args.sector_mode in ("phase4d_adaptive", "phase4d_hopf", "phase4d_hopf_iso", "phase4d_hopf_ball", "phase4d_hopf_chi", "phase4d_hopf_fib", "phase4d_hopf_fib_rung", "phase4d_hopf_fib_band", "phase4d_hopf_fib_band_iso", "phase4d_hopf_fib_band_bound", "phase4d_hopf_blend", "phase4d_complex_local"):
+    if args.sector_mode in ("phase4d_adaptive", "phase4d_hopf", "phase4d_hopf_base", "phase4d_hopf_iso", "phase4d_hopf_ball", "phase4d_hopf_chi", "phase4d_hopf_fib", "phase4d_hopf_fib_rung", "phase4d_hopf_fib_band", "phase4d_hopf_fib_band_iso", "phase4d_hopf_fib_band_bound", "phase4d_hopf_blend", "phase4d_complex_local"):
         print(
             "adaptive_shell="
             f"drive_mean={adaptive_shell_drive_mean:.6f} "
@@ -1226,9 +1254,12 @@ def main():
             "shell_mass_corr": float(shell_mass_corr),
             "shell_mass_shells_used": int(shell_mass_shells_used),
             "hopf_angular_mass_error": float(hopf_angular_mass_error),
+            "hopf_base_mass_error": float(hopf_base_mass_error),
             "hopf_chi_mass_error": float(hopf_chi_mass_error),
+            "hopf_delta_mass_error": float(hopf_delta_mass_error),
             "hopf_theta1_mass_error": float(hopf_theta1_mass_error),
             "hopf_theta2_mass_error": float(hopf_theta2_mass_error),
+            "hopf_alpha_entropy": float(hopf_alpha_entropy),
             "hopf_theta1_entropy": float(hopf_theta1_entropy),
             "hopf_theta2_entropy": float(hopf_theta2_entropy),
             "route_entropy_radius_corr": float(route_entropy_radius_corr),

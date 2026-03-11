@@ -22,18 +22,18 @@ Use this file as the local GitHub-style issue list for router research.
   - Depends on: `RR-059`
   - Canonical doc: `docs/research/increments/INC_0060_h4_hopf_measure_diagnostics.md`
   - Goal: gate the current frontier with geometry-specific shell, angular, entropy, and geodesic-neighborhood diagnostics
-- `RR-061` `[research][measure][active-next]`
+- `RR-061` `[research][measure][active]`
   - Title: Derive a measure-consistent `H^4` / Hopf route law
   - Branch: `codex/RR-061-measure-consistent-route-law`
   - Depends on: `RR-060`
   - Canonical doc: `docs/research/increments/INC_0061_measure_consistent_route_law.md`
   - Goal: correct shell and angular laws before phase or event-driven branches reopen
-- `RR-062` `[research][hopf-base][queued-next]`
-  - Title: Derive the Hopf-base angular route law
-  - Branch: `codex/RR-062-hopf-base-angular-law`
-  - Depends on: `RR-061`
-  - Canonical doc: `docs/research/increments/INC_0062_hopf_base_angular_law.md`
-  - Goal: route coarse sectors on Hopf-base coordinates and leave `alpha` as fiber phase
+- `RR-063` `[research][phase][queued-next]`
+  - Title: Test phase-transport necessity on top of corrected coarse routing
+  - Branch: `codex/RR-063-phase-transport-necessity`
+  - Depends on: `RR-061`, `RR-062`
+  - Canonical doc: `docs/research/increments/INC_0063_phase_transport_necessity.md`
+  - Goal: prove or kill transported phase as a geometry-induced mechanism
 
 ## Queued
 - `RR-053` `[systems][translation][queued]`
@@ -43,6 +43,11 @@ Use this file as the local GitHub-style issue list for router research.
   - Goal: turn the amortized crossover into a reusable systems path with persistent offline index artifacts
 
 ## Recently Closed
+- `RR-062` `[research][hopf-base][done]`
+  - Title: Derive the Hopf-base angular route law
+  - Branch: `codex/RR-062-hopf-base-angular-law`
+  - Canonical doc: `docs/research/increments/INC_0062_hopf_base_angular_law.md`
+  - Result: `phase4d_hopf_base` became the fastest healthy routed branch and the correct no-fiber-phase coarse-address control, but pure Hopf remained the routed quality lead
 - `RR-058` `[research][translation][done]`
   - Title: Recover translated top-1 with exact-bucket complex rerank
   - Branch: `codex/RR-058-product-complex-rerank`

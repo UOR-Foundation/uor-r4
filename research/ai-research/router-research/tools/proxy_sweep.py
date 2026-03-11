@@ -132,9 +132,12 @@ def summarize_route(route_id: str, summaries: List[Dict[str, Any]]) -> Dict[str,
         "mean_shell_mass_kl": metric_mean(summaries, "shell_mass_kl"),
         "mean_shell_mass_corr": metric_mean(summaries, "shell_mass_corr"),
         "mean_hopf_angular_mass_error": metric_mean(summaries, "hopf_angular_mass_error"),
+        "mean_hopf_base_mass_error": metric_mean(summaries, "hopf_base_mass_error"),
         "mean_hopf_chi_mass_error": metric_mean(summaries, "hopf_chi_mass_error"),
+        "mean_hopf_delta_mass_error": metric_mean(summaries, "hopf_delta_mass_error"),
         "mean_hopf_theta1_mass_error": metric_mean(summaries, "hopf_theta1_mass_error"),
         "mean_hopf_theta2_mass_error": metric_mean(summaries, "hopf_theta2_mass_error"),
+        "mean_hopf_alpha_entropy": metric_mean(summaries, "hopf_alpha_entropy"),
         "mean_route_entropy_radius_corr": metric_mean(summaries, "route_entropy_radius_corr"),
         "mean_route_entropy_radius_slope": metric_mean(summaries, "route_entropy_radius_slope"),
         "mean_geodesic_knn_overlap": metric_mean(summaries, "geodesic_knn_overlap_mean"),
@@ -310,6 +313,9 @@ def write_gate_note(path: str, config_path: str, route_stats: List[Dict[str, Any
             f"shell_mass_l1={stats['mean_shell_mass_error_l1']:.6f}, "
             f"shell_mass_corr={stats['mean_shell_mass_corr']:.6f}, "
             f"hopf_mass={stats['mean_hopf_angular_mass_error']:.6f}, "
+            f"hopf_base_mass={stats['mean_hopf_base_mass_error']:.6f}, "
+            f"delta_mass={stats['mean_hopf_delta_mass_error']:.6f}, "
+            f"alpha_H={stats['mean_hopf_alpha_entropy']:.6f}, "
             f"route_H_r_corr={stats['mean_route_entropy_radius_corr']:.6f}, "
             f"knn_overlap={stats['mean_geodesic_knn_overlap']:.6f}, "
             f"dyn_knn={stats['mean_dynamic_knn_distance']:.6f}, "

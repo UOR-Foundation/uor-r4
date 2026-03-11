@@ -15,7 +15,7 @@ class TestSectorModes(unittest.TestCase):
         U = hr.normalize_rows(v)
         C = hr.spherical_kmeans(U, K=k, iters=5, seed=0)
 
-        modes = ["kmeans", "phase2", "phase4d", "phase4d_adaptive", "phase4d_hopf", "phase4d_hopf_iso", "phase4d_hopf_ball", "phase4d_hopf_chi", "phase4d_hopf_fib", "phase4d_hopf_fib_rung", "phase4d_hopf_fib_band", "phase4d_hopf_fib_band_iso", "phase4d_hopf_fib_band_bound", "phase4d_hopf_blend", "phase4d_complex_local", "complex2"]
+        modes = ["kmeans", "phase2", "phase4d", "phase4d_adaptive", "phase4d_hopf", "phase4d_hopf_base", "phase4d_hopf_iso", "phase4d_hopf_ball", "phase4d_hopf_chi", "phase4d_hopf_fib", "phase4d_hopf_fib_rung", "phase4d_hopf_fib_band", "phase4d_hopf_fib_band_iso", "phase4d_hopf_fib_band_bound", "phase4d_hopf_blend", "phase4d_complex_local", "complex2"]
         for mode in modes:
             shell, sector, _u, _z = hr.route_addresses(
                 v,
@@ -167,6 +167,67 @@ class TestSectorModes(unittest.TestCase):
             hybrid_local_converge_lambda=0.0,
         )
         self.assertGreater(int(np.max(hybrid["local_k_eff"])), 1)
+
+    def test_hopf_base_sector_is_invariant_to_common_fiber_phase(self):
+        np.random.seed(9)
+        v = np.random.randn(48, 8)
+        chart = hr.Chart(R=np.eye(8), s_global=None, S_radial=None, scale_mode="global")
+        shell_a, sector_a, _u1, _z1 = hr.route_addresses(
+            v,
+            delta_r=3.0,
+            C=None,
+            chart=chart,
+            sector_mode="phase4d_hopf_base",
+            phase_dim_i=0,
+            phase_dim_j=1,
+            phase4_dim_i=0,
+            phase4_dim_j=1,
+            phase4_dim_k=2,
+            phase4_dim_l=3,
+            complex_dim_i=0,
+            complex_dim_j=1,
+            K=25,
+            time_pressure_lambda=0.0,
+            tau=1.0,
+            adaptive_min_pair_bins=2,
+            adaptive_time_growth=1.0,
+            adaptive_balance=1.0,
+            adaptive_angle_growth=0.35,
+            shell_mode="phi_log",
+        )
+
+        phi = 0.73
+        rot = np.array([[np.cos(phi), -np.sin(phi)], [np.sin(phi), np.cos(phi)]], dtype=np.float64)
+        v_shift = v.copy()
+        v_shift[:, 0:2] = v_shift[:, 0:2] @ rot.T
+        v_shift[:, 2:4] = v_shift[:, 2:4] @ rot.T
+
+        shell_b, sector_b, _u2, _z2 = hr.route_addresses(
+            v_shift,
+            delta_r=3.0,
+            C=None,
+            chart=chart,
+            sector_mode="phase4d_hopf_base",
+            phase_dim_i=0,
+            phase_dim_j=1,
+            phase4_dim_i=0,
+            phase4_dim_j=1,
+            phase4_dim_k=2,
+            phase4_dim_l=3,
+            complex_dim_i=0,
+            complex_dim_j=1,
+            K=25,
+            time_pressure_lambda=0.0,
+            tau=1.0,
+            adaptive_min_pair_bins=2,
+            adaptive_time_growth=1.0,
+            adaptive_balance=1.0,
+            adaptive_angle_growth=0.35,
+            shell_mode="phi_log",
+        )
+
+        np.testing.assert_array_equal(shell_a, shell_b)
+        np.testing.assert_array_equal(sector_a, sector_b)
 
     def test_phase_coupled_shell_mode_routes_valid_shells(self):
         np.random.seed(11)

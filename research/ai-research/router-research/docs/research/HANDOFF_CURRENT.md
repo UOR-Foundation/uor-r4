@@ -1,16 +1,20 @@
 # Current Research Handoff
 
 ## Latest Closed Increment
-- `INC-0060` is complete.
+- `INC-0062` is complete.
 - Evidence:
-  - `configs/proxy_transfer_inc0060_measure_diag_screen.json`
-  - `results/analysis/inc0060_measure_diag_screen.json`
-  - `docs/governance/gates/gate_20260310_230415.md`
+  - `configs/proxy_transfer_inc0062_hopf_base_screen.json`
+  - `results/analysis/inc0062_hopf_base_screen.json`
+  - `docs/governance/gates/gate_20260310_233347.md`
+  - `configs/proxy_transfer_inc0062_hopf_base_confirm.json`
+  - `results/analysis/inc0062_hopf_base_confirm.json`
+  - `docs/governance/gates/gate_20260310_233631.md`
 - Reading:
-  - routed Hopf geometry is real enough to keep
-  - shell and angular laws are still measure-inconsistent
-  - widened Hopf preserved geodesic neighborhoods best
-  - the next branch should be a measure-consistent route law, not a gated-intelligence branch
+  - `phase4d_hopf_base` is a valid healthy route law
+  - it is the fastest healthy routed branch in the 4-seed confirm
+  - it does not replace pure Hopf as the quality lead
+  - it should be treated as the no-fiber-phase coarse-address control for the next phase branch
+  - the current Hopf-base mass diagnostics are not sufficient to prove angular-law correctness across same-chart route families
 
 ## Contract State
 - `INC-0059` is now locked as the umbrella coupled-field contract.
@@ -53,25 +57,26 @@
   - especially the staged falsification ladder and the stronger geometry/spectral/phase/sparse framing
 
 ## Current In-Progress Increment
-- `INC-0061` is the active next implementation slice.
+- `INC-0063` is the active next implementation slice.
 - Setup artifacts:
   - `docs/research/increments/INC_0059_h4x4_polar_flow.md`
   - `docs/research/increments/INC_0060_h4_hopf_measure_diagnostics.md`
   - `docs/research/increments/INC_0061_measure_consistent_route_law.md`
+  - `docs/research/increments/INC_0062_hopf_base_angular_law.md`
+  - `docs/research/increments/INC_0063_phase_transport_necessity.md`
   - `docs/research/MECHANISM_FIRST_PLAN.md`
   - `docs/research/MATH_CONTRACT_H4XH4_PHASE_SPECTRAL_20260310.md`
 - Branch reading to preserve:
-  - `TXH4_W050` is still the tangent Slice A main-objective winner
-  - `H4XH4_BUCKET_W025` is the product quality/top-1 reference
-  - `H4XH4_CPX13_W025` is the product complex-key efficiency reference
-  - `HOPF_RET_CPX_P1_Q24` is the translated complex-key efficiency reference
+  - `HOPF_K25_BASE_PHI` is the routed quality lead
+  - `HOPF_BASE_K25_PHI` is the no-fiber-phase coarse-address control
+  - `HOPF_PHI2_BAND_PHI` is the widened healthy comparator
 - Next preferred work:
-  - close out shell-only correction inside `RR-061`
-  - move next to a Hopf-base angular law:
-    - coarse routing on base coordinates
-    - fiber phase kept separate
+  - run the strict phase-necessity branch:
+    - no fiber phase in the address (`phase4d_hopf_base`)
+    - raw phase coordinates (`phase4d_hopf`)
+    - geometry-induced transported phase (new route law)
   - keep geometry routing as the only active near-term goal
-  - defer gated-intelligence/event-style branches until this correction is tested
+  - defer gated-intelligence/event-style branches until phase/spectral claims sit on stable geometry
 
 ## Exact Current State
 - Latest closed increment:
@@ -114,6 +119,8 @@ Default resume path is:
 2. read `docs/research/increments/INC_0059_h4x4_polar_flow.md`
 3. read `docs/research/increments/INC_0060_h4_hopf_measure_diagnostics.md`
 4. read `docs/research/increments/INC_0061_measure_consistent_route_law.md`
-5. read `docs/research/LEARNED_KNOWLEDGE.md`
-6. read `docs/research/CURRENT_DIRECTION.md`
-7. resume with `INC-0061`
+5. read `docs/research/increments/INC_0062_hopf_base_angular_law.md`
+6. read `docs/research/increments/INC_0063_phase_transport_necessity.md`
+7. read `docs/research/LEARNED_KNOWLEDGE.md`
+8. read `docs/research/CURRENT_DIRECTION.md`
+9. resume with `INC-0063`

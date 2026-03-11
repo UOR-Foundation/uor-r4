@@ -61,6 +61,44 @@
     - bounded shell mass still fails route health when used alone
     - shell-only correction has now failed twice
     - next correction should shift to the actual Hopf base coordinates `(eta, delta)` and keep `alpha` as fiber phase
+25. Started `RR-062` from the clean shell-law conclusion.
+26. Added `sector_mode=phase4d_hopf_base`:
+    - coarse routing on Hopf base coordinates `(chi, delta)`
+    - common fiber phase `alpha` excluded from the coarse address
+27. Extended the route helpers:
+    - `hopf_coordinate_components(...)` now returns `chi`, `delta`, and `alpha`
+    - added `hopf_base_measure_diagnostics(...)`
+28. Wired the new mode through:
+    - `hyperbolic_router_so8.py`
+    - `tasks/router_proxy_eval.py`
+    - `tools/proxy_sweep.py`
+    - `tools/summarize.py`
+29. Added targeted coverage:
+    - CLI contract includes `phase4d_hopf_base`
+    - sector-mode tests include `phase4d_hopf_base`
+    - new invariance test confirms common fiber phase does not change the coarse address
+30. Verified compile and targeted unit tests passed.
+31. Created and ran the RR-062 2-seed screen:
+    - `configs/proxy_transfer_inc0062_hopf_base_screen.json`
+32. Read the screen result:
+    - `phase4d_hopf_base` beat `R0`, pure Hopf, and widened Hopf on mean proxy MSE and runtime
+    - promoted the branch to 4-seed confirm
+33. Discovered the new Hopf-base metrics were present in raw logs but not exposed in the sweep/gate tooling.
+34. Patched the sweep and summary tools to carry:
+    - `hopf_base_mass_error`
+    - `hopf_delta_mass_error`
+    - `hopf_alpha_entropy`
+35. Re-ran the RR-062 screen so the saved analysis and gate note included the new metrics.
+36. Created and ran the RR-062 4-seed confirm:
+    - `configs/proxy_transfer_inc0062_hopf_base_confirm.json`
+37. Read the confirm result:
+    - `phase4d_hopf_base` remained healthy and became the fastest healthy routed branch
+    - pure `phase4d_hopf` retained the routed quality lead
+    - widened Hopf retained the strongest neighborhood-preservation signal
+38. Recorded the durable interpretation:
+    - `phase4d_hopf_base` is the correct no-fiber-phase coarse-address control
+    - it is not yet the final angular-law correction
+    - next branch should be strict phase-transport necessity on top of this control
 
 ### Imported guidance integration
 1. User clarified that the intended new files were in the project base directory, not the git root.

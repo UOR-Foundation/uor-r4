@@ -16,6 +16,10 @@ This file stores durable mathematical and architectural findings that should sur
 - The practical rule is:
   - use that equation set to drive route-law and coupled-field design
   - do not reopen phase/spectral claims through loose heuristics
+- The new durable coarse-address split is:
+  - Hopf base coordinates can define a healthy coarse route law
+  - common fiber phase should be excluded from the coarse address when testing phase necessity
+  - that gives a clean no-phase control rather than mixing phase into every route family
 - Poincare-ball global alignment is foundational, not an optional visualization detail.
 - Pure Hopf-aware routing repeatedly carries the cleanest routed-quality signal.
 - `phase4_dims=0,2,4,6` is a stable clue, not a random projection choice.
@@ -135,6 +139,12 @@ This file stores durable mathematical and architectural findings that should sur
   - the likely next correction is:
     - coarse routing on `(eta, delta)`
     - keep `alpha` as the fiber phase
+- `INC-0062` added the next durable constraint:
+  - `phase4d_hopf_base` is healthy and fast enough to keep
+  - it is the fastest healthy routed branch on the 4-seed confirm
+  - pure `phase4d_hopf` remains the routed quality lead
+  - the current Hopf-base mass diagnostics are mostly coordinate-distribution diagnostics on the shared charted manifold, so they are not enough by themselves to prove angular-law correctness across same-chart route families
+  - `phase4d_hopf_base` should therefore be treated as the no-fiber-phase coarse-address control for phase-transport testing, not as the final corrected angular law
 - Every new branch should leave enough math and implementation context that another session can resume without re-deriving the branch intent.
 - Deep math branches should first prove signal with a minimal surrogate before rewriting the main route law.
 - Imported guidance files added at the project base should be copied into canonical context immediately through:
