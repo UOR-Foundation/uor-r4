@@ -523,3 +523,38 @@
 182. Decision for current checkpoint:
     - keep RR-057 open
     - treat selective or cached backfill as the likely next refinement, not broad fixed-size coarse augmentation
+
+### `RR-063` phase-transport necessity
+63. Started `RR-063` on top of the new Hopf-base coarse-address control.
+64. Added `sector_mode=phase4d_hopf_transport` and a connection-like phase law to the router:
+    - `transport_phase_shift = 0.5 * lambda * cos(2chi) * delta`
+    - `transported_alpha = wrap(alpha + transport_phase_shift)`
+65. Added phase-specific diagnostics to the proxy harness and sweep tooling:
+    - coherence
+    - mean shift magnitude
+    - connection strength
+    - effective alpha-bin count
+66. Added targeted tests for the transport law and CLI contract.
+67. Ran the first RR-063 screen and hit a harness bug:
+    - `optimize_chart()` was not accepting `phase_transport_lambda`
+68. Patched the core chart optimizer signature and forwarding path.
+69. Re-ran compile and targeted tests after the fix.
+70. Re-ran the RR-063 screen successfully.
+71. Read the first screen result:
+    - transported variants matched `phase4d_hopf_base` on primary task and route-health metrics
+    - only the phase-specific diagnostics changed
+72. Launched a direct address-difference audit to check whether the transported law was actually moving route addresses.
+73. Read the audit result:
+    - `phase4d_hopf_transport` changed `0` sectors and `0` shells versus `phase4d_hopf_base`
+    - raw `phase4d_hopf` still changed `2500` sectors versus the base control
+74. Wrote the audit to `results/analysis/inc0063_phase_transport_address_diff.json`.
+75. Closed `RR-063` negative at screen stage.
+76. Recorded the durable interpretation:
+    - geometry routing remains live
+    - this specific standalone Hopf transport law is mechanism-inert
+    - the next valid phase branch must couple the second `H^4` discrete complex-value field into the phase law
+77. Queued `RR-064` as the next phase branch:
+    - coupled complex-field phase transport
+    - intended two-lever mechanism:
+      - minima routing
+      - phase jumping

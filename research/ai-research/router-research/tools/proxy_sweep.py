@@ -138,6 +138,11 @@ def summarize_route(route_id: str, summaries: List[Dict[str, Any]]) -> Dict[str,
         "mean_hopf_theta1_mass_error": metric_mean(summaries, "hopf_theta1_mass_error"),
         "mean_hopf_theta2_mass_error": metric_mean(summaries, "hopf_theta2_mass_error"),
         "mean_hopf_alpha_entropy": metric_mean(summaries, "hopf_alpha_entropy"),
+        "mean_phase_transport_coherence": metric_mean(summaries, "phase_transport_coherence"),
+        "mean_phase_transport_shift_abs_mean": metric_mean(summaries, "phase_transport_shift_abs_mean"),
+        "mean_phase_transport_shift_abs_max": metric_mean(summaries, "phase_transport_shift_abs_max"),
+        "mean_phase_transport_connection_abs_mean": metric_mean(summaries, "phase_transport_connection_abs_mean"),
+        "mean_phase_transport_alpha_bins": metric_mean(summaries, "phase_transport_alpha_bins"),
         "mean_route_entropy_radius_corr": metric_mean(summaries, "route_entropy_radius_corr"),
         "mean_route_entropy_radius_slope": metric_mean(summaries, "route_entropy_radius_slope"),
         "mean_geodesic_knn_overlap": metric_mean(summaries, "geodesic_knn_overlap_mean"),
@@ -316,6 +321,9 @@ def write_gate_note(path: str, config_path: str, route_stats: List[Dict[str, Any
             f"hopf_base_mass={stats['mean_hopf_base_mass_error']:.6f}, "
             f"delta_mass={stats['mean_hopf_delta_mass_error']:.6f}, "
             f"alpha_H={stats['mean_hopf_alpha_entropy']:.6f}, "
+            f"phase_coh={stats['mean_phase_transport_coherence']:.6f}, "
+            f"phase_shift={stats['mean_phase_transport_shift_abs_mean']:.6f}, "
+            f"phase_conn={stats['mean_phase_transport_connection_abs_mean']:.6f}, "
             f"route_H_r_corr={stats['mean_route_entropy_radius_corr']:.6f}, "
             f"knn_overlap={stats['mean_geodesic_knn_overlap']:.6f}, "
             f"dyn_knn={stats['mean_dynamic_knn_distance']:.6f}, "

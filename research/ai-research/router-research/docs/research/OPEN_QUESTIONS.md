@@ -42,7 +42,15 @@
 
 ## Q0k: Is transported phase actually necessary once coarse routing is restricted to the Hopf base?
 - Priority: highest
-- Why it matters: `INC-0062` created the right no-fiber-phase control. The next branch must prove whether geometry-induced phase transport beats both that control and raw Hopf phase routing.
+- Why it matters: `INC-0062` created the right no-fiber-phase control, and `INC-0063` showed that a standalone base-only transport law is address-inert. The next branch must prove whether coupled-field phase transport beats both that control and raw Hopf phase routing.
+- Current owner: Geometry Theory Team
+
+## Q0l: Can the second `H^4` discrete complex-value field induce non-inert phase jumps?
+- Priority: highest
+- Why it matters: the user’s intended two-lever mechanism is now explicit:
+  - minima routing on the first `H^4`
+  - phase jumping through the coupled complex field on the second `H^4`
+  If that coupling still fails to move addresses or improve metrics, the near-term phase claim should narrow sharply.
 - Current owner: Geometry Theory Team
 
 ## Q0a: Does `train_route_mode=final_static` stay valid as sample count increases further?

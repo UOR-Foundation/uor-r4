@@ -168,6 +168,51 @@ class MeasureDiagnosticsTest(unittest.TestCase):
         self.assertLess(diag["hopf_delta_mass_error"], 1e-10)
         self.assertGreater(diag["hopf_alpha_entropy"], np.log(alpha_bins) - 0.2)
 
+    def test_hopf_phase_transport_diagnostics_follow_connection_law(self):
+        eta = np.array([0.10 * np.pi, 0.25 * np.pi, 0.40 * np.pi], dtype=np.float64)
+        delta = np.array([0.8, -1.2, 0.5], dtype=np.float64)
+        alpha = np.array([-0.2, 0.1, 0.7], dtype=np.float64)
+        rows = []
+        for e, dlt, alp in zip(eta, delta, alpha):
+            theta1 = hr.wrap_to_pi(alp + 0.5 * dlt)
+            theta2 = hr.wrap_to_pi(alp - 0.5 * dlt)
+            rho1 = np.cos(e)
+            rho2 = np.sin(e)
+            rows.append(
+                [
+                    rho1 * np.cos(theta1),
+                    rho1 * np.sin(theta1),
+                    rho2 * np.cos(theta2),
+                    rho2 * np.sin(theta2),
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                ]
+            )
+        z = np.asarray(rows, dtype=np.float64)
+        comp = hr.hopf_phase_transport_components(
+            z,
+            dim_i=0,
+            dim_j=1,
+            dim_k=2,
+            dim_l=3,
+            phase_transport_lambda=1.0,
+        )
+        expected = hr.wrap_to_pi(0.5 * np.cos(2.0 * eta) * delta)
+        np.testing.assert_allclose(comp["transport_phase_shift"], expected, atol=1e-8)
+        diag = hr.hopf_phase_transport_diagnostics(
+            z,
+            dim_i=0,
+            dim_j=1,
+            dim_k=2,
+            dim_l=3,
+            phase_transport_lambda=1.0,
+        )
+        self.assertGreaterEqual(diag["phase_transport_coherence"], -1.0)
+        self.assertLessEqual(diag["phase_transport_coherence"], 1.0)
+        self.assertGreater(diag["phase_transport_shift_abs_max"], 0.0)
+
     def test_route_entropy_radius_diagnostics_detects_increasing_entropy(self):
         shell = np.repeat(np.array([0, 1, 2, 3], dtype=np.int64), 40)
         sector = np.concatenate(

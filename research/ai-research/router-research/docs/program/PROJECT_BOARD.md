@@ -6,10 +6,11 @@
 - `RR-061` Derive a measure-consistent `H^4` / Hopf route law
 
 ## Next
-- `RR-063` Test phase-transport necessity on top of corrected coarse routing
+- `RR-064` Couple complex-field phase transport into the routing law
 - `RR-053` Package routed retrieval index reuse only if a future translated branch clears confirm
 
 ## Done Recently
+- `RR-063` Test phase-transport necessity on top of corrected coarse routing
 - `RR-062` Derive the Hopf-base angular route law
 - `RR-060` Add `H^4` / Hopf measure diagnostics to the routed frontier
 - `RR-058` Recover translated top-1 with exact-bucket complex rerank

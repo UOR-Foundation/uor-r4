@@ -20,6 +20,17 @@ This file stores durable mathematical and architectural findings that should sur
   - Hopf base coordinates can define a healthy coarse route law
   - common fiber phase should be excluded from the coarse address when testing phase necessity
   - that gives a clean no-phase control rather than mixing phase into every route family
+- `INC-0063` adds the next durable phase constraint:
+  - the current standalone Hopf transport law
+    - `transport_phase_shift = 0.5 * lambda * cos(2chi) * delta`
+    - is address-inert on the cheap static proxy schedule
+  - transported variants produced zero shell or sector differences versus `phase4d_hopf_base`
+  - phase therefore remains live only as a coupled-field claim:
+    - if geometry is going to force phase shifts, the second `H^4` discrete complex-value field has to participate directly
+  - the next valid phase branch is not another base-only phase score
+  - it is a coupled `H^4 x H^4` law with two levers:
+    - minima routing on the first factor
+    - phase jumping through the coupled complex field
 - Poincare-ball global alignment is foundational, not an optional visualization detail.
 - Pure Hopf-aware routing repeatedly carries the cleanest routed-quality signal.
 - `phase4_dims=0,2,4,6` is a stable clue, not a random projection choice.

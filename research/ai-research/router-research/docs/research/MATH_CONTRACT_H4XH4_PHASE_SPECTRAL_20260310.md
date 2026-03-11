@@ -114,6 +114,9 @@ and the connection-style transport form is:
 Working interpretation for this repo:
 - the second hyperbolic factor `F` is allowed to modulate transport on the routing factor `R`
 - but phase must be induced through geometry / connection structure, not inserted as an unconstrained score term
+- durable experimental constraint from `INC-0063`:
+  - a base-only Hopf transport law without direct coupled-field participation was address-inert on the proxy schedule
+  - near-term phase work should therefore be formulated as coupled-field transport, not standalone base-space phase correction
 
 ## Compatibility Kernel
 The imported theory corpus provides a generic compatibility sketch:

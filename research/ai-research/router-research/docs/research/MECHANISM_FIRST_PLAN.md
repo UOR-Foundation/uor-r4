@@ -28,6 +28,7 @@
   - derive a measure-consistent routing law
 4. next
   - run strict phase-necessity ablations
+  - if standalone base-only transport is inert, continue phase work only through a coupled `H^4 x H^4` complex-field law
 5. next
   - add operator/spectrum measurement
 6. next

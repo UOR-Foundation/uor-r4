@@ -38,6 +38,7 @@ class TestCLIContract(unittest.TestCase):
             "--hopf_blend_lambda",
             "--hopf_blend_chi_weight",
             "--hopf_blend_shell_weight",
+            "--phase_transport_lambda",
             "--time_pressure_lambda",
             "--train_route_mode",
             "--recluster_after_chart",
@@ -52,7 +53,7 @@ class TestCLIContract(unittest.TestCase):
         for flag in required:
             self.assertIn(flag, out)
 
-        self.assertIn("{kmeans,phase2,phase4d,phase4d_adaptive,phase4d_hopf,phase4d_hopf_base,phase4d_hopf_iso,phase4d_hopf_ball,phase4d_hopf_chi,phase4d_hopf_fib,phase4d_hopf_fib_rung,phase4d_hopf_fib_band,phase4d_hopf_fib_band_iso,phase4d_hopf_fib_band_bound,phase4d_hopf_blend,phase4d_complex_local,complex2}", out)
+        self.assertIn("{kmeans,phase2,phase4d,phase4d_adaptive,phase4d_hopf,phase4d_hopf_base,phase4d_hopf_transport,phase4d_hopf_iso,phase4d_hopf_ball,phase4d_hopf_chi,phase4d_hopf_fib,phase4d_hopf_fib_rung,phase4d_hopf_fib_band,phase4d_hopf_fib_band_iso,phase4d_hopf_fib_band_bound,phase4d_hopf_blend,phase4d_complex_local,complex2}", out)
         self.assertIn("{fixed,phi_ratio,phi_ladder}", out)
         self.assertIn("{dynamic,final_static}", out)
         self.assertIn("{route_chart,full_chart}", out)

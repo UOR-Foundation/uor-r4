@@ -1,6 +1,18 @@
 # Current Research Handoff
 
 ## Latest Closed Increment
+- `INC-0063` is complete and closed negative at screen stage.
+- Evidence:
+  - `configs/proxy_transfer_inc0063_phase_transport_screen.json`
+  - `results/analysis/inc0063_phase_transport_screen.json`
+  - `results/analysis/inc0063_phase_transport_address_diff.json`
+  - `docs/governance/gates/gate_20260310_235845.md`
+  - `docs/governance/gates/gate_20260311_000712.md`
+- Reading:
+  - the standalone Hopf transport law is mechanism-inert on the current proxy schedule
+  - all transported variants produced exactly the same shell and sector addresses as `phase4d_hopf_base`
+  - raw Hopf phase still changes sectors, so phase is not dead as a concept
+  - the next valid phase branch must couple the second `H^4` discrete complex-value field into the phase law
 - `INC-0062` is complete.
 - Evidence:
   - `configs/proxy_transfer_inc0062_hopf_base_screen.json`
@@ -57,13 +69,14 @@
   - especially the staged falsification ladder and the stronger geometry/spectral/phase/sparse framing
 
 ## Current In-Progress Increment
-- `INC-0063` is the active next implementation slice.
+- `INC-0064` is the active next implementation slice.
 - Setup artifacts:
   - `docs/research/increments/INC_0059_h4x4_polar_flow.md`
   - `docs/research/increments/INC_0060_h4_hopf_measure_diagnostics.md`
   - `docs/research/increments/INC_0061_measure_consistent_route_law.md`
   - `docs/research/increments/INC_0062_hopf_base_angular_law.md`
   - `docs/research/increments/INC_0063_phase_transport_necessity.md`
+  - `docs/research/increments/INC_0064_coupled_complex_phase_transport.md`
   - `docs/research/MECHANISM_FIRST_PLAN.md`
   - `docs/research/MATH_CONTRACT_H4XH4_PHASE_SPECTRAL_20260310.md`
 - Branch reading to preserve:
@@ -71,10 +84,10 @@
   - `HOPF_BASE_K25_PHI` is the no-fiber-phase coarse-address control
   - `HOPF_PHI2_BAND_PHI` is the widened healthy comparator
 - Next preferred work:
-  - run the strict phase-necessity branch:
-    - no fiber phase in the address (`phase4d_hopf_base`)
-    - raw phase coordinates (`phase4d_hopf`)
-    - geometry-induced transported phase (new route law)
+  - implement the coupled complex-phase branch:
+    - first factor supplies minima routing on the Hopf base
+    - second `H^4` supplies the discrete complex-value field
+    - transported phase must be induced by the coupling, not by a base-only connection term
   - keep geometry routing as the only active near-term goal
   - defer gated-intelligence/event-style branches until phase/spectral claims sit on stable geometry
 
@@ -121,6 +134,7 @@ Default resume path is:
 4. read `docs/research/increments/INC_0061_measure_consistent_route_law.md`
 5. read `docs/research/increments/INC_0062_hopf_base_angular_law.md`
 6. read `docs/research/increments/INC_0063_phase_transport_necessity.md`
-7. read `docs/research/LEARNED_KNOWLEDGE.md`
-8. read `docs/research/CURRENT_DIRECTION.md`
-9. resume with `INC-0063`
+7. read `docs/research/increments/INC_0064_coupled_complex_phase_transport.md`
+8. read `docs/research/LEARNED_KNOWLEDGE.md`
+9. read `docs/research/CURRENT_DIRECTION.md`
+10. resume with `INC-0064`

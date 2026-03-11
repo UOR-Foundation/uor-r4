@@ -15,7 +15,7 @@ class TestSectorModes(unittest.TestCase):
         U = hr.normalize_rows(v)
         C = hr.spherical_kmeans(U, K=k, iters=5, seed=0)
 
-        modes = ["kmeans", "phase2", "phase4d", "phase4d_adaptive", "phase4d_hopf", "phase4d_hopf_base", "phase4d_hopf_iso", "phase4d_hopf_ball", "phase4d_hopf_chi", "phase4d_hopf_fib", "phase4d_hopf_fib_rung", "phase4d_hopf_fib_band", "phase4d_hopf_fib_band_iso", "phase4d_hopf_fib_band_bound", "phase4d_hopf_blend", "phase4d_complex_local", "complex2"]
+        modes = ["kmeans", "phase2", "phase4d", "phase4d_adaptive", "phase4d_hopf", "phase4d_hopf_base", "phase4d_hopf_transport", "phase4d_hopf_iso", "phase4d_hopf_ball", "phase4d_hopf_chi", "phase4d_hopf_fib", "phase4d_hopf_fib_rung", "phase4d_hopf_fib_band", "phase4d_hopf_fib_band_iso", "phase4d_hopf_fib_band_bound", "phase4d_hopf_blend", "phase4d_complex_local", "complex2"]
         for mode in modes:
             shell, sector, _u, _z = hr.route_addresses(
                 v,
@@ -53,6 +53,35 @@ class TestSectorModes(unittest.TestCase):
             else:
                 sector_upper = k
             self.assertTrue(np.all(sector < sector_upper))
+
+    def test_hopf_transport_phase_vanishes_at_balanced_amplitude(self):
+        eta = 0.25 * np.pi
+        delta = 1.1
+        alpha = -0.4
+        theta1 = hr.wrap_to_pi(alpha + 0.5 * delta)
+        theta2 = hr.wrap_to_pi(alpha - 0.5 * delta)
+        rho1 = np.cos(eta)
+        rho2 = np.sin(eta)
+        z = np.array(
+            [[
+                rho1 * np.cos(theta1),
+                rho1 * np.sin(theta1),
+                rho2 * np.cos(theta2),
+                rho2 * np.sin(theta2),
+                0.0, 0.0, 0.0, 0.0,
+            ]],
+            dtype=np.float64,
+        )
+        comp = hr.hopf_phase_transport_components(
+            z,
+            dim_i=0,
+            dim_j=1,
+            dim_k=2,
+            dim_l=3,
+            phase_transport_lambda=1.0,
+        )
+        self.assertAlmostEqual(float(comp["transport_phase_shift"][0]), 0.0, places=7)
+        self.assertAlmostEqual(float(comp["transported_alpha"][0]), alpha, places=7)
 
     def test_hybrid_route_one_matches_batch_route(self):
         np.random.seed(1)

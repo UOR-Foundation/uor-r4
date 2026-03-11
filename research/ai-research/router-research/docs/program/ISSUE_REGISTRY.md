@@ -28,12 +28,21 @@ Use this file as the local GitHub-style issue list for router research.
   - Depends on: `RR-060`
   - Canonical doc: `docs/research/increments/INC_0061_measure_consistent_route_law.md`
   - Goal: correct shell and angular laws before phase or event-driven branches reopen
-- `RR-063` `[research][phase][queued-next]`
+- `RR-064` `[research][phase][queued-next]`
+  - Title: Couple complex-field phase transport into the routing law
+  - Branch: `codex/RR-064-coupled-complex-phase-transport`
+  - Depends on: `RR-059`, `RR-063`
+  - Canonical doc: `docs/research/increments/INC_0064_coupled_complex_phase_transport.md`
+  - Goal: test the intended two-lever mechanism:
+    - minima routing on the first `H^4`
+    - phase jumping through the coupled complex field on the second `H^4`
+- `RR-063` `[research][phase][done]`
   - Title: Test phase-transport necessity on top of corrected coarse routing
   - Branch: `codex/RR-063-phase-transport-necessity`
   - Depends on: `RR-061`, `RR-062`
   - Canonical doc: `docs/research/increments/INC_0063_phase_transport_necessity.md`
   - Goal: prove or kill transported phase as a geometry-induced mechanism
+  - Result: the standalone Hopf transport law was address-inert on the proxy schedule, so the next valid phase branch must couple the second `H^4` complex field into the phase law
 
 ## Queued
 - `RR-053` `[systems][translation][queued]`

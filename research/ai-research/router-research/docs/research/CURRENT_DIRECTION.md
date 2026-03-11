@@ -1,6 +1,25 @@
 # Current Direction
 
 ## Latest Update
+- `INC-0063` is complete and closed negative at screen stage.
+- New branch reading:
+  - `phase4d_hopf_transport` is address-inert on the current cheap static proxy schedule
+  - transported-phase variants produced the same shell and sector assignments as `phase4d_hopf_base`
+  - the branch therefore does not prove phase as a necessary mechanism
+- Durable interpretation:
+  - geometry routing remains live
+  - standalone base-only transport on Hopf coordinates is not enough
+  - the next valid phase branch must couple the second `H^4` discrete complex-value field into the phase law
+  - this matches the intended two-lever picture:
+    - minima routing on the first factor
+    - phase jumping through the coupled complex field
+- Canonical closure artifacts:
+  - `results/analysis/inc0063_phase_transport_screen.json`
+  - `results/analysis/inc0063_phase_transport_address_diff.json`
+  - `docs/governance/gates/gate_20260310_235845.md`
+  - `docs/governance/gates/gate_20260311_000712.md`
+- Immediate next action:
+  - `docs/research/increments/INC_0064_coupled_complex_phase_transport.md`
 - `INC-0062` is complete.
 - New branch result:
   - `sector_mode=phase4d_hopf_base`

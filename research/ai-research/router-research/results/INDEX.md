@@ -781,3 +781,17 @@ Use this file to map each run batch to parsed summaries and decision records.
 - Analysis: `results/analysis/inc0058_product_complex_rerank_screen.json`
 - Summary row range: rows where `run_tag` contains `inc0058_product_complex_rerank_screen`
 - Decision note: `docs/governance/gates/gate_20260306_140424.md`
+
+## Batch B106
+- Batch ID: `B106_inc0063_phase_transport_screen`
+- Config: `configs/proxy_transfer_inc0063_phase_transport_screen.json`
+- Logs: `results/raw/inc0063_phase_transport_screen_*.log`
+- Parsed files: matching `results/parsed/inc0063_phase_transport_screen_*.json`
+- Analysis:
+  - `results/analysis/inc0063_phase_transport_screen.json`
+  - `results/analysis/inc0063_phase_transport_address_diff.json`
+- Summary row range: rows where `run_tag` contains `inc0063_phase_transport_screen`
+- Decision notes:
+  - `docs/governance/gates/gate_20260310_235845.md`
+  - `docs/governance/gates/gate_20260311_000712.md`
+- Note: the first RR-063 screen failed because the harness was not forwarding `phase_transport_lambda` into `optimize_chart`; use the successful rerun plus the address-diff audit as canonical evidence.
