@@ -7,7 +7,12 @@
 
 ## Current Queue Override
 - Current primary RR: `RR-061`
-- Current primary INC: `INC-0140` (measure-consistent angular routing — sector-level discrimination)
+- Current primary INC: `INC-0141` (raw embedding angular routing test — does removing L2-normalization restore within-pair Hopf angular signal?)
+- 2026-03-13 INC-0140 KILL: angular sector routing (phase4d_hopf_base, learn_so8=0) indistinguishable from col-perm on L2-normalized embeddings.
+  Forensic audit confirms genuine kill: col-perm changes 66% of sector assignments but sector SIZE distribution is near-invariant (TV=0.009).
+  Root cause: within-pair Hopf correlations near-zero on L2-normalized embeddings (corr≈−0.04 for dims 0,2; −0.02 for dims 4,6).
+  All fixed-geometry routing paths on L2-normalized embeddings now exhausted (INC-0136–0140).
+  Next test: raw (non-L2-normalized) embeddings.
 - 2026-03-13 INC-0138 REFINE: geometry-only shell activation confirmed stable 2-shell structure;
   real vs Gaussian separation strong; real vs col-perm indistinguishable at shell level (norm-driven).
 - 2026-03-12 root-theory audit:
@@ -24,7 +29,7 @@
   - it worsened shell concentration and neighborhood preservation versus
     `HOPF_BASE_K25_PHI`
   - move next to the narrower correction:
-    `RR-061` / `INC-0140` (angular sector routing measure-consistency)
+    `RR-061` / `INC-0141` (raw embedding angular routing test)
 
 ## Routes
 - `R0`: `sector_mode=kmeans`, `scale_mode=radial`, `time_pressure_lambda=0.0`

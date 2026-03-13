@@ -3474,3 +3474,34 @@ Add new entries below.
   - Key supporting finding: INC-0138 showed angular routing discriminates real
     from Gaussian noise (buckets=15.5 vs 50.0, ~3× difference), making it the
     correct target for Stage 2 semantic routing characterization
+
+## 2026-03-13 (INC-0140 Closed: KILL — angular routing degenerate on L2-normalized embeddings)
+- INC-0140 experiment results (phase4d_hopf_base, learn_so8=0, learn_scale=0):
+  - ANG_ORIG vs ANG_COL_PERM pmax_after: 0.6006 vs 0.6030, |diff|/mean = 0.004
+  - ANG_ORIG vs ANG_COL_PERM sector_entropy: 1.322 vs 1.323, |diff|/mean = 0.0008
+  - Both well below the discrimination threshold (|diff|/mean > 0.2)
+  - ORIG vs GAUSSIAN separation intact (10.3× ratio) — geometric structure present
+    for noise vs real, but not for col-perm vs real
+- Forensic audit (2026-03-13) confirms genuine kill:
+  - Col-perm is a valid test: changes 66% of per-sample sector assignments
+  - chi_u KS-stat = 0.194, delta KS-stat = 0.621 — routing IS different between
+    ORIG and PERM at the coordinate level
+  - BUT sector SIZE distribution (TV = 0.009) is nearly invariant to col-perm
+  - pmax_after is driven by concentration, not semantic alignment
+  - Root cause: within-pair Hopf correlations near-zero on L2-normalized embeddings
+    (corr(z[0],z[2]) = −0.039, corr(z[4],z[6]) = −0.018)
+  - L2-normalization projects to S^127; fixed 4D Hopf subspace (dims 0,2,4,6)
+    sees no structured within-pair angular signal
+- Stage 2 conclusion after INC-0136 through INC-0140:
+  - Shell routing via geodesic substitution: KILLED (INC-0136)
+  - Shell pressure blend: KILLED (INC-0137)
+  - Geometry-only controls: r≡1 structural finding, shells indistinguishable (INC-0138)
+  - SO(8) chart learning: destroys routing quality (INC-0139)
+  - Angular sector routing without learned alignment: KILLED (INC-0140)
+  - ALL fixed-geometry routing paths on L2-normalized embeddings exhausted
+- Decision:
+  - Stage 2 requires testing whether raw (non-L2-normalized) embeddings restore
+    the within-pair Hopf angular signal needed for semantic routing
+  - INC-0141 is the next increment: raw embedding angular routing test
+  - If raw embeddings also fail, Stage 2 must be declared structurally blocked and
+    the kill-list stage must be revised or re-scoped

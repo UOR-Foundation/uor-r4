@@ -13,16 +13,28 @@ as authoritative when they disagree with this file.
 
 ## Canonical Queue
 - Current primary RR: `RR-061`
-- Current primary INC: `INC-0140` — measure-consistent angular routing (sector-level real vs col-perm discrimination)
+- Current primary INC: `INC-0141` — raw embedding angular routing test (does removing L2-normalization restore within-pair Hopf angular signal?)
 - Current primary increment doc:
-  `docs/research/increments/INC_0140_angular_sector_routing_measure_consistency.md`
-- Kill-list stage: `measure-consistent shell routing` (redirected to angular routing after fiber-balance path exhausted INC-0136–0139)
+  `docs/research/increments/INC_0141_TBD.md`
+- Kill-list stage: `measure-consistent shell routing` (all fixed-geometry paths on L2-normalized embeddings exhausted INC-0136–0140; testing normalization as root cause)
 - Mathematical object under test:
-  `first-factor H^4 routing manifold, Hopf base projection; sector assignment consistency with H^4 angular measure; sector-level discrimination of real vs col-perm inputs`
-- Success condition: `sector-level pmax_after or sector_entropy differs between GEOM_ORIG and GEOM_COL_PERM by |diff|/mean > 0.2, OR hopf mass errors differ meaningfully`
-- Falsification condition: `sector metrics indistinguishable between real and col-perm; Stage 2 requires architectural change (non-L2-normalized embeddings or different sector law)`
+  `first-factor H^4 routing manifold, Hopf base projection on raw (non-L2-normalized) embeddings; whether within-pair angular correlations survive without unit-sphere projection`
+- Success condition: `sector-level pmax_after or sector_entropy differs between GEOM_ORIG and GEOM_COL_PERM by |diff|/mean > 0.2 on raw embeddings; AND within-pair Hopf correlations are measurably higher than the near-zero values observed on L2-normalized embeddings`
+- Falsification condition: `raw embeddings also fail to discriminate real from col-perm at the sector level; Stage 2 must be declared structurally blocked and path revised`
 
 ## Latest Closed Increment
+- `INC-0140`:
+  `docs/research/increments/INC_0140_angular_sector_routing_measure_consistency.md`
+  - status: `Closed: KILL`
+  - verdict: Angular sector routing (phase4d_hopf_base, learn_so8=0) is measure-degenerate
+    on L2-normalized embeddings. ANG_ORIG vs ANG_COL_PERM pmax_after ratio: 0.004 (<<0.2
+    threshold). Forensic audit confirms genuine kill: col-perm changes 66% of per-sample
+    sector assignments (delta KS=0.621) but sector SIZE distribution is nearly invariant
+    (TV=0.009), so prediction performance is concentration-driven not semantically aligned.
+    Within-pair Hopf correlations near-zero (corr≈−0.04, −0.02) on L2-normalized embeddings.
+    Root cause: L2-normalization projects to S^127; fixed 4D Hopf subspace sees no
+    structured angular signal.
+
 - `INC-0139`:
   `docs/research/increments/INC_0139_TBD.md`
   - status: `Closed: REFINE`
