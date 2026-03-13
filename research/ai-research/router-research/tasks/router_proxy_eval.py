@@ -75,6 +75,7 @@ def event_gate_stats(
 def parse_args():
     ap = argparse.ArgumentParser()
     ap.add_argument("--input", type=str, default="data/wikitext2_proxy/wikitext2_proxy.npz")
+    ap.add_argument("--input_transform", type=str, default="none", choices=["none", "col_perm", "gaussian"])
     ap.add_argument("--eval_split", type=str, default="test", choices=["test", "val"])
     ap.add_argument("--max_train", type=int, default=12000)
     ap.add_argument("--max_eval", type=int, default=6000)
@@ -322,6 +323,19 @@ def main():
 
     v_tr, y_tr = _subset(x_train, y_train, args.max_train, args.seed + 1)
     v_ev, y_ev = _subset(x_eval, y_eval, args.max_eval, args.seed + 2)
+
+    if args.input_transform != "none":
+        rng = np.random.RandomState(args.seed + 77)
+        if args.input_transform == "col_perm":
+            for j in range(v_tr.shape[1]):
+                v_tr[:, j] = rng.permutation(v_tr[:, j])
+            for j in range(v_ev.shape[1]):
+                v_ev[:, j] = rng.permutation(v_ev[:, j])
+        elif args.input_transform == "gaussian":
+            mu = v_tr.mean(axis=0)
+            sd = v_tr.std(axis=0) + 1e-12
+            v_tr = rng.randn(*v_tr.shape) * sd + mu
+            v_ev = rng.randn(*v_ev.shape) * sd + mu
 
     d = int(v_tr.shape[1])
     dy = int(y_tr.shape[1])

@@ -7,7 +7,9 @@
 
 ## Current Queue Override
 - Current primary RR: `RR-061`
-- Current primary INC: `INC-0138` (pending creation — shell-density controller)
+- Current primary INC: `INC-0139` (pending creation — shell law sensitivity or pivot to angular law)
+- 2026-03-13 INC-0138 REFINE: geometry-only shell activation confirmed stable 2-shell structure;
+  real vs Gaussian separation strong; real vs col-perm indistinguishable at shell level (norm-driven).
 - 2026-03-12 root-theory audit:
   - treat the translated sparse-event lower-bank and dual-anchor line as
     supporting downstream evidence
@@ -22,7 +24,7 @@
   - it worsened shell concentration and neighborhood preservation versus
     `HOPF_BASE_K25_PHI`
   - move next to the narrower correction:
-    `RR-061` / `INC-0138` (pending creation)
+    `RR-061` / `INC-0139` (pending creation)
 
 ## Routes
 - `R0`: `sector_mode=kmeans`, `scale_mode=radial`, `time_pressure_lambda=0.0`

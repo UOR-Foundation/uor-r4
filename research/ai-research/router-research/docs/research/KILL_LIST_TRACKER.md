@@ -10,7 +10,7 @@ Use statuses:
 
 ## Canonical Queue
 - Current primary RR: `RR-061`
-- Current primary INC: `INC-0138` (pending creation — shell-density controller approach)
+- Current primary INC: `INC-0139` (pending creation — break shell-level real/col-perm indistinguishability or pivot to angular law)
 
 ## 1. Hyperbolic Embedding Stability
 - Status: `partial`
@@ -29,10 +29,11 @@ Use statuses:
   - `docs/research/increments/INC_0061_measure_consistent_route_law.md`
   - `docs/research/increments/INC_0136_measure_consistent_h4_hopf_route_return.md`
   - `docs/research/increments/INC_0137_measure_consistent_h4_hopf_shell_pressure_blend.md`
+  - `docs/research/increments/INC_0138_geometry_only_shell_activation_controls.md`
 - Blocker:
-  - `radius-interpolation blend (INC-0137) falsified: geodesic pull worsens shell_pmax at all weights (w=0.1: 0.52→0.75; w≥0.2: shell collapse). Next lever: occupancy-based density controller or chart-radius regularization`
+  - `INC-0138 REFINE: geometry-only shell activation produces stable 2-shell structure but shell level cannot discriminate real from col-perm embeddings (norm-driven); angular/Hopf dimension carries semantic structure; INC-0139 must decide: break shell indistinguishability or formally pivot Stage 2 to angular law`
 - Next branch:
-  - `INC-0138: shell-density controller / occupancy equalizer (not yet queued)`
+  - `INC-0139: shell law sensitivity sweep or explicit decision gate (pending creation)`
 
 ## 3. Hopf Angular Correctness
 - Status: `partial`

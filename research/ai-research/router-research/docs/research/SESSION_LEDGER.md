@@ -647,3 +647,50 @@ direction.
    - Or: regularize chart radius to reduce radial concentration
 2. Update GitHub Issue #1 (RR-061) with KILL decision for INC-0137
 3. Commit all changes to `codex/RR-061-measure-consistent-route-law` and push
+
+## Session Entry: 2026-03-13 — INC-0138 screen executed (geometry-only controls)
+
+### Context
+Active gate: Stage 2 — Measure-Consistent Shell Routing
+Branch: codex/RR-061-measure-consistent-route-law
+Task: run geometry-only shell activation experiment with real vs destructive controls
+
+### Files Read
+- docs/research/ACTIVE_STATE.md
+- docs/research/KILL_LIST_TRACKER.md
+- tasks/router_proxy_eval.py (structure of data loading, arg list, output metrics)
+- configs/proxy_transfer_inc0137*.json (config format reference)
+- results/analysis/inc0138_geometry_only_shell_activation_screen.json (results)
+
+### Commands Run
+- Added `--input_transform` flag (none/col_perm/gaussian) to tasks/router_proxy_eval.py
+- Created configs/proxy_transfer_inc0138_geometry_only_shell_activation_screen.json
+- Ran /opt/homebrew/Caskroom/miniforge/base/bin/python3 tools/proxy_sweep.py --config configs/proxy_transfer_inc0138_geometry_only_shell_activation_screen.json --python_bin /opt/homebrew/Caskroom/miniforge/base/bin/python3
+- 8 runs completed (4 routes x 2 seeds), all parsed, rc=0
+
+### Key Results
+| Route | eval_shells | shell_pmax | pmax_after | buckets | sector_entropy |
+|---|---|---|---|---|---|
+| GEOM_ORIG (original) | 2 | 0.584 | 0.529 | 15.5 | 1.322 |
+| GEOM_COL_PERM | 2 | 0.532 | 0.422 | 29.0 | 1.323 |
+| GEOM_GAUSSIAN | 2 | 0.645 | 0.048 | 50.0 | 3.195 |
+| R0 (learned) | 1 | 1.000 | 0.261 | 8.0 | 1.953 |
+
+### Conclusion
+Fixed geometry + adaptive shell activation produces stable 2-shell structure.
+Real embeddings separate from Gaussian noise strongly at bucket/sector level.
+Shell level does NOT discriminate real from col-perm (norm-driven, not semantic).
+Primary carrier of semantic structure is the Hopf-base angular/sector dimension.
+INC-0138 closed: REFINE — structure confirmed but shell indistinguishability finding
+requires a decision in INC-0139.
+
+### Cross-Stage Observation
+The Hopf-base angular dimension (sector_entropy, pmax_after, buckets) is primary
+carrier of semantic structure. This strengthens the case for Stage 3 (Hopf Angular
+Correctness) being the higher-value target once Stage 2 decision is documented.
+
+### Next Actions
+1. Create INC-0139: decide whether shell law can discriminate real from col-perm
+   or formally document norm-driven shell as a Stage 2 constraint
+2. Update GitHub Issue #1 with INC-0138 REFINE result
+3. Commit and push

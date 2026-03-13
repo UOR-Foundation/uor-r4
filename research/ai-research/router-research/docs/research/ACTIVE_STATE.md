@@ -13,23 +13,31 @@ as authoritative when they disagree with this file.
 
 ## Canonical Queue
 - Current primary RR: `RR-061`
-- Current primary INC: `INC-0138` (not yet created)
-- Current primary increment doc: pending
+- Current primary INC: `INC-0139` (pending creation — break shell-level indistinguishability between real and col-perm embeddings, or accept shell is norm-driven and pivot to angular law)
+- Current primary increment doc:
+  `docs/research/increments/INC_0139_TBD.md` (pending creation)
 - Kill-list stage: `measure-consistent shell routing`
 - Mathematical object under test:
-  `first-factor routing manifold on H^4; next candidate lever: shell-density controller or chart-radius regularization to equalize shell occupancy without touching geodesic radius`
-- Success condition:
-  `a density-equalizing controller reduces shell_pmax below HOPF_BASE_K25_PHI (0.5222) while preserving knn_overlap >= 0.6738`
-- Falsification condition:
-  `if density-equalizer also fails to improve shell concentration, document a narrower architectural constraint on what measure-consistent shell routing is achievable in the current chart framework`
+  `first-factor routing manifold on H^4; shell law sensitivity to angular-norm joint geometry vs norm-only geometry`
+- Success condition: `a shell law parameter change (K, delta_r, growth) makes shell metrics discriminate real from col-perm inputs (shell_pmax or shell_entropy differs by >0.1 between GEOM_ORIG and GEOM_COL_PERM) OR explicit decision to accept norm-driven shell and focus Stage 2 effort on angular law`
+- Falsification condition: `if no shell law parameter separates real from col-perm, document norm-driven shell as a fundamental constraint and pivot Stage 2 to angular improvement`
 
 ## Latest Closed Increment
+- `INC-0138`:
+  `docs/research/increments/INC_0138_geometry_only_shell_activation_controls.md`
+  - status: `Closed: REFINE`
+  - verdict: fixed H^4 geometry + adaptive shell activation (learn_so8=0, learn_scale=0) produces
+    stable 2-shell structure (shell_pmax≈0.58, no collapse). Real embeddings separate from
+    Gaussian noise strongly (buckets: 15.5 vs 50.0, pmax_after: 0.53 vs 0.05) but NOT from
+    column-permuted controls at the shell level. Shell assignment is norm-driven. Angular/Hopf
+    dimension is the primary carrier of semantic structure.
+
 - `INC-0137`:
   `docs/research/increments/INC_0137_measure_consistent_h4_hopf_shell_pressure_blend.md`
   - status: `Closed: KILL`
   - verdict: bounded geodesic-radius blend (w=0.1–0.4) worsens shell_pmax at all weights
-    vs chart-only HOPF_BASE_K25_PHI baseline (0.5222); w=0.1 passes health gate but
-    degrades pmax to 0.7464; w>=0.2 collapses to 1 shell. Radius interpolation is not
+    vs the chart-only HOPF_BASE_K25_PHI baseline (0.5222); w=0.1 passes health but
+    degrades pmax to 0.7464; w≥0.2 collapses to 1 shell. Radius-interpolation is not
     the right lever. Next increment must target an occupancy-feedback density controller.
 
 - `INC-0136`:

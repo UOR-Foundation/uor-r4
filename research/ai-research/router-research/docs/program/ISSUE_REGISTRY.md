@@ -4,7 +4,7 @@ Use this file as the local GitHub-style issue list for router research.
 
 ## Canonical Active Queue
 - Current primary RR: `RR-061`
-- Current primary INC: `INC-0138` (pending creation — shell-density controller)
+- Current primary INC: `INC-0139` (pending creation — shell law sensitivity or formal pivot to angular law)
 
 ## Active
 - `RR-050` `[research][math-review][active]`

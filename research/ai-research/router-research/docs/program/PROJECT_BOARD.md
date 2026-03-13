@@ -2,7 +2,8 @@
 
 ## Canonical Active Queue
 - Current primary RR: `RR-061`
-- Current primary INC: `INC-0138` (pending creation — shell-density controller)
+- Current primary INC: `INC-0139` (pending creation — shell law sensitivity or pivot to angular law)
+- INC-0138: Closed REFINE (2026-03-13) — geometry-only confirmed; norm-driven shell finding
 
 ## Now
 - `RR-050` Dynamic hyperbolic state branch (`H^4 + T_xH^4` vs `H^4 x H^4`)
