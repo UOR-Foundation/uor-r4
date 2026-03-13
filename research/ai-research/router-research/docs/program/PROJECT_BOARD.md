@@ -2,7 +2,9 @@
 
 ## Canonical Active Queue
 - Current primary RR: `RR-061`
-- Current primary INC: `INC-0141` (raw embedding angular routing test — does removing L2-normalization restore within-pair Hopf angular signal?)
+- Current primary INC: `INC-0142` (semantic embedding proxy task — does Hopf angular routing discriminate real from col-perm when embeddings have genuine semantic structure?)
+- INC-0141: Closed KILL (2026-03-13) — optimal-dim (46,117,62,78) Hopf routing also indistinguishable from col-perm (rel_diff=0.025, wrong direction); hash embedding proxy-task-blocked
+- INC-0140: Closed KILL (2026-03-13) — angular routing indistinguishable from col-perm on L2-normalized embeddings (rel_diff=0.004)
 - INC-0138: Closed REFINE (2026-03-13) — geometry-only confirmed; norm-driven shell finding
 
 ## Now

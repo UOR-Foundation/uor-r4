@@ -13,16 +13,27 @@ as authoritative when they disagree with this file.
 
 ## Canonical Queue
 - Current primary RR: `RR-061`
-- Current primary INC: `INC-0141` — raw embedding angular routing test (does removing L2-normalization restore within-pair Hopf angular signal?)
+- Current primary INC: `INC-0142` — TBD. Stage 2 is proxy-task-blocked by hash embedding. Next step: validate Stage 2 with semantically structured embeddings (e.g. GloVe / LM-activation proxy task) where Hopf angular sectors carry genuine semantic content.
 - Current primary increment doc:
-  `docs/research/increments/INC_0141_TBD.md`
-- Kill-list stage: `measure-consistent shell routing` (all fixed-geometry paths on L2-normalized embeddings exhausted INC-0136–0140; testing normalization as root cause)
+  `docs/research/increments/INC_0142_TBD.md` (to be created)
+- Kill-list stage: `measure-consistent shell routing` (Stage 2 proxy-task-blocked — hash embedding lacks semantic angular structure in any 4D Hopf subspace)
 - Mathematical object under test:
-  `first-factor H^4 routing manifold, Hopf base projection on raw (non-L2-normalized) embeddings; whether within-pair angular correlations survive without unit-sphere projection`
-- Success condition: `sector-level pmax_after or sector_entropy differs between GEOM_ORIG and GEOM_COL_PERM by |diff|/mean > 0.2 on raw embeddings; AND within-pair Hopf correlations are measurably higher than the near-zero values observed on L2-normalized embeddings`
-- Falsification condition: `raw embeddings also fail to discriminate real from col-perm at the sector level; Stage 2 must be declared structurally blocked and path revised`
+  `first-factor H^4 routing manifold, Hopf base projection — whether fixed-subspace angular routing discriminates real from col-perm when embeddings have genuine semantic clustering`
+- Success condition: `|pmax_after ORIG − pmax_after COL_PERM| / mean > 0.2 on semantically structured embeddings`
+- Falsification condition: `semantic embeddings also fail to discriminate; Stage 2 routing law is physically wrong regardless of proxy task`
 
 ## Latest Closed Increment
+- `INC-0141`:
+  `docs/research/increments/INC_0141_TBD.md`
+  - status: `Closed: KILL`
+  - verdict: Routing with optimal dims (46,117,62,78) — highest within-pair correlations
+    in the 128-dim hash embedding (|corr|=0.479) — does not discriminate real from
+    col-perm. OPT_ORIG pmax_after=0.379 vs OPT_COL_PERM=0.388 (wrong direction),
+    rel_diff=0.025 (<<0.2 threshold). Pre-screen TV=0.109 signal does not survive.
+    Cascade conclusion: hash embedding is proxy-task-blocked for Stage 2 — no 4D
+    Hopf subspace of a hash feature can produce semantic angular concentration;
+    Stage 2 requires semantically structured embeddings.
+
 - `INC-0140`:
   `docs/research/increments/INC_0140_angular_sector_routing_measure_consistency.md`
   - status: `Closed: KILL`

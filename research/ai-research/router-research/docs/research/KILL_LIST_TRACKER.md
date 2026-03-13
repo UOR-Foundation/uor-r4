@@ -10,7 +10,7 @@ Use statuses:
 
 ## Canonical Queue
 - Current primary RR: `RR-061`
-- Current primary INC: `INC-0141` (raw embedding angular routing test — does removing L2-normalization restore angular routing discrimination?)
+- Current primary INC: `INC-0142` (semantic embedding proxy task — does Hopf angular routing discriminate real from col-perm when embeddings have genuine semantic structure?)
 
 ## 1. Hyperbolic Embedding Stability
 - Status: `partial`
@@ -32,22 +32,24 @@ Use statuses:
   - `docs/research/increments/INC_0138_geometry_only_shell_activation_controls.md`
   - `docs/research/increments/INC_0139_TBD.md`
   - `docs/research/increments/INC_0140_angular_sector_routing_measure_consistency.md`
+  - `docs/research/increments/INC_0141_TBD.md`
 - Blocker:
-  - `INC-0136–0140 collectively exhaust ALL fixed-geometry routing paths on L2-normalized
-    embeddings: (1) shell routing via geodesic substitution (KILLED), (2) shell pressure
-    blend (KILLED), (3) geometry-only controls establish r≡1 and shell-indistinguishability
-    (REFINE), (4) SO(8) chart learning destroys routing quality (REFINE), (5) angular sector
-    routing via phase4d_hopf_base also indistinguishable from col-perm (KILLED). Root cause:
-    L2-normalization collapses embeddings to S^127; fixed Hopf projection onto any 4D
-    subspace is near-isotropic (within-pair correlations ≈ −0.04). Next test: raw
-    (non-L2-normalized) embeddings.`
-- Decision: All fixed-geometry routing variants on L2-normalized embeddings have failed
-  to pass the real-vs-col-perm discrimination threshold (|diff|/mean > 0.2). Stage 2
-  requires either (a) raw embeddings or (b) a sector law that does not depend on a fixed
-  coordinate subspace.
+  - `INC-0136–0141 collectively exhaust ALL routing paths on the wikitext2 hash embedding:
+    (1) shell routing via geodesic substitution (KILLED), (2) shell pressure blend (KILLED),
+    (3) geometry-only controls: r≡1, shells indistinguishable (REFINE), (4) SO(8) chart
+    learning: destroys routing quality (REFINE), (5) angular sector routing, default dims
+    (0,2,4,6): indistinguishable from col-perm (KILLED, INC-0140), (6) angular sector
+    routing, optimal dims (46,117,62,78) with max within-pair correlation |corr|=0.479:
+    still indistinguishable (rel_diff=0.025, wrong direction, KILLED, INC-0141).
+    Mathematical proof: chi_u and delta are scale-invariant; L2-normalization is irrelevant.
+    Root cause: hash embedding is designed to be ISOTROPIC — no 4D Hopf subspace of a
+    hash feature can produce semantic angular concentration. Stage 2 is proxy-task-blocked.
+    Next path: semantically structured embeddings (GloVe, LM activations) where Hopf
+    angular sectors correspond to genuine semantic clusters.`
+- Decision: Hash embedding proxy task is permanently blocked for Stage 2. Must switch to
+  semantically structured embeddings for any further Stage 2 routing discrimination tests.
 - Next branch:
-  - `INC-0141: raw embedding angular routing test (does removing L2-normalization restore
-    within-pair Hopf angular signal?)`
+  - `INC-0142: semantic embedding proxy task`
 
 ## 3. Hopf Angular Correctness
 - Status: `partial`

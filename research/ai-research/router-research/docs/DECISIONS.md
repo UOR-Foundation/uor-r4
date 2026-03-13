@@ -3505,3 +3505,34 @@ Add new entries below.
   - INC-0141 is the next increment: raw embedding angular routing test
   - If raw embeddings also fail, Stage 2 must be declared structurally blocked and
     the kill-list stage must be revised or re-scoped
+
+## 2026-03-13 (INC-0141 Closed: KILL — optimal-dim Hopf routing also degenerate; hash embedding proxy-task-blocked)
+- INC-0141 experiment results (phase4d_hopf_base, learn_so8=0, phase4_dims=46,117,62,78):
+  - OPT_ORIG vs OPT_COL_PERM pmax_after: 0.3786 vs 0.3880, |diff|/mean = 0.025
+  - Direction WRONG: col-perm is MORE concentrated than real embeddings
+  - OPT_GAUSSIAN pmax_after: 0.1438 (noise floor, well below ORIG/PERM)
+  - CTRL_0246 (dims 0,2,4,6): pmax_after = 0.6006, exactly matches INC-0140 ANG_ORIG
+    (confirms experimental consistency across sessions)
+- Pre-screen finding (did not survive routing):
+  - Max within-pair correlation in 128-dim hash embedding: |corr(46,117)| = 0.479
+  - Pre-screen TV under col-perm = 0.109 for dims (46,117,62,78) — strongest Stage 2
+    signal seen; direction correct on val set (ORIG pmax 0.338 > PERM pmax 0.305)
+  - On test set with 2500 tokens: direction reverses, |diff|/mean = 0.025
+  - Conclusion: pre-screen TV signal was sampling noise on a fundamentally uniform distribution
+- Mathematical finding: chi_u and delta are PROVABLY scale-invariant:
+  - chi_u = rho2^2/(rho1^2+rho2^2) — homogeneous degree 0
+  - delta = arctan2(z_j,z_i) − arctan2(z_l,z_k) — arctan2 is scale-invariant
+  - Consequence: INC-0140's attribution of failure to L2-normalization was incorrect;
+    raw embeddings give EXACTLY the same Hopf coordinates (verified empirically)
+- Cascade conclusion (INC-0136 through INC-0141):
+  - All 6 Stage 2 routing paths exhausted on wikitext2 hash embedding
+  - Hash features are designed to be ISOTROPIC by construction (uniform coverage)
+  - No 4D Hopf subspace of a hash feature can produce semantic angular concentration
+  - Dimensional correlation in a hash embedding ≠ semantic correlation
+  - Stage 2 is permanently proxy-task-blocked on wikitext2 hash embedding
+- Decision:
+  - Stage 2 must move to semantically structured embeddings (e.g., GloVe, LM activations)
+    where Hopf angular sectors correspond to genuine semantic clusters
+  - INC-0142 is the next increment: semantic embedding proxy task for Stage 2 routing
+  - If semantic embeddings also fail to discriminate real from col-perm, the H^4 Hopf
+    sector routing law is structurally wrong and Stage 2 must be declared killed

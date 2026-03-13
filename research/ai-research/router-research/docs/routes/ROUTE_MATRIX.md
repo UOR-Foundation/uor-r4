@@ -7,12 +7,15 @@
 
 ## Current Queue Override
 - Current primary RR: `RR-061`
-- Current primary INC: `INC-0141` (raw embedding angular routing test — does removing L2-normalization restore within-pair Hopf angular signal?)
+- Current primary INC: `INC-0142` (semantic embedding proxy task — does Hopf angular routing discriminate real from col-perm when embeddings have genuine semantic structure?)
+- 2026-03-13 INC-0141 KILL: routing with optimal dims (46,117,62,78) — max within-pair correlation |corr|=0.479 — gives OPT_ORIG pmax=0.379 vs OPT_COL_PERM pmax=0.388 (wrong direction), rel_diff=0.025.
+  Pre-screen TV=0.109 signal did not survive routing. Mathematical proof: chi_u and delta are scale-invariant; hash embedding is isotropic by construction.
+  Stage 2 is proxy-task-blocked on wikitext2 hash embedding. Next test: semantically structured embeddings.
 - 2026-03-13 INC-0140 KILL: angular sector routing (phase4d_hopf_base, learn_so8=0) indistinguishable from col-perm on L2-normalized embeddings.
   Forensic audit confirms genuine kill: col-perm changes 66% of sector assignments but sector SIZE distribution is near-invariant (TV=0.009).
   Root cause: within-pair Hopf correlations near-zero on L2-normalized embeddings (corr≈−0.04 for dims 0,2; −0.02 for dims 4,6).
-  All fixed-geometry routing paths on L2-normalized embeddings now exhausted (INC-0136–0140).
-  Next test: raw (non-L2-normalized) embeddings.
+  All fixed-geometry routing paths on L2-normalized embeddings now exhausted (INC-0136–0141).
+  Root cause confirmed: hash embedding lacks semantic angular structure regardless of dim choice.
 - 2026-03-13 INC-0138 REFINE: geometry-only shell activation confirmed stable 2-shell structure;
   real vs Gaussian separation strong; real vs col-perm indistinguishable at shell level (norm-driven).
 - 2026-03-12 root-theory audit:
@@ -28,8 +31,8 @@
     route-health gate
   - it worsened shell concentration and neighborhood preservation versus
     `HOPF_BASE_K25_PHI`
-  - move next to the narrower correction:
-    `RR-061` / `INC-0141` (raw embedding angular routing test)
+  - move next to:
+    `RR-061` / `INC-0142` (semantic embedding proxy task)
 
 ## Routes
 - `R0`: `sector_mode=kmeans`, `scale_mode=radial`, `time_pressure_lambda=0.0`

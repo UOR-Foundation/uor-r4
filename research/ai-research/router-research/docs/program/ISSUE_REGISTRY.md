@@ -4,7 +4,7 @@ Use this file as the local GitHub-style issue list for router research.
 
 ## Canonical Active Queue
 - Current primary RR: `RR-061`
-- Current primary INC: `INC-0141` (raw embedding angular routing test — does removing L2-normalization restore within-pair Hopf angular signal?)
+- Current primary INC: `INC-0142` (semantic embedding proxy task — does Hopf angular routing discriminate real from col-perm when embeddings have genuine semantic structure?)
 
 ## Active
 - `RR-050` `[research][math-review][active]`
