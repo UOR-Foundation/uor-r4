@@ -9,6 +9,36 @@ non-collapsed 2-shell structure. Real embeddings separate from Gaussian noise
 via bucket concentration, but do NOT separate from column-permuted controls
 at the shell level. Shell structure is driven by norm geometry, not semantic content.
 
+### Post-experiment structural finding (2026-03-13)
+**All embeddings are L2-normalized: `||v|| = 1.0` (std ≈ 2.7e-8).**
+
+This means the chart radius `r = safe_norm(route_z) ≡ 1.0` for all vectors
+when `learn_scale=0, learn_so8=0` (identity chart, rotation preserves norms).
+
+Shells therefore CANNOT form from radial magnitude variation alone.
+
+Verified empirically:
+- `adaptive_shell_growth=0.0`: `shell_multiplier=1.0` for all, 1 shell, `shell_pmax=1.0`
+- `adaptive_shell_growth=1.6`: `shell_multiplier` varies (std=0.414, range 1.96–2.85),
+  2 shells form, `shell_pmax=0.595`
+
+The mechanism is:
+```
+shell_multiplier = exp(adaptive_shell_growth * div_score * (1 + adaptive_shell_balance * |balance|) - shell_converge)
+balance = (rho1 - rho2) / (rho1 + rho2)   [Hopf fiber energy asymmetry]
+rho1 = ||(z[0], z[2])||,  rho2 = ||(z[4], z[6])||
+r_eff = r * shell_multiplier  [r=1, so r_eff = shell_multiplier]
+```
+
+**The Hopf fiber balance DOES vary significantly:** mean=0.066, std=0.621, range [-1, +1]. This is the geometric driver of shell spread — not the hyperbolic radius.
+
+**Restated: shells form because Hopf fiber energy is asymmetric across embeddings, and `adaptive_shell_growth` amplifies this asymmetry into effective-radius spread.**
+
+Column-permuted controls produce similar `balance` distributions because column permutation preserves each column's marginal distribution, and `balance` depends on marginal norms of column pairs — hence the shell-level indistinguishability.
+
+**The corrected question for Stage 2:**
+Does Hopf fiber balance variation (from real semantic embedding geometry) produce meaningfully different shell assignments than Hopf balance variation from semantically-destroyed controls? And can chart rotation learning (SO(8)) enhance fiber balance variation to make shells semantically discriminating?
+
 ### Screen Results Summary (2026-03-13)
 
 | Route | eval_shells | shell_pmax | shell_entropy | pmax_after | sector_entropy | buckets | test_unseen_rate | test_mse_after | hopf_base_mass_error | hopf_angular_mass_error |

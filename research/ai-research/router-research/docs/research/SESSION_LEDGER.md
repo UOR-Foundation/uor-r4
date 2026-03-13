@@ -694,3 +694,45 @@ Correctness) being the higher-value target once Stage 2 decision is documented.
    or formally document norm-driven shell as a Stage 2 constraint
 2. Update GitHub Issue #1 with INC-0138 REFINE result
 3. Commit and push
+
+## Session Entry: 2026-03-13 — Post-INC-0138 structural finding: r ≡ 1 on unit-norm embeddings
+
+### Structural Issue Identified
+Research leader observation: embeddings appear L2-normalized, so if shells depend
+on radial magnitude, r ≈ constant and shells cannot form without another driver.
+
+### Verified empirically (diagnostic: /tmp/inc0138_hopf_radial_diagnostic.py)
+- Embedding norms: mean=1.0, std=2.7e-8 — confirmed L2-normalized
+- Chart radius r=safe_norm(route_z): mean=1.0, std=0.0 — degenerate with identity chart
+- With adaptive_shell_growth=0.0: shell_multiplier=1.0 for all, 1 shell, shell_pmax=1.0
+- With adaptive_shell_growth=1.6: shell_multiplier varies (std=0.414, range 1.96-2.85),
+  2 shells, shell_pmax=0.595
+
+### Mechanism identified
+Shell_multiplier = exp(growth * div_score * (1 + balance_weight * |balance|) - converge)
+balance = (rho1-rho2)/(rho1+rho2)   [Hopf fiber energy asymmetry]
+rho1 = ||(z[0], z[2])||,  rho2 = ||(z[4], z[6])||
+
+Hopf balance DOES vary significantly: mean=0.066, std=0.621, range [-1, +1]
+Shells form because Hopf fiber balance is heterogeneous — not because r varies.
+
+### Why col-perm is indistinguishable at shell level
+Column permutation preserves each column's marginal distribution.
+balance = f(||col_pair_1||, ||col_pair_2||) depends only on marginal norms.
+Hence: col-perm balance distribution ≈ original balance distribution → same shells.
+
+### Restated Stage 2 question
+Not "does H^4 radius vary?" (it doesn't on unit-norm embeddings).
+But: "Can chart rotation (SO(8) learning) concentrate Hopf fiber balance in ways
+that make shell assignment semantically discriminating?"
+Test: run with learn_so8=1 and compare balance+shell distributions for GEOM_ORIG vs GEOM_COL_PERM.
+
+### Updated INC-0139
+INC-0139 now tests whether SO(8) chart learning creates semantically meaningful
+fiber balance variation, or whether the structural constraint is fundamental.
+INC-0138 doc updated with this structural finding.
+
+### Next Actions
+1. Update GitHub Issue #1 with this corrected Stage 2 framing
+2. Commit updated INC-0138 doc and INC-0139
+3. Proceed to INC-0139 experiment
