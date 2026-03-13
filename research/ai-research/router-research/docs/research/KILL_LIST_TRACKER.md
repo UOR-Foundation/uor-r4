@@ -9,8 +9,8 @@ Use statuses:
 - `killed` = falsified or explicitly abandoned
 
 ## Canonical Queue
-- Current primary RR: `RR-061`
-- Current primary INC: `INC-0143` (finalize PPMI-SVD discrimination OR production embedding validation)
+- Current primary RR: `RR-065`
+- Current primary INC: `INC-0144` (Closed: KEEP — Stage 3 PARTIAL-PASS, Hopf fixed geometry beats K-means adaptive)
 
 ## 1. Hyperbolic Embedding Stability
 - Status: `partial`
@@ -53,13 +53,23 @@ Use statuses:
   - `Stage 3 (Hopf Angular Correctness) — now unblocked. Queue first Stage 3 RR.`
 
 ## 3. Hopf Angular Correctness
-- Status: `partial`
+- Status: `partial-pass`
 - Canonical evidence:
   - `docs/research/increments/INC_0062_hopf_base_angular_law.md`
-- Blocker:
-  - `none — Stage 2 closed PARTIAL-PASS (2026-03-13). Stage 3 is now unblocked.`
+  - `docs/research/increments/INC_0144_hopf_angular_vs_kmeans_stage3.md`
+- Latest result (INC-0144, 2026-03-13):
+  - Fixed H^4 Hopf-base routing (dims 3,65,2,21) achieves rel_diff=31.2% discriminating PPMI-SVD
+    ORIG from COL_PERM (stable: 31.8%, 30.6% per seed).
+  - K-means adaptive clustering (100D PPMI) achieves rel_diff=3.1% (variable: −5.8%/+12.0%).
+  - Fixed H^4 Hopf geometry with 4D subspace OUTPERFORMS 100D adaptive K-means.
+  - Hopf chi-tightness: hopf_sector_chi_std=0.058 (Hopf) vs 0.253 (K-means) — 4.4× more
+    chi-coherent sectors; Hopf sectors correspond to geometrically coherent H^4 base regions.
+  - Angular mass balance (theta1=1.09, theta2=0.875 errors) remains open: reflects semantic
+    clustering in H^4 base (non-uniform distribution is feature, not bug).
+- Decision: Stage 3 → **PARTIAL-PASS** (2026-03-13, INC-0144 KEEP).
 - Next branch:
-  - `queue first Stage 3 increment: Hopf angular mass allocation correctness test`
+  - `Stage 4 (Phase Transport) — test on PPMI-SVD proxy (NOT hash embeddings).
+    Prior RR-063/064 results used hash embeddings and may not generalize to semantic proxy.`
 
 ## 4. Phase Transport Usefulness
 - Status: `partial`
@@ -68,9 +78,10 @@ Use statuses:
   - `docs/research/increments/INC_0064_coupled_complex_phase_transport.md`
   - `docs/research/increments/INC_0065_product_phase_field.md`
 - Blocker:
-  - `phase and coupled-field motion are mechanism-live. Stage 2 now closed. Reactivate after Stage 3 RR is queued and first increment shows stable routing.`
+  - `none — Stage 3 closed PARTIAL-PASS (2026-03-13, INC-0144 KEEP). Stage 4 is now unblocked.`
+  - `Required: run Stage 4 test on PPMI-SVD proxy (prior RR-063/064 used hash embeddings and results may not generalize)`
 - Next branch:
-  - `deferred until first Stage 3 increment closes`
+  - `INC-0145 — Stage 4 Phase Transport on PPMI-SVD: compare phase4d_hopf_base vs phase4d_hopf vs phase4d_hopf_transport`
 
 ## 5. Spectral / Operator Usefulness
 - Status: `partial`

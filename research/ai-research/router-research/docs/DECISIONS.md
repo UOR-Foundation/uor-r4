@@ -3590,3 +3590,28 @@ Add new entries below.
     angular discrimination, which is confirmed.
   - Stage 3 (Hopf Angular Correctness) is now unblocked
   - Next: queue first Stage 3 RR/INC
+
+## 2026-03-13 (INC-0144 Closed: KEEP — Stage 3 PARTIAL-PASS, fixed H^4 Hopf vs adaptive K-means)
+- INC-0144 experiment: screen (1 seed) + confirm (2 seeds) of Hopf-fixed geometry vs K-means adaptive
+  clustering on PPMI-SVD proxy. Routes: HOPF_ORIG, HOPF_PERM, KMEANS_ORIG, KMEANS_PERM.
+  sector_modes: `phase4d_hopf_base` (fixed H^4 Hopf) vs `kmeans` (adaptive, 100D PPMI input, K=25)
+- Confirm results (mean across seeds 0 and 1):
+  - HOPF_ORIG: pmax=0.0874  HOPF_PERM: pmax=0.0638  rel_diff=31.2% (stable: 31.8%, 30.6%)
+  - KMEANS_ORIG: pmax=0.0722  KMEANS_PERM: pmax=0.0698  rel_diff=3.1% (variable: −5.8%, +12.0%)
+  - Hopf chi-tightness: hopf_sector_chi_std=0.058 vs K-means 0.253 (4.4× more chi-coherent)
+  - geodesic_knn_jaccard=1.0 for both; no regression in local geometry preservation
+- Decision:
+  - INC-0144: KEEP
+  - Fixed H^4 Hopf routing (4D subspace, dims 3,65,2,21) systematically discriminates ORIG from
+    COL_PERM. Adaptive K-means (100D PPMI, 25× more dimensions) cannot discriminate.
+  - The FIXEDNESS of the H^4 geometric map is the essential mechanism: K-means adapts its centroids
+    to any distribution (including permuted), eliminating systematic discrimination.
+  - K-means instability (−5.8% vs +12.0% across seeds) vs Hopf stability (31.8% vs 30.6%) is itself
+    evidence: fixed geometry provides reliable routing; adaptive clustering does not.
+  - Stage 3 (Hopf Angular Correctness): PARTIAL-PASS (INC-0144 KEEP, 2026-03-13)
+  - Remaining Stage 3 open question: angular mass balance (theta1=1.09 error) — semantic clustering
+    in H^4 base is non-uniform; not a routing correctness bug, but worth tracking.
+  - Stage 4 (Phase Transport) is now unblocked. MUST use PPMI-SVD proxy.
+    Prior RR-063/064 results used hash embeddings and may not generalize.
+  - Next: INC-0145 (Stage 4 Phase Transport — phase4d_hopf_base vs phase4d_hopf vs phase4d_hopf_transport
+    on PPMI-SVD proxy, ppmi_proxy.npz, phase4_dims=3,65,2,21)

@@ -3,9 +3,11 @@
 Use this file as the local GitHub-style issue list for router research.
 
 ## Canonical Active Queue
-- Current primary RR: `RR-061`
-- Current primary INC: `INC-0143` — **Closed: KEEP** (2026-03-13). Stage 2 **CLOSED as PARTIAL-PASS**.
-  Next: queue Stage 3 (Hopf Angular Correctness) RR/INC.
+- Current primary RR: `RR-065`
+- Current primary INC: `INC-0144` — **Closed: KEEP** (2026-03-13). Stage 3 **PARTIAL-PASS**.
+  Next: INC-0145 (Stage 4 Phase Transport on PPMI-SVD proxy).
+- 2026-03-13 INC-0144 KEEP: Hopf fixed (phase4d_hopf_base, 4D) vs K-means adaptive (100D). HOPF rel_diff=31.2%
+  (stable: 31.8%/30.6%), KMEANS rel_diff=3.1% (variable: −5.8%/+12.0%). Stage 3 → PARTIAL-PASS.
 - 2026-03-13 INC-0143 KEEP: 4-seed finalize. rel_diff=38.5% (range 30.6%–54.6%), all seeds pass. Stage 2 closed.
 - 2026-03-13 INC-0142 KEEP: PPMI-SVD semantic embeddings confirm H^4 Hopf routing discrimination (rel_diff=31.2%, z≈4.2, 2 seeds). Stage 2 → PARTIAL-PASS.
 

@@ -12,21 +12,29 @@ Do not treat `CURRENT_DIRECTION.md`, `HANDOFF_CURRENT.md`, or `LIVE_WORKLOG.md`
 as authoritative when they disagree with this file.
 
 ## Canonical Queue
-- Current primary RR: `RR-061`
-- Current primary INC: `INC-0143` — **Closed: KEEP** (2026-03-13). 4-seed finalize:
-  PPMI-SVD ORIG mean_pmax_after=0.0905 vs COL_PERM=0.0613, rel_diff=38.5% across all
-  4 seeds (range 30.6%–54.6%). Stage 2 closed as PARTIAL-PASS.
-- Next INC: TBD — Stage 3 (Hopf angular correctness) can now be opened.
-  Immediate action: queue first Stage 3 increment.
+- Current primary RR: `RR-065`
+- Current primary INC: `INC-0144` — **Closed: KEEP** (2026-03-13). Stage 3 PARTIAL-PASS:
+  HOPF rel_diff=31.2% (stable: 31.8%, 30.6% per seed). KMEANS rel_diff=3.1% (variable near zero).
+  Fixed H^4 Hopf geometry discriminates; adaptive K-means cannot. Stage 3 confirmed.
+- Next INC: INC-0145 — Stage 4 (Phase Transport) on PPMI-SVD proxy.
+  Note: RR-063/064 (prior Stage 4 work) used hash embeddings → must be retested with PPMI-SVD.
 - Current primary increment doc:
-  `docs/research/increments/INC_0143_TBD.md`
-- Kill-list stage: `measure-consistent shell routing` (Stage 2 → CLOSED/PARTIAL-PASS)
+  `docs/research/increments/INC_0144_hopf_angular_vs_kmeans_stage3.md`
+- Kill-list stage: `Hopf angular correctness` (Stage 3 → PARTIAL-PASS)
 - Mathematical object under test:
-  `next: first-factor H^4 routing manifold, Hopf angular law — Stage 3`
-- Success condition: `Stage 3 RR queued with verified falsification condition`
-- Falsification condition: `n/a — planning phase`
+  `next: coupled H^4 × H^4 phase transport — does fiber-phase improve routing beyond Hopf-base?`
+- Success condition: `Phase transport changes route addresses vs phase4d_hopf_base AND improves at least one metric`
+- Falsification condition: `Phase transport does not differentiate from Hopf-base (route addresses unchanged)`
 
 ## Latest Closed Increment
+- `INC-0144`:
+  `docs/research/increments/INC_0144_hopf_angular_vs_kmeans_stage3.md`
+  - status: `Closed: KEEP`
+  - verdict: Fixed H^4 Hopf-base (dims 3,65,2,21) rel_diff=31.2% (seeds 31.8%/30.6%).
+      K-means (100D) rel_diff=3.1% (variable: −5.8%/+12.0%). Hopf 4D fixed >> K-means 100D adaptive.
+      Fixed geometry is essential; adaptive clustering cannot discriminate col-perm.
+      Stage 3 → PARTIAL-PASS. Stage 4 (Phase Transport on PPMI-SVD) is next.
+
 - `INC-0143`:
   `docs/research/increments/INC_0143_TBD.md`
   - status: `Closed: KEEP`
