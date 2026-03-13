@@ -13,16 +13,26 @@ as authoritative when they disagree with this file.
 
 ## Canonical Queue
 - Current primary RR: `RR-061`
-- Current primary INC: `INC-0139` (pending creation — break shell-level indistinguishability between real and col-perm embeddings, or accept shell is norm-driven and pivot to angular law)
+- Current primary INC: `INC-0140` — measure-consistent angular routing (sector-level real vs col-perm discrimination)
 - Current primary increment doc:
-  `docs/research/increments/INC_0139_TBD.md` (pending creation)
-- Kill-list stage: `measure-consistent shell routing`
+  `docs/research/increments/INC_0140_angular_sector_routing_measure_consistency.md`
+- Kill-list stage: `measure-consistent shell routing` (redirected to angular routing after fiber-balance path exhausted INC-0136–0139)
 - Mathematical object under test:
-  `first-factor routing manifold on H^4; shell law sensitivity to angular-norm joint geometry vs norm-only geometry`
-- Success condition: `a shell law parameter change (K, delta_r, growth) makes shell metrics discriminate real from col-perm inputs (shell_pmax or shell_entropy differs by >0.1 between GEOM_ORIG and GEOM_COL_PERM) OR explicit decision to accept norm-driven shell and focus Stage 2 effort on angular law`
-- Falsification condition: `if no shell law parameter separates real from col-perm, document norm-driven shell as a fundamental constraint and pivot Stage 2 to angular improvement`
+  `first-factor H^4 routing manifold, Hopf base projection; sector assignment consistency with H^4 angular measure; sector-level discrimination of real vs col-perm inputs`
+- Success condition: `sector-level pmax_after or sector_entropy differs between GEOM_ORIG and GEOM_COL_PERM by |diff|/mean > 0.2, OR hopf mass errors differ meaningfully`
+- Falsification condition: `sector metrics indistinguishable between real and col-perm; Stage 2 requires architectural change (non-L2-normalized embeddings or different sector law)`
 
 ## Latest Closed Increment
+- `INC-0139`:
+  `docs/research/increments/INC_0139_TBD.md`
+  - status: `Closed: REFINE`
+  - verdict: SO(8) chart learning nominally passes shell-discrimination threshold
+    (|LEARN_ORIG - LEARN_COL_PERM| shell_pmax = 0.0622 > 0.05) but via degenerate
+    concentration — both input types collapse to single dominant shells while
+    pmax_after drops from ~0.50 to ~0.10 (routing quality destroyed). Effect is
+    generic concentration, not semantic fiber discrimination. Fiber balance +
+    SO(8) path exhausted. Stage 2 formally redirects to angular routing.
+
 - `INC-0138`:
   `docs/research/increments/INC_0138_geometry_only_shell_activation_controls.md`
   - status: `Closed: REFINE`

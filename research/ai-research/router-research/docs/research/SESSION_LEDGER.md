@@ -736,3 +736,44 @@ INC-0138 doc updated with this structural finding.
 1. Update GitHub Issue #1 with this corrected Stage 2 framing
 2. Commit updated INC-0138 doc and INC-0139
 3. Proceed to INC-0139 experiment
+
+## Session Entry: 2026-03-13 — INC-0139 Closed: REFINE — fiber balance path exhausted
+
+### Experiment Run
+- Config: `configs/proxy_transfer_inc0139_so8_fiber_balance_screen.json`
+- Routes: GEOM_ORIG, GEOM_COL_PERM, LEARN_ORIG, LEARN_COL_PERM
+- Seeds: 0, 1 — 8 total runs
+
+### Results (2-seed means)
+| Route | learn_so8 | shells | shell_pmax | pmax_after | buckets | sec_ent |
+|---|---|---|---|---|---|---|
+| GEOM_ORIG | 0 | 2.00 | 0.5846 | 0.5284 | 15.5 | 1.3220 |
+| GEOM_COL_PERM | 0 | 2.00 | 0.5320 | 0.4222 | 29.0 | 1.3231 |
+| LEARN_ORIG | 1 | 2.00 | 0.7848 | 0.0966 | 45.0 | 3.0706 |
+| LEARN_COL_PERM | 1 | 2.50 | 0.7226 | 0.0992 | 50.5 | 2.9913 |
+
+### Decision
+- Technical criterion: |LEARN_ORIG - LEARN_COL_PERM| shell_pmax = 0.0622 > 0.05 → passes
+- Mechanism is degenerate: SO(8) increases shell_pmax for BOTH inputs by +0.19 (generic
+  concentration). pmax_after collapses from ~0.50 to ~0.10 (routing quality destroyed).
+  Incremental improvement over identity chart: 0.0622 - 0.0526 = 0.0096 (noise level).
+- REFINE: fiber balance + SO(8) path is exhausted.
+
+### Stage 2 Redirect
+Angular sector routing (Hopf base delta/chi/theta) shows meaningful real vs Gaussian
+signal (INC-0138: buckets=15.5 vs 50.0). INC-0140 formally tests whether sector
+routing is measure-consistent with H^4 angular measure.
+
+### Files Updated
+- `docs/research/increments/INC_0139_TBD.md` → Closed: REFINE
+- `docs/research/increments/INC_0140_angular_sector_routing_measure_consistency.md` → created
+- `docs/research/ACTIVE_STATE.md` → current INC → INC-0140
+- `docs/research/KILL_LIST_TRACKER.md` → Stage 2 blocker updated
+- `docs/routes/ROUTE_MATRIX.md`, `docs/program/PROJECT_BOARD.md`, `docs/program/ISSUE_REGISTRY.md`
+- `docs/DECISIONS.md` → INC-0139 decision logged
+
+### Next Actions
+1. make state → must pass
+2. Commit all docs (INC-0139, INC-0140, state docs)
+3. Push branch
+4. Update GitHub Issue #1 with INC-0139 REFINE verdict + Stage 2 redirect

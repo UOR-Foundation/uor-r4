@@ -10,7 +10,7 @@ Use statuses:
 
 ## Canonical Queue
 - Current primary RR: `RR-061`
-- Current primary INC: `INC-0139` (pending creation — break shell-level real/col-perm indistinguishability or pivot to angular law)
+- Current primary INC: `INC-0140` (measure-consistent angular routing — sector-level discrimination test)
 
 ## 1. Hyperbolic Embedding Stability
 - Status: `partial`
@@ -30,10 +30,12 @@ Use statuses:
   - `docs/research/increments/INC_0136_measure_consistent_h4_hopf_route_return.md`
   - `docs/research/increments/INC_0137_measure_consistent_h4_hopf_shell_pressure_blend.md`
   - `docs/research/increments/INC_0138_geometry_only_shell_activation_controls.md`
+  - `docs/research/increments/INC_0139_TBD.md`
 - Blocker:
-  - `INC-0138 REFINE: geometry-only shell activation produces stable 2-shell structure but shell level cannot discriminate real from col-perm embeddings (norm-driven); angular/Hopf dimension carries semantic structure; INC-0139 must decide: break shell indistinguishability or formally pivot Stage 2 to angular law`
+  - `INC-0136–0139 collectively establish: fiber balance path exhausted on L2-normalized embeddings. Shell routing cannot provide measure-consistent semantic routing without destroying routing quality. Stage 2 redirected to angular routing.`
+- Decision: Shell routing (radial dimension) via Hopf fiber balance is structurally constrained on unit-sphere embeddings (r≡1). SO(8) learning concentrates generically, not semantically. Stage 2 now tests angular sector routing.
 - Next branch:
-  - `INC-0139: shell law sensitivity sweep or explicit decision gate (pending creation)`
+  - `INC-0140: measure-consistent angular routing sector discrimination test`
 
 ## 3. Hopf Angular Correctness
 - Status: `partial`

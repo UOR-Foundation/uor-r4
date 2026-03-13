@@ -3454,3 +3454,23 @@ Add new entries below.
   - add a validator (`tools/check_research_state.py`) that fails if canonical
     queue docs disagree or if a later-stage branch is active without an
     explicit earlier-stage justification
+
+## 2026-03-13 (INC-0139 Closed: REFINE — fiber balance path exhausted)
+- Stage 2 shell routing via Hopf fiber balance + SO(8) chart learning has been
+  exhausted through four increments (INC-0136 through INC-0139):
+  - INC-0136: direct geodesic shell substitution KILLED (health gate failure)
+  - INC-0137: shell pressure blend KILLED (all weights worse than baseline)
+  - INC-0138: structural finding — r≡1 on L2-normalized embeddings; shells are
+    fiber-balance-driven; real vs col-perm INDISTINGUISHABLE at shell level
+  - INC-0139: SO(8) learning nominally passes threshold (|diff|=0.0622 > 0.05)
+    but via degenerate concentration — pmax_after collapses from 0.50 to 0.10,
+    routing quality destroyed; incremental gain over identity chart only 0.0096
+- Decision:
+  - Shell routing (radial dimension / Hopf fiber balance) is a structural dead end
+    on unit-sphere embeddings with current parameterization
+  - Stage 2 formally redirects to the angular sector routing law (Hopf base
+    projection: delta, chi, theta angles)
+  - INC-0140 is the next increment: measure-consistent angular routing test
+  - Key supporting finding: INC-0138 showed angular routing discriminates real
+    from Gaussian noise (buckets=15.5 vs 50.0, ~3× difference), making it the
+    correct target for Stage 2 semantic routing characterization

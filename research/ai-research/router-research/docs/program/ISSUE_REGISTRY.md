@@ -4,7 +4,7 @@ Use this file as the local GitHub-style issue list for router research.
 
 ## Canonical Active Queue
 - Current primary RR: `RR-061`
-- Current primary INC: `INC-0139` (pending creation — shell law sensitivity or formal pivot to angular law)
+- Current primary INC: `INC-0140` (measure-consistent angular routing — sector-level discrimination)
 
 ## Active
 - `RR-050` `[research][math-review][active]`

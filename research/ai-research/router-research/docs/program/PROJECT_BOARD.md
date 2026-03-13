@@ -2,7 +2,7 @@
 
 ## Canonical Active Queue
 - Current primary RR: `RR-061`
-- Current primary INC: `INC-0139` (pending creation — shell law sensitivity or pivot to angular law)
+- Current primary INC: `INC-0140` (measure-consistent angular routing — sector-level discrimination)
 - INC-0138: Closed REFINE (2026-03-13) — geometry-only confirmed; norm-driven shell finding
 
 ## Now
