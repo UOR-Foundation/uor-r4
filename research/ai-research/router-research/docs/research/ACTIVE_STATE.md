@@ -13,18 +13,25 @@ as authoritative when they disagree with this file.
 
 ## Canonical Queue
 - Current primary RR: `RR-061`
-- Current primary INC: `INC-0137`
-- Current primary increment doc:
-  `docs/research/increments/INC_0137_measure_consistent_h4_hopf_shell_pressure_blend.md`
+- Current primary INC: `INC-0138` (not yet created)
+- Current primary increment doc: pending
 - Kill-list stage: `measure-consistent shell routing`
 - Mathematical object under test:
-  `first-factor routing manifold on H^4; bounded shell-pressure/controller blend between route-chart radius and original-ball geodesic radius; Hopf-base angular allocation held fixed`
+  `first-factor routing manifold on H^4; next candidate lever: shell-density controller or chart-radius regularization to equalize shell occupancy without touching geodesic radius`
 - Success condition:
-  `a bounded shell-pressure blend materially improves shell-mass and/or Hopf-base diagnostics over HOPF_BASE_K25_PHI, preserves or improves geodesic neighborhood overlap, and stays within the routed quality/runtime band without shell collapse`
+  `a density-equalizing controller reduces shell_pmax below HOPF_BASE_K25_PHI (0.5222) while preserving knn_overlap >= 0.6738`
 - Falsification condition:
-  `if even bounded geodesic-shell blending still worsens shell concentration or neighborhood preservation, keep RR-061 open and narrow further into shell-controller diagnostics rather than reopening later translated frontier work`
+  `if density-equalizer also fails to improve shell concentration, document a narrower architectural constraint on what measure-consistent shell routing is achievable in the current chart framework`
 
 ## Latest Closed Increment
+- `INC-0137`:
+  `docs/research/increments/INC_0137_measure_consistent_h4_hopf_shell_pressure_blend.md`
+  - status: `Closed: KILL`
+  - verdict: bounded geodesic-radius blend (w=0.1–0.4) worsens shell_pmax at all weights
+    vs chart-only HOPF_BASE_K25_PHI baseline (0.5222); w=0.1 passes health gate but
+    degrades pmax to 0.7464; w>=0.2 collapses to 1 shell. Radius interpolation is not
+    the right lever. Next increment must target an occupancy-feedback density controller.
+
 - `INC-0136`:
   `docs/research/increments/INC_0136_measure_consistent_h4_hopf_route_return.md`
   - status: `complete, negative/explanatory`

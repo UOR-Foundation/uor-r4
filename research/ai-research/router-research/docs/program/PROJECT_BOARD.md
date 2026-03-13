@@ -2,7 +2,7 @@
 
 ## Canonical Active Queue
 - Current primary RR: `RR-061`
-- Current primary INC: `INC-0137`
+- Current primary INC: `INC-0138` (pending creation — shell-density controller)
 
 ## Now
 - `RR-050` Dynamic hyperbolic state branch (`H^4 + T_xH^4` vs `H^4 x H^4`)
@@ -16,7 +16,7 @@ Queue reset note:
 - 2026-03-12 `INC-0136` then closed negative/explanatory:
   direct geodesic shell substitution with Hopf-base sectors failed the health
   gate, so the next primary branch is now the narrower shell-pressure blend
-  correction in `INC-0137`.
+  correction in `INC-0137` (Closed: KILL — radius blend falsified 2026-03-13).
 
 ## Next
 - `RR-069` Translate the confirmed product phase-field branch into the routed retrieval harness

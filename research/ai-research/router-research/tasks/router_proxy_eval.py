@@ -124,6 +124,10 @@ def parse_args():
     ap.add_argument("--hopf_blend_lambda", type=float, default=0.8)
     ap.add_argument("--hopf_blend_chi_weight", type=float, default=1.0)
     ap.add_argument("--hopf_blend_shell_weight", type=float, default=0.5)
+    ap.add_argument("--shell_pressure_w", type=float, default=0.0,
+                    help="INC-0137: blend weight in [0,1] between chart radius and geodesic radius "
+                         "for shell bucket assignment (only active for sector_mode=phase4d_hopf_base). "
+                         "0=pure chart (default), 1=pure geodesic (= failed INC-0136 approach).")
     ap.add_argument("--phase_transport_lambda", type=float, default=1.0)
     ap.add_argument("--phase_field_lambda", type=float, default=0.0)
     ap.add_argument("--time_pressure_lambda", type=float, default=0.0)
@@ -534,6 +538,7 @@ def main():
             hybrid_local_target=args.hybrid_local_target,
             hybrid_local_hysteresis=args.hybrid_local_hysteresis,
             hybrid_local_converge_lambda=args.hybrid_local_converge_lambda,
+            shell_pressure_w=args.shell_pressure_w,
         )
         shell_ev, sector_ev, _, z_ev = hr.route_addresses(
             v_ev, delta_r=args.delta_r, C=C_used, chart=chart,
@@ -575,6 +580,7 @@ def main():
             hybrid_local_target=args.hybrid_local_target,
             hybrid_local_hysteresis=args.hybrid_local_hysteresis,
             hybrid_local_converge_lambda=args.hybrid_local_converge_lambda,
+            shell_pressure_w=args.shell_pressure_w,
         )
         if int(args.cache_routes) == 1:
             if route_cache_file == "":

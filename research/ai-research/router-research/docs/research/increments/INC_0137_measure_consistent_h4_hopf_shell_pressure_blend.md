@@ -1,7 +1,45 @@
 # INC-0137: Measure-Consistent `H^4` / Hopf Shell-Pressure Blend
 
 ## Status
-Queued next.
+Closed: KILL.
+
+Screen experiment `inc0137_measure_consistent_h4_hopf_shell_pressure_blend_screen` completed
+(2 seeds, 8 routes). Bounded geodesic-radius blend worsens shell concentration at every
+tested blend weight; the falsification condition is met.
+
+### Screen Results Summary (2026-03-13)
+
+| Route                    | Health | shell_pmax | knn_overlap | eval_shells | mse_ratio_R0 |
+|--------------------------|--------|------------|-------------|-------------|--------------|
+| HOPF_BASE_K25_PHI (w=0)  | PASS   | 0.5222     | 0.6738      | 2.0         | 0.9959       |
+| SPW_01 (w=0.1)           | PASS   | 0.7464     | 0.6738      | 2.0         | 0.9998       |
+| SPW_02 (w=0.2)           | FAIL   | 0.9914     | —           | 2.0         | —            |
+| SPW_03 (w=0.3)           | FAIL   | —          | —           | 1.0         | —            |
+| SPW_04 (w=0.4)           | FAIL   | —          | —           | 1.0         | —            |
+
+Result file: `results/analysis/inc0137_measure_consistent_h4_hopf_shell_pressure_blend_screen.json`
+
+### Decision Rationale
+No blend point improved `shell_pmax` over the chart-only baseline (HOPF_BASE_K25_PHI = 0.5222).
+SPW_01 at w=0.1 survived the health gate but degraded shell_pmax to 0.7464 (+0.2242).
+SPW_02–04 collapsed progressively (shells→1, pmax→1.0). `knn_overlap` was unchanged across
+all blend points (0.6738), confirming the geodesic pull only damages radial binning.
+
+The geodesic-radius pull moves shell mass in the wrong direction across the full tested range.
+A linear blend between chart-radius and Poincaré-ball geodesic-radius is not a viable
+correction lever for shell mass concentration.
+
+### Cross-Stage Observation
+The Poincaré-ball geodesic radius is concentrated near the origin relative to the chart
+radius: adding any weight toward geodesic radius pushes more tokens into the innermost shell.
+This suggests the next mechanistic target is a **shell-density controller** operating on the
+occupancy histogram rather than a radius interpolation.
+
+### Next Step (per falsification path)
+RR-061 remains open. The next increment must target a different lever:
+- Shell-density equalizer / occupancy feedback rather than radius blend
+- Or: investigate whether the chart radius itself can be regularized to produce more uniform
+  shell mass without touching the geodesic radius at all
 
 ## Trigger
 `INC-0136` completed a direct geodesic-shell substitution screen using

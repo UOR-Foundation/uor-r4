@@ -597,3 +597,53 @@ Recovery rule:
   Files: /Users/adminamn/ai-router/router-research/docs/research/KILL_LIST_TRACKER.md, /Users/adminamn/ai-router/router-research/docs/research/ACTIVE_STATE.md, /Users/adminamn/ai-router/router-research/docs/research/SUPPORTING_EVIDENCE.md, /Users/adminamn/ai-router/router-research/tools/check_research_state.py, /Users/adminamn/ai-router/router-research/tests/test_check_research_state.py, /Users/adminamn/ai-router/router-research/tools/context_bootstrap.py
 - 21:02:33 EDT [result] Canonical-state hardening completed: startup bootstrap now includes mission, kill-list, active state, and supporting evidence, while the validator checks RR/INC agreement and branch metadata.
 - 21:02:33 EDT [next] On every future resume: run `python tools/context_bootstrap.py --group startup --cat`, then `python tools/check_research_state.py`, then continue only if the canonical docs agree.
+
+---
+## Session Entry: 2026-03-13 — INC-0137 screen executed and closed
+
+### Files read
+- `docs/research/increments/INC_0137_measure_consistent_h4_hopf_shell_pressure_blend.md`
+- `docs/research/increments/INC_0136_measure_consistent_h4_hopf_route_return.md`
+- `results/analysis/inc0136_measure_consistent_h4_hopf_route_return_screen.json`
+- `configs/proxy_transfer_inc0136_measure_consistent_h4_hopf_route_return_screen.json`
+- `hyperbolic_router_so8.py` (route_addresses function, lines ~2880–3060)
+- `tasks/router_proxy_eval.py` (argument list and route_addresses call sites)
+- `docs/research/KILL_LIST_TRACKER.md`
+- `docs/research/ACTIVE_STATE.md`
+
+### Commands run
+- Syntax check: `/usr/bin/python3 -m py_compile hyperbolic_router_so8.py` → OK
+- Experiment: `python tools/proxy_sweep.py --config configs/proxy_transfer_inc0137_..._screen.json --python_bin /usr/bin/python3`
+
+### Edits made
+- `hyperbolic_router_so8.py`: added `shell_pressure_w: float = 0.0` parameter to `route_addresses(); implemented `r_eff = (1-w)*r_chart + w*r_geodesic` blend for `sector_mode="phase4d_hopf_base"`
+- `tasks/router_proxy_eval.py`: added `--shell_pressure_w` CLI arg; threaded through both `route_addresses` call sites
+- Created `configs/proxy_transfer_inc0137_..._screen.json` (8 routes: 3 baselines + SPW_01–04 blend points at w=0.1/0.2/0.3/0.4 + R0)
+- Updated INC-0137 doc status to `Closed: KILL`
+- Updated `KILL_LIST_TRACKER.md` queue → INC-0138
+- Updated `ACTIVE_STATE.md` queue → INC-0138
+
+### Results
+| Route               | Health | shell_pmax | knn_overlap |
+|---------------------|--------|------------|-------------|
+| HOPF_BASE_K25_PHI   | PASS   | 0.5222     | 0.6738      |
+| SPW_01 (w=0.1)      | PASS   | 0.7464     | 0.6738      |
+| SPW_02 (w=0.2)      | FAIL   | 0.9914     | —           |
+| SPW_03–04 (w≥0.3)   | FAIL   | —          | — (1 shell) |
+
+### Conclusion
+Falsification condition met. Radius-interpolation blend is not a viable lever for shell mass
+concentration. knn_overlap is invariant across blend weights; shell_pmax strictly worsens.
+
+### Cross-stage observation
+The Poincaré-ball geodesic radius is more origin-concentrated than the chart radius. Any
+positive blend weight pushes tokens into the innermost shell. This mechanistically explains
+why direct geodesic substitution (INC-0136) and blend (INC-0137) both fail in the same
+direction.
+
+### Next actions
+1. Create `INC-0138`: shell-density controller / occupancy equalizer
+   - Equalize shell occupancy via post-assignment feedback rather than radius modification
+   - Or: regularize chart radius to reduce radial concentration
+2. Update GitHub Issue #1 (RR-061) with KILL decision for INC-0137
+3. Commit all changes to `codex/RR-061-measure-consistent-route-law` and push

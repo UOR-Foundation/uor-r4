@@ -10,7 +10,7 @@ Use statuses:
 
 ## Canonical Queue
 - Current primary RR: `RR-061`
-- Current primary INC: `INC-0137`
+- Current primary INC: `INC-0138` (pending creation — shell-density controller approach)
 
 ## 1. Hyperbolic Embedding Stability
 - Status: `partial`
@@ -30,9 +30,9 @@ Use statuses:
   - `docs/research/increments/INC_0136_measure_consistent_h4_hopf_route_return.md`
   - `docs/research/increments/INC_0137_measure_consistent_h4_hopf_shell_pressure_blend.md`
 - Blocker:
-  - `shell-only fixes failed, and direct geodesic-shell substitution with Hopf-base routing over-concentrated shell mass and degraded neighborhood structure`
+  - `radius-interpolation blend (INC-0137) falsified: geodesic pull worsens shell_pmax at all weights (w=0.1: 0.52→0.75; w≥0.2: shell collapse). Next lever: occupancy-based density controller or chart-radius regularization`
 - Next branch:
-  - `INC-0137`
+  - `INC-0138: shell-density controller / occupancy equalizer (not yet queued)`
 
 ## 3. Hopf Angular Correctness
 - Status: `partial`

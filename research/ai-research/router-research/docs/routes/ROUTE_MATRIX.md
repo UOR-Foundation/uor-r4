@@ -7,7 +7,7 @@
 
 ## Current Queue Override
 - Current primary RR: `RR-061`
-- Current primary INC: `INC-0137`
+- Current primary INC: `INC-0138` (pending creation — shell-density controller)
 - 2026-03-12 root-theory audit:
   - treat the translated sparse-event lower-bank and dual-anchor line as
     supporting downstream evidence
@@ -22,7 +22,7 @@
   - it worsened shell concentration and neighborhood preservation versus
     `HOPF_BASE_K25_PHI`
   - move next to the narrower correction:
-    `RR-061` / `INC-0137_measure_consistent_h4_hopf_shell_pressure_blend.md`
+    `RR-061` / `INC-0138` (pending creation)
 
 ## Routes
 - `R0`: `sector_mode=kmeans`, `scale_mode=radial`, `time_pressure_lambda=0.0`

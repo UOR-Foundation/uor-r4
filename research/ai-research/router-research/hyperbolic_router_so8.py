@@ -2927,12 +2927,15 @@ def route_addresses(
     hybrid_local_target: float = 0.60,
     hybrid_local_hysteresis: float = 0.05,
     hybrid_local_converge_lambda: float = 1.0,
+    shell_pressure_w: float = 0.0,
 ):
     """
     v: (N,d)
     Returns: shell, sector, U (unit dir), z
     - shell uses r_eff = r * exp(lambda * tau)
     - sector uses either kmeans(U,C) or phase2(z)
+    - shell_pressure_w: blend weight in [0,1] between chart radius and geodesic radius
+      (0 = pure chart, 1 = pure geodesic; only active for phase4d_hopf_base)
     """
     z = apply_chart(v, chart)
     route_z = route_coordinate(v, chart, sector_mode=sector_mode, route_scale_lambda=route_scale_lambda)
@@ -2945,6 +2948,12 @@ def route_addresses(
     shell_r_base = r
     if sector_mode in ("phase4d_hopf_ball", "phase4d_hopf_base_ball"):
         shell_r_base = poincare_radius(exp_map0(v))
+    # Bounded blend: gently pull shell boundaries toward geodesic-correct mass
+    # without the hard substitution that collapsed shells in INC-0136.
+    if shell_pressure_w > 0.0 and sector_mode == "phase4d_hopf_base":
+        w = float(np.clip(shell_pressure_w, 0.0, 1.0))
+        r_geodesic = poincare_radius(exp_map0(v))
+        shell_r_base = (1.0 - w) * r + w * r_geodesic
 
     if time_pressure_lambda != 0.0:
         r_eff = shell_r_base * np.exp(float(time_pressure_lambda) * float(tau))
