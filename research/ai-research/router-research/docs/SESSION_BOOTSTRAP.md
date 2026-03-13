@@ -1,5 +1,20 @@
 # Session Bootstrap
 
+> **For agents recovering from context loss or compaction — run this first:**
+>
+> ```bash
+> make state      # validate canonical docs — MUST PASS before any work
+> make branch     # print current branch + kill-list context
+> make bootstrap  # full startup context packet
+> ```
+>
+> Then read: `docs/research/SESSION_LEDGER.md`
+>
+> **Active gate: Stage 2 / RR-061 / INC-0137 / GitHub Issue #1 / EPIC-2**
+> Do not advance any other stage until Stage 2 is resolved.
+
+---
+
 Purpose: give every new session, resumed session, or post-compaction recovery a
 single authoritative starting point.
 
@@ -15,38 +30,47 @@ increment and overwrite the live branch narrative.
 
 ## Primary Mission
 
-This project is a staged falsification program for a geometry-first computation
-hypothesis, not just a router search.
+This project is a **staged mathematical falsification program** for a
+geometry-first computation hypothesis — not a router search.
 
-Near-term:
+The thesis: fixed H^4 × H^4 hyperbolic geometry can replace dense
+linear-lattice routing in transformer-style LLMs, with a long-range target of
+10×–100× hardware savings via geometry-native routing, phase transport, and
+sparse event compute.
+
+Near-term falsification chain:
 - validate or kill the geometric substrate
 - preserve global hyperbolic alignment
-- derive measure-consistent shell and sector laws
+- derive measure-consistent shell and sector laws   ← CURRENTLY OPEN
 - test Hopf angular correctness
 - test coupled-field phase usefulness
-- eventually test spectral structure directly
+- test spectral structure
+- test sparse event-driven trainability
+- hardware-efficiency confirmation
 
 Long-term moonshot:
-- geometry -> operator -> spectrum -> phase/event dynamics
+- geometry → operator → spectrum → phase/event dynamics
 - sparse event-driven computation on a structured manifold
-- eventual adaptive-field / geometry-native hardware relevance
+- eventual geometry-native hardware relevance
 
 ## Canonical Architecture Contract
 
-The active mathematical object is asymmetric `H^4 x H^4`, not generic `R^8`.
+The active mathematical object is asymmetric `H^4 × H^4`, not generic `R^8`.
 
 - first factor = routing geometry
 - second factor = coupled field
 - routing manifold, transport/state field, and retrieval/key field must not be
   collapsed into one coordinate law prematurely
 - phase should be treated as geometry-induced transport, not a free heuristic
+- The Hopf fibration maps points to coarse addresses; shell law governs radial
+  buckets; angular law governs sector buckets
 
 ## Falsification Ladder
 
 Use this ordering when deciding what matters next:
 
 1. embedding stability
-2. measure-consistent shell routing
+2. **measure-consistent shell routing ← OPEN**
 3. Hopf angular correctness
 4. phase transport necessity/usefulness
 5. spectral emergence measurement
@@ -54,6 +78,8 @@ Use this ordering when deciding what matters next:
 7. hardware-efficiency confirmation
 
 Do not promote later-stage claims while earlier gates are unresolved.
+If you are about to work on Stage 3+ and Stage 2 is still open, you must write
+the justification in ACTIVE_STATE.md and KILL_LIST_TRACKER.md first.
 
 ## Source Of Truth Order
 

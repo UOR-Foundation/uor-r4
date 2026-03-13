@@ -1,4 +1,24 @@
-# Agent Rules (Codex)
+# Agent Rules — Full Reference
+
+> **Quick-read version:** see `../AGENTS.md` (repo root) or `../.github/copilot-instructions.md`.
+> This file is the complete deep reference. When the quick-read and this file
+> disagree, this file wins within the `router-research/` subtree.
+> When this file and `CORE_PROJECT_GOALS.md` disagree, `CORE_PROJECT_GOALS.md` wins always.
+
+---
+
+## The mission in one sentence
+
+Prove or falsify that fixed H^4 × H^4 hyperbolic geometry can replace the
+dense linear-lattice routing in transformer-style LLMs — targeting 10×–100×
+hardware savings.
+
+**Mathematics governs every decision in this project.**
+Before changing any formula, parameter, sector mode, or routing law, state
+in writing which mathematical object is being changed and what the change
+means geometrically.
+
+---
 
 ## Git-first non-negotiables  ← READ THESE FIRST
 
@@ -55,8 +75,11 @@
 - Add/update `docs/DECISIONS.md` when conclusions change.
 
 ## Experiment protocol
-- Screen (1 seed) -> confirm (2 seeds) -> finalize (4 seeds).
+- Screen (1 seed) → confirm (2 seeds) → finalize (4 seeds).
 - No massive grid sweeps unless there is a decision gate.
+- A screen result is **never** a conclusion.
+- A confirm result is not a conclusion until the increment doc records an
+  explicit KEEP / KILL / REFINE decision with a one-sentence rationale.
 
 ## Primary mission
 Prove or falsify geometry-native routing as a hardware-relevant alternative to
@@ -68,3 +91,148 @@ Secondary mission:
 - keep the human out of the terminal
 
 Those are support goals, not replacements for the core project thesis.
+
+---
+
+## Mathematical objects — reference card
+
+Before touching any code or config, identify which object you are changing:
+
+| Object | What it is | Where it lives in code |
+|---|---|---|
+| **Routing manifold** | H^4 Poincaré ball with shell/sector bucketing | `hyperbolic_router_so8.py` |
+| **Shell law** | maps ball radius → radial bucket; must be H^4-measure-consistent | `get_bucket()`, shell configs |
+| **Hopf angular law** | maps Hopf-base projection → sector bucket | `phase4d_hopf_*` sector modes |
+| **Coupled field** | second H^4; stores complex-plane values per bucket | SO(d) chart cache |
+| **Phase transport** | phase shift on routing transition; geometry-induced | `phase_transport_*` configs |
+| **Spectral structure** | operator eigenstructure over the route graph | `tasks/spectral_*` |
+| **Sparse event gate** | threshold on route-change magnitude | `event_gate_*` in eval tasks |
+| **Hardware cost surface** | flops/bandwidth curve vs dense baseline | Translation eval harness |
+
+The three objects that **must stay conceptually separate**:
+1. Routing manifold (where tokens route to)
+2. Transport/state field (what moves along the route)
+3. Retrieval/key field (what is indexed for lookup)
+
+Only merge them if a branch explicitly proves they should be merged.
+
+---
+
+## Kill-list status (always verify against KILL_LIST_TRACKER.md)
+
+| Stage | Description | Status |
+|---|---|---|
+| 1 | Hyperbolic embedding stability | PARTIAL |
+| **2** | **Measure-consistent shell routing** | **OPEN ← active gate** |
+| 3 | Hopf angular correctness | PARTIAL |
+| 4 | Phase transport usefulness | PARTIAL |
+| 5 | Spectral / operator usefulness | PARTIAL |
+| 6 | Sparse event-driven trainability | PARTIAL |
+| 7 | Hardware-efficiency confirmation | PARTIAL |
+
+Active: `RR-061 / INC-0137` — GitHub Issue #1 — Milestone EPIC-2
+
+---
+
+## Mandatory pre-branch questions
+
+Answer all four explicitly in `ACTIVE_STATE.md` before opening a branch:
+
+1. Which kill-list stage does this branch advance?
+2. Which mathematical object is being tested?
+3. What exact result counts as **success**? As **falsification**?
+4. Why is this not just packaging, cleanup, or contract work?
+
+If you cannot answer all four, the branch should not be opened.
+
+---
+
+## Agent scope hard limits
+
+| Limit | Rule |
+|---|---|
+| Branch scope | Work only on `ACTIVE_STATE.md`'s current branch |
+| Math-first | State the mathematical object and geometric meaning before any formula change |
+| No silent choices | Ask when config, baseline, or sector mode is ambiguous |
+| No cross-branch edits | Never touch another `codex/*` branch's code |
+| No cleanup commits | File renames / restructuring do not appear in results commits |
+| Cross-stage observations | Write to SESSION_LEDGER.md — do not chase them on this branch |
+| Prerequisite chain | Never promote a later stage past an open earlier gate without written justification in queue docs |
+
+---
+
+## Cross-pollination protocol
+
+This project has 7 interconnected stages. A result from Stage 4 can change
+what Stage 2 needs to prove. When you observe something that bears on a
+different stage:
+
+1. Do **not** diverge from the current increment.
+2. Write a note in `docs/research/SESSION_LEDGER.md` under the heading:
+   `## Cross-stage observation: Stage N → Stage M`
+3. Include: what you observed, which branch produced it, why it's relevant,
+   and what should be verified.
+
+The human researcher reviews these during increment close.
+
+---
+
+## Definition of done — increment
+
+An INC-#### is closed only when ALL of the following are true:
+
+- [ ] Increment doc `## Status` = `Closed: KEEP.` / `Closed: KILL.` / `Closed: REFINE.`
+      with a one-sentence decision rationale
+- [ ] `docs/research/ACTIVE_STATE.md` points at the next RR/INC
+- [ ] `docs/research/KILL_LIST_TRACKER.md` updated if stage verdict changed
+- [ ] `docs/DECISIONS.md` has a new entry
+- [ ] GitHub Issue for this RR updated with the decision
+- [ ] `make state` passes
+
+---
+
+## Drift detection — stop immediately if any of these apply
+
+- The next branch has no kill-list stage mapping in ROUTE_MATRIX.md
+- The next experiment tweaks a baseline that already failed (DECISIONS.md)
+- Three or more consecutive branches touched only translation/packaging
+- The phrase "let's just try" appears without a written falsification condition
+- An increment is being queued for Stage 3+ while Stage 2 is still open, with
+  no written justification in ACTIVE_STATE.md
+
+When drift is detected: re-read `CORE_PROJECT_GOALS.md` in full before
+taking any action.
+
+---
+
+## Source-of-truth priority
+
+When docs conflict, the highest-ranked document wins:
+
+```
+CORE_PROJECT_GOALS.md         ← mathematical mission — never overridden
+  KILL_LIST_TRACKER.md        ← stage status
+    ACTIVE_STATE.md           ← current queue
+      ROUTE_MATRIX.md         ← branch-to-stage mapping
+        DECISIONS.md          ← closed decisions
+          SESSION_LEDGER.md   ← in-session working notes (temporary)
+```
+
+---
+
+## Key files reference
+
+| File | Purpose |
+|---|---|
+| `CORE_PROJECT_GOALS.md` | Mathematical mission, drift warnings, branch checklist |
+| `docs/research/KILL_LIST_TRACKER.md` | Stage-by-stage status and blockers |
+| `docs/research/ACTIVE_STATE.md` | Live queue: current RR + INC |
+| `docs/research/ROUTE_MATRIX.md` | Branch-to-stage mapping |
+| `docs/DECISIONS.md` | All closed decisions |
+| `docs/research/SESSION_LEDGER.md` | In-session working notes |
+| `docs/GIT_ONBOARDING.md` | Git workflow guide |
+| `tools/git_research.py` | Branch automation brain |
+| `tools/check_research_state.py` | Canonical state validator |
+| `hyperbolic_router_so8.py` | Core router (routing + chart + growth) |
+| `tasks/router_proxy_eval.py` | Primary experiment harness |
+| `tasks/router_retrieval_eval.py` | Retrieval evaluation harness |
