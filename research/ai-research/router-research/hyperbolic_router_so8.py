@@ -18,8 +18,11 @@ Routing options:
   - sector_mode = "phase4d_hopf" : Hopf-aware shell-capacity pilot derived from H4 diagnostics
   - sector_mode = "phase4d_hopf_base" : coarse routing on the Hopf base (chi, delta) with fiber phase alpha excluded from the address
   - sector_mode = "phase4d_hopf_transport" : Hopf-base routing plus geometry-induced fiber transport on alpha
+  - sector_mode = "phase4d_hopf_transport_complex" : Hopf-base routing plus complex-field-coupled fiber transport
+  - sector_mode = "phase4d_hopf_product_phase" : explicit product H^4 x H^4 phase coupling with routing and field factors kept separate
   - sector_mode = "phase4d_hopf_iso" : Hopf-aware routing from a rotation-only near-isometric chart coordinate
   - sector_mode = "phase4d_hopf_ball" : Hopf-aware routing with shells anchored to original-ball geodesic radius
+  - sector_mode = "phase4d_hopf_base_ball" : Hopf-base coarse routing with shells anchored to original-ball geodesic radius
   - sector_mode = "phase4d_hopf_fib" : Hopf-aware routing with Fibonacci-constrained shell/chi/phase lattice
   - sector_mode = "phase4d_hopf_fib_rung" : Hopf-aware routing with recurrence-constrained phi^2 rung forcing
   - sector_mode = "phase4d_hopf_fib_band" : Hopf-aware routing with shared phi^2 rung-band states
@@ -489,17 +492,30 @@ def allocate_pair_bins(total_cap: np.ndarray, min_bins: int, ratio_scale: np.nda
     return k1.astype(np.int64), k2.astype(np.int64)
 
 
-def allocate_triplet_bins_budget(total_cap: int, min_first: int = 2) -> Tuple[int, int, int]:
+def allocate_triplet_bins_budget(
+    total_cap: int,
+    min_first: int = 2,
+    min_second: int = 1,
+    min_third: int = 1,
+) -> Tuple[int, int, int]:
     total_cap = max(1, int(total_cap))
     min_first = max(1, int(min_first))
+    min_second = max(1, int(min_second))
+    min_third = max(1, int(min_third))
+    if min_first * min_second * min_third > total_cap:
+        min_third = 1
+    if min_first * min_second * min_third > total_cap:
+        min_second = 1
+    if min_first * min_second * min_third > total_cap:
+        min_first = 1
     best = (1, total_cap, 1)
-    best_score = (-1, -1, float("inf"), 0, 0)
+    best_score = None
     for k_first in range(min_first, total_cap + 1):
-        for k_second in range(1, total_cap + 1):
+        for k_second in range(min_second, total_cap + 1):
             max_third = total_cap // max(k_first * k_second, 1)
-            if max_third < 1:
+            if max_third < min_third:
                 break
-            for k_third in range(1, max_third + 1):
+            for k_third in range(min_third, max_third + 1):
                 product = k_first * k_second * k_third
                 favor_base = 1 if k_second >= k_third else 0
                 spread = (
@@ -508,7 +524,7 @@ def allocate_triplet_bins_budget(total_cap: int, min_first: int = 2) -> Tuple[in
                     + abs(k_first - k_third)
                 )
                 score = (product, favor_base, -spread, k_second, -k_third)
-                if score > best_score:
+                if best_score is None or score > best_score:
                     best_score = score
                     best = (k_first, k_second, k_third)
     return best
@@ -567,6 +583,18 @@ def ensure_dims_in_range(dims: Iterable[int], d: int, flag_name: str):
     for idx in dims:
         if idx < 0 or idx >= d:
             raise ValueError(f"{flag_name} index {idx} out of range for d={d}")
+
+
+def ensure_distinct_dims(dims: Iterable[int], flag_name: str):
+    dims_list = list(int(idx) for idx in dims)
+    if len(set(dims_list)) != len(dims_list):
+        raise ValueError(f"{flag_name} must contain distinct indices")
+
+
+def ensure_disjoint_dims(dims_a: Iterable[int], flag_a: str, dims_b: Iterable[int], flag_b: str):
+    overlap = sorted(set(int(idx) for idx in dims_a).intersection(int(idx) for idx in dims_b))
+    if overlap:
+        raise ValueError(f"{flag_a} and {flag_b} must be disjoint; overlap={overlap}")
 
 def stable_hash(payload: Dict) -> str:
     blob = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
@@ -884,6 +912,325 @@ def hopf_phase_transport_diagnostics(
     }
 
 
+def hopf_phase_transport_complex_components(
+    z: np.ndarray,
+    dim_i: int,
+    dim_j: int,
+    dim_k: int,
+    dim_l: int,
+    complex_dim_i: int,
+    complex_dim_j: int,
+    phase_transport_lambda: float,
+    phase_field_lambda: float,
+) -> Dict[str, np.ndarray]:
+    comp = hopf_phase_transport_components(
+        z,
+        dim_i=dim_i,
+        dim_j=dim_j,
+        dim_k=dim_k,
+        dim_l=dim_l,
+        phase_transport_lambda=phase_transport_lambda,
+    )
+    field_phase = wrap_to_pi(np.arctan2(z[:, complex_dim_j], z[:, complex_dim_i]))
+    field_phase_shift = wrap_to_pi(float(phase_field_lambda) * field_phase)
+    transported_alpha = wrap_to_pi(comp["transported_alpha"] + field_phase_shift)
+    return {
+        **comp,
+        "field_phase": field_phase,
+        "field_phase_shift": field_phase_shift,
+        "transported_alpha": transported_alpha,
+    }
+
+
+def hopf_phase_transport_complex_diagnostics(
+    z: np.ndarray,
+    dim_i: int,
+    dim_j: int,
+    dim_k: int,
+    dim_l: int,
+    complex_dim_i: int,
+    complex_dim_j: int,
+    phase_transport_lambda: float,
+    phase_field_lambda: float,
+) -> Dict[str, float]:
+    if z.shape[0] == 0:
+        return {
+            "phase_transport_coherence": 0.0,
+            "phase_transport_shift_abs_mean": 0.0,
+            "phase_transport_shift_abs_max": 0.0,
+            "phase_transport_connection_abs_mean": 0.0,
+            "phase_transport_field_shift_abs_mean": 0.0,
+            "phase_transport_field_weight_abs_mean": 0.0,
+        }
+    comp = hopf_phase_transport_complex_components(
+        z,
+        dim_i=dim_i,
+        dim_j=dim_j,
+        dim_k=dim_k,
+        dim_l=dim_l,
+        complex_dim_i=complex_dim_i,
+        complex_dim_j=complex_dim_j,
+        phase_transport_lambda=phase_transport_lambda,
+        phase_field_lambda=phase_field_lambda,
+    )
+    phase_shift = wrap_to_pi(comp["transported_alpha"] - comp["alpha"])
+    return {
+        "phase_transport_coherence": float(np.mean(np.cos(phase_shift))),
+        "phase_transport_shift_abs_mean": float(np.mean(np.abs(phase_shift))),
+        "phase_transport_shift_abs_max": float(np.max(np.abs(phase_shift))),
+        "phase_transport_connection_abs_mean": float(np.mean(np.abs(comp["transport_connection_weight"]))),
+        "phase_transport_field_shift_abs_mean": float(np.mean(np.abs(comp["field_phase_shift"]))),
+        "phase_transport_field_weight_abs_mean": float(np.mean(np.abs(comp["field_phase"]))),
+    }
+
+
+def hopf_product_phase_components(
+    z: np.ndarray,
+    route_dim_i: int,
+    route_dim_j: int,
+    route_dim_k: int,
+    route_dim_l: int,
+    field_dim_i: int,
+    field_dim_j: int,
+    field_dim_k: int,
+    field_dim_l: int,
+    phase_transport_lambda: float,
+    phase_field_lambda: float,
+) -> Dict[str, np.ndarray]:
+    route_comp = hopf_phase_transport_components(
+        z,
+        dim_i=route_dim_i,
+        dim_j=route_dim_j,
+        dim_k=route_dim_k,
+        dim_l=route_dim_l,
+        phase_transport_lambda=phase_transport_lambda,
+    )
+    field_comp = hopf_coordinate_components(
+        z,
+        dim_i=field_dim_i,
+        dim_j=field_dim_j,
+        dim_k=field_dim_k,
+        dim_l=field_dim_l,
+    )
+    field_coupling_weight = np.sin(2.0 * route_comp["chi"]) * np.sin(2.0 * field_comp["chi"]) * field_comp["alpha"]
+    field_phase_shift = wrap_to_pi(float(phase_field_lambda) * field_coupling_weight)
+    transported_alpha = wrap_to_pi(route_comp["transported_alpha"] + field_phase_shift)
+    return {
+        **route_comp,
+        "field_chi": field_comp["chi"],
+        "field_delta": field_comp["delta"],
+        "field_alpha": field_comp["alpha"],
+        "field_coupling_weight": field_coupling_weight,
+        "field_phase_shift": field_phase_shift,
+        "transported_alpha": transported_alpha,
+    }
+
+
+def hopf_product_phase_diagnostics(
+    z: np.ndarray,
+    route_dim_i: int,
+    route_dim_j: int,
+    route_dim_k: int,
+    route_dim_l: int,
+    field_dim_i: int,
+    field_dim_j: int,
+    field_dim_k: int,
+    field_dim_l: int,
+    phase_transport_lambda: float,
+    phase_field_lambda: float,
+) -> Dict[str, float]:
+    if z.shape[0] == 0:
+        return {
+            "phase_transport_coherence": 0.0,
+            "phase_transport_shift_abs_mean": 0.0,
+            "phase_transport_shift_abs_max": 0.0,
+            "phase_transport_connection_abs_mean": 0.0,
+            "phase_transport_field_shift_abs_mean": 0.0,
+            "phase_transport_field_weight_abs_mean": 0.0,
+        }
+    comp = hopf_product_phase_components(
+        z,
+        route_dim_i=route_dim_i,
+        route_dim_j=route_dim_j,
+        route_dim_k=route_dim_k,
+        route_dim_l=route_dim_l,
+        field_dim_i=field_dim_i,
+        field_dim_j=field_dim_j,
+        field_dim_k=field_dim_k,
+        field_dim_l=field_dim_l,
+        phase_transport_lambda=phase_transport_lambda,
+        phase_field_lambda=phase_field_lambda,
+    )
+    phase_shift = wrap_to_pi(comp["transported_alpha"] - comp["alpha"])
+    return {
+        "phase_transport_coherence": float(np.mean(np.cos(phase_shift))),
+        "phase_transport_shift_abs_mean": float(np.mean(np.abs(phase_shift))),
+        "phase_transport_shift_abs_max": float(np.max(np.abs(phase_shift))),
+        "phase_transport_connection_abs_mean": float(np.mean(np.abs(comp["transport_connection_weight"]))),
+        "phase_transport_field_shift_abs_mean": float(np.mean(np.abs(comp["field_phase_shift"]))),
+        "phase_transport_field_weight_abs_mean": float(np.mean(np.abs(comp["field_coupling_weight"]))),
+    }
+
+
+def product_phase_shell_controller(
+    z: np.ndarray,
+    K: int,
+    dim_i: int,
+    dim_j: int,
+    dim_k: int,
+    dim_l: int,
+    delta_r: float,
+    tau: float,
+    adaptive_min_pair_bins: int,
+    adaptive_time_growth: float,
+    adaptive_balance: float,
+    adaptive_angle_growth: float,
+    adaptive_shell_growth: float,
+    adaptive_shell_balance: float,
+    adaptive_converge_lambda: float,
+    adaptive_converge_target: float,
+    adaptive_converge_hysteresis: float,
+    adaptive_converge_mode: str,
+    product_shell_control_mode: str = "continuous",
+    product_shell_gate_threshold: float = 0.0,
+) -> Dict[str, np.ndarray]:
+    comp = phase4d_adaptive_components(
+        z=z,
+        K=K,
+        dim_i=dim_i,
+        dim_j=dim_j,
+        dim_k=dim_k,
+        dim_l=dim_l,
+        delta_r=delta_r,
+        tau=tau,
+        adaptive_min_pair_bins=adaptive_min_pair_bins,
+        adaptive_time_growth=adaptive_time_growth,
+        adaptive_balance=adaptive_balance,
+        adaptive_angle_growth=adaptive_angle_growth,
+        adaptive_shell_growth=adaptive_shell_growth,
+        adaptive_shell_balance=adaptive_shell_balance,
+        adaptive_converge_lambda=adaptive_converge_lambda,
+        adaptive_converge_target=adaptive_converge_target,
+        adaptive_converge_hysteresis=adaptive_converge_hysteresis,
+        adaptive_converge_mode=adaptive_converge_mode,
+        shell_phase_coupling=0.0,
+    )
+    mode = str(product_shell_control_mode or "continuous")
+    min_bins = max(1, int(adaptive_min_pair_bins))
+    k_floor = max(1, min(int(K), min_bins * min_bins))
+    denom = max(float(int(K) - k_floor), 1.0)
+    capacity_pressure = np.clip((comp["hopf_shell_capacity"] - float(k_floor)) / denom, 0.0, 1.0)
+    chi_pressure = (4.0 * comp["chi_u"] * (1.0 - comp["chi_u"])) * (0.5 + 0.5 * comp["div_score"])
+    local_concentration = np.clip(comp["shell_ratio"] / PHI, 0.0, 1.0)
+    gate_score = chi_pressure * (0.5 + 0.5 * capacity_pressure) * (0.5 + 0.5 * local_concentration)
+    gate_score = np.clip(gate_score, 0.0, 1.0)
+    gate_threshold = max(0.0, float(product_shell_gate_threshold))
+    shell_multiplier = comp["shell_multiplier"].astype(np.float64)
+
+    if mode == "continuous":
+        active_mask = np.ones(gate_score.shape, dtype=bool)
+        band_state = np.full(gate_score.shape, 2, dtype=np.int64)
+        controlled_multiplier = shell_multiplier
+    elif mode == "gated":
+        active_mask = gate_score >= gate_threshold
+        band_state = np.where(active_mask, 2, 0).astype(np.int64)
+        controlled_multiplier = np.where(active_mask, shell_multiplier, 1.0)
+    elif mode == "banded":
+        band_lo = max(0.0, gate_threshold / PHI) if gate_threshold > 0.0 else (1.0 / (PHI * PHI))
+        band_hi = gate_threshold if gate_threshold > 0.0 else (1.0 / PHI)
+        band_state = np.zeros(gate_score.shape, dtype=np.int64)
+        band_state = np.where(gate_score >= band_lo, 1, band_state)
+        band_state = np.where(gate_score >= band_hi, 2, band_state)
+        active_mask = band_state > 0
+        controlled_multiplier = np.ones_like(shell_multiplier)
+        controlled_multiplier = np.where(band_state == 1, np.sqrt(np.maximum(shell_multiplier, 1e-12)), controlled_multiplier)
+        controlled_multiplier = np.where(band_state == 2, shell_multiplier, controlled_multiplier)
+    else:
+        raise ValueError(f"unsupported product_shell_control_mode={mode!r}")
+
+    return {
+        "shell_multiplier": controlled_multiplier.astype(np.float64),
+        "gate_score": gate_score.astype(np.float64),
+        "active_mask": active_mask.astype(bool),
+        "band_state": band_state.astype(np.int64),
+        "chi_pressure": chi_pressure.astype(np.float64),
+        "capacity_pressure": capacity_pressure.astype(np.float64),
+        "local_concentration": local_concentration.astype(np.float64),
+    }
+
+
+def product_phase_shell_diagnostics(
+    z: np.ndarray,
+    K: int,
+    dim_i: int,
+    dim_j: int,
+    dim_k: int,
+    dim_l: int,
+    delta_r: float,
+    tau: float,
+    adaptive_min_pair_bins: int,
+    adaptive_time_growth: float,
+    adaptive_balance: float,
+    adaptive_angle_growth: float,
+    adaptive_shell_growth: float,
+    adaptive_shell_balance: float,
+    adaptive_converge_lambda: float,
+    adaptive_converge_target: float,
+    adaptive_converge_hysteresis: float,
+    adaptive_converge_mode: str,
+    product_shell_control_mode: str,
+    product_shell_gate_threshold: float,
+) -> Dict[str, float]:
+    if z.shape[0] == 0:
+        return {
+            "product_shell_gate_score_mean": 0.0,
+            "product_shell_gate_score_max": 0.0,
+            "product_shell_active_frac": 0.0,
+            "product_shell_state_mean": 0.0,
+            "product_shell_states_used": 0.0,
+            "product_shell_chi_pressure_mean": 0.0,
+            "product_shell_capacity_pressure_mean": 0.0,
+            "product_shell_local_concentration_mean": 0.0,
+            "product_shell_multiplier_mean": 1.0,
+            "product_shell_multiplier_max": 1.0,
+        }
+    ctrl = product_phase_shell_controller(
+        z=z,
+        K=K,
+        dim_i=dim_i,
+        dim_j=dim_j,
+        dim_k=dim_k,
+        dim_l=dim_l,
+        delta_r=delta_r,
+        tau=tau,
+        adaptive_min_pair_bins=adaptive_min_pair_bins,
+        adaptive_time_growth=adaptive_time_growth,
+        adaptive_balance=adaptive_balance,
+        adaptive_angle_growth=adaptive_angle_growth,
+        adaptive_shell_growth=adaptive_shell_growth,
+        adaptive_shell_balance=adaptive_shell_balance,
+        adaptive_converge_lambda=adaptive_converge_lambda,
+        adaptive_converge_target=adaptive_converge_target,
+        adaptive_converge_hysteresis=adaptive_converge_hysteresis,
+        adaptive_converge_mode=adaptive_converge_mode,
+        product_shell_control_mode=product_shell_control_mode,
+        product_shell_gate_threshold=product_shell_gate_threshold,
+    )
+    state_counts = np.unique(ctrl["band_state"]).size
+    return {
+        "product_shell_gate_score_mean": float(np.mean(ctrl["gate_score"])),
+        "product_shell_gate_score_max": float(np.max(ctrl["gate_score"])),
+        "product_shell_active_frac": float(np.mean(ctrl["active_mask"].astype(np.float64))),
+        "product_shell_state_mean": float(np.mean(ctrl["band_state"])),
+        "product_shell_states_used": float(state_counts),
+        "product_shell_chi_pressure_mean": float(np.mean(ctrl["chi_pressure"])),
+        "product_shell_capacity_pressure_mean": float(np.mean(ctrl["capacity_pressure"])),
+        "product_shell_local_concentration_mean": float(np.mean(ctrl["local_concentration"])),
+        "product_shell_multiplier_mean": float(np.mean(ctrl["shell_multiplier"])),
+        "product_shell_multiplier_max": float(np.max(ctrl["shell_multiplier"])),
+    }
+
+
 def hopf_base_measure_diagnostics(
     z: np.ndarray,
     dim_i: int,
@@ -974,6 +1321,67 @@ def hopf_angular_measure_diagnostics(
         "hopf_theta2_mass_error": theta2_mass_error,
         "hopf_theta1_entropy": float(theta1_entropy),
         "hopf_theta2_entropy": float(theta2_entropy),
+    }
+
+
+def hopf_sector_routing_diagnostics(
+    z: np.ndarray,
+    sector: np.ndarray,
+    dim_i: int,
+    dim_j: int,
+    dim_k: int,
+    dim_l: int,
+    alpha_bins: int = 12,
+) -> Dict[str, float]:
+    sector = np.asarray(sector, dtype=np.int64).reshape(-1)
+    if z.shape[0] == 0 or sector.size == 0:
+        return {
+            "hopf_sector_groups_used": 0,
+            "hopf_sector_chi_std_mean": 0.0,
+            "hopf_sector_delta_cvar_mean": 0.0,
+            "hopf_sector_alpha_entropy_mean": 0.0,
+            "hopf_sector_alpha_entropy_gap": 0.0,
+        }
+
+    comp = hopf_coordinate_components(z, dim_i=dim_i, dim_j=dim_j, dim_k=dim_k, dim_l=dim_l)
+    alpha_bins = max(4, int(alpha_bins))
+    global_alpha_hist, _ = np.histogram(comp["alpha"], bins=alpha_bins, range=(-np.pi, np.pi))
+    global_alpha_entropy = entropy_from_counts(global_alpha_hist) if np.sum(global_alpha_hist) > 0 else 0.0
+
+    weights = []
+    chi_std = []
+    delta_cvar = []
+    alpha_entropy = []
+    for sid in np.unique(sector):
+        mask = sector == sid
+        count = int(np.sum(mask))
+        if count <= 0:
+            continue
+        weights.append(float(count))
+        chi_std.append(float(np.std(comp["chi_u"][mask])))
+        delta_vec = np.exp(1j * comp["delta"][mask])
+        delta_cvar.append(float(1.0 - np.abs(np.mean(delta_vec))))
+        alpha_hist, _ = np.histogram(comp["alpha"][mask], bins=alpha_bins, range=(-np.pi, np.pi))
+        alpha_entropy.append(entropy_from_counts(alpha_hist) if np.sum(alpha_hist) > 0 else 0.0)
+
+    if not weights:
+        return {
+            "hopf_sector_groups_used": 0,
+            "hopf_sector_chi_std_mean": 0.0,
+            "hopf_sector_delta_cvar_mean": 0.0,
+            "hopf_sector_alpha_entropy_mean": 0.0,
+            "hopf_sector_alpha_entropy_gap": 0.0,
+        }
+
+    w = np.asarray(weights, dtype=np.float64)
+    w = w / np.sum(w)
+    alpha_entropy_mean = float(np.sum(w * np.asarray(alpha_entropy, dtype=np.float64)))
+    return {
+        "hopf_sector_groups_used": int(len(weights)),
+        "hopf_sector_chi_std_mean": float(np.sum(w * np.asarray(chi_std, dtype=np.float64))),
+        "hopf_sector_delta_cvar_mean": float(np.sum(w * np.asarray(delta_cvar, dtype=np.float64))),
+        "hopf_sector_alpha_entropy_mean": alpha_entropy_mean,
+        "hopf_sector_alpha_entropy_gap": float(global_alpha_entropy - alpha_entropy_mean),
     }
 
 
@@ -1361,7 +1769,116 @@ def assign_sectors_phase4d_hopf_transport(
         dim_l=dim_l,
         phase_transport_lambda=phase_transport_lambda,
     )
-    kchi, kdelta, kalpha = allocate_triplet_bins_budget(K, min_first=max(2, int(hopf_chi_bins)))
+    kchi, kdelta, kalpha = allocate_triplet_bins_budget(
+        K,
+        min_first=max(2, int(hopf_chi_bins)),
+        min_second=2,
+        min_third=2,
+    )
+
+    u_chi = comp["chi_u"]
+    u_delta = (comp["delta"] + np.pi) / (2.0 * np.pi)
+    u_alpha = (comp["transported_alpha"] + np.pi) / (2.0 * np.pi)
+
+    bchi = np.minimum((u_chi * float(kchi)).astype(np.int64), max(kchi - 1, 0))
+    bdelta = np.minimum((u_delta * float(kdelta)).astype(np.int64), max(kdelta - 1, 0))
+    balpha = np.minimum((u_alpha * float(kalpha)).astype(np.int64), max(kalpha - 1, 0))
+
+    local_span = max(kdelta * kalpha, 1)
+    sector = bchi * local_span + bdelta * kalpha + balpha
+    sector = np.minimum(sector, max(int(K) - 1, 0))
+    return (
+        sector.astype(np.int64),
+        np.full(z.shape[0], kchi, dtype=np.int64),
+        np.full(z.shape[0], kdelta, dtype=np.int64),
+        np.full(z.shape[0], kalpha, dtype=np.int64),
+    )
+
+
+def assign_sectors_phase4d_hopf_transport_complex(
+    z: np.ndarray,
+    K: int,
+    dim_i: int,
+    dim_j: int,
+    dim_k: int,
+    dim_l: int,
+    complex_dim_i: int,
+    complex_dim_j: int,
+    phase_transport_lambda: float,
+    phase_field_lambda: float,
+    hopf_chi_bins: int,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    comp = hopf_phase_transport_complex_components(
+        z,
+        dim_i=dim_i,
+        dim_j=dim_j,
+        dim_k=dim_k,
+        dim_l=dim_l,
+        complex_dim_i=complex_dim_i,
+        complex_dim_j=complex_dim_j,
+        phase_transport_lambda=phase_transport_lambda,
+        phase_field_lambda=phase_field_lambda,
+    )
+    kchi, kdelta, kalpha = allocate_triplet_bins_budget(
+        K,
+        min_first=max(2, int(hopf_chi_bins)),
+        min_second=2,
+        min_third=2,
+    )
+
+    u_chi = comp["chi_u"]
+    u_delta = (comp["delta"] + np.pi) / (2.0 * np.pi)
+    u_alpha = (comp["transported_alpha"] + np.pi) / (2.0 * np.pi)
+
+    bchi = np.minimum((u_chi * float(kchi)).astype(np.int64), max(kchi - 1, 0))
+    bdelta = np.minimum((u_delta * float(kdelta)).astype(np.int64), max(kdelta - 1, 0))
+    balpha = np.minimum((u_alpha * float(kalpha)).astype(np.int64), max(kalpha - 1, 0))
+
+    local_span = max(kdelta * kalpha, 1)
+    sector = bchi * local_span + bdelta * kalpha + balpha
+    sector = np.minimum(sector, max(int(K) - 1, 0))
+    return (
+        sector.astype(np.int64),
+        np.full(z.shape[0], kchi, dtype=np.int64),
+        np.full(z.shape[0], kdelta, dtype=np.int64),
+        np.full(z.shape[0], kalpha, dtype=np.int64),
+    )
+
+
+def assign_sectors_phase4d_hopf_product_phase(
+    z: np.ndarray,
+    K: int,
+    route_dim_i: int,
+    route_dim_j: int,
+    route_dim_k: int,
+    route_dim_l: int,
+    field_dim_i: int,
+    field_dim_j: int,
+    field_dim_k: int,
+    field_dim_l: int,
+    phase_transport_lambda: float,
+    phase_field_lambda: float,
+    hopf_chi_bins: int,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    comp = hopf_product_phase_components(
+        z,
+        route_dim_i=route_dim_i,
+        route_dim_j=route_dim_j,
+        route_dim_k=route_dim_k,
+        route_dim_l=route_dim_l,
+        field_dim_i=field_dim_i,
+        field_dim_j=field_dim_j,
+        field_dim_k=field_dim_k,
+        field_dim_l=field_dim_l,
+        phase_transport_lambda=phase_transport_lambda,
+        phase_field_lambda=phase_field_lambda,
+    )
+    kchi, kdelta, kalpha = allocate_triplet_bins_budget(
+        K,
+        min_first=max(2, int(hopf_chi_bins)),
+        min_second=2,
+        min_third=2,
+    )
 
     u_chi = comp["chi_u"]
     u_delta = (comp["delta"] + np.pi) / (2.0 * np.pi)
@@ -2375,6 +2892,10 @@ def route_addresses(
     complex_dim_i: int,
     complex_dim_j: int,
     K: int,
+    field4_dim_i: int = 1,
+    field4_dim_j: int = 3,
+    field4_dim_k: int = 5,
+    field4_dim_l: int = 7,
     time_pressure_lambda: float = 0.0,
     tau: float = 1.0,
     adaptive_min_pair_bins: int = 2,
@@ -2392,11 +2913,14 @@ def route_addresses(
     memory_coord_mode: str = "route_chart",
     shell_mode: str = "linear",
     shell_phase_coupling: float = 0.0,
+    product_shell_control_mode: str = "continuous",
+    product_shell_gate_threshold: float = 0.0,
     hopf_chi_bins: int = 2,
     hopf_blend_lambda: float = 0.8,
     hopf_blend_chi_weight: float = 1.0,
     hopf_blend_shell_weight: float = 0.5,
     phase_transport_lambda: float = 1.0,
+    phase_field_lambda: float = 0.0,
     hybrid_local_k: int = 4,
     hybrid_complex_roots: int = 4,
     hybrid_local_min_k: int = 1,
@@ -2419,7 +2943,7 @@ def route_addresses(
 
     r = safe_norm(route_z, axis=1, keepdims=False)
     shell_r_base = r
-    if sector_mode == "phase4d_hopf_ball":
+    if sector_mode in ("phase4d_hopf_ball", "phase4d_hopf_base_ball"):
         shell_r_base = poincare_radius(exp_map0(v))
 
     if time_pressure_lambda != 0.0:
@@ -2427,7 +2951,7 @@ def route_addresses(
     else:
         r_eff = shell_r_base
 
-    if sector_mode in ("phase4d_adaptive", "phase4d_hopf", "phase4d_hopf_base", "phase4d_hopf_transport", "phase4d_hopf_iso", "phase4d_hopf_ball", "phase4d_hopf_chi", "phase4d_hopf_fib", "phase4d_hopf_fib_rung", "phase4d_hopf_fib_band", "phase4d_hopf_fib_band_iso", "phase4d_hopf_fib_band_bound", "phase4d_hopf_blend", "phase4d_complex_local"):
+    if sector_mode in ("phase4d_adaptive", "phase4d_hopf", "phase4d_hopf_base", "phase4d_hopf_transport", "phase4d_hopf_transport_complex", "phase4d_hopf_product_phase", "phase4d_hopf_iso", "phase4d_hopf_ball", "phase4d_hopf_base_ball", "phase4d_hopf_chi", "phase4d_hopf_fib", "phase4d_hopf_fib_rung", "phase4d_hopf_fib_band", "phase4d_hopf_fib_band_iso", "phase4d_hopf_fib_band_bound", "phase4d_hopf_blend", "phase4d_complex_local"):
         comp = phase4d_adaptive_components(
             z=route_z,
             K=K,
@@ -2449,10 +2973,34 @@ def route_addresses(
             adaptive_converge_mode=adaptive_converge_mode,
             shell_phase_coupling=shell_phase_coupling,
         )
+        if sector_mode == "phase4d_hopf_product_phase":
+            shell_ctrl = product_phase_shell_controller(
+                z=route_z,
+                K=K,
+                dim_i=phase4_dim_i,
+                dim_j=phase4_dim_j,
+                dim_k=phase4_dim_k,
+                dim_l=phase4_dim_l,
+                delta_r=delta_r,
+                tau=tau,
+                adaptive_min_pair_bins=adaptive_min_pair_bins,
+                adaptive_time_growth=adaptive_time_growth,
+                adaptive_balance=adaptive_balance,
+                adaptive_angle_growth=adaptive_angle_growth,
+                adaptive_shell_growth=adaptive_shell_growth,
+                adaptive_shell_balance=adaptive_shell_balance,
+                adaptive_converge_lambda=adaptive_converge_lambda,
+                adaptive_converge_target=adaptive_converge_target,
+                adaptive_converge_hysteresis=adaptive_converge_hysteresis,
+                adaptive_converge_mode=adaptive_converge_mode,
+                product_shell_control_mode=product_shell_control_mode,
+                product_shell_gate_threshold=product_shell_gate_threshold,
+            )
+            comp = {**comp, "shell_multiplier": shell_ctrl["shell_multiplier"]}
         r_eff = r_eff * comp["shell_multiplier"]
 
     shell_phase_bias = None
-    if sector_mode in ("phase4d_adaptive", "phase4d_hopf", "phase4d_hopf_base", "phase4d_hopf_transport", "phase4d_hopf_iso", "phase4d_hopf_ball", "phase4d_hopf_chi", "phase4d_hopf_fib", "phase4d_hopf_fib_rung", "phase4d_hopf_fib_band", "phase4d_hopf_fib_band_iso", "phase4d_hopf_fib_band_bound", "phase4d_hopf_blend", "phase4d_complex_local") and shell_mode == "phi_phase":
+    if sector_mode in ("phase4d_adaptive", "phase4d_hopf", "phase4d_hopf_base", "phase4d_hopf_transport", "phase4d_hopf_transport_complex", "phase4d_hopf_product_phase", "phase4d_hopf_iso", "phase4d_hopf_ball", "phase4d_hopf_base_ball", "phase4d_hopf_chi", "phase4d_hopf_fib", "phase4d_hopf_fib_rung", "phase4d_hopf_fib_band", "phase4d_hopf_fib_band_iso", "phase4d_hopf_fib_band_bound", "phase4d_hopf_blend", "phase4d_complex_local") and shell_mode == "phi_phase":
         shell_phase_bias = comp["shell_phase_bias"]
     shell, _, _ = shell_metric_components(
         r_eff,
@@ -2501,7 +3049,7 @@ def route_addresses(
             adaptive_angle_growth=adaptive_angle_growth,
         )
         return shell, sector, memory_u, memory_z
-    if sector_mode == "phase4d_hopf_base":
+    if sector_mode in ("phase4d_hopf_base", "phase4d_hopf_base_ball"):
         sector, _, _ = assign_sectors_phase4d_hopf_base(
             route_z,
             K=K,
@@ -2520,6 +3068,38 @@ def route_addresses(
             dim_k=phase4_dim_k,
             dim_l=phase4_dim_l,
             phase_transport_lambda=phase_transport_lambda,
+            hopf_chi_bins=hopf_chi_bins,
+        )
+        return shell, sector, memory_u, memory_z
+    if sector_mode == "phase4d_hopf_transport_complex":
+        sector, _, _, _ = assign_sectors_phase4d_hopf_transport_complex(
+            route_z,
+            K=K,
+            dim_i=phase4_dim_i,
+            dim_j=phase4_dim_j,
+            dim_k=phase4_dim_k,
+            dim_l=phase4_dim_l,
+            complex_dim_i=complex_dim_i,
+            complex_dim_j=complex_dim_j,
+            phase_transport_lambda=phase_transport_lambda,
+            phase_field_lambda=phase_field_lambda,
+            hopf_chi_bins=hopf_chi_bins,
+        )
+        return shell, sector, memory_u, memory_z
+    if sector_mode == "phase4d_hopf_product_phase":
+        sector, _, _, _ = assign_sectors_phase4d_hopf_product_phase(
+            route_z,
+            K=K,
+            route_dim_i=phase4_dim_i,
+            route_dim_j=phase4_dim_j,
+            route_dim_k=phase4_dim_k,
+            route_dim_l=phase4_dim_l,
+            field_dim_i=field4_dim_i,
+            field_dim_j=field4_dim_j,
+            field_dim_k=field4_dim_k,
+            field_dim_l=field4_dim_l,
+            phase_transport_lambda=phase_transport_lambda,
+            phase_field_lambda=phase_field_lambda,
             hopf_chi_bins=hopf_chi_bins,
         )
         return shell, sector, memory_u, memory_z
@@ -2672,6 +3252,10 @@ def route_one(
     complex_dim_i: int,
     complex_dim_j: int,
     K: int,
+    field4_dim_i: int = 1,
+    field4_dim_j: int = 3,
+    field4_dim_k: int = 5,
+    field4_dim_l: int = 7,
     time_pressure_lambda: float = 0.0,
     tau: float = 1.0,
     adaptive_min_pair_bins: int = 2,
@@ -2689,11 +3273,14 @@ def route_one(
     memory_coord_mode: str = "route_chart",
     shell_mode: str = "linear",
     shell_phase_coupling: float = 0.0,
+    product_shell_control_mode: str = "continuous",
+    product_shell_gate_threshold: float = 0.0,
     hopf_chi_bins: int = 2,
     hopf_blend_lambda: float = 0.8,
     hopf_blend_chi_weight: float = 1.0,
     hopf_blend_shell_weight: float = 0.5,
     phase_transport_lambda: float = 1.0,
+    phase_field_lambda: float = 0.0,
     hybrid_local_k: int = 4,
     hybrid_complex_roots: int = 4,
     hybrid_local_min_k: int = 1,
@@ -2708,6 +3295,8 @@ def route_one(
         phase_dim_i=phase_dim_i, phase_dim_j=phase_dim_j,
         phase4_dim_i=phase4_dim_i, phase4_dim_j=phase4_dim_j,
         phase4_dim_k=phase4_dim_k, phase4_dim_l=phase4_dim_l,
+        field4_dim_i=field4_dim_i, field4_dim_j=field4_dim_j,
+        field4_dim_k=field4_dim_k, field4_dim_l=field4_dim_l,
         complex_dim_i=complex_dim_i, complex_dim_j=complex_dim_j,
         K=K,
         time_pressure_lambda=time_pressure_lambda, tau=tau,
@@ -2726,11 +3315,14 @@ def route_one(
         memory_coord_mode=memory_coord_mode,
         shell_mode=shell_mode,
         shell_phase_coupling=shell_phase_coupling,
+        product_shell_control_mode=product_shell_control_mode,
+        product_shell_gate_threshold=product_shell_gate_threshold,
         hopf_chi_bins=hopf_chi_bins,
         hopf_blend_lambda=hopf_blend_lambda,
         hopf_blend_chi_weight=hopf_blend_chi_weight,
         hopf_blend_shell_weight=hopf_blend_shell_weight,
         phase_transport_lambda=phase_transport_lambda,
+        phase_field_lambda=phase_field_lambda,
         hybrid_local_k=hybrid_local_k,
         hybrid_complex_roots=hybrid_complex_roots,
         hybrid_local_min_k=hybrid_local_min_k,
@@ -2961,6 +3553,10 @@ def label_coherence_sse(
     complex_dim_i: int,
     complex_dim_j: int,
     K: int,
+    field4_dim_i: int = 1,
+    field4_dim_j: int = 3,
+    field4_dim_k: int = 5,
+    field4_dim_l: int = 7,
     adaptive_min_pair_bins: int = 2,
     adaptive_time_growth: float = 1.0,
     adaptive_balance: float = 1.0,
@@ -2976,11 +3572,14 @@ def label_coherence_sse(
     memory_coord_mode: str = "route_chart",
     shell_mode: str = "linear",
     shell_phase_coupling: float = 0.0,
+    product_shell_control_mode: str = "continuous",
+    product_shell_gate_threshold: float = 0.0,
     hopf_chi_bins: int = 2,
     hopf_blend_lambda: float = 0.8,
     hopf_blend_chi_weight: float = 1.0,
     hopf_blend_shell_weight: float = 0.5,
     phase_transport_lambda: float = 1.0,
+    phase_field_lambda: float = 0.0,
     hybrid_local_k: int = 4,
     hybrid_complex_roots: int = 4,
     hybrid_local_min_k: int = 1,
@@ -2995,6 +3594,8 @@ def label_coherence_sse(
         phase4_dim_i=phase4_dim_i, phase4_dim_j=phase4_dim_j,
         phase4_dim_k=phase4_dim_k, phase4_dim_l=phase4_dim_l,
         complex_dim_i=complex_dim_i, complex_dim_j=complex_dim_j,
+        field4_dim_i=field4_dim_i, field4_dim_j=field4_dim_j,
+        field4_dim_k=field4_dim_k, field4_dim_l=field4_dim_l,
         K=K,
         time_pressure_lambda=0.0, tau=1.0,
         adaptive_min_pair_bins=adaptive_min_pair_bins,
@@ -3012,11 +3613,14 @@ def label_coherence_sse(
         memory_coord_mode=memory_coord_mode,
         shell_mode=shell_mode,
         shell_phase_coupling=shell_phase_coupling,
+        product_shell_control_mode=product_shell_control_mode,
+        product_shell_gate_threshold=product_shell_gate_threshold,
         hopf_chi_bins=hopf_chi_bins,
         hopf_blend_lambda=hopf_blend_lambda,
         hopf_blend_chi_weight=hopf_blend_chi_weight,
         hopf_blend_shell_weight=hopf_blend_shell_weight,
         phase_transport_lambda=phase_transport_lambda,
+        phase_field_lambda=phase_field_lambda,
         hybrid_local_k=hybrid_local_k,
         hybrid_complex_roots=hybrid_complex_roots,
         hybrid_local_min_k=hybrid_local_min_k,
@@ -3053,6 +3657,10 @@ def chart_objective(
     alpha_overload: float,
     beta_bucketcount: float,
     radial_l2: float,
+    field4_dim_i: int = 1,
+    field4_dim_j: int = 3,
+    field4_dim_k: int = 5,
+    field4_dim_l: int = 7,
     adaptive_min_pair_bins: int = 2,
     adaptive_time_growth: float = 1.0,
     adaptive_balance: float = 1.0,
@@ -3068,11 +3676,14 @@ def chart_objective(
     memory_coord_mode: str = "route_chart",
     shell_mode: str = "linear",
     shell_phase_coupling: float = 0.0,
+    product_shell_control_mode: str = "continuous",
+    product_shell_gate_threshold: float = 0.0,
     hopf_chi_bins: int = 2,
     hopf_blend_lambda: float = 0.8,
     hopf_blend_chi_weight: float = 1.0,
     hopf_blend_shell_weight: float = 0.5,
     phase_transport_lambda: float = 1.0,
+    phase_field_lambda: float = 0.0,
     hybrid_local_k: int = 4,
     hybrid_complex_roots: int = 4,
     hybrid_local_min_k: int = 1,
@@ -3087,6 +3698,8 @@ def chart_objective(
         phase4_dim_i=phase4_dim_i, phase4_dim_j=phase4_dim_j,
         phase4_dim_k=phase4_dim_k, phase4_dim_l=phase4_dim_l,
         complex_dim_i=complex_dim_i, complex_dim_j=complex_dim_j,
+        field4_dim_i=field4_dim_i, field4_dim_j=field4_dim_j,
+        field4_dim_k=field4_dim_k, field4_dim_l=field4_dim_l,
         K=K,
         time_pressure_lambda=0.0, tau=1.0,
         adaptive_min_pair_bins=adaptive_min_pair_bins,
@@ -3104,11 +3717,14 @@ def chart_objective(
         memory_coord_mode=memory_coord_mode,
         shell_mode=shell_mode,
         shell_phase_coupling=shell_phase_coupling,
+        product_shell_control_mode=product_shell_control_mode,
+        product_shell_gate_threshold=product_shell_gate_threshold,
         hopf_chi_bins=hopf_chi_bins,
         hopf_blend_lambda=hopf_blend_lambda,
         hopf_blend_chi_weight=hopf_blend_chi_weight,
         hopf_blend_shell_weight=hopf_blend_shell_weight,
         phase_transport_lambda=phase_transport_lambda,
+        phase_field_lambda=phase_field_lambda,
         hybrid_local_k=hybrid_local_k,
         hybrid_complex_roots=hybrid_complex_roots,
         hybrid_local_min_k=hybrid_local_min_k,
@@ -3197,6 +3813,10 @@ def optimize_chart(
     seed: int,
     early_stop_patience: int,
     early_stop_min_delta: float,
+    field4_dim_i: int = 1,
+    field4_dim_j: int = 3,
+    field4_dim_k: int = 5,
+    field4_dim_l: int = 7,
     adaptive_min_pair_bins: int = 2,
     adaptive_time_growth: float = 1.0,
     adaptive_balance: float = 1.0,
@@ -3212,11 +3832,14 @@ def optimize_chart(
     memory_coord_mode: str = "route_chart",
     shell_mode: str = "linear",
     shell_phase_coupling: float = 0.0,
+    product_shell_control_mode: str = "continuous",
+    product_shell_gate_threshold: float = 0.0,
     hopf_chi_bins: int = 2,
     hopf_blend_lambda: float = 0.8,
     hopf_blend_chi_weight: float = 1.0,
     hopf_blend_shell_weight: float = 0.5,
     phase_transport_lambda: float = 1.0,
+    phase_field_lambda: float = 0.0,
     hybrid_local_k: int = 4,
     hybrid_complex_roots: int = 4,
     hybrid_local_min_k: int = 1,
@@ -3257,6 +3880,8 @@ def optimize_chart(
         phase4_dim_i=phase4_dim_i, phase4_dim_j=phase4_dim_j,
         phase4_dim_k=phase4_dim_k, phase4_dim_l=phase4_dim_l,
         complex_dim_i=complex_dim_i, complex_dim_j=complex_dim_j,
+        field4_dim_i=field4_dim_i, field4_dim_j=field4_dim_j,
+        field4_dim_k=field4_dim_k, field4_dim_l=field4_dim_l,
         K=K,
         alpha_overload=alpha_overload, beta_bucketcount=beta_bucketcount, radial_l2=radial_l2,
         adaptive_min_pair_bins=adaptive_min_pair_bins,
@@ -3274,11 +3899,14 @@ def optimize_chart(
         memory_coord_mode=memory_coord_mode,
         shell_mode=shell_mode,
         shell_phase_coupling=shell_phase_coupling,
+        product_shell_control_mode=product_shell_control_mode,
+        product_shell_gate_threshold=product_shell_gate_threshold,
         hopf_chi_bins=hopf_chi_bins,
         hopf_blend_lambda=hopf_blend_lambda,
         hopf_blend_chi_weight=hopf_blend_chi_weight,
         hopf_blend_shell_weight=hopf_blend_shell_weight,
         phase_transport_lambda=phase_transport_lambda,
+        phase_field_lambda=phase_field_lambda,
         hybrid_local_k=hybrid_local_k,
         hybrid_complex_roots=hybrid_complex_roots,
         hybrid_local_min_k=hybrid_local_min_k,
@@ -3321,6 +3949,8 @@ def optimize_chart(
                     phase4_dim_i=phase4_dim_i, phase4_dim_j=phase4_dim_j,
                     phase4_dim_k=phase4_dim_k, phase4_dim_l=phase4_dim_l,
                     complex_dim_i=complex_dim_i, complex_dim_j=complex_dim_j,
+                    field4_dim_i=field4_dim_i, field4_dim_j=field4_dim_j,
+                    field4_dim_k=field4_dim_k, field4_dim_l=field4_dim_l,
                     K=K,
                     alpha_overload=alpha_overload, beta_bucketcount=beta_bucketcount, radial_l2=radial_l2,
                     adaptive_min_pair_bins=adaptive_min_pair_bins,
@@ -3338,11 +3968,14 @@ def optimize_chart(
                     memory_coord_mode=memory_coord_mode,
                     shell_mode=shell_mode,
                     shell_phase_coupling=shell_phase_coupling,
+                    product_shell_control_mode=product_shell_control_mode,
+                    product_shell_gate_threshold=product_shell_gate_threshold,
                     hopf_chi_bins=hopf_chi_bins,
                     hopf_blend_lambda=hopf_blend_lambda,
                     hopf_blend_chi_weight=hopf_blend_chi_weight,
                     hopf_blend_shell_weight=hopf_blend_shell_weight,
                     phase_transport_lambda=phase_transport_lambda,
+                    phase_field_lambda=phase_field_lambda,
                     hybrid_local_k=hybrid_local_k,
                     hybrid_complex_roots=hybrid_complex_roots,
                     hybrid_local_min_k=hybrid_local_min_k,
@@ -3421,11 +4054,14 @@ def optimize_chart(
                     memory_coord_mode=memory_coord_mode,
                     shell_mode=shell_mode,
                     shell_phase_coupling=shell_phase_coupling,
+                    product_shell_control_mode=product_shell_control_mode,
+                    product_shell_gate_threshold=product_shell_gate_threshold,
                     hopf_chi_bins=hopf_chi_bins,
                     hopf_blend_lambda=hopf_blend_lambda,
                     hopf_blend_chi_weight=hopf_blend_chi_weight,
                     hopf_blend_shell_weight=hopf_blend_shell_weight,
                     phase_transport_lambda=phase_transport_lambda,
+                    phase_field_lambda=phase_field_lambda,
                     hybrid_local_k=hybrid_local_k,
                     hybrid_complex_roots=hybrid_complex_roots,
                     hybrid_local_min_k=hybrid_local_min_k,
@@ -3531,18 +4167,18 @@ def chart_cache_payload(args: argparse.Namespace) -> Dict:
         "K", "delta_r", "kmeans_iters", "learn_so8", "learn_scale", "scale_mode", "radial_bins",
         "radial_rmax", "radial_update_frac", "radial_l2", "chart_iters", "chart_alpha", "chart_beta",
         "so8_step", "so8_candidates", "scale_step", "scale_candidates", "scale_clip",
-        "sector_mode", "phase_dims", "phase4_dims", "complex_dims", "route_scale_lambda", "memory_coord_mode", "shell_mode", "shell_phase_coupling", "hopf_chi_bins", "hopf_blend_lambda", "hopf_blend_chi_weight", "hopf_blend_shell_weight", "phase_transport_lambda", "recluster_after_chart", "fast_dev",
+        "sector_mode", "phase_dims", "phase4_dims", "field4_dims", "complex_dims", "route_scale_lambda", "memory_coord_mode", "shell_mode", "shell_phase_coupling", "product_shell_control_mode", "product_shell_gate_threshold", "hopf_chi_bins", "hopf_blend_lambda", "hopf_blend_chi_weight", "hopf_blend_shell_weight", "phase_transport_lambda", "phase_field_lambda", "recluster_after_chart", "fast_dev",
         "hybrid_local_k", "hybrid_complex_roots", "hybrid_local_min_k", "hybrid_local_target",
         "hybrid_local_hysteresis", "hybrid_local_converge_lambda",
         "adaptive_min_pair_bins", "adaptive_time_growth", "adaptive_balance", "adaptive_angle_growth",
         "adaptive_shell_growth", "adaptive_shell_balance", "adaptive_converge_lambda",
         "adaptive_converge_target", "adaptive_converge_hysteresis", "adaptive_converge_mode",
     ]
-    return {"cache_version": "chart-v8", "args": {k: getattr(args, k) for k in keys}}
+    return {"cache_version": "chart-v11", "args": {k: getattr(args, k) for k in keys}}
 
 def route_cache_payload(args: argparse.Namespace, chart_fp: str, c_fp: str) -> Dict:
     keys = [
-        "seed", "delta_r", "sector_mode", "phase_dims", "phase4_dims", "complex_dims", "route_scale_lambda", "memory_coord_mode", "shell_mode", "shell_phase_coupling", "hopf_chi_bins", "hopf_blend_lambda", "hopf_blend_chi_weight", "hopf_blend_shell_weight", "phase_transport_lambda", "K",
+        "seed", "delta_r", "sector_mode", "phase_dims", "phase4_dims", "field4_dims", "complex_dims", "route_scale_lambda", "memory_coord_mode", "shell_mode", "shell_phase_coupling", "product_shell_control_mode", "product_shell_gate_threshold", "hopf_chi_bins", "hopf_blend_lambda", "hopf_blend_chi_weight", "hopf_blend_shell_weight", "phase_transport_lambda", "phase_field_lambda", "K",
         "hybrid_local_k", "hybrid_complex_roots", "hybrid_local_min_k", "hybrid_local_target",
         "hybrid_local_hysteresis", "hybrid_local_converge_lambda",
         "time_pressure_lambda", "recluster_after_chart",
@@ -3551,7 +4187,7 @@ def route_cache_payload(args: argparse.Namespace, chart_fp: str, c_fp: str) -> D
         "adaptive_converge_target", "adaptive_converge_hysteresis", "adaptive_converge_mode",
     ]
     return {
-        "cache_version": "routes-v8",
+        "cache_version": "routes-v11",
         "args": {k: getattr(args, k) for k in keys},
         "chart_fp": chart_fp,
         "c_fp": c_fp,
@@ -3594,10 +4230,21 @@ def run_full(args: argparse.Namespace):
     dy = int(args.dy)
     phase_dim_i, phase_dim_j = parse_pair_dims(args.phase_dims, "--phase_dims")
     phase4_dim_i, phase4_dim_j, phase4_dim_k, phase4_dim_l = parse_quad_dims(args.phase4_dims, "--phase4_dims")
+    field4_dim_i, field4_dim_j, field4_dim_k, field4_dim_l = parse_quad_dims(args.field4_dims, "--field4_dims")
     complex_dim_i, complex_dim_j = parse_pair_dims(args.complex_dims, "--complex_dims")
     ensure_dims_in_range([phase_dim_i, phase_dim_j], d, "--phase_dims")
     ensure_dims_in_range([phase4_dim_i, phase4_dim_j, phase4_dim_k, phase4_dim_l], d, "--phase4_dims")
+    ensure_dims_in_range([field4_dim_i, field4_dim_j, field4_dim_k, field4_dim_l], d, "--field4_dims")
     ensure_dims_in_range([complex_dim_i, complex_dim_j], d, "--complex_dims")
+    ensure_distinct_dims([phase4_dim_i, phase4_dim_j, phase4_dim_k, phase4_dim_l], "--phase4_dims")
+    ensure_distinct_dims([field4_dim_i, field4_dim_j, field4_dim_k, field4_dim_l], "--field4_dims")
+    if args.sector_mode == "phase4d_hopf_product_phase":
+        ensure_disjoint_dims(
+            [phase4_dim_i, phase4_dim_j, phase4_dim_k, phase4_dim_l],
+            "--phase4_dims",
+            [field4_dim_i, field4_dim_j, field4_dim_k, field4_dim_l],
+            "--field4_dims",
+        )
 
     if int(args.cache_chart) == 1 or int(args.cache_routes) == 1:
         ensure_dir(args.cache_dir)
@@ -3689,6 +4336,10 @@ def run_full(args: argparse.Namespace):
             phase4_dim_l=phase4_dim_l,
             complex_dim_i=complex_dim_i,
             complex_dim_j=complex_dim_j,
+            field4_dim_i=field4_dim_i,
+            field4_dim_j=field4_dim_j,
+            field4_dim_k=field4_dim_k,
+            field4_dim_l=field4_dim_l,
             K=args.K,
             seed=args.seed + 23,
             early_stop_patience=args.early_stop_patience,
@@ -3708,11 +4359,14 @@ def run_full(args: argparse.Namespace):
             memory_coord_mode=args.memory_coord_mode,
             shell_mode=args.shell_mode,
             shell_phase_coupling=args.shell_phase_coupling,
+            product_shell_control_mode=args.product_shell_control_mode,
+            product_shell_gate_threshold=args.product_shell_gate_threshold,
             hopf_chi_bins=args.hopf_chi_bins,
             hopf_blend_lambda=args.hopf_blend_lambda,
             hopf_blend_chi_weight=args.hopf_blend_chi_weight,
             hopf_blend_shell_weight=args.hopf_blend_shell_weight,
             phase_transport_lambda=args.phase_transport_lambda,
+            phase_field_lambda=args.phase_field_lambda,
             hybrid_local_k=args.hybrid_local_k,
             hybrid_complex_roots=args.hybrid_complex_roots,
             hybrid_local_min_k=args.hybrid_local_min_k,
@@ -3776,6 +4430,8 @@ def run_full(args: argparse.Namespace):
             phase4_dim_i=phase4_dim_i, phase4_dim_j=phase4_dim_j,
             phase4_dim_k=phase4_dim_k, phase4_dim_l=phase4_dim_l,
             complex_dim_i=complex_dim_i, complex_dim_j=complex_dim_j,
+            field4_dim_i=field4_dim_i, field4_dim_j=field4_dim_j,
+            field4_dim_k=field4_dim_k, field4_dim_l=field4_dim_l,
             K=args.K,
             time_pressure_lambda=0.0, tau=1.0,
             adaptive_min_pair_bins=args.adaptive_min_pair_bins,
@@ -3793,7 +4449,14 @@ def run_full(args: argparse.Namespace):
             memory_coord_mode=args.memory_coord_mode,
             shell_mode=args.shell_mode,
             shell_phase_coupling=args.shell_phase_coupling,
+            product_shell_control_mode=args.product_shell_control_mode,
+            product_shell_gate_threshold=args.product_shell_gate_threshold,
             hopf_chi_bins=args.hopf_chi_bins,
+            hopf_blend_lambda=args.hopf_blend_lambda,
+            hopf_blend_chi_weight=args.hopf_blend_chi_weight,
+            hopf_blend_shell_weight=args.hopf_blend_shell_weight,
+            phase_transport_lambda=args.phase_transport_lambda,
+            phase_field_lambda=args.phase_field_lambda,
             hybrid_local_k=args.hybrid_local_k,
             hybrid_complex_roots=args.hybrid_complex_roots,
             hybrid_local_min_k=args.hybrid_local_min_k,
@@ -3808,6 +4471,8 @@ def run_full(args: argparse.Namespace):
             phase4_dim_i=phase4_dim_i, phase4_dim_j=phase4_dim_j,
             phase4_dim_k=phase4_dim_k, phase4_dim_l=phase4_dim_l,
             complex_dim_i=complex_dim_i, complex_dim_j=complex_dim_j,
+            field4_dim_i=field4_dim_i, field4_dim_j=field4_dim_j,
+            field4_dim_k=field4_dim_k, field4_dim_l=field4_dim_l,
             K=args.K,
             time_pressure_lambda=0.0, tau=1.0,
             adaptive_min_pair_bins=args.adaptive_min_pair_bins,
@@ -3825,7 +4490,14 @@ def run_full(args: argparse.Namespace):
             memory_coord_mode=args.memory_coord_mode,
             shell_mode=args.shell_mode,
             shell_phase_coupling=args.shell_phase_coupling,
+            product_shell_control_mode=args.product_shell_control_mode,
+            product_shell_gate_threshold=args.product_shell_gate_threshold,
             hopf_chi_bins=args.hopf_chi_bins,
+            hopf_blend_lambda=args.hopf_blend_lambda,
+            hopf_blend_chi_weight=args.hopf_blend_chi_weight,
+            hopf_blend_shell_weight=args.hopf_blend_shell_weight,
+            phase_transport_lambda=args.phase_transport_lambda,
+            phase_field_lambda=args.phase_field_lambda,
             hybrid_local_k=args.hybrid_local_k,
             hybrid_complex_roots=args.hybrid_complex_roots,
             hybrid_local_min_k=args.hybrid_local_min_k,
@@ -3864,7 +4536,7 @@ def run_full(args: argparse.Namespace):
     route_z_te = route_coordinate(v_te, chart, sector_mode=args.sector_mode, route_scale_lambda=args.route_scale_lambda)
     alignment = poincare_alignment_diagnostics(
         v_te,
-        route_z_te if args.memory_coord_mode == "full_chart" else z_te,
+        route_z_te,
         max_pairs=512,
         seed=args.seed + 811,
     )
@@ -3934,7 +4606,14 @@ def run_full(args: argparse.Namespace):
     phase_transport_shift_abs_mean = 0.0
     phase_transport_shift_abs_max = 0.0
     phase_transport_connection_abs_mean = 0.0
+    phase_transport_field_shift_abs_mean = 0.0
+    phase_transport_field_weight_abs_mean = 0.0
     phase_transport_alpha_bins = 0.0
+    hopf_sector_groups_used = 0
+    hopf_sector_chi_std_mean = 0.0
+    hopf_sector_delta_cvar_mean = 0.0
+    hopf_sector_alpha_entropy_mean = 0.0
+    hopf_sector_alpha_entropy_gap = 0.0
     hybrid_coarse_eval_sectors = 0
     hybrid_local_eval_sectors = 0
     hybrid_local_pmax = 0.0
@@ -3953,8 +4632,8 @@ def run_full(args: argparse.Namespace):
     hybrid_local_activation_max = 0.0
     hybrid_local_k_eff_mean = 0.0
     hybrid_local_k_eff_max = 0
-    diag_z_te = route_z_te if args.memory_coord_mode == "full_chart" else z_te
-    if args.sector_mode in ("phase4d_adaptive", "phase4d_hopf", "phase4d_hopf_base", "phase4d_hopf_transport", "phase4d_hopf_iso", "phase4d_hopf_ball", "phase4d_hopf_chi", "phase4d_hopf_fib", "phase4d_hopf_fib_rung", "phase4d_hopf_fib_band", "phase4d_hopf_fib_band_iso", "phase4d_hopf_fib_band_bound", "phase4d_hopf_blend", "phase4d_complex_local"):
+    diag_z_te = route_z_te
+    if args.sector_mode in ("phase4d_adaptive", "phase4d_hopf", "phase4d_hopf_base", "phase4d_hopf_transport", "phase4d_hopf_transport_complex", "phase4d_hopf_product_phase", "phase4d_hopf_iso", "phase4d_hopf_ball", "phase4d_hopf_base_ball", "phase4d_hopf_chi", "phase4d_hopf_fib", "phase4d_hopf_fib_rung", "phase4d_hopf_fib_band", "phase4d_hopf_fib_band_iso", "phase4d_hopf_fib_band_bound", "phase4d_hopf_blend", "phase4d_complex_local"):
         comp = phase4d_adaptive_components(
             z=diag_z_te,
             K=args.K,
@@ -3978,17 +4657,60 @@ def run_full(args: argparse.Namespace):
         k1_dbg = comp["k1"]
         k2_dbg = comp["k2"]
         chi_ids = np.minimum((comp["chi_u"] * max(1, int(args.hopf_chi_bins))).astype(np.int64), max(max(1, int(args.hopf_chi_bins)) - 1, 0))
-        if args.sector_mode == "phase4d_hopf_transport":
-            _, kchi_dbg, kdelta_dbg, kalpha_dbg = assign_sectors_phase4d_hopf_transport(
+        if args.sector_mode in ("phase4d_hopf_base", "phase4d_hopf_base_ball"):
+            _, kchi_dbg, kdelta_dbg = assign_sectors_phase4d_hopf_base(
                 z=diag_z_te,
                 K=args.K,
                 dim_i=phase4_dim_i,
                 dim_j=phase4_dim_j,
                 dim_k=phase4_dim_k,
                 dim_l=phase4_dim_l,
-                phase_transport_lambda=args.phase_transport_lambda,
-                hopf_chi_bins=args.hopf_chi_bins,
             )
+            k1_dbg = kchi_dbg
+            k2_dbg = kdelta_dbg
+            chi_ids = np.minimum((comp["chi_u"] * kchi_dbg.astype(np.float64)).astype(np.int64), np.maximum(kchi_dbg - 1, 0))
+        if args.sector_mode in ("phase4d_hopf_transport", "phase4d_hopf_transport_complex", "phase4d_hopf_product_phase"):
+            if args.sector_mode == "phase4d_hopf_transport_complex":
+                _, kchi_dbg, kdelta_dbg, kalpha_dbg = assign_sectors_phase4d_hopf_transport_complex(
+                    z=diag_z_te,
+                    K=args.K,
+                    dim_i=phase4_dim_i,
+                    dim_j=phase4_dim_j,
+                    dim_k=phase4_dim_k,
+                    dim_l=phase4_dim_l,
+                    complex_dim_i=complex_dim_i,
+                    complex_dim_j=complex_dim_j,
+                    phase_transport_lambda=args.phase_transport_lambda,
+                    phase_field_lambda=args.phase_field_lambda,
+                    hopf_chi_bins=args.hopf_chi_bins,
+                )
+            elif args.sector_mode == "phase4d_hopf_product_phase":
+                _, kchi_dbg, kdelta_dbg, kalpha_dbg = assign_sectors_phase4d_hopf_product_phase(
+                    z=diag_z_te,
+                    K=args.K,
+                    route_dim_i=phase4_dim_i,
+                    route_dim_j=phase4_dim_j,
+                    route_dim_k=phase4_dim_k,
+                    route_dim_l=phase4_dim_l,
+                    field_dim_i=field4_dim_i,
+                    field_dim_j=field4_dim_j,
+                    field_dim_k=field4_dim_k,
+                    field_dim_l=field4_dim_l,
+                    phase_transport_lambda=args.phase_transport_lambda,
+                    phase_field_lambda=args.phase_field_lambda,
+                    hopf_chi_bins=args.hopf_chi_bins,
+                )
+            else:
+                _, kchi_dbg, kdelta_dbg, kalpha_dbg = assign_sectors_phase4d_hopf_transport(
+                    z=diag_z_te,
+                    K=args.K,
+                    dim_i=phase4_dim_i,
+                    dim_j=phase4_dim_j,
+                    dim_k=phase4_dim_k,
+                    dim_l=phase4_dim_l,
+                    phase_transport_lambda=args.phase_transport_lambda,
+                    hopf_chi_bins=args.hopf_chi_bins,
+                )
             k1_dbg = kchi_dbg
             k2_dbg = kdelta_dbg
             phase_transport_alpha_bins = float(np.mean(kalpha_dbg))
@@ -4085,7 +4807,6 @@ def run_full(args: argparse.Namespace):
                 hopf_blend_lambda=args.hopf_blend_lambda,
                 hopf_blend_chi_weight=args.hopf_blend_chi_weight,
                 hopf_blend_shell_weight=args.hopf_blend_shell_weight,
-            phase_transport_lambda=args.phase_transport_lambda,
             )
             adaptive_blend_total_mean = float(np.mean(blend_total_dbg))
             adaptive_blend_total_max = int(np.max(blend_total_dbg))
@@ -4186,6 +4907,21 @@ def run_full(args: argparse.Namespace):
         hybrid_local_k_eff_mean = float(np.mean(hybrid_dbg["local_k_eff"]))
         hybrid_local_k_eff_max = int(np.max(hybrid_dbg["local_k_eff"]))
 
+    hopf_sector = hopf_sector_routing_diagnostics(
+        route_z_te,
+        sector_te,
+        dim_i=phase4_dim_i,
+        dim_j=phase4_dim_j,
+        dim_k=phase4_dim_k,
+        dim_l=phase4_dim_l,
+        alpha_bins=12,
+    )
+    hopf_sector_groups_used = int(hopf_sector["hopf_sector_groups_used"])
+    hopf_sector_chi_std_mean = float(hopf_sector["hopf_sector_chi_std_mean"])
+    hopf_sector_delta_cvar_mean = float(hopf_sector["hopf_sector_delta_cvar_mean"])
+    hopf_sector_alpha_entropy_mean = float(hopf_sector["hopf_sector_alpha_entropy_mean"])
+    hopf_sector_alpha_entropy_gap = float(hopf_sector["hopf_sector_alpha_entropy_gap"])
+
     train_label_sse = label_coherence_sse(
         v_tr, y_tr, delta_r=args.delta_r, C=C_used, chart=chart,
         sector_mode=args.sector_mode,
@@ -4193,6 +4929,8 @@ def run_full(args: argparse.Namespace):
         phase4_dim_i=phase4_dim_i, phase4_dim_j=phase4_dim_j,
         phase4_dim_k=phase4_dim_k, phase4_dim_l=phase4_dim_l,
         complex_dim_i=complex_dim_i, complex_dim_j=complex_dim_j,
+        field4_dim_i=field4_dim_i, field4_dim_j=field4_dim_j,
+        field4_dim_k=field4_dim_k, field4_dim_l=field4_dim_l,
         K=args.K,
         adaptive_min_pair_bins=args.adaptive_min_pair_bins,
         adaptive_time_growth=args.adaptive_time_growth,
@@ -4205,7 +4943,16 @@ def run_full(args: argparse.Namespace):
         adaptive_converge_hysteresis=args.adaptive_converge_hysteresis,
         adaptive_converge_mode=args.adaptive_converge_mode,
         fib_rung_gate_threshold=args.fib_rung_gate_threshold,
+        route_scale_lambda=args.route_scale_lambda,
         memory_coord_mode=args.memory_coord_mode,
+        shell_mode=args.shell_mode,
+        shell_phase_coupling=args.shell_phase_coupling,
+        hopf_chi_bins=args.hopf_chi_bins,
+        hopf_blend_lambda=args.hopf_blend_lambda,
+        hopf_blend_chi_weight=args.hopf_blend_chi_weight,
+        hopf_blend_shell_weight=args.hopf_blend_shell_weight,
+        phase_transport_lambda=args.phase_transport_lambda,
+        phase_field_lambda=args.phase_field_lambda,
         hybrid_local_k=args.hybrid_local_k,
         hybrid_complex_roots=args.hybrid_complex_roots,
         hybrid_local_min_k=args.hybrid_local_min_k,
@@ -4220,6 +4967,8 @@ def run_full(args: argparse.Namespace):
         phase4_dim_i=phase4_dim_i, phase4_dim_j=phase4_dim_j,
         phase4_dim_k=phase4_dim_k, phase4_dim_l=phase4_dim_l,
         complex_dim_i=complex_dim_i, complex_dim_j=complex_dim_j,
+        field4_dim_i=field4_dim_i, field4_dim_j=field4_dim_j,
+        field4_dim_k=field4_dim_k, field4_dim_l=field4_dim_l,
         K=args.K,
         adaptive_min_pair_bins=args.adaptive_min_pair_bins,
         adaptive_time_growth=args.adaptive_time_growth,
@@ -4232,7 +4981,16 @@ def run_full(args: argparse.Namespace):
         adaptive_converge_hysteresis=args.adaptive_converge_hysteresis,
         adaptive_converge_mode=args.adaptive_converge_mode,
         fib_rung_gate_threshold=args.fib_rung_gate_threshold,
+        route_scale_lambda=args.route_scale_lambda,
         memory_coord_mode=args.memory_coord_mode,
+        shell_mode=args.shell_mode,
+        shell_phase_coupling=args.shell_phase_coupling,
+        hopf_chi_bins=args.hopf_chi_bins,
+        hopf_blend_lambda=args.hopf_blend_lambda,
+        hopf_blend_chi_weight=args.hopf_blend_chi_weight,
+        hopf_blend_shell_weight=args.hopf_blend_shell_weight,
+        phase_transport_lambda=args.phase_transport_lambda,
+        phase_field_lambda=args.phase_field_lambda,
         hybrid_local_k=args.hybrid_local_k,
         hybrid_complex_roots=args.hybrid_complex_roots,
         hybrid_local_min_k=args.hybrid_local_min_k,
@@ -4274,6 +5032,10 @@ def run_full(args: argparse.Namespace):
                     phase4_dim_l=phase4_dim_l,
                     complex_dim_i=complex_dim_i,
                     complex_dim_j=complex_dim_j,
+                    field4_dim_i=field4_dim_i,
+                    field4_dim_j=field4_dim_j,
+                    field4_dim_k=field4_dim_k,
+                    field4_dim_l=field4_dim_l,
                     K=args.K,
                     time_pressure_lambda=float(args.time_pressure_lambda),
                     tau=tau,
@@ -4292,11 +5054,14 @@ def run_full(args: argparse.Namespace):
                     memory_coord_mode=args.memory_coord_mode,
                     shell_mode=args.shell_mode,
                     shell_phase_coupling=args.shell_phase_coupling,
+                    product_shell_control_mode=args.product_shell_control_mode,
+                    product_shell_gate_threshold=args.product_shell_gate_threshold,
                     hopf_chi_bins=args.hopf_chi_bins,
                     hopf_blend_lambda=args.hopf_blend_lambda,
                     hopf_blend_chi_weight=args.hopf_blend_chi_weight,
                     hopf_blend_shell_weight=args.hopf_blend_shell_weight,
                     phase_transport_lambda=args.phase_transport_lambda,
+                    phase_field_lambda=args.phase_field_lambda,
                     hybrid_local_k=args.hybrid_local_k,
                     hybrid_complex_roots=args.hybrid_complex_roots,
                     hybrid_local_min_k=args.hybrid_local_min_k,
@@ -4344,12 +5109,12 @@ def run_full(args: argparse.Namespace):
 
     print("=== RUN SUMMARY ===")
     print(f"mode={args.mode} seed={args.seed} learn_so8={args.learn_so8} learn_scale={args.learn_scale}")
-    print(f"sector_mode={args.sector_mode} phase_dims={args.phase_dims} phase4_dims={args.phase4_dims} complex_dims={args.complex_dims}")
+    print(f"sector_mode={args.sector_mode} phase_dims={args.phase_dims} phase4_dims={args.phase4_dims} field4_dims={args.field4_dims} complex_dims={args.complex_dims}")
     print(
         f"time_pressure_lambda={args.time_pressure_lambda} "
         f"train_route_mode={args.train_route_mode} fast_dev={args.fast_dev}"
     )
-    if args.sector_mode in ("phase4d_adaptive", "phase4d_hopf", "phase4d_hopf_base", "phase4d_hopf_transport", "phase4d_hopf_iso", "phase4d_hopf_ball", "phase4d_hopf_chi", "phase4d_hopf_fib", "phase4d_hopf_fib_rung", "phase4d_hopf_fib_band", "phase4d_hopf_fib_band_iso", "phase4d_hopf_fib_band_bound", "phase4d_hopf_blend", "phase4d_complex_local"):
+    if args.sector_mode in ("phase4d_adaptive", "phase4d_hopf", "phase4d_hopf_base", "phase4d_hopf_transport", "phase4d_hopf_transport_complex", "phase4d_hopf_product_phase", "phase4d_hopf_iso", "phase4d_hopf_ball", "phase4d_hopf_base_ball", "phase4d_hopf_chi", "phase4d_hopf_fib", "phase4d_hopf_fib_rung", "phase4d_hopf_fib_band", "phase4d_hopf_fib_band_iso", "phase4d_hopf_fib_band_bound", "phase4d_hopf_blend", "phase4d_complex_local"):
         print(
             "adaptive_phase4d="
             f"min_pair_bins={args.adaptive_min_pair_bins} "
@@ -4373,15 +5138,46 @@ def run_full(args: argparse.Namespace):
             f"shell_weight={args.hopf_blend_shell_weight} "
             f"chi_bins={args.hopf_chi_bins}"
         )
-    if args.sector_mode == "phase4d_hopf_transport":
-        phase_transport = hopf_phase_transport_diagnostics(
-            z_te,
-            dim_i=phase4_dim_i,
-            dim_j=phase4_dim_j,
-            dim_k=phase4_dim_k,
-            dim_l=phase4_dim_l,
-            phase_transport_lambda=args.phase_transport_lambda,
-        )
+    if args.sector_mode in ("phase4d_hopf_transport", "phase4d_hopf_transport_complex", "phase4d_hopf_product_phase"):
+        if args.sector_mode == "phase4d_hopf_transport_complex":
+            phase_transport = hopf_phase_transport_complex_diagnostics(
+                route_z_te,
+                dim_i=phase4_dim_i,
+                dim_j=phase4_dim_j,
+                dim_k=phase4_dim_k,
+                dim_l=phase4_dim_l,
+                complex_dim_i=complex_dim_i,
+                complex_dim_j=complex_dim_j,
+                phase_transport_lambda=args.phase_transport_lambda,
+                phase_field_lambda=args.phase_field_lambda,
+            )
+            phase_transport_field_shift_abs_mean = float(phase_transport["phase_transport_field_shift_abs_mean"])
+            phase_transport_field_weight_abs_mean = float(phase_transport["phase_transport_field_weight_abs_mean"])
+        elif args.sector_mode == "phase4d_hopf_product_phase":
+            phase_transport = hopf_product_phase_diagnostics(
+                route_z_te,
+                route_dim_i=phase4_dim_i,
+                route_dim_j=phase4_dim_j,
+                route_dim_k=phase4_dim_k,
+                route_dim_l=phase4_dim_l,
+                field_dim_i=field4_dim_i,
+                field_dim_j=field4_dim_j,
+                field_dim_k=field4_dim_k,
+                field_dim_l=field4_dim_l,
+                phase_transport_lambda=args.phase_transport_lambda,
+                phase_field_lambda=args.phase_field_lambda,
+            )
+            phase_transport_field_shift_abs_mean = float(phase_transport["phase_transport_field_shift_abs_mean"])
+            phase_transport_field_weight_abs_mean = float(phase_transport["phase_transport_field_weight_abs_mean"])
+        else:
+            phase_transport = hopf_phase_transport_diagnostics(
+                route_z_te,
+                dim_i=phase4_dim_i,
+                dim_j=phase4_dim_j,
+                dim_k=phase4_dim_k,
+                dim_l=phase4_dim_l,
+                phase_transport_lambda=args.phase_transport_lambda,
+            )
         phase_transport_coherence = float(phase_transport["phase_transport_coherence"])
         phase_transport_shift_abs_mean = float(phase_transport["phase_transport_shift_abs_mean"])
         phase_transport_shift_abs_max = float(phase_transport["phase_transport_shift_abs_max"])
@@ -4389,10 +5185,13 @@ def run_full(args: argparse.Namespace):
         print(
             "phase_transport="
             f"lambda={args.phase_transport_lambda:.6f} "
+            f"field_lambda={args.phase_field_lambda:.6f} "
             f"coherence={phase_transport_coherence:.6f} "
             f"shift_abs_mean={phase_transport_shift_abs_mean:.6f} "
             f"shift_abs_max={phase_transport_shift_abs_max:.6f} "
             f"conn_abs_mean={phase_transport_connection_abs_mean:.6f} "
+            f"field_shift_abs_mean={phase_transport_field_shift_abs_mean:.6f} "
+            f"field_weight_abs_mean={phase_transport_field_weight_abs_mean:.6f} "
             f"alpha_bins={phase_transport_alpha_bins:.6f}"
         )
     if args.sector_mode == "phase4d_complex_local":
@@ -4434,7 +5233,7 @@ def run_full(args: argparse.Namespace):
 
     print("--- routing diagnostics (eval keys) ---")
     print(f"test_unseen_rate={unseen_rate:.6f}")
-    if args.sector_mode in ("phase4d_adaptive", "phase4d_hopf", "phase4d_hopf_base", "phase4d_hopf_transport", "phase4d_hopf_iso", "phase4d_hopf_ball", "phase4d_hopf_chi", "phase4d_hopf_fib", "phase4d_hopf_fib_rung", "phase4d_hopf_fib_band", "phase4d_hopf_fib_band_iso", "phase4d_hopf_fib_band_bound", "phase4d_hopf_blend", "phase4d_complex_local"):
+    if args.sector_mode in ("phase4d_adaptive", "phase4d_hopf", "phase4d_hopf_base", "phase4d_hopf_transport", "phase4d_hopf_transport_complex", "phase4d_hopf_product_phase", "phase4d_hopf_iso", "phase4d_hopf_ball", "phase4d_hopf_base_ball", "phase4d_hopf_chi", "phase4d_hopf_fib", "phase4d_hopf_fib_rung", "phase4d_hopf_fib_band", "phase4d_hopf_fib_band_iso", "phase4d_hopf_fib_band_bound", "phase4d_hopf_blend", "phase4d_complex_local"):
         print(
             "adaptive_shell="
             f"drive_mean={adaptive_shell_drive_mean:.6f} "
@@ -4491,6 +5290,14 @@ def run_full(args: argparse.Namespace):
             f"blend_chi_pressure_max={adaptive_blend_chi_pressure_max:.6f} "
             f"blend_shell_pressure_mean={adaptive_blend_shell_pressure_mean:.6f} "
             f"blend_shell_pressure_max={adaptive_blend_shell_pressure_max:.6f}"
+        )
+        print(
+            "hopf_sector="
+            f"groups={hopf_sector_groups_used} "
+            f"chi_std_mean={hopf_sector_chi_std_mean:.6f} "
+            f"delta_cvar_mean={hopf_sector_delta_cvar_mean:.6f} "
+            f"alpha_entropy_mean={hopf_sector_alpha_entropy_mean:.6f} "
+            f"alpha_entropy_gap={hopf_sector_alpha_entropy_gap:.6f}"
         )
     if args.sector_mode == "phase4d_complex_local":
         print(
@@ -4621,7 +5428,14 @@ def run_full(args: argparse.Namespace):
             "phase_transport_shift_abs_mean": float(phase_transport_shift_abs_mean),
             "phase_transport_shift_abs_max": float(phase_transport_shift_abs_max),
             "phase_transport_connection_abs_mean": float(phase_transport_connection_abs_mean),
+            "phase_transport_field_shift_abs_mean": float(phase_transport_field_shift_abs_mean),
+            "phase_transport_field_weight_abs_mean": float(phase_transport_field_weight_abs_mean),
             "phase_transport_alpha_bins": float(phase_transport_alpha_bins),
+            "hopf_sector_groups_used": int(hopf_sector_groups_used),
+            "hopf_sector_chi_std_mean": float(hopf_sector_chi_std_mean),
+            "hopf_sector_delta_cvar_mean": float(hopf_sector_delta_cvar_mean),
+            "hopf_sector_alpha_entropy_mean": float(hopf_sector_alpha_entropy_mean),
+            "hopf_sector_alpha_entropy_gap": float(hopf_sector_alpha_entropy_gap),
             "hybrid_coarse_eval_sectors": int(hybrid_coarse_eval_sectors),
             "hybrid_local_eval_sectors": int(hybrid_local_eval_sectors),
             "hybrid_local_pmax": float(hybrid_local_pmax),
@@ -4688,12 +5502,14 @@ def parse_args():
     ap.add_argument("--min_split_gain", type=float, default=1e-4)
 
     # Routing mode: sectors
-    ap.add_argument("--sector_mode", type=str, default="kmeans", choices=["kmeans", "phase2", "phase4d", "phase4d_adaptive", "phase4d_hopf", "phase4d_hopf_base", "phase4d_hopf_transport", "phase4d_hopf_iso", "phase4d_hopf_ball", "phase4d_hopf_chi", "phase4d_hopf_fib", "phase4d_hopf_fib_rung", "phase4d_hopf_fib_band", "phase4d_hopf_fib_band_iso", "phase4d_hopf_fib_band_bound", "phase4d_hopf_blend", "phase4d_complex_local", "complex2"],
+    ap.add_argument("--sector_mode", type=str, default="kmeans", choices=["kmeans", "phase2", "phase4d", "phase4d_adaptive", "phase4d_hopf", "phase4d_hopf_base", "phase4d_hopf_transport", "phase4d_hopf_transport_complex", "phase4d_hopf_product_phase", "phase4d_hopf_iso", "phase4d_hopf_ball", "phase4d_hopf_base_ball", "phase4d_hopf_chi", "phase4d_hopf_fib", "phase4d_hopf_fib_rung", "phase4d_hopf_fib_band", "phase4d_hopf_fib_band_iso", "phase4d_hopf_fib_band_bound", "phase4d_hopf_blend", "phase4d_complex_local", "complex2"],
                     help="how to compute sector index")
     ap.add_argument("--phase_dims", type=str, default="0,1",
                     help="two dims i,j used for phase2 sectoring, e.g. '0,1'")
     ap.add_argument("--phase4_dims", type=str, default="0,1,2,3",
                     help="four dims i,j,k,l used for phase4d sectoring, e.g. '0,1,2,3'")
+    ap.add_argument("--field4_dims", type=str, default="1,3,5,7",
+                    help="four dims i,j,k,l used for the coupled field factor in phase4d_hopf_product_phase")
     ap.add_argument("--complex_dims", type=str, default="0,1",
                     help="two dims i,j used for complex2 sectoring")
     ap.add_argument("--hybrid_local_k", type=int, default=4,
@@ -4733,6 +5549,11 @@ def parse_args():
                     help="shell metric: linear, phi-spaced log, or phase-coupled phi shells")
     ap.add_argument("--shell_phase_coupling", type=float, default=0.0,
                     help="signed phase-pressure shift applied to phi-based shells when shell_mode=phi_phase")
+    ap.add_argument("--product_shell_control_mode", type=str, default="continuous",
+                    choices=["continuous", "gated", "banded"],
+                    help="shell-capacity controller for phase4d_hopf_product_phase")
+    ap.add_argument("--product_shell_gate_threshold", type=float, default=0.0,
+                    help="activation threshold for sparse/banded product shell control")
     ap.add_argument("--fib_rung_gate_threshold", type=float, default=0.0,
                     help="gate threshold for phase4d_hopf_fib_rung; 0 preserves global ungated rung forcing")
     ap.add_argument("--route_scale_lambda", type=float, default=1.0,
@@ -4749,6 +5570,8 @@ def parse_args():
                     help="relative weight of shell-load pressure in phase4d_hopf_blend")
     ap.add_argument("--phase_transport_lambda", type=float, default=1.0,
                     help="strength of geometry-induced fiber transport alpha -> alpha + 0.5*lambda*cos(2chi)*delta for phase4d_hopf_transport")
+    ap.add_argument("--phase_field_lambda", type=float, default=0.0,
+                    help="strength of field-coupled phase transport for phase4d_hopf_transport_complex and phase4d_hopf_product_phase")
 
     # Time pressure
     ap.add_argument("--time_pressure_lambda", type=float, default=0.0,

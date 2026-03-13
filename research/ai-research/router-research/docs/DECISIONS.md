@@ -7,6 +7,831 @@
 
 Add new entries below.
 
+## 2026-03-12 (research increment INC-0134 refreshed real-task comparison)
+- Added the refreshed dual-anchor real-task comparison helper:
+  - `tools/translated_dual_anchor_real_task_refresh_comparison.py`
+  - test coverage:
+    - `tests/test_translated_dual_anchor_real_task_refresh_comparison.py`
+- Generated the refreshed real-task comparison artifact from the completed
+  lower-bank confirm, upper-bank confirm, and refreshed `INC-0133` contract:
+  - `results/analysis/inc0134_product_phase_sparse_event_translation_dual_anchor_real_task_refresh_comparison.json`
+  - `docs/reports/INC0134_PRODUCT_PHASE_SPARSE_EVENT_TRANSLATION_DUAL_ANCHOR_REAL_TASK_REFRESH_COMPARISON.md`
+- Key read:
+  - `CHART_H4XH4_FIELD_A150_EVT_T070_TAU002_CPX8_Q01_T2500` remains the
+    lower-bank systems-only default:
+    - `top1 delta vs dense = -0.0074`
+    - `amortized = 0.0899s`
+  - `CHART_H4XH4_FIELD_A150_EVT_T070_TAU002_SBI030_CPX8_Q01_T2500` remains
+    the balanced lower-bank quality comparator:
+    - `top1 delta vs default = +0.0018`
+    - `amortized delta vs default = +0.0043s`
+  - `CHART_H4XH4_FIELD_A150_EVT_T070_TAU002_SBI080_CPX8_Q01_T2500` remains
+    the quality-first lower-bank comparator:
+    - `top1 delta vs dense = +0.0004`
+    - `amortized delta vs dense = +0.0158s`
+  - the old lower-bank bounded-backfill point is no longer an active default
+- Decision:
+  - close `INC-0134` positive/explanatory
+  - keep `TAU002` as the lower-bank systems-only default
+  - keep `SBI030` as the balanced lower-bank quality comparator
+  - keep `SBI080` as the quality-first lower-bank comparator
+  - queue `INC-0135` to test whether the lower-bank three-way split is final
+    or whether one comparator deserves a named promoted operating mode
+
+## 2026-03-12 (research increment INC-0133 contract refresh)
+- Added the lower-bank contract refresh helper:
+  - `tools/translated_lower_bank_contract_refresh.py`
+  - test coverage:
+    - `tests/test_translated_lower_bank_contract_refresh.py`
+- Generated the refreshed contract artifact from the completed `INC-0132`
+  lower-bank selection plus the inherited broader/task-side/downstream
+  contracts:
+  - `results/analysis/inc0133_product_phase_sparse_event_translation_lower_bank_contract_refresh.json`
+  - `docs/reports/INC0133_PRODUCT_PHASE_SPARSE_EVENT_TRANSLATION_LOWER_BANK_CONTRACT_REFRESH.md`
+- Key read:
+  - the default lower-bank routed route is now inherited consistently as
+    `CHART_H4XH4_FIELD_A150_EVT_T070_TAU002_CPX8_Q01_T2500`
+  - `SBI030` and `SBI080` are now explicit lower-bank comparators instead of
+    stale nondefault leftovers
+  - `CHART_H4XH4_FIELD_A150_EVT_T070_BF2_SB1_CPX8_Q01_T2500` is now
+    historical-only on current contract surfaces
+  - the upper-bank default remains unchanged at
+    `CHART_H4XH4_FIELD_A150_EVT_T070_CPX8_Q01_T40000`
+- Decision:
+  - close `INC-0133` positive/explanatory
+  - stop inheriting the stale lower-bank bounded-backfill route by default
+  - queue `INC-0134` as the first refreshed real-task comparison from the new
+    lower-bank contract
+
+## 2026-03-12 (research increment INC-0132 analysis)
+- Added the lower-bank sparse-event translated reference-selection audit:
+  - `tools/translated_lower_bank_reference_selection.py`
+  - test coverage:
+    - `tests/test_translated_lower_bank_reference_selection.py`
+- Ran the audit from completed lower-bank artifacts:
+  - `results/analysis/inc0132_product_phase_sparse_event_translation_lower_bank_reference_reselection.json`
+  - `docs/reports/INC0132_PRODUCT_PHASE_SPARSE_EVENT_TRANSLATION_LOWER_BANK_REFERENCE_RESELECTION.md`
+- Key read:
+  - uncoupled near-hard is now the explicit lower-bank default:
+    - `top1=0.0446`
+    - `cand_frac=0.193328`
+    - `amortized=0.0899s`
+  - `SBI030` is the balanced lower-bank quality comparator:
+    - `top1 delta vs default = +0.0018`
+    - `amortized delta vs default = +0.0043s`
+  - `SBI080` is the quality-first comparator:
+    - `top1 delta vs default = +0.0078`
+    - `top1 delta vs dense = +0.0004`
+    - `amortized delta vs dense = +0.0158s`
+  - the old lower-bank bounded-backfill point is stale:
+    - focused amortized inflation = `18.91x` historical
+- Decision:
+  - close `INC-0132` positive/explanatory
+  - promote `CHART_H4XH4_FIELD_A150_EVT_T070_TAU002_CPX8_Q01_T2500` as the
+    explicit lower-bank default carry-forward route
+  - promote `CHART_H4XH4_FIELD_A150_EVT_T070_TAU002_SBI030_CPX8_Q01_T2500` as
+    the balanced lower-bank quality comparator
+  - keep `CHART_H4XH4_FIELD_A150_EVT_T070_TAU002_SBI080_CPX8_Q01_T2500` as a
+    quality-first comparator only
+  - queue `INC-0133` for contract refresh on the new lower-bank default
+
+## 2026-03-12 (research increment INC-0131 confirm)
+- Added the explicit prewarm plus carry-forward packet for lower-bank
+  sparse-event translated soft score bias:
+  - `configs/proxy_transfer_inc0131_product_phase_sparse_event_translation_soft_bias_carry_forward_prewarm_screen.json`
+  - `configs/proxy_transfer_inc0131_product_phase_sparse_event_translation_soft_bias_carry_forward_screen.json`
+  - `configs/proxy_transfer_inc0131_product_phase_sparse_event_translation_soft_bias_carry_forward_prewarm_confirm.json`
+  - `configs/proxy_transfer_inc0131_product_phase_sparse_event_translation_soft_bias_carry_forward_confirm.json`
+- Ran the tracked prewarm screen and confirm packet:
+  - `results/analysis/inc0131_product_phase_sparse_event_translation_soft_bias_carry_forward_screen.json`
+  - `results/analysis/inc0131_product_phase_sparse_event_translation_soft_bias_carry_forward_confirm.json`
+  - gate notes:
+    - `docs/governance/gates/gate_20260312_200544.md`
+    - `docs/governance/gates/gate_20260312_200705.md`
+- Key read:
+  - uncoupled near-hard remains the clean lower-bank systems point:
+    - `top1=0.0446`
+    - `cand_frac=0.193328`
+    - `amortized=0.0899s`
+  - `SBI030` is the balanced lower-bank quality lift:
+    - `top1=0.0464`
+    - `cand_frac=0.193328`
+    - `amortized=0.0942s`
+  - `SBI080` is the quality-first point:
+    - `top1=0.0524`
+    - `cand_frac=0.193328`
+    - `amortized=0.1416s`
+  - the old lower-bank bounded-backfill point did not hold on the focused
+    prewarmed packet:
+    - `top1=0.0452`
+    - `amortized=1.9991s`
+- Decision:
+  - close `INC-0131` positive/explanatory
+  - promote `CHART_H4XH4_FIELD_A150_EVT_T070_TAU002_CPX8_Q01_T2500` as the
+    lower-bank sparse-event translated systems reference
+  - promote `CHART_H4XH4_FIELD_A150_EVT_T070_TAU002_SBI030_CPX8_Q01_T2500` as
+    the balanced lower-bank quality comparator
+  - keep `CHART_H4XH4_FIELD_A150_EVT_T070_TAU002_SBI080_CPX8_Q01_T2500` as a
+    quality-first comparator only
+  - queue lower-bank reference reselection (`INC-0132`)
+
+## 2026-03-12 (research increment INC-0130 screen)
+- Added a new non-omission translated sparse-event coupling:
+  - `event_gate_translation_coupling=train_gate_score_bias`
+  - `event_gate_translation_score_bias_lambda`
+  - retrieval score-bias support in `tasks/router_retrieval_eval.py`
+  - config:
+    - `configs/proxy_transfer_inc0130_product_phase_sparse_event_translation_route_coupled_soft_bias_screen.json`
+- Ran the tracked 2-seed lower-bank soft-bias screen:
+  - `results/analysis/inc0130_product_phase_sparse_event_translation_route_coupled_soft_bias_screen.json`
+  - gate note: `docs/governance/gates/gate_20260312_195638.md`
+- Key read:
+  - soft score bias is genuinely downstream-live without deleting train items
+  - candidate fraction stays unchanged on every soft-bias point
+  - `SBI030` screened as the balanced quality-lift point
+  - `SBI080` screened as the strongest quality-first point
+- Decision:
+  - close `INC-0130` positive/explanatory
+  - move next to explicit prewarm plus confirm carry-forward (`INC-0131`)
+
+## 2026-03-12 (research increment INC-0129 screen)
+- Added the focused lower-bank train-gate-prune threshold-map packet:
+  - `configs/proxy_transfer_inc0129_product_phase_sparse_event_translation_route_coupled_threshold_map_screen.json`
+- Ran the tracked 2-seed threshold-map screen:
+  - `results/analysis/inc0129_product_phase_sparse_event_translation_route_coupled_threshold_map_screen.json`
+  - gate note: `docs/governance/gates/gate_20260312_194544.md`
+  - report:
+    - `docs/reports/INC0129_PRODUCT_PHASE_SPARSE_EVENT_TRANSLATION_ROUTE_COUPLED_THRESHOLD_MAP_SCREEN.md`
+- Key read:
+  - the train-gate-prune coupling is genuinely downstream-live
+  - threshold `0.010` is the best quality-preserving point:
+    - `keep_frac≈0.992`
+    - `top1=0.0448`
+    - `cand_frac≈0.187`
+  - but `0.010` still regresses online and amortized runtime versus uncoupled
+    near-hard
+  - thresholds `0.015-0.022` reduce candidate fraction further but collapse
+    translated quality sharply
+- Decision:
+  - close `INC-0129` negative/explanatory
+  - keep the existing translated sparse-event references unchanged
+  - retire train-gate pruning as a viable translated sparse-event
+    carry-forward surface
+  - move next to a softer translated coupling pilot (`INC-0130`)
+
+## 2026-03-12 (research increment INC-0128 screen)
+- Added a minimal translated sparse-event coupling into the lower-bank
+  translated retrieval path:
+  - `tasks/router_retrieval_eval.py`
+  - config:
+    - `configs/proxy_transfer_inc0128_product_phase_sparse_event_translation_route_coupled_screen.json`
+  - report:
+    - `docs/reports/INC0128_PRODUCT_PHASE_SPARSE_EVENT_TRANSLATION_ROUTE_COUPLED_SCREEN.md`
+- Fixed the harness edge case exposed by the first run:
+  - post-prune label coherence now uses the effective pruned train coordinate
+    view instead of the original full train bank
+- Ran the tracked `INC-0128` 2-seed screen:
+  - `results/analysis/inc0128_product_phase_sparse_event_translation_route_coupled_screen.json`
+  - gate note: `docs/governance/gates/gate_20260312_193527.md`
+- Key read:
+  - translated sparse-event behavior is now genuinely downstream-live under
+    `event_gate_translation_coupling=train_gate_prune`
+  - soft sparse at threshold `0.02` stays inert:
+    - `keep_frac=1.0`
+    - top-1 and candidate fraction unchanged
+  - near-hard at threshold `0.02` prunes materially:
+    - `keep_frac≈0.745`
+    - `cand_frac≈0.131`
+    - online `≈0.131s`
+  - the same near-hard coupled point is not promotable:
+    - top-1 collapses to `0.0212`
+- Decision:
+  - close `INC-0128` positive/explanatory
+  - stop treating translated sparse-event work as audit-only
+  - keep the existing translated sparse-event references unchanged
+  - move next to a threshold-map branch on the same coupling law (`INC-0129`)
+
+## 2026-03-12 (analysis INC-0127)
+- Added an explicit sparse-event translated rescue-feasibility audit:
+  - `tools/sparse_event_translation_systems_cost_rescue.py`
+  - test coverage:
+    - `tests/test_sparse_event_translation_systems_cost_rescue.py`
+    - `tests/test_router_retrieval_eval.py`
+- Ran the audit directly from the fixed translated and proxy artifacts:
+  - `results/analysis/inc0127_product_phase_sparse_event_translation_systems_cost_rescue.json`
+  - `docs/reports/INC0127_PRODUCT_PHASE_SPARSE_EVENT_TRANSLATION_SYSTEMS_COST_RESCUE.md`
+- Key read:
+  - translated soft sparse and translated near-hard differ only on
+    `event_gate_tau`
+  - current translated retrieval does not wire sparse-event knobs into the
+    downstream retrieval surface
+  - the observed translated timing gap therefore cannot support a selective
+    systems-cost rescue branch on the fixed lower-bank translated surface
+- Decision:
+  - close `INC-0127` negative/explanatory
+  - stop queuing translated timing rescue on the current audit-only surface
+  - move next to `INC-0128` route-coupled sparse-event translated pilot
+
+## 2026-03-12 (research increment INC-0101 screen)
+- Added a true hard proxy controller surface on top of the fixed product route
+  law:
+  - `tasks/router_proxy_eval.py`
+  - config:
+    - `configs/proxy_transfer_inc0101_product_phase_hard_event_proxy_screen.json`
+  - test coverage:
+    - `tests/test_router_proxy_eval.py`
+    - `tests/test_cli_contract.py`
+- Ran the tracked 2-seed hard-event proxy screen:
+  - `results/analysis/inc0101_product_phase_hard_event_proxy_screen.json`
+  - gate note: `docs/governance/gates/gate_20260312_113952.md`
+- Key read:
+  - both the sharpened near-hard controller and the true hard controller
+    passed the proxy health gate
+  - `H4XH4_FIELD_A150_EVT_T070_TAU002` screened as the strongest discrete-
+    leaning point with `event_gate_mean≈0.0206`
+  - `H4XH4_FIELD_A150_HARD_T062` stayed healthy, but remained mostly on with
+    `event_gate_active_frac≈0.845`
+- Decision:
+  - carry both event-discreteness candidates to confirm
+  - treat the sharpened soft controller as the screen leader for the branch
+
+## 2026-03-12 (research increment INC-0101 confirm)
+- Ran the tracked 4-seed hard-event proxy confirm:
+  - `configs/proxy_transfer_inc0101_product_phase_hard_event_proxy_confirm.json`
+  - `results/analysis/inc0101_product_phase_hard_event_proxy_confirm.json`
+  - gate note: `docs/governance/gates/gate_20260312_114258.md`
+- Key read:
+  - `H4XH4_FIELD_A150_EVT_T070_TAU002` held as the strongest near-hard event
+    point:
+    - `mse=0.0038642`
+    - `total_sec=6.040`
+    - `event_gate_mean=0.02055`
+    - `event_gate_active_frac=0.0`
+  - `H4XH4_FIELD_A150_HARD_T062` also held health, but stayed mostly on:
+    - `event_gate_mean=0.8439`
+    - `event_gate_active_frac=0.8439`
+- Decision:
+  - close `INC-0101` confirm positive/narrow
+  - promote `H4XH4_FIELD_A150_EVT_T070_TAU002` as the proxy near-hard event
+    reference
+  - do not overclaim binary hard-event trainability from this branch
+  - move next to translated carry-forward of the near-hard point
+
+## 2026-03-12 (research increment INC-0102 screen)
+- Ran the tracked prewarm plus translated near-hard carry-forward screen:
+  - `configs/proxy_transfer_inc0102_product_phase_near_hard_event_translation_prewarm_screen.json`
+  - `configs/proxy_transfer_inc0102_product_phase_near_hard_event_translation_screen.json`
+  - `results/analysis/inc0102_product_phase_near_hard_event_translation_screen.json`
+  - gate note: `docs/governance/gates/gate_20260312_115418.md`
+- Key read:
+  - the translated near-hard candidate preserved the same retrieval signal as
+    the continuous and soft sparse translated references
+  - but it lost the translated systems tradeoff:
+    - `online=0.21561s`
+    - `amortized=0.26344s`
+  - the translated sparse-event story therefore remains explicitly soft
+- Decision:
+  - close `INC-0102` negative at screen stage
+  - keep `CHART_H4XH4_FIELD_A150_EVT_T070_CPX8_Q01_T2500` as the translated
+    sparse-event reference
+  - move next to bounded quality recovery on the fixed soft sparse translated
+    point
+
+## 2026-03-12 (research increment INC-0103 confirm)
+- Ran the tracked prewarm, screen, and confirm rerank packet:
+  - `configs/proxy_transfer_inc0103_product_phase_soft_sparse_translation_quality_recovery_prewarm_screen.json`
+  - `configs/proxy_transfer_inc0103_product_phase_soft_sparse_translation_quality_recovery_screen.json`
+  - `configs/proxy_transfer_inc0103_product_phase_soft_sparse_translation_quality_recovery_prewarm_confirm.json`
+  - `configs/proxy_transfer_inc0103_product_phase_soft_sparse_translation_quality_recovery_confirm.json`
+  - `results/analysis/inc0103_product_phase_soft_sparse_translation_quality_recovery_confirm.json`
+  - gate notes:
+    - `docs/governance/gates/gate_20260312_120306.md`
+    - `docs/governance/gates/gate_20260312_120504.md`
+- Key read:
+  - bounded low-margin reranking did not recover translated quality
+  - `R050` only matched the fixed soft sparse translated point on top-1
+    (`0.0446`) while trimming amortized cost slightly (`0.10469s` vs
+    `0.10683s`)
+  - the branch therefore failed on its own quality-recovery contract
+- Decision:
+  - close `INC-0103` confirm negative on quality recovery
+  - keep `CHART_H4XH4_FIELD_A150_EVT_T070_CPX8_Q01_T2500` as the translated
+    sparse-event quality/reference point
+  - move next to bounded small-bucket backfill recovery (`INC-0104`)
+
+## 2026-03-12 (research increment INC-0104 confirm)
+- Ran the tracked prewarm, screen, and confirm bounded backfill packet:
+  - `configs/proxy_transfer_inc0104_product_phase_soft_sparse_translation_backfill_recovery_prewarm_screen.json`
+  - `configs/proxy_transfer_inc0104_product_phase_soft_sparse_translation_backfill_recovery_screen.json`
+  - `configs/proxy_transfer_inc0104_product_phase_soft_sparse_translation_backfill_recovery_prewarm_confirm.json`
+  - `configs/proxy_transfer_inc0104_product_phase_soft_sparse_translation_backfill_recovery_confirm.json`
+  - `results/analysis/inc0104_product_phase_soft_sparse_translation_backfill_recovery_confirm.json`
+  - gate notes:
+    - `docs/governance/gates/gate_20260312_121232.md`
+    - `docs/governance/gates/gate_20260312_121339.md`
+- Key read:
+  - bounded small-bucket backfill did not recover confirm-stage translated
+    quality
+  - but `CHART_H4XH4_FIELD_A150_EVT_T070_BF2_SB1_CPX8_Q01_T2500` became the
+    strongest lower-bank sparse translated systems point:
+    - `top1=0.0444`
+    - `cand_frac=0.189366`
+    - `amortized=0.10572s`
+  - the fixed soft sparse translated point remains the quality/reference read:
+    - `top1=0.0446`
+    - `cand_frac=0.193328`
+    - `amortized=0.15271s`
+- Decision:
+  - close `INC-0104` confirm negative on quality recovery
+  - promote `CHART_H4XH4_FIELD_A150_EVT_T070_BF2_SB1_CPX8_Q01_T2500` as the
+    lower-bank sparse translated systems lead
+  - move next to upper-bank carry-forward of that systems point (`INC-0105`)
+
+## 2026-03-12 (research increment INC-0105 confirm)
+- Ran the tracked prewarm, screen, and confirm upper-bank carry-forward packet:
+  - `configs/proxy_transfer_inc0105_product_phase_soft_sparse_translation_upper_bank_carry_forward_prewarm_screen.json`
+  - `configs/proxy_transfer_inc0105_product_phase_soft_sparse_translation_upper_bank_carry_forward_screen.json`
+  - `configs/proxy_transfer_inc0105_product_phase_soft_sparse_translation_upper_bank_carry_forward_prewarm_confirm.json`
+  - `configs/proxy_transfer_inc0105_product_phase_soft_sparse_translation_upper_bank_carry_forward_confirm.json`
+  - `results/analysis/inc0105_product_phase_soft_sparse_translation_upper_bank_carry_forward_confirm.json`
+  - gate notes:
+    - `docs/governance/gates/gate_20260312_121941.md`
+    - `docs/governance/gates/gate_20260312_122439.md`
+- Key read:
+  - the lower-bank sparse translated systems lead survives the upper bank
+  - `CHART_H4XH4_FIELD_A150_EVT_T070_BF2_SB1_CPX8_Q01_T40000` improves
+    candidate fraction and runtime over both routed references:
+    - `top1=0.0472875`
+    - `cand_frac=0.182003`
+    - `amortized=3.47015s`
+  - the fixed soft sparse upper-bank point remains the quality/reference read:
+    - `top1=0.047325`
+    - `cand_frac=0.183764`
+    - `amortized=3.53342s`
+- Decision:
+  - close `INC-0105` confirm positive/narrow
+  - promote `CHART_H4XH4_FIELD_A150_EVT_T070_BF2_SB1_CPX8_Q01_T40000` as the
+    upper-bank sparse translated systems lead
+  - move next to sparse translated systems cost decomposition (`INC-0106`)
+
+## 2026-03-12 (research increment INC-0106 audit)
+- Ran the sparse translated systems cost decomposition on the fixed `INC-0104`
+  and `INC-0105` confirm artifacts:
+  - `results/analysis/inc0106_product_phase_sparse_translation_systems_cost_decomposition.json`
+  - `docs/reports/INC0106_PRODUCT_PHASE_SPARSE_TRANSLATION_SYSTEMS_COST_DECOMPOSITION.md`
+- Key read:
+  - lower-bank bounded backfill gain is search-dominated on average
+  - upper-bank gain remains real on mean but mixes retrieval-search,
+    route-query, and route-index effects
+  - no hidden accounting regression surfaced
+- Decision:
+  - close `INC-0106` positive/explanatory
+  - keep the bounded backfill points as the sparse translated systems leads
+  - do not treat upper-bank route-query savings as stable guidance yet
+  - move next to per-seed component stability hardening (`INC-0107`)
+
+## 2026-03-12 (research increment INC-0107 audit)
+- Ran the sparse translated component stability audit on the fixed `INC-0104`
+  and `INC-0105` confirm artifacts:
+  - `results/analysis/inc0107_product_phase_sparse_translation_component_stability_audit.json`
+  - `docs/reports/INC0107_PRODUCT_PHASE_SPARSE_TRANSLATION_COMPONENT_STABILITY_AUDIT.md`
+- Key read:
+  - lower-bank backfill versus the continuous translated product reference is
+    stable at `4/4` seed wins
+  - lower-bank backfill versus the soft sparse translated reference is only a
+    `2/4` split on amortized cost
+  - upper-bank backfill versus both routed references is `3/4` mean-positive
+    but not seed-uniform
+  - candidate-fraction reduction is stable across all audited comparisons
+  - `route_query` changes sign across seeds and is not safe optimization
+    guidance yet
+- Decision:
+  - close `INC-0107` positive/explanatory
+  - keep the bounded backfill points as the sparse translated systems leads
+  - move next to repeated timing hardening on the exact fixed sparse
+    translated pairs (`INC-0108`)
+
+## 2026-03-12 (research increment INC-0108 audit)
+- Ran repeated timing hardening on the exact fixed lower/upper sparse
+  translated comparison packets, including two fresh warmed-chart reruns at
+  each anchor:
+  - `results/analysis/inc0108_product_phase_sparse_translation_repeated_timing_hardening_lower_r2.json`
+  - `results/analysis/inc0108_product_phase_sparse_translation_repeated_timing_hardening_lower_r3.json`
+  - `results/analysis/inc0108_product_phase_sparse_translation_repeated_timing_hardening_upper_r2.json`
+  - `results/analysis/inc0108_product_phase_sparse_translation_repeated_timing_hardening_upper_r3.json`
+  - `results/analysis/inc0108_product_phase_sparse_translation_repeated_timing_hardening.json`
+  - `docs/reports/INC0108_PRODUCT_PHASE_SPARSE_TRANSLATION_REPEATED_TIMING_HARDENING.md`
+- Key read:
+  - repeated wallclock timing still flips sign within seed on many lower- and
+    upper-bank comparisons
+  - candidate-fraction reduction remains stable across all repeated
+    comparisons
+  - the bounded backfill points remain valid mean systems leads, but
+    microtiming is still too noisy for direct optimization guidance
+- Decision:
+  - close `INC-0108` positive/explanatory
+  - keep bounded backfill as the sparse translated systems lead at both
+    anchors
+  - treat stable pruning rather than single-packet wallclock as the reliable
+    systems signal
+  - move next to a robust cost-reference audit on the completed evidence
+    (`INC-0109`)
+
+## 2026-03-12 (research increment INC-0109 audit)
+- Ran the robust sparse translated cost-reference audit on the fixed
+  `INC-0104`, `INC-0105`, and `INC-0108` evidence:
+  - `results/analysis/inc0109_product_phase_sparse_translation_robust_cost_reference.json`
+  - `docs/reports/INC0109_PRODUCT_PHASE_SPARSE_TRANSLATION_ROBUST_COST_REFERENCE.md`
+- Key read:
+  - upper-bank bounded backfill remains a clean robust systems lead versus
+    both routed baselines
+  - lower-bank bounded backfill remains robust versus the continuous
+    translated product reference
+  - lower-bank bounded backfill versus the fixed soft sparse translated
+    reference narrows to a pruning-first read:
+    - amortized median `+0.003406s`
+    - amortized trimmed mean `-0.020222s`
+    - candidate-fraction median `-0.003160`
+    - candidate-count median `-7.8996`
+  - top-1 stays effectively unchanged across the robust summaries
+- Decision:
+  - close `INC-0109` positive/explanatory
+  - keep the upper-bank bounded backfill point as the promoted sparse
+    translated systems lead
+  - keep the lower-bank bounded backfill point as the bounded-backfill
+    systems point, but describe it as pruning-first versus the fixed soft
+    sparse translated reference
+  - move next to repeated dense-frontier hardening on the fixed sparse
+    translated anchors (`INC-0110`)
+
+## 2026-03-12 (research increment INC-0110 audit)
+- Ran the dense-frontier robust hardening audit on the repeated warmed sparse
+  translated packets that already include the dense lower and upper anchors:
+  - `results/analysis/inc0110_product_phase_sparse_translation_dense_robust_hardening.json`
+  - `docs/reports/INC0110_PRODUCT_PHASE_SPARSE_TRANSLATION_DENSE_ROBUST_HARDENING.md`
+- Key read:
+  - lower-bank soft sparse versus dense narrows to a pruning-first read:
+    - amortized median `-0.004194s`
+    - amortized trimmed mean `+0.003878s`
+    - top-1 median `-0.007200`
+  - lower-bank bounded backfill remains the only robust lower-bank dense
+    systems promotion:
+    - amortized median `-0.000506s`
+    - amortized trimmed mean `-0.014058s`
+    - top-1 median `-0.006800`
+  - both upper-bank sparse translated points remain robust dense systems
+    promotions, but both keep a small robust top-1 deficit:
+    - upper soft sparse top-1 median `-0.001100`
+    - upper bounded backfill top-1 median `-0.001100`
+  - retrieval-search pruning remains the dominant gain mechanism, while
+    route-index build and route-query remain robust penalties
+- Decision:
+  - close `INC-0110` positive/explanatory
+  - keep the dense claim explicitly systems-first rather than quality-matched
+  - move next to dense quality-frontier accounting on the fixed sparse
+    translated points (`INC-0111`)
+
+## 2026-03-11 (research increment INC-0073 screen)
+- Ran the tracked 2-seed larger-load translated secondary-key screen:
+  - `configs/proxy_transfer_inc0073_product_phase_translation_secondary_key_large_load_screen.json`
+  - `results/analysis/inc0073_product_phase_translation_secondary_key_large_load_screen.json`
+  - gate note: `docs/governance/gates/gate_20260311_134522.md`
+- Key read:
+  - `H4XH4_FIELD_A150_CPX8` lost the small-load top-1 edge, but kept a large
+    candidate-pruning and runtime advantage on the harder translated load
+  - the branch therefore remained system-positive enough to justify confirm
+- Decision:
+  - carry the exact same fixed route/key/system law to 4-seed confirm
+
+## 2026-03-11 (research increment INC-0073 confirm)
+- Ran the tracked 4-seed larger-load translated secondary-key confirm:
+  - `configs/proxy_transfer_inc0073_product_phase_translation_secondary_key_large_load_confirm.json`
+  - `results/analysis/inc0073_product_phase_translation_secondary_key_large_load_confirm.json`
+  - gate note: `docs/governance/gates/gate_20260311_135226.md`
+- Key read:
+  - `H4XH4_FIELD_A150_CPX8` stayed well ahead of the Hopf translated controls
+    on candidate fraction plus online/amortized cost
+  - the larger-load hardening therefore passed on the systems axis
+  - the top-1 edge no longer survived, so the branch should be read as
+    systems/pruning positive rather than a total translated frontier win
+- Decision:
+  - close `INC-0073` confirm positive/narrow
+  - keep `H4XH4_FIELD_A150_CPX8` as the translated secondary-key systems lead
+  - move next to dense-vs-routed translated frontier pressure instead of
+    reopening geometry
+
+## 2026-03-11 (research increment INC-0074 screen)
+- Ran the tracked 2-seed dense-vs-routed translated frontier screen:
+  - `configs/proxy_transfer_inc0074_product_phase_translation_dense_frontier_screen.json`
+  - `results/analysis/inc0074_product_phase_translation_dense_frontier_screen.json`
+  - gate note: `docs/governance/gates/gate_20260311_140824.md`
+- Key read:
+  - `H4XH4_FIELD_A150_CPX8` immediately beat `DENSE_Q24` on candidate
+    fraction plus online/amortized cost
+  - it also screened slightly above dense on top-1
+- Decision:
+  - carry the exact same fixed route/key/system law to 4-seed confirm
+
+## 2026-03-11 (research increment INC-0074 confirm)
+- Ran the tracked 4-seed dense-vs-routed translated frontier confirm:
+  - `configs/proxy_transfer_inc0074_product_phase_translation_dense_frontier_confirm.json`
+  - `results/analysis/inc0074_product_phase_translation_dense_frontier_confirm.json`
+  - gate note: `docs/governance/gates/gate_20260311_141705.md`
+- Key read:
+  - `H4XH4_FIELD_A150_CPX8` stayed far below dense exact retrieval on
+    candidate fraction plus online/amortized cost
+  - the dense-frontier systems win therefore holds on 4 seeds
+  - the systems lead gives back a very small amount of top-1 versus dense and
+    the best routed quality points
+- Decision:
+  - close `INC-0074` confirm positive/narrow
+  - promote `H4XH4_FIELD_A150_CPX8` as the translated dense-frontier systems
+    lead
+  - move next to bounded quality recovery on top of the fixed dense-frontier
+    law
+
+## 2026-03-11 (research increment INC-0071 screen)
+- Ran the tracked 2-seed translated secondary-key screen:
+  - `configs/proxy_transfer_inc0071_product_phase_translation_secondary_keys_screen.json`
+  - `results/analysis/inc0071_product_phase_translation_secondary_keys_screen.json`
+  - gate note: `docs/governance/gates/gate_20260311_131450.md`
+- Key read:
+  - `H4XH4_FIELD_A150_CPX8` was the first useful translated secondary-key
+    point on the fixed product route law
+  - top-1 jumped to `0.04767` while candidate fraction fell to `0.19046`
+  - the screen justified confirm on the fixed route set
+- Decision:
+  - carry `H4XH4_FIELD_A150_CPX8` forward
+  - keep the geometry and phase law fixed
+
+## 2026-03-11 (research increment INC-0071 confirm)
+- Ran the tracked 4-seed translated secondary-key confirm:
+  - `configs/proxy_transfer_inc0071_product_phase_translation_secondary_keys_confirm.json`
+  - `results/analysis/inc0071_product_phase_translation_secondary_keys_confirm.json`
+  - gate note: `docs/governance/gates/gate_20260311_132141.md`
+- Key read:
+  - `H4XH4_FIELD_A150_CPX8` held up on 4 seeds
+  - top-1 improved over both fixed product baselines and over
+    `HOPF_K25_BASE_PHI`
+  - candidate fraction dropped sharply to `0.18723`
+  - online and amortized cost still trailed the main Hopf translated control
+- Decision:
+  - close `INC-0071` confirm positive/narrow
+  - promote `H4XH4_FIELD_A150_CPX8` as the translated secondary-key product
+    reference
+  - move next to a systems-cost rescue on the fixed route/key law
+
+## 2026-03-11 (research increment INC-0072 screen)
+- Ran the tracked 2-seed translated secondary-key cost-rescue screen:
+  - `configs/proxy_transfer_inc0072_product_phase_translation_secondary_key_cost_rescue_screen.json`
+  - `results/analysis/inc0072_product_phase_translation_secondary_key_cost_rescue_screen.json`
+  - gate note: `docs/governance/gates/gate_20260311_133356.md`
+- Key read:
+  - the systems-only implementation rescue was immediately effective
+  - `H4XH4_FIELD_A150_CPX8` beat `HOPF_K25_BASE_PHI` on top-1, candidate
+    fraction, online time, and amortized time
+- Decision:
+  - carry the exact same fixed route/key law into 4-seed confirm
+
+## 2026-03-11 (research increment INC-0072 confirm)
+- Ran the tracked 4-seed translated secondary-key cost-rescue confirm:
+  - `configs/proxy_transfer_inc0072_product_phase_translation_secondary_key_cost_rescue_confirm.json`
+  - `results/analysis/inc0072_product_phase_translation_secondary_key_cost_rescue_confirm.json`
+  - gate note: `docs/governance/gates/gate_20260311_133731.md`
+- Key read:
+  - `H4XH4_FIELD_A150_CPX8` held its confirmed addressing signal exactly
+  - it also stayed faster than `HOPF_K25_BASE_PHI` on both online and
+    amortized translated cost
+  - the fixed product route/key law is now a real translated systems win
+- Decision:
+  - close `INC-0072` confirm positive
+  - promote `H4XH4_FIELD_A150_CPX8` as the translated secondary-key systems lead
+  - move next to larger-load hardening before any broader operational claim
+
+## 2026-03-11 (research increment INC-0070 screen)
+- Added low-margin selective translated reranking on the fixed product routes:
+  - `tasks/router_retrieval_eval.py`
+  - config:
+    - `configs/proxy_transfer_inc0070_product_phase_translation_rescue_screen.json`
+  - test coverage:
+    - `tests/test_router_retrieval_eval.py`
+    - `tests/test_cli_contract.py`
+- Ran the tracked 2-seed translated retrieval rescue screen:
+  - `results/analysis/inc0070_product_phase_translation_rescue_screen.json`
+  - gate note: `docs/governance/gates/gate_20260311_130226.md`
+- Key read:
+  - the rerank variants stayed healthy
+  - but no rerank variant beat its corresponding fixed product baseline on the
+    translated quality/runtime tradeoff
+  - `H4XH4_FIELD_A100` remained the best translated product balanced branch:
+    `top1=0.04817`, `cand_frac=0.32029`, `amortized=0.4346s`
+  - `H4XH4_FIELD_A100_R025` and `H4XH4_FIELD_A100_R050` gave back too much
+    online/amortized cost to count as a rescue
+- Decision:
+  - close `INC-0070` negative at screen stage
+  - keep the fixed `INC-0069` product routes as the translated product
+    references
+  - move next to secondary-key screening on the fixed product routes
+
+## 2026-03-11 (research increment INC-0065 confirm)
+- Ran explicit product phase-field confirm:
+  - `configs/proxy_transfer_inc0065_product_phase_field_confirm.json`
+  - analysis: `results/analysis/inc0065_product_phase_field_confirm.json`
+  - address audit: `results/analysis/inc0065_product_phase_field_confirm_address_diff.json`
+  - gate note: `docs/governance/gates/gate_20260311_110024.md`
+- Key read:
+  - both carried product variants passed the 4-seed health gate
+  - explicit product coupling remains mechanism-live under confirm
+  - `H4XH4_FIELD_A150` is the best confirmed product-MSE point
+  - `H4XH4_FIELD_A100` is the stabilized transfer recommendation
+  - pure Hopf still owns the overall routed quality lead
+- Decision:
+  - close `INC-0065` positive at confirm stage
+  - keep the product branch as a confirmed phase-field reference family
+  - move next to direct spectral/operator measurement instead of more phase-law tuning
+
+## 2026-03-11 (research increment INC-0066 seed audit)
+- Added a direct spectral/operator audit tool:
+  - `tools/spectral_route_audit.py`
+  - test coverage: `tests/test_spectral_route_audit.py`
+- Ran the first seed spectral audit on the confirmed route set:
+  - `results/analysis/inc0065_product_phase_field_confirm_spectral_seed0.json`
+- Key read:
+  - all audited route graphs are connected under the normalized-Laplacian operator
+  - product routes show more delocalized low modes than the Hopf controls on seed 0
+  - pure Hopf keeps the strongest low-frequency sector-signal concentration on seed 0
+- Decision:
+  - treat this as the first measurement artifact, not as a promotion result
+  - expand spectral measurement next instead of inferring it from routing MSE
+
+## 2026-03-11 (research increment INC-0066 screen)
+- Added a reproducible sweep layer for the spectral branch:
+  - `tools/spectral_route_sweep.py`
+  - `configs/spectral_route_inc0066_screen.json`
+  - test coverage: `tests/test_spectral_route_sweep.py`
+- Ran the tracked 2-seed spectral screen:
+  - `results/analysis/inc0066_spectral_route_operator_screen.json`
+  - gate note: `docs/governance/gates/gate_20260311_112010.md`
+- Key read:
+  - all audited route graphs stayed connected
+  - product routes showed higher low-mode participation than the control set
+  - product routes showed lower low-frequency sector concentration than the
+    control set
+- Decision:
+  - close the `INC-0066` screen positive
+  - carry the same fixed route set into a 4-seed confirm
+
+## 2026-03-11 (research increment INC-0066 confirm)
+- Ran the tracked 4-seed spectral confirm:
+  - `configs/spectral_route_inc0066_confirm.json`
+  - `results/analysis/inc0066_spectral_route_operator_confirm.json`
+  - gate note: `docs/governance/gates/gate_20260311_112215.md`
+- Key read:
+  - all audited route graphs stayed connected
+  - product routes kept higher low-mode participation than the control set and
+    the Hopf-only controls
+  - pure Hopf still kept the strongest routed sector-concentration signal in
+    the low-frequency band
+- Decision:
+  - close `INC-0066` confirm positive
+  - treat direct geometry-induced spectral structure as evidence-positive on the
+    confirmed route set
+  - move next to signal-projection probes instead of more route-law tuning
+
+## 2026-03-11 (research increment INC-0067 screen)
+- Added a direct task-label probe layer:
+  - `tools/spectral_signal_probe.py`
+  - `tools/spectral_signal_sweep.py`
+  - configs:
+    - `configs/spectral_signal_inc0067_screen.json`
+    - `configs/spectral_signal_inc0067_confirm.json`
+  - test coverage:
+    - `tests/test_spectral_signal_sweep.py`
+- Ran the tracked 2-seed label-probe screen:
+  - `results/analysis/inc0067_spectral_signal_probes_screen.json`
+  - gate note: `docs/governance/gates/gate_20260311_113729.md`
+- Key read:
+  - operator distinction remained visible
+  - raw one-hot label lowfreq and Dirichlet gaps stayed slightly negative
+    versus the Hopf controls
+- Decision:
+  - do not close the branch positive from the screen
+  - carry the direct label probe to 4-seed confirm because the gaps are tiny
+
+## 2026-03-11 (research increment INC-0067 confirm)
+- Ran the tracked 4-seed label-probe confirm:
+  - `results/analysis/inc0067_spectral_signal_probes_confirm.json`
+  - gate note: `docs/governance/gates/gate_20260311_114258.md`
+- Key read:
+  - direct one-hot label probes remain slightly negative against the Hopf controls
+  - operator-level spectral distinction still survives from `INC-0066`
+  - this is a negative/inconclusive on the simplest task-label probe, not a
+    collapse of the operator result
+- Decision:
+  - close `INC-0067` inconclusive/negative for direct label probes
+  - move next to residual/task-error probes instead of reusing raw labels
+
+## 2026-03-11 (research increment INC-0068 screen)
+- Added a routed residual/task-error probe layer:
+  - `tools/spectral_residual_probe.py`
+  - `tools/spectral_residual_sweep.py`
+  - config:
+    - `configs/spectral_residual_inc0068_screen.json`
+  - test coverage:
+    - `tests/test_spectral_residual_probe.py`
+    - `tests/test_spectral_residual_sweep.py`
+- Ran the tracked 2-seed residual/task-error screen:
+  - `results/analysis/inc0068_spectral_residual_task_signals_screen.json`
+  - gate note: `docs/governance/gates/gate_20260311_122236.md`
+- Key read:
+  - all audited route graphs stayed connected
+  - product routes remained spectrally distinct
+  - residual norm, error-indicator, and true-margin probes all stayed negative
+    versus the Hopf controls on both lowfreq and Dirichlet views
+- Decision:
+  - close `INC-0068` inconclusive/negative at screen stage
+  - do not replay the same proxy-spectral branch at confirm
+  - move next to translated-retrieval evaluation of the confirmed product
+    phase-field branch
+
+## 2026-03-11 (research increment INC-0065 screen)
+- Ran explicit product phase-field screen:
+  - `configs/proxy_transfer_inc0065_product_phase_field_screen.json`
+  - analysis: `results/analysis/inc0065_product_phase_field_screen.json`
+  - address audit: `results/analysis/inc0065_product_phase_field_address_diff.json`
+  - gate note: `docs/governance/gates/gate_20260311_105034.md`
+- Key read:
+  - the explicit asymmetric `H^4 x H^4` product split is mechanism-live
+  - all three product variants passed the configured route-health gate
+  - field-shift metrics are nonzero across the branch
+  - address movement remains material vs `phase4d_hopf_base`
+  - `H4XH4_FIELD_A150` achieved the best screen MSE
+  - `H4XH4_FIELD_A100` is the automated stabilized-candidate recommendation
+- Decision:
+  - close the “queued next” state for `INC-0065`
+  - carry `H4XH4_FIELD_A100` and `H4XH4_FIELD_A150` into confirm
+  - treat explicit product phase-field routing as the main live phase branch
+
+## 2026-03-11 (research increment INC-0062 corrected screen)
+- Ran corrected Hopf-base screen:
+  - `configs/proxy_transfer_inc0062_hopf_base_screen_corrected.json`
+  - analysis: `results/analysis/inc0062_hopf_base_screen_corrected.json`
+  - gate note: `docs/governance/gates/gate_20260311_101015.md`
+- Key read:
+  - `phase4d_hopf_base` stayed healthy and competitive
+  - corrected Hopf sector diagnostics gave the clearest base/fiber separation
+    signature of the routed families
+- Decision:
+  - keep `phase4d_hopf_base` as the canonical no-fiber-phase coarse-address
+    control
+  - send the corrected branch to confirm
+
+## 2026-03-11 (research increment INC-0062 corrected confirm)
+- Ran corrected Hopf-base confirm:
+  - `configs/proxy_transfer_inc0062_hopf_base_confirm_corrected.json`
+  - analysis: `results/analysis/inc0062_hopf_base_confirm_corrected.json`
+  - gate note: `docs/governance/gates/gate_20260311_101213.md`
+- 4-seed read:
+  - `HOPF_K25_BASE_PHI`: best confirm MSE
+  - `HOPF_BASE_K25_PHI`: fastest healthy corrected control and strongest
+    corrected base/fiber separation evidence
+- Decision:
+  - promote `phase4d_hopf_base` as the canonical no-fiber-phase control
+  - keep pure Hopf as the routed quality lead
+  - do not use the old “control only” interpretation anymore
+
+## 2026-03-11 (research increment INC-0063 corrected screen)
+- Ran corrected standalone transport screen:
+  - `configs/proxy_transfer_inc0063_phase_transport_screen_corrected.json`
+  - analysis: `results/analysis/inc0063_phase_transport_screen_corrected.json`
+  - address audit: `results/analysis/inc0063_phase_transport_address_diff_corrected.json`
+  - gate note: `docs/governance/gates/gate_20260311_101344.md`
+- Key read:
+  - the old inert negative was caused by dead `alpha` bins at `K=25`
+  - corrected variants now have `phase_transport_alpha_bins=2.0`
+  - transport routes change about `98.6%-98.8%` of sector assignments vs
+    `phase4d_hopf_base`
+- Decision:
+  - replace the old negative closeout
+  - treat standalone transported phase as mechanism-live on the proxy schedule
+  - continue phase work from corrected evidence, not from the stale inertness
+    claim
+
+## 2026-03-11 (research increment INC-0064 corrected screen)
+- Ran corrected coupled complex-field transport screen:
+  - `configs/proxy_transfer_inc0064_coupled_complex_phase_screen.json`
+  - analysis: `results/analysis/inc0064_coupled_complex_phase_screen_corrected.json`
+  - address audit: `results/analysis/inc0064_coupled_complex_phase_address_diff_corrected.json`
+  - gate note: `docs/governance/gates/gate_20260311_101607.md`
+- Key read:
+  - same-chart coupled field is mechanism-live and health-passing
+  - field-shift metrics are strongly nonzero
+  - address movement is material vs `phase4d_hopf_base`
+  - the branch still trails Hopf-base and pure Hopf on proxy MSE
+- Decision:
+  - replace the old queued-next framing with the corrected completed screen
+  - move next to the explicit product phase-field branch (`INC-0065`)
+
 ## 2026-03-06 (research increment INC-0035 Slice A)
 - Added live Poincare-ball global-alignment diagnostics to:
   - `hyperbolic_router_so8.py`
@@ -1143,3 +1968,1489 @@ Add new entries below.
   - keeping candidate fraction fixed was necessary and succeeded
   - the obvious rerank law still failed to cash in a meaningful quality improvement
   - the second `H^4` likely needs a deeper coupled role than a local score correction
+
+## 2026-03-11 (research increment INC-0069)
+- Implemented translated-retrieval parity for the current phase/field route
+  surface in `tasks/router_retrieval_eval.py`:
+  - added `phase4d_hopf_base`, `phase4d_hopf_transport`,
+    `phase4d_hopf_transport_complex`, and `phase4d_hopf_product_phase`
+  - added `field4_dims`, `phase_transport_lambda`, and `phase_field_lambda`
+  - threaded the new args through `optimize_chart`, `route_addresses`, and
+    `label_coherence_sse`
+  - added regression coverage in `tests/test_router_retrieval_eval.py` and
+    `tests/test_cli_contract.py`
+- Ran translation screen:
+  - `configs/proxy_transfer_inc0069_product_phase_translation_screen.json`
+  - analysis: `results/analysis/inc0069_product_phase_translation_screen.json`
+  - gate note: `docs/governance/gates/gate_20260311_124011.md`
+- Screen reading:
+  - `H4XH4_FIELD_A100`: `top1=0.04817`, `cand_frac=0.3203`,
+    `amortized=0.5003s`
+  - `H4XH4_FIELD_A150`: `0.04567`, `0.3147`, `0.4645s`
+  - `HOPF_K25_BASE_PHI`: `0.04750`, `0.3488`, `0.4745s`
+  - `HOPF_BASE_K25_PHI`: `0.04767`, `0.3101`, `0.4694s`
+- Screen decision:
+  - carry both product routes to confirm
+  - the branch was not a clean translated frontier win, but it clearly preserved
+    useful pruning / addressing structure under task translation
+- Ran translation confirm:
+  - `configs/proxy_transfer_inc0069_product_phase_translation_confirm.json`
+  - analysis: `results/analysis/inc0069_product_phase_translation_confirm.json`
+  - gate note: `docs/governance/gates/gate_20260311_124616.md`
+- Confirm reading:
+  - `H4XH4_FIELD_A100`: `top1=0.04625`, `cand_frac=0.3177`,
+    `amortized=0.4733s`
+  - `H4XH4_FIELD_A150`: `0.04450`, `0.3083`, `0.4688s`
+  - `HOPF_K25_BASE_PHI`: `0.04683`, `0.3511`, `0.4806s`
+  - `HOPF_BASE_K25_PHI`: `0.04642`, `0.3113`, `0.4616s`
+  - `HOPF_PHI2_BAND_PHI`: `0.04617`, `0.3429`, `0.4834s`
+- Decision:
+  - close `INC-0069` confirm positive/narrow as translated retrieval evidence
+  - the fixed product routes do preserve useful locality / pruning under task
+    translation
+  - versus `HOPF_K25_BASE_PHI`, both product routes reduce candidate fraction
+    and slightly reduce amortized runtime across 4 seeds
+  - `HOPF_BASE_K25_PHI` still remains the strongest coarse-address translated
+    comparator, so this is not a route-frontier replacement
+  - queue `INC-0070` next: refine only the retrieval layer on top of the fixed
+    product routes to recover the small top-1 loss without giving back the
+    pruning/runtime gains
+
+## 2026-03-11 (research increment INC-0075 screen)
+- Ran the tracked 2-seed dense-frontier quality-recovery screen:
+  - `configs/proxy_transfer_inc0075_product_phase_translation_dense_quality_recovery_screen.json`
+  - `results/analysis/inc0075_product_phase_translation_dense_quality_recovery_screen.json`
+  - gate note: `docs/governance/gates/gate_20260311_142843.md`
+- Key read:
+  - the rerank variants did not improve the fixed systems lead
+  - `H4XH4_FIELD_A150` stayed the quality-matched routed point
+  - `H4XH4_FIELD_A150_CPX8` stayed the systems lead
+- Decision:
+  - carry only the unchanged frontier trio to confirm
+  - do not promote the rerank surfaces
+
+## 2026-03-11 (research increment INC-0075 confirm)
+- Ran the tracked 4-seed dense-frontier quality-recovery confirm:
+  - `configs/proxy_transfer_inc0075_product_phase_translation_dense_quality_recovery_confirm.json`
+  - `results/analysis/inc0075_product_phase_translation_dense_quality_recovery_confirm.json`
+  - gate note: `docs/governance/gates/gate_20260311_144445.md`
+- Key read:
+  - the confirm reproduced the `INC-0074` frontier split
+  - bounded quality rescue did not improve the fixed dense-frontier systems lead
+  - `H4XH4_FIELD_A150` remained quality-matched while `H4XH4_FIELD_A150_CPX8`
+    remained the stronger-pruning systems point
+- Decision:
+  - close `INC-0075` confirm negative
+  - kill bounded rerank quality rescue on the fixed frontier
+  - move next to repeated-query break-even mapping instead of more retrieval rescue
+
+## 2026-03-11 (research increment INC-0076 screen)
+- Ran the tracked 2-seed break-even screen:
+  - `configs/proxy_transfer_inc0076_product_phase_translation_break_even_screen.json`
+  - `results/analysis/inc0076_product_phase_translation_break_even_screen.json`
+  - gate note: `docs/governance/gates/gate_20260311_145722.md`
+- Key read:
+  - no routed crossover survived at `Q08`
+  - both routed points crossed dense on amortized cost by `Q16`
+  - the gap widened again at `Q24` and `Q32`
+- Decision:
+  - carry only the `Q08/Q16/Q24` crossover bracket to confirm
+  - keep the route and key law fixed
+
+## 2026-03-11 (research increment INC-0076 confirm)
+- Ran the tracked 4-seed break-even confirm:
+  - `configs/proxy_transfer_inc0076_product_phase_translation_break_even_confirm.json`
+  - `results/analysis/inc0076_product_phase_translation_break_even_confirm.json`
+  - gate note: `docs/governance/gates/gate_20260311_151013.md`
+- Key read:
+  - `H4XH4_FIELD_A150_Q16` matched dense top-1 while beating dense on amortized
+    cost
+  - `H4XH4_FIELD_A150_CPX8_Q16` became the first stronger-pruning systems
+    crossover point
+  - `H4XH4_FIELD_A150_CPX8_Q24` remained the stabilized dense-frontier systems
+    point with deeper amortized margin
+- Decision:
+  - close `INC-0076` confirm positive/narrow
+  - promote `Q16` as the first practical repeated-query crossover
+  - move next to hardware-cost profiling and workload-scale mapping on the fixed
+    crossover points
+
+## 2026-03-11 (research increment INC-0077 screen)
+- Added the translated hardware-profile summarizer:
+  - `tools/translated_hardware_profile.py`
+  - regression coverage: `tests/test_translated_hardware_profile.py`
+- Ran the tracked 2-seed hardware-profile screen:
+  - `configs/proxy_transfer_inc0077_product_phase_translation_hardware_profile_screen.json`
+  - `results/analysis/inc0077_product_phase_translation_hardware_profile_screen.json`
+  - `results/analysis/inc0077_product_phase_translation_hardware_profile_screen_profile.json`
+  - gate note: `docs/governance/gates/gate_20260311_152632.md`
+- Key read:
+  - the smaller-bank screen already showed the same slope change:
+    - no routed crossover survived at `Q16`
+    - the secondary-key branch crossed dense at `Q24`
+  - search-work ratios stayed almost unchanged from the current-bank confirm
+- Decision:
+  - carry the same `Q16/Q24` smaller-bank bracket to 4-seed confirm
+  - keep the route law and secondary-key law fixed
+
+## 2026-03-11 (research increment INC-0077 confirm)
+- Ran the tracked 4-seed hardware-profile confirm:
+  - `configs/proxy_transfer_inc0077_product_phase_translation_hardware_profile_confirm.json`
+  - `results/analysis/inc0077_product_phase_translation_hardware_profile_confirm.json`
+  - `results/analysis/inc0077_product_phase_translation_hardware_profile_confirm_profile.json`
+  - gate note: `docs/governance/gates/gate_20260311_153047.md`
+- Key read:
+  - the first explicit hardware-cost profile survived
+  - search-work reduction stayed stable across bank size:
+    - secondary-key branch near `19%` of dense work
+    - plain product branch near `31%`
+  - the crossover is scale-dependent rather than dead:
+    - at `max_train=12000`, crossover begins at `Q16`
+    - at `max_train=6000`, crossover survives only at `Q24`
+  - `H4XH4_FIELD_A150_CPX8_Q24_T6000` is the first confirmed smaller-bank
+    crossover point
+- Decision:
+  - close `INC-0077` confirm positive/narrow
+  - promote `H4XH4_FIELD_A150_CPX8_Q24_T6000` as the smaller-bank systems
+    crossover point
+  - move next to crossover-boundary mapping on the same fixed law
+
+## 2026-03-11 (research increment INC-0078 screen)
+- Ran the tracked 2-seed crossover-map screen:
+  - `configs/proxy_transfer_inc0078_product_phase_translation_crossover_map_screen.json`
+  - `results/analysis/inc0078_product_phase_translation_crossover_map_screen.json`
+  - `results/analysis/inc0078_product_phase_translation_crossover_map_screen_profile.json`
+  - gate note: `docs/governance/gates/gate_20260311_155644.md`
+- Key read:
+  - the boundary map was coherent immediately:
+    - `T3000`: no crossover through `Q24`
+    - `T6000`: first systems crossover at `Q24`
+    - `T12000`: first systems crossover already at `Q12`
+  - the secondary-key search-work ratio stayed effectively flat near `0.19`
+- Decision:
+  - carry only the actual boundary bracket to confirm
+  - do not rerun the whole surface
+
+## 2026-03-11 (research increment INC-0078 confirm)
+- Ran the tracked 4-seed crossover-map confirm:
+  - `configs/proxy_transfer_inc0078_product_phase_translation_crossover_map_confirm.json`
+  - `results/analysis/inc0078_product_phase_translation_crossover_map_confirm.json`
+  - `results/analysis/inc0078_product_phase_translation_crossover_map_confirm_profile.json`
+  - gate note: `docs/governance/gates/gate_20260311_161119.md`
+- Key read:
+  - the bank-by-bank crossover boundary is now explicitly confirmed
+  - `H4XH4_FIELD_A150_CPX8` keeps a stable work ratio while the crossover moves
+    earlier as the bank grows:
+    - no crossover through `Q24` at `3000`
+    - first crossover at `Q24` for `6000`
+    - first crossover by `Q12` for `12000`
+- Decision:
+  - close `INC-0078` confirm positive/narrow
+  - treat the boundary map as the live hardware-side result on the fixed law
+  - move next to a larger-bank extension instead of any new geometry or rescue
+
+## 2026-03-11 (research increment INC-0079 screen)
+- Ran the tracked 2-seed larger-bank boundary screen:
+  - `configs/proxy_transfer_inc0079_product_phase_translation_large_bank_boundary_extension_screen.json`
+  - `results/analysis/inc0079_product_phase_translation_large_bank_boundary_extension_screen.json`
+  - `results/analysis/inc0079_product_phase_translation_large_bank_boundary_extension_screen_profile.json`
+  - gate note: `docs/governance/gates/gate_20260311_222501.md`
+- Key read:
+  - the upper-bank extension was coherent immediately:
+    - `T12000`: onset stays at `Q12`
+    - `T18000`: onset already appears at `Q08`
+  - the secondary-key search-work ratio stayed effectively flat near `0.19`
+- Decision:
+  - carry only the `Q08/Q12` onset bracket to confirm
+  - keep the law fixed
+
+## 2026-03-11 (research increment INC-0079 confirm)
+- Ran the tracked 4-seed larger-bank boundary confirm:
+  - `configs/proxy_transfer_inc0079_product_phase_translation_large_bank_boundary_extension_confirm.json`
+  - `results/analysis/inc0079_product_phase_translation_large_bank_boundary_extension_confirm.json`
+  - `results/analysis/inc0079_product_phase_translation_large_bank_boundary_extension_confirm_profile.json`
+  - gate note: `docs/governance/gates/gate_20260311_223841.md`
+- Key read:
+  - the onset keeps moving left at a larger bank:
+    - `T12000`: first systems crossover at `Q12`
+    - `T18000`: first systems crossover at `Q08`
+  - the secondary-key search-work ratio still holds near `0.19`
+- Decision:
+  - close `INC-0079` confirm positive/narrow
+  - promote `H4XH4_FIELD_A150_CPX8_Q08_T18000` as the earliest confirmed
+    systems crossover point so far
+  - move next to a second larger-bank extension rather than any new geometry
+
+## 2026-03-11 (research increment INC-0080 screen)
+- Ran the tracked 2-seed second larger-bank boundary screen:
+  - `configs/proxy_transfer_inc0080_product_phase_translation_second_large_bank_boundary_extension_screen.json`
+  - `results/analysis/inc0080_product_phase_translation_second_large_bank_boundary_extension_screen.json`
+  - `results/analysis/inc0080_product_phase_translation_second_large_bank_boundary_extension_screen_profile.json`
+  - gate note: `docs/governance/gates/gate_20260311_230536.md`
+- Key read:
+  - the upper-bank hold was coherent immediately:
+    - `T24000`: first systems crossover at `Q08`
+    - `T30000`: first systems crossover at `Q08`
+    - `Q04` still did not cross at either bank
+  - the secondary-key search-work ratio stayed effectively flat:
+    - about `0.191` at `T24000`
+    - about `0.182` at `T30000`
+- Decision:
+  - carry only the `Q04/Q08` threshold bracket to confirm
+  - keep the law fixed
+
+## 2026-03-11 (research increment INC-0080 confirm)
+- Ran the tracked 4-seed second larger-bank boundary confirm:
+  - `configs/proxy_transfer_inc0080_product_phase_translation_second_large_bank_boundary_extension_confirm.json`
+  - `results/analysis/inc0080_product_phase_translation_second_large_bank_boundary_extension_confirm.json`
+  - `results/analysis/inc0080_product_phase_translation_second_large_bank_boundary_extension_confirm_profile.json`
+  - gate note: `docs/governance/gates/gate_20260311_232657.md`
+- Key read:
+  - the fixed translated product systems branch holds the `Q08` onset at both
+    larger banks:
+    - `T24000`: first systems crossover at `Q08`
+    - `T30000`: first systems crossover at `Q08`
+  - `Q04` still does not cross
+  - the secondary-key search-work ratio remains stable near `0.19`
+- Decision:
+  - close `INC-0080` confirm positive/narrow
+  - keep `H4XH4_FIELD_A150_CPX8_Q08_T18000` as the earliest confirmed systems
+    crossover point
+  - promote `H4XH4_FIELD_A150_CPX8_Q08_T30000` as the highest-bank confirmed
+    systems crossover point so far
+  - move next to an explicit `Q04` threshold search above `30000` rather than
+    claiming a new earlier onset
+
+## 2026-03-11 (research increment INC-0081 screen)
+- Ran the tracked 2-seed `Q04` threshold screen:
+  - `configs/proxy_transfer_inc0081_product_phase_translation_q04_threshold_search_screen.json`
+  - `results/analysis/inc0081_product_phase_translation_q04_threshold_search_screen.json`
+  - `results/analysis/inc0081_product_phase_translation_q04_threshold_search_screen_profile.json`
+  - gate note: `docs/governance/gates/gate_20260311_234946.md`
+- Key read:
+  - the threshold search was informative but non-monotone:
+    - `T36000`: first systems crossover at `Q04`
+    - `T40000`: first systems crossover at `Q08`
+  - the search-work ratio stayed stable near `18-19%`
+- Decision:
+  - carry the same `Q04/Q08` bracket to confirm
+  - do not invent another bank sweep yet
+
+## 2026-03-12 (research increment INC-0081 confirm)
+- Ran the tracked 4-seed `Q04` threshold confirm:
+  - `configs/proxy_transfer_inc0081_product_phase_translation_q04_threshold_search_confirm.json`
+  - `results/analysis/inc0081_product_phase_translation_q04_threshold_search_confirm.json`
+  - `results/analysis/inc0081_product_phase_translation_q04_threshold_search_confirm_profile.json`
+  - gate note: `docs/governance/gates/gate_20260312_002000.md`
+- Key read:
+  - the first real confirmed `Q04` systems crossover exists:
+    - `T36000`: first systems crossover at `Q04`
+  - the onset is not monotone:
+    - `T40000`: first systems crossover stays at `Q08`
+  - the candidate-fraction / search-work signal remains stable, so the split
+    looks like cost composition rather than route collapse
+- Decision:
+  - close `INC-0081` confirm positive/narrow
+  - promote `H4XH4_FIELD_A150_CPX8_Q04_T36000` as the earliest confirmed
+    systems crossover point so far
+  - promote `H4XH4_FIELD_A150_CPX8_Q08_T40000` as the highest-bank confirmed
+    systems crossover point so far
+  - move next to direct cost-accounting / memory-traffic analysis instead of
+    another blind bank extension
+
+## 2026-03-12 (research increment INC-0082 audit)
+- Ran the fixed translated cost-accounting audit:
+  - `tools/translated_cost_accounting.py`
+  - `results/analysis/inc0082_product_phase_translation_cost_accounting_audit.json`
+  - `docs/reports/INC0082_PRODUCT_PHASE_TRANSLATION_COST_ACCOUNTING_AUDIT.md`
+- Key read:
+  - `Q04 T36000` crosses because online savings exceed the offline penalty:
+    - online gain per repeat `9.862s`
+    - offline penalty per repeat `7.407s`
+    - amortized margin `+2.455s`
+  - `Q04 T40000` misses because the offline penalty exceeds the online gain:
+    - online gain per repeat `7.072s`
+    - offline penalty per repeat `8.038s`
+    - amortized margin `-0.966s`
+  - `Q08 T40000` still crosses because the same static offline cost is spread
+    across more repeats:
+    - online gain per repeat `7.657s`
+    - offline penalty per repeat `4.121s`
+    - amortized margin `+3.536s`
+  - search-work ratio and bytes-saved proxy remain stable across the split, so
+    the route signal itself is not collapsing
+- Decision:
+  - close `INC-0082` positive/explanatory
+  - treat the `Q04/Q08` threshold split as a software-side offline-cost issue
+    on the fixed translated stack
+  - do not reopen geometry or extend the bank map again yet
+  - move next to persistent route-cache / offline-cost rescue (`INC-0083`)
+
+## 2026-03-12 (research increment INC-0083 screen)
+- Ran the tracked 2-seed persistent route-cache screen:
+  - `configs/proxy_transfer_inc0083_product_phase_translation_persistent_route_cache_screen_cold.json`
+  - `configs/proxy_transfer_inc0083_product_phase_translation_persistent_route_cache_screen_warm.json`
+  - `results/analysis/inc0083_product_phase_translation_persistent_route_cache_screen_cold.json`
+  - `results/analysis/inc0083_product_phase_translation_persistent_route_cache_screen_warm.json`
+  - `results/analysis/inc0083_product_phase_translation_persistent_route_cache_screen_compare.json`
+  - `docs/reports/INC0083_PRODUCT_PHASE_TRANSLATION_PERSISTENT_ROUTE_CACHE_SCREEN_COMPARE.md`
+  - gate notes:
+    - `docs/governance/gates/gate_20260312_010935.md`
+    - `docs/governance/gates/gate_20260312_011438.md`
+- Key read:
+  - warm-cache reuse immediately removed almost all routed offline cost
+  - `Q04 T40000` flipped from a cold miss to a strong warm-cache systems win
+  - `Q08 T40000` strengthened materially under the same reuse
+  - top-1 and candidate fraction stayed unchanged between cold and warm routed
+    runs
+- Decision:
+  - carry the exact same fixed law into 4-seed cold/warm confirm
+  - treat cache stability as a hard invariant, not an optimization bonus
+
+## 2026-03-12 (research increment INC-0083 confirm)
+- Ran the tracked 4-seed persistent route-cache confirm:
+  - `configs/proxy_transfer_inc0083_product_phase_translation_persistent_route_cache_confirm_cold.json`
+  - `configs/proxy_transfer_inc0083_product_phase_translation_persistent_route_cache_confirm_warm.json`
+  - `results/analysis/inc0083_product_phase_translation_persistent_route_cache_confirm_cold.json`
+  - `results/analysis/inc0083_product_phase_translation_persistent_route_cache_confirm_warm.json`
+  - `results/analysis/inc0083_product_phase_translation_persistent_route_cache_confirm_compare.json`
+  - `docs/reports/INC0083_PRODUCT_PHASE_TRANSLATION_PERSISTENT_ROUTE_CACHE_CONFIRM_COMPARE.md`
+  - gate notes:
+    - `docs/governance/gates/gate_20260312_012911.md`
+    - `docs/governance/gates/gate_20260312_013859.md`
+- Key read:
+  - `Q04 T40000` cold routed amortized `10.389s` became warm `1.972s`
+  - `Q08 T40000` cold routed amortized `6.165s` became warm `1.891s`
+  - both warm routed points hit `chart_cache_hit=1.0` and
+    `route_cache_hit=1.0`
+  - top-1 and candidate fraction stayed unchanged under reuse
+- Decision:
+  - close `INC-0083` confirm positive/narrow
+  - keep the route law, secondary-key law, and bank fixed
+  - promote `H4XH4_FIELD_A150_CPX8_Q04_T40000` as the warm-cache rescued
+    upper-bank crossover point
+  - move next to a warm-cache onset map on the fixed `T40000` stack
+    (`INC-0084`)
+
+## 2026-03-12 (research increment INC-0084 screen)
+- Ran the tracked 2-seed warm-cache onset screen:
+  - `configs/proxy_transfer_inc0084_product_phase_translation_warm_cache_onset_map_screen.json`
+  - `results/analysis/inc0084_product_phase_translation_warm_cache_onset_map_screen.json`
+  - gate note: `docs/governance/gates/gate_20260312_015936.md`
+- Key read:
+  - the fixed translated product stack already crossed dense at `Q01` under
+    warm-cache conditions on the fixed `T40000` bank
+  - the same routed signal held across `Q01/Q02/Q04/Q08`
+  - all routed runs hit both caches
+- Decision:
+  - carry the exact same warm-cache bracket to 4-seed confirm
+  - do not reopen bank size or route-law scope inside this increment
+
+## 2026-03-12 (research increment INC-0084 confirm)
+- Ran the tracked 4-seed warm-cache onset confirm:
+  - `configs/proxy_transfer_inc0084_product_phase_translation_warm_cache_onset_map_confirm.json`
+  - `results/analysis/inc0084_product_phase_translation_warm_cache_onset_map_confirm.json`
+  - `docs/reports/INC0084_PRODUCT_PHASE_TRANSLATION_WARM_CACHE_ONSET_MAP.md`
+  - gate note: `docs/governance/gates/gate_20260312_021141.md`
+- Key read:
+  - `H4XH4_FIELD_A150_CPX8_Q01_T40000` confirmed at `top1=0.047325`,
+    `cand_frac=0.183764`, `amortized=2.204s`
+  - `DENSE_Q01_T40000` stayed at `top1=0.048850`, `amortized=9.536s`
+  - the same routed branch stayed system-positive across `Q02/Q04/Q08`
+  - all routed runs kept `chart_cache_hit=1.0` and `route_cache_hit=1.0`
+- Decision:
+  - close `INC-0084` confirm positive/narrow
+  - promote `H4XH4_FIELD_A150_CPX8_Q01_T40000` as the current warm-cache
+    single-query crossover point
+  - move next to a bank-boundary search for the earliest warm-cache `Q01`
+    crossover (`INC-0085`)
+
+## 2026-03-12 (research increment INC-0085 screen)
+- Ran the tracked 2-seed warm-cache bank-boundary screen:
+  - `configs/proxy_transfer_inc0085_product_phase_translation_warm_cache_q01_bank_boundary_prewarm_screen.json`
+  - `configs/proxy_transfer_inc0085_product_phase_translation_warm_cache_q01_bank_boundary_screen.json`
+  - `results/analysis/inc0085_product_phase_translation_warm_cache_q01_bank_boundary_screen.json`
+  - `results/analysis/inc0085_product_phase_translation_warm_cache_q01_bank_boundary_screen_profile.json`
+  - gate notes:
+    - `docs/governance/gates/gate_20260312_045413.md`
+    - `docs/governance/gates/gate_20260312_045437.md`
+- Key read:
+  - the fixed translated product stack already crossed dense at `Q01` on every
+    tracked bank in the narrowed ladder
+  - `T3000 Q01` already screened positive
+  - all routed runs kept `chart_cache_hit=1.0` and `route_cache_hit=1.0`
+- Decision:
+  - carry the exact same `T3000/T4500/T6000` and `Q01/Q02` bracket to confirm
+  - treat `T3000` as the candidate earliest tracked onset point until confirm
+
+## 2026-03-12 (research increment INC-0085 confirm)
+- Ran the tracked 4-seed warm-cache bank-boundary confirm:
+  - `configs/proxy_transfer_inc0085_product_phase_translation_warm_cache_q01_bank_boundary_prewarm_confirm.json`
+  - `configs/proxy_transfer_inc0085_product_phase_translation_warm_cache_q01_bank_boundary_confirm.json`
+  - `results/analysis/inc0085_product_phase_translation_warm_cache_q01_bank_boundary_confirm.json`
+  - `results/analysis/inc0085_product_phase_translation_warm_cache_q01_bank_boundary_confirm_profile.json`
+  - `docs/reports/INC0085_PRODUCT_PHASE_TRANSLATION_WARM_CACHE_Q01_BANK_BOUNDARY_CONFIRM.md`
+  - gate notes:
+    - `docs/governance/gates/gate_20260312_045613.md`
+    - `docs/governance/gates/gate_20260312_045657.md`
+- Key read:
+  - `H4XH4_FIELD_A150_CPX8_Q01_T3000` confirmed at `top1=0.044833`,
+    `cand_frac=0.191704`, `amortized=0.0744s`
+  - `DENSE_Q01_T3000` stayed at `top1=0.049833`, `amortized=0.1592s`
+  - `T4500` and `T6000` also stayed positive at `Q01`
+  - all routed runs kept exact warm-cache hits
+- Decision:
+  - close `INC-0085` confirm positive/narrow
+  - promote `H4XH4_FIELD_A150_CPX8_Q01_T3000` as the earliest tracked
+    confirmed warm-cache single-query crossover point
+  - move next to a lower-bound refinement below `T3000` (`INC-0086`)
+
+## 2026-03-12 (research increment INC-0086 screen)
+- Ran the tracked 2-seed warm-cache lower-bound screen:
+  - `configs/proxy_transfer_inc0086_product_phase_translation_warm_cache_q01_lower_boundary_refine_prewarm_screen.json`
+  - `configs/proxy_transfer_inc0086_product_phase_translation_warm_cache_q01_lower_boundary_refine_screen.json`
+  - `results/analysis/inc0086_product_phase_translation_warm_cache_q01_lower_boundary_refine_screen.json`
+  - `results/analysis/inc0086_product_phase_translation_warm_cache_q01_lower_boundary_refine_screen_profile.json`
+  - gate notes:
+    - `docs/governance/gates/gate_20260312_051358.md`
+    - `docs/governance/gates/gate_20260312_051419.md`
+- Key read:
+  - the tracked screen showed crossover at `Q01` for all three tested banks
+  - all routed runs kept `chart_cache_hit=1.0` and `route_cache_hit=1.0`
+  - that was strong enough to justify confirm on the same `T2500/T2750/T3000`
+    bracket
+- Decision:
+  - carry the exact same bracket to confirm
+  - treat `T2500` as the main falsification point because the earlier ad hoc
+    pilots had already suggested it might fail there
+
+## 2026-03-12 (research increment INC-0086 confirm)
+- Ran the tracked 4-seed warm-cache lower-bound confirm:
+  - `configs/proxy_transfer_inc0086_product_phase_translation_warm_cache_q01_lower_boundary_refine_prewarm_confirm.json`
+  - `configs/proxy_transfer_inc0086_product_phase_translation_warm_cache_q01_lower_boundary_refine_confirm.json`
+  - `results/analysis/inc0086_product_phase_translation_warm_cache_q01_lower_boundary_refine_confirm.json`
+  - `results/analysis/inc0086_product_phase_translation_warm_cache_q01_lower_boundary_refine_confirm_profile.json`
+  - `docs/reports/INC0086_PRODUCT_PHASE_TRANSLATION_WARM_CACHE_Q01_LOWER_BOUNDARY_REFINE_CONFIRM.md`
+  - gate notes:
+    - `docs/governance/gates/gate_20260312_051526.md`
+    - `docs/governance/gates/gate_20260312_051652.md`
+- Key read:
+  - `T2500` did not survive at `Q01`:
+    - dense amortized `0.1103s`
+    - routed amortized `0.1403s`
+  - `T2500` still crossed at `Q02`
+  - `T2750` is now the earliest tracked confirmed `Q01` crossover:
+    - dense amortized `0.1084s`
+    - routed amortized `0.0999s`
+  - `T3000` stayed positive as expected
+  - all routed runs kept exact warm-cache hits
+- Decision:
+  - close `INC-0086` confirm positive/narrow
+  - promote `H4XH4_FIELD_A150_CPX8_Q01_T2750` as the earliest tracked
+    confirmed warm-cache single-query crossover point
+  - record `H4XH4_FIELD_A150_CPX8_Q02_T2500` as the earliest tracked
+    confirmed warm-cache crossover at any repeat count
+  - move next to a threshold refinement inside `2500-2750` (`INC-0087`)
+
+## 2026-03-12 (research increment INC-0087 screen)
+- Ran the tracked 2-seed warm-cache threshold-refine screen:
+  - `configs/proxy_transfer_inc0087_product_phase_translation_warm_cache_q01_threshold_refine_prewarm_screen.json`
+  - `configs/proxy_transfer_inc0087_product_phase_translation_warm_cache_q01_threshold_refine_screen.json`
+  - `results/analysis/inc0087_product_phase_translation_warm_cache_q01_threshold_refine_screen.json`
+  - `results/analysis/inc0087_product_phase_translation_warm_cache_q01_threshold_refine_screen_profile.json`
+  - gate notes:
+    - `docs/governance/gates/gate_20260312_052842.md`
+    - `docs/governance/gates/gate_20260312_052915.md`
+- Key read:
+  - all three internal banks screened positive at `Q01`
+  - `T2600` immediately looked live enough to challenge `T2750`
+  - all routed runs kept `chart_cache_hit=1.0` and `route_cache_hit=1.0`
+- Decision:
+  - carry the exact same `T2600/T2650/T2700` bracket to confirm
+  - treat the screen as a threshold move candidate, not as a close-out
+
+## 2026-03-12 (research increment INC-0087 confirm)
+- Ran the tracked 4-seed warm-cache threshold-refine confirm:
+  - `configs/proxy_transfer_inc0087_product_phase_translation_warm_cache_q01_threshold_refine_prewarm_confirm.json`
+  - `configs/proxy_transfer_inc0087_product_phase_translation_warm_cache_q01_threshold_refine_confirm.json`
+  - `results/analysis/inc0087_product_phase_translation_warm_cache_q01_threshold_refine_confirm.json`
+  - `results/analysis/inc0087_product_phase_translation_warm_cache_q01_threshold_refine_confirm_profile.json`
+  - `docs/reports/INC0087_PRODUCT_PHASE_TRANSLATION_WARM_CACHE_Q01_THRESHOLD_REFINE_CONFIRM.md`
+  - gate notes:
+    - `docs/governance/gates/gate_20260312_053034.md`
+    - `docs/governance/gates/gate_20260312_053113.md`
+- Key read:
+  - `T2600` survived at `Q01` with a small but positive amortized margin
+  - `T2650` became a local non-monotone pocket:
+    - negative at `Q01`
+    - positive again at `Q02`
+  - `T2700` stayed positive at `Q01`
+  - routed search work and cache hits stayed effectively fixed across the
+    entire bracket
+- Decision:
+  - close `INC-0087` confirm positive/narrow
+  - promote `H4XH4_FIELD_A150_CPX8_Q01_T2600` as the earliest tracked
+    confirmed warm-cache single-query crossover point
+  - treat the `T2650` miss as a local systems-threshold anomaly, not a route
+    failure
+  - move next to a direct local cost audit (`INC-0088`)
+
+## 2026-03-12 (research increment INC-0088 audit)
+- Ran the local warm-cache cost audit on the `INC-0087` confirm bracket:
+  - `results/analysis/inc0087_product_phase_translation_warm_cache_q01_threshold_refine_cost_audit.json`
+  - `docs/reports/INC0087_PRODUCT_PHASE_TRANSLATION_WARM_CACHE_Q01_THRESHOLD_REFINE_COST_AUDIT.md`
+- Key read:
+  - `T2600` crosses because search gain still beats the fixed route-query plus
+    residual offline penalty
+  - `T2650` misses because dense search time dips locally while routed
+    route-query cost stays almost unchanged
+  - `T2700` crosses again once the dense search time rises back up
+- Decision:
+  - close `INC-0088` positive/explanatory
+  - keep `H4XH4_FIELD_A150_CPX8_Q01_T2600` as the earliest tracked confirmed
+    warm-cache single-query crossover point
+  - move next to a final `2500-2600` refine (`INC-0089`)
+
+## 2026-03-12 (research increment INC-0089 screen)
+- Ran the tracked 2-seed warm-cache `2500-2600` refine screen:
+  - `configs/proxy_transfer_inc0089_product_phase_translation_warm_cache_q01_2500_2600_refine_prewarm_screen.json`
+  - `configs/proxy_transfer_inc0089_product_phase_translation_warm_cache_q01_2500_2600_refine_screen.json`
+  - `results/analysis/inc0089_product_phase_translation_warm_cache_q01_2500_2600_refine_screen.json`
+  - `results/analysis/inc0089_product_phase_translation_warm_cache_q01_2500_2600_refine_screen_profile.json`
+  - gate notes:
+    - `docs/governance/gates/gate_20260312_054028.md`
+    - `docs/governance/gates/gate_20260312_054048.md`
+- Key read:
+  - `T2525` and `T2550` both screened positive at `Q01`
+  - `T2575` screened negative at `Q01` but positive at `Q02`
+  - that was strong enough to carry the exact same bracket to confirm
+- Decision:
+  - carry the exact same `2525/2550/2575` bracket to confirm
+
+## 2026-03-12 (research increment INC-0089 confirm)
+- Ran the tracked 4-seed warm-cache `2500-2600` refine confirm:
+  - `configs/proxy_transfer_inc0089_product_phase_translation_warm_cache_q01_2500_2600_refine_prewarm_confirm.json`
+  - `configs/proxy_transfer_inc0089_product_phase_translation_warm_cache_q01_2500_2600_refine_confirm.json`
+  - `results/analysis/inc0089_product_phase_translation_warm_cache_q01_2500_2600_refine_confirm.json`
+  - `results/analysis/inc0089_product_phase_translation_warm_cache_q01_2500_2600_refine_confirm_profile.json`
+  - `docs/reports/INC0089_PRODUCT_PHASE_TRANSLATION_WARM_CACHE_Q01_2500_2600_REFINE_CONFIRM.md`
+  - gate notes:
+    - `docs/governance/gates/gate_20260312_054156.md`
+    - `docs/governance/gates/gate_20260312_054233.md`
+- Key read:
+  - all three banks held at `Q01` on 4 seeds
+  - `T2525` is now the earliest tracked confirmed warm-cache single-query
+    crossover point
+  - routed search work and cache hits stayed effectively fixed across the
+    entire bracket
+- Decision:
+  - close `INC-0089` confirm positive/narrow
+  - promote `H4XH4_FIELD_A150_CPX8_Q01_T2525` as the earliest tracked
+    confirmed warm-cache single-query crossover point
+  - keep `H4XH4_FIELD_A150_CPX8_Q02_T2500` as the earliest tracked confirmed
+    warm-cache crossover at any repeat count
+  - move next to a final `2500-2525` refine (`INC-0090`)
+
+## 2026-03-12 (research increment INC-0090 screen)
+- Ran the tracked 2-seed warm-cache `2500-2525` refine screen:
+  - `configs/proxy_transfer_inc0090_product_phase_translation_warm_cache_q01_2500_2525_refine_prewarm_screen.json`
+  - `configs/proxy_transfer_inc0090_product_phase_translation_warm_cache_q01_2500_2525_refine_screen.json`
+  - `results/analysis/inc0090_product_phase_translation_warm_cache_q01_2500_2525_refine_screen.json`
+  - `results/analysis/inc0090_product_phase_translation_warm_cache_q01_2500_2525_refine_screen_profile.json`
+  - gate notes:
+    - `docs/governance/gates/gate_20260312_060106.md`
+    - `docs/governance/gates/gate_20260312_060131.md`
+- Key read:
+  - all four banks in the `2505/2510/2515/2520` bracket screened positive at
+    `Q01`
+  - `T2505 Q01` already screened cleanly positive:
+    - dense `top1=0.051518`, `amortized=0.1241s`
+    - routed `top1=0.044329`, `cand_frac=0.189414`, `amortized=0.0525s`
+  - `T2520 Q02` showed a small negative pocket on screen, but the single-query
+    onset read stayed coherent
+- Decision:
+  - carry the exact same `2505/2510/2515/2520` and `Q01/Q02` bracket to
+    confirm
+
+## 2026-03-12 (research increment INC-0090 confirm)
+- Ran the tracked 4-seed warm-cache `2500-2525` refine confirm:
+  - `configs/proxy_transfer_inc0090_product_phase_translation_warm_cache_q01_2500_2525_refine_prewarm_confirm.json`
+  - `configs/proxy_transfer_inc0090_product_phase_translation_warm_cache_q01_2500_2525_refine_confirm.json`
+  - `results/analysis/inc0090_product_phase_translation_warm_cache_q01_2500_2525_refine_confirm.json`
+  - `results/analysis/inc0090_product_phase_translation_warm_cache_q01_2500_2525_refine_confirm_profile.json`
+  - `docs/reports/INC0090_PRODUCT_PHASE_TRANSLATION_WARM_CACHE_Q01_2500_2525_REFINE_CONFIRM.md`
+  - gate notes:
+    - `docs/governance/gates/gate_20260312_060246.md`
+    - `docs/governance/gates/gate_20260312_060331.md`
+- Key read:
+  - all four banks held at `Q01` on 4 seeds
+  - `T2505` is now the earliest tracked confirmed warm-cache single-query
+    crossover point
+  - routed search work stayed pinned near `0.193` of dense across the full
+    bracket
+  - routed cache hits stayed exact across the full `Q01/Q02` bracket
+- Decision:
+  - close `INC-0090` confirm positive/narrow
+  - promote `H4XH4_FIELD_A150_CPX8_Q01_T2505` as the earliest tracked
+    confirmed warm-cache single-query crossover point
+  - keep `H4XH4_FIELD_A150_CPX8_Q02_T2500` as the earliest tracked confirmed
+    warm-cache crossover at any repeat count
+  - move next to a final `2500-2505` refine (`INC-0091`)
+
+## 2026-03-12 (research increment INC-0091 screen)
+- Ran the tracked 2-seed warm-cache `2500-2505` refine screen:
+  - `configs/proxy_transfer_inc0091_product_phase_translation_warm_cache_q01_2500_2505_refine_prewarm_screen.json`
+  - `configs/proxy_transfer_inc0091_product_phase_translation_warm_cache_q01_2500_2505_refine_screen.json`
+  - `results/analysis/inc0091_product_phase_translation_warm_cache_q01_2500_2505_refine_screen.json`
+  - `results/analysis/inc0091_product_phase_translation_warm_cache_q01_2500_2505_refine_screen_profile.json`
+  - gate notes:
+    - `docs/governance/gates/gate_20260312_062958.md`
+    - `docs/governance/gates/gate_20260312_063025.md`
+- Key read:
+  - all four banks in the `2501/2502/2503/2504` bracket screened positive at
+    `Q01`
+  - `T2501 Q01` already screened cleanly positive:
+    - dense `top1=0.051600`, `amortized=0.1328s`
+    - routed `top1=0.044400`, `cand_frac=0.189033`, `amortized=0.0840s`
+  - `T2503 Q02` showed a local negative pocket on screen, but the single-query
+    onset read stayed coherent enough to carry the exact same bracket to
+    confirm
+- Decision:
+  - carry the exact same `2501/2502/2503/2504` and `Q01/Q02` bracket to
+    confirm
+
+## 2026-03-12 (research increment INC-0091 confirm)
+- Ran the tracked 4-seed warm-cache `2500-2505` refine confirm:
+  - `configs/proxy_transfer_inc0091_product_phase_translation_warm_cache_q01_2500_2505_refine_prewarm_confirm.json`
+  - `configs/proxy_transfer_inc0091_product_phase_translation_warm_cache_q01_2500_2505_refine_confirm.json`
+  - `results/analysis/inc0091_product_phase_translation_warm_cache_q01_2500_2505_refine_confirm.json`
+  - `results/analysis/inc0091_product_phase_translation_warm_cache_q01_2500_2505_refine_confirm_profile.json`
+  - `docs/reports/INC0091_PRODUCT_PHASE_TRANSLATION_WARM_CACHE_Q01_2500_2505_REFINE_CONFIRM.md`
+  - gate notes:
+    - `docs/governance/gates/gate_20260312_063141.md`
+    - `docs/governance/gates/gate_20260312_063230.md`
+- Key read:
+  - all four banks held at `Q01` on 4 seeds
+  - `T2501` is now the earliest tracked confirmed warm-cache single-query
+    crossover point
+  - the screen-only `T2503 Q02` pocket disappeared on confirm
+  - routed search work stayed pinned near `0.193-0.194` of dense across the
+    full bracket
+  - routed cache hits stayed exact across the full `Q01/Q02` bracket
+- Decision:
+  - close `INC-0091` confirm positive/narrow
+  - promote `H4XH4_FIELD_A150_CPX8_Q01_T2501` as the earliest tracked
+    confirmed warm-cache single-query crossover point
+  - keep `H4XH4_FIELD_A150_CPX8_Q02_T2500` as the earliest tracked confirmed
+    warm-cache crossover at any repeat count
+  - stop refining `T`
+  - move next to exact-floor hardening on the `T2500/T2501` bracket
+    (`INC-0092`)
+
+## 2026-03-12 (research increment INC-0092 screen)
+- Ran the tracked 4-seed warm-cache exact-floor hardening screen:
+  - `configs/proxy_transfer_inc0092_product_phase_translation_warm_cache_q01_floor_hardening_prewarm_screen.json`
+  - `configs/proxy_transfer_inc0092_product_phase_translation_warm_cache_q01_floor_hardening_screen.json`
+  - `results/analysis/inc0092_product_phase_translation_warm_cache_q01_floor_hardening_screen.json`
+  - `results/analysis/inc0092_product_phase_translation_warm_cache_q01_floor_hardening_screen_profile.json`
+  - gate notes:
+    - `docs/governance/gates/gate_20260312_064253.md`
+    - `docs/governance/gates/gate_20260312_064320.md`
+- Key read:
+  - the screen immediately falsified the old exact `T2500` miss / `T2501` hit
+    separation
+  - both `T2500` and `T2501` screened positive at `Q01`
+  - that was strong enough to carry the exact same bracket to the expanded
+    seed confirm
+- Decision:
+  - carry the exact same `T2500/T2501` and `Q01/Q02` bracket to the expanded
+    seed confirm
+
+## 2026-03-12 (research increment INC-0092 confirm)
+- Ran the tracked 8-seed warm-cache exact-floor hardening confirm:
+  - `configs/proxy_transfer_inc0092_product_phase_translation_warm_cache_q01_floor_hardening_prewarm_confirm.json`
+  - `configs/proxy_transfer_inc0092_product_phase_translation_warm_cache_q01_floor_hardening_confirm.json`
+  - `results/analysis/inc0092_product_phase_translation_warm_cache_q01_floor_hardening_confirm.json`
+  - `results/analysis/inc0092_product_phase_translation_warm_cache_q01_floor_hardening_confirm_profile.json`
+  - `docs/reports/INC0092_PRODUCT_PHASE_TRANSLATION_WARM_CACHE_Q01_FLOOR_HARDENING_CONFIRM.md`
+  - gate notes:
+    - `docs/governance/gates/gate_20260312_064442.md`
+    - `docs/governance/gates/gate_20260312_064531.md`
+- Key read:
+  - `T2500` also holds at `Q01` on the expanded seed schedule
+  - `DENSE_Q01_T2500`: `top1=0.050300`, `amortized=0.1078s`
+  - `H4XH4_FIELD_A150_CPX8_Q01_T2500`: `top1=0.046300`,
+    `cand_frac=0.198723`, `amortized=0.0741s`
+  - `T2501` stays positive as well, but the lower-bank floor is no longer
+    separated from `T2500`
+  - routed search work stays pinned near `0.199` of dense on both banks
+  - routed cache hits stayed exact across the full `Q01/Q02` bracket
+- Decision:
+  - close `INC-0092` confirm positive/explanatory
+  - retire the old exact `T2500` miss / `T2501` hit story
+  - promote `H4XH4_FIELD_A150_CPX8_Q01_T2500` as the earliest tracked
+    confirmed warm-cache single-query crossover point
+  - retire the lower-bound `T/Q` search
+  - move next to cache-residency robustness on fixed operating points
+    (`INC-0093`)
+
+## 2026-03-12 (research increment INC-0093 screen)
+- Ran the tracked 2-seed cache-residency mix screen on the fixed translated
+  product stack:
+  - `configs/proxy_transfer_inc0093_product_phase_translation_cache_residency_mix_screen_cold.json`
+  - `configs/proxy_transfer_inc0093_product_phase_translation_cache_residency_mix_screen_prewarm.json`
+  - `configs/proxy_transfer_inc0093_product_phase_translation_cache_residency_mix_screen_warm.json`
+  - `results/analysis/inc0093_product_phase_translation_cache_residency_mix_screen_cold.json`
+  - `results/analysis/inc0093_product_phase_translation_cache_residency_mix_screen_warm.json`
+  - `results/analysis/inc0093_product_phase_translation_cache_residency_mix_screen_compare_chart.json`
+  - `results/analysis/inc0093_product_phase_translation_cache_residency_mix_screen_compare_route.json`
+  - `results/analysis/inc0093_product_phase_translation_cache_residency_mix_screen_compare_full.json`
+  - gate notes:
+    - `docs/governance/gates/gate_20260312_071450.md`
+    - `docs/governance/gates/gate_20260312_071837.md`
+    - `docs/governance/gates/gate_20260312_072037.md`
+- Key read:
+  - chart-only residency and full warm both stayed positive at `T40000 Q01`
+  - route-only residency was negative at both anchors
+  - chart-only also screened positive at `T2500 Q01`, but the margin was
+    narrow enough that the low-bank partial-residency read still needed confirm
+  - top-1 and candidate fraction stayed unchanged across cold and warm states
+- Decision:
+  - carry the same cold / chart-only / route-only / full-warm decomposition to
+    confirm
+
+## 2026-03-12 (research increment INC-0093 confirm)
+- Ran the tracked 4-seed cache-residency mix confirm on the fixed translated
+  product stack:
+  - `configs/proxy_transfer_inc0093_product_phase_translation_cache_residency_mix_confirm_cold.json`
+  - `configs/proxy_transfer_inc0093_product_phase_translation_cache_residency_mix_confirm_prewarm.json`
+  - `configs/proxy_transfer_inc0093_product_phase_translation_cache_residency_mix_confirm_warm.json`
+  - `results/analysis/inc0093_product_phase_translation_cache_residency_mix_confirm_cold.json`
+  - `results/analysis/inc0093_product_phase_translation_cache_residency_mix_confirm_warm.json`
+  - `results/analysis/inc0093_product_phase_translation_cache_residency_mix_confirm_compare_chart.json`
+  - `results/analysis/inc0093_product_phase_translation_cache_residency_mix_confirm_compare_route.json`
+  - `results/analysis/inc0093_product_phase_translation_cache_residency_mix_confirm_compare_full.json`
+  - `docs/reports/INC0093_PRODUCT_PHASE_TRANSLATION_CACHE_RESIDENCY_MIX_CONFIRM.md`
+  - gate notes:
+    - `docs/governance/gates/gate_20260312_072941.md`
+    - `docs/governance/gates/gate_20260312_073711.md`
+    - `docs/governance/gates/gate_20260312_074111.md`
+- Key read:
+  - chart residency carries almost all of the operational rescue
+  - route-only residency stays negative at both anchor operating points
+  - the upper-bank `T40000 Q01` systems win survives under chart-only
+    residency
+  - the exact lower-bank `T2500 Q01` floor still requires full warm residency
+  - top-1 and candidate fraction stayed unchanged across all residency states,
+    so the branch remains a pure cost-accounting result
+- Decision:
+  - close `INC-0093` confirm positive/explanatory
+  - promote chart residency as the dominant operational reuse surface on the
+    fixed translated product stack
+  - keep full warm as the exact lower-bank `T2500 Q01` floor claim
+  - move next to chart-resident / route-ephemeral repeat mapping (`INC-0094`)
+
+## 2026-03-12 (research increment INC-0094 screen)
+- Ran the tracked 2-seed chart-resident / route-ephemeral repeat-map screen:
+  - `configs/proxy_transfer_inc0094_product_phase_translation_chart_resident_route_ephemeral_repeat_map_prewarm_screen.json`
+  - `configs/proxy_transfer_inc0094_product_phase_translation_chart_resident_route_ephemeral_repeat_map_screen.json`
+  - `results/analysis/inc0094_product_phase_translation_chart_resident_route_ephemeral_repeat_map_screen.json`
+  - `results/analysis/inc0094_product_phase_translation_chart_resident_route_ephemeral_repeat_map_screen_profile.json`
+  - `docs/reports/INC0094_PRODUCT_PHASE_TRANSLATION_CHART_RESIDENT_ROUTE_EPHEMERAL_REPEAT_MAP_SCREEN.md`
+  - gate notes:
+    - `docs/governance/gates/gate_20260312_080917.md`
+    - `docs/governance/gates/gate_20260312_081226.md`
+- Key read:
+  - `T2500` still misses at `Q01` but already crosses at `Q02`
+  - `T40000` stays positive at every tracked repeat
+  - the screen stop rule is satisfied, so the same repeat ladder should carry
+    to confirm
+- Decision:
+  - carry the same `Q01/Q02/Q04` chart-resident repeat ladder to confirm
+
+## 2026-03-12 (research increment INC-0094 confirm)
+- Ran the tracked 4-seed chart-resident / route-ephemeral repeat-map confirm:
+  - `configs/proxy_transfer_inc0094_product_phase_translation_chart_resident_route_ephemeral_repeat_map_prewarm_confirm.json`
+  - `configs/proxy_transfer_inc0094_product_phase_translation_chart_resident_route_ephemeral_repeat_map_confirm.json`
+  - `results/analysis/inc0094_product_phase_translation_chart_resident_route_ephemeral_repeat_map_confirm.json`
+  - `results/analysis/inc0094_product_phase_translation_chart_resident_route_ephemeral_repeat_map_confirm_profile.json`
+  - `docs/reports/INC0094_PRODUCT_PHASE_TRANSLATION_CHART_RESIDENT_ROUTE_EPHEMERAL_REPEAT_MAP_CONFIRM.md`
+  - gate notes:
+    - `docs/governance/gates/gate_20260312_081526.md`
+    - `docs/governance/gates/gate_20260312_082126.md`
+- Key read:
+  - `T2500 Q01` still misses slightly under chart-only residency
+  - `T2500 Q02` now crosses on confirm
+  - `T2500 Q04` stays positive with a larger margin
+  - `T40000 Q01/Q02/Q04` all stay strongly positive under chart-only
+  - chart-persistent sessions are now a stronger claim than the old
+    fully-warm-only interpretation
+- Decision:
+  - close `INC-0094` confirm positive/narrow
+  - promote `CHART_H4XH4_FIELD_A150_CPX8_Q02_T2500` as the earliest confirmed
+    chart-resident lower-bank crossover point
+  - keep `CHART_H4XH4_FIELD_A150_CPX8_Q01_T40000` as the chart-resident
+    single-query upper-bank point
+  - move next to a chart-resident `Q01` bank-boundary search (`INC-0095`)
+
+## 2026-03-12 (research increment INC-0095 screen)
+- Ran the tracked 2-seed chart-resident `Q01` bank-boundary screen:
+  - `configs/proxy_transfer_inc0095_product_phase_translation_chart_resident_q01_bank_boundary_prewarm_screen.json`
+  - `configs/proxy_transfer_inc0095_product_phase_translation_chart_resident_q01_bank_boundary_screen.json`
+  - `results/analysis/inc0095_product_phase_translation_chart_resident_q01_bank_boundary_screen.json`
+  - `results/analysis/inc0095_product_phase_translation_chart_resident_q01_bank_boundary_screen_profile.json`
+  - `docs/reports/INC0095_PRODUCT_PHASE_TRANSLATION_CHART_RESIDENT_Q01_BANK_BOUNDARY_SCREEN.md`
+  - gate notes:
+    - `docs/governance/gates/gate_20260312_090117.md`
+    - `docs/governance/gates/gate_20260312_090210.md`
+- Key read:
+  - the coarse ladder was not monotone on screen
+  - `T2500` and `T3000+` were positive, while `T2750` was a local miss
+  - the honest confirm target is therefore the contradictory lower-bank slice,
+    not the full ladder
+- Decision:
+  - carry `T2500/T2750/T3000/T4000` to confirm
+
+## 2026-03-12 (research increment INC-0095 confirm)
+- Ran the tracked 4-seed focused chart-resident `Q01` confirm:
+  - `configs/proxy_transfer_inc0095_product_phase_translation_chart_resident_q01_bank_boundary_prewarm_confirm.json`
+  - `configs/proxy_transfer_inc0095_product_phase_translation_chart_resident_q01_bank_boundary_confirm.json`
+  - `results/analysis/inc0095_product_phase_translation_chart_resident_q01_bank_boundary_confirm.json`
+  - `results/analysis/inc0095_product_phase_translation_chart_resident_q01_bank_boundary_confirm_profile.json`
+  - `docs/reports/INC0095_PRODUCT_PHASE_TRANSLATION_CHART_RESIDENT_Q01_BANK_BOUNDARY_CONFIRM.md`
+  - gate notes:
+    - `docs/governance/gates/gate_20260312_090502.md`
+    - `docs/governance/gates/gate_20260312_090530.md`
+- Key read:
+  - every tracked lower-bank point now crosses on the focused chart-resident
+    `Q01` packet:
+    - `T2500`: `0.0849s` versus dense `0.1240s`
+    - `T2750`: `0.0903s` versus dense `0.1265s`
+    - `T3000`: `0.0949s` versus dense `0.1184s`
+    - `T4000`: `0.1971s` versus dense `0.2063s`
+  - routed work stays pinned near `19.2%-19.3%` of dense
+  - chart cache hits remain exact while route cache stays ephemeral:
+    - `chart_cache_hit=1.0`
+    - `route_cache_hit=0.0`
+  - this overturns the active lower-bank chart-only read from “miss at
+    `T2500 Q01`” to “focused `Q01` survives at `T2500`”
+  - the remaining operational issue is packet-scope sensitivity versus the
+    older mixed-repeat `INC-0094` packet
+- Decision:
+  - close `INC-0095` confirm positive/explanatory
+  - promote `CHART_H4XH4_FIELD_A150_CPX8_Q01_T2500` as the focused
+    chart-resident lower-bank point
+  - keep `CHART_H4XH4_FIELD_A150_CPX8_Q02_T2500` as the mixed-repeat lower-bank
+    point
+  - retire chart-resident `Q01` bank-boundary search as an active branch
+  - move next to packet-scope audit (`INC-0096`)
+
+## 2026-03-12 (research increment INC-0096 screen)
+- Ran the paired 2-seed packet-scope audit on the fixed chart-resident lower-
+  bank `Q01` point:
+  - `configs/proxy_transfer_inc0096_product_phase_translation_chart_resident_q01_packet_scope_audit_prewarm_screen.json`
+  - `configs/proxy_transfer_inc0096_product_phase_translation_chart_resident_q01_packet_scope_audit_focused_screen.json`
+  - `configs/proxy_transfer_inc0096_product_phase_translation_chart_resident_q01_packet_scope_audit_mixed_screen.json`
+  - `results/analysis/inc0096_product_phase_translation_chart_resident_q01_packet_scope_audit_focused_screen.json`
+  - `results/analysis/inc0096_product_phase_translation_chart_resident_q01_packet_scope_audit_mixed_screen.json`
+  - `results/analysis/inc0096_product_phase_translation_chart_resident_q01_packet_scope_audit_screen_compare.json`
+  - `docs/reports/INC0096_PRODUCT_PHASE_TRANSLATION_CHART_RESIDENT_Q01_PACKET_SCOPE_AUDIT_SCREEN_COMPARE.md`
+  - gate notes:
+    - `docs/governance/gates/gate_20260312_092114.md`
+    - `docs/governance/gates/gate_20260312_092121.md`
+    - `docs/governance/gates/gate_20260312_092137.md`
+- Key read:
+  - both focused and mixed packets are already positive at `T2500 Q01`
+  - the fresh paired screen does not reproduce the old mixed-packet sign flip
+  - the honest confirm is to harden both packets on the same expanded schedule
+- Decision:
+  - carry both focused and mixed packets to 8-seed confirm
+
+## 2026-03-12 (research increment INC-0096 confirm)
+- Ran the paired 8-seed packet-scope hardening confirm:
+  - `configs/proxy_transfer_inc0096_product_phase_translation_chart_resident_q01_packet_scope_audit_prewarm_confirm.json`
+  - `configs/proxy_transfer_inc0096_product_phase_translation_chart_resident_q01_packet_scope_audit_focused_confirm.json`
+  - `configs/proxy_transfer_inc0096_product_phase_translation_chart_resident_q01_packet_scope_audit_mixed_confirm.json`
+  - `results/analysis/inc0096_product_phase_translation_chart_resident_q01_packet_scope_audit_focused_confirm.json`
+  - `results/analysis/inc0096_product_phase_translation_chart_resident_q01_packet_scope_audit_mixed_confirm.json`
+  - `results/analysis/inc0096_product_phase_translation_chart_resident_q01_packet_scope_audit_confirm_compare.json`
+  - `docs/reports/INC0096_PRODUCT_PHASE_TRANSLATION_CHART_RESIDENT_Q01_PACKET_SCOPE_AUDIT_CONFIRM_COMPARE.md`
+  - gate notes:
+    - `docs/governance/gates/gate_20260312_092238.md`
+    - `docs/governance/gates/gate_20260312_092252.md`
+    - `docs/governance/gates/gate_20260312_092334.md`
+- Key read:
+  - `T2500 Q01` stays positive in both packet shapes on hardening
+  - focused margin vs dense: `+0.0348s`
+  - mixed margin vs dense: `+0.0075s`
+  - packet scope changes margin size, but top-1 and candidate fraction stay
+    identical across packets
+  - the translated chart-resident lower-bank single-query claim is now stable
+    across packet composition
+- Decision:
+  - close `INC-0096` confirm positive/explanatory
+  - promote `CHART_H4XH4_FIELD_A150_CPX8_Q01_T2500` as the stable
+    chart-resident lower-bank single-query point
+  - stop packet-scope auditing on this translated lower-bank point
+  - move next to reopened sparse / quantized phase-gated shell work
+    (`INC-0097`)
+
+## 2026-03-12 (research increment INC-0097 screen)
+- Added sparse shell-side controllers on top of the fixed product route law:
+  - `hyperbolic_router_so8.py`
+  - `tasks/router_proxy_eval.py`
+  - `tasks/router_retrieval_eval.py`
+  - tests:
+    - `tests/test_sector_modes.py`
+    - `tests/test_cli_contract.py`
+    - `tests/test_cache_contract.py`
+    - `tests/test_router_retrieval_eval.py`
+- Ran the tracked 2-seed sparse shell pilot screen:
+  - `configs/proxy_transfer_inc0097_product_phase_sparse_gated_shell_screen.json`
+  - `results/analysis/inc0097_product_phase_sparse_gated_shell_screen.json`
+  - `docs/reports/INC0097_PRODUCT_PHASE_SPARSE_GATED_SHELL_SCREEN.md`
+  - gate note:
+    - `docs/governance/gates/gate_20260312_095747.md`
+- Key read:
+  - the continuous product reference `H4XH4_FIELD_A150` remains healthy and is
+    still the best product route on the screen contract
+  - the sparse candidates are mechanism-live but both collapse shell balance:
+    - `H4XH4_FIELD_A150_G030`: `shell_pmax=0.9846`
+    - `H4XH4_FIELD_A150_B035`: `shell_pmax=0.9860`, `eval_shells=1.5`
+  - no sparse or banded candidate beats the continuous reference on health
+    plus runtime/quality tradeoff
+- Decision:
+  - close `INC-0097` negative at screen stage
+  - keep `H4XH4_FIELD_A150` as the fixed healthy product-phase reference
+  - do not carry sparse shell variants into translated retrieval
+  - move next to translated chart-resident route-cost decomposition
+    (`INC-0098`)
+
+## 2026-03-12 (research increment INC-0098 cost decomposition)
+- Extended translated cost accounting so the audit can compare fixed routes
+  across multiple confirmed analysis artifacts:
+  - `tools/translated_cost_accounting.py`
+  - test:
+    - `tests/test_translated_cost_accounting.py`
+- Built a curated merged audit input from the fixed anchor artifacts:
+  - lower chart-resident point from `INC-0096` focused confirm
+  - upper chart-resident point from `INC-0094` confirm
+  - full-warm references from `INC-0093` warm confirm
+  - input artifact:
+    - `results/analysis/inc0098_product_phase_translation_chart_resident_route_cost_decomposition_input.json`
+- Ran the translated route-cost audit:
+  - `results/analysis/inc0098_product_phase_translation_chart_resident_route_cost_decomposition.json`
+  - `docs/reports/INC0098_PRODUCT_PHASE_TRANSLATION_CHART_RESIDENT_ROUTE_COST_DECOMPOSITION.md`
+- Key read:
+  - chart-resident translated routing is already positive against dense at both
+    fixed anchors
+  - lower chart-versus-full gap is only `+0.0245s` and is split between
+    route-index build (`+0.0138s`) and retrieval search (`+0.0098s`)
+  - upper chart-versus-full gap is `+0.4767s` and is dominated by retrieval
+    search (`+0.2748s`) with route-index build second (`+0.2045s`)
+  - no hidden residual/offline accounting surface remains
+- Decision:
+  - close `INC-0098` positive/explanatory
+  - freeze the translated chart-resident stack as the current hardware-side
+    reference
+  - stop translated cost rescue as an active branch
+  - move next to sparse event-driven proxy trainability (`INC-0099`)
+
+## 2026-03-12 (research increment INC-0099 screen)
+- Added a proxy-only sparse-event controller on top of the fixed product route
+  law:
+  - `tasks/router_proxy_eval.py`
+  - `tools/proxy_sweep.py`
+  - tests:
+    - `tests/test_router_proxy_eval.py`
+    - `tests/test_cli_contract.py`
+    - `tests/test_cache_contract.py`
+    - `tests/test_proxy_sweep.py`
+- Ran the tracked 2-seed sparse-event proxy screen:
+  - `configs/proxy_transfer_inc0099_product_phase_sparse_event_proxy_screen.json`
+  - `results/analysis/inc0099_product_phase_sparse_event_proxy_screen.json`
+  - `docs/reports/INC0099_PRODUCT_PHASE_SPARSE_EVENT_PROXY_SCREEN.md`
+  - gate note:
+    - `docs/governance/gates/gate_20260312_104037.md`
+- Key read:
+  - `H4XH4_FIELD_A150_EVT_T070` is the only healthy sparse-event point
+  - it already cuts soft update mass to about `31.9%` of the dense EMA path
+  - the positive point is clearly nontrivial even though its hard active
+    fraction stays `0.0`
+- Decision:
+  - carry `H4XH4_FIELD_A150_EVT_T070` to confirm
+
+## 2026-03-12 (research increment INC-0099 confirm)
+- Ran the tracked 4-seed sparse-event proxy confirm:
+  - `configs/proxy_transfer_inc0099_product_phase_sparse_event_proxy_confirm.json`
+  - `results/analysis/inc0099_product_phase_sparse_event_proxy_confirm.json`
+  - `docs/reports/INC0099_PRODUCT_PHASE_SPARSE_EVENT_PROXY_CONFIRM.md`
+  - gate note:
+    - `docs/governance/gates/gate_20260312_104345.md`
+- Key read:
+  - `H4XH4_FIELD_A150_EVT_T070` stays healthy across 4 seeds:
+    - `mse=0.0038966`
+    - `total_sec=6.558`
+    - `shell_pmax=0.5702`
+    - `event_gate_mean=0.3191`
+  - the continuous product reference also stays healthy, but the sparse point
+    is slightly better on both proxy MSE and runtime
+  - the event result is positive on soft update mass, not yet on hard firing:
+    - `event_gate_active_frac=0.0`
+- Decision:
+  - close `INC-0099` confirm positive/narrow
+  - promote `H4XH4_FIELD_A150_EVT_T070` as the sparse-event proxy reference
+  - keep the translated chart-resident stack frozen as the downstream systems
+    reference
+  - move next to translated carry-forward of the fixed sparse point
+    (`INC-0100`)
+
+## 2026-03-12 (research increment INC-0100 screen)
+- Added sparse-event carry-forward to the translated retrieval harness:
+  - `tasks/router_retrieval_eval.py`
+  - tests:
+    - `tests/test_router_retrieval_eval.py`
+    - `tests/test_cli_contract.py`
+- Added the tracked translated sparse-event packet:
+  - `configs/proxy_transfer_inc0100_product_phase_sparse_event_translation_prewarm_screen.json`
+  - `configs/proxy_transfer_inc0100_product_phase_sparse_event_translation_screen.json`
+- Ran the tracked 2-seed translated sparse-event screen:
+  - `results/analysis/inc0100_product_phase_sparse_event_translation_screen.json`
+  - `docs/reports/INC0100_PRODUCT_PHASE_SPARSE_EVENT_TRANSLATION_SCREEN.md`
+  - gate note:
+    - `docs/governance/gates/gate_20260312_110233.md`
+- Key read:
+  - `CHART_H4XH4_FIELD_A150_EVT_T070_CPX8_Q01_T2500` preserves the translated
+    routed retrieval signal from the continuous product reference
+  - the sparse-event point materially improves routed runtime over the
+    continuous translated product reference
+  - dense exact still keeps a slight screen lead on the lower-bank amortized
+    metric
+- Decision:
+  - carry the sparse-event translated point to confirm
+
+## 2026-03-12 (research increment INC-0100 confirm)
+- Ran the tracked 4-seed translated sparse-event confirm:
+  - `configs/proxy_transfer_inc0100_product_phase_sparse_event_translation_prewarm_confirm.json`
+  - `configs/proxy_transfer_inc0100_product_phase_sparse_event_translation_confirm.json`
+  - `results/analysis/inc0100_product_phase_sparse_event_translation_confirm.json`
+  - `docs/reports/INC0100_PRODUCT_PHASE_SPARSE_EVENT_TRANSLATION_CONFIRM.md`
+  - gate note:
+    - `docs/governance/gates/gate_20260312_110324.md`
+- Key read:
+  - `CHART_H4XH4_FIELD_A150_EVT_T070_CPX8_Q01_T2500` holds across 4 seeds:
+    - `top1=0.0446`
+    - `cand_frac=0.193328`
+    - `online=0.11774s`
+    - `amortized=0.16861s`
+    - `event_gate_mean=0.3191`
+  - the continuous translated product reference keeps the same routed signal
+    but is much slower:
+    - `online=0.27591s`
+    - `amortized=0.33801s`
+  - dense exact keeps the quality lead, but the sparse-event routed point now
+    reaches a knife-edge lower-bank `Q01` amortized tie while pruning about
+    `80.7%` of candidates
+  - the result remains soft-sparse, not hard-firing:
+    - `event_gate_active_frac=0.0`
+- Decision:
+  - close `INC-0100` confirm positive/narrow
+  - promote `CHART_H4XH4_FIELD_A150_EVT_T070_CPX8_Q01_T2500` as the first
+    sparse-event translated retrieval reference
+  - keep dense exact as the quality reference and record the lower-bank systems
+    edge as narrow
+  - move next to hard event activation on the proxy harness (`INC-0101`)
+
+## 2026-03-12 (analysis INC-0111)
+- Built the dense quality/system frontier audit on the fixed sparse translated
+  dense comparisons:
+  - `results/analysis/inc0111_product_phase_sparse_translation_dense_quality_frontier.json`
+  - `docs/reports/INC0111_PRODUCT_PHASE_SPARSE_TRANSLATION_DENSE_QUALITY_FRONTIER.md`
+- Key read:
+  - lower-bank soft sparse versus dense is `pruning-only`
+  - lower-bank bounded backfill versus dense is `systems-only`
+  - both upper-bank sparse translated points are now `quality-near systems
+    promotion`
+  - the upper-bank robust top-1 gap stays inside the completed tolerance band:
+    - soft sparse max abs gap `0.001440`
+    - bounded backfill max abs gap `0.001470`
+  - the lower-bank gaps remain materially larger:
+    - soft sparse max abs gap `0.007360`
+    - bounded backfill max abs gap `0.007440`
+- Decision:
+  - close `INC-0111` positive/explanatory
+  - keep lower-bank sparse translated dense replacement explicitly
+    systems-first
+  - keep both upper-bank sparse translated points alive as near-frontier dense
+    systems promotions
+  - move next to focused upper-bank dense quality-tolerance hardening
+    (`INC-0112`)
+
+## 2026-03-12 (analysis INC-0112)
+- Ran two fresh paired upper-bank repeats on the fixed sparse translated dense
+  packet:
+  - `configs/proxy_transfer_inc0112_product_phase_sparse_translation_upper_bank_dense_quality_tolerance_hardening_prewarm_r4.json`
+  - `configs/proxy_transfer_inc0112_product_phase_sparse_translation_upper_bank_dense_quality_tolerance_hardening_r4.json`
+  - `configs/proxy_transfer_inc0112_product_phase_sparse_translation_upper_bank_dense_quality_tolerance_hardening_prewarm_r5.json`
+  - `configs/proxy_transfer_inc0112_product_phase_sparse_translation_upper_bank_dense_quality_tolerance_hardening_r5.json`
+  - `results/analysis/inc0112_product_phase_sparse_translation_upper_bank_dense_quality_tolerance_hardening_r4.json`
+  - `results/analysis/inc0112_product_phase_sparse_translation_upper_bank_dense_quality_tolerance_hardening_r5.json`
+- Built the hardened upper-bank robust and frontier audits:
+  - `results/analysis/inc0112_product_phase_sparse_translation_upper_bank_dense_robust_hardening.json`
+  - `results/analysis/inc0112_product_phase_sparse_translation_upper_bank_dense_quality_tolerance_hardening.json`
+  - `docs/reports/INC0112_PRODUCT_PHASE_SPARSE_TRANSLATION_UPPER_BANK_DENSE_ROBUST_HARDENING.md`
+  - `docs/reports/INC0112_PRODUCT_PHASE_SPARSE_TRANSLATION_UPPER_BANK_DENSE_QUALITY_TOLERANCE_HARDENING.md`
+- Key read:
+  - both upper-bank sparse translated points remain `quality-near systems
+    promotion`
+  - soft sparse robust top-1 gap max abs `0.001478`
+  - bounded backfill robust top-1 gap max abs `0.001511`
+  - soft sparse robust amortized median `-7.207634s`
+  - bounded backfill robust amortized median `-7.129120s`
+- Decision:
+  - close `INC-0112` positive/explanatory
+  - keep both upper-bank sparse translated points alive as near-frontier dense
+    systems promotions
+  - move next to residual upper-bank dense top-1 gap decomposition
+    (`INC-0113`)
+
+## 2026-03-12 (analysis INC-0113)
+- Ran the fixed upper-bank dense confirm packet with query-level retrieval
+  audits:
+  - `configs/proxy_transfer_inc0113_product_phase_sparse_translation_upper_bank_dense_gap_decomposition_prewarm_confirm.json`
+  - `configs/proxy_transfer_inc0113_product_phase_sparse_translation_upper_bank_dense_gap_decomposition_confirm.json`
+  - `results/analysis/inc0113_product_phase_sparse_translation_upper_bank_dense_gap_decomposition_confirm.json`
+- Built the upper-bank dense gap-decomposition audit:
+  - `results/analysis/inc0113_product_phase_sparse_translation_upper_bank_dense_gap_decomposition.json`
+  - `docs/reports/INC0113_PRODUCT_PHASE_SPARSE_TRANSLATION_UPPER_BANK_DENSE_GAP_DECOMPOSITION.md`
+- Key read:
+  - soft sparse mean net dense advantage rate `0.001525`
+  - bounded backfill mean net dense advantage rate `0.001562`
+  - both upper-bank gaps stay inside the `0.002000`
+    operational-negligibility band
+  - omission explains only about `1.2%-1.4%` of dense-only wins
+  - dense-only wins are overwhelmingly present-but-not-top1, mostly outside
+    routed top-k rather than target absence
+- Decision:
+  - close `INC-0113` positive/explanatory
+  - stop treating upper-bank dense-gap rescue as an active queue item
+  - keep both upper-bank sparse translated points alive as near-frontier dense
+    systems promotions
+  - move next to upper-bank dense reference selection/carry-forward
+    (`INC-0114`)
+
+## 2026-03-12 (analysis INC-0114)
+- Built the compact upper-bank reference-selection audit directly from the
+  completed `INC-0112` and `INC-0113` evidence:
+  - `results/analysis/inc0114_product_phase_sparse_translation_upper_bank_dense_reference_selection.json`
+  - `docs/reports/INC0114_PRODUCT_PHASE_SPARSE_TRANSLATION_UPPER_BANK_DENSE_REFERENCE_SELECTION.md`
+- Key read:
+  - both upper-bank sparse translated points remain eligible:
+    - `quality-near systems promotion`
+    - `operationally_negligible`
+  - the pair delta remains inside the configured carry-forward tolerances:
+    - top-1 `+0.000038`
+    - candidate fraction `+0.001761`
+    - amortized `-0.043834s`
+  - `CHART_H4XH4_FIELD_A150_EVT_T070_CPX8_Q01_T40000` wins the
+    within-tolerance tie-break
+- Decision:
+  - close `INC-0114` positive/explanatory
+  - promote `CHART_H4XH4_FIELD_A150_EVT_T070_CPX8_Q01_T40000` as the single
+    upper-bank dense-near routed reference
+  - keep `CHART_H4XH4_FIELD_A150_EVT_T070_BF2_SB1_CPX8_Q01_T40000` only as a
+    supporting comparator
+  - move next to promoted upper-bank carry-forward (`INC-0115`)
+
+## 2026-03-12 (analysis INC-0115)
+- Built the promoted upper-bank carry-forward contract from the completed
+  `INC-0104`, `INC-0113`, and `INC-0114` evidence:
+  - `results/analysis/inc0115_product_phase_sparse_translation_promoted_upper_bank_carry_forward.json`
+  - `docs/reports/INC0115_PRODUCT_PHASE_SPARSE_TRANSLATION_PROMOTED_UPPER_BANK_CARRY_FORWARD.md`
+- Key read:
+  - the default broader-comparison packet now freezes to four route ids:
+    - `DENSE_Q01_T2500`
+    - `CHART_H4XH4_FIELD_A150_EVT_T070_BF2_SB1_CPX8_Q01_T2500`
+    - `DENSE_Q01_T40000`
+    - `CHART_H4XH4_FIELD_A150_EVT_T070_CPX8_Q01_T40000`
+  - the lower-bank soft sparse point is now explicitly nondefault:
+    - `CHART_H4XH4_FIELD_A150_EVT_T070_CPX8_Q01_T2500`
+  - the upper-bank bounded-backfill point is now explicitly comparator-only:
+    - `CHART_H4XH4_FIELD_A150_EVT_T070_BF2_SB1_CPX8_Q01_T40000`
+- Decision:
+  - close `INC-0115` positive/explanatory
+  - freeze the dual-anchor default broader-comparison packet
+  - stop silently reopening the old upper-bank pair or the lower-bank
+    pruning-only point
+  - move next to the dual-anchor broader-comparison packet branch (`INC-0116`)
+
+## 2026-03-12 (analysis INC-0116)
+- Built the reusable dual-anchor broader-comparison packet directly from the
+  completed `INC-0115` contract and the resolved lower-bank and upper-bank
+  source configs:
+  - `results/analysis/inc0116_product_phase_sparse_translation_dual_anchor_broader_comparison_packet.json`
+  - `configs/packet_inc0116_product_phase_sparse_translation_dual_anchor_broader_comparison.json`
+  - `docs/reports/INC0116_PRODUCT_PHASE_SPARSE_TRANSLATION_DUAL_ANCHOR_BROADER_COMPARISON_PACKET.md`
+- Key read:
+  - the default packet is now an exact reusable manifest, not a narrative-only
+    contract
+  - all four default routes now carry their resolved inherited args from the
+    source configs
+  - optional and excluded-by-default routes are now explicit in the same
+    packet artifact
+- Decision:
+  - close `INC-0116` positive/explanatory
+  - use the packet manifest as the single default inheritance point for later
+    broader comparison work
+  - move next to the first dual-anchor broader comparison branch (`INC-0117`)
+
+## 2026-03-12 (analysis INC-0117)
+- Built the first explicit broader sparse translated comparison read directly
+  from the completed `INC-0116` packet and `INC-0111` dense-frontier analysis:
+  - `results/analysis/inc0117_product_phase_sparse_translation_dual_anchor_broader_comparison.json`
+  - `docs/reports/INC0117_PRODUCT_PHASE_SPARSE_TRANSLATION_DUAL_ANCHOR_BROADER_COMPARISON.md`
+- Key read:
+  - lower-bank default route remains `systems-only`:
+    - `CHART_H4XH4_FIELD_A150_EVT_T070_BF2_SB1_CPX8_Q01_T2500`
+  - upper-bank default route remains `quality-near systems promotion`:
+    - `CHART_H4XH4_FIELD_A150_EVT_T070_CPX8_Q01_T40000`
+  - the upper-bank bounded-backfill route remains explicit but optional:
+    - `CHART_H4XH4_FIELD_A150_EVT_T070_BF2_SB1_CPX8_Q01_T40000`
+- Decision:
+  - close `INC-0117` positive/explanatory
+  - keep the exact packet plus the combined broader read fixed
+  - move next to the task-side extension branch (`INC-0118`)
+
+## 2026-03-12 (analysis INC-0118)
+- Extended the completed dual-anchor packet and broader sparse translated read
+  onto the real-task side:
+  - `results/analysis/inc0118_product_phase_sparse_translation_dual_anchor_task_side_extension.json`
+  - `docs/reports/INC0118_PRODUCT_PHASE_SPARSE_TRANSLATION_DUAL_ANCHOR_TASK_SIDE_EXTENSION.md`
+- Key read:
+  - task-side work now inherits the exact dual-anchor packet by default
+  - lower bank stays systems-only by default via
+    `CHART_H4XH4_FIELD_A150_EVT_T070_BF2_SB1_CPX8_Q01_T2500`
+  - upper bank stays quality-near systems promotion by default via
+    `CHART_H4XH4_FIELD_A150_EVT_T070_CPX8_Q01_T40000`
+  - the upper-bank bounded-backfill route remains optional comparator-only
+  - `REAL_TASK_COMPARISON.md` is now the canonical task-side report target for
+    this packet
+- Decision:
+  - close `INC-0118` positive/explanatory
+  - keep the task-side packet and read fixed
+  - move next to the first explicit real-task comparison branch (`INC-0119`)
+
+## 2026-03-12 (analysis INC-0119)
+- Built the first explicit LM-proxy real-task comparison directly from the
+  completed dual-anchor packet and task-side extension:
+  - `results/analysis/inc0119_product_phase_sparse_translation_dual_anchor_real_task_comparison.json`
+  - `docs/reports/INC0119_PRODUCT_PHASE_SPARSE_TRANSLATION_DUAL_ANCHOR_REAL_TASK_COMPARISON.md`
+- Key read:
+  - lower-bank default routed point remains systems-only:
+    - `CHART_H4XH4_FIELD_A150_EVT_T070_BF2_SB1_CPX8_Q01_T2500`
+    - recommendation: `carry_as_systems_only_default`
+  - upper-bank default routed point remains quality-near systems promotion:
+    - `CHART_H4XH4_FIELD_A150_EVT_T070_CPX8_Q01_T40000`
+    - recommendation: `carry_as_promoted_real_task_default`
+  - the upper-bank bounded-backfill route remains explicit but optional:
+    - `CHART_H4XH4_FIELD_A150_EVT_T070_BF2_SB1_CPX8_Q01_T40000`
+- Decision:
+  - close `INC-0119` positive/explanatory
+  - keep the explicit LM-proxy real-task comparison fixed as the default
+    downstream task-side reference
+  - move next to downstream real-task carry-forward (`INC-0120`)
+
+## 2026-03-12 (analysis INC-0120)
+- Built the downstream real-task carry-forward contract directly from the
+  completed explicit LM-proxy real-task comparison:
+  - `results/analysis/inc0120_product_phase_sparse_translation_dual_anchor_real_task_carry_forward.json`
+  - `docs/reports/INC0120_PRODUCT_PHASE_SPARSE_TRANSLATION_DUAL_ANCHOR_REAL_TASK_CARRY_FORWARD.md`
+- Key read:
+  - lower-bank downstream default remains systems-only:
+    - `CHART_H4XH4_FIELD_A150_EVT_T070_BF2_SB1_CPX8_Q01_T2500`
+    - recommendation: `carry_as_systems_only_default`
+  - upper-bank downstream default remains quality-near systems promotion:
+    - `CHART_H4XH4_FIELD_A150_EVT_T070_CPX8_Q01_T40000`
+    - recommendation: `carry_as_promoted_real_task_default`
+  - the upper-bank bounded-backfill route remains explicit but optional:
+    - `CHART_H4XH4_FIELD_A150_EVT_T070_BF2_SB1_CPX8_Q01_T40000`
+- Decision:
+  - close `INC-0120` positive/explanatory
+  - keep the downstream real-task carry-forward contract fixed
+  - move next to the downstream packet-manifest branch (`INC-0121`)
+
+## 2026-03-12 (analysis INC-0121)
+- Built the downstream real-task packet manifest directly from the completed
+  `INC-0120` carry-forward contract and the original resolved `INC-0116`
+  route specs:
+  - `results/analysis/inc0121_product_phase_sparse_translation_dual_anchor_real_task_packet_manifest.json`
+  - `docs/reports/INC0121_PRODUCT_PHASE_SPARSE_TRANSLATION_DUAL_ANCHOR_REAL_TASK_PACKET_MANIFEST.md`
+- Key read:
+  - the downstream LM-proxy real-task packet now exists as one exact reusable
+    manifest
+  - default downstream route ids remain fixed:
+    - `DENSE_Q01_T2500`
+    - `CHART_H4XH4_FIELD_A150_EVT_T070_BF2_SB1_CPX8_Q01_T2500`
+    - `DENSE_Q01_T40000`
+    - `CHART_H4XH4_FIELD_A150_EVT_T070_CPX8_Q01_T40000`
+  - the upper-bank bounded-backfill route remains comparator-only
+- Decision:
+  - close `INC-0121` positive/explanatory
+  - keep the downstream real-task packet manifest fixed
+  - move next to the downstream real-task extension branch (`INC-0122`)
+
+## 2026-03-12 (analysis INC-0122)
+- Built the downstream real-task extension artifact directly from the
+  completed `INC-0121` packet manifest and `INC-0120` carry-forward read:
+  - `results/analysis/inc0122_product_phase_sparse_translation_dual_anchor_real_task_downstream_extension.json`
+  - `docs/reports/INC0122_PRODUCT_PHASE_SPARSE_TRANSLATION_DUAL_ANCHOR_REAL_TASK_DOWNSTREAM_EXTENSION.md`
+- Key read:
+  - downstream LM-proxy real-task inheritance is now explicit from the exact
+    packet manifest
+  - lower-bank downstream default remains systems-only:
+    - `CHART_H4XH4_FIELD_A150_EVT_T070_BF2_SB1_CPX8_Q01_T2500`
+  - upper-bank downstream default remains quality-near systems promotion:
+    - `CHART_H4XH4_FIELD_A150_EVT_T070_CPX8_Q01_T40000`
+  - the upper-bank bounded-backfill route remains explicit but optional
+- Decision:
+  - close `INC-0122` positive/explanatory
+  - keep the manifest-backed downstream extension fixed
+  - move next to the downstream real-task comparison branch (`INC-0123`)
+
+## 2026-03-12 (analysis INC-0123)
+- Built the explicit downstream real-task comparison directly from the
+  completed `INC-0122` downstream extension artifact and `INC-0121`
+  packet manifest:
+  - `results/analysis/inc0123_product_phase_sparse_translation_dual_anchor_real_task_downstream_comparison.json`
+  - `docs/reports/INC0123_PRODUCT_PHASE_SPARSE_TRANSLATION_DUAL_ANCHOR_REAL_TASK_DOWNSTREAM_COMPARISON.md`
+- Key read:
+  - the explicit downstream LM-proxy real-task comparison is now fixed from
+    the completed downstream extension artifact
+  - lower-bank downstream default remains systems-only:
+    - `CHART_H4XH4_FIELD_A150_EVT_T070_BF2_SB1_CPX8_Q01_T2500`
+  - upper-bank downstream default remains quality-near systems promotion:
+    - `CHART_H4XH4_FIELD_A150_EVT_T070_CPX8_Q01_T40000`
+  - the upper-bank bounded-backfill route remains explicit but optional
+- Decision:
+  - close `INC-0123` positive/explanatory
+  - keep the explicit downstream comparison fixed
+  - move next to the downstream carry-forward branch (`INC-0124`)
+
+## 2026-03-12 (analysis INC-0124)
+- Built the downstream real-task carry-forward contract directly from the
+  completed explicit downstream comparison:
+  - `results/analysis/inc0124_product_phase_sparse_translation_dual_anchor_real_task_downstream_carry_forward.json`
+  - `docs/reports/INC0124_PRODUCT_PHASE_SPARSE_TRANSLATION_DUAL_ANCHOR_REAL_TASK_DOWNSTREAM_CARRY_FORWARD.md`
+- Key read:
+  - lower-bank downstream default remains systems-only:
+    - `CHART_H4XH4_FIELD_A150_EVT_T070_BF2_SB1_CPX8_Q01_T2500`
+    - recommendation: `carry_as_systems_only_default`
+  - upper-bank downstream default remains quality-near systems promotion:
+    - `CHART_H4XH4_FIELD_A150_EVT_T070_CPX8_Q01_T40000`
+    - recommendation: `carry_as_promoted_real_task_default`
+  - the upper-bank bounded-backfill route remains explicit but optional
+- Decision:
+  - close `INC-0124` positive/explanatory
+  - keep the downstream real-task carry-forward contract fixed
+  - move next to the downstream packet-manifest branch (`INC-0125`)
+
+## 2026-03-12 (analysis INC-0125)
+- Ran the tracked 2-seed sparse-event proxy hardening screen:
+  - `configs/proxy_transfer_inc0125_product_phase_sparse_event_proxy_trainability_hardening_screen.json`
+  - `results/analysis/inc0125_product_phase_sparse_event_proxy_trainability_hardening_screen.json`
+  - `docs/governance/gates/gate_20260312_184338.md`
+- Ran the tracked 4-seed sparse-event proxy hardening confirm:
+  - `configs/proxy_transfer_inc0125_product_phase_sparse_event_proxy_trainability_hardening_confirm.json`
+  - `results/analysis/inc0125_product_phase_sparse_event_proxy_trainability_hardening_confirm.json`
+  - `docs/governance/gates/gate_20260312_184913.md`
+  - `docs/reports/INC0125_PRODUCT_PHASE_SPARSE_EVENT_PROXY_TRAINABILITY_HARDENING.md`
+- Key read:
+  - the harder proxy load did not kill sparse-event trainability on the fixed
+    product route law
+  - `H4XH4_FIELD_A150_EVT_T070_TAU002` is the clean near-hard winner:
+    - `mse=0.003859`
+    - `event_gate_mean=0.020038`
+    - `event_gate_active_frac=0.0`
+  - `H4XH4_FIELD_A150_EVT_T070` remains the healthy soft-sparse comparator:
+    - `mse=0.003895`
+    - `event_gate_mean=0.318959`
+    - `event_gate_active_frac=0.0`
+  - `H4XH4_FIELD_A150_HARD_T062` remains mostly-on rather than cleanly hard
+    sparse:
+    - `event_gate_active_frac=0.840375`
+  - `R0` fails the shell-health gate on this harder load and should not drive
+    branch acceptance
+- Decision:
+  - close `INC-0125` positive/explanatory
+  - promote `H4XH4_FIELD_A150_EVT_T070_TAU002` as the hardened near-hard
+    sparse-event proxy reference
+  - keep `H4XH4_FIELD_A150_HARD_T062` as comparator-only
+  - stop the downstream packet-manifest loop and move next to the
+    proxy/translation gap audit (`INC-0126`)
+
+## 2026-03-12 (analysis INC-0126)
+- Built and ran the sparse-event proxy/translation gap audit directly from the
+  completed fixed artifacts:
+  - `tools/sparse_event_proxy_translation_gap_audit.py`
+  - `results/analysis/inc0126_product_phase_sparse_event_proxy_translation_gap_audit.json`
+  - `docs/reports/INC0126_PRODUCT_PHASE_SPARSE_EVENT_PROXY_TRANSLATION_GAP_AUDIT.md`
+- Key read:
+  - the near-hard proxy result is real and survives hardening:
+    - `H4XH4_FIELD_A150_EVT_T070_TAU002`
+  - translated near-hard preserves the same top-1 and candidate fraction as
+    translated soft sparse:
+    - top-1 delta `0.000000`
+    - candidate-fraction delta `0.000000`
+  - the translated failure is systems-cost-only:
+    - online delta `+0.098602s`
+    - amortized delta `+0.117689s`
+    - primary driver `retrieval_search_sec`
+    - route-index build is the secondary contributor
+  - omission and ordering-loss explanations are not supported
+- Decision:
+  - close `INC-0126` positive/explanatory
+  - keep near-hard as a valid proxy mechanism win
+  - reopen translated near-hard only as a narrow systems-cost rescue surface
+  - move next to translated systems-cost rescue (`INC-0127`)
+
+## 2026-03-12 (course correction audit)
+- Re-audited the live queue against the root theory corpus:
+  - `CORE_PROJECT_GOALS.md`
+  - `docs/PROJECT_CONTEXT.md`
+  - `geometric_routing_kill_tests.md`
+  - `NEXT_CRITICAL_EXPERIMENTS.md`
+  - `EVIDENCE_SUMMARY.md`
+- Key read:
+  - the repo has real late-stage translated sparse-event evidence
+  - that evidence is downstream of the main unresolved geometry gate
+  - `RR-061` remains open as the measure-consistent `H^4` / Hopf route-law
+    question
+  - continuing directly into `INC-0135` would keep refining a lower-bank
+    translated frontier instead of advancing the earlier kill-list stage
+- Decision:
+  - defer `INC-0135` as a supporting late-stage follow-up
+  - queue `INC-0136` next:
+    `docs/research/increments/INC_0136_measure_consistent_h4_hopf_route_return.md`
+  - treat translated sparse-event and dual-anchor results as downstream
+    evidence, not the primary proof branch
+  - reset the live queue docs so the repo resumes from the geometry return
+
+## 2026-03-12 (state hardening)
+- Added a canonical research-state model:
+  - `docs/research/KILL_LIST_TRACKER.md`
+  - `docs/research/ACTIVE_STATE.md`
+  - `docs/research/SUPPORTING_EVIDENCE.md`
+- Key read:
+  - the repo needed one live queue authority and one kill-list authority
+  - mirrors like `CURRENT_DIRECTION.md`, `HANDOFF_CURRENT.md`, and
+    `LIVE_WORKLOG.md` should remain useful, but not authoritative
+  - translated sparse-event lower-bank and dual-anchor work should stay in the
+    repo as supporting evidence instead of redefining the active queue
+- Decision:
+  - keep all existing evidence and artifacts
+  - freeze `INC-0130` through `INC-0134` as supporting downstream evidence
+  - defer `INC-0135`
+  - make `INC-0136` the only primary queued increment
+  - add a validator (`tools/check_research_state.py`) that fails if canonical
+    queue docs disagree or if a later-stage branch is active without an
+    explicit earlier-stage justification

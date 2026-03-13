@@ -138,11 +138,22 @@ def summarize_route(route_id: str, summaries: List[Dict[str, Any]]) -> Dict[str,
         "mean_hopf_theta1_mass_error": metric_mean(summaries, "hopf_theta1_mass_error"),
         "mean_hopf_theta2_mass_error": metric_mean(summaries, "hopf_theta2_mass_error"),
         "mean_hopf_alpha_entropy": metric_mean(summaries, "hopf_alpha_entropy"),
+        "mean_hopf_sector_groups_used": metric_mean(summaries, "hopf_sector_groups_used"),
+        "mean_hopf_sector_chi_std_mean": metric_mean(summaries, "hopf_sector_chi_std_mean"),
+        "mean_hopf_sector_delta_cvar_mean": metric_mean(summaries, "hopf_sector_delta_cvar_mean"),
+        "mean_hopf_sector_alpha_entropy_mean": metric_mean(summaries, "hopf_sector_alpha_entropy_mean"),
+        "mean_hopf_sector_alpha_entropy_gap": metric_mean(summaries, "hopf_sector_alpha_entropy_gap"),
         "mean_phase_transport_coherence": metric_mean(summaries, "phase_transport_coherence"),
         "mean_phase_transport_shift_abs_mean": metric_mean(summaries, "phase_transport_shift_abs_mean"),
         "mean_phase_transport_shift_abs_max": metric_mean(summaries, "phase_transport_shift_abs_max"),
         "mean_phase_transport_connection_abs_mean": metric_mean(summaries, "phase_transport_connection_abs_mean"),
+        "mean_phase_transport_field_shift_abs_mean": metric_mean(summaries, "phase_transport_field_shift_abs_mean"),
+        "mean_phase_transport_field_weight_abs_mean": metric_mean(summaries, "phase_transport_field_weight_abs_mean"),
         "mean_phase_transport_alpha_bins": metric_mean(summaries, "phase_transport_alpha_bins"),
+        "mean_event_gate_error_mean": metric_mean(summaries, "event_gate_error_mean"),
+        "mean_event_gate_mean": metric_mean(summaries, "event_gate_mean"),
+        "mean_event_gate_active_frac": metric_mean(summaries, "event_gate_active_frac"),
+        "mean_event_gate_cost_proxy": metric_mean(summaries, "event_gate_cost_proxy"),
         "mean_route_entropy_radius_corr": metric_mean(summaries, "route_entropy_radius_corr"),
         "mean_route_entropy_radius_slope": metric_mean(summaries, "route_entropy_radius_slope"),
         "mean_geodesic_knn_overlap": metric_mean(summaries, "geodesic_knn_overlap_mean"),
@@ -160,6 +171,8 @@ def summarize_route(route_id: str, summaries: List[Dict[str, Any]]) -> Dict[str,
         "mean_retrieval_backfill_trigger_rate": metric_mean(summaries, "retrieval_backfill_trigger_rate"),
         "mean_retrieval_backfill_extra_candidates": metric_mean(summaries, "retrieval_backfill_extra_candidates_mean"),
         "mean_retrieval_secondary_key_count": metric_mean(summaries, "retrieval_secondary_key_count"),
+        "mean_retrieval_chart_cache_hit": metric_mean(summaries, "retrieval_chart_cache_hit"),
+        "mean_retrieval_route_cache_hit": metric_mean(summaries, "retrieval_route_cache_hit"),
     }
 
 
@@ -321,9 +334,13 @@ def write_gate_note(path: str, config_path: str, route_stats: List[Dict[str, Any
             f"hopf_base_mass={stats['mean_hopf_base_mass_error']:.6f}, "
             f"delta_mass={stats['mean_hopf_delta_mass_error']:.6f}, "
             f"alpha_H={stats['mean_hopf_alpha_entropy']:.6f}, "
+            f"hopf_sector_chi_std={stats['mean_hopf_sector_chi_std_mean']:.6f}, "
+            f"hopf_sector_alpha_gap={stats['mean_hopf_sector_alpha_entropy_gap']:.6f}, "
             f"phase_coh={stats['mean_phase_transport_coherence']:.6f}, "
             f"phase_shift={stats['mean_phase_transport_shift_abs_mean']:.6f}, "
             f"phase_conn={stats['mean_phase_transport_connection_abs_mean']:.6f}, "
+            f"phase_field_shift={stats['mean_phase_transport_field_shift_abs_mean']:.6f}, "
+            f"phase_field_weight={stats['mean_phase_transport_field_weight_abs_mean']:.6f}, "
             f"route_H_r_corr={stats['mean_route_entropy_radius_corr']:.6f}, "
             f"knn_overlap={stats['mean_geodesic_knn_overlap']:.6f}, "
             f"dyn_knn={stats['mean_dynamic_knn_distance']:.6f}, "
@@ -349,40 +366,107 @@ def choose_recommendation(
     health_gate: Optional[Dict[str, Any]] = None,
     baseline_route_id: str = "R0",
 ) -> str:
+    def is_retrieval_batch(row: Dict[str, Any]) -> bool:
+        return all(
+            key in row
+            for key in (
+                "mean_test_top1_after",
+                "mean_retrieval_candidate_fraction",
+                "mean_online_total_per_repeat_sec",
+                "mean_amortized_total_per_repeat_sec",
+            )
+        )
+
     by_route = {row["route_id"]: row for row in route_stats}
     baseline = by_route.get(baseline_route_id)
     best = min(route_stats, key=lambda row: row["mean_test_mse_after"])
+    passing: List[Dict[str, Any]] = []
     if baseline is None:
         return f"Track {best['route_id']} as provisional best; baseline {baseline_route_id} missing from batch."
 
     if health_gate:
         passing = [row for row in route_stats if row["route_id"] != baseline_route_id and row.get("passes_health_gate", False)]
-        if passing:
-            faster_passing = [
-                row for row in passing
-                if float(row.get("runtime_ratio_vs_r0", float("inf"))) < 1.0
+    if is_retrieval_batch(baseline):
+        retrieval_pool = passing if passing else [
+            row for row in route_stats if row["route_id"] != baseline_route_id
+        ]
+        if retrieval_pool:
+            baseline_cand_frac = float(baseline["mean_retrieval_candidate_fraction"])
+            baseline_online = float(baseline["mean_online_total_per_repeat_sec"])
+            baseline_amortized = float(baseline["mean_amortized_total_per_repeat_sec"])
+            retrieval_systems = [
+                row for row in retrieval_pool
+                if float(row.get("mean_retrieval_candidate_fraction", float("inf"))) < baseline_cand_frac
+                and float(row.get("mean_online_total_per_repeat_sec", float("inf"))) < baseline_online
+                and float(row.get("mean_amortized_total_per_repeat_sec", float("inf"))) < baseline_amortized
             ]
-            if faster_passing:
-                best_hardware = min(
-                    faster_passing,
-                    key=lambda row: (row["mean_total_sec"], row["mean_test_mse_after"]),
+            if retrieval_systems:
+                best_retrieval = min(
+                    retrieval_systems,
+                    key=lambda row: (
+                        float(row["mean_amortized_total_per_repeat_sec"]),
+                        float(row["mean_online_total_per_repeat_sec"]),
+                        float(row["mean_retrieval_candidate_fraction"]),
+                        -float(row["mean_test_top1_after"]),
+                    ),
                 )
-                if float(best_hardware["mean_test_mse_after"]) <= float(baseline["mean_test_mse_after"]):
+                if float(best_retrieval["mean_test_top1_after"]) >= float(baseline["mean_test_top1_after"]):
                     return (
-                        f"Promote {best_hardware['route_id']} as stabilized transfer candidate; "
-                        f"it passes the configured route-health gate and beats {baseline_route_id} on both quality and runtime."
+                        f"Promote {best_retrieval['route_id']} as translated systems lead; "
+                        f"it cuts candidate fraction plus online/amortized runtime vs {baseline_route_id} "
+                        "while also improving top-1."
                     )
                 return (
-                    f"Promote {best_hardware['route_id']} as hardware-efficiency transfer lead; "
-                    "it passes the configured route-health gate, reduces runtime materially, "
-                    f"and stays within the allowed quality tolerance vs {baseline_route_id}."
+                    f"Track {best_retrieval['route_id']} as translated systems lead; "
+                    f"it cuts candidate fraction plus online/amortized runtime vs {baseline_route_id}, "
+                    "but top-1 regressed and remains the next retrieval-quality recovery target."
                 )
 
-            best_passing = min(passing, key=lambda row: row["mean_test_mse_after"])
-            return (
-                f"Track {best_passing['route_id']} as the healthiest quality branch; "
-                f"it passes the configured route-health gate, but none of the healthy routes reduced runtime vs {baseline_route_id}."
+            best_retrieval_quality = max(
+                retrieval_pool,
+                key=lambda row: (
+                    float(row.get("mean_test_top1_after", float("-inf"))),
+                    -float(row.get("mean_retrieval_candidate_fraction", float("inf"))),
+                    -float(row.get("mean_amortized_total_per_repeat_sec", float("inf"))),
+                ),
             )
+            if passing:
+                return (
+                    f"Track {best_retrieval_quality['route_id']} as the healthiest translated quality branch; "
+                    f"it passes the configured route-health gate, but none of the healthy routes beat {baseline_route_id} "
+                    "on candidate pruning plus online/amortized runtime."
+                )
+            return (
+                f"Track {best_retrieval_quality['route_id']} as the translated quality branch; "
+                f"none of the alternates beat {baseline_route_id} on candidate pruning plus online/amortized runtime."
+            )
+
+    if health_gate and passing:
+        faster_passing = [
+            row for row in passing
+            if float(row.get("runtime_ratio_vs_r0", float("inf"))) < 1.0
+        ]
+        if faster_passing:
+            best_hardware = min(
+                faster_passing,
+                key=lambda row: (row["mean_total_sec"], row["mean_test_mse_after"]),
+            )
+            if float(best_hardware["mean_test_mse_after"]) <= float(baseline["mean_test_mse_after"]):
+                return (
+                    f"Promote {best_hardware['route_id']} as stabilized transfer candidate; "
+                    f"it passes the configured route-health gate and beats {baseline_route_id} on both quality and runtime."
+                )
+            return (
+                f"Promote {best_hardware['route_id']} as hardware-efficiency transfer lead; "
+                "it passes the configured route-health gate, reduces runtime materially, "
+                f"and stays within the allowed quality tolerance vs {baseline_route_id}."
+            )
+
+        best_passing = min(passing, key=lambda row: row["mean_test_mse_after"])
+        return (
+            f"Track {best_passing['route_id']} as the healthiest quality branch; "
+            f"it passes the configured route-health gate, but none of the healthy routes reduced runtime vs {baseline_route_id}."
+        )
 
     if best["route_id"] == baseline_route_id:
         return f"Keep {baseline_route_id} as transfer baseline; no alternate route beat it on mean proxy MSE."

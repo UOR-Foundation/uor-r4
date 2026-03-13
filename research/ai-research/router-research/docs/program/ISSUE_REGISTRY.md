@@ -2,6 +2,10 @@
 
 Use this file as the local GitHub-style issue list for router research.
 
+## Canonical Active Queue
+- Current primary RR: `RR-061`
+- Current primary INC: `INC-0137`
+
 ## Active
 - `RR-050` `[research][math-review][active]`
   - Title: Dynamic hyperbolic state branch (`H^4 + T_xH^4` vs `H^4 x H^4`)
@@ -27,24 +31,35 @@ Use this file as the local GitHub-style issue list for router research.
   - Branch: `codex/RR-061-measure-consistent-route-law`
   - Depends on: `RR-060`
   - Canonical doc: `docs/research/increments/INC_0061_measure_consistent_route_law.md`
+  - Current continuation increment:
+    `docs/research/increments/INC_0137_measure_consistent_h4_hopf_shell_pressure_blend.md`
   - Goal: correct shell and angular laws before phase or event-driven branches reopen
-- `RR-064` `[research][phase][queued-next]`
-  - Title: Couple complex-field phase transport into the routing law
-  - Branch: `codex/RR-064-coupled-complex-phase-transport`
-  - Depends on: `RR-059`, `RR-063`
-  - Canonical doc: `docs/research/increments/INC_0064_coupled_complex_phase_transport.md`
-  - Goal: test the intended two-lever mechanism:
-    - minima routing on the first `H^4`
-    - phase jumping through the coupled complex field on the second `H^4`
+  - Queue reset note: restored on 2026-03-12 as the next primary gate after a
+    root-theory audit found drift into late-stage translated sparse-event
+    frontier work
+  - Latest result:
+    - `INC-0136` direct geodesic-shell substitution failed the health gate and
+      worsened shell concentration / neighborhood preservation
+    - queue next moves to a narrower shell-pressure blend rather than more
+      downstream refinement
 - `RR-063` `[research][phase][done]`
   - Title: Test phase-transport necessity on top of corrected coarse routing
   - Branch: `codex/RR-063-phase-transport-necessity`
   - Depends on: `RR-061`, `RR-062`
   - Canonical doc: `docs/research/increments/INC_0063_phase_transport_necessity.md`
   - Goal: prove or kill transported phase as a geometry-induced mechanism
-  - Result: the standalone Hopf transport law was address-inert on the proxy schedule, so the next valid phase branch must couple the second `H^4` complex field into the phase law
+  - Result: the corrected rerun invalidated the old inert negative; standalone
+    transported phase is mechanism-live once `alpha` bins are active
 
 ## Queued
+- `RR-069` `[research][translation][queued]`
+  - Title: Translate the confirmed product phase-field branch into the routed retrieval harness
+  - Branch: `codex/RR-069-product-phase-translation-eval`
+  - Depends on: `RR-065`, `RR-066`, `RR-068`
+  - Canonical doc: `docs/research/increments/INC_0069_product_phase_translation_eval.md`
+  - Goal: evaluate whether the confirmed product branch is useful as retrieval/addressing geometry even though its proxy task-signal probes stayed negative
+  - Status note: valid supporting branch, but deferred behind the restored
+    `RR-061` geometry return
 - `RR-053` `[systems][translation][queued]`
   - Title: Package routed retrieval index reuse if amortization confirm passes
   - Branch: `codex/RR-053-index-reuse-packaging`
@@ -52,11 +67,42 @@ Use this file as the local GitHub-style issue list for router research.
   - Goal: turn the amortized crossover into a reusable systems path with persistent offline index artifacts
 
 ## Recently Closed
+- `RR-068` `[research][spectral][done]`
+  - Title: Probe residual and task-error signals on the confirmed operator family
+  - Branch: `codex/RR-068-spectral-residual-task-signals`
+  - Canonical doc: `docs/research/increments/INC_0068_spectral_residual_task_signals.md`
+  - Result: all routed residual/task-error probes stayed negative versus the Hopf controls on the proxy target, so the branch was closed at screen stage
+- `RR-067` `[research][spectral][done]`
+  - Title: Probe direct task-label signals on the confirmed operator family
+  - Branch: `codex/RR-067-spectral-signal-probes`
+  - Canonical doc: `docs/research/increments/INC_0067_spectral_signal_probes.md`
+  - Result: raw one-hot label projections stayed inconclusive/negative versus the Hopf controls even though the operator distinction survived
+- `RR-066` `[research][spectral][done]`
+  - Title: Measure the route-graph operator on the confirmed product phase-field family
+  - Branch: `codex/RR-066-spectral-route-operator`
+  - Canonical doc: `docs/research/increments/INC_0066_spectral_route_operator.md`
+  - Result: the confirmed product branch carried a distinct connected low-mode signature relative to the controls
+- `RR-065` `[research][phase][done]`
+  - Title: Extend corrected phase evidence into the explicit product phase-field branch
+  - Branch: `codex/RR-065-product-phase-field`
+  - Depends on: `RR-059`, `RR-063`, `RR-064`
+  - Canonical doc: `docs/research/increments/INC_0065_product_phase_field.md`
+  - Result: explicit asymmetric `H^4 x H^4` phase-field coupling stayed mechanism-live and health-passing through confirm
 - `RR-062` `[research][hopf-base][done]`
   - Title: Derive the Hopf-base angular route law
   - Branch: `codex/RR-062-hopf-base-angular-law`
   - Canonical doc: `docs/research/increments/INC_0062_hopf_base_angular_law.md`
-  - Result: `phase4d_hopf_base` became the fastest healthy routed branch and the correct no-fiber-phase coarse-address control, but pure Hopf remained the routed quality lead
+  - Result: corrected reruns promoted `phase4d_hopf_base` to the canonical
+    no-fiber-phase coarse-address control with stronger base/fiber separation
+    evidence, while pure Hopf remained the routed quality lead
+- `RR-064` `[research][phase][done]`
+  - Title: Couple complex-field phase transport into the routing law
+  - Branch: `codex/RR-064-coupled-complex-phase-transport`
+  - Depends on: `RR-059`, `RR-063`
+  - Canonical doc: `docs/research/increments/INC_0064_coupled_complex_phase_transport.md`
+  - Result: corrected same-chart coupling is mechanism-live and health-passing,
+    with strong field-shift metrics and material address movement, but it is not
+    yet the routed quality lead
 - `RR-058` `[research][translation][done]`
   - Title: Recover translated top-1 with exact-bucket complex rerank
   - Branch: `codex/RR-058-product-complex-rerank`

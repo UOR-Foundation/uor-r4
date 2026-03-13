@@ -36,6 +36,42 @@ def apply_proxy_fast_dev(args: argparse.Namespace):
     args.extra_budget = min(int(args.extra_budget), 32)
 
 
+def event_gate_value_from_error(
+    error_mag: float,
+    mode: str,
+    threshold: float,
+    tau: float,
+) -> float:
+    if mode == "off":
+        return 1.0
+    if mode == "hard_error":
+        return 1.0 if float(error_mag) >= float(threshold) else 0.0
+    if mode != "soft_error":
+        raise ValueError(f"unsupported event gate mode: {mode}")
+    gate_tau = max(float(tau), 1e-9)
+    logit = np.clip((float(error_mag) - float(threshold)) / gate_tau, -60.0, 60.0)
+    return float(1.0 / (1.0 + np.exp(-logit)))
+
+
+def event_gate_stats(
+    yhat: np.ndarray,
+    y: np.ndarray,
+    mode: str,
+    threshold: float,
+    tau: float,
+):
+    err = np.asarray(yhat, dtype=np.float64) - np.asarray(y, dtype=np.float64)
+    error_mag = float(np.sqrt(np.mean(err * err)))
+    gate = event_gate_value_from_error(
+        error_mag=error_mag,
+        mode=mode,
+        threshold=threshold,
+        tau=tau,
+    )
+    active = 1.0 if gate >= 0.5 else 0.0
+    return error_mag, gate, active
+
+
 def parse_args():
     ap = argparse.ArgumentParser()
     ap.add_argument("--input", type=str, default="data/wikitext2_proxy/wikitext2_proxy.npz")
@@ -56,9 +92,10 @@ def parse_args():
     ap.add_argument("--split_rounds", type=int, default=128)
     ap.add_argument("--min_split_gain", type=float, default=1e-4)
 
-    ap.add_argument("--sector_mode", type=str, default="kmeans", choices=["kmeans", "phase2", "phase4d", "phase4d_adaptive", "phase4d_hopf", "phase4d_hopf_base", "phase4d_hopf_transport", "phase4d_hopf_iso", "phase4d_hopf_ball", "phase4d_hopf_chi", "phase4d_hopf_fib", "phase4d_hopf_fib_rung", "phase4d_hopf_fib_band", "phase4d_hopf_fib_band_iso", "phase4d_hopf_fib_band_bound", "phase4d_hopf_blend", "phase4d_complex_local", "complex2"])
+    ap.add_argument("--sector_mode", type=str, default="kmeans", choices=["kmeans", "phase2", "phase4d", "phase4d_adaptive", "phase4d_hopf", "phase4d_hopf_base", "phase4d_hopf_transport", "phase4d_hopf_transport_complex", "phase4d_hopf_product_phase", "phase4d_hopf_iso", "phase4d_hopf_ball", "phase4d_hopf_base_ball", "phase4d_hopf_chi", "phase4d_hopf_fib", "phase4d_hopf_fib_rung", "phase4d_hopf_fib_band", "phase4d_hopf_fib_band_iso", "phase4d_hopf_fib_band_bound", "phase4d_hopf_blend", "phase4d_complex_local", "complex2"])
     ap.add_argument("--phase_dims", type=str, default="0,1")
     ap.add_argument("--phase4_dims", type=str, default="0,2,4,6")
+    ap.add_argument("--field4_dims", type=str, default="1,3,5,7")
     ap.add_argument("--complex_dims", type=str, default="0,1")
     ap.add_argument("--hybrid_local_k", type=int, default=4)
     ap.add_argument("--hybrid_complex_roots", type=int, default=4)
@@ -78,6 +115,8 @@ def parse_args():
     ap.add_argument("--adaptive_converge_mode", type=str, default="fixed", choices=["fixed", "phi_ratio", "phi_ladder"])
     ap.add_argument("--shell_mode", type=str, default="linear", choices=["linear", "phi_log", "phi_phase", "h4_mass", "h4_mass_phi"])
     ap.add_argument("--shell_phase_coupling", type=float, default=0.0)
+    ap.add_argument("--product_shell_control_mode", type=str, default="continuous", choices=["continuous", "gated", "banded"])
+    ap.add_argument("--product_shell_gate_threshold", type=float, default=0.0)
     ap.add_argument("--fib_rung_gate_threshold", type=float, default=0.0)
     ap.add_argument("--route_scale_lambda", type=float, default=1.0)
     ap.add_argument("--memory_coord_mode", type=str, default="route_chart", choices=["route_chart", "full_chart"])
@@ -86,8 +125,12 @@ def parse_args():
     ap.add_argument("--hopf_blend_chi_weight", type=float, default=1.0)
     ap.add_argument("--hopf_blend_shell_weight", type=float, default=0.5)
     ap.add_argument("--phase_transport_lambda", type=float, default=1.0)
+    ap.add_argument("--phase_field_lambda", type=float, default=0.0)
     ap.add_argument("--time_pressure_lambda", type=float, default=0.0)
     ap.add_argument("--train_route_mode", type=str, default="dynamic", choices=["dynamic", "final_static"])
+    ap.add_argument("--event_gate_mode", type=str, default="off", choices=["off", "soft_error", "hard_error"])
+    ap.add_argument("--event_gate_threshold", type=float, default=0.0)
+    ap.add_argument("--event_gate_tau", type=float, default=0.01)
 
     ap.add_argument("--learn_so8", type=int, default=0, choices=[0, 1])
     ap.add_argument("--learn_scale", type=int, default=1, choices=[0, 1])
@@ -120,7 +163,7 @@ def parse_args():
 
 def proxy_chart_cache_payload(args: argparse.Namespace, d: int, dy: int, n_train: int):
     return {
-        "cache_version": "proxy_chart_v7",
+        "cache_version": "proxy_chart_v12",
         "input": args.input,
         "eval_split": args.eval_split,
         "d": d,
@@ -134,16 +177,24 @@ def proxy_chart_cache_payload(args: argparse.Namespace, d: int, dy: int, n_train
             "sector_mode": args.sector_mode,
             "phase_dims": args.phase_dims,
             "phase4_dims": args.phase4_dims,
+            "field4_dims": args.field4_dims,
             "complex_dims": args.complex_dims,
             "route_scale_lambda": args.route_scale_lambda,
             "memory_coord_mode": args.memory_coord_mode,
             "shell_mode": args.shell_mode,
             "shell_phase_coupling": args.shell_phase_coupling,
+            "product_shell_control_mode": args.product_shell_control_mode,
+            "product_shell_gate_threshold": args.product_shell_gate_threshold,
             "fib_rung_gate_threshold": args.fib_rung_gate_threshold,
             "hopf_chi_bins": args.hopf_chi_bins,
             "hopf_blend_lambda": args.hopf_blend_lambda,
             "hopf_blend_chi_weight": args.hopf_blend_chi_weight,
             "hopf_blend_shell_weight": args.hopf_blend_shell_weight,
+            "phase_transport_lambda": args.phase_transport_lambda,
+            "phase_field_lambda": args.phase_field_lambda,
+            "event_gate_mode": args.event_gate_mode,
+            "event_gate_threshold": args.event_gate_threshold,
+            "event_gate_tau": args.event_gate_tau,
             "hybrid_local_k": args.hybrid_local_k,
             "hybrid_complex_roots": args.hybrid_complex_roots,
             "hybrid_local_min_k": args.hybrid_local_min_k,
@@ -183,7 +234,7 @@ def proxy_chart_cache_payload(args: argparse.Namespace, d: int, dy: int, n_train
 
 def proxy_route_cache_payload(args: argparse.Namespace, chart_fp: str, c_fp: str, n_train: int, n_eval: int):
     return {
-        "cache_version": "proxy_routes_v7",
+        "cache_version": "proxy_routes_v12",
         "input": args.input,
         "eval_split": args.eval_split,
         "n_train": n_train,
@@ -196,16 +247,24 @@ def proxy_route_cache_payload(args: argparse.Namespace, chart_fp: str, c_fp: str
             "sector_mode": args.sector_mode,
             "phase_dims": args.phase_dims,
             "phase4_dims": args.phase4_dims,
+            "field4_dims": args.field4_dims,
             "complex_dims": args.complex_dims,
             "route_scale_lambda": args.route_scale_lambda,
             "memory_coord_mode": args.memory_coord_mode,
             "shell_mode": args.shell_mode,
             "shell_phase_coupling": args.shell_phase_coupling,
+            "product_shell_control_mode": args.product_shell_control_mode,
+            "product_shell_gate_threshold": args.product_shell_gate_threshold,
             "fib_rung_gate_threshold": args.fib_rung_gate_threshold,
             "hopf_chi_bins": args.hopf_chi_bins,
             "hopf_blend_lambda": args.hopf_blend_lambda,
             "hopf_blend_chi_weight": args.hopf_blend_chi_weight,
             "hopf_blend_shell_weight": args.hopf_blend_shell_weight,
+            "phase_transport_lambda": args.phase_transport_lambda,
+            "phase_field_lambda": args.phase_field_lambda,
+            "event_gate_mode": args.event_gate_mode,
+            "event_gate_threshold": args.event_gate_threshold,
+            "event_gate_tau": args.event_gate_tau,
             "hybrid_local_k": args.hybrid_local_k,
             "hybrid_complex_roots": args.hybrid_complex_roots,
             "hybrid_local_min_k": args.hybrid_local_min_k,
@@ -265,10 +324,21 @@ def main():
 
     phase_dim_i, phase_dim_j = hr.parse_pair_dims(args.phase_dims, "--phase_dims")
     phase4_dim_i, phase4_dim_j, phase4_dim_k, phase4_dim_l = hr.parse_quad_dims(args.phase4_dims, "--phase4_dims")
+    field4_dim_i, field4_dim_j, field4_dim_k, field4_dim_l = hr.parse_quad_dims(args.field4_dims, "--field4_dims")
     complex_dim_i, complex_dim_j = hr.parse_pair_dims(args.complex_dims, "--complex_dims")
     hr.ensure_dims_in_range([phase_dim_i, phase_dim_j], d, "--phase_dims")
     hr.ensure_dims_in_range([phase4_dim_i, phase4_dim_j, phase4_dim_k, phase4_dim_l], d, "--phase4_dims")
+    hr.ensure_dims_in_range([field4_dim_i, field4_dim_j, field4_dim_k, field4_dim_l], d, "--field4_dims")
     hr.ensure_dims_in_range([complex_dim_i, complex_dim_j], d, "--complex_dims")
+    hr.ensure_distinct_dims([phase4_dim_i, phase4_dim_j, phase4_dim_k, phase4_dim_l], "--phase4_dims")
+    hr.ensure_distinct_dims([field4_dim_i, field4_dim_j, field4_dim_k, field4_dim_l], "--field4_dims")
+    if args.sector_mode == "phase4d_hopf_product_phase":
+        hr.ensure_disjoint_dims(
+            [phase4_dim_i, phase4_dim_j, phase4_dim_k, phase4_dim_l],
+            "--phase4_dims",
+            [field4_dim_i, field4_dim_j, field4_dim_k, field4_dim_l],
+            "--field4_dims",
+        )
 
     if int(args.cache_chart) == 1 or int(args.cache_routes) == 1:
         hr.ensure_dir(args.cache_dir)
@@ -339,6 +409,10 @@ def main():
             phase4_dim_l=phase4_dim_l,
             complex_dim_i=complex_dim_i,
             complex_dim_j=complex_dim_j,
+            field4_dim_i=field4_dim_i,
+            field4_dim_j=field4_dim_j,
+            field4_dim_k=field4_dim_k,
+            field4_dim_l=field4_dim_l,
             K=args.K,
             seed=args.seed + 23,
             early_stop_patience=args.early_stop_patience,
@@ -358,11 +432,14 @@ def main():
             memory_coord_mode=args.memory_coord_mode,
             shell_mode=args.shell_mode,
             shell_phase_coupling=args.shell_phase_coupling,
+            product_shell_control_mode=args.product_shell_control_mode,
+            product_shell_gate_threshold=args.product_shell_gate_threshold,
             hopf_chi_bins=args.hopf_chi_bins,
             hopf_blend_lambda=args.hopf_blend_lambda,
             hopf_blend_chi_weight=args.hopf_blend_chi_weight,
             hopf_blend_shell_weight=args.hopf_blend_shell_weight,
             phase_transport_lambda=args.phase_transport_lambda,
+            phase_field_lambda=args.phase_field_lambda,
             hybrid_local_k=args.hybrid_local_k,
             hybrid_complex_roots=args.hybrid_complex_roots,
             hybrid_local_min_k=args.hybrid_local_min_k,
@@ -423,6 +500,8 @@ def main():
             phase_dim_i=phase_dim_i, phase_dim_j=phase_dim_j,
             phase4_dim_i=phase4_dim_i, phase4_dim_j=phase4_dim_j,
             phase4_dim_k=phase4_dim_k, phase4_dim_l=phase4_dim_l,
+            field4_dim_i=field4_dim_i, field4_dim_j=field4_dim_j,
+            field4_dim_k=field4_dim_k, field4_dim_l=field4_dim_l,
             complex_dim_i=complex_dim_i, complex_dim_j=complex_dim_j,
             K=args.K,
             time_pressure_lambda=0.0, tau=1.0,
@@ -441,11 +520,14 @@ def main():
             memory_coord_mode=args.memory_coord_mode,
             shell_mode=args.shell_mode,
             shell_phase_coupling=args.shell_phase_coupling,
+            product_shell_control_mode=args.product_shell_control_mode,
+            product_shell_gate_threshold=args.product_shell_gate_threshold,
             hopf_chi_bins=args.hopf_chi_bins,
             hopf_blend_lambda=args.hopf_blend_lambda,
             hopf_blend_chi_weight=args.hopf_blend_chi_weight,
             hopf_blend_shell_weight=args.hopf_blend_shell_weight,
             phase_transport_lambda=args.phase_transport_lambda,
+            phase_field_lambda=args.phase_field_lambda,
             hybrid_local_k=args.hybrid_local_k,
             hybrid_complex_roots=args.hybrid_complex_roots,
             hybrid_local_min_k=args.hybrid_local_min_k,
@@ -459,6 +541,8 @@ def main():
             phase_dim_i=phase_dim_i, phase_dim_j=phase_dim_j,
             phase4_dim_i=phase4_dim_i, phase4_dim_j=phase4_dim_j,
             phase4_dim_k=phase4_dim_k, phase4_dim_l=phase4_dim_l,
+            field4_dim_i=field4_dim_i, field4_dim_j=field4_dim_j,
+            field4_dim_k=field4_dim_k, field4_dim_l=field4_dim_l,
             complex_dim_i=complex_dim_i, complex_dim_j=complex_dim_j,
             K=args.K,
             time_pressure_lambda=0.0, tau=1.0,
@@ -477,11 +561,14 @@ def main():
             memory_coord_mode=args.memory_coord_mode,
             shell_mode=args.shell_mode,
             shell_phase_coupling=args.shell_phase_coupling,
+            product_shell_control_mode=args.product_shell_control_mode,
+            product_shell_gate_threshold=args.product_shell_gate_threshold,
             hopf_chi_bins=args.hopf_chi_bins,
             hopf_blend_lambda=args.hopf_blend_lambda,
             hopf_blend_chi_weight=args.hopf_blend_chi_weight,
             hopf_blend_shell_weight=args.hopf_blend_shell_weight,
             phase_transport_lambda=args.phase_transport_lambda,
+            phase_field_lambda=args.phase_field_lambda,
             hybrid_local_k=args.hybrid_local_k,
             hybrid_complex_roots=args.hybrid_complex_roots,
             hybrid_local_min_k=args.hybrid_local_min_k,
@@ -522,7 +609,7 @@ def main():
     route_z_ev = hr.route_coordinate(v_ev, chart, sector_mode=args.sector_mode, route_scale_lambda=args.route_scale_lambda)
     alignment = hr.poincare_alignment_diagnostics(
         v_ev,
-        route_z_ev if args.memory_coord_mode == "full_chart" else z_ev,
+        route_z_ev,
         max_pairs=512,
         seed=args.seed + 811,
     )
@@ -571,18 +658,57 @@ def main():
     hopf_base_mass_error = float(hopf_base_measure["hopf_base_mass_error"])
     hopf_delta_mass_error = float(hopf_base_measure["hopf_delta_mass_error"])
     hopf_alpha_entropy = float(hopf_base_measure["hopf_alpha_entropy"])
-    phase_transport = hr.hopf_phase_transport_diagnostics(
-        route_z_ev,
-        dim_i=phase4_dim_i,
-        dim_j=phase4_dim_j,
-        dim_k=phase4_dim_k,
-        dim_l=phase4_dim_l,
-        phase_transport_lambda=args.phase_transport_lambda,
-    )
+    if args.sector_mode == "phase4d_hopf_transport_complex":
+        phase_transport = hr.hopf_phase_transport_complex_diagnostics(
+            route_z_ev,
+            dim_i=phase4_dim_i,
+            dim_j=phase4_dim_j,
+            dim_k=phase4_dim_k,
+            dim_l=phase4_dim_l,
+            complex_dim_i=complex_dim_i,
+            complex_dim_j=complex_dim_j,
+            phase_transport_lambda=args.phase_transport_lambda,
+            phase_field_lambda=args.phase_field_lambda,
+        )
+    elif args.sector_mode == "phase4d_hopf_product_phase":
+        phase_transport = hr.hopf_product_phase_diagnostics(
+            route_z_ev,
+            route_dim_i=phase4_dim_i,
+            route_dim_j=phase4_dim_j,
+            route_dim_k=phase4_dim_k,
+            route_dim_l=phase4_dim_l,
+            field_dim_i=field4_dim_i,
+            field_dim_j=field4_dim_j,
+            field_dim_k=field4_dim_k,
+            field_dim_l=field4_dim_l,
+            phase_transport_lambda=args.phase_transport_lambda,
+            phase_field_lambda=args.phase_field_lambda,
+        )
+    else:
+        phase_transport = hr.hopf_phase_transport_diagnostics(
+            route_z_ev,
+            dim_i=phase4_dim_i,
+            dim_j=phase4_dim_j,
+            dim_k=phase4_dim_k,
+            dim_l=phase4_dim_l,
+            phase_transport_lambda=args.phase_transport_lambda,
+        )
     phase_transport_coherence = float(phase_transport["phase_transport_coherence"])
     phase_transport_shift_abs_mean = float(phase_transport["phase_transport_shift_abs_mean"])
     phase_transport_shift_abs_max = float(phase_transport["phase_transport_shift_abs_max"])
     phase_transport_connection_abs_mean = float(phase_transport["phase_transport_connection_abs_mean"])
+    phase_transport_field_shift_abs_mean = float(phase_transport.get("phase_transport_field_shift_abs_mean", 0.0))
+    phase_transport_field_weight_abs_mean = float(phase_transport.get("phase_transport_field_weight_abs_mean", 0.0))
+    product_shell_gate_score_mean = 0.0
+    product_shell_gate_score_max = 0.0
+    product_shell_active_frac = 0.0
+    product_shell_states_used = 0.0
+    product_shell_multiplier_mean = 1.0
+    product_shell_multiplier_max = 1.0
+    event_gate_error_mean = 0.0
+    event_gate_mean = 1.0
+    event_gate_active_frac = 1.0
+    event_gate_cost_proxy = 1.0
     geodesic_neighbors = hr.geodesic_neighborhood_diagnostics(
         v_ev,
         route_z_ev,
@@ -653,6 +779,11 @@ def main():
     adaptive_blend_chi_pressure_max = 0.0
     adaptive_blend_shell_pressure_mean = 0.0
     adaptive_blend_shell_pressure_max = 0.0
+    hopf_sector_groups_used = 0
+    hopf_sector_chi_std_mean = 0.0
+    hopf_sector_delta_cvar_mean = 0.0
+    hopf_sector_alpha_entropy_mean = 0.0
+    hopf_sector_alpha_entropy_gap = 0.0
     phase_transport_alpha_bins = 0.0
     hybrid_coarse_eval_sectors = 0
     hybrid_local_eval_sectors = 0
@@ -672,8 +803,8 @@ def main():
     hybrid_local_activation_max = 0.0
     hybrid_local_k_eff_mean = 0.0
     hybrid_local_k_eff_max = 0
-    diag_z_ev = route_z_ev if args.memory_coord_mode == "full_chart" else z_ev
-    if args.sector_mode in ("phase4d_adaptive", "phase4d_hopf", "phase4d_hopf_base", "phase4d_hopf_transport", "phase4d_hopf_iso", "phase4d_hopf_ball", "phase4d_hopf_chi", "phase4d_hopf_fib", "phase4d_hopf_fib_rung", "phase4d_hopf_fib_band", "phase4d_hopf_fib_band_iso", "phase4d_hopf_fib_band_bound", "phase4d_hopf_blend", "phase4d_complex_local"):
+    diag_z_ev = route_z_ev
+    if args.sector_mode in ("phase4d_adaptive", "phase4d_hopf", "phase4d_hopf_base", "phase4d_hopf_transport", "phase4d_hopf_transport_complex", "phase4d_hopf_product_phase", "phase4d_hopf_iso", "phase4d_hopf_ball", "phase4d_hopf_base_ball", "phase4d_hopf_chi", "phase4d_hopf_fib", "phase4d_hopf_fib_rung", "phase4d_hopf_fib_band", "phase4d_hopf_fib_band_iso", "phase4d_hopf_fib_band_bound", "phase4d_hopf_blend", "phase4d_complex_local"):
         comp = hr.phase4d_adaptive_components(
             z=diag_z_ev,
             K=args.K,
@@ -698,7 +829,7 @@ def main():
         k1_dbg = comp["k1"]
         k2_dbg = comp["k2"]
         chi_ids = np.minimum((comp["chi_u"] * max(1, int(args.hopf_chi_bins))).astype(np.int64), max(max(1, int(args.hopf_chi_bins)) - 1, 0))
-        if args.sector_mode == "phase4d_hopf_base":
+        if args.sector_mode in ("phase4d_hopf_base", "phase4d_hopf_base_ball"):
             _, kchi_dbg, kdelta_dbg = hr.assign_sectors_phase4d_hopf_base(
                 z=diag_z_ev,
                 K=args.K,
@@ -710,17 +841,48 @@ def main():
             k1_dbg = kchi_dbg
             k2_dbg = kdelta_dbg
             chi_ids = np.minimum((comp["chi_u"] * kchi_dbg.astype(np.float64)).astype(np.int64), np.maximum(kchi_dbg - 1, 0))
-        if args.sector_mode == "phase4d_hopf_transport":
-            _, kchi_dbg, kdelta_dbg, kalpha_dbg = hr.assign_sectors_phase4d_hopf_transport(
-                z=diag_z_ev,
-                K=args.K,
-                dim_i=phase4_dim_i,
-                dim_j=phase4_dim_j,
-                dim_k=phase4_dim_k,
-                dim_l=phase4_dim_l,
-                phase_transport_lambda=args.phase_transport_lambda,
-                hopf_chi_bins=args.hopf_chi_bins,
-            )
+        if args.sector_mode in ("phase4d_hopf_transport", "phase4d_hopf_transport_complex", "phase4d_hopf_product_phase"):
+            if args.sector_mode == "phase4d_hopf_transport_complex":
+                _, kchi_dbg, kdelta_dbg, kalpha_dbg = hr.assign_sectors_phase4d_hopf_transport_complex(
+                    z=diag_z_ev,
+                    K=args.K,
+                    dim_i=phase4_dim_i,
+                    dim_j=phase4_dim_j,
+                    dim_k=phase4_dim_k,
+                    dim_l=phase4_dim_l,
+                    complex_dim_i=complex_dim_i,
+                    complex_dim_j=complex_dim_j,
+                    phase_transport_lambda=args.phase_transport_lambda,
+                    phase_field_lambda=args.phase_field_lambda,
+                    hopf_chi_bins=args.hopf_chi_bins,
+                )
+            elif args.sector_mode == "phase4d_hopf_product_phase":
+                _, kchi_dbg, kdelta_dbg, kalpha_dbg = hr.assign_sectors_phase4d_hopf_product_phase(
+                    z=diag_z_ev,
+                    K=args.K,
+                    route_dim_i=phase4_dim_i,
+                    route_dim_j=phase4_dim_j,
+                    route_dim_k=phase4_dim_k,
+                    route_dim_l=phase4_dim_l,
+                    field_dim_i=field4_dim_i,
+                    field_dim_j=field4_dim_j,
+                    field_dim_k=field4_dim_k,
+                    field_dim_l=field4_dim_l,
+                    phase_transport_lambda=args.phase_transport_lambda,
+                    phase_field_lambda=args.phase_field_lambda,
+                    hopf_chi_bins=args.hopf_chi_bins,
+                )
+            else:
+                _, kchi_dbg, kdelta_dbg, kalpha_dbg = hr.assign_sectors_phase4d_hopf_transport(
+                    z=diag_z_ev,
+                    K=args.K,
+                    dim_i=phase4_dim_i,
+                    dim_j=phase4_dim_j,
+                    dim_k=phase4_dim_k,
+                    dim_l=phase4_dim_l,
+                    phase_transport_lambda=args.phase_transport_lambda,
+                    hopf_chi_bins=args.hopf_chi_bins,
+                )
             k1_dbg = kchi_dbg
             k2_dbg = kdelta_dbg
             phase_transport_alpha_bins = float(np.mean(kalpha_dbg))
@@ -811,13 +973,14 @@ def main():
                 adaptive_time_growth=args.adaptive_time_growth,
                 adaptive_balance=args.adaptive_balance,
                 adaptive_angle_growth=args.adaptive_angle_growth,
-                shell_mode=args.shell_mode,
-                shell_phase_coupling=args.shell_phase_coupling,
-                hopf_chi_bins=args.hopf_chi_bins,
+            shell_mode=args.shell_mode,
+            shell_phase_coupling=args.shell_phase_coupling,
+            product_shell_control_mode=args.product_shell_control_mode,
+            product_shell_gate_threshold=args.product_shell_gate_threshold,
+            hopf_chi_bins=args.hopf_chi_bins,
                 hopf_blend_lambda=args.hopf_blend_lambda,
                 hopf_blend_chi_weight=args.hopf_blend_chi_weight,
                 hopf_blend_shell_weight=args.hopf_blend_shell_weight,
-            phase_transport_lambda=args.phase_transport_lambda,
             )
             adaptive_blend_total_mean = float(np.mean(blend_total_dbg))
             adaptive_blend_total_max = int(np.max(blend_total_dbg))
@@ -828,6 +991,35 @@ def main():
             adaptive_blend_shell_pressure_mean = float(np.mean(shell_pressure_dbg))
             adaptive_blend_shell_pressure_max = float(np.max(shell_pressure_dbg))
             chi_ids = np.minimum((comp["chi_u"] * kchi_dbg.astype(np.float64)).astype(np.int64), np.maximum(kchi_dbg - 1, 0))
+        if args.sector_mode == "phase4d_hopf_product_phase":
+            product_shell_diag = hr.product_phase_shell_diagnostics(
+                z=diag_z_ev,
+                K=args.K,
+                dim_i=phase4_dim_i,
+                dim_j=phase4_dim_j,
+                dim_k=phase4_dim_k,
+                dim_l=phase4_dim_l,
+                delta_r=args.delta_r,
+                tau=1.0,
+                adaptive_min_pair_bins=args.adaptive_min_pair_bins,
+                adaptive_time_growth=args.adaptive_time_growth,
+                adaptive_balance=args.adaptive_balance,
+                adaptive_angle_growth=args.adaptive_angle_growth,
+                adaptive_shell_growth=args.adaptive_shell_growth,
+                adaptive_shell_balance=args.adaptive_shell_balance,
+                adaptive_converge_lambda=args.adaptive_converge_lambda,
+                adaptive_converge_target=args.adaptive_converge_target,
+                adaptive_converge_hysteresis=args.adaptive_converge_hysteresis,
+                adaptive_converge_mode=args.adaptive_converge_mode,
+                product_shell_control_mode=args.product_shell_control_mode,
+                product_shell_gate_threshold=args.product_shell_gate_threshold,
+            )
+            product_shell_gate_score_mean = float(product_shell_diag["product_shell_gate_score_mean"])
+            product_shell_gate_score_max = float(product_shell_diag["product_shell_gate_score_max"])
+            product_shell_active_frac = float(product_shell_diag["product_shell_active_frac"])
+            product_shell_states_used = float(product_shell_diag["product_shell_states_used"])
+            product_shell_multiplier_mean = float(product_shell_diag["product_shell_multiplier_mean"])
+            product_shell_multiplier_max = float(product_shell_diag["product_shell_multiplier_max"])
         adaptive_k1_mean = float(np.mean(k1_dbg))
         adaptive_k2_mean = float(np.mean(k2_dbg))
         adaptive_k1_max = int(np.max(k1_dbg))
@@ -893,8 +1085,6 @@ def main():
             adaptive_converge_target=args.adaptive_converge_target,
             adaptive_converge_hysteresis=args.adaptive_converge_hysteresis,
             adaptive_converge_mode=args.adaptive_converge_mode,
-            fib_rung_gate_threshold=args.fib_rung_gate_threshold,
-            route_scale_lambda=args.route_scale_lambda,
             shell_mode=args.shell_mode,
             shell_phase_coupling=args.shell_phase_coupling,
             hybrid_local_k=args.hybrid_local_k,
@@ -926,6 +1116,21 @@ def main():
         hybrid_local_k_eff_mean = float(np.mean(hybrid_dbg["local_k_eff"]))
         hybrid_local_k_eff_max = int(np.max(hybrid_dbg["local_k_eff"]))
 
+    hopf_sector = hr.hopf_sector_routing_diagnostics(
+        route_z_ev,
+        sector_ev,
+        dim_i=phase4_dim_i,
+        dim_j=phase4_dim_j,
+        dim_k=phase4_dim_k,
+        dim_l=phase4_dim_l,
+        alpha_bins=12,
+    )
+    hopf_sector_groups_used = int(hopf_sector["hopf_sector_groups_used"])
+    hopf_sector_chi_std_mean = float(hopf_sector["hopf_sector_chi_std_mean"])
+    hopf_sector_delta_cvar_mean = float(hopf_sector["hopf_sector_delta_cvar_mean"])
+    hopf_sector_alpha_entropy_mean = float(hopf_sector["hopf_sector_alpha_entropy_mean"])
+    hopf_sector_alpha_entropy_gap = float(hopf_sector["hopf_sector_alpha_entropy_gap"])
+
     train_label_sse = hr.label_coherence_sse(
         v_tr, y_tr, delta_r=args.delta_r, C=C_used, chart=chart,
         sector_mode=args.sector_mode,
@@ -933,6 +1138,8 @@ def main():
         phase4_dim_i=phase4_dim_i, phase4_dim_j=phase4_dim_j,
         phase4_dim_k=phase4_dim_k, phase4_dim_l=phase4_dim_l,
         complex_dim_i=complex_dim_i, complex_dim_j=complex_dim_j,
+        field4_dim_i=field4_dim_i, field4_dim_j=field4_dim_j,
+        field4_dim_k=field4_dim_k, field4_dim_l=field4_dim_l,
         K=args.K,
         adaptive_min_pair_bins=args.adaptive_min_pair_bins,
         adaptive_time_growth=args.adaptive_time_growth,
@@ -954,6 +1161,7 @@ def main():
         hopf_blend_chi_weight=args.hopf_blend_chi_weight,
         hopf_blend_shell_weight=args.hopf_blend_shell_weight,
         phase_transport_lambda=args.phase_transport_lambda,
+        phase_field_lambda=args.phase_field_lambda,
         hybrid_local_k=args.hybrid_local_k,
         hybrid_complex_roots=args.hybrid_complex_roots,
         hybrid_local_min_k=args.hybrid_local_min_k,
@@ -968,6 +1176,8 @@ def main():
         phase4_dim_i=phase4_dim_i, phase4_dim_j=phase4_dim_j,
         phase4_dim_k=phase4_dim_k, phase4_dim_l=phase4_dim_l,
         complex_dim_i=complex_dim_i, complex_dim_j=complex_dim_j,
+        field4_dim_i=field4_dim_i, field4_dim_j=field4_dim_j,
+        field4_dim_k=field4_dim_k, field4_dim_l=field4_dim_l,
         K=args.K,
         adaptive_min_pair_bins=args.adaptive_min_pair_bins,
         adaptive_time_growth=args.adaptive_time_growth,
@@ -989,6 +1199,7 @@ def main():
         hopf_blend_chi_weight=args.hopf_blend_chi_weight,
         hopf_blend_shell_weight=args.hopf_blend_shell_weight,
         phase_transport_lambda=args.phase_transport_lambda,
+        phase_field_lambda=args.phase_field_lambda,
         hybrid_local_k=args.hybrid_local_k,
         hybrid_complex_roots=args.hybrid_complex_roots,
         hybrid_local_min_k=args.hybrid_local_min_k,
@@ -1004,6 +1215,9 @@ def main():
     t_train = time.perf_counter()
     total_steps = args.epochs * v_tr.shape[0]
     step_ctr = 0
+    event_gate_error_sum = 0.0
+    event_gate_sum = 0.0
+    event_gate_active_sum = 0.0
     for _epoch in range(args.epochs):
         order = np.random.permutation(v_tr.shape[0])
         for jj in order:
@@ -1027,6 +1241,10 @@ def main():
                     phase4_dim_l=phase4_dim_l,
                     complex_dim_i=complex_dim_i,
                     complex_dim_j=complex_dim_j,
+                    field4_dim_i=field4_dim_i,
+                    field4_dim_j=field4_dim_j,
+                    field4_dim_k=field4_dim_k,
+                    field4_dim_l=field4_dim_l,
                     K=args.K,
                     time_pressure_lambda=float(args.time_pressure_lambda),
                     tau=tau,
@@ -1045,11 +1263,14 @@ def main():
                     memory_coord_mode=args.memory_coord_mode,
                     shell_mode=args.shell_mode,
                     shell_phase_coupling=args.shell_phase_coupling,
+                    product_shell_control_mode=args.product_shell_control_mode,
+                    product_shell_gate_threshold=args.product_shell_gate_threshold,
                     hopf_chi_bins=args.hopf_chi_bins,
                     hopf_blend_lambda=args.hopf_blend_lambda,
                     hopf_blend_chi_weight=args.hopf_blend_chi_weight,
                     hopf_blend_shell_weight=args.hopf_blend_shell_weight,
                     phase_transport_lambda=args.phase_transport_lambda,
+                    phase_field_lambda=args.phase_field_lambda,
                     hybrid_local_k=args.hybrid_local_k,
                     hybrid_complex_roots=args.hybrid_complex_roots,
                     hybrid_local_min_k=args.hybrid_local_min_k,
@@ -1059,17 +1280,32 @@ def main():
                 )
             timings["training_route"] += time.perf_counter() - t_train_route
             t_train_update = time.perf_counter()
-            _, sj, _ = hr.predict_from_bucket(buckets, key, z1, d=d, dy=dy)
+            yhat, sj, _ = hr.predict_from_bucket(buckets, key, z1, d=d, dy=dy)
+            error_mag, event_gate, event_active = event_gate_stats(
+                yhat=yhat,
+                y=y_tr[jj],
+                mode=args.event_gate_mode,
+                threshold=args.event_gate_threshold,
+                tau=args.event_gate_tau,
+            )
+            event_gate_error_sum += error_mag
+            event_gate_sum += event_gate
+            event_gate_active_sum += event_active
             hr.ema_update(
                 hr.get_bucket(buckets, key, d=d, dy=dy).slots[sj],
                 z=z1,
                 y=y_tr[jj],
-                eta_p=args.eta_p,
-                eta_m=args.eta_m
+                eta_p=float(args.eta_p) * float(event_gate),
+                eta_m=float(args.eta_m) * float(event_gate),
             )
             timings["training_update"] += time.perf_counter() - t_train_update
             step_ctr += 1
     timings["training_ema"] = time.perf_counter() - t_train
+    if total_steps > 0:
+        event_gate_error_mean = float(event_gate_error_sum / float(total_steps))
+        event_gate_mean = float(event_gate_sum / float(total_steps))
+        event_gate_active_frac = float(event_gate_active_sum / float(total_steps))
+        event_gate_cost_proxy = float(event_gate_mean)
 
     mse0, pmax0, H0, nb0 = hr.eval_metrics(buckets, keys_ev, z_ev, y_ev)
 
@@ -1097,12 +1333,16 @@ def main():
 
     print("=== PROXY RUN SUMMARY ===")
     print(f"input={args.input} eval_split={args.eval_split} seed={args.seed}")
-    print(f"sector_mode={args.sector_mode} phase_dims={args.phase_dims} phase4_dims={args.phase4_dims} complex_dims={args.complex_dims}")
+    print(
+        f"sector_mode={args.sector_mode} phase_dims={args.phase_dims} "
+        f"phase4_dims={args.phase4_dims} field4_dims={args.field4_dims} "
+        f"complex_dims={args.complex_dims}"
+    )
     print(
         f"time_pressure_lambda={args.time_pressure_lambda} "
         f"train_route_mode={args.train_route_mode} fast_dev={args.fast_dev}"
     )
-    if args.sector_mode in ("phase4d_adaptive", "phase4d_hopf", "phase4d_hopf_base", "phase4d_hopf_transport", "phase4d_hopf_iso", "phase4d_hopf_ball", "phase4d_hopf_chi", "phase4d_hopf_fib", "phase4d_hopf_fib_rung", "phase4d_hopf_fib_band", "phase4d_hopf_fib_band_iso", "phase4d_hopf_fib_band_bound", "phase4d_hopf_blend", "phase4d_complex_local"):
+    if args.sector_mode in ("phase4d_adaptive", "phase4d_hopf", "phase4d_hopf_base", "phase4d_hopf_transport", "phase4d_hopf_transport_complex", "phase4d_hopf_product_phase", "phase4d_hopf_iso", "phase4d_hopf_ball", "phase4d_hopf_base_ball", "phase4d_hopf_chi", "phase4d_hopf_fib", "phase4d_hopf_fib_rung", "phase4d_hopf_fib_band", "phase4d_hopf_fib_band_iso", "phase4d_hopf_fib_band_bound", "phase4d_hopf_blend", "phase4d_complex_local"):
         print(
             "adaptive_phase4d="
             f"min_pair_bins={args.adaptive_min_pair_bins} "
@@ -1125,16 +1365,29 @@ def main():
             f"shell_weight={args.hopf_blend_shell_weight} "
             f"chi_bins={args.hopf_chi_bins}"
         )
-    if args.sector_mode == "phase4d_hopf_transport":
+    if args.sector_mode in ("phase4d_hopf_transport", "phase4d_hopf_transport_complex", "phase4d_hopf_product_phase"):
         print(
             "phase_transport="
             f"lambda={args.phase_transport_lambda:.6f} "
+            f"field_lambda={args.phase_field_lambda:.6f} "
             f"coherence={phase_transport_coherence:.6f} "
             f"shift_abs_mean={phase_transport_shift_abs_mean:.6f} "
             f"shift_abs_max={phase_transport_shift_abs_max:.6f} "
             f"conn_abs_mean={phase_transport_connection_abs_mean:.6f} "
+            f"field_shift_abs_mean={phase_transport_field_shift_abs_mean:.6f} "
+            f"field_weight_abs_mean={phase_transport_field_weight_abs_mean:.6f} "
             f"alpha_bins={phase_transport_alpha_bins:.6f}"
         )
+    print(
+        "event_gate="
+        f"mode={args.event_gate_mode} "
+        f"threshold={args.event_gate_threshold:.6f} "
+        f"tau={args.event_gate_tau:.6f} "
+        f"error_mean={event_gate_error_mean:.6f} "
+        f"gate_mean={event_gate_mean:.6f} "
+        f"active_frac={event_gate_active_frac:.6f} "
+        f"cost_proxy={event_gate_cost_proxy:.6f}"
+    )
     if args.sector_mode == "phase4d_complex_local":
         print(
             "hybrid_complex_local="
@@ -1180,7 +1433,7 @@ def main():
         f"knn_overlap={geodesic_knn_overlap_mean:.6f} "
         f"knn_jaccard={geodesic_knn_jaccard_mean:.6f}"
     )
-    if args.sector_mode in ("phase4d_adaptive", "phase4d_hopf", "phase4d_hopf_base", "phase4d_hopf_transport", "phase4d_hopf_iso", "phase4d_hopf_ball", "phase4d_hopf_chi", "phase4d_hopf_fib", "phase4d_hopf_fib_rung", "phase4d_hopf_fib_band", "phase4d_hopf_fib_band_iso", "phase4d_hopf_fib_band_bound", "phase4d_hopf_blend", "phase4d_complex_local"):
+    if args.sector_mode in ("phase4d_adaptive", "phase4d_hopf", "phase4d_hopf_base", "phase4d_hopf_transport", "phase4d_hopf_transport_complex", "phase4d_hopf_product_phase", "phase4d_hopf_iso", "phase4d_hopf_ball", "phase4d_hopf_base_ball", "phase4d_hopf_chi", "phase4d_hopf_fib", "phase4d_hopf_fib_rung", "phase4d_hopf_fib_band", "phase4d_hopf_fib_band_iso", "phase4d_hopf_fib_band_bound", "phase4d_hopf_blend", "phase4d_complex_local"):
         print(
             "adaptive_shell="
             f"drive_mean={adaptive_shell_drive_mean:.6f} "
@@ -1242,6 +1495,26 @@ def main():
             f"blend_shell_pressure_mean={adaptive_blend_shell_pressure_mean:.6f} "
             f"blend_shell_pressure_max={adaptive_blend_shell_pressure_max:.6f}"
         )
+        print(
+            "hopf_sector="
+            f"groups={hopf_sector_groups_used} "
+            f"chi_std_mean={hopf_sector_chi_std_mean:.6f} "
+            f"delta_cvar_mean={hopf_sector_delta_cvar_mean:.6f} "
+            f"alpha_entropy_mean={hopf_sector_alpha_entropy_mean:.6f} "
+            f"alpha_entropy_gap={hopf_sector_alpha_entropy_gap:.6f}"
+        )
+        if args.sector_mode == "phase4d_hopf_product_phase":
+            print(
+                "product_shell="
+                f"mode={args.product_shell_control_mode} "
+                f"gate_threshold={args.product_shell_gate_threshold:.6f} "
+                f"gate_score_mean={product_shell_gate_score_mean:.6f} "
+                f"gate_score_max={product_shell_gate_score_max:.6f} "
+                f"active_frac={product_shell_active_frac:.6f} "
+                f"states_used={int(product_shell_states_used)} "
+                f"mult_mean={product_shell_multiplier_mean:.6f} "
+                f"mult_max={product_shell_multiplier_max:.6f}"
+            )
     if args.sector_mode == "phase4d_complex_local":
         print(
             "hybrid_local="
@@ -1310,7 +1583,24 @@ def main():
             "phase_transport_shift_abs_mean": float(phase_transport_shift_abs_mean),
             "phase_transport_shift_abs_max": float(phase_transport_shift_abs_max),
             "phase_transport_connection_abs_mean": float(phase_transport_connection_abs_mean),
+            "phase_transport_field_shift_abs_mean": float(phase_transport_field_shift_abs_mean),
+            "phase_transport_field_weight_abs_mean": float(phase_transport_field_weight_abs_mean),
             "phase_transport_alpha_bins": float(phase_transport_alpha_bins),
+            "event_gate_error_mean": float(event_gate_error_mean),
+            "event_gate_mean": float(event_gate_mean),
+            "event_gate_active_frac": float(event_gate_active_frac),
+            "event_gate_cost_proxy": float(event_gate_cost_proxy),
+            "product_shell_gate_score_mean": float(product_shell_gate_score_mean),
+            "product_shell_gate_score_max": float(product_shell_gate_score_max),
+            "product_shell_active_frac": float(product_shell_active_frac),
+            "product_shell_states_used": float(product_shell_states_used),
+            "product_shell_multiplier_mean": float(product_shell_multiplier_mean),
+            "product_shell_multiplier_max": float(product_shell_multiplier_max),
+            "hopf_sector_groups_used": int(hopf_sector_groups_used),
+            "hopf_sector_chi_std_mean": float(hopf_sector_chi_std_mean),
+            "hopf_sector_delta_cvar_mean": float(hopf_sector_delta_cvar_mean),
+            "hopf_sector_alpha_entropy_mean": float(hopf_sector_alpha_entropy_mean),
+            "hopf_sector_alpha_entropy_gap": float(hopf_sector_alpha_entropy_gap),
             "hopf_theta1_entropy": float(hopf_theta1_entropy),
             "hopf_theta2_entropy": float(hopf_theta2_entropy),
             "route_entropy_radius_corr": float(route_entropy_radius_corr),

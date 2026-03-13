@@ -1,11 +1,14 @@
 # INC-0064: Coupled Complex-Field Phase Transport
 
 ## Status
-Queued next.
+Complete on corrected screen rerun. The old queued-next / inert framing is obsolete.
 
 ## Trigger
-`INC-0063` showed that a standalone Hopf-base transport law is not enough.
-The transported-phase variants produced zero shell or sector differences versus `phase4d_hopf_base`, so the branch was mechanism-inert on the current proxy schedule.
+The corrected `INC-0063` rerun changed the phase reading materially:
+- standalone Hopf transport is not inert once `alpha` bins are live
+- transported phase now changes addresses versus `phase4d_hopf_base`
+- the remaining open question is whether explicit field coupling makes that
+  phase motion stronger or more useful
 
 User clarification sharpens the intended mechanism:
 - first `H^4` = routing geometry
@@ -48,14 +51,77 @@ If the coupled complex-field law still does not move addresses or improve metric
 - phase remains unproven as a necessary mechanism in this routing stack
 - spectral claims should still be tested, but phase should stop driving route-law changes until a stronger mathematical transport law is identified
 
-## First Candidate Law
-Use the second-factor complex field to modulate fiber transport directly, rather than using only a base-space connection term.
-A practical first family is:
-- base routing on `(r, chi, delta)`
-- complex field phase `phi_F = atan2(F_j, F_i)`
-- transported fiber phase `alpha_tilde = alpha + lambda_conn * A(R) + lambda_field * phi_F`
+## Corrected Artifacts
+- Screen config:
+  - `configs/proxy_transfer_inc0064_coupled_complex_phase_screen.json`
+- Screen analysis:
+  - `results/analysis/inc0064_coupled_complex_phase_screen_corrected.json`
+- Address-diff audit:
+  - `results/analysis/inc0064_coupled_complex_phase_address_diff_corrected.json`
+- Gate note:
+  - `docs/governance/gates/gate_20260311_101607.md`
 
-The exact score law can change, but the branch contract is fixed:
-- phase transport must be coupled to the second `H^4`
-- it must create real address movement
-- it must be judged against the no-phase coarse-address control
+## Result
+2-seed screen means:
+- `HOPF_CPX_TRANSPORT_L050_F050`
+  - `mse=0.003920694`
+  - `total=5.731s`
+  - `phase_transport_shift_abs_mean=0.3611`
+  - `phase_transport_field_shift_abs_mean=0.3045`
+  - `phase_transport_alpha_bins=2.0`
+  - health pass
+- `HOPF_CPX_TRANSPORT_L050_F100`
+  - `mse=0.003932169`
+  - `total=5.532s`
+  - `phase_transport_shift_abs_mean=0.6644`
+  - `phase_transport_field_shift_abs_mean=0.6085`
+  - `phase_transport_alpha_bins=2.0`
+  - health pass
+- `HOPF_CPX_TRANSPORT_L100_F100`
+  - `mse=0.003934491`
+  - `total=6.448s`
+  - `phase_transport_shift_abs_mean=0.7202`
+  - `phase_transport_field_shift_abs_mean=0.6085`
+  - `phase_transport_alpha_bins=2.0`
+  - health pass
+- `HOPF_BASE_K25_PHI`
+  - `mse=0.003900382`
+  - `total=6.461s`
+  - health pass
+- `HOPF_K25_BASE_PHI`
+  - `mse=0.003902717`
+  - `total=5.888s`
+  - health pass
+- `R0`
+  - `mse=0.003916428`
+  - `total=6.820s`
+  - health fail
+
+Address-diff audit against `phase4d_hopf_base`:
+- `HOPF_CPX_TRANSPORT_L050_F050`
+  - `sector_diff_count=2466`
+  - `sector_diff_rate=0.9864`
+  - `shell_diff_count=185`
+- `HOPF_CPX_TRANSPORT_L050_F100`
+  - `sector_diff_count=2466`
+  - `sector_diff_rate=0.9864`
+  - `shell_diff_count=148`
+- `HOPF_CPX_TRANSPORT_L100_F100`
+  - `sector_diff_count=2466`
+  - `sector_diff_rate=0.9864`
+  - `shell_diff_count=148`
+
+## Reading
+- The coupled complex field is mechanically live in the corrected harness.
+- `phase_transport_field_shift_abs_mean` is strongly nonzero, so the field term
+  is not decorative.
+- The branch changes addresses materially while staying inside the route-health
+  gate.
+- The screen does **not** yet make the coupled branch the routed quality lead;
+  both `phase4d_hopf_base` and pure Hopf still keep better proxy MSE.
+
+## Decision
+- Replace the old queued-next framing with the corrected screen result.
+- Treat explicit complex-field phase coupling as mechanism-positive and health-positive.
+- Use this as the corrected bridge to the next product-phase-field branch rather
+  than as proof that the current same-chart coupling law is already optimal.

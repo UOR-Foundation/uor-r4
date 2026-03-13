@@ -795,3 +795,1362 @@ Use this file to map each run batch to parsed summaries and decision records.
   - `docs/governance/gates/gate_20260310_235845.md`
   - `docs/governance/gates/gate_20260311_000712.md`
 - Note: the first RR-063 screen failed because the harness was not forwarding `phase_transport_lambda` into `optimize_chart`; use the successful rerun plus the address-diff audit as canonical evidence.
+
+## Batch B107
+- Batch ID: `B107_inc0062_hopf_base_screen_corrected`
+- Config: `configs/proxy_transfer_inc0062_hopf_base_screen_corrected.json`
+- Logs: `results/raw/inc0062_hopf_base_screen_corrected_*.log`
+- Parsed files: matching `results/parsed/inc0062_hopf_base_screen_corrected_*.json`
+- Analysis: `results/analysis/inc0062_hopf_base_screen_corrected.json`
+- Summary row range: rows where `run_tag` contains `inc0062_hopf_base_screen_corrected`
+- Decision note: `docs/governance/gates/gate_20260311_101015.md`
+
+## Batch B108
+- Batch ID: `B108_inc0062_hopf_base_confirm_corrected`
+- Config: `configs/proxy_transfer_inc0062_hopf_base_confirm_corrected.json`
+- Logs: `results/raw/inc0062_hopf_base_confirm_corrected_*.log`
+- Parsed files: matching `results/parsed/inc0062_hopf_base_confirm_corrected_*.json`
+- Analysis: `results/analysis/inc0062_hopf_base_confirm_corrected.json`
+- Summary row range: rows where `run_tag` contains `inc0062_hopf_base_confirm_corrected`
+- Decision note: `docs/governance/gates/gate_20260311_101213.md`
+
+## Batch B109
+- Batch ID: `B109_inc0063_phase_transport_screen_corrected`
+- Config: `configs/proxy_transfer_inc0063_phase_transport_screen_corrected.json`
+- Logs: `results/raw/inc0063_phase_transport_screen_corrected_*.log`
+- Parsed files: matching `results/parsed/inc0063_phase_transport_screen_corrected_*.json`
+- Analysis:
+  - `results/analysis/inc0063_phase_transport_screen_corrected.json`
+  - `results/analysis/inc0063_phase_transport_address_diff_corrected.json`
+- Summary row range: rows where `run_tag` contains `inc0063_phase_transport_screen_corrected`
+- Decision note: `docs/governance/gates/gate_20260311_101344.md`
+
+## Batch B110
+- Batch ID: `B110_inc0064_coupled_complex_phase_screen_corrected`
+- Config: `configs/proxy_transfer_inc0064_coupled_complex_phase_screen.json`
+- Logs: `results/raw/inc0064_coupled_complex_phase_screen_corrected_*.log`
+- Parsed files: matching `results/parsed/inc0064_coupled_complex_phase_screen_corrected_*.json`
+- Analysis:
+  - `results/analysis/inc0064_coupled_complex_phase_screen_corrected.json`
+  - `results/analysis/inc0064_coupled_complex_phase_address_diff_corrected.json`
+- Summary row range: rows where `run_tag` contains `inc0064_coupled_complex_phase_screen_corrected`
+- Decision note: `docs/governance/gates/gate_20260311_101607.md`
+
+## Batch B111
+- Batch ID: `B111_inc0065_product_phase_field_screen`
+- Config: `configs/proxy_transfer_inc0065_product_phase_field_screen.json`
+- Logs: `results/raw/inc0065_product_phase_field_screen_*.log`
+- Parsed files: matching `results/parsed/inc0065_product_phase_field_screen_*.json`
+- Analysis:
+  - `results/analysis/inc0065_product_phase_field_screen.json`
+  - `results/analysis/inc0065_product_phase_field_address_diff.json`
+- Summary row range: rows where `run_tag` contains `inc0065_product_phase_field_screen`
+- Decision note: `docs/governance/gates/gate_20260311_105034.md`
+
+## Batch B112
+- Batch ID: `B112_inc0065_product_phase_field_confirm`
+- Config: `configs/proxy_transfer_inc0065_product_phase_field_confirm.json`
+- Logs: `results/raw/inc0065_product_phase_field_confirm_*.log`
+- Parsed files: matching `results/parsed/inc0065_product_phase_field_confirm_*.json`
+- Analysis:
+  - `results/analysis/inc0065_product_phase_field_confirm.json`
+  - `results/analysis/inc0065_product_phase_field_confirm_address_diff.json`
+- Summary row range: rows where `run_tag` contains `inc0065_product_phase_field_confirm`
+- Decision note: `docs/governance/gates/gate_20260311_110024.md`
+
+## Batch B113
+- Batch ID: `B113_inc0066_spectral_route_audit_seed0`
+- Config: `configs/proxy_transfer_inc0065_product_phase_field_confirm.json` reused as route set for spectral audit
+- Logs: none (tool writes analysis directly)
+- Parsed files: n/a
+- Analysis:
+  - `results/analysis/inc0065_product_phase_field_confirm_spectral_seed0.json`
+- Summary row range: n/a
+- Decision note: reflected in `docs/DECISIONS.md`
+
+## Batch B114
+- Batch ID: `B114_inc0066_spectral_route_operator_screen`
+- Config: `configs/spectral_route_inc0066_screen.json`
+- Logs: `results/raw/inc0066_spectral_route_operator_screen_seed*.log`
+- Parsed files: n/a
+- Analysis:
+  - `results/analysis/inc0066_spectral_route_operator_screen_seed0.json`
+  - `results/analysis/inc0066_spectral_route_operator_screen_seed1.json`
+  - `results/analysis/inc0066_spectral_route_operator_screen.json`
+- Summary row range: n/a
+- Decision note: `docs/governance/gates/gate_20260311_112010.md`
+
+## Batch B115
+- Batch ID: `B115_inc0066_spectral_route_operator_confirm`
+- Config: `configs/spectral_route_inc0066_confirm.json`
+- Logs: `results/raw/inc0066_spectral_route_operator_confirm_seed*.log`
+- Parsed files: n/a
+- Analysis:
+  - `results/analysis/inc0066_spectral_route_operator_confirm_seed0.json`
+  - `results/analysis/inc0066_spectral_route_operator_confirm_seed1.json`
+  - `results/analysis/inc0066_spectral_route_operator_confirm_seed2.json`
+  - `results/analysis/inc0066_spectral_route_operator_confirm_seed3.json`
+  - `results/analysis/inc0066_spectral_route_operator_confirm.json`
+- Summary row range: n/a
+- Decision note: `docs/governance/gates/gate_20260311_112215.md`
+
+## Batch B116
+- Batch ID: `B116_inc0067_spectral_signal_probes_screen`
+- Config: `configs/spectral_signal_inc0067_screen.json`
+- Logs: `results/raw/inc0067_spectral_signal_probes_screen_seed*.log`
+- Parsed files: n/a
+- Analysis:
+  - `results/analysis/inc0067_spectral_signal_probes_screen_seed0.json`
+  - `results/analysis/inc0067_spectral_signal_probes_screen_seed1.json`
+  - `results/analysis/inc0067_spectral_signal_probes_screen.json`
+- Summary row range: n/a
+- Decision note: `docs/governance/gates/gate_20260311_113729.md`
+
+## Batch B117
+- Batch ID: `B117_inc0067_spectral_signal_probes_confirm`
+- Config: `configs/spectral_signal_inc0067_confirm.json`
+- Logs: `results/raw/inc0067_spectral_signal_probes_confirm_seed*.log`
+- Parsed files: n/a
+- Analysis:
+  - `results/analysis/inc0067_spectral_signal_probes_confirm_seed0.json`
+  - `results/analysis/inc0067_spectral_signal_probes_confirm_seed1.json`
+  - `results/analysis/inc0067_spectral_signal_probes_confirm_seed2.json`
+  - `results/analysis/inc0067_spectral_signal_probes_confirm_seed3.json`
+  - `results/analysis/inc0067_spectral_signal_probes_confirm.json`
+- Summary row range: n/a
+- Decision note: `docs/governance/gates/gate_20260311_114258.md`
+
+## Batch B118
+- Batch ID: `B118_inc0068_spectral_residual_task_signals_screen`
+- Config: `configs/spectral_residual_inc0068_screen.json`
+- Logs: `results/raw/inc0068_spectral_residual_task_signals_screen_seed*.log`
+- Parsed files: n/a
+- Analysis:
+  - `results/analysis/inc0068_spectral_residual_task_signals_screen_seed0.json`
+  - `results/analysis/inc0068_spectral_residual_task_signals_screen_seed1.json`
+  - `results/analysis/inc0068_spectral_residual_task_signals_screen.json`
+- Summary row range: n/a
+- Decision note: `docs/governance/gates/gate_20260311_122236.md`
+
+## Batch B119
+- Batch ID: `B119_inc0069_product_phase_translation_screen`
+- Config: `configs/proxy_transfer_inc0069_product_phase_translation_screen.json`
+- Logs: `results/raw/inc0069_product_phase_translation_screen_*.log`
+- Parsed files: matching `results/parsed/inc0069_product_phase_translation_screen_*.json`
+- Analysis:
+  - `results/analysis/inc0069_product_phase_translation_screen.json`
+- Summary row range: rows where `run_tag` contains `inc0069_product_phase_translation_screen`
+- Decision note: `docs/governance/gates/gate_20260311_124011.md`
+
+## Batch B120
+- Batch ID: `B120_inc0069_product_phase_translation_confirm`
+- Config: `configs/proxy_transfer_inc0069_product_phase_translation_confirm.json`
+- Logs: `results/raw/inc0069_product_phase_translation_confirm_*.log`
+- Parsed files: matching `results/parsed/inc0069_product_phase_translation_confirm_*.json`
+- Analysis:
+  - `results/analysis/inc0069_product_phase_translation_confirm.json`
+- Summary row range: rows where `run_tag` contains `inc0069_product_phase_translation_confirm`
+- Decision note: `docs/governance/gates/gate_20260311_124616.md`
+
+## Batch B121
+- Batch ID: `B121_inc0070_product_phase_translation_rescue_screen`
+- Config: `configs/proxy_transfer_inc0070_product_phase_translation_rescue_screen.json`
+- Logs: `results/raw/inc0070_product_phase_translation_rescue_screen_*.log`
+- Parsed files: matching `results/parsed/inc0070_product_phase_translation_rescue_screen_*.json`
+- Analysis:
+  - `results/analysis/inc0070_product_phase_translation_rescue_screen.json`
+- Summary row range: rows where `run_tag` contains `inc0070_product_phase_translation_rescue_screen`
+- Decision note: `docs/governance/gates/gate_20260311_130226.md`
+
+## Batch B122
+- Batch ID: `B122_inc0071_product_phase_translation_secondary_keys_screen`
+- Config: `configs/proxy_transfer_inc0071_product_phase_translation_secondary_keys_screen.json`
+- Logs: `results/raw/inc0071_product_phase_translation_secondary_keys_screen_*.log`
+- Parsed files: matching `results/parsed/inc0071_product_phase_translation_secondary_keys_screen_*.json`
+- Analysis:
+  - `results/analysis/inc0071_product_phase_translation_secondary_keys_screen.json`
+- Summary row range: rows where `run_tag` contains `inc0071_product_phase_translation_secondary_keys_screen`
+- Decision note: `docs/governance/gates/gate_20260311_131450.md`
+
+## Batch B123
+- Batch ID: `B123_inc0071_product_phase_translation_secondary_keys_confirm`
+- Config: `configs/proxy_transfer_inc0071_product_phase_translation_secondary_keys_confirm.json`
+- Logs: `results/raw/inc0071_product_phase_translation_secondary_keys_confirm_*.log`
+- Parsed files: matching `results/parsed/inc0071_product_phase_translation_secondary_keys_confirm_*.json`
+- Analysis:
+  - `results/analysis/inc0071_product_phase_translation_secondary_keys_confirm.json`
+- Summary row range: rows where `run_tag` contains `inc0071_product_phase_translation_secondary_keys_confirm`
+- Decision note: `docs/governance/gates/gate_20260311_132141.md`
+
+## Batch B124
+- Batch ID: `B124_inc0072_product_phase_translation_secondary_key_cost_rescue_screen`
+- Config: `configs/proxy_transfer_inc0072_product_phase_translation_secondary_key_cost_rescue_screen.json`
+- Logs: `results/raw/inc0072_product_phase_translation_secondary_key_cost_rescue_screen_*.log`
+- Parsed files: matching `results/parsed/inc0072_product_phase_translation_secondary_key_cost_rescue_screen_*.json`
+- Analysis:
+  - `results/analysis/inc0072_product_phase_translation_secondary_key_cost_rescue_screen.json`
+- Summary row range: rows where `run_tag` contains `inc0072_product_phase_translation_secondary_key_cost_rescue_screen`
+- Decision note: `docs/governance/gates/gate_20260311_133356.md`
+
+## Batch B125
+- Batch ID: `B125_inc0072_product_phase_translation_secondary_key_cost_rescue_confirm`
+- Config: `configs/proxy_transfer_inc0072_product_phase_translation_secondary_key_cost_rescue_confirm.json`
+- Logs: `results/raw/inc0072_product_phase_translation_secondary_key_cost_rescue_confirm_*.log`
+- Parsed files: matching `results/parsed/inc0072_product_phase_translation_secondary_key_cost_rescue_confirm_*.json`
+- Analysis:
+  - `results/analysis/inc0072_product_phase_translation_secondary_key_cost_rescue_confirm.json`
+- Summary row range: rows where `run_tag` contains `inc0072_product_phase_translation_secondary_key_cost_rescue_confirm`
+- Decision note: `docs/governance/gates/gate_20260311_133731.md`
+
+## Batch B126
+- Batch ID: `B126_inc0073_product_phase_translation_secondary_key_large_load_screen`
+- Config: `configs/proxy_transfer_inc0073_product_phase_translation_secondary_key_large_load_screen.json`
+- Logs: `results/raw/inc0073_product_phase_translation_secondary_key_large_load_screen_*.log`
+- Parsed files: matching `results/parsed/inc0073_product_phase_translation_secondary_key_large_load_screen_*.json`
+- Analysis:
+  - `results/analysis/inc0073_product_phase_translation_secondary_key_large_load_screen.json`
+- Summary row range: rows where `run_tag` contains `inc0073_product_phase_translation_secondary_key_large_load_screen`
+- Decision note: `docs/governance/gates/gate_20260311_134522.md`
+
+## Batch B127
+- Batch ID: `B127_inc0073_product_phase_translation_secondary_key_large_load_confirm`
+- Config: `configs/proxy_transfer_inc0073_product_phase_translation_secondary_key_large_load_confirm.json`
+- Logs: `results/raw/inc0073_product_phase_translation_secondary_key_large_load_confirm_*.log`
+- Parsed files: matching `results/parsed/inc0073_product_phase_translation_secondary_key_large_load_confirm_*.json`
+- Analysis:
+  - `results/analysis/inc0073_product_phase_translation_secondary_key_large_load_confirm.json`
+- Summary row range: rows where `run_tag` contains `inc0073_product_phase_translation_secondary_key_large_load_confirm`
+- Decision note: `docs/governance/gates/gate_20260311_135226.md`
+
+## Batch B128
+- Batch ID: `B128_inc0074_product_phase_translation_dense_frontier_screen`
+- Config: `configs/proxy_transfer_inc0074_product_phase_translation_dense_frontier_screen.json`
+- Logs: `results/raw/inc0074_product_phase_translation_dense_frontier_screen_*.log`
+- Parsed files: matching `results/parsed/inc0074_product_phase_translation_dense_frontier_screen_*.json`
+- Analysis:
+  - `results/analysis/inc0074_product_phase_translation_dense_frontier_screen.json`
+- Summary row range: rows where `run_tag` contains `inc0074_product_phase_translation_dense_frontier_screen`
+- Decision note: `docs/governance/gates/gate_20260311_140824.md`
+
+## Batch B129
+- Batch ID: `B129_inc0074_product_phase_translation_dense_frontier_confirm`
+- Config: `configs/proxy_transfer_inc0074_product_phase_translation_dense_frontier_confirm.json`
+- Logs: `results/raw/inc0074_product_phase_translation_dense_frontier_confirm_*.log`
+- Parsed files: matching `results/parsed/inc0074_product_phase_translation_dense_frontier_confirm_*.json`
+- Analysis:
+  - `results/analysis/inc0074_product_phase_translation_dense_frontier_confirm.json`
+- Summary row range: rows where `run_tag` contains `inc0074_product_phase_translation_dense_frontier_confirm`
+- Decision note: `docs/governance/gates/gate_20260311_141705.md`
+
+## Batch B130
+- Batch ID: `B130_inc0075_product_phase_translation_dense_quality_recovery_screen`
+- Config: `configs/proxy_transfer_inc0075_product_phase_translation_dense_quality_recovery_screen.json`
+- Logs: `results/raw/inc0075_product_phase_translation_dense_quality_recovery_screen_*.log`
+- Parsed files: matching `results/parsed/inc0075_product_phase_translation_dense_quality_recovery_screen_*.json`
+- Analysis:
+  - `results/analysis/inc0075_product_phase_translation_dense_quality_recovery_screen.json`
+- Summary row range: rows where `run_tag` contains `inc0075_product_phase_translation_dense_quality_recovery_screen`
+- Decision note: `docs/governance/gates/gate_20260311_142843.md`
+
+## Batch B131
+- Batch ID: `B131_inc0075_product_phase_translation_dense_quality_recovery_confirm`
+- Config: `configs/proxy_transfer_inc0075_product_phase_translation_dense_quality_recovery_confirm.json`
+- Logs: `results/raw/inc0075_product_phase_translation_dense_quality_recovery_confirm_*.log`
+- Parsed files: matching `results/parsed/inc0075_product_phase_translation_dense_quality_recovery_confirm_*.json`
+- Analysis:
+  - `results/analysis/inc0075_product_phase_translation_dense_quality_recovery_confirm.json`
+- Summary row range: rows where `run_tag` contains `inc0075_product_phase_translation_dense_quality_recovery_confirm`
+- Decision note: `docs/governance/gates/gate_20260311_144445.md`
+
+## Batch B132
+- Batch ID: `B132_inc0076_product_phase_translation_break_even_screen`
+- Config: `configs/proxy_transfer_inc0076_product_phase_translation_break_even_screen.json`
+- Logs: `results/raw/inc0076_product_phase_translation_break_even_screen_*.log`
+- Parsed files: matching `results/parsed/inc0076_product_phase_translation_break_even_screen_*.json`
+- Analysis:
+  - `results/analysis/inc0076_product_phase_translation_break_even_screen.json`
+- Summary row range: rows where `run_tag` contains `inc0076_product_phase_translation_break_even_screen`
+- Decision note: `docs/governance/gates/gate_20260311_145722.md`
+
+## Batch B133
+- Batch ID: `B133_inc0076_product_phase_translation_break_even_confirm`
+- Config: `configs/proxy_transfer_inc0076_product_phase_translation_break_even_confirm.json`
+- Logs: `results/raw/inc0076_product_phase_translation_break_even_confirm_*.log`
+- Parsed files: matching `results/parsed/inc0076_product_phase_translation_break_even_confirm_*.json`
+- Analysis:
+  - `results/analysis/inc0076_product_phase_translation_break_even_confirm.json`
+- Summary row range: rows where `run_tag` contains `inc0076_product_phase_translation_break_even_confirm`
+- Decision note: `docs/governance/gates/gate_20260311_151013.md`
+
+## Batch B134
+- Batch ID: `B134_inc0077_product_phase_translation_hardware_profile_screen`
+- Config: `configs/proxy_transfer_inc0077_product_phase_translation_hardware_profile_screen.json`
+- Logs: `results/raw/inc0077_product_phase_translation_hardware_profile_screen_*.log`
+- Parsed files: matching `results/parsed/inc0077_product_phase_translation_hardware_profile_screen_*.json`
+- Analysis:
+  - `results/analysis/inc0077_product_phase_translation_hardware_profile_screen.json`
+  - `results/analysis/inc0077_product_phase_translation_hardware_profile_screen_profile.json`
+- Summary row range: rows where `run_tag` contains `inc0077_product_phase_translation_hardware_profile_screen`
+- Decision note: `docs/governance/gates/gate_20260311_152632.md`
+
+## Batch B135
+- Batch ID: `B135_inc0077_product_phase_translation_hardware_profile_confirm`
+- Config: `configs/proxy_transfer_inc0077_product_phase_translation_hardware_profile_confirm.json`
+- Logs: `results/raw/inc0077_product_phase_translation_hardware_profile_confirm_*.log`
+- Parsed files: matching `results/parsed/inc0077_product_phase_translation_hardware_profile_confirm_*.json`
+- Analysis:
+  - `results/analysis/inc0077_product_phase_translation_hardware_profile_confirm.json`
+  - `results/analysis/inc0077_product_phase_translation_hardware_profile_confirm_profile.json`
+- Summary row range: rows where `run_tag` contains `inc0077_product_phase_translation_hardware_profile_confirm`
+- Decision note: `docs/governance/gates/gate_20260311_153047.md`
+
+## Batch B136
+- Batch ID: `B136_inc0078_product_phase_translation_crossover_map_screen`
+- Config: `configs/proxy_transfer_inc0078_product_phase_translation_crossover_map_screen.json`
+- Logs: `results/raw/inc0078_product_phase_translation_crossover_map_screen_*.log`
+- Parsed files: matching `results/parsed/inc0078_product_phase_translation_crossover_map_screen_*.json`
+- Analysis:
+  - `results/analysis/inc0078_product_phase_translation_crossover_map_screen.json`
+  - `results/analysis/inc0078_product_phase_translation_crossover_map_screen_profile.json`
+- Summary row range: rows where `run_tag` contains `inc0078_product_phase_translation_crossover_map_screen`
+- Decision note: `docs/governance/gates/gate_20260311_155644.md`
+
+## Batch B137
+- Batch ID: `B137_inc0078_product_phase_translation_crossover_map_confirm`
+- Config: `configs/proxy_transfer_inc0078_product_phase_translation_crossover_map_confirm.json`
+- Logs: `results/raw/inc0078_product_phase_translation_crossover_map_confirm_*.log`
+- Parsed files: matching `results/parsed/inc0078_product_phase_translation_crossover_map_confirm_*.json`
+- Analysis:
+  - `results/analysis/inc0078_product_phase_translation_crossover_map_confirm.json`
+  - `results/analysis/inc0078_product_phase_translation_crossover_map_confirm_profile.json`
+- Summary row range: rows where `run_tag` contains `inc0078_product_phase_translation_crossover_map_confirm`
+- Decision note: `docs/governance/gates/gate_20260311_161119.md`
+
+## Batch B138
+- Batch ID: `B138_inc0079_product_phase_translation_large_bank_boundary_extension_screen`
+- Config: `configs/proxy_transfer_inc0079_product_phase_translation_large_bank_boundary_extension_screen.json`
+- Logs: `results/raw/inc0079_product_phase_translation_large_bank_boundary_extension_screen_*.log`
+- Parsed files: matching `results/parsed/inc0079_product_phase_translation_large_bank_boundary_extension_screen_*.json`
+- Analysis:
+  - `results/analysis/inc0079_product_phase_translation_large_bank_boundary_extension_screen.json`
+  - `results/analysis/inc0079_product_phase_translation_large_bank_boundary_extension_screen_profile.json`
+- Summary row range: rows where `run_tag` contains `inc0079_product_phase_translation_large_bank_boundary_extension_screen`
+- Decision note: `docs/governance/gates/gate_20260311_222501.md`
+
+## Batch B139
+- Batch ID: `B139_inc0079_product_phase_translation_large_bank_boundary_extension_confirm`
+- Config: `configs/proxy_transfer_inc0079_product_phase_translation_large_bank_boundary_extension_confirm.json`
+- Logs: `results/raw/inc0079_product_phase_translation_large_bank_boundary_extension_confirm_*.log`
+- Parsed files: matching `results/parsed/inc0079_product_phase_translation_large_bank_boundary_extension_confirm_*.json`
+- Analysis:
+  - `results/analysis/inc0079_product_phase_translation_large_bank_boundary_extension_confirm.json`
+  - `results/analysis/inc0079_product_phase_translation_large_bank_boundary_extension_confirm_profile.json`
+- Summary row range: rows where `run_tag` contains `inc0079_product_phase_translation_large_bank_boundary_extension_confirm`
+- Decision note: `docs/governance/gates/gate_20260311_223841.md`
+
+## Batch B140
+- Batch ID: `B140_inc0080_product_phase_translation_second_large_bank_boundary_extension_screen`
+- Config: `configs/proxy_transfer_inc0080_product_phase_translation_second_large_bank_boundary_extension_screen.json`
+- Logs: `results/raw/inc0080_product_phase_translation_second_large_bank_boundary_extension_screen_*.log`
+- Parsed files: matching `results/parsed/inc0080_product_phase_translation_second_large_bank_boundary_extension_screen_*.json`
+- Analysis:
+  - `results/analysis/inc0080_product_phase_translation_second_large_bank_boundary_extension_screen.json`
+  - `results/analysis/inc0080_product_phase_translation_second_large_bank_boundary_extension_screen_profile.json`
+- Summary row range: rows where `run_tag` contains `inc0080_product_phase_translation_second_large_bank_boundary_extension_screen`
+- Decision note: `docs/governance/gates/gate_20260311_230536.md`
+
+## Batch B141
+- Batch ID: `B141_inc0080_product_phase_translation_second_large_bank_boundary_extension_confirm`
+- Config: `configs/proxy_transfer_inc0080_product_phase_translation_second_large_bank_boundary_extension_confirm.json`
+- Logs: `results/raw/inc0080_product_phase_translation_second_large_bank_boundary_extension_confirm_*.log`
+- Parsed files: matching `results/parsed/inc0080_product_phase_translation_second_large_bank_boundary_extension_confirm_*.json`
+- Analysis:
+  - `results/analysis/inc0080_product_phase_translation_second_large_bank_boundary_extension_confirm.json`
+  - `results/analysis/inc0080_product_phase_translation_second_large_bank_boundary_extension_confirm_profile.json`
+- Summary row range: rows where `run_tag` contains `inc0080_product_phase_translation_second_large_bank_boundary_extension_confirm`
+- Decision note: `docs/governance/gates/gate_20260311_232657.md`
+
+## Batch B142
+- Batch ID: `B142_inc0081_product_phase_translation_q04_threshold_search_screen`
+- Config: `configs/proxy_transfer_inc0081_product_phase_translation_q04_threshold_search_screen.json`
+- Logs: `results/raw/inc0081_product_phase_translation_q04_threshold_search_screen_*.log`
+- Parsed files: matching `results/parsed/inc0081_product_phase_translation_q04_threshold_search_screen_*.json`
+- Analysis:
+  - `results/analysis/inc0081_product_phase_translation_q04_threshold_search_screen.json`
+  - `results/analysis/inc0081_product_phase_translation_q04_threshold_search_screen_profile.json`
+- Summary row range: rows where `run_tag` contains `inc0081_product_phase_translation_q04_threshold_search_screen`
+- Decision note: `docs/governance/gates/gate_20260311_234946.md`
+
+## Batch B143
+- Batch ID: `B143_inc0081_product_phase_translation_q04_threshold_search_confirm`
+- Config: `configs/proxy_transfer_inc0081_product_phase_translation_q04_threshold_search_confirm.json`
+- Logs: `results/raw/inc0081_product_phase_translation_q04_threshold_search_confirm_*.log`
+- Parsed files: matching `results/parsed/inc0081_product_phase_translation_q04_threshold_search_confirm_*.json`
+- Analysis:
+  - `results/analysis/inc0081_product_phase_translation_q04_threshold_search_confirm.json`
+  - `results/analysis/inc0081_product_phase_translation_q04_threshold_search_confirm_profile.json`
+- Summary row range: rows where `run_tag` contains `inc0081_product_phase_translation_q04_threshold_search_confirm`
+- Decision note: `docs/governance/gates/gate_20260312_002000.md`
+
+## Analysis INC-0082
+- Source analysis: `results/analysis/inc0081_product_phase_translation_q04_threshold_search_confirm.json`
+- Source profile: `results/analysis/inc0081_product_phase_translation_q04_threshold_search_confirm_profile.json`
+- Audit tool: `tools/translated_cost_accounting.py`
+- Audit outputs:
+  - `results/analysis/inc0082_product_phase_translation_cost_accounting_audit.json`
+  - `docs/reports/INC0082_PRODUCT_PHASE_TRANSLATION_COST_ACCOUNTING_AUDIT.md`
+- Reading:
+  - `Q04 T36000` crosses because online savings exceed the offline penalty
+  - `Q04 T40000` misses because the offline penalty exceeds the online gain
+  - `Q08 T40000` still crosses because the same static offline cost is spread
+    across more repeats
+
+## Analysis INC-0083
+- Source analysis:
+  - `results/analysis/inc0083_product_phase_translation_persistent_route_cache_confirm_cold.json`
+  - `results/analysis/inc0083_product_phase_translation_persistent_route_cache_confirm_warm.json`
+- Compare tool: `tools/translated_cache_compare.py`
+- Compare outputs:
+  - `results/analysis/inc0083_product_phase_translation_persistent_route_cache_confirm_compare.json`
+  - `docs/reports/INC0083_PRODUCT_PHASE_TRANSLATION_PERSISTENT_ROUTE_CACHE_CONFIRM_COMPARE.md`
+- Gate notes:
+  - `docs/governance/gates/gate_20260312_012911.md`
+  - `docs/governance/gates/gate_20260312_013859.md`
+- Reading:
+  - persistent cache reuse removes almost all static offline chart/train-route
+    build cost on the fixed translated product stack
+  - `Q04 T40000` flips from a cold miss to a strong warm-cache crossover
+  - `Q08 T40000` also strengthens materially under warm-cache reuse
+  - top-1 and candidate fraction stay unchanged between cold and warm routed
+    runs
+
+## Analysis INC-0084
+- Source analysis:
+  - `results/analysis/inc0084_product_phase_translation_warm_cache_onset_map_screen.json`
+  - `results/analysis/inc0084_product_phase_translation_warm_cache_onset_map_confirm.json`
+- Report:
+  - `docs/reports/INC0084_PRODUCT_PHASE_TRANSLATION_WARM_CACHE_ONSET_MAP.md`
+- Gate notes:
+  - `docs/governance/gates/gate_20260312_015936.md`
+  - `docs/governance/gates/gate_20260312_021141.md`
+- Reading:
+  - the fixed translated product stack crosses dense all the way down to
+    `Q01` under warm-cache conditions at `T40000`
+  - all routed runs keep `chart_cache_hit=1.0` and `route_cache_hit=1.0`
+  - top-1 and candidate fraction stay unchanged across the warm-cache repeat
+    bracket
+
+## Analysis INC-0085
+- Source analysis:
+  - `results/analysis/inc0085_product_phase_translation_warm_cache_q01_bank_boundary_screen.json`
+  - `results/analysis/inc0085_product_phase_translation_warm_cache_q01_bank_boundary_confirm.json`
+- Profiles:
+  - `results/analysis/inc0085_product_phase_translation_warm_cache_q01_bank_boundary_screen_profile.json`
+  - `results/analysis/inc0085_product_phase_translation_warm_cache_q01_bank_boundary_confirm_profile.json`
+- Reports:
+  - `docs/reports/INC0085_PRODUCT_PHASE_TRANSLATION_WARM_CACHE_Q01_BANK_BOUNDARY_SCREEN.md`
+  - `docs/reports/INC0085_PRODUCT_PHASE_TRANSLATION_WARM_CACHE_Q01_BANK_BOUNDARY_CONFIRM.md`
+- Gate notes:
+  - `docs/governance/gates/gate_20260312_045413.md`
+  - `docs/governance/gates/gate_20260312_045437.md`
+  - `docs/governance/gates/gate_20260312_045613.md`
+  - `docs/governance/gates/gate_20260312_045657.md`
+- Reading:
+  - the fixed translated product stack now has an earliest tracked confirmed
+    warm-cache `Q01` crossover at `T3000`
+  - `T3000/T4500/T6000` all stayed positive on the tracked `Q01/Q02` bracket
+  - routed cache hits stayed exact across the full ladder
+  - search work stayed pinned near `19%` of dense across banks
+
+## Analysis INC-0086
+- Source analysis:
+  - `results/analysis/inc0086_product_phase_translation_warm_cache_q01_lower_boundary_refine_screen.json`
+  - `results/analysis/inc0086_product_phase_translation_warm_cache_q01_lower_boundary_refine_confirm.json`
+- Profiles:
+  - `results/analysis/inc0086_product_phase_translation_warm_cache_q01_lower_boundary_refine_screen_profile.json`
+  - `results/analysis/inc0086_product_phase_translation_warm_cache_q01_lower_boundary_refine_confirm_profile.json`
+- Reports:
+  - `docs/reports/INC0086_PRODUCT_PHASE_TRANSLATION_WARM_CACHE_Q01_LOWER_BOUNDARY_REFINE_SCREEN.md`
+  - `docs/reports/INC0086_PRODUCT_PHASE_TRANSLATION_WARM_CACHE_Q01_LOWER_BOUNDARY_REFINE_CONFIRM.md`
+- Gate notes:
+  - `docs/governance/gates/gate_20260312_051358.md`
+  - `docs/governance/gates/gate_20260312_051419.md`
+  - `docs/governance/gates/gate_20260312_051526.md`
+  - `docs/governance/gates/gate_20260312_051652.md`
+- Reading:
+  - the fixed translated product stack now has an earlier tracked confirmed
+    warm-cache `Q01` crossover at `T2750`
+  - `T2500` still misses at `Q01`, but already crosses at `Q02`
+  - routed cache hits stayed exact across the full `T2500/T2750/T3000`
+    `Q01/Q02` bracket
+  - search work stayed pinned near `19%` of dense across the refined bank band
+
+## Analysis INC-0087
+- Source analysis:
+  - `results/analysis/inc0087_product_phase_translation_warm_cache_q01_threshold_refine_screen.json`
+  - `results/analysis/inc0087_product_phase_translation_warm_cache_q01_threshold_refine_confirm.json`
+- Profiles:
+  - `results/analysis/inc0087_product_phase_translation_warm_cache_q01_threshold_refine_screen_profile.json`
+  - `results/analysis/inc0087_product_phase_translation_warm_cache_q01_threshold_refine_confirm_profile.json`
+- Reports:
+  - `docs/reports/INC0087_PRODUCT_PHASE_TRANSLATION_WARM_CACHE_Q01_THRESHOLD_REFINE_SCREEN.md`
+  - `docs/reports/INC0087_PRODUCT_PHASE_TRANSLATION_WARM_CACHE_Q01_THRESHOLD_REFINE_CONFIRM.md`
+- Gate notes:
+  - `docs/governance/gates/gate_20260312_052842.md`
+  - `docs/governance/gates/gate_20260312_052915.md`
+  - `docs/governance/gates/gate_20260312_053034.md`
+  - `docs/governance/gates/gate_20260312_053113.md`
+- Reading:
+  - the fixed translated product stack now has an earlier tracked confirmed
+    warm-cache `Q01` crossover at `T2600`
+  - `T2650` is a local non-monotone pocket: it misses at `Q01` and crosses at
+    `Q02`
+  - routed cache hits stayed exact across the full `T2600/T2650/T2700`
+    `Q01/Q02` bracket
+  - search work stayed pinned near `19%` of dense across the refined band
+
+## Analysis INC-0088
+- Source confirm analysis:
+  - `results/analysis/inc0087_product_phase_translation_warm_cache_q01_threshold_refine_confirm.json`
+- Source confirm profile:
+  - `results/analysis/inc0087_product_phase_translation_warm_cache_q01_threshold_refine_confirm_profile.json`
+- Cost audit:
+  - `results/analysis/inc0087_product_phase_translation_warm_cache_q01_threshold_refine_cost_audit.json`
+- Cost report:
+  - `docs/reports/INC0087_PRODUCT_PHASE_TRANSLATION_WARM_CACHE_Q01_THRESHOLD_REFINE_COST_AUDIT.md`
+- Reading:
+  - the local `T2600/T2650/T2700` split is explained by route-query versus
+    dense-search cost balance
+  - `T2600` stays positive because search gain still beats the fixed routed
+    penalties
+  - `T2650` misses because dense search time dips locally while routed
+    route-query cost stays almost unchanged
+  - `T2700` crosses again once the dense search time rises back up
+
+## Analysis INC-0089
+- Source analysis:
+  - `results/analysis/inc0089_product_phase_translation_warm_cache_q01_2500_2600_refine_screen.json`
+  - `results/analysis/inc0089_product_phase_translation_warm_cache_q01_2500_2600_refine_confirm.json`
+- Profiles:
+  - `results/analysis/inc0089_product_phase_translation_warm_cache_q01_2500_2600_refine_screen_profile.json`
+  - `results/analysis/inc0089_product_phase_translation_warm_cache_q01_2500_2600_refine_confirm_profile.json`
+- Reports:
+  - `docs/reports/INC0089_PRODUCT_PHASE_TRANSLATION_WARM_CACHE_Q01_2500_2600_REFINE_SCREEN.md`
+  - `docs/reports/INC0089_PRODUCT_PHASE_TRANSLATION_WARM_CACHE_Q01_2500_2600_REFINE_CONFIRM.md`
+- Gate notes:
+  - `docs/governance/gates/gate_20260312_054028.md`
+  - `docs/governance/gates/gate_20260312_054048.md`
+  - `docs/governance/gates/gate_20260312_054156.md`
+  - `docs/governance/gates/gate_20260312_054233.md`
+- Reading:
+  - the fixed translated product stack now has an earlier tracked confirmed
+    warm-cache `Q01` crossover at `T2525`
+  - all three banks in the `2525/2550/2575` bracket held at `Q01` on confirm
+  - routed cache hits stayed exact across the full `Q01/Q02` bracket
+  - search work stayed pinned near `19%` of dense across the refined band
+
+## Analysis INC-0090
+- Source analysis:
+  - `results/analysis/inc0090_product_phase_translation_warm_cache_q01_2500_2525_refine_screen.json`
+  - `results/analysis/inc0090_product_phase_translation_warm_cache_q01_2500_2525_refine_confirm.json`
+- Profiles:
+  - `results/analysis/inc0090_product_phase_translation_warm_cache_q01_2500_2525_refine_screen_profile.json`
+  - `results/analysis/inc0090_product_phase_translation_warm_cache_q01_2500_2525_refine_confirm_profile.json`
+- Reports:
+  - `docs/reports/INC0090_PRODUCT_PHASE_TRANSLATION_WARM_CACHE_Q01_2500_2525_REFINE_SCREEN.md`
+  - `docs/reports/INC0090_PRODUCT_PHASE_TRANSLATION_WARM_CACHE_Q01_2500_2525_REFINE_CONFIRM.md`
+- Gate notes:
+  - `docs/governance/gates/gate_20260312_060106.md`
+  - `docs/governance/gates/gate_20260312_060131.md`
+  - `docs/governance/gates/gate_20260312_060246.md`
+  - `docs/governance/gates/gate_20260312_060331.md`
+- Reading:
+  - the fixed translated product stack now has an earlier tracked confirmed
+    warm-cache `Q01` crossover at `T2505`
+  - all four banks in the `2505/2510/2515/2520` bracket held at `Q01` on
+    confirm
+  - routed cache hits stayed exact across the full `Q01/Q02` bracket
+  - search work stayed pinned near `19%` of dense across the refined band
+
+## Analysis INC-0091
+- Source analysis:
+  - `results/analysis/inc0091_product_phase_translation_warm_cache_q01_2500_2505_refine_screen.json`
+  - `results/analysis/inc0091_product_phase_translation_warm_cache_q01_2500_2505_refine_confirm.json`
+- Profiles:
+  - `results/analysis/inc0091_product_phase_translation_warm_cache_q01_2500_2505_refine_screen_profile.json`
+  - `results/analysis/inc0091_product_phase_translation_warm_cache_q01_2500_2505_refine_confirm_profile.json`
+- Reports:
+  - `docs/reports/INC0091_PRODUCT_PHASE_TRANSLATION_WARM_CACHE_Q01_2500_2505_REFINE_SCREEN.md`
+  - `docs/reports/INC0091_PRODUCT_PHASE_TRANSLATION_WARM_CACHE_Q01_2500_2505_REFINE_CONFIRM.md`
+- Gate notes:
+  - `docs/governance/gates/gate_20260312_062958.md`
+  - `docs/governance/gates/gate_20260312_063025.md`
+  - `docs/governance/gates/gate_20260312_063141.md`
+  - `docs/governance/gates/gate_20260312_063230.md`
+- Reading:
+  - the fixed translated product stack now has an exact tracked confirmed
+    warm-cache `Q01` crossover at `T2501`
+  - all four banks in the `2501/2502/2503/2504` bracket held at `Q01` on
+    confirm
+  - the screen-only `T2503 Q02` pocket disappeared on confirm
+  - routed cache hits stayed exact across the full `Q01/Q02` bracket
+  - search work stayed pinned near `19%` of dense across the refined band
+
+## Analysis INC-0092
+- Source analysis:
+  - `results/analysis/inc0092_product_phase_translation_warm_cache_q01_floor_hardening_screen.json`
+  - `results/analysis/inc0092_product_phase_translation_warm_cache_q01_floor_hardening_confirm.json`
+- Profiles:
+  - `results/analysis/inc0092_product_phase_translation_warm_cache_q01_floor_hardening_screen_profile.json`
+  - `results/analysis/inc0092_product_phase_translation_warm_cache_q01_floor_hardening_confirm_profile.json`
+- Reports:
+  - `docs/reports/INC0092_PRODUCT_PHASE_TRANSLATION_WARM_CACHE_Q01_FLOOR_HARDENING_SCREEN.md`
+  - `docs/reports/INC0092_PRODUCT_PHASE_TRANSLATION_WARM_CACHE_Q01_FLOOR_HARDENING_CONFIRM.md`
+- Gate notes:
+  - `docs/governance/gates/gate_20260312_064253.md`
+  - `docs/governance/gates/gate_20260312_064320.md`
+  - `docs/governance/gates/gate_20260312_064442.md`
+  - `docs/governance/gates/gate_20260312_064531.md`
+- Reading:
+  - the fixed translated product stack no longer supports the old exact
+    `T2500` miss / `T2501` hit story under hardening
+  - both `T2500` and `T2501` now hold at `Q01`
+  - the lower-bank warm-cache floor therefore collapses to `T2500`
+  - routed cache hits stayed exact across the full `Q01/Q02` bracket
+  - search work stayed pinned near `20%` of dense across the hardened band
+
+## Analysis INC-0093
+- Source analysis:
+  - `results/analysis/inc0093_product_phase_translation_cache_residency_mix_screen_cold.json`
+  - `results/analysis/inc0093_product_phase_translation_cache_residency_mix_screen_warm.json`
+  - `results/analysis/inc0093_product_phase_translation_cache_residency_mix_confirm_cold.json`
+  - `results/analysis/inc0093_product_phase_translation_cache_residency_mix_confirm_warm.json`
+- Compare analyses:
+  - `results/analysis/inc0093_product_phase_translation_cache_residency_mix_screen_compare_chart.json`
+  - `results/analysis/inc0093_product_phase_translation_cache_residency_mix_screen_compare_route.json`
+  - `results/analysis/inc0093_product_phase_translation_cache_residency_mix_screen_compare_full.json`
+  - `results/analysis/inc0093_product_phase_translation_cache_residency_mix_confirm_compare_chart.json`
+  - `results/analysis/inc0093_product_phase_translation_cache_residency_mix_confirm_compare_route.json`
+  - `results/analysis/inc0093_product_phase_translation_cache_residency_mix_confirm_compare_full.json`
+- Reports:
+  - `docs/reports/INC0093_PRODUCT_PHASE_TRANSLATION_CACHE_RESIDENCY_MIX_SCREEN_COMPARE_CHART.md`
+  - `docs/reports/INC0093_PRODUCT_PHASE_TRANSLATION_CACHE_RESIDENCY_MIX_SCREEN_COMPARE_ROUTE.md`
+  - `docs/reports/INC0093_PRODUCT_PHASE_TRANSLATION_CACHE_RESIDENCY_MIX_SCREEN_COMPARE_FULL.md`
+  - `docs/reports/INC0093_PRODUCT_PHASE_TRANSLATION_CACHE_RESIDENCY_MIX_CONFIRM_COMPARE_CHART.md`
+  - `docs/reports/INC0093_PRODUCT_PHASE_TRANSLATION_CACHE_RESIDENCY_MIX_CONFIRM_COMPARE_ROUTE.md`
+  - `docs/reports/INC0093_PRODUCT_PHASE_TRANSLATION_CACHE_RESIDENCY_MIX_CONFIRM_COMPARE_FULL.md`
+  - `docs/reports/INC0093_PRODUCT_PHASE_TRANSLATION_CACHE_RESIDENCY_MIX_CONFIRM.md`
+- Gate notes:
+  - `docs/governance/gates/gate_20260312_071450.md`
+  - `docs/governance/gates/gate_20260312_071837.md`
+  - `docs/governance/gates/gate_20260312_072037.md`
+  - `docs/governance/gates/gate_20260312_072941.md`
+  - `docs/governance/gates/gate_20260312_073711.md`
+  - `docs/governance/gates/gate_20260312_074111.md`
+- Reading:
+  - chart residency carries almost all of the operational rescue on the fixed
+    translated product stack
+  - route-only residency stays negative at both anchor operating points
+  - the upper-bank `T40000 Q01` systems win survives under chart-only
+    residency
+  - the exact lower-bank `T2500 Q01` floor still requires full warm residency
+
+## Analysis INC-0094
+- Source analysis:
+  - `results/analysis/inc0094_product_phase_translation_chart_resident_route_ephemeral_repeat_map_screen.json`
+  - `results/analysis/inc0094_product_phase_translation_chart_resident_route_ephemeral_repeat_map_confirm.json`
+- Profiles:
+  - `results/analysis/inc0094_product_phase_translation_chart_resident_route_ephemeral_repeat_map_screen_profile.json`
+  - `results/analysis/inc0094_product_phase_translation_chart_resident_route_ephemeral_repeat_map_confirm_profile.json`
+- Reports:
+  - `docs/reports/INC0094_PRODUCT_PHASE_TRANSLATION_CHART_RESIDENT_ROUTE_EPHEMERAL_REPEAT_MAP_SCREEN.md`
+  - `docs/reports/INC0094_PRODUCT_PHASE_TRANSLATION_CHART_RESIDENT_ROUTE_EPHEMERAL_REPEAT_MAP_CONFIRM.md`
+- Gate notes:
+  - `docs/governance/gates/gate_20260312_080917.md`
+  - `docs/governance/gates/gate_20260312_081226.md`
+  - `docs/governance/gates/gate_20260312_081526.md`
+  - `docs/governance/gates/gate_20260312_082126.md`
+- Reading:
+  - chart-resident / route-ephemeral sessions now survive at `T2500` by `Q02`
+  - chart-resident `T40000` already survives by `Q01`
+  - the remaining gap is the earliest bank where chart-only `Q01` survives
+
+## Analysis INC-0095
+- Source analysis:
+  - `results/analysis/inc0095_product_phase_translation_chart_resident_q01_bank_boundary_screen.json`
+  - `results/analysis/inc0095_product_phase_translation_chart_resident_q01_bank_boundary_confirm.json`
+- Profiles:
+  - `results/analysis/inc0095_product_phase_translation_chart_resident_q01_bank_boundary_screen_profile.json`
+  - `results/analysis/inc0095_product_phase_translation_chart_resident_q01_bank_boundary_confirm_profile.json`
+- Reports:
+  - `docs/reports/INC0095_PRODUCT_PHASE_TRANSLATION_CHART_RESIDENT_Q01_BANK_BOUNDARY_SCREEN.md`
+  - `docs/reports/INC0095_PRODUCT_PHASE_TRANSLATION_CHART_RESIDENT_Q01_BANK_BOUNDARY_CONFIRM.md`
+- Gate notes:
+  - `docs/governance/gates/gate_20260312_090117.md`
+  - `docs/governance/gates/gate_20260312_090210.md`
+  - `docs/governance/gates/gate_20260312_090502.md`
+  - `docs/governance/gates/gate_20260312_090530.md`
+- Reading:
+  - the focused chart-resident `Q01` packet now survives already at `T2500`
+  - the earlier `INC-0094` mixed-repeat `T2500 Q01` miss is now a packet-scope
+    sensitivity issue, not a bank-location issue
+
+## Analysis INC-0096
+- Source analysis:
+  - `results/analysis/inc0096_product_phase_translation_chart_resident_q01_packet_scope_audit_focused_screen.json`
+  - `results/analysis/inc0096_product_phase_translation_chart_resident_q01_packet_scope_audit_mixed_screen.json`
+  - `results/analysis/inc0096_product_phase_translation_chart_resident_q01_packet_scope_audit_focused_confirm.json`
+  - `results/analysis/inc0096_product_phase_translation_chart_resident_q01_packet_scope_audit_mixed_confirm.json`
+- Profiles:
+  - `results/analysis/inc0096_product_phase_translation_chart_resident_q01_packet_scope_audit_focused_screen_profile.json`
+  - `results/analysis/inc0096_product_phase_translation_chart_resident_q01_packet_scope_audit_mixed_screen_profile.json`
+  - `results/analysis/inc0096_product_phase_translation_chart_resident_q01_packet_scope_audit_focused_confirm_profile.json`
+  - `results/analysis/inc0096_product_phase_translation_chart_resident_q01_packet_scope_audit_mixed_confirm_profile.json`
+- Compare artifacts:
+  - `results/analysis/inc0096_product_phase_translation_chart_resident_q01_packet_scope_audit_screen_compare.json`
+  - `results/analysis/inc0096_product_phase_translation_chart_resident_q01_packet_scope_audit_confirm_compare.json`
+  - `docs/reports/INC0096_PRODUCT_PHASE_TRANSLATION_CHART_RESIDENT_Q01_PACKET_SCOPE_AUDIT_SCREEN_COMPARE.md`
+  - `docs/reports/INC0096_PRODUCT_PHASE_TRANSLATION_CHART_RESIDENT_Q01_PACKET_SCOPE_AUDIT_CONFIRM_COMPARE.md`
+- Gate notes:
+  - `docs/governance/gates/gate_20260312_092114.md`
+  - `docs/governance/gates/gate_20260312_092121.md`
+  - `docs/governance/gates/gate_20260312_092137.md`
+  - `docs/governance/gates/gate_20260312_092238.md`
+  - `docs/governance/gates/gate_20260312_092252.md`
+  - `docs/governance/gates/gate_20260312_092334.md`
+- Reading:
+  - both focused and mixed packets stay positive at `T2500 Q01` on hardening
+  - packet scope changes the margin size, but not the retrieval signal or the
+  sign of the systems claim
+
+## Analysis INC-0097
+- Source analysis:
+  - `results/analysis/inc0097_product_phase_sparse_gated_shell_screen.json`
+- Reports:
+  - `docs/reports/INC0097_PRODUCT_PHASE_SPARSE_GATED_SHELL_SCREEN.md`
+- Gate notes:
+  - `docs/governance/gates/gate_20260312_095747.md`
+- Reading:
+  - the continuous product reference remains the only healthy product route on
+    the sparse-shell screen
+  - gated and banded shell control are mechanism-live but both collapse shell
+    balance (`shell_pmax≈0.985`)
+  - the shell pilot closes negative and does not justify translated carry-
+    forward
+
+## Analysis INC-0098
+- Source analysis:
+  - `results/analysis/inc0098_product_phase_translation_chart_resident_route_cost_decomposition_input.json`
+  - `results/analysis/inc0098_product_phase_translation_chart_resident_route_cost_decomposition.json`
+- Reports:
+  - `docs/reports/INC0098_PRODUCT_PHASE_TRANSLATION_CHART_RESIDENT_ROUTE_COST_DECOMPOSITION.md`
+- Reading:
+  - the fixed chart-resident translated stack is already positive against dense
+    at both lower and upper anchors
+  - the remaining chart-versus-full-warm gap is split between route-index
+    build and retrieval-search overhead
+  - the translated systems branch can now be frozen as a reference instead of
+    continued as an active cost-rescue branch
+
+## Analysis INC-0099
+- Source analysis:
+  - `results/analysis/inc0099_product_phase_sparse_event_proxy_screen.json`
+  - `results/analysis/inc0099_product_phase_sparse_event_proxy_confirm.json`
+- Reports:
+  - `docs/reports/INC0099_PRODUCT_PHASE_SPARSE_EVENT_PROXY_SCREEN.md`
+  - `docs/reports/INC0099_PRODUCT_PHASE_SPARSE_EVENT_PROXY_CONFIRM.md`
+- Gate notes:
+  - `docs/governance/gates/gate_20260312_104037.md`
+  - `docs/governance/gates/gate_20260312_104345.md`
+- Reading:
+  - the fixed product route law now supports a healthy soft-sparse proxy
+    controller
+  - promoted point `H4XH4_FIELD_A150_EVT_T070` holds with
+    `event_gate_mean≈0.319`
+  - the positive sparse-event read is about soft update mass, not yet hard
+    firing
+  - the next honest branch is translated carry-forward of that fixed sparse
+    point
+
+## Analysis INC-0100
+- Source analysis:
+  - `results/analysis/inc0100_product_phase_sparse_event_translation_screen.json`
+  - `results/analysis/inc0100_product_phase_sparse_event_translation_confirm.json`
+- Reports:
+  - `docs/reports/INC0100_PRODUCT_PHASE_SPARSE_EVENT_TRANSLATION_SCREEN.md`
+  - `docs/reports/INC0100_PRODUCT_PHASE_SPARSE_EVENT_TRANSLATION_CONFIRM.md`
+- Gate notes:
+  - `docs/governance/gates/gate_20260312_110233.md`
+  - `docs/governance/gates/gate_20260312_110324.md`
+- Reading:
+  - the fixed soft-sparse controller now carries through the translated
+    chart-resident retrieval harness
+  - the sparse translated point preserves routed retrieval signal relative to
+    the continuous product reference while materially improving runtime
+  - the lower-bank `Q01` dense-amortized comparison becomes an almost exact tie
+    rather than a routed miss
+  - the branch is still soft-sparse, not hard-firing, so hard threshold
+    activation becomes the next honest mechanism test
+
+## Analysis INC-0101
+- Source analysis:
+  - `results/analysis/inc0101_product_phase_hard_event_proxy_screen.json`
+  - `results/analysis/inc0101_product_phase_hard_event_proxy_confirm.json`
+- Reports:
+  - `docs/reports/INC0101_PRODUCT_PHASE_HARD_EVENT_PROXY_SCREEN.md`
+  - `docs/reports/INC0101_PRODUCT_PHASE_HARD_EVENT_PROXY_CONFIRM.md`
+- Gate notes:
+  - `docs/governance/gates/gate_20260312_113952.md`
+  - `docs/governance/gates/gate_20260312_114258.md`
+- Reading:
+  - the fixed product route law now supports a stable near-hard proxy event
+    point
+  - promoted point `H4XH4_FIELD_A150_EVT_T070_TAU002` holds with
+    `event_gate_mean≈0.0205`
+  - the true hard controller stays healthy only in a mostly-on regime and does
+    not justify the same discreteness claim
+  - the next honest branch is translated carry-forward of the near-hard point,
+    not more hard-threshold shaving
+
+## Analysis INC-0102
+- Source analysis:
+  - `results/analysis/inc0102_product_phase_near_hard_event_translation_prewarm_screen.json`
+  - `results/analysis/inc0102_product_phase_near_hard_event_translation_screen.json`
+- Reports:
+  - `docs/reports/INC0102_PRODUCT_PHASE_NEAR_HARD_EVENT_TRANSLATION_SCREEN.md`
+- Gate notes:
+  - `docs/governance/gates/gate_20260312_115408.md`
+  - `docs/governance/gates/gate_20260312_115418.md`
+- Reading:
+  - the translated near-hard candidate preserves the same routed retrieval
+    signal as the continuous and soft sparse translated references
+  - but it becomes slower than both translated references and therefore loses
+    the translated systems story
+  - translated sparse-event claims remain explicitly soft
+  - the next honest branch is bounded quality recovery on the fixed soft sparse
+    translated point
+
+## Analysis INC-0103
+- Source analysis:
+  - `results/analysis/inc0103_product_phase_soft_sparse_translation_quality_recovery_screen.json`
+  - `results/analysis/inc0103_product_phase_soft_sparse_translation_quality_recovery_confirm.json`
+- Reports:
+  - `docs/reports/INC0103_PRODUCT_PHASE_SOFT_SPARSE_TRANSLATION_QUALITY_RECOVERY_SCREEN.md`
+  - `docs/reports/INC0103_PRODUCT_PHASE_SOFT_SPARSE_TRANSLATION_QUALITY_RECOVERY_CONFIRM.md`
+- Gate notes:
+  - `docs/governance/gates/gate_20260312_120306.md`
+  - `docs/governance/gates/gate_20260312_120504.md`
+- Reading:
+  - bounded low-margin reranking did not recover translated quality on confirm
+  - the best rerank point only matched top-1 and trimmed amortized cost
+    slightly
+  - the fixed soft sparse translated point remains the sparse translated
+    quality/reference point
+
+## Analysis INC-0104
+- Source analysis:
+  - `results/analysis/inc0104_product_phase_soft_sparse_translation_backfill_recovery_screen.json`
+  - `results/analysis/inc0104_product_phase_soft_sparse_translation_backfill_recovery_confirm.json`
+- Reports:
+  - `docs/reports/INC0104_PRODUCT_PHASE_SOFT_SPARSE_TRANSLATION_BACKFILL_RECOVERY_SCREEN.md`
+  - `docs/reports/INC0104_PRODUCT_PHASE_SOFT_SPARSE_TRANSLATION_BACKFILL_RECOVERY_CONFIRM.md`
+- Gate notes:
+  - `docs/governance/gates/gate_20260312_121232.md`
+  - `docs/governance/gates/gate_20260312_121339.md`
+- Reading:
+  - bounded small-bucket backfill did not recover translated quality
+  - but it created a materially better lower-bank sparse translated systems
+    point
+  - the branch closes negative on quality recovery and positive on systems
+    refinement
+
+## Analysis INC-0105
+- Source analysis:
+  - `results/analysis/inc0105_product_phase_soft_sparse_translation_upper_bank_carry_forward_screen.json`
+  - `results/analysis/inc0105_product_phase_soft_sparse_translation_upper_bank_carry_forward_confirm.json`
+- Reports:
+  - `docs/reports/INC0105_PRODUCT_PHASE_SOFT_SPARSE_TRANSLATION_UPPER_BANK_CARRY_FORWARD_SCREEN.md`
+  - `docs/reports/INC0105_PRODUCT_PHASE_SOFT_SPARSE_TRANSLATION_UPPER_BANK_CARRY_FORWARD_CONFIRM.md`
+- Gate notes:
+  - `docs/governance/gates/gate_20260312_121941.md`
+  - `docs/governance/gates/gate_20260312_122439.md`
+- Reading:
+  - the lower-bank sparse translated systems lead survives at the upper bank
+  - the branch is positive/narrow on systems carry-forward, not on quality
+    recovery
+  - the next honest branch is sparse translated systems cost decomposition
+
+## Analysis INC-0106
+- Source analysis:
+  - `results/analysis/inc0104_product_phase_soft_sparse_translation_backfill_recovery_confirm.json`
+  - `results/analysis/inc0105_product_phase_soft_sparse_translation_upper_bank_carry_forward_confirm.json`
+  - `results/analysis/inc0106_product_phase_sparse_translation_systems_cost_decomposition.json`
+- Reports:
+  - `docs/reports/INC0106_PRODUCT_PHASE_SPARSE_TRANSLATION_SYSTEMS_COST_DECOMPOSITION.md`
+- Reading:
+  - lower-bank bounded backfill gain is search-dominated on average
+  - upper-bank gain remains real on mean but mixes search, route-query, and
+    route-index effects
+  - no hidden accounting regression surfaced
+
+## Analysis INC-0107
+- Source analysis:
+  - `results/analysis/inc0104_product_phase_soft_sparse_translation_backfill_recovery_confirm.json`
+  - `results/analysis/inc0105_product_phase_soft_sparse_translation_upper_bank_carry_forward_confirm.json`
+  - `results/analysis/inc0107_product_phase_sparse_translation_component_stability_audit.json`
+- Reports:
+  - `docs/reports/INC0107_PRODUCT_PHASE_SPARSE_TRANSLATION_COMPONENT_STABILITY_AUDIT.md`
+- Reading:
+  - lower-bank backfill versus the continuous translated product reference is
+    stable at `4/4` seed wins
+  - upper-bank bounded backfill remains mean-positive but not seed-uniform
+  - candidate-fraction reduction is stable, while `route_query` changes sign
+    across seeds
+  - the next honest branch is repeated timing hardening on the fixed sparse
+    translated pairs
+
+## Analysis INC-0108
+- Source analysis:
+  - `results/analysis/inc0104_product_phase_soft_sparse_translation_backfill_recovery_confirm.json`
+  - `results/analysis/inc0105_product_phase_soft_sparse_translation_upper_bank_carry_forward_confirm.json`
+  - `results/analysis/inc0108_product_phase_sparse_translation_repeated_timing_hardening_lower_r2.json`
+  - `results/analysis/inc0108_product_phase_sparse_translation_repeated_timing_hardening_lower_r3.json`
+  - `results/analysis/inc0108_product_phase_sparse_translation_repeated_timing_hardening_upper_r2.json`
+  - `results/analysis/inc0108_product_phase_sparse_translation_repeated_timing_hardening_upper_r3.json`
+  - `results/analysis/inc0108_product_phase_sparse_translation_repeated_timing_hardening.json`
+- Reports:
+  - `docs/reports/INC0108_PRODUCT_PHASE_SPARSE_TRANSLATION_REPEATED_TIMING_HARDENING.md`
+- Gate notes:
+  - `docs/governance/gates/gate_20260312_130158.md`
+  - `docs/governance/gates/gate_20260312_130648.md`
+  - `docs/governance/gates/gate_20260312_130722.md`
+  - `docs/governance/gates/gate_20260312_131452.md`
+- Reading:
+  - repeated timing hardening does not recover a clean seed-stable wallclock
+    story for the sparse translated systems leads
+  - candidate-fraction reduction remains stable across every repeated
+    comparison
+  - the bounded backfill points remain valid on mean, but microtiming remains
+    too noisy for direct optimization guidance
+  - the next honest branch is a robust cost-reference audit on the completed
+    sparse translated evidence
+
+## Analysis INC-0109
+- Source analysis:
+  - `results/analysis/inc0104_product_phase_soft_sparse_translation_backfill_recovery_confirm.json`
+  - `results/analysis/inc0105_product_phase_soft_sparse_translation_upper_bank_carry_forward_confirm.json`
+  - `results/analysis/inc0108_product_phase_sparse_translation_repeated_timing_hardening_lower_r2.json`
+  - `results/analysis/inc0108_product_phase_sparse_translation_repeated_timing_hardening_lower_r3.json`
+  - `results/analysis/inc0108_product_phase_sparse_translation_repeated_timing_hardening_upper_r2.json`
+  - `results/analysis/inc0108_product_phase_sparse_translation_repeated_timing_hardening_upper_r3.json`
+  - `results/analysis/inc0109_product_phase_sparse_translation_robust_cost_reference.json`
+- Reports:
+  - `docs/reports/INC0109_PRODUCT_PHASE_SPARSE_TRANSLATION_ROBUST_COST_REFERENCE.md`
+- Reading:
+  - upper-bank bounded backfill remains a clean robust sparse translated
+    systems lead versus both routed baselines
+  - lower-bank bounded backfill remains robust versus the continuous
+    translated product reference
+  - lower-bank bounded backfill versus the fixed soft sparse translated
+    reference narrows to a pruning-first read rather than a clean robust
+    wallclock promotion
+  - candidate-fraction and candidate-count reduction are now the clean robust
+    sparse translated signals
+  - the next honest branch is repeated dense-frontier hardening on the fixed
+    sparse translated anchors
+
+## Analysis INC-0110
+- Source analysis:
+  - `results/analysis/inc0104_product_phase_soft_sparse_translation_backfill_recovery_confirm.json`
+  - `results/analysis/inc0105_product_phase_soft_sparse_translation_upper_bank_carry_forward_confirm.json`
+  - `results/analysis/inc0108_product_phase_sparse_translation_repeated_timing_hardening_lower_r2.json`
+  - `results/analysis/inc0108_product_phase_sparse_translation_repeated_timing_hardening_lower_r3.json`
+  - `results/analysis/inc0108_product_phase_sparse_translation_repeated_timing_hardening_upper_r2.json`
+  - `results/analysis/inc0108_product_phase_sparse_translation_repeated_timing_hardening_upper_r3.json`
+  - `results/analysis/inc0110_product_phase_sparse_translation_dense_robust_hardening.json`
+- Reports:
+  - `docs/reports/INC0110_PRODUCT_PHASE_SPARSE_TRANSLATION_DENSE_ROBUST_HARDENING.md`
+- Reading:
+  - lower-bank soft sparse versus dense narrows to a pruning-first read rather
+    than a clean robust systems promotion
+  - lower-bank bounded backfill remains the only robust lower-bank dense
+    systems promotion
+  - both upper-bank sparse translated points remain robust dense systems
+    promotions
+  - every dense comparison still carries a robust top-1 deficit versus dense
+    exact
+  - the next honest branch is dense quality-frontier accounting on the fixed
+    sparse translated points
+
+## Analysis INC-0111
+- Source analysis:
+  - `results/analysis/inc0104_product_phase_soft_sparse_translation_backfill_recovery_confirm.json`
+  - `results/analysis/inc0105_product_phase_soft_sparse_translation_upper_bank_carry_forward_confirm.json`
+  - `results/analysis/inc0110_product_phase_sparse_translation_dense_robust_hardening.json`
+  - `results/analysis/inc0111_product_phase_sparse_translation_dense_quality_frontier.json`
+- Reports:
+  - `docs/reports/INC0111_PRODUCT_PHASE_SPARSE_TRANSLATION_DENSE_QUALITY_FRONTIER.md`
+- Reading:
+  - lower-bank soft sparse versus dense is `pruning-only`
+  - lower-bank bounded backfill versus dense is `systems-only`
+  - both upper-bank sparse translated points are `quality-near systems
+    promotion`
+  - the dense claim is now explicit:
+    - lower bank = systems-only
+    - upper bank = near-frontier
+  - the next honest branch is focused upper-bank dense quality-tolerance
+    hardening on the fixed sparse translated points
+
+## Analysis INC-0112
+- Source analysis:
+  - `results/analysis/inc0105_product_phase_soft_sparse_translation_upper_bank_carry_forward_confirm.json`
+  - `results/analysis/inc0108_product_phase_sparse_translation_repeated_timing_hardening_upper_r2.json`
+  - `results/analysis/inc0108_product_phase_sparse_translation_repeated_timing_hardening_upper_r3.json`
+  - `results/analysis/inc0112_product_phase_sparse_translation_upper_bank_dense_quality_tolerance_hardening_r4.json`
+  - `results/analysis/inc0112_product_phase_sparse_translation_upper_bank_dense_quality_tolerance_hardening_r5.json`
+  - `results/analysis/inc0112_product_phase_sparse_translation_upper_bank_dense_robust_hardening.json`
+  - `results/analysis/inc0112_product_phase_sparse_translation_upper_bank_dense_quality_tolerance_hardening.json`
+- Reports:
+  - `docs/reports/INC0112_PRODUCT_PHASE_SPARSE_TRANSLATION_UPPER_BANK_DENSE_ROBUST_HARDENING.md`
+  - `docs/reports/INC0112_PRODUCT_PHASE_SPARSE_TRANSLATION_UPPER_BANK_DENSE_QUALITY_TOLERANCE_HARDENING.md`
+- Reading:
+  - both upper-bank sparse translated points remain quality-near dense systems
+    promotions under two fresh paired repeats
+  - the upper-bank top-1 gap stays small but robustly negative
+  - the upper-bank dense claim remains near-frontier, not fully
+    quality-matched
+  - the next honest branch is residual upper-bank dense top-1 gap
+    decomposition on the fixed sparse translated points
+
+## Analysis INC-0113
+- Source analysis:
+  - `results/analysis/inc0113_product_phase_sparse_translation_upper_bank_dense_gap_decomposition_confirm.json`
+  - `results/analysis/inc0113_product_phase_sparse_translation_upper_bank_dense_gap_decomposition.json`
+- Reports:
+  - `docs/reports/INC0113_PRODUCT_PHASE_SPARSE_TRANSLATION_UPPER_BANK_DENSE_GAP_DECOMPOSITION.md`
+- Reading:
+  - both fixed upper-bank sparse translated points remain large systems wins
+    versus dense exact
+  - the residual upper-bank dense top-1 gap is operationally negligible on
+    both fixed sparse translated points:
+    - soft sparse mean net dense advantage rate `0.001525`
+    - bounded backfill mean net dense advantage rate `0.001562`
+  - omission explains only about `1.2%-1.4%` of dense-only wins
+  - dense-only wins are overwhelmingly present-but-not-top1 and therefore not
+    a candidate-recovery surface worth reopening
+  - the next honest branch is upper-bank dense reference selection/carry-
+    forward, not another quality rescue
+
+## Analysis INC-0114
+- Source analysis:
+  - `results/analysis/inc0112_product_phase_sparse_translation_upper_bank_dense_quality_tolerance_hardening.json`
+  - `results/analysis/inc0113_product_phase_sparse_translation_upper_bank_dense_gap_decomposition.json`
+  - `results/analysis/inc0113_product_phase_sparse_translation_upper_bank_dense_gap_decomposition_confirm.json`
+  - `results/analysis/inc0114_product_phase_sparse_translation_upper_bank_dense_reference_selection.json`
+- Reports:
+  - `docs/reports/INC0114_PRODUCT_PHASE_SPARSE_TRANSLATION_UPPER_BANK_DENSE_REFERENCE_SELECTION.md`
+- Reading:
+  - both upper-bank sparse translated points remain eligible dense-near systems
+    promotions
+  - the completed pair delta stays inside the explicit carry-forward
+    tolerance band:
+    - top-1 `+0.000038`
+    - candidate fraction `+0.001761`
+    - amortized `-0.043834s`
+  - `CHART_H4XH4_FIELD_A150_EVT_T070_CPX8_Q01_T40000` is now the promoted
+    upper-bank dense-near routed reference
+  - `CHART_H4XH4_FIELD_A150_EVT_T070_BF2_SB1_CPX8_Q01_T40000` drops to a
+    supporting comparator
+  - the next honest branch is promoted upper-bank carry-forward, not another
+    upper-bank fork
+
+## Analysis INC-0115
+- Source analysis:
+  - `results/analysis/inc0104_product_phase_soft_sparse_translation_backfill_recovery_confirm.json`
+  - `results/analysis/inc0113_product_phase_sparse_translation_upper_bank_dense_gap_decomposition_confirm.json`
+  - `results/analysis/inc0114_product_phase_sparse_translation_upper_bank_dense_reference_selection.json`
+  - `results/analysis/inc0115_product_phase_sparse_translation_promoted_upper_bank_carry_forward.json`
+- Reports:
+  - `docs/reports/INC0115_PRODUCT_PHASE_SPARSE_TRANSLATION_PROMOTED_UPPER_BANK_CARRY_FORWARD.md`
+- Reading:
+  - the default broader-comparison packet is now explicit:
+    - lower bank: `DENSE_Q01_T2500`,
+      `CHART_H4XH4_FIELD_A150_EVT_T070_BF2_SB1_CPX8_Q01_T2500`
+    - upper bank: `DENSE_Q01_T40000`,
+      `CHART_H4XH4_FIELD_A150_EVT_T070_CPX8_Q01_T40000`
+  - the lower-bank soft sparse route is now excluded by default
+  - the upper-bank bounded-backfill route is now comparator-only
+  - the next honest branch is the dual-anchor broader-comparison packet,
+    not another upper-bank or lower-bank fork
+
+## Analysis INC-0116
+- Source analysis:
+  - `results/analysis/inc0115_product_phase_sparse_translation_promoted_upper_bank_carry_forward.json`
+  - `configs/proxy_transfer_inc0104_product_phase_soft_sparse_translation_backfill_recovery_confirm.json`
+  - `configs/proxy_transfer_inc0113_product_phase_sparse_translation_upper_bank_dense_gap_decomposition_confirm.json`
+  - `results/analysis/inc0116_product_phase_sparse_translation_dual_anchor_broader_comparison_packet.json`
+  - `configs/packet_inc0116_product_phase_sparse_translation_dual_anchor_broader_comparison.json`
+- Reports:
+  - `docs/reports/INC0116_PRODUCT_PHASE_SPARSE_TRANSLATION_DUAL_ANCHOR_BROADER_COMPARISON_PACKET.md`
+- Reading:
+  - the default broader-comparison packet now exists as one reusable packet
+    manifest with resolved inherited args
+  - the four default routes remain fixed
+  - the upper-bank bounded-backfill route stays optional comparator-only
+  - the next honest branch is the first broader comparison that inherits this
+    packet directly
+
+## Analysis INC-0117
+- Source analysis:
+  - `results/analysis/inc0111_product_phase_sparse_translation_dense_quality_frontier.json`
+  - `results/analysis/inc0116_product_phase_sparse_translation_dual_anchor_broader_comparison_packet.json`
+  - `results/analysis/inc0117_product_phase_sparse_translation_dual_anchor_broader_comparison.json`
+- Reports:
+  - `docs/reports/INC0117_PRODUCT_PHASE_SPARSE_TRANSLATION_DUAL_ANCHOR_BROADER_COMPARISON.md`
+- Reading:
+  - lower-bank default routed point remains `systems-only`
+  - upper-bank default routed point remains `quality-near systems promotion`
+  - the upper-bank bounded-backfill route remains explicit but optional
+  - the next honest branch is the task-side extension of the same packet
+
+## Analysis INC-0118
+- Source analysis:
+  - `results/analysis/inc0116_product_phase_sparse_translation_dual_anchor_broader_comparison_packet.json`
+  - `results/analysis/inc0117_product_phase_sparse_translation_dual_anchor_broader_comparison.json`
+  - `results/analysis/inc0118_product_phase_sparse_translation_dual_anchor_task_side_extension.json`
+- Reports:
+  - `docs/reports/INC0118_PRODUCT_PHASE_SPARSE_TRANSLATION_DUAL_ANCHOR_TASK_SIDE_EXTENSION.md`
+- Reading:
+  - the dual-anchor packet now extends directly onto the real-task side
+  - lower bank stays systems-only by default
+  - upper bank stays quality-near systems promotion by default
+  - the upper-bank bounded-backfill route remains optional comparator-only
+  - the next honest branch is `INC-0119` explicit dual-anchor real-task
+    comparison
+
+## Analysis INC-0119
+- Source analysis:
+  - `results/analysis/inc0116_product_phase_sparse_translation_dual_anchor_broader_comparison_packet.json`
+  - `results/analysis/inc0118_product_phase_sparse_translation_dual_anchor_task_side_extension.json`
+  - `results/analysis/inc0119_product_phase_sparse_translation_dual_anchor_real_task_comparison.json`
+- Reports:
+  - `docs/reports/INC0119_PRODUCT_PHASE_SPARSE_TRANSLATION_DUAL_ANCHOR_REAL_TASK_COMPARISON.md`
+- Reading:
+  - the first explicit LM-proxy real-task comparison now inherits the exact
+    dual-anchor packet
+  - lower bank remains systems-only by default
+  - upper bank remains quality-near systems promotion by default
+  - the upper-bank bounded-backfill route remains optional comparator-only
+  - the next honest branch is `INC-0120` downstream real-task carry-forward
+
+## Analysis INC-0120
+- Source analysis:
+  - `results/analysis/inc0119_product_phase_sparse_translation_dual_anchor_real_task_comparison.json`
+  - `results/analysis/inc0120_product_phase_sparse_translation_dual_anchor_real_task_carry_forward.json`
+- Reports:
+  - `docs/reports/INC0120_PRODUCT_PHASE_SPARSE_TRANSLATION_DUAL_ANCHOR_REAL_TASK_CARRY_FORWARD.md`
+- Reading:
+  - the explicit LM-proxy real-task comparison now has one downstream
+    carry-forward contract
+  - lower bank remains systems-only by default
+  - upper bank remains quality-near systems promotion by default
+  - the upper-bank bounded-backfill route remains optional comparator-only
+  - the next honest branch is `INC-0121` downstream packet-manifest
+
+## Analysis INC-0121
+- Source analysis:
+  - `results/analysis/inc0120_product_phase_sparse_translation_dual_anchor_real_task_carry_forward.json`
+  - `results/analysis/inc0121_product_phase_sparse_translation_dual_anchor_real_task_packet_manifest.json`
+- Reports:
+  - `docs/reports/INC0121_PRODUCT_PHASE_SPARSE_TRANSLATION_DUAL_ANCHOR_REAL_TASK_PACKET_MANIFEST.md`
+- Reading:
+  - the downstream LM-proxy real-task packet now exists as one exact reusable
+    manifest
+  - default downstream route ids remain fixed
+  - the upper-bank bounded-backfill route remains optional comparator-only
+  - the next honest branch is `INC-0122` downstream real-task extension
+
+## Analysis INC-0122
+- Source analysis:
+  - `results/analysis/inc0120_product_phase_sparse_translation_dual_anchor_real_task_carry_forward.json`
+  - `results/analysis/inc0121_product_phase_sparse_translation_dual_anchor_real_task_packet_manifest.json`
+  - `results/analysis/inc0122_product_phase_sparse_translation_dual_anchor_real_task_downstream_extension.json`
+- Reports:
+  - `docs/reports/INC0122_PRODUCT_PHASE_SPARSE_TRANSLATION_DUAL_ANCHOR_REAL_TASK_DOWNSTREAM_EXTENSION.md`
+- Reading:
+  - downstream LM-proxy real-task inheritance is now explicit from the exact
+    packet manifest
+  - lower bank remains systems-only by default
+  - upper bank remains quality-near systems promotion by default
+  - the upper-bank bounded-backfill route remains optional comparator-only
+  - the next honest branch is `INC-0123` downstream explicit real-task
+    comparison
+
+## Analysis INC-0123
+- Source analysis:
+  - `results/analysis/inc0121_product_phase_sparse_translation_dual_anchor_real_task_packet_manifest.json`
+  - `results/analysis/inc0122_product_phase_sparse_translation_dual_anchor_real_task_downstream_extension.json`
+  - `results/analysis/inc0123_product_phase_sparse_translation_dual_anchor_real_task_downstream_comparison.json`
+- Reports:
+  - `docs/reports/INC0123_PRODUCT_PHASE_SPARSE_TRANSLATION_DUAL_ANCHOR_REAL_TASK_DOWNSTREAM_COMPARISON.md`
+- Reading:
+  - the explicit downstream LM-proxy real-task comparison is now fixed from
+    the completed downstream extension artifact
+  - lower bank remains systems-only by default
+  - upper bank remains quality-near systems promotion by default
+  - the upper-bank bounded-backfill route remains optional comparator-only
+  - the next honest branch is `INC-0124` downstream real-task carry-forward
+
+## Analysis INC-0124
+- Source analysis:
+  - `results/analysis/inc0123_product_phase_sparse_translation_dual_anchor_real_task_downstream_comparison.json`
+  - `results/analysis/inc0124_product_phase_sparse_translation_dual_anchor_real_task_downstream_carry_forward.json`
+- Reports:
+  - `docs/reports/INC0124_PRODUCT_PHASE_SPARSE_TRANSLATION_DUAL_ANCHOR_REAL_TASK_DOWNSTREAM_CARRY_FORWARD.md`
+- Reading:
+  - the explicit downstream LM-proxy real-task comparison now has one
+    downstream carry-forward contract
+  - lower bank remains systems-only by default
+  - upper bank remains quality-near systems promotion by default
+  - the upper-bank bounded-backfill route remains optional comparator-only
+  - the next honest branch is `INC-0125` downstream packet manifest
+
+## Analysis INC-0125
+- Source analysis:
+  - `results/analysis/inc0125_product_phase_sparse_event_proxy_trainability_hardening_screen.json`
+  - `results/analysis/inc0125_product_phase_sparse_event_proxy_trainability_hardening_confirm.json`
+- Reports:
+  - `docs/reports/INC0125_PRODUCT_PHASE_SPARSE_EVENT_PROXY_TRAINABILITY_HARDENING.md`
+- Reading:
+  - sparse-event proxy trainability survives the harder proxy load on the
+    fixed product route law
+  - `H4XH4_FIELD_A150_EVT_T070_TAU002` is now the hardened near-hard proxy
+    reference
+  - `H4XH4_FIELD_A150_EVT_T070` remains the healthy soft-sparse comparator
+  - `H4XH4_FIELD_A150_HARD_T062` remains mostly-on and is not a clean hard
+    sparse result
+  - the next honest branch is `INC-0126` proxy/translation gap audit
+
+## Analysis INC-0126
+- Source analysis:
+  - `results/analysis/inc0126_product_phase_sparse_event_proxy_translation_gap_audit.json`
+- Reports:
+  - `docs/reports/INC0126_PRODUCT_PHASE_SPARSE_EVENT_PROXY_TRANSLATION_GAP_AUDIT.md`
+- Reading:
+  - translated near-hard preserves the same top-1 and candidate fraction as
+    translated soft sparse and continuous
+  - the translated near-hard failure is systems-cost-only, not a quality or
+    candidate-set failure
+  - retrieval search is the dominant extra cost term, with route-index build
+    second
+  - the next honest branch is `INC-0127` translated systems-cost rescue
+
+## Analysis INC-0127
+- Source analysis:
+  - `results/analysis/inc0127_product_phase_sparse_event_translation_systems_cost_rescue.json`
+- Reports:
+  - `docs/reports/INC0127_PRODUCT_PHASE_SPARSE_EVENT_TRANSLATION_SYSTEMS_COST_RESCUE.md`
+- Reading:
+  - translated soft sparse and translated near-hard differ only on
+    `event_gate_tau`
+  - sparse-event knobs are audit-only on the current translated surface
+  - the old translated systems-cost rescue queue is therefore invalid
+  - the next honest branch is `INC-0128` route-coupled sparse-event
+    translated pilot
+
+## Analysis INC-0128
+- Source analysis:
+  - `results/analysis/inc0128_product_phase_sparse_event_translation_route_coupled_screen.json`
+- Reports:
+  - `docs/reports/INC0128_PRODUCT_PHASE_SPARSE_EVENT_TRANSLATION_ROUTE_COUPLED_SCREEN.md`
+- Reading:
+  - translated sparse-event behavior is no longer audit-only once train-gate
+    pruning is wired into the translated train bank
+  - soft sparse at threshold `0.02` stays inert with `keep_frac=1.0`
+  - near-hard at threshold `0.02` prunes materially but collapses top-1
+  - the next honest branch is `INC-0129` route-coupled threshold mapping
+
+## Analysis INC-0129
+- Source analysis:
+  - `results/analysis/inc0129_product_phase_sparse_event_translation_route_coupled_threshold_map_screen.json`
+- Reports:
+  - `docs/reports/INC0129_PRODUCT_PHASE_SPARSE_EVENT_TRANSLATION_ROUTE_COUPLED_THRESHOLD_MAP_SCREEN.md`
+- Reading:
+  - train-gate pruning is genuinely downstream-live
+  - threshold `0.010` best preserves translated quality, but still regresses
+    runtime versus uncoupled near-hard
+  - stronger thresholds reduce candidate fraction further but collapse top-1
+  - the next honest branch is `INC-0130` soft translated route-coupling
+
+## Analysis INC-0130
+- Source analysis:
+  - `results/analysis/inc0130_product_phase_sparse_event_translation_route_coupled_soft_bias_screen.json`
+- Reports:
+  - `docs/reports/INC0130_PRODUCT_PHASE_SPARSE_EVENT_TRANSLATION_ROUTE_COUPLED_SOFT_BIAS_SCREEN.md`
+- Reading:
+  - soft score bias is genuinely downstream-live without train-item deletion
+  - `SBI030` screened as the balanced lower-bank quality-lift point
+  - `SBI080` screened as the strongest quality-first point
+  - the next honest branch is `INC-0131` prewarmed lower-bank carry-forward
+
+## Analysis INC-0131
+- Source analysis:
+  - `results/analysis/inc0131_product_phase_sparse_event_translation_soft_bias_carry_forward_screen.json`
+  - `results/analysis/inc0131_product_phase_sparse_event_translation_soft_bias_carry_forward_confirm.json`
+- Reports:
+  - `docs/reports/INC0131_PRODUCT_PHASE_SPARSE_EVENT_TRANSLATION_SOFT_BIAS_CARRY_FORWARD_CONFIRM.md`
+- Reading:
+  - uncoupled near-hard is now the lower-bank sparse-event translated systems
+    reference
+  - `SBI030` is now the balanced lower-bank quality comparator
+  - `SBI080` is now the quality-first comparator
+  - the old lower-bank bounded-backfill default did not hold on the focused
+    prewarmed packet and now requires explicit reselection
+  - the next honest branch is `INC-0132` lower-bank reference reselection
+
+## Analysis INC-0132
+- Source analysis:
+  - `results/analysis/inc0132_product_phase_sparse_event_translation_lower_bank_reference_reselection.json`
+- Reports:
+  - `docs/reports/INC0132_PRODUCT_PHASE_SPARSE_EVENT_TRANSLATION_LOWER_BANK_REFERENCE_RESELECTION.md`
+- Reading:
+  - uncoupled near-hard is now the explicit lower-bank sparse-event
+    translated default route
+  - `SBI030` is now the balanced lower-bank quality comparator
+  - `SBI080` is now the quality-first comparator
+  - the old lower-bank bounded-backfill route is now stale historical-only
+  - the next honest branch is `INC-0133` lower-bank contract refresh
+
+## Analysis INC-0133
+- Source analysis:
+  - `results/analysis/inc0133_product_phase_sparse_event_translation_lower_bank_contract_refresh.json`
+- Reports:
+  - `docs/reports/INC0133_PRODUCT_PHASE_SPARSE_EVENT_TRANSLATION_LOWER_BANK_CONTRACT_REFRESH.md`
+- Reading:
+  - the `INC-0132` lower-bank selection is now inherited consistently across
+    broader, task-side, real-task, and downstream contract surfaces
+  - default lower-bank route:
+    `CHART_H4XH4_FIELD_A150_EVT_T070_TAU002_CPX8_Q01_T2500`
+  - explicit lower-bank comparators:
+    `CHART_H4XH4_FIELD_A150_EVT_T070_TAU002_SBI030_CPX8_Q01_T2500`,
+    `CHART_H4XH4_FIELD_A150_EVT_T070_TAU002_SBI080_CPX8_Q01_T2500`
+  - historical-only lower-bank comparator:
+    `CHART_H4XH4_FIELD_A150_EVT_T070_BF2_SB1_CPX8_Q01_T2500`
+  - the next honest branch is `INC-0134` refreshed dual-anchor real-task
+    comparison
+
+## Analysis INC-0134
+- Source analysis:
+  - `results/analysis/inc0134_product_phase_sparse_event_translation_dual_anchor_real_task_refresh_comparison.json`
+- Reports:
+  - `docs/reports/INC0134_PRODUCT_PHASE_SPARSE_EVENT_TRANSLATION_DUAL_ANCHOR_REAL_TASK_REFRESH_COMPARISON.md`
+- Reading:
+  - refreshed real-task comparison reaffirms
+    `CHART_H4XH4_FIELD_A150_EVT_T070_TAU002_CPX8_Q01_T2500` as the
+    lower-bank systems-only default
+  - `SBI030` remains the balanced lower-bank quality comparator
+  - `SBI080` remains the quality-first lower-bank comparator and is the first
+    lower-bank route to edge dense on top-1
+  - upper bank remains unchanged with
+    `CHART_H4XH4_FIELD_A150_EVT_T070_CPX8_Q01_T40000` as the promoted default
+  - the next honest branch is `INC-0135` lower-bank quality/systems frontier

@@ -16,6 +16,33 @@ Measure hardware-efficiency impact of geometric routing vs dense baseline.
   - route evaluator: `tasks/router_proxy_eval.py`
 - `--dataset auto` currently resolves to PTB in this environment.
 
+## Latest Sparse-Event Dual-Anchor Refreshed Comparison
+- Refreshed comparison artifacts:
+  - `results/analysis/inc0134_product_phase_sparse_event_translation_dual_anchor_real_task_refresh_comparison.json`
+  - `docs/reports/INC0134_PRODUCT_PHASE_SPARSE_EVENT_TRANSLATION_DUAL_ANCHOR_REAL_TASK_REFRESH_COMPARISON.md`
+- Current default lower-bank routed route:
+  - `CHART_H4XH4_FIELD_A150_EVT_T070_TAU002_CPX8_Q01_T2500`
+  - read: `systems-only`
+- Current lower-bank explicit comparators:
+  - balanced quality comparator:
+    `CHART_H4XH4_FIELD_A150_EVT_T070_TAU002_SBI030_CPX8_Q01_T2500`
+  - quality-first comparator:
+    `CHART_H4XH4_FIELD_A150_EVT_T070_TAU002_SBI080_CPX8_Q01_T2500`
+- Current upper-bank routed default:
+  - `CHART_H4XH4_FIELD_A150_EVT_T070_CPX8_Q01_T40000`
+  - read: `quality-near systems promotion`
+- Current upper-bank optional comparator:
+  - `CHART_H4XH4_FIELD_A150_EVT_T070_BF2_SB1_CPX8_Q01_T40000`
+- Historical-only lower-bank comparator:
+  - `CHART_H4XH4_FIELD_A150_EVT_T070_BF2_SB1_CPX8_Q01_T2500`
+- Current reading:
+  - `TAU002` remains the fastest lower-bank systems point
+  - `SBI030` remains the balanced lower-bank quality lift
+  - `SBI080` is now the first lower-bank route to edge dense on top-1, but it
+    gives back the lower-bank systems advantage
+  - the next honest branch is the lower-bank quality/systems frontier, not
+    another inheritance refresh
+
 ## Latest Baseline Snapshot
 - Artifact: `results/raw/dense_baseline_lm_proxy.json`
 - Metrics:
@@ -231,6 +258,462 @@ Measure hardware-efficiency impact of geometric routing vs dense baseline.
   - routed translated retrieval is now online-faster than dense exact retrieval
   - offline chart/index build dominates the total cost
   - the next systems branch is amortization / repeated-query break-even, not fresh geometry
+
+## Product Phase Dense Frontier
+- Increment docs:
+  - `docs/research/increments/INC_0074_product_phase_translation_dense_frontier.md`
+- Analyses:
+  - `results/analysis/inc0074_product_phase_translation_dense_frontier_screen.json`
+  - `results/analysis/inc0074_product_phase_translation_dense_frontier_confirm.json`
+- Gate notes:
+  - `docs/governance/gates/gate_20260311_140824.md`
+  - `docs/governance/gates/gate_20260311_141705.md`
+- 4-seed confirm means:
+  - `DENSE_Q24`
+    - `test_mse_after=0.004319`
+    - `test_top1_after=0.049125`
+    - `retrieval_candidate_fraction_mean=1.000000`
+    - `retrieval_online_total_per_repeat_sec=1.339524`
+    - `retrieval_total_amortized_per_repeat_sec=1.339524`
+  - `H4XH4_FIELD_A150_CPX8`
+    - `test_mse_after=0.004320`
+    - `test_top1_after=0.048667`
+    - `retrieval_candidate_fraction_mean=0.190318`
+    - `retrieval_online_total_per_repeat_sec=0.390383`
+    - `retrieval_total_amortized_per_repeat_sec=0.830795`
+  - `H4XH4_FIELD_A150`
+    - `test_mse_after=0.004320`
+    - `test_top1_after=0.049125`
+    - `retrieval_candidate_fraction_mean=0.314749`
+
+## Product Phase Break-Even
+- Increment doc:
+  - `docs/research/increments/INC_0076_product_phase_translation_break_even.md`
+- Analyses:
+  - `results/analysis/inc0076_product_phase_translation_break_even_screen.json`
+  - `results/analysis/inc0076_product_phase_translation_break_even_confirm.json`
+- Gate notes:
+  - `docs/governance/gates/gate_20260311_145722.md`
+  - `docs/governance/gates/gate_20260311_151013.md`
+- 4-seed confirm means:
+  - `DENSE_Q16`
+    - `test_top1_after=0.049125`
+    - `retrieval_candidate_fraction_mean=1.000000`
+    - `retrieval_total_amortized_per_repeat_sec=1.322228`
+  - `H4XH4_FIELD_A150_Q16`
+    - `test_top1_after=0.049125`
+    - `retrieval_candidate_fraction_mean=0.314749`
+    - `retrieval_total_amortized_per_repeat_sec=1.163243`
+  - `H4XH4_FIELD_A150_CPX8_Q16`
+    - `test_top1_after=0.048667`
+    - `retrieval_candidate_fraction_mean=0.190318`
+    - `retrieval_total_amortized_per_repeat_sec=1.036462`
+  - `DENSE_Q24`
+    - `test_top1_after=0.049125`
+    - `retrieval_candidate_fraction_mean=1.000000`
+    - `retrieval_total_amortized_per_repeat_sec=1.328060`
+  - `H4XH4_FIELD_A150_CPX8_Q24`
+    - `test_top1_after=0.048667`
+    - `retrieval_candidate_fraction_mean=0.190318`
+    - `retrieval_total_amortized_per_repeat_sec=0.831087`
+- Reading:
+  - the fixed product branch now has a confirmed amortized crossover against
+    dense exact retrieval
+  - `H4XH4_FIELD_A150_Q16` is the first quality-matched break-even point
+  - `H4XH4_FIELD_A150_CPX8_Q16` is the first stronger-pruning systems
+    crossover point
+  - `H4XH4_FIELD_A150_CPX8_Q24` remains the stabilized systems point
+
+## Product Phase Hardware Profile
+- Increment doc:
+  - `docs/research/increments/INC_0077_product_phase_translation_hardware_profile.md`
+- Analyses:
+  - `results/analysis/inc0077_product_phase_translation_hardware_profile_screen.json`
+  - `results/analysis/inc0077_product_phase_translation_hardware_profile_confirm.json`
+  - `results/analysis/inc0077_product_phase_translation_hardware_profile_screen_profile.json`
+  - `results/analysis/inc0077_product_phase_translation_hardware_profile_confirm_profile.json`
+- Reports:
+  - `docs/reports/INC0077_PRODUCT_PHASE_TRANSLATION_HARDWARE_PROFILE_SCREEN.md`
+  - `docs/reports/INC0077_PRODUCT_PHASE_TRANSLATION_HARDWARE_PROFILE_CONFIRM.md`
+- Gate notes:
+  - `docs/governance/gates/gate_20260311_152632.md`
+  - `docs/governance/gates/gate_20260311_153047.md`
+- 4-seed confirm means at `max_train=6000`:
+  - `DENSE_Q16_T6000`
+    - `test_top1_after=0.048667`
+    - `retrieval_candidate_fraction_mean=1.000000`
+    - `retrieval_total_amortized_per_repeat_sec=0.380635`
+  - `H4XH4_FIELD_A150_Q16_T6000`
+    - `test_top1_after=0.044500`
+    - `retrieval_candidate_fraction_mean=0.308333`
+    - `retrieval_total_amortized_per_repeat_sec=0.489746`
+  - `H4XH4_FIELD_A150_CPX8_Q16_T6000`
+    - `test_top1_after=0.047083`
+    - `retrieval_candidate_fraction_mean=0.187229`
+    - `retrieval_total_amortized_per_repeat_sec=0.464347`
+  - `DENSE_Q24_T6000`
+    - `test_top1_after=0.048667`
+    - `retrieval_candidate_fraction_mean=1.000000`
+    - `retrieval_total_amortized_per_repeat_sec=0.382233`
+  - `H4XH4_FIELD_A150_Q24_T6000`
+    - `test_top1_after=0.044500`
+    - `retrieval_candidate_fraction_mean=0.308333`
+    - `retrieval_total_amortized_per_repeat_sec=0.394226`
+  - `H4XH4_FIELD_A150_CPX8_Q24_T6000`
+    - `test_top1_after=0.047083`
+    - `retrieval_candidate_fraction_mean=0.187229`
+    - `retrieval_total_amortized_per_repeat_sec=0.350687`
+- Derived confirm profile:
+  - `H4XH4_FIELD_A150_CPX8_Q24_T6000`
+    - `search_work_ratio_vs_dense=0.187229`
+    - `amortized_margin_vs_dense=+0.031546s`
+    - `offline_share=0.5895`
+    - `online_share=0.3630`
+  - `H4XH4_FIELD_A150_Q16`
+    - `search_work_ratio_vs_dense=0.314749`
+    - `amortized_margin_vs_dense=+0.158985s`
+  - `H4XH4_FIELD_A150_CPX8_Q16`
+    - `search_work_ratio_vs_dense=0.190318`
+    - `amortized_margin_vs_dense=+0.285766s`
+- Reading:
+  - search-work reduction is stable across bank size:
+    - secondary-key branch stays near `19%` of dense scan work
+    - plain product branch stays near `31%`
+  - the crossover is scale-dependent rather than dead:
+    - at `max_train=12000`, crossover begins by `Q16`
+    - at `max_train=6000`, crossover survives only at `Q24`
+  - the first confirmed smaller-bank crossover point is
+    `H4XH4_FIELD_A150_CPX8_Q24_T6000`
+
+## Product Phase Crossover Map
+- Increment doc:
+  - `docs/research/increments/INC_0078_product_phase_translation_crossover_map.md`
+- Analyses:
+  - `results/analysis/inc0078_product_phase_translation_crossover_map_screen.json`
+  - `results/analysis/inc0078_product_phase_translation_crossover_map_confirm.json`
+  - `results/analysis/inc0078_product_phase_translation_crossover_map_screen_profile.json`
+  - `results/analysis/inc0078_product_phase_translation_crossover_map_confirm_profile.json`
+- Reports:
+  - `docs/reports/INC0078_PRODUCT_PHASE_TRANSLATION_CROSSOVER_MAP_SCREEN.md`
+  - `docs/reports/INC0078_PRODUCT_PHASE_TRANSLATION_CROSSOVER_MAP_CONFIRM.md`
+- Gate notes:
+  - `docs/governance/gates/gate_20260311_155644.md`
+  - `docs/governance/gates/gate_20260311_161119.md`
+- 4-seed confirm means:
+  - `DENSE_Q20_T3000`
+    - `test_top1_after=0.049833`
+    - `retrieval_candidate_fraction_mean=1.000000`
+    - `retrieval_total_amortized_per_repeat_sec=0.141692`
+  - `H4XH4_FIELD_A150_CPX8_Q24_T3000`
+    - `test_top1_after=0.044833`
+    - `retrieval_candidate_fraction_mean=0.191704`
+    - `retrieval_total_amortized_per_repeat_sec=0.170653`
+  - `DENSE_Q24_T6000`
+    - `test_top1_after=0.048667`
+    - `retrieval_candidate_fraction_mean=1.000000`
+    - `retrieval_total_amortized_per_repeat_sec=0.379925`
+  - `H4XH4_FIELD_A150_CPX8_Q24_T6000`
+    - `test_top1_after=0.047083`
+    - `retrieval_candidate_fraction_mean=0.187229`
+    - `retrieval_total_amortized_per_repeat_sec=0.363767`
+  - `DENSE_Q12_T12000`
+    - `test_top1_after=0.049125`
+    - `retrieval_candidate_fraction_mean=1.000000`
+    - `retrieval_total_amortized_per_repeat_sec=1.319593`
+  - `H4XH4_FIELD_A150_CPX8_Q12_T12000`
+    - `test_top1_after=0.048667`
+    - `retrieval_candidate_fraction_mean=0.190318`
+    - `retrieval_total_amortized_per_repeat_sec=1.245288`
+- Confirmed bank map:
+  - `max_train=3000`
+    - no routed crossover survived through `Q24`
+  - `max_train=6000`
+    - first systems crossover at `Q24`
+  - `max_train=12000`
+    - first systems crossover already at `Q12`
+- Reading:
+  - the crossover boundary improves monotonically with bank size on the fixed
+    translated product law
+  - the secondary-key search-work ratio stays essentially flat near `0.19`
+    while the onset moves earlier
+  - this is the clearest software-side hardware-efficiency read so far, but it
+    remains narrow because the map still stops at `12000`
+
+## Product Phase Larger-Bank Boundary Extension
+- Increment doc:
+  - `docs/research/increments/INC_0079_product_phase_translation_large_bank_boundary_extension.md`
+- Analyses:
+  - `results/analysis/inc0079_product_phase_translation_large_bank_boundary_extension_screen.json`
+  - `results/analysis/inc0079_product_phase_translation_large_bank_boundary_extension_confirm.json`
+  - `results/analysis/inc0079_product_phase_translation_large_bank_boundary_extension_screen_profile.json`
+  - `results/analysis/inc0079_product_phase_translation_large_bank_boundary_extension_confirm_profile.json`
+- Reports:
+  - `docs/reports/INC0079_PRODUCT_PHASE_TRANSLATION_LARGE_BANK_BOUNDARY_EXTENSION_SCREEN.md`
+  - `docs/reports/INC0079_PRODUCT_PHASE_TRANSLATION_LARGE_BANK_BOUNDARY_EXTENSION_CONFIRM.md`
+- Gate notes:
+  - `docs/governance/gates/gate_20260311_222501.md`
+  - `docs/governance/gates/gate_20260311_223841.md`
+- 4-seed confirm means:
+  - `DENSE_Q08_T12000`
+    - `test_top1_after=0.049125`
+    - `retrieval_candidate_fraction_mean=1.000000`
+    - `retrieval_total_amortized_per_repeat_sec=1.317740`
+  - `H4XH4_FIELD_A150_CPX8_Q12_T12000`
+    - `test_top1_after=0.048667`
+    - `retrieval_candidate_fraction_mean=0.190318`
+    - `retrieval_total_amortized_per_repeat_sec=1.222917`
+  - `DENSE_Q08_T18000`
+    - `test_top1_after=0.048639`
+    - `retrieval_candidate_fraction_mean=1.000000`
+    - `retrieval_total_amortized_per_repeat_sec=3.056797`
+  - `H4XH4_FIELD_A150_CPX8_Q08_T18000`
+    - `test_top1_after=0.047667`
+    - `retrieval_candidate_fraction_mean=0.189969`
+    - `retrieval_total_amortized_per_repeat_sec=2.637824`
+- Confirmed upper-bank onset:
+  - `max_train=12000`
+    - first systems crossover at `Q12`
+  - `max_train=18000`
+    - first systems crossover already at `Q08`
+- Reading:
+  - the onset keeps moving left at a larger bank without degrading the search
+    work ratio
+  - the secondary-key product systems family now has the earliest confirmed
+    crossover at `H4XH4_FIELD_A150_CPX8_Q08_T18000`
+  - this is stronger hardware-side software evidence again, but still narrow
+    because only one bank above `12000` has been confirmed
+    - `retrieval_total_amortized_per_repeat_sec=0.944737`
+- Current conclusion:
+  - the fixed product phase-field branch is now directly positive against
+    dense exact retrieval on the repo’s translated real-task pipeline
+  - `H4XH4_FIELD_A150_CPX8` is the strongest systems point
+  - the current systems lead still gives back a very small amount of top-1
+    versus dense exact, which motivated bounded quality recovery
+
+## Product Phase Second Large-Bank Boundary Extension
+- Increment doc:
+  - `docs/research/increments/INC_0080_product_phase_translation_second_large_bank_boundary_extension.md`
+- Analyses:
+  - `results/analysis/inc0080_product_phase_translation_second_large_bank_boundary_extension_screen.json`
+  - `results/analysis/inc0080_product_phase_translation_second_large_bank_boundary_extension_confirm.json`
+  - `results/analysis/inc0080_product_phase_translation_second_large_bank_boundary_extension_screen_profile.json`
+  - `results/analysis/inc0080_product_phase_translation_second_large_bank_boundary_extension_confirm_profile.json`
+- Key results:
+  - `max_train=24000`
+    - `Q04`
+      - `DENSE_Q04_T24000`: `top1=0.049354`, `amortized=5.152s`
+      - `H4XH4_FIELD_A150_CPX8_Q04_T24000`: `0.048833`, `7.425s`
+    - `Q08`
+      - `DENSE_Q08_T24000`: `0.049354`, `5.491s`
+      - `H4XH4_FIELD_A150_CPX8_Q08_T24000`: `0.048833`, `3.867s`
+  - `max_train=30000`
+    - `Q04`
+      - `DENSE_Q04_T30000`: `top1=0.048017`, `amortized=7.901s`
+      - `H4XH4_FIELD_A150_CPX8_Q04_T30000`: `0.047167`, `8.946s`
+    - `Q08`
+      - `DENSE_Q08_T30000`: `0.048017`, `7.560s`
+      - `H4XH4_FIELD_A150_CPX8_Q08_T30000`: `0.047167`, `5.394s`
+- Confirmed upper-bank onset:
+  - `max_train=24000`: first systems crossover at `Q08`
+  - `max_train=30000`: first systems crossover at `Q08`
+- Reading:
+  - the onset now clearly holds at `Q08` through `30000`
+  - `Q04` still does not cross
+  - the secondary-key search-work ratio remains stable near `19%`
+  - this strengthens the hardware-side scaling story, but shifts the next
+    question from generic bank extension to explicit `Q04` threshold search
+
+## Product Phase Q04 Threshold Search
+- Increment doc:
+  - `docs/research/increments/INC_0081_product_phase_translation_q04_threshold_search.md`
+- Analyses:
+  - `results/analysis/inc0081_product_phase_translation_q04_threshold_search_screen.json`
+  - `results/analysis/inc0081_product_phase_translation_q04_threshold_search_confirm.json`
+  - `results/analysis/inc0081_product_phase_translation_q04_threshold_search_screen_profile.json`
+  - `results/analysis/inc0081_product_phase_translation_q04_threshold_search_confirm_profile.json`
+- Key results:
+  - `max_train=36000`
+    - `Q04`
+      - `DENSE_Q04_T36000`: `top1=0.047903`, `amortized=12.149s`
+      - `H4XH4_FIELD_A150_CPX8_Q04_T36000`: `0.047069`, `9.694s`
+    - `Q08`
+      - `DENSE_Q08_T36000`: `0.047903`, `11.093s`
+      - `H4XH4_FIELD_A150_CPX8_Q08_T36000`: `0.047069`, `5.950s`
+  - `max_train=40000`
+    - `Q04`
+      - `DENSE_Q04_T40000`: `top1=0.048850`, `amortized=9.024s`
+      - `H4XH4_FIELD_A150_CPX8_Q04_T40000`: `0.047325`, `9.990s`
+    - `Q08`
+      - `DENSE_Q08_T40000`: `0.048850`, `9.642s`
+      - `H4XH4_FIELD_A150_CPX8_Q08_T40000`: `0.047325`, `6.106s`
+- Confirmed threshold read:
+  - `max_train=36000`: first systems crossover at `Q04`
+  - `max_train=40000`: first systems crossover at `Q08`
+- Reading:
+  - the first confirmed `Q04` crossover is real at `T36000`
+  - the onset is not monotone, because `T40000` still starts at `Q08`
+  - the search-work ratio remains stable, so the split is more likely a
+    cost-composition issue than a routing-collapse issue
+
+## Product Phase Cost Accounting Audit
+- Increment doc:
+  - `docs/research/increments/INC_0082_product_phase_translation_cost_accounting_audit.md`
+- Artifacts:
+  - `results/analysis/inc0082_product_phase_translation_cost_accounting_audit.json`
+  - `docs/reports/INC0082_PRODUCT_PHASE_TRANSLATION_COST_ACCOUNTING_AUDIT.md`
+- Key results:
+  - `T36000 Q04`
+    - online gain per repeat vs dense: `9.862s`
+    - offline penalty per repeat vs dense: `7.407s`
+    - amortized margin vs dense: `+2.455s`
+  - `T40000 Q04`
+    - online gain per repeat vs dense: `7.072s`
+    - offline penalty per repeat vs dense: `8.038s`
+    - amortized margin vs dense: `-0.966s`
+  - `T40000 Q08`
+    - online gain per repeat vs dense: `7.657s`
+    - offline penalty per repeat vs dense: `4.121s`
+    - amortized margin vs dense: `+3.536s`
+- Reading:
+  - the non-monotone `Q04/Q08` threshold is now explained directly by static
+    offline route-build cost composition
+  - the pruning signal itself stays stable:
+    - search-work ratio `0.190206` at `T36000 Q04`
+    - search-work ratio `0.183764` at `T40000 Q04`
+    - bytes-saved proxy stays near `81%`
+  - the next honest move is offline-cost rescue on the fixed translated stack,
+    not more bank extension and not new geometry
+
+## Product Phase Persistent Route Cache Rescue
+- Increment doc:
+  - `docs/research/increments/INC_0083_product_phase_translation_persistent_route_cache.md`
+- Artifacts:
+  - `results/analysis/inc0083_product_phase_translation_persistent_route_cache_screen_cold.json`
+  - `results/analysis/inc0083_product_phase_translation_persistent_route_cache_screen_warm.json`
+  - `results/analysis/inc0083_product_phase_translation_persistent_route_cache_screen_compare.json`
+  - `docs/reports/INC0083_PRODUCT_PHASE_TRANSLATION_PERSISTENT_ROUTE_CACHE_SCREEN_COMPARE.md`
+  - `results/analysis/inc0083_product_phase_translation_persistent_route_cache_confirm_cold.json`
+  - `results/analysis/inc0083_product_phase_translation_persistent_route_cache_confirm_warm.json`
+  - `results/analysis/inc0083_product_phase_translation_persistent_route_cache_confirm_compare.json`
+  - `docs/reports/INC0083_PRODUCT_PHASE_TRANSLATION_PERSISTENT_ROUTE_CACHE_CONFIRM_COMPARE.md`
+- Key confirm results:
+  - `Q04 T40000`
+    - cold:
+      - `DENSE_Q04_T40000`: `top1=0.048850`, `amortized=9.347s`
+      - `H4XH4_FIELD_A150_CPX8_Q04_T40000`: `0.047325`,
+        `cand_frac=0.183764`, `amortized=10.389s`
+    - warm:
+      - `DENSE_Q04_T40000`: `top1=0.048850`, `amortized=9.246s`
+      - `H4XH4_FIELD_A150_CPX8_Q04_T40000`: `0.047325`,
+        `cand_frac=0.183764`, `amortized=1.972s`
+      - routed cache hits: `chart=1.0`, `route=1.0`
+  - `Q08 T40000`
+    - cold:
+      - `DENSE_Q08_T40000`: `0.048850`, `9.506s`
+      - `H4XH4_FIELD_A150_CPX8_Q08_T40000`: `0.047325`,
+        `0.183764`, `6.165s`
+    - warm:
+      - `DENSE_Q08_T40000`: `0.048850`, `9.113s`
+      - `H4XH4_FIELD_A150_CPX8_Q08_T40000`: `0.047325`,
+        `0.183764`, `1.891s`
+      - routed cache hits: `chart=1.0`, `route=1.0`
+- Reading:
+  - `INC-0082` was correct: the blocking term was static offline build cost,
+    not route failure
+  - persistent cache reuse now removes almost all of that cost without changing
+    top-1 or candidate fraction
+  - `Q04 T40000` is now a strong warm-cache crossover on the fixed translated
+    stack
+  - the next honest move is a warm-cache onset map on the fixed `T40000` bank,
+    not new geometry
+
+## Product Phase Warm Cache Onset Map
+- Increment doc:
+  - `docs/research/increments/INC_0084_product_phase_translation_warm_cache_onset_map.md`
+- Artifacts:
+  - `results/analysis/inc0084_product_phase_translation_warm_cache_onset_map_screen.json`
+  - `results/analysis/inc0084_product_phase_translation_warm_cache_onset_map_confirm.json`
+  - `docs/reports/INC0084_PRODUCT_PHASE_TRANSLATION_WARM_CACHE_ONSET_MAP.md`
+- Key confirm results:
+  - dense:
+    - `Q01`: `top1=0.048850`, `amortized=9.536s`
+    - `Q02`: `0.048850`, `9.173s`
+    - `Q04`: `0.048850`, `9.364s`
+    - `Q08`: `0.048850`, `9.244s`
+  - routed:
+    - `Q01`: `top1=0.047325`, `cand_frac=0.183764`, `amortized=2.204s`
+    - `Q02`: `0.047325`, `0.183764`, `2.022s`
+    - `Q04`: `0.047325`, `0.183764`, `1.924s`
+    - `Q08`: `0.047325`, `0.183764`, `1.868s`
+  - routed cache hits:
+    - `chart_cache_hit=1.0`
+    - `route_cache_hit=1.0`
+- Reading:
+  - the fixed translated product stack is now confirm-stage system-positive at
+    `Q01` under the persisted-bank assumption
+  - this is still not a new geometry read; it is an operational reuse read on
+    the fixed geometry/search law
+  - the next honest move is to find the earliest bank where warm-cache `Q01`
+    holds, not to reopen the route law
+
+## Product Phase Dense Quality Recovery
+- Increment doc:
+  - `docs/research/increments/INC_0075_product_phase_translation_dense_quality_recovery.md`
+- Analyses:
+  - `results/analysis/inc0075_product_phase_translation_dense_quality_recovery_screen.json`
+  - `results/analysis/inc0075_product_phase_translation_dense_quality_recovery_confirm.json`
+- Gate notes:
+  - `docs/governance/gates/gate_20260311_142843.md`
+  - `docs/governance/gates/gate_20260311_144445.md`
+- 4-seed confirm means:
+  - `DENSE_Q24`
+    - `test_top1_after=0.049125`
+    - `retrieval_total_amortized_per_repeat_sec=1.355`
+  - `H4XH4_FIELD_A150`
+    - `test_top1_after=0.049125`
+    - `retrieval_candidate_fraction_mean=0.314749`
+    - `retrieval_total_amortized_per_repeat_sec=0.935`
+  - `H4XH4_FIELD_A150_CPX8`
+    - `test_top1_after=0.048667`
+    - `retrieval_candidate_fraction_mean=0.190318`
+    - `retrieval_total_amortized_per_repeat_sec=0.893`
+- Current conclusion:
+  - bounded rerank quality rescue did not improve the fixed dense-frontier law
+  - the frontier remains split:
+    - `H4XH4_FIELD_A150` is the quality-matched routed point
+    - `H4XH4_FIELD_A150_CPX8` is the strongest systems point
+  - the next honest step is break-even mapping, not another retrieval tweak
+
+## Product Phase Break-Even
+- Increment doc:
+  - `docs/research/increments/INC_0076_product_phase_translation_break_even.md`
+- Analyses:
+  - `results/analysis/inc0076_product_phase_translation_break_even_screen.json`
+  - `results/analysis/inc0076_product_phase_translation_break_even_confirm.json`
+- Gate notes:
+  - `docs/governance/gates/gate_20260311_145722.md`
+  - `docs/governance/gates/gate_20260311_151013.md`
+- 4-seed confirm means at the crossover bracket:
+  - `Q08`
+    - `DENSE_Q08`: `top1=0.049125`, `amortized=1.377s`
+    - `H4XH4_FIELD_A150_Q08`: `0.049125`, `1.838s`
+    - `H4XH4_FIELD_A150_CPX8_Q08`: `0.048667`, `1.691s`
+  - `Q16`
+    - `DENSE_Q16`: `top1=0.049125`, `amortized=1.322s`
+    - `H4XH4_FIELD_A150_Q16`: `0.049125`, `0.314749 cand_frac`, `1.163s`
+    - `H4XH4_FIELD_A150_CPX8_Q16`: `0.048667`, `0.190318 cand_frac`, `1.036s`
+  - `Q24`
+    - `DENSE_Q24`: `top1=0.049125`, `amortized=1.328s`
+    - `H4XH4_FIELD_A150_Q24`: `0.049125`, `0.314749 cand_frac`, `0.931s`
+    - `H4XH4_FIELD_A150_CPX8_Q24`: `0.048667`, `0.190318 cand_frac`, `0.831s`
+- Current conclusion:
+  - the fixed product branch now has a confirmed amortized crossover against
+    dense exact retrieval on the translated pipeline
+  - `Q16` is the first practical confirmed crossover
+  - `H4XH4_FIELD_A150_Q16` is the quality-matched break-even point
+  - `H4XH4_FIELD_A150_CPX8_Q16` is the stronger-pruning systems crossover point
+  - `H4XH4_FIELD_A150_CPX8_Q24` remains the stabilized dense-frontier systems
+    point
 
 ## Translated Retrieval Amortization
 - Increment doc:
@@ -1192,3 +1675,218 @@ Measure hardware-efficiency impact of geometric routing vs dense baseline.
   - the discrete complex / imaginary key survives translation into the routed retrieval harness
   - the branch materially improves translated addressing efficiency
   - the remaining weakness is a small top-1 penalty, which now looks like a recall/backfill problem rather than a routing-collapse problem
+
+## Sparse Translated Dual-Anchor Broader Comparison
+- Increment docs:
+  - `docs/research/increments/INC_0116_product_phase_sparse_translation_dual_anchor_broader_comparison_packet.md`
+  - `docs/research/increments/INC_0117_product_phase_sparse_translation_dual_anchor_broader_comparison.md`
+- Artifacts:
+  - `configs/packet_inc0116_product_phase_sparse_translation_dual_anchor_broader_comparison.json`
+  - `results/analysis/inc0116_product_phase_sparse_translation_dual_anchor_broader_comparison_packet.json`
+  - `results/analysis/inc0117_product_phase_sparse_translation_dual_anchor_broader_comparison.json`
+  - `docs/reports/INC0116_PRODUCT_PHASE_SPARSE_TRANSLATION_DUAL_ANCHOR_BROADER_COMPARISON_PACKET.md`
+  - `docs/reports/INC0117_PRODUCT_PHASE_SPARSE_TRANSLATION_DUAL_ANCHOR_BROADER_COMPARISON.md`
+- Current reading:
+  - lower-bank default routed point:
+    `CHART_H4XH4_FIELD_A150_EVT_T070_BF2_SB1_CPX8_Q01_T2500`
+    - `systems-only`
+  - upper-bank default routed point:
+    `CHART_H4XH4_FIELD_A150_EVT_T070_CPX8_Q01_T40000`
+    - `quality-near systems promotion`
+  - upper-bank bounded-backfill comparator remains explicit but optional-only:
+    `CHART_H4XH4_FIELD_A150_EVT_T070_BF2_SB1_CPX8_Q01_T40000`
+- Current conclusion:
+  - the broader sparse translated hardware-side read is now explicit and
+    reusable
+  - lower bank remains systems-first
+  - upper bank remains the near-frontier pressure point
+  - downstream real-task work should inherit this packet instead of rebuilding
+    route forks
+
+## Lower-Bank Sparse-Event Update
+- Increment docs:
+  - `docs/research/increments/INC_0132_product_phase_sparse_event_translation_lower_bank_reference_reselection.md`
+- Artifacts:
+  - `results/analysis/inc0132_product_phase_sparse_event_translation_lower_bank_reference_reselection.json`
+  - `docs/reports/INC0132_PRODUCT_PHASE_SPARSE_EVENT_TRANSLATION_LOWER_BANK_REFERENCE_RESELECTION.md`
+- Current reading:
+  - explicit lower-bank default route:
+    `CHART_H4XH4_FIELD_A150_EVT_T070_TAU002_CPX8_Q01_T2500`
+    - `systems-only`
+  - balanced lower-bank quality comparator:
+    `CHART_H4XH4_FIELD_A150_EVT_T070_TAU002_SBI030_CPX8_Q01_T2500`
+  - quality-first lower-bank comparator:
+    `CHART_H4XH4_FIELD_A150_EVT_T070_TAU002_SBI080_CPX8_Q01_T2500`
+  - historical bounded-backfill lower-bank route is now stale:
+    `CHART_H4XH4_FIELD_A150_EVT_T070_BF2_SB1_CPX8_Q01_T2500`
+- Current conclusion:
+  - the old lower-bank default from the broader/task-side lineage should no
+    longer be treated as the active carry-forward route
+  - the next honest branch is contract refresh, not another lower-bank sparse
+    translated mechanism search
+
+## Sparse Translated Dual-Anchor Task-Side Extension
+- Increment docs:
+  - `docs/research/increments/INC_0118_product_phase_sparse_translation_dual_anchor_task_side_extension.md`
+- Artifacts:
+  - `results/analysis/inc0118_product_phase_sparse_translation_dual_anchor_task_side_extension.json`
+  - `docs/reports/INC0118_PRODUCT_PHASE_SPARSE_TRANSLATION_DUAL_ANCHOR_TASK_SIDE_EXTENSION.md`
+- Current reading:
+  - the exact dual-anchor packet now extends directly onto the real-task side
+  - default task-side routes stay fixed:
+    - `DENSE_Q01_T2500`
+    - `CHART_H4XH4_FIELD_A150_EVT_T070_BF2_SB1_CPX8_Q01_T2500`
+    - `DENSE_Q01_T40000`
+    - `CHART_H4XH4_FIELD_A150_EVT_T070_CPX8_Q01_T40000`
+  - lower bank stays systems-only by default
+  - upper bank stays quality-near systems promotion by default
+  - the upper-bank bounded-backfill route remains optional comparator-only
+- Current conclusion:
+  - later task-side comparisons should now start from this fixed packet and
+    report contract
+  - the next honest branch is an explicit dual-anchor real-task comparison,
+    not another packet rebuild
+
+## Sparse Translated Dual-Anchor Explicit Real-Task Comparison
+- Increment docs:
+  - `docs/research/increments/INC_0119_product_phase_sparse_translation_dual_anchor_real_task_comparison.md`
+- Artifacts:
+  - `results/analysis/inc0119_product_phase_sparse_translation_dual_anchor_real_task_comparison.json`
+  - `docs/reports/INC0119_PRODUCT_PHASE_SPARSE_TRANSLATION_DUAL_ANCHOR_REAL_TASK_COMPARISON.md`
+- Current reading:
+  - the first explicit LM-proxy real-task comparison now inherits the exact
+    dual-anchor packet
+  - lower-bank default routed point:
+    `CHART_H4XH4_FIELD_A150_EVT_T070_BF2_SB1_CPX8_Q01_T2500`
+    - `systems-only`
+    - recommendation: carry as systems-only default
+  - upper-bank default routed point:
+    `CHART_H4XH4_FIELD_A150_EVT_T070_CPX8_Q01_T40000`
+    - `quality-near systems promotion`
+    - recommendation: carry as promoted real-task default
+  - upper-bank bounded-backfill comparator remains explicit but optional-only:
+    `CHART_H4XH4_FIELD_A150_EVT_T070_BF2_SB1_CPX8_Q01_T40000`
+- Current conclusion:
+  - the explicit real-task comparison is now fixed and reusable
+  - future downstream task-side branches should inherit this comparison by
+    default instead of rebuilding sparse translated route forks
+
+## Sparse Translated Dual-Anchor Real-Task Carry-Forward
+- Increment docs:
+  - `docs/research/increments/INC_0120_product_phase_sparse_translation_dual_anchor_real_task_carry_forward.md`
+- Artifacts:
+  - `results/analysis/inc0120_product_phase_sparse_translation_dual_anchor_real_task_carry_forward.json`
+  - `docs/reports/INC0120_PRODUCT_PHASE_SPARSE_TRANSLATION_DUAL_ANCHOR_REAL_TASK_CARRY_FORWARD.md`
+- Current reading:
+  - the explicit LM-proxy real-task comparison now has one downstream
+    carry-forward contract
+  - lower-bank downstream default:
+    `CHART_H4XH4_FIELD_A150_EVT_T070_BF2_SB1_CPX8_Q01_T2500`
+    - `systems-only`
+    - recommendation: carry as systems-only default
+  - upper-bank downstream default:
+    `CHART_H4XH4_FIELD_A150_EVT_T070_CPX8_Q01_T40000`
+    - `quality-near systems promotion`
+    - recommendation: carry as promoted real-task default
+  - upper-bank bounded-backfill comparator remains explicit but optional-only:
+    `CHART_H4XH4_FIELD_A150_EVT_T070_BF2_SB1_CPX8_Q01_T40000`
+- Current conclusion:
+  - downstream real-task work now has one fixed carry-forward contract
+  - the next honest branch is to turn that contract into one reusable packet
+    manifest, not to rebuild sparse translated route forks again
+
+## Sparse Translated Dual-Anchor Real-Task Packet Manifest
+- Increment docs:
+  - `docs/research/increments/INC_0121_product_phase_sparse_translation_dual_anchor_real_task_packet_manifest.md`
+- Artifacts:
+  - `results/analysis/inc0121_product_phase_sparse_translation_dual_anchor_real_task_packet_manifest.json`
+  - `docs/reports/INC0121_PRODUCT_PHASE_SPARSE_TRANSLATION_DUAL_ANCHOR_REAL_TASK_PACKET_MANIFEST.md`
+- Current reading:
+  - the downstream LM-proxy real-task packet now exists as one exact reusable
+    manifest
+  - default route ids remain fixed:
+    - `DENSE_Q01_T2500`
+    - `CHART_H4XH4_FIELD_A150_EVT_T070_BF2_SB1_CPX8_Q01_T2500`
+    - `DENSE_Q01_T40000`
+    - `CHART_H4XH4_FIELD_A150_EVT_T070_CPX8_Q01_T40000`
+  - upper-bank bounded-backfill comparator remains explicit but optional-only:
+    `CHART_H4XH4_FIELD_A150_EVT_T070_BF2_SB1_CPX8_Q01_T40000`
+  - lower-bank soft sparse route remains excluded by default:
+    `CHART_H4XH4_FIELD_A150_EVT_T070_CPX8_Q01_T2500`
+- Current conclusion:
+  - downstream real-task work now has one exact packet manifest to inherit
+  - the next honest branch is to use that packet on the next downstream
+    real-task question, not to rebuild route forks again
+
+## Sparse Translated Dual-Anchor Real-Task Downstream Extension
+- Increment docs:
+  - `docs/research/increments/INC_0122_product_phase_sparse_translation_dual_anchor_real_task_downstream_extension.md`
+- Artifacts:
+  - `results/analysis/inc0122_product_phase_sparse_translation_dual_anchor_real_task_downstream_extension.json`
+  - `docs/reports/INC0122_PRODUCT_PHASE_SPARSE_TRANSLATION_DUAL_ANCHOR_REAL_TASK_DOWNSTREAM_EXTENSION.md`
+- Current reading:
+  - the downstream LM-proxy real-task packet now extends into one explicit
+    downstream inheritance artifact
+  - lower-bank downstream default routed point:
+    `CHART_H4XH4_FIELD_A150_EVT_T070_BF2_SB1_CPX8_Q01_T2500`
+    - `systems-only`
+    - recommendation: carry as systems-only default
+  - upper-bank downstream default routed point:
+    `CHART_H4XH4_FIELD_A150_EVT_T070_CPX8_Q01_T40000`
+    - `quality-near systems promotion`
+    - recommendation: carry as promoted real-task default
+  - upper-bank bounded-backfill comparator remains explicit but optional-only:
+    `CHART_H4XH4_FIELD_A150_EVT_T070_BF2_SB1_CPX8_Q01_T40000`
+- Current conclusion:
+  - later downstream real-task branches should now start from this
+    manifest-backed extension artifact
+  - the next honest branch is an explicit downstream real-task comparison, not
+    another packet rebuild
+
+## Sparse Translated Dual-Anchor Real-Task Downstream Comparison
+- Increment docs:
+  - `docs/research/increments/INC_0123_product_phase_sparse_translation_dual_anchor_real_task_downstream_comparison.md`
+- Artifacts:
+  - `results/analysis/inc0123_product_phase_sparse_translation_dual_anchor_real_task_downstream_comparison.json`
+  - `docs/reports/INC0123_PRODUCT_PHASE_SPARSE_TRANSLATION_DUAL_ANCHOR_REAL_TASK_DOWNSTREAM_COMPARISON.md`
+- Current reading:
+  - the explicit downstream LM-proxy real-task comparison is now fixed from
+    the completed downstream extension artifact
+  - lower-bank downstream default routed point:
+    `CHART_H4XH4_FIELD_A150_EVT_T070_BF2_SB1_CPX8_Q01_T2500`
+    - `systems-only`
+    - recommendation: carry as systems-only default
+  - upper-bank downstream default routed point:
+    `CHART_H4XH4_FIELD_A150_EVT_T070_CPX8_Q01_T40000`
+    - `quality-near systems promotion`
+    - recommendation: carry as promoted real-task default
+  - upper-bank bounded-backfill comparator remains explicit but optional-only:
+    `CHART_H4XH4_FIELD_A150_EVT_T070_BF2_SB1_CPX8_Q01_T40000`
+- Current conclusion:
+  - downstream work now has one explicit comparison recommendation to inherit
+  - the next honest branch is downstream carry-forward, not another extension
+    or packet rebuild
+
+## Sparse Translated Dual-Anchor Real-Task Downstream Carry-Forward
+- Increment docs:
+  - `docs/research/increments/INC_0124_product_phase_sparse_translation_dual_anchor_real_task_downstream_carry_forward.md`
+- Artifacts:
+  - `results/analysis/inc0124_product_phase_sparse_translation_dual_anchor_real_task_downstream_carry_forward.json`
+  - `docs/reports/INC0124_PRODUCT_PHASE_SPARSE_TRANSLATION_DUAL_ANCHOR_REAL_TASK_DOWNSTREAM_CARRY_FORWARD.md`
+- Current reading:
+  - the explicit downstream LM-proxy real-task comparison now has one
+    downstream carry-forward contract
+  - lower-bank downstream default:
+    `CHART_H4XH4_FIELD_A150_EVT_T070_BF2_SB1_CPX8_Q01_T2500`
+    - `systems-only`
+    - recommendation: carry as systems-only default
+  - upper-bank downstream default:
+    `CHART_H4XH4_FIELD_A150_EVT_T070_CPX8_Q01_T40000`
+    - `quality-near systems promotion`
+    - recommendation: carry as promoted real-task default
+  - upper-bank bounded-backfill comparator remains explicit but optional-only:
+    `CHART_H4XH4_FIELD_A150_EVT_T070_BF2_SB1_CPX8_Q01_T40000`
+- Current conclusion:
+  - downstream real-task work now has one explicit carry-forward contract
+  - the next honest branch is to turn that contract into one reusable packet
+    manifest, not to rebuild route forks again

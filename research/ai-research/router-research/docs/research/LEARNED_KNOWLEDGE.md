@@ -20,17 +20,50 @@ This file stores durable mathematical and architectural findings that should sur
   - Hopf base coordinates can define a healthy coarse route law
   - common fiber phase should be excluded from the coarse address when testing phase necessity
   - that gives a clean no-phase control rather than mixing phase into every route family
-- `INC-0063` adds the next durable phase constraint:
-  - the current standalone Hopf transport law
+- The corrected `INC-0063` / `INC-0064` reruns changed the durable phase
+  constraint:
+  - the standalone Hopf transport law
     - `transport_phase_shift = 0.5 * lambda * cos(2chi) * delta`
-    - is address-inert on the cheap static proxy schedule
-  - transported variants produced zero shell or sector differences versus `phase4d_hopf_base`
-  - phase therefore remains live only as a coupled-field claim:
-    - if geometry is going to force phase shifts, the second `H^4` discrete complex-value field has to participate directly
-  - the next valid phase branch is not another base-only phase score
-  - it is a coupled `H^4 x H^4` law with two levers:
-    - minima routing on the first factor
-    - phase jumping through the coupled complex field
+    - is not inert once `alpha` bins are live
+  - corrected transported variants produce material shell and sector differences
+    versus `phase4d_hopf_base`
+  - coupled-field transport is also mechanism-live, with strongly nonzero field
+    shift metrics
+  - the explicit product `H^4 x H^4` phase-field branch is now also
+    evidence-positive on the proxy screen:
+    - all product variants passed the configured route-health gate
+    - field-shift metrics are nonzero
+    - address audit stays near `98.4%-98.6%` sector difference vs
+      `phase4d_hopf_base`
+  - the product branch also survives confirm:
+    - `H4XH4_FIELD_A150` is the best confirmed product-MSE point
+    - `H4XH4_FIELD_A100` is the stabilized confirmed recommendation
+    - pure Hopf still remains the overall routed MSE lead
+  - the next valid step is therefore direct spectral measurement on the
+    confirmed route set, not another search for whether phase is alive at all
+  - direct spectral measurement is now also evidence-positive:
+    - the confirmed route graphs remain connected on both the 2-seed screen and
+      the 4-seed confirm
+    - product routes keep higher low-mode participation than the full control
+      set and than the Hopf-only controls
+    - product routes keep higher shell low-frequency energy than the Hopf-only
+      controls
+    - pure Hopf still keeps the strongest routed sector-signal concentration in
+      the low-frequency band
+  - the next valid step is therefore signal attribution on top of the measured
+    operators, not more route-law retuning
+  - direct one-hot label probes are not enough:
+    - the product routes do not beat the Hopf controls on raw label lowfreq
+      energy
+    - the per-class indicator mean is nearly flat and too weak to claim as
+      useful task evidence
+  - routed residual/task-error probes are also not enough on the proxy target:
+    - the product routes lose to the Hopf controls on residual norm,
+      error-indicator, and true-margin low-mode projections
+    - the spectral distinction therefore remains structural rather than
+      task-useful on proxy regression
+  - the next useful probe should target translated retrieval or addressing
+    behavior, not more low-mode mining on the same proxy target
 - Poincare-ball global alignment is foundational, not an optional visualization detail.
 - Pure Hopf-aware routing repeatedly carries the cleanest routed-quality signal.
 - `phase4_dims=0,2,4,6` is a stable clue, not a random projection choice.

@@ -548,13 +548,98 @@
     - `phase4d_hopf_transport` changed `0` sectors and `0` shells versus `phase4d_hopf_base`
     - raw `phase4d_hopf` still changed `2500` sectors versus the base control
 74. Wrote the audit to `results/analysis/inc0063_phase_transport_address_diff.json`.
-75. Closed `RR-063` negative at screen stage.
-76. Recorded the durable interpretation:
+75. Provisionally closed `RR-063` negative at screen stage.
+76. Recorded the then-current interpretation:
     - geometry routing remains live
-    - this specific standalone Hopf transport law is mechanism-inert
-    - the next valid phase branch must couple the second `H^4` discrete complex-value field into the phase law
-77. Queued `RR-064` as the next phase branch:
+    - this specific standalone Hopf transport law appeared mechanism-inert
+    - the next valid phase branch would need direct coupled-field participation
+77. Queued `RR-064` as the next phase branch under that provisional read:
     - coupled complex-field phase transport
     - intended two-lever mechanism:
       - minima routing
       - phase jumping
+78. Reopened `RR-062`, `RR-063`, and `RR-064` after later recovery showed the
+    phase results were confounded by data-path issues and stale diagnostics.
+79. Added corrected Hopf-sector diagnostics for the Hopf-base branch and reran
+    the `INC-0062` screen and confirm.
+80. Read the corrected `INC-0062` result:
+    - `phase4d_hopf_base` stayed healthy
+    - base/fiber separation became clearly visible under the corrected sector
+      diagnostics
+    - pure Hopf still kept the best confirm MSE
+81. Repaired the transport triplet-bin allocation so `alpha` was live at
+    `K=25`.
+82. Reran the `RR-063` standalone transport screen with the corrected routing
+    law and a new address-diff audit.
+83. Read the corrected `RR-063` result:
+    - transported phase now changed about `98.6%-98.8%` of sector assignments
+      versus `phase4d_hopf_base`
+    - `phase_transport_alpha_bins=2.0`
+    - the earlier inert negative was falsified
+84. Reran the `RR-064` coupled complex-field screen and address-diff audit.
+85. Read the corrected `RR-064` result:
+    - coupled-field transport is mechanism-live and health-passing
+    - field-shift metrics are strongly nonzero
+    - same-chart coupling still trails the routed quality controls on proxy MSE
+86. Queued `RR-065` as the next explicit product phase-field branch on top of
+    the corrected `RR-062` / `RR-063` / `RR-064` chain.
+87. Implemented the explicit product branch:
+    - new `sector_mode=phase4d_hopf_product_phase`
+    - new `field4_dims` plumbing across router, proxy task, and address audit
+88. Ran the tracked `RR-065` product screen and seed-0 address audit.
+89. Read the `RR-065` result:
+    - all product candidates passed the configured route-health gate
+    - field-shift metrics are nonzero across the branch
+    - address movement remains material vs `phase4d_hopf_base`
+    - `H4XH4_FIELD_A150` is the best screen-MSE point
+    - `H4XH4_FIELD_A100` is the stabilized carry-forward recommendation
+90. Ran the tracked `RR-065` confirm and confirm address audit.
+91. Read the confirm result:
+    - both carried product variants passed the 4-seed health gate
+    - product coupling remained mechanism-live
+    - `H4XH4_FIELD_A150` stayed the best product-MSE point
+    - `H4XH4_FIELD_A100` stayed the stabilized recommendation
+    - pure Hopf still held the overall routed quality lead
+92. Implemented a direct spectral/operator audit tool for the confirmed route set.
+93. Ran the first seed spectral audit and saved the artifact for the next branch.
+94. Added a reproducible spectral sweep wrapper, screen config, and confirm
+    config for `INC-0066`.
+95. Ran the tracked `INC-0066` 2-seed screen on the confirmed route set.
+96. Read the `INC-0066` screen result:
+    - all route graphs stayed connected
+    - product routes showed higher low-mode participation than the control set
+    - product routes showed lower low-frequency sector concentration than the
+      control set
+97. Ran the tracked `INC-0066` 4-seed confirm on the same fixed route set.
+98. Read the `INC-0066` confirm result:
+    - the spectral distinction survived 4 seeds
+    - `H4XH4_FIELD_A150` stayed the strongest product/spectral point
+    - the next branch should probe signal usefulness of the modes rather than
+      reopen route search
+99. Implemented direct one-hot label probe tooling and a tracked `INC-0067`
+    screen/confirm sweep on the fixed operator set.
+100. Ran the tracked `INC-0067` screen.
+101. Read the `INC-0067` screen result:
+    - the operator distinction remained visible
+    - raw label lowfreq and Dirichlet gaps stayed slightly negative vs the Hopf
+      controls
+102. Ran the tracked `INC-0067` confirm.
+103. Read the `INC-0067` confirm result:
+    - direct one-hot label probes remained inconclusive/negative
+    - useful-task-signal measurement should move next to residuals or margins
+104. Implemented routed residual/task-error probe tooling and a tracked
+     `INC-0068` screen sweep on the fixed confirmed operator set.
+105. Ran the tracked `INC-0068` screen.
+106. Read the `INC-0068` screen result:
+    - all route graphs stayed connected
+    - the operator distinction from `INC-0066` remained visible
+    - residual norm, error-indicator, and true-margin probes all stayed
+      negative versus the Hopf controls
+107. Closed `INC-0068` inconclusive/negative at screen stage:
+    - the result was cleaner than `INC-0067`
+    - there was no justification for replaying the same proxy-spectral branch
+      at confirm
+108. Reframed the next evaluation target:
+    - keep the confirmed product phase-field routes fixed
+    - move next to translated retrieval as the next task-level harness
+109. Queued `INC-0069` as product phase-field translation evaluation.

@@ -213,6 +213,32 @@ class MeasureDiagnosticsTest(unittest.TestCase):
         self.assertLessEqual(diag["phase_transport_coherence"], 1.0)
         self.assertGreater(diag["phase_transport_shift_abs_max"], 0.0)
 
+    def test_hopf_sector_routing_diagnostics_detect_sector_compactness(self):
+        z = np.array(
+            [
+                [1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0],
+                [0.0, 1.0, -1.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                [0.0, 1.0, -1.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            ],
+            dtype=np.float64,
+        )
+        sector = np.array([0, 0, 1, 1], dtype=np.int64)
+        diag = hr.hopf_sector_routing_diagnostics(
+            z,
+            sector,
+            dim_i=0,
+            dim_j=1,
+            dim_k=2,
+            dim_l=3,
+            alpha_bins=8,
+        )
+
+        self.assertEqual(diag["hopf_sector_groups_used"], 2)
+        self.assertLess(diag["hopf_sector_chi_std_mean"], 1e-10)
+        self.assertLess(diag["hopf_sector_delta_cvar_mean"], 1e-10)
+        self.assertGreaterEqual(diag["hopf_sector_alpha_entropy_gap"], 0.0)
+
     def test_route_entropy_radius_diagnostics_detects_increasing_entropy(self):
         shell = np.repeat(np.array([0, 1, 2, 3], dtype=np.int64), 40)
         sector = np.concatenate(

@@ -1,60 +1,87 @@
 # Branching Strategy
 
 ## Purpose
-Use git branches to separate hypothesis families, systems rescues, and packaging work so evidence stays reviewable.
+Use git branches to separate hypothesis families, systems rescues, and packaging work so evidence stays reviewable. **The branch name is the canonical project path** — checking out a branch prints your full research context automatically via git hooks.
 
-## Current Constraint
-The parent repo is still in an unborn state with no initial commit.
-So this branch policy is fully defined, and the current working branch can be named, but multi-branch git history needs an initial commit before additional branch refs can be created normally.
+## Automation infrastructure
+
+All branching automation lives at the repo root. After cloning:
+
+```bash
+bash setup_hooks.sh     # one-time: activates .githooks/ versioned hooks
+make help               # see all available targets
+make state              # validate canonical doc consistency
+make bootstrap          # print full startup context
+```
+
+### Versioned git hooks (`.githooks/`)
+
+| Hook | Trigger | What it does |
+|---|---|---|
+| `post-checkout` | any `git checkout` switching branches | prints the research context panel for the new branch |
+| `prepare-commit-msg` | any `git commit` | pre-fills `[RR-###]` prefix + guided artifact template |
+| `pre-push` | any `git push` | blocks push if canonical docs are inconsistent |
+
+Hooks are tracked in `.githooks/` (not `.git/hooks/`) so they survive clones
+and are version-controlled. `setup_hooks.sh` sets `core.hooksPath = .githooks`.
+
+### `tools/git_research.py`
+
+The automation brain. Called by hooks; also exposes a direct CLI:
+
+```bash
+python tools/git_research.py status    # current branch context panel
+python tools/git_research.py list      # all codex/ branches + kill-list stages
+python tools/git_research.py validate  # full state check
+python tools/git_research.py new <rr> <slug> [--inc <inc>]
+```
+
+### `Makefile` (repo root)
+
+Single entry point wrapping all the above. Prefer `make <target>` over direct
+script calls in documentation and instructions.
+
+---
 
 ## Default Pattern
-- `main` or `master`
-  - current reproducible frontier
-  - current docs and tracking state
+- `main`
+  - current reproducible merge-worthy frontier
+  - receives merges only from `codex/*` branches that have passed `make state`
 - `codex/RR-###-short-slug`
   - one active issue / increment per branch
+  - created via `make new-inc RR=### INC=#### SLUG=slug`
 
 ## Branch Types
-- Research increment branch
-  - example: `codex/RR-052-retrieval-amortization-confirm`
-  - contains only the code, configs, and docs needed for that increment
-- Deep math branch
-  - example: `codex/RR-050-dynamic-h4-state`
-  - can diverge harder, but should not carry unrelated systems work
-- Systems packaging branch
-  - example: `codex/RR-053-index-reuse-packaging`
-  - only opened after a research result justifies operationalization
+
+| Type | Example | Rules |
+|---|---|---|
+| Research increment | `codex/RR-061-measure-consistent-route-law` | one kill-list stage per branch |
+| Deep math | `codex/RR-050-dynamic-h4-state` | may diverge harder; no unrelated systems work |
+| Systems packaging | `codex/RR-053-index-reuse-packaging` | only after a research result justifies operationalization |
 
 ## Rules
 1. One hypothesis family per branch.
 2. One merge-worthy decision per branch when possible.
 3. Do not mix geometry-law changes with systems-harness changes unless the increment explicitly requires both.
 4. Every branch must map back to one `RR-###` issue in `docs/program/ISSUE_REGISTRY.md`.
-5. Before merge, update:
-   - `docs/research/CURRENT_DIRECTION.md`
-   - `docs/research/HANDOFF_CURRENT.md`
-   - `docs/research/LIVE_WORKLOG.md`
-   - `docs/research/PROGRESS_TRACE.md`
-   - relevant increment doc
-   - `docs/program/ISSUE_REGISTRY.md`
-   - `docs/program/PROJECT_BOARD.md`
-
-## Current Recommended Branch Map
-- `codex/RR-052-retrieval-amortization-confirm`
-  - closed negative systems branch
-- `codex/RR-050-dynamic-h4-state`
-  - current recommended next branch
-- `codex/RR-053-index-reuse-packaging`
-  - only reopen if a future translated branch clears confirm
+5. Create branches using `make new-inc` — it scaffolds the increment doc and fires the context hook.
+6. Before merge, the following must be updated and pass `make state`:
+   - increment doc `## Status` → `Closed: KEEP/KILL/REFINE.`
+   - `docs/research/ACTIVE_STATE.md` → points at the next RR/INC
+   - `docs/research/KILL_LIST_TRACKER.md` → stage verdict if changed
+   - `docs/program/ISSUE_REGISTRY.md` and `docs/program/PROJECT_BOARD.md`
+   - `docs/DECISIONS.md`
 
 ## Merge Rule
 Merge only when the branch has:
-- config path
-- analysis artifact
-- gate note
-- explicit keep/kill/refine decision
+- config path (JSON in `configs/`)
+- at least one analysis artifact (log + parsed JSON + summary row)
+- an explicit keep/kill/refine decision recorded in the increment doc
 
-## Why This Helps Here
-- keeps translated retrieval work from contaminating deep geometry branches
-- makes agent fleets parallelizable
-- makes post-compaction recovery much easier because branch name, issue ID, and increment doc all point to the same unit of work
+## Why This Helps
+- Keeps translated retrieval work from contaminating deep geometry branches.
+- Makes agent fleets parallelizable — each branch is a self-contained unit.
+- Makes post-compaction recovery trivial: `git checkout <branch>` instantly
+  surfaces the context panel without reading any docs manually.
+- Canonical push validation (`pre-push` hook) prevents shipping inconsistent state.
+

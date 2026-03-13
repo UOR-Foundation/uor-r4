@@ -114,6 +114,103 @@ class ProxySweepHealthGateTest(unittest.TestCase):
         self.assertIn("DENSE", recommendation)
         self.assertIn("HOPF", recommendation)
 
+    def test_retrieval_recommendation_tracks_systems_lead_when_top1_regresses(self):
+        route_stats = [
+            {
+                "route_id": "HOPF",
+                "mean_test_mse_after": 0.00431,
+                "mean_total_sec": 26.2,
+                "mean_test_top1_after": 0.0510,
+                "mean_retrieval_candidate_fraction": 0.3368,
+                "mean_online_total_per_repeat_sec": 0.6290,
+                "mean_amortized_total_per_repeat_sec": 1.0681,
+                "passes_health_gate": True,
+            },
+            {
+                "route_id": "PRODUCT_CPX",
+                "mean_test_mse_after": 0.00432,
+                "mean_total_sec": 19.7,
+                "mean_test_top1_after": 0.0487,
+                "mean_retrieval_candidate_fraction": 0.1903,
+                "mean_online_total_per_repeat_sec": 0.3804,
+                "mean_amortized_total_per_repeat_sec": 0.7949,
+                "passes_health_gate": True,
+            },
+        ]
+        recommendation = choose_recommendation(
+            route_stats,
+            health_gate={"min_buckets": 4},
+            baseline_route_id="HOPF",
+        )
+        self.assertIn("translated systems lead", recommendation)
+        self.assertIn("PRODUCT_CPX", recommendation)
+        self.assertIn("top-1 regressed", recommendation)
+
+    def test_retrieval_recommendation_promotes_systems_lead_when_top1_improves(self):
+        route_stats = [
+            {
+                "route_id": "DENSE_Q24",
+                "mean_test_mse_after": 0.00432,
+                "mean_total_sec": 30.0,
+                "mean_test_top1_after": 0.0480,
+                "mean_retrieval_candidate_fraction": 1.0,
+                "mean_online_total_per_repeat_sec": 0.9000,
+                "mean_amortized_total_per_repeat_sec": 0.9000,
+                "passes_health_gate": False,
+            },
+            {
+                "route_id": "PRODUCT_CPX",
+                "mean_test_mse_after": 0.00431,
+                "mean_total_sec": 20.0,
+                "mean_test_top1_after": 0.0485,
+                "mean_retrieval_candidate_fraction": 0.1900,
+                "mean_online_total_per_repeat_sec": 0.3800,
+                "mean_amortized_total_per_repeat_sec": 0.7900,
+                "passes_health_gate": True,
+            },
+        ]
+        recommendation = choose_recommendation(
+            route_stats,
+            baseline_route_id="DENSE_Q24",
+        )
+        self.assertIn("Promote PRODUCT_CPX as translated systems lead", recommendation)
+        self.assertIn("improving top-1", recommendation)
+
+    def test_summarize_route_includes_sparse_event_metrics(self):
+        summaries = [
+            {
+                "route_id": "PRODUCT_EVT",
+                "args": {"seed": 0},
+                "metrics": {
+                    "test_mse_after": 0.0040,
+                    "event_gate_error_mean": 0.07,
+                    "event_gate_mean": 0.45,
+                    "event_gate_active_frac": 0.30,
+                    "event_gate_cost_proxy": 0.45,
+                },
+                "timings_sec": {"total": 10.0},
+            },
+            {
+                "route_id": "PRODUCT_EVT",
+                "args": {"seed": 1},
+                "metrics": {
+                    "test_mse_after": 0.0042,
+                    "event_gate_error_mean": 0.05,
+                    "event_gate_mean": 0.25,
+                    "event_gate_active_frac": 0.20,
+                    "event_gate_cost_proxy": 0.25,
+                },
+                "timings_sec": {"total": 11.0},
+            },
+        ]
+
+        stats = summarize_route("PRODUCT_EVT", summaries)
+
+        self.assertAlmostEqual(stats["mean_event_gate_error_mean"], 0.06)
+        self.assertAlmostEqual(stats["mean_event_gate_mean"], 0.35)
+        self.assertAlmostEqual(stats["mean_event_gate_active_frac"], 0.25)
+        self.assertAlmostEqual(stats["mean_event_gate_cost_proxy"], 0.35)
+
 
 if __name__ == "__main__":
     unittest.main()

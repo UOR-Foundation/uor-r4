@@ -23,6 +23,21 @@
 ## Q0g: Can sparse event-driven routing remain trainable end-to-end once event thresholds become real rather than proxy abstractions?
 - Priority: highest
 - Why it matters: the imported guidance treats event-driven computation as an end-state mechanism. That means threshold stability and gradient viability need their own kill tests.
+- Current read: `INC-0125` hardened the proxy answer positively on the fixed
+  product route law, `INC-0126` explained the old downstream failure, and
+  `INC-0127` showed the old translated reopen was audit-only on the present
+  harness. `INC-0128` then made translated sparse-event behavior genuinely
+  downstream-live via train-gate pruning, and `INC-0129` showed that the same
+  coupling has no viable threshold window: tiny pruning preserves quality but
+  worsens runtime, while useful pruning collapses translated top-1. `INC-0130`
+  and `INC-0131` then showed that softer score bias is the right reopen:
+  uncoupled near-hard is now the lower-bank systems reference, `SBI030` is the
+  balanced quality lift, and `SBI080` is the quality-first comparator. True
+  hard firing still remains open. `INC-0132` then resolved the lower-bank
+  default explicitly in favor of uncoupled near-hard and demoted the old
+  bounded-backfill point as stale. The next translated sparse-event question
+  is how to refresh the broader and downstream contract layers around that new
+  lower-bank default.
 - Current owner: Systems and Performance Team
 
 ## Q0h: Can the routing law be made measure-consistent with `H^4` and Hopf angular measure without requiring repair heuristics?
@@ -42,7 +57,11 @@
 
 ## Q0k: Is transported phase actually necessary once coarse routing is restricted to the Hopf base?
 - Priority: highest
-- Why it matters: `INC-0062` created the right no-fiber-phase control, and `INC-0063` showed that a standalone base-only transport law is address-inert. The next branch must prove whether coupled-field phase transport beats both that control and raw Hopf phase routing.
+- Why it matters: `INC-0062` created the right no-fiber-phase control, and the
+  corrected `INC-0063` rerun showed that standalone transport is mechanism-live
+  once `alpha` bins are active. The next question is whether that transported
+  phase is merely live or actually necessary/useful relative to the control and
+  raw Hopf phase routing.
 - Current owner: Geometry Theory Team
 
 ## Q0l: Can the second `H^4` discrete complex-value field induce non-inert phase jumps?
@@ -50,7 +69,9 @@
 - Why it matters: the user’s intended two-lever mechanism is now explicit:
   - minima routing on the first `H^4`
   - phase jumping through the coupled complex field on the second `H^4`
-  If that coupling still fails to move addresses or improve metrics, the near-term phase claim should narrow sharply.
+  The corrected `INC-0064` rerun already shows that same-chart coupled-field
+  transport moves addresses and produces nonzero field shifts. The next open
+  question is whether the explicit product branch improves on that surrogate.
 - Current owner: Geometry Theory Team
 
 ## Q0a: Does `train_route_mode=final_static` stay valid as sample count increases further?
@@ -232,6 +253,11 @@
 ## Q2ae: Can sparse event-driven computation remain trainable end-to-end once the routing law becomes more geometric?
 - Priority: highest
 - Why it matters: the imported notes frame sparse event firing as a core end-state, not just a retrieval optimization. That means trainability under thresholded or event-driven routing becomes a first-class kill test.
+- Current read: the project now has a positive soft-threshold proxy point and
+  a hardened near-hard proxy point (`INC-0125`), but `INC-0127` shows the
+  current translated sparse-event surface is not route-coupled at all. The
+  project still does not have a true hard-firing result or a real translated
+  sparse-event downstream win.
 - Current owner: Systems and Performance Team
 
 ## Q2af: What specific role should the second factor in `H^4 x H^4` play in the imported coupled-field picture?
