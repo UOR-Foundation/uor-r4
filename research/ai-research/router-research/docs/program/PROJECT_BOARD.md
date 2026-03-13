@@ -2,7 +2,8 @@
 
 ## Canonical Active Queue
 - Current primary RR: `RR-061`
-- Current primary INC: `INC-0142` (semantic embedding proxy task — does Hopf angular routing discriminate real from col-perm when embeddings have genuine semantic structure?)
+- Current primary INC: `INC-0143` (finalize PPMI-SVD discrimination 4 seeds AND/OR production embedding validation)
+- 2026-03-13 INC-0142 KEEP: PPMI-SVD semantic embeddings confirm H^4 Hopf routing discrimination (rel_diff=31.2%, z≈4.2, 2 seeds). Stage 2 → PARTIAL-PASS.
 - INC-0141: Closed KILL (2026-03-13) — optimal-dim (46,117,62,78) Hopf routing also indistinguishable from col-perm (rel_diff=0.025, wrong direction); hash embedding proxy-task-blocked
 - INC-0140: Closed KILL (2026-03-13) — angular routing indistinguishable from col-perm on L2-normalized embeddings (rel_diff=0.004)
 - INC-0138: Closed REFINE (2026-03-13) — geometry-only confirmed; norm-driven shell finding

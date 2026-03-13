@@ -10,7 +10,7 @@ Use statuses:
 
 ## Canonical Queue
 - Current primary RR: `RR-061`
-- Current primary INC: `INC-0142` (semantic embedding proxy task — does Hopf angular routing discriminate real from col-perm when embeddings have genuine semantic structure?)
+- Current primary INC: `INC-0143` (finalize PPMI-SVD discrimination OR production embedding validation)
 
 ## 1. Hyperbolic Embedding Stability
 - Status: `partial`
@@ -23,7 +23,7 @@ Use statuses:
   - `deferred until the route law is stable enough to justify a dedicated embedding benchmark`
 
 ## 2. Measure-Consistent Shell Routing
-- Status: `open`
+- Status: `partial`
 - Canonical evidence:
   - `docs/research/increments/INC_0060_h4_hopf_measure_diagnostics.md`
   - `docs/research/increments/INC_0061_measure_consistent_route_law.md`
@@ -33,7 +33,20 @@ Use statuses:
   - `docs/research/increments/INC_0139_TBD.md`
   - `docs/research/increments/INC_0140_angular_sector_routing_measure_consistency.md`
   - `docs/research/increments/INC_0141_TBD.md`
-- Blocker:
+  - `docs/research/increments/INC_0142_TBD.md`
+- Latest result (INC-0142, 2026-03-13):
+  - PPMI-SVD semantic embeddings, H^4 Hopf routing (dims 3,65,2,21):
+    ORIG > COL_PERM > GAUSSIAN ordering confirmed across seeds 0,1.
+    rel_diff = 31.2% (threshold 20%), z ≈ 4.2 per seed.
+  - H^4 Hopf routing geometry IS semantically discriminative with structured embeddings.
+  - INC-0136–0141 failures were hash-embedding proxy-task failures, NOT geometry failures.
+- Remaining open questions:
+  1. Finalize: does discrimination hold with 4-seed confirm?
+  2. Production embedding: does same hold with GloVe or LM activations?
+  3. Shell law: does measure-consistent shell routing add additional discrimination beyond sector?
+- Decision: Stage 2 geometry hypothesis NOT falsified. Stage 2 → PARTIAL-PASS.
+- Next branch:
+  - `INC-0143: finalize PPMI-SVD (4 seeds) OR production embedding test`
   - `INC-0136–0141 collectively exhaust ALL routing paths on the wikitext2 hash embedding:
     (1) shell routing via geodesic substitution (KILLED), (2) shell pressure blend (KILLED),
     (3) geometry-only controls: r≡1, shells indistinguishable (REFINE), (4) SO(8) chart
@@ -41,15 +54,10 @@ Use statuses:
     (0,2,4,6): indistinguishable from col-perm (KILLED, INC-0140), (6) angular sector
     routing, optimal dims (46,117,62,78) with max within-pair correlation |corr|=0.479:
     still indistinguishable (rel_diff=0.025, wrong direction, KILLED, INC-0141).
-    Mathematical proof: chi_u and delta are scale-invariant; L2-normalization is irrelevant.
-    Root cause: hash embedding is designed to be ISOTROPIC — no 4D Hopf subspace of a
-    hash feature can produce semantic angular concentration. Stage 2 is proxy-task-blocked.
-    Next path: semantically structured embeddings (GloVe, LM activations) where Hopf
-    angular sectors correspond to genuine semantic clusters.`
-- Decision: Hash embedding proxy task is permanently blocked for Stage 2. Must switch to
-  semantically structured embeddings for any further Stage 2 routing discrimination tests.
-- Next branch:
-  - `INC-0142: semantic embedding proxy task`
+    Hash embedding isotropic by construction — historical context only.`
+- INC-0142 (2026-03-13): PPMI-SVD semantic embeddings confirmed H^4 routing discrimination
+  (rel_diff=31.2%, z≈4.2, 2-seed confirm). The geometry IS working. Hash failures were
+  proxy-task failures. Stage 2 → PARTIAL-PASS pending finalize or production embedding.
 
 ## 3. Hopf Angular Correctness
 - Status: `partial`

@@ -3536,3 +3536,35 @@ Add new entries below.
   - INC-0142 is the next increment: semantic embedding proxy task for Stage 2 routing
   - If semantic embeddings also fail to discriminate real from col-perm, the H^4 Hopf
     sector routing law is structurally wrong and Stage 2 must be declared killed
+
+## 2026-03-13 (INC-0142 Closed: KEEP — Hopf routing discriminates with semantic embeddings)
+- INC-0142 experiment: PPMI-SVD semantic embeddings, H^4 Hopf routing (phase4d_hopf_base)
+  - Embedding: PPMI co-occurrence (PTB corpus, window=5) + SVD to 100D
+  - Context embedding: mean-pool over 32-token window, L2-normalised
+  - Pre-screen dim selection: found dims (3,65,2,21) with |corr|=0.9152 and |corr|=0.8668
+    (vs hash embedding max ≈ 0.15 — confirms genuine semantic clustering structure)
+- Screen results (seed=0, dims 3,65,2,21):
+  - SEM_ORIG pmax_after = 0.0860
+  - SEM_COL_PERM pmax_after = 0.0624
+  - SEM_GAUSSIAN pmax_after = 0.0596
+  - rel_diff = 31.8%, z = 4.21 — SCREEN PASS (threshold 20%)
+  - Ordering: ORIG > COL_PERM > GAUSSIAN — correct direction
+- Confirm results (seeds 0,1, dims 3,65,2,21):
+  - Mean SEM_ORIG = 0.0874, mean SEM_COL_PERM = 0.0638, mean SEM_GAUSSIAN = 0.0610
+  - rel_diff = 31.2%, seed0 z=4.21, seed1 z=4.15 — CONFIRM PASS
+  - Both seeds individually pass 20% threshold; correct ordering maintained
+- Additional finding: dims (0,1,2,3) — top-4 SVD components — fail (PERM > ORIG, same
+  direction as hash embedding failure). Top-4 SVD dims capture word frequency / topic
+  mass, not the specific semantic co-occurrence structure the Hopf routing exploits.
+- Decision:
+  - INC-0142: KEEP
+  - H^4 Hopf sector routing IS semantically discriminative with PPMI-SVD embeddings
+  - Stage 2 failures (INC-0136–0141) were proxy-task failures (hash embedding isotropy),
+    NOT failures of the routing geometry
+  - Stage 2 geometry hypothesis: NOT falsified
+  - Stage 2 status: PARTIAL-PASS
+  - Requirements to close Stage 2 fully:
+    (a) Finalize: 4-seed confirm maintains rel_diff > 0.2 (INC-0143 option A)
+    OR (b) Production-embedding test: same discrimination confirmed with GloVe or
+        LM-activation embeddings (INC-0143 option B)
+  - INC-0143 is the next increment: finalize and/or production embedding validation

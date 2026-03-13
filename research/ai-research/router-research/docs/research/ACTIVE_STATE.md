@@ -13,16 +13,35 @@ as authoritative when they disagree with this file.
 
 ## Canonical Queue
 - Current primary RR: `RR-061`
-- Current primary INC: `INC-0142` — TBD. Stage 2 is proxy-task-blocked by hash embedding. Next step: validate Stage 2 with semantically structured embeddings (e.g. GloVe / LM-activation proxy task) where Hopf angular sectors carry genuine semantic content.
+- Current primary INC: `INC-0143` — TBD. INC-0142 KEEP: H^4 Hopf routing discriminates real
+  from col-perm with PPMI-SVD semantic embeddings (rel_diff=31.2%, z≈4.2). Stage 2 is
+  PARTIAL-PASS: geometry is confirmed working with semantic embeddings; production embedding
+  source (GloVe, LM activations) still TBD. Next step: formalize Stage 2 closure conditions
+  and determine whether a finalize run (4 seeds) or a production-embedding test is needed
+  before Stage 2 can be closed.
 - Current primary increment doc:
-  `docs/research/increments/INC_0142_TBD.md` (to be created)
-- Kill-list stage: `measure-consistent shell routing` (Stage 2 proxy-task-blocked — hash embedding lacks semantic angular structure in any 4D Hopf subspace)
+  `docs/research/increments/INC_0143_TBD.md` (to be created)
+- Kill-list stage: `measure-consistent shell routing` (Stage 2 PARTIAL-PASS pending finalize)
 - Mathematical object under test:
-  `first-factor H^4 routing manifold, Hopf base projection — whether fixed-subspace angular routing discriminates real from col-perm when embeddings have genuine semantic clustering`
-- Success condition: `|pmax_after ORIG − pmax_after COL_PERM| / mean > 0.2 on semantically structured embeddings`
-- Falsification condition: `semantic embeddings also fail to discriminate; Stage 2 routing law is physically wrong regardless of proxy task`
+  `first-factor H^4 routing manifold — confirming PPMI-SVD discrimination holds at finalize
+  (4 seeds) and/or with production-quality embeddings`
+- Success condition: `Stage 2 closed with: finalize rel_diff > 0.2 maintained across 4 seeds
+  OR discrimination confirmed on GloVe/LM-activation embeddings`
+- Falsification condition: `Finalize fails (rel_diff collapses across 4 seeds), implying
+  confirm was a statistical artifact; Stage 2 geometry law requires further revision`
 
 ## Latest Closed Increment
+- `INC-0142`:
+  `docs/research/increments/INC_0142_TBD.md`
+  - status: `Closed: KEEP`
+  - verdict: PPMI-SVD semantic embeddings with H^4 Hopf routing (dims 3,65,2,21) show
+      ORIG > COL_PERM > GAUSSIAN in the correct direction across both seeds.
+      Mean pmax_after: ORIG=0.0874, COL_PERM=0.0638. rel_diff=31.2% (z≈4.2).
+      Both seeds pass individually (seed0 z=4.21, seed1 z=4.15). This confirms the
+      H^4 Hopf routing geometry IS semantically discriminative with structured
+      embeddings. INC-0136–0141 failures were proxy-task failures, not geometry failures.
+      Stage 2 status → PARTIAL-PASS.
+
 - `INC-0141`:
   `docs/research/increments/INC_0141_TBD.md`
   - status: `Closed: KILL`

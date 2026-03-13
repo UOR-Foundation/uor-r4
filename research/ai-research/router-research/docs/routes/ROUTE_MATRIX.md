@@ -7,7 +7,9 @@
 
 ## Current Queue Override
 - Current primary RR: `RR-061`
-- Current primary INC: `INC-0142` (semantic embedding proxy task — does Hopf angular routing discriminate real from col-perm when embeddings have genuine semantic structure?)
+- Current primary INC: `INC-0143` (finalize PPMI-SVD discrimination 4 seeds AND/OR production embedding validation)
+- 2026-03-13 INC-0142 KEEP: PPMI-SVD semantic embeddings confirm H^4 Hopf routing discrimination. rel_diff=31.2%, z≈4.2, 2-seed confirm. ORIG > COL_PERM > GAUSSIAN correct ordering.
+  Stage 2 geometry NOT falsified. Stage 2 → PARTIAL-PASS pending finalize.
 - 2026-03-13 INC-0141 KILL: routing with optimal dims (46,117,62,78) — max within-pair correlation |corr|=0.479 — gives OPT_ORIG pmax=0.379 vs OPT_COL_PERM pmax=0.388 (wrong direction), rel_diff=0.025.
   Pre-screen TV=0.109 signal did not survive routing. Mathematical proof: chi_u and delta are scale-invariant; hash embedding is isotropic by construction.
   Stage 2 is proxy-task-blocked on wikitext2 hash embedding. Next test: semantically structured embeddings.
@@ -32,7 +34,7 @@
   - it worsened shell concentration and neighborhood preservation versus
     `HOPF_BASE_K25_PHI`
   - move next to:
-    `RR-061` / `INC-0142` (semantic embedding proxy task)
+    `RR-061` / `INC-0143` (finalize PPMI-SVD + production embedding validation)
 
 ## Routes
 - `R0`: `sector_mode=kmeans`, `scale_mode=radial`, `time_pressure_lambda=0.0`
