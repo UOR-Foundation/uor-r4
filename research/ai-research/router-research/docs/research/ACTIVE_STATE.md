@@ -13,24 +13,29 @@ as authoritative when they disagree with this file.
 
 ## Canonical Queue
 - Current primary RR: `RR-061`
-- Current primary INC: `INC-0143` — TBD. INC-0142 KEEP: H^4 Hopf routing discriminates real
-  from col-perm with PPMI-SVD semantic embeddings (rel_diff=31.2%, z≈4.2). Stage 2 is
-  PARTIAL-PASS: geometry is confirmed working with semantic embeddings; production embedding
-  source (GloVe, LM activations) still TBD. Next step: formalize Stage 2 closure conditions
-  and determine whether a finalize run (4 seeds) or a production-embedding test is needed
-  before Stage 2 can be closed.
+- Current primary INC: `INC-0143` — **Closed: KEEP** (2026-03-13). 4-seed finalize:
+  PPMI-SVD ORIG mean_pmax_after=0.0905 vs COL_PERM=0.0613, rel_diff=38.5% across all
+  4 seeds (range 30.6%–54.6%). Stage 2 closed as PARTIAL-PASS.
+- Next INC: TBD — Stage 3 (Hopf angular correctness) can now be opened.
+  Immediate action: queue first Stage 3 increment.
 - Current primary increment doc:
-  `docs/research/increments/INC_0143_TBD.md` (to be created)
-- Kill-list stage: `measure-consistent shell routing` (Stage 2 PARTIAL-PASS pending finalize)
+  `docs/research/increments/INC_0143_TBD.md`
+- Kill-list stage: `measure-consistent shell routing` (Stage 2 → CLOSED/PARTIAL-PASS)
 - Mathematical object under test:
-  `first-factor H^4 routing manifold — confirming PPMI-SVD discrimination holds at finalize
-  (4 seeds) and/or with production-quality embeddings`
-- Success condition: `Stage 2 closed with: finalize rel_diff > 0.2 maintained across 4 seeds
-  OR discrimination confirmed on GloVe/LM-activation embeddings`
-- Falsification condition: `Finalize fails (rel_diff collapses across 4 seeds), implying
-  confirm was a statistical artifact; Stage 2 geometry law requires further revision`
+  `next: first-factor H^4 routing manifold, Hopf angular law — Stage 3`
+- Success condition: `Stage 3 RR queued with verified falsification condition`
+- Falsification condition: `n/a — planning phase`
 
 ## Latest Closed Increment
+- `INC-0143`:
+  `docs/research/increments/INC_0143_TBD.md`
+  - status: `Closed: KEEP`
+  - verdict: 4-seed finalize of PPMI-SVD discrimination. SEM_ORIG mean_pmax=0.0905,
+      SEM_COL_PERM=0.0613, rel_diff=38.5% across 4 seeds (30.6%–54.6%). All seeds pass.
+      Stage 2 closed as PARTIAL-PASS. H^4 Hopf routing is semantically discriminative
+      with PPMI-SVD embeddings and seed-stable; production routing requires structured
+      embeddings.
+
 - `INC-0142`:
   `docs/research/increments/INC_0142_TBD.md`
   - status: `Closed: KEEP`

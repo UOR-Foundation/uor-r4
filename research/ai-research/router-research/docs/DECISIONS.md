@@ -3568,3 +3568,25 @@ Add new entries below.
     OR (b) Production-embedding test: same discrimination confirmed with GloVe or
         LM-activation embeddings (INC-0143 option B)
   - INC-0143 is the next increment: finalize and/or production embedding validation
+
+## 2026-03-13 (INC-0143 Closed: KEEP — Stage 2 closed PARTIAL-PASS, 4-seed finalize)
+- INC-0143 experiment: 4-seed finalize of PPMI-SVD discrimination on H^4 Hopf routing
+  (dims 3,65,2,21), seeds [0,1,2,3], routes: SEM_ORIG / SEM_COL_PERM / SEM_GAUSSIAN
+- Results:
+  - Seed 0: ORIG=0.0860, COL_PERM=0.0624, rel_diff=31.8%
+  - Seed 1: ORIG=0.0888, COL_PERM=0.0652, rel_diff=30.6%
+  - Seed 2: ORIG=0.0952, COL_PERM=0.0544, rel_diff=54.6%
+  - Seed 3: ORIG=0.0920, COL_PERM=0.0632, rel_diff=37.1%
+  - Mean: ORIG=0.0905, COL_PERM=0.0613, rel_diff=38.5% (threshold 20%)
+  - All 4 seeds individually pass; range 30.6%–54.6%
+- Decision:
+  - INC-0143: KEEP
+  - H^4 Hopf routing with PPMI-SVD semantic embeddings is seed-stable (4 seeds)
+  - Stage 2 (Measure-Consistent Shell Routing): CLOSED as PARTIAL-PASS
+  - Caveat: production routing requires semantically structured input embeddings;
+    pure hash features (isotropic by construction) are insufficient for routing
+  - Shell splitting (radial discrimination): not demonstrated as strictly necessary —
+    pmax_before ≈ pmax_after in INC-0142/0143 (single shell). Stage 2 gate was
+    angular discrimination, which is confirmed.
+  - Stage 3 (Hopf Angular Correctness) is now unblocked
+  - Next: queue first Stage 3 RR/INC

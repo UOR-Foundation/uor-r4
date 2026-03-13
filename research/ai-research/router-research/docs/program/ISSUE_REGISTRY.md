@@ -4,7 +4,9 @@ Use this file as the local GitHub-style issue list for router research.
 
 ## Canonical Active Queue
 - Current primary RR: `RR-061`
-- Current primary INC: `INC-0143` (finalize PPMI-SVD discrimination 4 seeds AND/OR production embedding validation)
+- Current primary INC: `INC-0143` — **Closed: KEEP** (2026-03-13). Stage 2 **CLOSED as PARTIAL-PASS**.
+  Next: queue Stage 3 (Hopf Angular Correctness) RR/INC.
+- 2026-03-13 INC-0143 KEEP: 4-seed finalize. rel_diff=38.5% (range 30.6%–54.6%), all seeds pass. Stage 2 closed.
 - 2026-03-13 INC-0142 KEEP: PPMI-SVD semantic embeddings confirm H^4 Hopf routing discrimination (rel_diff=31.2%, z≈4.2, 2 seeds). Stage 2 → PARTIAL-PASS.
 
 ## Active

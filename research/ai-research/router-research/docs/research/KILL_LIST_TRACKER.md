@@ -23,7 +23,7 @@ Use statuses:
   - `deferred until the route law is stable enough to justify a dedicated embedding benchmark`
 
 ## 2. Measure-Consistent Shell Routing
-- Status: `partial`
+- Status: `closed/partial-pass`
 - Canonical evidence:
   - `docs/research/increments/INC_0060_h4_hopf_measure_diagnostics.md`
   - `docs/research/increments/INC_0061_measure_consistent_route_law.md`
@@ -34,39 +34,32 @@ Use statuses:
   - `docs/research/increments/INC_0140_angular_sector_routing_measure_consistency.md`
   - `docs/research/increments/INC_0141_TBD.md`
   - `docs/research/increments/INC_0142_TBD.md`
-- Latest result (INC-0142, 2026-03-13):
-  - PPMI-SVD semantic embeddings, H^4 Hopf routing (dims 3,65,2,21):
-    ORIG > COL_PERM > GAUSSIAN ordering confirmed across seeds 0,1.
-    rel_diff = 31.2% (threshold 20%), z ≈ 4.2 per seed.
-  - H^4 Hopf routing geometry IS semantically discriminative with structured embeddings.
-  - INC-0136–0141 failures were hash-embedding proxy-task failures, NOT geometry failures.
-- Remaining open questions:
-  1. Finalize: does discrimination hold with 4-seed confirm?
-  2. Production embedding: does same hold with GloVe or LM activations?
-  3. Shell law: does measure-consistent shell routing add additional discrimination beyond sector?
-- Decision: Stage 2 geometry hypothesis NOT falsified. Stage 2 → PARTIAL-PASS.
+  - `docs/research/increments/INC_0143_TBD.md`
+- Latest result (INC-0143, 2026-03-13):
+  - 4-seed finalize of PPMI-SVD discrimination on H^4 Hopf routing (dims 3,65,2,21).
+  - SEM_ORIG mean_pmax=0.0905, SEM_COL_PERM=0.0613, rel_diff=38.5% (threshold 20%).
+  - All 4 seeds pass individually (range 30.6%–54.6%).
+  - Stage 2 geometry hypothesis NOT falsified. Stage 2 **CLOSED as PARTIAL-PASS**.
+- Stage 2 closure note:
+  - H^4 Hopf sector routing discriminates semantically structured embeddings (PPMI-SVD)
+    from column-permuted control. The discrimination is seed-stable (4 independent seeds).
+  - Caveat: production routing requires semantically structured input embeddings.
+    Pure hash features (INC-0136–0141) are isotropic by construction and fail.
+  - Shell law (radial discrimination beyond sector) was not demonstrated as strictly
+    necessary — pmax_before ≈ pmax_after in all INC-0142/0143 runs (single shell).
+    This is acceptable: the Stage 2 gate was angular discrimination, not shell splitting.
+- Decision: Stage 2 → **CLOSED/PARTIAL-PASS** (2026-03-13, INC-0143 KEEP).
 - Next branch:
-  - `INC-0143: finalize PPMI-SVD (4 seeds) OR production embedding test`
-  - `INC-0136–0141 collectively exhaust ALL routing paths on the wikitext2 hash embedding:
-    (1) shell routing via geodesic substitution (KILLED), (2) shell pressure blend (KILLED),
-    (3) geometry-only controls: r≡1, shells indistinguishable (REFINE), (4) SO(8) chart
-    learning: destroys routing quality (REFINE), (5) angular sector routing, default dims
-    (0,2,4,6): indistinguishable from col-perm (KILLED, INC-0140), (6) angular sector
-    routing, optimal dims (46,117,62,78) with max within-pair correlation |corr|=0.479:
-    still indistinguishable (rel_diff=0.025, wrong direction, KILLED, INC-0141).
-    Hash embedding isotropic by construction — historical context only.`
-- INC-0142 (2026-03-13): PPMI-SVD semantic embeddings confirmed H^4 routing discrimination
-  (rel_diff=31.2%, z≈4.2, 2-seed confirm). The geometry IS working. Hash failures were
-  proxy-task failures. Stage 2 → PARTIAL-PASS pending finalize or production embedding.
+  - `Stage 3 (Hopf Angular Correctness) — now unblocked. Queue first Stage 3 RR.`
 
 ## 3. Hopf Angular Correctness
 - Status: `partial`
 - Canonical evidence:
   - `docs/research/increments/INC_0062_hopf_base_angular_law.md`
 - Blocker:
-  - `base/fiber separation is real, but full angular mass allocation still depends on closing RR-061`
+  - `none — Stage 2 closed PARTIAL-PASS (2026-03-13). Stage 3 is now unblocked.`
 - Next branch:
-  - `revisit immediately after INC-0137`
+  - `queue first Stage 3 increment: Hopf angular mass allocation correctness test`
 
 ## 4. Phase Transport Usefulness
 - Status: `partial`
@@ -75,9 +68,9 @@ Use statuses:
   - `docs/research/increments/INC_0064_coupled_complex_phase_transport.md`
   - `docs/research/increments/INC_0065_product_phase_field.md`
 - Blocker:
-  - `phase and coupled-field motion are mechanism-live, but they still rest on an unresolved coarse route law`
+  - `phase and coupled-field motion are mechanism-live. Stage 2 now closed. Reactivate after Stage 3 RR is queued and first increment shows stable routing.`
 - Next branch:
-  - `rerun minimal dependency chain only if INC-0137 materially changes the route law`
+  - `deferred until first Stage 3 increment closes`
 
 ## 5. Spectral / Operator Usefulness
 - Status: `partial`
@@ -99,7 +92,7 @@ Use statuses:
 - Blocker:
   - `proxy and translated sparse-event results are promising, but not yet a closed architecture-level trainability proof`
 - Next branch:
-  - `deferred while RR-061 is open`
+  - `deferred until Stage 3 makes progress — RR-061 Stage 2 is now closed`
 
 ## 7. Hardware-Efficiency Confirmation
 - Status: `partial`

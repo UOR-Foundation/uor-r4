@@ -1,7 +1,11 @@
 # INC-0143: Finalize PPMI-SVD Discrimination — Stage 2 Close
 
 ## Status
-Queued.
+Closed: KEEP.
+
+Stage 2 closed as PARTIAL-PASS. H^4 Hopf routing discriminates semantically structured
+embeddings (PPMI-SVD) from column-permuted control across all 4 seeds. rel_diff=38.5%
+(threshold 20%). No seed fails individually (range 30.6%–54.6%).
 
 ## Trigger
 INC-0142 Closed: KEEP (2026-03-13). PPMI-SVD semantic embeddings confirm H^4 Hopf routing
@@ -57,3 +61,28 @@ The recommended path is Option A first (fastest, no download needed), then Optio
 resources allow. If Option A passes, Stage 2 is closed as PARTIAL-PASS and development
 can proceed to Stages 3/4 with the constraint that production architecture requires
 semantic input embeddings for routing to function correctly.
+
+## Results (Option A — 4-seed finalize)
+
+**Config:** `configs/proxy_transfer_inc0143_ppmi_semantic_finalize.json`
+**Embedding:** PPMI-SVD from PTB corpus (window=5, 100D), mean-pool 32-token context, L2-norm
+**Subspace:** phase4_dims=3,65,2,21 (INC-0142 confirmed)
+
+| Seed | SEM_ORIG pmax | SEM_COL_PERM pmax | rel_diff |
+|------|--------------|------------------|---------|
+| 0    | 0.0860       | 0.0624           | 31.8%   |
+| 1    | 0.0888       | 0.0652           | 30.6%   |
+| 2    | 0.0952       | 0.0544           | 54.6%   |
+| 3    | 0.0920       | 0.0632           | 37.1%   |
+| mean | **0.0905**   | **0.0613**        | **38.5%** |
+
+- Mean rel_diff = 38.5% > 20% threshold → SUCCESS
+- All 4 seeds individually pass (range 30.6%–54.6%)
+- SEM_GAUSSIAN: no pmax (noise input produces no sector concentration — expected)
+- Ordering ORIG > COL_PERM maintained across all seeds
+
+## Decision
+**KEEP.** H^4 Hopf routing is seed-stable on PPMI-SVD semantic embeddings.
+Stage 2 closed as PARTIAL-PASS. Production routing requires semantically structured
+input embeddings for routing to function correctly; pure hash features are insufficient.
+Next: Stage 3 queue (Hopf angular correctness — now unblocked).
