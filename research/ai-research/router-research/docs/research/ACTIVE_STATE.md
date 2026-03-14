@@ -13,13 +13,18 @@ as authoritative when they disagree with this file.
 
 ## Canonical Queue
 - Current primary RR: `RR-067`
-- Current primary INC: `INC-0162` — **TBD** (Stage 7: finalize or next increment).
-- Previous INC: `INC-0161` — **Closed: KEEP** (2026-03-14). Multi-seed routing cost
+- Current primary INC: `INC-0163` -- **TBD** (Stage 7: finalize or next increment).
+- Previous INC: `INC-0162` -- **Closed: KEEP** (2026-03-14). Routing compute scaling
+  law. 6 K values (25-200), 5 seeds, 120 runs (40 new + 80 reused). Scaling exponents:
+  TRANS ORIG alpha=0.50 (square-root), TRANS PERM alpha=0.79, BASE PERM alpha=0.98.
+  Compression at K=200: TRANS 2.09x, BASE 1.43x. Phase transport amplifies
+  geometric concentration. Stage 7: PARTIAL-PASS (strong, scaling law established).
+- Previous INC: `INC-0161` -- **Closed: KEEP** (2026-03-14). Multi-seed routing cost
   confirm. 5 seeds, 4 K values, 80 runs. Effective bucket ratio (5-seed mean): K=25
   1.18x, K=50 1.36x, K=75 1.69x, K=100 1.97x. Gini ratio 1.63-2.11x. Ultra-low
   variance (std < 0.02). All seeds > 1.0x. Compression at 3/4 K values.
   Stage 7: PARTIAL-PASS (replicated 5-seed structural training sparsity).
-- Previous INC: `INC-0160` — **Closed: KEEP** (2026-03-14). Training routing cost screen.
+- Previous INC: `INC-0160` -- **Closed: KEEP** (2026-03-14). Training routing cost screen.
   Effective bucket ratio PERM/ORIG: 1.67× (TRANS), 1.35× (BASE). Training Gini ratio
   ORIG/PERM: 1.59× (TRANS), 1.89× (BASE). Top-half concentration: ORIG 94% vs PERM 78%
   (TRANS). Training sparsity matches eval sparsity (Gini within 0.02). Stage 7: PARTIAL.
@@ -44,14 +49,15 @@ as authoritative when they disagree with this file.
 - Previous INC: `INC-0152` — **Closed: REFINE** (2026-03-14). Gate saturated.
 - Current primary increment doc:
   `docs/research/increments/INC_0160_sparse_event_training_efficiency_matched.md` (closed: KEEP)
-- Kill-list stage: `Hardware-efficiency confirmation` (Stage 7 — PARTIAL-PASS, active gate)
-- Stage 7 definition: Training routing cost confirmation. ORIG routing concentrates
-  training workload into fewer effective memory regions than PERM. Replicated across
-  5 seeds and 4 K values with ultra-low variance.
+- Kill-list stage: `Hardware-efficiency confirmation` (Stage 7 -- PARTIAL-PASS strong, active gate)
+- Stage 7 definition: Routing compute scaling law. TRANS ORIG scales as K^0.50
+  (square-root), PERM scales as K^0.79-0.98 (near-linear). Compression ratio grows
+  with K. At K=200, TRANS ORIG uses 57 effective buckets vs 120 (2.09x).
 - Mathematical object under test:
-  `Training routing cost: effective bucket ratio 1.69x (TRANS K=75, 5-seed mean).
-   Compression grows monotonically with K (1.18x->1.97x). Gini ratio 1.63-2.11x.
-   Stage 7: PARTIAL-PASS (replicated 5-seed structural training sparsity).`
+  `Routing compute scaling law: effective_buckets ~ K^alpha.
+   TRANS ORIG alpha=0.50, TRANS PERM alpha=0.79, delta=0.295.
+   Phase transport halves the scaling exponent relative to permuted baseline.
+   Stage 7: PARTIAL-PASS (strong, scaling law established).`
 - Success condition: TBD (next increment)
 - Falsification condition: TBD (next increment)
 

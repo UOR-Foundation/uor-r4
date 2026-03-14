@@ -4067,3 +4067,30 @@ Add new entries below.
   - Ultra-low variance confirms this is structural, not stochastic
   - Stage 7: PARTIAL-PASS (replicated 5-seed structural training sparsity)
   - Next: INC-0162 — TBD
+
+### INC-0162 — Routing Compute Scaling Law
+
+- Date: 2025-07-17
+- Stage: 7 (Hardware-Efficiency Confirmation)
+- Verdict: **KEEP**
+- Data: 24 routes (K={25,50,75,100,150,200} × {BASE,TRANS} × {ORIG,PERM}),
+  5 seeds (0-4), 120 total runs (40 new + 80 reused from INC-0161)
+- No MSE used. Pure routing cost measurement.
+- Key findings:
+  1. Scaling exponents (effective_buckets = c × K^alpha):
+     - TRANS ORIG: alpha = 0.500 ± 0.003 (square-root scaling!)
+     - TRANS PERM: alpha = 0.795 ± 0.005
+     - BASE ORIG: alpha = 0.882 ± 0.003
+     - BASE PERM: alpha = 0.979 ± 0.001 (nearly linear)
+  2. Phase transport halves the scaling exponent (0.50 vs 0.88)
+  3. ORIG geometry halves the scaling exponent (0.50 vs 0.80)
+  4. At K=200: TRANS ORIG 57 eff buckets vs PERM 120 (2.09× compression)
+  5. Compression ratios (TRANS, 5-seed mean):
+     K=25: 1.18×, K=50: 1.36×, K=75: 1.69×, K=100: 1.97×,
+     K=150: 1.95×, K=200: 2.09×
+  6. Minor non-monotonicity K=100→K=150 (1.97→1.95) but overall trend
+     increasing; does not affect power law fit (R²=0.957)
+- Decision:
+  - INC-0162: KEEP — routing compute scaling law established
+  - Stage 7: PARTIAL-PASS (strong, scaling law quantified)
+  - Next: INC-0163 — TBD

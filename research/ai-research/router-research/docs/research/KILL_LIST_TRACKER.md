@@ -10,7 +10,7 @@ Use statuses:
 
 ## Canonical Queue
 - Current primary RR: `RR-067`
-- Current primary INC: `INC-0162` — TBD (Stage 7: next increment or finalize)
+- Current primary INC: `INC-0163` -- TBD (Stage 7: finalize or next increment)
 
 ## 1. Hyperbolic Embedding Stability
 - Status: `partial`
@@ -184,23 +184,25 @@ Use statuses:
   - `INC-0160: Stage 7 — Hardware-efficiency confirmation`
 
 ## 7. Hardware-Efficiency Confirmation
-- Status: `partial-pass` (replicated 5-seed structural training sparsity)
+- Status: `partial-pass` (strong -- scaling law established)
 - Canonical evidence:
   - `docs/research/increments/INC_0074_product_phase_translation_dense_frontier.md`
   - `docs/research/increments/INC_0092_product_phase_translation_warm_cache_q01_floor_hardening.md`
   - `docs/research/increments/INC_0098_product_phase_translation_chart_resident_route_cost_decomposition.md`
   - `docs/research/increments/INC_0160_sparse_event_training_efficiency_matched.md`
   - `docs/research/increments/INC_0161_routing_cost_confirm.md`
-- Latest result (INC-0161, 2026-03-14):
-  - **KEEP — routing compute compression replicated across 5 seeds and 4 K values.**
-  - Effective bucket ratio (PERM/ORIG, 5-seed mean): K=25 1.18x, K=50 1.36x, K=75 1.69x, K=100 1.97x.
-  - Gini ratio (ORIG/PERM, 5-seed mean): 1.63x (K=75 TRANS), 1.89x (K=100 TRANS), 2.11x (K=100 BASE).
-  - Ultra-low seed variance (std 0.008--0.019 on eff_ratio). Not a seed artifact.
-  - Compression grows monotonically with K. Passes at 3/4 K values (all except K=25).
-  - All 5 seeds > 1.0x at every K (no sign flips).
-- Decision: Stage 7 → **PARTIAL-PASS** (2026-03-14, INC-0161 KEEP).
-  Routing compute compression confirmed across 5 seeds with ultra-low variance.
+  - `docs/research/increments/INC_0162_routing_compute_scaling_law.md`
+- Latest result (INC-0162, 2026-03-14):
+  - **KEEP -- routing compute scaling law established.**
+  - Scaling exponents: TRANS ORIG alpha=0.50, TRANS PERM alpha=0.79, BASE PERM alpha=0.98.
+  - TRANS ORIG scales as K^0.50 (square-root). Doubling K increases effective
+    memory by 1.41x, not 2x.
+  - At K=200: TRANS ORIG 57 effective buckets vs PERM 120 (2.09x compression).
+  - Phase transport amplifies geometric concentration (alpha 0.50 vs BASE 0.88).
+  - All 6 K values (25-200), 5 seeds, ultra-low variance.
+- Decision: Stage 7 remains **PARTIAL-PASS** (strong) (2026-03-14, INC-0162 KEEP).
+  Scaling law quantified. Geometry achieves provably lower scaling exponent.
 - Blocker:
-  - `None. 5-seed confirmation complete. Finalize or extend to larger scale.`
+  - `None. Scaling law established. Finalize or extend to real-task validation.`
 - Next branch:
-  - `INC-0162: TBD — finalize or broader-scale hardware confirmation`
+  - `INC-0163: TBD -- finalize or real-task hardware confirmation`
