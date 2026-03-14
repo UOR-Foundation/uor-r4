@@ -3819,3 +3819,17 @@ Add new entries below.
     smoothness all confirmed across full screen→confirm→finalize protocol.
   - Remaining Stage 5 question (spectral → computational advantage) bridges to Stage 6.
   - Next: transition to Stage 6 (Sparse Event-Driven Trainability).
+
+## 2026-03-14 INC-0152 — **Closed: REFINE** — Spectral-event correlation probe (screen)
+- Kill-list stage: 6. Sparse Event-Driven Trainability
+- Mathematical object: Per-sample correlation between H^4 Poincaré Dirichlet roughness and event-gate quiescence
+- Protocol: screen (1 seed, seed=0)
+- Data: ppmi_proxy.npz, phase4_dims=3,65,2,21, K=75, event gate: soft_error, threshold=0.0, tau=0.02
+- Key finding: **Event gate saturated.** gate_mean=0.959, gate_std=0.004, active_frac=100%.
+  sigmoid((error_mean=0.063 - threshold=0.0) / tau=0.02) = 0.959. No gate discrimination.
+- Margin-signal roughness_vs_error Spearman: +0.529 (BASE poincaré), +0.502 (BASE ambient).
+  Correlation exists (r > 0.3), but poincaré delta only +2.7pp (below 10pp threshold).
+- Decision:
+  - INC-0152: REFINE — gate saturation prevents testing the full hypothesis
+  - Spectral roughness ↔ prediction error link confirmed at signal level
+  - Next: INC-0153 with gate threshold centered on actual error distribution (~0.06)

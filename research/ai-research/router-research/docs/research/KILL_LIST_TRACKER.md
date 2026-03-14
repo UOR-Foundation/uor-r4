@@ -10,7 +10,7 @@ Use statuses:
 
 ## Canonical Queue
 - Current primary RR: `RR-067`
-- Current primary INC: `INC-0151` (Closed: KEEP — Stage 5 finalized, transition to Stage 6)
+- Current primary INC: `INC-0153` (TBD — Stage 6 re-parameterized event gate correlation)
 
 ## 1. Hyperbolic Embedding Stability
 - Status: `partial`
@@ -142,10 +142,17 @@ Use statuses:
   - `docs/research/increments/INC_0125_product_phase_sparse_event_proxy_trainability_hardening.md`
   - `docs/research/increments/INC_0130_product_phase_sparse_event_translation_route_coupled_soft_bias_pilot.md`
   - `docs/research/increments/INC_0131_product_phase_sparse_event_translation_soft_bias_carry_forward.md`
+  - `docs/research/increments/INC_0152_spectral_event_correlation_screen.md`
+- Latest result (INC-0152, 2026-03-14):
+  - Spectral-event correlation probe: REFINE. Gate saturated at INC-0125 params
+    (threshold=0.0, tau=0.02 → gate_mean=0.959, active_frac=100%, std=0.004).
+    Spectral roughness ↔ error correlation exists (Spearman r ≈ 0.47–0.53 on margin signal),
+    but gate has no dynamic range. Poincaré vs ambient delta only +2.7–5.1pp (below 10pp).
+    Need re-parameterized gate (threshold ≈ error_mean, smaller tau).
 - Blocker:
-  - `proxy and translated sparse-event results are promising, but not yet a closed architecture-level trainability proof`
+  - `event gate re-parameterization needed; spectral-error link confirmed but gate saturated`
 - Next branch:
-  - `deferred until Stage 3 makes progress — RR-061 Stage 2 is now closed`
+  - `INC-0153: re-parameterized gate (threshold≈0.06, tau≈0.01) → screen → confirm`
 
 ## 7. Hardware-Efficiency Confirmation
 - Status: `partial`

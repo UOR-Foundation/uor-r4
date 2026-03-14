@@ -13,17 +13,17 @@ as authoritative when they disagree with this file.
 
 ## Canonical Queue
 - Current primary RR: `RR-067`
-- Current primary INC: `INC-0151` — **Closed: KEEP** (2026-03-13). Stage 5: 4-seed finalize confirmed.
-  true_margin_lowfreq +40–48%, label_indicator_max +57%, sector +72–77%.
-- Previous INC: `INC-0150` — **Closed: KEEP** (2026-03-13). 2-seed confirm passed.
-- Next INC: TBD — transition to Stage 6 (Sparse Event-Driven Trainability).
+- Current primary INC: `INC-0153` — TBD (Stage 6: re-parameterized event gate correlation probe).
+- Previous INC: `INC-0152` — **Closed: REFINE** (2026-03-14). Gate saturated at INC-0125 params.
+  Spectral roughness ↔ error correlation exists (Spearman r ≈ 0.47–0.53), but gate has no dynamic range
+  at threshold=0.0, tau=0.02 (gate_mean=0.959, active_frac=100%). Need re-parameterized gate.
 - Current primary increment doc:
-  `docs/research/increments/INC_0151_task_signal_poincare_finalize.md`
-- Kill-list stage: `Spectral / operator usefulness` (Stage 5 — PARTIAL-PASS strong, finalized)
+  `docs/research/increments/INC_0152_spectral_event_correlation_screen.md` (closed)
+- Kill-list stage: `Sparse event-driven trainability` (Stage 6 — PARTIAL, active gate)
 - Mathematical object under test:
-  `Stage 5 complete. Next: Stage 6 sparse event integration.`
-- Success condition (next): TBD (Stage 6 design)
-- Falsification condition (next): TBD (Stage 6 design)
+  `Per-sample correlation between H^4 Poincaré spectral roughness and event-gate quiescence (re-parameterized gate)`
+- Success condition: Spearman r > 0.3 between roughness and gate WITH genuine gate variance; poincaré_4d > ambient by >10pp
+- Falsification condition: |r| < 0.1 with well-parameterized gate (KILL); ambient matches poincaré (REFINE)
 
 ## Latest Closed Increment
 - `INC-0146`: **Closed: KEEP** (2026-03-13, Stage 4 PARTIAL-PASS confirmed).
