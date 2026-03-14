@@ -407,6 +407,8 @@ def task_eval_snapshot(args: argparse.Namespace, max_points: int) -> Dict[str, n
         "yhat_eval": yhat_ev[idx].astype(np.float64),
         "slot_eval": slot_ev[idx].astype(np.int64),
         "proto_d2_eval": proto_d2_ev[idx].astype(np.float64),
+        "v_ev": state["v_ev"][idx].astype(np.float64),
+        "dims": state["dims"],
     }
 
 

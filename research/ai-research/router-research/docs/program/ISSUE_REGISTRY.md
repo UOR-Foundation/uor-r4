@@ -4,8 +4,8 @@ Use this file as the local GitHub-style issue list for router research.
 
 ## Canonical Active Queue
 - Current primary RR: `RR-067`
-- Current primary INC: `INC-0148` — **Closed: KEEP** (2026-03-13). Stage 5: geometry-native spectral
-  operator confirmed. poincare_4d +91–95% sector alignment over ambient_euclidean.
+- Current primary INC: `INC-0149` — **Closed: KEEP** (2026-03-13). Stage 5: task-signal smoothness
+  on poincaré-4d operator confirmed. error_indicator +109%, true_margin +28–134%.
 - 2026-03-13 INC-0147 REFINE: Stage 4 mechanism revised. Raw alpha (λ=0) rel_diff=66.7% vs
   full transport (λ=1) at 68.7%: gap=+2.0pp. Fiber alpha confirmed (+20.6pp over base).
 - 2026-03-13 INC-0145 KEEP: HOPF_FULL rel_diff=40.7% (stable: 38.6%/42.7%). Stage 4 → PARTIAL-PASS.

@@ -46,6 +46,7 @@ def build_seed_command(
     knn_k: int,
     lowfreq_modes: int,
     output_path: str,
+    graph_mode: str = "ambient_euclidean",
 ) -> List[str]:
     return [
         python_bin,
@@ -62,6 +63,8 @@ def build_seed_command(
         str(knn_k),
         "--lowfreq-modes",
         str(lowfreq_modes),
+        "--graph-mode",
+        graph_mode,
         "--output",
         output_path,
     ]
@@ -298,6 +301,7 @@ def main() -> None:
     max_points = int(cfg.get("max_points", 384))
     knn_k = int(cfg.get("knn_k", 12))
     lowfreq_modes = int(cfg.get("lowfreq_modes", 8))
+    graph_mode = str(cfg.get("graph_mode", "ambient_euclidean"))
     route_ids = route_ids_from_config(cfg, proxy_config)
     route_args = route_arg_map(proxy_config)
 
@@ -319,6 +323,7 @@ def main() -> None:
             knn_k=knn_k,
             lowfreq_modes=lowfreq_modes,
             output_path=output_path,
+            graph_mode=graph_mode,
         )
         run_seed(cmd, log_path)
         payload = load_config(output_path)

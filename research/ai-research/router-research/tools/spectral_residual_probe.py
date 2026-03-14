@@ -70,6 +70,8 @@ def main() -> None:
     ap.add_argument("--max-points", type=int, default=384)
     ap.add_argument("--knn-k", type=int, default=12)
     ap.add_argument("--lowfreq-modes", type=int, default=8)
+    ap.add_argument("--graph-mode", type=str, default="ambient_euclidean",
+                     choices=["ambient_euclidean", "hopf_coords", "poincare_4d"])
     ap.add_argument("--output", required=True)
     args = ap.parse_args()
 
@@ -85,7 +87,10 @@ def main() -> None:
             raise SystemExit(f"route_id {route_id!r} not found in config")
         route_args = audit.build_args(common_args, route_map[route_id], args.seed)
         snap = audit.task_eval_snapshot(route_args, max_points=args.max_points)
-        decomp = audit.spectral_decomposition(snap["route_z"], knn_k=args.knn_k)
+        decomp = audit.spectral_decomposition(
+            snap["route_z"], knn_k=args.knn_k,
+            graph_mode=args.graph_mode, v_ev=snap["v_ev"], dims=snap["dims"],
+        )
         metrics = audit.spectral_metrics_from_decomposition(
             decomp,
             route_z=snap["route_z"],
@@ -122,6 +127,7 @@ def main() -> None:
         "max_points": int(args.max_points),
         "knn_k": int(args.knn_k),
         "lowfreq_modes": int(args.lowfreq_modes),
+        "graph_mode": args.graph_mode,
         "results": results,
     }
     os.makedirs(os.path.dirname(args.output), exist_ok=True)

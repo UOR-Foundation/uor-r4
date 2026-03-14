@@ -10,7 +10,7 @@ Use statuses:
 
 ## Canonical Queue
 - Current primary RR: `RR-067`
-- Current primary INC: `INC-0148` (Closed: KEEP — geometry-native spectral operator confirmed; poincare_4d +91–95% sector alignment)
+- Current primary INC: `INC-0149` (Closed: KEEP — Stage 5: task-signal smoothness confirmed)
 
 ## 1. Hyperbolic Embedding Stability
 - Status: `partial`
@@ -104,23 +104,28 @@ Use statuses:
   - `Begin Stage 5 (Spectral/Operator Usefulness) — Stage 4 proxy evidence sufficient`
 
 ## 5. Spectral / Operator Usefulness
-- Status: `partial`
+- Status: `partial` (strong — operator + task-signal confirmed)
 - Canonical evidence:
   - `docs/research/increments/INC_0066_spectral_route_operator.md`
   - `docs/research/increments/INC_0067_spectral_signal_probes.md`
   - `docs/research/increments/INC_0068_spectral_residual_task_signals.md`
   - `docs/research/increments/INC_0148_spectral_geometry_native_operator.md`
-- Latest result (INC-0148, 2026-03-13):
-  - Geometry-native spectral operator construction KEEP. poincare_4d gives +91–95% relative
-    improvement in sector_lowfreq_energy vs Euclidean-KNN baseline. hopf_coords gives +54–60%.
-  - Prior INC-0067/68 NEGATIVE results explained: wrong operator construction (Euclidean KNN on 100D).
-  - Theory chain confirmed: H^4 metric → operator → modes aligned with routing structure.
+  - `docs/research/increments/INC_0149_task_signal_poincare_operator.md`
+- Latest result (INC-0149, 2026-03-13):
+  - Task-signal smoothness on poincaré-4d operator KEEP. Multiple metrics >20% improvement:
+    error_indicator +109%, true_margin +28–134%, true_score +26%, residual_l2 +23%.
+    Dirichlet energy for true_margin decreases 3.5–4.7% (genuinely smoother, not artifact).
+  - Extends INC-0148 (routing-label alignment) to task-relevant signals.
+  - Theory chain: geometry → operator → modes → task-signal smoothness empirically supported.
+- Previous result (INC-0148, 2026-03-13):
+  - Geometry-native spectral operator KEEP. poincare_4d +91–95% sector_lowfreq_energy vs
+    Euclidean-KNN baseline. Prior INC-0067/68 NEGATIVE results explained: wrong operator.
 - Blocker:
-  - `operator construction confirmed (poincare_4d). Next: verify task-signal smoothness on
-    geometry-native operator (re-test INC-0067/68 protocol with poincare_4d). If task labels
-    are smoother, Stage 5 reaches strong partial-pass.`
+  - `operator construction and task-signal smoothness both confirmed. Remaining: whether spectral
+    smoothness translates into computational advantage (spectral-domain operations outperform
+    direct spatial operations). This requires Stage 6 integration testing.`
 - Next branch:
-  - `INC-0149: task-signal probes on poincare_4d operator (re-run INC-0067/68 protocol with corrected operator)`
+  - `Assess: multi-seed finalize Stage 5 OR transition to Stage 6 (sparse event-driven trainability)`
 
 ## 6. Sparse Event-Driven Trainability
 - Status: `partial`

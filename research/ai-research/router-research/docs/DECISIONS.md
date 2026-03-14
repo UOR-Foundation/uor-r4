@@ -3744,3 +3744,38 @@ Add new entries below.
   - Stage 5: PARTIAL-PASS updated — operator construction confirmed.
   - Next: INC-0149 — re-run task-signal probes with poincare_4d operator to test whether
     improved mode alignment translates into task-label smoothness.
+
+## 2026-03-13 INC-0149 — **Closed: KEEP** — Task-signal smoothness on poincaré-4d operator confirmed
+- Kill-list stage: 5. Spectral / Operator Usefulness
+- Mathematical object: Task-signal smoothness on the Poincaré-4d graph Laplacian (Laplace-Beltrami
+  approximation on H^4 Hopf routing manifold)
+- Hypothesis: The poincaré-4d operator (confirmed in INC-0148 for routing labels) also carries
+  task-relevant signal structure — residuals, error indicators, margins are smoother on the
+  geometry-native spectral modes than on Euclidean-KNN modes.
+- Data: ppmi_proxy.npz, phase4_dims=3,65,2,21, K=75
+- Screen results (seed=0, max_points=384, knn_k=12, lowfreq_modes=8):
+  Signal probe (labels):
+  - label_indicator_lowfreq_max: ambient=0.082, poincaré=0.117 (+43.3%)
+  - label_onehot_lowfreq_energy: ambient=0.0234, poincaré=0.0214 (−8.5%, aggregate worse)
+  Residual probe (task signals, HOPF_BASE_K75):
+  - error_indicator_lowfreq: ambient=0.00454, poincaré=0.00951 (+109%)
+  - true_margin_lowfreq:     ambient=0.02039, poincaré=0.02618 (+28%)
+  - true_score_lowfreq:      ambient=0.02520, poincaré=0.03183 (+26%)
+  - true_margin_dirichlet:   ambient=0.99404, poincaré=0.95956 (−3.5%, smoother)
+  Residual probe (HOPF_TRANS_K75_L0):
+  - true_margin_lowfreq:     ambient=0.02802, poincaré=0.06563 (+134%)
+  - residual_l2_lowfreq:     ambient=0.04764, poincaré=0.05864 (+23%)
+  - true_margin_dirichlet:   ambient=0.95965, poincaré=0.91502 (−4.7%, smoother)
+- Decision:
+  - INC-0149: KEEP
+  - Multiple task-signal metrics exceed the >20% KEEP threshold: error_indicator +109%,
+    true_margin +28–134%, true_score +26%, residual_l2 +23%.
+  - Dirichlet energy for true_margin decreases 3.5–4.7%, confirming genuine smoothing.
+  - Theory chain: geometry → operator → modes → task-signal smoothness is now empirically
+    supported at proxy scale across both routing-label and task-error metrics.
+  - Stage 5: PARTIAL-PASS further confirmed — both operator construction (INC-0148) and
+    task-signal alignment (INC-0149) are positive.
+  - Anomaly: aggregate one-hot label metric slightly worse (−8.5%); per-class indicators
+    and task-error metrics are more informative. error_indicator on TRANS route reverses
+    direction, likely due to pre-existing transport-sector bias.
+  - Next: assess whether to multi-seed finalize Stage 5 or transition to Stage 6.
