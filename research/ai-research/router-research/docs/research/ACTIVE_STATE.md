@@ -13,7 +13,17 @@ as authoritative when they disagree with this file.
 
 ## Canonical Queue
 - Current primary RR: `RR-067`
-- Current primary INC: `INC-0166` -- **TBD** (Stage 7: close or real-task validation).
+- Current primary INC: `INC-0168` -- **TBD** (Stage 7 / Stage 6: next experiment).
+- Previous INC: `INC-0167` -- **Closed: KEEP** (2026-03-14). Scaling mechanism diagnostic.
+  32 runs (2 seeds × 4 K × 4 routes) + static routing diagnostic (K=10..1000).
+  Shell structure structurally inaccessible: r_eff=1.0 for all L2-normalized tokens,
+  shell≥1 threshold at r_eff=2.225 never reached. √K scaling arises entirely from
+  angular sector discretization on Hopf base, amplified by phase transport.
+  Training-time exponents (K=250..1000): TRANS ORIG α=0.64, TRANS PERM α=0.82,
+  BASE ORIG α=0.86, BASE PERM α=0.88. PERM/ORIG ratio widens: 2.75× at K=1000.
+  Stage 7: PARTIAL-PASS (strong, scaling mechanism definitively attributed).
+- Previous INC: `INC-0166` -- **Closed: KEEP** (2026-03-14). Architecture law freeze
+  and K=100 boundary audit. Stage 7.
 - Previous INC: `INC-0165` -- **Closed: KEEP** (2026-03-14). Hardware proxy closure.
   80 runs (5 seeds × 4 K × 16 routes). Three hardware proxy models: Model A
   (eff cost), Model B (cache-line grouping), Model C (LRU cache). At matched

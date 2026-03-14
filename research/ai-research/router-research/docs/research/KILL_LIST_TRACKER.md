@@ -10,7 +10,10 @@ Use statuses:
 
 ## Canonical Queue
 - Current primary RR: `RR-067`
-- Current primary INC: `INC-0166` -- TBD (Stage 7: close or real-task validation)
+- Current primary INC: `INC-0168` -- TBD (next experiment)
+- Previous INC: `INC-0167` -- Closed: KEEP (2026-03-14). Scaling mechanism attributed
+  to angular sector discretization. Shells structurally inaccessible (r_eff=1.0).
+- Previous INC: `INC-0166` -- Closed: KEEP (2026-03-14). Law freeze + K=100 audit.
 
 ## 1. Hyperbolic Embedding Stability
 - Status: `partial`

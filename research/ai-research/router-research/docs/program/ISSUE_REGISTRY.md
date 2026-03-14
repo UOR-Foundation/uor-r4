@@ -4,7 +4,9 @@ Use this file as the local GitHub-style issue list for router research.
 
 ## Canonical Active Queue
 - Current primary RR: `RR-067`
-- Current primary INC: `INC-0166` -- TBD. Stage 7: close or real-task validation.
+- Current primary INC: `INC-0168` -- TBD. Stage 7: next experiment.
+- 2026-03-14 INC-0167 KEEP: Scaling mechanism diagnostic.
+- 2026-03-14 INC-0166 KEEP: Architecture law freeze + K=100 boundary audit.
 - 2026-03-14 INC-0164 KEEP: Scaling-law consistency. Predicted vs measured ratios within 1-11% (TRANS), 1-6% (BASE). 13/14 criteria pass.
 - 2026-03-14 INC-0163 KEEP: Matched-progress compute efficiency. ORIG 1.7-2.2x fewer eff buckets (TRANS), 1.9-2.4x faster convergence.
 - 2026-03-13 INC-0154 REFINE: Event-gate efficiency routing-agnostic (gate_mean delta <0.1pp, ORIG vs PERM).

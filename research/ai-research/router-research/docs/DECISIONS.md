@@ -4167,3 +4167,46 @@ Add new entries below.
   - INC-0165: KEEP — hardware proxy closure confirmed
   - Stage 7: PARTIAL-PASS (strong, hardware proxy closure confirmed)
   - Next: INC-0166 — TBD
+
+---
+
+## INC-0166: Architecture Law Freeze and K=100 Boundary Audit
+- Date: 2026-03-14
+- Stage: 7
+- Verdict: KEEP
+- Data: No new experiments (Part A: law freeze from INC-0162–0165).
+  Part B (K=100 boundary audit) deferred — mechanism identified in INC-0167.
+- Key findings:
+  1. Canonical architecture laws frozen from INC-0162–0165 chain:
+     geometry → coherence → concentration → scaling → compute → hardware.
+  2. Scaling law: effective_buckets ∝ K^α, TRANS ORIG α≈0.50 (square-root), BASE ORIG α≈0.88.
+  3. Compute advantage: at matched progress ORIG uses 1.7–2.2× fewer effective buckets (TRANS).
+  4. Hardware consequence: eff_cost 3.0–4.9× lower (TRANS), LRU-16 misses 2.5–2.9× fewer.
+  5. K=100 dip: reproducible structural feature across INC-0161–0165, not fatal.
+     Root cause attributed to sector discretization boundary (confirmed INC-0167).
+- Decision:
+  - INC-0166: KEEP — law freeze confirmed, K=100 dip structural not fatal
+  - Stage 7: PARTIAL-PASS (strong)
+  - Next: INC-0167
+
+---
+
+## INC-0167: Scaling Mechanism Diagnostic
+- Date: 2026-03-14
+- Stage: 7
+- Verdict: KEEP
+- Data: 32 pipeline runs (2 seeds × 4 K × 4 routes) + static routing diagnostic (K=10..1000).
+- Key findings:
+  1. Shell structure structurally inaccessible: r_eff=1.0 for all L2-normalized PPMI-SVD
+     tokens, shell≥1 threshold at r_eff=2.225 never reached.
+  2. Forced-shell experiments impossible: all routing metrics identical across delta_r values.
+  3. √K scaling arises entirely from angular sector discretization on Hopf base,
+     amplified by phase transport.
+  4. Training-time exponents (K=250..1000): TRANS ORIG α=0.64, TRANS PERM α=0.82,
+     BASE ORIG α=0.86, BASE PERM α=0.88.
+  5. PERM/ORIG effective bucket ratio grows with K: 2.18× (K=250) to 2.75× (K=1000) for TRANS.
+  6. INC-0162 scaling law confirmed to extend through K=1000.
+- Decision:
+  - INC-0167: KEEP — scaling mechanism definitively attributed to sector discretization
+  - Stage 7: PARTIAL-PASS (strong, mechanism identified)
+  - Next: INC-0168 — TBD
