@@ -4116,3 +4116,26 @@ Add new entries below.
   - INC-0163: KEEP — hardware-efficiency bridge confirmed
   - Stage 7: PARTIAL-PASS (strong, matched-progress compute efficiency confirmed)
   - Next: INC-0164 — TBD
+
+### INC-0164: Scaling-Law Consistency Test
+- Date: 2026-03-14
+- Stage: 7 (Hardware-Efficiency Confirmation)
+- Verdict: **KEEP**
+- Data: 16 routes (K={75,100,150,200} × {TRANS,BASE} × {ORIG,PERM}),
+  5 seeds (0-4), 80 total runs. No MSE used.
+- Progress metric: cosine similarity (NOT MSE).
+- Key findings:
+  1. Predicted ratio (c_PERM/c_ORIG) × K^(alpha_PERM−alpha_ORIG) matches
+     measured matched-progress compute ratios within 1-11% (TRANS), 1-6% (BASE).
+  2. TRANS ratios monotonically increase with K at all 4 progress levels
+     (p=0.50, 0.60, 0.70, 0.80).
+  3. TRANS at p=0.70: K=75 measured 1.725× vs predicted 1.634× (5.6% dev),
+     K=200 measured 2.212× vs predicted 2.182× (1.4% dev).
+  4. BASE at p=0.70: all K within 1-6% of prediction. K=100 dip non-monotonic
+     (known artifact, overall trend K=75→K=200 still increasing).
+  5. All seed variances CV < 0.06 (well below 0.30 threshold).
+  6. 13/14 success criteria pass.
+- Decision:
+  - INC-0164: KEEP — scaling-law mechanism confirmed
+  - Stage 7: PARTIAL-PASS (strong, scaling-law mechanism confirmed)
+  - Next: INC-0165 — TBD

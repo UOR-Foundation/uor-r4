@@ -10,7 +10,7 @@ Use statuses:
 
 ## Canonical Queue
 - Current primary RR: `RR-067`
-- Current primary INC: `INC-0164` -- TBD (Stage 7: finalize or next increment)
+- Current primary INC: `INC-0165` -- TBD (Stage 7: next increment or close)
 
 ## 1. Hyperbolic Embedding Stability
 - Status: `partial`
@@ -193,17 +193,18 @@ Use statuses:
   - `docs/research/increments/INC_0161_routing_cost_confirm.md`
   - `docs/research/increments/INC_0162_routing_compute_scaling_law.md`
   - `docs/research/increments/INC_0163_matched_progress_compute_efficiency.md`
-- Latest result (INC-0163, 2026-03-14):
-  - **KEEP -- matched-progress compute efficiency confirmed.**
-  - At matched training progress (cosine similarity), ORIG requires 1.7-2.2x
-    fewer effective bucket activations than PERM (TRANS), 1.4-1.5x (BASE).
-  - TRANS ORIG converges 1.9-2.4x faster than PERM (steps to 90% target).
-  - Advantage widens with K: eb_ratio 1.71x (K=75) to 2.23x (K=200).
+  - `docs/research/increments/INC_0164_scaling_law_consistency.md`
+- Latest result (INC-0164, 2026-03-14):
+  - **KEEP -- scaling-law consistency confirmed.**
+  - Predicted ratios (c_PERM/c_ORIG) × K^(alpha_PERM−alpha_ORIG) match measured
+    matched-progress compute ratios within 1-11% (TRANS) and 1-6% (BASE).
+  - TRANS ratios monotonically increase with K at all progress levels.
   - 80 runs (5 seeds x 4 K x 4 routes x 2 modes). No MSE used.
-- Decision: Stage 7 remains **PARTIAL-PASS** (strong) (2026-03-14, INC-0163 KEEP).
-  Hardware-efficiency bridge confirmed: structural routing advantage translates
-  to lower cumulative compute at matched learning progress.
+  - 13/14 success criteria pass (only BASE K=100 dip non-monotonic, known artifact).
+- Decision: Stage 7 remains **PARTIAL-PASS** (strong) (2026-03-14, INC-0164 KEEP).
+  Scaling-law mechanism confirmed: compute advantage is a direct mathematical
+  consequence of the routing scaling exponent difference.
 - Blocker:
-  - `None. Hardware-efficiency bridge confirmed. Ready for real-task validation.`
+  - `None. Scaling-law mechanism confirmed. Ready for real-task validation.`
 - Next branch:
-  - `INC-0164: TBD -- finalize Stage 7 or real-task hardware confirmation`
+  - `INC-0165: TBD -- next Stage 7 increment or close`

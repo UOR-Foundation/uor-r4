@@ -13,7 +13,12 @@ as authoritative when they disagree with this file.
 
 ## Canonical Queue
 - Current primary RR: `RR-067`
-- Current primary INC: `INC-0164` -- **TBD** (Stage 7: finalize or next increment).
+- Current primary INC: `INC-0165` -- **TBD** (Stage 7: next increment or close).
+- Previous INC: `INC-0164` -- **Closed: KEEP** (2026-03-14). Scaling-law consistency.
+  80 runs (5 seeds x 4 K x 4 routes x 2 modes). Predicted vs measured ratios
+  within 1-11% (TRANS) and 1-6% (BASE). TRANS monotonically increasing.
+  13/14 criteria pass. Scaling-law mechanism confirmed. No MSE used.
+  Stage 7: PARTIAL-PASS (strong, scaling-law mechanism confirmed).
 - Previous INC: `INC-0163` -- **Closed: KEEP** (2026-03-14). Matched-progress compute
   efficiency. 80 runs (5 seeds x 4 K x 16 routes). At matched progress, ORIG uses
   1.7-2.2x fewer effective buckets (TRANS), 1.4-1.5x fewer (BASE). ORIG converges
@@ -53,16 +58,16 @@ as authoritative when they disagree with this file.
   geometry-agnostic.
 - Previous INC: `INC-0152` — **Closed: REFINE** (2026-03-14). Gate saturated.
 - Current primary increment doc:
-  `docs/research/increments/INC_0163_matched_progress_compute_efficiency.md` (closed: KEEP)
+  `docs/research/increments/INC_0164_scaling_law_consistency.md` (closed: KEEP)
 - Kill-list stage: `Hardware-efficiency confirmation` (Stage 7 -- PARTIAL-PASS strong, active gate)
-- Stage 7 definition: Matched-progress compute efficiency confirmed. At equal
-  learning progress, ORIG uses 1.7-2.2x fewer effective buckets (TRANS) and converges
-  1.9-2.4x faster. Advantage widens with K (consistent with K^0.50 scaling law).
+- Stage 7 definition: Scaling-law consistency confirmed. The matched-progress compute
+  advantage is quantitatively explained by the INC-0162 routing scaling law.
+  Predicted ratios match measured within 1-11% (TRANS) and 1-6% (BASE).
 - Mathematical object under test:
-  `Matched-progress compute efficiency: ORIG vs PERM cumulative routing cost
-   at equal cosine-similarity progress levels. TRANS ORIG uses 1.7-2.2x fewer
-   effective buckets at matched progress. Hardware-efficiency bridge confirmed.
-   Stage 7: PARTIAL-PASS (strong, hardware-efficiency bridge confirmed).`
+  `Scaling-law consistency: whether the matched-progress compute advantage
+   follows from (c_PERM/c_ORIG) × K^(alpha_PERM − alpha_ORIG). Confirmed:
+   predicted and measured ratios match within 1-11% (TRANS), 1-6% (BASE).
+   Stage 7: PARTIAL-PASS (strong, scaling-law mechanism confirmed).`
 - Success condition: TBD (next increment)
 - Falsification condition: TBD (next increment)
 

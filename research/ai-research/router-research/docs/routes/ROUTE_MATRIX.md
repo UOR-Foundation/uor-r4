@@ -7,7 +7,8 @@
 
 ## Current Queue Override
 - Current primary RR: `RR-067`
-- Current primary INC: `INC-0164` -- TBD. Stage 7: finalize or next increment.
+- Current primary INC: `INC-0165` -- TBD. Stage 7: next increment or close.
+- 2026-03-14 INC-0164 KEEP: Scaling-law consistency. Predicted vs measured ratios within 1-11% (TRANS), 1-6% (BASE). 13/14 criteria pass.
 - 2026-03-14 INC-0163 KEEP: Matched-progress compute efficiency. ORIG 1.7-2.2x fewer eff buckets (TRANS), 1.9-2.4x faster convergence.
 - 2026-03-13 INC-0154 REFINE: Event-gate efficiency routing-agnostic (delta <0.1pp).
 - 2026-03-14 INC-0153 REFINE: Per-sample spectral-gate r > 0.3 but geometry-agnostic (delta 2.7–5.1pp).
