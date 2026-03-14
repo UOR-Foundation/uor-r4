@@ -10,7 +10,7 @@ Use statuses:
 
 ## Canonical Queue
 - Current primary RR: `RR-067`
-- Current primary INC: `INC-0155` — TBD (Stage 6: route-quality sparsity or architecture-level savings)
+- Current primary INC: `INC-0156` — TBD (Stage 6: spectral compression — spectral quality vs K)
 
 ## 1. Hyperbolic Embedding Stability
 - Status: `partial`
@@ -138,13 +138,33 @@ Use statuses:
 
 ## 6. Sparse Event-Driven Trainability
 - Status: `partial`
+- Interpretation update (INC-0154):
+  - "Sparse event-driven trainability" does NOT mean per-sample error gating.
+    INC-0152/0153/0154 showed error-based gating is routing-agnostic.
+  - The correct sparse-compute mechanism is **routing compression**: geometry-native
+    routing creates more coherent buckets (Stages 2–5), so fewer buckets are needed
+    to achieve the same reconstruction quality. Fewer buckets = fewer routing lookups
+    = fewer prototype updates = hardware savings.
+  - The Stage 6 question is now: **at fixed MSE target, how many fewer buckets does
+    structured (ORIG) routing need compared to scrambled (COL_PERM)?**
 - Canonical evidence:
   - `docs/research/increments/INC_0125_product_phase_sparse_event_proxy_trainability_hardening.md`
   - `docs/research/increments/INC_0130_product_phase_sparse_event_translation_route_coupled_soft_bias_pilot.md`
   - `docs/research/increments/INC_0131_product_phase_sparse_event_translation_soft_bias_carry_forward.md`
   - `docs/research/increments/INC_0152_spectral_event_correlation_screen.md`
   - `docs/research/increments/INC_0154_event_gate_efficiency_screen.md`
-- Latest result (INC-0154, 2026-03-13):
+  - `docs/research/increments/INC_0155_routing_compression_screen.md`
+- Latest result (INC-0155, 2026-03-13):
+  - Routing compression bucket count sweep: K ∈ {4,9,16,25,50,75,100} × {ORIG,PERM}.
+    MSE range: 0.003881–0.004008 (3.3% total spread). MSE INCREASES with K (prototype
+    estimation noise at fewer samples per bucket). Max ORIG-vs-PERM delta: +1.09%
+    (BASE K=25). Mean compression ratio: 0.87. No MSE-based routing compression exists.
+  - Secondary finding: sector entropy efficiency gap grows with K — ORIG=89.1% vs
+    PERM=97.6% at K=75 (8.6pp gap). Geometric routing IS more structured but doesn't
+    help MSE. hopf_angular_mass_error: ORIG=0.678, PERM=0.374.
+  - REFINE: MSE-based routing compression is the wrong metric (same root cause as
+    INC-0154: EMA prototypes saturate per-sample errors regardless of routing quality).
+- Previous result (INC-0154, 2026-03-13):
   - Event-gate efficiency 2×2×2 factorial: gate_mean delta <0.1pp (ORIG vs PERM).
     Error-based event gate is routing-agnostic — EMA prototypes equalize per-sample
     errors regardless of routing quality. Geometric advantage operates at
@@ -154,9 +174,12 @@ Use statuses:
 - Previous result (INC-0152, 2026-03-14):
   - Gate saturated at INC-0125 params (gate_mean=0.959, active_frac=100%).
 - Blocker:
-  - `error-based gate is routing-agnostic; need route-quality-based sparsity signal or architecture-level savings`
+  - `Four consecutive REFINE results (INC-0152–0155) confirm per-sample metrics are
+    geometry-agnostic on PPMI-SVD proxy. Stage 6 requires either: (a) spectral-quality
+    compression (lowfreq_energy vs K), or (b) a richer downstream task where routing
+    quality has measurable impact on task performance.`
 - Next branch:
-  - `INC-0155: route-quality-based sparsity or architecture-level routing compression`
+  - `INC-0156: spectral compression — lowfreq_energy vs K sweep ORIG vs COL_PERM`
 
 ## 7. Hardware-Efficiency Confirmation
 - Status: `partial`

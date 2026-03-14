@@ -3867,3 +3867,33 @@ Add new entries below.
   - Geometric advantage (Stages 2–5 confirmed) operates at bucket-organization level
   - Per-sample error (which drives the gate) is equalized by EMA prototype learning
   - Next: route-quality-based sparsity signal or architecture-level routing compression
+
+## 2026-03-13 INC-0155 — **Closed: REFINE** — Routing compression bucket count sweep (screen)
+- Kill-list stage: 6. Sparse Event-Driven Trainability (reinterpreted as routing compression)
+- Mathematical object: MSE-vs-K curve for ORIG vs COL_PERM routing
+- Protocol: screen (1 seed, seed=0)
+- Data: ppmi_proxy.npz, K ∈ {4,9,16,25,50,75,100} (BASE) + K ∈ {25,50,75,100} (TRANS)
+- Design: 22 routes total, event_gate_mode=off (pure routing quality test)
+- Key finding: **MSE is insensitive to both K and routing quality.**
+  MSE range across all 22 conditions: 0.003881–0.004008 (total spread 3.3%).
+  MSE INCREASES with K (opposite of expected) — more buckets = fewer samples per
+  prototype = slightly worse estimation.
+  ORIG vs PERM MSE delta: max +1.09% (BASE K=25). Mean compression ratio = 0.87.
+  No routing compression via MSE exists.
+- Secondary finding: **Sector entropy confirms structural signature.**
+  ORIG entropy efficiency 89.1–99.1% vs PERM 96.8–99.9%. Gap grows with K,
+  peaking at 8.6pp at K=75. Geometric routing produces non-uniform bucket
+  assignments that respect data structure. hopf_angular_mass_error: ORIG=0.678,
+  PERM=0.374 (structured data creates asymmetric Hopf occupancy).
+- Mathematical reason: Same root cause as INC-0154. EMA prototypes saturate at
+  these sample counts (5000 train, ~50–1250 per bucket). MSE depends on prototype
+  quality, not routing coherence. The geometric advantage manifests in spectral
+  properties (Stage 5: +40–77%) and entropy non-uniformity, not MSE.
+- Decision:
+  - INC-0155: REFINE — MSE-based routing compression is the wrong metric
+  - Structural signature IS present (entropy, Hopf mass error) but doesn't
+    help MSE
+  - Four consecutive REFINE results (INC-0152/0153/0154/0155) now confirm:
+    the PPMI-SVD proxy's per-sample metrics are geometry-agnostic
+  - Next: measure spectral quality vs K (lowfreq_energy vs K) to test whether
+    spectral compression exists, or accept that Stage 6 requires a richer task

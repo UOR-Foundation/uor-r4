@@ -13,22 +13,28 @@ as authoritative when they disagree with this file.
 
 ## Canonical Queue
 - Current primary RR: `RR-067`
-- Current primary INC: `INC-0155` — TBD (Stage 6: route-quality-based sparsity or architecture-level savings).
+- Current primary INC: `INC-0156` — **Pending** (Stage 6: spectral compression — lowfreq_energy vs K).
+  Measure how bucket count affects spectral quality (not MSE) to quantify routing
+  compression through the metric that IS geometry-sensitive.
+- Previous INC: `INC-0155` — **Closed: REFINE** (2026-03-13). MSE-vs-K flat (range 3%);
+  ORIG vs PERM delta ≤1.09%. MSE is insensitive to routing quality at these sample counts.
+  Sector entropy confirms structural signature (8.6pp gap at K=75) but it doesn't
+  translate to MSE advantage. MSE-based routing compression is the wrong metric.
 - Previous INC: `INC-0154` — **Closed: REFINE** (2026-03-13). Event-gate efficiency is
-  routing-agnostic: gate_mean delta <0.1pp (ORIG vs PERM). Error-based gate does not
-  interact with routing quality because EMA prototypes equalize per-sample errors.
-  Geometric advantage operates at bucket-organization level, not per-sample error level.
-- Previous INC: `INC-0153` — **Closed: REFINE** (2026-03-14). Per-sample spectral roughness ↔ gate
-  correlation confirmed (Spearman r ≈ 0.47–0.53) but geometry-agnostic (delta only +2.7–5.1pp).
-- Previous INC: `INC-0152` — **Closed: REFINE** (2026-03-14). Gate saturated at INC-0125 params.
-- Current primary increment doc:
-  `docs/research/increments/INC_0154_event_gate_efficiency_screen.md` (closed)
+  routing-agnostic: gate_mean delta <0.1pp (ORIG vs PERM).
+- Previous INC: `INC-0153` — **Closed: REFINE** (2026-03-14). Per-sample spectral ↔ gate
+  geometry-agnostic (delta only +2.7–5.1pp).
+- Previous INC: `INC-0152` — **Closed: REFINE** (2026-03-14). Gate saturated.
+- Current primary increment doc: TBD (INC-0156 not yet written)
 - Kill-list stage: `Sparse event-driven trainability` (Stage 6 — PARTIAL, active gate)
+- Interpretation update: Stage 6 sparsity = routing compression. MSE cannot measure it
+  (INC-0155). Per-sample gating cannot measure it (INC-0152/0153/0154). The remaining
+  instrument: spectral quality vs K (lowfreq_energy, label_indicator_max).
 - Mathematical object under test:
-  `Sparse event mechanism: error-based gating is routing-agnostic. Next: route-quality
-  gate, spectral gate, or architecture-level sparsity via routing compression.`
-- Success condition: TBD (INC-0155 design)
-- Falsification condition: TBD (INC-0155 design)
+  `Spectral compression: at fixed spectral quality target, how many fewer buckets
+  does structured (ORIG) Hopf routing need compared to scrambled (COL_PERM)?`
+- Success condition: spectral quality at K_orig matches spectral quality at K_perm > K_orig
+- Falsification condition: spectral quality equally insensitive to routing quality
 
 ## Latest Closed Increment
 - `INC-0146`: **Closed: KEEP** (2026-03-13, Stage 4 PARTIAL-PASS confirmed).
