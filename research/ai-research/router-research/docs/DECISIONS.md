@@ -4094,3 +4094,25 @@ Add new entries below.
   - INC-0162: KEEP — routing compute scaling law established
   - Stage 7: PARTIAL-PASS (strong, scaling law quantified)
   - Next: INC-0163 — TBD
+
+### INC-0163 — Matched-Progress Compute Efficiency
+
+- Date: 2026-03-14
+- Stage: 7 (Hardware-Efficiency Confirmation)
+- Verdict: **KEEP**
+- Data: 16 routes (K={75,100,150,200} × {TRANS,BASE} × {ORIG,PERM}),
+  5 seeds (0-4), 80 total runs. No MSE used.
+- Progress metric: cosine similarity (directional alignment, NOT MSE).
+- Key findings:
+  1. At matched training progress, ORIG requires 1.7–2.2× fewer effective
+     bucket activations than PERM (TRANS), 1.4–1.5× fewer (BASE).
+  2. TRANS ORIG converges 1.9–2.4× faster than PERM (steps to 90% target).
+  3. Advantage widens with K: eb_ratio 1.71× (K=75) to 2.23× (K=200).
+  4. Consistent with K^0.50 scaling law from INC-0162.
+  5. ORIG achieves equal or better eval cosine at convergence (+0.003 to +0.008
+     for TRANS, +0.001 to +0.003 for BASE).
+  6. All 8 K-mode combinations pass (4/4 TRANS, 4/4 BASE).
+- Decision:
+  - INC-0163: KEEP — hardware-efficiency bridge confirmed
+  - Stage 7: PARTIAL-PASS (strong, matched-progress compute efficiency confirmed)
+  - Next: INC-0164 — TBD

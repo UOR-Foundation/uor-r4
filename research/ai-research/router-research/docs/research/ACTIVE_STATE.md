@@ -13,7 +13,12 @@ as authoritative when they disagree with this file.
 
 ## Canonical Queue
 - Current primary RR: `RR-067`
-- Current primary INC: `INC-0163` -- **TBD** (Stage 7: finalize or next increment).
+- Current primary INC: `INC-0164` -- **TBD** (Stage 7: finalize or next increment).
+- Previous INC: `INC-0163` -- **Closed: KEEP** (2026-03-14). Matched-progress compute
+  efficiency. 80 runs (5 seeds x 4 K x 16 routes). At matched progress, ORIG uses
+  1.7-2.2x fewer effective buckets (TRANS), 1.4-1.5x fewer (BASE). ORIG converges
+  1.9-2.4x faster (TRANS). Advantage widens with K. No MSE used.
+  Stage 7: PARTIAL-PASS (strong, hardware-efficiency bridge confirmed).
 - Previous INC: `INC-0162` -- **Closed: KEEP** (2026-03-14). Routing compute scaling
   law. 6 K values (25-200), 5 seeds, 120 runs (40 new + 80 reused). Scaling exponents:
   TRANS ORIG alpha=0.50 (square-root), TRANS PERM alpha=0.79, BASE PERM alpha=0.98.
@@ -48,16 +53,16 @@ as authoritative when they disagree with this file.
   geometry-agnostic.
 - Previous INC: `INC-0152` — **Closed: REFINE** (2026-03-14). Gate saturated.
 - Current primary increment doc:
-  `docs/research/increments/INC_0160_sparse_event_training_efficiency_matched.md` (closed: KEEP)
+  `docs/research/increments/INC_0163_matched_progress_compute_efficiency.md` (closed: KEEP)
 - Kill-list stage: `Hardware-efficiency confirmation` (Stage 7 -- PARTIAL-PASS strong, active gate)
-- Stage 7 definition: Routing compute scaling law. TRANS ORIG scales as K^0.50
-  (square-root), PERM scales as K^0.79-0.98 (near-linear). Compression ratio grows
-  with K. At K=200, TRANS ORIG uses 57 effective buckets vs 120 (2.09x).
+- Stage 7 definition: Matched-progress compute efficiency confirmed. At equal
+  learning progress, ORIG uses 1.7-2.2x fewer effective buckets (TRANS) and converges
+  1.9-2.4x faster. Advantage widens with K (consistent with K^0.50 scaling law).
 - Mathematical object under test:
-  `Routing compute scaling law: effective_buckets ~ K^alpha.
-   TRANS ORIG alpha=0.50, TRANS PERM alpha=0.79, delta=0.295.
-   Phase transport halves the scaling exponent relative to permuted baseline.
-   Stage 7: PARTIAL-PASS (strong, scaling law established).`
+  `Matched-progress compute efficiency: ORIG vs PERM cumulative routing cost
+   at equal cosine-similarity progress levels. TRANS ORIG uses 1.7-2.2x fewer
+   effective buckets at matched progress. Hardware-efficiency bridge confirmed.
+   Stage 7: PARTIAL-PASS (strong, hardware-efficiency bridge confirmed).`
 - Success condition: TBD (next increment)
 - Falsification condition: TBD (next increment)
 

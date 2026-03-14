@@ -4,7 +4,8 @@ Use this file as the local GitHub-style issue list for router research.
 
 ## Canonical Active Queue
 - Current primary RR: `RR-067`
-- Current primary INC: `INC-0163` -- TBD. Stage 7: finalize or next increment.
+- Current primary INC: `INC-0164` -- TBD. Stage 7: finalize or next increment.
+- 2026-03-14 INC-0163 KEEP: Matched-progress compute efficiency. ORIG 1.7-2.2x fewer eff buckets (TRANS), 1.9-2.4x faster convergence.
 - 2026-03-13 INC-0154 REFINE: Event-gate efficiency routing-agnostic (gate_mean delta <0.1pp, ORIG vs PERM).
 - 2026-03-14 INC-0153 REFINE: Per-sample spectral-gate r ≈ 0.47–0.53 but geometry-agnostic (delta < 10pp).
 - 2026-03-14 INC-0152 REFINE: Gate saturated at INC-0125 params. Spectral roughness ↔ error confirmed.

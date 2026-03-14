@@ -10,7 +10,7 @@ Use statuses:
 
 ## Canonical Queue
 - Current primary RR: `RR-067`
-- Current primary INC: `INC-0163` -- TBD (Stage 7: finalize or next increment)
+- Current primary INC: `INC-0164` -- TBD (Stage 7: finalize or next increment)
 
 ## 1. Hyperbolic Embedding Stability
 - Status: `partial`
@@ -192,17 +192,18 @@ Use statuses:
   - `docs/research/increments/INC_0160_sparse_event_training_efficiency_matched.md`
   - `docs/research/increments/INC_0161_routing_cost_confirm.md`
   - `docs/research/increments/INC_0162_routing_compute_scaling_law.md`
-- Latest result (INC-0162, 2026-03-14):
-  - **KEEP -- routing compute scaling law established.**
-  - Scaling exponents: TRANS ORIG alpha=0.50, TRANS PERM alpha=0.79, BASE PERM alpha=0.98.
-  - TRANS ORIG scales as K^0.50 (square-root). Doubling K increases effective
-    memory by 1.41x, not 2x.
-  - At K=200: TRANS ORIG 57 effective buckets vs PERM 120 (2.09x compression).
-  - Phase transport amplifies geometric concentration (alpha 0.50 vs BASE 0.88).
-  - All 6 K values (25-200), 5 seeds, ultra-low variance.
-- Decision: Stage 7 remains **PARTIAL-PASS** (strong) (2026-03-14, INC-0162 KEEP).
-  Scaling law quantified. Geometry achieves provably lower scaling exponent.
+  - `docs/research/increments/INC_0163_matched_progress_compute_efficiency.md`
+- Latest result (INC-0163, 2026-03-14):
+  - **KEEP -- matched-progress compute efficiency confirmed.**
+  - At matched training progress (cosine similarity), ORIG requires 1.7-2.2x
+    fewer effective bucket activations than PERM (TRANS), 1.4-1.5x (BASE).
+  - TRANS ORIG converges 1.9-2.4x faster than PERM (steps to 90% target).
+  - Advantage widens with K: eb_ratio 1.71x (K=75) to 2.23x (K=200).
+  - 80 runs (5 seeds x 4 K x 4 routes x 2 modes). No MSE used.
+- Decision: Stage 7 remains **PARTIAL-PASS** (strong) (2026-03-14, INC-0163 KEEP).
+  Hardware-efficiency bridge confirmed: structural routing advantage translates
+  to lower cumulative compute at matched learning progress.
 - Blocker:
-  - `None. Scaling law established. Finalize or extend to real-task validation.`
+  - `None. Hardware-efficiency bridge confirmed. Ready for real-task validation.`
 - Next branch:
-  - `INC-0163: TBD -- finalize or real-task hardware confirmation`
+  - `INC-0164: TBD -- finalize Stage 7 or real-task hardware confirmation`
