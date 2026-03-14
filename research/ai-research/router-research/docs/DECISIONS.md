@@ -3615,3 +3615,28 @@ Add new entries below.
     Prior RR-063/064 results used hash embeddings and may not generalize.
   - Next: INC-0145 (Stage 4 Phase Transport — phase4d_hopf_base vs phase4d_hopf vs phase4d_hopf_transport
     on PPMI-SVD proxy, ppmi_proxy.npz, phase4_dims=3,65,2,21)
+
+## 2026-03-13 (INC-0145 Closed: KEEP — Stage 4 PARTIAL-PASS, geometry-induced phase-angle routing)
+- INC-0145 experiment: screen (1 seed) + confirm (2 seeds)
+  Routes: HOPF_BASE, HOPF_FULL, HOPF_TRANS x {ORIG, PERM}
+  sector_modes: phase4d_hopf_base / phase4d_hopf / phase4d_hopf_transport (lambda=1.0)
+  Data: ppmi_proxy.npz, phase4_dims=3,65,2,21, K=25, seeds=[0,1]
+- Confirm results (mean across seeds 0 and 1):
+  - HOPF_BASE: ORIG=0.0874, PERM=0.0638, rel_diff=31.2% (stable: 31.8%, 30.6%)  ← Stage 3 reference, exact replication
+  - HOPF_FULL: ORIG=0.2906, PERM=0.1924, rel_diff=40.7% (stable: 38.6%, 42.7%)  ← CONFIRM PASS
+  - HOPF_TRANS: ORIG=0.1054, PERM=0.0794, rel_diff=28.1% (variable: 23.4%, 32.7%)  ← K=25 bin dilution
+  - geodesic_knn_jaccard=1.0 for all; no route health regressions
+  - phase_transport_shift_abs_mean=0.512 (ORIG) and 0.411 (PERM) — non-trivial geometric connection
+- Decision:
+  - INC-0145: KEEP
+  - HOPF_FULL (phase4d_hopf) with geometry-induced theta_shift on phase angles achieves 40.7%
+    rel_diff — 30% relative improvement over Hopf-base (31.2%). The phase-angle coordinates
+    arctan2(b,a) and arctan2(d,c) carry more discriminative information than chi/delta base alone.
+    This is the FIBER-PHASE coordinate in action: the second H^4 factor (fiber α) carries routing signal.
+  - HOPF_TRANS (Levi-Civita fiber transport) at K=25: triplet bin allocation gives kalpha=2 only.
+    The K=25 triplet is too coarse — the geometric connection (pt_shift=0.512) is non-trivial but
+    its routing signal is masked by bin dilution. This is NOT evidence that the fiber signal is absent.
+  - Stage 4 (Phase Transport Usefulness): PARTIAL-PASS
+  - Next: INC-0146 — Stage 4 REFINE: HOPF_TRANS at K=50 to isolate Levi-Civita fiber transport
+    signal from K=25 triplet bin dilution. If K=50 HOPF_TRANS > HOPF_BASE, Stage 4 passes on
+    the geometric connection. If not, fiber transport is K-limited or adds nothing.

@@ -1,9 +1,10 @@
 # Project Board
 
 ## Canonical Active Queue
-- Current primary RR: `RR-065`
-- Current primary INC: `INC-0144` — **Closed: KEEP** (2026-03-13). Stage 3 **PARTIAL-PASS**.
-  Next: INC-0145 (Stage 4 Phase Transport on PPMI-SVD proxy).
+- Current primary RR: `RR-066`
+- Current primary INC: `INC-0145` — **Closed: KEEP** (2026-03-13). Stage 4 **PARTIAL-PASS**.
+  Next: INC-0146 (Stage 4 REFINE — HOPF_TRANS at K=50).
+- 2026-03-13 INC-0145 KEEP: HOPF_FULL rel_diff=40.7% (stable). Geometry-induced theta_shift on phase angles. Stage 4 → PARTIAL-PASS.
 - 2026-03-13 INC-0144 KEEP: Hopf fixed (phase4d_hopf_base) vs K-means adaptive. HOPF rel_diff=31.2%
   (stable), KMEANS rel_diff=3.1% (variable). Stage 3 → PARTIAL-PASS.
 - 2026-03-13 INC-0143 KEEP: 4-seed finalize. rel_diff=38.5% (range 30.6%–54.6%), all seeds pass. Stage 2 closed.

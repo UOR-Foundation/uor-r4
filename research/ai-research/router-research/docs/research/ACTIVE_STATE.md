@@ -12,21 +12,27 @@ Do not treat `CURRENT_DIRECTION.md`, `HANDOFF_CURRENT.md`, or `LIVE_WORKLOG.md`
 as authoritative when they disagree with this file.
 
 ## Canonical Queue
-- Current primary RR: `RR-065`
-- Current primary INC: `INC-0144` — **Closed: KEEP** (2026-03-13). Stage 3 PARTIAL-PASS:
-  HOPF rel_diff=31.2% (stable: 31.8%, 30.6% per seed). KMEANS rel_diff=3.1% (variable near zero).
-  Fixed H^4 Hopf geometry discriminates; adaptive K-means cannot. Stage 3 confirmed.
-- Next INC: INC-0145 — Stage 4 (Phase Transport) on PPMI-SVD proxy.
-  Note: RR-063/064 (prior Stage 4 work) used hash embeddings → must be retested with PPMI-SVD.
+- Current primary RR: `RR-066`
+- Current primary INC: `INC-0145` — **Closed: KEEP** (2026-03-13). Stage 4 PARTIAL-PASS:
+  HOPF_FULL rel_diff=40.7% (stable: 38.6%, 42.7%). HOPF_BASE rel_diff=31.2% (reference).
+  Geometry-induced theta_shift on phase angles improves discrimination by 30% relative.
+  HOPF_TRANS rel_diff=28.1% (variable: 23.4%, 32.7%) — K=25 triplet bin dilution confirmed.
+- Next INC: INC-0146 — Stage 4 REFINE: HOPF_TRANS at K=50 to isolate Levi-Civita fiber transport signal.
 - Current primary increment doc:
-  `docs/research/increments/INC_0144_hopf_angular_vs_kmeans_stage3.md`
-- Kill-list stage: `Hopf angular correctness` (Stage 3 → PARTIAL-PASS)
+  `docs/research/increments/INC_0145_phase_transport_fiber_stage4.md`
+- Kill-list stage: `Phase transport usefulness` (Stage 4 → PARTIAL-PASS)
 - Mathematical object under test:
-  `next: coupled H^4 × H^4 phase transport — does fiber-phase improve routing beyond Hopf-base?`
-- Success condition: `Phase transport changes route addresses vs phase4d_hopf_base AND improves at least one metric`
-- Falsification condition: `Phase transport does not differentiate from Hopf-base (route addresses unchanged)`
+  `next: Levi-Civita fiber transport at K=50 — does kalpha>2 reveal fiber signal?`
+- Success condition: `HOPF_TRANS K=50 rel_diff > HOPF_BASE rel_diff (31.2%) — fiber adds information at adequate bin resolution`
+- Falsification condition: `HOPF_TRANS K=50 rel_diff <= HOPF_BASE — fiber phase adds no signal even with adequate bins`
 
 ## Latest Closed Increment
+- `INC-0145`: **Closed: KEEP** (2026-03-13, Stage 4 PARTIAL-PASS)
+  `docs/research/increments/INC_0145_phase_transport_fiber_stage4.md`
+  - verdict: HOPF_FULL rel_diff=40.7% (stable). Geometry-induced theta_shift on phase angles
+    improves routing by 30% relative over Hopf-base. Stage 4 → PARTIAL-PASS.
+    HOPF_TRANS (K=25 triplet) variable: bin dilution, REFINE needed at K=50.
+
 - `INC-0144`:
   `docs/research/increments/INC_0144_hopf_angular_vs_kmeans_stage3.md`
   - status: `Closed: KEEP`

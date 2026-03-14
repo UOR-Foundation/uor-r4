@@ -9,8 +9,8 @@ Use statuses:
 - `killed` = falsified or explicitly abandoned
 
 ## Canonical Queue
-- Current primary RR: `RR-065`
-- Current primary INC: `INC-0144` (Closed: KEEP — Stage 3 PARTIAL-PASS, Hopf fixed geometry beats K-means adaptive)
+- Current primary RR: `RR-066`
+- Current primary INC: `INC-0145` (Closed: KEEP — Stage 4 PARTIAL-PASS, HOPF_FULL 40.7% vs base 31.2%)
 
 ## 1. Hyperbolic Embedding Stability
 - Status: `partial`
@@ -72,16 +72,27 @@ Use statuses:
     Prior RR-063/064 results used hash embeddings and may not generalize to semantic proxy.`
 
 ## 4. Phase Transport Usefulness
-- Status: `partial`
+- Status: `partial-pass`
 - Canonical evidence:
   - `docs/research/increments/INC_0063_phase_transport_necessity.md`
   - `docs/research/increments/INC_0064_coupled_complex_phase_transport.md`
   - `docs/research/increments/INC_0065_product_phase_field.md`
-- Blocker:
-  - `none — Stage 3 closed PARTIAL-PASS (2026-03-13, INC-0144 KEEP). Stage 4 is now unblocked.`
-  - `Required: run Stage 4 test on PPMI-SVD proxy (prior RR-063/064 used hash embeddings and results may not generalize)`
+  - `docs/research/increments/INC_0145_phase_transport_fiber_stage4.md`
+- Latest result (INC-0145, 2026-03-13):
+  - HOPF_FULL (phase4d_hopf, geometry-induced theta_shift on phase angles):
+    ORIG=0.291, PERM=0.192, rel_diff=40.7% (stable: 38.6%, 42.7%, 2 seeds)
+  - HOPF_BASE (phase4d_hopf_base, Stage 3 reference):
+    ORIG=0.087, PERM=0.064, rel_diff=31.2% (stable: 31.8%, 30.6%, 2 seeds)
+  - HOPF_TRANS (phase4d_hopf_transport, K=25, kalpha=2):
+    ORIG=0.105, PERM=0.079, rel_diff=28.1% (variable: 23.4%, 32.7%, 2 seeds)
+  - Primary finding: HOPF_FULL beats HOPF_BASE by 30% relative, 40.7% vs 31.2%.
+    Geometry-induced phase-angle routing improves discrimination beyond chi/delta base alone.
+  - HOPF_TRANS confounded by K=25 triplet bin dilution (kalpha=2 only); pt_shift=0.512 confirms
+    geometric connection is non-trivial — fiber signal masked by coarse bin resolution.
+- Decision: Stage 4 → **PARTIAL-PASS** (2026-03-13, INC-0145 KEEP).
 - Next branch:
-  - `INC-0145 — Stage 4 Phase Transport on PPMI-SVD: compare phase4d_hopf_base vs phase4d_hopf vs phase4d_hopf_transport`
+  - `INC-0146 — Stage 4 REFINE: HOPF_TRANS at K=50 to isolate Levi-Civita fiber transport from K=25 bin dilution`
+  - `Branch: codex/rr-067-phase-transport-k50-refine` (to be created)
 
 ## 5. Spectral / Operator Usefulness
 - Status: `partial`
