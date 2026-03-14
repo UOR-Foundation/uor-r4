@@ -1,9 +1,10 @@
 # Project Board
 
 ## Canonical Active Queue
-- Current primary RR: `RR-066`
-- Current primary INC: `INC-0145` — **Closed: KEEP** (2026-03-13). Stage 4 **PARTIAL-PASS**.
-  Next: INC-0146 (Stage 4 REFINE — HOPF_TRANS at K=50).
+- Current primary RR: `RR-067`
+- Current primary INC: `INC-0146` — **Closed: KEEP** (2026-03-13). Stage 4 PARTIAL-PASS confirmed.
+  HOPF_TRANS_K75 rel_diff=65.1% (stable). Fiber transport confirmed at kalpha=3.
+  Both Stage 4 mechanisms: HOPF_FULL (40.7%) and HOPF_TRANS (65.1%).
 - 2026-03-13 INC-0145 KEEP: HOPF_FULL rel_diff=40.7% (stable). Geometry-induced theta_shift on phase angles. Stage 4 → PARTIAL-PASS.
 - 2026-03-13 INC-0144 KEEP: Hopf fixed (phase4d_hopf_base) vs K-means adaptive. HOPF rel_diff=31.2%
   (stable), KMEANS rel_diff=3.1% (variable). Stage 3 → PARTIAL-PASS.

@@ -3640,3 +3640,40 @@ Add new entries below.
   - Next: INC-0146 — Stage 4 REFINE: HOPF_TRANS at K=50 to isolate Levi-Civita fiber transport
     signal from K=25 triplet bin dilution. If K=50 HOPF_TRANS > HOPF_BASE, Stage 4 passes on
     the geometric connection. If not, fiber transport is K-limited or adds nothing.
+
+## 2026-03-13 (INC-0146 Closed: KEEP — Stage 4 PARTIAL-PASS confirmed, Levi-Civita fiber transport)
+- INC-0146 experiment: screen (1 seed) + confirm (2 seeds)
+  Routes: HOPF_BASE_K25, HOPF_BASE_K75 (K-value control), HOPF_TRANS_K75 x {ORIG, PERM}
+  sector_modes: phase4d_hopf_base (K=25 and K=75) / phase4d_hopf_transport (K=75, lambda=1.0)
+  Data: ppmi_proxy.npz, phase4_dims=3,65,2,21, seeds=[0,1]
+  K discovery: allocate_triplet_bins_budget gives kalpha=2 at K=25 AND K=50; kalpha=3 first at K=75
+- Screen results (seed=0):
+  - HOPF_BASE_K25: rel_diff=31.8% (reference replication, matches INC-0145 exactly)
+  - HOPF_BASE_K75: rel_diff=46.0% (K-value alone improves base discrimination)
+  - HOPF_TRANS_K25: rel_diff=23.4% (INC-0145 replication, kalpha=2 confirmed)
+  - HOPF_TRANS_K75: rel_diff=68.7% (kalpha=3; fiber >> base at same K) — SCREEN PASS
+  - HOPF_TRANS_K100: rel_diff=87.3% (kalpha=4, even higher — K and fiber both scaling)
+- Confirm results (mean across seeds 0 and 1):
+  - HOPF_BASE_K25: ORIG=0.0874, PERM=0.0638, rel_diff=31.2% (stable: 31.8%, 30.6%) ← reference
+  - HOPF_BASE_K75: ORIG=0.0660, PERM=0.0410, rel_diff=46.7% (stable: 46.0%, 47.4%) ← K-control
+  - HOPF_TRANS_K75: ORIG=0.0668, PERM=0.0340, rel_diff=65.1% (stable: 68.7%, 61.2%) ← CONFIRM PASS
+    phase_transport_alpha_bins=3.0 in both seeds (kalpha=3 confirmed)
+    Fiber increment: HOPF_TRANS_K75 beats HOPF_BASE_K75 by +18.4pp (+39% relative over same-K base)
+  - geodesic_knn_jaccard=1.0 for all routes; no route health regressions
+- Decision:
+  - INC-0146: KEEP
+  - Levi-Civita fiber transport (phase4d_hopf_transport) at K=75 (kalpha=3) achieves 65.1% rel_diff.
+    This beats the same-K base (46.7%) by 18.4pp, confirming the transported_alpha coordinate
+    carries genuine semantic discrimination signal in the PPMI-SVD subspace (dims 3,65,2,21).
+  - The K=25 HOPF_TRANS underperformance (INC-0145: 28.1%, variable) was caused by kalpha=2 —
+    the bin resolution hypothesis is confirmed. K=50 would NOT have helped (kalpha=2 at K=50).
+    K=75 is the correct threshold for adequate fiber bin resolution.
+  - K-value control: HOPF_BASE_K75 (46.7%) > HOPF_BASE_K25 (31.2%). K-increase itself improves
+    base discrimination independently. But the fiber increment above baseline (+18.4pp) is a
+    fiber-specific effect, not a K-scaling artifact.
+  - Both Stage 4 mechanisms now confirmed on PPMI-SVD proxy:
+    1. HOPF_FULL (INC-0145, K=25): geometry-induced theta_shift on phase angles → 40.7%
+    2. HOPF_TRANS (INC-0146, K=75): Levi-Civita fiber transport → 65.1%
+  - Stage 4 (Phase Transport Usefulness): PARTIAL-PASS confirmed (proxy level)
+  - Next decision: INC-0147 Stage 4 4-seed finalize at K=75, OR begin Stage 5 (Spectral)
+    Stage 4 proxy evidence is sufficient to unblock Stage 5 investigation.

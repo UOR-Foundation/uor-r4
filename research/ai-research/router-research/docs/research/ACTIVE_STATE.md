@@ -12,21 +12,29 @@ Do not treat `CURRENT_DIRECTION.md`, `HANDOFF_CURRENT.md`, or `LIVE_WORKLOG.md`
 as authoritative when they disagree with this file.
 
 ## Canonical Queue
-- Current primary RR: `RR-066`
-- Current primary INC: `INC-0145` — **Closed: KEEP** (2026-03-13). Stage 4 PARTIAL-PASS:
-  HOPF_FULL rel_diff=40.7% (stable: 38.6%, 42.7%). HOPF_BASE rel_diff=31.2% (reference).
-  Geometry-induced theta_shift on phase angles improves discrimination by 30% relative.
-  HOPF_TRANS rel_diff=28.1% (variable: 23.4%, 32.7%) — K=25 triplet bin dilution confirmed.
-- Next INC: INC-0146 — Stage 4 REFINE: HOPF_TRANS at K=50 to isolate Levi-Civita fiber transport signal.
+- Current primary RR: `RR-067`
+- Current primary INC: `INC-0146` — **Closed: KEEP** (2026-03-13). Stage 4 PARTIAL-PASS (confirmed):
+  HOPF_TRANS K=75 rel_diff=65.1% (stable: 68.7%, 61.2%). HOPF_BASE_K75=46.7%. Fiber adds +18.4pp
+  over same-K base (+39% relative). Levi-Civita transported alpha confirms semantic signal at kalpha≥3.
+  Both Stage 4 mechanisms now confirmed: HOPF_FULL (INC-0145, 40.7%) and HOPF_TRANS (INC-0146, 65.1%).
+- Next INC: INC-0147 — decision point: Stage 4 4-seed finalize at K=75 OR begin Stage 5 (spectral)
 - Current primary increment doc:
-  `docs/research/increments/INC_0145_phase_transport_fiber_stage4.md`
-- Kill-list stage: `Phase transport usefulness` (Stage 4 → PARTIAL-PASS)
+  `docs/research/increments/INC_0146_phase_transport_k75_refine.md`
+- Kill-list stage: `Phase transport usefulness` (Stage 4 → PARTIAL-PASS confirmed, proxy-level)
 - Mathematical object under test:
-  `next: Levi-Civita fiber transport at K=50 — does kalpha>2 reveal fiber signal?`
-- Success condition: `HOPF_TRANS K=50 rel_diff > HOPF_BASE rel_diff (31.2%) — fiber adds information at adequate bin resolution`
-- Falsification condition: `HOPF_TRANS K=50 rel_diff <= HOPF_BASE — fiber phase adds no signal even with adequate bins`
+  `next: Stage 5 (spectral operator usefulness) or Stage 4 4-seed finalize at K=75`
+- Success condition (next): `Stage 5 spectral operator improves routing beyond HOPF_TRANS_K75 baseline`
+- Falsification condition (next): `spectral operator adds no signal above HOPF_TRANS_K75 (65.1%)`
 
 ## Latest Closed Increment
+- `INC-0146`: **Closed: KEEP** (2026-03-13, Stage 4 PARTIAL-PASS confirmed).
+  `docs/research/increments/INC_0146_phase_transport_k75_refine.md`
+  - verdict: HOPF_TRANS K=75 (kalpha=3) rel_diff=65.1% (stable: 68.7%, 61.2%).
+    HOPF_BASE_K75=46.7%. Fiber transport adds +18.4pp over same-K base. Both Stage 4
+    mechanisms confirmed (HOPF_FULL 40.7% INC-0145 + HOPF_TRANS 65.1% INC-0146).
+    K=50 confirmed to NOT resolve bin dilution (kalpha=2); K=75 is the correct threshold.
+
+- `INC-0146`: **In progress** — Stage 4 REFINE, HOPF_TRANS K=75/K=100 (RR-067)
 - `INC-0145`: **Closed: KEEP** (2026-03-13, Stage 4 PARTIAL-PASS)
   `docs/research/increments/INC_0145_phase_transport_fiber_stage4.md`
   - verdict: HOPF_FULL rel_diff=40.7% (stable). Geometry-induced theta_shift on phase angles

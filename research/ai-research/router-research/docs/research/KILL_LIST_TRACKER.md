@@ -9,8 +9,8 @@ Use statuses:
 - `killed` = falsified or explicitly abandoned
 
 ## Canonical Queue
-- Current primary RR: `RR-066`
-- Current primary INC: `INC-0145` (Closed: KEEP — Stage 4 PARTIAL-PASS, HOPF_FULL 40.7% vs base 31.2%)
+- Current primary RR: `RR-067`
+- Current primary INC: `INC-0146` (Closed: KEEP — Stage 4 PARTIAL-PASS confirmed, HOPF_TRANS_K75 65.1%)
 
 ## 1. Hyperbolic Embedding Stability
 - Status: `partial`
@@ -78,21 +78,28 @@ Use statuses:
   - `docs/research/increments/INC_0064_coupled_complex_phase_transport.md`
   - `docs/research/increments/INC_0065_product_phase_field.md`
   - `docs/research/increments/INC_0145_phase_transport_fiber_stage4.md`
-- Latest result (INC-0145, 2026-03-13):
+  - `docs/research/increments/INC_0146_phase_transport_k75_refine.md`
+- Latest result (INC-0146, 2026-03-13):
+  - HOPF_TRANS_K75 (phase4d_hopf_transport, K=75, kalpha=3):
+    ORIG=0.067, PERM=0.034, rel_diff=65.1% (stable: 68.7%, 61.2%, 2 seeds)
+  - HOPF_BASE_K75 (phase4d_hopf_base, K=75, K-value control):
+    ORIG=0.066, PERM=0.041, rel_diff=46.7% (stable: 46.0%, 47.4%, 2 seeds)
+  - HOPF_BASE_K25 reference: rel_diff=31.2% (stable, exact INC-0145 replication)
+  - Fiber increment at K=75: HOPF_TRANS_K75 beats HOPF_BASE_K75 by +18.4pp (+39% relative)
+  - K discovery confirmed: kalpha=2 at K=25 AND K=50; kalpha=3 first at K=75 (exact)
+- Previous result (INC-0145, 2026-03-13):
   - HOPF_FULL (phase4d_hopf, geometry-induced theta_shift on phase angles):
     ORIG=0.291, PERM=0.192, rel_diff=40.7% (stable: 38.6%, 42.7%, 2 seeds)
   - HOPF_BASE (phase4d_hopf_base, Stage 3 reference):
     ORIG=0.087, PERM=0.064, rel_diff=31.2% (stable: 31.8%, 30.6%, 2 seeds)
   - HOPF_TRANS (phase4d_hopf_transport, K=25, kalpha=2):
-    ORIG=0.105, PERM=0.079, rel_diff=28.1% (variable: 23.4%, 32.7%, 2 seeds)
-  - Primary finding: HOPF_FULL beats HOPF_BASE by 30% relative, 40.7% vs 31.2%.
-    Geometry-induced phase-angle routing improves discrimination beyond chi/delta base alone.
-  - HOPF_TRANS confounded by K=25 triplet bin dilution (kalpha=2 only); pt_shift=0.512 confirms
-    geometric connection is non-trivial — fiber signal masked by coarse bin resolution.
-- Decision: Stage 4 → **PARTIAL-PASS** (2026-03-13, INC-0145 KEEP).
+    ORIG=0.105, PERM=0.079, rel_diff=28.1% (variable: 23.4%, 32.7%, 2 seeds) — bin dilution
+- Decision: Stage 4 → **PARTIAL-PASS confirmed** (2026-03-13, INC-0146 KEEP).
+  Both fiber mechanisms confirmed: HOPF_FULL (40.7%, INC-0145) and HOPF_TRANS (65.1%, INC-0146).
+  Remaining open: transfer to real LM routing (proxy-level evidence sufficient to unblock Stage 5).
 - Next branch:
-  - `INC-0146 — Stage 4 REFINE: HOPF_TRANS at K=50 to isolate Levi-Civita fiber transport from K=25 bin dilution`
-  - `Branch: codex/rr-067-phase-transport-k50-refine` (to be created)
+  - Decision point: `INC-0147 — Stage 4 4-seed finalize at K=75 HOPF_TRANS` (optional)
+  - OR: `Begin Stage 5 (Spectral/Operator Usefulness) — Stage 4 proxy evidence sufficient`
 
 ## 5. Spectral / Operator Usefulness
 - Status: `partial`

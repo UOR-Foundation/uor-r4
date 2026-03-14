@@ -6,9 +6,10 @@
 - Finalize: 4 seeds
 
 ## Current Queue Override
-- Current primary RR: `RR-066`
-- Current primary INC: `INC-0145` — **Closed: KEEP** (2026-03-13). Stage 4 **PARTIAL-PASS**.
-  Next: INC-0146 (Stage 4 REFINE — HOPF_TRANS at K=50 to isolate Levi-Civita fiber transport).
+- Current primary RR: `RR-067`
+- Current primary INC: `INC-0146` — **Closed: KEEP** (2026-03-13). Stage 4 PARTIAL-PASS confirmed.
+  HOPF_TRANS_K75 rel_diff=65.1% (stable: 68.7%, 61.2%). HOPF_BASE_K75=46.7%. kalpha=3 confirmed.
+  K=50 excluded: kalpha=2 at K=50 same as K=25 (confirmed prediction).
 - 2026-03-13 INC-0145 KEEP: HOPF_FULL rel_diff=40.7% (stable: 38.6%, 42.7%). HOPF_BASE=31.2%. HOPF_TRANS=28.1% (variable, K=25 bin dilution). Stage 4 → PARTIAL-PASS.
 - 2026-03-13 INC-0144 KEEP: Hopf fixed (phase4d_hopf_base, 4D) vs K-means adaptive (100D). HOPF rel_diff=31.2%
   (stable: 31.8%, 30.6%). KMEANS rel_diff=3.1% (variable). Stage 3 → PARTIAL-PASS.
