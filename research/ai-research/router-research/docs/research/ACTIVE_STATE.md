@@ -13,19 +13,19 @@ as authoritative when they disagree with this file.
 
 ## Canonical Queue
 - Current primary RR: `RR-067`
-- Current primary INC: `INC-0147` — **Closed: REFINE** (2026-03-13). Stage 4 mechanism revised:
-  raw alpha (λ=0) gives 66.7% rel_diff at K=75 vs full transport (λ=1) at 68.7% — gap only +2.0pp.
-  Fiber phase coordinate alpha (raw) accounts for +20.6pp above base. Levi-Civita correction is
-  not differentially useful on PPMI-SVD proxy. Stage 4 PARTIAL-PASS confirmed with revised claim.
-- Next INC: `INC-0148` — decision: Stage 4 4-seed finalize at K=75 (HOPF_BASE + HOPF_TRANS_L0)
-  OR begin Stage 5 (spectral operator usefulness)
+- Current primary INC: `INC-0148` — **Closed: KEEP** (2026-03-13). Stage 5: Spectral / Operator
+  Usefulness. Geometry-native spectral operator confirmed. poincare_4d gives +91–95% relative
+  improvement in sector_lowfreq_energy vs Euclidean-KNN baseline. Theory chain confirmed.
+- Previous INC: `INC-0147` — **Closed: REFINE** (2026-03-13). Stage 4 mechanism revised.
+- Next INC: `INC-0149` — re-run task-signal probes with poincare_4d operator to test whether
+  mode alignment translates into task-label smoothness.
 - Current primary increment doc:
-  `docs/research/increments/INC_0147_phase_transport_lambda_control.md`
-- Kill-list stage: `Phase transport usefulness` (Stage 4 → PARTIAL-PASS confirmed, mechanism revised)
+  `docs/research/increments/INC_0148_spectral_geometry_native_operator.md`
+- Kill-list stage: `Spectral / operator usefulness` (Stage 5 — PARTIAL-PASS, operator confirmed)
 - Mathematical object under test:
-  `next: Stage 5 (spectral operator usefulness) or Stage 4 4-seed finalize`
-- Success condition (next): `either finalize K=75 4-seed result OR spectral operator improves routing`
-- Falsification condition (next): `spectral operator adds no signal above HOPF_TRANS_K75 baseline (66.7%)`
+  `next: task-signal probes on poincare_4d operator (INC-0149)`
+- Success condition (next): `task labels smoother on poincare_4d operator than on ambient_euclidean`
+- Falsification condition (next): `task labels show no improvement on geometry-native operator`
 
 ## Latest Closed Increment
 - `INC-0146`: **Closed: KEEP** (2026-03-13, Stage 4 PARTIAL-PASS confirmed).

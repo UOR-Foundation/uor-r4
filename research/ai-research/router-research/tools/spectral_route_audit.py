@@ -315,6 +315,8 @@ def route_eval_snapshot(args: argparse.Namespace, max_points: int) -> Dict[str, 
         "shell": state["shell_ev"][idx].astype(np.int64),
         "sector": state["sector_ev"][idx].astype(np.int64),
         "y_eval": state["y_ev"][idx].astype(np.float64),
+        "v_ev": state["v_ev"][idx].astype(np.float64),
+        "dims": state["dims"],
     }
 
 
@@ -414,6 +416,71 @@ def pairwise_distances(x: np.ndarray) -> np.ndarray:
     return np.sqrt(d2).astype(np.float64)
 
 
+def hopf_coords_from_raw(
+    v: np.ndarray,
+    dims: Tuple[int, ...],
+) -> np.ndarray:
+    """Extract Hopf coordinates as a 5D embedding respecting angular wrapping.
+
+    Returns (chi_u, cos(delta), sin(delta), cos(alpha), sin(alpha)) per point.
+    chi_u ∈ [0,1] is natural; delta, alpha are embedded on S^1 to handle wrap.
+    """
+    phase4_dim_i = dims[2]
+    phase4_dim_j = dims[3]
+    phase4_dim_k = dims[4]
+    phase4_dim_l = dims[5]
+    comp = hr.hopf_coordinate_components(
+        v, dim_i=phase4_dim_i, dim_j=phase4_dim_j,
+        dim_k=phase4_dim_k, dim_l=phase4_dim_l,
+    )
+    chi_u = comp["chi_u"][:, None]
+    cos_d = np.cos(comp["delta"])[:, None]
+    sin_d = np.sin(comp["delta"])[:, None]
+    cos_a = np.cos(comp["alpha"])[:, None]
+    sin_a = np.sin(comp["alpha"])[:, None]
+    return np.hstack([chi_u, cos_d, sin_d, cos_a, sin_a]).astype(np.float64)
+
+
+def poincare_pairwise_distances(
+    v: np.ndarray,
+    dims: Tuple[int, ...],
+) -> np.ndarray:
+    """Compute pairwise Poincaré ball distance on the 4 Hopf routing dims."""
+    phase4_dim_i = dims[2]
+    phase4_dim_j = dims[3]
+    phase4_dim_k = dims[4]
+    phase4_dim_l = dims[5]
+    sub = v[:, [phase4_dim_i, phase4_dim_j, phase4_dim_k, phase4_dim_l]].astype(np.float64)
+    n = sub.shape[0]
+    d = np.zeros((n, n), dtype=np.float64)
+    for i in range(n):
+        d[i, :] = hr.poincare_distance(sub[i:i+1, :], sub)
+    return d
+
+
+def build_knn_graph_from_distances(d: np.ndarray, knn_k: int) -> Tuple[np.ndarray, float]:
+    """Build KNN graph from a precomputed distance matrix."""
+    n = int(d.shape[0])
+    if n < 2:
+        return np.zeros((n, n), dtype=np.float64), 0.0
+    d_work = d.copy()
+    np.fill_diagonal(d_work, np.inf)
+    k = max(1, min(int(knn_k), n - 1))
+    nbr_idx = np.argpartition(d_work, kth=k - 1, axis=1)[:, :k]
+    nbr_dist = np.take_along_axis(d_work, nbr_idx, axis=1)
+    sigma = float(np.median(nbr_dist[np.isfinite(nbr_dist)]))
+    sigma = max(sigma, 1e-8)
+    a = np.zeros((n, n), dtype=np.float64)
+    w = np.exp(-(nbr_dist * nbr_dist) / (2.0 * sigma * sigma))
+    rows = np.repeat(np.arange(n), k)
+    cols = nbr_idx.reshape(-1)
+    vals = w.reshape(-1)
+    a[rows, cols] = vals
+    a = np.maximum(a, a.T)
+    np.fill_diagonal(a, 0.0)
+    return a, sigma
+
+
 def build_knn_graph(x: np.ndarray, knn_k: int) -> Tuple[np.ndarray, float]:
     n = int(x.shape[0])
     if n < 2:
@@ -447,8 +514,21 @@ def normalized_laplacian(a: np.ndarray) -> np.ndarray:
     return l
 
 
-def spectral_decomposition(route_z: np.ndarray, knn_k: int) -> Dict[str, np.ndarray]:
-    a, sigma = build_knn_graph(route_z, knn_k=knn_k)
+def spectral_decomposition(
+    route_z: np.ndarray,
+    knn_k: int,
+    graph_mode: str = "ambient_euclidean",
+    v_ev: np.ndarray = None,
+    dims: Tuple[int, ...] = None,
+) -> Dict[str, np.ndarray]:
+    if graph_mode == "hopf_coords":
+        coords = hopf_coords_from_raw(v_ev, dims)
+        a, sigma = build_knn_graph(coords, knn_k=knn_k)
+    elif graph_mode == "poincare_4d":
+        d = poincare_pairwise_distances(v_ev, dims)
+        a, sigma = build_knn_graph_from_distances(d, knn_k=knn_k)
+    else:
+        a, sigma = build_knn_graph(route_z, knn_k=knn_k)
     l = normalized_laplacian(a)
     evals, evecs = np.linalg.eigh(l)
     evals = np.clip(evals.astype(np.float64), 0.0, None)
@@ -558,8 +638,19 @@ def spectral_metrics_from_decomposition(
     }
 
 
-def spectral_metrics(route_z: np.ndarray, shell: np.ndarray, sector: np.ndarray, knn_k: int, lowfreq_modes: int) -> Dict[str, Any]:
-    decomp = spectral_decomposition(route_z, knn_k=knn_k)
+def spectral_metrics(
+    route_z: np.ndarray,
+    shell: np.ndarray,
+    sector: np.ndarray,
+    knn_k: int,
+    lowfreq_modes: int,
+    graph_mode: str = "ambient_euclidean",
+    v_ev: np.ndarray = None,
+    dims: Tuple[int, ...] = None,
+) -> Dict[str, Any]:
+    decomp = spectral_decomposition(
+        route_z, knn_k=knn_k, graph_mode=graph_mode, v_ev=v_ev, dims=dims,
+    )
     return spectral_metrics_from_decomposition(
         decomp,
         route_z=route_z,
@@ -584,6 +675,8 @@ def main() -> None:
     ap.add_argument("--max-points", type=int, default=384)
     ap.add_argument("--knn-k", type=int, default=12)
     ap.add_argument("--lowfreq-modes", type=int, default=8)
+    ap.add_argument("--graph-mode", type=str, default="ambient_euclidean",
+                     choices=["ambient_euclidean", "hopf_coords", "poincare_4d"])
     ap.add_argument("--output", required=True)
     args = ap.parse_args()
 
@@ -605,6 +698,9 @@ def main() -> None:
             snap["sector"],
             knn_k=args.knn_k,
             lowfreq_modes=args.lowfreq_modes,
+            graph_mode=args.graph_mode,
+            v_ev=snap["v_ev"],
+            dims=snap["dims"],
         )
         results.append(
             {
@@ -626,6 +722,7 @@ def main() -> None:
         "max_points": int(args.max_points),
         "knn_k": int(args.knn_k),
         "lowfreq_modes": int(args.lowfreq_modes),
+        "graph_mode": args.graph_mode,
         "results": results,
     }
     os.makedirs(os.path.dirname(args.output), exist_ok=True)

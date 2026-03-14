@@ -10,7 +10,7 @@ Use statuses:
 
 ## Canonical Queue
 - Current primary RR: `RR-067`
-- Current primary INC: `INC-0147` (Closed: REFINE — fiber alpha coordinate confirmed; Levi-Civita correction not differentially useful on PPMI-SVD proxy)
+- Current primary INC: `INC-0148` (Closed: KEEP — geometry-native spectral operator confirmed; poincare_4d +91–95% sector alignment)
 
 ## 1. Hyperbolic Embedding Stability
 - Status: `partial`
@@ -79,27 +79,29 @@ Use statuses:
   - `docs/research/increments/INC_0065_product_phase_field.md`
   - `docs/research/increments/INC_0145_phase_transport_fiber_stage4.md`
   - `docs/research/increments/INC_0146_phase_transport_k75_refine.md`
-- Latest result (INC-0146, 2026-03-13):
-  - HOPF_TRANS_K75 (phase4d_hopf_transport, K=75, kalpha=3):
-    ORIG=0.067, PERM=0.034, rel_diff=65.1% (stable: 68.7%, 61.2%, 2 seeds)
-  - HOPF_BASE_K75 (phase4d_hopf_base, K=75, K-value control):
-    ORIG=0.066, PERM=0.041, rel_diff=46.7% (stable: 46.0%, 47.4%, 2 seeds)
-  - HOPF_BASE_K25 reference: rel_diff=31.2% (stable, exact INC-0145 replication)
-  - Fiber increment at K=75: HOPF_TRANS_K75 beats HOPF_BASE_K75 by +18.4pp (+39% relative)
-  - K discovery confirmed: kalpha=2 at K=25 AND K=50; kalpha=3 first at K=75 (exact)
+  - `docs/research/increments/INC_0147_phase_transport_lambda_control.md`
+- Latest result (INC-0147, 2026-03-13):
+  - Lambda control screen (K=75, seed=0): isolates raw fiber alpha (λ=0) from Levi-Civita correction (λ=1).
+  - HOPF_BASE_K75: rel_diff=46.0% (reference)
+  - HOPF_TRANS_K75 λ=0 (raw alpha): rel_diff=66.7% — fiber coordinate alone adds +20.6pp over base
+  - HOPF_TRANS_K75 λ=0.5 (partial): rel_diff=71.8%
+  - HOPF_TRANS_K75 λ=1.0 (full transport): rel_diff=68.7% — INC-0146 replication
+  - L1−L0 gap = +2.0pp (within 5pp noise threshold)
+  - **Mechanism revised:** raw fiber alpha (θ₁+θ₂)/2 is the source of improvement, not the
+    Levi-Civita correction (λ/2)cos(2χ)·δ. Transport formula is valid geometry but the correction
+    term is not differentially useful on PPMI-SVD proxy.
+- Previous result (INC-0146, 2026-03-13):
+  - HOPF_TRANS_K75 rel_diff=65.1% (stable: 68.7%, 61.2%, 2 seeds)
+  - HOPF_BASE_K75 rel_diff=46.7%. Fiber adds +18.4pp over same-K base (+39% relative)
 - Previous result (INC-0145, 2026-03-13):
-  - HOPF_FULL (phase4d_hopf, geometry-induced theta_shift on phase angles):
-    ORIG=0.291, PERM=0.192, rel_diff=40.7% (stable: 38.6%, 42.7%, 2 seeds)
-  - HOPF_BASE (phase4d_hopf_base, Stage 3 reference):
-    ORIG=0.087, PERM=0.064, rel_diff=31.2% (stable: 31.8%, 30.6%, 2 seeds)
-  - HOPF_TRANS (phase4d_hopf_transport, K=25, kalpha=2):
-    ORIG=0.105, PERM=0.079, rel_diff=28.1% (variable: 23.4%, 32.7%, 2 seeds) — bin dilution
-- Decision: Stage 4 → **PARTIAL-PASS confirmed** (2026-03-13, INC-0146 KEEP).
-  Both fiber mechanisms confirmed: HOPF_FULL (40.7%, INC-0145) and HOPF_TRANS (65.1%, INC-0146).
+  - HOPF_FULL (gauge rotation on phase angles): rel_diff=40.7% (stable: 38.6%, 42.7%)
+  - HOPF_TRANS (K=25, kalpha=2): rel_diff=28.1% (variable, bin dilution)
+- Decision: Stage 4 → **PARTIAL-PASS confirmed** (2026-03-13, INC-0146 KEEP; mechanism revised INC-0147 REFINE).
+  Fiber phase coordinate alpha confirmed (+20.6pp over base at K=75). HOPF_FULL (40.7%) also confirmed.
+  Levi-Civita connection correction specifically is not differentially useful on PPMI-SVD proxy (+2pp).
   Remaining open: transfer to real LM routing (proxy-level evidence sufficient to unblock Stage 5).
 - Next branch:
-  - Decision point: `INC-0147 — Stage 4 4-seed finalize at K=75 HOPF_TRANS` (optional)
-  - OR: `Begin Stage 5 (Spectral/Operator Usefulness) — Stage 4 proxy evidence sufficient`
+  - `Begin Stage 5 (Spectral/Operator Usefulness) — Stage 4 proxy evidence sufficient`
 
 ## 5. Spectral / Operator Usefulness
 - Status: `partial`
@@ -107,10 +109,18 @@ Use statuses:
   - `docs/research/increments/INC_0066_spectral_route_operator.md`
   - `docs/research/increments/INC_0067_spectral_signal_probes.md`
   - `docs/research/increments/INC_0068_spectral_residual_task_signals.md`
+  - `docs/research/increments/INC_0148_spectral_geometry_native_operator.md`
+- Latest result (INC-0148, 2026-03-13):
+  - Geometry-native spectral operator construction KEEP. poincare_4d gives +91–95% relative
+    improvement in sector_lowfreq_energy vs Euclidean-KNN baseline. hopf_coords gives +54–60%.
+  - Prior INC-0067/68 NEGATIVE results explained: wrong operator construction (Euclidean KNN on 100D).
+  - Theory chain confirmed: H^4 metric → operator → modes aligned with routing structure.
 - Blocker:
-  - `operator distinction is real, but useful task-signal evidence stayed weak on the proxy target`
+  - `operator construction confirmed (poincare_4d). Next: verify task-signal smoothness on
+    geometry-native operator (re-test INC-0067/68 protocol with poincare_4d). If task labels
+    are smoother, Stage 5 reaches strong partial-pass.`
 - Next branch:
-  - `deferred until route law and phase branch are stable`
+  - `INC-0149: task-signal probes on poincare_4d operator (re-run INC-0067/68 protocol with corrected operator)`
 
 ## 6. Sparse Event-Driven Trainability
 - Status: `partial`

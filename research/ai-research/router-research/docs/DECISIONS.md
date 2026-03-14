@@ -3712,3 +3712,35 @@ Add new entries below.
   - Next: either 4-seed finalize at K=75 with HOPF_TRANS_L0 (raw alpha, simpler baseline) OR
     proceed to Stage 5 (spectral operator usefulness). Stage 4 proxy evidence is sufficient for
     Stage 5 unblocking regardless of which lambda is used.
+
+## 2026-03-13 INC-0148 — **Closed: KEEP** — Geometry-native spectral operator confirmed
+- Kill-list stage: 5. Spectral / Operator Usefulness
+- Mathematical object: Normalized graph Laplacian approximation to H^4 Laplace-Beltrami operator
+- Hypothesis:
+  Prior Stage 5 experiments (INC-0066/67/68) built the spectral graph using Euclidean KNN on 100D
+  ambient route coordinates — NOT the H^4-native metric. Theory predicts the manifold's own operator
+  should carry routing structure. This INC tested three operator constructions on the same confirmed
+  PPMI-SVD Hopf routes: (1) ambient_euclidean (100D Euclidean KNN, baseline), (2) hopf_coords
+  (5D Hopf coordinates: chi_u, cos/sin delta, cos/sin alpha), (3) poincare_4d (Poincaré ball distance
+  on the 4 routing dims).
+  Data: ppmi_proxy.npz, phase4_dims=3,65,2,21, K=75
+- Screen results (seed=0, max_points=384, knn_k=12, lowfreq_modes=8):
+  sector_lowfreq_energy:
+  - HOPF_BASE_K75:     ambient=0.196, hopf=0.314 (+60.3%), poincare=0.382 (+95.1%)
+  - HOPF_TRANS_K75_L0: ambient=0.349, hopf=0.538 (+54.1%), poincare=0.670 (+91.9%)
+  shell_lowfreq_energy: 0.0 for all (degenerate — single shell at K=75 with phi_log)
+  spectral_lambda2: ambient=0.0863, hopf=0.000178, poincare=0.01793
+  participation_ratio_mean: ambient=0.293, hopf=0.145, poincare=0.372
+- Decision:
+  - INC-0148: KEEP
+  - Both geometry-native operators exceed the 20% KEEP threshold by >2.7×.
+  - poincare_4d is the best construction: +91–95% relative improvement in sector_lowfreq_energy,
+    highest participation ratio (0.372), clean spectral gap (0.018).
+  - Theory chain confirmed: geometry (H^4 Poincaré distance) → operator (graph Laplacian) →
+    spectrum → modes aligned with routing structure (sector assignment).
+  - The 100D Euclidean KNN operator sees points as near-uniform in ambient space; it misses
+    the hyperbolic distance structure entirely.
+  - Prior INC-0067/68 NEGATIVE results are now explained: wrong operator construction.
+  - Stage 5: PARTIAL-PASS updated — operator construction confirmed.
+  - Next: INC-0149 — re-run task-signal probes with poincare_4d operator to test whether
+    improved mode alignment translates into task-label smoothness.

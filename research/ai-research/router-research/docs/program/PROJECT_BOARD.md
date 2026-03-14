@@ -2,12 +2,10 @@
 
 ## Canonical Active Queue
 - Current primary RR: `RR-067`
-- Current primary INC: `INC-0147` — **Closed: REFINE** (2026-03-13). Stage 4 mechanism revised.
-  Raw alpha (λ=0) rel_diff=66.7% vs full transport (λ=1) rel_diff=68.7% at K=75: gap=+2.0pp.
-  Fiber phase coordinate alpha confirmed (+20.6pp over base). Levi-Civita correction not differentially
-  useful. Stage 4 PARTIAL-PASS confirmed with revised mechanism claim.
-- 2026-03-13 INC-0146 KEEP: HOPF_TRANS_K75 rel_diff=65.1% (stable). Fiber adds +18.4pp over
-  same-K base. Both Stage 4 mechanisms: HOPF_FULL (40.7%) and HOPF_TRANS (65.1%).
+- Current primary INC: `INC-0148` — **Closed: KEEP** (2026-03-13). Stage 5: geometry-native spectral
+  operator confirmed. poincare_4d: sector_lowfreq_energy +91–95% over ambient_euclidean baseline.
+  Theory chain confirmed: H^4 metric → operator → modes aligned with routing structure.
+- 2026-03-13 INC-0147 REFINE: Fiber alpha confirmed (+20.6pp over base). Transport not needed.
 - 2026-03-13 INC-0145 KEEP: HOPF_FULL rel_diff=40.7% (stable). Geometry-induced theta_shift on phase angles. Stage 4 → PARTIAL-PASS.
 - 2026-03-13 INC-0144 KEEP: Hopf fixed (phase4d_hopf_base) vs K-means adaptive. HOPF rel_diff=31.2%
   (stable), KMEANS rel_diff=3.1% (variable). Stage 3 → PARTIAL-PASS.

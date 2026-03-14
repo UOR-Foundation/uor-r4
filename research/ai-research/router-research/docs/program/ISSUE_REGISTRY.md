@@ -4,10 +4,10 @@ Use this file as the local GitHub-style issue list for router research.
 
 ## Canonical Active Queue
 - Current primary RR: `RR-067`
-- Current primary INC: `INC-0147` — **Closed: REFINE** (2026-03-13). Fiber alpha coordinate confirmed.
-  L1 − L0 gap=+2.0pp (within 5pp REFINE threshold). Stage 4 mechanism revised to fiber phase coord.
-- 2026-03-13 INC-0146 KEEP: HOPF_TRANS_K75 rel_diff=65.1% (stable). Fiber +18.4pp over same-K base.
-- 2026-03-13 INC-0146 KEEP: HOPF_TRANS K=75 (kalpha=3) rel_diff=65.1% (stable). Levi-Civita fiber transport confirmed. Stage 4 both mechanisms confirmed.
+- Current primary INC: `INC-0148` — **Closed: KEEP** (2026-03-13). Stage 5: geometry-native spectral
+  operator confirmed. poincare_4d +91–95% sector alignment over ambient_euclidean.
+- 2026-03-13 INC-0147 REFINE: Stage 4 mechanism revised. Raw alpha (λ=0) rel_diff=66.7% vs
+  full transport (λ=1) at 68.7%: gap=+2.0pp. Fiber alpha confirmed (+20.6pp over base).
 - 2026-03-13 INC-0145 KEEP: HOPF_FULL rel_diff=40.7% (stable: 38.6%/42.7%). Stage 4 → PARTIAL-PASS.
 - 2026-03-13 INC-0144 KEEP: Hopf fixed (phase4d_hopf_base, 4D) vs K-means adaptive (100D). HOPF rel_diff=31.2%
   (stable: 31.8%/30.6%), KMEANS rel_diff=3.1% (variable: −5.8%/+12.0%). Stage 3 → PARTIAL-PASS.
