@@ -3847,3 +3847,23 @@ Add new entries below.
   - Poincaré delta only +2.7–5.1pp (below 10pp threshold)
   - Correlation works equally well on ambient Euclidean graph; geometric advantage is structural/aggregate
   - Next: test aggregate efficiency (do Stage 5 advantages lead to fewer gate firings?)
+
+## 2026-03-13 INC-0154 — **Closed: REFINE** — Event-gate efficiency interaction (screen)
+- Kill-list stage: 6. Sparse Event-Driven Trainability
+- Mathematical object: Aggregate event-gate efficiency × routing quality interaction
+- Protocol: screen (1 seed, seed=0)
+- Data: ppmi_proxy.npz, phase4_dims=3,65,2,21, K=75, gate: soft_error, threshold=0.07, tau=0.01
+- Design: 2×2×2 factorial: {BASE_K75, TRANS_K75} × {ORIG, COL_PERM} × {GATEOFF, T070}
+- Key finding: **Event-gate efficiency is routing-agnostic.**
+  gate_mean delta (PERM − ORIG): <0.1pp for both BASE and TRANS (far below 5pp falsification).
+  error_mean ≈ 0.0624 for all 8 conditions (identical to 4th decimal).
+  MSE degradation from gating: −2.5% for all conditions (gating slightly helps).
+- Mathematical reason: EMA prototype training equalizes per-sample prediction errors
+  regardless of routing quality. Column permutation preserves marginal distributions,
+  and prototypes adapt to whatever data appears in each bucket. The error surface
+  that the gate sees is routing-invariant.
+- Decision:
+  - INC-0154: REFINE — error-based event gate does not interact with routing quality
+  - Geometric advantage (Stages 2–5 confirmed) operates at bucket-organization level
+  - Per-sample error (which drives the gate) is equalized by EMA prototype learning
+  - Next: route-quality-based sparsity signal or architecture-level routing compression

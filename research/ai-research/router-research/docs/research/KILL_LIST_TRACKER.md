@@ -10,7 +10,7 @@ Use statuses:
 
 ## Canonical Queue
 - Current primary RR: `RR-067`
-- Current primary INC: `INC-0154` (TBD — Stage 6 aggregate event-gate efficiency)
+- Current primary INC: `INC-0155` — TBD (Stage 6: route-quality sparsity or architecture-level savings)
 
 ## 1. Hyperbolic Embedding Stability
 - Status: `partial`
@@ -143,18 +143,20 @@ Use statuses:
   - `docs/research/increments/INC_0130_product_phase_sparse_event_translation_route_coupled_soft_bias_pilot.md`
   - `docs/research/increments/INC_0131_product_phase_sparse_event_translation_soft_bias_carry_forward.md`
   - `docs/research/increments/INC_0152_spectral_event_correlation_screen.md`
-- Latest result (INC-0153, 2026-03-14):
-  - Re-parameterized gate (threshold=0.063, tau=0.002): gate_std=0.17, active_frac≈78%.
-    Per-sample roughness_vs_gate Spearman: +0.529 (BASE poincaré), +0.502 (ambient).
-    Correlation > 0.3 confirmed, but geometry delta only +2.7–5.1pp (below 10pp).
-    Per-sample spectral-gate link is geometry-agnostic — advantage is aggregate/structural.
+  - `docs/research/increments/INC_0154_event_gate_efficiency_screen.md`
+- Latest result (INC-0154, 2026-03-13):
+  - Event-gate efficiency 2×2×2 factorial: gate_mean delta <0.1pp (ORIG vs PERM).
+    Error-based event gate is routing-agnostic — EMA prototypes equalize per-sample
+    errors regardless of routing quality. Geometric advantage operates at
+    bucket-organization level, not per-sample error level. REFINE.
+- Previous result (INC-0153, 2026-03-14):
+  - Per-sample spectral roughness ↔ gate correlation geometry-agnostic (delta +2.7–5.1pp).
 - Previous result (INC-0152, 2026-03-14):
   - Gate saturated at INC-0125 params (gate_mean=0.959, active_frac=100%).
-    Spectral roughness ↔ error exists (r ≈ 0.47–0.53), gate had no variance.
 - Blocker:
-  - `per-sample spectral-gate correlation confirmed but geometry-agnostic; need to test aggregate efficiency`
+  - `error-based gate is routing-agnostic; need route-quality-based sparsity signal or architecture-level savings`
 - Next branch:
-  - `INC-0154: aggregate event-gate efficiency — do Stage 5 spectral advantages produce fewer gate firings?`
+  - `INC-0155: route-quality-based sparsity or architecture-level routing compression`
 
 ## 7. Hardware-Efficiency Confirmation
 - Status: `partial`

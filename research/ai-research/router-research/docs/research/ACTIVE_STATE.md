@@ -13,19 +13,22 @@ as authoritative when they disagree with this file.
 
 ## Canonical Queue
 - Current primary RR: `RR-067`
-- Current primary INC: `INC-0154` — TBD (Stage 6: aggregate event-gate efficiency probe).
+- Current primary INC: `INC-0155` — TBD (Stage 6: route-quality-based sparsity or architecture-level savings).
+- Previous INC: `INC-0154` — **Closed: REFINE** (2026-03-13). Event-gate efficiency is
+  routing-agnostic: gate_mean delta <0.1pp (ORIG vs PERM). Error-based gate does not
+  interact with routing quality because EMA prototypes equalize per-sample errors.
+  Geometric advantage operates at bucket-organization level, not per-sample error level.
 - Previous INC: `INC-0153` — **Closed: REFINE** (2026-03-14). Per-sample spectral roughness ↔ gate
   correlation confirmed (Spearman r ≈ 0.47–0.53) but geometry-agnostic (delta only +2.7–5.1pp).
-  Gate re-parameterization worked (gate_std=0.17, active_frac=78%). Geometric advantage is
-  structural/aggregate, not per-sample.
 - Previous INC: `INC-0152` — **Closed: REFINE** (2026-03-14). Gate saturated at INC-0125 params.
 - Current primary increment doc:
-  `docs/research/increments/INC_0153_spectral_event_reparameterized_gate_screen.md` (closed)
+  `docs/research/increments/INC_0154_event_gate_efficiency_screen.md` (closed)
 - Kill-list stage: `Sparse event-driven trainability` (Stage 6 — PARTIAL, active gate)
 - Mathematical object under test:
-  `Aggregate event-gate efficiency: does superior spectral organization (Stage 5 +40–77%) produce measurably fewer gate firings or faster convergence?`
-- Success condition: TBD (INC-0154 design)
-- Falsification condition: TBD (INC-0154 design)
+  `Sparse event mechanism: error-based gating is routing-agnostic. Next: route-quality
+  gate, spectral gate, or architecture-level sparsity via routing compression.`
+- Success condition: TBD (INC-0155 design)
+- Falsification condition: TBD (INC-0155 design)
 
 ## Latest Closed Increment
 - `INC-0146`: **Closed: KEEP** (2026-03-13, Stage 4 PARTIAL-PASS confirmed).

@@ -4,7 +4,8 @@ Use this file as the local GitHub-style issue list for router research.
 
 ## Canonical Active Queue
 - Current primary RR: `RR-067`
-- Current primary INC: `INC-0154` — TBD. Stage 6: aggregate event-gate efficiency.
+- Current primary INC: `INC-0155` — TBD. Stage 6: route-quality sparsity or architecture-level savings.
+- 2026-03-13 INC-0154 REFINE: Event-gate efficiency routing-agnostic (gate_mean delta <0.1pp, ORIG vs PERM).
 - 2026-03-14 INC-0153 REFINE: Per-sample spectral-gate r ≈ 0.47–0.53 but geometry-agnostic (delta < 10pp).
 - 2026-03-14 INC-0152 REFINE: Gate saturated at INC-0125 params. Spectral roughness ↔ error confirmed.
 - 2026-03-13 INC-0151 KEEP: 4-seed finalize confirmed. Stage 5 PARTIAL-PASS (strong).
