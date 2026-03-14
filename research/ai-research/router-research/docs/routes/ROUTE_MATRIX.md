@@ -7,7 +7,7 @@
 
 ## Current Queue Override
 - Current primary RR: `RR-067`
-- Current primary INC: `INC-0160` — TBD. Stage 7: hardware-efficiency confirmation.
+- Current primary INC: `INC-0161` — TBD. Stage 7: multi-seed or next increment.
 - 2026-03-13 INC-0154 REFINE: Event-gate efficiency routing-agnostic (delta <0.1pp).
 - 2026-03-14 INC-0153 REFINE: Per-sample spectral-gate r > 0.3 but geometry-agnostic (delta 2.7–5.1pp).
 - 2026-03-14 INC-0152 REFINE: Gate saturated. Spectral roughness ↔ error confirmed.

@@ -13,8 +13,12 @@ as authoritative when they disagree with this file.
 
 ## Canonical Queue
 - Current primary RR: `RR-067`
-- Current primary INC: `INC-0160` — **TBD** (Stage 7: hardware-efficiency confirmation,
-  now unblocked by Stage 6 PARTIAL-PASS strong).
+- Current primary INC: `INC-0161` — **TBD** (Stage 7: multi-seed confirm of training
+  routing cost, or next Stage 7 hardware-efficiency increment).
+- Previous INC: `INC-0160` — **Closed: KEEP** (2026-03-14). Training routing cost screen.
+  Effective bucket ratio PERM/ORIG: 1.67× (TRANS), 1.35× (BASE). Training Gini ratio
+  ORIG/PERM: 1.59× (TRANS), 1.89× (BASE). Top-half concentration: ORIG 94% vs PERM 78%
+  (TRANS). Training sparsity matches eval sparsity (Gini within 0.02). Stage 7: PARTIAL.
 - Previous INC: `INC-0159` — **Closed: KEEP** (2026-03-14). Routing sparsity screen
   (seed 0). ORIG routing concentrates label signal into 3.68× (BASE) / 2.14× (TRANS)
   more high-purity buckets at t=0.15. Gini: ORIG 2.12× / 1.65× more concentrated.
@@ -35,20 +39,17 @@ as authoritative when they disagree with this file.
   geometry-agnostic.
 - Previous INC: `INC-0152` — **Closed: REFINE** (2026-03-14). Gate saturated.
 - Current primary increment doc:
-  `docs/research/increments/INC_0159_sparse_event_training_efficiency.md` (closed: KEEP)
-- Kill-list stage: `Sparse event-driven trainability` (Stage 6 — PARTIAL-PASS strong, proceeding to Stage 7)
-- Stage 6 definition: Structural routing compression via bucket semantic coherence
-  + routing sparsity. Geometry-native routing produces higher per-bucket label purity,
-  lower per-bucket entropy, and more concentrated routing (higher Gini) than permuted
-  routing. Bucket coherence finalized at 4 seeds (INC-0158). Routing sparsity confirmed
-  at 1 seed (INC-0159). Combined with spectral operator (4 seeds, INC-0151), Stage 6
-  evidence is sufficient to proceed to Stage 7.
+  `docs/research/increments/INC_0160_sparse_event_training_efficiency_matched.md` (closed: KEEP)
+- Kill-list stage: `Hardware-efficiency confirmation` (Stage 7 — PARTIAL, active gate)
+- Stage 7 definition: Training routing cost confirmation. ORIG routing concentrates
+  training workload into fewer effective memory regions than PERM. Effective bucket
+  ratio 1.67× (TRANS), training Gini 1.59× (TRANS). Initial 1-seed evidence.
 - Mathematical object under test:
-  `Routing sparsity (confirmed): concentration ratio 3.68× at BASE t=0.15, Gini 2.12×.
-   Bucket coherence (finalized): purity ratio 1.976× at TRANS K=100.
-   Spectral compression: lowfreq_max ratio 1.50×. Stage 7 now unblocked.`
-- Success condition: Stage 6 evidence chain complete
-- Falsification condition: Routing sparsity concentration ratio < 1.1× at threshold 0.15
+  `Training routing cost: effective bucket ratio 1.67× (TRANS), Gini 1.59×.
+   ORIG uses 33 effective memory regions vs PERM 56. 40% fewer active cache lines.
+   Stage 7: PARTIAL (initial 1-seed evidence).`
+- Success condition: Multi-seed confirmation of effective bucket ratio ≥ 1.15
+- Falsification condition: Effective bucket ratio < 1.05 at 2+ seeds
 
 ## Latest Closed Increment
 - `INC-0146`: **Closed: KEEP** (2026-03-13, Stage 4 PARTIAL-PASS confirmed).

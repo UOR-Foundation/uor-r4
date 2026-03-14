@@ -4014,3 +4014,31 @@ Add new entries below.
     (4 seeds) + routing sparsity (1 seed). Evidence chain complete.
   - Stage 7 now unblocked.
   - Next: INC-0160 — Stage 7 hardware-efficiency confirmation
+
+### INC-0160 — Training Routing Cost — Screen
+- Date: 2026-03-14
+- Stage: 7 (Hardware-Efficiency Confirmation)
+- Verdict: **KEEP**
+- Data: 4 routes (K=75 × {BASE,TRANS} × {ORIG,PERM}), 1 seed (0),
+  EMA training (1 epoch, 5000 steps), per-step bucket key recording
+- No MSE used (INC-0155: routing-agnostic). Pure routing cost measurement.
+- Key findings:
+  1. **Effective bucket ratio (PERM/ORIG):** TRANS 1.67×, BASE 1.35×. ORIG
+     training uses 33 vs 56 (TRANS) / 49 vs 67 (BASE) effective memory regions.
+     40% fewer for TRANS, 26% fewer for BASE.
+  2. **Training Gini ratio (ORIG/PERM):** TRANS 1.59×, BASE 1.89×. ORIG training
+     workload is strongly concentrated. Exceeds 1.3× threshold.
+  3. **Top-half concentration:** ORIG TRANS 94% vs PERM 78%. The top 34 buckets
+     serve 94% of all ORIG training accesses.
+  4. **Training matches eval:** Training Gini within 0.02 of INC-0159 eval Gini.
+     Routing sparsity is not an artifact — persists through training.
+  5. **Raw unique bucket count uninformative:** BASE both touch 75 buckets.
+     Over 5000 steps, most buckets are eventually visited. Effective bucket count
+     (perplexity) is the correct hardware cost proxy.
+  6. **Coverage asymmetry:** ORIG TRANS visits 67/75 (89%) — 8 buckets receive
+     zero training samples. PERM visits 73/75 (97%).
+- Decision:
+  - INC-0160: KEEP — training routing cost advantage confirmed at 1 seed
+  - Geometry-native routing concentrates memory access patterns during training
+  - Stage 7: PARTIAL (initial 1-seed evidence)
+  - Next: INC-0161 — multi-seed confirm or next Stage 7 increment

@@ -10,7 +10,7 @@ Use statuses:
 
 ## Canonical Queue
 - Current primary RR: `RR-067`
-- Current primary INC: `INC-0160` — TBD (Stage 7: hardware-efficiency confirmation)
+- Current primary INC: `INC-0161` — TBD (Stage 7: multi-seed or next increment)
 
 ## 1. Hyperbolic Embedding Stability
 - Status: `partial`
@@ -184,12 +184,23 @@ Use statuses:
   - `INC-0160: Stage 7 — Hardware-efficiency confirmation`
 
 ## 7. Hardware-Efficiency Confirmation
-- Status: `partial` (now unblocked by Stage 6 PARTIAL-PASS strong)
+- Status: `partial` (initial positive evidence from INC-0160)
 - Canonical evidence:
   - `docs/research/increments/INC_0074_product_phase_translation_dense_frontier.md`
   - `docs/research/increments/INC_0092_product_phase_translation_warm_cache_q01_floor_hardening.md`
   - `docs/research/increments/INC_0098_product_phase_translation_chart_resident_route_cost_decomposition.md`
+  - `docs/research/increments/INC_0160_sparse_event_training_efficiency_matched.md`
+- Latest result (INC-0160, 2026-03-14):
+  - **KEEP — training routing cost advantage confirmed at 1 seed.**
+  - Effective bucket ratio (PERM/ORIG): 1.67× TRANS, 1.35× BASE.
+  - Training Gini ratio (ORIG/PERM): 1.59× TRANS, 1.89× BASE.
+  - Top-half concentration: ORIG TRANS 94% vs PERM 78%.
+  - Training sparsity matches eval sparsity (Gini within 0.02 of INC-0159).
+  - ORIG TRANS uses 33 effective memory regions vs PERM 56 (40% fewer).
+- Decision: Stage 7 → **PARTIAL** (2026-03-14, INC-0160 KEEP).
+  Training routing cost savings confirmed at 1 seed. Geometry concentrates
+  memory access patterns. Needs multi-seed confirmation.
 - Blocker:
-  - `Stage 6 resolved (PARTIAL-PASS strong). Ready for hardware efficiency work.`
+  - `Multi-seed confirmation needed (2+ seeds).`
 - Next branch:
-  - `INC-0160: begin Stage 7 hardware-efficiency confirmation`
+  - `INC-0161: multi-seed confirm or next Stage 7 increment`
