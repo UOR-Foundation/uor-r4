@@ -4139,3 +4139,31 @@ Add new entries below.
   - INC-0164: KEEP — scaling-law mechanism confirmed
   - Stage 7: PARTIAL-PASS (strong, scaling-law mechanism confirmed)
   - Next: INC-0165 — TBD
+
+### INC-0165: Hardware Proxy Closure via Memory-Traffic and Cache-Locality Models
+- Date: 2026-03-14
+- Stage: 7 (Hardware-Efficiency Confirmation)
+- Verdict: **KEEP**
+- Data: 16 routes (K={75,100,150,200} × {TRANS,BASE} × {ORIG,PERM}),
+  5 seeds (0-4), 80 total runs. No MSE used.
+- Progress metric: cosine similarity (checkpoint variable ONLY, NOT architecture metric).
+- Three hardware proxy models:
+  - Model A: cumulative effective-bucket cost (sum of per-step effective count)
+  - Model B: cache-line grouping at granularities G = [1, 2, 4]
+  - Model C: LRU cache reuse at capacities C = [8, 16, 32]
+- Key findings at matched progress p=0.70:
+  1. TRANS eff_cost ratio (PERM/ORIG): 3.0× (K=75) to 4.9× (K=200) — grows with K.
+  2. TRANS LRU-16 miss ratio: 2.5× (K=75) to 2.9× (K=200).
+  3. BASE eff_cost ratio: 1.8× (K=100) to 2.1× (K=75).
+  4. BASE LRU-16 miss ratio: 1.3× (K=150) to 1.8× (K=75).
+  5. All three models consistently show ORIG lower cost across all K values.
+  6. Cache-line grouping (Model B): advantage diminishes at G=4 (coarse lines absorb
+     routing differences), strongest at G=1 — consistent with fine-grained routing.
+  7. 18/20 success criteria pass. 2 failures: BASE trend-with-K for Models A and C
+     (known K=100 dip artifact, reproduced across INC-0161–0165).
+- INC-0164 1/14 failure resolution: BASE K=100 non-monotonic dip reproduced identically
+  in INC-0165 hardware models. Consistent structural feature, not noise. Not fatal.
+- Decision:
+  - INC-0165: KEEP — hardware proxy closure confirmed
+  - Stage 7: PARTIAL-PASS (strong, hardware proxy closure confirmed)
+  - Next: INC-0166 — TBD

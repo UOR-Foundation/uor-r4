@@ -13,7 +13,14 @@ as authoritative when they disagree with this file.
 
 ## Canonical Queue
 - Current primary RR: `RR-067`
-- Current primary INC: `INC-0165` -- **TBD** (Stage 7: next increment or close).
+- Current primary INC: `INC-0166` -- **TBD** (Stage 7: close or real-task validation).
+- Previous INC: `INC-0165` -- **Closed: KEEP** (2026-03-14). Hardware proxy closure.
+  80 runs (5 seeds × 4 K × 16 routes). Three hardware proxy models: Model A
+  (eff cost), Model B (cache-line grouping), Model C (LRU cache). At matched
+  progress (p=0.70): TRANS eff_cost 3.0-4.9× lower, LRU-16 misses 2.5-2.9×
+  fewer. BASE eff_cost 1.8-2.1× lower, LRU-16 misses 1.3-1.8× fewer.
+  18/20 criteria pass. Known BASE K=100 dip artifact (2 failures). No MSE used.
+  Stage 7: PARTIAL-PASS (strong, hardware proxy closure confirmed).
 - Previous INC: `INC-0164` -- **Closed: KEEP** (2026-03-14). Scaling-law consistency.
   80 runs (5 seeds x 4 K x 4 routes x 2 modes). Predicted vs measured ratios
   within 1-11% (TRANS) and 1-6% (BASE). TRANS monotonically increasing.
@@ -58,16 +65,16 @@ as authoritative when they disagree with this file.
   geometry-agnostic.
 - Previous INC: `INC-0152` — **Closed: REFINE** (2026-03-14). Gate saturated.
 - Current primary increment doc:
-  `docs/research/increments/INC_0164_scaling_law_consistency.md` (closed: KEEP)
+  `docs/research/increments/INC_0165_hardware_proxy_closure.md` (closed: KEEP)
 - Kill-list stage: `Hardware-efficiency confirmation` (Stage 7 -- PARTIAL-PASS strong, active gate)
-- Stage 7 definition: Scaling-law consistency confirmed. The matched-progress compute
-  advantage is quantitatively explained by the INC-0162 routing scaling law.
-  Predicted ratios match measured within 1-11% (TRANS) and 1-6% (BASE).
+- Stage 7 definition: Hardware proxy closure confirmed. Three cache/memory models
+  all show ORIG lower cost than PERM at matched progress. Chain complete:
+  geometry → coherence → concentration → scaling → compute → hardware.
 - Mathematical object under test:
-  `Scaling-law consistency: whether the matched-progress compute advantage
-   follows from (c_PERM/c_ORIG) × K^(alpha_PERM − alpha_ORIG). Confirmed:
-   predicted and measured ratios match within 1-11% (TRANS), 1-6% (BASE).
-   Stage 7: PARTIAL-PASS (strong, scaling-law mechanism confirmed).`
+  `Hardware proxy closure: whether routing concentration translates to lower
+   memory traffic and cache misses. Confirmed: eff_cost 3.0-4.9× lower (TRANS),
+   LRU-16 misses 2.5-2.9× fewer (TRANS) at matched progress.
+   Stage 7: PARTIAL-PASS (strong, hardware proxy closure confirmed).`
 - Success condition: TBD (next increment)
 - Falsification condition: TBD (next increment)
 

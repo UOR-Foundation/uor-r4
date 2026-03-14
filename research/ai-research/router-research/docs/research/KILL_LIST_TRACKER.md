@@ -10,7 +10,7 @@ Use statuses:
 
 ## Canonical Queue
 - Current primary RR: `RR-067`
-- Current primary INC: `INC-0165` -- TBD (Stage 7: next increment or close)
+- Current primary INC: `INC-0166` -- TBD (Stage 7: close or real-task validation)
 
 ## 1. Hyperbolic Embedding Stability
 - Status: `partial`
@@ -184,7 +184,7 @@ Use statuses:
   - `INC-0160: Stage 7 — Hardware-efficiency confirmation`
 
 ## 7. Hardware-Efficiency Confirmation
-- Status: `partial-pass` (strong -- scaling law established)
+- Status: `partial-pass` (strong -- hardware proxy closure confirmed)
 - Canonical evidence:
   - `docs/research/increments/INC_0074_product_phase_translation_dense_frontier.md`
   - `docs/research/increments/INC_0092_product_phase_translation_warm_cache_q01_floor_hardening.md`
@@ -194,17 +194,21 @@ Use statuses:
   - `docs/research/increments/INC_0162_routing_compute_scaling_law.md`
   - `docs/research/increments/INC_0163_matched_progress_compute_efficiency.md`
   - `docs/research/increments/INC_0164_scaling_law_consistency.md`
-- Latest result (INC-0164, 2026-03-14):
-  - **KEEP -- scaling-law consistency confirmed.**
-  - Predicted ratios (c_PERM/c_ORIG) × K^(alpha_PERM−alpha_ORIG) match measured
-    matched-progress compute ratios within 1-11% (TRANS) and 1-6% (BASE).
-  - TRANS ratios monotonically increase with K at all progress levels.
-  - 80 runs (5 seeds x 4 K x 4 routes x 2 modes). No MSE used.
-  - 13/14 success criteria pass (only BASE K=100 dip non-monotonic, known artifact).
-- Decision: Stage 7 remains **PARTIAL-PASS** (strong) (2026-03-14, INC-0164 KEEP).
-  Scaling-law mechanism confirmed: compute advantage is a direct mathematical
-  consequence of the routing scaling exponent difference.
+  - `docs/research/increments/INC_0165_hardware_proxy_closure.md`
+- Latest result (INC-0165, 2026-03-14):
+  - **KEEP -- hardware proxy closure confirmed.**
+  - Three models: Model A (eff cost), Model B (cache-line G=1/2/4),
+    Model C (LRU C=8/16/32). 80 runs (5 seeds × 4 K × 16 routes).
+  - At matched progress p=0.70:
+    TRANS eff_cost 3.0-4.9× lower, LRU-16 misses 2.5-2.9× fewer.
+    BASE eff_cost 1.8-2.1× lower, LRU-16 misses 1.3-1.8× fewer.
+  - Advantage grows with K (TRANS eff_cost: 3.0× at K=75 → 4.9× at K=200).
+  - 18/20 criteria pass. 2 failures: BASE trend-with-K (known K=100 dip).
+  - Chain complete: geometry → coherence → concentration → scaling → compute → hardware.
+- Decision: Stage 7 remains **PARTIAL-PASS** (strong) (2026-03-14, INC-0165 KEEP).
+  Hardware proxy closure confirmed. Routing concentration translates to measurable
+  memory-traffic and cache-locality advantage under all three proxy models.
 - Blocker:
-  - `None. Scaling-law mechanism confirmed. Ready for real-task validation.`
+  - `None. Hardware proxy closure confirmed. Ready for real-task validation or stage closure.`
 - Next branch:
-  - `INC-0165: TBD -- next Stage 7 increment or close`
+  - `INC-0166: TBD -- Stage 7 close or real-task validation`
