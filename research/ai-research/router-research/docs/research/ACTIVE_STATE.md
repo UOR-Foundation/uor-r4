@@ -13,7 +13,14 @@ as authoritative when they disagree with this file.
 
 ## Canonical Queue
 - Current primary RR: `RR-067`
-- Current primary INC: `INC-0168` -- **TBD** (Stage 7 / Stage 6: next experiment).
+- Current primary INC: `INC-0169` -- **TBD** (Stage 7: next increment)
+- Previous INC: `INC-0168` -- **Closed: KEEP** (2026-03-14). Norm-geometry diagnostic.
+  160 static routing runs (5 variants × 2 modes × 2 variants × 8 K values).
+  Routing sparsity is purely angular: TRANS ORIG α=0.572 is norm-invariant across
+  L1/L2/L3/L4 normalizations (max deviation <0.015). Shell activation (B2) does
+  NOT improve ORIG advantage: Gini ratio drops from 1.836 to 1.486.
+  The √K scaling is a hyperspherical angular property, not radial or norm-dependent.
+  Stage 7: PARTIAL-PASS (strong, routing geometry definitively characterized as angular).
 - Previous INC: `INC-0167` -- **Closed: KEEP** (2026-03-14). Scaling mechanism diagnostic.
   32 runs (2 seeds × 4 K × 4 routes) + static routing diagnostic (K=10..1000).
   Shell structure structurally inaccessible: r_eff=1.0 for all L2-normalized tokens,
@@ -75,8 +82,8 @@ as authoritative when they disagree with this file.
   geometry-agnostic.
 - Previous INC: `INC-0152` — **Closed: REFINE** (2026-03-14). Gate saturated.
 - Current primary increment doc:
-  `docs/research/increments/INC_0165_hardware_proxy_closure.md` (closed: KEEP)
-- Kill-list stage: `Hardware-efficiency confirmation` (Stage 7 -- PARTIAL-PASS strong, active gate)
+  `docs/research/increments/INC_0168_norm_geometry_angular_vs_radial.md` (closed: KEEP)
+- Kill-list stage: `Hardware-efficiency confirmation` (Stage 7 -- PARTIAL-PASS strong, active gate, geometry characterized as angular)
 - Stage 7 definition: Hardware proxy closure confirmed. Three cache/memory models
   all show ORIG lower cost than PERM at matched progress. Chain complete:
   geometry → coherence → concentration → scaling → compute → hardware.

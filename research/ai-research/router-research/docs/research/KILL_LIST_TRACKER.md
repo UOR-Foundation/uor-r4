@@ -10,7 +10,9 @@ Use statuses:
 
 ## Canonical Queue
 - Current primary RR: `RR-067`
-- Current primary INC: `INC-0168` -- TBD (next experiment)
+- Current primary INC: `INC-0169` -- TBD (next increment)
+- Previous INC: `INC-0168` -- Closed: KEEP (2026-03-14). Angular-vs-radial norm-geometry diagnostic.
+  Routing sparsity is purely angular: α=0.572 TRANS ORIG norm-invariant across L1/L2/L3/L4.
 - Previous INC: `INC-0167` -- Closed: KEEP (2026-03-14). Scaling mechanism attributed
   to angular sector discretization. Shells structurally inaccessible (r_eff=1.0).
 - Previous INC: `INC-0166` -- Closed: KEEP (2026-03-14). Law freeze + K=100 audit.
@@ -198,20 +200,26 @@ Use statuses:
   - `docs/research/increments/INC_0163_matched_progress_compute_efficiency.md`
   - `docs/research/increments/INC_0164_scaling_law_consistency.md`
   - `docs/research/increments/INC_0165_hardware_proxy_closure.md`
-- Latest result (INC-0165, 2026-03-14):
-  - **KEEP -- hardware proxy closure confirmed.**
-  - Three models: Model A (eff cost), Model B (cache-line G=1/2/4),
-    Model C (LRU C=8/16/32). 80 runs (5 seeds × 4 K × 16 routes).
-  - At matched progress p=0.70:
-    TRANS eff_cost 3.0-4.9× lower, LRU-16 misses 2.5-2.9× fewer.
-    BASE eff_cost 1.8-2.1× lower, LRU-16 misses 1.3-1.8× fewer.
-  - Advantage grows with K (TRANS eff_cost: 3.0× at K=75 → 4.9× at K=200).
-  - 18/20 criteria pass. 2 failures: BASE trend-with-K (known K=100 dip).
-  - Chain complete: geometry → coherence → concentration → scaling → compute → hardware.
-- Decision: Stage 7 remains **PARTIAL-PASS** (strong) (2026-03-14, INC-0165 KEEP).
-  Hardware proxy closure confirmed. Routing concentration translates to measurable
-  memory-traffic and cache-locality advantage under all three proxy models.
+  - `docs/research/increments/INC_0166_law_freeze_k100_boundary_audit.md`
+  - `docs/research/increments/INC_0167_scaling_mechanism_diagnostic.md`
+  - `docs/research/increments/INC_0168_norm_geometry_angular_vs_radial.md`
+- Latest result (INC-0168, 2026-03-14):
+  - **KEEP -- routing geometry definitively characterized as purely angular.**
+  - 160 static routing runs (5 norm variants × 2 modes × 2 data variants × 8 K).
+  - TRANS ORIG scaling exponent α=0.572 is IDENTICAL (max deviation <0.015)
+    across L2, L1 (no shells), L3, L4 normalizations. Norm-invariant confirmed.
+  - Shell activation (L1 + adjusted delta_r): does NOT improve ORIG advantage.
+    Gini ratio drops 1.836 → 1.486 (shells dilute angular concentration).
+  - L3/L4 norm surfaces: no measurable effect on routing metrics.
+  - The √K scaling is a direct consequence of Hopf-base angular sector
+    discretization. No radial contribution identified.
+- Decision: Stage 7 remains **PARTIAL-PASS** (strong) (2026-03-14, INC-0168 KEEP).
+  Routing geometry definitively characterized as angular. Hardware-efficiency
+  case is robust to normalization. Radial shells structurally inaccessible for
+  L2-normalized proxy.
 - Blocker:
-  - `None. Hardware proxy closure confirmed. Ready for real-task validation or stage closure.`
+  - `None. Stage 7 hardware proxy closure confirmed. Angular geometry characterized.`
+  - `Open question (out-of-scope): non-L2-normalized production embeddings may
+    activate shells; this would require a new proxy.`
 - Next branch:
-  - `INC-0166: TBD -- Stage 7 close or real-task validation`
+  - `INC-0169: TBD -- Stage 7 close or real-task validation`

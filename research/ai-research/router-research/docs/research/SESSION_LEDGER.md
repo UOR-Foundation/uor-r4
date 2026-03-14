@@ -777,3 +777,32 @@ routing is measure-consistent with H^4 angular measure.
 2. Commit all docs (INC-0139, INC-0140, state docs)
 3. Push branch
 4. Update GitHub Issue #1 with INC-0139 REFINE verdict + Stage 2 redirect
+
+---
+
+## Session: INC-0168 Norm-Geometry Diagnostic (2026-03-14)
+
+### Summary
+INC-0168 tested whether the √K routing scaling is angular-only or norm-dependent.
+Three experiments (A: L2 baseline, B: radial-aware via L1-normalization, C: L3/L4 surface).
+
+### Key Result
+TRANS ORIG α=0.572 is norm-invariant across all five variants (max Δα < 0.015).
+Shell activation (B2) does NOT improve ORIG advantage: Gini ratio drops 1.836 → 1.486.
+Routing sparsity is purely angular — a direct property of Hopf-base sector discretization.
+
+### Verdict: KEEP
+
+### Files Updated
+- `docs/research/increments/INC_0168_norm_geometry_angular_vs_radial.md` → created, Closed: KEEP
+- `docs/research/ACTIVE_STATE.md` → current INC → INC-0169 (TBD)
+- `docs/research/KILL_LIST_TRACKER.md` → Stage 7 latest result updated to INC-0168
+- `docs/DECISIONS.md` → INC-0168 decision logged
+- `results/analysis/inc0168_norm_geometry.json` → 160 routing runs
+- `_inc0168_analysis.py` → diagnostic script
+
+### Cross-stage observation
+Shell activation (B2) shows that when shells ARE active, angular concentration
+(Gini ratio) decreases. This is a safeguard for Stage 2/3: if future embedding
+proxies introduce non-unit L2 norms, shell splitting could dilute rather than
+amplify routing concentration. This does not change current PARTIAL-PASS verdicts.

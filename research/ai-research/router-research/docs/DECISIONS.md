@@ -4209,4 +4209,32 @@ Add new entries below.
 - Decision:
   - INC-0167: KEEP — scaling mechanism definitively attributed to sector discretization
   - Stage 7: PARTIAL-PASS (strong, mechanism identified)
-  - Next: INC-0168 — TBD
+  - Next: INC-0168
+
+---
+
+## INC-0168: Norm-Geometry Diagnostic — Angular vs Radial Routing
+- Date: 2026-03-14
+- Stage: 7
+- Verdict: KEEP
+- Data: 160 static routing runs (5 normalization variants × 2 routing modes ×
+  2 data variants {ORIG, PERM} × 8 K values).
+- Key findings:
+  1. TRANS ORIG power-law exponent α=0.572 is identical across L2, L1 (shells
+     inactive), L3, and L4 normalizations. Max deviation: <0.015. Norm-invariant.
+  2. BASE ORIG exponent α=0.916 similarly norm-invariant across all shell-inactive
+     variants.
+  3. Shell activation (L1-normalized data, delta_r adjusted so ~73% of tokens
+     reach shell 1) does NOT improve the structural advantage:
+     - Gini ratio ORIG/PERM drops from 1.836 to 1.486 at K=100 TRANS
+     - eff_bucket ratio marginally higher (+4%) but concentration advantage is lower
+  4. L3/L4 unit-surface normalization has no measurable effect on any metric:
+     α, eff_ratio, and Gini ratio are identical to L2 to <0.001.
+  5. Bucket purity trivially saturated (1.000) for all variants — PPMI-SVD continuous
+     proxy with 256-dim y produces one-label-per-small-bucket behavior.
+  6. Conclusive finding: the routing sparsity advantage is purely angular —
+     a property of Hopf-base sector discretization, not of radial geometry.
+- Decision:
+  - INC-0168: KEEP — routing geometry definitively characterized as purely angular
+  - Stage 7: PARTIAL-PASS (strong, angular mechanism confirmed, norm-invariant)
+  - Next: INC-0169 — TBD

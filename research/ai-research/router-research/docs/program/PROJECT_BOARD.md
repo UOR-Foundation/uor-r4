@@ -2,7 +2,8 @@
 
 ## Canonical Active Queue
 - Current primary RR: `RR-067`
-- Current primary INC: `INC-0168` -- TBD. Stage 7: next experiment.
+- Current primary INC: `INC-0169` -- TBD. Stage 7: next increment.
+- 2026-03-14 INC-0168 KEEP: Norm-geometry diagnostic. α=0.572 norm-invariant; routing is purely angular.
 - 2026-03-14 INC-0167 KEEP: Scaling mechanism diagnostic.
 - 2026-03-14 INC-0166 KEEP: Architecture law freeze + K=100 boundary audit.
 - 2026-03-14 INC-0164 KEEP: Scaling-law consistency. Predicted vs measured ratios within 1-11% (TRANS), 1-6% (BASE). 13/14 criteria pass.
