@@ -10,7 +10,7 @@ Use statuses:
 
 ## Canonical Queue
 - Current primary RR: `RR-067`
-- Current primary INC: `INC-0146` (Closed: KEEP — Stage 4 PARTIAL-PASS confirmed, HOPF_TRANS_K75 65.1%)
+- Current primary INC: `INC-0147` (Closed: REFINE — fiber alpha coordinate confirmed; Levi-Civita correction not differentially useful on PPMI-SVD proxy)
 
 ## 1. Hyperbolic Embedding Stability
 - Status: `partial`

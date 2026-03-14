@@ -3677,3 +3677,38 @@ Add new entries below.
   - Stage 4 (Phase Transport Usefulness): PARTIAL-PASS confirmed (proxy level)
   - Next decision: INC-0147 Stage 4 4-seed finalize at K=75, OR begin Stage 5 (Spectral)
     Stage 4 proxy evidence is sufficient to unblock Stage 5 investigation.
+
+## 2026-03-13 (INC-0147 Closed: REFINE — fiber alpha coordinate confirmed; Levi-Civita correction not differentially useful)
+- INC-0147 experiment: lambda control screen (1 seed=0, K=75)
+  Routes: HOPF_BASE_K75, HOPF_TRANS_K75_L0 (λ=0), HOPF_TRANS_K75_L05 (λ=0.5), HOPF_TRANS_K75_L1 (λ=1.0) × {ORIG, PERM}
+  Motivation: mathematical audit of INC-0146 found that transported_alpha = alpha + (λ/2)cos(2χ)·δ
+  reduces to raw alpha at λ=0; needed to distinguish "fiber coordinate carries signal" from
+  "Levi-Civita correction specifically adds signal."
+  sector_mode: phase4d_hopf_transport with phase_transport_lambda ∈ {0.0, 0.5, 1.0}
+  Data: ppmi_proxy.npz, phase4_dims=3,65,2,21, K=75
+- Screen results (seed=0):
+  - HOPF_BASE_K75:       ORIG=0.06520, PERM=0.04080, rel_diff=46.0%  ← reference
+  - HOPF_TRANS_K75_L0:   ORIG=0.06080, PERM=0.03040, rel_diff=66.7%  ← raw alpha, no transport
+  - HOPF_TRANS_K75_L05:  ORIG=0.07040, PERM=0.03320, rel_diff=71.8%  ← partial transport
+  - HOPF_TRANS_K75_L1:   ORIG=0.07040, PERM=0.03440, rel_diff=68.7%  ← full transport (INC-0146 replicate ✓)
+  - shift_abs_mean: L0=0.000 (disabled ✓), L05=0.256, L1=0.512 (correctly scaled ✓)
+  - alpha_bins=3 for all HOPF_TRANS variants (kalpha=3 at K=75 ✓)
+- Decision:
+  - INC-0147: REFINE
+  - L1 − L0 gap = +2.0pp (within 5pp REFINE threshold). Raw fiber alpha (λ=0) already captures
+    essentially all of the discrimination improvement (+20.6pp over HOPF_BASE_K75 at 46.0%).
+  - Revised Stage 4 mechanism: the **Hopf fiber phase coordinate alpha = (θ₁+θ₂)/2** is the
+    primary source of improvement. The Levi-Civita connection 1-form correction ((λ/2)cos(2χ)·δ)
+    adds only ~2pp at this proxy scale — not meaningfully beyond noise.
+  - Stage 4 claim is NOT killed: adding the 3rd Hopf coordinate (alpha) to the 2D base (chi, delta)
+    is confirmed as significant (+20.6pp). Only the specific "transport correction is the mechanism"
+    sub-claim is refuted; the broader "fiber phase is useful" claim stands.
+  - L05 peak (71.8%) is tentatively interesting — intermediate lambda may be optimal — but this is
+    a single-seed observation and requires a confirm pass before any conclusion can be drawn from it.
+  - Note: HOPF_FULL (INC-0145, 40.7%) uses a different mechanism (per-token gauge rotation on phase
+    angles via the balance parameter); its claim is independent and unaffected by this control.
+  - Stage 4 (Phase Transport Usefulness): PARTIAL-PASS confirmed with revised mechanism claim:
+    "Fiber phase alpha confirmed (+20.6pp at K=75); Levi-Civita correction not differentially useful."
+  - Next: either 4-seed finalize at K=75 with HOPF_TRANS_L0 (raw alpha, simpler baseline) OR
+    proceed to Stage 5 (spectral operator usefulness). Stage 4 proxy evidence is sufficient for
+    Stage 5 unblocking regardless of which lambda is used.

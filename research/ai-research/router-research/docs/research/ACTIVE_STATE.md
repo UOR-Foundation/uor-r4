@@ -13,18 +13,19 @@ as authoritative when they disagree with this file.
 
 ## Canonical Queue
 - Current primary RR: `RR-067`
-- Current primary INC: `INC-0146` — **Closed: KEEP** (2026-03-13). Stage 4 PARTIAL-PASS (confirmed):
-  HOPF_TRANS K=75 rel_diff=65.1% (stable: 68.7%, 61.2%). HOPF_BASE_K75=46.7%. Fiber adds +18.4pp
-  over same-K base (+39% relative). Levi-Civita transported alpha confirms semantic signal at kalpha≥3.
-  Both Stage 4 mechanisms now confirmed: HOPF_FULL (INC-0145, 40.7%) and HOPF_TRANS (INC-0146, 65.1%).
-- Next INC: INC-0147 — decision point: Stage 4 4-seed finalize at K=75 OR begin Stage 5 (spectral)
+- Current primary INC: `INC-0147` — **Closed: REFINE** (2026-03-13). Stage 4 mechanism revised:
+  raw alpha (λ=0) gives 66.7% rel_diff at K=75 vs full transport (λ=1) at 68.7% — gap only +2.0pp.
+  Fiber phase coordinate alpha (raw) accounts for +20.6pp above base. Levi-Civita correction is
+  not differentially useful on PPMI-SVD proxy. Stage 4 PARTIAL-PASS confirmed with revised claim.
+- Next INC: `INC-0148` — decision: Stage 4 4-seed finalize at K=75 (HOPF_BASE + HOPF_TRANS_L0)
+  OR begin Stage 5 (spectral operator usefulness)
 - Current primary increment doc:
-  `docs/research/increments/INC_0146_phase_transport_k75_refine.md`
-- Kill-list stage: `Phase transport usefulness` (Stage 4 → PARTIAL-PASS confirmed, proxy-level)
+  `docs/research/increments/INC_0147_phase_transport_lambda_control.md`
+- Kill-list stage: `Phase transport usefulness` (Stage 4 → PARTIAL-PASS confirmed, mechanism revised)
 - Mathematical object under test:
-  `next: Stage 5 (spectral operator usefulness) or Stage 4 4-seed finalize at K=75`
-- Success condition (next): `Stage 5 spectral operator improves routing beyond HOPF_TRANS_K75 baseline`
-- Falsification condition (next): `spectral operator adds no signal above HOPF_TRANS_K75 (65.1%)`
+  `next: Stage 5 (spectral operator usefulness) or Stage 4 4-seed finalize`
+- Success condition (next): `either finalize K=75 4-seed result OR spectral operator improves routing`
+- Falsification condition (next): `spectral operator adds no signal above HOPF_TRANS_K75 baseline (66.7%)`
 
 ## Latest Closed Increment
 - `INC-0146`: **Closed: KEEP** (2026-03-13, Stage 4 PARTIAL-PASS confirmed).

@@ -7,7 +7,8 @@
 
 ## Current Queue Override
 - Current primary RR: `RR-067`
-- Current primary INC: `INC-0146` — **Closed: KEEP** (2026-03-13). Stage 4 PARTIAL-PASS confirmed.
+- Current primary INC: `INC-0147` — **Closed: REFINE** (2026-03-13). Fiber alpha confirmed; transport not differentially useful.
+- 2026-03-13 INC-0146 KEEP: Stage 4 PARTIAL-PASS confirmed. HOPF_TRANS_K75=65.1%.
   HOPF_TRANS_K75 rel_diff=65.1% (stable: 68.7%, 61.2%). HOPF_BASE_K75=46.7%. kalpha=3 confirmed.
   K=50 excluded: kalpha=2 at K=50 same as K=25 (confirmed prediction).
 - 2026-03-13 INC-0145 KEEP: HOPF_FULL rel_diff=40.7% (stable: 38.6%, 42.7%). HOPF_BASE=31.2%. HOPF_TRANS=28.1% (variable, K=25 bin dilution). Stage 4 → PARTIAL-PASS.
