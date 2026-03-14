@@ -27,11 +27,11 @@ open gate** without explicit written justification in the queue docs.
 | # | Stage | Status |
 |---|---|---|
 | 1 | Hyperbolic embedding stability | PARTIAL |
-| 2 | **Measure-consistent shell routing** | **OPEN ← active gate** |
-| 3 | Hopf angular correctness | PARTIAL |
-| 4 | Phase transport usefulness | PARTIAL |
-| 5 | Spectral / operator usefulness | PARTIAL |
-| 6 | Sparse event-driven trainability | PARTIAL |
+| 2 | Measure-consistent shell routing | CLOSED |
+| 3 | Hopf angular correctness | PARTIAL-PASS |
+| 4 | Phase transport usefulness | PARTIAL-PASS |
+| 5 | Spectral / operator usefulness | PARTIAL-PASS (strong, finalized) |
+| 6 | **Sparse event-driven trainability** | **PARTIAL ← active gate** |
 | 7 | Hardware-efficiency confirmation | PARTIAL |
 
 **Canonical source of truth:** `router-research/docs/research/KILL_LIST_TRACKER.md`
@@ -40,13 +40,13 @@ open gate** without explicit written justification in the queue docs.
 
 ## Current active work
 
-- **Primary RR:** RR-061 (GitHub Issue #1)
-- **Primary INC:** INC-0137 (bounded shell-pressure/controller blend)
-- **Branch:** `codex/RR-061-measure-consistent-route-law`
-- **Milestone:** EPIC-2 · Measure-Consistent Shell Routing
+- **Primary RR:** RR-067
+- **Latest closed INC:** INC-0151 (Stage 5 finalized: KEEP)
+- **Branch:** `main` (latest state); experiment branches use `codex/*`
+- **Milestone:** EPIC-6 · Sparse Event-Driven Trainability
 
-Do not start new experiments until Stage 2 is resolved or there is a written
-justification in `ACTIVE_STATE.md` and `KILL_LIST_TRACKER.md`.
+Stages 2–5 are resolved. The active gate is Stage 6.
+Do not start Stage 7 work without written justification in the queue docs.
 
 ---
 
@@ -190,7 +190,7 @@ and must not displace active gate work:
 - The next experiment is a tweak of a baseline that already failed
 - Three or more consecutive branches have touched only translation/packaging
 - The phrase "let's just try" appears without a falsification condition
-- An increment is queued for a later stage while Stage 2 is still open, with no
+- An increment is queued for Stage 7 while Stage 6 is still open, with no
   written justification
 
 ---

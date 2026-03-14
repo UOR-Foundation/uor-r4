@@ -123,14 +123,14 @@ Only merge them if a branch explicitly proves they should be merged.
 | Stage | Description | Status |
 |---|---|---|
 | 1 | Hyperbolic embedding stability | PARTIAL |
-| **2** | **Measure-consistent shell routing** | **OPEN ← active gate** |
-| 3 | Hopf angular correctness | PARTIAL |
-| 4 | Phase transport usefulness | PARTIAL |
-| 5 | Spectral / operator usefulness | PARTIAL |
-| 6 | Sparse event-driven trainability | PARTIAL |
+| 2 | Measure-consistent shell routing | CLOSED |
+| 3 | Hopf angular correctness | PARTIAL-PASS |
+| 4 | Phase transport usefulness | PARTIAL-PASS |
+| 5 | Spectral / operator usefulness | PARTIAL-PASS (strong, finalized) |
+| **6** | **Sparse event-driven trainability** | **PARTIAL ← active gate** |
 | 7 | Hardware-efficiency confirmation | PARTIAL |
 
-Active: `RR-061 / INC-0137` — GitHub Issue #1 — Milestone EPIC-2
+Active: `RR-067 / INC-0151 closed` — next INC TBD — Milestone EPIC-6
 
 ---
 

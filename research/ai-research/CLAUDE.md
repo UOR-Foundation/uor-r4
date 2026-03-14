@@ -32,16 +32,20 @@ Read `docs/research/SESSION_LEDGER.md` after compaction recovery.
 
 ## Active gate
 
-**Stage 2 is open. Everything downstream is blocked.**
+**Stages 2–5 are resolved. Stage 6 is the active gate.**
 
 ```
-Stage 2: Measure-Consistent Shell Routing — OPEN
-  Active: RR-061 / INC-0137
-  Branch: codex/RR-061-measure-consistent-route-law
-  GitHub: Issue #1, Milestone EPIC-2
+Stage 2: Measure-Consistent Shell Routing — CLOSED
+Stage 3: Hopf Angular Correctness — PARTIAL-PASS
+Stage 4: Phase Transport Usefulness — PARTIAL-PASS
+Stage 5: Spectral / Operator Usefulness — PARTIAL-PASS (strong, finalized)
+Stage 6: Sparse Event-Driven Trainability — PARTIAL ← ACTIVE GATE
+  Latest closed: RR-067 / INC-0151
+  Branch: main (latest state)
+  Milestone: EPIC-6
 ```
 
-You may not open work on Stages 3–7 during this session unless
+You may not open work on Stage 7 during this session unless
 `ACTIVE_STATE.md` and `KILL_LIST_TRACKER.md` both contain a written
 justification for the exception and `make state` passes.
 

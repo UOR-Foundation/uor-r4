@@ -32,17 +32,17 @@ If `make state` fails → fix the inconsistency → then continue.
 
 ```
 Stage 1  Hyperbolic embedding stability          [PARTIAL]
-Stage 2  Measure-consistent shell routing        [OPEN]  ← YOU ARE HERE
-Stage 3  Hopf angular correctness                [PARTIAL — blocked by Stage 2]
-Stage 4  Phase transport usefulness              [PARTIAL — blocked by Stage 2]
-Stage 5  Spectral / operator usefulness          [PARTIAL — blocked by Stage 2]
-Stage 6  Sparse event-driven trainability        [PARTIAL — blocked by Stage 2]
-Stage 7  Hardware-efficiency confirmation        [PARTIAL — blocked by Stage 2]
+Stage 2  Measure-consistent shell routing        [CLOSED]
+Stage 3  Hopf angular correctness                [PARTIAL-PASS]
+Stage 4  Phase transport usefulness              [PARTIAL-PASS]
+Stage 5  Spectral / operator usefulness          [PARTIAL-PASS strong — finalized]
+Stage 6  Sparse event-driven trainability        [PARTIAL]  ← ACTIVE GATE
+Stage 7  Hardware-efficiency confirmation        [PARTIAL — blocked by Stage 6]
 ```
 
-Active gate: **RR-061 / INC-0137** (GitHub Issue #1, EPIC-2)
+Active gate: **RR-067 / INC-0151 closed** — next INC TBD (Stage 6 transition)
 
-**You may not promote a later-stage branch while Stage 2 is open unless you:**
+**You may not promote Stage 7 while Stage 6 is unresolved unless you:**
 1. Write the justification in ACTIVE_STATE.md
 2. Write the justification in KILL_LIST_TRACKER.md
 3. Pass `make state`
@@ -130,12 +130,12 @@ Then read: `docs/research/SESSION_LEDGER.md`
 
 | Milestone | Kill-list stage | Status |
 |---|---|---|
-| EPIC-1 | Hyperbolic embedding stability | open/partial |
-| **EPIC-2** | **Measure-consistent shell routing** | **ACTIVE** |
-| EPIC-3 | Hopf angular correctness | blocked |
-| EPIC-4 | Phase transport usefulness | blocked |
-| EPIC-5 | Spectral / operator usefulness | blocked |
-| EPIC-6 | Sparse event-driven trainability | blocked |
+| EPIC-1 | Hyperbolic embedding stability | partial |
+| EPIC-2 | Measure-consistent shell routing | closed |
+| EPIC-3 | Hopf angular correctness | partial-pass |
+| EPIC-4 | Phase transport usefulness | partial-pass |
+| EPIC-5 | Spectral / operator usefulness | partial-pass (strong) |
+| **EPIC-6** | **Sparse event-driven trainability** | **ACTIVE** |
 | EPIC-7 | Hardware-efficiency confirmation | blocked |
 
 When closing an increment: update the corresponding GitHub Issue with the
