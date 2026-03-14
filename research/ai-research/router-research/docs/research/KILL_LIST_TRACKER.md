@@ -10,7 +10,7 @@ Use statuses:
 
 ## Canonical Queue
 - Current primary RR: `RR-067`
-- Current primary INC: `INC-0161` — TBD (Stage 7: multi-seed or next increment)
+- Current primary INC: `INC-0162` — TBD (Stage 7: next increment or finalize)
 
 ## 1. Hyperbolic Embedding Stability
 - Status: `partial`
@@ -184,23 +184,23 @@ Use statuses:
   - `INC-0160: Stage 7 — Hardware-efficiency confirmation`
 
 ## 7. Hardware-Efficiency Confirmation
-- Status: `partial` (initial positive evidence from INC-0160)
+- Status: `partial-pass` (replicated 5-seed structural training sparsity)
 - Canonical evidence:
   - `docs/research/increments/INC_0074_product_phase_translation_dense_frontier.md`
   - `docs/research/increments/INC_0092_product_phase_translation_warm_cache_q01_floor_hardening.md`
   - `docs/research/increments/INC_0098_product_phase_translation_chart_resident_route_cost_decomposition.md`
   - `docs/research/increments/INC_0160_sparse_event_training_efficiency_matched.md`
-- Latest result (INC-0160, 2026-03-14):
-  - **KEEP — training routing cost advantage confirmed at 1 seed.**
-  - Effective bucket ratio (PERM/ORIG): 1.67× TRANS, 1.35× BASE.
-  - Training Gini ratio (ORIG/PERM): 1.59× TRANS, 1.89× BASE.
-  - Top-half concentration: ORIG TRANS 94% vs PERM 78%.
-  - Training sparsity matches eval sparsity (Gini within 0.02 of INC-0159).
-  - ORIG TRANS uses 33 effective memory regions vs PERM 56 (40% fewer).
-- Decision: Stage 7 → **PARTIAL** (2026-03-14, INC-0160 KEEP).
-  Training routing cost savings confirmed at 1 seed. Geometry concentrates
-  memory access patterns. Needs multi-seed confirmation.
+  - `docs/research/increments/INC_0161_routing_cost_confirm.md`
+- Latest result (INC-0161, 2026-03-14):
+  - **KEEP — routing compute compression replicated across 5 seeds and 4 K values.**
+  - Effective bucket ratio (PERM/ORIG, 5-seed mean): K=25 1.18x, K=50 1.36x, K=75 1.69x, K=100 1.97x.
+  - Gini ratio (ORIG/PERM, 5-seed mean): 1.63x (K=75 TRANS), 1.89x (K=100 TRANS), 2.11x (K=100 BASE).
+  - Ultra-low seed variance (std 0.008--0.019 on eff_ratio). Not a seed artifact.
+  - Compression grows monotonically with K. Passes at 3/4 K values (all except K=25).
+  - All 5 seeds > 1.0x at every K (no sign flips).
+- Decision: Stage 7 → **PARTIAL-PASS** (2026-03-14, INC-0161 KEEP).
+  Routing compute compression confirmed across 5 seeds with ultra-low variance.
 - Blocker:
-  - `Multi-seed confirmation needed (2+ seeds).`
+  - `None. 5-seed confirmation complete. Finalize or extend to larger scale.`
 - Next branch:
-  - `INC-0161: multi-seed confirm or next Stage 7 increment`
+  - `INC-0162: TBD — finalize or broader-scale hardware confirmation`

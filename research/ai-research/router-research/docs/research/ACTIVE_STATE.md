@@ -13,8 +13,12 @@ as authoritative when they disagree with this file.
 
 ## Canonical Queue
 - Current primary RR: `RR-067`
-- Current primary INC: `INC-0161` — **TBD** (Stage 7: multi-seed confirm of training
-  routing cost, or next Stage 7 hardware-efficiency increment).
+- Current primary INC: `INC-0162` — **TBD** (Stage 7: finalize or next increment).
+- Previous INC: `INC-0161` — **Closed: KEEP** (2026-03-14). Multi-seed routing cost
+  confirm. 5 seeds, 4 K values, 80 runs. Effective bucket ratio (5-seed mean): K=25
+  1.18x, K=50 1.36x, K=75 1.69x, K=100 1.97x. Gini ratio 1.63-2.11x. Ultra-low
+  variance (std < 0.02). All seeds > 1.0x. Compression at 3/4 K values.
+  Stage 7: PARTIAL-PASS (replicated 5-seed structural training sparsity).
 - Previous INC: `INC-0160` — **Closed: KEEP** (2026-03-14). Training routing cost screen.
   Effective bucket ratio PERM/ORIG: 1.67× (TRANS), 1.35× (BASE). Training Gini ratio
   ORIG/PERM: 1.59× (TRANS), 1.89× (BASE). Top-half concentration: ORIG 94% vs PERM 78%
@@ -40,16 +44,16 @@ as authoritative when they disagree with this file.
 - Previous INC: `INC-0152` — **Closed: REFINE** (2026-03-14). Gate saturated.
 - Current primary increment doc:
   `docs/research/increments/INC_0160_sparse_event_training_efficiency_matched.md` (closed: KEEP)
-- Kill-list stage: `Hardware-efficiency confirmation` (Stage 7 — PARTIAL, active gate)
+- Kill-list stage: `Hardware-efficiency confirmation` (Stage 7 — PARTIAL-PASS, active gate)
 - Stage 7 definition: Training routing cost confirmation. ORIG routing concentrates
-  training workload into fewer effective memory regions than PERM. Effective bucket
-  ratio 1.67× (TRANS), training Gini 1.59× (TRANS). Initial 1-seed evidence.
+  training workload into fewer effective memory regions than PERM. Replicated across
+  5 seeds and 4 K values with ultra-low variance.
 - Mathematical object under test:
-  `Training routing cost: effective bucket ratio 1.67× (TRANS), Gini 1.59×.
-   ORIG uses 33 effective memory regions vs PERM 56. 40% fewer active cache lines.
-   Stage 7: PARTIAL (initial 1-seed evidence).`
-- Success condition: Multi-seed confirmation of effective bucket ratio ≥ 1.15
-- Falsification condition: Effective bucket ratio < 1.05 at 2+ seeds
+  `Training routing cost: effective bucket ratio 1.69x (TRANS K=75, 5-seed mean).
+   Compression grows monotonically with K (1.18x->1.97x). Gini ratio 1.63-2.11x.
+   Stage 7: PARTIAL-PASS (replicated 5-seed structural training sparsity).`
+- Success condition: TBD (next increment)
+- Falsification condition: TBD (next increment)
 
 ## Latest Closed Increment
 - `INC-0146`: **Closed: KEEP** (2026-03-13, Stage 4 PARTIAL-PASS confirmed).

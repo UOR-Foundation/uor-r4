@@ -4042,3 +4042,28 @@ Add new entries below.
   - Geometry-native routing concentrates memory access patterns during training
   - Stage 7: PARTIAL (initial 1-seed evidence)
   - Next: INC-0161 — multi-seed confirm or next Stage 7 increment
+
+### INC-0161 — Multi-Seed Routing Compute Sparsity Replication — Confirm
+- Date: 2026-03-14
+- Stage: 7 (Hardware-Efficiency Confirmation)
+- Verdict: **KEEP**
+- Data: 16 routes (K={25,50,75,100} x {BASE,TRANS} x {ORIG,PERM}),
+  5 seeds (0-4), 80 total runs, EMA training (1 epoch, 5000 steps)
+- No MSE used. Pure routing cost measurement.
+- Key findings:
+  1. **Effective bucket ratio (PERM/ORIG, 5-seed mean):**
+     K=25: 1.18x, K=50: 1.36x, K=75: 1.69x, K=100: 1.97x (TRANS).
+     Compression grows monotonically with K.
+  2. **Gini ratio (ORIG/PERM, 5-seed mean):**
+     TRANS: 1.63x (K=75), 1.89x (K=100). BASE: 1.94x (K=75), 2.11x (K=100).
+  3. **Ultra-low variance:** Std of eff_ratio 0.008-0.019.
+     Not a seed artifact — stable structural property.
+  4. **All seeds > 1.0x** at every K value. No sign flips.
+  5. **3/4 K values pass 1.2x threshold.** K=25 narrowly misses (1.18x)
+     due to near-saturation of bucket space.
+  6. **TRANS amplifies compression.** At K=100, TRANS 1.97x vs BASE 1.31x.
+- Decision:
+  - INC-0161: KEEP — routing compute compression replicated across 5 seeds
+  - Ultra-low variance confirms this is structural, not stochastic
+  - Stage 7: PARTIAL-PASS (replicated 5-seed structural training sparsity)
+  - Next: INC-0162 — TBD
