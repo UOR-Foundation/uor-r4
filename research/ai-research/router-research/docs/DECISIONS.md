@@ -3833,3 +3833,17 @@ Add new entries below.
   - INC-0152: REFINE — gate saturation prevents testing the full hypothesis
   - Spectral roughness ↔ prediction error link confirmed at signal level
   - Next: INC-0153 with gate threshold centered on actual error distribution (~0.06)
+
+## 2026-03-14 INC-0153 — **Closed: REFINE** — Re-parameterized event gate correlation (screen)
+- Kill-list stage: 6. Sparse Event-Driven Trainability
+- Mathematical object: Per-sample spectral roughness ↔ event-gate correlation with centered gate
+- Protocol: screen (1 seed, seed=0)
+- Data: ppmi_proxy.npz, phase4_dims=3,65,2,21, K=75, gate: soft_error, threshold=0.063, tau=0.002
+- Gate re-parameterization: gate_std=0.1722 (vs 0.004 in INC-0152), active_frac=79.4%
+- Margin-signal roughness_vs_gate Spearman: +0.529 (poincaré BASE), +0.502 (ambient BASE)
+  delta=+0.027 (BASE), +0.051 (TRANS). Both > 0.3.
+- Decision:
+  - INC-0153: REFINE — per-sample correlation confirmed (r > 0.3) but geometry-agnostic
+  - Poincaré delta only +2.7–5.1pp (below 10pp threshold)
+  - Correlation works equally well on ambient Euclidean graph; geometric advantage is structural/aggregate
+  - Next: test aggregate efficiency (do Stage 5 advantages lead to fewer gate firings?)

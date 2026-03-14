@@ -13,17 +13,19 @@ as authoritative when they disagree with this file.
 
 ## Canonical Queue
 - Current primary RR: `RR-067`
-- Current primary INC: `INC-0153` — TBD (Stage 6: re-parameterized event gate correlation probe).
+- Current primary INC: `INC-0154` — TBD (Stage 6: aggregate event-gate efficiency probe).
+- Previous INC: `INC-0153` — **Closed: REFINE** (2026-03-14). Per-sample spectral roughness ↔ gate
+  correlation confirmed (Spearman r ≈ 0.47–0.53) but geometry-agnostic (delta only +2.7–5.1pp).
+  Gate re-parameterization worked (gate_std=0.17, active_frac=78%). Geometric advantage is
+  structural/aggregate, not per-sample.
 - Previous INC: `INC-0152` — **Closed: REFINE** (2026-03-14). Gate saturated at INC-0125 params.
-  Spectral roughness ↔ error correlation exists (Spearman r ≈ 0.47–0.53), but gate has no dynamic range
-  at threshold=0.0, tau=0.02 (gate_mean=0.959, active_frac=100%). Need re-parameterized gate.
 - Current primary increment doc:
-  `docs/research/increments/INC_0152_spectral_event_correlation_screen.md` (closed)
+  `docs/research/increments/INC_0153_spectral_event_reparameterized_gate_screen.md` (closed)
 - Kill-list stage: `Sparse event-driven trainability` (Stage 6 — PARTIAL, active gate)
 - Mathematical object under test:
-  `Per-sample correlation between H^4 Poincaré spectral roughness and event-gate quiescence (re-parameterized gate)`
-- Success condition: Spearman r > 0.3 between roughness and gate WITH genuine gate variance; poincaré_4d > ambient by >10pp
-- Falsification condition: |r| < 0.1 with well-parameterized gate (KILL); ambient matches poincaré (REFINE)
+  `Aggregate event-gate efficiency: does superior spectral organization (Stage 5 +40–77%) produce measurably fewer gate firings or faster convergence?`
+- Success condition: TBD (INC-0154 design)
+- Falsification condition: TBD (INC-0154 design)
 
 ## Latest Closed Increment
 - `INC-0146`: **Closed: KEEP** (2026-03-13, Stage 4 PARTIAL-PASS confirmed).

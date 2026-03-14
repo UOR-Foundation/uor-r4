@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
-"""Compare poincaré vs ambient correlation results for INC-0152 screen."""
+"""Compare poincaré vs ambient correlation results for INC-0153 screen."""
 import json
 
-with open("results/analysis/inc0152_event_corr_screen_poincare.json") as f:
+with open("results/analysis/inc0153_event_corr_repar_screen_poincare.json") as f:
     poin = json.load(f)
-with open("results/analysis/inc0152_event_corr_screen_ambient.json") as f:
+with open("results/analysis/inc0153_event_corr_repar_screen_ambient.json") as f:
     amb = json.load(f)
 
-print("=== INC-0152 Spectral-Event Correlation Screen ===\n")
+print("=== INC-0153 Re-Parameterized Gate Screen ===")
+print(f"Gate params: threshold={poin['event_gate_threshold']}, tau={poin['event_gate_tau']}\n")
 
 for ri, route_id in enumerate(["HOPF_BASE_K75", "HOPF_TRANS_K75_L0"]):
     print(f"--- {route_id} ---")
