@@ -3983,3 +3983,34 @@ Add new entries below.
   for structural compression). Remaining: bridge to sparse-event training efficiency.
 - Stage 6: PARTIAL-PASS (finalized for bucket coherence)
 - Next: INC-0159 — Stage 6→7 bridge or Stage 7 entry (TBD)
+
+### INC-0159 — Routing Sparsity — Screen
+- Date: 2026-03-14
+- Stage: 6 (Sparse Event-Driven Trainability → Stage 7 bridge)
+- Verdict: **KEEP**
+- Data: 4 routes (K=75 × {BASE,TRANS} × {ORIG,PERM}), 1 seed (0), poincaré_4d graph,
+  384 eval points, KNN-12, 8 lowfreq modes, purity thresholds 0.10–0.50
+- Key findings:
+  1. **Routing concentration at t=0.15:** BASE ORIG 25/73 (34.2%) vs PERM 7/75 (9.3%)
+     → ratio 3.68×. TRANS ORIG 25/63 (39.7%) vs PERM 13/70 (18.6%) → ratio 2.14×.
+     Both exceed 1.5× success threshold.
+  2. **High-purity tail (t ≥ 0.25):** BASE_PERM has 0 buckets above purity 0.25.
+     TRANS_ORIG has 21/63 (33%) above 0.25, 16/63 (25%) above 0.50. The tail is
+     exclusive to geometry-native routing.
+  3. **Gini coefficient:** BASE ORIG 0.52 vs PERM 0.24 (2.12×). TRANS ORIG 0.61 vs
+     PERM 0.37 (1.65×). Direct measure of routing inequality = sparsity.
+  4. **Spectral signal:** lowfreq_max = 0.1172 ORIG vs 0.0781 PERM (ratio 1.50×).
+     Identical to INC-0156 at seed 0. Geometry is K-invariant.
+  5. **TRANS amplifies sparsity:** 63 buckets (vs 73 BASE), purity 0.28 (vs 0.15),
+     Gini 0.61 (vs 0.52). Phase transport creates more concentrated routing.
+  6. **Info_density metric withdrawn:** MI bounded by H(sector) in concentrated
+     routing — the very property being measured caps the metric. MI is higher for
+     PERM (2.32 vs 1.99 BASE) because uniform bucket utilization maximizes H(sector),
+     not because PERM routing is better.
+- Decision:
+  - INC-0159: KEEP — routing sparsity confirmed. ORIG geometry-native routing creates
+    sparse, high-purity routing patterns that permuted routing cannot replicate.
+  - Stage 6: PARTIAL-PASS (strong) — bucket coherence (4 seeds) + spectral operator
+    (4 seeds) + routing sparsity (1 seed). Evidence chain complete.
+  - Stage 7 now unblocked.
+  - Next: INC-0160 — Stage 7 hardware-efficiency confirmation

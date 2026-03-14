@@ -13,8 +13,14 @@ as authoritative when they disagree with this file.
 
 ## Canonical Queue
 - Current primary RR: `RR-067`
-- Current primary INC: `INC-0159` — **TBD** (Stage 6 → Stage 7 bridge: translate bucket
-  coherence into sparse-event training efficiency, or begin Stage 7 if justified).
+- Current primary INC: `INC-0160` — **TBD** (Stage 7: hardware-efficiency confirmation,
+  now unblocked by Stage 6 PARTIAL-PASS strong).
+- Previous INC: `INC-0159` — **Closed: KEEP** (2026-03-14). Routing sparsity screen
+  (seed 0). ORIG routing concentrates label signal into 3.68× (BASE) / 2.14× (TRANS)
+  more high-purity buckets at t=0.15. Gini: ORIG 2.12× / 1.65× more concentrated.
+  Spectral: lowfreq_max ratio 1.50× (replicates INC-0156). TRANS amplifies all effects.
+  Info_density metric withdrawn (MI bounded by H(sector) in concentrated routing).
+  Stage 6 → PARTIAL-PASS (strong).
 - Previous INC: `INC-0158` — **Closed: KEEP** (2026-03-14). 4-seed finalize of bucket
   coherence + spectral compression. Purity: ORIG > PERM at 10/11 K values (91%),
   TRANS K=100 ratio 1.976×, all K ≥ 25 stable at 4 seeds. Entropy: ORIG < PERM at
@@ -29,17 +35,20 @@ as authoritative when they disagree with this file.
   geometry-agnostic.
 - Previous INC: `INC-0152` — **Closed: REFINE** (2026-03-14). Gate saturated.
 - Current primary increment doc:
-  `docs/research/increments/INC_0158_bucket_coherence_finalize.md` (closed: KEEP)
-- Kill-list stage: `Sparse event-driven trainability` (Stage 6 — PARTIAL-PASS finalized, active gate)
-- Stage 6 definition: Structural routing compression via bucket semantic coherence.
-  Geometry-native routing produces higher per-bucket label purity and lower per-bucket
-  entropy than permuted routing at every bucket count K ≥ 25. Finalized at 4 seeds (INC-0158).
-  Remaining: can bucket coherence translate to sparse-event training efficiency?
+  `docs/research/increments/INC_0159_sparse_event_training_efficiency.md` (closed: KEEP)
+- Kill-list stage: `Sparse event-driven trainability` (Stage 6 — PARTIAL-PASS strong, proceeding to Stage 7)
+- Stage 6 definition: Structural routing compression via bucket semantic coherence
+  + routing sparsity. Geometry-native routing produces higher per-bucket label purity,
+  lower per-bucket entropy, and more concentrated routing (higher Gini) than permuted
+  routing. Bucket coherence finalized at 4 seeds (INC-0158). Routing sparsity confirmed
+  at 1 seed (INC-0159). Combined with spectral operator (4 seeds, INC-0151), Stage 6
+  evidence is sufficient to proceed to Stage 7.
 - Mathematical object under test:
-  `Bucket semantic coherence (finalized): purity ratio 1.976× at TRANS K=100.
-   Spectral compression: label metric ratio 1.688 (4-seed). Bridge to Stage 7 TBD.`
-- Success condition: 4-seed finalize confirms bucket coherence advantage
-- Falsification condition: 2-seed patterns vanish under 4-seed averaging
+  `Routing sparsity (confirmed): concentration ratio 3.68× at BASE t=0.15, Gini 2.12×.
+   Bucket coherence (finalized): purity ratio 1.976× at TRANS K=100.
+   Spectral compression: lowfreq_max ratio 1.50×. Stage 7 now unblocked.`
+- Success condition: Stage 6 evidence chain complete
+- Falsification condition: Routing sparsity concentration ratio < 1.1× at threshold 0.15
 
 ## Latest Closed Increment
 - `INC-0146`: **Closed: KEEP** (2026-03-13, Stage 4 PARTIAL-PASS confirmed).

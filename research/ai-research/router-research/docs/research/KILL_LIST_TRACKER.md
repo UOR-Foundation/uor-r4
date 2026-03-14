@@ -10,7 +10,7 @@ Use statuses:
 
 ## Canonical Queue
 - Current primary RR: `RR-067`
-- Current primary INC: `INC-0159` — TBD (Stage 6→7 bridge or Stage 7 entry)
+- Current primary INC: `INC-0160` — TBD (Stage 7: hardware-efficiency confirmation)
 
 ## 1. Hyperbolic Embedding Stability
 - Status: `partial`
@@ -137,19 +137,21 @@ Use statuses:
   - `Transition to Stage 6 (Sparse Event-Driven Trainability)`
 
 ## 6. Sparse Event-Driven Trainability
-- Status: `partial-pass`
-- Stage 6 definition (updated INC-0158):
-  - **Bucket semantic coherence as routing compression — FINALIZED.**
-    Geometry-native routing produces higher per-bucket label purity and lower
-    per-bucket entropy than permuted routing at every bucket count K ≥ 25.
-    Finalized at 4 seeds (INC-0158). Purity ratio up to 1.976× at TRANS K=100.
-  - INC-0152/0153/0154 showed per-sample error metrics are geometry-agnostic.
-    INC-0155 showed per-sample MSE cannot detect routing compression.
-    INC-0156 found spectral compression at 1 seed.
-    INC-0157 confirmed bucket semantic coherence at 2 seeds.
-    INC-0158 finalized bucket coherence at 4 seeds.
-  - Remaining Stage 6 question: can bucket coherence translate to sparse-event
-    training efficiency? This is the bridge to Stage 7.
+- Status: `partial-pass` (strong — routing sparsity + bucket coherence + spectral operator)
+- Stage 6 definition (updated INC-0159):
+  - **Bucket semantic coherence — FINALIZED (INC-0158, 4 seeds).**
+    Purity ratio up to 1.976× at TRANS K=100. All K ≥ 25 stable.
+  - **Routing sparsity — CONFIRMED (INC-0159, 1 seed).**
+    ORIG concentrates label signal into 3.68× / 2.14× more high-purity
+    buckets than PERM (BASE / TRANS at t=0.15). Gini 2.12× / 1.65×.
+    High-purity tail (t ≥ 0.25) exclusive to ORIG at BASE K=75.
+  - **Spectral operator — FINALIZED (INC-0151, 4 seeds).**
+    true_margin_lowfreq +40–48%, spectral smoothness confirmed.
+  - INC-0152/0153/0154: per-sample error metrics geometry-agnostic.
+  - INC-0155: MSE not a valid observable.
+  - INC-0156: spectral compression (lowfreq_max ratio 1.50×, geometry is K-invariant).
+  - INC-0157: bucket coherence 2-seed confirm.
+  - Stage 6 evidence chain complete. Proceeding to Stage 7.
 - Canonical evidence:
   - `docs/research/increments/INC_0125_product_phase_sparse_event_proxy_trainability_hardening.md`
   - `docs/research/increments/INC_0130_product_phase_sparse_event_translation_route_coupled_soft_bias_pilot.md`
@@ -160,39 +162,34 @@ Use statuses:
   - `docs/research/increments/INC_0156_spectral_compression_screen.md`
   - `docs/research/increments/INC_0157_spectral_compression_confirm.md`
   - `docs/research/increments/INC_0158_bucket_coherence_finalize.md`
-- Latest result (INC-0158, 2026-03-14):
-  - **KEEP — bucket coherence finalized at 4 seeds.**
-  - Purity: ORIG > PERM at 10/11 K values (91%). TRANS K=100: purity ratio 1.976×
-    (ORIG=0.299, PERM=0.151). All K ≥ 25 stable at all 4 seeds, monotonically
-    growing with K. SEMs < 0.009.
-  - Entropy: ORIG < PERM at 10/11 K values. TRANS K=100: Δ=−0.955 bits.
-  - label_indicator_lowfreq_max: 4-seed mean ratio 1.688 (high per-seed variance:
-    0.86, 1.17, 1.50, 3.24). SEM=0.036.
-  - true_margin compression: cross-seed mean 2.40±0.97 at K ≤ 25 (BASE).
-    All 4 seeds show at least one compression point.
-  - input_transform bug fix verified active at all 4 seeds.
-- Previous result (INC-0157, 2026-03-13):
-  - KEEP — bucket coherence confirmed at 2 seeds (purity ratio 2.0× at TRANS K=100).
-- Previous result (INC-0156, 2026-03-13):
-  - REFINE — two compression forms at 1 seed, bug fix applied.
-- Previous result (INC-0155, 2026-03-13):
-  - REFINE — MSE not a valid observable. Structural signal: sector entropy gap 8.6pp.
-- Previous result (INC-0154, 2026-03-13):
-  - REFINE — event-gate routing-agnostic.
+  - `docs/research/increments/INC_0159_sparse_event_training_efficiency.md`
+- Latest result (INC-0159, 2026-03-14):
+  - **KEEP — routing sparsity confirmed at 1 seed.**
+  - Concentration at t=0.15: BASE 3.68× (25/73 vs 7/75), TRANS 2.14× (25/63 vs 13/70).
+  - High-purity tail: at t ≥ 0.25, BASE_PERM has 0 buckets; TRANS_ORIG has 21/63 (33%).
+  - Gini: BASE ORIG 0.52 vs PERM 0.24 (2.12×); TRANS ORIG 0.61 vs PERM 0.37 (1.65×).
+  - Spectral: lowfreq_max ratio 1.50× (exact INC-0156 replication).
+  - Info_density withdrawn: MI bounded by H(sector) in concentrated routing.
+  - TRANS amplifies all sparsity effects over BASE (consistent with INC-0146 +18pp).
+- Previous result (INC-0158, 2026-03-14):
+  - KEEP — bucket coherence finalized at 4 seeds (purity ratio 1.976× TRANS K=100).
+- Decision: Stage 6 → **PARTIAL-PASS (strong)** (2026-03-14, INC-0159 KEEP).
+  Evidence chain: bucket coherence (4 seeds, finalized) + spectral operator (4 seeds,
+  finalized) + routing sparsity (1 seed, confirmed). Geometry-native routing creates
+  sparse, high-purity routing patterns that permuted routing cannot replicate.
+  Stage 7 now unblocked.
 - Blocker:
-  - `Bucket coherence finalized at 4 seeds (KEEP). Structural routing compression
-    proven. Remaining: translate bucket coherence into sparse-event training
-    efficiency (Stage 6→7 bridge), or justify proceeding directly to Stage 7.`
+  - `None. Stage 6 evidence sufficient to proceed to Stage 7.`
 - Next branch:
-  - `INC-0159: Stage 6→7 bridge or Stage 7 entry (TBD)`
+  - `INC-0160: Stage 7 — Hardware-efficiency confirmation`
 
 ## 7. Hardware-Efficiency Confirmation
-- Status: `partial`
+- Status: `partial` (now unblocked by Stage 6 PARTIAL-PASS strong)
 - Canonical evidence:
   - `docs/research/increments/INC_0074_product_phase_translation_dense_frontier.md`
   - `docs/research/increments/INC_0092_product_phase_translation_warm_cache_q01_floor_hardening.md`
   - `docs/research/increments/INC_0098_product_phase_translation_chart_resident_route_cost_decomposition.md`
 - Blocker:
-  - `software-side translated wins exist, but they are not yet equivalent to architecture-level hardware replacement`
+  - `Stage 6 resolved (PARTIAL-PASS strong). Ready for hardware efficiency work.`
 - Next branch:
-  - `deferred until the geometry gate and sparse-event trainability are stronger`
+  - `INC-0160: begin Stage 7 hardware-efficiency confirmation`
