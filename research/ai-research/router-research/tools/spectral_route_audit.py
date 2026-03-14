@@ -49,6 +49,21 @@ def load_proxy_subset(args: argparse.Namespace) -> Tuple[np.ndarray, np.ndarray,
         y_eval = data["y_test"].astype(np.float64)
     v_tr, y_tr = task._subset(x_train, y_train, args.max_train, args.seed + 1)
     v_ev, y_ev = task._subset(x_eval, y_eval, args.max_eval, args.seed + 2)
+
+    input_transform = getattr(args, "input_transform", "none")
+    if input_transform != "none":
+        rng = np.random.RandomState(args.seed + 77)
+        if input_transform == "col_perm":
+            for j in range(v_tr.shape[1]):
+                v_tr[:, j] = rng.permutation(v_tr[:, j])
+            for j in range(v_ev.shape[1]):
+                v_ev[:, j] = rng.permutation(v_ev[:, j])
+        elif input_transform == "gaussian":
+            mu = v_tr.mean(axis=0)
+            sd = v_tr.std(axis=0) + 1e-12
+            v_tr = rng.randn(*v_tr.shape) * sd + mu
+            v_ev = rng.randn(*v_ev.shape) * sd + mu
+
     return v_tr, y_tr, v_ev, y_ev
 
 

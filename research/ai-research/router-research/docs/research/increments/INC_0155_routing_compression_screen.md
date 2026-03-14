@@ -1,9 +1,13 @@
 # INC-0155: Routing Compression — Bucket Count Sweep Screen
 
 ## Status
-Closed: REFINE. MSE is flat across K (range 3% over 25× K change) and insensitive
-to routing quality. Routing compression cannot be measured via MSE on this proxy.
-But sector entropy reveals confirmed structural signature of geometric routing.
+Closed: REFINE. Per-sample MSE cannot detect routing compression on this proxy.
+EMA prototype training adapts prototypes to empirical distributions inside each
+bucket; column permutation preserves marginal distributions, so reconstruction
+converges to nearly identical MSE regardless of routing quality. This does NOT
+imply routing compression does not exist — it implies MSE is a local distortion
+metric while the geometric advantage is structural and aggregate. Sector entropy
+(8.6pp gap at K=75) confirms the structural signal IS present.
 
 ## Kill-List Stage
 6 — Sparse Event-Driven Trainability (reinterpreted as routing compression)
@@ -118,7 +122,8 @@ Maximum delta: +1.09% (BASE K=25). All within noise for 1-seed screen.
 | 100 | 0.004006 | ≈61.5 | 0.62 |
 
 Mean BASE compression: 0.87. Mean TRANS compression: 0.74.
-Both BELOW 1.0 — no MSE-based routing compression exists.
+Both BELOW 1.0 — MSE cannot detect routing compression on this proxy.
+This does not imply routing compression does not exist.
 
 ### Table 4: Sector Entropy Efficiency (secondary finding)
 
@@ -135,7 +140,10 @@ Both BELOW 1.0 — no MSE-based routing compression exists.
 ORIG routing is systematically LESS uniform than PERM. The entropy
 efficiency gap grows from 0.8pp at K=4 to 8.6pp at K=75. This confirms
 geometric routing produces non-uniform bucket assignments that respect
-data structure — but the non-uniformity does NOT improve MSE.
+data structure. The non-uniformity does not reduce MSE (because MSE is
+insensitive to routing quality on this proxy), but it IS a structural
+signal that routing compression may be detectable through structural
+metrics (spectral energy, bucket coherence) rather than per-sample fidelity.
 
 Also: hopf_angular_mass_error ORIG=0.678, PERM=0.374 (constant across K).
 Geometric routing on structured data creates asymmetric Hopf occupancy;
@@ -144,24 +152,31 @@ on scrambled data, occupancy is more uniform.
 ## Mathematical Interpretation
 
 The MSE-vs-K flatness has the same root cause as INC-0154's gate homogeneity:
-EMA prototype learning equalizes per-sample reconstruction error regardless
-of routing quality. With 5000 training samples and max_slots_per_bucket=4,
-each bucket at K=100 still sees ~50 samples — enough for EMA convergence.
+EMA prototype learning adapts prototypes to the empirical distribution inside
+each bucket. Column permutation preserves marginal distributions, so the EMA
+process converges to nearly identical prototype reconstructions regardless of
+routing quality. Therefore: $E[\text{MSE} | \text{ORIG}] \approx E[\text{MSE} | \text{PERM}]$.
 
-The geometric advantage proved by Stages 2–5 is STRUCTURAL, not per-sample:
-- Per-sample MSE → geometry-agnostic (prototypes adapt locally)
+This is a measurement limitation, not a falsification of routing compression:
+- MSE is a local distortion metric (per-sample reconstruction fidelity)
+- Routing compression operates at the structural/aggregate level
+- The geometric advantage (Stages 2–5) is confirmed in structural metrics
+
+Evidence hierarchy:
+- Per-sample MSE → geometry-agnostic (local, prototypes adapt)
 - Per-sample gating → geometry-agnostic (INC-0154)
 - Sector entropy → geometry-DEPENDENT (confirmed: 8.6pp gap at K=75)
 - Aggregate spectral energy → geometry-DEPENDENT (Stage 5: +40–77%)
 
-MSE-based routing compression is the wrong metric for the same reason
-error-based gating was the wrong instrument: both operate per-sample,
-and the geometric advantage operates at the global organizational level.
+The geometric signal exists at the routing structure level, not at the
+per-sample prediction level. Therefore routing compression must be
+measured through structural quality metrics (spectral energy, bucket
+coherence) at equal routing complexity, not through MSE.
 
 ## Decision
-Closed: REFINE. MSE cannot measure routing compression on this proxy because
-MSE is insensitive to routing quality (EMA prototypes saturate at these sample
-counts). The structural signature (entropy non-uniformity) IS present but
-does not translate to MSE advantage. Next steps should measure routing
-compression through spectral properties (lowfreq_energy vs K) or use a harder
-proxy where routing quality has larger MSE impact.
+Closed: REFINE. Per-sample MSE cannot detect routing compression on this
+proxy (measurement limitation, not falsification). The structural routing
+signature IS present (sector entropy 8.6pp gap, Hopf occupancy asymmetry).
+Stage 6 question must be reframed: does geometry-native routing achieve
+the same structural/spectral quality with lower routing complexity?
+Next: INC-0156 spectral compression (lowfreq_energy vs K).

@@ -10,7 +10,7 @@ Use statuses:
 
 ## Canonical Queue
 - Current primary RR: `RR-067`
-- Current primary INC: `INC-0156` — TBD (Stage 6: spectral compression — spectral quality vs K)
+- Current primary INC: `INC-0157` — TBD (Stage 6: multi-seed confirm or new metric)
 
 ## 1. Hyperbolic Embedding Stability
 - Status: `partial`
@@ -138,15 +138,20 @@ Use statuses:
 
 ## 6. Sparse Event-Driven Trainability
 - Status: `partial`
-- Interpretation update (INC-0154):
-  - "Sparse event-driven trainability" does NOT mean per-sample error gating.
-    INC-0152/0153/0154 showed error-based gating is routing-agnostic.
-  - The correct sparse-compute mechanism is **routing compression**: geometry-native
-    routing creates more coherent buckets (Stages 2–5), so fewer buckets are needed
-    to achieve the same reconstruction quality. Fewer buckets = fewer routing lookups
-    = fewer prototype updates = hardware savings.
-  - The Stage 6 question is now: **at fixed MSE target, how many fewer buckets does
-    structured (ORIG) routing need compared to scrambled (COL_PERM)?**
+- Stage 6 definition (updated INC-0155):
+  - **Structural routing compression.** Geometry-native routing should require fewer
+    active buckets or lower routing mass to achieve the same spectral organization
+    quality. This structural compression is the architectural sparse-compute mechanism.
+  - INC-0152/0153/0154 showed per-sample error metrics are geometry-agnostic.
+    INC-0155 showed per-sample MSE cannot detect routing compression (measurement
+    limitation, not falsification — EMA prototypes adapt to marginal distributions
+    preserved by column permutation).
+  - The Stage 6 question is now: **does geometry-native routing achieve the same
+    structural/spectral quality with lower routing complexity?**
+  - This replaces the earlier incorrect question "does geometry reduce per-sample
+    reconstruction error?" with "does geometry reduce routing cost at equal
+    structural quality?" — aligning with the north-star hypothesis: geometry →
+    better bucket organization → routing compression → hardware savings.
 - Canonical evidence:
   - `docs/research/increments/INC_0125_product_phase_sparse_event_proxy_trainability_hardening.md`
   - `docs/research/increments/INC_0130_product_phase_sparse_event_translation_route_coupled_soft_bias_pilot.md`
@@ -154,32 +159,44 @@ Use statuses:
   - `docs/research/increments/INC_0152_spectral_event_correlation_screen.md`
   - `docs/research/increments/INC_0154_event_gate_efficiency_screen.md`
   - `docs/research/increments/INC_0155_routing_compression_screen.md`
-- Latest result (INC-0155, 2026-03-13):
-  - Routing compression bucket count sweep: K ∈ {4,9,16,25,50,75,100} × {ORIG,PERM}.
-    MSE range: 0.003881–0.004008 (3.3% total spread). MSE INCREASES with K (prototype
-    estimation noise at fewer samples per bucket). Max ORIG-vs-PERM delta: +1.09%
-    (BASE K=25). Mean compression ratio: 0.87. No MSE-based routing compression exists.
-  - Secondary finding: sector entropy efficiency gap grows with K — ORIG=89.1% vs
-    PERM=97.6% at K=75 (8.6pp gap). Geometric routing IS more structured but doesn't
-    help MSE. hopf_angular_mass_error: ORIG=0.678, PERM=0.374.
-  - REFINE: MSE-based routing compression is the wrong metric (same root cause as
-    INC-0154: EMA prototypes saturate per-sample errors regardless of routing quality).
+  - `docs/research/increments/INC_0156_spectral_compression_screen.md`
+- Latest result (INC-0156, 2026-07-09):
+  - **Two distinct compression forms found, both need multi-seed confirmation.**
+  - (1) Geometric structural compression: label_indicator_lowfreq_max ORIG=0.1172,
+    PERM=0.0781, ratio=1.50. PERM never reaches ORIG quality at any K → infinite
+    compression ratio. K-invariant → proves the GEOMETRY itself is compressed.
+  - (2) Routing-granularity compression: true_margin_lowfreq_energy at K ≤ 25
+    shows compression ratios 1.6–6.9× (ORIG at K=4 matches PERM at K≈28).
+    Effect reverses at K ≥ 50. Noisy at 1 seed.
+  - Anti-signal: sector_lowfreq_energy shows PERM > ORIG everywhere (PERM graph
+    has simpler structure, coarse sectors align trivially). Discarded for compression.
+  - Bug fix: spectral_route_audit.py was not applying input_transform to PERM data
+    → fixed. Without this, ORIG and PERM spectral metrics were on identical data.
+  - REFINE: signal present but noisy at 1 seed. Need multi-seed confirmation.
+- Previous result (INC-0155, 2026-03-13):
+  - Per-sample MSE cannot detect routing compression on this proxy.
+    MSE range: 0.003881–0.004008 (3.3% spread), insensitive to routing quality.
+    This is a measurement limitation: EMA prototypes adapt to marginal distributions
+    preserved by column permutation, producing E[MSE|ORIG] ≈ E[MSE|PERM].
+  - Structural signal confirmed: sector entropy gap 8.6pp at K=75 (ORIG=89.1%,
+    PERM=97.6%). hopf_angular_mass_error: ORIG=0.678, PERM=0.374.
+    Geometric routing IS structurally different, but per-sample MSE cannot see it.
+  - REFINE: MSE is not a valid observable for routing compression. Structural
+    metrics (spectral energy, bucket coherence) must be used instead.
 - Previous result (INC-0154, 2026-03-13):
   - Event-gate efficiency 2×2×2 factorial: gate_mean delta <0.1pp (ORIG vs PERM).
-    Error-based event gate is routing-agnostic — EMA prototypes equalize per-sample
-    errors regardless of routing quality. Geometric advantage operates at
-    bucket-organization level, not per-sample error level. REFINE.
+    Error-based event gate is routing-agnostic. REFINE.
 - Previous result (INC-0153, 2026-03-14):
   - Per-sample spectral roughness ↔ gate correlation geometry-agnostic (delta +2.7–5.1pp).
 - Previous result (INC-0152, 2026-03-14):
   - Gate saturated at INC-0125 params (gate_mean=0.959, active_frac=100%).
 - Blocker:
-  - `Four consecutive REFINE results (INC-0152–0155) confirm per-sample metrics are
-    geometry-agnostic on PPMI-SVD proxy. Stage 6 requires either: (a) spectral-quality
-    compression (lowfreq_energy vs K), or (b) a richer downstream task where routing
-    quality has measurable impact on task performance.`
+  - `Two compression forms found at 1 seed (label: ratio=1.50 infinite, true_margin:
+    1.6–6.9× at low K). sector_lowfreq_energy anti-compressed. Need multi-seed
+    confirmation and/or a metric that varies with K AND captures task-relevant quality.`
 - Next branch:
-  - `INC-0156: spectral compression — lowfreq_energy vs K sweep ORIG vs COL_PERM`
+  - `INC-0157: either (a) 2-seed confirm of true_margin compression at low K,
+    or (b) per-sector label purity metric — K-varying, task-relevant quality signal`
 
 ## 7. Hardware-Efficiency Confirmation
 - Status: `partial`

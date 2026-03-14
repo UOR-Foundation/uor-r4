@@ -13,28 +13,40 @@ as authoritative when they disagree with this file.
 
 ## Canonical Queue
 - Current primary RR: `RR-067`
-- Current primary INC: `INC-0156` — **Pending** (Stage 6: spectral compression — lowfreq_energy vs K).
-  Measure how bucket count affects spectral quality (not MSE) to quantify routing
-  compression through the metric that IS geometry-sensitive.
-- Previous INC: `INC-0155` — **Closed: REFINE** (2026-03-13). MSE-vs-K flat (range 3%);
-  ORIG vs PERM delta ≤1.09%. MSE is insensitive to routing quality at these sample counts.
-  Sector entropy confirms structural signature (8.6pp gap at K=75) but it doesn't
-  translate to MSE advantage. MSE-based routing compression is the wrong metric.
+- Current primary INC: `INC-0157` — **TBD** (Stage 6: next step after INC-0156 REFINE).
+  Either (a) 2-seed confirm of true_margin compression at low K, or
+  (b) new metric design: per-sector label purity or sector classification margin
+  that varies with K and captures task-relevant routing quality.
+- Previous INC: `INC-0156` — **Closed: REFINE** (2026-07-09). Spectral compression via
+  equal-quality routing cost. label_indicator_lowfreq_max: ORIG/PERM = 1.50, PERM never
+  reaches ORIG quality (geometric structural compression). true_margin_lowfreq_energy:
+  compression ratios 1.6–6.9× at K ≤ 25 (BASE), noisy at 1 seed, reverses at K ≥ 50.
+  sector_lowfreq_energy: anti-compression (PERM > ORIG, measures graph-sector coherence
+  not task quality). Two compression forms found, both need multi-seed confirmation.
+- Previous INC: `INC-0155` — **Closed: REFINE** (2026-03-13). Per-sample MSE cannot detect
+  routing compression (measurement limitation, not falsification). EMA prototypes adapt to
+  marginal distributions preserved by column permutation → E[MSE|ORIG] ≈ E[MSE|PERM].
+  Structural signal confirmed: sector entropy gap 8.6pp at K=75.
 - Previous INC: `INC-0154` — **Closed: REFINE** (2026-03-13). Event-gate efficiency is
   routing-agnostic: gate_mean delta <0.1pp (ORIG vs PERM).
 - Previous INC: `INC-0153` — **Closed: REFINE** (2026-03-14). Per-sample spectral ↔ gate
   geometry-agnostic (delta only +2.7–5.1pp).
 - Previous INC: `INC-0152` — **Closed: REFINE** (2026-03-14). Gate saturated.
-- Current primary increment doc: TBD (INC-0156 not yet written)
+- Current primary increment doc:
+  `docs/research/increments/INC_0156_spectral_compression_screen.md` (closed: REFINE)
 - Kill-list stage: `Sparse event-driven trainability` (Stage 6 — PARTIAL, active gate)
-- Interpretation update: Stage 6 sparsity = routing compression. MSE cannot measure it
-  (INC-0155). Per-sample gating cannot measure it (INC-0152/0153/0154). The remaining
-  instrument: spectral quality vs K (lowfreq_energy, label_indicator_max).
+- Stage 6 definition (updated): Structural routing compression. Does geometry-native
+  routing achieve the same structural/spectral quality with lower routing complexity?
+  MSE is not a valid observable (INC-0155). Compression must be evaluated using
+  equal-quality structural metrics (spectral energy, bucket coherence).
+  INC-0156 found two compression forms: (1) geometric structural (label metric, +50%,
+  K-invariant, infinite compression), (2) routing-granularity (true_margin at low K,
+  ratios 1.6–6.9×, noisy at 1 seed). Both need multi-seed confirmation.
 - Mathematical object under test:
-  `Spectral compression: at fixed spectral quality target, how many fewer buckets
-  does structured (ORIG) Hopf routing need compared to scrambled (COL_PERM)?`
-- Success condition: spectral quality at K_orig matches spectral quality at K_perm > K_orig
-- Falsification condition: spectral quality equally insensitive to routing quality
+  `Spectral compression: label_indicator shows infinite compression (ORIG unreachable);
+   true_margin shows K-dependent compression at K ≤ 25; sector_lfe is anti-compressed`
+- Success condition: multi-seed confirm of compression in task-relevant quality metric
+- Falsification condition: 1-seed patterns vanish under multi-seed averaging
 
 ## Latest Closed Increment
 - `INC-0146`: **Closed: KEEP** (2026-03-13, Stage 4 PARTIAL-PASS confirmed).

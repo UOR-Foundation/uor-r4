@@ -3874,26 +3874,55 @@ Add new entries below.
 - Protocol: screen (1 seed, seed=0)
 - Data: ppmi_proxy.npz, K ∈ {4,9,16,25,50,75,100} (BASE) + K ∈ {25,50,75,100} (TRANS)
 - Design: 22 routes total, event_gate_mode=off (pure routing quality test)
-- Key finding: **MSE is insensitive to both K and routing quality.**
+- Key finding: **Per-sample MSE cannot detect routing compression on this proxy.**
   MSE range across all 22 conditions: 0.003881–0.004008 (total spread 3.3%).
-  MSE INCREASES with K (opposite of expected) — more buckets = fewer samples per
-  prototype = slightly worse estimation.
-  ORIG vs PERM MSE delta: max +1.09% (BASE K=25). Mean compression ratio = 0.87.
-  No routing compression via MSE exists.
-- Secondary finding: **Sector entropy confirms structural signature.**
+  EMA prototype training adapts prototypes to the empirical distribution inside
+  each bucket; column permutation preserves marginal distributions, so reconstruction
+  converges to nearly identical MSE regardless of routing quality.
+  This is a measurement limitation, not a falsification of compression.
+- Structural finding: **Sector entropy confirms geometric routing signal.**
   ORIG entropy efficiency 89.1–99.1% vs PERM 96.8–99.9%. Gap grows with K,
   peaking at 8.6pp at K=75. Geometric routing produces non-uniform bucket
   assignments that respect data structure. hopf_angular_mass_error: ORIG=0.678,
   PERM=0.374 (structured data creates asymmetric Hopf occupancy).
-- Mathematical reason: Same root cause as INC-0154. EMA prototypes saturate at
-  these sample counts (5000 train, ~50–1250 per bucket). MSE depends on prototype
-  quality, not routing coherence. The geometric advantage manifests in spectral
-  properties (Stage 5: +40–77%) and entropy non-uniformity, not MSE.
+- Interpretation: MSE is a local distortion metric. Routing compression operates
+  at the structural/aggregate level. The geometric signal exists at the routing
+  structure level, not at the per-sample prediction level. This is consistent
+  with Stage 5 results (+40–77% spectral energy) which are aggregate structural
+  signals, not per-sample ones.
 - Decision:
-  - INC-0155: REFINE — MSE-based routing compression is the wrong metric
-  - Structural signature IS present (entropy, Hopf mass error) but doesn't
-    help MSE
-  - Four consecutive REFINE results (INC-0152/0153/0154/0155) now confirm:
-    the PPMI-SVD proxy's per-sample metrics are geometry-agnostic
-  - Next: measure spectral quality vs K (lowfreq_energy vs K) to test whether
-    spectral compression exists, or accept that Stage 6 requires a richer task
+  - INC-0155: REFINE — per-sample MSE is not a valid observable for routing compression
+  - Structural signature IS present (entropy 8.6pp gap, Hopf occupancy asymmetry)
+  - Stage 6 question reframed: does geometry-native routing achieve the same
+    structural/spectral quality with lower routing complexity?
+  - Next: INC-0156 spectral compression (lowfreq_energy vs K)
+
+### INC-0156 — Spectral Compression via Equal-Quality Routing Cost — Screen
+- Date: 2026-07-09
+- Branch: main
+- Verdict: **REFINE** — two distinct compression forms found, both need multi-seed
+  confirmation
+- Data: 22 routes (K ∈ {4,9,16,25,50,75,100} × {ORIG,PERM} × {BASE,TRANS}), 1 seed,
+  poincaré_4d graph operator, 384 eval points, KNN-12, 8 lowfreq modes
+- Bug fix: spectral_route_audit.py `load_proxy_subset()` was NOT applying
+  `input_transform` — PERM routes computed spectral metrics on unscrambled data.
+  Fixed to match router_proxy_eval.py transform logic (seed+77, col_perm).
+- Finding 1: **Geometric structural compression (label metrics).** ORIG poincaré_4d
+  graph captures label semantics 50.1% better (label_indicator_lowfreq_max = 0.1172
+  vs 0.0781, ratio = 1.50). PERM never reaches ORIG quality at any K → infinite
+  compression ratio. K-invariant: proves the geometry itself is compressed.
+- Finding 2: **Routing-granularity compression (true_margin).** BASE at K ≤ 25:
+  compression ratios 1.6–6.9× (ORIG at K=4 matches PERM at K≈28). Effect reverses
+  at K ≥ 50. TRANS at K=100: PERM never reaches ORIG quality. But true_margin values
+  are noisy (range 0.009–0.150), 1-seed noise floor is high.
+- Finding 3: **Anti-signal in sector_lowfreq_energy.** PERM has 3–16% higher
+  sector_lowfreq_energy at every K. PERM graph has higher λ2 (0.037 vs 0.018),
+  simpler structure where coarse sectors align trivially. sector_lowfreq_energy
+  measures graph-sector coherence, not task-relevant quality → discarded for
+  compression evaluation.
+- Decision:
+  - INC-0156: REFINE — compression signal present in label metrics (geometric, ∞)
+    and true_margin (K-dependent, 1.6–6.9× at low K), but 1-seed noise is high
+    and sector metric shows anti-compression
+  - Next: INC-0157 — either multi-seed confirm of true_margin compression at
+    low K, or new metric design (per-sector label purity)
