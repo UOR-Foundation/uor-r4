@@ -10,7 +10,9 @@ Use statuses:
 
 ## Canonical Queue
 - Current primary RR: `RR-067`
-- Current primary INC: `INC-0169` -- TBD (next increment)
+- Current primary INC: `INC-0170` -- TBD (Stage 7: Large-K Angular Capacity Test)
+- Previous INC: `INC-0169` -- Closed: KEEP (2026-03-14). Canonical law freeze + design implications.
+  eff_buckets=2.957×K^0.572 (TRANS ORIG). Norm-invariant. Shell hierarchy excluded. INC-0170 proposed.
 - Previous INC: `INC-0168` -- Closed: KEEP (2026-03-14). Angular-vs-radial norm-geometry diagnostic.
   Routing sparsity is purely angular: α=0.572 TRANS ORIG norm-invariant across L1/L2/L3/L4.
 - Previous INC: `INC-0167` -- Closed: KEEP (2026-03-14). Scaling mechanism attributed
@@ -202,8 +204,7 @@ Use statuses:
   - `docs/research/increments/INC_0165_hardware_proxy_closure.md`
   - `docs/research/increments/INC_0166_law_freeze_k100_boundary_audit.md`
   - `docs/research/increments/INC_0167_scaling_mechanism_diagnostic.md`
-  - `docs/research/increments/INC_0168_norm_geometry_angular_vs_radial.md`
-- Latest result (INC-0168, 2026-03-14):
+  - `docs/research/increments/INC_0168_norm_geometry_angular_vs_radial.md`  - `docs/research/increments/INC_0169_canonical_law_freeze_design_implications.md`- Latest result (INC-0168, 2026-03-14):
   - **KEEP -- routing geometry definitively characterized as purely angular.**
   - 160 static routing runs (5 norm variants × 2 modes × 2 data variants × 8 K).
   - TRANS ORIG scaling exponent α=0.572 is IDENTICAL (max deviation <0.015)
@@ -213,13 +214,24 @@ Use statuses:
   - L3/L4 norm surfaces: no measurable effect on routing metrics.
   - The √K scaling is a direct consequence of Hopf-base angular sector
     discretization. No radial contribution identified.
-- Decision: Stage 7 remains **PARTIAL-PASS** (strong) (2026-03-14, INC-0168 KEEP).
-  Routing geometry definitively characterized as angular. Hardware-efficiency
-  case is robust to normalization. Radial shells structurally inaccessible for
-  L2-normalized proxy.
+- Latest result (INC-0169, 2026-03-14):
+  - **KEEP -- canonical routing law frozen, design implications derived.**
+  - Synthesis increment. All results drawn from INC-0162 through INC-0168.
+  - Canonical law: eff_buckets = 2.957 × K^0.572 (TRANS ORIG, static, L2-normalized).
+  - Norm-invariance confirmed: Δα < 0.015 across L1/L2/L3/L4 (INC-0168).
+  - Shell hierarchy excluded from default design (inaccessible by construction;
+    forced activation degrades Gini ratio by 19%, INC-0168).
+  - Hardware consequence chain documented: 3.0–4.9× eff_cost, 2.5–2.9× LRU misses (TRANS).
+  - Design knob priority: K (high), phase transport (high), normalization (low), shells (low).
+  - INC-0170 proposal: Large-K angular capacity test, K=1000–5000, static routing.
+    Predicted eff_ratio at K=5000: ~4.4× (extrapolation of INC-0168 static fit).
+- Decision: Stage 7 remains **PARTIAL-PASS** (strong) (2026-03-14, INC-0169 KEEP).
+  Routing law and hardware consequences definitively characterized. INC-0169 freezes the
+  canonical law. Remaining Stage 7 work: large-K capacity validation (INC-0170),
+  eventual training-system implementation.
 - Blocker:
   - `None. Stage 7 hardware proxy closure confirmed. Angular geometry characterized.`
   - `Open question (out-of-scope): non-L2-normalized production embeddings may
     activate shells; this would require a new proxy.`
 - Next branch:
-  - `INC-0169: TBD -- Stage 7 close or real-task validation`
+  - `INC-0170: TBD -- Large-K Angular Capacity Test (K=1000–5000, static routing)`

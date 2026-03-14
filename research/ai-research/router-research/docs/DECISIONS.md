@@ -4237,4 +4237,30 @@ Add new entries below.
 - Decision:
   - INC-0168: KEEP — routing geometry definitively characterized as purely angular
   - Stage 7: PARTIAL-PASS (strong, angular mechanism confirmed, norm-invariant)
-  - Next: INC-0169 — TBD
+  - Next: INC-0169
+
+---
+
+## INC-0169: Canonical Architecture Law Freeze and Design Implications
+- Date: 2026-03-14
+- Stage: 7
+- Verdict: KEEP
+- Data: Synthesis increment. No new experiments. All results from INC-0162 through INC-0168.
+- Key findings:
+  1. Canonical static routing law (TRANS ORIG, L2-normalized):
+     eff_buckets = 2.957 × K^0.572, R²=0.963 (INC-0168, 160 runs, K=10–400).
+  2. Law is norm-invariant: Δα < 0.015 across L1/L2/L3/L4 normalizations.
+  3. Shell hierarchy excluded from default design: structurally inaccessible
+     for L2-normalized embeddings (INC-0167); forced activation degrades Gini
+     ratio −19% at K=100 TRANS (INC-0168).
+  4. Hardware consequence chain: 3.0–4.9× eff_cost reduction, 2.5–2.9× fewer
+     LRU-16 cache misses at matched progress p=0.70 (TRANS mode, INC-0165).
+  5. Design knob priority: K (high), phase transport λ (high),
+     normalization choice (low), shell count (low).
+  6. INC-0170 proposal: Large-K angular capacity test (K=1000–5000, static
+     routing). Predicted eff_ratio (PERM/ORIG) at K=5000: ~4.4× (extrapolation
+     of INC-0168 static fit).
+- Decision:
+  - INC-0169: KEEP — canonical routing law frozen, design implications derived
+  - Stage 7: PARTIAL-PASS (strong, law and hardware consequences fully characterized)
+  - Next: INC-0170 — Large-K Angular Capacity Test

@@ -806,3 +806,28 @@ Shell activation (B2) shows that when shells ARE active, angular concentration
 (Gini ratio) decreases. This is a safeguard for Stage 2/3: if future embedding
 proxies introduce non-unit L2 norms, shell splitting could dilute rather than
 amplify routing concentration. This does not change current PARTIAL-PASS verdicts.
+
+---
+
+## Session: INC-0169 Canonical Law Freeze (2026-03-14)
+
+### Summary
+INC-0169 is a synthesis increment. No new experiments run. Canonical routing law
+frozen from INC-0162 through INC-0168 evidence. Design implications derived.
+
+### Key Result
+Canonical law: eff_buckets = 2.957 × K^0.572 (TRANS ORIG, static, L2-normalized).
+Law is norm-invariant (Δα < 0.015 across L1/L2/L3/L4). Shell hierarchy excluded.
+Hardware consequence: 3.0–4.9× eff_cost reduction, 2.5–2.9× fewer LRU misses (TRANS).
+INC-0170 proposal: Large-K capacity test, K=1000–5000 (predicted eff_ratio ~4.4× at K=5000).
+
+### Verdict: KEEP
+
+### Files Updated
+- `docs/research/increments/INC_0169_canonical_law_freeze_design_implications.md` → created, Closed: KEEP
+- `docs/research/ACTIVE_STATE.md` → current INC → INC-0170 (TBD)
+- `docs/research/KILL_LIST_TRACKER.md` → Stage 7 latest result updated to INC-0169
+- `docs/DECISIONS.md` → INC-0169 decision logged
+- `docs/routes/ROUTE_MATRIX.md` → updated to INC-0170
+- `docs/program/PROJECT_BOARD.md` → updated to INC-0170
+- `docs/program/ISSUE_REGISTRY.md` → updated to INC-0170

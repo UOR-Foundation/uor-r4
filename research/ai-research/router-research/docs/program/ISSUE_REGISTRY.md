@@ -4,7 +4,8 @@ Use this file as the local GitHub-style issue list for router research.
 
 ## Canonical Active Queue
 - Current primary RR: `RR-067`
-- Current primary INC: `INC-0169` -- TBD. Stage 7: next increment.
+- Current primary INC: `INC-0170` -- TBD. Stage 7: Large-K Angular Capacity Test.
+- 2026-03-14 INC-0169 KEEP: Canonical law freeze and design implications. eff_buckets=2.957×K^0.572 TRANS ORIG. Norm-invariant. Shell hierarchy excluded. INC-0170 proposed.
 - 2026-03-14 INC-0168 KEEP: Norm-geometry diagnostic. α=0.572 norm-invariant; routing is purely angular.
 - 2026-03-14 INC-0167 KEEP: Scaling mechanism diagnostic.
 - 2026-03-14 INC-0166 KEEP: Architecture law freeze + K=100 boundary audit.

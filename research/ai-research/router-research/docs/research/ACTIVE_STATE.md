@@ -13,7 +13,14 @@ as authoritative when they disagree with this file.
 
 ## Canonical Queue
 - Current primary RR: `RR-067`
-- Current primary INC: `INC-0169` -- **TBD** (Stage 7: next increment)
+- Current primary INC: `INC-0170` -- **TBD** (Stage 7: Large-K Angular Capacity Test)
+- Previous INC: `INC-0169` -- **Closed: KEEP** (2026-03-14). Canonical architecture law freeze and design implications.
+  Synthesis increment (no new experiments). Canonical law: eff_buckets = 2.957 × K^0.572 (TRANS ORIG,
+  static, L2-normalized). Law is norm-invariant (Δα < 0.015 across L1/L2/L3/L4). Shell hierarchy
+  excluded from default design. Phase transport (TRANS) is primary amplifier.
+  Design knob priority: K (high), phase transport (high), normalization (low), shells (low).
+  INC-0170 proposal: Large-K capacity test, K=1000–5000, static routing.
+  Stage 7: PARTIAL-PASS (strong, routing law and hardware consequences definitively characterized).
 - Previous INC: `INC-0168` -- **Closed: KEEP** (2026-03-14). Norm-geometry diagnostic.
   160 static routing runs (5 variants × 2 modes × 2 variants × 8 K values).
   Routing sparsity is purely angular: TRANS ORIG α=0.572 is norm-invariant across
