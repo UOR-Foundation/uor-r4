@@ -13,17 +13,17 @@ as authoritative when they disagree with this file.
 
 ## Canonical Queue
 - Current primary RR: `RR-067`
-- Current primary INC: `INC-0150` — **Closed: KEEP** (2026-03-13). Stage 5: 2-seed confirm
-  replicates task-signal smoothness on poincaré-4d. true_margin +26–55%, label_indicator_max +25%.
-- Previous INC: `INC-0149` — **Closed: KEEP** (2026-03-13). Screen confirmed task-signal smoothness.
-- Next INC: `INC-0151` — 4-seed finalize of Stage 5 task-signal poincaré operator.
+- Current primary INC: `INC-0151` — **Closed: KEEP** (2026-03-13). Stage 5: 4-seed finalize confirmed.
+  true_margin_lowfreq +40–48%, label_indicator_max +57%, sector +72–77%.
+- Previous INC: `INC-0150` — **Closed: KEEP** (2026-03-13). 2-seed confirm passed.
+- Next INC: TBD — transition to Stage 6 (Sparse Event-Driven Trainability).
 - Current primary increment doc:
-  `docs/research/increments/INC_0150_task_signal_poincare_confirm.md`
-- Kill-list stage: `Spectral / operator usefulness` (Stage 5 — confirm passed, finalize next)
+  `docs/research/increments/INC_0151_task_signal_poincare_finalize.md`
+- Kill-list stage: `Spectral / operator usefulness` (Stage 5 — PARTIAL-PASS strong, finalized)
 - Mathematical object under test:
-  `Task-signal smoothness on Poincaré-4d graph Laplacian (4-seed finalize)`
-- Success condition (next): `≥1 task-signal metric >20% improvement in 4-seed mean`
-- Falsification condition (next): `all 4-seed mean improvements <20%`
+  `Stage 5 complete. Next: Stage 6 sparse event integration.`
+- Success condition (next): TBD (Stage 6 design)
+- Falsification condition (next): TBD (Stage 6 design)
 
 ## Latest Closed Increment
 - `INC-0146`: **Closed: KEEP** (2026-03-13, Stage 4 PARTIAL-PASS confirmed).

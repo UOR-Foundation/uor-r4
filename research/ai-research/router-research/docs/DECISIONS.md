@@ -3800,3 +3800,22 @@ Add new entries below.
   - 2-seed confirm replicates INC-0149 screen for true_margin_lowfreq and label_indicator_max.
   - Theory chain (geometry → operator → modes → task-signal smoothness) holds at 2-seed level.
   - Proceed to 4-seed finalize (INC-0151).
+
+## 2026-03-13 INC-0151 — **Closed: KEEP** — 4-seed finalize of task-signal poincaré operator
+- Kill-list stage: 5. Spectral / Operator Usefulness
+- Mathematical object: Task-signal smoothness on Poincaré-4d graph Laplacian (4-seed finalize)
+- Protocol: screen (INC-0149) → confirm (INC-0150) → **finalize (INC-0151)**
+- Data: ppmi_proxy.npz, phase4_dims=3,65,2,21, K=75, seeds=[0,1,2,3]
+- Finalize results (4-seed mean):
+  - true_margin_lowfreq: +39.8% (BASE), +47.5% (TRANS)
+  - label_indicator_lowfreq_max: +57.3%
+  - sector_lowfreq_energy: +72.4% (BASE), +77.2% (TRANS)
+  - true_margin_dirichlet: −5.8% (BASE), −6.5% (TRANS) — genuinely smoother
+- Progression: true_margin stable across all 3 stages (screen→confirm→finalize).
+  label_indicator_max strengthened. Sector alignment stable.
+- Decision:
+  - INC-0151: KEEP — 4-seed finalize confirms theory chain
+  - Stage 5: PARTIAL-PASS (strong). Operator construction, label smoothness, and task-signal
+    smoothness all confirmed across full screen→confirm→finalize protocol.
+  - Remaining Stage 5 question (spectral → computational advantage) bridges to Stage 6.
+  - Next: transition to Stage 6 (Sparse Event-Driven Trainability).

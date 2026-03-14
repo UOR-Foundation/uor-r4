@@ -2,8 +2,8 @@
 
 ## Canonical Active Queue
 - Current primary RR: `RR-067`
-- Current primary INC: `INC-0150` — **Closed: KEEP** (2026-03-13). 2-seed confirm of task-signal
-  poincaré operator. true_margin +26–55%, label_indicator_max +25%. Proceed to 4-seed finalize.
+- Current primary INC: `INC-0151` — **Closed: KEEP** (2026-03-13). Stage 5: 4-seed finalize confirmed.
+  true_margin_lowfreq +40–48%, label_indicator_max +57%. Stage 5 PARTIAL-PASS (strong).
 - 2026-03-13 INC-0149 KEEP: Task-signal smoothness confirmed (screen). error_indicator +109%, true_margin +28–134%.
 - 2026-03-13 INC-0148 KEEP: Geometry-native operator confirmed. poincaré-4d +91–95% sector alignment.
 - 2026-03-13 INC-0145 KEEP: HOPF_FULL rel_diff=40.7% (stable). Geometry-induced theta_shift on phase angles. Stage 4 → PARTIAL-PASS.

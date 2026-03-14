@@ -10,7 +10,7 @@ Use statuses:
 
 ## Canonical Queue
 - Current primary RR: `RR-067`
-- Current primary INC: `INC-0150` (Closed: KEEP — Stage 5: 2-seed confirm passed, 4-seed finalize next)
+- Current primary INC: `INC-0151` (Closed: KEEP — Stage 5 finalized, transition to Stage 6)
 
 ## 1. Hyperbolic Embedding Stability
 - Status: `partial`
@@ -104,28 +104,37 @@ Use statuses:
   - `Begin Stage 5 (Spectral/Operator Usefulness) — Stage 4 proxy evidence sufficient`
 
 ## 5. Spectral / Operator Usefulness
-- Status: `partial` (strong — operator + task-signal confirmed)
+- Status: `partial-pass` (strong — 4-seed finalized)
 - Canonical evidence:
   - `docs/research/increments/INC_0066_spectral_route_operator.md`
   - `docs/research/increments/INC_0067_spectral_signal_probes.md`
   - `docs/research/increments/INC_0068_spectral_residual_task_signals.md`
   - `docs/research/increments/INC_0148_spectral_geometry_native_operator.md`
   - `docs/research/increments/INC_0149_task_signal_poincare_operator.md`
-- Latest result (INC-0149, 2026-03-13):
-  - Task-signal smoothness on poincaré-4d operator KEEP. Multiple metrics >20% improvement:
-    error_indicator +109%, true_margin +28–134%, true_score +26%, residual_l2 +23%.
-    Dirichlet energy for true_margin decreases 3.5–4.7% (genuinely smoother, not artifact).
-  - Extends INC-0148 (routing-label alignment) to task-relevant signals.
-  - Theory chain: geometry → operator → modes → task-signal smoothness empirically supported.
+  - `docs/research/increments/INC_0150_task_signal_poincare_confirm.md`
+  - `docs/research/increments/INC_0151_task_signal_poincare_finalize.md`
+- Latest result (INC-0151, 2026-03-13):
+  - 4-seed finalize KEEP. Stable improvements across all seeds:
+    true_margin_lowfreq +39.8% (BASE) / +47.5% (TRANS),
+    label_indicator_lowfreq_max +57.3%,
+    sector_lowfreq_energy +72.4% / +77.2%,
+    true_margin_dirichlet −5.8% / −6.5% (genuinely smoother).
+  - Progression stable-to-strengthening: screen +28% → confirm +26% → finalize +40%.
+  - Theory chain geometry → operator → modes → task-signal fully confirmed at 4 seeds.
+- Previous result (INC-0150, 2026-03-13):
+  - 2-seed confirm KEEP. true_margin_lowfreq +26% (BASE) / +55% (TRANS),
+    sector_lowfreq_energy +94% / +89%.
+- Previous result (INC-0149, 2026-03-13):
+  - 1-seed screen KEEP. error_indicator +109%, true_margin +28–134%, true_score +26%.
 - Previous result (INC-0148, 2026-03-13):
   - Geometry-native spectral operator KEEP. poincare_4d +91–95% sector_lowfreq_energy vs
     Euclidean-KNN baseline. Prior INC-0067/68 NEGATIVE results explained: wrong operator.
-- Blocker:
-  - `operator construction and task-signal smoothness both confirmed. Remaining: whether spectral
-    smoothness translates into computational advantage (spectral-domain operations outperform
-    direct spatial operations). This requires Stage 6 integration testing.`
+- Decision: Stage 5 → **PARTIAL-PASS (strong)** (2026-03-13, INC-0151 KEEP).
+  Full screen→confirm→finalize protocol complete. All key metrics pass >20% threshold
+  at 4-seed mean. Spectral operator construction and task-signal smoothness confirmed.
+  Remaining: whether spectral smoothness translates to computational advantage (Stage 6).
 - Next branch:
-  - `Assess: multi-seed finalize Stage 5 OR transition to Stage 6 (sparse event-driven trainability)`
+  - `Transition to Stage 6 (Sparse Event-Driven Trainability)`
 
 ## 6. Sparse Event-Driven Trainability
 - Status: `partial`
