@@ -10,7 +10,7 @@ Use statuses:
 
 ## Canonical Queue
 - Current primary RR: `RR-067`
-- Current primary INC: `INC-0149` (Closed: KEEP — Stage 5: task-signal smoothness confirmed)
+- Current primary INC: `INC-0150` (Closed: KEEP — Stage 5: 2-seed confirm passed, 4-seed finalize next)
 
 ## 1. Hyperbolic Embedding Stability
 - Status: `partial`

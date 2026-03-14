@@ -7,8 +7,9 @@
 
 ## Current Queue Override
 - Current primary RR: `RR-067`
-- Current primary INC: `INC-0149` — **Closed: KEEP** (2026-03-13). Stage 5: task-signal smoothness
-  on poincaré-4d operator confirmed. error_indicator +109%, true_margin +28–134%.
+- Current primary INC: `INC-0150` — **Closed: KEEP** (2026-03-13). 2-seed confirm passed.
+  true_margin +26–55%. Proceed to INC-0151 (4-seed finalize).
+- 2026-03-13 INC-0149 KEEP: Task-signal smoothness confirmed (screen). error_indicator +109%, true_margin +28–134%.
 - 2026-03-13 INC-0147 REFINE: Raw alpha (λ=0) rel_diff=66.7% vs full transport (λ=1) at 68.7%.
   Fiber alpha confirmed (+20.6pp over base). Transport correction not needed.
 - 2026-03-13 INC-0145 KEEP: HOPF_FULL rel_diff=40.7% (stable: 38.6%, 42.7%). HOPF_BASE=31.2%. HOPF_TRANS=28.1% (variable, K=25 bin dilution). Stage 4 → PARTIAL-PASS.

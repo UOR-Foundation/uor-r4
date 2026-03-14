@@ -13,18 +13,17 @@ as authoritative when they disagree with this file.
 
 ## Canonical Queue
 - Current primary RR: `RR-067`
-- Current primary INC: `INC-0149` — **Closed: KEEP** (2026-03-13). Stage 5: task-signal smoothness
-  on poincaré-4d operator confirmed. Multiple task-signal metrics >20% improvement: error_indicator
-  +109%, true_margin +28–134%, true_score +26%, residual_l2 +23%.
-- Previous INC: `INC-0148` — **Closed: KEEP** (2026-03-13). poincaré-4d +91–95% sector alignment.
-- Next INC: TBD — assess whether to multi-seed finalize Stage 5 or transition to Stage 6.
+- Current primary INC: `INC-0150` — **Closed: KEEP** (2026-03-13). Stage 5: 2-seed confirm
+  replicates task-signal smoothness on poincaré-4d. true_margin +26–55%, label_indicator_max +25%.
+- Previous INC: `INC-0149` — **Closed: KEEP** (2026-03-13). Screen confirmed task-signal smoothness.
+- Next INC: `INC-0151` — 4-seed finalize of Stage 5 task-signal poincaré operator.
 - Current primary increment doc:
-  `docs/research/increments/INC_0149_task_signal_poincare_operator.md`
-- Kill-list stage: `Spectral / operator usefulness` (Stage 5 — operator + task-signal confirmed)
+  `docs/research/increments/INC_0150_task_signal_poincare_confirm.md`
+- Kill-list stage: `Spectral / operator usefulness` (Stage 5 — confirm passed, finalize next)
 - Mathematical object under test:
-  `Task-signal smoothness on Poincaré-4d graph Laplacian`
-- Success condition (next): TBD — pending next increment definition
-- Falsification condition (next): TBD
+  `Task-signal smoothness on Poincaré-4d graph Laplacian (4-seed finalize)`
+- Success condition (next): `≥1 task-signal metric >20% improvement in 4-seed mean`
+- Falsification condition (next): `all 4-seed mean improvements <20%`
 
 ## Latest Closed Increment
 - `INC-0146`: **Closed: KEEP** (2026-03-13, Stage 4 PARTIAL-PASS confirmed).

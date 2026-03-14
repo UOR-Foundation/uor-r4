@@ -3779,3 +3779,24 @@ Add new entries below.
     and task-error metrics are more informative. error_indicator on TRANS route reverses
     direction, likely due to pre-existing transport-sector bias.
   - Next: assess whether to multi-seed finalize Stage 5 or transition to Stage 6.
+
+## 2026-03-13 INC-0150 — **Closed: KEEP** — 2-seed confirm of task-signal poincaré operator
+- Kill-list stage: 5. Spectral / Operator Usefulness
+- Mathematical object: Task-signal smoothness on Poincaré-4d graph Laplacian (2-seed replication)
+- Protocol: screen (1 seed, INC-0149) → **confirm (2 seeds, INC-0150)** → finalize (4 seeds)
+- Data: ppmi_proxy.npz, phase4_dims=3,65,2,21, K=75, seeds=[0,1]
+- Confirm results (2-seed mean, max_points=384, knn_k=12, lowfreq_modes=8):
+  Passing >20% threshold:
+  - true_margin_lowfreq: +26.3% (BASE), +55.3% (TRANS) — replicates screen (+28%/+134%)
+  - label_indicator_lowfreq_max: +25.4% — replicates screen (+43%)
+  - sector_lowfreq_energy: +94.2% (BASE), +88.8% (TRANS) — stable from INC-0148
+  Dirichlet confirmation:
+  - true_margin_dirichlet: −4.2% (BASE), −5.1% (TRANS) — genuinely smoother
+  Anomalies:
+  - error_indicator_lowfreq reversed from screen: +109% → −23% (noisy at ~97% error rate)
+  - true_score_lowfreq inconsistent: −9% (BASE), −24% (TRANS)
+- Decision:
+  - INC-0150: KEEP
+  - 2-seed confirm replicates INC-0149 screen for true_margin_lowfreq and label_indicator_max.
+  - Theory chain (geometry → operator → modes → task-signal smoothness) holds at 2-seed level.
+  - Proceed to 4-seed finalize (INC-0151).
