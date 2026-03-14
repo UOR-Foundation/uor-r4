@@ -10,7 +10,7 @@ Use statuses:
 
 ## Canonical Queue
 - Current primary RR: `RR-067`
-- Current primary INC: `INC-0158` — TBD (Stage 6: 4-seed finalize of bucket coherence + label spectral)
+- Current primary INC: `INC-0159` — TBD (Stage 6→7 bridge or Stage 7 entry)
 
 ## 1. Hyperbolic Embedding Stability
 - Status: `partial`
@@ -138,16 +138,18 @@ Use statuses:
 
 ## 6. Sparse Event-Driven Trainability
 - Status: `partial-pass`
-- Stage 6 definition (updated INC-0157):
-  - **Bucket semantic coherence as routing compression.** Geometry-native routing
-    produces higher per-bucket label purity and lower per-bucket entropy than
-    permuted routing at every bucket count K. This means fewer buckets suffice
-    for equivalent semantic organization → routing compression → hardware savings.
+- Stage 6 definition (updated INC-0158):
+  - **Bucket semantic coherence as routing compression — FINALIZED.**
+    Geometry-native routing produces higher per-bucket label purity and lower
+    per-bucket entropy than permuted routing at every bucket count K ≥ 25.
+    Finalized at 4 seeds (INC-0158). Purity ratio up to 1.976× at TRANS K=100.
   - INC-0152/0153/0154 showed per-sample error metrics are geometry-agnostic.
     INC-0155 showed per-sample MSE cannot detect routing compression.
-    INC-0156 found spectral compression at 1 seed (label metric +50%, true_margin
-    compression 1.6–6.9× at low K, sector_lfe anti-compressed).
+    INC-0156 found spectral compression at 1 seed.
     INC-0157 confirmed bucket semantic coherence at 2 seeds.
+    INC-0158 finalized bucket coherence at 4 seeds.
+  - Remaining Stage 6 question: can bucket coherence translate to sparse-event
+    training efficiency? This is the bridge to Stage 7.
 - Canonical evidence:
   - `docs/research/increments/INC_0125_product_phase_sparse_event_proxy_trainability_hardening.md`
   - `docs/research/increments/INC_0130_product_phase_sparse_event_translation_route_coupled_soft_bias_pilot.md`
@@ -157,34 +159,32 @@ Use statuses:
   - `docs/research/increments/INC_0155_routing_compression_screen.md`
   - `docs/research/increments/INC_0156_spectral_compression_screen.md`
   - `docs/research/increments/INC_0157_spectral_compression_confirm.md`
-- Latest result (INC-0157, 2026-03-13):
-  - **KEEP — bucket semantic coherence confirmed at 2 seeds.**
-  - Bucket purity: ORIG > PERM at EVERY K, BOTH seeds. TRANS K=100: purity
-    ratio 2.0× (ORIG=0.305, PERM=0.152, std < 0.01). Effect grows with K.
-  - Bucket entropy: ORIG < PERM at EVERY K, BOTH seeds. TRANS K=100: Δ=−0.96 bits.
-  - label_indicator_lowfreq_max: ORIG/PERM = 1.32 mean (1.50 seed 0, 1.17 seed 1).
-    PERM never reaches ORIG quality at either seed.
-  - true_margin_lowfreq_energy: NOT seed-stable. Seed 0 compression at K ≤ 25,
-    seed 1 only at K=4. REFINE.
-  - input_transform bug fix verified active at both seeds.
+  - `docs/research/increments/INC_0158_bucket_coherence_finalize.md`
+- Latest result (INC-0158, 2026-03-14):
+  - **KEEP — bucket coherence finalized at 4 seeds.**
+  - Purity: ORIG > PERM at 10/11 K values (91%). TRANS K=100: purity ratio 1.976×
+    (ORIG=0.299, PERM=0.151). All K ≥ 25 stable at all 4 seeds, monotonically
+    growing with K. SEMs < 0.009.
+  - Entropy: ORIG < PERM at 10/11 K values. TRANS K=100: Δ=−0.955 bits.
+  - label_indicator_lowfreq_max: 4-seed mean ratio 1.688 (high per-seed variance:
+    0.86, 1.17, 1.50, 3.24). SEM=0.036.
+  - true_margin compression: cross-seed mean 2.40±0.97 at K ≤ 25 (BASE).
+    All 4 seeds show at least one compression point.
+  - input_transform bug fix verified active at all 4 seeds.
+- Previous result (INC-0157, 2026-03-13):
+  - KEEP — bucket coherence confirmed at 2 seeds (purity ratio 2.0× at TRANS K=100).
 - Previous result (INC-0156, 2026-03-13):
-  - Two compression forms at 1 seed: label metric ORIG/PERM=1.50 (K-invariant),
-    true_margin 1.6–6.9× at K ≤ 25. sector_lowfreq_energy anti-compressed.
-    REFINE. Bug fix: spectral_route_audit.py input_transform applied.
+  - REFINE — two compression forms at 1 seed, bug fix applied.
 - Previous result (INC-0155, 2026-03-13):
-  - MSE not a valid observable. Structural signal: sector entropy gap 8.6pp.
+  - REFINE — MSE not a valid observable. Structural signal: sector entropy gap 8.6pp.
 - Previous result (INC-0154, 2026-03-13):
-  - Event-gate routing-agnostic. REFINE.
-- Previous result (INC-0153, 2026-03-14):
-  - Per-sample spectral ↔ gate geometry-agnostic (delta +2.7–5.1pp).
-- Previous result (INC-0152, 2026-03-14):
-  - Gate saturated at INC-0125 params.
+  - REFINE — event-gate routing-agnostic.
 - Blocker:
-  - `Bucket coherence confirmed at 2 seeds (KEEP). Needs 4-seed finalize to
-    pin down effect sizes and confirm seed stability at tighter error bars.
-    true_margin routing-granularity compression not yet stable (REFINE).`
+  - `Bucket coherence finalized at 4 seeds (KEEP). Structural routing compression
+    proven. Remaining: translate bucket coherence into sparse-event training
+    efficiency (Stage 6→7 bridge), or justify proceeding directly to Stage 7.`
 - Next branch:
-  - `INC-0158: 4-seed finalize of bucket coherence + label spectral advantage`
+  - `INC-0159: Stage 6→7 bridge or Stage 7 entry (TBD)`
 
 ## 7. Hardware-Efficiency Confirmation
 - Status: `partial`

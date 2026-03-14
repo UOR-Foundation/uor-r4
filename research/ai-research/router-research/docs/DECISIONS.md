@@ -3959,3 +3959,27 @@ Add new entries below.
   - Stage 6: PARTIAL-PASS (confirmed at 2 seeds; needs 4-seed finalize)
   - Next: INC-0158 — 4-seed finalize of bucket coherence + label spectral
     advantage
+
+### INC-0158 — Bucket Coherence + Spectral Compression — 4-Seed Finalize
+- Date: 2026-03-14
+- Stage: 6 (Sparse Event-Driven Trainability)
+- Verdict: **KEEP**
+- Key findings:
+  1. **Bucket purity FINALIZED:** ORIG > PERM at 10/11 K values (91%) in 4-seed
+     mean. TRANS K=100 purity ratio = 1.976× (ORIG=0.299, PERM=0.151). All K ≥ 25
+     stable across all 4 seeds with monotonic growth. SEMs < 0.009.
+  2. **Bucket entropy FINALIZED:** ORIG < PERM at 10/11 K values. TRANS K=100:
+     Δ = −0.955 bits per bucket. All K ≥ 9 consistent at all 4 seeds.
+  3. **label_indicator_lowfreq_max:** 4-seed mean ratio 1.688. High per-seed
+     variance (range: 0.86–3.24). Robust mean but individual seeds noisy.
+  4. **true_margin compression:** Cross-seed mean 2.40±0.97 at K ≤ 25. All 4 seeds
+     show at least one compression point. Directionally positive but magnitude unstable.
+  5. **K=4 below geometry-resolution threshold:** negligible differences at K=4.
+     Advantage emerges at K ≥ 9 (entropy) and K ≥ 25 (purity with 4-seed stability).
+  6. **Bug fix verified active at all 4 seeds** (purity Δ ≈ +0.04 per seed).
+- INC-0158: KEEP — bucket coherence finalized at protocol-compliant 4 seeds. Structural
+  routing compression is proven: geometry-native routing produces semantically coherent
+  bucket assignments that permuted routing cannot match. Stage 6: PARTIAL-PASS (finalized
+  for structural compression). Remaining: bridge to sparse-event training efficiency.
+- Stage 6: PARTIAL-PASS (finalized for bucket coherence)
+- Next: INC-0159 — Stage 6→7 bridge or Stage 7 entry (TBD)

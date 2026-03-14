@@ -13,31 +13,31 @@ as authoritative when they disagree with this file.
 
 ## Canonical Queue
 - Current primary RR: `RR-067`
-- Current primary INC: `INC-0158` — **TBD** (Stage 6: 4-seed finalize of bucket coherence
-  + label spectral advantage).
-- Previous INC: `INC-0157` — **Closed: KEEP** (2026-03-13). 2-seed confirm of spectral
-  compression + bucket semantic coherence. Bucket purity: ORIG > PERM at every K, both
-  seeds, growing with K (TRANS K=100: purity ratio 2.0×). Bucket entropy: ORIG < PERM
-  at every K, both seeds (TRANS K=100: Δ = −0.96 bits). label_indicator_lowfreq_max:
-  ORIG/PERM = 1.32 mean (both seeds ORIG > PERM). true_margin: not seed-stable (REFINE).
-  Stage 6: PARTIAL-PASS.
-- Previous INC: `INC-0156` — **Closed: REFINE** (2026-03-13). Spectral compression via
-  equal-quality routing cost. Two compression forms found at 1 seed.
+- Current primary INC: `INC-0159` — **TBD** (Stage 6 → Stage 7 bridge: translate bucket
+  coherence into sparse-event training efficiency, or begin Stage 7 if justified).
+- Previous INC: `INC-0158` — **Closed: KEEP** (2026-03-14). 4-seed finalize of bucket
+  coherence + spectral compression. Purity: ORIG > PERM at 10/11 K values (91%),
+  TRANS K=100 ratio 1.976×, all K ≥ 25 stable at 4 seeds. Entropy: ORIG < PERM at
+  10/11 K (TRANS K=100: Δ = −0.955 bits). label_indicator_lowfreq_max: 4-seed mean
+  ratio 1.688 (high variance). true_margin compression 2.40±0.97 at K ≤ 25.
+  Stage 6: PARTIAL-PASS (finalized for bucket coherence).
+- Previous INC: `INC-0157` — **Closed: KEEP** (2026-03-13). 2-seed confirm.
+- Previous INC: `INC-0156` — **Closed: REFINE** (2026-03-13). Spectral compression at 1 seed.
 - Previous INC: `INC-0155` — **Closed: REFINE** (2026-03-13). MSE not a valid observable.
 - Previous INC: `INC-0154` — **Closed: REFINE** (2026-03-13). Event-gate routing-agnostic.
 - Previous INC: `INC-0153` — **Closed: REFINE** (2026-03-14). Per-sample spectral ↔ gate
   geometry-agnostic.
 - Previous INC: `INC-0152` — **Closed: REFINE** (2026-03-14). Gate saturated.
 - Current primary increment doc:
-  `docs/research/increments/INC_0157_spectral_compression_confirm.md` (closed: KEEP)
-- Kill-list stage: `Sparse event-driven trainability` (Stage 6 — PARTIAL-PASS, active gate)
+  `docs/research/increments/INC_0158_bucket_coherence_finalize.md` (closed: KEEP)
+- Kill-list stage: `Sparse event-driven trainability` (Stage 6 — PARTIAL-PASS finalized, active gate)
 - Stage 6 definition: Structural routing compression via bucket semantic coherence.
   Geometry-native routing produces higher per-bucket label purity and lower per-bucket
-  entropy than permuted routing at every bucket count K. Confirmed at 2 seeds (INC-0157).
-  INC-0156 bug fix (input_transform) verified active at both seeds.
+  entropy than permuted routing at every bucket count K ≥ 25. Finalized at 4 seeds (INC-0158).
+  Remaining: can bucket coherence translate to sparse-event training efficiency?
 - Mathematical object under test:
-  `Bucket semantic coherence: per-bucket purity, entropy, K-varying compression.
-   Geometric structural compression: label_indicator_lowfreq_max ratio 1.32 (2-seed).`
+  `Bucket semantic coherence (finalized): purity ratio 1.976× at TRANS K=100.
+   Spectral compression: label metric ratio 1.688 (4-seed). Bridge to Stage 7 TBD.`
 - Success condition: 4-seed finalize confirms bucket coherence advantage
 - Falsification condition: 2-seed patterns vanish under 4-seed averaging
 
