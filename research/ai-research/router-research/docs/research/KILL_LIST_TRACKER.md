@@ -10,7 +10,7 @@ Use statuses:
 
 ## Canonical Queue
 - Current primary RR: `RR-067`
-- Current primary INC: `INC-0157` — TBD (Stage 6: multi-seed confirm or new metric)
+- Current primary INC: `INC-0158` — TBD (Stage 6: 4-seed finalize of bucket coherence + label spectral)
 
 ## 1. Hyperbolic Embedding Stability
 - Status: `partial`
@@ -137,21 +137,17 @@ Use statuses:
   - `Transition to Stage 6 (Sparse Event-Driven Trainability)`
 
 ## 6. Sparse Event-Driven Trainability
-- Status: `partial`
-- Stage 6 definition (updated INC-0155):
-  - **Structural routing compression.** Geometry-native routing should require fewer
-    active buckets or lower routing mass to achieve the same spectral organization
-    quality. This structural compression is the architectural sparse-compute mechanism.
+- Status: `partial-pass`
+- Stage 6 definition (updated INC-0157):
+  - **Bucket semantic coherence as routing compression.** Geometry-native routing
+    produces higher per-bucket label purity and lower per-bucket entropy than
+    permuted routing at every bucket count K. This means fewer buckets suffice
+    for equivalent semantic organization → routing compression → hardware savings.
   - INC-0152/0153/0154 showed per-sample error metrics are geometry-agnostic.
-    INC-0155 showed per-sample MSE cannot detect routing compression (measurement
-    limitation, not falsification — EMA prototypes adapt to marginal distributions
-    preserved by column permutation).
-  - The Stage 6 question is now: **does geometry-native routing achieve the same
-    structural/spectral quality with lower routing complexity?**
-  - This replaces the earlier incorrect question "does geometry reduce per-sample
-    reconstruction error?" with "does geometry reduce routing cost at equal
-    structural quality?" — aligning with the north-star hypothesis: geometry →
-    better bucket organization → routing compression → hardware savings.
+    INC-0155 showed per-sample MSE cannot detect routing compression.
+    INC-0156 found spectral compression at 1 seed (label metric +50%, true_margin
+    compression 1.6–6.9× at low K, sector_lfe anti-compressed).
+    INC-0157 confirmed bucket semantic coherence at 2 seeds.
 - Canonical evidence:
   - `docs/research/increments/INC_0125_product_phase_sparse_event_proxy_trainability_hardening.md`
   - `docs/research/increments/INC_0130_product_phase_sparse_event_translation_route_coupled_soft_bias_pilot.md`
@@ -160,43 +156,35 @@ Use statuses:
   - `docs/research/increments/INC_0154_event_gate_efficiency_screen.md`
   - `docs/research/increments/INC_0155_routing_compression_screen.md`
   - `docs/research/increments/INC_0156_spectral_compression_screen.md`
-- Latest result (INC-0156, 2026-07-09):
-  - **Two distinct compression forms found, both need multi-seed confirmation.**
-  - (1) Geometric structural compression: label_indicator_lowfreq_max ORIG=0.1172,
-    PERM=0.0781, ratio=1.50. PERM never reaches ORIG quality at any K → infinite
-    compression ratio. K-invariant → proves the GEOMETRY itself is compressed.
-  - (2) Routing-granularity compression: true_margin_lowfreq_energy at K ≤ 25
-    shows compression ratios 1.6–6.9× (ORIG at K=4 matches PERM at K≈28).
-    Effect reverses at K ≥ 50. Noisy at 1 seed.
-  - Anti-signal: sector_lowfreq_energy shows PERM > ORIG everywhere (PERM graph
-    has simpler structure, coarse sectors align trivially). Discarded for compression.
-  - Bug fix: spectral_route_audit.py was not applying input_transform to PERM data
-    → fixed. Without this, ORIG and PERM spectral metrics were on identical data.
-  - REFINE: signal present but noisy at 1 seed. Need multi-seed confirmation.
+  - `docs/research/increments/INC_0157_spectral_compression_confirm.md`
+- Latest result (INC-0157, 2026-03-13):
+  - **KEEP — bucket semantic coherence confirmed at 2 seeds.**
+  - Bucket purity: ORIG > PERM at EVERY K, BOTH seeds. TRANS K=100: purity
+    ratio 2.0× (ORIG=0.305, PERM=0.152, std < 0.01). Effect grows with K.
+  - Bucket entropy: ORIG < PERM at EVERY K, BOTH seeds. TRANS K=100: Δ=−0.96 bits.
+  - label_indicator_lowfreq_max: ORIG/PERM = 1.32 mean (1.50 seed 0, 1.17 seed 1).
+    PERM never reaches ORIG quality at either seed.
+  - true_margin_lowfreq_energy: NOT seed-stable. Seed 0 compression at K ≤ 25,
+    seed 1 only at K=4. REFINE.
+  - input_transform bug fix verified active at both seeds.
+- Previous result (INC-0156, 2026-03-13):
+  - Two compression forms at 1 seed: label metric ORIG/PERM=1.50 (K-invariant),
+    true_margin 1.6–6.9× at K ≤ 25. sector_lowfreq_energy anti-compressed.
+    REFINE. Bug fix: spectral_route_audit.py input_transform applied.
 - Previous result (INC-0155, 2026-03-13):
-  - Per-sample MSE cannot detect routing compression on this proxy.
-    MSE range: 0.003881–0.004008 (3.3% spread), insensitive to routing quality.
-    This is a measurement limitation: EMA prototypes adapt to marginal distributions
-    preserved by column permutation, producing E[MSE|ORIG] ≈ E[MSE|PERM].
-  - Structural signal confirmed: sector entropy gap 8.6pp at K=75 (ORIG=89.1%,
-    PERM=97.6%). hopf_angular_mass_error: ORIG=0.678, PERM=0.374.
-    Geometric routing IS structurally different, but per-sample MSE cannot see it.
-  - REFINE: MSE is not a valid observable for routing compression. Structural
-    metrics (spectral energy, bucket coherence) must be used instead.
+  - MSE not a valid observable. Structural signal: sector entropy gap 8.6pp.
 - Previous result (INC-0154, 2026-03-13):
-  - Event-gate efficiency 2×2×2 factorial: gate_mean delta <0.1pp (ORIG vs PERM).
-    Error-based event gate is routing-agnostic. REFINE.
+  - Event-gate routing-agnostic. REFINE.
 - Previous result (INC-0153, 2026-03-14):
-  - Per-sample spectral roughness ↔ gate correlation geometry-agnostic (delta +2.7–5.1pp).
+  - Per-sample spectral ↔ gate geometry-agnostic (delta +2.7–5.1pp).
 - Previous result (INC-0152, 2026-03-14):
-  - Gate saturated at INC-0125 params (gate_mean=0.959, active_frac=100%).
+  - Gate saturated at INC-0125 params.
 - Blocker:
-  - `Two compression forms found at 1 seed (label: ratio=1.50 infinite, true_margin:
-    1.6–6.9× at low K). sector_lowfreq_energy anti-compressed. Need multi-seed
-    confirmation and/or a metric that varies with K AND captures task-relevant quality.`
+  - `Bucket coherence confirmed at 2 seeds (KEEP). Needs 4-seed finalize to
+    pin down effect sizes and confirm seed stability at tighter error bars.
+    true_margin routing-granularity compression not yet stable (REFINE).`
 - Next branch:
-  - `INC-0157: either (a) 2-seed confirm of true_margin compression at low K,
-    or (b) per-sector label purity metric — K-varying, task-relevant quality signal`
+  - `INC-0158: 4-seed finalize of bucket coherence + label spectral advantage`
 
 ## 7. Hardware-Efficiency Confirmation
 - Status: `partial`

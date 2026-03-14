@@ -13,40 +13,33 @@ as authoritative when they disagree with this file.
 
 ## Canonical Queue
 - Current primary RR: `RR-067`
-- Current primary INC: `INC-0157` — **TBD** (Stage 6: next step after INC-0156 REFINE).
-  Either (a) 2-seed confirm of true_margin compression at low K, or
-  (b) new metric design: per-sector label purity or sector classification margin
-  that varies with K and captures task-relevant routing quality.
-- Previous INC: `INC-0156` — **Closed: REFINE** (2026-07-09). Spectral compression via
-  equal-quality routing cost. label_indicator_lowfreq_max: ORIG/PERM = 1.50, PERM never
-  reaches ORIG quality (geometric structural compression). true_margin_lowfreq_energy:
-  compression ratios 1.6–6.9× at K ≤ 25 (BASE), noisy at 1 seed, reverses at K ≥ 50.
-  sector_lowfreq_energy: anti-compression (PERM > ORIG, measures graph-sector coherence
-  not task quality). Two compression forms found, both need multi-seed confirmation.
-- Previous INC: `INC-0155` — **Closed: REFINE** (2026-03-13). Per-sample MSE cannot detect
-  routing compression (measurement limitation, not falsification). EMA prototypes adapt to
-  marginal distributions preserved by column permutation → E[MSE|ORIG] ≈ E[MSE|PERM].
-  Structural signal confirmed: sector entropy gap 8.6pp at K=75.
-- Previous INC: `INC-0154` — **Closed: REFINE** (2026-03-13). Event-gate efficiency is
-  routing-agnostic: gate_mean delta <0.1pp (ORIG vs PERM).
+- Current primary INC: `INC-0158` — **TBD** (Stage 6: 4-seed finalize of bucket coherence
+  + label spectral advantage).
+- Previous INC: `INC-0157` — **Closed: KEEP** (2026-03-13). 2-seed confirm of spectral
+  compression + bucket semantic coherence. Bucket purity: ORIG > PERM at every K, both
+  seeds, growing with K (TRANS K=100: purity ratio 2.0×). Bucket entropy: ORIG < PERM
+  at every K, both seeds (TRANS K=100: Δ = −0.96 bits). label_indicator_lowfreq_max:
+  ORIG/PERM = 1.32 mean (both seeds ORIG > PERM). true_margin: not seed-stable (REFINE).
+  Stage 6: PARTIAL-PASS.
+- Previous INC: `INC-0156` — **Closed: REFINE** (2026-03-13). Spectral compression via
+  equal-quality routing cost. Two compression forms found at 1 seed.
+- Previous INC: `INC-0155` — **Closed: REFINE** (2026-03-13). MSE not a valid observable.
+- Previous INC: `INC-0154` — **Closed: REFINE** (2026-03-13). Event-gate routing-agnostic.
 - Previous INC: `INC-0153` — **Closed: REFINE** (2026-03-14). Per-sample spectral ↔ gate
-  geometry-agnostic (delta only +2.7–5.1pp).
+  geometry-agnostic.
 - Previous INC: `INC-0152` — **Closed: REFINE** (2026-03-14). Gate saturated.
 - Current primary increment doc:
-  `docs/research/increments/INC_0156_spectral_compression_screen.md` (closed: REFINE)
-- Kill-list stage: `Sparse event-driven trainability` (Stage 6 — PARTIAL, active gate)
-- Stage 6 definition (updated): Structural routing compression. Does geometry-native
-  routing achieve the same structural/spectral quality with lower routing complexity?
-  MSE is not a valid observable (INC-0155). Compression must be evaluated using
-  equal-quality structural metrics (spectral energy, bucket coherence).
-  INC-0156 found two compression forms: (1) geometric structural (label metric, +50%,
-  K-invariant, infinite compression), (2) routing-granularity (true_margin at low K,
-  ratios 1.6–6.9×, noisy at 1 seed). Both need multi-seed confirmation.
+  `docs/research/increments/INC_0157_spectral_compression_confirm.md` (closed: KEEP)
+- Kill-list stage: `Sparse event-driven trainability` (Stage 6 — PARTIAL-PASS, active gate)
+- Stage 6 definition: Structural routing compression via bucket semantic coherence.
+  Geometry-native routing produces higher per-bucket label purity and lower per-bucket
+  entropy than permuted routing at every bucket count K. Confirmed at 2 seeds (INC-0157).
+  INC-0156 bug fix (input_transform) verified active at both seeds.
 - Mathematical object under test:
-  `Spectral compression: label_indicator shows infinite compression (ORIG unreachable);
-   true_margin shows K-dependent compression at K ≤ 25; sector_lfe is anti-compressed`
-- Success condition: multi-seed confirm of compression in task-relevant quality metric
-- Falsification condition: 1-seed patterns vanish under multi-seed averaging
+  `Bucket semantic coherence: per-bucket purity, entropy, K-varying compression.
+   Geometric structural compression: label_indicator_lowfreq_max ratio 1.32 (2-seed).`
+- Success condition: 4-seed finalize confirms bucket coherence advantage
+- Falsification condition: 2-seed patterns vanish under 4-seed averaging
 
 ## Latest Closed Increment
 - `INC-0146`: **Closed: KEEP** (2026-03-13, Stage 4 PARTIAL-PASS confirmed).

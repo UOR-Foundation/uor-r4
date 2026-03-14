@@ -3926,3 +3926,36 @@ Add new entries below.
     and sector metric shows anti-compression
   - Next: INC-0157 — either multi-seed confirm of true_margin compression at
     low K, or new metric design (per-sector label purity)
+
+### INC-0157 — Spectral Compression + Bucket Coherence — 2-Seed Confirm
+- Date: 2026-03-13
+- Branch: main
+- Verdict: **KEEP** — bucket semantic coherence confirmed at 2 seeds, geometric
+  structural advantage confirmed. Stage 6: PARTIAL-PASS.
+- Data: 22 routes × 2 seeds (0,1), poincaré_4d graph, spectral signal + residual
+  + bucket coherence probes
+- Finding 1 (157A): **label_indicator_lowfreq_max ORIG/PERM = 1.32 mean (1.50 seed 0,
+  1.17 seed 1).** PERM never reaches ORIG quality at either seed → geometric
+  structural compression persists across seeds. Seed variance is non-negligible
+  (ratio 1.17–1.50) → warrants 4-seed finalize.
+- Finding 2 (157A): **true_margin_lowfreq_energy compression NOT seed-stable.**
+  Seed 0: BASE K ≤ 25 compression 1.6–6.9×. Seed 1: BASE K=4 only (2.5×),
+  reverses at K ≥ 16. This metric remains REFINE.
+- Finding 3 (157B): **Bucket purity ORIG > PERM at EVERY K, BOTH seeds.**
+  Effect grows monotonically with K. TRANS K=100: purity ratio 2.0× (mean
+  ORIG=0.305, PERM=0.152, std < 0.01). This is the strongest K-varying,
+  task-relevant compression signal found in Stage 6.
+- Finding 4 (157B): **Bucket entropy ORIG < PERM at EVERY K, BOTH seeds.**
+  Effect grows with K. TRANS K=100: Δ = −0.96 bits.
+- Finding 5 (157B): Bucket-label MI is higher for PERM (confounded by more
+  uniform bucket utilization). MI excluded from compression analysis.
+- Bug fix verification: input_transform confirmed active (seed 0: Δ=+0.044,
+  seed 1: Δ=+0.041).
+- Decision:
+  - INC-0157: KEEP — bucket coherence provides the K-varying semantic
+    compression signal Stage 6 required. Geometric routing produces higher
+    purity / lower entropy per bucket → fewer buckets needed for equivalent
+    semantic organization → routing compression → hardware savings.
+  - Stage 6: PARTIAL-PASS (confirmed at 2 seeds; needs 4-seed finalize)
+  - Next: INC-0158 — 4-seed finalize of bucket coherence + label spectral
+    advantage
