@@ -1,0 +1,261 @@
+"""Deterministic per-agent observation construction for gateway flows."""
+
+from __future__ import annotations
+
+import json
+from typing import Any, Mapping, Sequence
+
+from agents.protocol.observation import Observation
+
+_DEFAULT_HEALTH = 100
+
+
+def build_observation_for_actor(
+    snapshot: Mapping[str, Any],
+    *,
+    actor_id: str,
+    run_id: str,
+    step: int,
+    max_steps: int,
+    messages: Sequence[str] = (),
+) -> Observation:
+    """Build a deterministic observation for a single actor from a world snapshot."""
+    if not isinstance(snapshot, Mapping):
+        raise ValueError("snapshot must be a mapping")
+    if not isinstance(actor_id, str) or not actor_id:
+        raise ValueError("actor_id must be a non-empty string")
+    if not isinstance(run_id, str) or not run_id:
+        raise ValueError("run_id must be a non-empty string")
+    if not isinstance(step, int) or step < 0:
+        raise ValueError("step must be a non-negative integer")
+    if not isinstance(max_steps, int) or max_steps < 0:
+        raise ValueError("max_steps must be a non-negative integer")
+
+    entities = _require_mapping(snapshot.get("entities"), field_name="snapshot.entities")
+    rooms = _require_mapping(snapshot.get("rooms"), field_name="snapshot.rooms")
+    scenario_vars = _require_mapping(snapshot.get("scenario_vars", {}), field_name="snapshot.scenario_vars")
+
+    actor_payload = entities.get(actor_id)
+    if not isinstance(actor_payload, Mapping):
+        raise ValueError("actor_not_found")
+
+    location = _require_non_empty_string(actor_payload.get("location"), field_name="actor.location")
+    room_payload = rooms.get(location)
+    if not isinstance(room_payload, Mapping):
+        raise ValueError("actor_room_not_found")
+
+    description_raw = room_payload.get("description", "")
+    if not isinstance(description_raw, str):
+        raise ValueError("room.description must be a string")
+    description = description_raw
+
+    exits_map = _require_mapping(room_payload.get("exits", {}), field_name="room.exits")
+    exits = _sorted_exits(exits_map)
+
+    room_entity_ids = _entity_ids_in_room(room_payload, actor_id=actor_id)
+    visible_room_entity_ids = _visible_room_entity_ids(
+        room_entity_ids=room_entity_ids,
+        entities=entities,
+        scenario_vars=scenario_vars,
+        actor_id=actor_id,
+        room_id=location,
+    )
+    observed_entities = _observed_entities(visible_room_entity_ids, entities)
+    inventory = _normalized_inventory(actor_payload)
+    health = _resolved_health(actor_payload)
+    action_space = _action_space(
+        exits=exits,
+        room_entity_ids=visible_room_entity_ids,
+        entities=entities,
+        inventory=inventory,
+    )
+
+    remaining_steps = max(max_steps - step, 0)
+    normalized_messages = _normalize_string_tuple(messages, field_name="messages")
+    return Observation.from_dict(
+        {
+            "run_id": run_id,
+            "step": step,
+            "location": location,
+            "description": description,
+            "exits": list(exits),
+            "entities": list(observed_entities),
+            "inventory": list(inventory),
+            "health": health,
+            "messages": list(normalized_messages),
+            "action_space": list(action_space),
+            "remaining_steps": remaining_steps,
+        }
+    )
+
+
+def _require_mapping(value: Any, *, field_name: str) -> Mapping[str, Any]:
+    if not isinstance(value, Mapping):
+        raise ValueError(f"{field_name} must be a mapping")
+    return value
+
+
+def _require_non_empty_string(value: Any, *, field_name: str) -> str:
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"{field_name} must be a non-empty string")
+    return value
+
+
+def _normalize_string_tuple(value: Any, *, field_name: str) -> tuple[str, ...]:
+    if isinstance(value, (str, bytes)) or not isinstance(value, Sequence):
+        raise ValueError(f"{field_name} must be a sequence of strings")
+
+    normalized: list[str] = []
+    for entry in value:
+        if not isinstance(entry, str):
+            raise ValueError(f"{field_name} must contain only strings")
+        normalized.append(entry)
+    return tuple(normalized)
+
+
+def _sorted_exits(exits_map: Mapping[str, Any]) -> tuple[str, ...]:
+    exits: list[str] = []
+    for direction, destination in exits_map.items():
+        resolved_direction = _require_non_empty_string(direction, field_name="room.exits.direction")
+        _require_non_empty_string(destination, field_name="room.exits.destination")
+        exits.append(resolved_direction)
+    return tuple(sorted(exits))
+
+
+def _entity_ids_in_room(room_payload: Mapping[str, Any], *, actor_id: str) -> tuple[str, ...]:
+    raw_entities = room_payload.get("entities_present", ())
+    entity_ids = _normalize_string_tuple(raw_entities, field_name="room.entities_present")
+    return tuple(sorted(entity_id for entity_id in entity_ids if entity_id != actor_id))
+
+
+def _visible_room_entity_ids(
+    *,
+    room_entity_ids: Sequence[str],
+    entities: Mapping[str, Any],
+    scenario_vars: Mapping[str, Any],
+    actor_id: str,
+    room_id: str,
+) -> tuple[str, ...]:
+    hidden_items = _hidden_item_ids(scenario_vars)
+    if len(hidden_items) == 0:
+        return tuple(room_entity_ids)
+    if _is_room_revealed(scenario_vars=scenario_vars, actor_id=actor_id, room_id=room_id):
+        return tuple(room_entity_ids)
+
+    visible: list[str] = []
+    for entity_id in room_entity_ids:
+        payload = entities.get(entity_id)
+        if not isinstance(payload, Mapping):
+            raise ValueError(f"room_entity_not_found:{entity_id}")
+        entity_type = str(payload.get("entity_type", ""))
+        if entity_id in hidden_items and entity_type in {"item", "consumable"}:
+            continue
+        visible.append(entity_id)
+    return tuple(visible)
+
+
+def _hidden_item_ids(scenario_vars: Mapping[str, Any]) -> frozenset[str]:
+    if scenario_vars.get("observation_policy") != "look_reveals_hidden_items_v1":
+        return frozenset()
+    raw_ids = scenario_vars.get("hidden_item_ids_json")
+    if not isinstance(raw_ids, str):
+        return frozenset()
+    try:
+        parsed = json.loads(raw_ids)
+    except json.JSONDecodeError:
+        return frozenset()
+    if not isinstance(parsed, list):
+        return frozenset()
+    return frozenset(value for value in parsed if isinstance(value, str) and value)
+
+
+def _is_room_revealed(
+    *,
+    scenario_vars: Mapping[str, Any],
+    actor_id: str,
+    room_id: str,
+) -> bool:
+    reveal_key = f"reveal.{actor_id}.{room_id}"
+    value = scenario_vars.get(reveal_key)
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int):
+        return value != 0
+    if isinstance(value, str):
+        return value in {"1", "true", "True"}
+    return False
+
+
+def _observed_entities(
+    room_entity_ids: Sequence[str],
+    entities: Mapping[str, Any],
+) -> tuple[dict[str, str], ...]:
+    observed: list[dict[str, str]] = []
+    for entity_id in room_entity_ids:
+        entity_payload = entities.get(entity_id)
+        if not isinstance(entity_payload, Mapping):
+            raise ValueError(f"room_entity_not_found:{entity_id}")
+        entity_type = _require_non_empty_string(
+            entity_payload.get("entity_type"),
+            field_name=f"entity_type[{entity_id}]",
+        )
+        observed.append({"type": entity_type, "name": entity_id})
+    return tuple(observed)
+
+
+def _normalized_inventory(actor_payload: Mapping[str, Any]) -> tuple[str, ...]:
+    raw_inventory = actor_payload.get("inventory", ())
+    entries = _normalize_string_tuple(raw_inventory, field_name="actor.inventory")
+    return tuple(sorted(set(entries)))
+
+
+def _resolved_health(actor_payload: Mapping[str, Any]) -> int:
+    raw_health = actor_payload.get("health")
+    if raw_health is None:
+        return _DEFAULT_HEALTH
+    if not isinstance(raw_health, int):
+        raise ValueError("actor.health must be an integer")
+    return raw_health
+
+
+def _action_space(
+    *,
+    exits: Sequence[str],
+    room_entity_ids: Sequence[str],
+    entities: Mapping[str, Any],
+    inventory: Sequence[str],
+) -> tuple[str, ...]:
+    ordered_actions: list[str] = ["wait", "look"]
+    ordered_actions.extend(f"move {direction}" for direction in exits)
+
+    take_targets: list[str] = []
+    attack_targets: list[str] = []
+    give_targets: list[str] = []
+    for entity_id in room_entity_ids:
+        payload = entities.get(entity_id)
+        if not isinstance(payload, Mapping):
+            raise ValueError(f"room_entity_not_found:{entity_id}")
+        entity_type = str(payload.get("entity_type", ""))
+        if entity_type in {"item", "consumable"}:
+            take_targets.append(entity_id)
+        if entity_type == "npc":
+            attack_targets.append(entity_id)
+            give_targets.append(entity_id)
+
+    ordered_actions.extend(f"take {entity_id}" for entity_id in sorted(take_targets))
+    ordered_actions.extend(f"drop {item_id}" for item_id in sorted(inventory))
+    ordered_actions.extend(f"use {item_id}" for item_id in sorted(inventory))
+    for item_id in sorted(inventory):
+        ordered_actions.extend(
+            f"give {item_id} {target_id}" for target_id in sorted(give_targets)
+        )
+    ordered_actions.extend(f"attack {entity_id}" for entity_id in sorted(attack_targets))
+
+    deduplicated: list[str] = []
+    seen: set[str] = set()
+    for action in ordered_actions:
+        if action in seen:
+            continue
+        seen.add(action)
+        deduplicated.append(action)
+    return tuple(deduplicated)
