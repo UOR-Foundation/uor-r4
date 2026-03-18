@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 import re
+from decimal import Decimal, ROUND_HALF_UP
 
 from evaluation.benchmark_runner.runner import BenchmarkRunnerConfig, run_benchmark_lifecycle
 
@@ -48,6 +50,60 @@ def _runner_config() -> BenchmarkRunnerConfig:
         scenario=_scenario_payload(),
         actor_ids=("agent-a", "agent-b"),
     )
+
+
+def _final_metric_sum(
+    *,
+    events: list[dict[str, object]],
+    actor_id: str,
+    metric_name: str,
+) -> float:
+    snapshots = [event for event in events if event["event_type"] == "state_snapshot"]
+    if len(snapshots) == 0:
+        return 0.0
+
+    final_state_json = snapshots[-1]["payload"]["state_json"]  # type: ignore[index]
+    state_payload = json.loads(str(final_state_json))
+    for actor_state in state_payload.get("agent_states", []):
+        if actor_state.get("actor_id") != actor_id:
+            continue
+        for metric in actor_state.get("metrics", []):
+            if metric.get("metric_name") == metric_name:
+                return float(metric.get("value_sum", 0.0))
+        return 0.0
+    return 0.0
+
+
+def _round_score(value: float, *, precision: int = 6) -> float:
+    quant = Decimal("1").scaleb(-precision)
+    decimal_value = Decimal(str(value)).quantize(quant, rounding=ROUND_HALF_UP)
+    return float(decimal_value)
+
+
+def _recompute_quest_completion_contract(
+    *,
+    payload: dict[str, object],
+    actor_id: str,
+) -> dict[str, float]:
+    replay = payload["replay_artifact"]  # type: ignore[index]
+    scorecard = payload["scorecard"]  # type: ignore[index]
+    events = replay["events"]  # type: ignore[index]
+    max_steps = int(replay["envelope"]["max_steps"])  # type: ignore[index]
+    quest_completed = _final_metric_sum(events=events, actor_id=actor_id, metric_name="quest.completed")
+    recomputed_normalized = min(max(quest_completed / max_steps, 0.0), 1.0)
+
+    actor_scorecard = next(actor for actor in scorecard["actors"] if actor["actor_id"] == actor_id)  # type: ignore[index]
+    quest_weight = float(scorecard["normalized_weights"]["quest_completion"])  # type: ignore[index]
+    recomputed_contribution = _round_score(recomputed_normalized * quest_weight)
+    scorecard_contribution = float(actor_scorecard["contributions"]["quest_completion"])
+    scorecard_normalized = float(actor_scorecard["normalized_metrics"]["quest_completion"])
+    return {
+        "quest_completed": quest_completed,
+        "recomputed_normalized": recomputed_normalized,
+        "scorecard_normalized": scorecard_normalized,
+        "recomputed_contribution": recomputed_contribution,
+        "scorecard_contribution": scorecard_contribution,
+    }
 
 
 def test_second_tiny_scenario_executes_end_to_end() -> None:
@@ -99,9 +155,29 @@ def test_second_tiny_scenario_emits_replay_scorecard_and_parity() -> None:
         assert re.fullmatch(r"[0-9a-f]{64}", parity[field_name]) is not None
 
 
+def test_second_tiny_scenario_replay_snapshot_contract_maps_memory_retrieval_to_scorecard() -> None:
+    payload = run_benchmark_lifecycle(_runner_config()).to_dict()
+
+    actor_a_projection = _recompute_quest_completion_contract(payload=payload, actor_id="agent-a")
+    actor_b_projection = _recompute_quest_completion_contract(payload=payload, actor_id="agent-b")
+
+    assert actor_a_projection["quest_completed"] == 1.0
+    assert actor_a_projection["recomputed_normalized"] == actor_a_projection["scorecard_normalized"]
+    assert actor_a_projection["recomputed_contribution"] == actor_a_projection["scorecard_contribution"]
+
+    assert actor_b_projection["quest_completed"] == 0.0
+    assert actor_b_projection["scorecard_normalized"] == 0.0
+    assert actor_b_projection["scorecard_contribution"] == 0.0
+    assert actor_b_projection["recomputed_normalized"] == actor_b_projection["scorecard_normalized"]
+    assert actor_b_projection["recomputed_contribution"] == actor_b_projection["scorecard_contribution"]
+
+
 def test_second_tiny_scenario_is_deterministic_for_same_seed() -> None:
     first = run_benchmark_lifecycle(_runner_config())
     second = run_benchmark_lifecycle(_runner_config())
+    first_projection = _recompute_quest_completion_contract(payload=first.to_dict(), actor_id="agent-a")
+    second_projection = _recompute_quest_completion_contract(payload=second.to_dict(), actor_id="agent-a")
 
     assert first.to_canonical_json() == second.to_canonical_json()
     assert first.replay_parity_artifact.to_canonical_json() == second.replay_parity_artifact.to_canonical_json()
+    assert first_projection == second_projection
