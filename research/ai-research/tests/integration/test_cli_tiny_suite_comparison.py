@@ -119,6 +119,7 @@ def test_cli_tiny_suite_comparison_writes_output_file_matching_stdout(
         "report_schema_version": "tiny_suite_comparison_report_v1",
     }
     assert "external_agent_label" not in file_payload["report"]
+    assert "external_agent_profile_id" not in file_payload["report"]
 
     list_exit = main(["reports", "list", "--dir", str(tmp_path), "--output", "json"])
     list_payload = _read_json_output(capsys.readouterr().out)

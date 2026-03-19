@@ -19,6 +19,12 @@ def _manifest_path_for(output_path: Path) -> Path:
     return Path(str(output_path) + ".manifest.json")
 
 
+def _replay_path_for(output_path: Path) -> Path:
+    if output_path.suffix:
+        return output_path.with_suffix(output_path.suffix + ".replay.json")
+    return Path(str(output_path) + ".replay.json")
+
+
 def _write_deterministic_agent_script(tmp_path: Path) -> Path:
     script_path = tmp_path / "external_agent.py"
     script_path.write_text(
@@ -63,6 +69,34 @@ def _write_broken_persistent_agent_script(tmp_path: Path) -> Path:
         encoding="utf-8",
     )
     return script_path
+
+
+def _write_external_agent_profile(
+    tmp_path: Path,
+    *,
+    agent_id: str = "profile-agent",
+    display_name: str = "Profile Wrapper",
+    command: str,
+    persistent_agent_session: bool = False,
+    filename: str = "external-agent-profile.json",
+) -> Path:
+    profile_path = tmp_path / filename
+    profile_path.write_text(
+        json.dumps(
+            {
+                "agent_id": agent_id,
+                "display_name": display_name,
+                "command": command,
+                "persistent_agent_session": persistent_agent_session,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return profile_path
 
 
 def test_cli_run_default_executes_real_runtime_path_and_emits_structured_output(
@@ -286,6 +320,53 @@ def test_cli_run_external_agent_label_surfaces_in_output(
     assert payload["external_agent_label"] == "deterministic-wrapper"
 
 
+def test_cli_run_agent_profile_executes_and_surfaces_profile_identity(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    script_path = _write_deterministic_agent_script(tmp_path)
+    profile_path = _write_external_agent_profile(
+        tmp_path,
+        agent_id="rule-profile",
+        display_name="Rule Profile",
+        command=f"{sys.executable} {script_path}",
+    )
+
+    first_exit = main(
+        [
+            "run",
+            "--scenario",
+            "tiny-fetch-quest",
+            "--actor-id",
+            "agent-a",
+            "--agent-profile",
+            str(profile_path),
+        ]
+    )
+    first_output = capsys.readouterr().out
+    second_exit = main(
+        [
+            "run",
+            "--scenario",
+            "tiny-fetch-quest",
+            "--actor-id",
+            "agent-a",
+            "--agent-profile",
+            str(profile_path),
+        ]
+    )
+    second_output = capsys.readouterr().out
+
+    assert first_exit == 0
+    assert second_exit == 0
+    assert first_output == second_output
+
+    payload = _read_json_output(first_output)
+    assert payload["accepted"] is True
+    assert payload["external_agent_profile_id"] == "rule-profile"
+    assert payload["external_agent_label"] == "Rule Profile"
+
+
 def test_cli_run_rejects_invalid_external_local_agent_command_machine_readably(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -297,6 +378,36 @@ def test_cli_run_rejects_invalid_external_local_agent_command_machine_readably(
     assert payload["accepted"] is False
     assert payload["error_type"] == "run_rejected"
     assert payload["reason"] == "external_agent_command_not_found:/definitely/missing/mudbench-agent-binary"
+
+
+def test_cli_run_rejects_missing_agent_profile_machine_readably(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    exit_code = main(["run", "--agent-profile", "profiles/does-not-exist.json"])
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    payload = _read_json_output(captured.out)
+    assert payload["accepted"] is False
+    assert payload["error_type"] == "run_rejected"
+    assert str(payload["reason"]).startswith("agent_profile_read_failed:")
+
+
+def test_cli_run_rejects_malformed_agent_profile_machine_readably(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    profile_path = tmp_path / "bad-profile.json"
+    profile_path.write_text("{not-json", encoding="utf-8")
+
+    exit_code = main(["run", "--agent-profile", str(profile_path)])
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    payload = _read_json_output(captured.out)
+    assert payload["accepted"] is False
+    assert payload["error_type"] == "run_rejected"
+    assert str(payload["reason"]).startswith("json_payload_invalid:")
 
 
 def test_cli_run_rejects_broken_persistent_agent_session_machine_readably(
@@ -439,6 +550,193 @@ def test_cli_suite_tiny_external_comparison_emits_deterministic_structured_outpu
         assert entry["candidate"]["agent_id"] == "external-local-agent"
 
 
+def test_cli_suite_tiny_external_profile_comparison_emits_deterministic_structured_output(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    script_path = _write_deterministic_agent_script(tmp_path)
+    profile_path = _write_external_agent_profile(
+        tmp_path,
+        agent_id="rule-profile",
+        display_name="Rule Profile",
+        command=f"{sys.executable} {script_path}",
+    )
+
+    first_exit = main(
+        [
+            "suite",
+            "--suite",
+            "tiny",
+            "--baseline-agent",
+            "agent-a",
+            "--agent-profile",
+            str(profile_path),
+        ]
+    )
+    first_output = capsys.readouterr().out
+    second_exit = main(
+        [
+            "suite",
+            "--suite",
+            "tiny",
+            "--baseline-agent",
+            "agent-a",
+            "--agent-profile",
+            str(profile_path),
+        ]
+    )
+    second_output = capsys.readouterr().out
+
+    assert first_exit == 0
+    assert second_exit == 0
+    assert first_output == second_output
+
+    payload = _read_json_output(first_output)
+    assert payload["accepted"] is True
+    assert payload["actor_ids"] == ["agent-a", "rule-profile"]
+    assert payload["report"]["candidate_agent_id"] == "rule-profile"
+    assert payload["report"]["external_agent_profile_id"] == "rule-profile"
+    assert payload["report"]["external_agent_label"] == "Rule Profile"
+
+
+def test_cli_suite_tiny_dual_external_profile_comparison_emits_deterministic_structured_output(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    baseline_profile_path = _write_external_agent_profile(
+        tmp_path,
+        agent_id="baseline-rule-profile",
+        display_name="Baseline Rule Profile",
+        command=f"{sys.executable} examples/agents/deterministic_rule_agent.py",
+        filename="baseline-agent-profile.json",
+    )
+    candidate_profile_path = _write_external_agent_profile(
+        tmp_path,
+        agent_id="candidate-mock-profile",
+        display_name="Candidate Mock Profile",
+        command=f"{sys.executable} examples/agents/mock_llm_wrapper.py",
+        filename="candidate-agent-profile.json",
+    )
+
+    first_exit = main(
+        [
+            "suite",
+            "--suite",
+            "tiny",
+            "--baseline-agent",
+            "agent-a",
+            "--baseline-agent-profile",
+            str(baseline_profile_path),
+            "--candidate-agent-profile",
+            str(candidate_profile_path),
+        ]
+    )
+    first_output = capsys.readouterr().out
+    second_exit = main(
+        [
+            "suite",
+            "--suite",
+            "tiny",
+            "--baseline-agent",
+            "agent-a",
+            "--baseline-agent-profile",
+            str(baseline_profile_path),
+            "--candidate-agent-profile",
+            str(candidate_profile_path),
+        ]
+    )
+    second_output = capsys.readouterr().out
+
+    assert first_exit == 0
+    assert second_exit == 0
+    assert first_output == second_output
+
+    payload = _read_json_output(first_output)
+    assert payload["accepted"] is True
+    assert payload["actor_ids"] == ["baseline-rule-profile", "candidate-mock-profile"]
+    assert payload["report"]["baseline_agent_id"] == "baseline-rule-profile"
+    assert payload["report"]["candidate_agent_id"] == "candidate-mock-profile"
+    assert payload["report"]["baseline_external_agent_profile_id"] == "baseline-rule-profile"
+    assert payload["report"]["candidate_external_agent_profile_id"] == "candidate-mock-profile"
+    assert payload["report"]["baseline_external_agent_label"] == "Baseline Rule Profile"
+    assert payload["report"]["candidate_external_agent_label"] == "Candidate Mock Profile"
+    assert payload["report"]["scenario_count"] == 5
+    assert len(payload["report"]["comparisons"]) == 5
+    for entry in payload["report"]["comparisons"]:
+        assert entry["baseline"]["agent_id"] == "baseline-rule-profile"
+        assert entry["candidate"]["agent_id"] == "candidate-mock-profile"
+
+
+def test_cli_suite_tiny_shared_dual_external_profile_comparison_emits_deterministic_structured_output(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    baseline_profile_path = _write_external_agent_profile(
+        tmp_path,
+        agent_id="baseline-rule-profile",
+        display_name="Baseline Rule Profile",
+        command=f"{sys.executable} examples/agents/deterministic_rule_agent.py",
+        filename="baseline-agent-profile.json",
+    )
+    candidate_profile_path = _write_external_agent_profile(
+        tmp_path,
+        agent_id="candidate-mock-profile",
+        display_name="Candidate Mock Profile",
+        command=f"{sys.executable} examples/agents/mock_llm_wrapper.py",
+        filename="candidate-agent-profile.json",
+    )
+
+    first_exit = main(
+        [
+            "suite",
+            "--suite",
+            "tiny",
+            "--baseline-agent",
+            "agent-a",
+            "--baseline-agent-profile",
+            str(baseline_profile_path),
+            "--candidate-agent-profile",
+            str(candidate_profile_path),
+            "--external-agent-actor",
+            "agent-b",
+        ]
+    )
+    first_output = capsys.readouterr().out
+    second_exit = main(
+        [
+            "suite",
+            "--suite",
+            "tiny",
+            "--baseline-agent",
+            "agent-a",
+            "--baseline-agent-profile",
+            str(baseline_profile_path),
+            "--candidate-agent-profile",
+            str(candidate_profile_path),
+            "--external-agent-actor",
+            "agent-b",
+        ]
+    )
+    second_output = capsys.readouterr().out
+
+    assert first_exit == 0
+    assert second_exit == 0
+    assert first_output == second_output
+
+    payload = _read_json_output(first_output)
+    assert payload["accepted"] is True
+    assert payload["actor_ids"] == ["baseline-rule-profile", "candidate-mock-profile"]
+    assert payload["report"]["baseline_agent_id"] == "baseline-rule-profile"
+    assert payload["report"]["candidate_agent_id"] == "candidate-mock-profile"
+    assert payload["report"]["baseline_external_agent_profile_id"] == "baseline-rule-profile"
+    assert payload["report"]["candidate_external_agent_profile_id"] == "candidate-mock-profile"
+    for entry in payload["report"]["comparisons"]:
+        assert entry["baseline"]["agent_id"] == "baseline-rule-profile"
+        assert entry["candidate"]["agent_id"] == "candidate-mock-profile"
+        assert entry["baseline"]["replay_ref"] == entry["candidate"]["replay_ref"]
+        assert entry["baseline"]["parity_ref"] == entry["candidate"]["parity_ref"]
+
+
 def test_cli_suite_tiny_external_comparison_rejects_invalid_external_command_machine_readably(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -460,6 +758,99 @@ def test_cli_suite_tiny_external_comparison_rejects_invalid_external_command_mac
     assert payload["accepted"] is False
     assert payload["error_type"] == "suite_rejected"
     assert payload["reason"] == "external_agent_command_not_found:/definitely/missing/mudbench-agent-binary"
+
+
+def test_cli_suite_tiny_external_profile_rejects_missing_profile_machine_readably(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    exit_code = main(
+        [
+            "suite",
+            "--suite",
+            "tiny",
+            "--baseline-agent",
+            "agent-a",
+            "--agent-profile",
+            "profiles/does-not-exist.json",
+        ]
+    )
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    payload = _read_json_output(captured.out)
+    assert payload["accepted"] is False
+    assert payload["error_type"] == "suite_rejected"
+    assert str(payload["reason"]).startswith("agent_profile_read_failed:")
+
+
+def test_cli_suite_tiny_dual_external_profile_rejects_missing_profile_machine_readably(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    baseline_profile_path = _write_external_agent_profile(
+        tmp_path,
+        agent_id="baseline-rule-profile",
+        display_name="Baseline Rule Profile",
+        command=f"{sys.executable} examples/agents/deterministic_rule_agent.py",
+        filename="baseline-agent-profile.json",
+    )
+
+    exit_code = main(
+        [
+            "suite",
+            "--suite",
+            "tiny",
+            "--baseline-agent",
+            "agent-a",
+            "--baseline-agent-profile",
+            str(baseline_profile_path),
+            "--candidate-agent-profile",
+            "profiles/missing-candidate-profile.json",
+        ]
+    )
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    payload = _read_json_output(captured.out)
+    assert payload["accepted"] is False
+    assert payload["error_type"] == "suite_rejected"
+    assert str(payload["reason"]).startswith("agent_profile_read_failed:")
+
+
+def test_cli_suite_tiny_dual_external_profile_rejects_malformed_profile_machine_readably(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    baseline_profile_path = _write_external_agent_profile(
+        tmp_path,
+        agent_id="baseline-rule-profile",
+        display_name="Baseline Rule Profile",
+        command=f"{sys.executable} examples/agents/deterministic_rule_agent.py",
+        filename="baseline-agent-profile.json",
+    )
+    malformed_profile_path = tmp_path / "bad-candidate-profile.json"
+    malformed_profile_path.write_text("{not-json", encoding="utf-8")
+
+    exit_code = main(
+        [
+            "suite",
+            "--suite",
+            "tiny",
+            "--baseline-agent",
+            "agent-a",
+            "--baseline-agent-profile",
+            str(baseline_profile_path),
+            "--candidate-agent-profile",
+            str(malformed_profile_path),
+        ]
+    )
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    payload = _read_json_output(captured.out)
+    assert payload["accepted"] is False
+    assert payload["error_type"] == "suite_rejected"
+    assert str(payload["reason"]).startswith("json_payload_invalid:")
 
 
 def test_cli_suite_tiny_mixed_external_comparison_emits_deterministic_structured_output(
@@ -561,22 +952,26 @@ def test_cli_suite_output_file_is_deterministic_for_identical_invocation(
 ) -> None:
     output_path = tmp_path / "tiny-suite.json"
     manifest_path = _manifest_path_for(output_path)
+    replay_path = _replay_path_for(output_path)
 
     first_exit = main(["suite", "--suite", "tiny", "--output", "json", "--output-file", str(output_path)])
     first_stdout = capsys.readouterr().out
     first_file = output_path.read_text(encoding="utf-8")
     first_manifest = manifest_path.read_text(encoding="utf-8")
+    first_replay = replay_path.read_text(encoding="utf-8")
 
     second_exit = main(["suite", "--suite", "tiny", "--output", "json", "--output-file", str(output_path)])
     second_stdout = capsys.readouterr().out
     second_file = output_path.read_text(encoding="utf-8")
     second_manifest = manifest_path.read_text(encoding="utf-8")
+    second_replay = replay_path.read_text(encoding="utf-8")
 
     assert first_exit == 0
     assert second_exit == 0
     assert first_stdout == second_stdout
     assert first_file == second_file
     assert first_manifest == second_manifest
+    assert first_replay == second_replay
 
 
 def test_cli_reports_list_and_show_are_deterministic_for_identical_input(
@@ -668,6 +1063,7 @@ def test_cli_reports_history_is_deterministic_for_identical_input(
     assert payload["artifact_count"] == 2
     assert len(payload["history"]) == 2
     assert len(payload["leaderboard"]) >= 2
+    assert len(payload["identity_rollups"]) >= 2
 
 
 def test_cli_reports_export_is_deterministic_for_identical_input(
@@ -721,6 +1117,8 @@ def test_cli_reports_export_is_deterministic_for_identical_input(
     assert len(payload["artifacts"]) == 2
     assert len(payload["history"]) == 2
     assert len(payload["leaderboard"]) >= 2
+    assert len(payload["identity_rollups"]) >= 2
+    assert len(payload["replay_drilldowns"]) == 2
     assert payload["coverage"]["scenario_ids"] == [
         "tiny-delayed-retrieval",
         "tiny-fetch-quest",
@@ -729,6 +1127,64 @@ def test_cli_reports_export_is_deterministic_for_identical_input(
         "tiny-social-trade",
     ]
     assert payload["coverage"]["external_agent_labels"] == ["deterministic-wrapper"]
+    assert payload["replay_drilldowns"][0]["replay_run_count"] == 5
+
+
+def test_cli_reports_history_surfaces_unlabeled_raw_external_agent_gracefully(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    output_path = tmp_path / "tiny-suite-external.json"
+
+    write_exit = main(
+        [
+            "suite",
+            "--suite",
+            "tiny",
+            "--baseline-agent",
+            "agent-a",
+            "--agent-command",
+            f"{sys.executable} examples/agents/deterministic_rule_agent.py",
+            "--output",
+            "json",
+            "--output-file",
+            str(output_path),
+        ]
+    )
+    capsys.readouterr()
+
+    history_exit = main(["reports", "history", "--dir", str(tmp_path)])
+    history_payload = _read_json_output(capsys.readouterr().out)
+    export_exit = main(["reports", "export", "--dir", str(tmp_path)])
+    export_payload = _read_json_output(capsys.readouterr().out)
+
+    assert write_exit == 0
+    assert history_exit == 0
+    assert export_exit == 0
+    assert history_payload["history"][0]["actor_ids"] == ["agent-a", "external-local-agent"]
+    assert history_payload["history"][0]["identity_summary"] == [
+        {"actor_id": "agent-a", "identity_type": "built_in_actor"},
+        {"actor_id": "external-local-agent", "identity_type": "external_agent_command"},
+    ]
+    assert any(
+        entry["actor_id"] == "external-local-agent" and entry["identity_type"] == "external_agent_command"
+        for entry in history_payload["leaderboard"]
+    )
+    assert any(
+        entry["identity_value"] == "external-local-agent"
+        and entry["identity_type"] == "external_agent_command"
+        and entry["comparison_artifact_count"] == 1
+        and entry["has_comparison_artifacts"] is True
+        for entry in history_payload["identity_rollups"]
+    )
+    assert export_payload["coverage"]["external_agent_labels"] == []
+    assert export_payload["coverage"]["external_agent_profile_ids"] == []
+    assert any(
+        entry["identity_value"] == "external-local-agent"
+        and entry["identity_type"] == "external_agent_command"
+        and "has_shared_run_arena_artifacts" not in entry
+        for entry in export_payload["identity_rollups"]
+    )
 
 
 def test_cli_reports_rejects_missing_or_malformed_inputs_machine_readably(
@@ -751,6 +1207,24 @@ def test_cli_reports_rejects_missing_or_malformed_inputs_machine_readably(
     malformed_history_payload = _read_json_output(capsys.readouterr().out)
     malformed_export_exit = main(["reports", "export", "--dir", str(tmp_path)])
     malformed_export_payload = _read_json_output(capsys.readouterr().out)
+
+    malformed_manifest_path.unlink()
+
+    valid_output_path = tmp_path / "tiny-suite.json"
+    write_exit = main(["suite", "--suite", "tiny", "--output", "json", "--output-file", str(valid_output_path)])
+    capsys.readouterr()
+    replay_path = _replay_path_for(valid_output_path)
+    replay_path.unlink()
+    missing_replay_export_exit = main(["reports", "export", "--dir", str(tmp_path)])
+    missing_replay_export_payload = _read_json_output(capsys.readouterr().out)
+
+    broken_output_path = tmp_path / "tiny-suite-broken.json"
+    write_broken_exit = main(["suite", "--suite", "tiny", "--output", "json", "--output-file", str(broken_output_path)])
+    capsys.readouterr()
+    broken_replay_path = _replay_path_for(broken_output_path)
+    broken_replay_path.write_text("{bad-json", encoding="utf-8")
+    broken_replay_export_exit = main(["reports", "export", "--dir", str(tmp_path)])
+    broken_replay_export_payload = _read_json_output(capsys.readouterr().out)
 
     assert missing_dir_exit == 1
     assert missing_dir_payload["accepted"] is False
@@ -781,6 +1255,18 @@ def test_cli_reports_rejects_missing_or_malformed_inputs_machine_readably(
     assert malformed_export_payload["accepted"] is False
     assert malformed_export_payload["error_type"] == "reports_rejected"
     assert str(malformed_export_payload["reason"]).startswith("json_payload_invalid:")
+
+    assert write_exit == 0
+    assert missing_replay_export_exit == 1
+    assert missing_replay_export_payload["accepted"] is False
+    assert missing_replay_export_payload["error_type"] == "reports_rejected"
+    assert str(missing_replay_export_payload["reason"]).startswith("replay_drilldown_file_not_found:")
+
+    assert write_broken_exit == 0
+    assert broken_replay_export_exit == 1
+    assert broken_replay_export_payload["accepted"] is False
+    assert broken_replay_export_payload["error_type"] == "reports_rejected"
+    assert str(broken_replay_export_payload["reason"]).startswith("json_payload_invalid:")
 
 
 def test_cli_run_with_scenario_file_is_deterministic_for_identical_invocation(

@@ -290,6 +290,7 @@ class BenchmarkRunnerConfig:
     seed_override: int | None = None
     max_steps_override: int | None = None
     external_agent_command: Sequence[str] | None = None
+    external_agent_commands_by_actor: Mapping[str, Sequence[str]] | None = None
     external_agent_actor_id: str | None = None
     persistent_agent_session: bool = False
     normalization_profiles: Mapping[str, NormalizationProfile | Mapping[str, Any]] | None = None
@@ -341,6 +342,24 @@ class BenchmarkRunnerConfig:
                     raise ValueError("external_agent_command must contain non-empty strings")
                 normalized_command.append(token)
             object.__setattr__(self, "external_agent_command", tuple(normalized_command))
+        if self.external_agent_commands_by_actor is not None:
+            if not isinstance(self.external_agent_commands_by_actor, Mapping):
+                raise ValueError("external_agent_commands_by_actor must be a mapping")
+            normalized_commands_by_actor: dict[str, tuple[str, ...]] = {}
+            for actor_id, command in self.external_agent_commands_by_actor.items():
+                if not isinstance(actor_id, str) or not actor_id:
+                    raise ValueError("external_agent_commands_by_actor keys must be non-empty strings")
+                if actor_id not in self.actor_ids:
+                    raise ValueError("external_agent_commands_by_actor keys must be present in actor_ids")
+                if isinstance(command, (str, bytes)) or not isinstance(command, Sequence):
+                    raise ValueError("external_agent_commands_by_actor values must be sequences of strings")
+                normalized_command = tuple(str(token) for token in command)
+                if len(normalized_command) == 0 or any(token == "" for token in normalized_command):
+                    raise ValueError("external_agent_commands_by_actor values must contain non-empty strings")
+                normalized_commands_by_actor[actor_id] = normalized_command
+            object.__setattr__(self, "external_agent_commands_by_actor", normalized_commands_by_actor)
+        if self.external_agent_command is not None and self.external_agent_commands_by_actor is not None:
+            raise ValueError("external_agent_command and external_agent_commands_by_actor cannot both be provided")
         if self.external_agent_actor_id is not None:
             if not isinstance(self.external_agent_actor_id, str) or not self.external_agent_actor_id:
                 raise ValueError("external_agent_actor_id must be None or a non-empty string")
@@ -619,6 +638,94 @@ def build_tiny_suite_external_comparison_report(
     }
 
 
+def build_tiny_suite_external_profile_comparison_report(
+    baseline_profile_results: Sequence[BenchmarkRunnerResult],
+    candidate_profile_results: Sequence[BenchmarkRunnerResult],
+    *,
+    compared_actor_id: str,
+    baseline_external_agent_id: str,
+    candidate_external_agent_id: str,
+) -> dict[str, Any]:
+    """Build a compact deterministic comparison report for external profile vs external profile tiny-suite runs."""
+    baseline_report = build_tiny_suite_baseline_report(baseline_profile_results)
+    candidate_report = build_tiny_suite_baseline_report(candidate_profile_results)
+
+    if not isinstance(compared_actor_id, str) or not compared_actor_id:
+        raise ValueError("compared_actor_id must be a non-empty string")
+    if not isinstance(baseline_external_agent_id, str) or not baseline_external_agent_id:
+        raise ValueError("baseline_external_agent_id must be a non-empty string")
+    if not isinstance(candidate_external_agent_id, str) or not candidate_external_agent_id:
+        raise ValueError("candidate_external_agent_id must be a non-empty string")
+    if baseline_external_agent_id == candidate_external_agent_id:
+        raise ValueError("baseline_external_agent_id and candidate_external_agent_id must differ")
+
+    baseline_entries_by_scenario_agent = {
+        (str(entry["scenario_id"]), str(entry["agent_id"])): entry
+        for entry in baseline_report["entries"]
+    }
+    candidate_entries_by_scenario_agent = {
+        (str(entry["scenario_id"]), str(entry["agent_id"])): entry
+        for entry in candidate_report["entries"]
+    }
+    baseline_scenario_ids = sorted({str(entry["scenario_id"]) for entry in baseline_report["entries"]})
+    candidate_scenario_ids = sorted({str(entry["scenario_id"]) for entry in candidate_report["entries"]})
+    if baseline_scenario_ids != candidate_scenario_ids:
+        raise ValueError("baseline_profile_results and candidate_profile_results must cover identical scenario_ids")
+
+    comparisons: list[dict[str, Any]] = []
+    baseline_total = 0.0
+    candidate_total = 0.0
+    for scenario_id in baseline_scenario_ids:
+        baseline_source_entry = baseline_entries_by_scenario_agent.get((scenario_id, compared_actor_id))
+        candidate_source_entry = candidate_entries_by_scenario_agent.get((scenario_id, compared_actor_id))
+        if baseline_source_entry is None:
+            raise ValueError(f"baseline external profile actor missing from suite report: {compared_actor_id}")
+        if candidate_source_entry is None:
+            raise ValueError(f"candidate external profile actor missing from suite report: {compared_actor_id}")
+
+        baseline_entry = dict(baseline_source_entry)
+        baseline_entry["agent_id"] = baseline_external_agent_id
+        candidate_entry = dict(candidate_source_entry)
+        candidate_entry["agent_id"] = candidate_external_agent_id
+
+        baseline_score = float(baseline_entry["composite_score"])
+        candidate_score = float(candidate_entry["composite_score"])
+        baseline_total += baseline_score
+        candidate_total += candidate_score
+        comparisons.append(
+            {
+                "scenario_id": scenario_id,
+                "baseline": baseline_entry,
+                "candidate": candidate_entry,
+                "composite_score_difference": candidate_score - baseline_score,
+            }
+        )
+
+    scenario_count = len(comparisons)
+    baseline_average = baseline_total / scenario_count if scenario_count > 0 else 0.0
+    candidate_average = candidate_total / scenario_count if scenario_count > 0 else 0.0
+    benchmark_ids = sorted(
+        {str(benchmark_id) for benchmark_id in baseline_report["benchmark_ids"]}
+        | {str(benchmark_id) for benchmark_id in candidate_report["benchmark_ids"]}
+    )
+    return {
+        "schema_version": "tiny_suite_comparison_report_v1",
+        "benchmark_ids": benchmark_ids,
+        "baseline_agent_id": baseline_external_agent_id,
+        "candidate_agent_id": candidate_external_agent_id,
+        "scenario_count": scenario_count,
+        "comparisons": comparisons,
+        "summary": {
+            "baseline_composite_score_total": baseline_total,
+            "candidate_composite_score_total": candidate_total,
+            "composite_score_difference_total": candidate_total - baseline_total,
+            "baseline_composite_score_average": baseline_average,
+            "candidate_composite_score_average": candidate_average,
+            "composite_score_difference_average": candidate_average - baseline_average,
+        },
+    }
+
+
 def build_tiny_suite_mixed_external_comparison_report(
     shared_results: Sequence[BenchmarkRunnerResult],
     *,
@@ -693,10 +800,92 @@ def build_tiny_suite_mixed_external_comparison_report(
     }
 
 
+def build_tiny_suite_mixed_external_profile_comparison_report(
+    shared_results: Sequence[BenchmarkRunnerResult],
+    *,
+    baseline_actor_id: str,
+    candidate_actor_id: str,
+    baseline_external_agent_id: str,
+    candidate_external_agent_id: str,
+) -> dict[str, Any]:
+    """Build a compact deterministic comparison report from shared-run external profile vs external profile results."""
+    shared_report = build_tiny_suite_baseline_report(shared_results)
+    entries = shared_report["entries"]
+
+    if not isinstance(baseline_actor_id, str) or not baseline_actor_id:
+        raise ValueError("baseline_actor_id must be a non-empty string")
+    if not isinstance(candidate_actor_id, str) or not candidate_actor_id:
+        raise ValueError("candidate_actor_id must be a non-empty string")
+    if not isinstance(baseline_external_agent_id, str) or not baseline_external_agent_id:
+        raise ValueError("baseline_external_agent_id must be a non-empty string")
+    if not isinstance(candidate_external_agent_id, str) or not candidate_external_agent_id:
+        raise ValueError("candidate_external_agent_id must be a non-empty string")
+    if baseline_actor_id == candidate_actor_id:
+        raise ValueError("baseline_actor_id and candidate_actor_id must differ")
+    if baseline_external_agent_id == candidate_external_agent_id:
+        raise ValueError("baseline_external_agent_id and candidate_external_agent_id must differ")
+
+    entries_by_scenario_agent = {
+        (str(entry["scenario_id"]), str(entry["agent_id"])): entry
+        for entry in entries
+    }
+    scenario_ids = sorted({str(entry["scenario_id"]) for entry in entries})
+
+    comparisons: list[dict[str, Any]] = []
+    baseline_total = 0.0
+    candidate_total = 0.0
+    for scenario_id in scenario_ids:
+        baseline_source_entry = entries_by_scenario_agent.get((scenario_id, baseline_actor_id))
+        candidate_source_entry = entries_by_scenario_agent.get((scenario_id, candidate_actor_id))
+        if baseline_source_entry is None:
+            raise ValueError(f"baseline external profile actor missing from suite report: {baseline_actor_id}")
+        if candidate_source_entry is None:
+            raise ValueError(f"candidate external profile actor missing from suite report: {candidate_actor_id}")
+
+        baseline_entry = dict(baseline_source_entry)
+        baseline_entry["agent_id"] = baseline_external_agent_id
+        candidate_entry = dict(candidate_source_entry)
+        candidate_entry["agent_id"] = candidate_external_agent_id
+
+        baseline_score = float(baseline_entry["composite_score"])
+        candidate_score = float(candidate_entry["composite_score"])
+        baseline_total += baseline_score
+        candidate_total += candidate_score
+        comparisons.append(
+            {
+                "scenario_id": scenario_id,
+                "baseline": baseline_entry,
+                "candidate": candidate_entry,
+                "composite_score_difference": candidate_score - baseline_score,
+            }
+        )
+
+    scenario_count = len(comparisons)
+    baseline_average = baseline_total / scenario_count if scenario_count > 0 else 0.0
+    candidate_average = candidate_total / scenario_count if scenario_count > 0 else 0.0
+    return {
+        "schema_version": "tiny_suite_comparison_report_v1",
+        "benchmark_ids": shared_report["benchmark_ids"],
+        "baseline_agent_id": baseline_external_agent_id,
+        "candidate_agent_id": candidate_external_agent_id,
+        "scenario_count": scenario_count,
+        "comparisons": comparisons,
+        "summary": {
+            "baseline_composite_score_total": baseline_total,
+            "candidate_composite_score_total": candidate_total,
+            "composite_score_difference_total": candidate_total - baseline_total,
+            "baseline_composite_score_average": baseline_average,
+            "candidate_composite_score_average": candidate_average,
+            "composite_score_difference_average": candidate_average - baseline_average,
+        },
+    }
+
+
 @dataclass(frozen=True, slots=True)
 class _ResolvedRunnerConfig:
     run_config: BenchmarkRunConfig
     external_agent_command: Sequence[str] | None = None
+    external_agent_commands_by_actor: Mapping[str, Sequence[str]] | None = None
     external_agent_actor_id: str | None = None
     persistent_agent_session: bool = False
     normalization_profiles: Mapping[str, NormalizationProfile | Mapping[str, Any]] | None = None
@@ -767,6 +956,7 @@ def run_benchmark_lifecycle(
         run_config.actor_ids,
         script_policy=_resolve_agent_script_policy(scenario_vars),
         external_agent_command=resolved_config.external_agent_command,
+        external_agent_commands_by_actor=resolved_config.external_agent_commands_by_actor,
         external_agent_actor_id=resolved_config.external_agent_actor_id,
         persistent_agent_session=resolved_config.persistent_agent_session,
     )
@@ -784,10 +974,11 @@ def run_benchmark_lifecycle(
                 session_manager=session_manager,
             )
             _raise_external_agent_runner_failure_if_present(
-                gateway_failures=gateway_step.failures,
-                external_agent_command=resolved_config.external_agent_command,
-                external_agent_actor_id=resolved_config.external_agent_actor_id,
-            )
+            gateway_failures=gateway_step.failures,
+            external_agent_command=resolved_config.external_agent_command,
+            external_agent_commands_by_actor=resolved_config.external_agent_commands_by_actor,
+            external_agent_actor_id=resolved_config.external_agent_actor_id,
+        )
             step_outcome = controller.step(gateway_step.accepted_action_requests)
             tracker.apply_signals(
                 _build_runtime_step_signals(
@@ -892,6 +1083,7 @@ def _coerce_runner_config(
         return _ResolvedRunnerConfig(
             run_config=config.to_run_config(),
             external_agent_command=config.external_agent_command,
+            external_agent_commands_by_actor=config.external_agent_commands_by_actor,
             external_agent_actor_id=config.external_agent_actor_id,
             persistent_agent_session=config.persistent_agent_session,
             normalization_profiles=config.normalization_profiles,
@@ -1370,21 +1562,24 @@ def _build_gateway_agent_configs(
     *,
     script_policy: str | None = None,
     external_agent_command: Sequence[str] | None = None,
+    external_agent_commands_by_actor: Mapping[str, Sequence[str]] | None = None,
     external_agent_actor_id: str | None = None,
     persistent_agent_session: bool = False,
 ) -> tuple[StepDriverAgentConfig, ...]:
     external_command = _resolve_external_local_agent_command(external_agent_command)
+    external_commands_by_actor = _resolve_external_local_agent_commands_by_actor(external_agent_commands_by_actor)
     script_map = _resolve_runner_agent_scripts(script_policy)
     configs: list[StepDriverAgentConfig] = []
     for idx, actor_id in enumerate(actor_ids):
-        use_external_command = external_command is not None and (
+        actor_external_command = external_commands_by_actor.get(actor_id)
+        use_external_command = actor_external_command is not None or external_command is not None and (
             external_agent_actor_id is None or actor_id == external_agent_actor_id
         )
         if not use_external_command:
             script = script_map.get(idx % len(script_map), _RUNNER_AGENT_SCRIPT_EXPLORER)
             command = (sys.executable, "-c", script)
         else:
-            command = external_command
+            command = actor_external_command or external_command
         configs.append(
             StepDriverAgentConfig(
                 actor_id=actor_id,
@@ -1417,18 +1612,36 @@ def _resolve_external_local_agent_command(
     return normalized_command
 
 
+def _resolve_external_local_agent_commands_by_actor(
+    external_agent_commands_by_actor: Mapping[str, Sequence[str]] | None,
+) -> dict[str, tuple[str, ...]]:
+    if external_agent_commands_by_actor is None:
+        return {}
+    normalized_commands_by_actor: dict[str, tuple[str, ...]] = {}
+    for actor_id, command in external_agent_commands_by_actor.items():
+        normalized_command = _resolve_external_local_agent_command(command)
+        if normalized_command is not None:
+            normalized_commands_by_actor[str(actor_id)] = normalized_command
+    return normalized_commands_by_actor
+
+
 def _raise_external_agent_runner_failure_if_present(
     *,
     gateway_failures: Sequence[Any],
     external_agent_command: Sequence[str] | None,
+    external_agent_commands_by_actor: Mapping[str, Sequence[str]] | None,
     external_agent_actor_id: str | None,
 ) -> None:
-    if external_agent_command is None:
+    if external_agent_command is None and external_agent_commands_by_actor is None:
         return
     for failure in gateway_failures:
         if getattr(failure, "stage", None) != "runner":
             continue
         actor_id = getattr(failure, "actor_id", "unknown-actor")
+        if external_agent_commands_by_actor is not None and actor_id in external_agent_commands_by_actor:
+            reason = getattr(failure, "reason", "runner_error")
+            detail = getattr(failure, "detail", None) or "unknown_runner_failure"
+            raise RuntimeError(f"external_local_agent_runner_failure:{actor_id}:{reason}:{detail}")
         if external_agent_actor_id is not None and actor_id != external_agent_actor_id:
             continue
         reason = getattr(failure, "reason", "runner_error")
