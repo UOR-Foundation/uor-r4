@@ -265,8 +265,8 @@
       <section class="hero">
         <h1>MUDBench Local Observer</h1>
         <p>
-          Load a <code>reports export --dir ...</code> JSON viewmodel to inspect leaderboard,
-          history, replay drilldowns, and compact head-to-head match summaries for comparison artifacts.
+          Load either a <code>reports export --dir ...</code> JSON viewmodel or a standalone
+          shard export payload to inspect benchmark summaries and in-process world-mode state.
         </p>
       </section>
 
@@ -276,12 +276,51 @@
           <button id="load-text" class="button" type="button">Load From Text</button>
           <button id="clear-view" class="button" type="button">Clear</button>
         </div>
-        <textarea id="json-input" placeholder="Paste reports export JSON here"></textarea>
+        <textarea id="json-input" placeholder="Paste reports export or shard export JSON here"></textarea>
         <div id="status" class="status">Choose an export JSON file or paste JSON to begin.</div>
       </section>
 
       <section id="dashboard" class="hidden">
         <section class="panel stack">
+          <div>
+            <h2>Shard Export Summary</h2>
+            <p class="muted">
+              Inspect a standalone in-process shard export payload from <code>ShardState.build_shard_export_payload()</code>.
+            </p>
+          </div>
+
+          <div id="shard-empty" class="muted"></div>
+
+          <section class="grid summary-grid">
+            <div class="card">
+              <h3>Shard Metadata</h3>
+              <div id="shard-meta" class="meta-list"></div>
+            </div>
+            <div class="card">
+              <h3>Record Families</h3>
+              <div id="shard-counts" class="meta-list"></div>
+            </div>
+            <div class="card">
+              <h3>Lifecycle Counts</h3>
+              <div id="shard-lifecycle" class="meta-list"></div>
+            </div>
+            <div class="card">
+              <h3>Checkpoint And Journal</h3>
+              <div id="shard-generations" class="meta-list"></div>
+            </div>
+            <div class="card">
+              <h3>Bundle Verification</h3>
+              <div id="shard-verification" class="meta-list"></div>
+            </div>
+          </section>
+
+          <div class="card">
+            <h3>Identity Categories</h3>
+            <div id="shard-identities" class="meta-list"></div>
+          </div>
+        </section>
+
+        <section id="filters-panel" class="panel stack">
           <div>
             <h2>Observer Filters</h2>
             <p class="muted">
@@ -312,7 +351,7 @@
           <div id="filter-summary" class="status">No filters applied.</div>
         </section>
 
-        <section class="grid coverage-grid">
+        <section id="coverage-panel" class="grid coverage-grid">
           <div class="panel">
             <h2>Coverage</h2>
             <p class="muted" id="coverage-summary"></p>
@@ -337,7 +376,7 @@
           </div>
         </section>
 
-        <section class="panel">
+        <section id="leaderboard-panel" class="panel">
           <h2>Leaderboard</h2>
           <table>
             <thead>
@@ -353,7 +392,7 @@
           </table>
         </section>
 
-        <section class="panel stack">
+        <section id="rollups-panel" class="panel stack">
           <div>
             <h2>Identity Rollups</h2>
             <p class="muted">
@@ -379,7 +418,7 @@
           </div>
         </section>
 
-        <section class="panel">
+        <section id="history-panel" class="panel">
           <h2>History</h2>
           <table>
             <thead>
@@ -396,7 +435,7 @@
           </table>
         </section>
 
-        <section class="panel stack">
+        <section id="arena-panel" class="panel stack">
           <div>
             <h2>Arena Summary</h2>
             <p class="muted">
@@ -448,7 +487,7 @@
           </div>
         </section>
 
-        <section class="panel stack">
+        <section id="match-panel" class="panel stack">
           <div>
             <h2>Match Summary</h2>
             <p class="muted">
@@ -500,7 +539,7 @@
           </div>
         </section>
 
-        <section class="panel stack">
+        <section id="replay-panel" class="panel stack">
           <div>
             <h2>Replay Inspector</h2>
             <p class="muted">
@@ -565,12 +604,28 @@
     <script>
       (function () {
         var EXPECTED_VERSION = "reports_export_viewmodel_v1";
+        var SHARD_EXPORT_KIND = "shard_export_placeholder";
         var fileInput = document.getElementById("file-input");
         var jsonInput = document.getElementById("json-input");
         var loadTextButton = document.getElementById("load-text");
         var clearButton = document.getElementById("clear-view");
         var status = document.getElementById("status");
         var dashboard = document.getElementById("dashboard");
+        var shardEmpty = document.getElementById("shard-empty");
+        var shardMeta = document.getElementById("shard-meta");
+        var shardCounts = document.getElementById("shard-counts");
+        var shardLifecycle = document.getElementById("shard-lifecycle");
+        var shardGenerations = document.getElementById("shard-generations");
+        var shardVerification = document.getElementById("shard-verification");
+        var shardIdentities = document.getElementById("shard-identities");
+        var filtersPanel = document.getElementById("filters-panel");
+        var coveragePanel = document.getElementById("coverage-panel");
+        var leaderboardPanel = document.getElementById("leaderboard-panel");
+        var rollupsPanel = document.getElementById("rollups-panel");
+        var historyPanel = document.getElementById("history-panel");
+        var arenaPanel = document.getElementById("arena-panel");
+        var matchPanel = document.getElementById("match-panel");
+        var replayPanel = document.getElementById("replay-panel");
         var actorFilter = document.getElementById("actor-filter");
         var labelFilter = document.getElementById("label-filter");
         var profileFilter = document.getElementById("profile-filter");
@@ -676,6 +731,17 @@
         }
 
         function validateViewmodel(payload) {
+          if (isShardExportPayload(payload)) {
+            return { kind: "shard_export", payload: validateShardExportPayload(payload) };
+          }
+          return { kind: "reports_export", payload: validateReportsExportPayload(payload) };
+        }
+
+        function isShardExportPayload(payload) {
+          return !!payload && typeof payload === "object" && payload.payload_kind === SHARD_EXPORT_KIND;
+        }
+
+        function validateReportsExportPayload(payload) {
           if (!payload || typeof payload !== "object") {
             throw new Error("Export payload must be a JSON object.");
           }
@@ -696,6 +762,43 @@
           }
           if (!Array.isArray(payload.replay_drilldowns)) {
             throw new Error("Export payload is missing replay_drilldowns.");
+          }
+          return payload;
+        }
+
+        function validateShardExportPayload(payload) {
+          if (!payload || typeof payload !== "object") {
+            throw new Error("Shard export payload must be a JSON object.");
+          }
+          if (payload.payload_kind !== SHARD_EXPORT_KIND) {
+            throw new Error("Unsupported shard payload_kind: " + String(payload.payload_kind));
+          }
+          if (payload.payload_version !== 1) {
+            throw new Error("Unsupported shard payload_version: " + String(payload.payload_version));
+          }
+          if (!payload.metadata || typeof payload.metadata !== "object") {
+            throw new Error("Shard export payload is missing metadata.");
+          }
+          if (!payload.record_family_counts || typeof payload.record_family_counts !== "object") {
+            throw new Error("Shard export payload is missing record_family_counts.");
+          }
+          if (!payload.lifecycle_counts || typeof payload.lifecycle_counts !== "object") {
+            throw new Error("Shard export payload is missing lifecycle_counts.");
+          }
+          if (!payload.checkpoint || typeof payload.checkpoint !== "object") {
+            throw new Error("Shard export payload is missing checkpoint.");
+          }
+          if (!payload.journal || typeof payload.journal !== "object") {
+            throw new Error("Shard export payload is missing journal.");
+          }
+          if (
+            payload.bundle_verification_summary !== undefined
+            && (
+              !payload.bundle_verification_summary
+              || typeof payload.bundle_verification_summary !== "object"
+            )
+          ) {
+            throw new Error("Shard export payload bundle_verification_summary must be an object when present.");
           }
           return payload;
         }
@@ -1000,6 +1103,149 @@
             replay_drilldowns: drilldowns,
             coverage: buildFilteredCoverage(historyEntries, drilldowns)
           };
+        }
+
+        function toggleBenchmarkPanels(show) {
+          [
+            filtersPanel,
+            coveragePanel,
+            leaderboardPanel,
+            rollupsPanel,
+            historyPanel,
+            arenaPanel,
+            matchPanel,
+            replayPanel
+          ].forEach(function (node) {
+            if (!node) {
+              return;
+            }
+            node.classList[show ? "remove" : "add"]("hidden");
+          });
+        }
+
+        function renderShardExportSummary(payload) {
+          clearNode(shardMeta);
+          clearNode(shardCounts);
+          clearNode(shardLifecycle);
+          clearNode(shardGenerations);
+          clearNode(shardVerification);
+          clearNode(shardIdentities);
+
+          if (!payload) {
+            shardEmpty.textContent = "No shard export payload is loaded. Load a standalone shard export JSON to inspect in-process world-mode state.";
+            return;
+          }
+
+          shardEmpty.textContent = "";
+          var metadata = payload.metadata || {};
+          var recordCounts = payload.record_family_counts || {};
+          var lifecycleCounts = payload.lifecycle_counts || {};
+          var characterCounts = lifecycleCounts.characters || {};
+          var sessionCounts = lifecycleCounts.sessions || {};
+          var checkpoint = payload.checkpoint || {};
+          var journal = payload.journal || {};
+          var verificationSummary = payload.bundle_verification_summary || null;
+          var identityCounts = payload.identity_category_counts || {};
+
+          shardMeta.appendChild(createMetaRow("Shard", String(payload.shard_id || "")));
+          shardMeta.appendChild(createMetaRow("Mode", String(metadata.mode_marker || "")));
+          shardMeta.appendChild(createMetaRow("Status", String(metadata.shard_status || "")));
+          shardMeta.appendChild(createMetaRow("Ruleset", String(metadata.world_ruleset_version || "")));
+          shardMeta.appendChild(createMetaRow("Engine", String(metadata.benchmark_engine_version || "")));
+          shardMeta.appendChild(createMetaRow("Scheduler", String(metadata.scheduler_policy_version || "")));
+          shardMeta.appendChild(createMetaRow("Season", String(metadata.season_id || "none")));
+
+          Object.keys(recordCounts).sort().forEach(function (key) {
+            shardCounts.appendChild(createMetaRow(key, String(recordCounts[key])));
+          });
+
+          shardLifecycle.appendChild(createMetaRow(
+            "Characters",
+            [
+              "active=" + String(characterCounts.active || 0),
+              "inactive=" + String(characterCounts.inactive || 0),
+              "total=" + String(characterCounts.total || 0)
+            ].join(" | ")
+          ));
+          shardLifecycle.appendChild(createMetaRow(
+            "Sessions",
+            [
+              "active=" + String(sessionCounts.active || 0),
+              "inactive=" + String(sessionCounts.inactive || 0),
+              "total=" + String(sessionCounts.total || 0)
+            ].join(" | ")
+          ));
+
+          shardGenerations.appendChild(createMetaRow(
+            "Checkpoint Generation",
+            String(checkpoint.registry_checkpoint_generation || 0)
+          ));
+          shardGenerations.appendChild(createMetaRow(
+            "Checkpoint Marker",
+            String(checkpoint.checkpoint_commit_marker || "")
+          ));
+          shardGenerations.appendChild(createMetaRow(
+            "Last Mutation",
+            String(journal.last_committed_mutation_generation || 0)
+          ));
+          shardGenerations.appendChild(createMetaRow(
+            "Next Mutation",
+            String(journal.expected_next_mutation_generation || 0)
+          ));
+          shardGenerations.appendChild(createMetaRow(
+            "Journal Mode",
+            String(journal.mutation_journal_mode || "")
+          ));
+
+          if (verificationSummary) {
+            var issueCodes = Array.isArray(verificationSummary.issue_codes)
+              ? verificationSummary.issue_codes.map(function (value) { return String(value); }).sort()
+              : [];
+            shardVerification.appendChild(createMetaRow(
+              "Status",
+              verificationSummary.is_valid ? "valid" : "invalid"
+            ));
+            shardVerification.appendChild(createMetaRow(
+              "Issue Codes",
+              issueCodes.length > 0 ? issueCodes.join(" | ") : "none"
+            ));
+            shardVerification.appendChild(createMetaRow(
+              "Artifacts",
+              String(verificationSummary.artifact_count || 0)
+            ));
+            shardVerification.appendChild(createMetaRow(
+              "Verified",
+              String(verificationSummary.verified_artifact_count || 0)
+            ));
+          } else {
+            shardVerification.appendChild(createMetaRow(
+              "Status",
+              "not provided"
+            ));
+            shardVerification.appendChild(createMetaRow(
+              "Issue Codes",
+              "none"
+            ));
+            shardVerification.appendChild(createMetaRow(
+              "Artifacts",
+              "0"
+            ));
+            shardVerification.appendChild(createMetaRow(
+              "Verified",
+              "0"
+            ));
+          }
+
+          Object.keys(identityCounts).sort().forEach(function (key) {
+            var counts = identityCounts[key] || {};
+            var summary = Object.keys(counts).sort().map(function (countKey) {
+              return countKey + "=" + String(counts[countKey]);
+            });
+            shardIdentities.appendChild(createMetaRow(
+              key,
+              summary.length > 0 ? summary.join(" | ") : "none"
+            ));
+          });
         }
 
         function filterIdentityRollups(payload, filters) {
@@ -1771,9 +2017,17 @@
         }
 
         function render(payload) {
-          validateViewmodel(payload);
-          currentPayload = payload;
-          populateFilterControls(payload);
+          var validated = validateViewmodel(payload);
+          currentPayload = validated.payload;
+          renderShardExportSummary(validated.kind === "shard_export" ? validated.payload : null);
+          toggleBenchmarkPanels(validated.kind === "reports_export");
+          if (validated.kind === "shard_export") {
+            currentDisplayPayload = null;
+            dashboard.classList.remove("hidden");
+            setStatus("Loaded shard export payload successfully.", false);
+            return;
+          }
+          populateFilterControls(validated.payload);
           actorFilter.value = "";
           labelFilter.value = "";
           profileFilter.value = "";
@@ -1854,6 +2108,12 @@
           currentPayload = null;
           currentDisplayPayload = null;
           dashboard.classList.add("hidden");
+          toggleBenchmarkPanels(true);
+          clearNode(shardMeta);
+          clearNode(shardCounts);
+          clearNode(shardLifecycle);
+          clearNode(shardGenerations);
+          clearNode(shardIdentities);
           clearNode(actorFilter);
           clearNode(labelFilter);
           clearNode(profileFilter);
@@ -1884,6 +2144,7 @@
           clearNode(eventBody);
           arenaEmpty.textContent = "";
           comparisonEmpty.textContent = "";
+          shardEmpty.textContent = "";
           filterSummary.textContent = "";
           rollupEmpty.textContent = "";
           coverageSummary.textContent = "";

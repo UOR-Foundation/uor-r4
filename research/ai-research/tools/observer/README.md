@@ -3,7 +3,11 @@
 This directory contains a single static observer page for inspecting MUDBench
 report exports locally.
 
-The observer consumes the existing `reports export --dir <path>` JSON viewmodel.
+The observer consumes either:
+
+- the existing `reports export --dir <path>` JSON viewmodel
+- a standalone shard export payload from `ShardState.build_shard_export_payload()`
+
 It does not run a server, mutate artifacts, or fetch benchmark data on its own.
 
 ## Generate Saved Artifacts
@@ -49,6 +53,55 @@ The saved-artifacts directory should contain the `*.manifest.json` files created
 by the `suite --output-file ...` workflow, plus their sibling `*.replay.json`
 files.
 
+## Generate Shard Export JSON
+
+The shard summary panel reads the existing in-process shard export shape from
+`ShardState.build_shard_export_payload()`.
+
+Example local workflow:
+
+```bash
+PYTHONPATH=src python - <<'PY' > observer-shard-export.json
+import json
+from pathlib import Path
+from tempfile import TemporaryDirectory
+
+from world.state import ShardState
+
+state = (
+    ShardState.create_empty("shard-dev")
+    .register_account(account_id="acct-alice")
+    .register_agent_profile(agent_profile_id="profile-a")
+    .register_system_identity(
+        system_identity_id="sys-guard",
+        identity_class="npc_controller",
+    )
+    .register_character(
+        character_id="char-guard",
+        identity_class="npc_controller",
+        system_identity_id="sys-guard",
+        status="inactive",
+    )
+    .open_character_session(
+        session_id="sess-guard",
+        character_id="char-guard",
+    )
+    .close_character_session("sess-guard")
+)
+
+with TemporaryDirectory() as temp_dir:
+    bundle_dir = Path(temp_dir)
+    state.write_shard_artifact_bundle(bundle_dir)
+    payload = state.build_shard_export_payload(
+        bundle_verification_summary=state.build_bundle_verification_summary(bundle_dir)
+    )
+
+print(json.dumps(payload, indent=2, sort_keys=True))
+PY
+```
+
+That produces a single deterministic JSON payload for the shard summary panel.
+
 ## Open The Observer
 
 Open [index.html](/Users/adminamn/MUDBench/tools/observer/index.html) directly in a browser.
@@ -56,15 +109,18 @@ Open [index.html](/Users/adminamn/MUDBench/tools/observer/index.html) directly i
 Because the page is intentionally static and dependency-free, use one of these
 manual workflows:
 
-1. Click `Choose Export JSON` and select the exported `observer-export.json` file.
+1. Click `Choose Export JSON` and select either `observer-export.json` or
+   `observer-shard-export.json`.
 2. Or paste the JSON into the text area and click `Load From Text`.
 3. Optionally narrow the loaded export with the observer filter controls.
 
 ## What It Displays
 
-The page renders the existing export viewmodel only. It shows:
+The page renders only the currently loaded JSON payload. It shows:
 
 - leaderboard summary
+- shard export summary when the loaded payload is a standalone
+  `build_shard_export_payload()` JSON
 - identity rollup summaries when the export includes `identity_rollups`
 - artifact/history entries
 - scenario coverage
@@ -81,6 +137,30 @@ The page renders the existing export viewmodel only. It shows:
 
 If the JSON does not match the current export shape, the page shows a validation
 error instead of attempting to guess.
+
+## Shard Summary Workflow
+
+The shard summary panel is also fully static and `file://` compatible.
+
+Use this workflow:
+
+1. Materialize `observer-shard-export.json` from `ShardState.build_shard_export_payload()`.
+2. Open [index.html](/Users/adminamn/MUDBench/tools/observer/index.html).
+3. Load the shard export JSON file or paste its contents.
+
+When a standalone shard export is loaded, the page shows:
+
+- shard metadata
+- registry record-family counts
+- active/inactive character counts
+- active/inactive session counts
+- identity-category counts when present
+- bundle verification status when `bundle_verification_summary` is present
+- checkpoint and journal generation placeholder metadata
+
+The benchmark-specific panels stay unchanged for `reports export` payloads.
+When a shard export is not loaded, the shard summary panel degrades gracefully
+with a small explanatory message.
 
 ## Replay Inspection Workflow
 
