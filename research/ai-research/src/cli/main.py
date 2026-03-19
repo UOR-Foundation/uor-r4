@@ -274,6 +274,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Single-shot local-process agent command string; MUDBench sends one observation on stdin and expects one action JSON on stdout",
     )
     run_parser.add_argument(
+        "--agent-label",
+        default=None,
+        help="Optional label to use for an external local-process agent in CLI output; requires --agent-command",
+    )
+    run_parser.add_argument(
         "--persistent-agent-session",
         action="store_true",
         help="Keep the external local-process agent command alive across turns using the same stdin/stdout JSON contract; requires --agent-command",
@@ -301,6 +306,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--agent-command",
         default=None,
         help="External local-process agent command string for suite comparison candidate side",
+    )
+    suite_parser.add_argument(
+        "--agent-label",
+        default=None,
+        help="Optional label to use for the external local-process suite candidate; requires --agent-command",
     )
     suite_parser.add_argument(
         "--external-agent-actor",
@@ -342,6 +352,28 @@ def build_parser() -> argparse.ArgumentParser:
         help="CLI output format",
     )
 
+    reports_history_parser = reports_subcommands.add_parser(
+        "history", help="Summarize saved suite report artifacts as deterministic history"
+    )
+    reports_history_parser.add_argument("--dir", required=True, help="Directory containing saved report manifests")
+    reports_history_parser.add_argument(
+        "--output",
+        choices=("json", "pretty"),
+        default="json",
+        help="CLI output format",
+    )
+
+    reports_export_parser = reports_subcommands.add_parser(
+        "export", help="Export a stable saved-report viewmodel for downstream tooling"
+    )
+    reports_export_parser.add_argument("--dir", required=True, help="Directory containing saved report manifests")
+    reports_export_parser.add_argument(
+        "--output",
+        choices=("json", "pretty"),
+        default="json",
+        help="CLI output format",
+    )
+
     reports_show_parser = reports_subcommands.add_parser("show", help="Show a saved suite report artifact")
     reports_show_parser.add_argument("--manifest", required=True, help="Path to a saved suite report manifest")
     reports_show_parser.add_argument(
@@ -364,8 +396,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                 scenario_file=args.scenario_file,
             )
             external_agent_command = _resolve_external_agent_command(args.agent_command)
+            external_agent_label = _resolve_external_agent_label(args.agent_label)
             if args.persistent_agent_session and external_agent_command is None:
                 raise ValueError("persistent_agent_session_requires_agent_command")
+            if external_agent_label is not None and external_agent_command is None:
+                raise ValueError("agent_label_requires_agent_command")
         except ValueError as exc:
             error_payload = {
                 "accepted": False,
@@ -397,7 +432,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(json.dumps(error_payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True))
             return 1
 
-        response_payload = _build_run_response(result.to_dict())
+        response_payload = _build_run_response(
+            result.to_dict(),
+            external_agent_label=external_agent_label,
+        )
         if args.output == "pretty":
             print(json.dumps(response_payload, sort_keys=True, indent=2, ensure_ascii=True))
         else:
@@ -407,8 +445,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         actor_ids = tuple(args.actor_id) if len(args.actor_id) > 0 else _DEFAULT_ACTOR_IDS
         try:
             external_agent_command = _resolve_external_agent_command(args.agent_command)
+            external_agent_label = _resolve_external_agent_label(args.agent_label)
             if args.persistent_agent_session and external_agent_command is None:
                 raise ValueError("persistent_agent_session_requires_agent_command")
+            if external_agent_label is not None and external_agent_command is None:
+                raise ValueError("agent_label_requires_agent_command")
             _validate_suite_comparison_args(
                 baseline_agent=args.baseline_agent,
                 candidate_agent=args.candidate_agent,
@@ -416,6 +457,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 external_agent_command=external_agent_command,
                 external_agent_actor=args.external_agent_actor,
             )
+            resolved_external_agent_label = external_agent_label or _EXTERNAL_COMPARISON_AGENT_ID
 
             baseline_result_bundle = tuple(
                 run_benchmark_lifecycle(
@@ -457,9 +499,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                     mixed_result_bundle,
                     baseline_agent_id=args.baseline_agent,
                     external_actor_id=args.external_agent_actor,
-                    external_agent_id=_EXTERNAL_COMPARISON_AGENT_ID,
+                    external_agent_id=resolved_external_agent_label,
                 )
-                response_actor_ids = (args.baseline_agent, _EXTERNAL_COMPARISON_AGENT_ID)
+                report_payload = dict(report_payload)
+                report_payload["external_agent_label"] = resolved_external_agent_label
+                response_actor_ids = (args.baseline_agent, resolved_external_agent_label)
             else:
                 external_result_bundle = tuple(
                     run_benchmark_lifecycle(
@@ -478,9 +522,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                     baseline_result_bundle,
                     external_result_bundle,
                     compared_actor_id=args.baseline_agent,
-                    external_agent_id=_EXTERNAL_COMPARISON_AGENT_ID,
+                    external_agent_id=resolved_external_agent_label,
                 )
-                response_actor_ids = (args.baseline_agent, _EXTERNAL_COMPARISON_AGENT_ID)
+                report_payload = dict(report_payload)
+                report_payload["external_agent_label"] = resolved_external_agent_label
+                response_actor_ids = (args.baseline_agent, resolved_external_agent_label)
         except (ValueError, RuntimeError) as exc:
             error_payload = {
                 "accepted": False,
@@ -535,6 +581,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         try:
             if args.reports_command == "list":
                 response_payload = _build_reports_list_response(Path(args.dir))
+            elif args.reports_command == "history":
+                response_payload = _build_reports_history_response(Path(args.dir))
+            elif args.reports_command == "export":
+                response_payload = _build_reports_export_response(Path(args.dir))
             elif args.reports_command == "show":
                 response_payload = _build_reports_show_response(Path(args.manifest))
             else:
@@ -554,12 +604,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     return 2
 
 
-def _build_run_response(result_payload: Mapping[str, Any]) -> dict[str, Any]:
+def _build_run_response(
+    result_payload: Mapping[str, Any],
+    *,
+    external_agent_label: str | None = None,
+) -> dict[str, Any]:
     lifecycle_payload = result_payload["lifecycle_state"]
     scorecard_payload = result_payload["scorecard"]
     replay_payload = result_payload["replay_artifact"]
     parity_payload = result_payload["replay_parity_artifact"]
-    return {
+    response_payload = {
         "accepted": True,
         "run_id": lifecycle_payload["run_id"],
         "benchmark_id": scorecard_payload["metadata"]["benchmark_id"],
@@ -587,6 +641,9 @@ def _build_run_response(result_payload: Mapping[str, Any]) -> dict[str, Any]:
             },
         },
     }
+    if external_agent_label is not None:
+        response_payload["external_agent_label"] = external_agent_label
+    return response_payload
 
 
 def _build_suite_response(
@@ -651,6 +708,12 @@ def _build_suite_output_manifest(
         "has_replay_refs": replay_present,
         "has_parity_refs": parity_present,
         "report_schema_version": report_schema_version,
+        **(
+            {"external_agent_label": str(report_payload["external_agent_label"])}
+            if isinstance(report_payload.get("external_agent_label"), str)
+            and str(report_payload["external_agent_label"]) != ""
+            else {}
+        ),
     }
 
 
@@ -690,6 +753,82 @@ def _build_reports_show_response(manifest_path: Path) -> dict[str, Any]:
     }
 
 
+def _build_reports_history_response(directory_path: Path) -> dict[str, Any]:
+    if not directory_path.exists():
+        raise ValueError(f"reports_dir_not_found:{directory_path}")
+    if not directory_path.is_dir():
+        raise ValueError(f"reports_dir_not_directory:{directory_path}")
+
+    loaded_artifacts = [
+        _load_saved_suite_report_artifact(manifest_path)
+        for manifest_path in sorted(directory_path.glob("*.manifest.json"))
+    ]
+    history_entries = [_build_reports_history_entry(loaded_artifact) for loaded_artifact in loaded_artifacts]
+    leaderboard = _build_reports_history_leaderboard(history_entries)
+    return {
+        "accepted": True,
+        "command": "reports_history",
+        "directory": str(directory_path),
+        "artifact_count": len(history_entries),
+        "history": history_entries,
+        "leaderboard": leaderboard,
+    }
+
+
+def _build_reports_export_response(directory_path: Path) -> dict[str, Any]:
+    history_payload = _build_reports_history_response(directory_path)
+    history_entries = history_payload["history"]
+    scenario_ids = sorted(
+        {
+            str(scenario_id)
+            for entry in history_entries
+            for scenario_id in entry.get("scenario_ids", ())
+            if isinstance(scenario_id, str) and scenario_id
+        }
+    )
+    actor_ids = sorted(
+        {
+            str(actor_id)
+            for entry in history_entries
+            for actor_id in entry.get("actor_ids", ())
+            if isinstance(actor_id, str) and actor_id
+        }
+    )
+    external_agent_labels = sorted(
+        {
+            str(entry["external_agent_label"])
+            for entry in history_entries
+            if isinstance(entry.get("external_agent_label"), str) and str(entry["external_agent_label"]) != ""
+        }
+    )
+    artifacts = [
+        {
+            "report_path": entry["report_path"],
+            "manifest_path": entry["manifest_path"],
+            "artifact_type": entry["artifact_type"],
+            "command_mode": entry["command_mode"],
+            "suite_id": entry["suite_id"],
+            "benchmark_id": entry["benchmark_id"],
+        }
+        for entry in history_entries
+    ]
+    return {
+        "accepted": True,
+        "command": "reports_export",
+        "directory": str(directory_path),
+        "viewmodel_version": "reports_export_viewmodel_v1",
+        "artifact_count": history_payload["artifact_count"],
+        "coverage": {
+            "scenario_ids": scenario_ids,
+            "actor_ids": actor_ids,
+            "external_agent_labels": external_agent_labels,
+        },
+        "artifacts": artifacts,
+        "history": history_entries,
+        "leaderboard": history_payload["leaderboard"],
+    }
+
+
 def _load_saved_suite_report_artifact(manifest_path: Path) -> dict[str, Any]:
     manifest_payload = _read_json_mapping(manifest_path, missing_prefix="report_manifest_not_found")
     artifact_type = manifest_payload.get("artifact_type")
@@ -716,6 +855,112 @@ def _load_saved_suite_report_artifact(manifest_path: Path) -> dict[str, Any]:
         "manifest": manifest_payload,
         "report": report_payload,
     }
+
+
+def _build_reports_history_entry(loaded_artifact: Mapping[str, Any]) -> dict[str, Any]:
+    artifact_payload = loaded_artifact["artifact"]
+    manifest_payload = loaded_artifact["manifest"]
+    report_payload = loaded_artifact["report"]
+    history_entry = {
+        "report_path": artifact_payload["report_path"],
+        "manifest_path": artifact_payload["manifest_path"],
+        "artifact_type": artifact_payload["artifact_type"],
+        "command_mode": artifact_payload["command_mode"],
+        "suite_id": artifact_payload["suite_id"],
+        "benchmark_id": artifact_payload["benchmark_id"],
+        "scenario_ids": list(manifest_payload.get("scenario_ids", ())),
+        "actor_ids": list(manifest_payload.get("actor_ids", ())),
+        "score_summary": _build_reports_history_score_summary(report_payload),
+    }
+    external_agent_label = manifest_payload.get("external_agent_label")
+    if isinstance(external_agent_label, str) and external_agent_label:
+        history_entry["external_agent_label"] = external_agent_label
+    return history_entry
+
+
+def _build_reports_history_score_summary(report_payload: Mapping[str, Any]) -> dict[str, Any]:
+    report = report_payload.get("report")
+    if not isinstance(report, Mapping):
+        raise ValueError("report_file_missing_report_payload")
+    schema_version = report.get("schema_version")
+    if schema_version == "tiny_suite_baseline_report_v1":
+        entries = report.get("entries")
+        if not isinstance(entries, list):
+            raise ValueError("report_file_invalid_baseline_entries")
+        aggregate_scores = [float(entry["aggregate_score"]) for entry in entries]
+        composite_scores = [float(entry["composite_score"]) for entry in entries]
+        return {
+            "report_schema_version": schema_version,
+            "entry_count": len(entries),
+            "aggregate_score_max": max(aggregate_scores) if aggregate_scores else 0.0,
+            "aggregate_score_min": min(aggregate_scores) if aggregate_scores else 0.0,
+            "composite_score_max": max(composite_scores) if composite_scores else 0.0,
+            "composite_score_min": min(composite_scores) if composite_scores else 0.0,
+        }
+    if schema_version == "tiny_suite_comparison_report_v1":
+        summary = report.get("summary")
+        if not isinstance(summary, Mapping):
+            raise ValueError("report_file_invalid_comparison_summary")
+        return {
+            "report_schema_version": schema_version,
+            "scenario_count": int(report.get("scenario_count", 0)),
+            "baseline_composite_score_total": float(summary["baseline_composite_score_total"]),
+            "candidate_composite_score_total": float(summary["candidate_composite_score_total"]),
+            "composite_score_difference_total": float(summary["composite_score_difference_total"]),
+            "composite_score_difference_average": float(summary["composite_score_difference_average"]),
+        }
+    raise ValueError(f"report_file_unsupported_schema_version:{schema_version}")
+
+
+def _build_reports_history_leaderboard(
+    history_entries: Sequence[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    totals: dict[str, dict[str, Any]] = {}
+    for entry in history_entries:
+        actor_ids = entry.get("actor_ids", ())
+        if not isinstance(actor_ids, Sequence) or isinstance(actor_ids, (str, bytes)):
+            continue
+        score_summary = entry.get("score_summary")
+        if not isinstance(score_summary, Mapping):
+            continue
+        report_schema_version = score_summary.get("report_schema_version")
+        if report_schema_version == "tiny_suite_baseline_report_v1":
+            contribution_value = float(score_summary.get("composite_score_max", 0.0))
+        elif report_schema_version == "tiny_suite_comparison_report_v1":
+            contribution_value = float(score_summary.get("candidate_composite_score_total", 0.0))
+        else:
+            contribution_value = 0.0
+
+        for actor_id in actor_ids:
+            if not isinstance(actor_id, str) or not actor_id:
+                continue
+            actor_totals = totals.setdefault(
+                actor_id,
+                {"actor_id": actor_id, "artifact_count": 0, "suite_ids": set(), "benchmark_ids": set(), "score_total": 0.0},
+            )
+            actor_totals["artifact_count"] += 1
+            actor_totals["score_total"] += contribution_value
+            suite_id = entry.get("suite_id")
+            benchmark_id = entry.get("benchmark_id")
+            if isinstance(suite_id, str) and suite_id:
+                actor_totals["suite_ids"].add(suite_id)
+            if isinstance(benchmark_id, str) and benchmark_id:
+                actor_totals["benchmark_ids"].add(benchmark_id)
+
+    leaderboard = []
+    for actor_id in sorted(totals):
+        actor_totals = totals[actor_id]
+        leaderboard.append(
+            {
+                "actor_id": actor_id,
+                "artifact_count": int(actor_totals["artifact_count"]),
+                "suite_ids": sorted(actor_totals["suite_ids"]),
+                "benchmark_ids": sorted(actor_totals["benchmark_ids"]),
+                "score_total": float(actor_totals["score_total"]),
+            }
+        )
+    leaderboard.sort(key=lambda entry: (-entry["score_total"], str(entry["actor_id"])))
+    return leaderboard
 
 
 def _read_json_mapping(path: Path, *, missing_prefix: str) -> Mapping[str, Any]:
@@ -820,6 +1065,15 @@ def _resolve_external_agent_command(agent_command: str | None) -> tuple[str, ...
     if len(parsed_command) == 0:
         raise ValueError("external_agent_command_empty")
     return parsed_command
+
+
+def _resolve_external_agent_label(agent_label: str | None) -> str | None:
+    if agent_label is None:
+        return None
+    normalized_label = agent_label.strip()
+    if normalized_label == "":
+        raise ValueError("external_agent_label_empty")
+    return normalized_label
 
 
 def _render_cli_output(payload: Mapping[str, Any], *, output_format: str) -> str:

@@ -127,3 +127,63 @@ def test_cli_tiny_suite_reporting_writes_output_file_matching_stdout(
         "manifest": manifest_payload,
         "report": file_payload,
     }
+
+    history_exit = main(["reports", "history", "--dir", str(tmp_path), "--output", "json"])
+    history_payload = _read_json_output(capsys.readouterr().out)
+
+    assert history_exit == 0
+    assert history_payload["accepted"] is True
+    assert history_payload["command"] == "reports_history"
+    assert history_payload["directory"] == str(tmp_path)
+    assert history_payload["artifact_count"] == 1
+    assert len(history_payload["history"]) == 1
+    history_entry = history_payload["history"][0]
+    assert history_entry["report_path"] == str(output_path)
+    assert history_entry["manifest_path"] == str(manifest_path)
+    assert history_entry["artifact_type"] == "suite_report_manifest_v1"
+    assert history_entry["command_mode"] == "suite_baseline"
+    assert history_entry["suite_id"] == "tiny"
+    assert history_entry["benchmark_id"] == "mudbench-cli"
+    assert history_entry["scenario_ids"] == [
+        "tiny-delayed-retrieval",
+        "tiny-fetch-quest",
+        "tiny-hidden-key",
+        "tiny-locked-path",
+        "tiny-social-trade",
+    ]
+    assert history_entry["actor_ids"] == ["agent-a", "agent-b"]
+    assert history_entry["score_summary"]["report_schema_version"] == "tiny_suite_baseline_report_v1"
+    assert history_entry["score_summary"]["entry_count"] == 10
+    assert history_entry["score_summary"]["aggregate_score_max"] >= history_entry["score_summary"]["aggregate_score_min"]
+    assert history_entry["score_summary"]["composite_score_max"] >= history_entry["score_summary"]["composite_score_min"]
+    leaderboard = history_payload["leaderboard"]
+    assert [entry["actor_id"] for entry in leaderboard] == ["agent-a", "agent-b"]
+    for entry in leaderboard:
+        assert entry["artifact_count"] == 1
+        assert entry["suite_ids"] == ["tiny"]
+        assert entry["benchmark_ids"] == ["mudbench-cli"]
+        assert isinstance(entry["score_total"], float)
+
+    export_exit = main(["reports", "export", "--dir", str(tmp_path), "--output", "json"])
+    export_payload = _read_json_output(capsys.readouterr().out)
+
+    assert export_exit == 0
+    assert export_payload["accepted"] is True
+    assert export_payload["command"] == "reports_export"
+    assert export_payload["viewmodel_version"] == "reports_export_viewmodel_v1"
+    assert export_payload["artifact_count"] == 1
+    assert export_payload["coverage"]["scenario_ids"] == history_entry["scenario_ids"]
+    assert export_payload["coverage"]["actor_ids"] == ["agent-a", "agent-b"]
+    assert export_payload["coverage"]["external_agent_labels"] == []
+    assert export_payload["artifacts"] == [
+        {
+            "report_path": str(output_path),
+            "manifest_path": str(manifest_path),
+            "artifact_type": "suite_report_manifest_v1",
+            "command_mode": "suite_baseline",
+            "suite_id": "tiny",
+            "benchmark_id": "mudbench-cli",
+        }
+    ]
+    assert export_payload["history"] == history_payload["history"]
+    assert export_payload["leaderboard"] == history_payload["leaderboard"]
