@@ -95,6 +95,16 @@ class DeterministicLocalRunnerSessionManager:
                 )
         return tuple(results)
 
+    def close(self, runners: Sequence[LocalProcessRunner]) -> None:
+        ordered_runners = tuple(sorted(runners, key=lambda runner: runner.command))
+        seen_runners: set[int] = set()
+        for runner in ordered_runners:
+            runner_id = id(runner)
+            if runner_id in seen_runners:
+                continue
+            seen_runners.add(runner_id)
+            runner.close()
+
 
 def _request_sort_key(request: LocalRunnerSessionRequest) -> tuple[str]:
     return (request.actor_id,)
@@ -106,4 +116,3 @@ def _validate_unique_actor_ids(requests: Sequence[LocalRunnerSessionRequest]) ->
         if request.actor_id in seen:
             raise ValueError(f"duplicate actor_id in requests: {request.actor_id}")
         seen.add(request.actor_id)
-

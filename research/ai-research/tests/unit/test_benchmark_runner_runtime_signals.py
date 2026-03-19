@@ -1,7 +1,15 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 from core.event_logger import EventRecord, normalize_payload
-from evaluation.benchmark_runner.runner import _build_runtime_step_signals
+from evaluation.benchmark_runner.runner import (
+    BenchmarkRunnerConfig,
+    _build_runtime_step_signals,
+    build_tiny_suite_baseline_report,
+    run_benchmark_lifecycle,
+)
 
 
 def _metric_count(signals: tuple[object, ...], *, actor_id: str, metric_name: str) -> int:
@@ -85,3 +93,36 @@ def test_runtime_signals_emits_social_trade_success_only_for_trade_completion_un
     assert _metric_count(
         non_trade_signals, actor_id="agent-a", metric_name="social.trade.completed"
     ) == 0
+
+
+def test_tiny_suite_baseline_report_includes_required_fields_for_configured_agents_only() -> None:
+    scenario = json.loads(Path("scenarios/canonical/tiny_fetch_quest.json").read_text(encoding="utf-8"))
+
+    result = run_benchmark_lifecycle(
+        BenchmarkRunnerConfig(
+            run_id="unit-suite-report-run",
+            benchmark_id="unit-benchmark",
+            scenario=scenario,
+            actor_ids=("agent-a", "agent-b"),
+        )
+    )
+
+    report = build_tiny_suite_baseline_report((result,))
+
+    assert report["schema_version"] == "tiny_suite_baseline_report_v1"
+    assert report["benchmark_ids"] == ["unit-benchmark"]
+    assert report["scenario_count"] == 1
+    assert report["entry_count"] == 2
+
+    entries = report["entries"]
+    assert [entry["agent_id"] for entry in entries] == ["agent-a", "agent-b"]
+    assert all(entry["scenario_id"] == "tiny-fetch-quest" for entry in entries)
+    assert all(isinstance(entry["aggregate_score"], float) for entry in entries)
+    assert all(isinstance(entry["composite_score"], float) for entry in entries)
+    assert all(entry["replay_ref"].startswith("sha256:") for entry in entries)
+    assert all(
+        set(entry["parity_ref"].keys()) == {"terminal_state_hash", "applied_steps_hash", "score_summary_hash"}
+        for entry in entries
+    )
+    assert all("quest_completion" in entry["normalized_metrics"] for entry in entries)
+    assert all("quest_completion" in entry["contributions"] for entry in entries)
