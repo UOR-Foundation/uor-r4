@@ -800,6 +800,15 @@
           ) {
             throw new Error("Shard export payload bundle_verification_summary must be an object when present.");
           }
+          if (
+            payload.bundle_recovery_summary !== undefined
+            && (
+              !payload.bundle_recovery_summary
+              || typeof payload.bundle_recovery_summary !== "object"
+            )
+          ) {
+            throw new Error("Shard export payload bundle_recovery_summary must be an object when present.");
+          }
           return payload;
         }
 
@@ -1145,6 +1154,7 @@
           var checkpoint = payload.checkpoint || {};
           var journal = payload.journal || {};
           var verificationSummary = payload.bundle_verification_summary || null;
+          var recoverySummary = payload.bundle_recovery_summary || null;
           var identityCounts = payload.identity_category_counts || {};
 
           shardMeta.appendChild(createMetaRow("Shard", String(payload.shard_id || "")));
@@ -1201,6 +1211,16 @@
             var issueCodes = Array.isArray(verificationSummary.issue_codes)
               ? verificationSummary.issue_codes.map(function (value) { return String(value); }).sort()
               : [];
+            var hashIssueCodes = Array.isArray(verificationSummary.hash_issue_codes)
+              ? verificationSummary.hash_issue_codes.map(function (value) { return String(value); }).sort()
+              : [];
+            var linkageIssueCodes = Array.isArray(verificationSummary.linkage_issue_codes)
+              ? verificationSummary.linkage_issue_codes.map(function (value) { return String(value); }).sort()
+              : [];
+            var manifestIssueCodes = Array.isArray(verificationSummary.manifest_issue_codes)
+              ? verificationSummary.manifest_issue_codes.map(function (value) { return String(value); }).sort()
+              : [];
+            var issueCategoryCounts = verificationSummary.issue_category_counts || {};
             shardVerification.appendChild(createMetaRow(
               "Status",
               verificationSummary.is_valid ? "valid" : "invalid"
@@ -1216,6 +1236,27 @@
             shardVerification.appendChild(createMetaRow(
               "Verified",
               String(verificationSummary.verified_artifact_count || 0)
+            ));
+            shardVerification.appendChild(createMetaRow(
+              "Hash Issues",
+              hashIssueCodes.length > 0 ? hashIssueCodes.join(" | ") : "none"
+            ));
+            shardVerification.appendChild(createMetaRow(
+              "Linkage Issues",
+              linkageIssueCodes.length > 0 ? linkageIssueCodes.join(" | ") : "none"
+            ));
+            shardVerification.appendChild(createMetaRow(
+              "Manifest Issues",
+              manifestIssueCodes.length > 0 ? manifestIssueCodes.join(" | ") : "none"
+            ));
+            shardVerification.appendChild(createMetaRow(
+              "Issue Counts",
+              [
+                "hash=" + String(issueCategoryCounts.hash || 0),
+                "linkage=" + String(issueCategoryCounts.linkage || 0),
+                "manifest=" + String(issueCategoryCounts.manifest || 0),
+                "other=" + String(issueCategoryCounts.other || 0)
+              ].join(" | ")
             ));
           } else {
             shardVerification.appendChild(createMetaRow(
@@ -1233,6 +1274,75 @@
             shardVerification.appendChild(createMetaRow(
               "Verified",
               "0"
+            ));
+            shardVerification.appendChild(createMetaRow(
+              "Hash Issues",
+              "none"
+            ));
+            shardVerification.appendChild(createMetaRow(
+              "Linkage Issues",
+              "none"
+            ));
+            shardVerification.appendChild(createMetaRow(
+              "Manifest Issues",
+              "none"
+            ));
+            shardVerification.appendChild(createMetaRow(
+              "Issue Counts",
+              "hash=0 | linkage=0 | manifest=0 | other=0"
+            ));
+          }
+
+          if (recoverySummary) {
+            var recoveryIssueCodes = Array.isArray(recoverySummary.issue_codes)
+              ? recoverySummary.issue_codes.map(function (value) { return String(value); }).sort()
+              : [];
+            var fatalIssueCodes = Array.isArray(recoverySummary.fatal_issue_codes)
+              ? recoverySummary.fatal_issue_codes.map(function (value) { return String(value); }).sort()
+              : [];
+            var degradableIssueCodes = Array.isArray(recoverySummary.degradable_issue_codes)
+              ? recoverySummary.degradable_issue_codes.map(function (value) { return String(value); }).sort()
+              : [];
+            shardVerification.appendChild(createMetaRow(
+              "Recovery State",
+              String(recoverySummary.recovery_state || "unknown")
+            ));
+            shardVerification.appendChild(createMetaRow(
+              "Verification Valid",
+              recoverySummary.verification_is_valid ? "true" : "false"
+            ));
+            shardVerification.appendChild(createMetaRow(
+              "Recovery Issues",
+              recoveryIssueCodes.length > 0 ? recoveryIssueCodes.join(" | ") : "none"
+            ));
+            shardVerification.appendChild(createMetaRow(
+              "Fatal Issues",
+              fatalIssueCodes.length > 0 ? fatalIssueCodes.join(" | ") : "none"
+            ));
+            shardVerification.appendChild(createMetaRow(
+              "Degradable Issues",
+              degradableIssueCodes.length > 0 ? degradableIssueCodes.join(" | ") : "none"
+            ));
+          } else {
+            shardVerification.appendChild(createMetaRow(
+              "Recovery State",
+              "not provided"
+            ));
+            shardVerification.appendChild(createMetaRow(
+              "Verification Valid",
+              "false"
+            ));
+            shardVerification.appendChild(createMetaRow(
+              "Recovery Issues",
+              "none"
+            ));
+            shardVerification.appendChild(createMetaRow(
+              "Fatal Issues",
+              "none"
+            ));
+            shardVerification.appendChild(createMetaRow(
+              "Degradable Issues",
+              "none"
             ));
           }
 

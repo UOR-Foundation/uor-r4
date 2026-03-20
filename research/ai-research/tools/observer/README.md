@@ -93,7 +93,8 @@ with TemporaryDirectory() as temp_dir:
     bundle_dir = Path(temp_dir)
     state.write_shard_artifact_bundle(bundle_dir)
     payload = state.build_shard_export_payload(
-        bundle_verification_summary=state.build_bundle_verification_summary(bundle_dir)
+        bundle_verification_summary=state.build_bundle_verification_summary(bundle_dir),
+        bundle_recovery_summary=state.classify_shard_bundle_recovery_state(bundle_dir),
     )
 
 print(json.dumps(payload, indent=2, sort_keys=True))
@@ -101,6 +102,12 @@ PY
 ```
 
 That produces a single deterministic JSON payload for the shard summary panel.
+If the payload includes a richer `bundle_verification_summary`, the observer
+will render the same hash-issue, linkage-issue, manifest-issue, and
+issue-category counts that were already computed in the shard export.
+If the payload also includes `bundle_recovery_summary`, the observer will show
+the same resumable/degraded/non_resumable recovery classification and issue
+breakdown from the shard export.
 
 ## Open The Observer
 
@@ -156,6 +163,8 @@ When a standalone shard export is loaded, the page shows:
 - active/inactive session counts
 - identity-category counts when present
 - bundle verification status when `bundle_verification_summary` is present
+- bundle hash-issue, linkage-issue, and manifest-issue details when those richer summary fields are present
+- bundle recovery state and fatal/degradable issue details when `bundle_recovery_summary` is present
 - checkpoint and journal generation placeholder metadata
 
 The benchmark-specific panels stay unchanged for `reports export` payloads.

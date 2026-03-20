@@ -7,6 +7,9 @@ from core.event_logger import EventRecord, normalize_payload
 from evaluation.benchmark_runner.runner import (
     BenchmarkRunnerConfig,
     _build_runtime_step_signals,
+    _build_runtime_state_snapshot_json,
+    _build_runtime_telemetry_summary,
+    _normalize_runtime_telemetry_record,
     build_tiny_suite_baseline_report,
     run_benchmark_lifecycle,
 )
@@ -93,6 +96,138 @@ def test_runtime_signals_emits_social_trade_success_only_for_trade_completion_un
     assert _metric_count(
         non_trade_signals, actor_id="agent-a", metric_name="social.trade.completed"
     ) == 0
+
+
+def test_runtime_signals_emit_llm_runtime_metrics_from_sidecar_records() -> None:
+    signals = _build_runtime_step_signals(
+        run_id="run-llm-signal",
+        step=3,
+        actor_ids=("agent-a",),
+        accepted_action_count=1,
+        gateway_failures=(),
+        emitted_events=(),
+        runtime_telemetry_records=(
+            {
+                "actor_id": "agent-a",
+                "run_id": "run-llm-signal",
+                "step": 3,
+                "repair_used": True,
+                "fail_closed_used": False,
+                "final_parse_status": "accepted_after_repair",
+                "failure_reason": "invalid_json",
+                "provider_request_count": 2,
+                "provider_latency_ms": 25.0,
+            },
+        ),
+    )
+
+    assert _metric_count(signals, actor_id="agent-a", metric_name="llm.runtime.turns") == 1
+    assert _metric_count(signals, actor_id="agent-a", metric_name="llm.runtime.repair_used") == 1
+    assert _metric_count(signals, actor_id="agent-a", metric_name="llm.runtime.fail_closed_used") == 1
+    assert (
+        _metric_count(
+            signals,
+            actor_id="agent-a",
+            metric_name="llm.runtime.final_parse_status.accepted_after_repair",
+        )
+        == 1
+    )
+
+
+def test_runtime_telemetry_summary_is_deterministic_and_actor_grouped() -> None:
+    records = (
+        {
+            "actor_id": "agent-a",
+            "run_id": "run-llm-signal",
+            "step": 1,
+            "repair_used": False,
+            "fail_closed_used": False,
+            "final_parse_status": "accepted_initial",
+            "provider_request_count": 1,
+            "provider_latency_ms": 12.0,
+        },
+        {
+            "actor_id": "agent-a",
+            "run_id": "run-llm-signal",
+            "step": 2,
+            "repair_used": True,
+            "fail_closed_used": True,
+            "final_parse_status": "fail_closed",
+            "failure_reason": "model_output_rejected_after_repair:invalid_json",
+            "provider_request_count": 2,
+            "provider_latency_ms": 15.0,
+        },
+    )
+
+    first = _build_runtime_telemetry_summary(records)
+    second = _build_runtime_telemetry_summary(records)
+
+    assert first == second
+    assert first == [
+        {
+            "actor_id": "agent-a",
+            "turn_count": 2,
+            "repair_used_count": 1,
+            "fail_closed_used_count": 1,
+            "provider_request_count_total": 3,
+            "provider_latency_ms_total": 27.0,
+            "final_parse_status_counts": {
+                "accepted_initial": 1,
+                "fail_closed": 1,
+            },
+            "failure_reasons": ["model_output_rejected_after_repair:invalid_json"],
+        }
+    ]
+
+
+def test_runtime_state_snapshot_includes_runtime_telemetry_summary() -> None:
+    scenario = json.loads(Path("scenarios/canonical/tiny_fetch_quest.json").read_text(encoding="utf-8"))
+    result = run_benchmark_lifecycle(
+        BenchmarkRunnerConfig(
+            run_id="unit-runtime-telemetry-run",
+            benchmark_id="unit-benchmark",
+            scenario=scenario,
+            actor_ids=("agent-a",),
+        )
+    )
+
+    state_json = _build_runtime_state_snapshot_json(
+        run_manifest=result.run_manifest,
+        tracker_snapshot=result.tracker_snapshot,
+        step_index=result.lifecycle_state.step_index,
+        runtime_telemetry_summary=_build_runtime_telemetry_summary(
+            (
+                _normalize_runtime_telemetry_record(
+                    {
+                        "actor_id": "agent-a",
+                        "run_id": "unit-runtime-telemetry-run",
+                        "step": 0,
+                        "repair_used": True,
+                        "fail_closed_used": False,
+                        "final_parse_status": "accepted_after_repair",
+                        "failure_reason": "invalid_json",
+                        "provider_name": "openai-chat-completions",
+                        "provider_request_count": 2,
+                        "provider_latency_ms": 10.0,
+                    }
+                ),
+            )
+        ),
+    )
+    payload = json.loads(state_json)
+
+    assert payload["runtime_telemetry_summary"] == [
+        {
+            "actor_id": "agent-a",
+            "turn_count": 1,
+            "repair_used_count": 1,
+            "fail_closed_used_count": 0,
+            "provider_request_count_total": 2,
+            "provider_latency_ms_total": 10.0,
+            "final_parse_status_counts": {"accepted_after_repair": 1},
+            "failure_reasons": ["invalid_json"],
+        }
+    ]
 
 
 def test_tiny_suite_baseline_report_includes_required_fields_for_configured_agents_only() -> None:

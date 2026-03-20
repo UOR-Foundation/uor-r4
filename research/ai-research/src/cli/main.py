@@ -4,13 +4,19 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shlex
+import sys
+from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Any, Mapping
 from typing import Sequence
 
+from agents.direct_provider_runner import build_direct_provider_command, resolve_direct_provider_config
+from human_console_client import run_human_console_session, run_human_shared_shard_session
 from evaluation.benchmark_runner.runner import (
     BenchmarkRunnerConfig,
+    build_playable_slice_comparison_entry,
     build_tiny_suite_baseline_report,
     build_tiny_suite_comparison_report,
     build_tiny_suite_external_comparison_report,
@@ -26,6 +32,26 @@ _DEFAULT_ACTOR_IDS = ("agent-a", "agent-b")
 _DEFAULT_SUITE_ID = "tiny"
 _BUILTIN_COMPARISON_AGENT_IDS = ("agent-a", "agent-b")
 _EXTERNAL_COMPARISON_AGENT_ID = "external-local-agent"
+_DIRECT_PROVIDER_PROMPT_ENGINES = (
+    "baseline",
+    "geometric-routed",
+    "angular-canonical",
+    "legacy-router-backed",
+)
+_ANGULAR_ROUTER_VARIANTS = (
+    "angular-hopf-base",
+    "angular-hopf-trans",
+)
+_LEGACY_ROUTER_VARIANTS = (
+    "legacy-phase4d_hopf_base",
+    "legacy-phase4d_hopf_transport",
+    "legacy-phase4d_hopf_product_phase",
+)
+_PLAYABLE_SLICE_SCENARIOS = (
+    "tiny-guarded-relic",
+    "tiny-hazard-route",
+    "tiny-delayed-cost",
+)
 _SUITE_REPLAY_DRILLDOWN_SCHEMA_VERSION = "suite_replay_drilldown_v1"
 _TINY_SUITE_SCENARIOS = (
     "tiny-delayed-retrieval",
@@ -236,6 +262,123 @@ _SCENARIO_PRESETS: dict[str, dict[str, Any]] = {
             }
         ],
     },
+    "tiny-guarded-relic": {
+        "scenario_id": "tiny-guarded-relic",
+        "title": "Tiny Guarded Relic",
+        "description": "Richer tiny scenario requiring navigation, defeating a sentinel, unlocking a sealed reliquary, and retrieving the relic.",
+        "start_room_id": "camp",
+        "max_steps": 8,
+        "seed": 77,
+        "version": "1.0",
+        "scenario_vars": {
+            "mode": "guarded-relic",
+            "agent_script_policy": "guarded-relic-v1",
+            "world_config_json": (
+                '{"items":[{"entity_id":"relic-key","entity_type":"item","location":"armory"},'
+                '{"entity_id":"relic","entity_type":"item","location":"reliquary"}],'
+                '"npcs":[{"entity_id":"sentinel","entity_type":"npc","health":10,"location":"watch-post"}],'
+                '"rooms":{"armory":{"description":"A cramped armory with a single iron key resting on a rack.",'
+                '"entities":[],"exits":{"north":"watch-post","west":"camp"},"title":"Armory"},'
+                '"camp":{"description":"A wind-beaten camp at the edge of the ruins.",'
+                '"entities":[],"exits":{"east":"armory"},"title":"Camp"},'
+                '"reliquary":{"description":"A sealed reliquary where the relic rests on a stone pedestal.",'
+                '"entities":[],"exits":{"south":"seal-door"},"title":"Reliquary"},'
+                '"seal-door":{"description":"A heavy sealed door blocks the final chamber.",'
+                '"entities":[],"exits":{"west":"watch-post"},"title":"Seal Door"},'
+                '"watch-post":{"description":"A narrow watch-post where a sentinel keeps vigil over the sealed door.",'
+                '"entities":[],"exits":{"east":"seal-door","south":"armory"},"title":"Watch Post"}},'
+                '"unlock_effects":[{"effect_id":"reliquary-seal","item_id":"relic-key","source_room_id":"seal-door",'
+                '"direction":"north","destination_room_id":"reliquary","consume_item":false,"requires_actor_in_place":true}]}'
+            ),
+        },
+        "objectives": [
+            {
+                "objective_id": "collect-relic",
+                "objective_type": "collect_item",
+                "target_id": "relic",
+                "required_count": 1,
+            }
+        ],
+    },
+    "tiny-hazard-route": {
+        "scenario_id": "tiny-hazard-route",
+        "title": "Tiny Hazard Route",
+        "description": "Tiny hazard-route scenario with a risky guarded shortcut and a safer bridge-kit bypass.",
+        "start_room_id": "camp",
+        "max_steps": 8,
+        "seed": 88,
+        "version": "1.0",
+        "scenario_vars": {
+            "mode": "hazard-tradeoff",
+            "agent_script_policy": "hazard-tradeoff-v1",
+            "world_config_json": (
+                '{"items":[{"entity_id":"bridge-kit","entity_type":"item","location":"supply-cache"},'
+                '{"entity_id":"storm-core","entity_type":"item","location":"vault"}],'
+                '"npcs":[{"entity_id":"raider","entity_type":"npc","health":20,"location":"ember-pass"}],'
+                '"rooms":{"bridge-approach":{"description":"A broken bridge spans the final ravine, but a bridge kit could make the crossing safe.",'
+                '"entities":[],"exits":{"south":"supply-cache"},"title":"Bridge Approach"},'
+                '"camp":{"description":"A storm-battered camp between a guarded choke point and an abandoned supply route.",'
+                '"entities":[],"exits":{"east":"supply-cache","north":"ember-pass"},"title":"Storm Camp"},'
+                '"ember-pass":{"description":"A charred pass watched by a raider; the route is short but dangerous.",'
+                '"entities":[],"exits":{"north":"vault","south":"camp"},"title":"Ember Pass"},'
+                '"supply-cache":{"description":"A half-collapsed cache with salvage that could make the longer route safe.",'
+                '"entities":[],"exits":{"north":"bridge-approach","west":"camp"},"title":"Supply Cache"},'
+                '"vault":{"description":"A sealed storm vault where the storm core hums behind the last approach.",'
+                '"entities":[],"exits":{"south":"ember-pass"},"title":"Storm Vault"}},'
+                '"unlock_effects":[{"effect_id":"bridge-span","item_id":"bridge-kit","source_room_id":"bridge-approach",'
+                '"direction":"north","destination_room_id":"vault","consume_item":false,"requires_actor_in_place":true}]}'
+            ),
+        },
+        "objectives": [
+            {
+                "objective_id": "collect-storm-core",
+                "objective_type": "collect_item",
+                "target_id": "storm-core",
+                "required_count": 1,
+            }
+        ],
+    },
+    "tiny-delayed-cost": {
+        "scenario_id": "tiny-delayed-cost",
+        "title": "Tiny Delayed Cost",
+        "description": "Tiny delayed-cost scenario where one power cell can be spent early for a shortcut or saved for the final vault seal.",
+        "start_room_id": "camp",
+        "max_steps": 8,
+        "seed": 93,
+        "version": "1.0",
+        "scenario_vars": {
+            "mode": "delayed-cost-planning",
+            "agent_script_policy": "delayed-cost-v1",
+            "world_config_json": (
+                '{"items":[{"entity_id":"power-cell","entity_type":"item","location":"depot"},'
+                '{"entity_id":"archive-ledger","entity_type":"item","location":"vault"}],'
+                '"rooms":{"camp":{"description":"A split base camp between a dormant tram spur and a maintenance route into the vault wing.",'
+                '"entities":[],"exits":{"east":"depot","north":"tram-hub"},"title":"Camp"},'
+                '"depot":{"description":"A supply depot where a single power cell rests on a charging cradle.",'
+                '"entities":[],"exits":{"east":"service-tunnel","west":"camp"},"title":"Depot"},'
+                '"service-tunnel":{"description":"A cramped service tunnel that reaches the vault threshold without spending the cell early.",'
+                '"entities":[],"exits":{"north":"vault-door","west":"depot"},"title":"Service Tunnel"},'
+                '"tram-hub":{"description":"An inactive tram hub where the power cell can energize a shortcut, but doing so will drain it.",'
+                '"entities":[],"exits":{"south":"camp"},"title":"Tram Hub"},'
+                '"vault":{"description":"The inner archive vault, where the ledger waits once the final seal is powered.",'
+                '"entities":[],"exits":{"south":"vault-door"},"title":"Vault"},'
+                '"vault-door":{"description":"A sealed vault threshold whose northern lock also requires the same power cell.",'
+                '"entities":[],"exits":{"south":"service-tunnel"},"title":"Vault Door"}},'
+                '"unlock_effects":[{"effect_id":"tram-bypass","item_id":"power-cell","source_room_id":"tram-hub",'
+                '"direction":"east","destination_room_id":"vault-door","consume_item":true,"requires_actor_in_place":true},'
+                '{"effect_id":"vault-seal","item_id":"power-cell","source_room_id":"vault-door",'
+                '"direction":"north","destination_room_id":"vault","consume_item":true,"requires_actor_in_place":true}]}'
+            ),
+        },
+        "objectives": [
+            {
+                "objective_id": "collect-archive-ledger",
+                "objective_type": "collect_item",
+                "target_id": "archive-ledger",
+                "required_count": 1,
+            }
+        ],
+    },
 }
 
 
@@ -290,6 +433,175 @@ def build_parser() -> argparse.ArgumentParser:
         "--persistent-agent-session",
         action="store_true",
         help="Keep the external local-process agent command alive across turns using the same stdin/stdout JSON contract; requires --agent-command",
+    )
+    run_parser.add_argument(
+        "--direct-provider",
+        choices=("openai-chat-completions",),
+        default=None,
+        help="Execute one bounded direct-provider benchmark path using the built-in canonical LLM runtime helpers.",
+    )
+    run_parser.add_argument(
+        "--direct-provider-model",
+        default=None,
+        help="Direct-provider model identifier. Falls back to MUDBENCH_OPENAI_MODEL for the supported provider path.",
+    )
+    run_parser.add_argument(
+        "--direct-provider-timeout-seconds",
+        type=float,
+        default=None,
+        help="Optional external-agent timeout override for live direct-provider run turns only.",
+    )
+    run_parser.add_argument(
+        "--prompt-engine",
+        choices=_DIRECT_PROVIDER_PROMPT_ENGINES,
+        default="baseline",
+        help="Prompt assembly mode for the optional direct-provider benchmark path.",
+    )
+    run_parser.add_argument(
+        "--router-variant",
+        choices=_ANGULAR_ROUTER_VARIANTS + _LEGACY_ROUTER_VARIANTS,
+        default=None,
+        help="Router variant to use when a variant-aware prompt engine is selected.",
+    )
+
+    play_parser = subcommands.add_parser("play", help="Launch a minimal local human-play console client")
+    play_parser.add_argument(
+        "--scenario",
+        choices=tuple(sorted(_SCENARIO_PRESETS.keys())),
+        default="minimal",
+        help="Built-in scenario preset to execute",
+    )
+    play_parser.add_argument(
+        "--scenario-file",
+        default=None,
+        help="Path to a scenario definition JSON file on disk",
+    )
+    play_parser.add_argument("--run-id", default="human-console", help="Run identifier")
+    play_parser.add_argument("--run-seed", type=int, default=None, help="Optional run seed override")
+    play_parser.add_argument("--max-steps", type=int, default=None, help="Optional max step override")
+    play_parser.add_argument(
+        "--actor-id",
+        default="human-player",
+        help="Human-controlled actor identifier",
+    )
+
+    shared_play_parser = subcommands.add_parser(
+        "play-shared-shard",
+        help="Launch a minimal local shared-shard console loop for multiple participants",
+    )
+    shared_play_parser.add_argument(
+        "--scenario",
+        choices=tuple(sorted(_SCENARIO_PRESETS.keys())),
+        default="tiny-fetch-quest",
+        help="Built-in scenario preset to execute",
+    )
+    shared_play_parser.add_argument(
+        "--scenario-file",
+        default=None,
+        help="Path to a scenario definition JSON file on disk",
+    )
+    shared_play_parser.add_argument("--run-id", default="human-shared-shard", help="Run identifier")
+    shared_play_parser.add_argument("--shard-id", default="shared-shard-local", help="Shard identifier")
+    shared_play_parser.add_argument("--run-seed", type=int, default=None, help="Optional run seed override")
+    shared_play_parser.add_argument("--max-steps", type=int, default=None, help="Optional max step override")
+    shared_play_parser.add_argument(
+        "--actor-id",
+        action="append",
+        default=[],
+        help="Participant actor identifier (repeatable). Defaults to two local participants.",
+    )
+    shared_play_parser.add_argument(
+        "--mock-agent-actor-id",
+        action="append",
+        default=[],
+        help="Participant actor identifier to run through the local mock LLM path (repeatable).",
+    )
+    shared_play_parser.add_argument(
+        "--agent-command",
+        default=None,
+        help="Local-process agent command string for one external shared participant.",
+    )
+    shared_play_parser.add_argument(
+        "--external-agent-actor-id",
+        default=None,
+        help="Participant actor identifier to run through the external local-process wrapper path.",
+    )
+    shared_play_parser.add_argument(
+        "--persistent-agent-session",
+        action="store_true",
+        help="Keep the external shared participant alive across turns using the same stdin/stdout JSON contract; requires --agent-command.",
+    )
+    shared_play_parser.add_argument(
+        "--direct-provider",
+        choices=("openai-chat-completions",),
+        default=None,
+        help="Execute one bounded direct-provider participant path in shared shard play.",
+    )
+    shared_play_parser.add_argument(
+        "--direct-provider-model",
+        default=None,
+        help="Direct-provider model identifier. Falls back to MUDBENCH_OPENAI_MODEL for the supported shared path.",
+    )
+
+    compare_parser = subcommands.add_parser(
+        "compare-playable-slices",
+        help="Execute a compact comparison pass across the richer playable slices",
+    )
+    compare_parser.add_argument("--benchmark-id", default=_DEFAULT_BENCHMARK_ID, help="Benchmark identifier")
+    compare_parser.add_argument(
+        "--actor-id",
+        default="agent-a",
+        help="Single actor identifier used across comparison runs",
+    )
+    compare_parser.add_argument(
+        "--output",
+        choices=("json", "pretty"),
+        default="json",
+        help="CLI output format",
+    )
+    compare_parser.add_argument(
+        "--direct-provider",
+        choices=("openai-chat-completions",),
+        default=None,
+        help="Optionally include one bounded direct-provider comparison mode.",
+    )
+    compare_parser.add_argument(
+        "--direct-provider-model",
+        default=None,
+        help="Direct-provider model identifier. Falls back to MUDBENCH_OPENAI_MODEL for the supported provider path.",
+    )
+    compare_parser.add_argument(
+        "--include-routed-prompt-engine",
+        action="store_true",
+        help="Also compare the optional geometric-routed prompt engine for the direct-provider mode.",
+    )
+    compare_parser.add_argument(
+        "--include-angular-canonical-prompt-engine",
+        action="store_true",
+        help="Also compare the optional canonical angular prompt engine for the direct-provider mode.",
+    )
+    compare_parser.add_argument(
+        "--angular-router-variant",
+        choices=_ANGULAR_ROUTER_VARIANTS,
+        default=None,
+        help="Canonical angular router variant to use when --include-angular-canonical-prompt-engine is selected.",
+    )
+    compare_parser.add_argument(
+        "--include-legacy-router-backed-prompt-engine",
+        action="store_true",
+        help="Also compare the explicit legacy router-backed proxy prompt engine for the direct-provider mode.",
+    )
+    compare_parser.add_argument(
+        "--legacy-router-variant",
+        choices=_LEGACY_ROUTER_VARIANTS,
+        default=None,
+        help="Legacy proxy router variant to use when --include-legacy-router-backed-prompt-engine is selected.",
+    )
+    compare_parser.add_argument(
+        "--direct-provider-comparison-timeout-seconds",
+        type=float,
+        default=None,
+        help="Optional external-agent timeout override for live direct-provider comparison turns only.",
     )
 
     suite_parser = subcommands.add_parser("suite", help="Execute deterministic tiny-suite baseline reporting")
@@ -414,6 +726,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "run":
         actor_ids = tuple(args.actor_id) if len(args.actor_id) > 0 else _DEFAULT_ACTOR_IDS
         try:
+            if args.direct_provider is None and args.direct_provider_model is not None:
+                raise ValueError("direct_provider_model_requires_direct_provider")
+            if args.direct_provider is None and args.direct_provider_timeout_seconds is not None:
+                raise ValueError("direct_provider_timeout_requires_direct_provider")
             scenario_payload = _resolve_run_scenario_payload(
                 scenario_name=args.scenario,
                 scenario_file=args.scenario_file,
@@ -428,6 +744,43 @@ def main(argv: Sequence[str] | None = None) -> int:
             external_agent_label = external_agent_config["label"]
             external_agent_profile_id = external_agent_config["profile_id"]
             persistent_agent_session = external_agent_config["persistent_agent_session"]
+            if args.direct_provider is not None:
+                if external_agent_command is not None:
+                    raise ValueError("direct_provider_conflicts_with_agent_command")
+                if args.agent_profile is not None:
+                    raise ValueError("direct_provider_conflicts_with_agent_profile")
+                if args.agent_label is not None:
+                    raise ValueError("direct_provider_conflicts_with_agent_label")
+                if persistent_agent_session:
+                    raise ValueError("direct_provider_conflicts_with_persistent_agent_session")
+                if len(actor_ids) != 1:
+                    raise ValueError("direct_provider_requires_single_actor")
+                if args.direct_provider_timeout_seconds is not None and args.direct_provider_timeout_seconds <= 0.0:
+                    raise ValueError("direct_provider_timeout_seconds_must_be_positive")
+                if args.router_variant is not None and not _prompt_engine_supports_router_variant(args.prompt_engine):
+                    raise ValueError("router_variant_requires_variant_prompt_engine")
+                if (
+                    args.router_variant is not None
+                    and not _router_variant_matches_prompt_engine(args.prompt_engine, args.router_variant)
+                ):
+                    raise ValueError("router_variant_mismatch_for_prompt_engine")
+                direct_provider_config = resolve_direct_provider_config(
+                    provider=args.direct_provider,
+                    model=args.direct_provider_model,
+                    env=os.environ,
+                )
+                external_agent_command = build_direct_provider_command(
+                    direct_provider_config,
+                    python_executable=sys.executable,
+                    prompt_engine=args.prompt_engine,
+                    router_variant=args.router_variant,
+                )
+                external_agent_label = f"direct-provider:{direct_provider_config.provider}"
+                external_agent_profile_id = None
+            elif args.prompt_engine != "baseline":
+                raise ValueError("prompt_engine_requires_direct_provider")
+            elif args.router_variant is not None:
+                raise ValueError("router_variant_requires_variant_prompt_engine")
             if persistent_agent_session and external_agent_command is None:
                 raise ValueError("persistent_agent_session_requires_agent_command")
             if external_agent_label is not None and external_agent_command is None:
@@ -450,6 +803,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             max_steps_override=args.max_steps,
             external_agent_command=external_agent_command,
             persistent_agent_session=persistent_agent_session,
+            external_agent_timeout_seconds=args.direct_provider_timeout_seconds,
         )
 
         try:
@@ -472,6 +826,384 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(json.dumps(response_payload, sort_keys=True, indent=2, ensure_ascii=True))
         else:
             print(json.dumps(response_payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True))
+        return 0
+    if args.command == "play":
+        try:
+            scenario_payload = _resolve_run_scenario_payload(
+                scenario_name=args.scenario,
+                scenario_file=args.scenario_file,
+            )
+        except ValueError as exc:
+            error_payload = {
+                "accepted": False,
+                "error_type": "play_rejected",
+                "reason": str(exc),
+            }
+            print(json.dumps(error_payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True))
+            return 1
+
+        try:
+            result = run_human_console_session(
+                scenario=scenario_payload,
+                actor_id=args.actor_id,
+                run_id=args.run_id,
+                run_seed=args.run_seed,
+                max_steps_override=args.max_steps,
+            )
+        except (ValueError, RuntimeError) as exc:
+            error_payload = {
+                "accepted": False,
+                "error_type": "play_rejected",
+                "reason": str(exc),
+            }
+            print(json.dumps(error_payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True))
+            return 1
+
+        print(_render_human_console_summary(result))
+        return 0
+    if args.command == "play-shared-shard":
+        mock_agent_actor_ids = tuple(args.mock_agent_actor_id)
+        try:
+            external_agent_config = {"command": None, "persistent_agent_session": False}
+            external_agent_actor_id = args.external_agent_actor_id
+            if args.direct_provider is None and args.direct_provider_model is not None:
+                raise ValueError("direct_provider_model_requires_direct_provider")
+            if args.direct_provider is not None:
+                if args.agent_command is not None:
+                    raise ValueError("direct_provider_conflicts_with_agent_command")
+                if args.persistent_agent_session:
+                    raise ValueError("direct_provider_conflicts_with_persistent_agent_session")
+                direct_provider_config = resolve_direct_provider_config(
+                    provider=args.direct_provider,
+                    model=args.direct_provider_model,
+                    env=os.environ,
+                )
+                external_agent_config = {
+                    "command": build_direct_provider_command(
+                        direct_provider_config,
+                        python_executable=sys.executable,
+                    ),
+                    "persistent_agent_session": False,
+                }
+                if external_agent_actor_id is None:
+                    external_agent_actor_id = "direct-provider"
+            if args.agent_command is not None:
+                external_agent_config = _resolve_external_agent_config(
+                    agent_command=args.agent_command,
+                    agent_label=None,
+                    agent_profile=None,
+                    persistent_agent_session=args.persistent_agent_session,
+                )
+                if external_agent_actor_id is None:
+                    external_agent_actor_id = "external-agent"
+            persistent_agent_session = external_agent_config["persistent_agent_session"]
+            if len(args.actor_id) > 0:
+                actor_ids = tuple(args.actor_id)
+            elif external_agent_actor_id is not None:
+                actor_ids = ("human-a", external_agent_actor_id)
+            elif len(mock_agent_actor_ids) > 0:
+                actor_ids = ("human-a",) + mock_agent_actor_ids
+            else:
+                actor_ids = ("human-a", "human-b")
+            scenario_payload = _resolve_run_scenario_payload(
+                scenario_name=args.scenario,
+                scenario_file=args.scenario_file,
+            )
+            if len(actor_ids) < 2:
+                raise ValueError("shared_shard_loop_requires_at_least_two_actors")
+            if len(set(mock_agent_actor_ids)) != len(mock_agent_actor_ids):
+                raise ValueError("shared_shard_loop_agent_actor_ids_must_be_unique")
+            if any(actor_id not in actor_ids for actor_id in mock_agent_actor_ids):
+                raise ValueError("shared_shard_loop_agent_actor_ids_must_be_subset_of_actor_ids")
+            if len(mock_agent_actor_ids) >= len(actor_ids):
+                raise ValueError("shared_shard_loop_requires_at_least_one_human_actor")
+            if args.agent_command is None and args.direct_provider is None and args.external_agent_actor_id is not None:
+                raise ValueError("external_agent_actor_id_requires_agent_command")
+            if args.persistent_agent_session and args.agent_command is None:
+                raise ValueError("persistent_agent_session_requires_agent_command")
+            if args.agent_command is not None and external_agent_actor_id not in actor_ids:
+                raise ValueError("shared_shard_loop_external_agent_actor_ids_must_be_subset_of_actor_ids")
+            if external_agent_actor_id is not None and external_agent_actor_id in mock_agent_actor_ids:
+                raise ValueError("shared_shard_loop_actor_id_conflicts_between_mock_and_external_agents")
+        except ValueError as exc:
+            error_payload = {
+                "accepted": False,
+                "error_type": "play_shared_shard_rejected",
+                "reason": str(exc),
+            }
+            print(json.dumps(error_payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True))
+            return 1
+
+        try:
+            result = run_human_shared_shard_session(
+                scenario=scenario_payload,
+                actor_ids=actor_ids,
+                mock_agent_actor_ids=mock_agent_actor_ids,
+                external_agent_commands_by_actor=(
+                    {external_agent_actor_id: external_agent_config["command"]}
+                    if external_agent_actor_id is not None and external_agent_config["command"] is not None
+                    else None
+                ),
+                persistent_agent_session=persistent_agent_session,
+                run_id=args.run_id,
+                shard_id=args.shard_id,
+                run_seed=args.run_seed,
+                max_steps_override=args.max_steps,
+            )
+        except (ValueError, RuntimeError) as exc:
+            error_payload = {
+                "accepted": False,
+                "error_type": "play_shared_shard_rejected",
+                "reason": str(exc),
+            }
+            print(json.dumps(error_payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True))
+            return 1
+
+        print(_render_human_console_summary(result))
+        return 0
+    if args.command == "compare-playable-slices":
+        try:
+            if args.direct_provider is None and args.direct_provider_model is not None:
+                raise ValueError("direct_provider_model_requires_direct_provider")
+            if args.direct_provider is None and args.direct_provider_comparison_timeout_seconds is not None:
+                raise ValueError("direct_provider_comparison_timeout_requires_direct_provider")
+            if args.direct_provider is None and args.include_routed_prompt_engine:
+                raise ValueError("include_routed_prompt_engine_requires_direct_provider")
+            if args.direct_provider is None and args.include_angular_canonical_prompt_engine:
+                raise ValueError("include_angular_canonical_prompt_engine_requires_direct_provider")
+            if args.direct_provider is None and args.include_legacy_router_backed_prompt_engine:
+                raise ValueError("include_legacy_router_backed_prompt_engine_requires_direct_provider")
+            if args.direct_provider is None and args.angular_router_variant is not None:
+                raise ValueError("angular_router_variant_requires_direct_provider")
+            if args.direct_provider is None and args.legacy_router_variant is not None:
+                raise ValueError("legacy_router_variant_requires_direct_provider")
+            if args.direct_provider_comparison_timeout_seconds is not None and (
+                args.direct_provider_comparison_timeout_seconds <= 0.0
+            ):
+                raise ValueError("direct_provider_comparison_timeout_seconds_must_be_positive")
+            if (
+                args.direct_provider is not None
+                and args.angular_router_variant is not None
+                and not args.include_angular_canonical_prompt_engine
+            ):
+                raise ValueError("angular_router_variant_requires_angular_canonical_prompt_engine")
+            if (
+                args.direct_provider is not None
+                and args.legacy_router_variant is not None
+                and not args.include_legacy_router_backed_prompt_engine
+            ):
+                raise ValueError("legacy_router_variant_requires_legacy_router_backed_prompt_engine")
+
+            direct_provider_command: tuple[str, ...] | None = None
+            direct_provider_identity: str | None = None
+            direct_provider_routed_command: tuple[str, ...] | None = None
+            direct_provider_angular_canonical_command: tuple[str, ...] | None = None
+            direct_provider_legacy_router_backed_command: tuple[str, ...] | None = None
+            if args.direct_provider is not None:
+                direct_provider_config = resolve_direct_provider_config(
+                    provider=args.direct_provider,
+                    model=args.direct_provider_model,
+                    env=os.environ,
+                )
+                direct_provider_command = build_direct_provider_command(
+                    direct_provider_config,
+                    python_executable=sys.executable,
+                )
+                direct_provider_identity = f"direct-provider:{direct_provider_config.provider}"
+                if args.include_routed_prompt_engine:
+                    direct_provider_routed_command = build_direct_provider_command(
+                        direct_provider_config,
+                        python_executable=sys.executable,
+                        prompt_engine="geometric-routed",
+                    )
+                if args.include_angular_canonical_prompt_engine:
+                    direct_provider_angular_canonical_command = build_direct_provider_command(
+                        direct_provider_config,
+                        python_executable=sys.executable,
+                        prompt_engine="angular-canonical",
+                        router_variant=args.angular_router_variant,
+                    )
+                if args.include_legacy_router_backed_prompt_engine:
+                    direct_provider_legacy_router_backed_command = build_direct_provider_command(
+                        direct_provider_config,
+                        python_executable=sys.executable,
+                        prompt_engine="legacy-router-backed",
+                        router_variant=args.legacy_router_variant,
+                    )
+
+            entries: list[dict[str, Any]] = []
+            mode_ids = ["built_in", "mock_wrapper"]
+            if direct_provider_command is not None:
+                mode_ids.append("direct_provider")
+            if direct_provider_routed_command is not None:
+                mode_ids.append("direct_provider_routed")
+            if direct_provider_angular_canonical_command is not None:
+                mode_ids.append("direct_provider_angular_canonical")
+            if direct_provider_legacy_router_backed_command is not None:
+                mode_ids.append("direct_provider_legacy_router_backed")
+
+            for scenario_name in _PLAYABLE_SLICE_SCENARIOS:
+                scenario_payload = _SCENARIO_PRESETS[scenario_name]
+                built_in_result = run_benchmark_lifecycle(
+                    BenchmarkRunnerConfig(
+                        run_id=f"cli-compare-built-{scenario_name}",
+                        benchmark_id=args.benchmark_id,
+                        scenario=scenario_payload,
+                        actor_ids=(args.actor_id,),
+                    )
+                )
+                entries.append(
+                    build_playable_slice_comparison_entry(
+                        built_in_result,
+                        mode="built_in",
+                        agent_identity="built-in",
+                        actor_id=args.actor_id,
+                    )
+                )
+
+                mock_wrapper_result = run_benchmark_lifecycle(
+                    BenchmarkRunnerConfig(
+                        run_id=f"cli-compare-mock-{scenario_name}",
+                        benchmark_id=args.benchmark_id,
+                        scenario=scenario_payload,
+                        actor_ids=(args.actor_id,),
+                        external_agent_command=(
+                            sys.executable,
+                            "examples/agents/mock_llm_wrapper.py",
+                        ),
+                    )
+                )
+                entries.append(
+                    build_playable_slice_comparison_entry(
+                        mock_wrapper_result,
+                        mode="mock_wrapper",
+                        agent_identity="mock-llm-wrapper",
+                        actor_id=args.actor_id,
+                    )
+                )
+
+                if direct_provider_command is not None and direct_provider_identity is not None:
+                    direct_provider_result = run_benchmark_lifecycle(
+                        BenchmarkRunnerConfig(
+                            run_id=f"cli-compare-direct-{scenario_name}",
+                            benchmark_id=args.benchmark_id,
+                            scenario=scenario_payload,
+                            actor_ids=(args.actor_id,),
+                            external_agent_command=direct_provider_command,
+                            external_agent_timeout_seconds=args.direct_provider_comparison_timeout_seconds,
+                        )
+                    )
+                    entries.append(
+                        _with_prompt_engine_metadata(
+                            build_playable_slice_comparison_entry(
+                                direct_provider_result,
+                                mode="direct_provider",
+                                agent_identity=direct_provider_identity,
+                                actor_id=args.actor_id,
+                            ),
+                            prompt_engine="baseline",
+                        )
+                    )
+
+                if direct_provider_routed_command is not None and direct_provider_identity is not None:
+                    direct_provider_routed_result = run_benchmark_lifecycle(
+                        BenchmarkRunnerConfig(
+                            run_id=f"cli-compare-direct-routed-{scenario_name}",
+                            benchmark_id=args.benchmark_id,
+                            scenario=scenario_payload,
+                            actor_ids=(args.actor_id,),
+                            external_agent_command=direct_provider_routed_command,
+                            external_agent_timeout_seconds=args.direct_provider_comparison_timeout_seconds,
+                        )
+                    )
+                    entries.append(
+                        _with_prompt_engine_metadata(
+                            build_playable_slice_comparison_entry(
+                                direct_provider_routed_result,
+                                mode="direct_provider_routed",
+                                agent_identity=f"{direct_provider_identity}:geometric-routed",
+                                actor_id=args.actor_id,
+                            ),
+                            prompt_engine="geometric-routed",
+                        )
+                    )
+
+                if direct_provider_angular_canonical_command is not None and direct_provider_identity is not None:
+                    direct_provider_angular_canonical_result = run_benchmark_lifecycle(
+                        BenchmarkRunnerConfig(
+                            run_id=f"cli-compare-direct-angular-canonical-{scenario_name}",
+                            benchmark_id=args.benchmark_id,
+                            scenario=scenario_payload,
+                            actor_ids=(args.actor_id,),
+                            external_agent_command=direct_provider_angular_canonical_command,
+                            external_agent_timeout_seconds=args.direct_provider_comparison_timeout_seconds,
+                        )
+                    )
+                    entries.append(
+                        _with_prompt_engine_metadata(
+                            build_playable_slice_comparison_entry(
+                                direct_provider_angular_canonical_result,
+                                mode="direct_provider_angular_canonical",
+                                agent_identity=(
+                                    f"{direct_provider_identity}:angular-canonical:"
+                                    f"{args.angular_router_variant or 'angular-hopf-trans'}"
+                                ),
+                                actor_id=args.actor_id,
+                            ),
+                            prompt_engine="angular-canonical",
+                            router_variant=args.angular_router_variant or "angular-hopf-trans",
+                        )
+                    )
+
+                if (
+                    direct_provider_legacy_router_backed_command is not None
+                    and direct_provider_identity is not None
+                ):
+                    direct_provider_legacy_router_backed_result = run_benchmark_lifecycle(
+                        BenchmarkRunnerConfig(
+                            run_id=f"cli-compare-direct-legacy-router-backed-{scenario_name}",
+                            benchmark_id=args.benchmark_id,
+                            scenario=scenario_payload,
+                            actor_ids=(args.actor_id,),
+                            external_agent_command=direct_provider_legacy_router_backed_command,
+                            external_agent_timeout_seconds=args.direct_provider_comparison_timeout_seconds,
+                        )
+                    )
+                    entries.append(
+                        _with_prompt_engine_metadata(
+                            build_playable_slice_comparison_entry(
+                                direct_provider_legacy_router_backed_result,
+                                mode="direct_provider_legacy_router_backed",
+                                agent_identity=(
+                                    f"{direct_provider_identity}:legacy-router-backed:"
+                                    f"{args.legacy_router_variant or 'legacy-phase4d_hopf_base'}"
+                                ),
+                                actor_id=args.actor_id,
+                            ),
+                            prompt_engine="legacy-router-backed",
+                            router_variant=args.legacy_router_variant or "legacy-phase4d_hopf_base",
+                        )
+                    )
+        except (ValueError, RuntimeError) as exc:
+            error_payload = {
+                "accepted": False,
+                "error_type": "playable_slice_comparison_rejected",
+                "reason": str(exc),
+            }
+            print(json.dumps(error_payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True))
+            return 1
+
+        response_payload = {
+            "accepted": True,
+            "comparison_schema": "playable_slice_comparison_v1",
+            "benchmark_id": args.benchmark_id,
+            "actor_id": args.actor_id,
+            "scenario_ids": list(_PLAYABLE_SLICE_SCENARIOS),
+            "mode_ids": mode_ids,
+            "entry_count": len(entries),
+            "entries": entries,
+        }
+        print(_render_cli_output(response_payload, output_format=args.output))
         return 0
     if args.command == "suite":
         actor_ids = tuple(args.actor_id) if len(args.actor_id) > 0 else _DEFAULT_ACTOR_IDS
@@ -1873,10 +2605,88 @@ def _resolve_external_agent_label(agent_label: str | None) -> str | None:
     return normalized_label
 
 
+def _prompt_engine_supports_router_variant(prompt_engine: str) -> bool:
+    return prompt_engine in {"angular-canonical", "legacy-router-backed"}
+
+
+def _router_variant_matches_prompt_engine(prompt_engine: str, router_variant: str) -> bool:
+    if prompt_engine == "angular-canonical":
+        return router_variant in _ANGULAR_ROUTER_VARIANTS
+    if prompt_engine == "legacy-router-backed":
+        return router_variant in _LEGACY_ROUTER_VARIANTS
+    return False
+
+
+def _with_prompt_engine_metadata(
+    entry: Mapping[str, Any],
+    *,
+    prompt_engine: str,
+    router_variant: str | None = None,
+) -> dict[str, Any]:
+    enriched_entry = dict(entry)
+    enriched_entry["prompt_engine"] = prompt_engine
+    if router_variant is not None:
+        enriched_entry["router_variant"] = router_variant
+    return enriched_entry
+
+
 def _render_cli_output(payload: Mapping[str, Any], *, output_format: str) -> str:
     if output_format == "pretty":
         return json.dumps(payload, sort_keys=True, indent=2, ensure_ascii=True)
     return json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+
+
+def _render_human_console_summary(result: Mapping[str, Any] | object) -> str:
+    if isinstance(result, Mapping):
+        payload = result
+    elif is_dataclass(result):
+        payload = asdict(result)
+    else:
+        payload = dict(result.__dict__)
+    inventory = payload.get("final_inventory", ())
+    rendered_inventory = ", ".join(str(item) for item in inventory) if isinstance(inventory, Sequence) else ""
+    if rendered_inventory == "":
+        rendered_inventory = "empty"
+    if "shard_id" in payload:
+        actor_ids = payload.get("actor_ids", ())
+        rendered_actor_ids = ", ".join(str(actor_id) for actor_id in actor_ids) if isinstance(
+            actor_ids, Sequence
+        ) else ""
+        if rendered_actor_ids == "":
+            rendered_actor_ids = "none"
+        completed_actor_ids = payload.get("completed_actor_ids", ())
+        rendered_completed_actor_ids = ", ".join(
+            str(actor_id) for actor_id in completed_actor_ids
+        ) if isinstance(completed_actor_ids, Sequence) else ""
+        if rendered_completed_actor_ids == "":
+            rendered_completed_actor_ids = "none"
+        return "\n".join(
+            (
+                "Session Summary",
+                f"Scenario: {payload['scenario_id']}",
+                f"Shard: {payload['shard_id']}",
+                f"Actors: {rendered_actor_ids}",
+                f"Steps Played: {payload['step_count']}/{payload['max_steps']}",
+                f"Completed Actors: {rendered_completed_actor_ids}",
+                f"Quit Requested: {payload['quit_requested']}",
+                f"Shard Mutation Generation: {payload['shard_mutation_generation']}",
+                f"World Tick Count: {payload.get('world_tick_count', 0)}",
+                f"Last World Tick Heartbeat: {payload.get('last_world_tick_heartbeat', 'not_started')}",
+                f"World NPC Stance Phase: {payload.get('world_npc_stance_phase', 'dormant')}",
+            )
+        )
+    return "\n".join(
+        (
+            "Session Summary",
+            f"Scenario: {payload['scenario_id']}",
+            f"Actor: {payload['actor_id']}",
+            f"Steps Played: {payload['step_count']}/{payload['max_steps']}",
+            f"Objective Completed: {payload['objective_completed']}",
+            f"Quit Requested: {payload['quit_requested']}",
+            f"Final Location: {payload['final_location']}",
+            f"Final Inventory: {rendered_inventory}",
+        )
+    )
 
 
 if __name__ == "__main__":

@@ -4,7 +4,10 @@ import copy
 
 import pytest
 
-from agents.gateway.observation_builder import build_observation_for_actor
+from agents.gateway.observation_builder import (
+    build_model_facing_observation_payload,
+    build_observation_for_actor,
+)
 from agents.protocol.serialization import canonical_json_dumps
 
 
@@ -201,3 +204,75 @@ def test_observation_builder_hides_configured_hidden_items_until_revealed() -> N
     )
     assert ("item", "hidden-key") in tuple((entity.type, entity.name) for entity in revealed.entities)
     assert "take hidden-key" in revealed.action_space
+
+
+def test_build_model_facing_observation_payload_is_deterministic() -> None:
+    observation = build_observation_for_actor(
+        _sample_snapshot(),
+        actor_id="agent-1",
+        run_id="run-llm",
+        step=2,
+        max_steps=8,
+        messages=("A guard watches carefully.",),
+    )
+
+    first = build_model_facing_observation_payload(observation, actor_id="agent-1")
+    second = build_model_facing_observation_payload(observation, actor_id="agent-1")
+
+    assert canonical_json_dumps(first) == canonical_json_dumps(second)
+    assert first == {
+        "mode": "benchmark_single_turn",
+        "session_frame": {
+            "mode": "benchmark_single_turn",
+            "turn_scope": "single_turn_only",
+            "session_continuation_allowed": False,
+            "history_policy": "no_cross_turn_memory",
+        },
+        "response_format": {
+            "type": "json_object",
+            "required_fields": ["action"],
+            "additional_properties": False,
+        },
+        "output_contract": {
+            "json_only": True,
+            "single_action_only": True,
+            "fail_closed_after_single_repair": True,
+        },
+        "action_selection_rule": "Return exactly one action from observation.action_space.",
+        "allowed_actions": list(observation.action_space),
+        "allowed_targets": {
+            "move": ["east", "west"],
+            "take": ["item-1"],
+            "drop": ["item-2"],
+            "use": ["item-2"],
+            "attack": ["npc-1"],
+            "give": [{"item_id": "item-2", "target_id": "npc-1"}],
+        },
+        "actor_id": "agent-1",
+        "observation": observation.to_dict(),
+    }
+
+
+def test_build_model_facing_observation_payload_explicitly_differs_for_persistent_session_mode() -> None:
+    observation = build_observation_for_actor(
+        _sample_snapshot(),
+        actor_id="agent-1",
+        run_id="run-persistent",
+        step=1,
+        max_steps=8,
+    )
+
+    payload = build_model_facing_observation_payload(
+        observation,
+        mode="persistent_session",
+        actor_id="agent-1",
+    )
+
+    assert payload["mode"] == "persistent_session"
+    assert payload["session_frame"] == {
+        "mode": "persistent_session",
+        "turn_scope": "persistent_session_turn",
+        "session_continuation_allowed": True,
+        "history_policy": "caller_managed_session_history",
+    }
+    assert payload["allowed_actions"] == list(observation.action_space)

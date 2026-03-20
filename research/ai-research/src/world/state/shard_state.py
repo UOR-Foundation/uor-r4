@@ -89,11 +89,85 @@ def _expected_bundle_filenames(shard_id: str) -> dict[str, str]:
     file_prefix = shard_id + "."
     return {
         "artifact_index": file_prefix + "artifact_index.json",
+        "artifact_manifest": file_prefix + "artifact_manifest.json",
         "shard_checkpoint_placeholder": file_prefix + "shard_checkpoint_placeholder.json",
         "registry_checkpoint_placeholder": file_prefix + "registry_checkpoint_placeholder.json",
         "mutation_journal_placeholder": file_prefix + "mutation_journal_placeholder.json",
         "shard_export_payload": file_prefix + "shard_export_placeholder.json",
     }
+
+
+def _world_npc_stance_phase_for_tick_count(world_tick_count: int) -> str:
+    _require_non_negative_int(world_tick_count, field_name="world_tick_count")
+    if world_tick_count == 0:
+        return "dormant"
+    phase_cycle = ("watchful", "patrolling", "settling")
+    return phase_cycle[(world_tick_count - 1) % len(phase_cycle)]
+
+
+def _world_tick_scene_message_for_stance_phase(npc_stance_phase: str) -> str:
+    _require_non_empty_string(npc_stance_phase, field_name="npc_stance_phase")
+    scene_messages = {
+        "dormant": "The shard feels still, as if the watch has not yet begun.",
+        "watchful": "A distant sentinel grows watchful in the quiet corridors.",
+        "patrolling": "You catch the measured rhythm of a distant patrol.",
+        "settling": "The far-off watch settles back into guarded stillness.",
+    }
+    return scene_messages.get(
+        npc_stance_phase,
+        f"The shard shifts into a {npc_stance_phase} phase.",
+    )
+
+
+def _world_phase_interaction_hint_for_stance_phase(npc_stance_phase: str) -> str:
+    _require_non_empty_string(npc_stance_phase, field_name="npc_stance_phase")
+    interaction_hints = {
+        "dormant": "Hint: the route feels open while the watch remains dormant.",
+        "watchful": "Hint: the sharp watch makes a careful look feel safer than rushing.",
+        "patrolling": "Hint: the moving patrol leaves brief windows for repositioning.",
+        "settling": "Hint: the easing watch makes nearby movement feel less exposed.",
+    }
+    return interaction_hints.get(
+        npc_stance_phase,
+        f"Hint: the shard's {npc_stance_phase} phase may change how the route feels.",
+    )
+
+
+def _world_phase_outcome_message_for_location_and_stance_phase(
+    *,
+    location: str,
+    npc_stance_phase: str,
+) -> str | None:
+    _require_non_empty_string(location, field_name="location")
+    _require_non_empty_string(npc_stance_phase, field_name="npc_stance_phase")
+    if location != "corridor":
+        return None
+
+    phase_messages = {
+        "dormant": "Consequence: the exposed west passage is open before the watch begins.",
+        "watchful": (
+            "Consequence: the exposed west passage is pinned under watch; move west is unavailable."
+        ),
+        "patrolling": "Consequence: the west passage opens again between patrol sweeps.",
+        "settling": "Consequence: the west passage remains open as the watch settles.",
+    }
+    return phase_messages.get(
+        npc_stance_phase,
+        f"Consequence: the corridor route shifts under the shard's {npc_stance_phase} phase.",
+    )
+
+
+def _world_phase_filtered_action_space_for_location_and_stance_phase(
+    *,
+    location: str,
+    npc_stance_phase: str,
+    action_space: tuple[str, ...],
+) -> tuple[str, ...]:
+    _require_non_empty_string(location, field_name="location")
+    _require_non_empty_string(npc_stance_phase, field_name="npc_stance_phase")
+    if location == "corridor" and npc_stance_phase == "watchful":
+        return tuple(action for action in action_space if action != "move west")
+    return action_space
 
 
 _HASH_BUNDLE_ISSUE_CODES = frozenset({
@@ -106,6 +180,34 @@ _LINKAGE_BUNDLE_ISSUE_CODES = frozenset({
     "mutation_journal_generation_mismatch",
     "shard_export_generation_mismatch",
 })
+
+_MANIFEST_BUNDLE_ISSUE_CODES = frozenset({
+    "missing_artifact_manifest",
+    "invalid_artifact_manifest",
+    "manifest_shard_id_mismatch",
+    "manifest_index_filename_mismatch",
+    "manifest_bundle_generation_mismatch",
+    "manifest_expected_next_generation_mismatch",
+    "manifest_artifact_filename_mismatch",
+    "manifest_linkage_mismatch",
+})
+
+_DEGRADED_BUNDLE_ISSUE_CODES = frozenset({
+    "filename_mismatch",
+    "artifact_index_filename_mismatch",
+})
+
+_NON_RESUMABLE_BUNDLE_ISSUE_CODES = frozenset({
+    "missing_artifact_index",
+    "multiple_artifact_indexes",
+    "invalid_artifact_index",
+    "invalid_shard_id",
+    "invalid_artifact_entries",
+    "missing_artifact_entry",
+    "missing_artifact_file",
+    "invalid_artifact_payload",
+    "invalid_bundle_generation",
+}) | _HASH_BUNDLE_ISSUE_CODES | _LINKAGE_BUNDLE_ISSUE_CODES | _MANIFEST_BUNDLE_ISSUE_CODES
 
 
 def _summarize_bundle_verification_result(verification_result: dict[str, Any]) -> dict[str, Any]:
@@ -131,11 +233,17 @@ def _summarize_bundle_verification_result(verification_result: dict[str, Any]) -
         for issue_code in normalized_issue_codes
         if issue_code in _LINKAGE_BUNDLE_ISSUE_CODES
     ]
+    manifest_issue_codes = [
+        issue_code
+        for issue_code in normalized_issue_codes
+        if issue_code in _MANIFEST_BUNDLE_ISSUE_CODES
+    ]
     other_issue_codes = [
         issue_code
         for issue_code in normalized_issue_codes
         if issue_code not in _HASH_BUNDLE_ISSUE_CODES
         and issue_code not in _LINKAGE_BUNDLE_ISSUE_CODES
+        and issue_code not in _MANIFEST_BUNDLE_ISSUE_CODES
     ]
     return {
         "is_valid": bool(verification_result.get("is_valid", False)),
@@ -144,11 +252,53 @@ def _summarize_bundle_verification_result(verification_result: dict[str, Any]) -
         "verified_artifact_count": verified_artifact_count,
         "hash_issue_codes": hash_issue_codes,
         "linkage_issue_codes": linkage_issue_codes,
+        "manifest_issue_codes": manifest_issue_codes,
         "issue_category_counts": {
             "hash": len(hash_issue_codes),
             "linkage": len(linkage_issue_codes),
+            "manifest": len(manifest_issue_codes),
             "other": len(other_issue_codes),
         },
+    }
+
+
+def _classify_bundle_recovery_result(verification_result: dict[str, Any]) -> dict[str, Any]:
+    issue_codes = verification_result.get("issue_codes", ())
+    if not isinstance(issue_codes, list):
+        issue_codes = []
+    normalized_issue_codes = sorted({str(issue_code) for issue_code in issue_codes})
+    fatal_issue_codes = [
+        issue_code
+        for issue_code in normalized_issue_codes
+        if issue_code in _NON_RESUMABLE_BUNDLE_ISSUE_CODES
+    ]
+    degradable_issue_codes = [
+        issue_code
+        for issue_code in normalized_issue_codes
+        if issue_code in _DEGRADED_BUNDLE_ISSUE_CODES
+    ]
+    other_issue_codes = [
+        issue_code
+        for issue_code in normalized_issue_codes
+        if issue_code not in _NON_RESUMABLE_BUNDLE_ISSUE_CODES
+        and issue_code not in _DEGRADED_BUNDLE_ISSUE_CODES
+    ]
+    if len(fatal_issue_codes) > 0 or len(other_issue_codes) > 0:
+        recovery_state = "non_resumable"
+    elif len(degradable_issue_codes) > 0:
+        recovery_state = "degraded"
+    else:
+        recovery_state = "resumable"
+    return {
+        "payload_kind": "shard_bundle_recovery_classification_placeholder",
+        "payload_version": 1,
+        "bundle_directory": verification_result.get("bundle_directory"),
+        "shard_id": verification_result.get("shard_id"),
+        "recovery_state": recovery_state,
+        "issue_codes": normalized_issue_codes,
+        "fatal_issue_codes": fatal_issue_codes,
+        "degradable_issue_codes": degradable_issue_codes,
+        "verification_is_valid": bool(verification_result.get("is_valid", False)),
     }
 
 
@@ -162,6 +312,9 @@ class ShardMetadata:
     world_ruleset_version: str = "unconfigured"
     benchmark_engine_version: str = "unconfigured"
     scheduler_policy_version: str = "unconfigured"
+    world_tick_count: int = 0
+    last_world_tick_heartbeat: str = "not_started"
+    npc_stance_phase: str = "dormant"
     season_id: str | None = None
     created_from_snapshot_ref: str | None = None
 
@@ -178,6 +331,12 @@ class ShardMetadata:
             self.scheduler_policy_version,
             field_name="scheduler_policy_version",
         )
+        _require_non_negative_int(self.world_tick_count, field_name="world_tick_count")
+        _require_non_empty_string(
+            self.last_world_tick_heartbeat,
+            field_name="last_world_tick_heartbeat",
+        )
+        _require_non_empty_string(self.npc_stance_phase, field_name="npc_stance_phase")
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -187,6 +346,9 @@ class ShardMetadata:
             "world_ruleset_version": self.world_ruleset_version,
             "benchmark_engine_version": self.benchmark_engine_version,
             "scheduler_policy_version": self.scheduler_policy_version,
+            "world_tick_count": self.world_tick_count,
+            "last_world_tick_heartbeat": self.last_world_tick_heartbeat,
+            "npc_stance_phase": self.npc_stance_phase,
             "season_id": self.season_id,
             "created_from_snapshot_ref": self.created_from_snapshot_ref,
         }
@@ -324,6 +486,58 @@ class ShardState:
             ),
         )
 
+    def advance_world_tick(
+        self,
+        *,
+        heartbeat_prefix: str = "shared_shard_world_tick",
+    ) -> "ShardState":
+        _require_non_empty_string(heartbeat_prefix, field_name="heartbeat_prefix")
+        next_tick_count = self.metadata.world_tick_count + 1
+        return replace(
+            self,
+            metadata=replace(
+                self.metadata,
+                world_tick_count=next_tick_count,
+                last_world_tick_heartbeat=f"{heartbeat_prefix}:{next_tick_count:04d}",
+                npc_stance_phase=_world_npc_stance_phase_for_tick_count(next_tick_count),
+            ),
+        )
+
+    def get_world_tick_scene_message(self) -> str:
+        return _world_tick_scene_message_for_stance_phase(self.metadata.npc_stance_phase)
+
+    def get_world_phase_interaction_hint(self) -> str:
+        return _world_phase_interaction_hint_for_stance_phase(self.metadata.npc_stance_phase)
+
+    def get_world_phase_outcome_message(self, *, location: str) -> str | None:
+        return _world_phase_outcome_message_for_location_and_stance_phase(
+            location=location,
+            npc_stance_phase=self.metadata.npc_stance_phase,
+        )
+
+    def get_world_phase_filtered_action_space(
+        self,
+        *,
+        location: str,
+        action_space: tuple[str, ...],
+    ) -> tuple[str, ...]:
+        return _world_phase_filtered_action_space_for_location_and_stance_phase(
+            location=location,
+            npc_stance_phase=self.metadata.npc_stance_phase,
+            action_space=action_space,
+        )
+
+    def get_world_tick_observation_messages(self, *, location: str | None = None) -> tuple[str, ...]:
+        messages = [
+            self.get_world_tick_scene_message(),
+            self.get_world_phase_interaction_hint(),
+        ]
+        if location is not None:
+            outcome_message = self.get_world_phase_outcome_message(location=location)
+            if outcome_message is not None:
+                messages.append(outcome_message)
+        return tuple(messages)
+
     def get_account(self, account_id: str) -> Any:
         return self.identity_registry.get_account(account_id)
 
@@ -402,10 +616,15 @@ class ShardState:
         verification_result = self.verify_shard_artifact_bundle(directory_path)
         return _summarize_bundle_verification_result(verification_result)
 
+    def classify_shard_bundle_recovery_state(self, directory_path: Any) -> dict[str, Any]:
+        verification_result = self.verify_shard_artifact_bundle(directory_path)
+        return _classify_bundle_recovery_result(verification_result)
+
     def build_shard_export_payload(
         self,
         *,
         bundle_verification_summary: dict[str, Any] | None = None,
+        bundle_recovery_summary: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         active_characters = len(self.find_characters_by_status("active"))
         inactive_characters = len(self.find_characters_by_status("inactive"))
@@ -488,6 +707,12 @@ class ShardState:
                         for issue_code in bundle_verification_summary.get("linkage_issue_codes", ())
                     }
                 ),
+                "manifest_issue_codes": sorted(
+                    {
+                        str(issue_code)
+                        for issue_code in bundle_verification_summary.get("manifest_issue_codes", ())
+                    }
+                ),
                 "issue_category_counts": {
                     "hash": int(
                         bundle_verification_summary.get("issue_category_counts", {}).get("hash", 0)
@@ -498,10 +723,43 @@ class ShardState:
                             0,
                         )
                     ),
+                    "manifest": int(
+                        bundle_verification_summary.get("issue_category_counts", {}).get(
+                            "manifest",
+                            0,
+                        )
+                    ),
                     "other": int(
                         bundle_verification_summary.get("issue_category_counts", {}).get("other", 0)
                     ),
                 },
+            }
+        if bundle_recovery_summary is not None:
+            payload["bundle_recovery_summary"] = {
+                "recovery_state": str(
+                    bundle_recovery_summary.get("recovery_state", "non_resumable")
+                ),
+                "issue_codes": sorted(
+                    {
+                        str(issue_code)
+                        for issue_code in bundle_recovery_summary.get("issue_codes", ())
+                    }
+                ),
+                "fatal_issue_codes": sorted(
+                    {
+                        str(issue_code)
+                        for issue_code in bundle_recovery_summary.get("fatal_issue_codes", ())
+                    }
+                ),
+                "degradable_issue_codes": sorted(
+                    {
+                        str(issue_code)
+                        for issue_code in bundle_recovery_summary.get("degradable_issue_codes", ())
+                    }
+                ),
+                "verification_is_valid": bool(
+                    bundle_recovery_summary.get("verification_is_valid", False)
+                ),
             }
         return payload
 
@@ -533,6 +791,7 @@ class ShardState:
             expected_filenames["mutation_journal_placeholder"]
         )
         shard_export_path = output_directory / expected_filenames["shard_export_payload"]
+        manifest_path = output_directory / expected_filenames["artifact_manifest"]
         artifact_paths = {
             "bundle_directory": str(output_directory),
             "shard_checkpoint_placeholder": self.write_shard_checkpoint_placeholder(
@@ -608,6 +867,40 @@ class ShardState:
             index_payload,
             artifact_label="artifact bundle index",
         )
+        manifest_payload = {
+            "payload_kind": "shard_artifact_bundle_manifest_placeholder",
+            "payload_version": 1,
+            "manifest_family": "shard_artifact_bundle_manifest_v1",
+            "shard_id": self.shard_id,
+            "mode_marker": self.metadata.mode_marker,
+            "bundle_generation": self.journal.last_committed_mutation_generation,
+            "expected_next_generation": self.journal.expected_next_mutation_generation,
+            "index_filename": index_path.name,
+            "artifact_filenames": {
+                "shard_checkpoint_placeholder": shard_checkpoint_path.name,
+                "registry_checkpoint_placeholder": registry_checkpoint_path.name,
+                "mutation_journal_placeholder": mutation_journal_path.name,
+                "shard_export_payload": shard_export_path.name,
+            },
+            "linkage": {
+                "shard_checkpoint_generation": shard_checkpoint_payload["checkpoint_generation"],
+                "registry_checkpoint_generation": registry_checkpoint_payload["checkpoint_generation"],
+                "mutation_journal_generation": mutation_journal_payload[
+                    "last_committed_mutation_generation"
+                ],
+                "mutation_journal_expected_next_generation": mutation_journal_payload[
+                    "expected_next_mutation_generation"
+                ],
+                "shard_export_generation": shard_export_payload["journal"][
+                    "last_committed_mutation_generation"
+                ],
+            },
+        }
+        artifact_paths["artifact_manifest"] = _write_json_payload(
+            manifest_path,
+            manifest_payload,
+            artifact_label="artifact bundle manifest",
+        )
         return artifact_paths
 
     def verify_shard_artifact_bundle(self, directory_path: Any) -> dict[str, Any]:
@@ -618,6 +911,7 @@ class ShardState:
             "payload_version": 1,
             "bundle_directory": str(output_directory),
             "index_filename": None,
+            "manifest_filename": None,
             "shard_id": None,
             "is_valid": False,
             "issue_codes": [],
@@ -648,6 +942,21 @@ class ShardState:
         expected_filenames = _expected_bundle_filenames(shard_id)
         if index_path.name != expected_filenames["artifact_index"]:
             result["issue_codes"].append("artifact_index_filename_mismatch")
+
+        manifest_path = output_directory / expected_filenames["artifact_manifest"]
+        result["manifest_filename"] = expected_filenames["artifact_manifest"]
+        manifest_payload = _read_json_file(manifest_path)
+        if not manifest_path.exists() or not manifest_path.is_file():
+            result["issue_codes"].append("missing_artifact_manifest")
+            manifest_payload = None
+        elif manifest_payload is None:
+            result["issue_codes"].append("invalid_artifact_manifest")
+
+        if manifest_payload is not None:
+            if manifest_payload.get("shard_id") != shard_id:
+                result["issue_codes"].append("manifest_shard_id_mismatch")
+            if manifest_payload.get("index_filename") != index_path.name:
+                result["issue_codes"].append("manifest_index_filename_mismatch")
 
         artifact_entries = index_payload.get("artifacts")
         if not isinstance(artifact_entries, list):
@@ -724,6 +1033,37 @@ class ShardState:
         if not isinstance(bundle_generation, int) or bundle_generation < 0:
             result["issue_codes"].append("invalid_bundle_generation")
         else:
+            if manifest_payload is not None:
+                manifest_artifact_filenames = manifest_payload.get("artifact_filenames", {})
+                manifest_linkage = manifest_payload.get("linkage", {})
+                if manifest_payload.get("bundle_generation") != bundle_generation:
+                    result["issue_codes"].append("manifest_bundle_generation_mismatch")
+                if manifest_payload.get("expected_next_generation") != bundle_generation + 1:
+                    result["issue_codes"].append("manifest_expected_next_generation_mismatch")
+                if not isinstance(manifest_artifact_filenames, dict):
+                    result["issue_codes"].append("manifest_artifact_filename_mismatch")
+                else:
+                    ordered_artifact_types = [
+                        "shard_checkpoint_placeholder",
+                        "registry_checkpoint_placeholder",
+                        "mutation_journal_placeholder",
+                        "shard_export_payload",
+                    ]
+                    for artifact_type in ordered_artifact_types:
+                        if manifest_artifact_filenames.get(artifact_type) != expected_filenames[artifact_type]:
+                            result["issue_codes"].append("manifest_artifact_filename_mismatch")
+                            break
+                if (
+                    not isinstance(manifest_linkage, dict)
+                    or manifest_linkage.get("shard_checkpoint_generation") != bundle_generation
+                    or manifest_linkage.get("registry_checkpoint_generation") != bundle_generation
+                    or manifest_linkage.get("mutation_journal_generation") != bundle_generation
+                    or manifest_linkage.get("mutation_journal_expected_next_generation")
+                    != bundle_generation + 1
+                    or manifest_linkage.get("shard_export_generation") != bundle_generation
+                ):
+                    result["issue_codes"].append("manifest_linkage_mismatch")
+
             shard_checkpoint_payload = artifact_payload_by_type.get("shard_checkpoint_placeholder")
             if shard_checkpoint_payload is not None:
                 shard_checkpoint_generation = shard_checkpoint_payload.get("checkpoint_generation")

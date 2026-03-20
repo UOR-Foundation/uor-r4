@@ -5,15 +5,23 @@ from __future__ import annotations
 import json
 import shutil
 import sys
-from dataclasses import dataclass
+import tempfile
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from agents.gateway.action_pipeline import run_action_pipeline
+from agents.gateway.observation_builder import build_observation_for_actor
+from agents.llm_runtime import BenchmarkLLMTurnResult, run_mock_benchmark_llm_turn
+from agents.protocol.action import ActionSubmission
+from agents.protocol.observation import Observation
 from agents.gateway.step_driver import StepDriverAgentConfig, drive_gateway_step
 from agents.local_runner.process_bridge import LocalProcessRunner
 from agents.local_runner.session_manager import DeterministicLocalRunnerSessionManager
+from agents.local_runner.session_manager import LocalRunnerSessionRequest
 from core.event_logger import EventLogger, EventRecord, normalize_payload
 from core.simulation_controller import SimulationController
+from core.run_state import RunStatus
 from evaluation.benchmark_runner.lifecycle import (
     BenchmarkLifecycleState,
     BenchmarkLifecycleStatus,
@@ -47,6 +55,7 @@ from scenarios.scenario_loader import (
 from world.rooms.room_graph import DeterministicRoomGraph
 from world.state.basic_action_processor import BasicDeterministicActionProcessor
 from world.state.spawn_manager import DeterministicSpawnManager, SpawnRequest
+from world.state.shard_state import ShardState
 from world.state.world_bootstrap import bootstrap_world_state_manager
 from world.state.world_state import DeterministicWorldStateManager
 
@@ -73,6 +82,8 @@ _SCORING_VERSION = "phase3-v1"
 _SOCIAL_GIVE_COMPLETED_METRIC = "social.give.completed"
 _SOCIAL_TRADE_COMPLETED_METRIC = "social.trade.completed"
 _RUNNER_AGENT_TIMEOUT_SECONDS = 1.0
+_LLM_RUNTIME_TELEMETRY_SCHEMA = "llm_runtime_turn_v1"
+_LLM_RUNTIME_TELEMETRY_EVENT_TYPE = "agent_runtime_telemetry"
 _RUNNER_AGENT_SCRIPT_EXPLORER = (
     "import json,sys\n"
     "line=sys.stdin.readline()\n"
@@ -276,6 +287,211 @@ _RUNNER_SOCIAL_TRADE_AGENT_SCRIPTS = {
     0: _RUNNER_AGENT_SCRIPT_SOCIAL_TRADE,
     1: _RUNNER_AGENT_SCRIPT_SOCIAL_TRADE,
 }
+_RUNNER_AGENT_SCRIPT_GUARDED_RELIC = (
+    "import json,sys\n"
+    "line=sys.stdin.readline()\n"
+    "observation=json.loads(line)\n"
+    "step=int(observation.get('step',0))\n"
+    "location=str(observation.get('location',''))\n"
+    "inventory=tuple(observation.get('inventory',[]))\n"
+    "entities=tuple(observation.get('entities',[]))\n"
+    "action_space=tuple(observation.get('action_space',[]))\n"
+    "has_key='relic-key' in inventory\n"
+    "sentinel_present=False\n"
+    "for entity in entities:\n"
+    "    if isinstance(entity,dict) and entity.get('type') == 'npc' and entity.get('name') == 'sentinel':\n"
+    "        sentinel_present=True\n"
+    "        break\n"
+    "action=None\n"
+    "if 'take relic-key' in action_space and not has_key:\n"
+    "    action='take relic-key'\n"
+    "elif location == 'watch-post' and sentinel_present and step <= 3 and 'attack sentinel' in action_space:\n"
+    "    action='attack sentinel'\n"
+    "elif location == 'seal-door':\n"
+    "    if 'move north' in action_space:\n"
+    "        action='move north'\n"
+    "    elif has_key and 'use relic-key' in action_space:\n"
+    "        action='use relic-key'\n"
+    "    elif 'move west' in action_space:\n"
+    "        action='move west'\n"
+    "elif location == 'reliquary' and 'take relic' in action_space:\n"
+    "    action='take relic'\n"
+    "elif location == 'camp':\n"
+    "    if not has_key and 'move east' in action_space:\n"
+    "        action='move east'\n"
+    "    elif 'move north' in action_space:\n"
+    "        action='move north'\n"
+    "elif location == 'armory':\n"
+    "    if not has_key and 'take relic-key' in action_space:\n"
+    "        action='take relic-key'\n"
+    "    elif 'move north' in action_space:\n"
+    "        action='move north'\n"
+    "    elif 'move west' in action_space:\n"
+    "        action='move west'\n"
+    "elif location == 'watch-post':\n"
+    "    if 'move east' in action_space:\n"
+    "        action='move east'\n"
+    "    elif 'move south' in action_space:\n"
+    "        action='move south'\n"
+    "if action is None:\n"
+    "    for candidate in action_space:\n"
+    "        if candidate.startswith('take '):\n"
+    "            action=candidate\n"
+    "            break\n"
+    "if action is None:\n"
+    "    for candidate in action_space:\n"
+    "        if candidate.startswith('move '):\n"
+    "            action=candidate\n"
+    "            break\n"
+    "if action is None:\n"
+    "    for candidate in action_space:\n"
+    "        if candidate.startswith('attack '):\n"
+    "            action=candidate\n"
+    "            break\n"
+    "if action is None:\n"
+    "    action='look' if 'look' in action_space else 'wait'\n"
+    "print(json.dumps({'action': action}, sort_keys=True, separators=(',', ':'), ensure_ascii=True))\n"
+)
+_RUNNER_GUARDED_RELIC_AGENT_SCRIPTS = {
+    0: _RUNNER_AGENT_SCRIPT_GUARDED_RELIC,
+    1: _RUNNER_AGENT_SCRIPT_GUARDED_RELIC,
+}
+_RUNNER_AGENT_SCRIPT_HAZARD_TRADEOFF = (
+    "import json,sys\n"
+    "line=sys.stdin.readline()\n"
+    "observation=json.loads(line)\n"
+    "location=str(observation.get('location',''))\n"
+    "inventory=tuple(observation.get('inventory',[]))\n"
+    "entities=tuple(observation.get('entities',[]))\n"
+    "action_space=tuple(observation.get('action_space',[]))\n"
+    "has_kit='bridge-kit' in inventory\n"
+    "raider_present=False\n"
+    "for entity in entities:\n"
+    "    if isinstance(entity,dict) and entity.get('type') == 'npc' and entity.get('name') == 'raider':\n"
+    "        raider_present=True\n"
+    "        break\n"
+    "action=None\n"
+    "if 'take storm-core' in action_space:\n"
+    "    action='take storm-core'\n"
+    "elif 'take bridge-kit' in action_space and not has_kit:\n"
+    "    action='take bridge-kit'\n"
+    "elif location == 'camp':\n"
+    "    if not has_kit and 'move east' in action_space:\n"
+    "        action='move east'\n"
+    "    elif has_kit and 'move east' in action_space:\n"
+    "        action='move east'\n"
+    "    elif raider_present and 'move north' in action_space:\n"
+    "        action='move north'\n"
+    "elif location == 'supply-cache':\n"
+    "    if has_kit and 'move north' in action_space:\n"
+    "        action='move north'\n"
+    "    elif 'move west' in action_space:\n"
+    "        action='move west'\n"
+    "elif location == 'bridge-approach':\n"
+    "    if has_kit and 'move north' in action_space:\n"
+    "        action='move north'\n"
+    "    elif has_kit and 'use bridge-kit' in action_space:\n"
+    "        action='use bridge-kit'\n"
+    "    elif 'move south' in action_space:\n"
+    "        action='move south'\n"
+    "elif location == 'ember-pass':\n"
+    "    if raider_present and 'attack raider' in action_space:\n"
+    "        action='attack raider'\n"
+    "    elif 'move north' in action_space:\n"
+    "        action='move north'\n"
+    "elif location == 'vault' and 'take storm-core' in action_space:\n"
+    "    action='take storm-core'\n"
+    "if action is None:\n"
+    "    for candidate in action_space:\n"
+    "        if candidate.startswith('take '):\n"
+    "            action=candidate\n"
+    "            break\n"
+    "if action is None:\n"
+    "    for candidate in action_space:\n"
+    "        if candidate.startswith('use '):\n"
+    "            action=candidate\n"
+    "            break\n"
+    "if action is None:\n"
+    "    for candidate in action_space:\n"
+    "        if candidate.startswith('move '):\n"
+    "            action=candidate\n"
+    "            break\n"
+    "if action is None:\n"
+    "    for candidate in action_space:\n"
+    "        if candidate.startswith('attack '):\n"
+    "            action=candidate\n"
+    "            break\n"
+    "if action is None:\n"
+    "    action='look' if 'look' in action_space else 'wait'\n"
+    "print(json.dumps({'action': action}, sort_keys=True, separators=(',', ':'), ensure_ascii=True))\n"
+)
+_RUNNER_HAZARD_TRADEOFF_AGENT_SCRIPTS = {
+    0: _RUNNER_AGENT_SCRIPT_HAZARD_TRADEOFF,
+    1: _RUNNER_AGENT_SCRIPT_HAZARD_TRADEOFF,
+}
+_RUNNER_AGENT_SCRIPT_DELAYED_COST = (
+    "import json,sys\n"
+    "line=sys.stdin.readline()\n"
+    "observation=json.loads(line)\n"
+    "location=str(observation.get('location',''))\n"
+    "inventory=tuple(observation.get('inventory',[]))\n"
+    "action_space=tuple(observation.get('action_space',[]))\n"
+    "has_cell='power-cell' in inventory\n"
+    "action=None\n"
+    "if 'take archive-ledger' in action_space:\n"
+    "    action='take archive-ledger'\n"
+    "elif 'take power-cell' in action_space and not has_cell:\n"
+    "    action='take power-cell'\n"
+    "elif location == 'camp':\n"
+    "    if not has_cell and 'move east' in action_space:\n"
+    "        action='move east'\n"
+    "    elif has_cell and 'move east' in action_space:\n"
+    "        action='move east'\n"
+    "elif location == 'depot':\n"
+    "    if has_cell and 'move east' in action_space:\n"
+    "        action='move east'\n"
+    "    elif 'move west' in action_space:\n"
+    "        action='move west'\n"
+    "elif location == 'service-tunnel':\n"
+    "    if 'move north' in action_space:\n"
+    "        action='move north'\n"
+    "    elif 'move west' in action_space:\n"
+    "        action='move west'\n"
+    "elif location == 'vault-door':\n"
+    "    if 'move north' in action_space:\n"
+    "        action='move north'\n"
+    "    elif has_cell and 'use power-cell' in action_space:\n"
+    "        action='use power-cell'\n"
+    "    elif 'move south' in action_space:\n"
+    "        action='move south'\n"
+    "elif location == 'tram-hub':\n"
+    "    if 'move south' in action_space:\n"
+    "        action='move south'\n"
+    "elif location == 'vault' and 'take archive-ledger' in action_space:\n"
+    "    action='take archive-ledger'\n"
+    "if action is None:\n"
+    "    for candidate in action_space:\n"
+    "        if candidate.startswith('take '):\n"
+    "            action=candidate\n"
+    "            break\n"
+    "if action is None:\n"
+    "    for candidate in action_space:\n"
+    "        if candidate.startswith('use '):\n"
+    "            action=candidate\n"
+    "            break\n"
+    "if action is None:\n"
+    "    for candidate in action_space:\n"
+    "        if candidate.startswith('move '):\n"
+    "            action=candidate\n"
+    "            break\n"
+    "if action is None:\n"
+    "    action='look' if 'look' in action_space else 'wait'\n"
+    "print(json.dumps({'action': action}, sort_keys=True, separators=(',', ':'), ensure_ascii=True))\n"
+)
+_RUNNER_DELAYED_COST_AGENT_SCRIPTS = {
+    0: _RUNNER_AGENT_SCRIPT_DELAYED_COST,
+    1: _RUNNER_AGENT_SCRIPT_DELAYED_COST,
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -293,6 +509,7 @@ class BenchmarkRunnerConfig:
     external_agent_commands_by_actor: Mapping[str, Sequence[str]] | None = None
     external_agent_actor_id: str | None = None
     persistent_agent_session: bool = False
+    external_agent_timeout_seconds: float | None = None
     normalization_profiles: Mapping[str, NormalizationProfile | Mapping[str, Any]] | None = None
     score_weights: Mapping[str, float] | None = None
 
@@ -369,6 +586,12 @@ class BenchmarkRunnerConfig:
                 raise ValueError("external_agent_actor_id must be present in actor_ids")
         if not isinstance(self.persistent_agent_session, bool):
             raise ValueError("persistent_agent_session must be a boolean")
+        if self.external_agent_timeout_seconds is not None and (
+            not isinstance(self.external_agent_timeout_seconds, (int, float))
+            or isinstance(self.external_agent_timeout_seconds, bool)
+            or float(self.external_agent_timeout_seconds) <= 0.0
+        ):
+            raise ValueError("external_agent_timeout_seconds must be None or a positive number")
         if self.normalization_profiles is not None and not isinstance(self.normalization_profiles, Mapping):
             raise ValueError("normalization_profiles must be a mapping")
         if self.score_weights is not None and not isinstance(self.score_weights, Mapping):
@@ -402,6 +625,7 @@ class BenchmarkRunnerResult:
     replay_artifact: ReplayArtifact
     replay_parity_artifact: ReplayParityArtifact
     replay_artifact_refs: tuple[tuple[str, str], ...]
+    runtime_telemetry_records: tuple[dict[str, Any], ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -426,10 +650,104 @@ class BenchmarkRunnerResult:
                 {"name": name, "ref": ref}
                 for name, ref in self.replay_artifact_refs
             ],
+            "runtime_telemetry": {
+                "records": [dict(record) for record in self.runtime_telemetry_records],
+                "summary_by_actor": _build_runtime_telemetry_summary(self.runtime_telemetry_records),
+            },
         }
 
     def to_canonical_json(self) -> str:
         return json.dumps(self.to_dict(), sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+
+
+def _extract_final_metric_sum_for_actor(
+    result: BenchmarkRunnerResult,
+    *,
+    actor_id: str,
+    metric_name: str,
+) -> float:
+    if not isinstance(actor_id, str) or not actor_id:
+        raise ValueError("actor_id must be a non-empty string")
+    if not isinstance(metric_name, str) or not metric_name:
+        raise ValueError("metric_name must be a non-empty string")
+
+    replay_events = result.replay_artifact.to_dict()["events"]
+    snapshots = [event for event in replay_events if event["event_type"] == _RUNTIME_REPLAY_STATE_EVENT_TYPE]
+    if len(snapshots) == 0:
+        return 0.0
+
+    final_state_json = snapshots[-1]["payload"]["state_json"]  # type: ignore[index]
+    state_payload = json.loads(str(final_state_json))
+    for actor_state in state_payload.get("agent_states", []):
+        if actor_state.get("actor_id") != actor_id:
+            continue
+        for metric in actor_state.get("metrics", []):
+            if metric.get("metric_name") == metric_name:
+                return float(metric.get("value_sum", 0.0))
+        return 0.0
+    return 0.0
+
+
+def build_playable_slice_comparison_entry(
+    result: BenchmarkRunnerResult,
+    *,
+    mode: str,
+    agent_identity: str,
+    actor_id: str,
+) -> dict[str, Any]:
+    """Build one compact deterministic playable-slice comparison entry."""
+    if not isinstance(result, BenchmarkRunnerResult):
+        raise ValueError("result must be a BenchmarkRunnerResult")
+    if not isinstance(mode, str) or not mode:
+        raise ValueError("mode must be a non-empty string")
+    if not isinstance(agent_identity, str) or not agent_identity:
+        raise ValueError("agent_identity must be a non-empty string")
+    if not isinstance(actor_id, str) or not actor_id:
+        raise ValueError("actor_id must be a non-empty string")
+
+    scorecard_payload = result.scorecard.to_dict()
+    actor_scorecard = next(
+        (actor for actor in scorecard_payload["actors"] if actor["actor_id"] == actor_id),
+        None,
+    )
+    if actor_scorecard is None:
+        raise ValueError(f"missing_actor_scorecard:{actor_id}")
+
+    runtime_summary = next(
+        (
+            entry
+            for entry in _build_runtime_telemetry_summary(result.runtime_telemetry_records)
+            if entry["actor_id"] == actor_id
+        ),
+        None,
+    )
+    runtime_telemetry = None
+    if runtime_summary is not None:
+        runtime_telemetry = {
+            "turn_count": int(runtime_summary["turn_count"]),
+            "repair_used_count": int(runtime_summary["repair_used_count"]),
+            "fail_closed_used_count": int(runtime_summary["fail_closed_used_count"]),
+            "provider_request_count_total": int(runtime_summary["provider_request_count_total"]),
+            "provider_latency_ms_total": float(runtime_summary["provider_latency_ms_total"]),
+            "final_parse_status_counts": dict(runtime_summary["final_parse_status_counts"]),
+            "failure_reasons": list(runtime_summary["failure_reasons"]),
+        }
+
+    return {
+        "scenario_id": result.lifecycle_state.scenario_id,
+        "mode": mode,
+        "agent_identity": agent_identity,
+        "actor_id": actor_id,
+        "objective_completed": _extract_final_metric_sum_for_actor(
+            result,
+            actor_id=actor_id,
+            metric_name="quest.completed",
+        )
+        >= 1.0,
+        "aggregate_score": float(scorecard_payload["aggregate_score"]),
+        "composite_score": float(actor_scorecard["composite_score"]),
+        "runtime_telemetry": runtime_telemetry,
+    }
 
 
 def build_tiny_suite_baseline_report(
@@ -888,8 +1206,415 @@ class _ResolvedRunnerConfig:
     external_agent_commands_by_actor: Mapping[str, Sequence[str]] | None = None
     external_agent_actor_id: str | None = None
     persistent_agent_session: bool = False
+    external_agent_timeout_seconds: float | None = None
     normalization_profiles: Mapping[str, NormalizationProfile | Mapping[str, Any]] | None = None
     score_weights: Mapping[str, float] | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class BenchmarkPlayableSession:
+    """Minimal initialized benchmark runtime session for bounded local play surfaces."""
+
+    scenario_initialization: ScenarioInitialization
+    scenario_vars: Mapping[str, Any]
+    world_state: DeterministicWorldStateManager
+    controller: SimulationController
+
+
+@dataclass(frozen=True, slots=True)
+class SharedShardParticipantBinding:
+    """Deterministic participant-to-shard identity binding for shared local shard loops."""
+
+    actor_id: str
+    account_id: str
+    character_id: str
+    session_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class SharedShardLoopStepResult:
+    """Compact deterministic step result for the shared shard loop."""
+
+    step_index: int
+    accepted_actions: tuple[tuple[str, str], ...]
+    emitted_event_types: tuple[str, ...]
+    active_actor_ids: tuple[str, ...]
+    shard_mutation_generation: int
+    world_tick_count: int
+    world_tick_heartbeat: str
+    world_npc_stance_phase: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "step_index": self.step_index,
+            "accepted_actions": [
+                {"actor_id": actor_id, "action": action}
+                for actor_id, action in self.accepted_actions
+            ],
+            "emitted_event_types": list(self.emitted_event_types),
+            "active_actor_ids": list(self.active_actor_ids),
+            "shard_mutation_generation": self.shard_mutation_generation,
+            "world_tick_count": self.world_tick_count,
+            "world_tick_heartbeat": self.world_tick_heartbeat,
+            "world_npc_stance_phase": self.world_npc_stance_phase,
+        }
+
+
+@dataclass(slots=True)
+class SharedShardLoopSession:
+    """Minimal in-process shared shard loop over one persistent world/controller pair."""
+
+    shard_state: ShardState
+    scenario_initialization: ScenarioInitialization
+    scenario_vars: Mapping[str, Any]
+    world_state: DeterministicWorldStateManager
+    controller: SimulationController
+    run_id: str
+    participant_bindings: tuple[SharedShardParticipantBinding, ...]
+    agent_actor_ids: tuple[str, ...] = ()
+    external_agent_runners_by_actor: Mapping[str, LocalProcessRunner] = field(default_factory=dict)
+    external_agent_session_manager: DeterministicLocalRunnerSessionManager = field(
+        default_factory=DeterministicLocalRunnerSessionManager
+    )
+
+    @property
+    def shard_id(self) -> str:
+        return self.shard_state.shard_id
+
+    @property
+    def current_tick(self) -> int:
+        return self.controller.run_state.step_index
+
+    @property
+    def max_steps(self) -> int:
+        return self.controller.run_state.max_steps
+
+    @property
+    def world_tick_count(self) -> int:
+        return self.shard_state.metadata.world_tick_count
+
+    @property
+    def world_npc_stance_phase(self) -> str:
+        return self.shard_state.metadata.npc_stance_phase
+
+    def get_participant_binding(self, actor_id: str) -> SharedShardParticipantBinding:
+        for binding in self.participant_bindings:
+            if binding.actor_id == actor_id:
+                return binding
+        raise ValueError(f"unknown_shared_shard_actor:{actor_id}")
+
+    def is_agent_participant(self, actor_id: str) -> bool:
+        self.get_participant_binding(actor_id)
+        return actor_id in self.agent_actor_ids
+
+    def is_external_agent_participant(self, actor_id: str) -> bool:
+        self.get_participant_binding(actor_id)
+        return actor_id in self.external_agent_runners_by_actor
+
+    def session_is_active(self, actor_id: str) -> bool:
+        binding = self.get_participant_binding(actor_id)
+        return self.shard_state.get_session(binding.session_id).status == "active"
+
+    def active_actor_ids(self) -> tuple[str, ...]:
+        return tuple(
+            binding.actor_id
+            for binding in self.participant_bindings
+            if self.session_is_active(binding.actor_id)
+        )
+
+    def get_observation(self, actor_id: str) -> Observation:
+        if not self.session_is_active(actor_id):
+            raise ValueError(f"inactive_shared_shard_session:{actor_id}")
+        observation = build_observation_for_actor(
+            self.world_state.get_snapshot(),
+            actor_id=actor_id,
+            run_id=self.run_id,
+            step=self.current_tick,
+            max_steps=self.max_steps,
+            messages=(),
+        )
+        return Observation(
+            run_id=observation.run_id,
+            step=observation.step,
+            location=observation.location,
+            description=observation.description,
+            exits=observation.exits,
+            entities=observation.entities,
+            inventory=observation.inventory,
+            health=observation.health,
+            messages=self.shard_state.get_world_tick_observation_messages(
+                location=observation.location,
+            ),
+            action_space=self.shard_state.get_world_phase_filtered_action_space(
+                location=observation.location,
+                action_space=observation.action_space,
+            ),
+            remaining_steps=observation.remaining_steps,
+            protocol_version=observation.protocol_version,
+        )
+
+    def open_participant_session(self, actor_id: str) -> None:
+        binding = self.get_participant_binding(actor_id)
+        try:
+            session_record = self.shard_state.get_session(binding.session_id)
+        except ValueError:
+            session_record = None
+        if session_record is not None:
+            self.shard_state = self.shard_state.activate_session(binding.session_id)
+            return
+        self.shard_state = self.shard_state.open_character_session(
+            session_id=binding.session_id,
+            character_id=binding.character_id,
+            account_id=binding.account_id,
+        )
+
+    def close_participant_session(self, actor_id: str) -> None:
+        binding = self.get_participant_binding(actor_id)
+        self.shard_state = self.shard_state.close_character_session(binding.session_id)
+
+    def build_mock_agent_turn(self, actor_id: str) -> BenchmarkLLMTurnResult:
+        if not self.is_agent_participant(actor_id):
+            raise ValueError(f"shared_shard_actor_not_agent_controlled:{actor_id}")
+        observation = self.get_observation(actor_id)
+        return run_mock_benchmark_llm_turn(
+            observation,
+            actor_id=actor_id,
+        )
+
+    def request_external_agent_action(self, actor_id: str) -> ActionSubmission:
+        if not self.is_external_agent_participant(actor_id):
+            raise ValueError(f"shared_shard_actor_not_external_agent_controlled:{actor_id}")
+        runner = self.external_agent_runners_by_actor[actor_id]
+        observation = self.get_observation(actor_id)
+        result = self.external_agent_session_manager.request_actions(
+            (
+                LocalRunnerSessionRequest(
+                    actor_id=actor_id,
+                    runner=runner,
+                    observation=observation,
+                    timeout_seconds=_RUNNER_AGENT_TIMEOUT_SECONDS,
+                ),
+            )
+        )[0]
+        if not result.success or result.action_submission is None:
+            raise RuntimeError(
+                "shared_shard_external_agent_failure:"
+                f"{actor_id}:{result.error_type or 'runner_error'}:"
+                f"{result.error_message or 'unknown_runner_failure'}"
+            )
+        return result.action_submission
+
+    def close_external_agent_participants(self) -> None:
+        self.external_agent_session_manager.close(tuple(self.external_agent_runners_by_actor.values()))
+
+    def advance_tick(
+        self,
+        submitted_actions: Mapping[str, str] | None = None,
+    ) -> SharedShardLoopStepResult:
+        if self.controller.run_state.status is not RunStatus.RUNNING:
+            raise ValueError("shared_shard_loop_not_running")
+        normalized_actions = {} if submitted_actions is None else dict(submitted_actions)
+        if not isinstance(normalized_actions, dict):
+            raise ValueError("submitted_actions must be a mapping when provided")
+
+        accepted_action_requests = []
+        accepted_actions: list[tuple[str, str]] = []
+        step_index = self.current_tick
+        active_actor_ids = self.active_actor_ids()
+
+        for actor_id in sorted(normalized_actions):
+            if actor_id not in {binding.actor_id for binding in self.participant_bindings}:
+                raise ValueError(f"unknown_shared_shard_actor:{actor_id}")
+            if actor_id not in active_actor_ids:
+                raise ValueError(f"inactive_shared_shard_session:{actor_id}")
+
+        for actor_id in active_actor_ids:
+            observation = self.get_observation(actor_id)
+            selected_action = normalized_actions.get(actor_id, "wait")
+            pipeline_result = run_action_pipeline(
+                actor_id=actor_id,
+                submission=ActionSubmission(action=selected_action),
+                observation=observation,
+            )
+            if not pipeline_result.accepted or pipeline_result.action_request is None:
+                raise ValueError(
+                    f"shared_shard_action_rejected:{actor_id}:{pipeline_result.reason or 'action_rejected'}"
+                )
+            accepted_action_requests.append(pipeline_result.action_request)
+            accepted_actions.append((actor_id, selected_action))
+
+        step_outcome = self.controller.step(tuple(accepted_action_requests))
+        self.shard_state = self.shard_state.advance_world_tick()
+        return SharedShardLoopStepResult(
+            step_index=step_index,
+            accepted_actions=tuple(accepted_actions),
+            emitted_event_types=tuple(event.event_type for event in step_outcome.emitted_events),
+            active_actor_ids=active_actor_ids,
+            shard_mutation_generation=self.shard_state.journal.last_committed_mutation_generation,
+            world_tick_count=self.shard_state.metadata.world_tick_count,
+            world_tick_heartbeat=self.shard_state.metadata.last_world_tick_heartbeat,
+            world_npc_stance_phase=self.shard_state.metadata.npc_stance_phase,
+        )
+
+
+def _build_shared_shard_participant_binding(actor_id: str) -> SharedShardParticipantBinding:
+    if not isinstance(actor_id, str) or not actor_id:
+        raise ValueError("actor_id must be a non-empty string")
+    return SharedShardParticipantBinding(
+        actor_id=actor_id,
+        account_id=f"acct-{actor_id}",
+        character_id=f"char-{actor_id}",
+        session_id=f"sess-{actor_id}",
+    )
+
+
+def build_playable_benchmark_session(
+    *,
+    scenario: Mapping[str, Any] | str,
+    actor_ids: Sequence[str],
+    run_id: str,
+    run_seed: int | None = None,
+    max_steps_override: int | None = None,
+) -> BenchmarkPlayableSession:
+    """Build an initialized deterministic runtime session without scorecard/replay orchestration."""
+    scenario_load = load_scenario_definition(scenario)
+    if not scenario_load.accepted or scenario_load.scenario is None:
+        raise ValueError(f"scenario load rejected: {scenario_load.reason}")
+
+    initialization = build_scenario_initialization(
+        scenario_load.scenario,
+        seed_override=run_seed,
+    )
+    max_steps = initialization.max_steps
+    if max_steps_override is not None:
+        max_steps = max_steps_override
+
+    scenario_vars = _scenario_vars_to_dict(initialization.scenario_vars)
+    world_config = _extract_world_config(initialization.scenario_vars)
+    world_config = _apply_seed_variation_to_world_config(
+        world_config=world_config,
+        scenario_vars=scenario_vars,
+        seed=initialization.run_seed,
+    )
+    world_state = _build_runner_world_state(
+        start_room_id=initialization.start_room_id,
+        actor_ids=actor_ids,
+        seed=initialization.run_seed,
+        world_config=world_config,
+        scenario_vars=scenario_vars,
+    )
+    controller = SimulationController(
+        world_state_manager=world_state,
+        action_processor=BasicDeterministicActionProcessor(),
+        event_logger=_InMemoryEventLogger(),
+        seed=initialization.run_seed,
+        max_steps=max_steps,
+        run_id=run_id,
+    )
+    controller.initialize()
+    return BenchmarkPlayableSession(
+        scenario_initialization=initialization,
+        scenario_vars=scenario_vars,
+        world_state=world_state,
+        controller=controller,
+    )
+
+
+def build_shared_shard_loop_session(
+    *,
+    scenario: Mapping[str, Any] | str,
+    actor_ids: Sequence[str],
+    run_id: str,
+    shard_id: str = "shared-shard-local",
+    run_seed: int | None = None,
+    max_steps_override: int | None = None,
+    enforce_reconciliation: bool = False,
+    agent_actor_ids: Sequence[str] = (),
+    external_agent_commands_by_actor: Mapping[str, Sequence[str]] | None = None,
+    persistent_agent_session: bool = False,
+) -> SharedShardLoopSession:
+    """Build the first minimal in-process shared shard loop over one evolving world state."""
+    if isinstance(actor_ids, (str, bytes)) or not isinstance(actor_ids, Sequence):
+        raise ValueError("actor_ids must be a sequence of strings")
+    normalized_actor_ids = tuple(str(actor_id) for actor_id in actor_ids)
+    if len(normalized_actor_ids) < 2:
+        raise ValueError("shared_shard_loop_requires_at_least_two_actors")
+    if len(set(normalized_actor_ids)) != len(normalized_actor_ids):
+        raise ValueError("shared_shard_loop_actor_ids_must_be_unique")
+    if isinstance(agent_actor_ids, (str, bytes)) or not isinstance(agent_actor_ids, Sequence):
+        raise ValueError("agent_actor_ids must be a sequence of strings")
+    normalized_agent_actor_ids = tuple(str(actor_id) for actor_id in agent_actor_ids)
+    if len(set(normalized_agent_actor_ids)) != len(normalized_agent_actor_ids):
+        raise ValueError("shared_shard_loop_agent_actor_ids_must_be_unique")
+    if any(actor_id not in normalized_actor_ids for actor_id in normalized_agent_actor_ids):
+        raise ValueError("shared_shard_loop_agent_actor_ids_must_be_subset_of_actor_ids")
+    if not isinstance(persistent_agent_session, bool):
+        raise ValueError("persistent_agent_session must be a boolean")
+    external_agent_runners_by_actor: dict[str, LocalProcessRunner] = {}
+    if external_agent_commands_by_actor is not None:
+        normalized_external_commands = _resolve_external_local_agent_commands_by_actor(
+            external_agent_commands_by_actor
+        )
+        if any(actor_id not in normalized_actor_ids for actor_id in normalized_external_commands):
+            raise ValueError("shared_shard_loop_external_agent_actor_ids_must_be_subset_of_actor_ids")
+        if any(actor_id in normalized_agent_actor_ids for actor_id in normalized_external_commands):
+            raise ValueError("shared_shard_loop_actor_id_conflicts_between_mock_and_external_agents")
+        external_agent_runners_by_actor = {
+            actor_id: LocalProcessRunner(command, persistent_session=persistent_agent_session)
+            for actor_id, command in normalized_external_commands.items()
+        }
+    if not isinstance(shard_id, str) or not shard_id:
+        raise ValueError("shard_id must be a non-empty string")
+
+    playable_session = build_playable_benchmark_session(
+        scenario=scenario,
+        actor_ids=normalized_actor_ids,
+        run_id=run_id,
+        run_seed=run_seed,
+        max_steps_override=max_steps_override,
+    )
+    shard_state = ShardState.create_empty(
+        shard_id,
+        world_ruleset_version="shared_shard_loop_v1",
+        benchmark_engine_version=_BENCHMARK_VERSION,
+        scheduler_policy_version="deterministic_local_shared_loop_v1",
+    )
+    if enforce_reconciliation:
+        shard_state = shard_state.with_session_principal_reconciliation_enforced(True)
+
+    participant_bindings = tuple(
+        _build_shared_shard_participant_binding(actor_id)
+        for actor_id in normalized_actor_ids
+    )
+    for binding in participant_bindings:
+        shard_state = shard_state.register_account(account_id=binding.account_id)
+        shard_state = shard_state.register_character(
+            character_id=binding.character_id,
+            identity_class=(
+                "external_agent"
+                if binding.actor_id in normalized_agent_actor_ids
+                or binding.actor_id in external_agent_runners_by_actor
+                else "human_player"
+            ),
+            owner_account_id=binding.account_id,
+        )
+        shard_state = shard_state.open_character_session(
+            session_id=binding.session_id,
+            character_id=binding.character_id,
+            account_id=binding.account_id,
+        )
+
+    return SharedShardLoopSession(
+        shard_state=shard_state,
+        scenario_initialization=playable_session.scenario_initialization,
+        scenario_vars=playable_session.scenario_vars,
+        world_state=playable_session.world_state,
+        controller=playable_session.controller,
+        run_id=run_id,
+        participant_bindings=participant_bindings,
+        agent_actor_ids=normalized_agent_actor_ids,
+        external_agent_runners_by_actor=external_agent_runners_by_actor,
+    )
 
 
 def run_benchmark_lifecycle(
@@ -952,65 +1677,81 @@ def run_benchmark_lifecycle(
         run_id=run_config.run_id,
     )
     controller.initialize()
-    gateway_agent_configs = _build_gateway_agent_configs(
-        run_config.actor_ids,
-        script_policy=_resolve_agent_script_policy(scenario_vars),
-        external_agent_command=resolved_config.external_agent_command,
-        external_agent_commands_by_actor=resolved_config.external_agent_commands_by_actor,
-        external_agent_actor_id=resolved_config.external_agent_actor_id,
-        persistent_agent_session=resolved_config.persistent_agent_session,
-    )
-    session_manager = DeterministicLocalRunnerSessionManager()
-    runtime_events: list[EventRecord] = []
-    try:
-        while lifecycle.state.status is BenchmarkLifecycleStatus.RUNNING:
-            step = lifecycle.state.step_index
-            gateway_step = drive_gateway_step(
-                snapshot=world_state.get_snapshot(),
-                run_id=run_config.run_id,
-                step=step,
-                max_steps=max_steps,
-                agent_configs=gateway_agent_configs,
-                session_manager=session_manager,
-            )
-            _raise_external_agent_runner_failure_if_present(
-            gateway_failures=gateway_step.failures,
+    runtime_telemetry_records: list[dict[str, Any]] = []
+    with tempfile.TemporaryDirectory(prefix="mudbench-llm-runtime-telemetry-") as runtime_telemetry_dir:
+        gateway_agent_configs = _build_gateway_agent_configs(
+            run_config.actor_ids,
+            script_policy=_resolve_agent_script_policy(scenario_vars),
             external_agent_command=resolved_config.external_agent_command,
             external_agent_commands_by_actor=resolved_config.external_agent_commands_by_actor,
             external_agent_actor_id=resolved_config.external_agent_actor_id,
+            persistent_agent_session=resolved_config.persistent_agent_session,
+            external_agent_timeout_seconds=resolved_config.external_agent_timeout_seconds,
+            runtime_telemetry_dir=runtime_telemetry_dir,
         )
-            step_outcome = controller.step(gateway_step.accepted_action_requests)
-            tracker.apply_signals(
-                _build_runtime_step_signals(
+        session_manager = DeterministicLocalRunnerSessionManager()
+        runtime_events: list[EventRecord] = []
+        try:
+            while lifecycle.state.status is BenchmarkLifecycleStatus.RUNNING:
+                step = lifecycle.state.step_index
+                gateway_step = drive_gateway_step(
+                    snapshot=world_state.get_snapshot(),
+                    run_id=run_config.run_id,
+                    step=step,
+                    max_steps=max_steps,
+                    agent_configs=gateway_agent_configs,
+                    session_manager=session_manager,
+                )
+                _raise_external_agent_runner_failure_if_present(
+                    gateway_failures=gateway_step.failures,
+                    external_agent_command=resolved_config.external_agent_command,
+                    external_agent_commands_by_actor=resolved_config.external_agent_commands_by_actor,
+                    external_agent_actor_id=resolved_config.external_agent_actor_id,
+                )
+                step_runtime_telemetry = _read_runtime_telemetry_records(
+                    telemetry_dir=Path(runtime_telemetry_dir),
                     run_id=run_config.run_id,
                     step=step,
                     actor_ids=run_config.actor_ids,
-                    accepted_action_count=step_outcome.processed_actions,
-                    gateway_failures=gateway_step.failures,
-                    emitted_events=step_outcome.emitted_events,
                 )
-            )
-            runtime_events.extend(step_outcome.emitted_events)
-            tracker_snapshot_at_step = tracker.snapshot()
-            runtime_events.append(
-                EventRecord(
-                    step_index=step,
-                    event_type=_RUNTIME_REPLAY_STATE_EVENT_TYPE,
-                    payload=normalize_payload(
-                        {
-                            "state_schema": _RUNTIME_REPLAY_STATE_SCHEMA,
-                            "state_json": _build_runtime_state_snapshot_json(
-                                run_manifest=run_manifest,
-                                tracker_snapshot=tracker_snapshot_at_step,
-                                step_index=step,
-                            ),
-                        }
-                    ),
+                runtime_telemetry_records.extend(step_runtime_telemetry)
+                step_outcome = controller.step(gateway_step.accepted_action_requests)
+                tracker.apply_signals(
+                    _build_runtime_step_signals(
+                        run_id=run_config.run_id,
+                        step=step,
+                        actor_ids=run_config.actor_ids,
+                        accepted_action_count=step_outcome.processed_actions,
+                        gateway_failures=gateway_step.failures,
+                        emitted_events=step_outcome.emitted_events,
+                        runtime_telemetry_records=step_runtime_telemetry,
+                    )
                 )
-            )
-            lifecycle.advance_step()
-    finally:
-        session_manager.close(tuple(config.runner for config in gateway_agent_configs))
+                runtime_events.extend(step_outcome.emitted_events)
+                runtime_events.extend(_build_runtime_telemetry_events(step_runtime_telemetry))
+                tracker_snapshot_at_step = tracker.snapshot()
+                runtime_events.append(
+                    EventRecord(
+                        step_index=step,
+                        event_type=_RUNTIME_REPLAY_STATE_EVENT_TYPE,
+                        payload=normalize_payload(
+                            {
+                                "state_schema": _RUNTIME_REPLAY_STATE_SCHEMA,
+                                "state_json": _build_runtime_state_snapshot_json(
+                                    run_manifest=run_manifest,
+                                    tracker_snapshot=tracker_snapshot_at_step,
+                                    step_index=step,
+                                    runtime_telemetry_summary=_build_runtime_telemetry_summary(
+                                        runtime_telemetry_records
+                                    ),
+                                ),
+                            }
+                        ),
+                    )
+                )
+                lifecycle.advance_step()
+        finally:
+            session_manager.close(tuple(config.runner for config in gateway_agent_configs))
 
     tracker_snapshot = tracker.snapshot()
     capability_result = extract_capability_metrics(tracker_snapshot)
@@ -1070,6 +1811,7 @@ def run_benchmark_lifecycle(
         replay_artifact=replay_artifact,
         replay_parity_artifact=parity_result.parity_artifact,
         replay_artifact_refs=replay_artifact_refs,
+        runtime_telemetry_records=tuple(runtime_telemetry_records),
     )
 
 
@@ -1086,6 +1828,7 @@ def _coerce_runner_config(
             external_agent_commands_by_actor=config.external_agent_commands_by_actor,
             external_agent_actor_id=config.external_agent_actor_id,
             persistent_agent_session=config.persistent_agent_session,
+            external_agent_timeout_seconds=config.external_agent_timeout_seconds,
             normalization_profiles=config.normalization_profiles,
             score_weights=config.score_weights,
         )
@@ -1104,6 +1847,7 @@ def _build_runtime_step_signals(
     accepted_action_count: int,
     gateway_failures: Sequence[Any],
     emitted_events: Sequence[EventRecord],
+    runtime_telemetry_records: Sequence[Mapping[str, Any]] = (),
 ) -> tuple[MetricSignal, ...]:
     signals: list[MetricSignal] = []
     for actor_id in actor_ids:
@@ -1242,6 +1986,70 @@ def _build_runtime_step_signals(
                     actor_id=actor_id,
                     metric_name="actions.count",
                     value=1.0,
+                )
+            )
+    for record in runtime_telemetry_records:
+        actor_id = record.get("actor_id")
+        if not isinstance(actor_id, str) or not actor_id:
+            continue
+        signals.append(
+            MetricSignal(
+                run_id=run_id,
+                step=step,
+                actor_id=actor_id,
+                metric_name="llm.runtime.turns",
+                value=1.0,
+            )
+        )
+        signals.append(
+            MetricSignal(
+                run_id=run_id,
+                step=step,
+                actor_id=actor_id,
+                metric_name="llm.runtime.repair_used",
+                value=1.0 if bool(record.get("repair_used")) else 0.0,
+            )
+        )
+        signals.append(
+            MetricSignal(
+                run_id=run_id,
+                step=step,
+                actor_id=actor_id,
+                metric_name="llm.runtime.fail_closed_used",
+                value=1.0 if bool(record.get("fail_closed_used")) else 0.0,
+            )
+        )
+        final_parse_status = record.get("final_parse_status")
+        if isinstance(final_parse_status, str) and final_parse_status:
+            signals.append(
+                MetricSignal(
+                    run_id=run_id,
+                    step=step,
+                    actor_id=actor_id,
+                    metric_name=f"llm.runtime.final_parse_status.{final_parse_status}",
+                    value=1.0,
+                )
+            )
+        provider_request_count = record.get("provider_request_count")
+        if isinstance(provider_request_count, int):
+            signals.append(
+                MetricSignal(
+                    run_id=run_id,
+                    step=step,
+                    actor_id=actor_id,
+                    metric_name="llm.runtime.provider_request_count",
+                    value=float(provider_request_count),
+                )
+            )
+        provider_latency_ms = record.get("provider_latency_ms")
+        if isinstance(provider_latency_ms, (int, float)):
+            signals.append(
+                MetricSignal(
+                    run_id=run_id,
+                    step=step,
+                    actor_id=actor_id,
+                    metric_name="llm.runtime.provider_latency_ms",
+                    value=float(provider_latency_ms),
                 )
             )
     return tuple(signals)
@@ -1565,10 +2373,17 @@ def _build_gateway_agent_configs(
     external_agent_commands_by_actor: Mapping[str, Sequence[str]] | None = None,
     external_agent_actor_id: str | None = None,
     persistent_agent_session: bool = False,
+    external_agent_timeout_seconds: float | None = None,
+    runtime_telemetry_dir: str | None = None,
 ) -> tuple[StepDriverAgentConfig, ...]:
     external_command = _resolve_external_local_agent_command(external_agent_command)
     external_commands_by_actor = _resolve_external_local_agent_commands_by_actor(external_agent_commands_by_actor)
     script_map = _resolve_runner_agent_scripts(script_policy)
+    timeout_seconds = (
+        _RUNNER_AGENT_TIMEOUT_SECONDS
+        if external_agent_timeout_seconds is None
+        else float(external_agent_timeout_seconds)
+    )
     configs: list[StepDriverAgentConfig] = []
     for idx, actor_id in enumerate(actor_ids):
         actor_external_command = external_commands_by_actor.get(actor_id)
@@ -1580,6 +2395,11 @@ def _build_gateway_agent_configs(
             command = (sys.executable, "-c", script)
         else:
             command = actor_external_command or external_command
+            command = _augment_runtime_telemetry_command(
+                command=command,
+                actor_id=actor_id,
+                runtime_telemetry_dir=runtime_telemetry_dir,
+            )
         configs.append(
             StepDriverAgentConfig(
                 actor_id=actor_id,
@@ -1587,7 +2407,7 @@ def _build_gateway_agent_configs(
                     command,
                     persistent_session=use_external_command and persistent_agent_session,
                 ),
-                timeout_seconds=_RUNNER_AGENT_TIMEOUT_SECONDS,
+                timeout_seconds=timeout_seconds,
             )
         )
     return tuple(configs)
@@ -1625,6 +2445,167 @@ def _resolve_external_local_agent_commands_by_actor(
     return normalized_commands_by_actor
 
 
+def _augment_runtime_telemetry_command(
+    *,
+    command: Sequence[str],
+    actor_id: str,
+    runtime_telemetry_dir: str | None,
+) -> tuple[str, ...]:
+    normalized_command = tuple(command)
+    if runtime_telemetry_dir is None or not _is_direct_provider_runner_command(normalized_command):
+        return normalized_command
+    return normalized_command + (
+        "--telemetry-dir",
+        runtime_telemetry_dir,
+        "--telemetry-actor-id",
+        actor_id,
+    )
+
+
+def _is_direct_provider_runner_command(command: Sequence[str]) -> bool:
+    if len(command) < 2:
+        return False
+    return Path(command[1]).name == "direct_provider_runner.py"
+
+
+def _read_runtime_telemetry_records(
+    *,
+    telemetry_dir: Path,
+    run_id: str,
+    step: int,
+    actor_ids: Sequence[str],
+) -> tuple[dict[str, Any], ...]:
+    if not telemetry_dir.exists():
+        return ()
+
+    records: list[dict[str, Any]] = []
+    for actor_id in sorted(actor_ids):
+        record_path = telemetry_dir / (
+            f"{run_id}__step_{step:06d}__{actor_id}.llm_runtime_telemetry.json"
+        )
+        if not record_path.exists():
+            continue
+        payload = json.loads(record_path.read_text(encoding="utf-8"))
+        if not isinstance(payload, dict):
+            raise ValueError(f"runtime_telemetry_invalid_payload:{record_path}")
+        records.append(_normalize_runtime_telemetry_record(payload))
+        record_path.unlink()
+    return tuple(records)
+
+
+def _normalize_runtime_telemetry_record(payload: Mapping[str, Any]) -> dict[str, Any]:
+    actor_id = payload.get("actor_id")
+    run_id = payload.get("run_id")
+    step = payload.get("step")
+    final_parse_status = payload.get("final_parse_status")
+    if not isinstance(actor_id, str) or not actor_id:
+        raise ValueError("runtime_telemetry_missing_actor_id")
+    if not isinstance(run_id, str) or not run_id:
+        raise ValueError("runtime_telemetry_missing_run_id")
+    if not isinstance(step, int) or step < 0:
+        raise ValueError("runtime_telemetry_invalid_step")
+    if not isinstance(final_parse_status, str) or not final_parse_status:
+        raise ValueError("runtime_telemetry_missing_final_parse_status")
+
+    record: dict[str, Any] = {
+        "telemetry_schema": str(payload.get("telemetry_schema", _LLM_RUNTIME_TELEMETRY_SCHEMA)),
+        "actor_id": actor_id,
+        "run_id": run_id,
+        "step": step,
+        "repair_used": bool(payload.get("repair_used")),
+        "fail_closed_used": bool(payload.get("fail_closed_used")),
+        "final_parse_status": final_parse_status,
+    }
+    failure_reason = payload.get("failure_reason")
+    if isinstance(failure_reason, str) and failure_reason:
+        record["failure_reason"] = failure_reason
+    provider_name = payload.get("provider_name")
+    if isinstance(provider_name, str) and provider_name:
+        record["provider_name"] = provider_name
+    provider_request_count = payload.get("provider_request_count")
+    if isinstance(provider_request_count, int):
+        record["provider_request_count"] = provider_request_count
+    provider_latency_ms = payload.get("provider_latency_ms")
+    if isinstance(provider_latency_ms, (int, float)):
+        record["provider_latency_ms"] = round(float(provider_latency_ms), 3)
+    return record
+
+
+def _build_runtime_telemetry_events(
+    runtime_telemetry_records: Sequence[Mapping[str, Any]],
+) -> tuple[EventRecord, ...]:
+    events: list[EventRecord] = []
+    for record in runtime_telemetry_records:
+        step = record.get("step")
+        actor_id = record.get("actor_id")
+        if not isinstance(step, int) or step < 0:
+            continue
+        if not isinstance(actor_id, str) or not actor_id:
+            continue
+        events.append(
+            EventRecord(
+                step_index=step,
+                event_type=_LLM_RUNTIME_TELEMETRY_EVENT_TYPE,
+                actor_id=actor_id,
+                payload=normalize_payload(dict(record)),
+            )
+        )
+    return tuple(events)
+
+
+def _build_runtime_telemetry_summary(
+    runtime_telemetry_records: Sequence[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    summary_by_actor: dict[str, dict[str, Any]] = {}
+    for record in runtime_telemetry_records:
+        actor_id = record.get("actor_id")
+        if not isinstance(actor_id, str) or not actor_id:
+            continue
+        entry = summary_by_actor.setdefault(
+            actor_id,
+            {
+                "actor_id": actor_id,
+                "turn_count": 0,
+                "repair_used_count": 0,
+                "fail_closed_used_count": 0,
+                "provider_request_count_total": 0,
+                "provider_latency_ms_total": 0.0,
+                "final_parse_status_counts": {},
+                "failure_reasons": [],
+            },
+        )
+        entry["turn_count"] += 1
+        if bool(record.get("repair_used")):
+            entry["repair_used_count"] += 1
+        if bool(record.get("fail_closed_used")):
+            entry["fail_closed_used_count"] += 1
+        final_parse_status = record.get("final_parse_status")
+        if isinstance(final_parse_status, str) and final_parse_status:
+            counts = entry["final_parse_status_counts"]
+            counts[final_parse_status] = counts.get(final_parse_status, 0) + 1
+        failure_reason = record.get("failure_reason")
+        if isinstance(failure_reason, str) and failure_reason and failure_reason not in entry["failure_reasons"]:
+            entry["failure_reasons"].append(failure_reason)
+        provider_request_count = record.get("provider_request_count")
+        if isinstance(provider_request_count, int):
+            entry["provider_request_count_total"] += provider_request_count
+        provider_latency_ms = record.get("provider_latency_ms")
+        if isinstance(provider_latency_ms, (int, float)):
+            entry["provider_latency_ms_total"] += float(provider_latency_ms)
+
+    ordered_summary: list[dict[str, Any]] = []
+    for actor_id in sorted(summary_by_actor):
+        entry = dict(summary_by_actor[actor_id])
+        entry["provider_latency_ms_total"] = round(float(entry["provider_latency_ms_total"]), 3)
+        entry["failure_reasons"] = sorted(entry["failure_reasons"])
+        entry["final_parse_status_counts"] = {
+            key: entry["final_parse_status_counts"][key]
+            for key in sorted(entry["final_parse_status_counts"])
+        }
+        ordered_summary.append(entry)
+    return ordered_summary
+
+
 def _raise_external_agent_runner_failure_if_present(
     *,
     gateway_failures: Sequence[Any],
@@ -1660,6 +2641,12 @@ def _resolve_runner_agent_scripts(script_policy: str | None) -> Mapping[int, str
         return _RUNNER_PLANNING_AGENT_SCRIPTS
     if script_policy == "social-trade-dependency":
         return _RUNNER_SOCIAL_TRADE_AGENT_SCRIPTS
+    if script_policy == "guarded-relic-v1":
+        return _RUNNER_GUARDED_RELIC_AGENT_SCRIPTS
+    if script_policy == "hazard-tradeoff-v1":
+        return _RUNNER_HAZARD_TRADEOFF_AGENT_SCRIPTS
+    if script_policy == "delayed-cost-v1":
+        return _RUNNER_DELAYED_COST_AGENT_SCRIPTS
     return _RUNNER_AGENT_SCRIPTS
 
 
@@ -1720,6 +2707,7 @@ def _build_runtime_state_snapshot_json(
     run_manifest: RunManifest,
     tracker_snapshot: MetricTrackerSnapshot,
     step_index: int,
+    runtime_telemetry_summary: Sequence[Mapping[str, Any]] = (),
 ) -> str:
     if not isinstance(step_index, int) or isinstance(step_index, bool) or step_index < 0:
         raise ValueError("step_index must be a non-negative integer")
@@ -1736,6 +2724,7 @@ def _build_runtime_state_snapshot_json(
         "npc_states": [],
         "room_states": [],
         "tracker_total_signals": tracker_payload["total_signals"],
+        "runtime_telemetry_summary": [dict(entry) for entry in runtime_telemetry_summary],
     }
     return json.dumps(
         canonical_state,

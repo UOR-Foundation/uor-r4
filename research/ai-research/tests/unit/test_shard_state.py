@@ -59,6 +59,9 @@ def test_shard_state_exposes_clear_metadata_and_generation_placeholders() -> Non
         "world_ruleset_version": "world-v1",
         "benchmark_engine_version": "engine-v1",
         "scheduler_policy_version": "scheduler-v1",
+        "world_tick_count": 0,
+        "last_world_tick_heartbeat": "not_started",
+        "npc_stance_phase": "dormant",
         "season_id": None,
         "created_from_snapshot_ref": None,
     }
@@ -77,6 +80,116 @@ def test_shard_state_exposes_clear_metadata_and_generation_placeholders() -> Non
     assert payload["mutation_policy"] == {
         "enforce_session_principal_reconciliation": False,
     }
+
+
+def test_shard_state_world_tick_hook_is_deterministic_without_mutating_identity_journal() -> None:
+    state = (
+        ShardState.create_empty("shard-dev")
+        .register_account(account_id="acct-alice")
+        .register_character(
+            character_id="char-alice",
+            identity_class="human_player",
+            owner_account_id="acct-alice",
+        )
+    )
+
+    advanced_once = state.advance_world_tick()
+    advanced_twice = advanced_once.advance_world_tick()
+
+    assert state.metadata.world_tick_count == 0
+    assert state.metadata.last_world_tick_heartbeat == "not_started"
+    assert state.metadata.npc_stance_phase == "dormant"
+    assert advanced_once.metadata.world_tick_count == 1
+    assert advanced_once.metadata.last_world_tick_heartbeat == "shared_shard_world_tick:0001"
+    assert advanced_once.metadata.npc_stance_phase == "watchful"
+    assert advanced_twice.metadata.world_tick_count == 2
+    assert advanced_twice.metadata.last_world_tick_heartbeat == "shared_shard_world_tick:0002"
+    assert advanced_twice.metadata.npc_stance_phase == "patrolling"
+    assert advanced_twice.journal.last_committed_mutation_generation == state.journal.last_committed_mutation_generation
+    assert advanced_twice.journal.expected_next_mutation_generation == state.journal.expected_next_mutation_generation
+    assert advanced_twice.identity_registry.to_dict() == state.identity_registry.to_dict()
+
+
+def test_shard_state_world_tick_scene_message_tracks_npc_stance_phase_deterministically() -> None:
+    state = ShardState.create_empty("shard-dev")
+
+    first = state.advance_world_tick()
+    second = first.advance_world_tick()
+    third = second.advance_world_tick()
+
+    assert state.get_world_tick_scene_message() == (
+        "The shard feels still, as if the watch has not yet begun."
+    )
+    assert first.get_world_tick_scene_message() == (
+        "A distant sentinel grows watchful in the quiet corridors."
+    )
+    assert second.get_world_tick_scene_message() == (
+        "You catch the measured rhythm of a distant patrol."
+    )
+    assert third.get_world_tick_scene_message() == (
+        "The far-off watch settles back into guarded stillness."
+    )
+
+
+def test_shard_state_world_phase_interaction_hint_tracks_stance_phase_deterministically() -> None:
+    state = ShardState.create_empty("shard-dev")
+
+    first = state.advance_world_tick()
+    second = first.advance_world_tick()
+    third = second.advance_world_tick()
+
+    assert state.get_world_phase_interaction_hint() == (
+        "Hint: the route feels open while the watch remains dormant."
+    )
+    assert first.get_world_phase_interaction_hint() == (
+        "Hint: the sharp watch makes a careful look feel safer than rushing."
+    )
+    assert second.get_world_phase_interaction_hint() == (
+        "Hint: the moving patrol leaves brief windows for repositioning."
+    )
+    assert third.get_world_phase_interaction_hint() == (
+        "Hint: the easing watch makes nearby movement feel less exposed."
+    )
+    assert second.get_world_tick_observation_messages() == (
+        "You catch the measured rhythm of a distant patrol.",
+        "Hint: the moving patrol leaves brief windows for repositioning.",
+    )
+
+
+def test_shard_state_world_phase_outcome_effect_is_deterministic_for_corridor_route() -> None:
+    state = ShardState.create_empty("shard-dev")
+
+    watchful = state.advance_world_tick()
+    patrolling = watchful.advance_world_tick()
+    settling = patrolling.advance_world_tick()
+
+    action_space = ("wait", "look", "move east", "move west")
+
+    assert state.get_world_phase_outcome_message(location="corridor") == (
+        "Consequence: the exposed west passage is open before the watch begins."
+    )
+    assert watchful.get_world_phase_outcome_message(location="corridor") == (
+        "Consequence: the exposed west passage is pinned under watch; move west is unavailable."
+    )
+    assert patrolling.get_world_phase_outcome_message(location="corridor") == (
+        "Consequence: the west passage opens again between patrol sweeps."
+    )
+    assert settling.get_world_phase_outcome_message(location="corridor") == (
+        "Consequence: the west passage remains open as the watch settles."
+    )
+    assert watchful.get_world_phase_filtered_action_space(
+        location="corridor",
+        action_space=action_space,
+    ) == ("wait", "look", "move east")
+    assert patrolling.get_world_phase_filtered_action_space(
+        location="corridor",
+        action_space=action_space,
+    ) == action_space
+    assert watchful.get_world_tick_observation_messages(location="corridor") == (
+        "A distant sentinel grows watchful in the quiet corridors.",
+        "Hint: the sharp watch makes a careful look feel safer than rushing.",
+        "Consequence: the exposed west passage is pinned under watch; move west is unavailable.",
+    )
 
 
 def test_registry_shell_uses_sorted_record_categories_without_persistence_side_effects() -> None:
@@ -2436,6 +2549,7 @@ def test_shard_state_artifact_bundle_writer_is_deterministic_and_side_effect_fre
         "mutation_journal_placeholder": str(first_dir / "shard-dev.mutation_journal_placeholder.json"),
         "shard_export_payload": str(first_dir / "shard-dev.shard_export_placeholder.json"),
         "artifact_index": str(first_dir / "shard-dev.artifact_index.json"),
+        "artifact_manifest": str(first_dir / "shard-dev.artifact_manifest.json"),
     }
     assert second_bundle == {
         "bundle_directory": str(second_dir),
@@ -2444,9 +2558,11 @@ def test_shard_state_artifact_bundle_writer_is_deterministic_and_side_effect_fre
         "mutation_journal_placeholder": str(second_dir / "shard-dev.mutation_journal_placeholder.json"),
         "shard_export_payload": str(second_dir / "shard-dev.shard_export_placeholder.json"),
         "artifact_index": str(second_dir / "shard-dev.artifact_index.json"),
+        "artifact_manifest": str(second_dir / "shard-dev.artifact_manifest.json"),
     }
     assert sorted(path.name for path in first_dir.iterdir()) == [
         "shard-dev.artifact_index.json",
+        "shard-dev.artifact_manifest.json",
         "shard-dev.mutation_journal_placeholder.json",
         "shard-dev.registry_checkpoint_placeholder.json",
         "shard-dev.shard_checkpoint_placeholder.json",
@@ -2454,6 +2570,7 @@ def test_shard_state_artifact_bundle_writer_is_deterministic_and_side_effect_fre
     ]
     assert sorted(path.name for path in second_dir.iterdir()) == [
         "shard-dev.artifact_index.json",
+        "shard-dev.artifact_manifest.json",
         "shard-dev.mutation_journal_placeholder.json",
         "shard-dev.registry_checkpoint_placeholder.json",
         "shard-dev.shard_checkpoint_placeholder.json",
@@ -2479,8 +2596,15 @@ def test_shard_state_artifact_bundle_writer_is_deterministic_and_side_effect_fre
         (first_dir / "shard-dev.artifact_index.json").read_text(encoding="utf-8")
         == (second_dir / "shard-dev.artifact_index.json").read_text(encoding="utf-8")
     )
+    assert (
+        (first_dir / "shard-dev.artifact_manifest.json").read_text(encoding="utf-8")
+        == (second_dir / "shard-dev.artifact_manifest.json").read_text(encoding="utf-8")
+    )
     index_payload = json.loads(
         (first_dir / "shard-dev.artifact_index.json").read_text(encoding="utf-8")
+    )
+    manifest_payload = json.loads(
+        (first_dir / "shard-dev.artifact_manifest.json").read_text(encoding="utf-8")
     )
     shard_checkpoint_hash = hashlib.sha256(
         (first_dir / "shard-dev.shard_checkpoint_placeholder.json").read_bytes()
@@ -2535,6 +2659,29 @@ def test_shard_state_artifact_bundle_writer_is_deterministic_and_side_effect_fre
                 "content_hash_sha256": shard_export_hash,
             },
         ],
+    }
+    assert manifest_payload == {
+        "payload_kind": "shard_artifact_bundle_manifest_placeholder",
+        "payload_version": 1,
+        "manifest_family": "shard_artifact_bundle_manifest_v1",
+        "shard_id": "shard-dev",
+        "mode_marker": "persistent_world_shell",
+        "bundle_generation": 4,
+        "expected_next_generation": 5,
+        "index_filename": "shard-dev.artifact_index.json",
+        "artifact_filenames": {
+            "shard_checkpoint_placeholder": "shard-dev.shard_checkpoint_placeholder.json",
+            "registry_checkpoint_placeholder": "shard-dev.registry_checkpoint_placeholder.json",
+            "mutation_journal_placeholder": "shard-dev.mutation_journal_placeholder.json",
+            "shard_export_payload": "shard-dev.shard_export_placeholder.json",
+        },
+        "linkage": {
+            "shard_checkpoint_generation": 4,
+            "registry_checkpoint_generation": 4,
+            "mutation_journal_generation": 4,
+            "mutation_journal_expected_next_generation": 5,
+            "shard_export_generation": 4,
+        },
     }
     assert state.to_dict() == before
     assert state.checkpoint.registry_checkpoint_generation == 0
@@ -2591,6 +2738,7 @@ def test_shard_state_bundle_verification_helper_accepts_valid_bundle(tmp_path) -
         "payload_version": 1,
         "bundle_directory": str(bundle_dir),
         "index_filename": "shard-dev.artifact_index.json",
+        "manifest_filename": "shard-dev.artifact_manifest.json",
         "shard_id": "shard-dev",
         "is_valid": True,
         "issue_codes": [],
@@ -2692,6 +2840,29 @@ def test_shard_state_bundle_verification_helper_detects_hash_mismatch(tmp_path) 
     assert shard_export_result["issue_codes"] == ["content_hash_mismatch"]
 
 
+def test_shard_state_bundle_verification_helper_detects_manifest_linkage_mismatch(tmp_path) -> None:
+    state = ShardState.create_empty("shard-dev").register_account(account_id="acct-alice")
+    before = state.to_dict()
+    bundle_dir = tmp_path / "bundle-manifest-mismatch"
+    bundle_dir.mkdir()
+    state.write_shard_artifact_bundle(bundle_dir)
+
+    manifest_path = bundle_dir / "shard-dev.artifact_manifest.json"
+    manifest_payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest_payload["linkage"]["shard_export_generation"] = 99
+    manifest_path.write_text(
+        json.dumps(manifest_payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    result = state.verify_shard_artifact_bundle(bundle_dir)
+
+    assert result["is_valid"] is False
+    assert result["issue_codes"] == ["manifest_linkage_mismatch"]
+    assert result["manifest_filename"] == "shard-dev.artifact_manifest.json"
+    assert state.to_dict() == before
+
+
 def test_shard_state_bundle_verification_helper_detects_generation_linkage_mismatch(
     tmp_path,
 ) -> None:
@@ -2739,6 +2910,98 @@ def test_shard_state_bundle_verification_helper_detects_generation_linkage_misma
     assert state.to_dict() == before
 
 
+def test_shard_state_bundle_recovery_helper_classifies_valid_bundle_as_resumable(tmp_path) -> None:
+    state = ShardState.create_empty("shard-dev").register_account(account_id="acct-alice")
+    before = state.to_dict()
+    bundle_dir = tmp_path / "bundle-recovery-valid"
+    bundle_dir.mkdir()
+    state.write_shard_artifact_bundle(bundle_dir)
+
+    result = state.classify_shard_bundle_recovery_state(bundle_dir)
+
+    assert result == {
+        "payload_kind": "shard_bundle_recovery_classification_placeholder",
+        "payload_version": 1,
+        "bundle_directory": str(bundle_dir),
+        "shard_id": "shard-dev",
+        "recovery_state": "resumable",
+        "issue_codes": [],
+        "fatal_issue_codes": [],
+        "degradable_issue_codes": [],
+        "verification_is_valid": True,
+    }
+    assert state.to_dict() == before
+
+
+def test_shard_state_bundle_recovery_helper_classifies_filename_mismatch_as_degraded(
+    tmp_path,
+) -> None:
+    state = ShardState.create_empty("shard-dev").register_account(account_id="acct-alice")
+    before = state.to_dict()
+    bundle_dir = tmp_path / "bundle-recovery-degraded"
+    bundle_dir.mkdir()
+    state.write_shard_artifact_bundle(bundle_dir)
+
+    index_path = bundle_dir / "shard-dev.artifact_index.json"
+    index_payload = json.loads(index_path.read_text(encoding="utf-8"))
+    for artifact in index_payload["artifacts"]:
+        if artifact["artifact_type"] == "shard_export_payload":
+            artifact["filename"] = "unexpected-shard-export.json"
+            break
+    index_path.write_text(
+        json.dumps(index_payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    result = state.classify_shard_bundle_recovery_state(bundle_dir)
+
+    assert result == {
+        "payload_kind": "shard_bundle_recovery_classification_placeholder",
+        "payload_version": 1,
+        "bundle_directory": str(bundle_dir),
+        "shard_id": "shard-dev",
+        "recovery_state": "degraded",
+        "issue_codes": ["filename_mismatch"],
+        "fatal_issue_codes": [],
+        "degradable_issue_codes": ["filename_mismatch"],
+        "verification_is_valid": False,
+    }
+    assert state.to_dict() == before
+
+
+def test_shard_state_bundle_recovery_helper_classifies_manifest_mismatch_as_non_resumable(
+    tmp_path,
+) -> None:
+    state = ShardState.create_empty("shard-dev").register_account(account_id="acct-alice")
+    before = state.to_dict()
+    bundle_dir = tmp_path / "bundle-recovery-nonresumable"
+    bundle_dir.mkdir()
+    state.write_shard_artifact_bundle(bundle_dir)
+
+    manifest_path = bundle_dir / "shard-dev.artifact_manifest.json"
+    manifest_payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest_payload["linkage"]["shard_export_generation"] = 99
+    manifest_path.write_text(
+        json.dumps(manifest_payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    result = state.classify_shard_bundle_recovery_state(bundle_dir)
+
+    assert result == {
+        "payload_kind": "shard_bundle_recovery_classification_placeholder",
+        "payload_version": 1,
+        "bundle_directory": str(bundle_dir),
+        "shard_id": "shard-dev",
+        "recovery_state": "non_resumable",
+        "issue_codes": ["manifest_linkage_mismatch"],
+        "fatal_issue_codes": ["manifest_linkage_mismatch"],
+        "degradable_issue_codes": [],
+        "verification_is_valid": False,
+    }
+    assert state.to_dict() == before
+
+
 def test_shard_state_export_payload_can_include_valid_bundle_verification_summary(tmp_path) -> None:
     state = (
         ShardState.create_empty("shard-dev")
@@ -2772,9 +3035,11 @@ def test_shard_state_export_payload_can_include_valid_bundle_verification_summar
         "verified_artifact_count": 4,
         "hash_issue_codes": [],
         "linkage_issue_codes": [],
+        "manifest_issue_codes": [],
         "issue_category_counts": {
             "hash": 0,
             "linkage": 0,
+            "manifest": 0,
             "other": 0,
         },
     }
@@ -2782,38 +3047,138 @@ def test_shard_state_export_payload_can_include_valid_bundle_verification_summar
     assert state.to_dict() == before
 
 
-def test_shard_state_export_payload_can_include_linkage_issue_bundle_verification_summary(
+def test_shard_state_export_payload_can_include_resumable_bundle_recovery_summary(
     tmp_path,
 ) -> None:
-    state = (
-        ShardState.create_empty("shard-dev")
-        .register_account(account_id="acct-alice")
-        .register_agent_profile(agent_profile_id="profile-a")
-    )
+    state = ShardState.create_empty("shard-dev").register_account(account_id="acct-alice")
     before = state.to_dict()
-    bundle_dir = tmp_path / "bundle-invalid-summary"
+    bundle_dir = tmp_path / "bundle-recovery-summary-valid"
     bundle_dir.mkdir()
     state.write_shard_artifact_bundle(bundle_dir)
 
-    shard_export_path = bundle_dir / "shard-dev.shard_export_placeholder.json"
-    shard_export_payload = json.loads(shard_export_path.read_text(encoding="utf-8"))
-    shard_export_payload["journal"]["last_committed_mutation_generation"] = 99
-    shard_export_payload["journal"]["expected_next_mutation_generation"] = 100
-    shard_export_path.write_text(
-        json.dumps(shard_export_payload, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
-    shard_export_hash = hashlib.sha256(shard_export_path.read_bytes()).hexdigest()
+    summary = state.classify_shard_bundle_recovery_state(bundle_dir)
+    payload = state.build_shard_export_payload(bundle_recovery_summary=summary)
+
+    assert summary == {
+        "payload_kind": "shard_bundle_recovery_classification_placeholder",
+        "payload_version": 1,
+        "bundle_directory": str(bundle_dir),
+        "shard_id": "shard-dev",
+        "recovery_state": "resumable",
+        "issue_codes": [],
+        "fatal_issue_codes": [],
+        "degradable_issue_codes": [],
+        "verification_is_valid": True,
+    }
+    assert payload["bundle_recovery_summary"] == {
+        "recovery_state": "resumable",
+        "issue_codes": [],
+        "fatal_issue_codes": [],
+        "degradable_issue_codes": [],
+        "verification_is_valid": True,
+    }
+    assert state.to_dict() == before
+
+
+def test_shard_state_export_payload_can_include_degraded_bundle_recovery_summary(
+    tmp_path,
+) -> None:
+    state = ShardState.create_empty("shard-dev").register_account(account_id="acct-alice")
+    before = state.to_dict()
+    bundle_dir = tmp_path / "bundle-recovery-summary-degraded"
+    bundle_dir.mkdir()
+    state.write_shard_artifact_bundle(bundle_dir)
 
     index_path = bundle_dir / "shard-dev.artifact_index.json"
     index_payload = json.loads(index_path.read_text(encoding="utf-8"))
     for artifact in index_payload["artifacts"]:
         if artifact["artifact_type"] == "shard_export_payload":
-            artifact["generation"] = 99
-            artifact["content_hash_sha256"] = shard_export_hash
+            artifact["filename"] = "unexpected-shard-export.json"
             break
     index_path.write_text(
         json.dumps(index_payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    summary = state.classify_shard_bundle_recovery_state(bundle_dir)
+    payload = state.build_shard_export_payload(bundle_recovery_summary=summary)
+
+    assert summary == {
+        "payload_kind": "shard_bundle_recovery_classification_placeholder",
+        "payload_version": 1,
+        "bundle_directory": str(bundle_dir),
+        "shard_id": "shard-dev",
+        "recovery_state": "degraded",
+        "issue_codes": ["filename_mismatch"],
+        "fatal_issue_codes": [],
+        "degradable_issue_codes": ["filename_mismatch"],
+        "verification_is_valid": False,
+    }
+    assert payload["bundle_recovery_summary"] == {
+        "recovery_state": "degraded",
+        "issue_codes": ["filename_mismatch"],
+        "fatal_issue_codes": [],
+        "degradable_issue_codes": ["filename_mismatch"],
+        "verification_is_valid": False,
+    }
+    assert state.to_dict() == before
+
+
+def test_shard_state_export_payload_can_include_non_resumable_bundle_recovery_summary(
+    tmp_path,
+) -> None:
+    state = ShardState.create_empty("shard-dev").register_account(account_id="acct-alice")
+    before = state.to_dict()
+    bundle_dir = tmp_path / "bundle-recovery-summary-nonresumable"
+    bundle_dir.mkdir()
+    state.write_shard_artifact_bundle(bundle_dir)
+
+    manifest_path = bundle_dir / "shard-dev.artifact_manifest.json"
+    manifest_payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest_payload["linkage"]["shard_export_generation"] = 99
+    manifest_path.write_text(
+        json.dumps(manifest_payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    summary = state.classify_shard_bundle_recovery_state(bundle_dir)
+    payload = state.build_shard_export_payload(bundle_recovery_summary=summary)
+
+    assert summary == {
+        "payload_kind": "shard_bundle_recovery_classification_placeholder",
+        "payload_version": 1,
+        "bundle_directory": str(bundle_dir),
+        "shard_id": "shard-dev",
+        "recovery_state": "non_resumable",
+        "issue_codes": ["manifest_linkage_mismatch"],
+        "fatal_issue_codes": ["manifest_linkage_mismatch"],
+        "degradable_issue_codes": [],
+        "verification_is_valid": False,
+    }
+    assert payload["bundle_recovery_summary"] == {
+        "recovery_state": "non_resumable",
+        "issue_codes": ["manifest_linkage_mismatch"],
+        "fatal_issue_codes": ["manifest_linkage_mismatch"],
+        "degradable_issue_codes": [],
+        "verification_is_valid": False,
+    }
+    assert state.to_dict() == before
+
+
+def test_shard_state_export_payload_can_include_manifest_issue_bundle_verification_summary(
+    tmp_path,
+) -> None:
+    state = ShardState.create_empty("shard-dev").register_account(account_id="acct-alice")
+    before = state.to_dict()
+    bundle_dir = tmp_path / "bundle-invalid-summary"
+    bundle_dir.mkdir()
+    state.write_shard_artifact_bundle(bundle_dir)
+
+    manifest_path = bundle_dir / "shard-dev.artifact_manifest.json"
+    manifest_payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest_payload["linkage"]["shard_export_generation"] = 99
+    manifest_path.write_text(
+        json.dumps(manifest_payload, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
 
@@ -2822,14 +3187,16 @@ def test_shard_state_export_payload_can_include_linkage_issue_bundle_verificatio
 
     assert summary == {
         "is_valid": False,
-        "issue_codes": ["shard_export_generation_mismatch"],
+        "issue_codes": ["manifest_linkage_mismatch"],
         "artifact_count": 4,
         "verified_artifact_count": 4,
         "hash_issue_codes": [],
-        "linkage_issue_codes": ["shard_export_generation_mismatch"],
+        "linkage_issue_codes": [],
+        "manifest_issue_codes": ["manifest_linkage_mismatch"],
         "issue_category_counts": {
             "hash": 0,
-            "linkage": 1,
+            "linkage": 0,
+            "manifest": 1,
             "other": 0,
         },
     }

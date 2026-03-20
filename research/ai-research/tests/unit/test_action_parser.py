@@ -2,7 +2,12 @@ from __future__ import annotations
 
 import pytest
 
-from agents.gateway.action_parser import ActionCommandParseResult, parse_action_command
+from agents.gateway.action_parser import (
+    ActionCommandParseResult,
+    ModelActionOutputParseResult,
+    parse_action_command,
+    parse_model_action_output,
+)
 from core.action_processor import ActionRequest, normalize_arguments
 
 
@@ -130,3 +135,39 @@ def test_parse_action_command_rejects_invalid_actor_id() -> None:
 def test_parse_action_command_rejects_non_string_action() -> None:
     with pytest.raises(ValueError, match="action must be a string"):
         parse_action_command(actor_id="agent-1", action=object())  # type: ignore[arg-type]
+
+
+def test_parse_model_action_output_accepts_valid_json_action_payload() -> None:
+    result = parse_model_action_output(
+        raw_output='{"action":"move north"}',
+        action_space=("move north", "wait"),
+    )
+
+    assert result.accepted is True
+    assert result.reason is None
+    assert result.action_submission is not None
+    assert result.action_submission.action == "move north"
+
+
+def test_parse_model_action_output_rejects_invalid_json_with_explicit_reason() -> None:
+    result = parse_model_action_output(
+        raw_output="not-json",
+        action_space=("move north", "wait"),
+    )
+
+    assert result == ModelActionOutputParseResult(
+        accepted=False,
+        reason="invalid_json",
+    )
+
+
+def test_parse_model_action_output_rejects_unexpected_extra_fields() -> None:
+    result = parse_model_action_output(
+        raw_output='{"action":"wait","reasoning":"because"}',
+        action_space=("move north", "wait"),
+    )
+
+    assert result == ModelActionOutputParseResult(
+        accepted=False,
+        reason="unexpected_output_field",
+    )

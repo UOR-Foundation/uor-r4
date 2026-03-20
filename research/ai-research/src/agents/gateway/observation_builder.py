@@ -8,6 +8,7 @@ from typing import Any, Mapping, Sequence
 from agents.protocol.observation import Observation
 
 _DEFAULT_HEALTH = 100
+_LLM_RUNTIME_MODES = frozenset({"benchmark_single_turn", "persistent_session"})
 
 
 def build_observation_for_actor(
@@ -87,6 +88,202 @@ def build_observation_for_actor(
             "remaining_steps": remaining_steps,
         }
     )
+
+
+def build_model_facing_observation_payload(
+    observation: Observation,
+    *,
+    mode: str = "benchmark_single_turn",
+    actor_id: str | None = None,
+) -> dict[str, Any]:
+    """Build the canonical model-facing observation payload for LLM runtime use."""
+    if not isinstance(observation, Observation):
+        raise ValueError("observation must be an Observation")
+    if not isinstance(mode, str) or mode not in _LLM_RUNTIME_MODES:
+        raise ValueError("mode must be one of: benchmark_single_turn, persistent_session")
+    if actor_id is not None and (not isinstance(actor_id, str) or not actor_id):
+        raise ValueError("actor_id must be a non-empty string when provided")
+
+    normalized_action_space = list(observation.action_space)
+    payload: dict[str, Any] = {
+        "mode": mode,
+        "session_frame": _build_session_frame(mode),
+        "response_format": {
+            "type": "json_object",
+            "required_fields": ["action"],
+            "additional_properties": False,
+        },
+        "output_contract": {
+            "json_only": True,
+            "single_action_only": True,
+            "fail_closed_after_single_repair": True,
+        },
+        "action_selection_rule": "Return exactly one action from observation.action_space.",
+        "allowed_actions": normalized_action_space,
+        "allowed_targets": _build_allowed_targets(normalized_action_space),
+        "observation": observation.to_dict(),
+    }
+    if actor_id is not None:
+        payload["actor_id"] = actor_id
+    return payload
+
+
+def _build_session_frame(mode: str) -> dict[str, Any]:
+    if mode == "benchmark_single_turn":
+        return {
+            "mode": mode,
+            "turn_scope": "single_turn_only",
+            "session_continuation_allowed": False,
+            "history_policy": "no_cross_turn_memory",
+        }
+    return {
+        "mode": mode,
+        "turn_scope": "persistent_session_turn",
+        "session_continuation_allowed": True,
+        "history_policy": "caller_managed_session_history",
+    }
+
+
+def _build_allowed_targets(action_space: Sequence[str]) -> dict[str, Any]:
+    directional_targets: list[str] = []
+    single_argument_targets: dict[str, list[str]] = {
+        "take": [],
+        "drop": [],
+        "use": [],
+        "attack": [],
+    }
+    give_targets: list[dict[str, str]] = []
+
+    for action in action_space:
+        parts = action.split(" ")
+        verb = parts[0]
+        if verb == "move" and len(parts) == 2:
+            _append_unique(directional_targets, parts[1])
+            continue
+        if verb in single_argument_targets and len(parts) == 2:
+            _append_unique(single_argument_targets[verb], parts[1])
+            continue
+        if verb == "give" and len(parts) == 3:
+            candidate = {"item_id": parts[1], "target_id": parts[2]}
+            if candidate not in give_targets:
+                give_targets.append(candidate)
+
+    allowed_targets: dict[str, Any] = {}
+    if directional_targets:
+        allowed_targets["move"] = directional_targets
+    for verb in ("take", "drop", "use", "attack"):
+        if single_argument_targets[verb]:
+            allowed_targets[verb] = single_argument_targets[verb]
+    if give_targets:
+        allowed_targets["give"] = give_targets
+    return allowed_targets
+
+
+def _build_loop_layers(
+    observation: Observation,
+    action_space: Sequence[str],
+) -> dict[str, Any]:
+    allowed_targets = _build_allowed_targets(action_space)
+    local_objective_targets = sorted(
+        target
+        for verb in ("take", "use", "attack", "give")
+        for target in _stringified_targets(allowed_targets.get(verb, ()))
+    )
+    multi_agent_entities = sorted(
+        entity.name
+        for entity in observation.entities
+        if entity.type not in {"item", "consumable", "npc"}
+    )
+    return {
+        "immediate_action": {
+            "location": observation.location,
+            "allowed_actions": list(action_space),
+            "allowed_targets": allowed_targets,
+            "exits": list(observation.exits),
+            "visible_entities": [entity.name for entity in observation.entities],
+        },
+        "local_objective": {
+            "candidate_targets": local_objective_targets,
+            "inventory": list(observation.inventory),
+            "interaction_actions": [
+                action
+                for action in action_space
+                if action.startswith("take ")
+                or action.startswith("use ")
+                or action.startswith("attack ")
+                or action.startswith("give ")
+            ],
+        },
+        "temporal_world": {
+            "messages": list(observation.messages),
+            "step": observation.step,
+            "remaining_steps": observation.remaining_steps,
+        },
+        "multi_agent": {
+            "visible_other_entities": multi_agent_entities,
+            "visible_other_entity_count": len(multi_agent_entities),
+        },
+        "persistence": {
+            "inventory": list(observation.inventory),
+            "health": observation.health,
+            "step": observation.step,
+            "remaining_steps": observation.remaining_steps,
+        },
+    }
+
+
+def _build_routing_context(
+    observation: Observation,
+    action_space: Sequence[str],
+) -> dict[str, Any]:
+    allowed_targets = _build_allowed_targets(action_space)
+    return {
+        "available_loop_layers": [
+            "immediate_action",
+            "local_objective",
+            "temporal_world",
+            "multi_agent",
+            "persistence",
+        ],
+        "inventory_count": len(observation.inventory),
+        "message_count": len(observation.messages),
+        "visible_entity_count": len(observation.entities),
+        "visible_other_entity_count": sum(
+            1
+            for entity in observation.entities
+            if entity.type not in {"item", "consumable", "npc"}
+        ),
+        "interaction_action_count": sum(
+            1
+            for action in action_space
+            if action.startswith("take ")
+            or action.startswith("use ")
+            or action.startswith("attack ")
+            or action.startswith("give ")
+        ),
+        "allowed_target_verbs": sorted(allowed_targets.keys()),
+    }
+
+
+def _stringified_targets(value: object) -> list[str]:
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, Sequence):
+        items: list[str] = []
+        for entry in value:
+            if isinstance(entry, str):
+                items.append(entry)
+            elif isinstance(entry, Mapping):
+                for mapping_value in entry.values():
+                    if isinstance(mapping_value, str):
+                        items.append(mapping_value)
+        return items
+    return []
+
+
+def _append_unique(entries: list[str], value: str) -> None:
+    if value not in entries:
+        entries.append(value)
 
 
 def _require_mapping(value: Any, *, field_name: str) -> Mapping[str, Any]:
