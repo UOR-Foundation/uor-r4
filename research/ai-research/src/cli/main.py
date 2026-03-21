@@ -379,6 +379,58 @@ _SCENARIO_PRESETS: dict[str, dict[str, Any]] = {
             }
         ],
     },
+    "tiny-context-pressure": {
+        "scenario_id": "tiny-context-pressure",
+        "title": "Tiny Context Pressure",
+        "description": "Richer tiny scenario with a dangerous shortcut, a longer dependency route, a consumable decoy shortcut, and a final shared resource gate.",
+        "start_room_id": "camp",
+        "max_steps": 12,
+        "seed": 101,
+        "version": "1.0",
+        "scenario_vars": {
+            "mode": "context-pressure",
+            "agent_script_policy": "context-pressure-v1",
+            "world_config_json": (
+                '{"items":[{"entity_id":"coolant-cell","entity_type":"item","location":"depot"},'
+                '{"entity_id":"valve-handle","entity_type":"item","location":"workshop"},'
+                '{"entity_id":"signal-flare","entity_type":"item","location":"decoy-annex"},'
+                '{"entity_id":"archive-prism","entity_type":"item","location":"archive"}],'
+                '"npcs":[{"entity_id":"marauder","entity_type":"npc","health":10,"location":"relay-hall"}],'
+                '"rooms":{"archive":{"description":"The inner archive chamber where the prism rests once the final seal is powered.",'
+                '"entities":[],"exits":{"south":"seal-door"},"title":"Archive"},'
+                '"camp":{"description":"A pressure camp between a raider-held relay hall, a coolant depot, and a maintenance workshop.",'
+                '"entities":[],"exits":{"east":"depot","north":"relay-hall","south":"workshop"},"title":"Pressure Camp"},'
+                '"decoy-annex":{"description":"A side annex opened by the emergency lift; a signal flare sits here, but it does not help with the archive.",'
+                '"entities":[],"exits":{"west":"relay-hall"},"title":"Decoy Annex"},'
+                '"depot":{"description":"A coolant depot with a single charged cell still resting in its cradle.",'
+                '"entities":[],"exits":{"west":"camp"},"title":"Coolant Depot"},'
+                '"relay-hall":{"description":"A relay hall where a marauder guards the short route; an emergency lift can be powered here, but it will drain the coolant cell.",'
+                '"entities":[],"exits":{"north":"seal-door","south":"camp"},"title":"Relay Hall"},'
+                '"seal-door":{"description":"A reinforced pressure seal whose northern lock requires the same coolant cell that can be wasted on the relay lift.",'
+                '"entities":[],"exits":{"south":"spillway"},"title":"Seal Door"},'
+                '"service-bay":{"description":"A maintenance bay with a seized pressure valve that can open the spillway bypass.",'
+                '"entities":[],"exits":{"west":"workshop"},"title":"Service Bay"},'
+                '"spillway":{"description":"A spillway access path that reaches the seal door without fighting through the relay hall.",'
+                '"entities":[],"exits":{"north":"seal-door","south":"service-bay"},"title":"Spillway Access"},'
+                '"workshop":{"description":"A cramped workshop where the missing valve handle lies on a bench beside maintenance notes.",'
+                '"entities":[],"exits":{"east":"service-bay","north":"camp"},"title":"Workshop"}},'
+                '"unlock_effects":[{"effect_id":"service-bypass","item_id":"valve-handle","source_room_id":"service-bay",'
+                '"direction":"north","destination_room_id":"spillway","consume_item":false,"requires_actor_in_place":true},'
+                '{"effect_id":"relay-lift","item_id":"coolant-cell","source_room_id":"relay-hall",'
+                '"direction":"east","destination_room_id":"decoy-annex","consume_item":true,"requires_actor_in_place":true},'
+                '{"effect_id":"archive-seal","item_id":"coolant-cell","source_room_id":"seal-door",'
+                '"direction":"north","destination_room_id":"archive","consume_item":true,"requires_actor_in_place":true}]}'
+            ),
+        },
+        "objectives": [
+            {
+                "objective_id": "collect-archive-prism",
+                "objective_type": "collect_item",
+                "target_id": "archive-prism",
+                "required_count": 1,
+            }
+        ],
+    },
 }
 
 
@@ -450,6 +502,11 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=None,
         help="Optional external-agent timeout override for live direct-provider run turns only.",
+    )
+    run_parser.add_argument(
+        "--direct-provider-prompt-dump-dir",
+        default=None,
+        help="Optional directory for writing direct-provider prompt/raw-response dump sidecars.",
     )
     run_parser.add_argument(
         "--prompt-engine",
@@ -583,8 +640,13 @@ def build_parser() -> argparse.ArgumentParser:
     compare_parser.add_argument(
         "--angular-router-variant",
         choices=_ANGULAR_ROUTER_VARIANTS,
+        action="append",
         default=None,
-        help="Canonical angular router variant to use when --include-angular-canonical-prompt-engine is selected.",
+        help=(
+            "Canonical angular router variant to use when "
+            "--include-angular-canonical-prompt-engine is selected. Repeat to compare multiple "
+            "angular variants in one invocation."
+        ),
     )
     compare_parser.add_argument(
         "--include-legacy-router-backed-prompt-engine",
@@ -602,6 +664,11 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=None,
         help="Optional external-agent timeout override for live direct-provider comparison turns only.",
+    )
+    compare_parser.add_argument(
+        "--direct-provider-comparison-prompt-dump-dir",
+        default=None,
+        help="Optional directory for writing direct-provider comparison prompt/raw-response dump sidecars.",
     )
 
     suite_parser = subcommands.add_parser("suite", help="Execute deterministic tiny-suite baseline reporting")
@@ -730,6 +797,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 raise ValueError("direct_provider_model_requires_direct_provider")
             if args.direct_provider is None and args.direct_provider_timeout_seconds is not None:
                 raise ValueError("direct_provider_timeout_requires_direct_provider")
+            if args.direct_provider is None and args.direct_provider_prompt_dump_dir is not None:
+                raise ValueError("direct_provider_prompt_dump_dir_requires_direct_provider")
             scenario_payload = _resolve_run_scenario_payload(
                 scenario_name=args.scenario,
                 scenario_file=args.scenario_file,
@@ -774,6 +843,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                     python_executable=sys.executable,
                     prompt_engine=args.prompt_engine,
                     router_variant=args.router_variant,
+                )
+                external_agent_command = _augment_direct_provider_prompt_dump_command(
+                    external_agent_command,
+                    prompt_dump_dir=args.direct_provider_prompt_dump_dir,
+                    actor_id=actor_ids[0],
+                    scenario_id=_scenario_payload_id(scenario_payload),
                 )
                 external_agent_label = f"direct-provider:{direct_provider_config.provider}"
                 external_agent_profile_id = None
@@ -967,6 +1042,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 raise ValueError("direct_provider_model_requires_direct_provider")
             if args.direct_provider is None and args.direct_provider_comparison_timeout_seconds is not None:
                 raise ValueError("direct_provider_comparison_timeout_requires_direct_provider")
+            if args.direct_provider is None and args.direct_provider_comparison_prompt_dump_dir is not None:
+                raise ValueError("direct_provider_comparison_prompt_dump_dir_requires_direct_provider")
             if args.direct_provider is None and args.include_routed_prompt_engine:
                 raise ValueError("include_routed_prompt_engine_requires_direct_provider")
             if args.direct_provider is None and args.include_angular_canonical_prompt_engine:
@@ -997,7 +1074,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             direct_provider_command: tuple[str, ...] | None = None
             direct_provider_identity: str | None = None
             direct_provider_routed_command: tuple[str, ...] | None = None
-            direct_provider_angular_canonical_command: tuple[str, ...] | None = None
+            direct_provider_angular_canonical_commands: tuple[tuple[str, tuple[str, ...]], ...] = ()
             direct_provider_legacy_router_backed_command: tuple[str, ...] | None = None
             if args.direct_provider is not None:
                 direct_provider_config = resolve_direct_provider_config(
@@ -1017,11 +1094,19 @@ def main(argv: Sequence[str] | None = None) -> int:
                         prompt_engine="geometric-routed",
                     )
                 if args.include_angular_canonical_prompt_engine:
-                    direct_provider_angular_canonical_command = build_direct_provider_command(
-                        direct_provider_config,
-                        python_executable=sys.executable,
-                        prompt_engine="angular-canonical",
-                        router_variant=args.angular_router_variant,
+                    direct_provider_angular_canonical_commands = tuple(
+                        (
+                            angular_router_variant,
+                            build_direct_provider_command(
+                                direct_provider_config,
+                                python_executable=sys.executable,
+                                prompt_engine="angular-canonical",
+                                router_variant=angular_router_variant,
+                            ),
+                        )
+                        for angular_router_variant in _resolve_compare_angular_router_variants(
+                            args.angular_router_variant
+                        )
                     )
                 if args.include_legacy_router_backed_prompt_engine:
                     direct_provider_legacy_router_backed_command = build_direct_provider_command(
@@ -1037,7 +1122,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 mode_ids.append("direct_provider")
             if direct_provider_routed_command is not None:
                 mode_ids.append("direct_provider_routed")
-            if direct_provider_angular_canonical_command is not None:
+            if direct_provider_angular_canonical_commands:
                 mode_ids.append("direct_provider_angular_canonical")
             if direct_provider_legacy_router_backed_command is not None:
                 mode_ids.append("direct_provider_legacy_router_backed")
@@ -1089,7 +1174,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                             benchmark_id=args.benchmark_id,
                             scenario=scenario_payload,
                             actor_ids=(args.actor_id,),
-                            external_agent_command=direct_provider_command,
+                            external_agent_command=_augment_direct_provider_prompt_dump_command(
+                                direct_provider_command,
+                                prompt_dump_dir=args.direct_provider_comparison_prompt_dump_dir,
+                                actor_id=args.actor_id,
+                                scenario_id=_scenario_payload_id(scenario_payload),
+                            ),
                             external_agent_timeout_seconds=args.direct_provider_comparison_timeout_seconds,
                         )
                     )
@@ -1112,7 +1202,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                             benchmark_id=args.benchmark_id,
                             scenario=scenario_payload,
                             actor_ids=(args.actor_id,),
-                            external_agent_command=direct_provider_routed_command,
+                            external_agent_command=_augment_direct_provider_prompt_dump_command(
+                                direct_provider_routed_command,
+                                prompt_dump_dir=args.direct_provider_comparison_prompt_dump_dir,
+                                actor_id=args.actor_id,
+                                scenario_id=_scenario_payload_id(scenario_payload),
+                            ),
                             external_agent_timeout_seconds=args.direct_provider_comparison_timeout_seconds,
                         )
                     )
@@ -1128,32 +1223,44 @@ def main(argv: Sequence[str] | None = None) -> int:
                         )
                     )
 
-                if direct_provider_angular_canonical_command is not None and direct_provider_identity is not None:
-                    direct_provider_angular_canonical_result = run_benchmark_lifecycle(
-                        BenchmarkRunnerConfig(
-                            run_id=f"cli-compare-direct-angular-canonical-{scenario_name}",
-                            benchmark_id=args.benchmark_id,
-                            scenario=scenario_payload,
-                            actor_ids=(args.actor_id,),
-                            external_agent_command=direct_provider_angular_canonical_command,
-                            external_agent_timeout_seconds=args.direct_provider_comparison_timeout_seconds,
-                        )
-                    )
-                    entries.append(
-                        _with_prompt_engine_metadata(
-                            build_playable_slice_comparison_entry(
-                                direct_provider_angular_canonical_result,
-                                mode="direct_provider_angular_canonical",
-                                agent_identity=(
-                                    f"{direct_provider_identity}:angular-canonical:"
-                                    f"{args.angular_router_variant or 'angular-hopf-trans'}"
+                if direct_provider_angular_canonical_commands and direct_provider_identity is not None:
+                    for (
+                        angular_router_variant,
+                        direct_provider_angular_canonical_command,
+                    ) in direct_provider_angular_canonical_commands:
+                        direct_provider_angular_canonical_result = run_benchmark_lifecycle(
+                            BenchmarkRunnerConfig(
+                                run_id=(
+                                    f"cli-compare-direct-angular-canonical-"
+                                    f"{angular_router_variant}-{scenario_name}"
                                 ),
-                                actor_id=args.actor_id,
-                            ),
-                            prompt_engine="angular-canonical",
-                            router_variant=args.angular_router_variant or "angular-hopf-trans",
+                                benchmark_id=args.benchmark_id,
+                                scenario=scenario_payload,
+                                actor_ids=(args.actor_id,),
+                                external_agent_command=_augment_direct_provider_prompt_dump_command(
+                                    direct_provider_angular_canonical_command,
+                                    prompt_dump_dir=args.direct_provider_comparison_prompt_dump_dir,
+                                    actor_id=args.actor_id,
+                                    scenario_id=_scenario_payload_id(scenario_payload),
+                                ),
+                                external_agent_timeout_seconds=args.direct_provider_comparison_timeout_seconds,
+                            )
                         )
-                    )
+                        entries.append(
+                            _with_prompt_engine_metadata(
+                                build_playable_slice_comparison_entry(
+                                    direct_provider_angular_canonical_result,
+                                    mode="direct_provider_angular_canonical",
+                                    agent_identity=(
+                                        f"{direct_provider_identity}:angular-canonical:"
+                                        f"{angular_router_variant}"
+                                    ),
+                                    actor_id=args.actor_id,
+                                ),
+                                prompt_engine="angular-canonical",
+                                router_variant=angular_router_variant,
+                            )
+                        )
 
                 if (
                     direct_provider_legacy_router_backed_command is not None
@@ -1165,7 +1272,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                             benchmark_id=args.benchmark_id,
                             scenario=scenario_payload,
                             actor_ids=(args.actor_id,),
-                            external_agent_command=direct_provider_legacy_router_backed_command,
+                            external_agent_command=_augment_direct_provider_prompt_dump_command(
+                                direct_provider_legacy_router_backed_command,
+                                prompt_dump_dir=args.direct_provider_comparison_prompt_dump_dir,
+                                actor_id=args.actor_id,
+                                scenario_id=_scenario_payload_id(scenario_payload),
+                            ),
                             external_agent_timeout_seconds=args.direct_provider_comparison_timeout_seconds,
                         )
                     )
@@ -2605,6 +2717,41 @@ def _resolve_external_agent_label(agent_label: str | None) -> str | None:
     return normalized_label
 
 
+def _scenario_payload_id(scenario_payload: Mapping[str, Any]) -> str | None:
+    scenario_id = scenario_payload.get("scenario_id")
+    if scenario_id is None:
+        return None
+    if not isinstance(scenario_id, str) or not scenario_id:
+        raise ValueError("scenario_payload_missing_valid_scenario_id")
+    return scenario_id
+
+
+def _augment_direct_provider_prompt_dump_command(
+    command: Sequence[str],
+    *,
+    prompt_dump_dir: str | None,
+    actor_id: str,
+    scenario_id: str | None,
+) -> tuple[str, ...]:
+    normalized_command = tuple(command)
+    if prompt_dump_dir is None:
+        return normalized_command
+    if not isinstance(prompt_dump_dir, str) or not prompt_dump_dir:
+        raise ValueError("direct_provider_prompt_dump_dir_must_be_non_empty")
+    if not isinstance(actor_id, str) or not actor_id:
+        raise ValueError("prompt_dump_actor_id_must_be_non_empty")
+
+    augmented_command = normalized_command + (
+        "--prompt-dump-dir",
+        prompt_dump_dir,
+        "--prompt-dump-actor-id",
+        actor_id,
+    )
+    if scenario_id is not None:
+        augmented_command += ("--prompt-dump-scenario-id", scenario_id)
+    return augmented_command
+
+
 def _prompt_engine_supports_router_variant(prompt_engine: str) -> bool:
     return prompt_engine in {"angular-canonical", "legacy-router-backed"}
 
@@ -2615,6 +2762,17 @@ def _router_variant_matches_prompt_engine(prompt_engine: str, router_variant: st
     if prompt_engine == "legacy-router-backed":
         return router_variant in _LEGACY_ROUTER_VARIANTS
     return False
+
+
+def _resolve_compare_angular_router_variants(raw_variants: Sequence[str] | None) -> tuple[str, ...]:
+    if not raw_variants:
+        return ("angular-hopf-trans",)
+
+    ordered_variants: list[str] = []
+    for router_variant in raw_variants:
+        if router_variant not in ordered_variants:
+            ordered_variants.append(router_variant)
+    return tuple(ordered_variants)
 
 
 def _with_prompt_engine_metadata(

@@ -214,6 +214,21 @@ def test_build_benchmark_prompt_is_deterministic() -> None:
     assert "Routing plan:" not in first
 
 
+def test_context_pressure_baseline_prompt_keeps_full_observation_path() -> None:
+    observation = _representative_slice_observation(
+        "tiny-context-pressure",
+        target_step=9,
+    )
+
+    prompt = build_benchmark_prompt(observation)
+
+    assert canonical_json_dumps(observation.to_dict()) in prompt
+    assert "Routing plan:" not in prompt
+    assert "Angular canonical plan:" not in prompt
+    assert "Legacy router-backed proxy plan:" not in prompt
+    assert "Observation summary:" not in prompt
+
+
 def test_build_benchmark_prompt_from_payload_matches_observation_helper() -> None:
     observation = _sample_observation()
     payload = build_canonical_model_facing_observation_payload(observation)
@@ -278,20 +293,21 @@ def test_build_geometric_routed_prompt_plan_is_deterministic() -> None:
     assert first["engine"] == "geometric-routed"
     assert first["dominant_loop"] == "immediate_action"
     assert first["secondary_loops"] == [
-        "local_objective",
         "temporal_world",
-        "persistence",
+        "local_objective",
         "multi_agent",
+        "persistence",
     ]
     assert first["prompt_section_order"] == [
         "immediate_action",
-        "local_objective",
         "temporal_world",
-        "persistence",
+        "local_objective",
         "multi_agent",
+        "persistence",
     ]
-    assert first["compressed_sections"] == ["persistence", "multi_agent"]
+    assert first["compressed_sections"] == ["persistence"]
     assert first["reasoning_pressure_tag"] == "execution_pressure"
+    assert first["routing_context"]["pressure_features"]["actionable_hazard_pressure"] > 0
 
 
 def test_build_geometric_routed_benchmark_prompt_differs_in_controlled_way() -> None:
@@ -304,8 +320,8 @@ def test_build_geometric_routed_benchmark_prompt_differs_in_controlled_way() -> 
     assert "Invariant runtime guardrails:" in routed
     assert "Routing plan:" in routed
     assert "Loop layer: immediate_action" in routed
-    assert "Loop layer: local_objective (summary)" in routed
-    assert "Loop layer: temporal_world" not in routed
+    assert "Loop layer: temporal_world (summary)" in routed
+    assert "Loop layer: local_objective" not in routed
     assert "Loop layer: persistence" not in routed
     assert "Loop layer: multi_agent" not in routed
     assert "Observation summary:" in routed
@@ -326,10 +342,15 @@ def test_build_angular_canonical_prompt_plan_is_deterministic() -> None:
     assert first["router_variant"] == "angular-hopf-trans"
     assert first["router_family"] == "canonical_single_shell_angular_hopf_router"
     assert first["single_shell"] is True
-    assert first["coordinate_adapter_contract"] == "mudbench_prompt_state_v1"
+    assert first["coordinate_adapter_contract"] == "mudbench_prompt_state_v2"
     assert first["router_k"] == 8
     assert first["prompt_section_order"][0] == "immediate_action"
     assert first["reasoning_pressure_tag"].startswith("angular_hopf_trans:")
+    assert first["routing_context"]["pressure_features"]["hostile_actor_pressure"] > 0
+    assert (
+        first["routing_coordinate_adapter"]["pressure_features"]["actionable_hazard_pressure"]
+        > 0
+    )
 
 
 def test_build_angular_canonical_variants_are_distinct_and_wired() -> None:
@@ -361,9 +382,10 @@ def test_build_angular_canonical_benchmark_prompt_differs_in_controlled_way() ->
     assert "Angular canonical plan:" in angular
     assert '"router_variant":"angular-hopf-trans"' in angular
     assert "Angular layer: immediate_action" in angular
-    assert "Angular layer: local_objective (summary)" in angular
+    assert "Angular layer: temporal_world (summary)" in angular
     assert "Angular layer: persistence" not in angular
     assert "Angular layer: multi_agent" not in angular
+    assert "Angular layer: local_objective" not in angular
     assert "Observation summary:" in angular
     assert "Observation anchor:" not in angular
     assert '"action"' in angular
@@ -386,6 +408,7 @@ def test_build_legacy_router_backed_prompt_plan_is_deterministic() -> None:
     assert first["engine"] == "legacy-router-backed"
     assert first["router_variant"] == "legacy-phase4d_hopf_transport"
     assert first["router_family"] == "legacy_phi_fibonacci_prompt_router"
+    assert first["routing_context"]["pressure_features"]["hostile_actor_pressure"] > 0
 
 
 def test_build_legacy_router_backed_benchmark_prompt_differs_in_controlled_way() -> None:
@@ -409,6 +432,80 @@ def test_build_legacy_router_backed_benchmark_prompt_differs_in_controlled_way()
     assert "Observation summary:" in legacy_router
     assert "Observation anchor:" not in legacy_router
     assert '"action"' in legacy_router
+
+
+def test_context_pressure_enriched_adapter_distinguishes_entry_and_gate_states() -> None:
+    entry_observation = _representative_slice_observation(
+        "tiny-context-pressure",
+        target_step=0,
+    )
+    gate_observation = _representative_slice_observation(
+        "tiny-context-pressure",
+        target_step=9,
+    )
+
+    entry_plan = build_angular_canonical_prompt_plan(
+        build_canonical_model_facing_observation_payload(entry_observation),
+        router_variant="angular-hopf-base",
+    )
+    gate_plan = build_angular_canonical_prompt_plan(
+        build_canonical_model_facing_observation_payload(gate_observation),
+        router_variant="angular-hopf-base",
+    )
+
+    entry_features = entry_plan["routing_context"]["pressure_features"]
+    gate_features = gate_plan["routing_context"]["pressure_features"]
+
+    assert gate_features["dependency_gate_pressure"] > entry_features["dependency_gate_pressure"]
+    assert gate_features["location_sensitive_use_pressure"] > entry_features["location_sensitive_use_pressure"]
+    assert gate_features["resource_scarcity_pressure"] > entry_features["resource_scarcity_pressure"]
+    assert (
+        gate_plan["routing_coordinate_adapter"]["bundle_scores"]
+        != entry_plan["routing_coordinate_adapter"]["bundle_scores"]
+    )
+
+
+def test_context_pressure_routed_families_share_enriched_pressure_features() -> None:
+    observation = _representative_slice_observation(
+        "tiny-context-pressure",
+        target_step=9,
+    )
+    payload = build_canonical_model_facing_observation_payload(observation)
+
+    geometric_plan = build_geometric_routed_prompt_plan(payload)
+    angular_plan = build_angular_canonical_prompt_plan(
+        payload,
+        router_variant="angular-hopf-base",
+    )
+    legacy_plan = build_legacy_router_backed_prompt_plan(
+        payload,
+        router_variant="legacy-phase4d_hopf_transport",
+    )
+
+    assert geometric_plan["routing_context"]["pressure_features"] == angular_plan["routing_context"]["pressure_features"]
+    assert geometric_plan["routing_context"]["pressure_features"] == legacy_plan["routing_context"]["pressure_features"]
+    assert geometric_plan["engine"] == "geometric-routed"
+    assert angular_plan["engine"] == "angular-canonical"
+    assert legacy_plan["engine"] == "legacy-router-backed"
+    assert angular_plan["coordinate_adapter_contract"] == "mudbench_prompt_state_v2"
+
+
+def test_context_pressure_routed_prompt_surfaces_enriched_pressure_features() -> None:
+    observation = _representative_slice_observation(
+        "tiny-context-pressure",
+        target_step=9,
+    )
+
+    angular_prompt = build_benchmark_prompt(
+        observation,
+        prompt_engine="angular-canonical",
+        router_variant="angular-hopf-base",
+    )
+
+    assert '"dependency_gate_pressure"' in angular_prompt
+    assert '"location_sensitive_use_pressure"' in angular_prompt
+    assert '"resource_scarcity_pressure"' in angular_prompt
+    assert '"adapter_schema":"mudbench_prompt_state_v2"' in angular_prompt
 
 
 def test_routed_prompt_length_is_materially_reduced_on_representative_slice() -> None:

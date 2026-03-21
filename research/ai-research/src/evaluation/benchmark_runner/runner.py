@@ -492,6 +492,99 @@ _RUNNER_DELAYED_COST_AGENT_SCRIPTS = {
     0: _RUNNER_AGENT_SCRIPT_DELAYED_COST,
     1: _RUNNER_AGENT_SCRIPT_DELAYED_COST,
 }
+_RUNNER_AGENT_SCRIPT_CONTEXT_PRESSURE = (
+    "import json,sys\n"
+    "line=sys.stdin.readline()\n"
+    "observation=json.loads(line)\n"
+    "location=str(observation.get('location',''))\n"
+    "inventory=tuple(observation.get('inventory',[]))\n"
+    "action_space=tuple(observation.get('action_space',[]))\n"
+    "has_cell='coolant-cell' in inventory\n"
+    "has_valve='valve-handle' in inventory\n"
+    "action=None\n"
+    "if 'take archive-prism' in action_space:\n"
+    "    action='take archive-prism'\n"
+    "elif 'take coolant-cell' in action_space and not has_cell:\n"
+    "    action='take coolant-cell'\n"
+    "elif 'take valve-handle' in action_space and not has_valve:\n"
+    "    action='take valve-handle'\n"
+    "elif location == 'camp':\n"
+    "    if not has_cell and 'move east' in action_space:\n"
+    "        action='move east'\n"
+    "    elif has_cell and not has_valve and 'move south' in action_space:\n"
+    "        action='move south'\n"
+    "    elif has_cell and has_valve and 'move south' in action_space:\n"
+    "        action='move south'\n"
+    "    elif 'move north' in action_space:\n"
+    "        action='move north'\n"
+    "elif location == 'depot':\n"
+    "    if not has_cell and 'take coolant-cell' in action_space:\n"
+    "        action='take coolant-cell'\n"
+    "    elif 'move west' in action_space:\n"
+    "        action='move west'\n"
+    "elif location == 'workshop':\n"
+    "    if not has_valve and 'take valve-handle' in action_space:\n"
+    "        action='take valve-handle'\n"
+    "    elif 'move east' in action_space:\n"
+    "        action='move east'\n"
+    "    elif 'move north' in action_space:\n"
+    "        action='move north'\n"
+    "elif location == 'service-bay':\n"
+    "    if 'move north' in action_space:\n"
+    "        action='move north'\n"
+    "    elif has_valve and 'use valve-handle' in action_space:\n"
+    "        action='use valve-handle'\n"
+    "    elif 'move west' in action_space:\n"
+    "        action='move west'\n"
+    "elif location == 'spillway':\n"
+    "    if 'move north' in action_space:\n"
+    "        action='move north'\n"
+    "    elif 'move south' in action_space:\n"
+    "        action='move south'\n"
+    "elif location == 'seal-door':\n"
+    "    if 'move north' in action_space:\n"
+    "        action='move north'\n"
+    "    elif has_cell and 'use coolant-cell' in action_space:\n"
+    "        action='use coolant-cell'\n"
+    "    elif 'move south' in action_space:\n"
+    "        action='move south'\n"
+    "elif location == 'relay-hall':\n"
+    "    if 'move south' in action_space:\n"
+    "        action='move south'\n"
+    "    elif 'attack marauder' in action_space:\n"
+    "        action='attack marauder'\n"
+    "    elif 'move north' in action_space:\n"
+    "        action='move north'\n"
+    "elif location == 'decoy-annex' and 'move west' in action_space:\n"
+    "    action='move west'\n"
+    "if action is None:\n"
+    "    for candidate in action_space:\n"
+    "        if candidate.startswith('take '):\n"
+    "            action=candidate\n"
+    "            break\n"
+    "if action is None:\n"
+    "    for candidate in action_space:\n"
+    "        if candidate.startswith('use '):\n"
+    "            action=candidate\n"
+    "            break\n"
+    "if action is None:\n"
+    "    for candidate in action_space:\n"
+    "        if candidate.startswith('move '):\n"
+    "            action=candidate\n"
+    "            break\n"
+    "if action is None:\n"
+    "    for candidate in action_space:\n"
+    "        if candidate.startswith('attack '):\n"
+    "            action=candidate\n"
+    "            break\n"
+    "if action is None:\n"
+    "    action='look' if 'look' in action_space else 'wait'\n"
+    "print(json.dumps({'action': action}, sort_keys=True, separators=(',', ':'), ensure_ascii=True))\n"
+)
+_RUNNER_CONTEXT_PRESSURE_AGENT_SCRIPTS = {
+    0: _RUNNER_AGENT_SCRIPT_CONTEXT_PRESSURE,
+    1: _RUNNER_AGENT_SCRIPT_CONTEXT_PRESSURE,
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -2647,6 +2740,8 @@ def _resolve_runner_agent_scripts(script_policy: str | None) -> Mapping[int, str
         return _RUNNER_HAZARD_TRADEOFF_AGENT_SCRIPTS
     if script_policy == "delayed-cost-v1":
         return _RUNNER_DELAYED_COST_AGENT_SCRIPTS
+    if script_policy == "context-pressure-v1":
+        return _RUNNER_CONTEXT_PRESSURE_AGENT_SCRIPTS
     return _RUNNER_AGENT_SCRIPTS
 
 

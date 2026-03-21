@@ -8,7 +8,7 @@ import os
 import sys
 import urllib.error
 import urllib.request
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import replace
 from dataclasses import dataclass
 from pathlib import Path
@@ -30,6 +30,7 @@ _OPENAI_API_KEY_ENV = "MUDBENCH_OPENAI_API_KEY"
 _OPENAI_MODEL_ENV = "MUDBENCH_OPENAI_MODEL"
 _OPENAI_BASE_URL_ENV = "MUDBENCH_OPENAI_BASE_URL"
 _RUNTIME_TELEMETRY_FILENAME_TEMPLATE = "{run_id}__step_{step:06d}__{actor_id}.llm_runtime_telemetry.json"
+_PROMPT_DUMP_FILENAME_TEMPLATE = "{run_id}__step_{step:06d}__{actor_id}.direct_provider_prompt_dump.json"
 
 
 @dataclass(frozen=True, slots=True)
@@ -242,6 +243,20 @@ def _build_runtime_telemetry_output_path(
     )
 
 
+def _build_prompt_dump_output_path(
+    *,
+    prompt_dump_dir: Path,
+    run_id: str,
+    step: int,
+    actor_id: str,
+) -> Path:
+    return prompt_dump_dir / _PROMPT_DUMP_FILENAME_TEMPLATE.format(
+        run_id=run_id,
+        step=step,
+        actor_id=actor_id,
+    )
+
+
 def _write_runtime_telemetry_if_configured(
     *,
     telemetry_dir: str | None,
@@ -285,6 +300,94 @@ def _write_runtime_telemetry_if_configured(
         run_id=observation.run_id,
         step=observation.step,
         actor_id=telemetry_actor_id,
+    )
+    output_path.write_text(
+        json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True) + "\n",
+        encoding="utf-8",
+    )
+
+
+def _serialize_parse_result(parse_result: Any) -> dict[str, Any]:
+    if parse_result is None:
+        return {}
+    payload: dict[str, Any] = {"accepted": bool(parse_result.accepted)}
+    if parse_result.reason is not None:
+        payload["reason"] = parse_result.reason
+    if parse_result.action_submission is not None:
+        payload["action_submission"] = parse_result.action_submission.to_dict()
+    return payload
+
+
+def _write_prompt_dump_if_configured(
+    *,
+    prompt_dump_dir: str | None,
+    prompt_dump_actor_id: str | None,
+    prompt_dump_scenario_id: str | None,
+    observation: "Observation",
+    result: "BenchmarkLLMTurnResult",
+    provider_turns: Sequence[Mapping[str, Any]],
+) -> None:
+    if prompt_dump_dir is None and prompt_dump_actor_id is None and prompt_dump_scenario_id is None:
+        return
+    if prompt_dump_dir is None:
+        raise ValueError("prompt_dump_actor_id_requires_prompt_dump_dir")
+    if prompt_dump_actor_id is None:
+        raise ValueError("prompt_dump_dir_requires_prompt_dump_actor_id")
+    if not isinstance(prompt_dump_dir, str) or not prompt_dump_dir:
+        raise ValueError("prompt_dump_dir must be a non-empty string when provided")
+    if not isinstance(prompt_dump_actor_id, str) or not prompt_dump_actor_id:
+        raise ValueError("prompt_dump_actor_id must be a non-empty string when provided")
+    if prompt_dump_scenario_id is not None and (
+        not isinstance(prompt_dump_scenario_id, str) or not prompt_dump_scenario_id
+    ):
+        raise ValueError("prompt_dump_scenario_id must be a non-empty string when provided")
+
+    output_dir = Path(prompt_dump_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    normalized_turns = [dict(turn) for turn in provider_turns]
+    payload: dict[str, Any] = {
+        "dump_schema": "direct_provider_prompt_dump_v1",
+        "actor_id": prompt_dump_actor_id,
+        "run_id": observation.run_id,
+        "step": observation.step,
+        "prompt_engine": result.prompt_engine,
+        "router_variant": result.router_variant,
+        "prompt_text": result.prompt,
+        "repair_prompt_text": result.repair_prompt,
+        "provider_turns": normalized_turns,
+        "initial_parse_result": _serialize_parse_result(result.initial_parse_result),
+        "repaired_parse_result": _serialize_parse_result(result.repaired_parse_result),
+        "final_action": result.action_submission.to_dict(),
+        "used_fail_closed_fallback": result.used_fail_closed_fallback,
+        "fail_closed_reason": result.fail_closed_reason,
+    }
+    if prompt_dump_scenario_id is not None:
+        payload["scenario_id"] = prompt_dump_scenario_id
+    if len(normalized_turns) >= 1:
+        payload["raw_provider_response_text"] = normalized_turns[0].get("raw_provider_response_text")
+    if len(normalized_turns) >= 2:
+        payload["repair_raw_provider_response_text"] = normalized_turns[1].get(
+            "raw_provider_response_text"
+        )
+    if result.runtime_telemetry is not None:
+        provider_name = result.runtime_telemetry.get("provider_name")
+        if isinstance(provider_name, str) and provider_name:
+            payload["provider_name"] = provider_name
+        provider_request_count = result.runtime_telemetry.get("provider_request_count")
+        if isinstance(provider_request_count, int):
+            payload["provider_request_count"] = provider_request_count
+        provider_latency_ms = result.runtime_telemetry.get("provider_latency_ms")
+        if isinstance(provider_latency_ms, (int, float)):
+            payload["provider_latency_ms"] = round(float(provider_latency_ms), 3)
+        final_parse_status = result.runtime_telemetry.get("final_parse_status")
+        if isinstance(final_parse_status, str) and final_parse_status:
+            payload["final_parse_status"] = final_parse_status
+
+    output_path = _build_prompt_dump_output_path(
+        prompt_dump_dir=output_dir,
+        run_id=observation.run_id,
+        step=observation.step,
+        actor_id=prompt_dump_actor_id,
     )
     output_path.write_text(
         json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True) + "\n",
@@ -377,12 +480,33 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Optional actor identifier to include in runtime telemetry sidecar records.",
     )
+    parser.add_argument(
+        "--prompt-dump-dir",
+        default=None,
+        help="Optional directory for writing deterministic prompt/raw-response dump sidecar records.",
+    )
+    parser.add_argument(
+        "--prompt-dump-actor-id",
+        default=None,
+        help="Optional actor identifier to include in prompt/raw-response dump sidecar records.",
+    )
+    parser.add_argument(
+        "--prompt-dump-scenario-id",
+        default=None,
+        help="Optional scenario identifier to include in prompt/raw-response dump sidecar records.",
+    )
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     try:
         args = _build_parser().parse_args(argv)
+        if args.prompt_dump_dir is None and args.prompt_dump_actor_id is not None:
+            raise ValueError("prompt_dump_actor_id_requires_prompt_dump_dir")
+        if args.prompt_dump_dir is None and args.prompt_dump_scenario_id is not None:
+            raise ValueError("prompt_dump_scenario_id_requires_prompt_dump_dir")
+        if args.prompt_dump_dir is not None and args.prompt_dump_actor_id is None:
+            raise ValueError("prompt_dump_dir_requires_prompt_dump_actor_id")
         observation = _read_observation()
         config = resolve_direct_provider_config(
             provider=args.provider,
@@ -396,9 +520,26 @@ def main(argv: list[str] | None = None) -> int:
                 base_url=args.base_url,
                 timeout_seconds=config.timeout_seconds,
             )
+        provider_turns: list[dict[str, Any]] = []
+
+        def _capturing_completion_request(prompt: str, runtime_config: DirectProviderConfig) -> str:
+            raw_provider_response_text = request_openai_chat_completions(
+                prompt=prompt,
+                config=runtime_config,
+            )
+            provider_turns.append(
+                {
+                    "phase": "initial" if len(provider_turns) == 0 else "repair",
+                    "prompt_text": prompt,
+                    "raw_provider_response_text": raw_provider_response_text,
+                }
+            )
+            return raw_provider_response_text
+
         result = run_direct_provider_benchmark_turn(
             observation,
             config=config,
+            completion_request=_capturing_completion_request,
             prompt_engine=args.prompt_engine,
             router_variant=args.router_variant,
         )
@@ -407,6 +548,14 @@ def main(argv: list[str] | None = None) -> int:
             telemetry_actor_id=args.telemetry_actor_id,
             observation=observation,
             runtime_telemetry=result.runtime_telemetry,
+        )
+        _write_prompt_dump_if_configured(
+            prompt_dump_dir=args.prompt_dump_dir,
+            prompt_dump_actor_id=args.prompt_dump_actor_id,
+            prompt_dump_scenario_id=args.prompt_dump_scenario_id,
+            observation=observation,
+            result=result,
+            provider_turns=provider_turns,
         )
         sys.stdout.write(
             json.dumps(

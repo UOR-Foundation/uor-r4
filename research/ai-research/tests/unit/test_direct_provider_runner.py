@@ -10,6 +10,7 @@ import pytest
 from agents.direct_provider_runner import (
     _DEFAULT_OPENAI_BASE_URL,
     DirectProviderConfig,
+    _build_prompt_dump_output_path,
     build_direct_provider_command,
     build_openai_chat_completions_request,
     request_openai_chat_completions,
@@ -456,6 +457,108 @@ def test_direct_provider_runner_main_repairs_one_invalid_provider_response(
         "step": 2,
         "telemetry_schema": "llm_runtime_turn_v1",
     }
+
+
+def test_direct_provider_runner_main_writes_prompt_dump_when_requested(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    responses = iter(("not-json", '{"action":"move east"}'))
+    time_points = iter((1.0, 1.01, 2.0, 2.015))
+
+    def _request(prompt: str, config: DirectProviderConfig) -> str:
+        assert config.provider == "openai-chat-completions"
+        return next(responses)
+
+    monkeypatch.setenv("MUDBENCH_OPENAI_API_KEY", "test-key")
+    monkeypatch.setattr("agents.direct_provider_runner.request_openai_chat_completions", _request)
+    monkeypatch.setattr("agents.direct_provider_runner.monotonic", lambda: next(time_points))
+    stdin = StringIO(json.dumps(_sample_observation().to_dict()) + "\n")
+    stdout = StringIO()
+    stderr = StringIO()
+    monkeypatch.setattr(sys, "stdin", stdin)
+    monkeypatch.setattr(sys, "stdout", stdout)
+    monkeypatch.setattr(sys, "stderr", stderr)
+
+    from agents import direct_provider_runner
+
+    exit_code = direct_provider_runner.main(
+        [
+            "--provider",
+            "openai-chat-completions",
+            "--model",
+            "gpt-4.1-mini",
+            "--prompt-engine",
+            "angular-canonical",
+            "--router-variant",
+            "angular-hopf-trans",
+            "--prompt-dump-dir",
+            str(tmp_path),
+            "--prompt-dump-actor-id",
+            "agent-a",
+            "--prompt-dump-scenario-id",
+            "tiny-fetch-quest",
+        ]
+    )
+
+    assert exit_code == 0
+    assert json.loads(stdout.getvalue().strip()) == {"action": "move east"}
+    assert stderr.getvalue() == ""
+
+    dump_path = _build_prompt_dump_output_path(
+        prompt_dump_dir=tmp_path,
+        run_id="tiny-fetch-quest-run",
+        step=2,
+        actor_id="agent-a",
+    )
+    dump_payload = json.loads(dump_path.read_text(encoding="utf-8"))
+    assert dump_payload["dump_schema"] == "direct_provider_prompt_dump_v1"
+    assert dump_payload["scenario_id"] == "tiny-fetch-quest"
+    assert dump_payload["prompt_engine"] == "angular-canonical"
+    assert dump_payload["router_variant"] == "angular-hopf-trans"
+    assert dump_payload["raw_provider_response_text"] == "not-json"
+    assert dump_payload["repair_raw_provider_response_text"] == '{"action":"move east"}'
+    assert dump_payload["final_action"] == {"action": "move east"}
+    assert dump_payload["provider_turns"] == [
+        {
+            "phase": "initial",
+            "prompt_text": dump_payload["prompt_text"],
+            "raw_provider_response_text": "not-json",
+        },
+        {
+            "phase": "repair",
+            "prompt_text": dump_payload["repair_prompt_text"],
+            "raw_provider_response_text": '{"action":"move east"}',
+        },
+    ]
+
+
+def test_direct_provider_runner_main_rejects_prompt_dump_dir_without_actor_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stdout = StringIO()
+    stderr = StringIO()
+    monkeypatch.setattr(sys, "stdout", stdout)
+    monkeypatch.setattr(sys, "stderr", stderr)
+
+    from agents import direct_provider_runner
+
+    exit_code = direct_provider_runner.main(
+        [
+            "--provider",
+            "openai-chat-completions",
+            "--model",
+            "gpt-4.1-mini",
+            "--prompt-dump-dir",
+            "/tmp/prompt-dumps",
+        ]
+    )
+
+    assert exit_code == 1
+    assert stdout.getvalue() == ""
+    assert stderr.getvalue().strip() == (
+        "direct_provider_runner error: prompt_dump_dir_requires_prompt_dump_actor_id"
+    )
 
 
 def test_direct_provider_runner_main_fails_closed_after_invalid_repair(

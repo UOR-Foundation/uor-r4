@@ -226,6 +226,22 @@ def test_cli_run_supports_delayed_cost_tiny_scenario_selection(
     assert payload["scorecard"]["aggregate_score"] > 0.0
 
 
+def test_cli_run_supports_context_pressure_tiny_scenario_selection(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    exit_code = main(["run", "--scenario", "tiny-context-pressure"])
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    payload = _read_json_output(captured.out)
+    assert payload["scenario_id"] == "tiny-context-pressure"
+    assert payload["accepted"] is True
+    assert payload["lifecycle"]["status"] == "finalized"
+    assert payload["lifecycle"]["step_count"] == 12
+    assert payload["replay"]["event_count"] > payload["lifecycle"]["step_count"] * 2
+    assert payload["scorecard"]["aggregate_score"] > 0.0
+
+
 def test_cli_run_rejects_routed_prompt_engine_without_direct_provider(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -238,6 +254,21 @@ def test_cli_run_rejects_routed_prompt_engine_without_direct_provider(
         "accepted": False,
         "error_type": "run_rejected",
         "reason": "prompt_engine_requires_direct_provider",
+    }
+
+
+def test_cli_run_rejects_prompt_dump_dir_without_direct_provider(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    exit_code = main(["run", "--direct-provider-prompt-dump-dir", "/tmp/direct-provider-dumps"])
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    payload = _read_json_output(captured.out)
+    assert payload == {
+        "accepted": False,
+        "error_type": "run_rejected",
+        "reason": "direct_provider_prompt_dump_dir_requires_direct_provider",
     }
 
 
@@ -496,6 +527,23 @@ def test_cli_compare_playable_slices_rejects_timeout_override_without_direct_pro
     }
 
 
+def test_cli_compare_playable_slices_rejects_prompt_dump_dir_without_direct_provider(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    exit_code = main(
+        ["compare-playable-slices", "--direct-provider-comparison-prompt-dump-dir", "/tmp/compare-dumps"]
+    )
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    payload = _read_json_output(captured.out)
+    assert payload == {
+        "accepted": False,
+        "error_type": "playable_slice_comparison_rejected",
+        "reason": "direct_provider_comparison_prompt_dump_dir_requires_direct_provider",
+    }
+
+
 def test_cli_compare_playable_slices_rejects_non_positive_timeout_override(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -736,6 +784,224 @@ def test_cli_compare_playable_slices_threads_timeout_override_into_direct_provid
     assert exit_code == 0
     assert _read_json_output(captured.out)["accepted"] is True
     assert captured_timeouts == [7.5] * 12
+
+
+def test_cli_compare_playable_slices_can_include_multiple_angular_variants_in_one_invocation(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    captured_commands: list[tuple[str, ...] | None] = []
+
+    class _FakeProviderConfig:
+        provider = "openai-chat-completions"
+
+    class _FakeResult:
+        def __init__(self, scenario_id: str, mode: str) -> None:
+            self.scenario_id = scenario_id
+            self.mode = mode
+
+    def _fake_resolve_direct_provider_config(**_: object) -> _FakeProviderConfig:
+        return _FakeProviderConfig()
+
+    def _fake_build_direct_provider_command(
+        _config: object,
+        *,
+        python_executable: str,
+        prompt_engine: str = "baseline",
+        router_variant: str | None = None,
+    ) -> tuple[str, ...]:
+        command = [python_executable, "src/agents/direct_provider_runner.py", "--provider", "openai-chat-completions"]
+        if prompt_engine != "baseline":
+            command.extend(("--prompt-engine", prompt_engine))
+        if router_variant is not None:
+            command.extend(("--router-variant", router_variant))
+        return tuple(command)
+
+    def _fake_run_benchmark_lifecycle(config: object) -> _FakeResult:
+        external_agent_command = getattr(config, "external_agent_command")
+        captured_commands.append(None if external_agent_command is None else tuple(external_agent_command))
+        scenario_id = str(getattr(config, "scenario")["scenario_id"])
+        if external_agent_command is None:
+            return _FakeResult(scenario_id, "built_in")
+        if tuple(external_agent_command)[1] == "examples/agents/mock_llm_wrapper.py":
+            return _FakeResult(scenario_id, "mock_wrapper")
+        if "--router-variant" in tuple(external_agent_command):
+            command_tuple = tuple(external_agent_command)
+            if "legacy-router-backed" in command_tuple:
+                return _FakeResult(scenario_id, "direct_provider_legacy_router_backed")
+            return _FakeResult(scenario_id, "direct_provider_angular_canonical")
+        return _FakeResult(scenario_id, "direct_provider")
+
+    def _fake_build_playable_slice_comparison_entry(
+        result: _FakeResult,
+        *,
+        mode: str,
+        agent_identity: str,
+        actor_id: str,
+    ) -> dict[str, object]:
+        return {
+            "scenario_id": result.scenario_id,
+            "mode": mode,
+            "agent_identity": agent_identity,
+            "actor_id": actor_id,
+            "objective_completed": True,
+            "aggregate_score": 0.5,
+            "composite_score": 0.25,
+            "runtime_telemetry": {"repair_used_count": 0} if mode.startswith("direct_provider") else None,
+        }
+
+    monkeypatch.setattr("cli.main.resolve_direct_provider_config", _fake_resolve_direct_provider_config)
+    monkeypatch.setattr("cli.main.build_direct_provider_command", _fake_build_direct_provider_command)
+    monkeypatch.setattr("cli.main.run_benchmark_lifecycle", _fake_run_benchmark_lifecycle)
+    monkeypatch.setattr(
+        "cli.main.build_playable_slice_comparison_entry",
+        _fake_build_playable_slice_comparison_entry,
+    )
+
+    exit_code = main(
+        [
+            "compare-playable-slices",
+            "--direct-provider",
+            "openai-chat-completions",
+            "--direct-provider-model",
+            "gpt-4.1-mini",
+            "--include-angular-canonical-prompt-engine",
+            "--angular-router-variant",
+            "angular-hopf-base",
+            "--angular-router-variant",
+            "angular-hopf-trans",
+        ]
+    )
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    payload = _read_json_output(captured.out)
+    assert payload["mode_ids"] == [
+        "built_in",
+        "mock_wrapper",
+        "direct_provider",
+        "direct_provider_angular_canonical",
+    ]
+    assert payload["entry_count"] == 15
+    baseline_entries = [entry for entry in payload["entries"] if entry["mode"] == "direct_provider"]
+    angular_entries = [
+        entry for entry in payload["entries"] if entry["mode"] == "direct_provider_angular_canonical"
+    ]
+    assert len(baseline_entries) == 3
+    assert len(angular_entries) == 6
+    assert all(entry["prompt_engine"] == "angular-canonical" for entry in angular_entries)
+    assert {entry["router_variant"] for entry in angular_entries} == {
+        "angular-hopf-base",
+        "angular-hopf-trans",
+    }
+    assert sum(1 for entry in angular_entries if entry["router_variant"] == "angular-hopf-base") == 3
+    assert sum(1 for entry in angular_entries if entry["router_variant"] == "angular-hopf-trans") == 3
+    assert any(command is not None and "angular-hopf-base" in command for command in captured_commands)
+    assert any(command is not None and "angular-hopf-trans" in command for command in captured_commands)
+
+
+def test_cli_compare_playable_slices_wires_prompt_dump_flags_into_direct_provider_rows(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    captured_commands: list[tuple[str, ...] | None] = []
+
+    class _FakeProviderConfig:
+        provider = "openai-chat-completions"
+
+    class _FakeResult:
+        def __init__(self, scenario_id: str, mode: str) -> None:
+            self.scenario_id = scenario_id
+            self.mode = mode
+
+    def _fake_resolve_direct_provider_config(**_: object) -> _FakeProviderConfig:
+        return _FakeProviderConfig()
+
+    def _fake_build_direct_provider_command(
+        _config: object,
+        *,
+        python_executable: str,
+        prompt_engine: str = "baseline",
+        router_variant: str | None = None,
+    ) -> tuple[str, ...]:
+        command = [python_executable, "src/agents/direct_provider_runner.py", "--provider", "openai-chat-completions"]
+        if prompt_engine != "baseline":
+            command.extend(("--prompt-engine", prompt_engine))
+        if router_variant is not None:
+            command.extend(("--router-variant", router_variant))
+        return tuple(command)
+
+    def _fake_run_benchmark_lifecycle(config: object) -> _FakeResult:
+        external_agent_command = getattr(config, "external_agent_command")
+        captured_commands.append(None if external_agent_command is None else tuple(external_agent_command))
+        scenario_id = str(getattr(config, "scenario")["scenario_id"])
+        if external_agent_command is None:
+            return _FakeResult(scenario_id, "built_in")
+        if tuple(external_agent_command)[1] == "examples/agents/mock_llm_wrapper.py":
+            return _FakeResult(scenario_id, "mock_wrapper")
+        return _FakeResult(scenario_id, "direct_provider")
+
+    def _fake_build_playable_slice_comparison_entry(
+        result: _FakeResult,
+        *,
+        mode: str,
+        agent_identity: str,
+        actor_id: str,
+    ) -> dict[str, object]:
+        return {
+            "scenario_id": result.scenario_id,
+            "mode": mode,
+            "agent_identity": agent_identity,
+            "actor_id": actor_id,
+            "objective_completed": True,
+            "aggregate_score": 0.5,
+            "composite_score": 0.25,
+            "runtime_telemetry": {"repair_used_count": 0} if mode.startswith("direct_provider") else None,
+        }
+
+    monkeypatch.setattr("cli.main.resolve_direct_provider_config", _fake_resolve_direct_provider_config)
+    monkeypatch.setattr("cli.main.build_direct_provider_command", _fake_build_direct_provider_command)
+    monkeypatch.setattr("cli.main.run_benchmark_lifecycle", _fake_run_benchmark_lifecycle)
+    monkeypatch.setattr(
+        "cli.main.build_playable_slice_comparison_entry",
+        _fake_build_playable_slice_comparison_entry,
+    )
+
+    exit_code = main(
+        [
+            "compare-playable-slices",
+            "--direct-provider",
+            "openai-chat-completions",
+            "--direct-provider-model",
+            "gpt-4.1-mini",
+            "--include-angular-canonical-prompt-engine",
+            "--angular-router-variant",
+            "angular-hopf-trans",
+            "--include-legacy-router-backed-prompt-engine",
+            "--legacy-router-variant",
+            "legacy-phase4d_hopf_transport",
+            "--direct-provider-comparison-prompt-dump-dir",
+            "/tmp/compare-prompt-dumps",
+        ]
+    )
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert _read_json_output(captured.out)["accepted"] is True
+    direct_commands = [
+        command
+        for command in captured_commands
+        if command is not None and command[1] == "src/agents/direct_provider_runner.py"
+    ]
+    assert len(direct_commands) == 9
+    assert all("--prompt-dump-dir" in command for command in direct_commands)
+    assert all("--prompt-dump-actor-id" in command for command in direct_commands)
+    assert all("--prompt-dump-scenario-id" in command for command in direct_commands)
+    assert {command[command.index("--prompt-dump-scenario-id") + 1] for command in direct_commands} == {
+        "tiny-guarded-relic",
+        "tiny-hazard-route",
+        "tiny-delayed-cost",
+    }
 
 
 def test_cli_compare_playable_slices_rejects_angular_canonical_mode_without_direct_provider(
@@ -1672,6 +1938,84 @@ def test_cli_run_wires_routed_prompt_engine_through_direct_provider_command(
     assert _read_json_output(captured.out)["accepted"] is True
     assert captured_command is not None
     assert captured_command[-2:] == ("--prompt-engine", "geometric-routed")
+
+
+def test_cli_run_wires_direct_provider_prompt_dump_flags_through_command_seam(
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured_command: tuple[str, ...] | None = None
+
+    class _FakeResult:
+        def to_dict(self) -> dict[str, object]:
+            return {
+                "lifecycle_state": {
+                    "run_id": "cli-run",
+                    "scenario_id": "tiny-hidden-key",
+                    "status": "finalized",
+                    "step_index": 1,
+                    "max_steps": 6,
+                    "seed": 33,
+                },
+                "scorecard": {
+                    "aggregate_score": 0.5,
+                    "metadata": {
+                        "benchmark_id": "mudbench-cli",
+                        "scoring_version": "phase3-v1",
+                    },
+                },
+                "replay_artifact_refs": [
+                    {"name": "replay_artifact", "ref": "replay-1"},
+                    {"name": "replay_checksum", "ref": "replay-1"},
+                ],
+                "replay_artifact": {
+                    "envelope": {"schema_version": "1.0"},
+                    "events": [{"event_type": "step"}],
+                },
+                "replay_parity_artifact": {
+                    "terminal_step": 1,
+                    "step_count": 1,
+                    "terminal_state_hash": "a" * 64,
+                    "applied_steps_hash": "b" * 64,
+                    "score_summary_hash": "c" * 64,
+                },
+            }
+
+    def _fake_run_benchmark_lifecycle(config):
+        nonlocal captured_command
+        captured_command = config.external_agent_command
+        return _FakeResult()
+
+    monkeypatch.setenv("MUDBENCH_OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("MUDBENCH_OPENAI_MODEL", "gpt-4.1-mini")
+    monkeypatch.setattr("cli.main.run_benchmark_lifecycle", _fake_run_benchmark_lifecycle)
+
+    exit_code = main(
+        [
+            "run",
+            "--scenario",
+            "tiny-hidden-key",
+            "--actor-id",
+            "agent-a",
+            "--direct-provider",
+            "openai-chat-completions",
+            "--direct-provider-prompt-dump-dir",
+            "/tmp/direct-provider-dumps",
+        ]
+    )
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert _read_json_output(captured.out)["accepted"] is True
+    assert captured_command is not None
+    assert captured_command[-6:] == (
+        "--prompt-dump-dir",
+        "/tmp/direct-provider-dumps",
+        "--prompt-dump-actor-id",
+        "agent-a",
+        "--prompt-dump-scenario-id",
+        "tiny-hidden-key",
+    )
 
 
 def test_cli_run_wires_angular_canonical_prompt_engine_and_variant_through_direct_provider_command(

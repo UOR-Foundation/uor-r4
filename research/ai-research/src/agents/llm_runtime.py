@@ -73,6 +73,74 @@ _EXPECTED_ACTION_OUTPUT_CONTRACT = {
     "required_fields": ["action"],
     "additional_properties": False,
 }
+_ROUTED_HAZARD_KEYWORDS = (
+    "guard",
+    "marauder",
+    "raider",
+    "storm",
+    "hazard",
+    "danger",
+    "spill",
+    "drain",
+    "threat",
+    "hostile",
+)
+_ROUTED_GATE_KEYWORDS = (
+    "seal",
+    "lock",
+    "valve",
+    "bypass",
+    "door",
+    "archive",
+    "vault",
+    "unlock",
+    "lift",
+    "requires",
+    "powered",
+    "threshold",
+)
+_ROUTED_PROGRESS_KEYWORDS = (
+    "archive",
+    "vault",
+    "prism",
+    "ledger",
+    "artifact",
+    "relic",
+    "seal",
+    "bypass",
+    "final",
+    "inner",
+)
+_ROUTED_MISLEADING_KEYWORDS = (
+    "shortcut",
+    "short route",
+    "annex",
+    "signal",
+    "flare",
+    "emergency",
+    "side",
+    "drain",
+    "waste",
+    "decoy",
+)
+_ROUTED_RESOURCE_KEYWORDS = (
+    "cell",
+    "power",
+    "coolant",
+    "charge",
+    "battery",
+    "fuel",
+    "key",
+    "handle",
+)
+_ROUTED_CONSUMABLE_RESOURCE_KEYWORDS = (
+    "cell",
+    "power",
+    "coolant",
+    "charge",
+    "battery",
+    "fuel",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -243,6 +311,7 @@ def build_geometric_routed_prompt_plan(
         "compressed_sections": compressed_sections,
         "reasoning_pressure_tag": _build_reasoning_pressure_tag(dominant_loop),
         "layer_scores": dict(scores),
+        "routing_context": dict(routing_context),
     }
 
 
@@ -284,6 +353,7 @@ def build_angular_canonical_prompt_plan(
     layer_scores = _build_loop_layer_scores(loop_layers, routing_context=routing_context)
     routing_coordinate_adapter = _build_canonical_angular_routing_coordinate(
         layer_scores=layer_scores,
+        routing_context=routing_context,
     )
     plan = build_router_core_canonical_angular_prompt_plan(
         routing_coordinate=routing_coordinate_adapter["raw_coordinate"],
@@ -295,7 +365,9 @@ def build_angular_canonical_prompt_plan(
             router_variant,
         ),
     )
+    plan["coordinate_adapter_contract"] = routing_coordinate_adapter["adapter_schema"]
     plan["layer_scores"] = dict(layer_scores)
+    plan["routing_context"] = dict(routing_context)
     plan["routing_coordinate_adapter"] = routing_coordinate_adapter
     return plan
 
@@ -345,6 +417,7 @@ def build_legacy_router_backed_prompt_plan(
         layer_order=_ROUTED_LAYER_ORDER,
     )
     plan["layer_scores"] = dict(layer_scores)
+    plan["routing_context"] = dict(routing_context)
     return plan
 
 
@@ -793,6 +866,10 @@ def _build_compact_layer_summary(
                 and not isinstance(visible_entities, (str, bytes))
                 else 0
             ),
+            "actionable_hazard_pressure": layer_payload.get(
+                "actionable_hazard_pressure", 0
+            ),
+            "hostile_actor_pressure": layer_payload.get("hostile_actor_pressure", 0),
         }
     if layer_name == "local_objective":
         candidate_targets = layer_payload.get("candidate_targets", ())
@@ -816,6 +893,14 @@ def _build_compact_layer_summary(
                 and not isinstance(interaction_actions, (str, bytes))
                 else 0
             ),
+            "dependency_gate_pressure": layer_payload.get("dependency_gate_pressure", 0),
+            "location_sensitive_use_pressure": layer_payload.get(
+                "location_sensitive_use_pressure", 0
+            ),
+            "misleading_local_affordance_pressure": layer_payload.get(
+                "misleading_local_affordance_pressure", 0
+            ),
+            "global_progress_pressure": layer_payload.get("global_progress_pressure", 0),
         }
     if layer_name == "temporal_world":
         messages = layer_payload.get("messages", ())
@@ -829,6 +914,7 @@ def _build_compact_layer_summary(
             "message_preview": normalized_messages[:1],
             "step": layer_payload.get("step", 0),
             "remaining_steps": layer_payload.get("remaining_steps", 0),
+            "time_pressure": layer_payload.get("time_pressure", 0),
         }
     if layer_name == "multi_agent":
         visible_other_entities = layer_payload.get("visible_other_entities", ())
@@ -843,6 +929,7 @@ def _build_compact_layer_summary(
                 "visible_other_entity_count", 0
             ),
             "entity_preview": normalized_entities[:2],
+            "hostile_actor_pressure": layer_payload.get("hostile_actor_pressure", 0),
         }
     if layer_name == "persistence":
         inventory = layer_payload.get("inventory", ())
@@ -857,6 +944,10 @@ def _build_compact_layer_summary(
             "health": layer_payload.get("health", 0),
             "step": layer_payload.get("step", 0),
             "remaining_steps": layer_payload.get("remaining_steps", 0),
+            "resource_scarcity_pressure": layer_payload.get(
+                "resource_scarcity_pressure", 0
+            ),
+            "consumable_pressure": layer_payload.get("consumable_pressure", 0),
         }
     raise ValueError(f"unsupported loop layer: {layer_name}")
 
@@ -938,6 +1029,11 @@ def _build_routed_loop_layers(
         and entity.get("type") not in {"item", "consumable", "npc"}
         and isinstance(entity.get("name"), str)
     )
+    pressure_features = _build_routed_pressure_features(
+        observation_payload,
+        allowed_actions,
+        allowed_targets,
+    )
     return {
         "immediate_action": {
             "location": observation_payload.get("location"),
@@ -945,26 +1041,39 @@ def _build_routed_loop_layers(
             "allowed_targets": dict(allowed_targets),
             "exits": list(exits) if isinstance(exits, Sequence) and not isinstance(exits, (str, bytes)) else [],
             "visible_entities": visible_entities,
+            "actionable_hazard_pressure": pressure_features["actionable_hazard_pressure"],
+            "hostile_actor_pressure": pressure_features["hostile_actor_pressure"],
         },
         "local_objective": {
             "candidate_targets": local_objective_targets,
             "inventory": list(inventory) if isinstance(inventory, Sequence) and not isinstance(inventory, (str, bytes)) else [],
             "interaction_actions": interaction_actions,
+            "dependency_gate_pressure": pressure_features["dependency_gate_pressure"],
+            "location_sensitive_use_pressure": pressure_features["location_sensitive_use_pressure"],
+            "misleading_local_affordance_pressure": pressure_features[
+                "misleading_local_affordance_pressure"
+            ],
+            "global_progress_pressure": pressure_features["global_progress_pressure"],
         },
         "temporal_world": {
             "messages": list(messages) if isinstance(messages, Sequence) and not isinstance(messages, (str, bytes)) else [],
             "step": observation_payload.get("step", 0),
             "remaining_steps": observation_payload.get("remaining_steps", 0),
+            "time_pressure": pressure_features["time_pressure"],
         },
         "multi_agent": {
             "visible_other_entities": multi_agent_entities,
             "visible_other_entity_count": len(multi_agent_entities),
+            "hostile_actor_pressure": pressure_features["hostile_actor_pressure"],
         },
         "persistence": {
             "inventory": list(inventory) if isinstance(inventory, Sequence) and not isinstance(inventory, (str, bytes)) else [],
             "health": observation_payload.get("health", 0),
             "step": observation_payload.get("step", 0),
             "remaining_steps": observation_payload.get("remaining_steps", 0),
+            "resource_scarcity_pressure": pressure_features["resource_scarcity_pressure"],
+            "consumable_pressure": pressure_features["consumable_pressure"],
+            "global_progress_pressure": pressure_features["global_progress_pressure"],
         },
     }
 
@@ -977,6 +1086,11 @@ def _build_routed_routing_context(
     inventory = observation_payload.get("inventory", ())
     messages = observation_payload.get("messages", ())
     entities = observation_payload.get("entities", ())
+    pressure_features = _build_routed_pressure_features(
+        observation_payload,
+        allowed_actions,
+        allowed_targets,
+    )
     return {
         "inventory_count": len(inventory) if isinstance(inventory, Sequence) and not isinstance(inventory, (str, bytes)) else 0,
         "message_count": len(messages) if isinstance(messages, Sequence) and not isinstance(messages, (str, bytes)) else 0,
@@ -996,6 +1110,8 @@ def _build_routed_routing_context(
             or action.startswith("give ")
         ),
         "allowed_target_verbs": sorted(str(key) for key in allowed_targets.keys()),
+        **pressure_features,
+        "pressure_features": pressure_features,
     }
 
 
@@ -1017,6 +1133,7 @@ def _build_loop_layer_scores(
 def _build_canonical_angular_routing_coordinate(
     *,
     layer_scores: Mapping[str, int],
+    routing_context: Mapping[str, Any],
 ) -> dict[str, Any]:
     """Project current prompt/world state into the canonical 4D routing contract.
 
@@ -1036,11 +1153,52 @@ def _build_canonical_angular_routing_coordinate(
         "multi_agent": max(1, int(layer_scores.get("multi_agent", 1))),
         "persistence": max(1, int(layer_scores.get("persistence", 1))),
     }
+    pressure_features = {
+        "actionable_hazard_pressure": int(
+            routing_context.get("actionable_hazard_pressure", 0)
+        ),
+        "hostile_actor_pressure": int(routing_context.get("hostile_actor_pressure", 0)),
+        "resource_scarcity_pressure": int(
+            routing_context.get("resource_scarcity_pressure", 0)
+        ),
+        "dependency_gate_pressure": int(
+            routing_context.get("dependency_gate_pressure", 0)
+        ),
+        "misleading_local_affordance_pressure": int(
+            routing_context.get("misleading_local_affordance_pressure", 0)
+        ),
+        "location_sensitive_use_pressure": int(
+            routing_context.get("location_sensitive_use_pressure", 0)
+        ),
+        "global_progress_pressure": int(
+            routing_context.get("global_progress_pressure", 0)
+        ),
+        "time_pressure": int(routing_context.get("time_pressure", 0)),
+        "consumable_pressure": int(routing_context.get("consumable_pressure", 0)),
+    }
+    bundle_feature_totals = {
+        "action_local": pressure_features["actionable_hazard_pressure"]
+        + pressure_features["hostile_actor_pressure"],
+        "local_objective": pressure_features["dependency_gate_pressure"]
+        + pressure_features["location_sensitive_use_pressure"]
+        + pressure_features["misleading_local_affordance_pressure"]
+        + pressure_features["global_progress_pressure"],
+        "temporal_world": pressure_features["time_pressure"]
+        + int(routing_context.get("message_count", 0)),
+        "shared_state": pressure_features["resource_scarcity_pressure"]
+        + pressure_features["consumable_pressure"]
+        + pressure_features["hostile_actor_pressure"],
+    }
     bundle_scores = {
-        "action_local": component_scores["immediate_action"],
-        "local_objective": component_scores["local_objective"],
-        "temporal_world": component_scores["temporal_world"],
-        "shared_state": component_scores["persistence"] + component_scores["multi_agent"],
+        "action_local": component_scores["immediate_action"]
+        + bundle_feature_totals["action_local"],
+        "local_objective": component_scores["local_objective"]
+        + bundle_feature_totals["local_objective"],
+        "temporal_world": component_scores["temporal_world"]
+        + bundle_feature_totals["temporal_world"],
+        "shared_state": component_scores["persistence"]
+        + component_scores["multi_agent"]
+        + bundle_feature_totals["shared_state"],
     }
     raw_coordinate = (
         float(bundle_scores["action_local"]),
@@ -1050,7 +1208,7 @@ def _build_canonical_angular_routing_coordinate(
     )
     normalized_coordinate = normalize_4d_coordinate(raw_coordinate)
     return {
-        "adapter_schema": "mudbench_prompt_state_v1",
+        "adapter_schema": "mudbench_prompt_state_v2",
         "coordinate_labels": [
             "action_local",
             "local_objective",
@@ -1058,6 +1216,8 @@ def _build_canonical_angular_routing_coordinate(
             "shared_state",
         ],
         "component_scores": component_scores,
+        "pressure_features": pressure_features,
+        "bundle_feature_totals": bundle_feature_totals,
         "bundle_scores": bundle_scores,
         "raw_coordinate": raw_coordinate,
         "normalized_coordinate": tuple(round(value, 6) for value in normalized_coordinate),
@@ -1080,6 +1240,153 @@ def _stringified_targets(value: object) -> list[str]:
     return []
 
 
+def _build_routed_pressure_features(
+    observation_payload: Mapping[str, Any],
+    allowed_actions: Sequence[str],
+    allowed_targets: Mapping[str, Any],
+) -> dict[str, Any]:
+    entities = observation_payload.get("entities", ())
+    inventory = observation_payload.get("inventory", ())
+    messages = observation_payload.get("messages", ())
+    description = str(observation_payload.get("description", ""))
+    location = str(observation_payload.get("location", ""))
+    normalized_entities = (
+        [entity for entity in entities if isinstance(entity, Mapping)]
+        if isinstance(entities, Sequence) and not isinstance(entities, (str, bytes))
+        else []
+    )
+    normalized_inventory = (
+        [str(item) for item in inventory if isinstance(item, str)]
+        if isinstance(inventory, Sequence) and not isinstance(inventory, (str, bytes))
+        else []
+    )
+    normalized_messages = (
+        [message for message in messages if isinstance(message, str)]
+        if isinstance(messages, Sequence) and not isinstance(messages, (str, bytes))
+        else []
+    )
+    visible_entity_names = [
+        str(entity.get("name"))
+        for entity in normalized_entities
+        if isinstance(entity.get("name"), str)
+    ]
+    npc_entity_count = sum(
+        1 for entity in normalized_entities if entity.get("type") == "npc"
+    )
+    attack_target_count = len(_stringified_targets(allowed_targets.get("attack", ())))
+    use_target_count = len(_stringified_targets(allowed_targets.get("use", ())))
+    take_target_count = len(_stringified_targets(allowed_targets.get("take", ())))
+    text_blob = " ".join(
+        [
+            location,
+            description,
+            *normalized_messages,
+            *visible_entity_names,
+            *normalized_inventory,
+        ]
+    ).lower()
+    hazard_keyword_hits = _count_keyword_hits(text_blob, _ROUTED_HAZARD_KEYWORDS)
+    gate_keyword_hits = _count_keyword_hits(text_blob, _ROUTED_GATE_KEYWORDS)
+    progress_keyword_hits = _count_keyword_hits(text_blob, _ROUTED_PROGRESS_KEYWORDS)
+    misleading_keyword_hits = _count_keyword_hits(text_blob, _ROUTED_MISLEADING_KEYWORDS)
+    resource_keyword_inventory_count = sum(
+        1
+        for item in normalized_inventory
+        if any(keyword in item.lower() for keyword in _ROUTED_RESOURCE_KEYWORDS)
+    )
+    consumable_pressure = sum(
+        1
+        for item in normalized_inventory
+        if any(
+            keyword in item.lower()
+            for keyword in _ROUTED_CONSUMABLE_RESOURCE_KEYWORDS
+        )
+    )
+    remaining_steps = int(observation_payload.get("remaining_steps", 0))
+    time_pressure = (
+        3
+        if remaining_steps <= 2
+        else 2
+        if remaining_steps <= 4
+        else 1
+        if remaining_steps <= 6
+        else 0
+    )
+    hostile_actor_pressure = attack_target_count + npc_entity_count + min(
+        hazard_keyword_hits,
+        2,
+    )
+    actionable_hazard_pressure = (
+        hostile_actor_pressure + time_pressure + (1 if attack_target_count > 0 else 0)
+    )
+    dependency_gate_pressure = (
+        gate_keyword_hits
+        + (1 if use_target_count > 0 else 0)
+        + (1 if resource_keyword_inventory_count > 0 else 0)
+    )
+    location_sensitive_use_pressure = use_target_count * (1 + min(gate_keyword_hits, 2))
+    resource_scarcity_pressure = (
+        resource_keyword_inventory_count
+        + consumable_pressure
+        + (1 if use_target_count > 0 and consumable_pressure > 0 else 0)
+        + (
+            1
+            if resource_keyword_inventory_count > 0 and remaining_steps <= 4
+            else 0
+        )
+    )
+    misleading_local_affordance_pressure = misleading_keyword_hits + (
+        1 if misleading_keyword_hits > 0 and use_target_count > 0 else 0
+    )
+    global_progress_pressure = (
+        progress_keyword_hits
+        + (1 if take_target_count > 0 else 0)
+        + (1 if any(token in location.lower() for token in ("archive", "vault", "seal")) else 0)
+    )
+    active_pressure_tags = [
+        tag
+        for tag, value in (
+            ("hazard_pressure", actionable_hazard_pressure),
+            ("hostile_actor_pressure", hostile_actor_pressure),
+            ("resource_scarcity_pressure", resource_scarcity_pressure),
+            ("dependency_gate_pressure", dependency_gate_pressure),
+            (
+                "misleading_local_affordance_pressure",
+                misleading_local_affordance_pressure,
+            ),
+            ("location_sensitive_use_pressure", location_sensitive_use_pressure),
+            ("global_progress_pressure", global_progress_pressure),
+            ("time_pressure", time_pressure),
+        )
+        if value > 0
+    ]
+    return {
+        "npc_entity_count": npc_entity_count,
+        "attack_target_count": attack_target_count,
+        "use_target_count": use_target_count,
+        "take_target_count": take_target_count,
+        "hazard_keyword_hits": hazard_keyword_hits,
+        "gate_keyword_hits": gate_keyword_hits,
+        "progress_keyword_hits": progress_keyword_hits,
+        "misleading_keyword_hits": misleading_keyword_hits,
+        "resource_keyword_inventory_count": resource_keyword_inventory_count,
+        "consumable_pressure": consumable_pressure,
+        "time_pressure": time_pressure,
+        "hostile_actor_pressure": hostile_actor_pressure,
+        "actionable_hazard_pressure": actionable_hazard_pressure,
+        "resource_scarcity_pressure": resource_scarcity_pressure,
+        "dependency_gate_pressure": dependency_gate_pressure,
+        "misleading_local_affordance_pressure": misleading_local_affordance_pressure,
+        "location_sensitive_use_pressure": location_sensitive_use_pressure,
+        "global_progress_pressure": global_progress_pressure,
+        "active_pressure_tags": active_pressure_tags,
+    }
+
+
+def _count_keyword_hits(text_blob: str, keywords: Sequence[str]) -> int:
+    return sum(1 for keyword in keywords if keyword in text_blob)
+
+
 def _score_loop_layer(
     layer_name: str,
     layer_payload: Mapping[str, Any],
@@ -1087,25 +1394,55 @@ def _score_loop_layer(
     routing_context: Mapping[str, Any],
 ) -> int:
     if layer_name == "immediate_action":
-        return 90 + len(layer_payload.get("allowed_actions", ()))
+        allowed_actions = layer_payload.get("allowed_actions", ())
+        exits = layer_payload.get("exits", ())
+        return (
+            24
+            + (len(allowed_actions) * 4)
+            + (len(exits) * 3)
+            + (int(routing_context.get("actionable_hazard_pressure", 0)) * 6)
+            + (int(routing_context.get("hostile_actor_pressure", 0)) * 4)
+        )
     if layer_name == "local_objective":
         candidate_targets = layer_payload.get("candidate_targets", ())
         interaction_actions = layer_payload.get("interaction_actions", ())
-        return 40 + (len(candidate_targets) * 10) + (len(interaction_actions) * 5)
+        return (
+            20
+            + (len(candidate_targets) * 5)
+            + (len(interaction_actions) * 3)
+            + (int(routing_context.get("dependency_gate_pressure", 0)) * 8)
+            + (int(routing_context.get("location_sensitive_use_pressure", 0)) * 5)
+            + (
+                int(routing_context.get("misleading_local_affordance_pressure", 0))
+                * 4
+            )
+            + (int(routing_context.get("global_progress_pressure", 0)) * 3)
+        )
     if layer_name == "temporal_world":
         messages = layer_payload.get("messages", ())
-        score = 20 + (len(messages) * 10)
+        score = 10 + (len(messages) * 10) + (int(routing_context.get("time_pressure", 0)) * 8)
         message_blob = " ".join(
             message for message in messages if isinstance(message, str)
         ).lower()
         if any(token in message_blob for token in ("watch", "patrol", "phase", "consequence", "route")):
             score += 25
+        score += int(routing_context.get("actionable_hazard_pressure", 0)) * 2
         return score
     if layer_name == "multi_agent":
-        return 10 + (int(routing_context.get("visible_other_entity_count", 0)) * 20)
+        return (
+            5
+            + (int(routing_context.get("visible_other_entity_count", 0)) * 8)
+            + (int(routing_context.get("hostile_actor_pressure", 0)) * 6)
+            + (int(routing_context.get("npc_entity_count", 0)) * 4)
+        )
     if layer_name == "persistence":
-        return 15 + (int(routing_context.get("inventory_count", 0)) * 15) + int(
-            layer_payload.get("step", 0)
+        return (
+            12
+            + (int(routing_context.get("inventory_count", 0)) * 5)
+            + int(layer_payload.get("step", 0))
+            + (int(routing_context.get("resource_scarcity_pressure", 0)) * 8)
+            + (int(routing_context.get("consumable_pressure", 0)) * 6)
+            + (int(routing_context.get("global_progress_pressure", 0)) * 2)
         )
     raise ValueError(f"unsupported loop layer: {layer_name}")
 
