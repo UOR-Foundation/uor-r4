@@ -84,6 +84,20 @@ _SOCIAL_TRADE_COMPLETED_METRIC = "social.trade.completed"
 _RUNNER_AGENT_TIMEOUT_SECONDS = 1.0
 _LLM_RUNTIME_TELEMETRY_SCHEMA = "llm_runtime_turn_v1"
 _LLM_RUNTIME_TELEMETRY_EVENT_TYPE = "agent_runtime_telemetry"
+_TIMING_MODE_OFF = "off"
+_TIMING_MODE_EQUAL_CADENCE = "equal-cadence"
+_TIMING_MODE_HUMAN_PARITY = "human-parity"
+_TIMING_MODE_NATIVE_SPEED = "native-speed"
+_SUPPORTED_TIMING_MODES = frozenset(
+    {
+        _TIMING_MODE_OFF,
+        _TIMING_MODE_EQUAL_CADENCE,
+        _TIMING_MODE_HUMAN_PARITY,
+        _TIMING_MODE_NATIVE_SPEED,
+    }
+)
+_DEFAULT_EQUAL_CADENCE_INTERVAL = 2
+_DEFAULT_HUMAN_PARITY_CADENCE_INTERVAL = 2
 _RUNNER_AGENT_SCRIPT_EXPLORER = (
     "import json,sys\n"
     "line=sys.stdin.readline()\n"
@@ -603,6 +617,9 @@ class BenchmarkRunnerConfig:
     external_agent_actor_id: str | None = None
     persistent_agent_session: bool = False
     external_agent_timeout_seconds: float | None = None
+    timing_mode: str | None = None
+    action_cadence_interval: int | None = None
+    actor_action_cadence_overrides: Mapping[str, int] | None = None
     normalization_profiles: Mapping[str, NormalizationProfile | Mapping[str, Any]] | None = None
     score_weights: Mapping[str, float] | None = None
 
@@ -685,6 +702,17 @@ class BenchmarkRunnerConfig:
             or float(self.external_agent_timeout_seconds) <= 0.0
         ):
             raise ValueError("external_agent_timeout_seconds must be None or a positive number")
+        normalized_timing_mode, resolved_cadence_interval, normalized_cadence_overrides = (
+            resolve_timing_mode_cadence_config(
+                timing_mode=self.timing_mode,
+                action_cadence_interval=self.action_cadence_interval,
+                actor_action_cadence_overrides=self.actor_action_cadence_overrides,
+                actor_ids=self.actor_ids,
+            )
+        )
+        object.__setattr__(self, "timing_mode", normalized_timing_mode)
+        object.__setattr__(self, "action_cadence_interval", resolved_cadence_interval)
+        object.__setattr__(self, "actor_action_cadence_overrides", normalized_cadence_overrides)
         if self.normalization_profiles is not None and not isinstance(self.normalization_profiles, Mapping):
             raise ValueError("normalization_profiles must be a mapping")
         if self.score_weights is not None and not isinstance(self.score_weights, Mapping):
@@ -1336,9 +1364,13 @@ class SharedShardLoopStepResult:
     world_tick_count: int
     world_tick_heartbeat: str
     world_npc_stance_phase: str
+    timing_mode: str | None = None
+    action_cadence_interval: int | None = None
+    actor_action_cadence_overrides: tuple[tuple[str, int], ...] = ()
+    actor_next_action_eligible_at: tuple[tuple[str, int], ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        payload = {
             "step_index": self.step_index,
             "accepted_actions": [
                 {"actor_id": actor_id, "action": action}
@@ -1351,6 +1383,19 @@ class SharedShardLoopStepResult:
             "world_tick_heartbeat": self.world_tick_heartbeat,
             "world_npc_stance_phase": self.world_npc_stance_phase,
         }
+        if self.timing_mode is not None:
+            payload["timing_mode"] = self.timing_mode
+        if self.action_cadence_interval is not None:
+            payload["action_cadence_interval"] = self.action_cadence_interval
+            payload["actor_action_cadence_overrides"] = [
+                {"actor_id": actor_id, "cadence_interval": cadence_interval}
+                for actor_id, cadence_interval in self.actor_action_cadence_overrides
+            ]
+            payload["actor_next_action_eligible_at"] = [
+                {"actor_id": actor_id, "next_action_eligible_at": next_action_eligible_at}
+                for actor_id, next_action_eligible_at in self.actor_next_action_eligible_at
+            ]
+        return payload
 
 
 @dataclass(slots=True)
@@ -1366,6 +1411,7 @@ class SharedShardLoopSession:
     participant_bindings: tuple[SharedShardParticipantBinding, ...]
     agent_actor_ids: tuple[str, ...] = ()
     external_agent_runners_by_actor: Mapping[str, LocalProcessRunner] = field(default_factory=dict)
+    external_agent_timeout_seconds: float | None = None
     external_agent_session_manager: DeterministicLocalRunnerSessionManager = field(
         default_factory=DeterministicLocalRunnerSessionManager
     )
@@ -1389,6 +1435,18 @@ class SharedShardLoopSession:
     @property
     def world_npc_stance_phase(self) -> str:
         return self.shard_state.metadata.npc_stance_phase
+
+    @property
+    def action_cadence_interval(self) -> int | None:
+        return self.shard_state.action_cadence_interval
+
+    @property
+    def actor_action_cadence_overrides(self) -> tuple[tuple[str, int], ...]:
+        return self.shard_state.actor_action_cadence_overrides
+
+    @property
+    def timing_mode(self) -> str | None:
+        return self.shard_state.timing_mode
 
     def get_participant_binding(self, actor_id: str) -> SharedShardParticipantBinding:
         for binding in self.participant_bindings:
@@ -1415,6 +1473,12 @@ class SharedShardLoopSession:
             if self.session_is_active(binding.actor_id)
         )
 
+    def get_actor_next_action_eligible_at(self, actor_id: str) -> int:
+        return self.shard_state.get_actor_next_action_eligible_at(actor_id)
+
+    def is_actor_action_eligible(self, actor_id: str) -> bool:
+        return self.shard_state.is_actor_action_eligible(actor_id)
+
     def get_observation(self, actor_id: str) -> Observation:
         if not self.session_is_active(actor_id):
             raise ValueError(f"inactive_shared_shard_session:{actor_id}")
@@ -1426,6 +1490,22 @@ class SharedShardLoopSession:
             max_steps=self.max_steps,
             messages=(),
         )
+        messages = list(
+            self.shard_state.get_world_tick_observation_messages(
+                location=observation.location,
+            )
+        )
+        if self.action_cadence_interval is not None:
+            timing_prefix = ""
+            if self.timing_mode is not None:
+                timing_prefix = f"timing_mode={self.timing_mode}; "
+            messages.append(
+                "Timing: "
+                f"{timing_prefix}"
+                f"world_tick={self.world_tick_count}; "
+                f"action_cadence_interval={self.shard_state.get_actor_action_cadence_interval(actor_id)}; "
+                f"next_action_eligible_at={self.get_actor_next_action_eligible_at(actor_id)}"
+            )
         return Observation(
             run_id=observation.run_id,
             step=observation.step,
@@ -1435,9 +1515,7 @@ class SharedShardLoopSession:
             entities=observation.entities,
             inventory=observation.inventory,
             health=observation.health,
-            messages=self.shard_state.get_world_tick_observation_messages(
-                location=observation.location,
-            ),
+            messages=tuple(messages),
             action_space=self.shard_state.get_world_phase_filtered_action_space(
                 location=observation.location,
                 action_space=observation.action_space,
@@ -1485,7 +1563,11 @@ class SharedShardLoopSession:
                     actor_id=actor_id,
                     runner=runner,
                     observation=observation,
-                    timeout_seconds=_RUNNER_AGENT_TIMEOUT_SECONDS,
+                    timeout_seconds=(
+                        _RUNNER_AGENT_TIMEOUT_SECONDS
+                        if self.external_agent_timeout_seconds is None
+                        else float(self.external_agent_timeout_seconds)
+                    ),
                 ),
             )
         )[0]
@@ -1522,6 +1604,14 @@ class SharedShardLoopSession:
                 raise ValueError(f"inactive_shared_shard_session:{actor_id}")
 
         for actor_id in active_actor_ids:
+            if not self.is_actor_action_eligible(actor_id):
+                if actor_id in normalized_actions:
+                    raise ValueError(
+                        "shared_shard_action_rejected:"
+                        f"{actor_id}:action_cadence_locked_until_tick_"
+                        f"{self.get_actor_next_action_eligible_at(actor_id)}"
+                    )
+                continue
             observation = self.get_observation(actor_id)
             selected_action = normalized_actions.get(actor_id, "wait")
             pipeline_result = run_action_pipeline(
@@ -1537,6 +1627,8 @@ class SharedShardLoopSession:
             accepted_actions.append((actor_id, selected_action))
 
         step_outcome = self.controller.step(tuple(accepted_action_requests))
+        for actor_id, _ in accepted_actions:
+            self.shard_state = self.shard_state.record_actor_action_acceptance(actor_id)
         self.shard_state = self.shard_state.advance_world_tick()
         return SharedShardLoopStepResult(
             step_index=step_index,
@@ -1547,7 +1639,74 @@ class SharedShardLoopSession:
             world_tick_count=self.shard_state.metadata.world_tick_count,
             world_tick_heartbeat=self.shard_state.metadata.last_world_tick_heartbeat,
             world_npc_stance_phase=self.shard_state.metadata.npc_stance_phase,
+            timing_mode=self.shard_state.timing_mode,
+            action_cadence_interval=self.shard_state.action_cadence_interval,
+            actor_action_cadence_overrides=self.shard_state.actor_action_cadence_overrides,
+            actor_next_action_eligible_at=self.shard_state.actor_next_action_eligible_at,
         )
+
+
+def resolve_timing_mode_cadence_config(
+    *,
+    timing_mode: str | None,
+    action_cadence_interval: int | None,
+    actor_action_cadence_overrides: Mapping[str, int] | None,
+    actor_ids: Sequence[str],
+) -> tuple[str | None, int | None, Mapping[str, int] | None]:
+    normalized_timing_mode = timing_mode
+    if normalized_timing_mode is not None:
+        if not isinstance(normalized_timing_mode, str) or not normalized_timing_mode:
+            raise ValueError("timing_mode must be None or a non-empty string")
+        if normalized_timing_mode not in _SUPPORTED_TIMING_MODES:
+            raise ValueError("unsupported_timing_mode")
+    if action_cadence_interval is not None and (
+        not isinstance(action_cadence_interval, int)
+        or isinstance(action_cadence_interval, bool)
+        or action_cadence_interval <= 0
+    ):
+        raise ValueError("action_cadence_interval must be None or a positive integer")
+    normalized_overrides: dict[str, int] | None = None
+    if actor_action_cadence_overrides is not None:
+        if len(actor_action_cadence_overrides) == 0:
+            actor_action_cadence_overrides = None
+        elif not isinstance(actor_action_cadence_overrides, Mapping):
+            raise ValueError("actor_action_cadence_overrides must be a mapping")
+    if actor_action_cadence_overrides is not None:
+        normalized_overrides = {}
+        for actor_id, cadence_interval in actor_action_cadence_overrides.items():
+            if not isinstance(actor_id, str) or not actor_id:
+                raise ValueError("actor_action_cadence_overrides keys must be non-empty strings")
+            if actor_id not in actor_ids:
+                raise ValueError("actor_action_cadence_overrides keys must be present in actor_ids")
+            if (
+                not isinstance(cadence_interval, int)
+                or isinstance(cadence_interval, bool)
+                or cadence_interval <= 0
+            ):
+                raise ValueError("actor_action_cadence_overrides values must be positive integers")
+            normalized_overrides[actor_id] = cadence_interval
+    if normalized_timing_mode is None:
+        if normalized_overrides is not None and action_cadence_interval is None:
+            raise ValueError("actor_action_cadence_overrides require action_cadence_interval")
+        return None, action_cadence_interval, normalized_overrides
+    if normalized_timing_mode in {_TIMING_MODE_OFF, _TIMING_MODE_NATIVE_SPEED}:
+        if action_cadence_interval is not None or normalized_overrides is not None:
+            raise ValueError("timing_mode_disallows_explicit_action_cadence")
+        return normalized_timing_mode, None, None
+    if normalized_timing_mode == _TIMING_MODE_HUMAN_PARITY:
+        if action_cadence_interval is not None or normalized_overrides is not None:
+            raise ValueError("human_parity_timing_mode_disallows_explicit_cadence_overrides")
+        return normalized_timing_mode, _DEFAULT_HUMAN_PARITY_CADENCE_INTERVAL, None
+    if normalized_timing_mode == _TIMING_MODE_EQUAL_CADENCE:
+        if normalized_overrides is not None:
+            raise ValueError("equal_cadence_timing_mode_disallows_actor_overrides")
+        resolved_interval = (
+            _DEFAULT_EQUAL_CADENCE_INTERVAL
+            if action_cadence_interval is None
+            else action_cadence_interval
+        )
+        return normalized_timing_mode, resolved_interval, None
+    raise ValueError("unsupported_timing_mode")
 
 
 def _build_shared_shard_participant_binding(actor_id: str) -> SharedShardParticipantBinding:
@@ -1622,9 +1781,13 @@ def build_shared_shard_loop_session(
     run_seed: int | None = None,
     max_steps_override: int | None = None,
     enforce_reconciliation: bool = False,
+    timing_mode: str | None = None,
+    action_cadence_interval: int | None = None,
+    actor_action_cadence_overrides: Mapping[str, int] | None = None,
     agent_actor_ids: Sequence[str] = (),
     external_agent_commands_by_actor: Mapping[str, Sequence[str]] | None = None,
     persistent_agent_session: bool = False,
+    external_agent_timeout_seconds: float | None = None,
 ) -> SharedShardLoopSession:
     """Build the first minimal in-process shared shard loop over one evolving world state."""
     if isinstance(actor_ids, (str, bytes)) or not isinstance(actor_ids, Sequence):
@@ -1643,6 +1806,20 @@ def build_shared_shard_loop_session(
         raise ValueError("shared_shard_loop_agent_actor_ids_must_be_subset_of_actor_ids")
     if not isinstance(persistent_agent_session, bool):
         raise ValueError("persistent_agent_session must be a boolean")
+    if external_agent_timeout_seconds is not None and (
+        not isinstance(external_agent_timeout_seconds, (int, float))
+        or isinstance(external_agent_timeout_seconds, bool)
+        or float(external_agent_timeout_seconds) <= 0.0
+    ):
+        raise ValueError("external_agent_timeout_seconds must be None or a positive number")
+    timing_mode, action_cadence_interval, actor_action_cadence_overrides = (
+        resolve_timing_mode_cadence_config(
+            timing_mode=timing_mode,
+            action_cadence_interval=action_cadence_interval,
+            actor_action_cadence_overrides=actor_action_cadence_overrides,
+            actor_ids=normalized_actor_ids,
+        )
+    )
     external_agent_runners_by_actor: dict[str, LocalProcessRunner] = {}
     if external_agent_commands_by_actor is not None:
         normalized_external_commands = _resolve_external_local_agent_commands_by_actor(
@@ -1674,6 +1851,11 @@ def build_shared_shard_loop_session(
     )
     if enforce_reconciliation:
         shard_state = shard_state.with_session_principal_reconciliation_enforced(True)
+    shard_state = shard_state.with_action_cadence(
+        timing_mode=timing_mode,
+        action_cadence_interval=action_cadence_interval,
+        actor_action_cadence_overrides=actor_action_cadence_overrides,
+    )
 
     participant_bindings = tuple(
         _build_shared_shard_participant_binding(actor_id)
@@ -1707,6 +1889,7 @@ def build_shared_shard_loop_session(
         participant_bindings=participant_bindings,
         agent_actor_ids=normalized_agent_actor_ids,
         external_agent_runners_by_actor=external_agent_runners_by_actor,
+        external_agent_timeout_seconds=external_agent_timeout_seconds,
     )
 
 

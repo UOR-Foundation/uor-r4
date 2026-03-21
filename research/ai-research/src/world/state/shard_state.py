@@ -6,7 +6,7 @@ import hashlib
 import json
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 from .shard_identity_registry import InProcessShardIdentityRegistry
 
@@ -21,6 +21,49 @@ def _require_non_negative_int(value: Any, *, field_name: str) -> int:
     if not isinstance(value, int) or value < 0:
         raise ValueError(f"{field_name} must be a non-negative integer")
     return value
+
+
+def _require_positive_int(value: Any, *, field_name: str) -> int:
+    if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+        raise ValueError(f"{field_name} must be a positive integer")
+    return value
+
+
+def _normalize_optional_timing_mode(value: Any) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value:
+        raise ValueError("timing_mode must be None or a non-empty string")
+    return value
+
+
+def _normalize_actor_tick_mapping(
+    value: Mapping[str, int] | tuple[tuple[str, int], ...],
+    *,
+    field_name: str,
+    require_positive_values: bool,
+) -> tuple[tuple[str, int], ...]:
+    if isinstance(value, tuple):
+        items = value
+    elif isinstance(value, Mapping):
+        items = tuple(value.items())
+    else:
+        raise ValueError(f"{field_name} must be a mapping or tuple of pairs")
+    normalized: dict[str, int] = {}
+    for actor_id, tick_value in items:
+        _require_non_empty_string(actor_id, field_name=f"{field_name}.actor_id")
+        if require_positive_values:
+            normalized_value = _require_positive_int(
+                tick_value,
+                field_name=f"{field_name}.{actor_id}",
+            )
+        else:
+            normalized_value = _require_non_negative_int(
+                tick_value,
+                field_name=f"{field_name}.{actor_id}",
+            )
+        normalized[actor_id] = normalized_value
+    return tuple((actor_id, normalized[actor_id]) for actor_id in sorted(normalized))
 
 
 def _count_records_by_attr(records: tuple[Any, ...], *, field_name: str) -> dict[str, int]:
@@ -315,6 +358,10 @@ class ShardMetadata:
     world_tick_count: int = 0
     last_world_tick_heartbeat: str = "not_started"
     npc_stance_phase: str = "dormant"
+    timing_mode: str | None = None
+    action_cadence_interval: int | None = None
+    actor_action_cadence_overrides: tuple[tuple[str, int], ...] = ()
+    actor_next_action_eligible_at: tuple[tuple[str, int], ...] = ()
     season_id: str | None = None
     created_from_snapshot_ref: str | None = None
 
@@ -337,6 +384,26 @@ class ShardMetadata:
             field_name="last_world_tick_heartbeat",
         )
         _require_non_empty_string(self.npc_stance_phase, field_name="npc_stance_phase")
+        object.__setattr__(self, "timing_mode", _normalize_optional_timing_mode(self.timing_mode))
+        if self.action_cadence_interval is not None:
+            _require_positive_int(
+                self.action_cadence_interval,
+                field_name="action_cadence_interval",
+            )
+        normalized_overrides = _normalize_actor_tick_mapping(
+            self.actor_action_cadence_overrides,
+            field_name="actor_action_cadence_overrides",
+            require_positive_values=True,
+        )
+        normalized_next_eligible = _normalize_actor_tick_mapping(
+            self.actor_next_action_eligible_at,
+            field_name="actor_next_action_eligible_at",
+            require_positive_values=False,
+        )
+        object.__setattr__(self, "actor_action_cadence_overrides", normalized_overrides)
+        object.__setattr__(self, "actor_next_action_eligible_at", normalized_next_eligible)
+        if self.action_cadence_interval is None and len(normalized_overrides) > 0:
+            raise ValueError("actor_action_cadence_overrides require action_cadence_interval")
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -349,6 +416,16 @@ class ShardMetadata:
             "world_tick_count": self.world_tick_count,
             "last_world_tick_heartbeat": self.last_world_tick_heartbeat,
             "npc_stance_phase": self.npc_stance_phase,
+            "timing_mode": self.timing_mode,
+            "action_cadence_interval": self.action_cadence_interval,
+            "actor_action_cadence_overrides": [
+                {"actor_id": actor_id, "cadence_interval": cadence_interval}
+                for actor_id, cadence_interval in self.actor_action_cadence_overrides
+            ],
+            "actor_next_action_eligible_at": [
+                {"actor_id": actor_id, "next_action_eligible_at": next_action_eligible_at}
+                for actor_id, next_action_eligible_at in self.actor_next_action_eligible_at
+            ],
             "season_id": self.season_id,
             "created_from_snapshot_ref": self.created_from_snapshot_ref,
         }
@@ -463,6 +540,56 @@ class ShardState:
     def with_mutation_policy(self, mutation_policy: ShardMutationPolicy) -> "ShardState":
         return replace(self, mutation_policy=mutation_policy)
 
+    @property
+    def action_cadence_interval(self) -> int | None:
+        return self.metadata.action_cadence_interval
+
+    @property
+    def action_cadence_enabled(self) -> bool:
+        return self.metadata.action_cadence_interval is not None
+
+    @property
+    def timing_mode(self) -> str | None:
+        return self.metadata.timing_mode
+
+    @property
+    def actor_action_cadence_overrides(self) -> tuple[tuple[str, int], ...]:
+        return self.metadata.actor_action_cadence_overrides
+
+    @property
+    def actor_next_action_eligible_at(self) -> tuple[tuple[str, int], ...]:
+        return self.metadata.actor_next_action_eligible_at
+
+    def with_action_cadence(
+        self,
+        *,
+        action_cadence_interval: int | None,
+        actor_action_cadence_overrides: Mapping[str, int] | None = None,
+        timing_mode: str | None = None,
+    ) -> "ShardState":
+        if action_cadence_interval is None:
+            normalized_overrides: tuple[tuple[str, int], ...] = ()
+        else:
+            _require_positive_int(
+                action_cadence_interval,
+                field_name="action_cadence_interval",
+            )
+            normalized_overrides = _normalize_actor_tick_mapping(
+                actor_action_cadence_overrides or (),
+                field_name="actor_action_cadence_overrides",
+                require_positive_values=True,
+            )
+        return replace(
+            self,
+            metadata=replace(
+                self.metadata,
+                timing_mode=_normalize_optional_timing_mode(timing_mode),
+                action_cadence_interval=action_cadence_interval,
+                actor_action_cadence_overrides=normalized_overrides,
+                actor_next_action_eligible_at=(),
+            ),
+        )
+
     def with_session_principal_reconciliation_enforced(
         self,
         enforced: bool = True,
@@ -500,6 +627,43 @@ class ShardState:
                 world_tick_count=next_tick_count,
                 last_world_tick_heartbeat=f"{heartbeat_prefix}:{next_tick_count:04d}",
                 npc_stance_phase=_world_npc_stance_phase_for_tick_count(next_tick_count),
+            ),
+        )
+
+    def get_actor_action_cadence_interval(self, actor_id: str) -> int | None:
+        _require_non_empty_string(actor_id, field_name="actor_id")
+        if not self.action_cadence_enabled:
+            return None
+        override_map = dict(self.metadata.actor_action_cadence_overrides)
+        return override_map.get(actor_id, self.metadata.action_cadence_interval)
+
+    def get_actor_next_action_eligible_at(self, actor_id: str) -> int:
+        _require_non_empty_string(actor_id, field_name="actor_id")
+        next_eligible_map = dict(self.metadata.actor_next_action_eligible_at)
+        return next_eligible_map.get(actor_id, 0)
+
+    def is_actor_action_eligible(self, actor_id: str) -> bool:
+        _require_non_empty_string(actor_id, field_name="actor_id")
+        if not self.action_cadence_enabled:
+            return True
+        return self.metadata.world_tick_count >= self.get_actor_next_action_eligible_at(actor_id)
+
+    def record_actor_action_acceptance(self, actor_id: str) -> "ShardState":
+        _require_non_empty_string(actor_id, field_name="actor_id")
+        cadence_interval = self.get_actor_action_cadence_interval(actor_id)
+        if cadence_interval is None:
+            return self
+        next_eligible_map = dict(self.metadata.actor_next_action_eligible_at)
+        next_eligible_map[actor_id] = self.metadata.world_tick_count + cadence_interval
+        return replace(
+            self,
+            metadata=replace(
+                self.metadata,
+                actor_next_action_eligible_at=_normalize_actor_tick_mapping(
+                    next_eligible_map,
+                    field_name="actor_next_action_eligible_at",
+                    require_positive_values=False,
+                ),
             ),
         )
 

@@ -386,12 +386,13 @@ def test_cli_compare_playable_slices_supports_direct_provider_mode_deterministic
         "tiny-guarded-relic",
         "tiny-hazard-route",
         "tiny-delayed-cost",
+        "tiny-context-pressure",
     ]
     assert payload["mode_ids"] == ["built_in", "mock_wrapper", "direct_provider"]
-    assert payload["entry_count"] == 9
-    assert len(captured_configs) == 9
+    assert payload["entry_count"] == 12
+    assert len(captured_configs) == 12
     direct_entries = [entry for entry in payload["entries"] if entry["mode"] == "direct_provider"]
-    assert len(direct_entries) == 3
+    assert len(direct_entries) == 4
     assert all(entry["agent_identity"] == "direct-provider:openai-chat-completions" for entry in direct_entries)
     assert all(entry["runtime_telemetry"]["repair_used_count"] == 1 for entry in direct_entries)
     assert all(entry["prompt_engine"] == "baseline" for entry in direct_entries)
@@ -490,9 +491,9 @@ def test_cli_compare_playable_slices_can_include_routed_direct_provider_mode_det
         "direct_provider",
         "direct_provider_routed",
     ]
-    assert payload["entry_count"] == 12
+    assert payload["entry_count"] == 16
     routed_entries = [entry for entry in payload["entries"] if entry["mode"] == "direct_provider_routed"]
-    assert len(routed_entries) == 3
+    assert len(routed_entries) == 4
     assert all(entry["prompt_engine"] == "geometric-routed" for entry in routed_entries)
     assert any(command is not None and "--prompt-engine" in command for command in captured_commands)
 
@@ -676,11 +677,11 @@ def test_cli_compare_playable_slices_can_include_canonical_angular_direct_provid
         "direct_provider",
         "direct_provider_angular_canonical",
     ]
-    assert payload["entry_count"] == 12
+    assert payload["entry_count"] == 16
     router_entries = [
         entry for entry in payload["entries"] if entry["mode"] == "direct_provider_angular_canonical"
     ]
-    assert len(router_entries) == 3
+    assert len(router_entries) == 4
     assert all(entry["prompt_engine"] == "angular-canonical" for entry in router_entries)
     assert all(entry["router_variant"] == "angular-hopf-trans" for entry in router_entries)
     assert any(command is not None and "--router-variant" in command for command in captured_commands)
@@ -783,7 +784,7 @@ def test_cli_compare_playable_slices_threads_timeout_override_into_direct_provid
 
     assert exit_code == 0
     assert _read_json_output(captured.out)["accepted"] is True
-    assert captured_timeouts == [7.5] * 12
+    assert captured_timeouts == [7.5] * 16
 
 
 def test_cli_compare_playable_slices_can_include_multiple_angular_variants_in_one_invocation(
@@ -882,20 +883,20 @@ def test_cli_compare_playable_slices_can_include_multiple_angular_variants_in_on
         "direct_provider",
         "direct_provider_angular_canonical",
     ]
-    assert payload["entry_count"] == 15
+    assert payload["entry_count"] == 20
     baseline_entries = [entry for entry in payload["entries"] if entry["mode"] == "direct_provider"]
     angular_entries = [
         entry for entry in payload["entries"] if entry["mode"] == "direct_provider_angular_canonical"
     ]
-    assert len(baseline_entries) == 3
-    assert len(angular_entries) == 6
+    assert len(baseline_entries) == 4
+    assert len(angular_entries) == 8
     assert all(entry["prompt_engine"] == "angular-canonical" for entry in angular_entries)
     assert {entry["router_variant"] for entry in angular_entries} == {
         "angular-hopf-base",
         "angular-hopf-trans",
     }
-    assert sum(1 for entry in angular_entries if entry["router_variant"] == "angular-hopf-base") == 3
-    assert sum(1 for entry in angular_entries if entry["router_variant"] == "angular-hopf-trans") == 3
+    assert sum(1 for entry in angular_entries if entry["router_variant"] == "angular-hopf-base") == 4
+    assert sum(1 for entry in angular_entries if entry["router_variant"] == "angular-hopf-trans") == 4
     assert any(command is not None and "angular-hopf-base" in command for command in captured_commands)
     assert any(command is not None and "angular-hopf-trans" in command for command in captured_commands)
 
@@ -993,7 +994,7 @@ def test_cli_compare_playable_slices_wires_prompt_dump_flags_into_direct_provide
         for command in captured_commands
         if command is not None and command[1] == "src/agents/direct_provider_runner.py"
     ]
-    assert len(direct_commands) == 9
+    assert len(direct_commands) == 12
     assert all("--prompt-dump-dir" in command for command in direct_commands)
     assert all("--prompt-dump-actor-id" in command for command in direct_commands)
     assert all("--prompt-dump-scenario-id" in command for command in direct_commands)
@@ -1001,6 +1002,7 @@ def test_cli_compare_playable_slices_wires_prompt_dump_flags_into_direct_provide
         "tiny-guarded-relic",
         "tiny-hazard-route",
         "tiny-delayed-cost",
+        "tiny-context-pressure",
     }
 
 
@@ -1089,6 +1091,7 @@ def test_cli_play_shared_shard_wires_shared_console_session_deterministically(
     assert captured_args["actor_ids"] == ("human-a", "human-b")
     assert captured_args["mock_agent_actor_ids"] == ()
     assert captured_args["persistent_agent_session"] is False
+    assert captured_args["external_agent_timeout_seconds"] is None
     assert "Session Summary" in captured.out
     assert "Shard: shared-shard-local" in captured.out
     assert "Actors: human-a, human-b" in captured.out
@@ -1096,6 +1099,103 @@ def test_cli_play_shared_shard_wires_shared_console_session_deterministically(
     assert "World Tick Count: 3" in captured.out
     assert "Last World Tick Heartbeat: shared_shard_world_tick:0003" in captured.out
     assert "World NPC Stance Phase: settling" in captured.out
+
+
+def test_cli_play_shared_shard_wires_action_cadence_deterministically(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    captured_args: dict[str, object] = {}
+
+    def _fake_run_human_shared_shard_session(**kwargs: object) -> HumanSharedShardSessionResult:
+        captured_args.update(kwargs)
+        return HumanSharedShardSessionResult(
+            run_id="human-shared-shard",
+            shard_id="shared-shard-local",
+            scenario_id="tiny-fetch-quest",
+            actor_ids=("human-a", "human-b"),
+            step_count=2,
+            max_steps=5,
+            completed_actor_ids=(),
+            quit_requested=False,
+            shard_mutation_generation=6,
+            world_tick_count=2,
+            last_world_tick_heartbeat="shared_shard_world_tick:0002",
+            world_npc_stance_phase="patrolling",
+            action_cadence_interval=2,
+            actor_action_cadence_overrides=(("human-b", 3),),
+            actor_next_action_eligible_at=(("human-a", 2), ("human-b", 3)),
+        )
+
+    monkeypatch.setattr("cli.main.run_human_shared_shard_session", _fake_run_human_shared_shard_session)
+
+    exit_code = main(
+        [
+            "play-shared-shard",
+            "--scenario",
+            "tiny-fetch-quest",
+            "--action-cadence-interval",
+            "2",
+            "--actor-action-cadence",
+            "human-b=3",
+        ]
+    )
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert captured_args["action_cadence_interval"] == 2
+    assert captured_args["actor_action_cadence_overrides"] == {"human-b": 3}
+    assert "Action Cadence Interval: 2" in captured.out
+    assert "Actor Action Cadence Overrides: human-b=3" in captured.out
+    assert "Next Action Eligible At: human-a=2, human-b=3" in captured.out
+
+
+def test_cli_play_shared_shard_wires_timing_mode_deterministically(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    captured_args: dict[str, object] = {}
+
+    def _fake_run_human_shared_shard_session(**kwargs: object) -> HumanSharedShardSessionResult:
+        captured_args.update(kwargs)
+        return HumanSharedShardSessionResult(
+            run_id="human-shared-shard",
+            shard_id="shared-shard-local",
+            scenario_id="tiny-fetch-quest",
+            actor_ids=("human-a", "human-b"),
+            step_count=2,
+            max_steps=5,
+            completed_actor_ids=(),
+            quit_requested=False,
+            shard_mutation_generation=6,
+            world_tick_count=2,
+            last_world_tick_heartbeat="shared_shard_world_tick:0002",
+            world_npc_stance_phase="patrolling",
+            timing_mode="human-parity",
+            action_cadence_interval=2,
+            actor_action_cadence_overrides=(),
+            actor_next_action_eligible_at=(("human-a", 2), ("human-b", 2)),
+        )
+
+    monkeypatch.setattr("cli.main.run_human_shared_shard_session", _fake_run_human_shared_shard_session)
+
+    exit_code = main(
+        [
+            "play-shared-shard",
+            "--scenario",
+            "tiny-fetch-quest",
+            "--timing-mode",
+            "human-parity",
+        ]
+    )
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert captured_args["timing_mode"] == "human-parity"
+    assert captured_args["action_cadence_interval"] is None
+    assert captured_args["actor_action_cadence_overrides"] == {}
+    assert "Timing Mode: human-parity" in captured.out
+    assert "Action Cadence Interval: 2" in captured.out
 
 
 def test_cli_play_shared_shard_wires_mock_agent_participant_deterministically(
@@ -1346,6 +1446,49 @@ def test_cli_play_shared_shard_wires_direct_provider_participant_deterministical
     assert "Completed Actors: direct-provider" in captured.out
 
 
+def test_cli_play_shared_shard_wires_shared_external_agent_timeout_deterministically(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    captured_args: dict[str, object] = {}
+
+    def _fake_run_human_shared_shard_session(**kwargs: object) -> HumanSharedShardSessionResult:
+        captured_args.update(kwargs)
+        return HumanSharedShardSessionResult(
+            run_id="human-shared-shard",
+            shard_id="shared-shard-local",
+            scenario_id="tiny-fetch-quest",
+            actor_ids=("human-a", "external-agent"),
+            step_count=1,
+            max_steps=5,
+            completed_actor_ids=(),
+            quit_requested=False,
+            shard_mutation_generation=6,
+            world_tick_count=1,
+            last_world_tick_heartbeat="shared_shard_world_tick:0001",
+            world_npc_stance_phase="watchful",
+        )
+
+    monkeypatch.setattr("cli.main.run_human_shared_shard_session", _fake_run_human_shared_shard_session)
+
+    exit_code = main(
+        [
+            "play-shared-shard",
+            "--scenario",
+            "tiny-fetch-quest",
+            "--agent-command",
+            f"{sys.executable} examples/agents/mock_llm_wrapper.py",
+            "--shared-external-agent-timeout-seconds",
+            "20",
+        ]
+    )
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert captured_args["external_agent_timeout_seconds"] == 20.0
+    assert "Session Summary" in captured.out
+
+
 def test_cli_play_shared_shard_rejects_persistent_session_without_agent_command_machine_readably(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -1363,6 +1506,94 @@ def test_cli_play_shared_shard_rejects_persistent_session_without_agent_command_
     assert captured.out.strip() == (
         '{"accepted":false,"error_type":"play_shared_shard_rejected",'
         '"reason":"persistent_agent_session_requires_agent_command"}'
+    )
+
+
+def test_cli_play_shared_shard_rejects_actor_action_cadence_without_global_interval_machine_readably(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    exit_code = main(
+        [
+            "play-shared-shard",
+            "--scenario",
+            "tiny-fetch-quest",
+            "--actor-action-cadence",
+            "human-a=2",
+        ]
+    )
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert captured.out.strip() == (
+        '{"accepted":false,"error_type":"play_shared_shard_rejected",'
+        '"reason":"actor_action_cadence_requires_action_cadence_interval"}'
+    )
+
+
+def test_cli_play_shared_shard_rejects_explicit_cadence_with_native_speed_timing_mode_machine_readably(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    exit_code = main(
+        [
+            "play-shared-shard",
+            "--scenario",
+            "tiny-fetch-quest",
+            "--timing-mode",
+            "native-speed",
+            "--action-cadence-interval",
+            "2",
+        ]
+    )
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert captured.out.strip() == (
+        '{"accepted":false,"error_type":"play_shared_shard_rejected",'
+        '"reason":"timing_mode_disallows_explicit_action_cadence"}'
+    )
+
+
+def test_cli_play_shared_shard_rejects_actor_override_with_equal_cadence_timing_mode_machine_readably(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    exit_code = main(
+        [
+            "play-shared-shard",
+            "--scenario",
+            "tiny-fetch-quest",
+            "--timing-mode",
+            "equal-cadence",
+            "--actor-action-cadence",
+            "human-a=3",
+        ]
+    )
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert captured.out.strip() == (
+        '{"accepted":false,"error_type":"play_shared_shard_rejected",'
+        '"reason":"equal_cadence_timing_mode_disallows_actor_overrides"}'
+    )
+
+
+def test_cli_play_shared_shard_rejects_nonpositive_shared_external_agent_timeout_machine_readably(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    exit_code = main(
+        [
+            "play-shared-shard",
+            "--scenario",
+            "tiny-fetch-quest",
+            "--shared-external-agent-timeout-seconds",
+            "0",
+        ]
+    )
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert captured.out.strip() == (
+        '{"accepted":false,"error_type":"play_shared_shard_rejected",'
+        '"reason":"shared_external_agent_timeout_seconds_must_be_positive"}'
     )
 
 

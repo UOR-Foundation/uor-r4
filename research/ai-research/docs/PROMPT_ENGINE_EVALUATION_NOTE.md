@@ -54,3 +54,34 @@
   - hazard-style routing is more model-sensitive than guarded-relic
   - `gpt-4.1-mini` is currently the clearest discriminator for angular variant differences on hazard-route
   - stronger models currently collapse variant differences on hazard-route rather than sharpening them
+
+## 2026-03-20 Tiny-Context-Pressure Adapter Reeval Update
+
+- `tiny-context-pressure` was rerun after the routed adapter enrichment that introduced the explicit `mudbench_prompt_state_v2` pressure features.
+- Live follow-up runs used the plain direct-provider `run` path on `openai-chat-completions` with `--direct-provider-timeout-seconds 15`.
+- On `gpt-4.1-mini`, the slice still collapsed into the earlier pattern:
+  - `baseline=0.10`
+  - `angular-canonical::angular-hopf-base=0.066667`
+  - `angular-canonical::angular-hopf-trans=0.066667`
+  - `legacy-router-backed::legacy-phase4d_hopf_transport=0.066667`
+- A matched low-pressure three-replicate retry on `gpt-4.1-mini` confirmed that this weaker pattern is stable on the smaller model:
+  - `baseline` stayed fixed at `0.10` in all `3/3` replicates
+  - `angular-canonical::angular-hopf-trans` stayed fixed at `0.066667` in all `3/3` replicates
+  - `legacy-router-backed::legacy-phase4d_hopf_transport` stayed fixed at `0.066667` in all `3/3` replicates
+- On `gpt-4.1`, the enriched adapter broke the prior full collapse:
+  - `baseline=0.10`
+  - `angular-canonical::angular-hopf-base=0.10`
+  - `angular-canonical::angular-hopf-trans=0.108333`
+  - `legacy-router-backed::legacy-phase4d_hopf_transport=0.166667`
+- Current tiny-context-pressure interpretation:
+  - the enriched adapter did not help on `gpt-4.1-mini`
+  - it did create routed separation on `gpt-4.1`
+  - on this slice and model, legacy transport is currently the strongest routed variant and the only routed row that clearly beats baseline
+- A throttled three-replicate retry on `gpt-4.1` confirmed that this was not just a one-sample effect:
+  - `baseline` stayed fixed at `0.10` in all `3/3` replicates
+  - `angular-canonical::angular-hopf-trans` scored `0.104167`, `0.104167`, and `0.108333`
+  - `legacy-router-backed::legacy-phase4d_hopf_transport` stayed fixed at `0.166667` and won `3/3` replicates
+- A later low-pressure four-slice `gpt-4.1` comparison-equivalent run across `tiny-guarded-relic`, `tiny-hazard-route`, `tiny-delayed-cost`, and `tiny-context-pressure` showed that the richer slice is still the clearest routed-separation target:
+  - `tiny-context-pressure` produced the full `legacy transport > angular-hopf-trans > baseline = angular-hopf-base` ordering
+  - the older three slices were mostly ties or partial separations
+  - across all four slices, `legacy-router-backed::legacy-phase4d_hopf_transport` had the strongest overall mean and total on `gpt-4.1`

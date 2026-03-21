@@ -23,6 +23,7 @@ from evaluation.benchmark_runner.runner import (
     build_tiny_suite_external_profile_comparison_report,
     build_tiny_suite_mixed_external_profile_comparison_report,
     build_tiny_suite_mixed_external_comparison_report,
+    resolve_timing_mode_cadence_config,
     run_benchmark_lifecycle,
 )
 
@@ -47,10 +48,17 @@ _LEGACY_ROUTER_VARIANTS = (
     "legacy-phase4d_hopf_transport",
     "legacy-phase4d_hopf_product_phase",
 )
+_TIMING_MODE_CHOICES = (
+    "off",
+    "equal-cadence",
+    "human-parity",
+    "native-speed",
+)
 _PLAYABLE_SLICE_SCENARIOS = (
     "tiny-guarded-relic",
     "tiny-hazard-route",
     "tiny-delayed-cost",
+    "tiny-context-pressure",
 )
 _SUITE_REPLAY_DRILLDOWN_SCHEMA_VERSION = "suite_replay_drilldown_v1"
 _TINY_SUITE_SCENARIOS = (
@@ -599,6 +607,30 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Direct-provider model identifier. Falls back to MUDBENCH_OPENAI_MODEL for the supported shared path.",
     )
+    shared_play_parser.add_argument(
+        "--timing-mode",
+        choices=_TIMING_MODE_CHOICES,
+        default=None,
+        help="Optional explicit benchmark/session timing regime that resolves into shared cadence settings.",
+    )
+    shared_play_parser.add_argument(
+        "--action-cadence-interval",
+        type=int,
+        default=None,
+        help="Optional positive world-tick cadence interval applied to shared-shard actor actions.",
+    )
+    shared_play_parser.add_argument(
+        "--actor-action-cadence",
+        action="append",
+        default=[],
+        help="Optional per-actor cadence override in actor_id=interval form; requires --action-cadence-interval.",
+    )
+    shared_play_parser.add_argument(
+        "--shared-external-agent-timeout-seconds",
+        type=float,
+        default=None,
+        help="Optional positive timeout override for shared external-agent or direct-provider turns.",
+    )
 
     compare_parser = subcommands.add_parser(
         "compare-playable-slices",
@@ -1000,6 +1032,32 @@ def main(argv: Sequence[str] | None = None) -> int:
                 raise ValueError("shared_shard_loop_external_agent_actor_ids_must_be_subset_of_actor_ids")
             if external_agent_actor_id is not None and external_agent_actor_id in mock_agent_actor_ids:
                 raise ValueError("shared_shard_loop_actor_id_conflicts_between_mock_and_external_agents")
+            actor_action_cadence_overrides = _parse_actor_action_cadence_overrides(
+                args.actor_action_cadence
+            )
+            if args.action_cadence_interval is not None and args.action_cadence_interval <= 0:
+                raise ValueError("action_cadence_interval_must_be_positive")
+            if (
+                args.timing_mode is None
+                and len(actor_action_cadence_overrides) > 0
+                and args.action_cadence_interval is None
+            ):
+                raise ValueError("actor_action_cadence_requires_action_cadence_interval")
+            if args.timing_mode is None and any(
+                actor_id not in actor_ids for actor_id in actor_action_cadence_overrides
+            ):
+                raise ValueError("actor_action_cadence_actor_ids_must_be_subset_of_actor_ids")
+            resolve_timing_mode_cadence_config(
+                timing_mode=args.timing_mode,
+                action_cadence_interval=args.action_cadence_interval,
+                actor_action_cadence_overrides=actor_action_cadence_overrides,
+                actor_ids=actor_ids,
+            )
+            if (
+                args.shared_external_agent_timeout_seconds is not None
+                and args.shared_external_agent_timeout_seconds <= 0.0
+            ):
+                raise ValueError("shared_external_agent_timeout_seconds_must_be_positive")
         except ValueError as exc:
             error_payload = {
                 "accepted": False,
@@ -1024,6 +1082,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                 shard_id=args.shard_id,
                 run_seed=args.run_seed,
                 max_steps_override=args.max_steps,
+                timing_mode=args.timing_mode,
+                action_cadence_interval=args.action_cadence_interval,
+                actor_action_cadence_overrides=actor_action_cadence_overrides,
+                external_agent_timeout_seconds=args.shared_external_agent_timeout_seconds,
             )
         except (ValueError, RuntimeError) as exc:
             error_payload = {
@@ -2708,6 +2770,26 @@ def _resolve_external_agent_config(
     }
 
 
+def _parse_actor_action_cadence_overrides(
+    raw_values: Sequence[str],
+) -> dict[str, int]:
+    normalized_overrides: dict[str, int] = {}
+    for raw_value in raw_values:
+        if not isinstance(raw_value, str) or raw_value == "":
+            raise ValueError("actor_action_cadence_entries_must_be_non_empty_strings")
+        actor_id, separator, raw_interval = raw_value.partition("=")
+        if separator == "" or actor_id == "" or raw_interval == "":
+            raise ValueError("actor_action_cadence_entries_must_use_actor_id_equals_interval")
+        try:
+            cadence_interval = int(raw_interval)
+        except ValueError as exc:
+            raise ValueError("actor_action_cadence_interval_must_be_integer") from exc
+        if cadence_interval <= 0:
+            raise ValueError("actor_action_cadence_interval_must_be_positive")
+        normalized_overrides[actor_id] = cadence_interval
+    return {actor_id: normalized_overrides[actor_id] for actor_id in sorted(normalized_overrides)}
+
+
 def _resolve_external_agent_label(agent_label: str | None) -> str | None:
     if agent_label is None:
         return None
@@ -2818,21 +2900,42 @@ def _render_human_console_summary(result: Mapping[str, Any] | object) -> str:
         ) if isinstance(completed_actor_ids, Sequence) else ""
         if rendered_completed_actor_ids == "":
             rendered_completed_actor_ids = "none"
-        return "\n".join(
-            (
-                "Session Summary",
-                f"Scenario: {payload['scenario_id']}",
-                f"Shard: {payload['shard_id']}",
-                f"Actors: {rendered_actor_ids}",
-                f"Steps Played: {payload['step_count']}/{payload['max_steps']}",
-                f"Completed Actors: {rendered_completed_actor_ids}",
-                f"Quit Requested: {payload['quit_requested']}",
-                f"Shard Mutation Generation: {payload['shard_mutation_generation']}",
-                f"World Tick Count: {payload.get('world_tick_count', 0)}",
-                f"Last World Tick Heartbeat: {payload.get('last_world_tick_heartbeat', 'not_started')}",
-                f"World NPC Stance Phase: {payload.get('world_npc_stance_phase', 'dormant')}",
+        lines = [
+            "Session Summary",
+            f"Scenario: {payload['scenario_id']}",
+            f"Shard: {payload['shard_id']}",
+            f"Actors: {rendered_actor_ids}",
+            f"Steps Played: {payload['step_count']}/{payload['max_steps']}",
+            f"Completed Actors: {rendered_completed_actor_ids}",
+            f"Quit Requested: {payload['quit_requested']}",
+            f"Shard Mutation Generation: {payload['shard_mutation_generation']}",
+            f"World Tick Count: {payload.get('world_tick_count', 0)}",
+            f"Last World Tick Heartbeat: {payload.get('last_world_tick_heartbeat', 'not_started')}",
+            f"World NPC Stance Phase: {payload.get('world_npc_stance_phase', 'dormant')}",
+        ]
+        timing_mode = payload.get("timing_mode")
+        if timing_mode is not None:
+            lines.append(f"Timing Mode: {timing_mode}")
+        action_cadence_interval = payload.get("action_cadence_interval")
+        if action_cadence_interval is not None:
+            cadence_overrides = payload.get("actor_action_cadence_overrides", ())
+            next_eligible = payload.get("actor_next_action_eligible_at", ())
+            rendered_overrides = ", ".join(
+                f"{actor_id}={cadence_interval}"
+                for actor_id, cadence_interval in cadence_overrides
+            ) if isinstance(cadence_overrides, Sequence) else ""
+            rendered_next_eligible = ", ".join(
+                f"{actor_id}={tick_value}"
+                for actor_id, tick_value in next_eligible
+            ) if isinstance(next_eligible, Sequence) else ""
+            lines.extend(
+                (
+                    f"Action Cadence Interval: {action_cadence_interval}",
+                    f"Actor Action Cadence Overrides: {rendered_overrides or 'none'}",
+                    f"Next Action Eligible At: {rendered_next_eligible or 'none'}",
+                )
             )
-        )
+        return "\n".join(lines)
     return "\n".join(
         (
             "Session Summary",

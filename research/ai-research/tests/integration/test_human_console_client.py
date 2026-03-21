@@ -4,6 +4,7 @@ import builtins
 import json
 import sys
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
@@ -13,6 +14,8 @@ from cli.main import main
 
 def _start_direct_provider_test_server(
     response_contents: list[str],
+    *,
+    response_delay_seconds: float = 0.0,
 ) -> tuple[str, ThreadingHTTPServer]:
     remaining_responses = list(response_contents)
 
@@ -21,6 +24,8 @@ def _start_direct_provider_test_server(
             content_length = int(self.headers.get("Content-Length", "0"))
             self.rfile.read(content_length)
             response_content = remaining_responses.pop(0)
+            if response_delay_seconds > 0.0:
+                time.sleep(response_delay_seconds)
             response_payload = {
                 "choices": [
                     {
@@ -200,6 +205,90 @@ def test_cli_play_shared_shard_fetch_quest_flow_works_deterministically(
     assert "World NPC Stance Phase: settling" in captured.out
 
 
+def test_cli_play_shared_shard_action_cadence_surfaces_timing_deterministically(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    scripted_inputs = iter(
+        (
+            "east",
+            "wait",
+            "quit",
+        )
+    )
+    monkeypatch.setattr(builtins, "input", lambda _prompt="": next(scripted_inputs))
+
+    exit_code = main(
+        [
+            "play-shared-shard",
+            "--scenario",
+            "tiny-fetch-quest",
+            "--actor-id",
+            "human-a",
+            "--actor-id",
+            "human-b",
+            "--action-cadence-interval",
+            "2",
+            "--actor-action-cadence",
+            "human-b=3",
+        ]
+    )
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert (
+        "Timing: world_tick=0; action_cadence_interval=2; next_action_eligible_at=0"
+    ) in captured.out
+    assert "Actor Timing: human-a next eligible at world tick 2" in captured.out
+    assert "Actor Timing: human-b next eligible at world tick 3" in captured.out
+    assert (
+        "World Timing: action_cadence_interval=2; next_action_eligible_at=human-a=2, human-b=3"
+    ) in captured.out
+    assert "Action Cadence Interval: 2" in captured.out
+    assert "Actor Action Cadence Overrides: human-b=3" in captured.out
+    assert "Next Action Eligible At: human-a=2, human-b=3" in captured.out
+
+
+def test_cli_play_shared_shard_timing_mode_surfaces_deterministically(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    scripted_inputs = iter(
+        (
+            "east",
+            "wait",
+            "quit",
+        )
+    )
+    monkeypatch.setattr(builtins, "input", lambda _prompt="": next(scripted_inputs))
+
+    exit_code = main(
+        [
+            "play-shared-shard",
+            "--scenario",
+            "tiny-fetch-quest",
+            "--actor-id",
+            "human-a",
+            "--actor-id",
+            "human-b",
+            "--timing-mode",
+            "human-parity",
+        ]
+    )
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert (
+        "Timing: timing_mode=human-parity; world_tick=0; action_cadence_interval=2; next_action_eligible_at=0"
+    ) in captured.out
+    assert (
+        "World Timing: timing_mode=human-parity; action_cadence_interval=2; "
+        "next_action_eligible_at=human-a=2, human-b=2"
+    ) in captured.out
+    assert "Timing Mode: human-parity" in captured.out
+    assert "Action Cadence Interval: 2" in captured.out
+
+
 def test_cli_play_shared_shard_mixed_human_and_agent_flow_works_deterministically(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -368,6 +457,58 @@ def test_cli_play_shared_shard_mixed_human_and_direct_provider_flow_works_determ
     assert (
         "Consequence: the exposed west passage is pinned under watch; move west is unavailable."
     ) in captured.out
+
+
+def test_cli_play_shared_shard_mixed_human_and_direct_provider_supports_explicit_timeout_override(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    base_url, server = _start_direct_provider_test_server(
+        [
+            '{"action":"move east"}',
+            "not-json",
+            '{"action":"move east"}',
+            '{"action":"take golden-key"}',
+        ],
+        response_delay_seconds=1.2,
+    )
+    scripted_inputs = iter(
+        (
+            "east",
+            "east",
+            "wait",
+        )
+    )
+    monkeypatch.setattr(builtins, "input", lambda _prompt="": next(scripted_inputs))
+    monkeypatch.setenv("MUDBENCH_OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("MUDBENCH_OPENAI_BASE_URL", base_url)
+
+    try:
+        exit_code = main(
+            [
+                "play-shared-shard",
+                "--scenario",
+                "tiny-fetch-quest",
+                "--direct-provider",
+                "openai-chat-completions",
+                "--direct-provider-model",
+                "gpt-4.1-mini",
+                "--external-agent-actor-id",
+                "direct-provider",
+                "--shared-external-agent-timeout-seconds",
+                "3",
+            ]
+        )
+        captured = capsys.readouterr()
+    finally:
+        server.shutdown()
+        server.server_close()
+
+    assert exit_code == 0
+    assert "Actor Turn: direct-provider" in captured.out
+    assert "External Agent Selected Action: move east" in captured.out
+    assert "External Agent Selected Action: take golden-key" in captured.out
+    assert "Objective complete for: direct-provider" in captured.out
 
 
 def test_cli_play_shared_shard_mixed_human_and_persistent_external_agent_flow_works_deterministically(

@@ -29,15 +29,17 @@ def test_cli_compare_playable_slices_runs_built_in_and_mock_wrapper_modes_determ
         "tiny-guarded-relic",
         "tiny-hazard-route",
         "tiny-delayed-cost",
+        "tiny-context-pressure",
     ]
     assert payload["mode_ids"] == ["built_in", "mock_wrapper"]
-    assert payload["entry_count"] == 6
+    assert payload["entry_count"] == 8
 
     entries = payload["entries"]
-    assert [entry["scenario_id"] for entry in entries[0:6:2]] == [
+    assert [entry["scenario_id"] for entry in entries[0:8:2]] == [
         "tiny-guarded-relic",
         "tiny-hazard-route",
         "tiny-delayed-cost",
+        "tiny-context-pressure",
     ]
     assert all(entry["aggregate_score"] > 0.0 for entry in entries)
     assert all(isinstance(entry["objective_completed"], bool) for entry in entries)
@@ -45,8 +47,8 @@ def test_cli_compare_playable_slices_runs_built_in_and_mock_wrapper_modes_determ
     built_in_entries = [entry for entry in entries if entry["mode"] == "built_in"]
     wrapper_entries = [entry for entry in entries if entry["mode"] == "mock_wrapper"]
 
-    assert len(built_in_entries) == 3
-    assert len(wrapper_entries) == 3
+    assert len(built_in_entries) == 4
+    assert len(wrapper_entries) == 4
     assert all(entry["runtime_telemetry"] is None for entry in built_in_entries)
     assert all(entry["agent_identity"] == "mock-llm-wrapper" for entry in wrapper_entries)
 
@@ -132,9 +134,9 @@ def test_cli_compare_playable_slices_can_surface_baseline_and_routed_provider_mo
         "direct_provider",
         "direct_provider_routed",
     ]
-    assert payload["entry_count"] == 12
+    assert payload["entry_count"] == 16
     routed_entries = [entry for entry in payload["entries"] if entry["mode"] == "direct_provider_routed"]
-    assert len(routed_entries) == 3
+    assert len(routed_entries) == 4
     assert all(entry["prompt_engine"] == "geometric-routed" for entry in routed_entries)
 
 
@@ -227,15 +229,15 @@ def test_cli_compare_playable_slices_can_surface_baseline_routed_canonical_angul
         "direct_provider_angular_canonical",
         "direct_provider_legacy_router_backed",
     ]
-    assert payload["entry_count"] == 18
+    assert payload["entry_count"] == 24
     angular_entries = [
         entry for entry in payload["entries"] if entry["mode"] == "direct_provider_angular_canonical"
     ]
     legacy_entries = [
         entry for entry in payload["entries"] if entry["mode"] == "direct_provider_legacy_router_backed"
     ]
-    assert len(angular_entries) == 3
-    assert len(legacy_entries) == 3
+    assert len(angular_entries) == 4
+    assert len(legacy_entries) == 4
     assert all(entry["prompt_engine"] == "angular-canonical" for entry in angular_entries)
     assert all(entry["router_variant"] == "angular-hopf-trans" for entry in angular_entries)
     assert all(entry["prompt_engine"] == "legacy-router-backed" for entry in legacy_entries)
@@ -331,7 +333,7 @@ def test_cli_compare_playable_slices_threads_timeout_override_through_real_compa
     assert exit_code == 0
     payload = _read_json_output(output)
     assert payload["accepted"] is True
-    assert observed_timeouts == [6.0] * 15
+    assert observed_timeouts == [6.0] * 20
 
 
 def test_cli_compare_playable_slices_can_surface_multiple_angular_variants_and_legacy_proxy_in_one_artifact(
@@ -423,7 +425,7 @@ def test_cli_compare_playable_slices_can_surface_multiple_angular_variants_and_l
         "direct_provider_angular_canonical",
         "direct_provider_legacy_router_backed",
     ]
-    assert payload["entry_count"] == 18
+    assert payload["entry_count"] == 24
     baseline_entries = [entry for entry in payload["entries"] if entry["mode"] == "direct_provider"]
     angular_entries = [
         entry for entry in payload["entries"] if entry["mode"] == "direct_provider_angular_canonical"
@@ -431,9 +433,9 @@ def test_cli_compare_playable_slices_can_surface_multiple_angular_variants_and_l
     legacy_entries = [
         entry for entry in payload["entries"] if entry["mode"] == "direct_provider_legacy_router_backed"
     ]
-    assert len(baseline_entries) == 3
-    assert len(angular_entries) == 6
-    assert len(legacy_entries) == 3
+    assert len(baseline_entries) == 4
+    assert len(angular_entries) == 8
+    assert len(legacy_entries) == 4
     assert all(entry["prompt_engine"] == "angular-canonical" for entry in angular_entries)
     assert {entry["router_variant"] for entry in angular_entries} == {
         "angular-hopf-base",
@@ -534,11 +536,12 @@ def test_cli_compare_playable_slices_threads_prompt_dump_flags_through_direct_pr
         for command in captured_commands
         if command is not None and command[1] == "src/agents/direct_provider_runner.py"
     ]
-    assert len(direct_commands) == 12
+    assert len(direct_commands) == 16
     assert all("--prompt-dump-dir" in command for command in direct_commands)
     assert all(command[command.index("--prompt-dump-dir") + 1] == "/tmp/compare-prompt-dumps" for command in direct_commands)
     assert {command[command.index("--prompt-dump-scenario-id") + 1] for command in direct_commands} == {
         "tiny-guarded-relic",
         "tiny-hazard-route",
         "tiny-delayed-cost",
+        "tiny-context-pressure",
     }

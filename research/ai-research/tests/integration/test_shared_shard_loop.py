@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import sys
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -76,6 +77,8 @@ def _write_persistent_external_shared_agent_script(tmp_path: Path) -> tuple[Path
 
 def _start_direct_provider_test_server(
     response_contents: list[str],
+    *,
+    response_delay_seconds: float = 0.0,
 ) -> tuple[str, list[dict[str, object]], ThreadingHTTPServer]:
     captured_requests: list[dict[str, object]] = []
     remaining_responses = list(response_contents)
@@ -87,6 +90,8 @@ def _start_direct_provider_test_server(
             payload = json.loads(body)
             captured_requests.append(payload)
             response_content = remaining_responses.pop(0)
+            if response_delay_seconds > 0.0:
+                time.sleep(response_delay_seconds)
             response_payload = {
                 "choices": [
                     {
@@ -215,6 +220,106 @@ def test_shared_shard_loop_world_tick_advances_deterministically_even_when_actor
         "Hint: the moving patrol leaves brief windows for repositioning.",
     )
     assert session.current_tick == 2
+
+
+def test_shared_shard_loop_action_cadence_rejects_early_actions_and_honors_overrides() -> None:
+    session = build_shared_shard_loop_session(
+        scenario=_SCENARIO_PRESETS["tiny-fetch-quest"],
+        actor_ids=("player-a", "player-b"),
+        run_id="shared-loop-run",
+        shard_id="shared-shard-alpha",
+        action_cadence_interval=2,
+        actor_action_cadence_overrides={"player-b": 3},
+    )
+
+    first = session.advance_tick({"player-a": "wait", "player-b": "wait"})
+
+    assert first.to_dict() == {
+        "step_index": 0,
+        "accepted_actions": [
+            {"actor_id": "player-a", "action": "wait"},
+            {"actor_id": "player-b", "action": "wait"},
+        ],
+        "emitted_event_types": ["action_wait", "action_wait", "step_completed"],
+        "active_actor_ids": ["player-a", "player-b"],
+        "shard_mutation_generation": 6,
+        "world_tick_count": 1,
+        "world_tick_heartbeat": "shared_shard_world_tick:0001",
+        "world_npc_stance_phase": "watchful",
+        "action_cadence_interval": 2,
+        "actor_action_cadence_overrides": [
+            {"actor_id": "player-b", "cadence_interval": 3},
+        ],
+        "actor_next_action_eligible_at": [
+            {"actor_id": "player-a", "next_action_eligible_at": 2},
+            {"actor_id": "player-b", "next_action_eligible_at": 3},
+        ],
+    }
+    assert session.get_observation("player-a").messages == (
+        "A distant sentinel grows watchful in the quiet corridors.",
+        "Hint: the sharp watch makes a careful look feel safer than rushing.",
+        "Timing: world_tick=1; action_cadence_interval=2; next_action_eligible_at=2",
+    )
+    with pytest.raises(
+        ValueError,
+        match="shared_shard_action_rejected:player-a:action_cadence_locked_until_tick_2",
+    ):
+        session.advance_tick({"player-a": "wait"})
+
+    second = session.advance_tick()
+    third = session.advance_tick({"player-a": "wait"})
+    fourth = session.advance_tick({"player-b": "wait"})
+
+    assert second.accepted_actions == ()
+    assert second.world_tick_count == 2
+    assert third.accepted_actions == (("player-a", "wait"),)
+    assert third.actor_next_action_eligible_at == (("player-a", 4), ("player-b", 3))
+    assert fourth.accepted_actions == (("player-b", "wait"),)
+    assert fourth.actor_next_action_eligible_at == (("player-a", 4), ("player-b", 6))
+
+
+def test_shared_shard_loop_timing_modes_resolve_into_cadence_deterministically() -> None:
+    off_session = build_shared_shard_loop_session(
+        scenario=_SCENARIO_PRESETS["tiny-fetch-quest"],
+        actor_ids=("player-a", "player-b"),
+        run_id="shared-loop-off",
+        shard_id="shared-shard-off",
+        timing_mode="off",
+    )
+    parity_session = build_shared_shard_loop_session(
+        scenario=_SCENARIO_PRESETS["tiny-fetch-quest"],
+        actor_ids=("player-a", "player-b"),
+        run_id="shared-loop-parity",
+        shard_id="shared-shard-parity",
+        timing_mode="human-parity",
+    )
+    equal_session = build_shared_shard_loop_session(
+        scenario=_SCENARIO_PRESETS["tiny-fetch-quest"],
+        actor_ids=("player-a", "player-b"),
+        run_id="shared-loop-equal",
+        shard_id="shared-shard-equal",
+        timing_mode="equal-cadence",
+        action_cadence_interval=3,
+    )
+
+    assert off_session.timing_mode == "off"
+    assert off_session.action_cadence_interval is None
+    assert off_session.get_observation("player-a").messages == (
+        "The shard feels still, as if the watch has not yet begun.",
+        "Hint: the route feels open while the watch remains dormant.",
+    )
+
+    assert parity_session.timing_mode == "human-parity"
+    assert parity_session.action_cadence_interval == 2
+    assert parity_session.get_observation("player-a").messages == (
+        "The shard feels still, as if the watch has not yet begun.",
+        "Hint: the route feels open while the watch remains dormant.",
+        "Timing: timing_mode=human-parity; world_tick=0; action_cadence_interval=2; next_action_eligible_at=0",
+    )
+
+    assert equal_session.timing_mode == "equal-cadence"
+    assert equal_session.action_cadence_interval == 3
+    assert equal_session.actor_action_cadence_overrides == ()
 
 
 def test_shared_shard_loop_phase_outcome_effect_blocks_and_reopens_corridor_route_deterministically() -> None:
@@ -502,3 +607,74 @@ def test_shared_shard_loop_supports_mixed_human_and_direct_provider_participatio
     assert "Your previous response was invalid for MUDBench." in str(
         captured_requests[2]["messages"][0]["content"]
     )
+
+
+def test_shared_shard_loop_external_agent_timeout_override_supports_slow_direct_provider(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    base_url, _, slow_server = _start_direct_provider_test_server(
+        ['{"action":"move east"}'],
+        response_delay_seconds=1.2,
+    )
+    monkeypatch.setenv("MUDBENCH_OPENAI_API_KEY", "test-key")
+    provider_config = DirectProviderConfig(
+        provider="openai-chat-completions",
+        model="gpt-4.1-mini",
+        api_key="test-key",
+        base_url=base_url,
+    )
+
+    default_timeout_session = build_shared_shard_loop_session(
+        scenario=_SCENARIO_PRESETS["tiny-fetch-quest"],
+        actor_ids=("human-a", "direct-b"),
+        external_agent_commands_by_actor={
+            "direct-b": build_direct_provider_command(
+                provider_config,
+                python_executable=sys.executable,
+            ),
+        },
+        run_id="shared-loop-run-default-timeout",
+        shard_id="shared-shard-default-timeout",
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="shared_shard_external_agent_failure:direct-b:timeout:",
+    ):
+        default_timeout_session.request_external_agent_action("direct-b")
+    default_timeout_session.close_external_agent_participants()
+    slow_server.shutdown()
+    slow_server.server_close()
+
+    base_url, _, slow_server = _start_direct_provider_test_server(
+        ['{"action":"move east"}'],
+        response_delay_seconds=1.2,
+    )
+    provider_config = DirectProviderConfig(
+        provider="openai-chat-completions",
+        model="gpt-4.1-mini",
+        api_key="test-key",
+        base_url=base_url,
+    )
+    override_timeout_session = build_shared_shard_loop_session(
+        scenario=_SCENARIO_PRESETS["tiny-fetch-quest"],
+        actor_ids=("human-a", "direct-b"),
+        external_agent_commands_by_actor={
+            "direct-b": build_direct_provider_command(
+                provider_config,
+                python_executable=sys.executable,
+            ),
+        },
+        run_id="shared-loop-run-override-timeout",
+        shard_id="shared-shard-override-timeout",
+        external_agent_timeout_seconds=2.0,
+    )
+
+    try:
+        action_submission = override_timeout_session.request_external_agent_action("direct-b")
+    finally:
+        override_timeout_session.close_external_agent_participants()
+        slow_server.shutdown()
+        slow_server.server_close()
+
+    assert action_submission.action == "move east"

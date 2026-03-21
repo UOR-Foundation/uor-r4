@@ -74,6 +74,10 @@ class HumanSharedShardSessionResult:
     world_tick_count: int
     last_world_tick_heartbeat: str
     world_npc_stance_phase: str
+    timing_mode: str | None = None
+    action_cadence_interval: int | None = None
+    actor_action_cadence_overrides: tuple[tuple[str, int], ...] = ()
+    actor_next_action_eligible_at: tuple[tuple[str, int], ...] = ()
 
 
 def render_human_observation(observation: Observation) -> str:
@@ -253,6 +257,10 @@ def run_human_shared_shard_session(
     shard_id: str = "shared-shard-local",
     run_seed: int | None = None,
     max_steps_override: int | None = None,
+    timing_mode: str | None = None,
+    action_cadence_interval: int | None = None,
+    actor_action_cadence_overrides: Mapping[str, int] | None = None,
+    external_agent_timeout_seconds: float | None = None,
     input_reader: Callable[[str], str] | None = None,
     output_writer: Callable[[str], None] = print,
 ) -> HumanSharedShardSessionResult:
@@ -268,6 +276,10 @@ def run_human_shared_shard_session(
         shard_id=shard_id,
         run_seed=run_seed,
         max_steps_override=max_steps_override,
+        timing_mode=timing_mode,
+        action_cadence_interval=action_cadence_interval,
+        actor_action_cadence_overrides=actor_action_cadence_overrides,
+        external_agent_timeout_seconds=external_agent_timeout_seconds,
     )
     quit_requested = False
 
@@ -291,6 +303,13 @@ def run_human_shared_shard_session(
 
             submitted_actions: dict[str, str] = {}
             for actor_id in session.active_actor_ids():
+                if not session.is_actor_action_eligible(actor_id):
+                    output_writer(
+                        "Actor Timing: "
+                        f"{actor_id} next eligible at world tick "
+                        f"{session.get_actor_next_action_eligible_at(actor_id)}"
+                    )
+                    continue
                 observation = session.get_observation(actor_id)
                 output_writer(f"Actor Turn: {actor_id}")
                 output_writer(render_human_observation(observation))
@@ -337,14 +356,14 @@ def run_human_shared_shard_session(
 
             step_result = session.advance_tick(submitted_actions)
             snapshot = session.world_state.get_snapshot()
-            for actor_id in step_result.active_actor_ids:
+            for actor_id, accepted_action in step_result.accepted_actions:
                 actor_payload = _require_actor_payload(snapshot, actor_id)
                 output_writer(
                     "\n".join(
                         (
                             f"Actor Result: {actor_id}",
                             render_human_turn_result(
-                                action=submitted_actions[actor_id],
+                                action=accepted_action,
                                 event_types=step_result.emitted_event_types,
                                 location=str(actor_payload.get("location", "")),
                                 inventory=tuple(_string_sequence(actor_payload.get("inventory", ()))),
@@ -356,6 +375,22 @@ def run_human_shared_shard_session(
                 "World Tick Effect: "
                 f"npc_stance_phase={step_result.world_npc_stance_phase}"
             )
+            if step_result.action_cadence_interval is not None:
+                rendered_next_eligible = ", ".join(
+                    f"{actor_id}={next_action_eligible_at}"
+                    for actor_id, next_action_eligible_at in step_result.actor_next_action_eligible_at
+                )
+                if rendered_next_eligible == "":
+                    rendered_next_eligible = "none"
+                timing_prefix = ""
+                if step_result.timing_mode is not None:
+                    timing_prefix = f"timing_mode={step_result.timing_mode}; "
+                output_writer(
+                    "World Timing: "
+                    f"{timing_prefix}"
+                    f"action_cadence_interval={step_result.action_cadence_interval}; "
+                    f"next_action_eligible_at={rendered_next_eligible}"
+                )
 
         final_snapshot = session.world_state.get_snapshot()
         completed_actor_ids = tuple(
@@ -380,6 +415,10 @@ def run_human_shared_shard_session(
             world_tick_count=session.shard_state.metadata.world_tick_count,
             last_world_tick_heartbeat=session.shard_state.metadata.last_world_tick_heartbeat,
             world_npc_stance_phase=session.shard_state.metadata.npc_stance_phase,
+            timing_mode=session.timing_mode,
+            action_cadence_interval=session.action_cadence_interval,
+            actor_action_cadence_overrides=session.actor_action_cadence_overrides,
+            actor_next_action_eligible_at=session.shard_state.actor_next_action_eligible_at,
         )
     finally:
         session.close_external_agent_participants()

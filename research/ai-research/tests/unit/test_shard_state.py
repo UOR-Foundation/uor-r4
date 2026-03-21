@@ -62,6 +62,10 @@ def test_shard_state_exposes_clear_metadata_and_generation_placeholders() -> Non
         "world_tick_count": 0,
         "last_world_tick_heartbeat": "not_started",
         "npc_stance_phase": "dormant",
+        "timing_mode": None,
+        "action_cadence_interval": None,
+        "actor_action_cadence_overrides": [],
+        "actor_next_action_eligible_at": [],
         "season_id": None,
         "created_from_snapshot_ref": None,
     }
@@ -108,6 +112,53 @@ def test_shard_state_world_tick_hook_is_deterministic_without_mutating_identity_
     assert advanced_twice.journal.last_committed_mutation_generation == state.journal.last_committed_mutation_generation
     assert advanced_twice.journal.expected_next_mutation_generation == state.journal.expected_next_mutation_generation
     assert advanced_twice.identity_registry.to_dict() == state.identity_registry.to_dict()
+
+
+def test_shard_state_action_cadence_is_disabled_by_default() -> None:
+    state = ShardState.create_empty("shard-dev")
+
+    assert state.action_cadence_enabled is False
+    assert state.action_cadence_interval is None
+    assert state.actor_action_cadence_overrides == ()
+    assert state.actor_next_action_eligible_at == ()
+    assert state.is_actor_action_eligible("player-a") is True
+    assert state.get_actor_next_action_eligible_at("player-a") == 0
+
+
+def test_shard_state_action_cadence_tracks_next_eligible_tick_and_overrides_deterministically() -> None:
+    state = ShardState.create_empty("shard-dev").with_action_cadence(
+        timing_mode="equal-cadence",
+        action_cadence_interval=2,
+        actor_action_cadence_overrides={"player-b": 3},
+    )
+
+    accepted_a = state.record_actor_action_acceptance("player-a")
+    accepted_b = accepted_a.record_actor_action_acceptance("player-b")
+    ticked_once = accepted_b.advance_world_tick()
+    ticked_twice = ticked_once.advance_world_tick()
+    ticked_thrice = ticked_twice.advance_world_tick()
+
+    assert state.action_cadence_enabled is True
+    assert state.timing_mode == "equal-cadence"
+    assert state.action_cadence_interval == 2
+    assert state.actor_action_cadence_overrides == (("player-b", 3),)
+    assert accepted_b.actor_next_action_eligible_at == (("player-a", 2), ("player-b", 3))
+    assert accepted_b.is_actor_action_eligible("player-a") is False
+    assert accepted_b.is_actor_action_eligible("player-b") is False
+    assert ticked_once.is_actor_action_eligible("player-a") is False
+    assert ticked_twice.is_actor_action_eligible("player-a") is True
+    assert ticked_twice.is_actor_action_eligible("player-b") is False
+    assert ticked_thrice.is_actor_action_eligible("player-b") is True
+
+
+def test_shard_state_with_action_cadence_tracks_optional_timing_mode_deterministically() -> None:
+    state = ShardState.create_empty("shard-dev").with_action_cadence(
+        timing_mode="human-parity",
+        action_cadence_interval=2,
+    )
+
+    assert state.timing_mode == "human-parity"
+    assert state.to_dict()["metadata"]["timing_mode"] == "human-parity"
 
 
 def test_shard_state_world_tick_scene_message_tracks_npc_stance_phase_deterministically() -> None:
