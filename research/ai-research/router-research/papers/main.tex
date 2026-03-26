@@ -46,12 +46,13 @@
 % ── Title ─────────────────────────────────────────────────────────────────────
 \title{%
   \textbf{Angular Manifold Routing: Sublinear Compute Reduction\\
-  via Hopf-Base Sector Discretization}\\[4pt]
-  \large An Extension of TurboQuant to Transformer Routing
+  via Hopf-Base Sector Discretization}
 }
 
 \author{%
-  [Author names withheld for double-blind review]
+  Casey Allard\\[2pt]
+  \textit{Independent Researcher}\\[2pt]
+  \small\texttt{caseyallard@hotmail.com}
 }
 
 \date{March 2026}
@@ -85,16 +86,17 @@ We validate the mechanism in a small trainable language model (PTB, confirmed 2 
 perplexity cost and no learned gate matrix, while using 46 of 64 effective expert paths at
 convergence ($1.4\times$ more efficient than dense routing).
 A second-dataset replication on WikiText-2 (confirmed 2 seeds) finds a
-HOPF/BASELINE ratio of $1.081$---identical to the PTB confirmed ratio---under identical
+HOPF/BASELINE ratio of $1.081$---numerically identical to the PTB confirmed ratio---under identical
 training conditions.
 A key honest finding: the specific Hopf sector geometry does not add advantage over
 randomly-permuted fixed routing in trainable LM settings---experts co-adapt their
 weights---but the 8\% PPL gap is stable across both datasets and both seed counts.
+This result is scoped to the 2-layer toy-scale trainable setting and should not be
+read as a claim of broad MoE replacement or large-scale transformer substitution.
 
 We provide a standalone Python script (numpy only, $<60$~s) reproducing the core result.
-Our work extends TurboQuant from data compression to routing computation, and together
-suggests that the angular structure of normalized embeddings has engineering consequences
-throughout the inference pipeline.
+Taken together with TurboQuant, this work suggests the angular non-uniformity of
+embeddings has engineering consequences in both data compression and routing computation.
 \end{abstract}
 
 % ── 1. Background ─────────────────────────────────────────────────────────────
@@ -362,8 +364,7 @@ Seeds confirmed             & 2              & 2              \\
 (confirmed, cross-dataset).}
 HOPF-ROUTED achieves within-8\% validation perplexity of the learned gating baseline
 with no learned gate matrix, confirmed across 2 seeds and two datasets.
-The HOPF/BASELINE ratio of 1.081 is identical on PTB and WT2, the strongest possible
-replication outcome.
+The HOPF/BASELINE ratio of 1.081 is numerically identical on PTB and WT2, an unusually tight cross-dataset replication.
 
 \textbf{On the correct baseline.}
 The BASELINE uses learned top-1 gating \emph{without} load-balance auxiliary loss.
@@ -416,10 +417,12 @@ def hopf_transport_sectors(x, K, dims=(3, 65, 2, 21), lam=1.0):
 
 Full reproduction:
 \begin{verbatim}
-git clone https://github.com/[repo] ai-router
-cd ai-router/router-research
-python hopf_routing_demo.py          # numpy only; reproduces Table 3
+python hopf_routing_demo.py   # numpy only; reproduces Table 3
 \end{verbatim}
+
+A standalone reproduction bundle, including \texttt{hopf\_routing\_demo.py},
+figure-generation code, and manuscript source, will be released with the public
+preprint record.
 
 \subsection{What this work does not prove}
 
@@ -469,14 +472,12 @@ is the natural next research direction.
 
 \subsection{Next steps}
 
-\begin{enumerate}[leftmargin=1.4em,itemsep=2pt]
-  \item Large-scale LM with Hopf-routed MoE (extends INC-0171 to production scale)
-  \item Non-normalized embeddings (transformer hidden states without LayerNorm may
-        activate radial shell structure)
-  \item Combined Hopf routing + TurboQuant quantization (covers storage and compute
-        in a single pipeline)
-  \item Attention routing via angular sector addressing of Q/K projections
-\end{enumerate}
+The most natural extension is validating the efficiency transfer at larger model and
+dataset scale.
+More broadly, the convergence of TurboQuant and this work on a shared geometric property
+invites investigation of whether the angular structure of normalized embeddings constitutes
+a common substrate underlying multiple inference-time efficiency mechanisms;
+we leave this to future work.
 
 % ── References ────────────────────────────────────────────────────────────────
 \bibliographystyle{plainnat}

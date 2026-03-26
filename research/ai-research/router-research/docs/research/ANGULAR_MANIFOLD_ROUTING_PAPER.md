@@ -1,7 +1,5 @@
 # Angular Manifold Routing: Sublinear Compute Reduction via Hopf-Base Sector Discretization
 
-**An Extension of TurboQuant to Transformer Routing**
-
 ---
 
 ## Abstract
@@ -10,9 +8,10 @@ We show that the same geometric property of normalized token embeddings that ena
 
 Across 169 experimental increments on a PPMI-SVD semantic proxy, we establish: (1) the routing footprint scales as K^0.572 (vs K^1.0 for standard dense routing), (2) this advantage grows with K and persists at K=5000 (ratio 2.6–2.8×), (3) the mechanism is purely angular and norm-invariant (Δα < 0.015 across L1/L2/L3/L4), and (4) a fixed 4D Hopf geometry outperforms 100D adaptive K-means clustering on semantically structured embeddings.
 
-We validate the mechanism in a small trainable language model (INC-0171, confirmed 2 seeds): fixed geometric routing replaces learned gating with only 8% validation perplexity cost and no learned gate matrix, while using 46 of 64 effective expert paths at convergence (1.4× more efficient than dense routing). A second-dataset replication on WikiText-2 (INC-0173, confirmed 2 seeds) confirms the result is stable across datasets: HOPF achieves a HOPF/BASELINE ratio of 1.081 on WT2 — identical to PTB's confirmed ratio — under identical training conditions. A key honest finding: the specific Hopf sector geometry does not add advantage over a randomly-permuted fixed routing in trainable LM settings — experts co-adapt their weights — but the 8% PPL gap is confirmed stable across both datasets and seed counts.
+We validate the mechanism in a small trainable language model (INC-0171, confirmed 2 seeds): fixed geometric routing replaces learned gating with only 8% validation perplexity cost and no learned gate matrix, while using 46 of 64 effective expert paths at convergence (1.4× more efficient than dense routing). A second-dataset replication on WikiText-2 (INC-0173, confirmed 2 seeds) confirms the result is stable across datasets: HOPF achieves a HOPF/BASELINE ratio of 1.081 on WT2 — numerically identical to PTB's confirmed ratio — under identical training conditions. A key honest finding: the specific Hopf sector geometry does not add advantage over a randomly-permuted fixed routing in trainable LM settings — experts co-adapt their weights — but the 8% PPL gap is confirmed stable across both datasets and seed counts.
+This result is scoped to the 2-layer toy-scale trainable setting and should not be read as a claim of broad MoE replacement or large-scale transformer substitution.
 
-We provide a standalone Python script (numpy only, < 60 seconds) that reproduces the core result. Our work extends TurboQuant from data compression to routing computation, and together suggests that the angular structure of normalized embeddings has engineering consequences throughout the inference pipeline.
+We provide a standalone Python script (numpy only, < 60 seconds) that reproduces the core result. Taken together with TurboQuant, this work suggests the angular non-uniformity of embeddings has engineering consequences in both data compression and routing computation.
 
 ---
 
@@ -242,12 +241,14 @@ To confirm the result is not PTB-specific, we replicated INC-0171 on WikiText-2 
 The full routing algorithm is independently verifiable in under 60 seconds:
 
 ```bash
-git clone https://github.com/[repo] ai-router
-cd ai-router/router-research
-python hopf_routing_demo.py
+python hopf_routing_demo.py   # numpy only; reproduces Table 2 within 0.5%
 ```
 
-Dependencies: numpy only. Output matches paper Table 2 within 0.5% (seed=42). The script implements the full routing algorithm as approximately 40 lines of standalone numpy.
+A standalone reproduction bundle, including `hopf_routing_demo.py`,
+figure-generation code, and manuscript source, will be released with the
+public preprint record.
+
+Dependencies: numpy only. The script implements the full routing algorithm as approximately 40 lines of standalone numpy.
 
 **Core routing function (excerpt):**
 
@@ -282,10 +283,11 @@ We are explicit about the limitations:
 
 ### 5.3 Next steps
 
-1. **Large-scale LM** with Hopf-routed MoE (extends INC-0171 to production scale; this is the natural follow-on)
-2. **Non-normalized embeddings** (transformer hidden states without LayerNorm may activate radial shells)
-3. **Combined Hopf routing + TurboQuant quantization** (covers both storage and compute in one pipeline)
-4. **Attention routing** via angular sector addressing of Q/K projections
+The most natural extension is validating the efficiency transfer at larger model and dataset scale.
+More broadly, the convergence of TurboQuant and this work on a shared geometric property
+invites investigation of whether the angular structure of normalized embeddings constitutes
+a common substrate underlying multiple inference-time efficiency mechanisms;
+we leave this to future work.
 
 ---
 
@@ -293,7 +295,7 @@ We are explicit about the limitations:
 
 [Google, 2026] TurboQuant: Extreme KV-Cache Compression via Angular Rotation-Invariant Quantization. Google Research, 2026.
 
-[This work, 2026] Evidence chain INC-0143 through INC-0171. Incrementally falsified routing variants, canonical scaling law, and LM integration. Available at: [repo URL]/router-research/docs/research/
+[This work, 2026] Evidence chain INC-0143 through INC-0171. Incrementally falsified routing variants, canonical scaling law, and LM integration. Full increment documents released with preprint bundle.
 
 ---
 
