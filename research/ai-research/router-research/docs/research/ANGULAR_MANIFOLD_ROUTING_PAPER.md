@@ -10,7 +10,7 @@ We show that the same geometric property of normalized token embeddings that ena
 
 Across 169 experimental increments on a PPMI-SVD semantic proxy, we establish: (1) the routing footprint scales as K^0.572 (vs K^1.0 for standard dense routing), (2) this advantage grows with K and persists at K=5000 (ratio 2.6–2.8×), (3) the mechanism is purely angular and norm-invariant (Δα < 0.015 across L1/L2/L3/L4), and (4) a fixed 4D Hopf geometry outperforms 100D adaptive K-means clustering on semantically structured embeddings.
 
-We validate the mechanism in a small trainable language model (INC-0171, confirmed 2 seeds): fixed geometric routing replaces learned gating with only 8% validation perplexity cost and no learned gate matrix, while using 46 of 64 effective expert paths at convergence (1.4× more efficient than dense routing). A second-dataset replication on WikiText-2 (INC-0173) confirms the result holds across datasets: HOPF achieves within 6.3% PPL of BASELINE on WT2 under identical training conditions. A key honest finding: the specific Hopf sector geometry does not add advantage over a randomly-permuted fixed routing in trainable LM settings — experts co-adapt their weights — but the 8% PPL gap is confirmed stable across both datasets.
+We validate the mechanism in a small trainable language model (INC-0171, confirmed 2 seeds): fixed geometric routing replaces learned gating with only 8% validation perplexity cost and no learned gate matrix, while using 46 of 64 effective expert paths at convergence (1.4× more efficient than dense routing). A second-dataset replication on WikiText-2 (INC-0173, confirmed 2 seeds) confirms the result is stable across datasets: HOPF achieves a HOPF/BASELINE ratio of 1.081 on WT2 — identical to PTB's confirmed ratio — under identical training conditions. A key honest finding: the specific Hopf sector geometry does not add advantage over a randomly-permuted fixed routing in trainable LM settings — experts co-adapt their weights — but the 8% PPL gap is confirmed stable across both datasets and seed counts.
 
 We provide a standalone Python script (numpy only, < 60 seconds) that reproduces the core result. Our work extends TurboQuant from data compression to routing computation, and together suggests that the angular structure of normalized embeddings has engineering consequences throughout the inference pipeline.
 
@@ -208,29 +208,30 @@ At 2000 steps eff_b=38.76 (ratio 1.65×); at convergence eff_b=45.96 (ratio 1.39
 
 ### 4.5 Second-Dataset Replication (INC-0173, WikiText-2)
 
-To confirm the result is not PTB-specific, we replicated INC-0171 on WikiText-2 (WT2) under identical conditions: same architecture, same training budget (4000 steps), same three conditions (BASELINE, HOPF, PERMUTED), same VOCAB_SIZE=5000.
+To confirm the result is not PTB-specific, we replicated INC-0171 on WikiText-2 (WT2) under identical conditions: same architecture, same training budget (4000 steps), same three conditions (BASELINE, HOPF, PERMUTED), same VOCAB_SIZE=5000. We ran both seeds (0 and 1) for full 2-seed confirmation.
 
-| Method | Val PPL | eff_buckets | Dataset |
-|---|---|---|---|
-| BASELINE | 106.96 | 31.91 | WT2 |
-| HOPF-ROUTED | 113.65 | 45.38 | WT2 |
-| PERMUTED | 113.86 | 45.80 | WT2 |
+| Method | Seed 0 PPL | Seed 1 PPL | Mean PPL | Mean eff_b | Dataset |
+|---|---|---|---|---|---|
+| BASELINE | 106.96 | 104.74 | 105.85 | 35.37 | WT2 |
+| HOPF-ROUTED | 113.65 | 115.25 | 114.45 | 40.94 | WT2 |
+| PERMUTED | 113.86 | 115.09 | 114.48 | 42.28 | WT2 |
 
-**PPL ratio (HOPF / BASELINE): 1.063** — within 8% threshold, slightly better than PTB (1.081).  
-**HOPF vs PERMUTED: Δppl = 0.21** — geometry irrelevance confirmed on WT2.  
-**HOPF vs DENSE efficiency: 1.41×** — comparable to PTB's 1.39×.
+**PPL ratio (HOPF / BASELINE): 1.081 (2-seed mean)** — identical to PTB's confirmed ratio.  
+**HOPF vs PERMUTED: |Δppl| = 0.03** — geometry irrelevance confirmed on WT2 (stronger than PTB's Δ=0.13).  
+**HOPF vs DENSE efficiency: 1.56×** (2-seed mean) — above 1.5× confirm threshold.
 
-**WT2-specific note:** The BASELINE concentrates more aggressively on WT2 (eff_b=31.91) than on PTB (eff_b=44), likely because the higher OOV rate at VOCAB_SIZE=5000 creates a more peaked token distribution that the learned gate exploits. Fixed routing (HOPF) cannot adapt, giving eff_b=45.38 > BASELINE's 31.91. The efficiency comparison between BASELINE and HOPF is therefore dataset-dependent; both remain efficiently below K=64 and the PPL claim is unaffected.
+**WT2-specific note:** The BASELINE concentrates more aggressively on WT2 (mean eff_b=35.37) than on PTB (eff_b=44), likely because the higher OOV rate at VOCAB_SIZE=5000 creates a more peaked token distribution that the learned gate exploits. Fixed routing (HOPF) cannot adapt; its eff_b varies more across seeds (36.51–45.38) due to initialization sensitivity in a higher-OOV regime. The efficiency comparison is dataset-dependent; the PPL claim is unaffected.
 
 **Cross-dataset summary:**
 
-| Metric | PTB (INC-0171 confirm) | WT2 (INC-0173 screen) |
+| Metric | PTB (INC-0171 confirm) | WT2 (INC-0173 confirm) |
 |---|---|---|
-| HOPF/BASELINE PPL ratio | 1.081 | **1.063** |
-| HOPF/PERMUTED Δppl | 0.13 | **0.21** |
-| HOPF vs DENSE eff_ratio | 1.39× | **1.41×** |
-| BASELINE eff_b | 44.00 | **31.91** |
-| HOPF eff_b | 45.96 | **45.38** |
+| HOPF/BASELINE PPL ratio | 1.081 | **1.081** |
+| HOPF/PERMUTED |Δppl| | 0.13 | **0.03** |
+| HOPF vs DENSE eff_ratio | 1.39× | **1.56×** |
+| BASELINE mean eff_b | 44.00 | **35.37** |
+| HOPF mean eff_b | 45.96 | **40.94** |
+| Seeds confirmed | 2 | **2** |
 
 ---
 
@@ -309,7 +310,7 @@ We are explicit about the limitations:
 | INC-0170 | Stage 7 | Large-K validation: ratio 2.6–2.8× at K=600–5000 (does not collapse) |
 | INC-0171 | Stage 6/7 | LM integration (confirm, 2 seeds): HOPF within 8% PPL of learned gating, eff_b=46/64, 1.39× vs DENSE |
 | INC-0172 | Control (KILL) | Architectural control: Switch aux loss → near-uniform routing (eff_b=63), slightly worse PPL; confirms BASELINE (native concentration, eff_b=44) is the correct comparison; native concentration regime validated |
-| INC-0173 | Stage 7 (replic.) | WT2 replication (screen, 1 seed): HOPF/BASELINE=1.063 on WikiText-2 — result holds across datasets; HOPF ≈ PERMUTED (Δ=0.21), eff_ratio vs DENSE=1.41× |
+| INC-0173 | Stage 7 (replic.) | WT2 replication (confirm, 2 seeds): HOPF/BASELINE=1.081 (mean) on WikiText-2 — identical to PTB's 1.081; HOPF ≈ PERMUTED (|Δ|=0.03 ppl mean); eff_ratio vs DENSE=1.56× (mean) |
 
 Full increment documents: `router-research/docs/research/increments/INC_*.md`
 

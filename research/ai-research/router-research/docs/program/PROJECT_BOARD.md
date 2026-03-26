@@ -1,8 +1,11 @@
 # Project Board
 
 ## Canonical Active Queue
-- Current primary RR: `RR-067`
-- Current primary INC: `INC-0170` -- TBD. Stage 7: Large-K Angular Capacity Test.
+- Current primary RR: **Publication phase — Angular Manifold Routing / sparse-routing-MoE replacement (no active RR assigned; experimental research complete).**
+  All prior experimental RRs (including RR-068) are frozen/inactive and preserved as historical record.
+- Current primary INC: **Publication** — all increments closed. Paper skeleton and publication packet complete. INC-0171 KEEP (2026-03-26).
+- 2026-03-26 INC-0171 KEEP: End-to-End LM Integration. HOPF/BASELINE PPL ratio 1.081 (confirmed). Stage 7: COMPLETE. Publication-ready.
+- 2026-03-14 INC-0170 KEEP: Large-K Angular Capacity Test. eff_ratio 2.6–2.8× at K=600–5000.
 - 2026-03-14 INC-0169 KEEP: Canonical law freeze and design implications. eff_buckets=2.957×K^0.572 TRANS ORIG. Norm-invariant. Shell hierarchy excluded. INC-0170 proposed.
 - 2026-03-14 INC-0168 KEEP: Norm-geometry diagnostic. α=0.572 norm-invariant; routing is purely angular.
 - 2026-03-14 INC-0167 KEEP: Scaling mechanism diagnostic.
@@ -25,12 +28,19 @@
 - INC-0140: Closed KILL (2026-03-13) — angular routing indistinguishable from col-perm on L2-normalized embeddings (rel_diff=0.004)
 - INC-0138: Closed REFINE (2026-03-13) — geometry-only confirmed; norm-driven shell finding
 
-## Now
-- `RR-050` Dynamic hyperbolic state branch (`H^4 + T_xH^4` vs `H^4 x H^4`)
-- `RR-059` Lock the coupled `H^4 x H^4` branch contract
-- `RR-061` Derive a measure-consistent `H^4` / Hopf route law
+## Active — Publication Branch
+**The current and only active forward workstream is the Angular Manifold Routing / sparse-routing-MoE replacement publication.**
+No experimental RR is active. All prior experimental branches are frozen and preserved as historical record.
+- Angular Manifold Routing paper: `docs/research/PAPER_SKELETON.md` + `docs/research/PUBLICATION_PACKET.md` + `docs/research/ANGULAR_MANIFOLD_ROUTING_PAPER.md`
+- Next action: finalize and submit to arXiv.
 
-Queue reset note:
+## Frozen — Prior Research Branches (historical record, not active)
+The branches listed below were active research experiments. They are now **frozen/inactive** — all evidence preserved, no further forward work planned.
+- `RR-050` Dynamic hyperbolic state branch (`H^4 + T_xH^4` vs `H^4 x H^4`) — **[FROZEN — superseded by publication; preserved as historical record]**
+- `RR-059` Lock the coupled `H^4 x H^4` branch contract — **[FROZEN — superseded by publication; preserved as historical record]**
+- `RR-061` Derive a measure-consistent `H^4` / Hopf route law — **[FROZEN — superseded by publication; all Stage 2–7 results captured in completed increments]**
+
+Queue reset note (preserved for historical context, 2026-03-12):
 - 2026-03-12 audit restored `RR-061` as the next primary research gate.
 - Later translated sparse-event frontier work remains valid supporting evidence,
   but it is not the main next proof step.
@@ -39,10 +49,9 @@ Queue reset note:
   gate, so the next primary branch is now the narrower shell-pressure blend
   correction in `INC-0137` (Closed: KILL — radius blend falsified 2026-03-13).
 
-## Next
-- `RR-069` Translate the confirmed product phase-field branch into the routed retrieval harness
-  - deferred behind the `RR-061` geometry return
-- `RR-053` Package routed retrieval index reuse only if a future translated branch clears confirm
+## Frozen — Deferred Branches (not active, not forward work)
+- `RR-069` Translate the confirmed product phase-field branch into the routed retrieval harness — **[FROZEN / DEFERRED — not the active forward branch; preserved as historical record]**
+- `RR-053` Package routed retrieval index reuse only if a future translated branch clears confirm — **[FROZEN / DEFERRED — not the active forward branch]**
 
 ## Done Recently
 - `RR-068` Probe residual and task-error signals on the confirmed operator family

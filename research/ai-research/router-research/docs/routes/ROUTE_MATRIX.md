@@ -6,8 +6,13 @@
 - Finalize: 4 seeds
 
 ## Current Queue Override
-- Current primary RR: `RR-067`
-- Current primary INC: `INC-0170` -- TBD. Stage 7: Large-K Angular Capacity Test.
+- Current primary RR: **Publication phase — Angular Manifold Routing / sparse-routing-MoE replacement (no active RR assigned; experimental research complete).**
+  All prior experimental RRs (including RR-068) are frozen/inactive and preserved as historical record.
+- Current primary INC: **Publication** — all increments closed. Paper skeleton and publication packet complete. INC-0171 KEEP (2026-03-26).
+
+<!-- ═══ FROZEN RESEARCH HISTORY — all entries below are closed/inactive ═══ -->
+- 2026-03-26 INC-0171 KEEP: End-to-End LM Integration. HOPF/BASELINE PPL ratio 1.081 (confirmed). eff_ratio 1.39× at convergence. Stage 7: COMPLETE. Publication-ready.
+- 2026-03-14 INC-0170 KEEP: Large-K Angular Capacity Test. eff_ratio 2.6–2.8× at K=600–5000. Full-range alpha=0.657.
 - 2026-03-14 INC-0169 KEEP: Canonical law freeze. eff_buckets=2.957×K^0.572 (TRANS ORIG). Norm-invariant. Shell hierarchy excluded. INC-0170 proposed.
 - 2026-03-14 INC-0168 KEEP: Norm-geometry diagnostic. α=0.572 TRANS ORIG norm-invariant. Routing is purely angular.
 - 2026-03-14 INC-0167 KEEP: Scaling mechanism diagnostic. √K scaling from sector discretization, shells structurally inaccessible.

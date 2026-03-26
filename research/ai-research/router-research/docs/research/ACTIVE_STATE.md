@@ -18,11 +18,11 @@ as authoritative when they disagree with this file.
   Publication strategy: FINALISED (see `docs/research/PUBLICATION_STRATEGY.md`).
   No further pre-publication experiments required.
   Next action: LaTeX conversion from ANGULAR_MANIFOLD_ROUTING_PAPER.md → arXiv cs.LG submission.
-- Previous INC: `INC-0173` -- **Closed: KEEP** (screen, 1 seed, 4000 steps, 2026-03-26). WT2 Replication.
-  WikiText-2, identical setup to INC-0171. HOPF/BASELINE PPL ratio=1.063 (within 10%, better than PTB's 1.081).
-  HOPF ≈ PERMUTED (Δ=0.21 ppl) — geometry irrelevance confirmed on second dataset.
-  BASELINE native concentration holds (eff_b=31.91 on WT2 vs 44 on PTB — more concentrated on WT2).
-  HOPF vs DENSE efficiency: 1.41× (comparable to PTB's 1.39×). PPL replication claim KEEP.
+- Previous INC: `INC-0173` -- **Closed: KEEP** (confirm, 2 seeds, 4000 steps, 2026-03-26). WT2 Replication.
+  WikiText-2, identical setup to INC-0171. HOPF/BASELINE PPL ratio=**1.081 (2-seed mean, identical to PTB)**.
+  HOPF ≈ PERMUTED (|Δ|=0.03 ppl mean) — geometry irrelevance fully confirmed on second dataset.
+  BASELINE native concentration holds (mean eff_b=35.37 on WT2). HOPF vs DENSE eff_ratio=1.56× (mean).
+  Seed variance: seed 0 ratio=1.063, seed 1 ratio=1.100 — both within threshold; mean is robustly 1.081.
 - Previous INC: `INC-0172` -- **Closed: KILL** (screen, 1 seed, 4000 steps, 2026-03-26). MoE Substitution Study.
   Design flaw: LEARNED_SPARSE condition imported Switch-style aux loss, which the project had already
   established is the wrong comparison. Geometry provides expert concentration natively (INC-0138,

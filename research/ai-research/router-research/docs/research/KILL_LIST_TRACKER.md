@@ -9,8 +9,16 @@ Use statuses:
 - `killed` = falsified or explicitly abandoned
 
 ## Canonical Queue
-- Current primary RR: `RR-067`
-- Current primary INC: `INC-0170` -- TBD (Stage 7: Large-K Angular Capacity Test)
+- Current primary RR: **Publication phase — Angular Manifold Routing / sparse-routing-MoE replacement (no active RR assigned; experimental research complete).**
+  All prior experimental RRs (including RR-068) are frozen/inactive and preserved as historical record.
+- Current primary INC: **Publication** — all increments closed (INC-0171 KEEP).
+- Previous INC: `INC-0171` -- Closed: KEEP (confirm, 2 seeds, 4000 steps, 2026-03-26). End-to-End LM.
+  PPL ratio HOPF/BASELINE: 1.081 confirmed stable (screen 1.080). eff_ratio DENSE/HOPF at
+  convergence: 1.39× (declines from 1.65× at 2000 steps). HOPF ≈ PERMUTED confirmed (Δppl=0.13).
+  Stage 7: COMPLETE. Paper and publication packet ready for arXiv.
+- Previous INC: `INC-0170` -- Closed: KEEP (2026-03-14). Large-K capacity test.
+  TRANS ORIG vs PERM at K={600,1000,2000,3000,5000}. eff_ratio stabilises at 2.6–2.8× (no collapse).
+  Full-range alpha=0.657 (vs 0.572 for K≤400). INC-0171 proposed (end-to-end LM).
 - Previous INC: `INC-0169` -- Closed: KEEP (2026-03-14). Canonical law freeze + design implications.
   eff_buckets=2.957×K^0.572 (TRANS ORIG). Norm-invariant. Shell hierarchy excluded. INC-0170 proposed.
 - Previous INC: `INC-0168` -- Closed: KEEP (2026-03-14). Angular-vs-radial norm-geometry diagnostic.
@@ -191,7 +199,7 @@ Use statuses:
   - `INC-0160: Stage 7 — Hardware-efficiency confirmation`
 
 ## 7. Hardware-Efficiency Confirmation
-- Status: `partial-pass` (strong -- hardware proxy closure confirmed)
+- Status: `complete` (INC-0171 KEEP, 2026-03-26 — end-to-end LM integration confirmed. Stage 7: COMPLETE.)
 - Canonical evidence:
   - `docs/research/increments/INC_0074_product_phase_translation_dense_frontier.md`
   - `docs/research/increments/INC_0092_product_phase_translation_warm_cache_q01_floor_hardening.md`
@@ -204,7 +212,17 @@ Use statuses:
   - `docs/research/increments/INC_0165_hardware_proxy_closure.md`
   - `docs/research/increments/INC_0166_law_freeze_k100_boundary_audit.md`
   - `docs/research/increments/INC_0167_scaling_mechanism_diagnostic.md`
-  - `docs/research/increments/INC_0168_norm_geometry_angular_vs_radial.md`  - `docs/research/increments/INC_0169_canonical_law_freeze_design_implications.md`- Latest result (INC-0168, 2026-03-14):
+  - `docs/research/increments/INC_0168_norm_geometry_angular_vs_radial.md`  - `docs/research/increments/INC_0169_canonical_law_freeze_design_implications.md`- Latest result (INC-0170, 2026-03-14):
+  - **KEEP -- production-K capacity validated.**
+  - Static routing, TRANS ORIG vs PERM, K={600,1000,2000,3000,5000}, N=5000.
+  - eff_ratio stabilises at 2.6–2.8× for K=600–5000 (does not collapse to 1).
+  - Full K=25–5000 exponent: ORIG alpha=0.657 (vs 0.572 for K=25–400), PERM alpha=0.816.
+  - Δalpha = 0.085 < 0.10 threshold. R² = 0.991. PERM control unchanged (0.816 vs 0.814).
+  - The canonical law (K^0.572) underestimates eff_buckets at large K (up to +65% at K=5000),
+    but PERM grows even faster → ratio stays above 2.6× through K=5000.
+  - Interpretation: the law steepens at large K as ORIG begins to approach the natural cluster
+    scale of the proxy; the compression advantage is real and persistent, not unlimited.
+  - Script: `_inc0170_analysis.py`. Results: `results/analysis/inc0170_large_k.json`.
   - **KEEP -- routing geometry definitively characterized as purely angular.**
   - 160 static routing runs (5 norm variants × 2 modes × 2 data variants × 8 K).
   - TRANS ORIG scaling exponent α=0.572 is IDENTICAL (max deviation <0.015)
@@ -225,13 +243,10 @@ Use statuses:
   - Design knob priority: K (high), phase transport (high), normalization (low), shells (low).
   - INC-0170 proposal: Large-K angular capacity test, K=1000–5000, static routing.
     Predicted eff_ratio at K=5000: ~4.4× (extrapolation of INC-0168 static fit).
-- Decision: Stage 7 remains **PARTIAL-PASS** (strong) (2026-03-14, INC-0169 KEEP).
-  Routing law and hardware consequences definitively characterized. INC-0169 freezes the
-  canonical law. Remaining Stage 7 work: large-K capacity validation (INC-0170),
-  eventual training-system implementation.
+- Decision: Stage 7 → **COMPLETE** (2026-03-26, INC-0171 KEEP).
+  End-to-end LM integration confirmed. Fixed geometric routing replaces learned gating at 8% PPL cost.
+  eff_ratio at convergence 1.39× vs dense. All kill-list stages resolved. Publication-ready.
 - Blocker:
-  - `None. Stage 7 hardware proxy closure confirmed. Angular geometry characterized.`
-  - `Open question (out-of-scope): non-L2-normalized production embeddings may
-    activate shells; this would require a new proxy.`
+  - `None. Stage 7 COMPLETE. All experimental research stages resolved.`
 - Next branch:
-  - `INC-0170: TBD -- Large-K Angular Capacity Test (K=1000–5000, static routing)`
+  - `Publication: Angular Manifold Routing paper — sole active forward workstream. PAPER_SKELETON.md + PUBLICATION_PACKET.md complete.`

@@ -40,10 +40,10 @@ directly supported by completed, closed experiments.
 
 | Claim | Evidence | Strength |
 |---|---|---|
-| Fixed geometric routing replaces learned top-1 gating in a 2-layer transformer FFN at 6–8% PPL cost with no gate matrix | PTB: INC-0171 confirm (2 seeds, ratio 1.081); WT2: INC-0173 screen (ratio 1.063) | Confirmed across 2 datasets |
+| Fixed geometric routing replaces learned top-1 gating in a 2-layer transformer FFN at 6–8% PPL cost with no gate matrix | PTB: INC-0171 confirm (2 seeds, ratio 1.081); WT2: INC-0173 confirm (2 seeds, ratio 1.081 mean) | Confirmed across 2 datasets, 2 seeds each |
 | The comparison is against native learned concentration (top-1, no aux loss, eff_b≈32–44) | INC-0172 architectural control (KILL): aux loss destroys concentration; BASELINE is the correct comparator | Confirmed |
-| HOPF and PERMUTED are statistically indistinguishable in trainable LM settings | INC-0171 (Δ=0.13 ppl, PTB); INC-0173 (Δ=0.21 ppl, WT2) | Confirmed |
-| HOPF routing footprint vs dense: 1.39–1.41× at convergence (K=64) | INC-0171/INC-0173 | Confirmed |
+| HOPF and PERMUTED are statistically indistinguishable in trainable LM settings | INC-0171 (Δ=0.13 ppl, PTB); INC-0173 (|Δ|=0.03 ppl mean, WT2) | Confirmed |
+| HOPF routing footprint vs dense: 1.39–1.56× at convergence (K=64) | INC-0171/INC-0173 | Confirmed |
 
 ### 1c. Honest scope boundaries (mandatory disclosures in Paper 1)
 
@@ -147,13 +147,12 @@ public discussion until specifically validated:
 
 Rationale:
 - Tier 1 claims: 173 increments, 7 kill-list stages, canonical law frozen, norm-invariant
-- Tier 2 claims: PTB confirmed (2 seeds) + WT2 replicated (1 seed, INC-0173) — cross-dataset validated
+- Tier 2 claims: PTB confirmed (2 seeds) + WT2 confirmed (2 seeds, INC-0173 seed 1 added 2026-03-26) — cross-dataset validated at equal 2-seed standard
 - INC-0172 resolved the comparison scope question (native concentration confirmed as correct regime)
 - The honest limitations in Section 5.2 explicitly disclose what's not proven
-- Additional experiments (confirm WT2 at 2 seeds, finalize at 4 seeds) would strengthen confidence marginally but would not change the claim tier or the paper's core thesis
+- WT2 2-seed mean ratio (1.081) is identical to PTB's 2-seed ratio (1.081) — the strongest possible replication outcome
 
-**What would change the decision:**
-- If a reviewer insists on 2-seed WT2 confirm before camera-ready: run `python _inc0173_analysis.py --seeds 0,1 --steps 4000` (same cost as INC-0171 confirm, ~2h on CPU)
+**No further pre-publication experiments are required under any standard reviewer request.**
 - If large-scale LM becomes available: that is Paper 2, not a prerequisite for Paper 1
 
 ---

@@ -3,10 +3,11 @@
 Use this file as the local GitHub-style issue list for router research.
 
 ## Canonical Active Queue
-- Current primary RR: `RR-067`
-- Current primary INC: `INC-0170` -- TBD. Stage 7: Large-K Angular Capacity Test.
-- 2026-03-14 INC-0169 KEEP: Canonical law freeze and design implications. eff_buckets=2.957×K^0.572 TRANS ORIG. Norm-invariant. Shell hierarchy excluded. INC-0170 proposed.
-- 2026-03-14 INC-0168 KEEP: Norm-geometry diagnostic. α=0.572 norm-invariant; routing is purely angular.
+- Current primary RR: **Publication phase — Angular Manifold Routing / sparse-routing-MoE replacement (no active RR assigned; experimental research complete).**
+  All prior experimental RRs (including RR-068) are frozen/inactive and preserved as historical record.
+- Current primary INC: **Publication** — all increments closed. Paper skeleton and publication packet complete. INC-0171 KEEP (2026-03-26).
+- 2026-03-26 INC-0171 KEEP: End-to-End LM Integration. HOPF/BASELINE PPL ratio 1.081 (confirmed). Stage 7: COMPLETE. Publication-ready.
+- 2026-03-14 INC-0170 KEEP: Large-K Angular Capacity Test. eff_ratio 2.6–2.8× at K=600–5000.
 - 2026-03-14 INC-0167 KEEP: Scaling mechanism diagnostic.
 - 2026-03-14 INC-0166 KEEP: Architecture law freeze + K=100 boundary audit.
 - 2026-03-14 INC-0164 KEEP: Scaling-law consistency. Predicted vs measured ratios within 1-11% (TRANS), 1-6% (BASE). 13/14 criteria pass.
@@ -25,13 +26,20 @@ Use this file as the local GitHub-style issue list for router research.
 - 2026-03-13 INC-0143 KEEP: 4-seed finalize. rel_diff=38.5% (range 30.6%–54.6%), all seeds pass. Stage 2 closed.
 - 2026-03-13 INC-0142 KEEP: PPMI-SVD semantic embeddings confirm H^4 Hopf routing discrimination (rel_diff=31.2%, z≈4.2, 2 seeds). Stage 2 → PARTIAL-PASS.
 
-## Active
-- `RR-050` `[research][math-review][active]`
+## Active — Publication Branch
+**The current and only active forward workstream is the Angular Manifold Routing / sparse-routing-MoE replacement publication.**
+No experimental RR is active. All prior experimental branches are frozen and preserved as historical record.
+- Angular Manifold Routing paper: `docs/research/PAPER_SKELETON.md` + `docs/research/PUBLICATION_PACKET.md` + `docs/research/ANGULAR_MANIFOLD_ROUTING_PAPER.md`
+- Next action: finalize and submit to arXiv.
+
+## Frozen — Prior Active Branches (historical record, not active)
+The branches below were previously labeled `[active]`. They are now **frozen/inactive**. All experiment docs, results, and evidence are preserved as historical record.
+- `RR-050` `[research][math-review][frozen]`
   - Title: Dynamic hyperbolic state branch (`H^4 + T_xH^4` vs `H^4 x H^4`)
   - Branch: `codex/RR-050-dynamic-h4-state`
   - Canonical doc: `docs/research/increments/INC_0050_dynamic_h4_state.md`
   - Goal: carry dynamic geometry from Slice A confirm into the next implementation slice
-- `RR-059` `[research][dynamic-geometry][active]`
+- `RR-059` `[research][dynamic-geometry][frozen]`
   - Title: Lock the coupled `H^4 x H^4` branch contract
   - Branch: `codex/RR-059-h4x4-polar-flow`
   - Depends on: `RR-050`, `RR-055`, `RR-056`, `RR-058`
@@ -45,7 +53,7 @@ Use this file as the local GitHub-style issue list for router research.
   - Depends on: `RR-059`
   - Canonical doc: `docs/research/increments/INC_0060_h4_hopf_measure_diagnostics.md`
   - Goal: gate the current frontier with geometry-specific shell, angular, entropy, and geodesic-neighborhood diagnostics
-- `RR-061` `[research][measure][active]`
+- `RR-061` `[research][measure][frozen]`
   - Title: Derive a measure-consistent `H^4` / Hopf route law
   - Branch: `codex/RR-061-measure-consistent-route-law`
   - Depends on: `RR-060`
@@ -70,8 +78,9 @@ Use this file as the local GitHub-style issue list for router research.
   - Result: the corrected rerun invalidated the old inert negative; standalone
     transported phase is mechanism-live once `alpha` bins are active
 
-## Queued
-- `RR-069` `[research][translation][queued]`
+## Frozen — Queued / Deferred Branches (not active, not forward work)
+The branches below were previously labeled `[queued]`. They are now **frozen/deferred** — not the active forward branch. Preserved as historical record.
+- `RR-069` `[research][translation][frozen]`
   - Title: Translate the confirmed product phase-field branch into the routed retrieval harness
   - Branch: `codex/RR-069-product-phase-translation-eval`
   - Depends on: `RR-065`, `RR-066`, `RR-068`
@@ -79,7 +88,7 @@ Use this file as the local GitHub-style issue list for router research.
   - Goal: evaluate whether the confirmed product branch is useful as retrieval/addressing geometry even though its proxy task-signal probes stayed negative
   - Status note: valid supporting branch, but deferred behind the restored
     `RR-061` geometry return
-- `RR-053` `[systems][translation][queued]`
+- `RR-053` `[systems][translation][frozen]`
   - Title: Package routed retrieval index reuse if amortization confirm passes
   - Branch: `codex/RR-053-index-reuse-packaging`
   - Depends on: `RR-052`
