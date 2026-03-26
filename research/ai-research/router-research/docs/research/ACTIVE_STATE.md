@@ -12,8 +12,31 @@ Do not treat `CURRENT_DIRECTION.md`, `HANDOFF_CURRENT.md`, or `LIVE_WORKLOG.md`
 as authoritative when they disagree with this file.
 
 ## Canonical Queue
-- Current primary RR: `RR-067`
-- Current primary INC: `INC-0170` -- **TBD** (Stage 7: Large-K Angular Capacity Test)
+- Current primary RR: **Publication phase — Angular Manifold Routing / sparse-routing-MoE replacement (no active RR assigned; experimental research complete).**
+  All prior experimental RRs (including RR-068) are frozen/inactive and preserved as historical record.
+- Current primary INC: **Publication** — all increments closed. Paper skeleton complete.
+  Next action: write full paper from PAPER_SKELETON.md + create PUBLICATION_PACKET.md.
+- Previous INC: `INC-0172` -- **Closed: KILL** (screen, 1 seed, 4000 steps, 2026-03-26). MoE Substitution Study.
+  Design flaw: LEARNED_SPARSE condition imported Switch-style aux loss, which the project had already
+  established is the wrong comparison. Geometry provides expert concentration natively (INC-0138,
+  Stage 2–3 closure); aux loss fights concentration. BASELINE (top-1, no aux loss, eff_b=44) IS the
+  correct learned sparse comparison. INC-0171 already answered this correctly.
+  Screen finding: aux loss converged to uniform routing (eff_b=62.77) from step 400; concentration
+  guard fired. HOPF/BASELINE=1.071 replicates INC-0171. INC-0171 KEEP is the valid substitution result.
+- Previous INC: `INC-0171` -- **Closed: KEEP** (confirm, 2 seeds, 4000 steps, 2026-03-26). End-to-End LM Integration.
+  2-layer transformer PTB, K=64 experts, BASELINE vs HOPF vs PERMUTED.
+  HOPF mean val_ppl=164.54 vs BASELINE=152.26 (ratio 1.081, confirmed stable across 2 seeds). KEEP.
+  Key finding: fixed geometric routing replaces learned gating at 8% PPL cost, no gate matrix needed.
+  HOPF ≈ PERMUTED (164.54 vs 164.41, Δ=0.13) — confirmed: Hopf geometry adds no advantage over
+  random fixed routing in trainable LM; experts co-adapt. eff_ratio at convergence: 1.39× vs DENSE
+  (declines from 1.65× at 2000 steps as experts expand sector coverage with training).
+  Stage 7: COMPLETE. Publication-ready.
+- Previous INC: `INC-0170` -- **Closed: KEEP** (2026-03-14). Large-K Angular Capacity Test.
+  Static routing, TRANS ORIG vs PERM, K={600,1000,2000,3000,5000}.
+  Compression ratio stabilises at 2.6–2.8× across K=600–5000 (does not collapse).
+  Full-range alpha (K=25–5000): ORIG=0.657 (vs 0.572 for K=25–400), PERM=0.816.
+  Δalpha=0.085 within 0.10 threshold. R²=0.991. KEEP.
+  Stage 7: PARTIAL-PASS (strong, production-K validated). INC-0171 proposed.
 - Previous INC: `INC-0169` -- **Closed: KEEP** (2026-03-14). Canonical architecture law freeze and design implications.
   Synthesis increment (no new experiments). Canonical law: eff_buckets = 2.957 × K^0.572 (TRANS ORIG,
   static, L2-normalized). Law is norm-invariant (Δα < 0.015 across L1/L2/L3/L4). Shell hierarchy
@@ -90,7 +113,7 @@ as authoritative when they disagree with this file.
 - Previous INC: `INC-0152` — **Closed: REFINE** (2026-03-14). Gate saturated.
 - Current primary increment doc:
   `docs/research/increments/INC_0168_norm_geometry_angular_vs_radial.md` (closed: KEEP)
-- Kill-list stage: `Hardware-efficiency confirmation` (Stage 7 -- PARTIAL-PASS strong, active gate, geometry characterized as angular)
+- Kill-list stage: `Hardware-efficiency confirmation` (Stage 7 -- COMPLETE — INC-0171 KEEP (2026-03-26). Publication-ready.)
 - Stage 7 definition: Hardware proxy closure confirmed. Three cache/memory models
   all show ORIG lower cost than PERM at matched progress. Chain complete:
   geometry → coherence → concentration → scaling → compute → hardware.

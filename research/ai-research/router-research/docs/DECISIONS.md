@@ -4264,3 +4264,35 @@ Add new entries below.
   - INC-0169: KEEP — canonical routing law frozen, design implications derived
   - Stage 7: PARTIAL-PASS (strong, law and hardware consequences fully characterized)
   - Next: INC-0170 — Large-K Angular Capacity Test
+
+---
+
+## INC-0172: MoE Substitution Study — Angular Routing vs Learned Sparse Top-1
+- Date: 2026-03-26
+- Stage: 7 (Publication extension)
+- Verdict: KILL — design flaw, wrong baseline
+- Data: Screen only (1 seed, 4000 steps). Results in `results/analysis/inc0172_moe_substitution.json`.
+- Key findings:
+  1. LEARNED_SPARSE with Switch aux loss (coeff=1e-2) converged to near-perfect uniform routing
+     (eff_b=62.77/64) from step 400 onwards. Aux loss reached its mathematical minimum
+     (aux_loss=0.0100 = aux_coeff) immediately — routing is degenerate as a sparse baseline.
+  2. Concentration guard fired (eff_b=62.77 > 57.6 threshold).
+  3. LEARNED_SPARSE ≈ BASELINE in quality (154.78 vs 154.55, Δppl=0.23) — forced uniform
+     routing neither helps nor hurts at this scale.
+  4. HOPF/LEARNED_SPARSE ratio=1.070; HOPF/BASELINE ratio=1.071. Replicates INC-0171.
+  5. DENSE quality ceiling: 135.14 ppl (1.68M params vs 5.64M for routing conditions).
+- Design flaw: The LEARNED_SPARSE condition imported Switch Transformer aux loss as the
+  "proper MoE" comparison. The project had already established (INC-0138, Stage 2–3 closure)
+  that the geometry provides expert concentration natively via angular sector discretization
+  — no auxiliary loss is needed or appropriate. BASELINE (top-1, no aux loss, naturally
+  concentrates at eff_b=44) IS the correct learned sparse comparison. The Switch aux loss
+  enforces the opposite of what geometry provides: uniform distribution vs geometric concentration.
+- Decision:
+  - INC-0172: KILL — design flaw; wrong baseline
+  - INC-0171 KEEP remains the valid substitution result
+  - Paper claim stands as: "fixed geometric routing replaces learned gating (top-1, no aux
+    loss) at 8% PPL cost with no gate matrix" — this is the correct and honest claim
+  - INC-0172 screen is preserved as supporting evidence: aux loss destroys the concentration
+    geometry provides; forced uniform routing ≈ natural concentration in quality but is
+    architecturally inconsistent with the project thesis
+  - Stage 7: COMPLETE. No further experimental work required. Next: PUBLICATION_PACKET.md.
