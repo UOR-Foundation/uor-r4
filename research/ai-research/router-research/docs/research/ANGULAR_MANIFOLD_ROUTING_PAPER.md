@@ -114,9 +114,9 @@ On the PPMI-SVD semantic proxy (L2-norm, K=25 to 5000, 160+ runs across 7 seeds)
 
 | Routing | Scaling Law | R² | Range |
 |---|---|---|---|
-| TRANS ORIG (Hopf) | eff_buckets = 2.957 × K^**0.572** | 0.963 | K=25–400 (canonical) |
-| TRANS ORIG (full range) | eff_buckets ≈ K^**0.657** | 0.991 | K=25–5000 |
-| TRANS PERM (control) | eff_buckets = 1.664 × K^**0.814** | 0.993 | K=25–5000 |
+| HOPF (canonical) | eff_buckets = 2.957 × K^**0.572** | 0.963 | K=25–400 |
+| HOPF (full range) | eff_buckets ≈ K^**0.657** | 0.991 | K=25–5000 |
+| PERM (control) | eff_buckets = 1.664 × K^**0.814** | 0.993 | K=25–5000 |
 | BASE ORIG | eff_buckets = 0.998 × K^**0.916** | 0.995 | K=25–400 |
 | DENSE | eff_buckets = K^**1.0** | 1.000 | all K |
 
@@ -144,14 +144,14 @@ On an EMA-based training proxy that simulates routing cache pressure:
 
 | Routing | eff_cost reduction | LRU-16 miss reduction |
 |---|---|---|
-| TRANS ORIG (Hopf) | 3.0–4.9× lower | 2.5–2.9× fewer |
+| HOPF (canonical) | 3.0–4.9× lower | 2.5–2.9× fewer |
 | BASE ORIG | 1.8–2.1× lower | 1.3–1.8× fewer |
 
 Phase transport amplifies the hardware advantage by 1.5–2.4× vs BASE. Gains widen with K and do not saturate through K=5000.
 
 ### 3.4 Norm invariance (INC-0168)
 
-The Hopf scaling exponent is **norm-invariant**: α=0.572 (TRANS ORIG) varies by < 0.015 across L1, L2, L3, L4 normalizations. The mechanism is purely angular — the radial component does not contribute. Shell hierarchy (radial stratification) **degrades** the Gini ratio by 19% and is excluded from the canonical design.
+The Hopf scaling exponent is **norm-invariant**: α=0.572 (HOPF canonical) varies by < 0.015 across L1, L2, L3, L4 normalizations. The mechanism is purely angular — the radial component does not contribute. Shell hierarchy (radial stratification) **degrades** the Gini ratio by 19% and is excluded from the canonical design.
 
 ---
 
@@ -303,18 +303,18 @@ we leave this to future work.
 
 | Increment range | Stage | What was proved |
 |---|---|---|
-| INC-0143..0146 | Stage 3 | Fixed H⁴ Hopf outperforms K-means adaptive; Gini advantage established |
-| INC-0147 | Stage 3 | Mechanism isolation: raw fiber alpha (θ₁+θ₂)/2 is primary mechanism (+20.6 pp) |
-| INC-0148..0159 | Stage 4/5 | Training-time scaling, EMA update rule, K=250–1000 range |
-| INC-0160..0165 | Stage 7 | Hardware proxy: 3.0–4.9× eff_cost reduction, 2.5–2.9× LRU miss reduction |
-| INC-0166..0168 | Stage 7 | Norm invariance (Δα < 0.015), shell hierarchy excluded, canonical law |
-| INC-0169 | Stage 7 | Law freeze: eff_buckets = 2.957 × K^0.572 (TRANS ORIG, canonical) |
-| INC-0170 | Stage 7 | Large-K validation: ratio 2.6–2.8× at K=600–5000 (does not collapse) |
-| INC-0171 | Stage 6/7 | LM integration (confirm, 2 seeds): HOPF within 8% PPL of learned gating, eff_b=46/64, 1.39× vs DENSE |
-| INC-0172 | Control (KILL) | Architectural control: Switch aux loss → near-uniform routing (eff_b=63), slightly worse PPL; confirms BASELINE (native concentration, eff_b=44) is the correct comparison; native concentration regime validated |
-| INC-0173 | Stage 7 (replic.) | WT2 replication (confirm, 2 seeds): HOPF/BASELINE=1.081 (mean) on WikiText-2 — identical to PTB's 1.081; HOPF ≈ PERMUTED (|Δ|=0.03 ppl mean); eff_ratio vs DENSE=1.56× (mean) |
+| INC-0143..0146 | §2 | Fixed H⁴ Hopf outperforms K-means adaptive; Gini advantage established |
+| INC-0147 | §2 | Mechanism isolation: raw fiber alpha (θ₁+θ₂)/2 is primary mechanism (+20.6 pp) |
+| INC-0148..0159 | §3 | Training-time scaling, EMA update rule, K=250–1000 range |
+| INC-0160..0165 | §3 | Hardware proxy: 3.0–4.9× eff_cost reduction, 2.5–2.9× LRU miss reduction |
+| INC-0166..0168 | §3 | Norm invariance (Δα < 0.015), shell hierarchy excluded, canonical law |
+| INC-0169 | §3 | Law freeze: eff_buckets = 2.957 × K^0.572 (canonical HOPF) |
+| INC-0170 | §3 | Large-K validation: ratio 2.6–2.8× at K=600–5000 (does not collapse) |
+| INC-0171 | §4 | LM integration (confirm, 2 seeds): HOPF within 8% PPL of learned gating, eff_b=46/64, 1.39× vs DENSE |
+| INC-0172 | §4 (control) | Architectural control: imposed load-balance aux loss → near-uniform routing (eff_b=63), slightly worse PPL; confirms BASELINE (native concentration, eff_b=44) is the correct comparison |
+| INC-0173 | §4 | WT2 replication (confirm, 2 seeds): HOPF/BASELINE=1.081 (mean) on WikiText-2 — identical to PTB's 1.081; HOPF ≈ PERMUTED (|Δ|=0.03 ppl mean); eff_ratio vs DENSE=1.56× (mean) |
 
-Full increment documents: `router-research/docs/research/increments/INC_*.md`
+Full records are available in the released artifact bundle.
 
 ---
 

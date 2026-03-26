@@ -227,16 +227,16 @@ On the PPMI-SVD proxy ($>$160 runs, 7 seeds, $K=25$ to $5000$):
 
 \begin{table}[h]
 \centering
-\caption{Routing scaling laws. TRANS ORIG = canonical Hopf; PERM = structure-destroyed
+\caption{Routing scaling laws. HOPF = canonical Hopf with full transport; PERM = structure-destroyed
 control (same marginal statistics, randomly permuted sectors).}
 \label{tab:scaling}
 \begin{tabular}{llcc}
 \toprule
 Routing         & Scaling law                                & $R^2$  & Range \\
 \midrule
-TRANS ORIG      & $\hat{e} = 2.957 \cdot K^{\mathbf{0.572}}$ & 0.963  & $K$=25--400 \\
-TRANS ORIG      & $\hat{e} \approx K^{0.657}$                 & 0.991  & $K$=25--5000 \\
-TRANS PERM      & $\hat{e} = 1.664 \cdot K^{0.814}$           & 0.993  & $K$=25--5000 \\
+HOPF            & $\hat{e} = 2.957 \cdot K^{\mathbf{0.572}}$ & 0.963  & $K$=25--400 \\
+HOPF            & $\hat{e} \approx K^{0.657}$                 & 0.991  & $K$=25--5000 \\
+PERM            & $\hat{e} = 1.664 \cdot K^{0.814}$           & 0.993  & $K$=25--5000 \\
 DENSE           & $\hat{e} = K^{1.0}$                         & 1.000  & all $K$ \\
 \bottomrule
 \end{tabular}
@@ -261,7 +261,7 @@ $2.6$--$2.8\times$ across $K{=}600$--$5000$ (INC-0170).
 \subsection{Hardware proxy (INC-0165, 80 runs, 5 seeds)}
 
 Simulating routing cache pressure:
-TRANS ORIG achieves $3.0$--$4.9\times$ lower effective cost and $2.5$--$2.9\times$
+HOPF achieves $3.0$--$4.9\times$ lower effective cost and $2.5$--$2.9\times$
 fewer LRU-16 cache misses vs.\ dense routing.
 Phase transport amplifies the hardware advantage by $1.5$--$2.4\times$ vs.\ BASE.
 Gains do not saturate through $K{=}5000$.
@@ -489,32 +489,31 @@ we leave this to future work.
 
 \begin{table}[h]
 \centering
-\caption{Key increments in the evidence chain. Full increment documents:
-\texttt{docs/research/increments/INC\_*.md}}
+\caption{Key increments in the evidence chain. Full records are available in the released artifact bundle.}
 \label{tab:evidence}
 \small
 \begin{tabular}{p{2.9cm}p{1.5cm}p{8.8cm}}
 \toprule
-Increment range     & Stage  & Finding \\
+Increment range     & Section & Finding \\
 \midrule
-INC-0143--0146      & Stg.~3 & Fixed H\textsuperscript{4} Hopf outperforms 100D K-means;
+INC-0143--0146      & \S2     & Fixed H\textsuperscript{4} Hopf outperforms 100D K-means;
                                Gini advantage established \\
-INC-0147            & Stg.~3 & Mechanism isolation: raw fiber $\alpha=(\theta_1+\theta_2)/2$
+INC-0147            & \S2     & Mechanism isolation: raw fiber $\alpha=(\theta_1+\theta_2)/2$
                                is primary mechanism (+20.6~pp) \\
-INC-0148--0159      & Stg.~4/5 & Training-time scaling, EMA update rule, $K{=}250$--$1000$ \\
-INC-0160--0165      & Stg.~7 & Hardware proxy: $3.0$--$4.9\times$ eff\_cost reduction,
+INC-0148--0159      & \S3     & Training-time scaling, EMA update rule, $K{=}250$--$1000$ \\
+INC-0160--0165      & \S3     & Hardware proxy: $3.0$--$4.9\times$ eff\_cost reduction,
                                $2.5$--$2.9\times$ LRU miss reduction \\
-INC-0166--0168      & Stg.~7 & Norm invariance ($\Delta\alpha < 0.015$), shell hierarchy
+INC-0166--0168      & \S3     & Norm invariance ($\Delta\alpha < 0.015$), shell hierarchy
                                excluded, canonical law \\
-INC-0169            & Stg.~7 & Law freeze: $\hat{e} = 2.957 \cdot K^{0.572}$ (TRANS ORIG) \\
-INC-0170            & Stg.~7 & Large-$K$: ratio $2.6$--$2.8\times$ at $K{=}600$--$5000$
+INC-0169            & \S3     & Law freeze: $\hat{e} = 2.957 \cdot K^{0.572}$ (canonical HOPF) \\
+INC-0170            & \S3     & Large-$K$: ratio $2.6$--$2.8\times$ at $K{=}600$--$5000$
                                (does not collapse) \\
-INC-0171            & Stg.~6/7 & LM integration (PTB, 2 seeds): HOPF within 8\% PPL,
+INC-0171            & \S4     & LM integration (PTB, 2 seeds): HOPF within 8\% PPL,
                                eff$_b{=}46/64$, $1.39\times$ vs DENSE \\
-INC-0172 (killed)   & Control & Switch aux loss $\to$ near-uniform routing
+INC-0172 (killed)   & \S4     & Imposed load-balance aux loss $\to$ near-uniform routing
                                (eff$_b{=}63$); confirms native concentration
                                as correct comparator \\
-INC-0173            & Stg.~7 & WT2 replication (2 seeds): ratio $1.081$ (mean),
+INC-0173            & \S4     & WT2 replication (2 seeds): ratio $1.081$ (mean),
                                identical to PTB; HOPF${\approx}$PERM ($|\Delta|{=}0.03$~ppl) \\
 \bottomrule
 \end{tabular}
