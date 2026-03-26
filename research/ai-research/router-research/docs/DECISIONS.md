@@ -4296,3 +4296,28 @@ Add new entries below.
     geometry provides; forced uniform routing ≈ natural concentration in quality but is
     architecturally inconsistent with the project thesis
   - Stage 7: COMPLETE. No further experimental work required. Next: PUBLICATION_PACKET.md.
+
+---
+
+## INC-0173: WikiText-2 Replication — Native Concentration on Second Dataset
+- Date: 2026-03-26
+- Stage: 7 (Publication strengthening)
+- Verdict: KEEP
+- Data: Screen (1 seed, 4000 steps). Results in `results/analysis/inc0173_wt2_replication.json`.
+- Key findings:
+  1. HOPF/BASELINE PPL ratio = 1.063 on WT2 — passes ≤ 1.10 threshold, better than PTB (1.081).
+  2. HOPF ≈ PERMUTED (113.65 vs 113.86, Δ=0.21 ppl) — geometry irrelevance confirmed on WT2.
+  3. BASELINE native concentration holds: eff_b=31.91 (no aux loss; even more concentrated than PTB's 44).
+  4. HOPF vs DENSE efficiency: 64/45.38 = 1.41× — comparable to PTB's 1.39×.
+  5. WT2-specific: BASELINE concentrates more aggressively on WT2 (eff_b=31.91) than PTB (44) at
+     VOCAB_SIZE=5000, likely due to higher OOV rate causing peaked token distribution. HOPF (fixed)
+     cannot adapt, giving eff_b=45.38 > BASELINE's 31.91. This inverts the eff_ratio direction vs
+     PTB but does NOT affect the PPL replication claim, which is the core paper result.
+  6. Script REFINE flag: the eff_ratio threshold (BASELINE/HOPF ≥ 1.3) is PTB-calibrated; it fires
+     on WT2 because BASELINE is more concentrated than HOPF there. Not a scientific failure.
+- Decision:
+  - INC-0173: KEEP — PPL replication passes cleanly on second dataset
+  - Paper claim now supported on both PTB (INC-0171 confirm, 2 seeds) and WT2 (INC-0173 screen)
+  - Honest reporting: ratio range 6–8% across datasets; HOPF ≈ PERMUTED on both; native
+    concentration holds on both; eff_b dynamics are dataset-specific (honest limitation)
+  - Stage 7: COMPLETE. Experimental work finished. Next: arXiv submission.

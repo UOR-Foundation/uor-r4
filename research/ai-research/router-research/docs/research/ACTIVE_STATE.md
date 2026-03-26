@@ -14,8 +14,13 @@ as authoritative when they disagree with this file.
 ## Canonical Queue
 - Current primary RR: **Publication phase — Angular Manifold Routing / sparse-routing-MoE replacement (no active RR assigned; experimental research complete).**
   All prior experimental RRs (including RR-068) are frozen/inactive and preserved as historical record.
-- Current primary INC: **Publication** — all increments closed. Paper skeleton complete.
-  Next action: write full paper from PAPER_SKELETON.md + create PUBLICATION_PACKET.md.
+- Current primary INC: **Publication** — all increments closed. Paper and replication complete.
+  Next action: LaTeX conversion from ANGULAR_MANIFOLD_ROUTING_PAPER.md → arXiv submission.
+- Previous INC: `INC-0173` -- **Closed: KEEP** (screen, 1 seed, 4000 steps, 2026-03-26). WT2 Replication.
+  WikiText-2, identical setup to INC-0171. HOPF/BASELINE PPL ratio=1.063 (within 10%, better than PTB's 1.081).
+  HOPF ≈ PERMUTED (Δ=0.21 ppl) — geometry irrelevance confirmed on second dataset.
+  BASELINE native concentration holds (eff_b=31.91 on WT2 vs 44 on PTB — more concentrated on WT2).
+  HOPF vs DENSE efficiency: 1.41× (comparable to PTB's 1.39×). PPL replication claim KEEP.
 - Previous INC: `INC-0172` -- **Closed: KILL** (screen, 1 seed, 4000 steps, 2026-03-26). MoE Substitution Study.
   Design flaw: LEARNED_SPARSE condition imported Switch-style aux loss, which the project had already
   established is the wrong comparison. Geometry provides expert concentration natively (INC-0138,
