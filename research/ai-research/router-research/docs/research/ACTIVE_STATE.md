@@ -15,7 +15,9 @@ as authoritative when they disagree with this file.
 - Current primary RR: **Publication phase — Angular Manifold Routing / sparse-routing-MoE replacement (no active RR assigned; experimental research complete).**
   All prior experimental RRs (including RR-068) are frozen/inactive and preserved as historical record.
 - Current primary INC: **Publication** — all increments closed. Paper and replication complete.
-  Next action: LaTeX conversion from ANGULAR_MANIFOLD_ROUTING_PAPER.md → arXiv submission.
+  Publication strategy: FINALISED (see `docs/research/PUBLICATION_STRATEGY.md`).
+  No further pre-publication experiments required.
+  Next action: LaTeX conversion from ANGULAR_MANIFOLD_ROUTING_PAPER.md → arXiv cs.LG submission.
 - Previous INC: `INC-0173` -- **Closed: KEEP** (screen, 1 seed, 4000 steps, 2026-03-26). WT2 Replication.
   WikiText-2, identical setup to INC-0171. HOPF/BASELINE PPL ratio=1.063 (within 10%, better than PTB's 1.081).
   HOPF ≈ PERMUTED (Δ=0.21 ppl) — geometry irrelevance confirmed on second dataset.
