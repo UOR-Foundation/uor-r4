@@ -17,7 +17,7 @@ as authoritative when they disagree with this file.
 - Current primary INC: **Publication** — all increments closed. Paper and replication complete.
   Publication strategy: FINALISED (see `docs/research/PUBLICATION_STRATEGY.md`).
   No further pre-publication experiments required.
-  Next action: LaTeX conversion from ANGULAR_MANIFOLD_ROUTING_PAPER.md → arXiv cs.LG submission.
+  Next action: **LaTeX bundle complete** (`papers/`). Build PDF with `cd papers && make all` (requires pdflatex), then `make bundle` for arXiv zip. See `papers/SUBMISSION_CHECKLIST.md`.
 - Previous INC: `INC-0173` -- **Closed: KEEP** (confirm, 2 seeds, 4000 steps, 2026-03-26). WT2 Replication.
   WikiText-2, identical setup to INC-0171. HOPF/BASELINE PPL ratio=**1.081 (2-seed mean, identical to PTB)**.
   HOPF ≈ PERMUTED (|Δ|=0.03 ppl mean) — geometry irrelevance fully confirmed on second dataset.
