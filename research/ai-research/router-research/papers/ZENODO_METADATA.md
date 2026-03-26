@@ -111,7 +111,7 @@ Leave blank (this is a preprint deposit)
 - [ ] Zip the bundle: `cd papers && zip -r angular_manifold_routing_bundle.zip release_bundle/`
 - [ ] Upload zip to https://zenodo.org/ under "New upload"
 - [ ] Reserve DOI before publishing (Zenodo allows pre-reservation)
-- [ ] Add reserved Zenodo DOI to paper (`\footnote{Zenodo: \url{https://doi.org/10.5281/zenodo.XXXXXX}}`) and recompile
+- [x] Add Zenodo DOI to paper and recompile: `https://doi.org/10.5281/zenodo.19243034`
 - [ ] Publish Zenodo record
 - [ ] Record Zenodo DOI in `docs/research/ACTIVE_STATE.md` and `docs/DECISIONS.md`
 - [ ] After arXiv submission: update Zenodo related identifiers with arXiv ID

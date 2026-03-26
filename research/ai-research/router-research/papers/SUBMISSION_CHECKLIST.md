@@ -61,11 +61,8 @@ No large data files — users generate `ppmi_proxy.npz` themselves via `generate
    - Title, author, description, keywords
    - License dropdown: **CC BY 4.0** (primary; Apache-2.0 for code noted in description)
 4. **Reserve DOI before publishing** (Zenodo → Reserve DOI button)
-5. Add the reserved Zenodo DOI to `main.tex` and recompile PDF before publishing:
-   ```latex
-   \footnote{Reproduction bundle (Zenodo): \url{https://doi.org/10.5281/zenodo.XXXXXX}}
-   ```
-6. Replace `main.pdf` in the upload with the recompiled PDF (contains Zenodo DOI).
+5. ~~Add the reserved Zenodo DOI to `main.tex` and recompile PDF before publishing~~ — **DONE** (DOI `10.5281/zenodo.19243034` patched into `main.tex`; PDF rebuilt).
+6. Replace `main.pdf` in the upload with the recompiled PDF (see `papers/main.pdf` and `papers/release_bundle/main.pdf`).
 7. Publish the Zenodo record.
 
 ### Step 3 — Record the Zenodo DOI
@@ -89,7 +86,7 @@ No large data files — users generate `ppmi_proxy.npz` themselves via `generate
    - Files: `angular_manifold_routing_arxiv.zip` (contains .tex, .bbl, figures/)
    - Title: *Angular Manifold Routing: Sublinear Compute Reduction via Hopf-Base Sector Discretization*
    - Abstract: copy from `papers/main.tex` `\begin{abstract}...\end{abstract}`
-   - Comments field: *Reproduction bundle: https://doi.org/10.5281/zenodo.XXXXXX*
+   - Comments field: *Reproduction bundle: https://doi.org/10.5281/zenodo.19243034*
    - License: CC BY 4.0
 
 3. **Verify PDF on arXiv preview** — check all tables render, figure displays, citations resolve.
