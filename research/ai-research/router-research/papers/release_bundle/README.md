@@ -71,17 +71,14 @@ record; the full analysis scripts are not included in this minimal bundle.
 
 ## License
 
-**See the LICENSE file (if included) or the paper header for the applicable license.**
+This bundle uses a split license structure — see the license files for full terms.
 
-> ⚠️ License has not yet been finalized for public release.  
-> Recommended options (author to choose one before uploading):
->
-> | Component | Recommended | Notes |
-> |---|---|---|
-> | Paper (`main.pdf`, `main.tex`) | CC BY 4.0 | Standard academic preprint license |
-> | Code (`hopf_routing_demo.py`, `generate_*.py`) | MIT or Apache 2.0 | Permissive, reuse-friendly |
->
-> To finalize: replace this section with a LICENSE file and update the paper header.
+| Files | License | License file |
+|---|---|---|
+| `hopf_routing_demo.py`, `generate_ppmi_proxy.py`, `generate_figures.py` | Apache-2.0 | `LICENSE-CODE` |
+| `main.pdf`, `main.tex`, `references.bib`, `figures/` | CC BY 4.0 | `LICENSE-PAPER` |
+
+**Copyright 2026 Casey Allard**
 
 ---
 

@@ -54,35 +54,27 @@ Software + Publication (type: preprint)
 
 ## License
 
-> ⚠️ **Finalize the license before uploading. Choose one option per component below.**
+This bundle uses a split license structure:
 
-### Paper (main.pdf, main.tex, references.bib)
+| Component | License |
+|---|---|
+| Manuscript (`main.pdf`, `main.tex`, `references.bib`, `figures/`) | **CC BY 4.0** — Creative Commons Attribution 4.0 International |
+| Code / scripts (`hopf_routing_demo.py`, `generate_ppmi_proxy.py`, `generate_figures.py`) | **Apache-2.0** |
 
-- **Recommended:** Creative Commons Attribution 4.0 International (CC BY 4.0)
-  - Standard for academic preprints; allows reuse with attribution
-  - Compatible with arXiv's default CC BY 4.0 option
-
-### Code and Scripts (hopf_routing_demo.py, generate_ppmi_proxy.py, generate_figures.py)
-
-- **Recommended: MIT License** — permissive, reuse-friendly, minimal boilerplate
-- Alternative: Apache 2.0 — similar permissiveness, adds patent clause
-
-### To finalize:
-1. Add a `LICENSE` file to `papers/release_bundle/` with the chosen code license text.
-2. Note in the Zenodo description whether the paper and code use different licenses.
-3. Select the matching license in Zenodo's license dropdown.
+**Zenodo dropdown:** Select **CC BY 4.0** (the primary artifact is the manuscript).  
+In the Zenodo Notes/Description field, add: *"Code files in this bundle are licensed under Apache-2.0; see `LICENSE-CODE`."*  
+Full license texts are in `LICENSE-CODE` and `LICENSE-PAPER` within the bundle.
 
 ---
 
 ## Related Identifiers
 
-*(Add these after arXiv submission. Leave blank until IDs are assigned.)*
+*(Zenodo does not require an arXiv ID before publishing. Add the arXiv ID as a Zenodo record update after arXiv submission.)*
 
 | Relationship | Identifier | Note |
 |---|---|---|
-| Is supplemented by | `[FILL IN arXiv ID]` | arXiv preprint |
-| Is cited by | `[FILL IN arXiv ID]` | Same — fill in once submitted |
-| Is source code of | `[FILL IN arXiv ID]` | Reproduction bundle for the paper |
+| Is supplemented by | `[add arXiv ID after submission]` | arXiv preprint |
+| Is source code of | `[add arXiv ID after submission]` | Reproduction bundle for the paper |
 
 ---
 
@@ -100,7 +92,7 @@ Leave blank (this is a preprint deposit)
 
 ## Version
 
-1.0.0 — Initial release (concurrent with arXiv submission)
+1.0.0 — Initial release (prior to arXiv submission)
 
 ---
 
@@ -114,13 +106,12 @@ Leave blank (this is a preprint deposit)
 
 ## Checklist Before Uploading
 
-- [ ] arXiv ID obtained and added to `related_identifiers` above
-- [ ] arXiv ID added to `main.tex` abstract/footnote and PDF recompiled
-- [ ] License finalized and LICENSE file added to bundle
+- [x] Licenses locked: `LICENSE-CODE` (Apache-2.0) and `LICENSE-PAPER` (CC BY 4.0) in bundle
 - [ ] `CITATION.cff` or BibTeX citation block finalized (see README.md in bundle)
 - [ ] Zip the bundle: `cd papers && zip -r angular_manifold_routing_bundle.zip release_bundle/`
 - [ ] Upload zip to https://zenodo.org/ under "New upload"
 - [ ] Reserve DOI before publishing (Zenodo allows pre-reservation)
-- [ ] Add Zenodo DOI to paper (`\footnote{Zenodo: \url{https://doi.org/10.5281/zenodo.XXXXXX}}`) and recompile
+- [ ] Add reserved Zenodo DOI to paper (`\footnote{Zenodo: \url{https://doi.org/10.5281/zenodo.XXXXXX}}`) and recompile
 - [ ] Publish Zenodo record
 - [ ] Record Zenodo DOI in `docs/research/ACTIVE_STATE.md` and `docs/DECISIONS.md`
+- [ ] After arXiv submission: update Zenodo related identifiers with arXiv ID

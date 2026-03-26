@@ -37,9 +37,48 @@ make check            # verify page count (target: 4-5 pages)
 If no pdflatex: use Overleaf (upload main.tex + references.bib + figures/)
 or install TeX Live: `brew install texlive` / `apt install texlive-full`
 
-## 3. arXiv Submission Steps
+## 3. Zenodo Release (code + data snapshot)
 
-1. **Build the bundle:**
+**Do this before arXiv submission** — Zenodo timestamp precedes arXiv.  
+**Bundle location:** `papers/release_bundle/`  
+**Metadata draft:** `papers/ZENODO_METADATA.md`
+
+### Step 1 — Prepare the zip (licenses are already in the bundle)
+
+```bash
+cd router-research/papers
+zip -r angular_manifold_routing_bundle.zip release_bundle/
+```
+
+Bundle contains `LICENSE-CODE` (Apache-2.0) and `LICENSE-PAPER` (CC BY 4.0).  
+No large data files — users generate `ppmi_proxy.npz` themselves via `generate_ppmi_proxy.py`.
+
+### Step 2 — Upload to Zenodo
+
+1. Go to https://zenodo.org/ → New Upload
+2. Upload `angular_manifold_routing_bundle.zip`
+3. Fill fields from `papers/ZENODO_METADATA.md`:
+   - Title, author, description, keywords
+   - License dropdown: **CC BY 4.0** (primary; Apache-2.0 for code noted in description)
+4. **Reserve DOI before publishing** (Zenodo → Reserve DOI button)
+5. Add the reserved Zenodo DOI to `main.tex` and recompile PDF before publishing:
+   ```latex
+   \footnote{Reproduction bundle (Zenodo): \url{https://doi.org/10.5281/zenodo.XXXXXX}}
+   ```
+6. Replace `main.pdf` in the upload with the recompiled PDF (contains Zenodo DOI).
+7. Publish the Zenodo record.
+
+### Step 3 — Record the Zenodo DOI
+
+- [ ] Add Zenodo DOI to `docs/research/ACTIVE_STATE.md`
+- [ ] Add Zenodo DOI to `docs/DECISIONS.md`
+- [ ] Update Section 4 below (arXiv comments field) with the Zenodo DOI
+
+## 4. arXiv Submission Steps
+
+**Do this after Zenodo is published** — include the Zenodo DOI in the comments field.
+
+1. **Build the arXiv bundle:**
    ```bash
    make bundle
    # produces: angular_manifold_routing_arxiv.zip
@@ -50,50 +89,14 @@ or install TeX Live: `brew install texlive` / `apt install texlive-full`
    - Files: `angular_manifold_routing_arxiv.zip` (contains .tex, .bbl, figures/)
    - Title: *Angular Manifold Routing: Sublinear Compute Reduction via Hopf-Base Sector Discretization*
    - Abstract: copy from `papers/main.tex` `\begin{abstract}...\end{abstract}`
-   - Comments field: *Reproduction bundle (code + data generation script): Zenodo DOI [add after Step 4]*
-   - License: CC BY 4.0 (recommended; finalize in ZENODO_METADATA.md first)
+   - Comments field: *Reproduction bundle: https://doi.org/10.5281/zenodo.XXXXXX*
+   - License: CC BY 4.0
 
 3. **Verify PDF on arXiv preview** — check all tables render, figure displays, citations resolve.
 
 4. **Record arXiv ID** in `docs/research/ACTIVE_STATE.md` and `DECISIONS.md`.
 
-## 4. Zenodo Release (code + data snapshot)
-
-**Bundle location:** `papers/release_bundle/`  
-**Metadata draft:** `papers/ZENODO_METADATA.md`
-
-### Step 1 — Finalize license
-- Open `papers/ZENODO_METADATA.md` and choose a license for paper and code.
-- Add a `LICENSE` file to `papers/release_bundle/`.
-
-### Step 2 — Get arXiv ID first (see Section 3), then add it to the paper
-- Add DOI/ID to `main.tex` (e.g., `\footnote{arXiv:\url{...}}`) and recompile.
-- Update `papers/ZENODO_METADATA.md` related identifiers.
-
-### Step 3 — Prepare the zip
-```bash
-cd router-research/papers
-zip -r angular_manifold_routing_bundle.zip release_bundle/
-```
-This creates a ~5MB zip (no large data files; users generate ppmi_proxy.npz themselves).
-
-### Step 4 — Upload to Zenodo
-1. Go to https://zenodo.org/ → New Upload
-2. Upload `angular_manifold_routing_bundle.zip`
-3. Fill fields from `papers/ZENODO_METADATA.md`:
-   - Title, author, description, keywords, license, related identifiers
-4. **Reserve DOI before publishing** (Zenodo → Reserve DOI)
-5. Add the reserved Zenodo DOI to `main.tex` and recompile PDF before publishing:
-   ```latex
-   \footnote{Zenodo record: \url{https://doi.org/10.5281/zenodo.XXXXXX}}
-   ```
-6. Upload the final PDF (with DOI) to the Zenodo record.
-7. Publish the Zenodo record.
-
-### Step 5 — Record the DOI
-- [ ] Add Zenodo DOI to `docs/research/ACTIVE_STATE.md`
-- [ ] Add Zenodo DOI to `docs/DECISIONS.md`
-- [ ] Update `SUBMISSION_CHECKLIST.md` Section 3 arXiv comments field with Zenodo DOI
+5. **Update Zenodo related identifiers** with the arXiv ID (Zenodo → Edit → Related identifiers).
 
 ## 5. Repo Snapshot Consistency
 
