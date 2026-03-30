@@ -18,7 +18,7 @@ Angular Manifold Routing: Sublinear Compute Reduction via Hopf-Base Sector Discr
 | Name | Allard, Casey |
 | Affiliation | Independent Researcher |
 | Email | caseyallard@hotmail.com |
-| ORCID | [FILL IN — optional: https://orcid.org/xxxx-xxxx-xxxx-xxxx] |
+| ORCID | https://orcid.org/0009-0005-9758-5969 |
 
 ---
 
