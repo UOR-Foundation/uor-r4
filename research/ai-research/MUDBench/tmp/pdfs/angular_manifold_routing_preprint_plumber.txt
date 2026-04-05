@@ -1,0 +1,345 @@
+
+
+===== PAGE 1 =====
+Angular Manifold Routing
+Sublinear Token Routing via
+Hyperspherical Sector Discretization
+Preprint draft for research review
+Casey (independent research program)
+March 14, 2026
+Abstract
+This preprint summarizes a geometry-native routing program for sparse neural computation. The router maps
+normalized token embeddings onto a single-shell hyperspherical manifold and partitions that manifold into
+angular sectors derived from the Hopf base. Across the internal experiment chain summarized here, the
+effective routed footprint grows sublinearly with routing capacity K, approximately as effective_buckets(K) =
+2.957 * K^0.572 in the canonical static regime. The measured advantage is norm-invariant across L1/L2/L3/L4
+normalization, degrades when radial shells are forced, and carries through to matched-progress compute
+savings and hardware proxy savings. The resulting working theory is that a router constrained to a normalized
+angular manifold can organize tokens into sectors whose occupancy grows sublinearly with routing capacity,
+yielding fewer active routing regions, better locality, and lower memory traffic than a permuted control. The
+paper presents the architecture, related work, internal methodology, the experimental chain to date, and the
+design implications of the frozen law.
+Status note. This document is an internal preprint-style synthesis of the projects current theory and experimental results. It is
+intended for technical review, not as a claim of final external validation.
+Angular Manifold Routing preprint draft Page 1
+
+===== PAGE 2 =====
+1. Introduction
+Sparse routing has become a central strategy for scaling neural systems without paying the full cost of dense
+computation. Modern mixture-of-experts systems, sparse attention systems, and retrieval-augmented architectures
+all try to restrict computation to a task-relevant subset of the full parameter or memory space. Classic
+conditional-computation work and later sparse expert models established the appeal of activating only a small
+subset of modules for each example, but practical systems still struggle with routing overhead, locality, and load
+balancing. Shazeer et al. introduced large-scale sparse expert activation, Fedus et al. simplified top-1 expert routing
+in Switch Transformers, and Roy et al. showed that routing-based sparse attention could reduce nominal attention
+complexity. Hyperbolic and Poincare-based representation work, meanwhile, demonstrated that geometry itself can
+act as an inductive prior for structured representations. This project asks a different question: can geometric
+structure itself become the routing mechanism, rather than merely the embedding prior?
+The present router family was initially framed in terms of hyperbolic routing, Hopf structure, event gates, and
+hardware reduction. Through the experiment chain summarized here, that story was progressively simplified. The
+current working picture is cleaner than the original one: the main sparsity effect does not appear to require explicit
+per-sample event gating, and it does not appear to be driven by a radial shell hierarchy. Instead, the dominant signal
+is angular. Once embeddings are normalized onto a hypersphere, routing behaves like a sector-allocation process
+on the Hopf base, and the effective number of active routing buckets grows sublinearly with bucket capacity K. The
+result is a measurable reduction in active routing footprint, matched-progress routed computation, and hardware
+proxy cost.
+This document has four goals. First, it places the work in context relative to prior sparse-routing and
+geometry-aware literature. Second, it states the current architecture and frozen canonical law as clearly as possible.
+Third, it records the experimental chain and the quantitative results that support that law. Fourth, it distills the
+design implications for future large-scale routing experiments and eventual integration into a real trainable model.
+Main contributions of the current preprint stage:
+(cid:127) A concrete routing architecture in which normalized embeddings are routed on an angular manifold rather than
+through explicit learned gating logits.
+(cid:127) A measured effective-footprint law showing sublinear growth of active routing regions with routing capacity K in
+the strongest angular regime.
+(cid:127) A mechanism audit showing that the effect is angular, norm-invariant, and not improved by forced radial shells.
+(cid:127) A matched-progress compute analysis and a hardware proxy closure linking routing concentration to lower
+effective routing cost, fewer cache misses, and lower bytes moved.
+(cid:127) A frozen design rule: normalized angular routing is the current default architecture; shell hierarchies are not part of
+the default design under normalized embeddings unless future evidence justifies reintroducing them.
+2. Positioning relative to prior work
+The broader context includes at least four relevant lines of work. The first is conditional computation and sparse
+expert routing. Sparse gating mechanisms for deep networks and mixture-of-experts layers were explored before
+the modern large-language-model era, and sparsely gated MoE layers later demonstrated that conditional activation
+could increase capacity without proportional compute growth. Switch Transformers simplified expert selection to
+top-1 routing, explicitly highlighting that routing overhead and implementation details are part of the real systems
+problem. These systems, however, typically compute gating decisions in Euclidean feature space and then treat
+routing as a learned categorical choice rather than as a geometric consequence of the representation itself.
+Angular Manifold Routing preprint draft Page 2
+
+===== PAGE 3 =====
+ncitenturn552712search0nturn552712search1nturn869446search1nturn869446search4n
+The second line is sparse attention and routing-based attention. Routing Transformer, for example, used online
+clustering to reduce effective attention complexity. That work is relevant because it already treats routing structure
+as part of the complexity story. The present work is different in that the central object is not a clustering algorithm
+imposed on top of the representation; it is a normalized angular routing manifold that is intended to act as the
+routing substrate itself. ncitenturn552712search2n
+The third line is geometry-aware representation learning, especially hyperbolic and Poincare-based methods.
+Hyperbolic geometry has repeatedly been shown to encode hierarchical and relational data efficiently. The current
+project was initially inspired by that general idea, but the current mechanism turns out not to rely on a multi-shell
+hyperbolic hierarchy in the default normalized regime. Instead, it uses the angular component of the geometry and
+an associated Hopf-style partitioning as the active routing mechanism. In that sense, the work is geometry-native
+but not simply another hyperbolic embedding paper. ncitenturn552712search3n
+The fourth line is systems-oriented work on hardware locality. Standard sparse architectures often recover
+theoretical gains only partially because irregular routing harms memory locality and introduces cache and
+communication penalties. The significance of the current experiment chain is that it does not stop at a sparsity
+claim; it also tests whether the measured routing concentration propagates into simple hardware proxy models.
+That bridge, while still preliminary, is what makes the results interesting beyond abstract routing theory.
+3. Current architecture and working theory
+The current architecture can be described without unnecessary mysticism. Let x be a token representation in R^d.
+Before routing, x is normalized onto a unit sphere under the chosen norm. In the default router family, L2
+normalization is used:
+x_hat = x / ||x||_2
+Because ||x_hat||_2 = 1 for all routed tokens, the router operates on a single-shell manifold. In practice that means
+radial shells are absent by construction and routing must be driven by angular coordinates. The earlier event-gate
+framing was valuable as an exploratory intuition, but the measured effect chain indicates that explicit per-sample
+event gating is not the dominant sparsity mechanism. Sparsity is effectively baked into bucket compression itself:
+the geometry concentrates tokens into a sublinear number of active sectors, so many explicit gate decisions become
+redundant at the level of the present model family.
+The current routing substrate is best described as a normalized angular manifold with Hopf-base sector
+discretization. The implementation-level details evolved over multiple increments, but the essential logic is stable:
+normalized tokens are mapped to angular sectors; those sectors define routing buckets; only the concentrated subset
+of effective buckets is activated for downstream compute or memory access. A transport field can amplify the
+effect, but transport does not replace the geometric source of sparsity. The strongest measured gains occur in the
+TRANS regime, where transport acts as an amplifier on top of the angular manifold rather than as an independent
+routing principle.
+Angular Manifold Routing preprint draft Page 3
+
+===== PAGE 4 =====
+Figure 1. Current working architecture. Normalized embeddings live on a single-shell hyperspherical manifold, are partitioned
+into Hopf-base angular sectors, and activate only a sublinear effective set of buckets. Explicit per-sample event gating was
+deprioritized once sparsity was shown to arise from bucket compression itself.
+4. Formal statement of the frozen working law
+The law frozen in the current repository is intentionally modest. It is not a universal claim about all geometric
+routers. It is a canonical statement about the present router family under normalized embeddings and angular sector
+discretization. In the strongest static regime studied so far, the effective routed footprint obeys:
+effective_buckets(K) = 2.957 * K^0.572
+This law should be read together with two qualifications. First, the exact exponent depends on the regime. Internal
+training experiments yielded an exponent near 0.50 in one range and nearer 0.64 in a larger-K training range, while
+the static router law froze at 0.572. Second, what is invariant is not the exact decimal expansion but the sublinear
+character of the footprint and its angular mechanism. For the current architecture family, the active footprint grows
+substantially slower than K itself. That is the architectural fact with design consequences.
+The corresponding mechanistic statement is: for normalized embeddings routed by Hopf-base angular sectors,
+effective bucket occupancy grows sublinearly because the manifold organizes tokens into a concentrated subset of
+angular sectors. The law is angular, not radial. Changing the norm family while preserving normalization leaves the
+exponent essentially unchanged. Forcing radial shells does not improve the effect and can reduce concentration.
+Angular Manifold Routing preprint draft Page 4
+
+===== PAGE 5 =====
+Figure 2. Observed and fitted sublinear routing footprint. The ORIG angular router grows much more slowly with K than the
+permuted control. The frozen static law uses exponent 0.572 in the current canonical regime.
+5. Experimental program and controls
+The experimental program was intentionally incremental and adversarial. Earlier increments repeatedly showed
+that pointwise distortion metrics were the wrong instrument. Per-sample MSE, error-based gating, and other local
+fidelity metrics were repeatedly found to be geometry-agnostic under the EMA prototype proxy, because local
+reconstruction quality could be equalized regardless of whether routing respected structure. The project therefore
+pivoted from local-error observables to structural observables. This pivot matters because it explains why the later
+results are coherent while the early MSE-based story was not.
+The central controls are ORIG versus PERM and BASE versus TRANS. ORIG retains the geometry-native
+organization; PERM acts as a permuted-routing control. BASE is the simpler routing mode; TRANS augments
+routing with transport and consistently amplifies the effect. The important measurements in the stabilized protocol
+are structural: bucket purity, bucket entropy, routing concentration (for example Gini coefficient and top-half
+concentration), effective bucket count or routing perplexity, matched-progress routed cost, and hardware proxy
+costs. These are the observables that survived the metric audit.
+The project also used mechanism probes. A shell audit discovered that the routed tokens had r_eff = 1.0 because
+the vectors were normalized. That eliminated a hidden source of ambiguity: shells were not merely inactive, they
+were structurally absent in the default design. A norm audit then tested L1, L2, L3, and L4 normalization. A
+shell-forcing audit tested whether introducing shell structure improved the routing law. It did not. These probes
+matter because they turn the scaling observation into a mechanism explanation rather than a coincidence.
+6. Structural coherence results
+The first stabilized result chain established that geometry-native routing groups semantically related items into
+more coherent buckets than the permuted control. The strongest snapshot from the finalized coherence stage is that
+the bucket-purity ratio ORIG/PERM rises with K and approaches roughly 2x in the strongest reported setting, while
+Angular Manifold Routing preprint draft Page 5
+
+===== PAGE 6 =====
+bucket entropy falls correspondingly. The sign of the effect is overwhelmingly stable across the tested K values.
+This is the point where the project moved from "maybe the geometry helps" to "the geometry is visibly
+reorganizing the partition structure."
+Metric / regime Representative value Interpretation
+Bucket purity ratio at K=25 (BASE) 1.135x Early positive semantic grouping signal
+Bucket purity ratio at K=50 (TRANS) 1.448x Improved semantic clustering
+Bucket purity ratio at K=75 (TRANS) 1.746x Strong structural compression
+Bucket purity ratio at K=100 (TRANS) 1.976x Nearly 2x more same-label concentration
+Bucket entropy delta at K=100 (TRANS) -0.955 bits per bucket Lower entropy under ORIG routing
+Spectral label metric mean ratio 1.688x Task-relevant structure improves with geometry
+Figure 3. Coherence and concentration. Left: semantic bucket purity ratio ORIG/PERM rises with K in the representative
+TRANS regime. Right: routing concentration remains substantially higher under ORIG during training.
+Taken together, the coherence results answer a basic question that plagued the earlier stages: where does the
+advantage live if not in MSE? It lives in organization. The geometry is not making each individual sample easier to
+reconstruct under the proxy; it is arranging samples so that semantically related tokens land together in
+concentrated regions of routing space. That organization is what later produces sparse compute and locality
+benefits.
+7. Training-time routing sparsity
+Once the project stopped asking whether geometry lowered per-sample error and started asking whether geometry
+reduced the number of effective routing regions, the main sparsity signal appeared clearly. Multi-seed replication
+Angular Manifold Routing preprint draft Page 6
+
+===== PAGE 7 =====
+showed that ORIG consistently used fewer effective buckets than PERM while maintaining higher concentration.
+The effect strengthened with K and displayed unusually low seed variance, which is one reason the later law-freeze
+step was justified.
+K eff_ratio (PERM/ORIG) gini_ratio (ORIG/PERM) top_half_diff
+25 1.175 +/- 0.011 1.628 +/- 0.047 0.101
+50 1.359 +/- 0.012 1.862 +/- 0.034 0.190
+75 1.693 +/- 0.019 1.623 +/- 0.023 0.165
+100 1.972 +/- 0.016 1.889 +/- 0.045 0.203
+The interpretation is straightforward. ORIG routing visits fewer effective buckets, yet those buckets are more
+concentrated and more semantically coherent. In the projects own terms, bucket compression is already the
+sparse-event mechanism. The architecture does not need to discover sparsity through a separate error gate because
+geometry-native routing is already reducing the active routing surface.
+8. Scaling-law results
+The scaling stage quantified how effective footprint changes with bucket capacity K. The clearest law-like
+measurements came from fitting effective bucket count to a power law. Four regimes were especially informative:
+BASE PERM (near linear), BASE ORIG (modestly sublinear), TRANS PERM (more sublinear), and TRANS
+ORIG (the strongest compression). The projects central scaling result is not just that ORIG is better than PERM,
+but that the combination of geometry-native routing and transport produces a notably lower exponent than the
+control.
+Route type alpha c R^2
+TRANS ORIG 0.500 +/- 0.003 3.96 0.957
+TRANS PERM 0.795 +/- 0.005 1.81 0.989
+BASE ORIG 0.882 +/- 0.003 1.15 0.996
+BASE PERM 0.979 +/- 0.001 0.99 0.999
+The interpretation that survived later audits is that geometry and transport both matter, but the dominant routing
+mechanism in the frozen default design is angular. The static freeze at exponent 0.572 is therefore not a magical
+number in the abstract; it is the exponent associated with the current normalized angular router family in its
+strongest static diagnostic regime.
+9. Matched-progress compute advantage and predictive closure
+A scaling law is only interesting if it predicts something operational. The matched-progress experiments tested
+whether ORIG reaches the same level of progress with less routed computation. Progress was aligned using a
+checkpoint variable (cosine similarity) but the mechanism itself was always evaluated using routed cost, not cosine.
+The critical result was that the measured compute advantage closely matched the prediction derived from the fitted
+exponent difference. That is what gave the project mechanistic closure.
+Angular Manifold Routing preprint draft Page 7
+
+===== PAGE 8 =====
+Mode K eff_ORIG eff_PERM ratio PERM/ORIG progress delta
+TRANS 75 32.94 55.75 1.69x +0.004
+TRANS 100 37.99 74.92 1.97x +0.003
+TRANS 150 46.96 91.65 1.95x +0.007
+TRANS 200 57.41 119.74 2.09x +0.008
+BASE 75 49.18 67.06 1.36x +0.001
+BASE 100 70.82 93.01 1.31x +0.002
+BASE 150 94.90 134.93 1.42x +0.003
+BASE 200 123.71 176.90 1.43x +0.003
+The predictive check compared measured matched-progress ratios against the law-based prediction (c_PERM /
+c_ORIG) * K^(alpha_PERM - alpha_ORIG). Deviations were mostly small, with one noisier point still within a
+manageable range. This is the step at which the project could legitimately stop saying "we observed something
+interesting" and start saying "the compute advantage is the consequence of a measured routing law."
+10. Hardware proxy closure
+The next bridge was to test whether routing concentration actually translates into hardware-relevant savings under
+simple proxy models. Three proxy families were evaluated at matched progress: cumulative effective bucket cost,
+cache-line grouping, and finite-cache LRU miss proxies, along with a bytes-moved proxy. ORIG was cheaper than
+PERM in every tested K value and in both modes. The strongest gains appeared in TRANS, where routing
+concentration is highest.
+Angular Manifold Routing preprint draft Page 8
+
+===== PAGE 9 =====
+Figure 4. Hardware proxy savings in the TRANS regime. Even after applying memory-model abstractions, the
+geometry-native router remains markedly cheaper than the permuted control at matched progress.
+Mode / K Model A eff_cost Model B cache-line Model C LRU-16 bytes moved
+TRANS 75 3.020x 1.287x 2.560x 2.560x
+TRANS 100 3.394x 1.300x 2.479x 2.479x
+TRANS 150 4.019x 1.585x 2.649x 2.649x
+TRANS 200 4.927x 1.640x 2.884x 2.884x
+BASE 75 2.131x 1.033x 1.794x 1.794x
+BASE 100 1.805x 1.040x 1.479x 1.479x
+BASE 150 1.799x 1.061x 1.340x 1.340x
+BASE 200 1.833x 1.103x 1.351x 1.351x
+The strongest proxy is not necessarily the most realistic one. Model A preserves more of the raw routing signal, so
+it shows the largest gain. Model B deliberately washes out detail with coarse cache-line grouping, and the
+advantage shrinks accordingly. Model C introduces a simple reuse model and still shows large savings, which is
+why it is the most convincing hardware bridge in the present paper. The effect is not merely visible in a stylized
+abstract metric; it survives contact with a memory-reuse proxy.
+11. Mechanism audit: norm invariance and shell non-necessity
+The mechanism audit is where the architecture became simpler rather than more complicated. The critical
+discovery was that the routed data lived on a normalized hypersphere. In the default router family, r_eff = 1.0 by
+construction, so radial shells are absent. This means the earlier intuition about radial shell hierarchies, while useful
+as an exploratory hypothesis, is not the operative source of the measured gains in the present architecture. The
+gains come from angular sector allocation.
+Angular Manifold Routing preprint draft Page 9
+
+===== PAGE 10 =====
+Figure 5. Norm invariance and shell penalty. Changing the normalization family leaves the exponent effectively unchanged,
+whereas forcing shell activation reduces routing concentration.
+Variant alpha (TRANS ORIGd)elta vs baseline Interpretation
+L2 baseline 0.572 - Canonical freeze
+L1, shells off 0.572 < 0.001 No meaningful change
+L1, shells on 0.558 -0.014 Forced shell hierarchy weakens effect
+L3 0.572 < 0.001 Norm-invariant
+L4 0.572 < 0.001 Norm-invariant
+This audit has three consequences. First, shell logic should not be part of the default router design as long as
+embeddings are normalized in the current way. Second, changing the norm family does not buy a new radial degree
+of freedom; all norm-normalized variants remain single-shell. Third, the strong sublinear law is therefore best
+explained as a property of angular Hopf-base sector discretization on the hypersphere. The router is not benefitting
+from hidden shell hierarchies. It is benefitting from directional concentration.
+12. Canonical law and design implications
+The current canonical law can therefore be stated compactly. For the present router family, normalized embeddings
+are routed on a single-shell angular manifold, and the effective routed footprint grows sublinearly with nominal
+bucket capacity according to a regime-dependent power law whose strongest static freeze is approximately 2.957 *
+K^0.572. This law is norm-invariant across tested L1/L2/L3/L4 normalization families and is degraded rather than
+improved by forced radial shells. The measured hardware advantage follows from this routing law through reduced
+active bucket cost, fewer cache-line touches, fewer cache misses, and lower bytes moved.
+Angular Manifold Routing preprint draft Page 10
+
+===== PAGE 11 =====
+Knob Priority Current design implication
+Sector resolution K High Primary capacity knob; compression ratio grows with K through the tested range
+Phase transport / TRANSH migohde Amplifies concentration and hardware savings relative to BASE
+Normalization family Low Empirically near-invariant in tested range; choose for convenience and numerical stability
+Shell count Low / excluded Not part of default design under normalized embeddings; forced shells hurt concentration
+Explicit event gating Secondary Not the main sparsity source in the current architecture; bucket compression already supplies sparsity
+In practical terms, the router should currently be built around normalized angular routing, increasing sector
+resolution K and transport quality rather than around shell hierarchies or elaborate gate machinery. This is not a
+philosophical preference; it is what the measured results support. If future experiments on full trainable models
+reveal a need for richer radial structure, shells can be revisited. But the burden of proof has shifted. Shells are no
+longer the default.
+13. Limitations and unresolved questions
+The present preprint is still an internal architecture report rather than a final external claim. Several limitations
+matter. First, the results are presently derived from an internal routing-and-proxy program rather than from a full
+large-language-model training run. The work has therefore established a routing law and a hardware-proxy bridge,
+not a state-of-the-art language-model benchmark. Second, the law should be treated as a family law for the present
+router implementation, not as a universal constant. The exponent varies somewhat by regime, even though the
+mechanism is stable. Third, the hardware models are proxies. They are strong enough to motivate implementation,
+but they are not replacements for actual kernel-level or device-level measurements. Fourth, the large-K regime still
+needs explicit exploration to decide whether the sublinear advantage persists indefinitely, transitions to a new
+regime, or saturates.
+A fifth limitation is social rather than mathematical: geometric routing can be made to look more mystical than it is.
+The current evidence does not require grand claims about brains or physics. The clean claim is already good
+enough. A normalized angular manifold can compress routed computation into a sublinear effective footprint. That
+alone would be an interesting architecture principle if it holds up in real model training.
+14. Next steps
+There are three immediate next steps. The first is a large-K angular capacity test to determine whether the sublinear
+advantage continues, saturates, or changes regime at much larger routing resolutions. The second is integration into
+a real trainable model so that the compute and hardware story can be tested under an end-to-end task rather than
+only under the current routed proxy program. The third is systems work: if the angular router is going to matter in
+practice, it should be married to an execution design that can exploit the locality benefits it appears to create.
+A useful medium-term goal is to test whether the same angular law appears when routing is attached to
+bucket-specific experts, retrieval memories, or hybrid expert-memory modules. The architecture already suggests
+that many old design choices can be revisited under the new constraint: once the active routed footprint grows
+sublinearly, the problem of how to fill those active buckets with useful compute becomes much more interesting
+than the problem of how to gate them in the first place.
+15. Conclusion
+Angular Manifold Routing preprint draft Page 11
+
+===== PAGE 12 =====
+The current state of the project is stronger than it was at the start of the session that produced these results. The
+mechanism is simpler, the law is clearer, and the design guidance is more disciplined. For the current router family,
+the sparsity advantage is a property of normalized angular routing on a Hopf-base manifold. It is not a hidden MSE
+effect, not a shell hierarchy effect, and not a norm-specific artifact. The effective routed footprint grows sublinearly
+with routing capacity, and that sublinear law explains the matched-progress compute advantage and the observed
+hardware proxy savings. Whatever follows in later experiments, that is already an attention-worthy architecture
+result.
+References
+David Eigen, Marc’Aurelio Ranzato, and Ilya Sutskever. Learning Factored Representations in a Deep Mixture of Experts.
+arXiv:1312.4314, 2013.
+Yoshua Bengio, Nicholas Leonard, and Aaron Courville. Estimating or Propagating Gradients Through Stochastic Neurons for
+Conditional Computation. arXiv:1308.3432, 2013.
+Noam Shazeer, Azalia Mirhoseini, Krzysztof Maziarz, Andy Davis, Quoc Le, Geoffrey Hinton, and Jeff Dean. Outrageously
+Large Neural Networks: The Sparsely-Gated Mixture-of-Experts Layer. arXiv:1701.06538, 2017.
+William Fedus, Barret Zoph, and Noam Shazeer. Switch Transformers: Scaling to Trillion Parameter Models with Simple and
+Efficient Sparsity. arXiv:2101.03961, 2021.
+Aurko Roy, Mohammad Saffar, Ashish Vaswani, and David Grangier. Efficient Content-Based Sparse Attention with Routing
+Transformers. arXiv:2003.05997, 2020.
+Maximilian Nickel and Douwe Kiela. Poincare Embeddings for Learning Hierarchical Representations. arXiv:1705.08039, 2017.
+Angular Manifold Routing preprint draft Page 12
