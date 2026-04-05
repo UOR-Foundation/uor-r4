@@ -10,6 +10,9 @@ combines:
 It also contains root-level notes, figures, scripts, and experimental artifacts
 that cut across those subprojects.
 
+Start with [PROJECT_MAP.md](/Users/adminamn/AI-Research/PROJECT_MAP.md) for a
+quick orientation to the monorepo.
+
 ## Structure
 
 - `ai-router/`
