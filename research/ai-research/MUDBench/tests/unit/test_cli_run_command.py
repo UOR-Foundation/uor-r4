@@ -121,6 +121,8 @@ def test_cli_run_default_executes_real_runtime_path_and_emits_structured_output(
     assert payload["scorecard"]["metadata"]["scoring_version"] == "phase3-v1"
     assert payload["replay"]["schema_version"] == "1.0"
     assert payload["replay"]["event_count"] >= payload["lifecycle"]["step_count"] * 2
+    assert "timing_mode" not in payload
+    assert "action_cadence_interval" not in payload
 
 
 def test_cli_run_surfaces_replay_and_scorecard_references(capsys: pytest.CaptureFixture[str]) -> None:
@@ -1657,9 +1659,10 @@ def test_human_console_rendering_is_deterministic() -> None:
             "Health: 100",
             "Description: A narrow watch-post where a sentinel keeps vigil.",
             "Exits: east, south",
-            "Entities: sentinel",
+            "NPCs: sentinel",
             "Inventory: relic-key",
-            "Messages: The sentinel blocks the seal door.",
+            "Messages:",
+            "  The sentinel blocks the seal door.",
             "Available Actions:",
             "  1. wait",
             "  2. look",
@@ -2053,6 +2056,14 @@ def test_cli_run_wires_direct_provider_through_external_agent_command_seam(
                     "applied_steps_hash": "b" * 64,
                     "score_summary_hash": "c" * 64,
                 },
+                "timing": {
+                    "timing_mode": "human-parity",
+                    "action_cadence_interval": 2,
+                    "actor_action_cadence_overrides": [],
+                    "actor_next_action_eligible_at": [
+                        {"actor_id": "agent-a", "next_action_eligible_at": 2}
+                    ],
+                },
             }
 
     def _fake_run_benchmark_lifecycle(config):
@@ -2060,6 +2071,9 @@ def test_cli_run_wires_direct_provider_through_external_agent_command_seam(
         captured_config["persistent_agent_session"] = config.persistent_agent_session
         captured_config["external_agent_timeout_seconds"] = config.external_agent_timeout_seconds
         captured_config["actor_ids"] = config.actor_ids
+        captured_config["timing_mode"] = config.timing_mode
+        captured_config["action_cadence_interval"] = config.action_cadence_interval
+        captured_config["actor_action_cadence_overrides"] = config.actor_action_cadence_overrides
         return _FakeResult()
 
     monkeypatch.setenv("MUDBENCH_OPENAI_API_KEY", "test-key")
@@ -2083,9 +2097,16 @@ def test_cli_run_wires_direct_provider_through_external_agent_command_seam(
     payload = _read_json_output(captured.out)
     assert payload["accepted"] is True
     assert payload["external_agent_label"] == "direct-provider:openai-chat-completions"
+    assert payload["timing_mode"] == "human-parity"
+    assert payload["action_cadence_interval"] == 2
+    assert payload["actor_action_cadence_overrides"] == []
+    assert payload["actor_next_action_eligible_at"] == [{"actor_id": "agent-a", "next_action_eligible_at": 2}]
     assert captured_config["persistent_agent_session"] is False
     assert captured_config["external_agent_timeout_seconds"] is None
     assert captured_config["actor_ids"] == ("agent-a",)
+    assert captured_config["timing_mode"] is None
+    assert captured_config["action_cadence_interval"] is None
+    assert captured_config["actor_action_cadence_overrides"] is None
     external_agent_command = captured_config["external_agent_command"]
     assert isinstance(external_agent_command, tuple)
     assert external_agent_command[0] == sys.executable
@@ -2461,6 +2482,78 @@ def test_cli_suite_tiny_emits_deterministic_structured_output(
     assert payload["report"]["schema_version"] == "tiny_suite_baseline_report_v1"
     assert payload["report"]["scenario_count"] == 5
     assert payload["report"]["entry_count"] == 10
+    assert "timing_mode_aggregation" not in payload["report"]
+    assert set(payload["report"]["entries"][0]) == {
+        "scenario_id",
+        "agent_id",
+        "aggregate_score",
+        "composite_score",
+        "normalized_metrics",
+        "contributions",
+        "replay_ref",
+        "parity_ref",
+    }
+    assert "timing_mode" not in payload
+    assert "action_cadence_interval" not in payload
+
+
+def test_cli_suite_tiny_with_timing_mode_emits_report_level_timing_aggregation_deterministically(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    first_exit = main(
+        [
+            "suite",
+            "--suite",
+            "tiny",
+            "--timing-mode",
+            "equal-cadence",
+            "--action-cadence-interval",
+            "3",
+        ]
+    )
+    first_output = capsys.readouterr().out
+    second_exit = main(
+        [
+            "suite",
+            "--suite",
+            "tiny",
+            "--timing-mode",
+            "equal-cadence",
+            "--action-cadence-interval",
+            "3",
+        ]
+    )
+    second_output = capsys.readouterr().out
+
+    assert first_exit == 0
+    assert second_exit == 0
+    assert first_output == second_output
+
+    payload = _read_json_output(first_output)
+    timing_mode_aggregation = payload["report"]["timing_mode_aggregation"]
+    assert timing_mode_aggregation == {
+        "mode_count": 1,
+        "run_count": 5,
+        "entry_count": 10,
+        "aggregate_score_total": timing_mode_aggregation["aggregate_score_total"],
+        "aggregate_score_average": timing_mode_aggregation["aggregate_score_average"],
+        "modes": [
+            {
+                "timing_mode": "equal-cadence",
+                "run_count": 5,
+                "entry_count": 10,
+                "aggregate_score_total": timing_mode_aggregation["modes"][0]["aggregate_score_total"],
+                "aggregate_score_average": timing_mode_aggregation["modes"][0]["aggregate_score_average"],
+                "scenario_ids": [
+                    "tiny-delayed-retrieval",
+                    "tiny-fetch-quest",
+                    "tiny-hidden-key",
+                    "tiny-locked-path",
+                    "tiny-social-trade",
+                ],
+            }
+        ],
+    }
 
 
 def test_cli_suite_tiny_comparison_emits_deterministic_structured_output(
@@ -2487,7 +2580,64 @@ def test_cli_suite_tiny_comparison_emits_deterministic_structured_output(
     assert payload["report"]["candidate_agent_id"] == "agent-b"
     assert payload["report"]["scenario_count"] == 5
     assert len(payload["report"]["comparisons"]) == 5
+    assert "timing_mode_aggregation" not in payload["report"]
+    assert set(payload["report"]["comparisons"][0]["baseline"]) == {
+        "scenario_id",
+        "agent_id",
+        "aggregate_score",
+        "composite_score",
+        "normalized_metrics",
+        "contributions",
+        "replay_ref",
+        "parity_ref",
+    }
+    assert set(payload["report"]["comparisons"][0]["candidate"]) == {
+        "scenario_id",
+        "agent_id",
+        "aggregate_score",
+        "composite_score",
+        "normalized_metrics",
+        "contributions",
+        "replay_ref",
+        "parity_ref",
+    }
     assert "composite_score_difference_total" in payload["report"]["summary"]
+
+
+def test_cli_suite_tiny_comparison_with_timing_mode_emits_report_level_timing_aggregation(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    exit_code = main(
+        [
+            "suite",
+            "--suite",
+            "tiny",
+            "--baseline-agent",
+            "agent-a",
+            "--candidate-agent",
+            "agent-b",
+            "--timing-mode",
+            "equal-cadence",
+            "--action-cadence-interval",
+            "3",
+        ]
+    )
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    payload = _read_json_output(captured.out)
+    timing_mode_aggregation = payload["report"]["timing_mode_aggregation"]
+    assert timing_mode_aggregation["mode_count"] == 1
+    assert timing_mode_aggregation["run_count"] == 5
+    assert timing_mode_aggregation["entry_count"] == 10
+    assert [entry["timing_mode"] for entry in timing_mode_aggregation["modes"]] == ["equal-cadence"]
+    assert timing_mode_aggregation["modes"][0]["scenario_ids"] == [
+        "tiny-delayed-retrieval",
+        "tiny-fetch-quest",
+        "tiny-hidden-key",
+        "tiny-locked-path",
+        "tiny-social-trade",
+    ]
 
 
 def test_cli_suite_tiny_comparison_rejects_unsupported_actor_machine_readably(
@@ -2553,6 +2703,171 @@ def test_cli_suite_tiny_external_comparison_emits_deterministic_structured_outpu
     for entry in payload["report"]["comparisons"]:
         assert entry["baseline"]["agent_id"] == "agent-a"
         assert entry["candidate"]["agent_id"] == "external-local-agent"
+
+
+def test_cli_run_wires_explicit_timing_mode_to_runner_config(
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured_config: dict[str, object] = {}
+
+    class _FakeResult:
+        def to_dict(self) -> dict[str, object]:
+            return {
+                "lifecycle_state": {
+                    "run_id": "cli-run",
+                    "scenario_id": "tiny-hidden-key",
+                    "status": "finalized",
+                    "step_index": 1,
+                    "max_steps": 6,
+                    "seed": 33,
+                },
+                "scorecard": {
+                    "aggregate_score": 0.5,
+                    "metadata": {
+                        "benchmark_id": "mudbench-cli",
+                        "scoring_version": "phase3-v1",
+                    },
+                },
+                "replay_artifact_refs": [
+                    {"name": "replay_artifact", "ref": "replay-1"},
+                    {"name": "replay_checksum", "ref": "replay-1"},
+                ],
+                "replay_artifact": {
+                    "envelope": {"schema_version": "1.0"},
+                    "events": [{"event_type": "step"}],
+                },
+                "replay_parity_artifact": {
+                    "terminal_step": 1,
+                    "step_count": 1,
+                    "terminal_state_hash": "a" * 64,
+                    "applied_steps_hash": "b" * 64,
+                    "score_summary_hash": "c" * 64,
+                },
+            }
+
+    def _fake_run_benchmark_lifecycle(config):
+        captured_config["timing_mode"] = config.timing_mode
+        captured_config["action_cadence_interval"] = config.action_cadence_interval
+        captured_config["actor_action_cadence_overrides"] = config.actor_action_cadence_overrides
+        return _FakeResult()
+
+    monkeypatch.setattr("cli.main.run_benchmark_lifecycle", _fake_run_benchmark_lifecycle)
+
+    exit_code = main(
+        [
+            "run",
+            "--scenario",
+            "tiny-hidden-key",
+            "--timing-mode",
+            "equal-cadence",
+            "--action-cadence-interval",
+            "3",
+        ]
+    )
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert _read_json_output(captured.out)["accepted"] is True
+    assert captured_config["timing_mode"] == "equal-cadence"
+    assert captured_config["action_cadence_interval"] == 3
+    assert captured_config["actor_action_cadence_overrides"] is None
+
+
+def test_cli_suite_wires_explicit_timing_mode_to_all_runner_configs(
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured_configs: list[object] = []
+
+    class _FakeResult:
+        def __init__(self, scenario_name: str) -> None:
+            self.scenario_name = scenario_name
+
+    def _fake_run_benchmark_lifecycle(config):
+        captured_configs.append(config)
+        return _FakeResult(config.scenario["scenario_id"])
+
+    def _fake_build_tiny_suite_baseline_report(_results):
+        return {
+            "schema_version": "tiny_suite_baseline_report_v1",
+            "benchmark_ids": ["mudbench-cli"],
+            "scenario_count": 5,
+            "entry_count": 10,
+            "entries": [
+                {
+                    "scenario_id": "tiny-fetch-quest",
+                    "agent_id": "agent-a",
+                    "aggregate_score": 0.5,
+                    "composite_score": 0.5,
+                    "normalized_metrics": {"quest_completion": 0.5},
+                    "contributions": {"quest_completion": 0.5},
+                    "replay_ref": "sha256:abc",
+                    "parity_ref": {
+                        "terminal_state_hash": "a" * 64,
+                        "applied_steps_hash": "b" * 64,
+                        "score_summary_hash": "c" * 64,
+                    },
+                },
+                {
+                    "scenario_id": "tiny-fetch-quest",
+                    "agent_id": "agent-b",
+                    "aggregate_score": 0.5,
+                    "composite_score": 0.5,
+                    "normalized_metrics": {"quest_completion": 0.5},
+                    "contributions": {"quest_completion": 0.5},
+                    "replay_ref": "sha256:def",
+                    "parity_ref": {
+                        "terminal_state_hash": "a" * 64,
+                        "applied_steps_hash": "b" * 64,
+                        "score_summary_hash": "c" * 64,
+                    },
+                },
+            ],
+        }
+
+    monkeypatch.setattr("cli.main.run_benchmark_lifecycle", _fake_run_benchmark_lifecycle)
+    monkeypatch.setattr("cli.main.build_tiny_suite_baseline_report", _fake_build_tiny_suite_baseline_report)
+
+    exit_code = main(["suite", "--suite", "tiny", "--timing-mode", "human-parity"])
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    payload = _read_json_output(captured.out)
+    assert payload["accepted"] is True
+    assert payload["timing_mode"] == "human-parity"
+    assert payload["action_cadence_interval"] == 2
+    assert payload["actor_action_cadence_overrides"] == []
+    assert len(captured_configs) == 5
+    for config in captured_configs:
+        assert config.timing_mode == "human-parity"
+        assert config.action_cadence_interval == 2
+        assert config.actor_action_cadence_overrides is None
+
+
+def test_cli_suite_rejects_explicit_cadence_with_native_speed_timing_mode_machine_readably(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    exit_code = main(
+        [
+            "suite",
+            "--suite",
+            "tiny",
+            "--timing-mode",
+            "native-speed",
+            "--action-cadence-interval",
+            "2",
+        ]
+    )
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    payload = _read_json_output(captured.out)
+    assert payload == {
+        "accepted": False,
+        "error_type": "suite_rejected",
+        "reason": "timing_mode_disallows_explicit_action_cadence",
+    }
 
 
 def test_cli_suite_tiny_external_profile_comparison_emits_deterministic_structured_output(
@@ -3285,3 +3600,1007 @@ def test_cli_run_with_scenario_file_is_deterministic_for_identical_invocation(
     assert first_exit == 0
     assert second_exit == 0
     assert first_output == second_output
+
+
+# ── suite_timing_mode_eval_unblock_v1 tests ──────────────────────────────────
+
+
+def test_cli_suite_human_parity_timing_mode_no_longer_rejects_on_lifecycle_path(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """human-parity must not raise via the live BenchmarkRunnerConfig/__post_init__ path."""
+    exit_code = main(["suite", "--suite", "tiny", "--timing-mode", "human-parity"])
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    payload = _read_json_output(captured.out)
+    assert payload["accepted"] is True
+    assert payload["timing_mode"] == "human-parity"
+    assert payload["action_cadence_interval"] == 2
+    assert "timing_mode_aggregation" in payload["report"]
+    agg = payload["report"]["timing_mode_aggregation"]
+    assert agg["modes"][0]["timing_mode"] == "human-parity"
+
+
+def test_cli_suite_direct_provider_timeout_wired_through_deterministically(
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """--direct-provider-timeout-seconds must be threaded into every suite BenchmarkRunnerConfig."""
+    captured_configs: list[object] = []
+
+    def _fake_run_benchmark_lifecycle(config):
+        captured_configs.append(config)
+
+        class _R:
+            scenario_name = config.scenario["scenario_id"]
+
+        return _R()
+
+    def _fake_build_tiny_suite_baseline_report(_results):
+        return {
+            "schema_version": "tiny_suite_baseline_report_v1",
+            "benchmark_ids": ["mudbench-cli"],
+            "scenario_count": 1,
+            "entry_count": 2,
+            "entries": [
+                {
+                    "scenario_id": "tiny-fetch-quest",
+                    "agent_id": "agent-a",
+                    "aggregate_score": 0.5,
+                    "composite_score": 0.5,
+                    "normalized_metrics": {"quest_completion": 0.5},
+                    "contributions": {"quest_completion": 0.5},
+                    "replay_ref": "sha256:abc",
+                    "parity_ref": {
+                        "terminal_state_hash": "a" * 64,
+                        "applied_steps_hash": "b" * 64,
+                        "score_summary_hash": "c" * 64,
+                    },
+                },
+            ],
+        }
+
+    monkeypatch.setattr("cli.main.run_benchmark_lifecycle", _fake_run_benchmark_lifecycle)
+    monkeypatch.setattr("cli.main.build_tiny_suite_baseline_report", _fake_build_tiny_suite_baseline_report)
+
+    exit_code = main(
+        ["suite", "--suite", "tiny", "--direct-provider-timeout-seconds", "30.0"]
+    )
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    payload = _read_json_output(captured.out)
+    assert payload["accepted"] is True
+    assert len(captured_configs) == 5
+    for config in captured_configs:
+        assert config.external_agent_timeout_seconds == 30.0
+
+
+def test_cli_suite_default_timeout_preserved_when_not_specified(
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Omitting --direct-provider-timeout-seconds leaves external_agent_timeout_seconds as None."""
+    captured_configs: list[object] = []
+
+    def _fake_run_benchmark_lifecycle(config):
+        captured_configs.append(config)
+
+        class _R:
+            scenario_name = config.scenario["scenario_id"]
+
+        return _R()
+
+    def _fake_build_tiny_suite_baseline_report(_results):
+        return {
+            "schema_version": "tiny_suite_baseline_report_v1",
+            "benchmark_ids": ["mudbench-cli"],
+            "scenario_count": 1,
+            "entry_count": 2,
+            "entries": [
+                {
+                    "scenario_id": "tiny-fetch-quest",
+                    "agent_id": "agent-a",
+                    "aggregate_score": 0.5,
+                    "composite_score": 0.5,
+                    "normalized_metrics": {"quest_completion": 0.5},
+                    "contributions": {"quest_completion": 0.5},
+                    "replay_ref": "sha256:abc",
+                    "parity_ref": {
+                        "terminal_state_hash": "a" * 64,
+                        "applied_steps_hash": "b" * 64,
+                        "score_summary_hash": "c" * 64,
+                    },
+                },
+            ],
+        }
+
+    monkeypatch.setattr("cli.main.run_benchmark_lifecycle", _fake_run_benchmark_lifecycle)
+    monkeypatch.setattr("cli.main.build_tiny_suite_baseline_report", _fake_build_tiny_suite_baseline_report)
+
+    exit_code = main(["suite", "--suite", "tiny"])
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    payload = _read_json_output(captured.out)
+    assert payload["accepted"] is True
+    assert len(captured_configs) == 5
+    for config in captured_configs:
+        assert config.external_agent_timeout_seconds is None
+
+
+def test_cli_suite_rejects_non_positive_direct_provider_timeout_machine_readably(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """--direct-provider-timeout-seconds must be rejected machine-readably when <= 0."""
+    for bad_value in ["0", "-1.5"]:
+        exit_code = main(
+            ["suite", "--suite", "tiny", "--direct-provider-timeout-seconds", bad_value]
+        )
+        captured = capsys.readouterr()
+        assert exit_code == 1
+        payload = _read_json_output(captured.out)
+        assert payload == {
+            "accepted": False,
+            "error_type": "suite_rejected",
+            "reason": "direct_provider_timeout_seconds_must_be_positive",
+        }
+
+
+def test_cli_suite_truly_invalid_timing_cadence_combination_still_rejects_machine_readably(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """native-speed + explicit cadence must still reject even after timing-mode fixes."""
+    exit_code = main(
+        [
+            "suite",
+            "--suite",
+            "tiny",
+            "--timing-mode",
+            "native-speed",
+            "--action-cadence-interval",
+            "3",
+        ]
+    )
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    payload = _read_json_output(captured.out)
+    assert payload == {
+        "accepted": False,
+        "error_type": "suite_rejected",
+        "reason": "timing_mode_disallows_explicit_action_cadence",
+    }
+
+
+def test_cli_suite_row_level_output_unchanged_after_timing_mode_fixes(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Row-level entry fields must be preserved identically regardless of timing-mode fixes."""
+    exit_code = main(["suite", "--suite", "tiny"])
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    payload = _read_json_output(captured.out)
+    assert payload["accepted"] is True
+    entries = payload["report"]["entries"]
+    assert len(entries) == 10
+    required_fields = {
+        "agent_id",
+        "aggregate_score",
+        "composite_score",
+        "contributions",
+        "normalized_metrics",
+        "parity_ref",
+        "replay_ref",
+        "scenario_id",
+    }
+    for entry in entries:
+        assert required_fields.issubset(set(entry.keys()))
+    assert "timing_mode_aggregation" not in payload["report"]
+
+
+def test_tiny_context_pressure_preset_carries_timing_consequence() -> None:
+    """The hardcoded tiny-context-pressure CLI preset must include the cadence-efficiency
+    timing consequence so CLI-driven evaluations activate the timing-sensitive scoring path."""
+    from cli.main import _SCENARIO_PRESETS
+
+    preset = _SCENARIO_PRESETS["tiny-context-pressure"]
+    scenario_vars = preset["scenario_vars"]
+    assert isinstance(scenario_vars, dict)
+    assert scenario_vars.get("timing_consequence") == "cadence_efficiency"
+
+
+# ---------------------------------------------------------------------------
+# provider_budget_and_rate_controls tests
+# ---------------------------------------------------------------------------
+
+
+def test_provider_budget_default_absent_in_run_result(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """When --provider-min-turn-delay-seconds / --provider-max-actions are not given,
+    provider_budget key must appear in the response with None/0 defaults."""
+    exit_code = main(["run", "--scenario", "tiny-context-pressure"])
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    payload = _read_json_output(captured.out)
+    assert "provider_budget" in payload
+    pb = payload["provider_budget"]
+    assert pb["provider_min_turn_delay_seconds"] is None
+    assert pb["provider_max_actions"] is None
+    assert isinstance(pb["provider_action_count"], int)
+
+
+def test_provider_min_turn_delay_surfaces_in_result(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """--provider-min-turn-delay-seconds must be echoed back in provider_budget."""
+    exit_code = main(
+        [
+            "run",
+            "--scenario",
+            "tiny-context-pressure",
+            "--provider-min-turn-delay-seconds",
+            "0.0",
+        ]
+    )
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    payload = _read_json_output(captured.out)
+    pb = payload["provider_budget"]
+    assert pb["provider_min_turn_delay_seconds"] == 0.0
+    assert pb["provider_max_actions"] is None
+
+
+def test_provider_max_actions_surfaces_in_result(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """--provider-max-actions must be echoed back in provider_budget."""
+    exit_code = main(
+        [
+            "run",
+            "--scenario",
+            "tiny-context-pressure",
+            "--provider-max-actions",
+            "100",
+        ]
+    )
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    payload = _read_json_output(captured.out)
+    pb = payload["provider_budget"]
+    assert pb["provider_max_actions"] == 100
+
+
+def test_provider_max_actions_zero_rejected(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """--provider-max-actions 0 must be rejected machine-readably."""
+    exit_code = main(
+        [
+            "run",
+            "--scenario",
+            "tiny-context-pressure",
+            "--provider-max-actions",
+            "0",
+        ]
+    )
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    payload = _read_json_output(captured.out)
+    assert payload["accepted"] is False
+    assert "provider_max_actions_must_be_positive" in payload["reason"]
+
+
+def test_provider_min_turn_delay_negative_rejected(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Negative --provider-min-turn-delay-seconds must be rejected machine-readably."""
+    exit_code = main(
+        [
+            "run",
+            "--scenario",
+            "tiny-context-pressure",
+            "--provider-min-turn-delay-seconds",
+            "-1.0",
+        ]
+    )
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    payload = _read_json_output(captured.out)
+    assert payload["accepted"] is False
+    assert "provider_min_turn_delay_seconds_must_be_non_negative" in payload["reason"]
+
+
+def test_provider_budget_does_not_affect_scripted_run(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """provider_max_actions with a scripted-only run must complete without error (scripted
+    actors are not counted as provider actors so the cap never triggers)."""
+    exit_code = main(
+        [
+            "run",
+            "--scenario",
+            "tiny-context-pressure",
+            "--provider-max-actions",
+            "1",
+        ]
+    )
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    payload = _read_json_output(captured.out)
+    assert payload["accepted"] is True
+    pb = payload["provider_budget"]
+    assert pb["provider_action_count"] == 0
+    assert pb["provider_max_actions"] == 1
+
+
+def test_provider_budget_row_level_output_backward_compatible(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """provider_budget must be present and all core scorecard fields must survive unchanged."""
+    exit_code = main(["run", "--scenario", "tiny-context-pressure"])
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    payload = _read_json_output(captured.out)
+    assert "provider_budget" in payload
+    assert "scorecard" in payload
+    assert "aggregate_score" in payload["scorecard"]
+
+
+def test_build_provider_actor_ids_no_external_command() -> None:
+    """No external command → empty provider actor set."""
+    from evaluation.benchmark_runner.runner import _build_provider_actor_ids
+
+    result = _build_provider_actor_ids(
+        actor_ids=["a1", "a2"],
+        external_agent_command=None,
+        external_agent_commands_by_actor=None,
+        external_agent_actor_id=None,
+    )
+    assert result == frozenset()
+
+
+def test_build_provider_actor_ids_single_external_command_no_actor_id() -> None:
+    """Single external command with no actor_id restriction → all actor IDs."""
+    from evaluation.benchmark_runner.runner import _build_provider_actor_ids
+
+    result = _build_provider_actor_ids(
+        actor_ids=["a1"],
+        external_agent_command=["python", "agent.py"],
+        external_agent_commands_by_actor=None,
+        external_agent_actor_id=None,
+    )
+    assert result == frozenset({"a1"})
+
+
+def test_build_provider_actor_ids_single_external_command_with_actor_id() -> None:
+    """Single external command restricted to one actor_id → only that actor."""
+    from evaluation.benchmark_runner.runner import _build_provider_actor_ids
+
+    result = _build_provider_actor_ids(
+        actor_ids=["a1", "a2"],
+        external_agent_command=["python", "agent.py"],
+        external_agent_commands_by_actor=None,
+        external_agent_actor_id="a2",
+    )
+    assert result == frozenset({"a2"})
+
+
+def test_build_provider_actor_ids_commands_by_actor() -> None:
+    """Per-actor command map → provider set matches map keys exactly."""
+    from evaluation.benchmark_runner.runner import _build_provider_actor_ids
+
+    result = _build_provider_actor_ids(
+        actor_ids=["a1", "a2", "a3"],
+        external_agent_command=None,
+        external_agent_commands_by_actor={"a1": ["python", "agent1.py"], "a3": ["python", "agent3.py"]},
+        external_agent_actor_id=None,
+    )
+    assert result == frozenset({"a1", "a3"})
+
+
+# ---------------------------------------------------------------------------
+# provider_budget_suite_wiring tests
+# ---------------------------------------------------------------------------
+
+
+def test_suite_provider_budget_absent_by_default(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Default suite run must not include provider_budget key in response."""
+    exit_code = main(["suite", "--suite", "tiny"])
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    payload = _read_json_output(captured.out)
+    assert payload["accepted"] is True
+    assert "provider_budget" not in payload
+
+
+def test_suite_provider_min_turn_delay_surfaces_in_response(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """--provider-min-turn-delay-seconds must appear in suite response provider_budget."""
+    exit_code = main(
+        [
+            "suite",
+            "--suite",
+            "tiny",
+            "--provider-min-turn-delay-seconds",
+            "0.0",
+        ]
+    )
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    payload = _read_json_output(captured.out)
+    assert payload["accepted"] is True
+    assert "provider_budget" in payload
+    pb = payload["provider_budget"]
+    assert pb["provider_min_turn_delay_seconds"] == 0.0
+    assert pb["provider_max_actions"] is None
+
+
+def test_suite_provider_max_actions_surfaces_in_response(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """--provider-max-actions must appear in suite response provider_budget."""
+    exit_code = main(
+        [
+            "suite",
+            "--suite",
+            "tiny",
+            "--provider-max-actions",
+            "100",
+        ]
+    )
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    payload = _read_json_output(captured.out)
+    assert payload["accepted"] is True
+    assert "provider_budget" in payload
+    pb = payload["provider_budget"]
+    assert pb["provider_max_actions"] == 100
+    assert pb["provider_min_turn_delay_seconds"] is None
+
+
+def test_suite_provider_max_actions_zero_rejected(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """--provider-max-actions 0 must be rejected machine-readably on suite path."""
+    exit_code = main(
+        [
+            "suite",
+            "--suite",
+            "tiny",
+            "--provider-max-actions",
+            "0",
+        ]
+    )
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    payload = _read_json_output(captured.out)
+    assert payload["accepted"] is False
+    assert payload["error_type"] == "suite_rejected"
+    assert "provider_max_actions_must_be_positive" in payload["reason"]
+
+
+def test_suite_provider_min_turn_delay_negative_rejected(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Negative --provider-min-turn-delay-seconds must be rejected machine-readably on suite path."""
+    exit_code = main(
+        [
+            "suite",
+            "--suite",
+            "tiny",
+            "--provider-min-turn-delay-seconds",
+            "-0.5",
+        ]
+    )
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    payload = _read_json_output(captured.out)
+    assert payload["accepted"] is False
+    assert payload["error_type"] == "suite_rejected"
+    assert "provider_min_turn_delay_seconds_must_be_non_negative" in payload["reason"]
+
+
+def test_suite_provider_budget_does_not_affect_scripted_suite(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """provider_max_actions on a scripted-only suite must complete without early termination."""
+    exit_code = main(
+        [
+            "suite",
+            "--suite",
+            "tiny",
+            "--provider-max-actions",
+            "1",
+        ]
+    )
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    payload = _read_json_output(captured.out)
+    assert payload["accepted"] is True
+    assert "provider_budget" in payload
+    assert payload["provider_budget"]["provider_max_actions"] == 1
+    entries = payload["report"]["entries"]
+    assert len(entries) == 10
+
+
+def test_suite_provider_budget_row_level_output_backward_compatible(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Suite row-level fields must be unchanged when provider budget args are given."""
+    exit_code = main(
+        [
+            "suite",
+            "--suite",
+            "tiny",
+            "--provider-max-actions",
+            "100",
+        ]
+    )
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    payload = _read_json_output(captured.out)
+    assert payload["accepted"] is True
+    entries = payload["report"]["entries"]
+    assert len(entries) == 10
+    required_fields = {
+        "agent_id",
+        "aggregate_score",
+        "composite_score",
+        "contributions",
+        "normalized_metrics",
+        "parity_ref",
+        "replay_ref",
+        "scenario_id",
+    }
+    for entry in entries:
+        assert required_fields.issubset(set(entry.keys()))
+
+
+def test_suite_timing_mode_aggregation_intact_with_provider_budget(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """timing_mode_aggregation must still appear correctly when provider budget args are given."""
+    exit_code = main(
+        [
+            "suite",
+            "--suite",
+            "tiny",
+            "--timing-mode",
+            "off",
+            "--provider-max-actions",
+            "100",
+        ]
+    )
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    payload = _read_json_output(captured.out)
+    assert payload["accepted"] is True
+    assert "timing_mode_aggregation" in payload["report"]
+    agg = payload["report"]["timing_mode_aggregation"]
+    assert agg["mode_count"] == 1
+    assert isinstance(agg["entry_count"], int)
+    assert len(agg["modes"]) == 1
+    assert agg["modes"][0]["timing_mode"] == "off"
+
+
+# ---------------------------------------------------------------------------
+# provider_budget_compare_wiring tests
+# ---------------------------------------------------------------------------
+
+
+def test_compare_provider_budget_absent_by_default(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Default compare run must not include provider_budget key in response."""
+    exit_code = main(["compare-playable-slices"])
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    payload = _read_json_output(captured.out)
+    assert payload["accepted"] is True
+    assert "provider_budget" not in payload
+
+
+def test_compare_provider_min_turn_delay_surfaces_in_response(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """--provider-min-turn-delay-seconds must appear in compare response provider_budget."""
+    exit_code = main(
+        [
+            "compare-playable-slices",
+            "--provider-min-turn-delay-seconds",
+            "0.0",
+        ]
+    )
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    payload = _read_json_output(captured.out)
+    assert payload["accepted"] is True
+    assert "provider_budget" in payload
+    pb = payload["provider_budget"]
+    assert pb["provider_min_turn_delay_seconds"] == 0.0
+    assert pb["provider_max_actions"] is None
+
+
+def test_compare_provider_max_actions_surfaces_in_response(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """--provider-max-actions must appear in compare response provider_budget."""
+    exit_code = main(
+        [
+            "compare-playable-slices",
+            "--provider-max-actions",
+            "100",
+        ]
+    )
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    payload = _read_json_output(captured.out)
+    assert payload["accepted"] is True
+    assert "provider_budget" in payload
+    pb = payload["provider_budget"]
+    assert pb["provider_max_actions"] == 100
+    assert pb["provider_min_turn_delay_seconds"] is None
+
+
+def test_compare_provider_max_actions_zero_rejected(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """--provider-max-actions 0 must be rejected machine-readably on compare path."""
+    exit_code = main(
+        [
+            "compare-playable-slices",
+            "--provider-max-actions",
+            "0",
+        ]
+    )
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    payload = _read_json_output(captured.out)
+    assert payload["accepted"] is False
+    assert payload["error_type"] == "playable_slice_comparison_rejected"
+    assert "provider_max_actions_must_be_positive" in payload["reason"]
+
+
+def test_compare_provider_min_turn_delay_negative_rejected(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Negative --provider-min-turn-delay-seconds must be rejected machine-readably on compare path."""
+    exit_code = main(
+        [
+            "compare-playable-slices",
+            "--provider-min-turn-delay-seconds",
+            "-1.0",
+        ]
+    )
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    payload = _read_json_output(captured.out)
+    assert payload["accepted"] is False
+    assert payload["error_type"] == "playable_slice_comparison_rejected"
+    assert "provider_min_turn_delay_seconds_must_be_non_negative" in payload["reason"]
+
+
+def test_compare_provider_budget_does_not_affect_scripted_compare(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """provider_max_actions on a scripted-only compare must complete with all entries intact."""
+    exit_code = main(
+        [
+            "compare-playable-slices",
+            "--provider-max-actions",
+            "1",
+        ]
+    )
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    payload = _read_json_output(captured.out)
+    assert payload["accepted"] is True
+    assert "provider_budget" in payload
+    assert payload["provider_budget"]["provider_max_actions"] == 1
+    assert payload["entry_count"] > 0
+
+
+def test_compare_row_level_output_backward_compatible_with_provider_budget(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Compare entries must have required fields when provider budget args are given."""
+    exit_code = main(
+        [
+            "compare-playable-slices",
+            "--provider-max-actions",
+            "100",
+        ]
+    )
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    payload = _read_json_output(captured.out)
+    assert payload["accepted"] is True
+    required_top_level = {"comparison_schema", "benchmark_id", "actor_id", "scenario_ids", "mode_ids", "entry_count", "entries"}
+    assert required_top_level.issubset(set(payload.keys()))
+    for entry in payload["entries"]:
+        assert "mode" in entry
+        assert "scenario_id" in entry
+        assert "aggregate_score" in entry
+
+
+def test_compare_provider_budget_both_controls_surfaced(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Both controls must appear in provider_budget when both are set."""
+    exit_code = main(
+        [
+            "compare-playable-slices",
+            "--provider-min-turn-delay-seconds",
+            "0.5",
+            "--provider-max-actions",
+            "50",
+        ]
+    )
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    payload = _read_json_output(captured.out)
+    assert payload["accepted"] is True
+    pb = payload["provider_budget"]
+    assert pb["provider_min_turn_delay_seconds"] == 0.5
+    assert pb["provider_max_actions"] == 50
+
+
+
+
+# ---------------------------------------------------------------------------
+# World persistence CLI argument tests
+# ---------------------------------------------------------------------------
+
+
+def test_run_world_save_path_accepted(
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: "Path",
+) -> None:
+    """--world-save-path is accepted and saves a snapshot on run completion."""
+    import os
+    save_path = str(tmp_path / "world_snapshot.json")
+    exit_code = main(["run", "--world-save-path", save_path])
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    payload = _read_json_output(captured.out)
+    assert payload["accepted"] is True
+    assert os.path.isfile(save_path), "world snapshot file must be created after run"
+
+
+def test_run_world_load_path_nonexistent_rejected(
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: "Path",
+) -> None:
+    """--world-load-path must reject a nonexistent file before run starts."""
+    missing_path = str(tmp_path / "does_not_exist.json")
+    exit_code = main(["run", "--world-load-path", missing_path])
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    payload = _read_json_output(captured.out)
+    assert payload["accepted"] is False
+    assert "world_load_path_not_found" in payload["reason"]
+
+
+def test_run_world_persistence_default_behavior_unchanged(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Default run behavior (no persistence args) is unchanged."""
+    exit_code = main(["run"])
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    payload = _read_json_output(captured.out)
+    assert payload["accepted"] is True
+
+
+def test_run_world_save_and_load_roundtrip(
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: "Path",
+) -> None:
+    """Save after first run; load path is accepted for second run."""
+    import os
+    save_path = str(tmp_path / "world.json")
+    exit_code = main(["run", "--world-save-path", save_path])
+    capsys.readouterr()
+    assert exit_code == 0
+    assert os.path.isfile(save_path)
+
+    exit_code2 = main(["run", "--world-load-path", save_path])
+    captured2 = capsys.readouterr()
+    assert exit_code2 == 0
+    payload2 = _read_json_output(captured2.out)
+    assert payload2["accepted"] is True
+
+
+def test_play_shared_shard_world_save_path_arg_accepted(
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: "Path",
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """--world-save-path is accepted by play-shared-shard subparser."""
+    save_path = str(tmp_path / "shard_world.json")
+    inputs = iter(["quit"])
+    monkeypatch.setattr("builtins.input", lambda _: next(inputs))
+    main(["play-shared-shard", "--world-save-path", save_path])
+    captured = capsys.readouterr()
+    assert "world_load_path_not_found" not in captured.out
+
+
+def test_play_shared_shard_world_load_path_nonexistent_rejected(
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: "Path",
+) -> None:
+    """--world-load-path must reject a nonexistent file on play-shared-shard."""
+    missing_path = str(tmp_path / "no_shard.json")
+    exit_code = main(["play-shared-shard", "--world-load-path", missing_path])
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    payload = _read_json_output(captured.out)
+    assert payload["accepted"] is False
+    assert "world_load_path_not_found" in payload["reason"]
+
+
+# ---------------------------------------------------------------------------
+# World save slot CLI argument tests
+# ---------------------------------------------------------------------------
+
+
+def test_run_world_save_slot_accepted(
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: "Path",
+) -> None:
+    """--world-save-slot creates a named .json file in --save-dir after run."""
+    import os
+    save_dir = str(tmp_path / "saves")
+    exit_code = main(["run", "--world-save-slot", "my-run", "--save-dir", save_dir])
+    capsys.readouterr()
+    assert exit_code == 0
+    assert os.path.isfile(os.path.join(save_dir, "my-run.json"))
+
+
+def test_run_world_load_slot_missing_rejects(
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: "Path",
+) -> None:
+    """--world-load-slot for a nonexistent slot fails during lifecycle (not CLI validation)."""
+    save_dir = str(tmp_path / "saves")
+    exit_code = main(["run", "--world-load-slot", "ghost", "--save-dir", save_dir])
+    capsys.readouterr()
+    assert exit_code == 1
+
+
+def test_run_world_save_slot_and_path_mutually_exclusive(
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: "Path",
+) -> None:
+    """--world-save-slot and --world-save-path cannot be combined."""
+    exit_code = main([
+        "run",
+        "--world-save-slot", "my-save",
+        "--world-save-path", str(tmp_path / "snap.json"),
+    ])
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    payload = _read_json_output(captured.out)
+    assert payload["accepted"] is False
+
+
+def test_run_world_load_slot_and_path_mutually_exclusive(
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: "Path",
+) -> None:
+    """--world-load-slot and --world-load-path cannot be combined."""
+    # Create a dummy snap file so --world-load-path does not fail on file-not-found
+    snap_path = str(tmp_path / "snap.json")
+    with open(snap_path, "w") as f:
+        f.write("{}")
+    exit_code = main([
+        "run",
+        "--world-load-slot", "my-save",
+        "--world-load-path", snap_path,
+    ])
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    payload = _read_json_output(captured.out)
+    assert payload["accepted"] is False
+
+
+def test_run_world_save_slot_invalid_name_rejected(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Invalid slot names are rejected clearly."""
+    exit_code = main(["run", "--world-save-slot", "bad name!"])
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    payload = _read_json_output(captured.out)
+    assert payload["accepted"] is False
+    assert "world_save_slot" in payload["reason"]
+
+
+def test_run_world_save_slot_and_load_roundtrip(
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: "Path",
+) -> None:
+    """Save slot after first run, load slot in second run."""
+    import os
+    save_dir = str(tmp_path / "saves")
+    exit_code = main(["run", "--world-save-slot", "session1", "--save-dir", save_dir])
+    capsys.readouterr()
+    assert exit_code == 0
+    assert os.path.isfile(os.path.join(save_dir, "session1.json"))
+
+    exit_code2 = main(["run", "--world-load-slot", "session1", "--save-dir", save_dir])
+    captured2 = capsys.readouterr()
+    assert exit_code2 == 0
+    payload2 = _read_json_output(captured2.out)
+    assert payload2["accepted"] is True
+
+
+def test_list_saves_command_empty_dir(
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: "Path",
+) -> None:
+    """list-saves returns accepted with empty slots for an empty directory."""
+    save_dir = str(tmp_path / "saves")
+    exit_code = main(["list-saves", "--save-dir", save_dir])
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    payload = _read_json_output(captured.out)
+    assert payload["accepted"] is True
+    assert payload["slots"] == []
+
+
+def test_list_saves_command_shows_saved_slot(
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: "Path",
+) -> None:
+    """list-saves shows a slot that was saved via --world-save-slot."""
+    save_dir = str(tmp_path / "saves")
+    main(["run", "--world-save-slot", "mygame", "--save-dir", save_dir])
+    capsys.readouterr()
+
+    exit_code = main(["list-saves", "--save-dir", save_dir])
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    payload = _read_json_output(captured.out)
+    assert payload["accepted"] is True
+    slot_names = [s["slot_name"] for s in payload["slots"]]
+    assert "mygame" in slot_names
+
+
+def test_play_shared_shard_world_save_slot_accepted(
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: "Path",
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """--world-save-slot is accepted on play-shared-shard."""
+    import os
+    save_dir = str(tmp_path / "saves")
+    inputs = iter(["quit"])
+    monkeypatch.setattr("builtins.input", lambda _: next(inputs))
+    main(["play-shared-shard", "--world-save-slot", "shardsave", "--save-dir", save_dir])
+    capsys.readouterr()
+    assert os.path.isfile(os.path.join(save_dir, "shardsave.json"))
+
+
+def test_play_shared_shard_world_load_slot_missing_rejects(
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: "Path",
+) -> None:
+    """--world-load-slot for nonexistent slot rejects on play-shared-shard."""
+    save_dir = str(tmp_path / "saves")
+    exit_code = main([
+        "play-shared-shard",
+        "--world-load-slot", "no-such-slot",
+        "--save-dir", save_dir,
+    ])
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    payload = _read_json_output(captured.out)
+    assert payload["accepted"] is False

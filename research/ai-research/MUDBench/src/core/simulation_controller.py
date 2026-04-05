@@ -76,19 +76,25 @@ class SimulationController:
                 status=self.run_state.status,
             )
 
-        ordered_actions = tuple(actions)
-        results = self._action_processor.process_actions(
-            ordered_actions,
-            self._world_state_manager,
-            step_index=self.run_state.step_index,
-        )
+        # Sort deterministically by actor_id (primary key matches process_actions ordering).
+        # Process one action at a time, applying each delta to world state before the next
+        # action is evaluated.  This prevents lost-update races when multiple actors modify
+        # the same room in the same tick (e.g. both moving out of the same source room).
+        ordered_actions = tuple(sorted(actions, key=lambda r: str(r.actor_id)))
 
+        results = []
         emitted_events: list[EventRecord] = []
-        for result in results:
-            emitted_events.extend(result.events)
-            if result.accepted and result.world_delta:
-                delta = dict(result.world_delta)
-                self._world_state_manager.apply_delta(delta)
+        for action in ordered_actions:
+            single_results = self._action_processor.process_actions(
+                (action,),
+                self._world_state_manager,
+                step_index=self.run_state.step_index,
+            )
+            for result in single_results:
+                results.append(result)
+                emitted_events.extend(result.events)
+                if result.accepted and result.world_delta:
+                    self._world_state_manager.apply_delta(dict(result.world_delta))
 
         # Runtime contract: every executed step emits a deterministic step marker so replay can
         # reconstruct true step progression even when no domain events were produced.

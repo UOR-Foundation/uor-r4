@@ -48,7 +48,13 @@ def build_observation_for_actor(
     description_raw = room_payload.get("description", "")
     if not isinstance(description_raw, str):
         raise ValueError("room.description must be a string")
-    description = description_raw
+    description = _resolve_reactive_description(
+        room_id=location,
+        base_description=description_raw,
+        rooms=rooms,
+        entities=entities,
+        scenario_vars=scenario_vars,
+    )
 
     exits_map = _require_mapping(room_payload.get("exits", {}), field_name="room.exits")
     exits = _sorted_exits(exits_map)
@@ -428,24 +434,42 @@ def _action_space(
     take_targets: list[str] = []
     attack_targets: list[str] = []
     give_targets: list[str] = []
+    talk_targets: list[str] = []
     for entity_id in room_entity_ids:
         payload = entities.get(entity_id)
         if not isinstance(payload, Mapping):
             raise ValueError(f"room_entity_not_found:{entity_id}")
         entity_type = str(payload.get("entity_type", ""))
+        tags = payload.get("tags") or []
         if entity_type in {"item", "consumable"}:
             take_targets.append(entity_id)
         if entity_type == "npc":
-            attack_targets.append(entity_id)
+            # All NPCs are valid attack targets unless explicitly tagged "neutral" or "peaceful".
+            # Neutral/peaceful NPCs represent allies, quest-givers, or non-combatants where
+            # attacking is almost always a player error rather than intentional play.
+            if "neutral" not in tags and "peaceful" not in tags:
+                attack_targets.append(entity_id)
+            # Non-hostile NPCs can be talked to.
+            if "hostile" not in tags:
+                talk_targets.append(entity_id)
+            # Give targets include all NPCs for item trading, but NOT for consumables
+            # which are activated with ``use`` rather than handed to an NPC.
             give_targets.append(entity_id)
 
     ordered_actions.extend(f"take {entity_id}" for entity_id in sorted(take_targets))
     ordered_actions.extend(f"drop {item_id}" for item_id in sorted(inventory))
     ordered_actions.extend(f"use {item_id}" for item_id in sorted(inventory))
     for item_id in sorted(inventory):
-        ordered_actions.extend(
-            f"give {item_id} {target_id}" for target_id in sorted(give_targets)
-        )
+        # Consumables are activated with ``use``, not handed to NPCs — skip give for them.
+        item_entity_type = str((entities.get(item_id) or {}).get("entity_type", ""))
+        if item_entity_type != "consumable":
+            ordered_actions.extend(
+                f"give {item_id} {target_id}" for target_id in sorted(give_targets)
+            )
+    ordered_actions.extend(f"talk {entity_id}" for entity_id in sorted(talk_targets))
+    # defend appears alongside attack options — it's only useful when hostile NPCs are present.
+    if attack_targets:
+        ordered_actions.append("defend")
     ordered_actions.extend(f"attack {entity_id}" for entity_id in sorted(attack_targets))
 
     deduplicated: list[str] = []
@@ -456,3 +480,71 @@ def _action_space(
         seen.add(action)
         deduplicated.append(action)
     return tuple(deduplicated)
+
+
+_VALID_REACTIVE_CONDITION_TYPES: frozenset[str] = frozenset(
+    {"scenario_var_truthy", "entity_absent"}
+)
+
+
+def _resolve_reactive_description(
+    *,
+    room_id: str,
+    base_description: str,
+    rooms: Mapping[str, Any],
+    entities: Mapping[str, Any],
+    scenario_vars: Mapping[str, Any],
+) -> str:
+    """Return a state-reactive description for a room, or the base description.
+
+    Reads ``room_description_overrides_json`` from ``scenario_vars`` (written
+    there during world setup).  Each override entry specifies:
+
+    - ``room_id``          — which room this override applies to
+    - ``condition_type``   — ``"scenario_var_truthy"`` or ``"entity_absent"``
+    - For ``scenario_var_truthy``: ``condition_key`` (key in scenario_vars)
+    - For ``entity_absent``: ``condition_room_id`` + ``condition_entity_id``
+    - ``description``      — the override text to use when the condition is met
+
+    The first matching override for the current room wins.
+    Falls back to ``base_description`` when no override matches.
+    """
+    raw = scenario_vars.get("room_description_overrides_json")
+    if not isinstance(raw, str):
+        return base_description
+    try:
+        overrides = json.loads(raw)
+    except (json.JSONDecodeError, ValueError):
+        return base_description
+    if not isinstance(overrides, list):
+        return base_description
+
+    for override in overrides:
+        if not isinstance(override, Mapping):
+            continue
+        if override.get("room_id") != room_id:
+            continue
+        condition_type = override.get("condition_type", "")
+        if condition_type not in _VALID_REACTIVE_CONDITION_TYPES:
+            continue
+        override_text = override.get("description")
+        if not isinstance(override_text, str) or not override_text:
+            continue
+
+        if condition_type == "scenario_var_truthy":
+            key = str(override.get("condition_key", ""))
+            if key and scenario_vars.get(key):
+                return override_text
+
+        elif condition_type == "entity_absent":
+            check_room_id = str(override.get("condition_room_id", room_id))
+            entity_id = str(override.get("condition_entity_id", ""))
+            if not entity_id:
+                continue
+            check_room = rooms.get(check_room_id)
+            if isinstance(check_room, Mapping):
+                present = check_room.get("entities_present", [])
+                if entity_id not in present:
+                    return override_text
+
+    return base_description

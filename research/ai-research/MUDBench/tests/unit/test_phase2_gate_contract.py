@@ -125,13 +125,13 @@ def test_phase2_gate_contract_happy_path_invariants(tmp_path) -> None:
             "actor_id": "agent-a",
             "location": "room-a",
             "remaining_steps": 4,
-            "action_space": ["wait", "look", "move north", "attack npc-1"],
+            "action_space": ["wait", "look", "move north", "talk npc-1", "defend", "attack npc-1"],
         },
         {
             "actor_id": "agent-b",
             "location": "room-a",
             "remaining_steps": 4,
-            "action_space": ["wait", "look", "move north", "attack npc-1"],
+            "action_space": ["wait", "look", "move north", "talk npc-1", "defend", "attack npc-1"],
         },
     ]
     assert payload["runner_results"] == [

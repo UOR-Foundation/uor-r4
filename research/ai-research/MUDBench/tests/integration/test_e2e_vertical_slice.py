@@ -183,7 +183,7 @@ def test_e2e_vertical_slice_emits_complete_artifact_chain() -> None:
     assert replay["envelope"]["schema_version"] == "1.0"
     assert replay["envelope"]["run_id"] == "e2e-vertical-slice-run"
     assert replay["envelope"]["scenario_id"] == "tiny-fetch-quest"
-    assert len(replay["events"]) == 20  # 4 events per step × 5 steps
+    assert len(replay["events"]) == 22  # step 2 adds npc_alert; step 3 adds npc_defeated when guard is defeated
 
     refs = payload["replay_artifact_refs"]
     assert len(refs) == 2

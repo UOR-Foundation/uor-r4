@@ -26,6 +26,11 @@ from evaluation.benchmark_runner.runner import (
     resolve_timing_mode_cadence_config,
     run_benchmark_lifecycle,
 )
+from world.state.world_persistence import (
+    WORLD_SAVE_DIR_DEFAULT,
+    list_world_slots,
+    validate_slot_name,
+)
 
 _DEFAULT_RUN_ID = "cli-run"
 _DEFAULT_BENCHMARK_ID = "mudbench-cli"
@@ -69,6 +74,31 @@ _TINY_SUITE_SCENARIOS = (
     "tiny-social-trade",
 )
 
+_CANONICAL_SCENARIO_DIR = Path(__file__).resolve().parent.parent.parent / "scenarios" / "canonical"
+
+
+def _load_canonical_scenarios() -> dict[str, dict[str, Any]]:
+    """Load all canonical scenario JSON files keyed by scenario_id.
+
+    Called once at module-load time and merged into ``_SCENARIO_PRESETS``.
+    Any ``*.json`` file under ``scenarios/canonical/`` with a valid
+    ``scenario_id`` field is included automatically, eliminating the need to
+    manually maintain inline copies of canonical scenarios in this file.
+    """
+    presets: dict[str, dict[str, Any]] = {}
+    if not _CANONICAL_SCENARIO_DIR.is_dir():
+        return presets
+    for path in sorted(_CANONICAL_SCENARIO_DIR.glob("*.json")):
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            continue
+        scenario_id = payload.get("scenario_id")
+        if isinstance(scenario_id, str) and scenario_id:
+            presets[scenario_id] = payload
+    return presets
+
+
 _SCENARIO_PRESETS: dict[str, dict[str, Any]] = {
     "minimal": {
         "scenario_id": "cli-minimal-scenario",
@@ -106,339 +136,8 @@ _SCENARIO_PRESETS: dict[str, dict[str, Any]] = {
             }
         ],
     },
-    "tiny-fetch-quest": {
-        "scenario_id": "tiny-fetch-quest",
-        "title": "Tiny Fetch Quest",
-        "description": "Minimal 3-room scenario with item collection and NPC combat for vertical-slice e2e testing.",
-        "start_room_id": "entrance",
-        "max_steps": 5,
-        "seed": 42,
-        "version": "1.0",
-        "scenario_vars": {
-            "mode": "vertical-slice",
-            "seed_variation_policy": "tiny_fetch_v1",
-            "seed_variation_axis": "key_room",
-            "seed_variation_values_json": "[\"treasury\",\"corridor\"]",
-            "world_config_json": (
-                '{"items":[{"entity_id":"golden-key","entity_type":"item","location":"treasury"}],'
-                '"npcs":[{"entity_id":"guard-1","entity_type":"npc","health":30,"location":"corridor"}],'
-                '"rooms":{"corridor":{"description":"A narrow stone corridor.","entities":[],'
-                '"exits":{"east":"treasury","west":"entrance"},"title":"Stone Corridor"},'
-                '"entrance":{"description":"A dimly lit entrance hall.","entities":[],'
-                '"exits":{"east":"corridor"},"title":"Entrance Hall"},'
-                '"treasury":{"description":"A small treasury chamber.","entities":[],'
-                '"exits":{"west":"corridor"},"title":"Treasury Chamber"}}}'
-            ),
-        },
-        "objectives": [
-            {
-                "objective_id": "collect-golden-key",
-                "objective_type": "collect_item",
-                "target_id": "golden-key",
-                "required_count": 1,
-            }
-        ],
-    },
-    "tiny-delayed-retrieval": {
-        "scenario_id": "tiny-delayed-retrieval",
-        "title": "Tiny Delayed Retrieval",
-        "description": "Tiny memory-focused scenario with delayed target retrieval.",
-        "start_room_id": "start",
-        "max_steps": 6,
-        "seed": 24,
-        "version": "1.0",
-        "scenario_vars": {
-            "mode": "vertical-slice-memory",
-            "agent_script_policy": "memory_delayed_retrieval_v1",
-            "world_config_json": (
-                '{"items":[{"entity_id":"memory-token","entity_type":"item","location":"cache"},'
-                '{"entity_id":"note-fragment","entity_type":"item","location":"start"}],'
-                '"rooms":{"cache":{"description":"A quiet storage alcove.","entities":[],'
-                '"exits":{"west":"junction"},"title":"Cache"},'
-                '"junction":{"description":"A crossroads with worn stone marks.","entities":[],'
-                '"exits":{"east":"cache","west":"start"},"title":"Junction"},'
-                '"start":{"description":"A small starting chamber with etched markings.","entities":[],'
-                '"exits":{"east":"junction"},"title":"Start"}}}'
-            ),
-        },
-        "objectives": [
-            {
-                "objective_id": "retrieve-memory-token",
-                "objective_type": "collect_item",
-                "target_id": "memory-token",
-                "required_count": 1,
-            }
-        ],
-    },
-    "tiny-hidden-key": {
-        "scenario_id": "tiny-hidden-key",
-        "title": "Tiny Hidden Key",
-        "description": "Tiny partial-observability scenario with look-triggered hidden item reveal.",
-        "start_room_id": "start",
-        "max_steps": 6,
-        "seed": 33,
-        "version": "1.0",
-        "scenario_vars": {
-            "mode": "vertical-slice-observability",
-            "agent_script_policy": "partial_observability_v1",
-            "observation_policy": "look_reveals_hidden_items_v1",
-            "hidden_item_ids_json": "[\"hidden-key\"]",
-            "world_config_json": (
-                '{"items":[{"entity_id":"hidden-key","entity_type":"item","location":"vault"},'
-                '{"entity_id":"decoy-note","entity_type":"item","location":"start"}],'
-                '"rooms":{"hall":{"description":"A quiet connecting hall.","entities":[],'
-                '"exits":{"east":"vault","west":"start"},"title":"Hall"},'
-                '"start":{"description":"A small chamber with worn stone walls.","entities":[],'
-                '"exits":{"east":"hall"},"title":"Start"},'
-                '"vault":{"description":"A compact vault with dusty shelves.","entities":[],'
-                '"exits":{"west":"hall"},"title":"Vault"}}}'
-            ),
-        },
-        "objectives": [
-            {
-                "objective_id": "collect-hidden-key",
-                "objective_type": "collect_item",
-                "target_id": "hidden-key",
-                "required_count": 1,
-            }
-        ],
-    },
-    "tiny-locked-path": {
-        "scenario_id": "tiny-locked-path",
-        "title": "Tiny Locked Path",
-        "description": "Tiny planning scenario that requires a key to open a sealed door before collecting the artifact.",
-        "start_room_id": "entry",
-        "max_steps": 8,
-        "seed": 55,
-        "version": "1.0",
-        "scenario_vars": {
-            "mode": "planning-dependency",
-            "world_config_json": (
-                '{"items":[{"entity_id":"brass-key","entity_type":"item","location":"key-chamber"},'
-                '{"entity_id":"artifact","entity_type":"item","location":"treasure"}],'
-                '"rooms":{"entry":{"description":"The entry chamber smells of salt and stone. Paths lead east to the locksmiths and south to a sealed gate.","entities":[],'
-                '"exits":{"east":"key-chamber","south":"lock-ante"},"title":"Entry Chamber"},'
-                '"key-chamber":{"description":"A cramped chamber with a brass key resting on an iron stand.","entities":[],'
-                '"exits":{"west":"entry"},"title":"Key Chamber"},'
-                '"lock-ante":{"description":"A narrow ante-chamber with a barred northern door and a passage south.","entities":[],'
-                '"exits":{"south":"entry"},"title":"Lock Ante-Chamber"},'
-                '"treasure":{"description":"A tiny vault lit by phosphor moss; a prized artifact lies within.","entities":[],'
-                '"exits":{"south":"lock-ante"},"title":"Treasure Vault"}},"unlock_effects":[{"effect_id":"sealed_gate",'
-                '"item_id":"brass-key","source_room_id":"lock-ante","direction":"north","destination_room_id":"treasure",'
-                '"consume_item":false,"requires_actor_in_place":true}]}'
-            ),
-        },
-        "objectives": [
-            {
-                "objective_id": "collect-artifact",
-                "objective_type": "collect_item",
-                "target_id": "artifact",
-                "required_count": 1,
-            }
-        ],
-    },
-    "tiny-social-trade": {
-        "scenario_id": "tiny-social-trade",
-        "title": "Tiny Social Trade",
-        "description": "Tiny social/trade scenario requiring token handoff to an NPC before objective retrieval.",
-        "start_room_id": "start",
-        "max_steps": 7,
-        "seed": 66,
-        "version": "1.0",
-        "scenario_vars": {
-            "mode": "social-trade-dependency",
-            "agent_script_policy": "social-trade-dependency",
-            "world_config_json": (
-                '{"items":[{"entity_id":"trade-token","entity_type":"item","location":"token-room"}],'
-                '"npcs":[{"entity_id":"trader","entity_type":"npc","health":30,"location":"market"}],'
-                '"rooms":{"market":{"description":"A compact market stall where a trader watches quietly.","entities":[],'
-                '"exits":{"west":"start"},"title":"Market"},'
-                '"start":{"description":"A small crossroads linking the token room and market.","entities":[],'
-                '"exits":{"east":"market","west":"token-room"},"title":"Crossroads"},'
-                '"token-room":{"description":"A narrow supply room with a single trade token on a shelf.","entities":[],'
-                '"exits":{"east":"start"},"title":"Token Room"}},'
-                '"trade_effects":[{"effect_id":"market-trade","item_id":"trade-token","target_id":"trader",'
-                '"reward_item_id":"artifact","reward_entity_type":"item"}]}'
-            ),
-        },
-        "objectives": [
-            {
-                "objective_id": "collect-artifact",
-                "objective_type": "collect_item",
-                "target_id": "artifact",
-                "required_count": 1,
-            }
-        ],
-    },
-    "tiny-guarded-relic": {
-        "scenario_id": "tiny-guarded-relic",
-        "title": "Tiny Guarded Relic",
-        "description": "Richer tiny scenario requiring navigation, defeating a sentinel, unlocking a sealed reliquary, and retrieving the relic.",
-        "start_room_id": "camp",
-        "max_steps": 8,
-        "seed": 77,
-        "version": "1.0",
-        "scenario_vars": {
-            "mode": "guarded-relic",
-            "agent_script_policy": "guarded-relic-v1",
-            "world_config_json": (
-                '{"items":[{"entity_id":"relic-key","entity_type":"item","location":"armory"},'
-                '{"entity_id":"relic","entity_type":"item","location":"reliquary"}],'
-                '"npcs":[{"entity_id":"sentinel","entity_type":"npc","health":10,"location":"watch-post"}],'
-                '"rooms":{"armory":{"description":"A cramped armory with a single iron key resting on a rack.",'
-                '"entities":[],"exits":{"north":"watch-post","west":"camp"},"title":"Armory"},'
-                '"camp":{"description":"A wind-beaten camp at the edge of the ruins.",'
-                '"entities":[],"exits":{"east":"armory"},"title":"Camp"},'
-                '"reliquary":{"description":"A sealed reliquary where the relic rests on a stone pedestal.",'
-                '"entities":[],"exits":{"south":"seal-door"},"title":"Reliquary"},'
-                '"seal-door":{"description":"A heavy sealed door blocks the final chamber.",'
-                '"entities":[],"exits":{"west":"watch-post"},"title":"Seal Door"},'
-                '"watch-post":{"description":"A narrow watch-post where a sentinel keeps vigil over the sealed door.",'
-                '"entities":[],"exits":{"east":"seal-door","south":"armory"},"title":"Watch Post"}},'
-                '"unlock_effects":[{"effect_id":"reliquary-seal","item_id":"relic-key","source_room_id":"seal-door",'
-                '"direction":"north","destination_room_id":"reliquary","consume_item":false,"requires_actor_in_place":true}]}'
-            ),
-        },
-        "objectives": [
-            {
-                "objective_id": "collect-relic",
-                "objective_type": "collect_item",
-                "target_id": "relic",
-                "required_count": 1,
-            }
-        ],
-    },
-    "tiny-hazard-route": {
-        "scenario_id": "tiny-hazard-route",
-        "title": "Tiny Hazard Route",
-        "description": "Tiny hazard-route scenario with a risky guarded shortcut and a safer bridge-kit bypass.",
-        "start_room_id": "camp",
-        "max_steps": 8,
-        "seed": 88,
-        "version": "1.0",
-        "scenario_vars": {
-            "mode": "hazard-tradeoff",
-            "agent_script_policy": "hazard-tradeoff-v1",
-            "world_config_json": (
-                '{"items":[{"entity_id":"bridge-kit","entity_type":"item","location":"supply-cache"},'
-                '{"entity_id":"storm-core","entity_type":"item","location":"vault"}],'
-                '"npcs":[{"entity_id":"raider","entity_type":"npc","health":20,"location":"ember-pass"}],'
-                '"rooms":{"bridge-approach":{"description":"A broken bridge spans the final ravine, but a bridge kit could make the crossing safe.",'
-                '"entities":[],"exits":{"south":"supply-cache"},"title":"Bridge Approach"},'
-                '"camp":{"description":"A storm-battered camp between a guarded choke point and an abandoned supply route.",'
-                '"entities":[],"exits":{"east":"supply-cache","north":"ember-pass"},"title":"Storm Camp"},'
-                '"ember-pass":{"description":"A charred pass watched by a raider; the route is short but dangerous.",'
-                '"entities":[],"exits":{"north":"vault","south":"camp"},"title":"Ember Pass"},'
-                '"supply-cache":{"description":"A half-collapsed cache with salvage that could make the longer route safe.",'
-                '"entities":[],"exits":{"north":"bridge-approach","west":"camp"},"title":"Supply Cache"},'
-                '"vault":{"description":"A sealed storm vault where the storm core hums behind the last approach.",'
-                '"entities":[],"exits":{"south":"ember-pass"},"title":"Storm Vault"}},'
-                '"unlock_effects":[{"effect_id":"bridge-span","item_id":"bridge-kit","source_room_id":"bridge-approach",'
-                '"direction":"north","destination_room_id":"vault","consume_item":false,"requires_actor_in_place":true}]}'
-            ),
-        },
-        "objectives": [
-            {
-                "objective_id": "collect-storm-core",
-                "objective_type": "collect_item",
-                "target_id": "storm-core",
-                "required_count": 1,
-            }
-        ],
-    },
-    "tiny-delayed-cost": {
-        "scenario_id": "tiny-delayed-cost",
-        "title": "Tiny Delayed Cost",
-        "description": "Tiny delayed-cost scenario where one power cell can be spent early for a shortcut or saved for the final vault seal.",
-        "start_room_id": "camp",
-        "max_steps": 8,
-        "seed": 93,
-        "version": "1.0",
-        "scenario_vars": {
-            "mode": "delayed-cost-planning",
-            "agent_script_policy": "delayed-cost-v1",
-            "world_config_json": (
-                '{"items":[{"entity_id":"power-cell","entity_type":"item","location":"depot"},'
-                '{"entity_id":"archive-ledger","entity_type":"item","location":"vault"}],'
-                '"rooms":{"camp":{"description":"A split base camp between a dormant tram spur and a maintenance route into the vault wing.",'
-                '"entities":[],"exits":{"east":"depot","north":"tram-hub"},"title":"Camp"},'
-                '"depot":{"description":"A supply depot where a single power cell rests on a charging cradle.",'
-                '"entities":[],"exits":{"east":"service-tunnel","west":"camp"},"title":"Depot"},'
-                '"service-tunnel":{"description":"A cramped service tunnel that reaches the vault threshold without spending the cell early.",'
-                '"entities":[],"exits":{"north":"vault-door","west":"depot"},"title":"Service Tunnel"},'
-                '"tram-hub":{"description":"An inactive tram hub where the power cell can energize a shortcut, but doing so will drain it.",'
-                '"entities":[],"exits":{"south":"camp"},"title":"Tram Hub"},'
-                '"vault":{"description":"The inner archive vault, where the ledger waits once the final seal is powered.",'
-                '"entities":[],"exits":{"south":"vault-door"},"title":"Vault"},'
-                '"vault-door":{"description":"A sealed vault threshold whose northern lock also requires the same power cell.",'
-                '"entities":[],"exits":{"south":"service-tunnel"},"title":"Vault Door"}},'
-                '"unlock_effects":[{"effect_id":"tram-bypass","item_id":"power-cell","source_room_id":"tram-hub",'
-                '"direction":"east","destination_room_id":"vault-door","consume_item":true,"requires_actor_in_place":true},'
-                '{"effect_id":"vault-seal","item_id":"power-cell","source_room_id":"vault-door",'
-                '"direction":"north","destination_room_id":"vault","consume_item":true,"requires_actor_in_place":true}]}'
-            ),
-        },
-        "objectives": [
-            {
-                "objective_id": "collect-archive-ledger",
-                "objective_type": "collect_item",
-                "target_id": "archive-ledger",
-                "required_count": 1,
-            }
-        ],
-    },
-    "tiny-context-pressure": {
-        "scenario_id": "tiny-context-pressure",
-        "title": "Tiny Context Pressure",
-        "description": "Richer tiny scenario with a dangerous shortcut, a longer dependency route, a consumable decoy shortcut, and a final shared resource gate.",
-        "start_room_id": "camp",
-        "max_steps": 12,
-        "seed": 101,
-        "version": "1.0",
-        "scenario_vars": {
-            "mode": "context-pressure",
-            "agent_script_policy": "context-pressure-v1",
-            "world_config_json": (
-                '{"items":[{"entity_id":"coolant-cell","entity_type":"item","location":"depot"},'
-                '{"entity_id":"valve-handle","entity_type":"item","location":"workshop"},'
-                '{"entity_id":"signal-flare","entity_type":"item","location":"decoy-annex"},'
-                '{"entity_id":"archive-prism","entity_type":"item","location":"archive"}],'
-                '"npcs":[{"entity_id":"marauder","entity_type":"npc","health":10,"location":"relay-hall"}],'
-                '"rooms":{"archive":{"description":"The inner archive chamber where the prism rests once the final seal is powered.",'
-                '"entities":[],"exits":{"south":"seal-door"},"title":"Archive"},'
-                '"camp":{"description":"A pressure camp between a raider-held relay hall, a coolant depot, and a maintenance workshop.",'
-                '"entities":[],"exits":{"east":"depot","north":"relay-hall","south":"workshop"},"title":"Pressure Camp"},'
-                '"decoy-annex":{"description":"A side annex opened by the emergency lift; a signal flare sits here, but it does not help with the archive.",'
-                '"entities":[],"exits":{"west":"relay-hall"},"title":"Decoy Annex"},'
-                '"depot":{"description":"A coolant depot with a single charged cell still resting in its cradle.",'
-                '"entities":[],"exits":{"west":"camp"},"title":"Coolant Depot"},'
-                '"relay-hall":{"description":"A relay hall where a marauder guards the short route; an emergency lift can be powered here, but it will drain the coolant cell.",'
-                '"entities":[],"exits":{"north":"seal-door","south":"camp"},"title":"Relay Hall"},'
-                '"seal-door":{"description":"A reinforced pressure seal whose northern lock requires the same coolant cell that can be wasted on the relay lift.",'
-                '"entities":[],"exits":{"south":"spillway"},"title":"Seal Door"},'
-                '"service-bay":{"description":"A maintenance bay with a seized pressure valve that can open the spillway bypass.",'
-                '"entities":[],"exits":{"west":"workshop"},"title":"Service Bay"},'
-                '"spillway":{"description":"A spillway access path that reaches the seal door without fighting through the relay hall.",'
-                '"entities":[],"exits":{"north":"seal-door","south":"service-bay"},"title":"Spillway Access"},'
-                '"workshop":{"description":"A cramped workshop where the missing valve handle lies on a bench beside maintenance notes.",'
-                '"entities":[],"exits":{"east":"service-bay","north":"camp"},"title":"Workshop"}},'
-                '"unlock_effects":[{"effect_id":"service-bypass","item_id":"valve-handle","source_room_id":"service-bay",'
-                '"direction":"north","destination_room_id":"spillway","consume_item":false,"requires_actor_in_place":true},'
-                '{"effect_id":"relay-lift","item_id":"coolant-cell","source_room_id":"relay-hall",'
-                '"direction":"east","destination_room_id":"decoy-annex","consume_item":true,"requires_actor_in_place":true},'
-                '{"effect_id":"archive-seal","item_id":"coolant-cell","source_room_id":"seal-door",'
-                '"direction":"north","destination_room_id":"archive","consume_item":true,"requires_actor_in_place":true}]}'
-            ),
-        },
-        "objectives": [
-            {
-                "objective_id": "collect-archive-prism",
-                "objective_type": "collect_item",
-                "target_id": "archive-prism",
-                "required_count": 1,
-            }
-        ],
-    },
+    # Canonical tiny-* scenarios auto-loaded from scenarios/canonical/*.json
+    **_load_canonical_scenarios(),
 }
 
 
@@ -512,6 +211,43 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional external-agent timeout override for live direct-provider run turns only.",
     )
     run_parser.add_argument(
+        "--provider-min-turn-delay-seconds",
+        type=float,
+        default=None,
+        help="Optional minimum wall-clock delay (in seconds) between provider-backed actor turns.",
+    )
+    run_parser.add_argument(
+        "--provider-max-actions",
+        type=int,
+        default=None,
+        help="Optional cap on total accepted actions from provider-backed actors; run finalizes after reaching the limit.",
+    )
+    run_parser.add_argument(
+        "--world-save-path",
+        default=None,
+        help="Optional file path to save a world snapshot after the run completes.",
+    )
+    run_parser.add_argument(
+        "--world-load-path",
+        default=None,
+        help="Optional file path to load a world snapshot before the run begins.",
+    )
+    run_parser.add_argument(
+        "--world-save-slot",
+        default=None,
+        help="Optional named save slot to store world state after the run (stored in --save-dir).",
+    )
+    run_parser.add_argument(
+        "--world-load-slot",
+        default=None,
+        help="Optional named save slot to load world state from before the run (from --save-dir).",
+    )
+    run_parser.add_argument(
+        "--save-dir",
+        default=None,
+        help=f"Directory for named save slots (default: {WORLD_SAVE_DIR_DEFAULT}).",
+    )
+    run_parser.add_argument(
         "--direct-provider-prompt-dump-dir",
         default=None,
         help="Optional directory for writing direct-provider prompt/raw-response dump sidecars.",
@@ -527,6 +263,24 @@ def build_parser() -> argparse.ArgumentParser:
         choices=_ANGULAR_ROUTER_VARIANTS + _LEGACY_ROUTER_VARIANTS,
         default=None,
         help="Router variant to use when a variant-aware prompt engine is selected.",
+    )
+    run_parser.add_argument(
+        "--timing-mode",
+        choices=_TIMING_MODE_CHOICES,
+        default=None,
+        help="Optional explicit benchmark timing regime that resolves into cadence settings.",
+    )
+    run_parser.add_argument(
+        "--action-cadence-interval",
+        type=int,
+        default=None,
+        help="Optional positive world-tick cadence interval for benchmark actor actions.",
+    )
+    run_parser.add_argument(
+        "--actor-action-cadence",
+        action="append",
+        default=[],
+        help="Optional per-actor cadence override in actor_id=interval form; requires --action-cadence-interval.",
     )
 
     play_parser = subcommands.add_parser("play", help="Launch a minimal local human-play console client")
@@ -631,6 +385,47 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Optional positive timeout override for shared external-agent or direct-provider turns.",
     )
+    shared_play_parser.add_argument(
+        "--world-save-path",
+        default=None,
+        help="Optional file path to save a world snapshot when the shared-shard session ends.",
+    )
+    shared_play_parser.add_argument(
+        "--world-load-path",
+        default=None,
+        help="Optional file path to load a world snapshot before the shared-shard session begins.",
+    )
+    shared_play_parser.add_argument(
+        "--world-save-slot",
+        default=None,
+        help="Optional named save slot to store world state when the session ends (in --save-dir).",
+    )
+    shared_play_parser.add_argument(
+        "--world-load-slot",
+        default=None,
+        help="Optional named save slot to reconnect to an existing world state (from --save-dir).",
+    )
+    shared_play_parser.add_argument(
+        "--save-dir",
+        default=None,
+        help=f"Directory for named save slots (default: {WORLD_SAVE_DIR_DEFAULT}).",
+    )
+
+    list_saves_parser = subcommands.add_parser(
+        "list-saves",
+        help="List named world save slots in the save directory",
+    )
+    list_saves_parser.add_argument(
+        "--save-dir",
+        default=None,
+        help=f"Directory containing named save slots (default: {WORLD_SAVE_DIR_DEFAULT}).",
+    )
+    list_saves_parser.add_argument(
+        "--output",
+        choices=("json", "pretty"),
+        default="json",
+        help="CLI output format",
+    )
 
     compare_parser = subcommands.add_parser(
         "compare-playable-slices",
@@ -701,6 +496,18 @@ def build_parser() -> argparse.ArgumentParser:
         "--direct-provider-comparison-prompt-dump-dir",
         default=None,
         help="Optional directory for writing direct-provider comparison prompt/raw-response dump sidecars.",
+    )
+    compare_parser.add_argument(
+        "--provider-min-turn-delay-seconds",
+        type=float,
+        default=None,
+        help="Optional minimum wall-clock delay (in seconds) between provider-backed actor turns in each compare row.",
+    )
+    compare_parser.add_argument(
+        "--provider-max-actions",
+        type=int,
+        default=None,
+        help="Optional cap on total accepted provider-backed actor actions per compare row; each row finalizes after hitting the limit.",
     )
 
     suite_parser = subcommands.add_parser("suite", help="Execute deterministic tiny-suite baseline reporting")
@@ -773,6 +580,42 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Optional path to write the emitted suite report JSON",
     )
+    suite_parser.add_argument(
+        "--timing-mode",
+        choices=_TIMING_MODE_CHOICES,
+        default=None,
+        help="Optional explicit benchmark timing regime that resolves into cadence settings for all suite runs.",
+    )
+    suite_parser.add_argument(
+        "--action-cadence-interval",
+        type=int,
+        default=None,
+        help="Optional positive world-tick cadence interval for suite benchmark actor actions.",
+    )
+    suite_parser.add_argument(
+        "--actor-action-cadence",
+        action="append",
+        default=[],
+        help="Optional per-actor cadence override in actor_id=interval form; requires --action-cadence-interval.",
+    )
+    suite_parser.add_argument(
+        "--direct-provider-timeout-seconds",
+        type=float,
+        default=None,
+        help="Optional explicit timeout in seconds for external provider-backed suite rows; overrides the built-in default.",
+    )
+    suite_parser.add_argument(
+        "--provider-min-turn-delay-seconds",
+        type=float,
+        default=None,
+        help="Optional minimum wall-clock delay (in seconds) between provider-backed actor turns in each suite row.",
+    )
+    suite_parser.add_argument(
+        "--provider-max-actions",
+        type=int,
+        default=None,
+        help="Optional cap on total accepted provider-backed actor actions per suite row; each row finalizes after hitting the limit.",
+    )
 
     reports_parser = subcommands.add_parser("reports", help="Inspect saved suite report artifacts")
     reports_subcommands = reports_parser.add_subparsers(dest="reports_command", required=True)
@@ -825,6 +668,31 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "run":
         actor_ids = tuple(args.actor_id) if len(args.actor_id) > 0 else _DEFAULT_ACTOR_IDS
         try:
+            actor_action_cadence_overrides = _parse_actor_action_cadence_overrides(
+                args.actor_action_cadence
+            )
+            if args.action_cadence_interval is not None and args.action_cadence_interval <= 0:
+                raise ValueError("action_cadence_interval_must_be_positive")
+            if (
+                args.timing_mode is None
+                and len(actor_action_cadence_overrides) > 0
+                and args.action_cadence_interval is None
+            ):
+                raise ValueError("actor_action_cadence_requires_action_cadence_interval")
+            if args.timing_mode is None and any(
+                actor_id not in actor_ids for actor_id in actor_action_cadence_overrides
+            ):
+                raise ValueError("actor_action_cadence_actor_ids_must_be_subset_of_actor_ids")
+            (
+                resolved_timing_mode,
+                resolved_action_cadence_interval,
+                resolved_actor_action_cadence_overrides,
+            ) = resolve_timing_mode_cadence_config(
+                timing_mode=args.timing_mode,
+                action_cadence_interval=args.action_cadence_interval,
+                actor_action_cadence_overrides=actor_action_cadence_overrides,
+                actor_ids=actor_ids,
+            )
             if args.direct_provider is None and args.direct_provider_model is not None:
                 raise ValueError("direct_provider_model_requires_direct_provider")
             if args.direct_provider is None and args.direct_provider_timeout_seconds is not None:
@@ -892,6 +760,24 @@ def main(argv: Sequence[str] | None = None) -> int:
                 raise ValueError("persistent_agent_session_requires_agent_command")
             if external_agent_label is not None and external_agent_command is None:
                 raise ValueError("agent_label_requires_agent_command")
+            if args.provider_min_turn_delay_seconds is not None and args.provider_min_turn_delay_seconds < 0.0:
+                raise ValueError("provider_min_turn_delay_seconds_must_be_non_negative")
+            if args.provider_max_actions is not None and args.provider_max_actions <= 0:
+                raise ValueError("provider_max_actions_must_be_positive")
+            if args.world_load_path is not None and not os.path.isfile(args.world_load_path):
+                raise ValueError(f"world_load_path_not_found:{args.world_load_path}")
+            if args.world_save_path is not None and args.world_save_slot is not None:
+                raise ValueError("world_save_path and world_save_slot cannot both be provided")
+            if args.world_load_path is not None and args.world_load_slot is not None:
+                raise ValueError("world_load_path and world_load_slot cannot both be provided")
+            if args.world_save_slot is not None:
+                _slot_err = validate_slot_name(args.world_save_slot)
+                if _slot_err:
+                    raise ValueError(f"world_save_slot:{_slot_err}")
+            if args.world_load_slot is not None:
+                _slot_err = validate_slot_name(args.world_load_slot)
+                if _slot_err:
+                    raise ValueError(f"world_load_slot:{_slot_err}")
         except ValueError as exc:
             error_payload = {
                 "accepted": False,
@@ -911,6 +797,16 @@ def main(argv: Sequence[str] | None = None) -> int:
             external_agent_command=external_agent_command,
             persistent_agent_session=persistent_agent_session,
             external_agent_timeout_seconds=args.direct_provider_timeout_seconds,
+            timing_mode=args.timing_mode,
+            action_cadence_interval=args.action_cadence_interval,
+            actor_action_cadence_overrides=actor_action_cadence_overrides,
+            provider_min_turn_delay_seconds=args.provider_min_turn_delay_seconds,
+            provider_max_actions=args.provider_max_actions,
+            world_save_path=args.world_save_path,
+            world_load_path=args.world_load_path,
+            world_save_slot=args.world_save_slot,
+            world_load_slot=args.world_load_slot,
+            save_dir=args.save_dir,
         )
 
         try:
@@ -1058,6 +954,20 @@ def main(argv: Sequence[str] | None = None) -> int:
                 and args.shared_external_agent_timeout_seconds <= 0.0
             ):
                 raise ValueError("shared_external_agent_timeout_seconds_must_be_positive")
+            if args.world_load_path is not None and not os.path.isfile(args.world_load_path):
+                raise ValueError(f"world_load_path_not_found:{args.world_load_path}")
+            if args.world_save_path is not None and args.world_save_slot is not None:
+                raise ValueError("world_save_path and world_save_slot cannot both be provided")
+            if args.world_load_path is not None and args.world_load_slot is not None:
+                raise ValueError("world_load_path and world_load_slot cannot both be provided")
+            if args.world_save_slot is not None:
+                _slot_err = validate_slot_name(args.world_save_slot)
+                if _slot_err:
+                    raise ValueError(f"world_save_slot:{_slot_err}")
+            if args.world_load_slot is not None:
+                _slot_err = validate_slot_name(args.world_load_slot)
+                if _slot_err:
+                    raise ValueError(f"world_load_slot:{_slot_err}")
         except ValueError as exc:
             error_payload = {
                 "accepted": False,
@@ -1086,6 +996,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                 action_cadence_interval=args.action_cadence_interval,
                 actor_action_cadence_overrides=actor_action_cadence_overrides,
                 external_agent_timeout_seconds=args.shared_external_agent_timeout_seconds,
+                world_load_path=args.world_load_path,
+                world_save_path=args.world_save_path,
+                world_load_slot=args.world_load_slot,
+                world_save_slot=args.world_save_slot,
+                save_dir=args.save_dir,
             )
         except (ValueError, RuntimeError) as exc:
             error_payload = {
@@ -1097,6 +1012,24 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 1
 
         print(_render_human_console_summary(result))
+        return 0
+    if args.command == "list-saves":
+        effective_save_dir = args.save_dir or WORLD_SAVE_DIR_DEFAULT
+        list_result = list_world_slots(effective_save_dir)
+        response_payload: dict[str, Any] = list_result.to_dict()
+        response_payload["accepted"] = list_result.accepted
+        if args.output == "pretty":
+            if not list_result.slots:
+                print(f"No save slots found in: {list_result.save_dir}")
+            else:
+                print(f"Save slots in: {list_result.save_dir}")
+                for slot in list_result.slots:
+                    print(
+                        f"  {slot.slot_name:20s}  scenario={slot.scenario_id}  "
+                        f"tick={slot.world_tick}  version={slot.scenario_version}"
+                    )
+        else:
+            print(json.dumps(response_payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True))
         return 0
     if args.command == "compare-playable-slices":
         try:
@@ -1120,6 +1053,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                 args.direct_provider_comparison_timeout_seconds <= 0.0
             ):
                 raise ValueError("direct_provider_comparison_timeout_seconds_must_be_positive")
+            if args.provider_min_turn_delay_seconds is not None and args.provider_min_turn_delay_seconds < 0.0:
+                raise ValueError("provider_min_turn_delay_seconds_must_be_non_negative")
+            if args.provider_max_actions is not None and args.provider_max_actions <= 0:
+                raise ValueError("provider_max_actions_must_be_positive")
             if (
                 args.direct_provider is not None
                 and args.angular_router_variant is not None
@@ -1243,6 +1180,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                                 scenario_id=_scenario_payload_id(scenario_payload),
                             ),
                             external_agent_timeout_seconds=args.direct_provider_comparison_timeout_seconds,
+                            provider_min_turn_delay_seconds=args.provider_min_turn_delay_seconds,
+                            provider_max_actions=args.provider_max_actions,
                         )
                     )
                     entries.append(
@@ -1271,6 +1210,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                                 scenario_id=_scenario_payload_id(scenario_payload),
                             ),
                             external_agent_timeout_seconds=args.direct_provider_comparison_timeout_seconds,
+                            provider_min_turn_delay_seconds=args.provider_min_turn_delay_seconds,
+                            provider_max_actions=args.provider_max_actions,
                         )
                     )
                     entries.append(
@@ -1306,6 +1247,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                                     scenario_id=_scenario_payload_id(scenario_payload),
                                 ),
                                 external_agent_timeout_seconds=args.direct_provider_comparison_timeout_seconds,
+                                provider_min_turn_delay_seconds=args.provider_min_turn_delay_seconds,
+                                provider_max_actions=args.provider_max_actions,
                             )
                         )
                         entries.append(
@@ -1341,6 +1284,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                                 scenario_id=_scenario_payload_id(scenario_payload),
                             ),
                             external_agent_timeout_seconds=args.direct_provider_comparison_timeout_seconds,
+                            provider_min_turn_delay_seconds=args.provider_min_turn_delay_seconds,
+                            provider_max_actions=args.provider_max_actions,
                         )
                     )
                     entries.append(
@@ -1377,11 +1322,50 @@ def main(argv: Sequence[str] | None = None) -> int:
             "entry_count": len(entries),
             "entries": entries,
         }
+        if (
+            args.provider_min_turn_delay_seconds is not None
+            or args.provider_max_actions is not None
+        ):
+            response_payload["provider_budget"] = {
+                "provider_min_turn_delay_seconds": args.provider_min_turn_delay_seconds,
+                "provider_max_actions": args.provider_max_actions,
+            }
         print(_render_cli_output(response_payload, output_format=args.output))
         return 0
     if args.command == "suite":
         actor_ids = tuple(args.actor_id) if len(args.actor_id) > 0 else _DEFAULT_ACTOR_IDS
         try:
+            actor_action_cadence_overrides = _parse_actor_action_cadence_overrides(
+                args.actor_action_cadence
+            )
+            if args.action_cadence_interval is not None and args.action_cadence_interval <= 0:
+                raise ValueError("action_cadence_interval_must_be_positive")
+            if args.direct_provider_timeout_seconds is not None and args.direct_provider_timeout_seconds <= 0.0:
+                raise ValueError("direct_provider_timeout_seconds_must_be_positive")
+            if args.provider_min_turn_delay_seconds is not None and args.provider_min_turn_delay_seconds < 0.0:
+                raise ValueError("provider_min_turn_delay_seconds_must_be_non_negative")
+            if args.provider_max_actions is not None and args.provider_max_actions <= 0:
+                raise ValueError("provider_max_actions_must_be_positive")
+            if (
+                args.timing_mode is None
+                and len(actor_action_cadence_overrides) > 0
+                and args.action_cadence_interval is None
+            ):
+                raise ValueError("actor_action_cadence_requires_action_cadence_interval")
+            if args.timing_mode is None and any(
+                actor_id not in actor_ids for actor_id in actor_action_cadence_overrides
+            ):
+                raise ValueError("actor_action_cadence_actor_ids_must_be_subset_of_actor_ids")
+            (
+                resolved_timing_mode,
+                resolved_action_cadence_interval,
+                resolved_actor_action_cadence_overrides,
+            ) = resolve_timing_mode_cadence_config(
+                timing_mode=args.timing_mode,
+                action_cadence_interval=args.action_cadence_interval,
+                actor_action_cadence_overrides=actor_action_cadence_overrides,
+                actor_ids=actor_ids,
+            )
             suite_results_for_saved_replay: tuple[tuple[str, Any], ...] = ()
             baseline_external_agent_config = _resolve_external_agent_config(
                 agent_command=None,
@@ -1442,6 +1426,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                                     baseline_external_agent_config["persistent_agent_session"]
                                     or candidate_external_agent_config["persistent_agent_session"]
                                 ),
+                                timing_mode=args.timing_mode,
+                                action_cadence_interval=args.action_cadence_interval,
+                                actor_action_cadence_overrides=actor_action_cadence_overrides,
+                                external_agent_timeout_seconds=args.direct_provider_timeout_seconds,
+                                provider_min_turn_delay_seconds=args.provider_min_turn_delay_seconds,
+                                provider_max_actions=args.provider_max_actions,
                             )
                         )
                         for scenario_name in suite_scenario_names
@@ -1464,6 +1454,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                                 actor_ids=actor_ids,
                                 external_agent_command=baseline_external_agent_config["command"],
                                 persistent_agent_session=baseline_external_agent_config["persistent_agent_session"],
+                                timing_mode=args.timing_mode,
+                                action_cadence_interval=args.action_cadence_interval,
+                                actor_action_cadence_overrides=actor_action_cadence_overrides,
+                                external_agent_timeout_seconds=args.direct_provider_timeout_seconds,
+                                provider_min_turn_delay_seconds=args.provider_min_turn_delay_seconds,
+                                provider_max_actions=args.provider_max_actions,
                             )
                         )
                         for scenario_name in suite_scenario_names
@@ -1477,6 +1473,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                                 actor_ids=actor_ids,
                                 external_agent_command=candidate_external_agent_config["command"],
                                 persistent_agent_session=candidate_external_agent_config["persistent_agent_session"],
+                                timing_mode=args.timing_mode,
+                                action_cadence_interval=args.action_cadence_interval,
+                                actor_action_cadence_overrides=actor_action_cadence_overrides,
+                                external_agent_timeout_seconds=args.direct_provider_timeout_seconds,
+                                provider_min_turn_delay_seconds=args.provider_min_turn_delay_seconds,
+                                provider_max_actions=args.provider_max_actions,
                             )
                         )
                         for scenario_name in suite_scenario_names
@@ -1508,6 +1510,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                             benchmark_id=args.benchmark_id,
                             scenario=_SCENARIO_PRESETS[scenario_name],
                             actor_ids=actor_ids,
+                            timing_mode=args.timing_mode,
+                            action_cadence_interval=args.action_cadence_interval,
+                            actor_action_cadence_overrides=actor_action_cadence_overrides,
+                            external_agent_timeout_seconds=args.direct_provider_timeout_seconds,
+                            provider_min_turn_delay_seconds=args.provider_min_turn_delay_seconds,
+                            provider_max_actions=args.provider_max_actions,
                         )
                     )
                     for scenario_name in suite_scenario_names
@@ -1523,6 +1531,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                             benchmark_id=args.benchmark_id,
                             scenario=_SCENARIO_PRESETS[scenario_name],
                             actor_ids=actor_ids,
+                            timing_mode=args.timing_mode,
+                            action_cadence_interval=args.action_cadence_interval,
+                            actor_action_cadence_overrides=actor_action_cadence_overrides,
+                            external_agent_timeout_seconds=args.direct_provider_timeout_seconds,
+                            provider_min_turn_delay_seconds=args.provider_min_turn_delay_seconds,
+                            provider_max_actions=args.provider_max_actions,
                         )
                     )
                     for scenario_name in suite_scenario_names
@@ -1542,6 +1556,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                             benchmark_id=args.benchmark_id,
                             scenario=_SCENARIO_PRESETS[scenario_name],
                             actor_ids=actor_ids,
+                            timing_mode=args.timing_mode,
+                            action_cadence_interval=args.action_cadence_interval,
+                            actor_action_cadence_overrides=actor_action_cadence_overrides,
+                            external_agent_timeout_seconds=args.direct_provider_timeout_seconds,
+                            provider_min_turn_delay_seconds=args.provider_min_turn_delay_seconds,
+                            provider_max_actions=args.provider_max_actions,
                         )
                     )
                     for scenario_name in suite_scenario_names
@@ -1556,6 +1576,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                             external_agent_command=external_agent_command,
                             external_agent_actor_id=args.external_agent_actor,
                             persistent_agent_session=persistent_agent_session,
+                            timing_mode=args.timing_mode,
+                            action_cadence_interval=args.action_cadence_interval,
+                            actor_action_cadence_overrides=actor_action_cadence_overrides,
+                            external_agent_timeout_seconds=args.direct_provider_timeout_seconds,
+                            provider_min_turn_delay_seconds=args.provider_min_turn_delay_seconds,
+                            provider_max_actions=args.provider_max_actions,
                         )
                     )
                     for scenario_name in suite_scenario_names
@@ -1581,6 +1607,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                             benchmark_id=args.benchmark_id,
                             scenario=_SCENARIO_PRESETS[scenario_name],
                             actor_ids=actor_ids,
+                            timing_mode=args.timing_mode,
+                            action_cadence_interval=args.action_cadence_interval,
+                            actor_action_cadence_overrides=actor_action_cadence_overrides,
+                            external_agent_timeout_seconds=args.direct_provider_timeout_seconds,
+                            provider_min_turn_delay_seconds=args.provider_min_turn_delay_seconds,
+                            provider_max_actions=args.provider_max_actions,
                         )
                     )
                     for scenario_name in suite_scenario_names
@@ -1594,6 +1626,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                             actor_ids=actor_ids,
                             external_agent_command=external_agent_command,
                             persistent_agent_session=persistent_agent_session,
+                            timing_mode=args.timing_mode,
+                            action_cadence_interval=args.action_cadence_interval,
+                            actor_action_cadence_overrides=actor_action_cadence_overrides,
+                            external_agent_timeout_seconds=args.direct_provider_timeout_seconds,
+                            provider_min_turn_delay_seconds=args.provider_min_turn_delay_seconds,
+                            provider_max_actions=args.provider_max_actions,
                         )
                     )
                     for scenario_name in suite_scenario_names
@@ -1628,6 +1666,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             benchmark_id=args.benchmark_id,
             actor_ids=response_actor_ids,
             report_payload=report_payload,
+            timing_mode=resolved_timing_mode,
+            action_cadence_interval=resolved_action_cadence_interval,
+            actor_action_cadence_overrides=resolved_actor_action_cadence_overrides,
+            provider_min_turn_delay_seconds=args.provider_min_turn_delay_seconds,
+            provider_max_actions=args.provider_max_actions,
         )
         rendered_output = _render_cli_output(response_payload, output_format=args.output)
         if args.output_file is not None:
@@ -1754,6 +1797,21 @@ def _build_run_response(
         response_payload["external_agent_label"] = external_agent_label
     if external_agent_profile_id is not None:
         response_payload["external_agent_profile_id"] = external_agent_profile_id
+    timing_payload = result_payload.get("timing")
+    if isinstance(timing_payload, Mapping):
+        timing_mode = timing_payload.get("timing_mode")
+        action_cadence_interval = timing_payload.get("action_cadence_interval")
+        actor_action_cadence_overrides = list(timing_payload.get("actor_action_cadence_overrides", ()))
+        actor_next_action_eligible_at = list(timing_payload.get("actor_next_action_eligible_at", ()))
+        if timing_mode is not None:
+            response_payload["timing_mode"] = timing_mode
+        if action_cadence_interval is not None:
+            response_payload["action_cadence_interval"] = action_cadence_interval
+            response_payload["actor_action_cadence_overrides"] = actor_action_cadence_overrides
+            response_payload["actor_next_action_eligible_at"] = actor_next_action_eligible_at
+    provider_budget_payload = result_payload.get("provider_budget")
+    if isinstance(provider_budget_payload, Mapping):
+        response_payload["provider_budget"] = dict(provider_budget_payload)
     return response_payload
 
 
@@ -1763,14 +1821,33 @@ def _build_suite_response(
     benchmark_id: str,
     actor_ids: Sequence[str],
     report_payload: Mapping[str, Any],
+    timing_mode: str | None = None,
+    action_cadence_interval: int | None = None,
+    actor_action_cadence_overrides: Mapping[str, int] | None = None,
+    provider_min_turn_delay_seconds: float | None = None,
+    provider_max_actions: int | None = None,
 ) -> dict[str, Any]:
-    return {
+    response = {
         "accepted": True,
         "suite_id": suite_id,
         "benchmark_id": benchmark_id,
         "actor_ids": list(actor_ids),
         "report": report_payload,
     }
+    if timing_mode is not None:
+        response["timing_mode"] = timing_mode
+    if action_cadence_interval is not None:
+        response["action_cadence_interval"] = action_cadence_interval
+        response["actor_action_cadence_overrides"] = [
+            {"actor_id": actor_id, "cadence_interval": cadence_interval}
+            for actor_id, cadence_interval in (actor_action_cadence_overrides or {}).items()
+        ]
+    if provider_min_turn_delay_seconds is not None or provider_max_actions is not None:
+        response["provider_budget"] = {
+            "provider_min_turn_delay_seconds": provider_min_turn_delay_seconds,
+            "provider_max_actions": provider_max_actions,
+        }
+    return response
 
 
 def _build_suite_output_manifest(
@@ -1819,6 +1896,28 @@ def _build_suite_output_manifest(
         "has_replay_refs": replay_present,
         "has_parity_refs": parity_present,
         "report_schema_version": report_schema_version,
+        **(
+            {"timing_mode": str(response_payload["timing_mode"])}
+            if isinstance(response_payload.get("timing_mode"), str)
+            and str(response_payload["timing_mode"]) != ""
+            else {}
+        ),
+        **(
+            {"action_cadence_interval": int(response_payload["action_cadence_interval"])}
+            if isinstance(response_payload.get("action_cadence_interval"), int)
+            and not isinstance(response_payload.get("action_cadence_interval"), bool)
+            else {}
+        ),
+        **(
+            {
+                "actor_action_cadence_overrides": list(
+                    response_payload.get("actor_action_cadence_overrides", ())
+                )
+            }
+            if isinstance(response_payload.get("action_cadence_interval"), int)
+            and not isinstance(response_payload.get("action_cadence_interval"), bool)
+            else {}
+        ),
         **(
             {"external_agent_label": str(report_payload["external_agent_label"])}
             if isinstance(report_payload.get("external_agent_label"), str)

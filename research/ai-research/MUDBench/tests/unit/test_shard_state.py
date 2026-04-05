@@ -3253,3 +3253,18 @@ def test_shard_state_export_payload_can_include_manifest_issue_bundle_verificati
     }
     assert payload["bundle_verification_summary"] == summary
     assert state.to_dict() == before
+
+
+# ---------------------------------------------------------------------------
+# Timing consequence helper
+# ---------------------------------------------------------------------------
+
+def test_has_cadence_efficiency_consequence_detects_flag() -> None:
+    """_has_cadence_efficiency_consequence returns True iff timing_consequence matches."""
+    from evaluation.benchmark_runner.runner import _has_cadence_efficiency_consequence
+
+    assert _has_cadence_efficiency_consequence({"timing_consequence": "cadence_efficiency"}) is True
+    assert _has_cadence_efficiency_consequence({}) is False
+    assert _has_cadence_efficiency_consequence({"timing_consequence": "other"}) is False
+    assert _has_cadence_efficiency_consequence({"timing_consequence": ""}) is False
+    assert _has_cadence_efficiency_consequence({"timing_consequence": None}) is False

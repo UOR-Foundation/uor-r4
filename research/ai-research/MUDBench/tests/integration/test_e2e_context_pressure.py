@@ -3,11 +3,24 @@ from __future__ import annotations
 import json
 
 from cli.main import _SCENARIO_PRESETS
-from evaluation.benchmark_runner.runner import BenchmarkRunnerConfig, run_benchmark_lifecycle
+from evaluation.benchmark_runner.runner import (
+    BenchmarkRunnerConfig,
+    run_benchmark_lifecycle,
+)
 
 
 def _scenario_payload() -> dict[str, object]:
     return dict(_SCENARIO_PRESETS["tiny-context-pressure"])
+
+
+def _scenario_payload_with_consequence() -> dict[str, object]:
+    """Return the context-pressure payload with the cadence-efficiency timing consequence active."""
+    payload = dict(_SCENARIO_PRESETS["tiny-context-pressure"])
+    scenario_vars = dict(payload["scenario_vars"])  # type: ignore[arg-type]
+    scenario_vars["timing_consequence"] = "cadence_efficiency"
+    payload = dict(payload)
+    payload["scenario_vars"] = scenario_vars
+    return payload
 
 
 def _runner_config() -> BenchmarkRunnerConfig:
@@ -139,3 +152,105 @@ def test_context_pressure_is_structurally_richer_than_current_richer_tiny_slices
     assert payload["scorecard"]["aggregate_score"] > 0.0
     assert payload["scorecard"]["metadata"]["scenario_id"] == "tiny-context-pressure"
     assert _final_metric_sum(events=events, actor_id="agent-a", metric_name="quest.completed") >= 2.0
+
+
+def test_timing_consequence_zero_overhead_without_cadence() -> None:
+    """Timing consequence is active but cadence=1 (default) produces zero overhead.
+    Score must be identical to a run with no timing_consequence in scenario_vars."""
+    result_baseline = run_benchmark_lifecycle(
+        BenchmarkRunnerConfig(
+            run_id="e2e-tc-no-cadence",
+            benchmark_id="e2e-benchmark",
+            scenario=_scenario_payload(),
+            actor_ids=("agent-a", "agent-b"),
+            action_cadence_interval=None,
+        )
+    )
+    result_with_consequence = run_benchmark_lifecycle(
+        BenchmarkRunnerConfig(
+            run_id="e2e-tc-consequence-no-cadence",
+            benchmark_id="e2e-benchmark",
+            scenario=_scenario_payload_with_consequence(),
+            actor_ids=("agent-a", "agent-b"),
+            action_cadence_interval=None,
+        )
+    )
+    # cadence_interval=1 → overhead=0 → consequence leaves score unchanged
+    assert result_baseline.scorecard.aggregate_score == result_with_consequence.scorecard.aggregate_score
+
+
+def test_timing_consequence_penalizes_higher_cadence() -> None:
+    """With the cadence-efficiency consequence active, cadence=3 must produce
+    a strictly lower aggregate_score than cadence=1 (same scenario, same agent script)."""
+    result_cadence1 = run_benchmark_lifecycle(
+        BenchmarkRunnerConfig(
+            run_id="e2e-tc-cadence1",
+            benchmark_id="e2e-benchmark",
+            scenario=_scenario_payload_with_consequence(),
+            actor_ids=("agent-a", "agent-b"),
+            action_cadence_interval=None,
+        )
+    )
+    result_cadence3 = run_benchmark_lifecycle(
+        BenchmarkRunnerConfig(
+            run_id="e2e-tc-cadence3",
+            benchmark_id="e2e-benchmark",
+            scenario=_scenario_payload_with_consequence(),
+            actor_ids=("agent-a", "agent-b"),
+            action_cadence_interval=3,
+        )
+    )
+    # cadence=3 adds overhead 2×actions_count to denominator → lower efficiency → lower aggregate
+    assert result_cadence3.scorecard.aggregate_score < result_cadence1.scorecard.aggregate_score
+
+
+def test_timing_consequence_ordering_stable_under_cadence() -> None:
+    """The per-actor ordering from _runner_config must remain deterministic under cadence=3."""
+    result = run_benchmark_lifecycle(
+        BenchmarkRunnerConfig(
+            run_id="e2e-tc-ordering",
+            benchmark_id="e2e-benchmark",
+            scenario=_scenario_payload_with_consequence(),
+            actor_ids=("agent-a", "agent-b"),
+            action_cadence_interval=3,
+        )
+    )
+    payload = result.to_dict()
+    assert payload["scorecard"]["metadata"]["scenario_id"] == "tiny-context-pressure"
+    assert payload["scorecard"]["aggregate_score"] > 0.0
+    # Run twice — must be deterministic
+    result2 = run_benchmark_lifecycle(
+        BenchmarkRunnerConfig(
+            run_id="e2e-tc-ordering",
+            benchmark_id="e2e-benchmark",
+            scenario=_scenario_payload_with_consequence(),
+            actor_ids=("agent-a", "agent-b"),
+            action_cadence_interval=3,
+        )
+    )
+    assert result.scorecard.aggregate_score == result2.scorecard.aggregate_score
+
+
+def test_cli_preset_activates_timing_consequence_under_cadence() -> None:
+    """The live _SCENARIO_PRESETS['tiny-context-pressure'] preset (no manual injection)
+    must activate the cadence-efficiency consequence when cadence > 1 is specified."""
+    result_no_cadence = run_benchmark_lifecycle(
+        BenchmarkRunnerConfig(
+            run_id="e2e-preset-sync-no-cadence",
+            benchmark_id="e2e-benchmark",
+            scenario=_scenario_payload(),
+            actor_ids=("agent-a", "agent-b"),
+            action_cadence_interval=None,
+        )
+    )
+    result_cadence3 = run_benchmark_lifecycle(
+        BenchmarkRunnerConfig(
+            run_id="e2e-preset-sync-cadence3",
+            benchmark_id="e2e-benchmark",
+            scenario=_scenario_payload(),
+            actor_ids=("agent-a", "agent-b"),
+            action_cadence_interval=3,
+        )
+    )
+    # Preset now carries timing_consequence; cadence=3 must produce a lower score than cadence=1
+    assert result_cadence3.scorecard.aggregate_score < result_no_cadence.scorecard.aggregate_score

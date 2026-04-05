@@ -13,6 +13,29 @@ from evaluation.benchmark_runner.runner import (
     build_playable_benchmark_session,
     build_shared_shard_loop_session,
 )
+from world.state.world_persistence import (
+    WORLD_SAVE_DIR_DEFAULT,
+    load_world_slot,
+    save_world_slot,
+    save_world_snapshot,
+)
+
+
+def _extract_scenario_id_from_payload(scenario: Mapping[str, Any] | str) -> str | None:
+    """Extract scenario_id from a scenario payload (dict or JSON string) without full loading."""
+    if isinstance(scenario, Mapping):
+        val = scenario.get("scenario_id")
+        return str(val) if val else None
+    if isinstance(scenario, str):
+        try:
+            import json as _json
+            parsed = _json.loads(scenario)
+            if isinstance(parsed, dict):
+                val = parsed.get("scenario_id")
+                return str(val) if val else None
+        except (ValueError, TypeError):
+            pass
+    return None
 
 _DEFAULT_RUN_ID = "human-console"
 _DEFAULT_ACTOR_ID = "human-player"
@@ -81,12 +104,24 @@ class HumanSharedShardSessionResult:
 
 
 def render_human_observation(observation: Observation) -> str:
-    """Render one observation deterministically for terminal play."""
+    """Render one observation deterministically for terminal play.
+
+    Entities are grouped by type (NPCs / Items / Other) so hostile NPCs,
+    interactable objects, and other actors are immediately distinguishable.
+    Messages are rendered one per line instead of comma-joined so multi-line
+    status blocks (history, objectives, world events) remain readable.
+    """
     targets = _build_allowed_target_summary(observation.action_space)
-    entities = ", ".join(entity.name for entity in observation.entities) or "none"
     inventory = ", ".join(observation.inventory) or "empty"
     exits = ", ".join(observation.exits) or "none"
-    messages = ", ".join(observation.messages) or "none"
+
+    # Split entities by type for clarity.
+    npc_names = [e.name for e in observation.entities if e.type == "npc"]
+    item_names = [e.name for e in observation.entities if e.type in {"item", "consumable"}]
+    other_names = [
+        e.name for e in observation.entities if e.type not in {"npc", "item", "consumable"}
+    ]
+
     action_lines = [
         f"  {index}. {action}"
         for index, action in enumerate(observation.action_space, start=1)
@@ -95,7 +130,13 @@ def render_human_observation(observation: Observation) -> str:
         f"  {verb}: {', '.join(target_values)}"
         for verb, target_values in targets
     ] or ["  none"]
-    lines = [
+
+    # Messages as one-per-line list — stays readable for both humans and agents.
+    message_lines: list[str] = (
+        [f"  {msg}" for msg in observation.messages] if observation.messages else ["  (none)"]
+    )
+
+    lines: list[str] = [
         f"Run: {observation.run_id}",
         f"Step: {observation.step + 1}",
         f"Remaining Steps: {observation.remaining_steps}",
@@ -103,9 +144,19 @@ def render_human_observation(observation: Observation) -> str:
         f"Health: {observation.health}",
         f"Description: {observation.description}",
         f"Exits: {exits}",
-        f"Entities: {entities}",
+    ]
+    if npc_names:
+        lines.append(f"NPCs: {', '.join(npc_names)}")
+    if item_names:
+        lines.append(f"Items: {', '.join(item_names)}")
+    if other_names:
+        lines.append(f"Other: {', '.join(other_names)}")
+    if not npc_names and not item_names and not other_names:
+        lines.append("Entities: none")
+    lines += [
         f"Inventory: {inventory}",
-        f"Messages: {messages}",
+        "Messages:",
+        *message_lines,
         "Available Actions:",
         *action_lines,
         "Allowed Targets:",
@@ -263,9 +314,35 @@ def run_human_shared_shard_session(
     external_agent_timeout_seconds: float | None = None,
     input_reader: Callable[[str], str] | None = None,
     output_writer: Callable[[str], None] = print,
+    world_load_path: str | None = None,
+    world_save_path: str | None = None,
+    world_load_slot: str | None = None,
+    world_save_slot: str | None = None,
+    save_dir: str | None = None,
 ) -> HumanSharedShardSessionResult:
     """Run a minimal deterministic multi-participant shared shard console loop."""
     resolved_input_reader = input if input_reader is None else input_reader
+    _effective_save_dir = save_dir or WORLD_SAVE_DIR_DEFAULT
+
+    # Resolve named save slot into a pre-loaded world state if requested.
+    _preloaded_world_state = None
+    if world_load_slot is not None:
+        _scenario_id_for_guard = _extract_scenario_id_from_payload(scenario)
+        _slot_result = load_world_slot(
+            world_load_slot,
+            _effective_save_dir,
+            required_scenario_id=_scenario_id_for_guard,
+        )
+        if not _slot_result.accepted or _slot_result.world_state is None:
+            raise ValueError(
+                f"world_load_slot_rejected:{world_load_slot}:{_slot_result.reason}"
+            )
+        _preloaded_world_state = _slot_result.world_state
+        output_writer(
+            f"World: loaded save slot '{world_load_slot}' "
+            f"(scenario={_slot_result.scenario_id}, tick={_slot_result.world_tick})"
+        )
+
     session = build_shared_shard_loop_session(
         scenario=scenario,
         actor_ids=tuple(actor_ids),
@@ -280,6 +357,8 @@ def run_human_shared_shard_session(
         action_cadence_interval=action_cadence_interval,
         actor_action_cadence_overrides=actor_action_cadence_overrides,
         external_agent_timeout_seconds=external_agent_timeout_seconds,
+        world_load_path=world_load_path,
+        world_state=_preloaded_world_state,
     )
     quit_requested = False
 
@@ -421,6 +500,28 @@ def run_human_shared_shard_session(
             actor_next_action_eligible_at=session.shard_state.actor_next_action_eligible_at,
         )
     finally:
+        if world_save_slot is not None:
+            _save_result = save_world_slot(
+                world_save_slot,
+                _effective_save_dir,
+                session.world_state,
+                run_id=run_id,
+                scenario_id=session.scenario_initialization.scenario_id,
+                scenario_version=session.scenario_initialization.version,
+                session_id=session.shard_id,
+                actor_ids=list(actor_ids),
+            )
+            if _save_result.accepted:
+                output_writer(f"World: saved to slot '{world_save_slot}' ({_save_result.path})")
+        elif world_save_path is not None:
+            save_world_snapshot(
+                world_save_path,
+                session.world_state,
+                run_id=run_id,
+                scenario_id=session.scenario_initialization.scenario_id,
+                scenario_version=session.scenario_initialization.version,
+                actor_ids=list(actor_ids),
+            )
         session.close_external_agent_participants()
 
 

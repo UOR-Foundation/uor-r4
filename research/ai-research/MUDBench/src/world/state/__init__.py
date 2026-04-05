@@ -15,6 +15,19 @@ from .shard_state import (
     ShardMutationPolicy,
     ShardState,
 )
+from .world_persistence import (
+    WORLD_SAVE_DIR_DEFAULT,
+    WorldSlotInfo,
+    WorldSlotListResult,
+    WorldSnapshotLoadResult,
+    WorldSnapshotSaveResult,
+    list_world_slots,
+    load_world_slot,
+    load_world_snapshot,
+    save_world_slot,
+    save_world_snapshot,
+    validate_slot_name,
+)
 
 __all__ = [
     "InProcessShardIdentityRegistry",
@@ -28,4 +41,15 @@ __all__ = [
     "ShardSessionRecord",
     "ShardState",
     "ShardSystemIdentityRecord",
+    "WorldSnapshotLoadResult",
+    "WorldSnapshotSaveResult",
+    "WorldSlotInfo",
+    "WorldSlotListResult",
+    "WORLD_SAVE_DIR_DEFAULT",
+    "list_world_slots",
+    "load_world_slot",
+    "load_world_snapshot",
+    "save_world_slot",
+    "save_world_snapshot",
+    "validate_slot_name",
 ]

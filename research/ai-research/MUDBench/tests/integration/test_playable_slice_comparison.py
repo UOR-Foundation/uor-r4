@@ -33,6 +33,7 @@ def test_cli_compare_playable_slices_runs_built_in_and_mock_wrapper_modes_determ
     ]
     assert payload["mode_ids"] == ["built_in", "mock_wrapper"]
     assert payload["entry_count"] == 8
+    assert "timing_mode_aggregation" not in payload
 
     entries = payload["entries"]
     assert [entry["scenario_id"] for entry in entries[0:8:2]] == [

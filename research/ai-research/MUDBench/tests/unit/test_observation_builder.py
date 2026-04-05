@@ -79,6 +79,8 @@ def test_observation_builder_maps_snapshot_to_protocol_observation() -> None:
         "drop item-2",
         "use item-2",
         "give item-2 npc-1",
+        "talk npc-1",
+        "defend",
         "attack npc-1",
     )
 
@@ -276,3 +278,36 @@ def test_build_model_facing_observation_payload_explicitly_differs_for_persisten
         "history_policy": "caller_managed_session_history",
     }
     assert payload["allowed_actions"] == list(observation.action_space)
+
+
+def test_neutral_npc_does_not_generate_attack_action() -> None:
+    snapshot = _sample_snapshot()
+    entities = snapshot["entities"]
+    assert isinstance(entities, dict)
+    entities["npc-1"]["tags"] = ["neutral"]
+
+    observation = build_observation_for_actor(
+        snapshot,
+        actor_id="agent-1",
+        run_id="run-neutral-tag",
+        step=1,
+        max_steps=5,
+    )
+
+    assert "attack npc-1" not in observation.action_space
+    assert "talk npc-1" in observation.action_space
+
+
+def test_untagged_npc_generates_attack_action() -> None:
+    snapshot = _sample_snapshot()
+
+    observation = build_observation_for_actor(
+        snapshot,
+        actor_id="agent-1",
+        run_id="run-untagged",
+        step=1,
+        max_steps=5,
+    )
+
+    assert "attack npc-1" in observation.action_space
+    assert "talk npc-1" in observation.action_space

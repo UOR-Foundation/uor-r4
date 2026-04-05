@@ -179,16 +179,24 @@ def test_cli_play_shared_shard_fetch_quest_flow_works_deterministically(
     assert "Actor Turn: human-a" in captured.out
     assert "Actor Turn: human-b" in captured.out
     assert (
-        "Messages: The shard feels still, as if the watch has not yet begun., "
+        "The shard feels still, as if the watch has not yet begun."
+    ) in captured.out
+    assert (
         "Hint: the route feels open while the watch remains dormant."
     ) in captured.out
     assert (
-        "Messages: A distant sentinel grows watchful in the quiet corridors., "
-        "Hint: the sharp watch makes a careful look feel safer than rushing., "
+        "A distant sentinel grows watchful in the quiet corridors."
+    ) in captured.out
+    assert (
+        "Hint: the sharp watch makes a careful look feel safer than rushing."
+    ) in captured.out
+    assert (
         "Consequence: the exposed west passage is pinned under watch; move west is unavailable."
     ) in captured.out
     assert (
-        "Messages: You catch the measured rhythm of a distant patrol., "
+        "You catch the measured rhythm of a distant patrol."
+    ) in captured.out
+    assert (
         "Hint: the moving patrol leaves brief windows for repositioning."
     ) in captured.out
     assert "Actor Result: human-a" in captured.out
@@ -320,10 +328,8 @@ def test_cli_play_shared_shard_mixed_human_and_agent_flow_works_deterministicall
     assert "Agent Selected Action: take golden-key" in captured.out
     assert "Objective complete for: agent-b" in captured.out
     assert "Completed Actors: agent-b" in captured.out
-    assert (
-        "Messages: You catch the measured rhythm of a distant patrol., "
-        "Hint: the moving patrol leaves brief windows for repositioning."
-    ) in captured.out
+    assert "You catch the measured rhythm of a distant patrol." in captured.out
+    assert "Hint: the moving patrol leaves brief windows for repositioning." in captured.out
 
 
 def test_cli_play_shared_shard_phase_outcome_effect_is_experienced_deterministically(
@@ -399,10 +405,8 @@ def test_cli_play_shared_shard_mixed_human_and_external_agent_flow_works_determi
     assert "External Agent Selected Action: take golden-key" in captured.out
     assert "Objective complete for: external-agent" in captured.out
     assert "Completed Actors: external-agent" in captured.out
-    assert (
-        "Messages: You catch the measured rhythm of a distant patrol., "
-        "Hint: the moving patrol leaves brief windows for repositioning."
-    ) in captured.out
+    assert "You catch the measured rhythm of a distant patrol." in captured.out
+    assert "Hint: the moving patrol leaves brief windows for repositioning." in captured.out
 
 
 def test_cli_play_shared_shard_mixed_human_and_direct_provider_flow_works_deterministically(
@@ -544,7 +548,5 @@ def test_cli_play_shared_shard_mixed_human_and_persistent_external_agent_flow_wo
     assert "Objective complete for: external-agent" in captured.out
     assert "Completed Actors: external-agent" in captured.out
     assert "World Tick Effect: npc_stance_phase=patrolling" in captured.out
-    assert (
-        "Messages: You catch the measured rhythm of a distant patrol., "
-        "Hint: the moving patrol leaves brief windows for repositioning."
-    ) in captured.out
+    assert "You catch the measured rhythm of a distant patrol." in captured.out
+    assert "Hint: the moving patrol leaves brief windows for repositioning." in captured.out

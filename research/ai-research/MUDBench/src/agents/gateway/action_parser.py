@@ -10,7 +10,7 @@ from agents.protocol.action import ActionSubmission
 from agents.protocol.observation import require_supported_protocol_version
 from core.action_processor import ActionRequest, normalize_arguments
 
-_NO_ARGUMENT_VERBS = frozenset({"wait", "look"})
+_NO_ARGUMENT_VERBS = frozenset({"wait", "look", "defend"})
 _VERB_TO_ARGUMENT_KEY = {
     "move": "direction",
     "take": "item_id",
@@ -18,6 +18,7 @@ _VERB_TO_ARGUMENT_KEY = {
     "use": "item_id",
     "attack": "target_id",
     "give": "item_id",
+    "talk": "target_id",
 }
 _SUPPORTED_VERBS = _NO_ARGUMENT_VERBS | frozenset(_VERB_TO_ARGUMENT_KEY.keys())
 

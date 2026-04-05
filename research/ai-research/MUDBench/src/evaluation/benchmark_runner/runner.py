@@ -6,9 +6,10 @@ import json
 import shutil
 import sys
 import tempfile
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping, Sequence, cast
 
 from agents.gateway.action_pipeline import run_action_pipeline
 from agents.gateway.observation_builder import build_observation_for_actor
@@ -53,10 +54,18 @@ from scenarios.scenario_loader import (
     load_scenario_definition,
 )
 from world.rooms.room_graph import DeterministicRoomGraph
-from world.state.basic_action_processor import BasicDeterministicActionProcessor
+from world.state.basic_action_processor import BasicDeterministicActionProcessor, process_npc_tick, process_npc_respawn_tick, process_quest_objective_tick, process_actor_defeat_tick, process_actor_respawn_tick, _ACTOR_ENTITY_TYPES, _DEFAULT_ACTOR_HEALTH
 from world.state.spawn_manager import DeterministicSpawnManager, SpawnRequest
 from world.state.shard_state import ShardState
 from world.state.world_bootstrap import bootstrap_world_state_manager
+from world.state.world_persistence import (
+    WORLD_SAVE_DIR_DEFAULT,
+    load_world_slot,
+    load_world_snapshot,
+    save_world_slot,
+    save_world_snapshot,
+    validate_slot_name,
+)
 from world.state.world_state import DeterministicWorldStateManager
 
 _CAPABILITY_KEYS = (
@@ -88,6 +97,7 @@ _TIMING_MODE_OFF = "off"
 _TIMING_MODE_EQUAL_CADENCE = "equal-cadence"
 _TIMING_MODE_HUMAN_PARITY = "human-parity"
 _TIMING_MODE_NATIVE_SPEED = "native-speed"
+_TIMING_CONSEQUENCE_CADENCE_EFFICIENCY = "cadence_efficiency"
 _SUPPORTED_TIMING_MODES = frozenset(
     {
         _TIMING_MODE_OFF,
@@ -622,6 +632,13 @@ class BenchmarkRunnerConfig:
     actor_action_cadence_overrides: Mapping[str, int] | None = None
     normalization_profiles: Mapping[str, NormalizationProfile | Mapping[str, Any]] | None = None
     score_weights: Mapping[str, float] | None = None
+    provider_min_turn_delay_seconds: float | None = None
+    provider_max_actions: int | None = None
+    world_save_path: str | None = None
+    world_load_path: str | None = None
+    world_save_slot: str | None = None
+    world_load_slot: str | None = None
+    save_dir: str | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.run_id, str) or not self.run_id:
@@ -717,6 +734,42 @@ class BenchmarkRunnerConfig:
             raise ValueError("normalization_profiles must be a mapping")
         if self.score_weights is not None and not isinstance(self.score_weights, Mapping):
             raise ValueError("score_weights must be a mapping")
+        if self.provider_min_turn_delay_seconds is not None and (
+            not isinstance(self.provider_min_turn_delay_seconds, (int, float))
+            or isinstance(self.provider_min_turn_delay_seconds, bool)
+            or float(self.provider_min_turn_delay_seconds) < 0.0
+        ):
+            raise ValueError("provider_min_turn_delay_seconds must be None or a non-negative number")
+        if self.provider_max_actions is not None and (
+            not isinstance(self.provider_max_actions, int)
+            or isinstance(self.provider_max_actions, bool)
+            or self.provider_max_actions <= 0
+        ):
+            raise ValueError("provider_max_actions must be None or a positive integer")
+        if self.world_save_path is not None and (
+            not isinstance(self.world_save_path, str) or not self.world_save_path
+        ):
+            raise ValueError("world_save_path must be None or a non-empty string")
+        if self.world_load_path is not None and (
+            not isinstance(self.world_load_path, str) or not self.world_load_path
+        ):
+            raise ValueError("world_load_path must be None or a non-empty string")
+        if self.world_save_path is not None and self.world_save_slot is not None:
+            raise ValueError("world_save_path and world_save_slot cannot both be provided")
+        if self.world_load_path is not None and self.world_load_slot is not None:
+            raise ValueError("world_load_path and world_load_slot cannot both be provided")
+        if self.world_save_slot is not None:
+            _slot_err = validate_slot_name(self.world_save_slot)
+            if _slot_err:
+                raise ValueError(f"world_save_slot: {_slot_err}")
+        if self.world_load_slot is not None:
+            _slot_err = validate_slot_name(self.world_load_slot)
+            if _slot_err:
+                raise ValueError(f"world_load_slot: {_slot_err}")
+        if self.save_dir is not None and (
+            not isinstance(self.save_dir, str) or not self.save_dir
+        ):
+            raise ValueError("save_dir must be None or a non-empty string")
 
     def to_run_config(self) -> BenchmarkRunConfig:
         """Convert wrapper config into canonical run configuration."""
@@ -747,6 +800,13 @@ class BenchmarkRunnerResult:
     replay_parity_artifact: ReplayParityArtifact
     replay_artifact_refs: tuple[tuple[str, str], ...]
     runtime_telemetry_records: tuple[dict[str, Any], ...] = ()
+    timing_mode: str | None = None
+    action_cadence_interval: int | None = None
+    actor_action_cadence_overrides: tuple[tuple[str, int], ...] = ()
+    actor_next_action_eligible_at: tuple[tuple[str, int], ...] = ()
+    provider_min_turn_delay_seconds: float | None = None
+    provider_max_actions: int | None = None
+    provider_action_count: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -774,6 +834,23 @@ class BenchmarkRunnerResult:
             "runtime_telemetry": {
                 "records": [dict(record) for record in self.runtime_telemetry_records],
                 "summary_by_actor": _build_runtime_telemetry_summary(self.runtime_telemetry_records),
+            },
+            "timing": {
+                "timing_mode": self.timing_mode,
+                "action_cadence_interval": self.action_cadence_interval,
+                "actor_action_cadence_overrides": [
+                    {"actor_id": actor_id, "cadence_interval": cadence_interval}
+                    for actor_id, cadence_interval in self.actor_action_cadence_overrides
+                ],
+                "actor_next_action_eligible_at": [
+                    {"actor_id": actor_id, "next_action_eligible_at": next_action_eligible_at}
+                    for actor_id, next_action_eligible_at in self.actor_next_action_eligible_at
+                ],
+            },
+            "provider_budget": {
+                "provider_min_turn_delay_seconds": self.provider_min_turn_delay_seconds,
+                "provider_max_actions": self.provider_max_actions,
+                "provider_action_count": self.provider_action_count,
             },
         }
 
@@ -871,6 +948,68 @@ def build_playable_slice_comparison_entry(
     }
 
 
+def _build_timing_mode_aggregation(
+    results: Sequence[BenchmarkRunnerResult],
+) -> dict[str, Any] | None:
+    timed_results = [
+        result
+        for result in results
+        if isinstance(result.timing_mode, str) and result.timing_mode != ""
+    ]
+    if len(timed_results) == 0:
+        return None
+
+    rollups_by_mode: dict[str, dict[str, Any]] = {}
+    for result in timed_results:
+        timing_mode = str(result.timing_mode)
+        rollup = rollups_by_mode.get(timing_mode)
+        if rollup is None:
+            rollup = {
+                "timing_mode": timing_mode,
+                "run_count": 0,
+                "entry_count": 0,
+                "aggregate_score_total": 0.0,
+                "scenario_ids": set(),
+            }
+            rollups_by_mode[timing_mode] = rollup
+        rollup["run_count"] = int(rollup["run_count"]) + 1
+        rollup["entry_count"] = int(rollup["entry_count"]) + len(result.run_manifest.actor_ids)
+        rollup["aggregate_score_total"] = float(rollup["aggregate_score_total"]) + float(result.scorecard.aggregate_score)
+        cast(set[str], rollup["scenario_ids"]).add(str(result.lifecycle_state.scenario_id))
+
+    modes: list[dict[str, Any]] = []
+    total_run_count = 0
+    total_entry_count = 0
+    total_aggregate_score = 0.0
+    for timing_mode in sorted(rollups_by_mode):
+        mode_rollup = rollups_by_mode[timing_mode]
+        run_count = int(mode_rollup["run_count"])
+        entry_count = int(mode_rollup["entry_count"])
+        aggregate_score_total = float(mode_rollup["aggregate_score_total"])
+        total_run_count += run_count
+        total_entry_count += entry_count
+        total_aggregate_score += aggregate_score_total
+        modes.append(
+            {
+                "timing_mode": timing_mode,
+                "run_count": run_count,
+                "entry_count": entry_count,
+                "aggregate_score_total": aggregate_score_total,
+                "aggregate_score_average": aggregate_score_total / run_count if run_count > 0 else 0.0,
+                "scenario_ids": sorted(cast(set[str], mode_rollup["scenario_ids"])),
+            }
+        )
+
+    return {
+        "mode_count": len(modes),
+        "run_count": total_run_count,
+        "entry_count": total_entry_count,
+        "aggregate_score_total": total_aggregate_score,
+        "aggregate_score_average": total_aggregate_score / total_run_count if total_run_count > 0 else 0.0,
+        "modes": modes,
+    }
+
+
 def build_tiny_suite_baseline_report(
     results: Sequence[BenchmarkRunnerResult],
 ) -> dict[str, Any]:
@@ -917,13 +1056,17 @@ def build_tiny_suite_baseline_report(
             )
 
     entries.sort(key=lambda entry: (str(entry["scenario_id"]), str(entry["agent_id"])))
-    return {
+    report_payload: dict[str, Any] = {
         "schema_version": "tiny_suite_baseline_report_v1",
         "benchmark_ids": sorted(benchmark_ids),
         "scenario_count": len(scenario_ids),
         "entry_count": len(entries),
         "entries": entries,
     }
+    timing_mode_aggregation = _build_timing_mode_aggregation(results)
+    if timing_mode_aggregation is not None:
+        report_payload["timing_mode_aggregation"] = timing_mode_aggregation
+    return report_payload
 
 
 def build_tiny_suite_comparison_report(
@@ -976,7 +1119,7 @@ def build_tiny_suite_comparison_report(
     scenario_count = len(comparisons)
     baseline_average = baseline_total / scenario_count if scenario_count > 0 else 0.0
     candidate_average = candidate_total / scenario_count if scenario_count > 0 else 0.0
-    return {
+    report_payload: dict[str, Any] = {
         "schema_version": "tiny_suite_comparison_report_v1",
         "benchmark_ids": baseline_report["benchmark_ids"],
         "baseline_agent_id": baseline_agent_id,
@@ -992,6 +1135,10 @@ def build_tiny_suite_comparison_report(
             "composite_score_difference_average": candidate_average - baseline_average,
         },
     }
+    timing_mode_aggregation = _build_timing_mode_aggregation(results)
+    if timing_mode_aggregation is not None:
+        report_payload["timing_mode_aggregation"] = timing_mode_aggregation
+    return report_payload
 
 
 def build_tiny_suite_external_comparison_report(
@@ -1059,7 +1206,7 @@ def build_tiny_suite_external_comparison_report(
         {str(benchmark_id) for benchmark_id in baseline_report["benchmark_ids"]}
         | {str(benchmark_id) for benchmark_id in external_report["benchmark_ids"]}
     )
-    return {
+    report_payload: dict[str, Any] = {
         "schema_version": "tiny_suite_comparison_report_v1",
         "benchmark_ids": benchmark_ids,
         "baseline_agent_id": compared_actor_id,
@@ -1075,6 +1222,12 @@ def build_tiny_suite_external_comparison_report(
             "composite_score_difference_average": candidate_average - baseline_average,
         },
     }
+    timing_mode_aggregation = _build_timing_mode_aggregation(
+        tuple(baseline_results) + tuple(external_results)
+    )
+    if timing_mode_aggregation is not None:
+        report_payload["timing_mode_aggregation"] = timing_mode_aggregation
+    return report_payload
 
 
 def build_tiny_suite_external_profile_comparison_report(
@@ -1147,7 +1300,7 @@ def build_tiny_suite_external_profile_comparison_report(
         {str(benchmark_id) for benchmark_id in baseline_report["benchmark_ids"]}
         | {str(benchmark_id) for benchmark_id in candidate_report["benchmark_ids"]}
     )
-    return {
+    report_payload: dict[str, Any] = {
         "schema_version": "tiny_suite_comparison_report_v1",
         "benchmark_ids": benchmark_ids,
         "baseline_agent_id": baseline_external_agent_id,
@@ -1163,6 +1316,12 @@ def build_tiny_suite_external_profile_comparison_report(
             "composite_score_difference_average": candidate_average - baseline_average,
         },
     }
+    timing_mode_aggregation = _build_timing_mode_aggregation(
+        tuple(baseline_profile_results) + tuple(candidate_profile_results)
+    )
+    if timing_mode_aggregation is not None:
+        report_payload["timing_mode_aggregation"] = timing_mode_aggregation
+    return report_payload
 
 
 def build_tiny_suite_mixed_external_comparison_report(
@@ -1221,7 +1380,7 @@ def build_tiny_suite_mixed_external_comparison_report(
     scenario_count = len(comparisons)
     baseline_average = baseline_total / scenario_count if scenario_count > 0 else 0.0
     candidate_average = candidate_total / scenario_count if scenario_count > 0 else 0.0
-    return {
+    report_payload: dict[str, Any] = {
         "schema_version": "tiny_suite_comparison_report_v1",
         "benchmark_ids": shared_report["benchmark_ids"],
         "baseline_agent_id": baseline_agent_id,
@@ -1237,6 +1396,10 @@ def build_tiny_suite_mixed_external_comparison_report(
             "composite_score_difference_average": candidate_average - baseline_average,
         },
     }
+    timing_mode_aggregation = _build_timing_mode_aggregation(shared_results)
+    if timing_mode_aggregation is not None:
+        report_payload["timing_mode_aggregation"] = timing_mode_aggregation
+    return report_payload
 
 
 def build_tiny_suite_mixed_external_profile_comparison_report(
@@ -1302,7 +1465,7 @@ def build_tiny_suite_mixed_external_profile_comparison_report(
     scenario_count = len(comparisons)
     baseline_average = baseline_total / scenario_count if scenario_count > 0 else 0.0
     candidate_average = candidate_total / scenario_count if scenario_count > 0 else 0.0
-    return {
+    report_payload: dict[str, Any] = {
         "schema_version": "tiny_suite_comparison_report_v1",
         "benchmark_ids": shared_report["benchmark_ids"],
         "baseline_agent_id": baseline_external_agent_id,
@@ -1318,6 +1481,10 @@ def build_tiny_suite_mixed_external_profile_comparison_report(
             "composite_score_difference_average": candidate_average - baseline_average,
         },
     }
+    timing_mode_aggregation = _build_timing_mode_aggregation(shared_results)
+    if timing_mode_aggregation is not None:
+        report_payload["timing_mode_aggregation"] = timing_mode_aggregation
+    return report_payload
 
 
 @dataclass(frozen=True, slots=True)
@@ -1330,6 +1497,16 @@ class _ResolvedRunnerConfig:
     external_agent_timeout_seconds: float | None = None
     normalization_profiles: Mapping[str, NormalizationProfile | Mapping[str, Any]] | None = None
     score_weights: Mapping[str, float] | None = None
+    timing_mode: str | None = None
+    action_cadence_interval: int | None = None
+    actor_action_cadence_overrides: Mapping[str, int] | None = None
+    provider_min_turn_delay_seconds: float | None = None
+    provider_max_actions: int | None = None
+    world_save_path: str | None = None
+    world_load_path: str | None = None
+    world_save_slot: str | None = None
+    world_load_slot: str | None = None
+    save_dir: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -1415,6 +1592,10 @@ class SharedShardLoopSession:
     external_agent_session_manager: DeterministicLocalRunnerSessionManager = field(
         default_factory=DeterministicLocalRunnerSessionManager
     )
+    # Events emitted during the most recent advance_tick; cleared and replaced each tick.
+    _last_tick_events: tuple[EventRecord, ...] = field(default_factory=tuple, init=False)
+    # True after world event log history has been shown to actors on this session instance.
+    _history_shown: bool = field(default=False, init=False)
 
     @property
     def shard_id(self) -> str:
@@ -1490,11 +1671,75 @@ class SharedShardLoopSession:
             max_steps=self.max_steps,
             messages=(),
         )
-        messages = list(
+        messages: list[str] = []
+        # Show world event log history once per session instance (e.g. on reconnect/load).
+        if not self._history_shown:
+            self._history_shown = True
+            history_msgs = _format_world_event_log_messages(
+                self.world_state.get_snapshot().get("scenario_vars", {})
+            )
+            messages.extend(history_msgs)
+            quest_msgs = _format_quest_status_messages(
+                self.world_state.get_snapshot().get("scenario_vars", {}),
+                actor_id,
+            )
+            messages.extend(quest_msgs)
+        messages.extend(
             self.shard_state.get_world_tick_observation_messages(
                 location=observation.location,
             )
         )
+        messages.extend(_format_tick_event_messages(self._last_tick_events, actor_id=actor_id))
+        # Persistently surface hostile NPC status so actors always see current
+        # NPC health and threat state, including after save/load/reconnect.
+        messages.extend(
+            _format_hostile_npc_status_messages(
+                self.world_state.get_snapshot(), observation.location
+            )
+        )
+        # Surface actor defeat/respawn status so a defeated actor always knows
+        # their current state and when they will recover.
+        defeat_msg = _format_actor_defeat_status_message(
+            self.world_state.get_snapshot().get("scenario_vars", {}),
+            actor_id,
+        )
+        if defeat_msg is not None:
+            messages.append(defeat_msg)
+        # Surface co-actor defeat status so active actors can see which teammates
+        # are down and when they will return.
+        co_actor_defeat_msgs = _format_co_actor_defeat_status_messages(
+            self.world_state.get_snapshot().get("scenario_vars", {}),
+            actor_id,
+        )
+        messages.extend(co_actor_defeat_msgs)
+        # Compact always-visible party status: health, location, and defeat state
+        # for every co-actor so participants have at-a-glance teammate awareness.
+        all_actor_ids = tuple(b.actor_id for b in self.participant_bindings)
+        party_msgs = _format_party_status_messages(
+            self.world_state.get_snapshot(),
+            self.world_state.get_snapshot().get("scenario_vars", {}),
+            all_actor_ids,
+            actor_id,
+        )
+        messages.extend(party_msgs)
+        # Compact always-visible objective progress so actors see quest status
+        # on every tick during active play, not just after reconnect.
+        quest_progress = _format_quest_progress_compact(
+            self.world_state.get_snapshot().get("scenario_vars", {}),
+            actor_id,
+        )
+        if quest_progress is not None:
+            messages.append(quest_progress)
+        # Contextual affordance hints: surface calm-NPC and revive opportunities
+        # when the actor carries the relevant item and is in the right place.
+        affordance_hints = _format_affordance_hints(
+            self.world_state.get_snapshot(),
+            self.world_state.get_snapshot().get("scenario_vars", {}),
+            actor_id,
+            observation.location,
+            observation.inventory,
+        )
+        messages.extend(affordance_hints)
         if self.action_cadence_interval is not None:
             timing_prefix = ""
             if self.timing_mode is not None:
@@ -1612,6 +1857,11 @@ class SharedShardLoopSession:
                         f"{self.get_actor_next_action_eligible_at(actor_id)}"
                     )
                 continue
+            # Skip defeated actors — they cannot act until respawned.
+            if self.world_state.get_snapshot().get("scenario_vars", {}).get(
+                f"actor_defeated.{actor_id}"
+            ):
+                continue
             observation = self.get_observation(actor_id)
             selected_action = normalized_actions.get(actor_id, "wait")
             pipeline_result = run_action_pipeline(
@@ -1627,6 +1877,52 @@ class SharedShardLoopSession:
             accepted_actions.append((actor_id, selected_action))
 
         step_outcome = self.controller.step(tuple(accepted_action_requests))
+        # Run hostile NPC counter-attacks after player actions are resolved.
+        npc_tick_result = process_npc_tick(self.world_state, step_index=step_index)
+        npc_tick_events: tuple[EventRecord, ...] = ()
+        if npc_tick_result is not None:
+            npc_tick_events = npc_tick_result.events
+            if npc_tick_result.world_delta:
+                self.world_state.apply_delta(dict(npc_tick_result.world_delta))
+        # Run NPC respawn check after counter-attacks (so a just-defeated NPC never
+        # immediately counter-attacks and respawns in the same tick).
+        npc_respawn_result = process_npc_respawn_tick(self.world_state, step_index=step_index)
+        npc_respawn_events: tuple[EventRecord, ...] = ()
+        if npc_respawn_result is not None:
+            npc_respawn_events = npc_respawn_result.events
+            if npc_respawn_result.world_delta:
+                self.world_state.apply_delta(dict(npc_respawn_result.world_delta))
+        # Detect actors reduced to 0 HP this tick and mark them as defeated.
+        actor_defeat_result = process_actor_defeat_tick(self.world_state, step_index=step_index)
+        actor_defeat_events: tuple[EventRecord, ...] = ()
+        if actor_defeat_result is not None:
+            actor_defeat_events = actor_defeat_result.events
+            if actor_defeat_result.world_delta:
+                self.world_state.apply_delta(dict(actor_defeat_result.world_delta))
+        # Restore actors whose respawn timer has elapsed.
+        actor_respawn_result = process_actor_respawn_tick(self.world_state, step_index=step_index)
+        actor_respawn_events: tuple[EventRecord, ...] = ()
+        if actor_respawn_result is not None:
+            actor_respawn_events = actor_respawn_result.events
+            if actor_respawn_result.world_delta:
+                self.world_state.apply_delta(dict(actor_respawn_result.world_delta))
+        # Run quest objective checks against all events emitted this tick.
+        all_events_this_tick = (
+            tuple(step_outcome.emitted_events)
+            + npc_tick_events
+            + npc_respawn_events
+            + actor_defeat_events
+            + actor_respawn_events
+        )
+        quest_result = process_quest_objective_tick(
+            self.world_state, all_events_this_tick, step_index=step_index
+        )
+        quest_events: tuple[EventRecord, ...] = ()
+        if quest_result is not None:
+            quest_events = quest_result.events
+            if quest_result.world_delta:
+                self.world_state.apply_delta(dict(quest_result.world_delta))
+        self._last_tick_events = all_events_this_tick + quest_events
         for actor_id, _ in accepted_actions:
             self.shard_state = self.shard_state.record_actor_action_acceptance(actor_id)
         self.shard_state = self.shard_state.advance_world_tick()
@@ -1727,6 +2023,8 @@ def build_playable_benchmark_session(
     run_id: str,
     run_seed: int | None = None,
     max_steps_override: int | None = None,
+    world_load_path: str | None = None,
+    world_state: DeterministicWorldStateManager | None = None,
 ) -> BenchmarkPlayableSession:
     """Build an initialized deterministic runtime session without scorecard/replay orchestration."""
     scenario_load = load_scenario_definition(scenario)
@@ -1748,15 +2046,27 @@ def build_playable_benchmark_session(
         scenario_vars=scenario_vars,
         seed=initialization.run_seed,
     )
-    world_state = _build_runner_world_state(
-        start_room_id=initialization.start_room_id,
-        actor_ids=actor_ids,
-        seed=initialization.run_seed,
-        world_config=world_config,
-        scenario_vars=scenario_vars,
-    )
+
+    if world_state is not None:
+        # Pre-loaded world state provided directly — use as-is (highest priority).
+        resolved_world_state = world_state
+    elif world_load_path is not None:
+        load_result = load_world_snapshot(world_load_path)
+        if not load_result.accepted or load_result.world_state is None:
+            raise ValueError(
+                f"world_load_path_rejected:{world_load_path}:{load_result.reason}"
+            )
+        resolved_world_state = load_result.world_state
+    else:
+        resolved_world_state = _build_runner_world_state(
+            start_room_id=initialization.start_room_id,
+            actor_ids=actor_ids,
+            seed=initialization.run_seed,
+            world_config=world_config,
+            scenario_vars=scenario_vars,
+        )
     controller = SimulationController(
-        world_state_manager=world_state,
+        world_state_manager=resolved_world_state,
         action_processor=BasicDeterministicActionProcessor(),
         event_logger=_InMemoryEventLogger(),
         seed=initialization.run_seed,
@@ -1767,7 +2077,7 @@ def build_playable_benchmark_session(
     return BenchmarkPlayableSession(
         scenario_initialization=initialization,
         scenario_vars=scenario_vars,
-        world_state=world_state,
+        world_state=resolved_world_state,
         controller=controller,
     )
 
@@ -1788,6 +2098,8 @@ def build_shared_shard_loop_session(
     external_agent_commands_by_actor: Mapping[str, Sequence[str]] | None = None,
     persistent_agent_session: bool = False,
     external_agent_timeout_seconds: float | None = None,
+    world_load_path: str | None = None,
+    world_state: DeterministicWorldStateManager | None = None,
 ) -> SharedShardLoopSession:
     """Build the first minimal in-process shared shard loop over one evolving world state."""
     if isinstance(actor_ids, (str, bytes)) or not isinstance(actor_ids, Sequence):
@@ -1842,6 +2154,8 @@ def build_shared_shard_loop_session(
         run_id=run_id,
         run_seed=run_seed,
         max_steps_override=max_steps_override,
+        world_load_path=world_load_path,
+        world_state=world_state,
     )
     shard_state = ShardState.create_empty(
         shard_id,
@@ -1936,13 +2250,34 @@ def run_benchmark_lifecycle(
         scenario_vars=scenario_vars,
         seed=initialization.run_seed,
     )
-    world_state = _build_runner_world_state(
-        start_room_id=initialization.start_room_id,
-        actor_ids=run_config.actor_ids,
-        seed=initialization.run_seed,
-        world_config=world_config,
-        scenario_vars=scenario_vars,
-    )
+    if resolved_config.world_load_slot is not None:
+        _effective_save_dir = resolved_config.save_dir or WORLD_SAVE_DIR_DEFAULT
+        _load_result = load_world_slot(
+            resolved_config.world_load_slot,
+            _effective_save_dir,
+            required_scenario_id=initialization.scenario_id,
+            required_scenario_version=initialization.version,
+        )
+        if not _load_result.accepted or _load_result.world_state is None:
+            raise ValueError(
+                f"world_load_slot_rejected:{resolved_config.world_load_slot}:{_load_result.reason}"
+            )
+        world_state = _load_result.world_state
+    elif resolved_config.world_load_path is not None:
+        _load_result = load_world_snapshot(resolved_config.world_load_path)
+        if not _load_result.accepted or _load_result.world_state is None:
+            raise ValueError(
+                f"world_load_path_rejected:{resolved_config.world_load_path}:{_load_result.reason}"
+            )
+        world_state = _load_result.world_state
+    else:
+        world_state = _build_runner_world_state(
+            start_room_id=initialization.start_room_id,
+            actor_ids=run_config.actor_ids,
+            seed=initialization.run_seed,
+            world_config=world_config,
+            scenario_vars=scenario_vars,
+        )
     controller_logger = _InMemoryEventLogger()
     controller = SimulationController(
         world_state_manager=world_state,
@@ -1953,6 +2288,22 @@ def run_benchmark_lifecycle(
         run_id=run_config.run_id,
     )
     controller.initialize()
+    # Config values are already fully resolved by BenchmarkRunnerConfig.__post_init__; use directly.
+    shared_timing_mode = resolved_config.timing_mode
+    shared_action_cadence_interval = resolved_config.action_cadence_interval
+    shared_actor_cadence_overrides = resolved_config.actor_action_cadence_overrides
+    shared_shard_state = (
+        ShardState.create_empty(
+            "benchmark-shared-shard",
+            world_ruleset_version="benchmark_runner_v1",
+            benchmark_engine_version=run_manifest.benchmark_version,
+            scheduler_policy_version="benchmark_runner_scheduler_v1",
+        ).with_action_cadence(
+            timing_mode=shared_timing_mode,
+            action_cadence_interval=shared_action_cadence_interval,
+            actor_action_cadence_overrides=shared_actor_cadence_overrides,
+        )
+    )
     runtime_telemetry_records: list[dict[str, Any]] = []
     with tempfile.TemporaryDirectory(prefix="mudbench-llm-runtime-telemetry-") as runtime_telemetry_dir:
         gateway_agent_configs = _build_gateway_agent_configs(
@@ -1967,6 +2318,13 @@ def run_benchmark_lifecycle(
         )
         session_manager = DeterministicLocalRunnerSessionManager()
         runtime_events: list[EventRecord] = []
+        provider_actor_ids = _build_provider_actor_ids(
+            actor_ids=run_config.actor_ids,
+            external_agent_command=resolved_config.external_agent_command,
+            external_agent_commands_by_actor=resolved_config.external_agent_commands_by_actor,
+            external_agent_actor_id=resolved_config.external_agent_actor_id,
+        )
+        provider_action_count = 0
         try:
             while lifecycle.state.status is BenchmarkLifecycleStatus.RUNNING:
                 step = lifecycle.state.step_index
@@ -1992,6 +2350,17 @@ def run_benchmark_lifecycle(
                 )
                 runtime_telemetry_records.extend(step_runtime_telemetry)
                 step_outcome = controller.step(gateway_step.accepted_action_requests)
+                step_had_provider_action = False
+                for action_request in gateway_step.accepted_action_requests:
+                    shared_shard_state = shared_shard_state.record_actor_action_acceptance(
+                        action_request.actor_id
+                    )
+                    if action_request.actor_id in provider_actor_ids:
+                        provider_action_count += 1
+                        step_had_provider_action = True
+                shared_shard_state = shared_shard_state.advance_world_tick(
+                    heartbeat_prefix="benchmark_world_tick"
+                )
                 tracker.apply_signals(
                     _build_runtime_step_signals(
                         run_id=run_config.run_id,
@@ -2025,11 +2394,45 @@ def run_benchmark_lifecycle(
                         ),
                     )
                 )
+                if (
+                    resolved_config.provider_max_actions is not None
+                    and provider_action_count >= resolved_config.provider_max_actions
+                    and provider_actor_ids
+                ):
+                    lifecycle.finalize()
+                    break
+                if (
+                    resolved_config.provider_min_turn_delay_seconds is not None
+                    and step_had_provider_action
+                ):
+                    time.sleep(resolved_config.provider_min_turn_delay_seconds)
                 lifecycle.advance_step()
         finally:
             session_manager.close(tuple(config.runner for config in gateway_agent_configs))
 
     tracker_snapshot = tracker.snapshot()
+    if _has_cadence_efficiency_consequence(scenario_vars):
+        cadence_interval = resolved_config.action_cadence_interval or 1
+        if cadence_interval > 1:
+            for actor_id, actor_metrics in tracker_snapshot.actors:
+                base_actions = next(
+                    (agg.value_sum for name, agg in actor_metrics if name == "actions.count"),
+                    0.0,
+                )
+                overhead = float(base_actions) * float(cadence_interval - 1)
+                if overhead > 0.0:
+                    tracker.apply_signals(
+                        (
+                            MetricSignal(
+                                run_id=run_config.run_id,
+                                step=max_steps,
+                                actor_id=actor_id,
+                                metric_name="actions.count",
+                                value=overhead,
+                            ),
+                        )
+                    )
+            tracker_snapshot = tracker.snapshot()
     capability_result = extract_capability_metrics(tracker_snapshot)
     normalized_result = normalize_capability_metrics(
         capability_result,
@@ -2075,6 +2478,28 @@ def run_benchmark_lifecycle(
     if not parity_result.accepted or parity_result.parity_artifact is None:
         reason = parity_result.reason or "unknown_parity_computation_failure"
         raise RuntimeError(f"runtime replay parity computation rejected: {reason}")
+
+    if resolved_config.world_save_slot is not None:
+        _effective_save_dir = resolved_config.save_dir or WORLD_SAVE_DIR_DEFAULT
+        save_world_slot(
+            resolved_config.world_save_slot,
+            _effective_save_dir,
+            world_state,
+            run_id=run_config.run_id,
+            scenario_id=initialization.scenario_id,
+            scenario_version=initialization.version,
+            actor_ids=list(run_config.actor_ids),
+        )
+    elif resolved_config.world_save_path is not None:
+        save_world_snapshot(
+            resolved_config.world_save_path,
+            world_state,
+            run_id=run_config.run_id,
+            scenario_id=initialization.scenario_id,
+            scenario_version=initialization.version,
+            actor_ids=list(run_config.actor_ids),
+        )
+
     return BenchmarkRunnerResult(
         lifecycle_state=lifecycle.state,
         scenario_initialization=initialization,
@@ -2088,6 +2513,13 @@ def run_benchmark_lifecycle(
         replay_parity_artifact=parity_result.parity_artifact,
         replay_artifact_refs=replay_artifact_refs,
         runtime_telemetry_records=tuple(runtime_telemetry_records),
+        timing_mode=shared_shard_state.timing_mode,
+        action_cadence_interval=shared_shard_state.action_cadence_interval,
+        actor_action_cadence_overrides=shared_shard_state.actor_action_cadence_overrides,
+        actor_next_action_eligible_at=shared_shard_state.actor_next_action_eligible_at,
+        provider_min_turn_delay_seconds=resolved_config.provider_min_turn_delay_seconds,
+        provider_max_actions=resolved_config.provider_max_actions,
+        provider_action_count=provider_action_count,
     )
 
 
@@ -2107,6 +2539,16 @@ def _coerce_runner_config(
             external_agent_timeout_seconds=config.external_agent_timeout_seconds,
             normalization_profiles=config.normalization_profiles,
             score_weights=config.score_weights,
+            timing_mode=config.timing_mode,
+            action_cadence_interval=config.action_cadence_interval,
+            actor_action_cadence_overrides=config.actor_action_cadence_overrides,
+            provider_min_turn_delay_seconds=config.provider_min_turn_delay_seconds,
+            provider_max_actions=config.provider_max_actions,
+            world_save_path=config.world_save_path,
+            world_load_path=config.world_load_path,
+            world_save_slot=config.world_save_slot,
+            world_load_slot=config.world_load_slot,
+            save_dir=config.save_dir,
         )
 
     if isinstance(config, Mapping):
@@ -2465,8 +2907,898 @@ def _build_trade_effects_scenario_delta(
     }
 
 
+def _build_defeat_unlock_effects_scenario_delta(
+    world_config: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    """Convert ``defeat_unlock_effects`` array in *world_config* to scenario-var JSON.
+
+    The resulting ``defeat_unlock_effects_json`` value is a dict keyed by ``npc_id``
+    so the action processor can look up the effect by the defeated NPC in O(1).
+    """
+    if not isinstance(world_config, Mapping):
+        return {}
+    raw_effects = world_config.get("defeat_unlock_effects")
+    if not isinstance(raw_effects, Sequence):
+        return {}
+
+    effect_map: dict[str, dict[str, Any]] = {}
+    for raw_effect in raw_effects:
+        if not isinstance(raw_effect, Mapping):
+            continue
+        npc_id = raw_effect.get("npc_id")
+        source_room = raw_effect.get("source_room_id")
+        direction = raw_effect.get("direction")
+        destination_room = raw_effect.get("destination_room_id")
+        if (
+            not isinstance(npc_id, str)
+            or not npc_id
+            or not isinstance(source_room, str)
+            or not source_room
+            or not isinstance(direction, str)
+            or not direction
+            or not isinstance(destination_room, str)
+            or not destination_room
+        ):
+            continue
+        effect_id = raw_effect.get("effect_id")
+        if not isinstance(effect_id, str) or not effect_id:
+            effect_id = f"defeat_unlock:{npc_id}:{source_room}:{direction}"
+        effect_map[npc_id] = {
+            "destination_room_id": destination_room,
+            "direction": direction,
+            "effect_id": effect_id,
+            "source_room_id": source_room,
+        }
+
+    if not effect_map:
+        return {}
+
+    return {
+        "defeat_unlock_effects_json": json.dumps(
+            effect_map,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=True,
+        )
+    }
+
+
+def _build_calm_npc_effects_scenario_delta(
+    world_config: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    """Convert ``calm_npc_effects`` array in *world_config* to scenario-var JSON.
+
+    The resulting ``calm_npc_effects_json`` is a JSON-encoded list that the
+    action processor can scan to find an effect matching (item_id, source_room_id).
+    """
+    if not isinstance(world_config, Mapping):
+        return {}
+    raw_effects = world_config.get("calm_npc_effects")
+    if not isinstance(raw_effects, Sequence):
+        return {}
+
+    effects: list[dict[str, Any]] = []
+    for raw_effect in raw_effects:
+        if not isinstance(raw_effect, Mapping):
+            continue
+        item_id = raw_effect.get("item_id")
+        source_room = raw_effect.get("source_room_id")
+        target_npc_id = raw_effect.get("target_npc_id")
+        effect_id = raw_effect.get("effect_id")
+        if (
+            not isinstance(item_id, str) or not item_id
+            or not isinstance(source_room, str) or not source_room
+            or not isinstance(target_npc_id, str) or not target_npc_id
+        ):
+            continue
+        if not isinstance(effect_id, str) or not effect_id:
+            effect_id = f"calm_npc:{item_id}:{source_room}:{target_npc_id}"
+        effects.append(
+            {
+                "effect_id": effect_id,
+                "item_id": item_id,
+                "source_room_id": source_room,
+                "target_npc_id": target_npc_id,
+            }
+        )
+
+    if not effects:
+        return {}
+
+    return {
+        "calm_npc_effects_json": json.dumps(
+            effects,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=True,
+        )
+    }
+
+
+def _build_npc_respawn_rules_scenario_delta(
+    world_config: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    """Convert ``npc_respawn_rules`` array in *world_config* to scenario-var JSON.
+
+    The resulting ``npc_respawn_rules_json`` is a JSON-encoded list that the
+    action processor reads to schedule and execute NPC respawns.
+
+    Required per-rule fields:
+    - ``"npc_id"``              — which NPC respawns
+    - ``"respawn_delay_ticks"`` — ticks after defeat/calm before respawn (>= 1)
+    - ``"respawn_health"``       — restored health (> 0)
+    - ``"respawn_room_id"``      — room to reappear in
+
+    Optional:
+    - ``"respawn_tags"``          — tags on respawn (default: [])
+    - ``"clears_calm_effects"``   — list of calm effect IDs to clear on respawn
+    """
+    if not isinstance(world_config, Mapping):
+        return {}
+    raw_rules = world_config.get("npc_respawn_rules")
+    if not isinstance(raw_rules, Sequence):
+        return {}
+
+    rules: list[dict[str, Any]] = []
+    for raw_rule in raw_rules:
+        if not isinstance(raw_rule, Mapping):
+            continue
+        npc_id = raw_rule.get("npc_id")
+        delay = raw_rule.get("respawn_delay_ticks")
+        health = raw_rule.get("respawn_health")
+        room_id = raw_rule.get("respawn_room_id")
+        if (
+            not isinstance(npc_id, str) or not npc_id
+            or not isinstance(delay, int) or delay <= 0
+            or not isinstance(health, int) or health <= 0
+            or not isinstance(room_id, str) or not room_id
+        ):
+            continue
+        rule: dict[str, Any] = {
+            "npc_id": npc_id,
+            "respawn_delay_ticks": delay,
+            "respawn_health": health,
+            "respawn_room_id": room_id,
+            "respawn_tags": list(raw_rule.get("respawn_tags") or []),
+            "clears_calm_effects": list(raw_rule.get("clears_calm_effects") or []),
+        }
+        rules.append(rule)
+
+    if not rules:
+        return {}
+
+    return {
+        "npc_respawn_rules_json": json.dumps(
+            rules,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=True,
+        )
+    }
+
+
 def _scenario_vars_to_dict(scenario_vars: Sequence[tuple[str, Any]]) -> dict[str, Any]:
     return {key: value for key, value in scenario_vars}
+
+
+def _build_npc_dialogue_scenario_delta(
+    world_config: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    """Convert ``npc_dialogue`` array in *world_config* to scenario-var JSON.
+
+    Each entry must have:
+    - ``"npc_id"``   — which NPC speaks
+    - ``"lines"``    — non-empty list of dialogue strings
+
+    The resulting ``npc_dialogue_json`` is read by ``_find_npc_dialogue`` in the
+    action processor.
+    """
+    if not isinstance(world_config, Mapping):
+        return {}
+    raw_entries = world_config.get("npc_dialogue")
+    if not isinstance(raw_entries, Sequence):
+        return {}
+
+    dialogue: list[dict[str, Any]] = []
+    for raw in raw_entries:
+        if not isinstance(raw, Mapping):
+            continue
+        npc_id = raw.get("npc_id")
+        lines = raw.get("lines")
+        if not isinstance(npc_id, str) or not npc_id:
+            continue
+        if not isinstance(lines, list) or not lines:
+            continue
+        valid_lines = [str(line) for line in lines if isinstance(line, str) and line]
+        if not valid_lines:
+            continue
+        dialogue.append({"npc_id": npc_id, "lines": valid_lines})
+
+    if not dialogue:
+        return {}
+
+    return {
+        "npc_dialogue_json": json.dumps(
+            dialogue,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=True,
+        )
+    }
+
+
+_QUEST_TRIGGER_EVENTS = frozenset(
+    {"npc_defeated", "npc_calmed", "action_take", "route_unlocked"}
+)
+
+
+def _build_quest_objectives_scenario_delta(
+    world_config: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    """Convert ``quest_objectives`` array in *world_config* to scenario-var JSON.
+
+    Each entry must have:
+    - ``"quest_id"``           — unique identifier
+    - ``"title"``              — human-readable quest name
+    - ``"trigger_event"``      — event_type that completes the quest
+    - ``"trigger_target_id"``  — payload value to match
+
+    Optional:
+    - ``"reward_message"``     — shown to completing actor
+
+    The resulting ``quest_objectives_json`` is read by
+    ``process_quest_objective_tick`` in the action processor.
+    """
+    if not isinstance(world_config, Mapping):
+        return {}
+    raw_entries = world_config.get("quest_objectives")
+    if not isinstance(raw_entries, Sequence):
+        return {}
+
+    quests: list[dict[str, Any]] = []
+    for raw in raw_entries:
+        if not isinstance(raw, Mapping):
+            continue
+        quest_id = raw.get("quest_id")
+        title = raw.get("title")
+        trigger_event = raw.get("trigger_event")
+        trigger_target_id = raw.get("trigger_target_id")
+        if (
+            not isinstance(quest_id, str) or not quest_id
+            or not isinstance(title, str) or not title
+            or not isinstance(trigger_event, str) or trigger_event not in _QUEST_TRIGGER_EVENTS
+            or not isinstance(trigger_target_id, str) or not trigger_target_id
+        ):
+            continue
+        entry: dict[str, Any] = {
+            "quest_id": quest_id,
+            "title": title,
+            "trigger_event": trigger_event,
+            "trigger_target_id": trigger_target_id,
+        }
+        reward = raw.get("reward_message")
+        if isinstance(reward, str) and reward:
+            entry["reward_message"] = reward
+        quests.append(entry)
+
+    if not quests:
+        return {}
+
+    return {
+        "quest_objectives_json": json.dumps(
+            quests,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=True,
+        )
+    }
+
+
+_VALID_REACTIVE_CONDITION_TYPES: frozenset[str] = frozenset(
+    {"scenario_var_truthy", "entity_absent"}
+)
+
+
+def _build_room_description_overrides_scenario_delta(
+    world_config: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    """Convert ``room_description_overrides`` in *world_config* to scenario-var JSON.
+
+    Each entry must have:
+    - ``"room_id"``         — which room this override applies to
+    - ``"condition_type"``  — ``"scenario_var_truthy"`` or ``"entity_absent"``
+    - ``"description"``     — replacement text when condition is met
+
+    For ``"scenario_var_truthy"``:
+    - ``"condition_key"``   — scenario_var key that must be truthy
+
+    For ``"entity_absent"``:
+    - ``"condition_room_id"``    — room to check for entity presence
+    - ``"condition_entity_id"``  — entity that must be absent
+
+    The resulting ``room_description_overrides_json`` is read by
+    ``_resolve_reactive_description`` in observation_builder.
+    """
+    if not isinstance(world_config, Mapping):
+        return {}
+    raw_entries = world_config.get("room_description_overrides")
+    if not isinstance(raw_entries, Sequence):
+        return {}
+
+    valid: list[dict[str, Any]] = []
+    for raw in raw_entries:
+        if not isinstance(raw, Mapping):
+            continue
+        room_id = raw.get("room_id")
+        condition_type = raw.get("condition_type")
+        description = raw.get("description")
+        if (
+            not isinstance(room_id, str) or not room_id
+            or condition_type not in _VALID_REACTIVE_CONDITION_TYPES
+            or not isinstance(description, str) or not description
+        ):
+            continue
+        entry: dict[str, Any] = {
+            "room_id": room_id,
+            "condition_type": condition_type,
+            "description": description,
+        }
+        if condition_type == "scenario_var_truthy":
+            key = raw.get("condition_key")
+            if not isinstance(key, str) or not key:
+                continue
+            entry["condition_key"] = key
+        elif condition_type == "entity_absent":
+            croom = raw.get("condition_room_id")
+            centity = raw.get("condition_entity_id")
+            if not isinstance(croom, str) or not croom:
+                continue
+            if not isinstance(centity, str) or not centity:
+                continue
+            entry["condition_room_id"] = croom
+            entry["condition_entity_id"] = centity
+        valid.append(entry)
+
+    if not valid:
+        return {}
+
+    return {
+        "room_description_overrides_json": json.dumps(
+            valid,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=True,
+        )
+    }
+
+
+def _format_quest_status_messages(
+    scenario_vars: Any,
+    actor_id: str,
+) -> tuple[str, ...]:
+    """Emit a summary of the actor's completed quests for reconnect context.
+
+    Returns an empty tuple when no quest objectives are configured or none
+    are complete for this actor.  Only non-empty when there is something
+    meaningful to report.
+    """
+    if not isinstance(scenario_vars, Mapping):
+        return ()
+    raw = scenario_vars.get("quest_objectives_json")
+    if not isinstance(raw, str):
+        return ()
+    try:
+        objectives = json.loads(raw)
+    except (json.JSONDecodeError, ValueError):
+        return ()
+    if not isinstance(objectives, list) or not objectives:
+        return ()
+
+    completed: list[str] = []
+    in_progress: list[str] = []
+    for obj in objectives:
+        if not isinstance(obj, Mapping):
+            continue
+        quest_id = str(obj.get("quest_id", ""))
+        title = str(obj.get("title", quest_id))
+        quest_key = f"quest.{quest_id}.{actor_id}"
+        if scenario_vars.get(quest_key) == "complete":
+            completed.append(title)
+        else:
+            in_progress.append(title)
+
+    if not completed and not in_progress:
+        return ()
+
+    lines: list[str] = ["[Quest] Your objectives:"]
+    for title in completed:
+        lines.append(f"[Quest]   ✓ {title}")
+    for title in in_progress:
+        lines.append(f"[Quest]   ○ {title}")
+    return tuple(lines)
+
+
+def _format_quest_progress_compact(
+    scenario_vars: Any,
+    actor_id: str,
+) -> str | None:
+    """Return a compact single-line objective progress summary, or None when not applicable.
+
+    Emitted on *every* observation so actors always know their current quest
+    progress during active play — not just on reconnect.  Returns ``None``
+    when no quest objectives are configured so existing behavior is unaffected.
+
+    Format: ``[Objectives] ✓ Title A  ○ Title B  ○ Title C``
+    """
+    if not isinstance(scenario_vars, Mapping):
+        return None
+    raw = scenario_vars.get("quest_objectives_json")
+    if not isinstance(raw, str):
+        return None
+    try:
+        objectives = json.loads(raw)
+    except (json.JSONDecodeError, ValueError):
+        return None
+    if not isinstance(objectives, list) or not objectives:
+        return None
+
+    parts: list[str] = []
+    for obj in objectives:
+        if not isinstance(obj, Mapping):
+            continue
+        quest_id = str(obj.get("quest_id", ""))
+        title = str(obj.get("title", quest_id))
+        quest_key = f"quest.{quest_id}.{actor_id}"
+        marker = "✓" if scenario_vars.get(quest_key) == "complete" else "○"
+        parts.append(f"{marker} {title}")
+
+    if not parts:
+        return None
+    return "[Objectives] " + "  ".join(parts)
+
+
+def _format_actor_defeat_status_message(
+    scenario_vars: Mapping[str, Any],
+    actor_id: str,
+) -> str | None:
+    """Return a status message when the actor is currently defeated/awaiting respawn.
+
+    Shown on every ``get_observation`` so a defeated actor always knows
+    their current state and when they will recover.  Returns ``None`` when
+    the actor is alive.
+    """
+    if not isinstance(scenario_vars, Mapping):
+        return None
+    if not scenario_vars.get(f"actor_defeated.{actor_id}"):
+        return None
+    respawn_at = scenario_vars.get(f"actor_respawn_at.{actor_id}")
+    if isinstance(respawn_at, int):
+        return f"[Status] You have been defeated. You will respawn at tick {respawn_at}."
+    return "[Status] You have been defeated. Awaiting respawn."
+
+
+def _format_co_actor_defeat_status_messages(
+    scenario_vars: Mapping[str, Any],
+    actor_id: str,
+) -> tuple[str, ...]:
+    """Return status messages for OTHER actors that are currently defeated.
+
+    Shown on every ``get_observation`` so all active actors can always see
+    which teammates are down and when they will recover.  Returns an empty
+    tuple when no co-actors are defeated.
+    """
+    if not isinstance(scenario_vars, Mapping):
+        return ()
+    messages: list[str] = []
+    for key, value in scenario_vars.items():
+        if not key.startswith("actor_defeated."):
+            continue
+        if not value:
+            continue
+        co_id = key[len("actor_defeated."):]
+        if co_id == actor_id:
+            continue
+        respawn_at = scenario_vars.get(f"actor_respawn_at.{co_id}")
+        if isinstance(respawn_at, int):
+            messages.append(f"[World] {co_id} is currently defeated (respawning at tick {respawn_at}).")
+        else:
+            messages.append(f"[World] {co_id} is currently defeated (awaiting respawn).")
+    return tuple(messages)
+
+
+def _format_party_status_messages(
+    snapshot: Mapping[str, Any],
+    scenario_vars: Mapping[str, Any],
+    all_actor_ids: Sequence[str],
+    self_actor_id: str,
+) -> tuple[str, ...]:
+    """Return a compact party-status line for each co-actor (not self).
+
+    Shows health, location, and defeat/respawn state so all participants have
+    at-a-glance teammate situational awareness on every observation — including
+    after save/load/reconnect.  Returns an empty tuple when there are no
+    co-actors.
+    """
+    if not isinstance(snapshot, Mapping):
+        return ()
+    entities = snapshot.get("entities") or {}
+    if not isinstance(entities, Mapping):
+        entities = {}
+    if not isinstance(scenario_vars, Mapping):
+        scenario_vars = {}
+
+    messages: list[str] = []
+    for co_id in sorted(str(a) for a in all_actor_ids if str(a) != self_actor_id):
+        entity = entities.get(co_id)
+        location = "unknown"
+        health_str = f"{_DEFAULT_ACTOR_HEALTH} HP"
+        if isinstance(entity, Mapping):
+            loc = entity.get("location")
+            if isinstance(loc, str) and loc:
+                location = loc
+            hp = entity.get("health")
+            if isinstance(hp, int):
+                health_str = f"{hp} HP"
+
+        defeated = bool(scenario_vars.get(f"actor_defeated.{co_id}"))
+        if defeated:
+            respawn_at = scenario_vars.get(f"actor_respawn_at.{co_id}")
+            if isinstance(respawn_at, int):
+                status = f"DEFEATED (respawn tick {respawn_at})"
+            else:
+                status = "DEFEATED (awaiting respawn)"
+        else:
+            status = health_str
+
+        messages.append(f"[Party] {co_id}: {location} — {status}")
+    return tuple(messages)
+
+
+def _format_hostile_npc_status_messages(
+    snapshot: Mapping[str, Any],
+    actor_location: str,
+) -> tuple[str, ...]:
+    """Emit status messages for hostile NPCs in the actor's current room.
+
+    Called on every ``get_observation`` so the actor always sees current NPC health
+    and hostile state, even after reconnecting into a persisted world.
+    Returns an empty tuple when there are no hostile NPCs in the room.
+    """
+    entities = snapshot.get("entities", {})
+    rooms = snapshot.get("rooms", {})
+    room = rooms.get(actor_location)
+    if not isinstance(room, Mapping):
+        return ()
+    messages: list[str] = []
+    for entity_id in sorted(room.get("entities_present", [])):
+        entity = entities.get(entity_id)
+        if not isinstance(entity, Mapping):
+            continue
+        if entity.get("entity_type") != "npc":
+            continue
+        hostile = "hostile" in entity.get("tags", [])
+        health = entity.get("health")
+        if hostile and isinstance(health, int) and health > 0:
+            messages.append(
+                f"[World] {entity_id} is HOSTILE ({health} HP remaining)."
+            )
+    return tuple(messages)
+
+
+def _format_tick_event_messages(
+    events: Sequence[EventRecord],
+    *,
+    actor_id: str | None = None,
+) -> tuple[str, ...]:
+    """Convert recent-tick events to human-readable observation message strings.
+
+    Surfaces ``npc_defeated``, ``route_unlocked``, ``npc_alert``,
+    ``npc_counter_attack``, ``npc_calmed``, ``npc_respawn``, ``npc_talked``,
+    ``quest_completed``, ``actor_defeated``, ``actor_respawned``,
+    ``actor_loot_dropped``, ``actor_revived``, ``action_attack``, and
+    ``action_defend`` events.  All other event types are silently ignored
+    so existing behavior is unaffected.
+
+    When ``actor_id`` is provided, actor-specific events (``quest_completed``,
+    ``action_attack``, ``action_defend``) are only shown to the matching actor.
+    ``npc_counter_attack`` defended-hit messages use [Combat] prefix to
+    distinguish defended hits from undefended [World]-prefixed ones.
+    """
+    messages: list[str] = []
+    for event in events:
+        if event.event_type == "npc_defeated":
+            payload = dict(event.payload) if event.payload else {}
+            target_id = payload.get("target_id", "unknown")
+            messages.append(f"[World] {target_id} was defeated!")
+        elif event.event_type == "route_unlocked":
+            payload = dict(event.payload) if event.payload else {}
+            direction = payload.get("direction", "unknown")
+            destination = payload.get("destination_room_id", "unknown")
+            messages.append(f"[World] A new passage opened: {direction} → {destination}.")
+        elif event.event_type == "npc_alert":
+            payload = dict(event.payload) if event.payload else {}
+            target_id = payload.get("target_id", "unknown")
+            remaining = payload.get("remaining_health")
+            hp_note = f" ({remaining} HP remaining)" if isinstance(remaining, int) else ""
+            messages.append(f"[World] {target_id} is now HOSTILE{hp_note}!")
+        elif event.event_type == "npc_counter_attack":
+            payload = dict(event.payload) if event.payload else {}
+            npc_id = payload.get("npc_id", "unknown")
+            target_id = payload.get("target_id", "unknown")
+            damage = payload.get("damage", "?")
+            resulting_hp = payload.get("resulting_health")
+            defended = payload.get("defended", False)
+            hp_note = f" (you have {resulting_hp} HP)" if isinstance(resulting_hp, int) else ""
+            if defended:
+                messages.append(
+                    f"[Combat] {npc_id} strikes {target_id} for {damage} damage"
+                    f" (defended — reduced){hp_note}"
+                )
+            else:
+                messages.append(
+                    f"[World] {npc_id} attacks {target_id} for {damage} damage!{hp_note}"
+                )
+        elif event.event_type == "npc_calmed":
+            payload = dict(event.payload) if event.payload else {}
+            target_id = payload.get("target_id", "unknown")
+            item_id = payload.get("item_id", "unknown")
+            calmer_id = event.actor_id or "unknown"
+            messages.append(
+                f"[World] {calmer_id} calmed {target_id} using {item_id}."
+                f" {target_id} is no longer hostile."
+            )
+        elif event.event_type == "npc_respawn":
+            payload = dict(event.payload) if event.payload else {}
+            npc_id = payload.get("npc_id", "unknown")
+            room_id = payload.get("room_id", "unknown")
+            tags = payload.get("tags", [])
+            hostile_note = " (hostile)" if "hostile" in (tags or []) else ""
+            messages.append(
+                f"[World] {npc_id} has returned to {room_id}{hostile_note}!"
+            )
+        elif event.event_type == "npc_talked":
+            payload = dict(event.payload) if event.payload else {}
+            target_id = payload.get("target_id", "unknown")
+            line = payload.get("line", "...")
+            messages.append(f"[{target_id}] \"{line}\"")
+        elif event.event_type == "quest_completed":
+            if actor_id is not None and event.actor_id != actor_id:
+                continue
+            payload = dict(event.payload) if event.payload else {}
+            title = payload.get("title", "Quest")
+            reward = payload.get("reward_message", "")
+            reward_suffix = f" {reward}" if reward else ""
+            messages.append(f"[Quest] {title} complete!{reward_suffix}")
+        elif event.event_type == "actor_defeated":
+            payload = dict(event.payload) if event.payload else {}
+            defeated_id = payload.get("actor_id", "unknown")
+            respawn_at = payload.get("respawn_at_tick")
+            respawn_note = f" Respawning at tick {respawn_at}." if isinstance(respawn_at, int) else ""
+            messages.append(f"[World] {defeated_id} has been defeated!{respawn_note}")
+        elif event.event_type == "actor_respawned":
+            payload = dict(event.payload) if event.payload else {}
+            respawned_id = payload.get("actor_id", "unknown")
+            room_id = payload.get("room_id", "unknown")
+            health = payload.get("health")
+            hp_note = f" ({health} HP)" if isinstance(health, int) else ""
+            messages.append(f"[World] {respawned_id} has returned to {room_id}{hp_note}.")
+        elif event.event_type == "actor_loot_dropped":
+            payload = dict(event.payload) if event.payload else {}
+            defeated_id = payload.get("actor_id", "unknown")
+            room_id = payload.get("room_id", "unknown")
+            item_ids = payload.get("item_ids") or []
+            items_str = ", ".join(str(i) for i in item_ids) if item_ids else "nothing"
+            messages.append(
+                f"[World] {defeated_id} dropped {items_str} in {room_id}."
+            )
+        elif event.event_type == "actor_revived":
+            payload = dict(event.payload) if event.payload else {}
+            reviver_id = event.actor_id or "unknown"
+            target_id = payload.get("target_id", "unknown")
+            room_id = payload.get("room_id", "unknown")
+            hp = payload.get("revive_health")
+            hp_note = f" ({hp} HP)" if isinstance(hp, int) else ""
+            messages.append(f"[World] {reviver_id} revived {target_id} in {room_id}{hp_note}.")
+        elif event.event_type == "action_attack":
+            if actor_id is not None and event.actor_id == actor_id:
+                payload = dict(event.payload) if event.payload else {}
+                target_id = payload.get("target_id", "unknown")
+                damage = payload.get("damage", "?")
+                resulting_hp = payload.get("resulting_health")
+                hp_note = (
+                    f" {target_id} has {resulting_hp} HP remaining."
+                    if isinstance(resulting_hp, int) and resulting_hp > 0
+                    else ""
+                )
+                messages.append(f"[Combat] You hit {target_id} for {damage} damage.{hp_note}")
+        elif event.event_type == "action_defend":
+            if actor_id is not None and event.actor_id == actor_id:
+                messages.append(
+                    "[Combat] You brace for impact."
+                    " Incoming attacks will deal reduced damage this tick."
+                )
+    return tuple(messages)
+
+
+def _format_world_event_log_messages(scenario_vars: Any) -> tuple[str, ...]:
+    """Format the persistent world event log as history messages for reconnect context.
+
+    Returns an empty tuple when there is no history, so default behavior is unchanged.
+    Only called once per session instance (guarded by ``_history_shown``).
+    """
+    if not isinstance(scenario_vars, Mapping):
+        return ()
+    raw = scenario_vars.get("world_event_log_json")
+    if not isinstance(raw, str):
+        return ()
+    try:
+        log: list[Any] = json.loads(raw)
+    except (json.JSONDecodeError, ValueError):
+        return ()
+    if not isinstance(log, list) or not log:
+        return ()
+
+    lines: list[str] = ["[History] World events:"]
+    for entry in log:
+        if not isinstance(entry, dict):
+            continue
+        etype = entry.get("event_type", "")
+        step = entry.get("step", "?")
+        if etype == "npc_defeated":
+            target = entry.get("target_id", "unknown")
+            lines.append(f"[History]   step {step}: {target} was defeated.")
+        elif etype == "route_unlocked":
+            direction = entry.get("direction", "?")
+            dest = entry.get("destination_room_id", "?")
+            lines.append(f"[History]   step {step}: passage opened {direction} \u2192 {dest}.")
+        elif etype == "npc_alert":
+            target = entry.get("target_id", "unknown")
+            remaining = entry.get("remaining_health")
+            hp_note = f" ({remaining} HP)" if isinstance(remaining, int) else ""
+            lines.append(f"[History]   step {step}: {target} became hostile{hp_note}.")
+        elif etype == "npc_calmed":
+            target = entry.get("target_id", "unknown")
+            item = entry.get("item_id", "unknown")
+            lines.append(f"[History]   step {step}: {target} was calmed (used {item}).")
+        elif etype == "npc_respawn":
+            npc = entry.get("npc_id", "unknown")
+            room = entry.get("room_id", "unknown")
+            lines.append(f"[History]   step {step}: {npc} returned to {room}.")
+        elif etype == "actor_defeated":
+            actor = entry.get("actor_id", "unknown")
+            respawn_at = entry.get("respawn_at_tick")
+            respawn_note = f" (respawn at tick {respawn_at})" if isinstance(respawn_at, int) else ""
+            lines.append(f"[History]   step {step}: {actor} was defeated{respawn_note}.")
+        elif etype == "actor_respawned":
+            actor = entry.get("actor_id", "unknown")
+            room = entry.get("room_id", "unknown")
+            health = entry.get("health")
+            hp_note = f" ({health} HP)" if isinstance(health, int) else ""
+            lines.append(f"[History]   step {step}: {actor} respawned at {room}{hp_note}.")
+        elif etype == "actor_loot_dropped":
+            actor = entry.get("actor_id", "unknown")
+            room = entry.get("room_id", "unknown")
+            item_ids = entry.get("item_ids") or []
+            items_str = ", ".join(str(i) for i in item_ids) if item_ids else "nothing"
+            lines.append(f"[History]   step {step}: {actor} dropped {items_str} in {room}.")
+        elif etype == "actor_revived":
+            reviver = entry.get("actor_id", "unknown")
+            target = entry.get("target_id", "unknown")
+            room = entry.get("room_id", "unknown")
+            hp = entry.get("revive_health")
+            hp_note = f" ({hp} HP)" if isinstance(hp, int) else ""
+            lines.append(f"[History]   step {step}: {reviver} revived {target} in {room}{hp_note}.")
+    return tuple(lines) if len(lines) > 1 else ()
+
+
+def _format_affordance_hints(
+    snapshot: Mapping[str, Any],
+    scenario_vars: Mapping[str, Any],
+    actor_id: str,
+    actor_location: str | None,
+    actor_inventory: Sequence[str],
+) -> tuple[str, ...]:
+    """Return contextual [Hint] messages for important affordances the actor may not notice.
+
+    Currently surfaces:
+    - calm-NPC affordance: actor carries the calming item and is in the right room.
+    - revive affordance: actor carries the revive item and a defeated co-actor is in the room.
+
+    Returns an empty tuple when no hints apply so the default behavior is unchanged.
+    """
+    if not isinstance(scenario_vars, Mapping) or not isinstance(snapshot, Mapping):
+        return ()
+    if not actor_location:
+        return ()
+
+    hints: list[str] = []
+    inventory_set = frozenset(actor_inventory)
+    entities: Mapping[str, Any] = snapshot.get("entities") or {}
+
+    # Calm-NPC affordance: actor has calming item and is in the source room.
+    raw_calm = scenario_vars.get("calm_npc_effects_json")
+    if isinstance(raw_calm, str):
+        try:
+            calm_effects = json.loads(raw_calm)
+        except (json.JSONDecodeError, ValueError):
+            calm_effects = []
+        for effect in calm_effects if isinstance(calm_effects, list) else []:
+            if not isinstance(effect, Mapping):
+                continue
+            item_id = str(effect.get("item_id", ""))
+            source_room = str(effect.get("source_room_id", ""))
+            target_npc = str(effect.get("target_npc_id", ""))
+            effect_id = str(effect.get("effect_id", ""))
+            if not item_id or not source_room or not target_npc:
+                continue
+            already_done = bool(scenario_vars.get(f"calmed.{effect_id}"))
+            if already_done:
+                continue
+            if item_id in inventory_set and actor_location == source_room:
+                npc_data = entities.get(target_npc)
+                npc_alive = (
+                    isinstance(npc_data, Mapping)
+                    and (not isinstance(npc_data.get("health"), int) or npc_data.get("health", 1) > 0)
+                )
+                if npc_alive:
+                    hints.append(
+                        f"[Hint] You carry {item_id} — use it here to calm the {target_npc}."
+                    )
+
+    # Revive affordance: actor has revive item and a defeated co-actor is in the same room.
+    raw_revive = scenario_vars.get("actor_revive_effects_json")
+    if isinstance(raw_revive, str):
+        try:
+            revive_effects = json.loads(raw_revive)
+        except (json.JSONDecodeError, ValueError):
+            revive_effects = []
+        for effect in revive_effects if isinstance(revive_effects, list) else []:
+            if not isinstance(effect, Mapping):
+                continue
+            item_id = str(effect.get("item_id", ""))
+            if not item_id or item_id not in inventory_set:
+                continue
+            # Find a defeated co-actor in the same room.
+            for eid, edata in entities.items():
+                if eid == actor_id:
+                    continue
+                if not isinstance(edata, Mapping):
+                    continue
+                if edata.get("entity_type") not in _ACTOR_ENTITY_TYPES:
+                    continue
+                if edata.get("location") != actor_location:
+                    continue
+                if bool(scenario_vars.get(f"actor_defeated.{eid}")):
+                    hints.append(
+                        f"[Hint] {eid} is defeated nearby — use {item_id} to revive them."
+                    )
+                    break  # one hint per revive item is enough
+
+    return tuple(hints)
+
+
+def _has_cadence_efficiency_consequence(scenario_vars: Mapping[str, Any]) -> bool:
+    """Return True when the scenario opts into the cadence-efficiency timing consequence."""
+    return scenario_vars.get("timing_consequence") == _TIMING_CONSEQUENCE_CADENCE_EFFICIENCY
+
+
+def _build_provider_actor_ids(
+    *,
+    actor_ids: Sequence[str],
+    external_agent_command: Sequence[str] | None,
+    external_agent_commands_by_actor: Mapping[str, Sequence[str]] | None,
+    external_agent_actor_id: str | None,
+) -> frozenset[str]:
+    """Return the set of actor IDs whose actions are backed by an external provider command."""
+    if external_agent_commands_by_actor:
+        return frozenset(external_agent_commands_by_actor.keys())
+    if external_agent_command is not None:
+        if external_agent_actor_id is not None:
+            return frozenset({external_agent_actor_id})
+        if len(actor_ids) == 1:
+            return frozenset({actor_ids[0]})
+        return frozenset(actor_ids)
+    return frozenset()
 
 
 def _apply_seed_variation_to_world_config(
@@ -2548,6 +3880,24 @@ def _build_runner_world_state(
     trade_effects_delta = _build_trade_effects_scenario_delta(world_config)
     if trade_effects_delta:
         world.apply_delta({"scenario_vars": trade_effects_delta})
+    defeat_unlock_effects_delta = _build_defeat_unlock_effects_scenario_delta(world_config)
+    if defeat_unlock_effects_delta:
+        world.apply_delta({"scenario_vars": defeat_unlock_effects_delta})
+    calm_npc_effects_delta = _build_calm_npc_effects_scenario_delta(world_config)
+    if calm_npc_effects_delta:
+        world.apply_delta({"scenario_vars": calm_npc_effects_delta})
+    npc_respawn_rules_delta = _build_npc_respawn_rules_scenario_delta(world_config)
+    if npc_respawn_rules_delta:
+        world.apply_delta({"scenario_vars": npc_respawn_rules_delta})
+    npc_dialogue_delta = _build_npc_dialogue_scenario_delta(world_config)
+    if npc_dialogue_delta:
+        world.apply_delta({"scenario_vars": npc_dialogue_delta})
+    quest_objectives_delta = _build_quest_objectives_scenario_delta(world_config)
+    if quest_objectives_delta:
+        world.apply_delta({"scenario_vars": quest_objectives_delta})
+    room_desc_overrides_delta = _build_room_description_overrides_scenario_delta(world_config)
+    if room_desc_overrides_delta:
+        world.apply_delta({"scenario_vars": room_desc_overrides_delta})
 
     if world_config is not None and isinstance(world_config, Mapping):
         entity_delta: dict[str, dict[str, Any]] = {}
@@ -2564,16 +3914,27 @@ def _build_runner_world_state(
                 "entity_type": str(item_def.get("entity_type", "item")),
                 "location": item_loc,
             }
-            snapshot = world.get_snapshot()
-            rooms = snapshot.get("rooms", {})
-            if item_loc in rooms:
-                room_payload = dict(rooms[item_loc])
+            # Use already-accumulated room_delta entry as base if present,
+            # so multiple items sharing a room don't overwrite each other.
+            if item_loc in room_delta:
+                room_payload = dict(room_delta[item_loc])
                 entities_present = list(room_payload.get("entities_present", []))
                 if item_id not in entities_present:
                     entities_present.append(item_id)
                     entities_present.sort()
                 room_payload["entities_present"] = entities_present
                 room_delta[item_loc] = room_payload
+            else:
+                snapshot = world.get_snapshot()
+                rooms = snapshot.get("rooms", {})
+                if item_loc in rooms:
+                    room_payload = dict(rooms[item_loc])
+                    entities_present = list(room_payload.get("entities_present", []))
+                    if item_id not in entities_present:
+                        entities_present.append(item_id)
+                        entities_present.sort()
+                    room_payload["entities_present"] = entities_present
+                    room_delta[item_loc] = room_payload
 
         for npc_def in world_config.get("npcs", ()):
             if not isinstance(npc_def, Mapping):
@@ -2589,6 +3950,8 @@ def _build_runner_world_state(
             }
             if "health" in npc_def and isinstance(npc_def["health"], int):
                 npc_entity["health"] = npc_def["health"]
+            if "tags" in npc_def and isinstance(npc_def["tags"], list):
+                npc_entity["tags"] = sorted(str(t) for t in npc_def["tags"] if isinstance(t, str))
             entity_delta[npc_id] = npc_entity
             snapshot = world.get_snapshot()
             rooms = snapshot.get("rooms", {})
