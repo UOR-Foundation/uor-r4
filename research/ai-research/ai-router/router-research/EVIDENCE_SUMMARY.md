@@ -37,6 +37,20 @@ relationships between routed states.
 
 Status: - exploratory - not yet proven necessary
 
+Prime admissibility transport note:
+
+- the exact finite-depth admissibility state is currently interpreted as a
+  layered torus-valued phase-fiber state
+- a compressed quotient in `C^2` appears to capture a reusable transport
+  backbone across wheel scales
+- a shared canonical law trained on `W = 2310, 30030, 510510` generalized to
+  unseen `W = 9699690` with only small degradation
+- the current conservative framing is `z_{t+1} ≈ A_* z_t + epsilon_t`, where
+  `A_*` is the reusable backbone and `epsilon_t` is unresolved local residual
+  structure
+- this is evidence for reusable compressed transport structure, not evidence of
+  exact closure or a prime oracle
+
 ## 5. Hardware Implications
 
 Prototype results suggest possible compute savings if sparse routing

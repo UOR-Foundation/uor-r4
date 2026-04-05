@@ -23,6 +23,18 @@ python tools/session_ledger.py --kind decision --note "RR-061 still active; do n
 python tools/session_ledger.py --kind next --note "Resume RR-061 with stronger angular-law diagnostics"
 ```
 
+## 2026-04-05
+- 13:00:00 EDT [read] Located durable research-note, index, and integration-note destinations for the prime admissibility transport result inside the merged monorepo.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/docs/research/SESSION_LEDGER.md, /Users/adminamn/AI-Research/ai-router/router-research/results/INDEX.md, /Users/adminamn/AI-Research/ai-router/router-research/EVIDENCE_SUMMARY.md, /Users/adminamn/AI-Research/MUDBench/docs/GEOMETRIC_ROUTED_PROMPT_ENGINE.md
+- 13:00:00 EDT [edit] Added a durable router-side research note for the layered torus-bundle interpretation, the `C^2` quotient, and the shared canonical transport law `A_*`.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/docs/research/prime_transport_c2_backbone.md
+- 13:00:00 EDT [edit] Copied the unseen-wheel script and result artifacts into stable `router-research` experiment locations.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/tools/prime_transport/c2_shared_astar_unseen_wheel_test.py, /Users/adminamn/AI-Research/ai-router/router-research/results/prime_transport_c2_backbone/c2_shared_astar_unseen_9699690_summary.csv, /Users/adminamn/AI-Research/ai-router/router-research/results/prime_transport_c2_backbone/c2_shared_astar_unseen_9699690_eigenvalues.csv, /Users/adminamn/AI-Research/ai-router/router-research/results/prime_transport_c2_backbone/c2_shared_astar_unseen_9699690_note.md
+- 13:00:00 EDT [edit] Added a short MUDBench integration note framing the result as a low-dimensional backbone-plus-residual hint for hierarchical routing and reasoning compression, not as a production routing law.
+  Files: /Users/adminamn/AI-Research/MUDBench/docs/PRIME_TRANSPORT_BACKBONE_NOTE.md, /Users/adminamn/AI-Research/MUDBench/docs/GEOMETRIC_ROUTED_PROMPT_ENGINE.md
+- 13:00:00 EDT [decision] Record the prime admissibility transport result as durable supporting evidence for reusable compressed transport structure while keeping the non-claims explicit: no exact closure, no prime oracle, no production routing claim.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/docs/research/prime_transport_c2_backbone.md, /Users/adminamn/AI-Research/ai-router/router-research/EVIDENCE_SUMMARY.md, /Users/adminamn/AI-Research/ai-router/router-research/results/INDEX.md
+
 Recovery rule:
 - on resume after compaction or interruption, read this file after
   `docs/SESSION_BOOTSTRAP.md`

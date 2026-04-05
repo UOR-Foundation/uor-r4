@@ -238,6 +238,11 @@ In this framing:
 
 This is the point where MUDBench becomes useful to the routing project itself: it provides repeated, measurable, world-grounded decision points where routing pressure is not arbitrary.
 
+Related note:
+	•	see `docs/PRIME_TRANSPORT_BACKBONE_NOTE.md` for the current conservative
+	  interpretation of the prime admissibility transport result as a reusable
+	  backbone-plus-residual routing hint rather than a production routing law
+
 ⸻
 
 Initial implementation boundary

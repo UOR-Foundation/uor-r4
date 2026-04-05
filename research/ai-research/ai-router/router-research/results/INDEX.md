@@ -2,6 +2,21 @@
 
 Use this file to map each run batch to parsed summaries and decision records.
 
+## Durable Research Artifacts
+
+- Prime admissibility `C^2` backbone:
+  - note:
+    `docs/research/prime_transport_c2_backbone.md`
+  - script:
+    `tools/prime_transport/c2_shared_astar_unseen_wheel_test.py`
+  - artifacts:
+    `results/prime_transport_c2_backbone/c2_shared_astar_unseen_9699690_summary.csv`
+    `results/prime_transport_c2_backbone/c2_shared_astar_unseen_9699690_eigenvalues.csv`
+    `results/prime_transport_c2_backbone/c2_shared_astar_unseen_9699690_note.md`
+  - result:
+    shared `A_*` trained on `W = 2310, 30030, 510510` generalized to unseen
+    `W = 9699690` with `err_star / err_test = 1.013071972668`
+
 ## Batch Template
 - Batch ID:
 - Config:
