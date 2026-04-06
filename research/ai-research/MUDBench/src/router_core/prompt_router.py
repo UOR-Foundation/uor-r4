@@ -17,6 +17,9 @@ from __future__ import annotations
 import math
 from typing import Mapping
 
+from router_core._shared_ai_router_math import allocate_pair_bins_scalar
+from router_core._shared_ai_router_math import fibonacci_values_upto as _shared_fibonacci_values_upto
+
 PHI = (1.0 + math.sqrt(5.0)) / 2.0
 LOG_PHI = math.log(PHI)
 _DEFAULT_LAYER_ORDER = (
@@ -39,11 +42,7 @@ _LEGACY_ROUTER_VARIANT_ALIASES = {
 
 
 def fibonacci_values_upto(max_value: int) -> list[int]:
-    max_value = max(1, int(max_value))
-    vals = [1, 2]
-    while vals[-1] < max_value:
-        vals.append(vals[-1] + vals[-2])
-    return [value for value in vals if value <= max_value]
+    return _shared_fibonacci_values_upto(max_value)
 
 
 def _fibonacci_ceil(value: int, *, max_value: int) -> int:
@@ -54,19 +53,11 @@ def _fibonacci_ceil(value: int, *, max_value: int) -> int:
 
 
 def _allocate_pair_bins(total_cap: int, *, min_bins: int, ratio_scale: float) -> tuple[int, int]:
-    total_cap = max(1, int(total_cap))
-    ratio_scale = max(float(ratio_scale), 1e-9)
-    pair_min = min(total_cap, max(1, int(min_bins)))
-
-    base = math.sqrt(float(total_cap))
-    k1 = max(pair_min, min(total_cap, int(round(base * ratio_scale))))
-    k2 = max(pair_min, min(total_cap, int(round(float(total_cap) / max(k1, 1)))))
-
-    if k1 * k2 > total_cap:
-        k2 = max(pair_min, min(total_cap, int(math.floor(float(total_cap) / max(k1, 1)))))
-    if k1 * k2 > total_cap:
-        k1 = max(pair_min, min(total_cap, int(math.floor(float(total_cap) / max(k2, 1)))))
-    return k1, k2
+    return allocate_pair_bins_scalar(
+        total_cap,
+        min_bins=min_bins,
+        ratio_scale=ratio_scale,
+    )
 
 
 def build_legacy_router_backed_prompt_plan(

@@ -18,6 +18,13 @@ import math
 from typing import Mapping
 from typing import Sequence
 
+from router_core._shared_ai_router_math import allocate_triplet_bins_budget as _shared_allocate_triplet_bins_budget
+from router_core._shared_ai_router_math import assign_sector_hopf_base_scalar as _shared_assign_sector_hopf_base_scalar
+from router_core._shared_ai_router_math import assign_sector_hopf_transport_scalar as _shared_assign_sector_hopf_transport_scalar
+from router_core._shared_ai_router_math import hopf_coordinate_components_scalar as _shared_hopf_coordinate_components_scalar
+from router_core._shared_ai_router_math import hopf_phase_transport_components_scalar as _shared_hopf_phase_transport_components_scalar
+from router_core._shared_ai_router_math import normalize_4d_coordinate as _shared_normalize_4d_coordinate
+
 SUPPORTED_CANONICAL_ANGULAR_VARIANTS = (
     "angular-hopf-base",
     "angular-hopf-trans",
@@ -37,19 +44,7 @@ _BASE_BUNDLE_ORDER = CANONICAL_ANGULAR_COORDINATE_LABELS
 
 def normalize_4d_coordinate(routing_coordinate: Sequence[float]) -> tuple[float, float, float, float]:
     """Normalize one deterministic 4D routing coordinate onto the unit shell."""
-    if isinstance(routing_coordinate, (str, bytes)) or not isinstance(routing_coordinate, Sequence):
-        raise ValueError("routing_coordinate must be a sequence of four numbers")
-    if len(routing_coordinate) != 4:
-        raise ValueError("routing_coordinate must contain exactly four values")
-    normalized_values: list[float] = []
-    for value in routing_coordinate:
-        if not isinstance(value, (int, float)):
-            raise ValueError("routing_coordinate must contain only numbers")
-        normalized_values.append(float(value))
-    norm = math.sqrt(sum(value * value for value in normalized_values))
-    if norm <= 1e-12:
-        norm = 1.0
-    return tuple(value / norm for value in normalized_values)  # type: ignore[return-value]
+    return _shared_normalize_4d_coordinate(routing_coordinate)
 
 
 def build_canonical_angular_prompt_plan(
@@ -159,36 +154,12 @@ def _allocate_triplet_bins_budget(
     min_second: int = 1,
     min_third: int = 1,
 ) -> tuple[int, int, int]:
-    total_cap = max(1, int(total_cap))
-    min_first = max(1, int(min_first))
-    min_second = max(1, int(min_second))
-    min_third = max(1, int(min_third))
-    if min_first * min_second * min_third > total_cap:
-        min_third = 1
-    if min_first * min_second * min_third > total_cap:
-        min_second = 1
-    if min_first * min_second * min_third > total_cap:
-        min_first = 1
-    best = (1, total_cap, 1)
-    best_score: tuple[int, int, int, int, int] | None = None
-    for k_first in range(min_first, total_cap + 1):
-        for k_second in range(min_second, total_cap + 1):
-            max_third = total_cap // max(k_first * k_second, 1)
-            if max_third < min_third:
-                break
-            for k_third in range(min_third, max_third + 1):
-                product = k_first * k_second * k_third
-                favor_base = 1 if k_second >= k_third else 0
-                spread = (
-                    abs(k_first - k_second)
-                    + abs(k_second - k_third)
-                    + abs(k_first - k_third)
-                )
-                score = (product, favor_base, -spread, k_second, -k_third)
-                if best_score is None or score > best_score:
-                    best_score = score
-                    best = (k_first, k_second, k_third)
-    return best
+    return _shared_allocate_triplet_bins_budget(
+        total_cap,
+        min_first=min_first,
+        min_second=min_second,
+        min_third=min_third,
+    )
 
 
 def _wrap_to_pi(theta: float) -> float:
@@ -198,30 +169,7 @@ def _wrap_to_pi(theta: float) -> float:
 def _hopf_coordinate_components(
     normalized_coordinate: Sequence[float],
 ) -> dict[str, float]:
-    a, b, c, d = (float(value) for value in normalized_coordinate)
-    rho1 = math.sqrt((a * a) + (b * b))
-    rho2 = math.sqrt((c * c) + (d * d))
-    denom = max(math.sqrt((rho1 * rho1) + (rho2 * rho2)), 1e-12)
-    cos_chi = rho1 / denom
-    sin_chi = rho2 / denom
-    chi_u = min(max(sin_chi * sin_chi, 0.0), 1.0 - 1e-12)
-    chi = math.asin(min(max(sin_chi, 0.0), 1.0))
-    theta1 = _wrap_to_pi(math.atan2(b, a))
-    theta2 = _wrap_to_pi(math.atan2(d, c))
-    delta = _wrap_to_pi(theta1 - theta2)
-    alpha = _wrap_to_pi(0.5 * (theta1 + theta2))
-    return {
-        "rho1": rho1,
-        "rho2": rho2,
-        "chi": chi,
-        "chi_u": chi_u,
-        "theta1": theta1,
-        "theta2": theta2,
-        "delta": delta,
-        "alpha": alpha,
-        "cos_chi": cos_chi,
-        "sin_chi": sin_chi,
-    }
+    return _shared_hopf_coordinate_components_scalar(normalized_coordinate)
 
 
 def _hopf_phase_transport_components(
@@ -229,19 +177,10 @@ def _hopf_phase_transport_components(
     *,
     phase_transport_lambda: float,
 ) -> dict[str, float]:
-    components = _hopf_coordinate_components(normalized_coordinate)
-    chi = components["chi"]
-    delta = components["delta"]
-    alpha = components["alpha"]
-    connection_weight = 0.5 * float(phase_transport_lambda) * math.cos(2.0 * chi)
-    phase_shift = _wrap_to_pi(connection_weight * delta)
-    transported_alpha = _wrap_to_pi(alpha + phase_shift)
-    return {
-        **components,
-        "transport_connection_weight": connection_weight,
-        "transport_phase_shift": phase_shift,
-        "transported_alpha": transported_alpha,
-    }
+    return _shared_hopf_phase_transport_components_scalar(
+        normalized_coordinate,
+        phase_transport_lambda=phase_transport_lambda,
+    )
 
 
 def _assign_sector_angular_hopf_base(
@@ -249,24 +188,10 @@ def _assign_sector_angular_hopf_base(
     *,
     K: int,
 ) -> dict[str, object]:
-    components = _hopf_coordinate_components(normalized_coordinate)
-    kchi = max(1, int(math.floor(math.sqrt(max(int(K), 1)))))
-    kdelta = max(1, int(math.ceil(float(max(int(K), 1)) / float(kchi))))
-    u_chi = components["chi_u"]
-    u_delta = (components["delta"] + math.pi) / (2.0 * math.pi)
-    chi_bin = min(int(u_chi * float(kchi)), max(kchi - 1, 0))
-    delta_bin = min(int(u_delta * float(kdelta)), max(kdelta - 1, 0))
-    sector_id = (chi_bin * kdelta + delta_bin) % max(int(K), 1)
-    return {
-        "coordinates": components,
-        "sector_id": int(sector_id),
-        "sector_bins": {
-            "chi_bins": kchi,
-            "delta_bins": kdelta,
-            "chi_bin": chi_bin,
-            "delta_bin": delta_bin,
-        },
-    }
+    return _shared_assign_sector_hopf_base_scalar(
+        normalized_coordinate,
+        K=K,
+    )
 
 
 def _assign_sector_angular_hopf_trans(
@@ -276,36 +201,12 @@ def _assign_sector_angular_hopf_trans(
     phase_transport_lambda: float,
     hopf_chi_bins: int,
 ) -> dict[str, object]:
-    components = _hopf_phase_transport_components(
+    return _shared_assign_sector_hopf_transport_scalar(
         normalized_coordinate,
+        K=K,
         phase_transport_lambda=phase_transport_lambda,
+        hopf_chi_bins=hopf_chi_bins,
     )
-    kchi, kdelta, kalpha = _allocate_triplet_bins_budget(
-        K,
-        min_first=max(2, int(hopf_chi_bins)),
-        min_second=2,
-        min_third=2,
-    )
-    u_chi = components["chi_u"]
-    u_delta = (components["delta"] + math.pi) / (2.0 * math.pi)
-    u_alpha = (components["transported_alpha"] + math.pi) / (2.0 * math.pi)
-    chi_bin = min(int(u_chi * float(kchi)), max(kchi - 1, 0))
-    delta_bin = min(int(u_delta * float(kdelta)), max(kdelta - 1, 0))
-    alpha_bin = min(int(u_alpha * float(kalpha)), max(kalpha - 1, 0))
-    local_span = max(kdelta * kalpha, 1)
-    sector_id = min((chi_bin * local_span) + (delta_bin * kalpha) + alpha_bin, max(int(K) - 1, 0))
-    return {
-        "coordinates": components,
-        "sector_id": int(sector_id),
-        "sector_bins": {
-            "chi_bins": kchi,
-            "delta_bins": kdelta,
-            "alpha_bins": kalpha,
-            "chi_bin": chi_bin,
-            "delta_bin": delta_bin,
-            "alpha_bin": alpha_bin,
-        },
-    }
 
 
 def _bundle_tiebreak_rank(
