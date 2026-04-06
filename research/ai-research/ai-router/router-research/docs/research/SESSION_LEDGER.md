@@ -3942,3 +3942,47 @@ residue set of the new stencil.
 - the mismatch correlation is not perfectly clean at the raw transition level
 - but the candidate pollution plus filtered-eval improvement make this look
   like a real structural bottleneck in the rebuilt line
+
+---
+
+## Session Entry: 2026-04-06 — Prime Transport Inner Representation Rebuild V7
+
+### Scope
+- rebuild the native joint transport operator so compatibility is part of the
+  transport law itself
+- use the bounded radial/fiber, spin, and composite compatibility proxies from
+  the compatibility audit
+- no wrapper tuning, no projection, no flattening, no post-hoc evaluation-only
+  filter
+
+### Files Added / Updated
+- `tools/prime_transport/geometry_native_sequence_model_r7.py` → created
+- `tools/prime_transport/run_geometry_native_sequence_model_r7.py` → created
+- `docs/research/prime_transport_inner_representation_rebuild_v7.md` → created
+- `results/prime_transport_recursive_system/prime_transport_inner_representation_rebuild_v7.csv` → created
+- `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- `r7` moves compatibility into the native transport law:
+  - only candidates in the best available compatibility tier are scored by the
+    learned joint operator
+  - composite-compatibility mismatches are eliminated in practice:
+    - selected compat mismatch fraction `0.0000`
+    - tier-4 usage `0.0000`
+- bounded performance on the v3 discourse/query task:
+  - `r6`: test accuracy `0.7382`, query accuracy `0.7310`, loss `0.6617`
+  - filtered `r6` audit reference: test accuracy `0.7436`, query accuracy
+    `0.7518`, loss `0.6512`
+  - `r7`: test accuracy `0.7400`, query accuracy `0.7339`, loss `0.6685`
+- compatibility remains only partially satisfied:
+  - selected radial/fiber mismatch fraction `0.5082`
+  - selected spin mismatch fraction `0.6503`
+  - compared incompatible fraction among scored candidates `0.7956`
+  - average scored candidates per side-step `2.0104`
+
+### Status
+- compatibility is now inside the native transport operator itself
+- but `r7` does not recover the gains seen in the compatibility-filtered audit
+- the result is architecturally positive and empirically negative
+- the main remaining bottleneck appears to be the native compatibility-aware
+  move geometry, not the absence of compatibility conditioning itself
