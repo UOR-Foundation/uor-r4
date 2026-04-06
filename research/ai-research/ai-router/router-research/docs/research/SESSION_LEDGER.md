@@ -24,6 +24,202 @@ python tools/session_ledger.py --kind next --note "Resume RR-061 with stronger a
 ```
 
 ## 2026-04-05
+- 23:00:00 EDT [decision] Froze the router-memory branch as ready for a larger router-native systems prototype and defined the next bounded shared-workspace prototype with the current read path unchanged.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/docs/research/prime_transport_router_memory_readiness.md, /Users/adminamn/AI-Research/ai-router/router-research/docs/research/prime_transport_router_memory_systems_prototype.md
+- 22:45:00 EDT [edit] Added the first bounded multi-entity router-memory experiment and task-family note using the current read path and promotion logic unchanged.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/tools/prime_transport/run_multi_entity_router_memory_experiment.py, /Users/adminamn/AI-Research/ai-router/router-research/docs/research/prime_transport_multi_entity_router_memory_family.md
+- 22:45:00 EDT [run] Ran the bounded multi-entity router-memory experiment and saved the coordination summary artifact.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/results/prime_transport_recursive_system/prime_transport_multi_entity_router_memory_experiment.csv
+  Cmd: `python ai-router/router-research/tools/prime_transport/run_multi_entity_router_memory_experiment.py`
+- 22:45:00 EDT [decision] The unchanged router-memory architecture remains coherent on bounded multi-entity state coordination and is now strong enough for a future larger router-native systems prototype.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/docs/research/prime_transport_multi_entity_router_memory_experiment.md, /Users/adminamn/AI-Research/ai-router/router-research/EVIDENCE_SUMMARY.md
+- 22:25:00 EDT [edit] Added the first larger router-memory experiment on a richer structured-record task family using the current read path unchanged.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/tools/prime_transport/run_larger_router_memory_experiment.py, /Users/adminamn/AI-Research/ai-router/router-research/docs/research/prime_transport_router_memory_record_family.md
+- 22:25:00 EDT [run] Ran the larger structured-record router-memory experiment and saved the bounded results summary.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/results/prime_transport_recursive_system/prime_transport_larger_router_memory_experiment.csv
+  Cmd: `python ai-router/router-research/tools/prime_transport/run_larger_router_memory_experiment.py`
+- 22:25:00 EDT [decision] The unchanged router-memory read path remains coherent on the first richer structured-record task family and is now strong enough to justify a larger router-native systems experiment.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/docs/research/prime_transport_larger_router_memory_experiment.md, /Users/adminamn/AI-Research/ai-router/router-research/EVIDENCE_SUMMARY.md
+- 22:10:00 EDT [decision] Froze the router-memory branch status: keep the current read path unchanged, treat promoted-query burden as a real deeper-family architectural cost, and use that as the starting point for the next larger router-native decision.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/docs/research/prime_transport_router_memory_status.md, /Users/adminamn/AI-Research/ai-router/router-research/EVIDENCE_SUMMARY.md
+- 22:00:00 EDT [edit] Added a bounded promoted-query reduction comparison for the router-memory task loop using one tiny read-side `phi0` hint refinement.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/tools/prime_transport/router_memory_layer.py, /Users/adminamn/AI-Research/ai-router/router-research/tools/prime_transport/run_router_memory_promoted_query_reduction.py
+- 22:00:00 EDT [run] Ran the promoted-query reduction comparison and saved the baseline-versus-refined memory-task summary.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/results/prime_transport_recursive_system/prime_transport_router_memory_promoted_query_reduction.csv
+  Cmd: `python ai-router/router-research/tools/prime_transport/run_router_memory_promoted_query_reduction.py`
+- 22:00:00 EDT [decision] Keep the current router-memory read path unchanged: the tested `phi0` hint lowers promoted-query burden, but it degrades task retrieval accuracy too much to be a worthwhile replacement.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/docs/research/prime_transport_router_memory_promoted_query_reduction.md, /Users/adminamn/AI-Research/ai-router/router-research/EVIDENCE_SUMMARY.md
+- 21:45:00 EDT [edit] Added the first bounded stateful task-loop driver on top of the router-memory layer, turning the routing state into an explicit symbolic read/write memory process.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/tools/prime_transport/run_router_memory_task_loop.py, /Users/adminamn/AI-Research/ai-router/router-research/tools/prime_transport/router_memory_layer.py
+- 21:45:00 EDT [run] Ran the bounded router-memory task loop and saved the multi-step state-carry summary artifact.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/results/prime_transport_recursive_system/prime_transport_router_memory_task_loop.csv
+  Cmd: `python ai-router/router-research/tools/prime_transport/run_router_memory_task_loop.py`
+- 21:45:00 EDT [decision] The router-memory layer now supports real carried-state retrieval in a bounded task loop strongly enough to justify a larger router-native experiment, with promoted-query burden on deeper lifts as the main remaining architectural cost.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/docs/research/prime_transport_router_memory_task_loop.md, /Users/adminamn/AI-Research/ai-router/router-research/EVIDENCE_SUMMARY.md
+- 21:30:00 EDT [edit] Added the first structured read/write router-memory layer on top of the guarded prime-transport policy, with explicit query and write operations over reusable `base_gap` memory cells.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/tools/prime_transport/router_memory_layer.py, /Users/adminamn/AI-Research/ai-router/router-research/tools/prime_transport/run_router_memory_layer_demo.py
+- 21:30:00 EDT [run] Ran the bounded router-memory demo on the existing exact trace family and saved the memory-layer summary artifact.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/results/prime_transport_recursive_system/prime_transport_router_memory_layer_demo.csv
+  Cmd: `python ai-router/router-research/tools/prime_transport/run_router_memory_layer_demo.py`
+- 21:30:00 EDT [decision] The router-memory path is strong enough to continue architecturally: the minimal read/write layer is stable and high-resolution after warmup, but exact branch retrieval remains partial and should be the main caution before any larger router-native experiment.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/docs/research/prime_transport_router_memory_layer.md, /Users/adminamn/AI-Research/ai-router/router-research/EVIDENCE_SUMMARY.md
+- 21:05:00 EDT [decision] Froze the final real-signal status: keep `base_gap` as the first guarded real-signal policy, stop replay-family micro-refinement, and treat fallback efficiency rather than route reuse as the currently validated win.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/docs/research/prime_transport_real_signal_status.md, /Users/adminamn/AI-Research/ai-router/router-research/EVIDENCE_SUMMARY.md
+- 20:45:00 EDT [edit] Added the larger guarded real-signal trial runner by extending the existing real-signal wrapper to accept an explicit paired replay slice without changing the wrapper boundary or policy.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/tools/prime_transport/real_signal_benchmark_wrapper.py, /Users/adminamn/AI-Research/ai-router/router-research/tools/prime_transport/run_prime_transport_larger_real_signal_trial.py
+- 20:45:00 EDT [run] Ran the paired larger real-signal benchmark on the selected `timing_mode_eval_v1` replay artifacts and saved the guarded comparison summary.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/results/prime_transport_recursive_system/prime_transport_larger_real_signal_trial.csv
+  Cmd: `python ai-router/router-research/tools/prime_transport/run_prime_transport_larger_real_signal_trial.py`
+- 20:45:00 EDT [decision] The paired larger replay slice still does not produce natural route reuse for `base_gap`, but it preserves the prime-transport fallback advantage; keep `base_gap` unchanged as the first guarded real-signal policy.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/docs/research/prime_transport_larger_real_signal_trial.md, /Users/adminamn/AI-Research/ai-router/router-research/EVIDENCE_SUMMARY.md
+- 18:50:00 EDT [edit] Implemented the first offline mock router module plus a tiny bounded demo runner under the research tools tree.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/tools/prime_transport/mock_router_module.py, /Users/adminamn/AI-Research/ai-router/router-research/tools/prime_transport/run_mock_router_module_demo.py
+- 18:50:00 EDT [run] Ran the mock router demo and saved the minimal demo artifact showing initialization, update, route decision, and selective promotion behavior.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/results/prime_transport_recursive_system/prime_transport_mock_router_demo.csv
+  Cmd: `python ai-router/router-research/tools/prime_transport/run_mock_router_module_demo.py`
+- 18:50:00 EDT [edit] Added a short implementation note documenting what was built and the bounded demo assumptions.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/docs/research/prime_transport_mock_router_module_implementation.md
+- 18:35:00 EDT [edit] Added an implementation-facing mock router module spec and compact interface table for the exact-layer routing abstraction.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/docs/research/prime_transport_mock_router_module_spec.md, /Users/adminamn/AI-Research/ai-router/router-research/results/prime_transport_recursive_system/prime_transport_mock_router_interface_table.csv
+- 18:35:00 EDT [decision] The smallest non-runtime prototype step is an offline module that defaults to `R_min`, exposes explicit promotion checks, and escalates only unresolved classes toward `R_full`.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/docs/research/prime_transport_mock_router_module_spec.md, /Users/adminamn/AI-Research/ai-router/router-research/EVIDENCE_SUMMARY.md
+- 18:20:00 EDT [edit] Added a bounded offline evaluation harness for the three exact-layer routing-state candidates and a short note interpreting the resulting prototype tradeoff.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/tools/prime_transport/run_rmin_offline_eval.py, /Users/adminamn/AI-Research/ai-router/router-research/docs/research/prime_transport_rmin_offline_eval.md
+- 18:20:00 EDT [run] Ran the offline `R_static` vs `R_min` vs `R_full` evaluation and saved the summary table.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/results/prime_transport_recursive_system/prime_transport_rmin_offline_eval_summary.csv
+  Cmd: `python ai-router/router-research/tools/prime_transport/run_rmin_offline_eval.py`
+- 18:20:00 EDT [decision] Keep `R_min = (b, phi, r, next_return_gap)` as the first routing prototype target: it is strong enough to justify a prototype, but it should be paired with selective promotion because it remains materially weaker than full spin.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/docs/research/prime_transport_rmin_offline_eval.md, /Users/adminamn/AI-Research/ai-router/router-research/EVIDENCE_SUMMARY.md
+- 18:05:00 EDT [edit] Added an implementation-ready exact-layer prototype spec for the recommended minimal routing state `(b, phi, r, next_return_gap)` and a compact state/update/refinement table.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/docs/research/prime_transport_rmin_prototype_spec.md, /Users/adminamn/AI-Research/ai-router/router-research/results/prime_transport_recursive_system/prime_transport_rmin_prototype_table.csv
+- 18:05:00 EDT [decision] Treat `R_min` as the first routing prototype target: route coarsely on chart plus immediate return-memory, and promote only unresolved classes that continue collective first-splitting.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/docs/research/prime_transport_rmin_prototype_spec.md, /Users/adminamn/AI-Research/ai-router/router-research/EVIDENCE_SUMMARY.md
+- 17:55:00 EDT [edit] Added a routing-abstraction note that translates the current exact-layer results into three candidate routing states and a minimal routing principle based on coarse state, delayed refinement, and first-splitting promotion.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/docs/research/prime_transport_routing_abstraction.md
+- 17:55:00 EDT [edit] Added a compact three-state comparison table for static chart, minimal hybrid predictive state, and full predictive state.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/results/prime_transport_recursive_system/prime_transport_routing_state_candidates.csv
+- 17:55:00 EDT [decision] Recommend the minimal hybrid state `(b, phi, r, next_return_gap)` as the first routing prototype target because it is the smallest currently justified predictive refinement of the exact chart that remains genuinely smaller than spin.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/docs/research/prime_transport_routing_abstraction.md, /Users/adminamn/AI-Research/ai-router/router-research/EVIDENCE_SUMMARY.md
+- 17:35:00 EDT [edit] Added a minimal predictive-state note that selects the smallest currently viable exact routing state from the validated residual candidates and ties it back to the canonical threshold-law reading.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/docs/research/prime_transport_minimal_predictive_state.md
+- 17:35:00 EDT [run] Built a compact comparison table placing the chart exact address, the selected minimal candidate, stronger noncompressed return-memory candidates, and full spin on the same bounded exact rows.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/results/prime_transport_recursive_system/visible_threshold_minimal_predictive_state_comparison.csv
+- 17:35:00 EDT [decision] Record `next_return_gap` as the smallest currently viable exact predictive residual for routing use: it stays smaller than spin and captures substantial structure, but it remains materially weaker than full spin.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/docs/research/prime_transport_minimal_predictive_state.md, /Users/adminamn/AI-Research/ai-router/router-research/EVIDENCE_SUMMARY.md
+- 17:15:00 EDT [edit] Added a bounded return-grammar compression runner that compares a very small exact dynamical candidate family against the spin-side target on the existing tightly matched first-splitting rows.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/tools/prime_transport/analyze_return_grammar_compression.py
+- 17:15:00 EDT [run] Ran the return-grammar compression comparison and saved the per-row candidate table plus the candidate score summary.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/results/prime_transport_recursive_system/visible_threshold_return_grammar_comparison.csv, /Users/adminamn/AI-Research/ai-router/router-research/results/prime_transport_recursive_system/visible_threshold_return_grammar_scores.csv
+  Cmd: `python ai-router/router-research/tools/prime_transport/analyze_return_grammar_compression.py`
+- 17:15:00 EDT [result] The strongest raw-capture candidates are short return-gap sequences, but they overexpand the label space beyond spin and therefore do not qualify as genuine compressions; record the residual as partially compressible but still significantly weaker than spin.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/docs/research/prime_transport_return_grammar_compression.md, /Users/adminamn/AI-Research/ai-router/router-research/EVIDENCE_SUMMARY.md
+- 16:50:00 EDT [edit] Added a final consolidated exact-layer note summarizing the current prime transport picture across static phase-fiber-scale structure, predictive spin, visible-threshold mechanism, and the current residual beyond the static chart.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/docs/research/prime_transport_exact_layer_consolidated.md
+- 16:50:00 EDT [decision] Treat the consolidated exact-layer note as the compact landing reference for this branch: exact static chart `(b, phi, r)`, stronger predictive state `(b, spin_H)`, canonical law class `density + first-splitting event`, and residual candidate class centered on return-memory rather than local suffix memory.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/docs/research/prime_transport_exact_layer_consolidated.md, /Users/adminamn/AI-Research/ai-router/router-research/EVIDENCE_SUMMARY.md, /Users/adminamn/AI-Research/ai-router/router-research/results/INDEX.md
+- 16:35:00 EDT [edit] Added a bounded residual-analysis runner for the exact-layer question “spin minus phase-fiber-scale,” using tightly matched first-splitting rows and a small family of exact dynamical candidate labels.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/tools/prime_transport/analyze_spin_phase_fiber_residual.py
+- 16:35:00 EDT [run] Ran the spin-minus-phase-fiber residual analysis on the two existing tightly density-matched families and saved the residual, summary, and score tables.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/results/prime_transport_recursive_system/visible_threshold_spin_minus_phase_fiber_residuals.csv, /Users/adminamn/AI-Research/ai-router/router-research/results/prime_transport_recursive_system/visible_threshold_spin_minus_phase_fiber_summary.csv, /Users/adminamn/AI-Research/ai-router/router-research/results/prime_transport_recursive_system/visible_threshold_spin_minus_phase_fiber_scores.csv
+  Cmd: `python ai-router/router-research/tools/prime_transport/analyze_spin_phase_fiber_residual.py`
+- 16:35:00 EDT [result] The strongest small exact residual object tested so far is a previous/next return-gap pair, which materially improves predictive purity over `b` alone but still captures only part of the spin partition, especially on the deeper `30030 -> 510510` family; record the residual as partially compressible but not yet reducible to a small exact object.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/docs/research/prime_transport_spin_minus_phase_fiber_residual.md, /Users/adminamn/AI-Research/ai-router/router-research/EVIDENCE_SUMMARY.md
+- 16:10:00 EDT [edit] Added a compact canonical exact-layer note summarizing the current relationship between the static phase-fiber chart `(b, phi, r)`, finite-horizon spin, and visible first-splitting events.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/docs/research/prime_transport_phase_fiber_vs_spin_canonical.md
+- 16:10:00 EDT [decision] Record the stable exact-layer reading that phase-fiber-scale coordinates carry real first-splitting signal but do not yet replace spin as the stronger exact predictor; visible first splitting should currently be described as partially geometric and partially genuinely dynamical.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/docs/research/prime_transport_phase_fiber_vs_spin_canonical.md, /Users/adminamn/AI-Research/ai-router/router-research/EVIDENCE_SUMMARY.md, /Users/adminamn/AI-Research/ai-router/router-research/results/INDEX.md
+- 15:55:00 EDT [edit] Added a bounded exact-layer phase-fiber readability runner that maps known first-splitting parent predictive classes back into the exact phase-fiber chart `(b, phi, r)` and scores simple phase-fiber concentration features against visible threshold.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/tools/prime_transport/analyze_phase_fiber_first_split.py
+- 15:55:00 EDT [run] Ran the phase-fiber readability analysis on the two existing tightly density-matched families and saved the mapped class table, row-level readability summary, and predictor score table.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/results/prime_transport_recursive_system/visible_threshold_phase_fiber_mapped_first_split_classes.csv, /Users/adminamn/AI-Research/ai-router/router-research/results/prime_transport_recursive_system/visible_threshold_phase_fiber_readability_summary.csv, /Users/adminamn/AI-Research/ai-router/router-research/results/prime_transport_recursive_system/visible_threshold_phase_fiber_readability_scores.csv
+  Cmd: `python ai-router/router-research/tools/prime_transport/analyze_phase_fiber_first_split.py`
+- 15:55:00 EDT [result] First visible splitting is partially readable in exact phase-fiber-scale coordinates: concentration of first splitters in dominant `phi` tuples and base phases is strong on the bounded matched-family table, but full spin-side first-splitting multiplicity remains the stronger exact predictor and no simple local phase-fiber rule is yet earned.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/docs/research/prime_transport_phase_fiber_first_split_readability.md, /Users/adminamn/AI-Research/ai-router/router-research/EVIDENCE_SUMMARY.md
+- 04:40:00 EDT [edit] Added a fixed-family arrangement-isolation runner that holds the lift prime and local forbidden-count fixed while comparing residual visible-threshold variation against arrangement-sensitive stencil statistics.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/tools/prime_transport/analyze_arrangement_isolation.py
+- 04:40:00 EDT [run] Ran the exact fixed-family arrangement-isolation analysis on the `p = 13, nu_p(A) = 4` and `p = 17, nu_p(A) = 4` families and saved the focused row and score tables.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/results/prime_transport_recursive_system/visible_threshold_arrangement_isolation_rows.csv, /Users/adminamn/AI-Research/ai-router/router-research/results/prime_transport_recursive_system/visible_threshold_arrangement_isolation_scores.csv
+  Cmd: `python ai-router/router-research/tools/prime_transport/analyze_arrangement_isolation.py`
+- 04:40:00 EDT [result] Arrangement is now isolated as a genuine secondary driver because visible-threshold variation persists when both `p` and `nu_p(A)` are fixed, but parent admissible density still outperforms the tested arrangement statistics; `gap_entropy` and `gap_max` are the best current arrangement candidates.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/docs/research/prime_transport_arrangement_isolation.md, /Users/adminamn/AI-Research/ai-router/router-research/EVIDENCE_SUMMARY.md
+- 04:25:00 EDT [edit] Extended the visible-threshold predictor analysis with a small arrangement-sensitive statistic family built from the forbidden-residue gap profile at the lift prime.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/tools/prime_transport/analyze_visible_threshold_predictors.py, /Users/adminamn/AI-Research/ai-router/router-research/results/prime_transport_recursive_system/visible_threshold_arrangement_stats.csv
+- 04:25:00 EDT [result] Arrangement information now clearly improves on forbidden-count alone, with `gap_max` and `gap_span` the strongest tested arrangement features, but no arrangement statistic beats the lift prime as the leading coarse organizer.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/docs/research/prime_transport_arrangement_statistics.md, /Users/adminamn/AI-Research/ai-router/router-research/results/prime_transport_recursive_system/visible_threshold_predictor_scores.csv
+- 04:10:00 EDT [edit] Extended the exact threshold family with three additional admissible size-4 tuplets chosen to collapse `nu_p(A)` at targeted tested primes while keeping raw tuplet size fixed.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/tools/prime_transport/run_threshold_law_table.py, /Users/adminamn/AI-Research/ai-router/router-research/results/prime_transport_recursive_system/threshold_law_summary.csv
+- 04:10:00 EDT [run] Computed the exact threshold extension rows for `double_twins_p13`, `double_twins_p17`, and `double_twins_p19`, merged them into the main threshold table, and reran the visible-threshold predictor analysis.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/results/prime_transport_recursive_system/threshold_law_summary.csv, /Users/adminamn/AI-Research/ai-router/router-research/results/prime_transport_recursive_system/threshold_law_detail.csv, /Users/adminamn/AI-Research/ai-router/router-research/results/prime_transport_recursive_system/visible_threshold_predictor_scores.csv
+  Cmd: `python ai-router/router-research/tools/prime_transport/analyze_visible_threshold_predictors.py`
+- 04:10:00 EDT [result] The extension broke the earlier `|A|` versus `nu_p(A)` degeneracy: size alone is now more clearly ruled out, `p * |A|` is no longer the leading coarse organizer, and the remaining plausible law class depends on lift prime plus finer local stencil arrangement beyond forbidden-count alone.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/docs/research/prime_transport_visible_threshold_extension.md, /Users/adminamn/AI-Research/ai-router/router-research/EVIDENCE_SUMMARY.md
+- 03:40:00 EDT [edit] Added an exact-layer visible-threshold predictor analysis runner that augments the threshold table with local stencil counts, parent admissible density, and coarse mixed-scale candidate variables.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/tools/prime_transport/analyze_visible_threshold_predictors.py
+- 03:40:00 EDT [run] Ran the visible-threshold predictor analysis on the current exact threshold table and saved row-level predictors, score summaries, and monotonicity checks.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/results/prime_transport_recursive_system/visible_threshold_predictor_rows.csv, /Users/adminamn/AI-Research/ai-router/router-research/results/prime_transport_recursive_system/visible_threshold_predictor_scores.csv, /Users/adminamn/AI-Research/ai-router/router-research/results/prime_transport_recursive_system/visible_threshold_monotonicity.csv
+  Cmd: `python ai-router/router-research/tools/prime_transport/analyze_visible_threshold_predictors.py`
+- 03:40:00 EDT [result] Current exact-table analysis rules out laws in `p` alone, `|A|` alone, or small lag, while the strongest tested coarse candidate class is a mixed prime-by-stencil scale such as `p * |A|`; record this only as a plausible law class anchor, not a formula.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/docs/research/prime_transport_visible_threshold_predictors.md, /Users/adminamn/AI-Research/ai-router/router-research/EVIDENCE_SUMMARY.md
+- 03:25:00 EDT [edit] Added a threshold-law runner that measures first internal split, first visible split, and lag across successive wheel lifts and established tuplet patterns entirely at the exact `(b, spin_H)` layer.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/tools/prime_transport/run_threshold_law_table.py
+- 03:25:00 EDT [run] Ran the exact threshold-law table across lifts `210 -> 2310 -> 30030 -> 510510 -> 9699690` for tuplets `twins`, `triplet`, and `quadruplet`, with horizons checked up to `H = 60`.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/results/prime_transport_recursive_system/threshold_law_summary.csv, /Users/adminamn/AI-Research/ai-router/router-research/results/prime_transport_recursive_system/threshold_law_detail.csv
+  Cmd: `python ai-router/router-research/tools/prime_transport/run_threshold_law_table.py`
+- 03:25:00 EDT [result] The current exact table shows `first_internal_split_H = 1` in every tested lift/tuplet, while visible split ranges from immediate to strongly delayed; the quadruplet visible lag is `0, 20, 50, >59` along the tested lifts, so no small-lag law is supported.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/docs/research/prime_transport_threshold_law.md, /Users/adminamn/AI-Research/ai-router/router-research/EVIDENCE_SUMMARY.md
+- 20:25:00 EDT [edit] Added a durable canonical framework note that makes the exact recursive admissibility system the primary project object and explicitly places quotient geometry in the downstream layer.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/docs/research/prime_transport_canonical_framework.md
+- 20:25:00 EDT [edit] Added a short canonical-vs-downstream boundary note to reduce future drift back toward treating quotient work as primary.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/docs/research/prime_transport_canonical_vs_downstream.md
+- 20:25:00 EDT [decision] Record the next preferred step strictly at the exact recursive-system layer: formalize and test the law for first internal split horizon, first visible split horizon, and their lag as functions of wheel lift and tuplet pattern.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/docs/research/prime_transport_canonical_framework.md, /Users/adminamn/AI-Research/ai-router/router-research/results/INDEX.md, /Users/adminamn/AI-Research/ai-router/router-research/EVIDENCE_SUMMARY.md
+- 20:05:00 EDT [read] Re-centered the prime-transport line on the canonical recursive-system summary and explicitly dropped quotient geometry as the primary object for the current task.
+  Files: /Users/adminamn/AI-Research/prime_research_summary.md
+- 20:05:00 EDT [edit] Added a stable exact-system research reference covering the transport orbit, recursive affine lift, exact `(b, phi, r)` state, finite-horizon spin, compressed predictive state `(b, spin_H)`, and delayed visibility.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/docs/research/prime_transport_exact_recursive_system.md
+- 20:05:00 EDT [edit] Added a bounded exact-state experiment that measures delayed visibility and predictive-state refinement under wheel lifts entirely at the `(b, spin_H)` layer, with no quotient target.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/tools/prime_transport/run_recursive_state_visibility.py
+- 20:05:00 EDT [run] Ran the exact recursive-system visibility experiment on the `30030 -> 510510` and `510510 -> 9699690` wheel lifts for horizons `H = 1 .. 60`.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/results/prime_transport_recursive_system/recursive_state_visibility_detail.csv, /Users/adminamn/AI-Research/ai-router/router-research/results/prime_transport_recursive_system/recursive_state_visibility_summary.csv
+  Cmd: `python ai-router/router-research/tools/prime_transport/run_recursive_state_visibility.py`
+- 20:05:00 EDT [result] Confirmed that internal predictive refinement is active from `H = 1` on both tested wheel lifts, while visible predictive-state count growth is delayed; the `17`-layer lift first becomes visibly distinct at `H = 51`, and the `19`-layer lift showed no visible predictive-state count increase through `H = 60`.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/docs/research/prime_transport_exact_recursive_system.md, /Users/adminamn/AI-Research/ai-router/router-research/EVIDENCE_SUMMARY.md
+- 19:15:00 EDT [read] Re-read the canonical prime summary and the current grouped-packet note/index/evidence files before resetting the research line around the recursive dynamical system.
+  Files: /Users/adminamn/AI-Research/prime_research_summary.md, /Users/adminamn/AI-Research/ai-router/router-research/docs/research/prime_transport_grouped_packet_recovery_stage2.md, /Users/adminamn/AI-Research/ai-router/router-research/EVIDENCE_SUMMARY.md, /Users/adminamn/AI-Research/ai-router/router-research/results/INDEX.md
+- 19:15:00 EDT [edit] Added a corrective spin-first research note that reorders the project around exact recursive lift, exact `(b, phi, r)` state, finite-horizon spin, and only then downstream low-dimensional quotient attempts.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/docs/research/prime_transport_spin_first_reset.md
+- 19:15:00 EDT [edit] Added a bounded spin-based bridge runner that constructs exact finite-horizon future-word states `spin_H` from the aligned datasets and compares `spin_H -> z` recovery against the saved grouped-packet baseline family results.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/tools/prime_transport/run_spin_h_c2_bridge.py
+- 19:15:00 EDT [run] Ran the first spin-first bridge comparison on the checked-in `W = 30030` and `W = 510510` aligned datasets.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/results/prime_transport_spin_bridge/spin_h_c2_bridge_detail.csv, /Users/adminamn/AI-Research/ai-router/router-research/results/prime_transport_spin_bridge/spin_h_c2_bridge_summary.csv
+  Cmd: `python ai-router/router-research/tools/prime_transport/run_spin_h_c2_bridge.py`
+- 19:15:00 EDT [result] First-pass exact `spin_H` keyed recovery slightly improved over the weakest packet baselines only marginally, remained weak in absolute terms, and did not beat the stronger within-scale packet result; record spin-first as the better-motivated bridge candidate, but not yet an empirical explanation of the `C^2` backbone.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/docs/research/prime_transport_spin_first_reset.md, /Users/adminamn/AI-Research/ai-router/router-research/EVIDENCE_SUMMARY.md
+- 18:25:00 EDT [run] Ran the second-stage grouped-packet family comparison on the aligned `W = 30030` and `W = 510510` datasets.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/tools/prime_transport/run_grouped_packet_family_recovery.py, /Users/adminamn/AI-Research/ai-router/router-research/results/prime_transport_grouped_packets/grouped_packet_family_recovery_detail.csv, /Users/adminamn/AI-Research/ai-router/router-research/results/prime_transport_grouped_packets/grouped_packet_family_recovery_summary.csv
+  Cmd: `python ai-router/router-research/tools/prime_transport/run_grouped_packet_family_recovery.py`
+- 18:25:00 EDT [result] The best tested family was `fourier4_adjacent_interactions`, which improved within-scale recovery slightly versus the baseline but still left absolute recovery poor and cross-scale transfer weak; record the grouped-packet picture as weak / currently unsupported at this simple composition level.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/docs/research/prime_transport_grouped_packet_recovery_stage2.md, /Users/adminamn/AI-Research/ai-router/router-research/EVIDENCE_SUMMARY.md
+- 18:10:00 EDT [edit] Added a second-stage grouped-packet recovery runner comparing a small controlled family of encoders and composition rules against the aligned `C^2` target across `W = 30030` and `W = 510510`.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/tools/prime_transport/run_grouped_packet_family_recovery.py
+- 18:10:00 EDT [edit] Added a bounded stage-2 interpretation note and indexed the recovery experiment artifacts.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/docs/research/prime_transport_grouped_packet_recovery_stage2.md, /Users/adminamn/AI-Research/ai-router/router-research/results/INDEX.md, /Users/adminamn/AI-Research/ai-router/router-research/EVIDENCE_SUMMARY.md
+- 17:10:00 EDT [read] Inspected the existing local prime-transport artifacts to identify the current quotient trajectory source and the available phase/fiber summaries before building an aligned packet dataset.
+  Files: /Users/adminamn/AI-Research/complex_C2_quotient_trajectory.csv, /Users/adminamn/AI-Research/phase_scale_fiber_admissible_states.csv, /Users/adminamn/AI-Research/phase_scale_fiber_summary.csv, /Users/adminamn/AI-Research/phase_fiber_generalization_summary.csv, /Users/adminamn/AI-Research/ai-router/router-research/tools/prime_transport/c2_shared_astar_unseen_wheel_test.py
+- 17:10:00 EDT [edit] Added a dataset builder that reconstructs the current `C^2` quotient coordinates and aligns them with transport index, base phase, admissibility, and finite-depth layer phases derived from the fiber index.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/tools/prime_transport/build_layer_packet_dataset.py
+- 17:10:00 EDT [edit] Updated the grouped-packet scaffold to consume the aligned dataset schema directly via `phi_m_angle` and `z1/z2` columns.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/tools/prime_transport/layer_packet_c2_scaffold.py
+- 17:10:00 EDT [edit] Added a short schema/source-of-truth note for the aligned packet datasets and indexed the new builder.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/results/prime_transport_grouped_packets/README.md, /Users/adminamn/AI-Research/ai-router/router-research/results/INDEX.md
+- 16:30:00 EDT [read] Re-read the durable prime transport note, results index, evidence summary, and prime-transport tool location before recording the next grouped-packet step.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/docs/research/prime_transport_c2_backbone.md, /Users/adminamn/AI-Research/ai-router/router-research/results/INDEX.md, /Users/adminamn/AI-Research/ai-router/router-research/EVIDENCE_SUMMARY.md, /Users/adminamn/AI-Research/ai-router/router-research/tools/prime_transport/c2_shared_astar_unseen_wheel_test.py
+- 16:30:00 EDT [edit] Added a bounded research note formalizing the grouped complex-packet hypothesis as a follow-on explanation test for the empirical `C^2` backbone.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/docs/research/prime_transport_grouped_packet_hypothesis.md
+- 16:30:00 EDT [edit] Added a small scaffold experiment defining a candidate layer packet, a normalized composition rule, and a simple recovery test against reference `C^2` coordinates.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/tools/prime_transport/layer_packet_c2_scaffold.py
+- 16:30:00 EDT [decision] Keep the grouped-packet step explicitly downstream of the layered torus-state and empirical `C^2` backbone results: packet composition is a candidate explanatory formalism, not a proved symmetry or closed-form recursion.
+  Files: /Users/adminamn/AI-Research/ai-router/router-research/docs/research/prime_transport_grouped_packet_hypothesis.md, /Users/adminamn/AI-Research/ai-router/router-research/EVIDENCE_SUMMARY.md, /Users/adminamn/AI-Research/ai-router/router-research/results/INDEX.md
 - 13:00:00 EDT [read] Located durable research-note, index, and integration-note destinations for the prime admissibility transport result inside the merged monorepo.
   Files: /Users/adminamn/AI-Research/ai-router/router-research/docs/research/SESSION_LEDGER.md, /Users/adminamn/AI-Research/ai-router/router-research/results/INDEX.md, /Users/adminamn/AI-Research/ai-router/router-research/EVIDENCE_SUMMARY.md, /Users/adminamn/AI-Research/MUDBench/docs/GEOMETRIC_ROUTED_PROMPT_ENGINE.md
 - 13:00:00 EDT [edit] Added a durable router-side research note for the layered torus-bundle interpretation, the `C^2` quotient, and the shared canonical transport law `A_*`.
@@ -843,3 +1039,1097 @@ INC-0170 proposal: Large-K capacity test, K=1000–5000 (predicted eff_ratio ~4.
 - `docs/routes/ROUTE_MATRIX.md` → updated to INC-0170
 - `docs/program/PROJECT_BOARD.md` → updated to INC-0170
 - `docs/program/ISSUE_REGISTRY.md` → updated to INC-0170
+
+---
+
+## Session Entry: 2026-04-05 — Prime Transport Interaction Statistics
+
+### Scope
+- stayed entirely inside the exact recursive-system layer
+- no quotient targets, no runtime router changes, no MUDBench changes
+- tested whether visible threshold is better organized by interaction between
+  inherited parent return grammar and the new local stencil at the lift prime
+
+### Files Added / Updated
+- `docs/research/prime_transport_interaction_statistics.md` → created
+- `tools/prime_transport/analyze_interaction_statistics.py` → executed
+- `results/prime_transport_recursive_system/visible_threshold_interaction_stats.csv` → created
+- `results/prime_transport_recursive_system/visible_threshold_interaction_scores.csv` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Interaction Statistics Tested
+- `weighted_gap_forbidden_hit_rate`
+- `weighted_gap_mean_forbidden_distance`
+- `largest_gap_forbidden_distance`
+- `most_common_gap_forbidden_distance`
+
+These compare exact parent return-gap residues mod `p` against the forbidden
+residue set of the new stencil.
+
+### Main Result
+- strongest interaction-sensitive score:
+  `weighted_gap_mean_forbidden_distance` with Spearman `0.17411086930415728`
+- strongest previously-established coarse controls remain much larger:
+  - `new_prime`: `0.8125966644585016`
+  - `parent_admissible_density`: `-0.7346753721413163`
+  - `local_allowed_count`: `0.7213299617065603`
+  - `gap_max`: `0.5951493353290387`
+
+### Interpretation
+- the first global parent-return/stencil alignment summaries are too weak to
+  serve as the leading visibility law
+- this does not rule out the broader parent-grammar / new-stencil interaction
+  law class
+- it only rules out this first coarse family of interaction proxies as the main
+  explanatory object
+
+### Next Exact-Layer Step
+1. identify which parent return-gap classes are split first under each lift
+2. test a first-split statistic tied to those classes
+3. compare it against `p`, parent density, and `gap_max`
+
+---
+
+## Session Entry: 2026-04-05 — Prime Transport First Splitting Classes
+
+### Scope
+- stayed entirely inside the exact recursive-system layer
+- no quotient targets, no runtime router changes, no MUDBench changes
+- moved from global interaction averages to event-level splitting at the exact
+  visible threshold
+
+### Files Added / Updated
+- `docs/research/prime_transport_first_splitting_classes.md` → created
+- `tools/prime_transport/analyze_first_splitting_classes.py` → created and executed
+- `results/prime_transport_recursive_system/visible_threshold_first_splitting_classes.csv` → created
+- `results/prime_transport_recursive_system/visible_threshold_first_splitting_event_stats.csv` → created
+- `results/prime_transport_recursive_system/visible_threshold_first_splitting_scores.csv` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Exact Event Definition
+- for a row with exact `H_visible_first = H* > 1`, the pre-threshold parent
+  classes are `(b, spin_{H*-1})`
+- a class is a first splitting class if its descendants in the child wheel
+  produce more than one distinct child predictive class at horizon `H*`
+
+### Main Result
+- strongest event-based statistics:
+  - `num_first_splitting_classes`: Spearman `0.820410093133918`
+  - `total_extra_child_classes_from_first_split`: `0.7982368473735418`
+  - `fraction_first_splitting_classes`: `0.7464992739326641`
+- best earlier global interaction summary was only:
+  - `weighted_gap_mean_forbidden_distance`: `0.17411086930415728`
+- strongest control on the current event table:
+  - parent admissible density: `-0.8593693199561495`
+
+### Interpretation
+- first-splitting-event structure is a substantially better target than the
+  earlier global interaction averages
+- the visible threshold appears to come from a broad release of unresolved
+  parent predictive classes, not from a single rare exceptional class
+- parent density still slightly outperforms the tested first-splitting
+  statistics, so the event-law class is plausible but not yet complete
+
+### Next Exact-Layer Step
+1. condition on parent admissible density
+2. compare rows with similar density but different first-splitting multiplicity
+3. test whether first-splitting statistics explain residual threshold
+   variation after that conditioning
+
+---
+
+## Session Entry: 2026-04-05 — Prime Transport Density-Conditioned First Splitting
+
+### Scope
+- stayed entirely inside the exact recursive-system layer
+- no quotient targets, no runtime router changes, no MUDBench changes
+- tested whether first-splitting-event multiplicity still organizes visible
+  threshold after coarse conditioning on parent admissible density
+
+### Files Added / Updated
+- `docs/research/prime_transport_density_conditioned_first_splitting.md` → created
+- `tools/prime_transport/analyze_density_conditioned_first_splitting.py` → created and executed
+- `results/prime_transport_recursive_system/visible_threshold_density_conditioned_rows.csv` → created
+- `results/prime_transport_recursive_system/visible_threshold_density_conditioned_band_scores.csv` → created
+- `results/prime_transport_recursive_system/visible_threshold_density_conditioned_residual_scores.csv` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Conditioning Scheme
+- three coarse density bands:
+  - `low_density_le_0p08`
+  - `mid_density_0p08_to_0p18`
+  - `high_density_gt_0p18`
+- no extra rows added in this step
+
+### Main Result
+- pooled within-band residual ranking:
+  - `num_first_splitting_classes_residual`: Spearman `0.8144338729465652`
+  - `total_extra_child_classes_residual`: `0.7879242712955016`
+  - `fraction_first_splitting_classes_residual`: `0.7776149817645324`
+- so first-splitting multiplicity still matters after coarse density
+  conditioning
+
+### Interpretation
+- visible threshold is now best described by a density-plus-first-splitting
+  event law class
+- this is stronger than a density-only reading and stronger than the earlier
+  global interaction-average line
+- the bands remain small, so this is a narrowing result rather than a finished
+  formula
+
+### Next Exact-Layer Step
+1. add a very small number of exact rows chosen to tighten density-matched
+   contrasts
+2. keep parent density roughly fixed
+3. vary first-splitting multiplicity and split mass
+4. test whether event statistics remain stronger than `gap_max` under tighter
+   conditioning
+
+---
+
+## Session Entry: 2026-04-05 — Prime Transport Tight Density-Matched First Splitting
+
+### Scope
+- stayed entirely inside the exact recursive-system layer
+- no quotient targets, no runtime router changes, no MUDBench changes
+- tightened density matching by adding a single small exact family on
+  `2310 -> 30030`
+
+### Files Added / Updated
+- `docs/research/prime_transport_tight_density_matched_first_splitting.md` → created
+- `tools/prime_transport/run_tight_density_matched_first_split.py` → created and executed
+- `results/prime_transport_recursive_system/visible_threshold_tight_density_matched_rows.csv` → created
+- `results/prime_transport_recursive_system/visible_threshold_tight_density_matched_first_split_classes.csv` → created
+- `results/prime_transport_recursive_system/visible_threshold_tight_density_matched_scores.csv` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Matched Family
+- exact lift: `2310 -> 30030`
+- exact parent density for all six rows:
+  `0.05454545454545454`
+- tuplets:
+  - `quadruplet`
+  - `double_twins_p17`
+  - `quad_alt_0618`
+  - `quad_alt_0826`
+  - `quad_alt_1836`
+  - `quad_alt_3854`
+
+### Main Result
+- within this exact density-matched family:
+  - `num_first_splitting_classes`: Spearman `0.9710083124552245`
+  - `total_extra_child_classes_from_first_split`: `0.9710083124552245`
+  - `fraction_first_splitting_classes`: `0.9710083124552245`
+  - `gap_max`: `0.2537596094612761`
+- visible thresholds span `6, 16, 21, 26` while density is constant
+
+### Interpretation
+- first-splitting multiplicity remains much stronger than `gap_max` under tight
+  density matching
+- the best current exact-layer law class is now
+  `density + first-splitting event`
+- no leading `gap_max` correction is earned on the present matched-family
+  evidence
+
+### Next Exact-Layer Step
+1. build one more tiny density-matched family on a different lift
+2. repeat the same comparison
+3. check whether first-splitting multiplicity still dominates simple
+   arrangement statistics there
+---
+
+## Session Entry: 2026-04-05 — Prime Transport Second Tight Density-Matched First Splitting
+
+### Scope
+- stayed entirely inside the exact recursive-system layer
+- no quotient targets, no runtime router changes, no MUDBench changes
+- replicated the tight matched-family comparison on a second lift
+
+### Files Added / Updated
+- `docs/research/prime_transport_second_tight_density_matched_first_splitting.md` → created
+- `tools/prime_transport/run_second_tight_density_matched_first_split.py` → created and executed
+- `results/prime_transport_recursive_system/visible_threshold_second_tight_density_matched_rows.csv` → created
+- `results/prime_transport_recursive_system/visible_threshold_second_tight_density_matched_scores.csv` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Matched Family
+- exact lift: `30030 -> 510510`
+- exact parent density for all four rows:
+  `0.03776223776223776`
+- tuplets:
+  - `quad_alt_0406`
+  - `double_twins_p17`
+  - `quad_alt_0618`
+  - `quadruplet`
+
+### Main Result
+- visible thresholds: `36`, `41`, `46`, `51`
+- matched-family ranking:
+  - `num_first_splitting_classes`: Spearman `1.0`
+  - `total_extra_child_classes_from_first_split`: `1.0`
+  - `fraction_first_splitting_classes`: `1.0`
+  - `gap_max`: `0.31622776601683794`
+
+### Interpretation
+- the tight matched result now replicates across two different lifts
+- the best current exact-layer law class is robustly
+  `density + first-splitting event`
+- simple arrangement statistics remain secondary on the matched evidence so far
+
+### Next Exact-Layer Step
+1. if a tiny matched family can be built cleanly on the `19` lift, test it
+2. otherwise stop extension and formalize the current law class as the stable
+   working hypothesis before proposing cautious bounds
+
+---
+
+## Session Entry: 2026-04-05 — Prime Transport Visible Threshold Canonical Law Class
+
+### Scope
+- no new experiments
+- no quotient targets, no runtime router changes, no MUDBench changes
+- consolidated the current exact-layer threshold-law result into one durable
+  canonical note
+
+### Files Added / Updated
+- `docs/research/prime_transport_visible_threshold_canonical_law_class.md` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Canonical Exact-Layer Conclusion
+- internal split is immediate in the current exact table
+- visible split is the delayed threshold object
+- density alone is insufficient
+- burden and simple arrangement alone are insufficient
+- the best current exact-layer law class is
+  `density + first-splitting event`
+- arrangement is secondary on the current tightly matched evidence
+
+### Status
+- this is now the stable exact-layer reference for future prime-transport
+  routing-theory work
+- it is a law class / mechanism class, not a closed formula
+
+---
+
+## Session Entry: 2026-04-05 — Prime Transport Exact-Layer Synthesis
+
+### Scope
+- no new experiments
+- no quotient targets, no runtime router changes, no MUDBench changes
+- wrote one compact synthesis note tying together the canonical exact-layer
+  stack and the canonical threshold-law result
+
+### Files Added / Updated
+- `docs/research/prime_transport_exact_layer_synthesis.md` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Synthesis Result
+- exact state is organized as phase-fiber-scale factorization
+- finite-horizon spin is the internal predictive compression object
+- delayed visibility is the mechanism from hidden refinement to visible
+  predictive refinement
+- the current best visible-threshold law class is
+  `density + first-splitting event`
+- the minimal routing interpretation is now stated explicitly without changing
+  runtime code
+
+---
+
+## Session Entry: 2026-04-05 — Prime Transport Mock Router Grouping Key
+
+### Scope
+- no runtime router changes
+- no MUDBench seam changes
+- bounded offline comparison only
+- goal: replace literal `R_min` route identity with a coarser exact-layer
+  routing partition
+
+### Files Added / Updated
+- `tools/prime_transport/run_mock_router_grouping_eval.py` → created
+- `docs/research/prime_transport_mock_router_grouping_key.md` → created
+- `results/prime_transport_recursive_system/prime_transport_mock_router_grouping_eval.csv` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- literal `R_min` keys are confirmed to be too fine-grained for trace-level
+  routing
+- `gap_only` is too coarse and promotes almost everything
+- `phi_gap` stays too close to literal identity
+- `base_zero_gap` lowers ambiguity modestly but is not meaningfully smaller
+  than the average full-spin partition
+- the best current first coarse routing key is
+  `base_gap = (b, r, next_return_gap)`
+
+### Status
+- the next offline prototype step should switch the mock router partition to
+  `base_gap` and rerun the trace-level promotion path
+
+---
+
+## Session Entry: 2026-04-05 — Prime Transport Base-Gap Prototype
+
+### Scope
+- offline only
+- no live router changes
+- no MUDBench seam changes
+- goal: test the first full routing prototype using stored `R_min`,
+  `base_gap` partitioning, and selective fallback to `R_full`
+
+### Files Added / Updated
+- `tools/prime_transport/run_mock_router_base_gap_prototype.py` → created
+- `docs/research/prime_transport_mock_router_base_gap_prototype.md` → created
+- `results/prime_transport_recursive_system/prime_transport_mock_router_base_gap_prototype.csv` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- `literal_rmin` remains exact but is not a reusable partition
+- `gap_only` reaches high resolution only by promoting almost everything
+- `base_gap` gives the best current tradeoff:
+  substantial route reuse, meaningful unresolved ambiguity, moderate
+  promotion, and near-complete post-promotion resolution
+
+### Status
+- `base_gap = (b, r, next_return_gap)` is now the best current first serious
+  offline routing prototype
+- the next offline step should inspect promoted `base_gap` cases and test
+  whether one minimal exact-layer refinement reduces promotion materially
+
+---
+
+## Session Entry: 2026-04-05 — Prime Transport Base-Gap Refinement
+
+### Scope
+- offline only
+- no live router changes
+- no MUDBench seam changes
+- goal: test whether one minimal exact-layer refinement can beat `base_gap`
+  without collapsing back toward address-like routing
+
+### Files Added / Updated
+- `tools/prime_transport/run_mock_router_base_gap_refinement.py` → created
+- `docs/research/prime_transport_mock_router_base_gap_refinement.md` → created
+- `results/prime_transport_recursive_system/prime_transport_mock_router_base_gap_refinement.csv` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- promoted `base_gap` cases are missing a real phi-side distinction
+- the tested refinement `base_gap_phi0 = (b, r, next_return_gap, phi0)` does
+  reduce promotion materially
+- but it also makes the partition much finer and reduces route reuse sharply
+- so it is not a better enough tradeoff to replace `base_gap`
+
+### Status
+- `base_gap` remains the best current first offline routing prototype
+- any next refinement should be smaller than a direct phi-coordinate add-on,
+  or the offline design can stop here and move to implementation-side wiring
+
+---
+
+## Session Entry: 2026-04-05 — Prime Transport Base-Gap Routing Loop
+
+### Scope
+- offline only
+- no live router changes
+- no MUDBench seam changes
+- goal: test the selected `base_gap` partition inside a cached routing loop
+  over the bounded traces
+
+### Files Added / Updated
+- `tools/prime_transport/run_base_gap_routing_loop_eval.py` → created
+- `docs/research/prime_transport_base_gap_routing_loop_eval.md` → created
+- `results/prime_transport_recursive_system/prime_transport_base_gap_routing_loop_eval.csv` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- `base_gap` route classes are reused heavily across the bounded traces
+- route decisions stay stable once cached
+- promotion remains selective rather than universal
+- effective resolved fraction stays high in loop operation
+
+### Status
+- `base_gap` is now mature enough for a guarded non-runtime integration
+  experiment
+- no live integration is justified yet, but the offline design can now move
+  from pure analysis scripts toward a bounded prototype boundary
+
+---
+
+## Session Entry: 2026-04-05 — Prime Transport Base-Gap Adapter Integration
+
+### Scope
+- guarded and offline only
+- no live router changes
+- no MUDBench seam changes
+- goal: package the selected `base_gap` policy into a callable research-side
+  adapter boundary
+
+### Files Added / Updated
+- `tools/prime_transport/base_gap_routing_adapter.py` → created
+- `tools/prime_transport/run_base_gap_routing_adapter_demo.py` → created
+- `docs/research/prime_transport_base_gap_adapter_integration.md` → created
+- `results/prime_transport_recursive_system/prime_transport_base_gap_routing_adapter_demo.csv` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- the selected `base_gap` policy now has a minimal callable adapter boundary
+- the tiny benchmark-like demo exercises initialize, step, route, and
+  promotion fallback on bounded exact traces
+- the adapter preserves the same qualitative reuse/promotion pattern as the
+  loop evaluation
+
+### Status
+- this is now the first guarded non-runtime integration boundary for the
+  current routing policy
+- the first future hookup point should be a research-only benchmark harness
+  wrapper around the existing bounded trace-building path
+
+---
+
+## Session Entry: 2026-04-05 — Prime Transport Base-Gap Benchmark Wrapper
+
+### Scope
+- guarded and research-only
+- no live router changes
+- no MUDBench seam changes
+- goal: hook the guarded adapter into the existing bounded trace-building path
+  and expose a benchmark-like wrapper boundary
+
+### Files Added / Updated
+- `tools/prime_transport/base_gap_benchmark_wrapper.py` → created
+- `tools/prime_transport/run_base_gap_benchmark_wrapper.py` → created
+- `docs/research/prime_transport_base_gap_benchmark_wrapper.md` → created
+- `results/prime_transport_recursive_system/prime_transport_base_gap_benchmark_wrapper.csv` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- the existing bounded trace-building path is now reused directly behind a
+  research-only benchmark wrapper
+- the wrapper preserves the same route reuse, promotion, and fallback behavior
+  as the prior bounded loop evaluation
+- this is the smallest future hookup point for a guarded benchmark-harness
+  experiment
+
+### Status
+- the adapter is now ready for a future guarded benchmark-harness experiment
+- no live integration is justified yet
+
+---
+
+## Session Entry: 2026-04-05 — Prime Transport Guarded Benchmark Harness Eval
+
+### Scope
+- guarded and research-only
+- no live router changes
+- no MUDBench seam changes
+- goal: compare the selected `base_gap` policy against simple controls through
+  the research-only benchmark wrapper boundary
+
+### Files Added / Updated
+- `tools/prime_transport/run_guarded_benchmark_harness_eval.py` → created
+- `docs/research/prime_transport_guarded_benchmark_harness_eval.md` → created
+- `results/prime_transport_recursive_system/prime_transport_guarded_benchmark_harness_eval.csv` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- `static_only` remains exact but address-like and therefore not reusable
+- `gap_only` remains coarse but too fallback-heavy
+- `base_gap` sits in the intended middle position:
+  reusable, stable, and materially less fallback-heavy than `gap_only`
+
+### Status
+- `base_gap` is now strong enough for a future guarded benchmark-side
+  integration step
+- the remaining unresolved risk is fallback burden on bounded traces, not route
+  instability
+
+---
+
+## Session Entry: 2026-04-05 — Prime Transport Base-Gap Fallback Burden
+
+### Scope
+- research-only
+- no live router changes
+- no MUDBench seam changes
+- goal: profile only the promoted/fallback cases of the current `base_gap`
+  policy and determine whether one cheap bounded refinement is justified
+
+### Files Added / Updated
+- `tools/prime_transport/analyze_base_gap_fallback_burden.py` → created
+- `docs/research/prime_transport_base_gap_fallback_burden.md` → created
+- `results/prime_transport_recursive_system/prime_transport_base_gap_fallback_burden.csv` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- aggregate fallback burden is moderately structured rather than sharply
+  concentrated
+- the deeper lift family is closer to diffuse than to concentrated
+- there is no single obvious cheap extra refinement that current bounded
+  evidence justifies before guarded benchmark-side integration
+
+### Status
+- `base_gap` should remain unchanged for the first guarded integration step
+- fallback accounting should remain explicit and observable
+
+---
+
+## Session Entry: 2026-04-05 — Prime Transport Guarded Benchmark Hookup Plan
+
+### Scope
+- research-only planning
+- no live router changes
+- no MUDBench seam changes
+- goal: define the smallest future benchmark-side hookup plan for the current
+  `base_gap` policy
+
+### Files Added / Updated
+- `docs/research/prime_transport_guarded_benchmark_hookup_plan.md` → created
+- `results/prime_transport_recursive_system/prime_transport_guarded_benchmark_hookup_checklist.csv` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- the smallest future hookup point is now fixed as the existing research-only
+  wrapper around the bounded trace-building path
+- policy inputs, outputs, controls, and required metrics are now stated
+  explicitly
+- fallback accounting is recorded as a mandatory safeguard rather than an
+  optional metric
+
+### Status
+- no further offline policy refinement is required before the first guarded
+  benchmark-side hookup experiment
+- no live seam work is justified yet
+
+---
+
+## Session Entry: 2026-04-05 — Prime Transport Research-Side Integration Readiness
+
+### Scope
+- research-side consolidation only
+- no live router changes
+- no MUDBench seam changes
+- no new experiments
+- goal: write one final readiness note for the current guarded routing policy
+
+### Files Added / Updated
+- `docs/research/prime_transport_research_side_integration_readiness.md` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- the current policy, wrapper boundary, benchmark comparison result, and
+  fallback-risk reading are now consolidated into one compact readiness note
+- the policy is marked ready for a research-side integration trial
+- the existing research-only wrapper boundary remains the smallest safe hookup
+  point
+
+### Status
+- this is now the top-level readiness reference for the current
+  prime-transport routing policy
+- no live integration is justified yet
+
+---
+
+## Session Entry: 2026-04-05 — Prime Transport Research-Side Integration Trial
+
+### Scope
+- research-only
+- no live router changes
+- no MUDBench seam changes
+- goal: execute the smallest research-side integration trial through the
+  existing wrapper boundary and bounded trace family
+
+### Files Added / Updated
+- `docs/research/prime_transport_research_side_integration_trial.md` → created
+- `results/prime_transport_recursive_system/prime_transport_guarded_benchmark_harness_eval.csv` → refreshed
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- the trial reproduces the prior guarded benchmark result without drift
+- `base_gap` remains the stable middle policy between `static_only` and
+  `gap_only`
+- the remaining guarded risk is still fallback burden, not instability
+
+### Status
+- the policy is now ready for a larger research-side benchmark experiment
+- no live seam work is justified yet
+
+---
+
+## Session Entry: 2026-04-05 — Prime Transport Larger Research-Side Benchmark
+
+### Scope
+- research-only
+- no live router changes
+- no MUDBench seam changes
+- goal: run the first larger research-side benchmark through the same guarded
+  wrapper boundary on a broader exact-row trace set
+
+### Files Added / Updated
+- `tools/prime_transport/run_larger_research_side_benchmark.py` → created
+- `docs/research/prime_transport_larger_research_side_benchmark.md` → created
+- `results/prime_transport_recursive_system/prime_transport_larger_research_side_benchmark.csv` → created
+- `tools/prime_transport/base_gap_benchmark_wrapper.py` → updated to accept explicit source paths while preserving the existing boundary
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- `base_gap` remains stable on the larger exact-row trace set
+- fallback burden does not grow materially and is lower than in the smaller
+  guarded trial
+- the policy still occupies the intended middle position between `static_only`
+  and `gap_only`
+
+### Status
+- the current policy remains the right candidate for future guarded
+  benchmark-side work beyond the original tiny trial
+- no live integration is justified yet
+
+---
+
+## Session Entry: 2026-04-05 — Prime Transport Research-Side Benchmark Validation
+
+### Scope
+- documentation-only consolidation
+- no live router changes
+- no MUDBench seam changes
+- goal: freeze the current research-side benchmark validation status of the
+  `base_gap` routing policy in one durable note
+
+### Files Added / Updated
+- `docs/research/prime_transport_research_side_benchmark_validation.md` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- the note consolidates the guarded benchmark trial and the larger
+  research-side benchmark into one validation status reference
+- `base_gap` remains stable, route-decision instability remains zero, and
+  fallback burden remains the main explicit guarded cost
+
+### Status
+- the current policy is documented as sufficiently validated for future guarded
+  research-side integration work beyond the current wrapper boundary
+- no live seam work is justified yet
+
+---
+
+## Session Entry: 2026-04-05 — Prime Transport vs Angular Hopf Head-to-Head
+
+### Scope
+- research-only
+- no live router changes
+- no MUDBench seam changes
+- goal: run the first guarded direct comparison between the canonical angular
+  Hopf practical baseline and the prime-transport `base_gap + fallback` policy
+
+### Files Added / Updated
+- `tools/prime_transport/angular_hopf_benchmark_adapter.py` → created
+- `tools/prime_transport/run_prime_transport_vs_angular_hopf_head_to_head.py` → created
+- `docs/research/prime_transport_vs_angular_hopf_head_to_head.md` → created
+- `results/prime_transport_recursive_system/prime_transport_vs_angular_hopf_head_to_head.csv` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- on the shared larger guarded trace set, the canonical angular Hopf baseline
+  is extremely compact but too coarse, with effective resolved fraction only
+  `0.1681`
+- `base_gap + fallback` remains stable and reaches effective resolved fraction
+  `0.9900` with bounded fallback burden and zero instability
+- `gap_only` remains the coarse high-fallback control
+
+### Status
+- `base_gap + fallback` is now the stronger bounded practical policy on this
+  research-side comparison boundary
+- delayed refinement and explicit fallback accounting are now the main ideas
+  worth transferring back into any future angular-side practical routing work
+
+---
+
+## Session Entry: 2026-04-05 — Angular Hopf vs Prime Transport With Transfers
+
+### Scope
+- research-only
+- no live router changes
+- no MUDBench seam changes
+- goal: test whether the prime-side win survives after delayed refinement,
+  fallback accounting, and predictive partitioning are transferred back into
+  the unchanged angular Hopf path
+
+### Files Added / Updated
+- `tools/prime_transport/run_angular_hopf_vs_prime_transport_with_transfers.py` → created
+- `docs/research/angular_hopf_vs_prime_transport_with_transfers.md` → created
+- `results/prime_transport_recursive_system/angular_hopf_vs_prime_transport_with_transfers.csv` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- guarded angular Hopf recovers predictive resolution only by promoting almost
+  everything (`0.9883` step fraction)
+- `base_gap + fallback` remains near-complete in effective resolution while
+  keeping fallback much lower (`0.3312`)
+- the remaining prime-side advantage therefore survives the discipline
+  transfer and now looks structural rather than merely procedural
+
+### Status
+- delayed refinement and fallback accounting now look like generally useful
+  routing discipline
+- `base_gap + fallback` remains the stronger practical policy on the guarded
+  research-side boundary
+
+---
+
+## Session Entry: 2026-04-05 — Prime Transport Routing Decision Freeze
+
+### Scope
+- documentation-only consolidation
+- no live router changes
+- no MUDBench seam changes
+- goal: freeze the current guarded research-side routing decision in one
+  durable note
+
+### Files Added / Updated
+- `docs/research/prime_transport_routing_decision.md` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- the note consolidates the guarded benchmark validation, the direct
+  head-to-head, and the guarded angular transfer comparison into one policy
+  decision
+- `base_gap + fallback` is now recorded as the leading research-side routing
+  candidate
+- canonical angular Hopf is now recorded as the practical comparison baseline
+
+### Status
+- the next guarded research-side benchmark integration trial should use prime
+  transport as the primary policy under test and angular Hopf as baseline
+- no live seam work is justified yet
+
+---
+
+## Session Entry: 2026-04-05 — Prime Transport Guarded Real-Signal Trial
+
+### Scope
+- research-only
+- no live router changes
+- no MUDBench seam changes
+- goal: test the prime-transport policy against real MUDBench replay signal
+  through the guarded research-side wrapper boundary
+
+### Files Added / Updated
+- `tools/prime_transport/real_signal_benchmark_wrapper.py` → created
+- `tools/prime_transport/run_prime_transport_guarded_real_signal_trial.py` → created
+- `docs/research/prime_transport_guarded_real_signal_trial.md` → created
+- `results/prime_transport_recursive_system/prime_transport_guarded_real_signal_trial.csv` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- on the first replay-based real-signal trial, `base_gap` retains zero
+  fallback burden and full effective resolution
+- guarded angular still requires materially more fallback to reach full
+  resolution
+- the main remaining weakness is that current real-signal `base_gap` keying is
+  too fine to show route reuse on the tiny bounded traces
+
+### Status
+- the prime policy does not collapse outside the synthetic trace family
+- the next bounded real-signal step should focus on route reuse / class
+  coarsening rather than on fallback correctness
+
+---
+
+## Session Entry: 2026-04-05 — Prime Transport Real-Signal Reuse Recovery
+
+### Scope
+- research-only
+- no live router changes
+- no MUDBench seam changes
+- goal: determine why `base_gap` shows zero reuse on replay-based real signal
+  and test the smallest guarded coarsening/alignment candidates
+
+### Files Added / Updated
+- `tools/prime_transport/run_prime_transport_real_signal_reuse_recovery.py` → created
+- `docs/research/prime_transport_real_signal_reuse_recovery.md` → created
+- `results/prime_transport_recursive_system/prime_transport_real_signal_reuse_recovery.csv` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- zero reuse is now traced mainly to exact base phase on very short replay
+  traces rather than to exact `next_return_gap`
+- gap bucketing alone changes nothing
+- the first tiny base-phase coarsening recovers reuse, but only by giving back
+  the fallback advantage
+
+### Status
+- the original real-signal `base_gap` policy should remain unchanged for now
+- real-signal reuse remains the main open practical problem, and the first
+  cheap coarsening did not solve it well enough
+
+---
+
+## Session Entry: 2026-04-05 — Prime Transport Real-Signal Reuse Decision
+
+### Scope
+- documentation-only consolidation
+- no live router changes
+- no MUDBench seam changes
+- goal: freeze the current real-signal reuse conclusion and define the next
+  larger guarded replay slice for a fair reuse test
+
+### Files Added / Updated
+- `docs/research/prime_transport_real_signal_reuse_decision.md` → created
+- `results/prime_transport_recursive_system/prime_transport_next_real_signal_slice_checklist.csv` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- the note freezes the conclusion that `base_gap` remains the correct first
+  real-signal policy on the tiny replay set
+- further tiny coarsening work is not justified before moving to a larger
+  replay slice
+- the next exact guarded slice is now fixed as the paired
+  `timing_mode_eval_v1` baseline replay artifacts
+
+### Status
+- the next fair real-signal reuse test should use the paired baseline replay
+  slice with the same guarded comparison metrics
+- no live seam work is justified yet
+
+---
+
+## Session Entry: 2026-04-05 — Prime Transport Router Memory Workspace Experiment
+
+### Scope
+- research-only bounded workspace-system prototype
+- no live router changes
+- no MUDBench seam changes
+- no training or read-path redesign
+- goal: test the unchanged router-memory layer as a small local-plus-shared
+  workspace system
+
+### Files Added / Updated
+- `tools/prime_transport/run_router_memory_workspace_experiment.py` → created
+- `results/prime_transport_recursive_system/prime_transport_router_memory_workspace_experiment.csv` → created
+- `docs/research/prime_transport_router_memory_workspace_experiment.md` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- the unchanged memory architecture now supports bounded workspace-style local
+  plus shared state maintenance
+- per-entity retrieval accuracy, shared-ledger retrieval accuracy, and joint
+  snapshot accuracy are all `1.0`
+- route reuse remains high at `0.8411588411588411`
+- promoted-query burden remains real at `0.48843742442001076`, but instability
+  stays `0.0`
+
+### Status
+- the branch is strong enough to justify a future larger router-native systems
+  experiment beyond this bounded workspace prototype
+- promoted querying remains the main explicit architectural cost
+
+---
+
+## Session Entry: 2026-04-05 — Prime Transport Router Memory Agent Loop
+
+### Scope
+- research-only bounded agent-style control loop
+- no live router changes
+- no MUDBench seam changes
+- no training or memory-architecture redesign
+- goal: test whether the unchanged workspace memory supports repeated
+  read/decide/write control behavior
+
+### Files Added / Updated
+- `tools/prime_transport/run_router_memory_agent_loop.py` → created
+- `results/prime_transport_recursive_system/prime_transport_router_memory_agent_loop.csv` → created
+- `docs/research/prime_transport_router_memory_agent_loop_family.md` → created
+- `docs/research/prime_transport_router_memory_agent_loop.md` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- local and shared retrieval remain exact under the bounded control loop
+- route reuse remains `0.8411588411588411`
+- route decision instability remains `0.0`
+- action correctness is `0.5975357975357976`
+- joint control-loop correctness is `0.4287376200235855`
+
+### Status
+- memory-substrate coherence remains validated
+- the next honest step is to improve bounded control policy before scaling to a
+  larger coordination-logic prototype
+
+---
+
+## Session Entry: 2026-04-05 — Prime Transport Router Memory Context Packet
+
+### Scope
+- research-only bounded context-packet comparison
+- no live router changes
+- no MUDBench seam changes
+- no training, no memory redesign, no promotion change
+- goal: test whether a minimal structured context packet improves control-loop
+  quality over the same unchanged workspace memory
+
+### Files Added / Updated
+- `tools/prime_transport/run_router_memory_context_packet.py` → created
+- `results/prime_transport_recursive_system/prime_transport_router_memory_context_packet.csv` → created
+- `docs/research/prime_transport_router_memory_context_packet.md` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- action correctness improves from `0.5975357975357976` to
+  `0.7577422577422577`
+- joint control-loop correctness improves from `0.4287376200235855` to
+  `0.4768426712341106`
+- route reuse, promoted-query burden, and instability remain unchanged
+
+### Status
+- the context packet is now the best bounded control surface tested on top of
+  the current router-memory workspace
+- future coordination experiments should keep the same memory architecture and
+  use structured context packets rather than the looser baseline controller
+
+---
+
+## Session Entry: 2026-04-05 — Prime Transport Router Memory Packet Control Improvement
+
+### Scope
+- research-only bounded controller comparison
+- no live router changes
+- no MUDBench seam changes
+- no training
+- no routing, memory, promotion, or packet redesign
+- goal: improve control quality only by upgrading the bounded controller on the
+  unchanged context-packet surface
+
+### Files Added / Updated
+- `tools/prime_transport/run_router_memory_context_packet.py` → extended
+- `results/prime_transport_recursive_system/prime_transport_router_memory_context_packet.csv` → refreshed
+- `docs/research/prime_transport_router_memory_packet_control_improvement.md` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- action correctness improves from `0.5975357975357976` to
+  `0.7676989676989677`
+- joint control-loop correctness improves from `0.4287376200235855` to
+  `0.49339896262483907`
+- route reuse, promoted-query burden, retrieval accuracy, and instability are
+  unchanged
+
+### Status
+- the context packet is now validated as a strong bounded control surface
+- the branch is ready for a future larger coordination-logic prototype on the
+  same unchanged routing and memory stack
+
+---
+
+## Session Entry: 2026-04-05 — Prime Transport Attractor Identity Experiment
+
+### Scope
+- research-only bounded attractor-identity comparison
+- no live router changes
+- no MUDBench seam changes
+- no training
+- no routing, memory, promotion, or packet redesign
+- goal: test one minimal convergence-identity signal on top of the unchanged
+  router-memory plus packet stack
+
+### Files Added / Updated
+- `tools/prime_transport/run_router_memory_context_packet.py` → extended
+- `results/prime_transport_recursive_system/prime_transport_router_memory_context_packet.csv` → refreshed
+- `docs/research/prime_transport_attractor_identity_experiment.md` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- attractor identity does not reduce promoted-query burden
+- action correctness improves to `0.8437895437895437`
+- joint control-loop correctness improves to `0.6188811188811189`
+- retrieval remains exact and instability remains `0.0`
+
+### Status
+- the tested attractor identity is a useful bounded convergence aid for
+  controller quality
+- it is not yet a validated promoted-query reduction mechanism
+
+---
+
+## Session Entry: 2026-04-05 — Prime Transport Router Memory Control Stack Decision
+
+### Scope
+- documentation-only architectural freeze
+- no live router changes
+- no MUDBench seam changes
+- no training and no code changes
+- goal: freeze the best current controller surface and define the next bounded
+  coordination-logic prototype
+
+### Files Added / Updated
+- `docs/research/prime_transport_router_memory_control_stack_decision.md` → created
+- `docs/research/prime_transport_router_memory_coordination_prototype.md` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- the current best bounded stack is fixed as unchanged router-memory plus
+  unchanged packet surface plus attractor identity
+- attractor identity is recorded as a control-quality aid, not a promoted-query
+  reduction
+- the next prototype is defined as a bounded reassignment and dependency
+  coordination loop on the same unchanged stack
+
+### Status
+- the branch is ready to test harder bounded coordination logic without
+  redesigning routing, memory, packet structure, or promotion behavior
+
+---
+
+## Session Entry: 2026-04-05 — Prime Transport Router Memory Coordination Experiment
+
+### Scope
+- research-only bounded four-entity coordination prototype
+- no live router changes
+- no MUDBench seam changes
+- no training and no architecture redesign
+- goal: test the current best controller surface on a harder reassignment and
+  dependency-coordination loop
+
+### Files Added / Updated
+- `tools/prime_transport/run_router_memory_coordination_experiment.py` → created
+- `results/prime_transport_recursive_system/prime_transport_router_memory_coordination_experiment.csv` → created
+- `docs/research/prime_transport_router_memory_coordination_experiment.md` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- action correctness reaches `0.8075674325674326`
+- reassignment / handoff correctness reaches `0.9285714285714286`
+- local and shared retrieval remain exact
+- route decision instability remains `0.0`
+- joint full-loop coordination correctness is mixed at `0.4391505191725942`
+
+### Status
+- the current best stack is strong enough for a bounded internal
+  system-architecture demo
+- the next remaining challenge is harder full-loop coordination quality, not
+  routing or memory coherence
+
+---
+
+## Session Entry: 2026-04-05 — Router-Native Architecture Demo Package
+
+### Scope
+- documentation-only internal checkpoint packaging
+- no live router changes
+- no MUDBench seam changes
+- no new experiments
+- no code changes
+- goal: package the current router-native branch into a stable internal demo
+  checkpoint for continued work
+
+### Files Added / Updated
+- `docs/research/router_native_architecture_demo.md` → created
+- `results/prime_transport_recursive_system/router_native_architecture_demo_manifest.csv` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- the current best stack is frozen as unchanged router-memory plus unchanged
+  promotion/query behavior plus packet plus attractor identity
+- the validated stages, open costs, key drivers, key CSVs, and next experiment
+  are now collected in one internal package
+
+### Status
+- the branch now has a stable internal launchpad for the next coordination-
+  quality experiments without needing to reconstruct the control stack from
+  many separate notes

@@ -4,6 +4,22 @@ Use this file to map each run batch to parsed summaries and decision records.
 
 ## Durable Research Artifacts
 
+- Prime admissibility canonical framework:
+  - canonical note:
+    `docs/research/prime_transport_canonical_framework.md`
+  - boundary note:
+    `docs/research/prime_transport_canonical_vs_downstream.md`
+  - exact-system companion:
+    `docs/research/prime_transport_exact_recursive_system.md`
+  - exact-state runner:
+    `tools/prime_transport/run_recursive_state_visibility.py`
+  - exact-state results:
+    `results/prime_transport_recursive_system/recursive_state_visibility_detail.csv`
+    `results/prime_transport_recursive_system/recursive_state_visibility_summary.csv`
+  - next preferred step:
+    formalize and test the law for first internal split horizon, first visible
+    split horizon, and their lag as a function of wheel lift and tuplet pattern
+
 - Prime admissibility `C^2` backbone:
   - note:
     `docs/research/prime_transport_c2_backbone.md`
@@ -16,6 +32,345 @@ Use this file to map each run batch to parsed summaries and decision records.
   - result:
     shared `A_*` trained on `W = 2310, 30030, 510510` generalized to unseen
     `W = 9699690` with `err_star / err_test = 1.013071972668`
+
+- Prime admissibility grouped-packet hypothesis:
+  - note:
+    `docs/research/prime_transport_grouped_packet_hypothesis.md`
+  - scaffold:
+    `tools/prime_transport/layer_packet_c2_scaffold.py`
+  - dataset builder:
+    `tools/prime_transport/build_layer_packet_dataset.py`
+  - dataset schema note:
+    `results/prime_transport_grouped_packets/README.md`
+  - built datasets:
+    `results/prime_transport_grouped_packets/prime_transport_layer_packet_dataset_W30030.csv`
+    `results/prime_transport_grouped_packets/prime_transport_layer_packet_dataset_W510510.csv`
+  - question:
+    can small per-layer complex packets composed across depth recover or
+    explain part of the empirical shared `C^2` transport backbone?
+
+- Prime admissibility grouped-packet recovery stage 2:
+  - note:
+    `docs/research/prime_transport_grouped_packet_recovery_stage2.md`
+  - runner:
+    `tools/prime_transport/run_grouped_packet_family_recovery.py`
+  - detail table:
+    `results/prime_transport_grouped_packets/grouped_packet_family_recovery_detail.csv`
+  - summary table:
+    `results/prime_transport_grouped_packets/grouped_packet_family_recovery_summary.csv`
+
+- Prime admissibility spin-first reset and bridge test:
+  - note:
+    `docs/research/prime_transport_spin_first_reset.md`
+  - runner:
+    `tools/prime_transport/run_spin_h_c2_bridge.py`
+  - detail table:
+    `results/prime_transport_spin_bridge/spin_h_c2_bridge_detail.csv`
+  - summary table:
+    `results/prime_transport_spin_bridge/spin_h_c2_bridge_summary.csv`
+  - question:
+    is the empirical shared `C^2` backbone better understood as a quotient of
+    finite-horizon spin dynamics than as a direct composition of per-layer
+    phase packets?
+
+- Prime admissibility exact recursive system:
+  - note:
+    `docs/research/prime_transport_exact_recursive_system.md`
+  - runner:
+    `tools/prime_transport/run_recursive_state_visibility.py`
+  - detail table:
+    `results/prime_transport_recursive_system/recursive_state_visibility_detail.csv`
+  - summary table:
+    `results/prime_transport_recursive_system/recursive_state_visibility_summary.csv`
+  - question:
+    how should the exact recursive system be formalized and measured at the
+    `(b, spin_H)` layer before any downstream quotient geometry is attempted?
+
+- Prime admissibility exact-layer consolidated note:
+  - canonical note:
+    `docs/research/prime_transport_exact_layer_consolidated.md`
+  - purpose:
+    compact summary of the strongest current exact-layer mathematical picture
+    tying together static phase-fiber-scale structure, predictive spin,
+    visible-threshold mechanism, and the current residual beyond the static
+    chart
+
+- Prime admissibility threshold law:
+  - note:
+    `docs/research/prime_transport_threshold_law.md`
+  - runner:
+    `tools/prime_transport/run_threshold_law_table.py`
+  - summary table:
+    `results/prime_transport_recursive_system/threshold_law_summary.csv`
+  - detail table:
+    `results/prime_transport_recursive_system/threshold_law_detail.csv`
+  - question:
+    how do first internal split horizon, first visible split horizon, and their
+    lag vary with wheel lift and tuplet pattern at the exact `(b, spin_H)`
+    layer?
+
+- Prime admissibility phase-fiber first-split readability:
+  - note:
+    `docs/research/prime_transport_phase_fiber_first_split_readability.md`
+  - runner:
+    `tools/prime_transport/analyze_phase_fiber_first_split.py`
+  - class table:
+    `results/prime_transport_recursive_system/visible_threshold_phase_fiber_mapped_first_split_classes.csv`
+  - summary table:
+    `results/prime_transport_recursive_system/visible_threshold_phase_fiber_readability_summary.csv`
+  - score table:
+    `results/prime_transport_recursive_system/visible_threshold_phase_fiber_readability_scores.csv`
+  - question:
+    are first visible splitting events already partially readable in the exact
+    phase-fiber-scale chart `(b, phi, r)`, or is full spin still necessary?
+
+- Prime admissibility phase-fiber versus spin:
+  - canonical note:
+    `docs/research/prime_transport_phase_fiber_vs_spin_canonical.md`
+  - question:
+    what is the current exact-layer relationship between the static chart
+    `(b, phi, r)`, finite-horizon spin, and visible first-splitting events?
+
+- Prime admissibility spin-minus-phase-fiber residual:
+  - note:
+    `docs/research/prime_transport_spin_minus_phase_fiber_residual.md`
+  - runner:
+    `tools/prime_transport/analyze_spin_phase_fiber_residual.py`
+  - residual table:
+    `results/prime_transport_recursive_system/visible_threshold_spin_minus_phase_fiber_residuals.csv`
+  - summary table:
+    `results/prime_transport_recursive_system/visible_threshold_spin_minus_phase_fiber_summary.csv`
+  - score table:
+    `results/prime_transport_recursive_system/visible_threshold_spin_minus_phase_fiber_scores.csv`
+  - question:
+    can the predictive structure carried by spin beyond the static chart be
+    compressed into a small exact return-memory object?
+
+- Prime admissibility return-grammar compression:
+  - note:
+    `docs/research/prime_transport_return_grammar_compression.md`
+  - runner:
+    `tools/prime_transport/analyze_return_grammar_compression.py`
+  - candidate comparison:
+    `results/prime_transport_recursive_system/visible_threshold_return_grammar_comparison.csv`
+  - score table:
+    `results/prime_transport_recursive_system/visible_threshold_return_grammar_scores.csv`
+  - question:
+    does there exist a small exact return-grammar object that captures most of
+    the predictive distinctions currently carried by spin beyond the static
+    chart?
+
+- Prime admissibility minimal predictive state:
+  - note:
+    `docs/research/prime_transport_minimal_predictive_state.md`
+  - comparison table:
+    `results/prime_transport_recursive_system/visible_threshold_minimal_predictive_state_comparison.csv`
+  - question:
+    what is the smallest exact predictive state that improves over static chart
+    reading while remaining meaningfully smaller than full spin?
+
+- Prime admissibility routing abstraction:
+  - note:
+    `docs/research/prime_transport_routing_abstraction.md`
+  - candidate table:
+    `results/prime_transport_recursive_system/prime_transport_routing_state_candidates.csv`
+  - question:
+    which exact-layer state should serve as the first routing prototype target:
+    static chart, minimal hybrid predictive state, or full spin?
+
+- Prime admissibility `R_min` prototype spec:
+  - note:
+    `docs/research/prime_transport_rmin_prototype_spec.md`
+  - prototype table:
+    `results/prime_transport_recursive_system/prime_transport_rmin_prototype_table.csv`
+  - question:
+    how should the first exact-layer routing prototype based on
+    `(b, phi, r, next_return_gap)` be specified before any runtime integration?
+
+- Prime admissibility `R_min` offline evaluation:
+  - note:
+    `docs/research/prime_transport_rmin_offline_eval.md`
+  - summary table:
+    `results/prime_transport_recursive_system/prime_transport_rmin_offline_eval_summary.csv`
+  - runner:
+    `tools/prime_transport/run_rmin_offline_eval.py`
+  - question:
+    is `R_min` strong enough to justify a first routing prototype before any
+    runtime integration?
+
+- Prime admissibility mock router module spec:
+  - note:
+    `docs/research/prime_transport_mock_router_module_spec.md`
+  - interface table:
+    `results/prime_transport_recursive_system/prime_transport_mock_router_interface_table.csv`
+  - question:
+    what is the smallest offline module/API shape that can host `R_static`,
+    `R_min`, and selective promotion toward `R_full`?
+
+- Prime admissibility mock router module implementation:
+  - note:
+    `docs/research/prime_transport_mock_router_module_implementation.md`
+  - module:
+    `tools/prime_transport/mock_router_module.py`
+  - demo:
+    `tools/prime_transport/run_mock_router_module_demo.py`
+  - demo artifact:
+    `results/prime_transport_recursive_system/prime_transport_mock_router_demo.csv`
+
+- Prime admissibility larger real-signal trial:
+  - note:
+    `docs/research/prime_transport_larger_real_signal_trial.md`
+  - runner:
+    `tools/prime_transport/run_prime_transport_larger_real_signal_trial.py`
+  - summary table:
+    `results/prime_transport_recursive_system/prime_transport_larger_real_signal_trial.csv`
+  - question:
+    does natural route reuse emerge for `base_gap` on the paired larger replay
+    slice, and does the guarded fallback advantage survive on that same
+    real-signal boundary?
+
+- Prime admissibility final real-signal status:
+  - note:
+    `docs/research/prime_transport_real_signal_status.md`
+  - purpose:
+    freeze the current real-signal conclusion: `base_gap` is the correct first
+    guarded real-signal policy because the validated win is fallback
+    efficiency, while natural route reuse is still not established on the
+    current replay-based benchmark boundary
+
+- Prime admissibility router-memory layer:
+  - note:
+    `docs/research/prime_transport_router_memory_layer.md`
+  - module:
+    `tools/prime_transport/router_memory_layer.py`
+  - demo:
+    `tools/prime_transport/run_router_memory_layer_demo.py`
+  - result artifact:
+    `results/prime_transport_recursive_system/prime_transport_router_memory_layer_demo.csv`
+  - question:
+    can the validated routing policy function as a small structured
+    read/write memory machine, with explicit update, query, and promotion,
+    before any larger router-native architecture experiment is attempted?
+
+- Prime admissibility router-memory task loop:
+  - note:
+    `docs/research/prime_transport_router_memory_task_loop.md`
+  - driver:
+    `tools/prime_transport/run_router_memory_task_loop.py`
+  - result artifact:
+    `results/prime_transport_recursive_system/prime_transport_router_memory_task_loop.csv`
+  - question:
+    can the router-memory layer support real state carry and later retrieval in
+    a bounded multi-step task loop, not only in replay-style routing analyses?
+
+- Prime admissibility router-memory promoted-query reduction:
+  - note:
+    `docs/research/prime_transport_router_memory_promoted_query_reduction.md`
+  - runner:
+    `tools/prime_transport/run_router_memory_promoted_query_reduction.py`
+  - result artifact:
+    `results/prime_transport_recursive_system/prime_transport_router_memory_promoted_query_reduction.csv`
+  - question:
+    can one tiny read-side refinement reduce promoted-query burden without
+    materially harming carried-state retrieval quality or stability?
+
+- Prime admissibility router-memory status:
+  - note:
+    `docs/research/prime_transport_router_memory_status.md`
+  - purpose:
+    freeze the branch-level architectural reading: the router-memory path is
+    viable as a stateful memory substrate, but deeper-family promoted-query
+    burden remains the main unsolved cost and the first cheap refinement has
+    already been rejected
+
+- Prime admissibility larger router-memory experiment:
+  - task-family note:
+    `docs/research/prime_transport_router_memory_record_family.md`
+  - experiment note:
+    `docs/research/prime_transport_larger_router_memory_experiment.md`
+  - runner:
+    `tools/prime_transport/run_larger_router_memory_experiment.py`
+  - result artifact:
+    `results/prime_transport_recursive_system/prime_transport_larger_router_memory_experiment.csv`
+  - question:
+    does the current router-memory architecture remain coherent on a richer
+    multi-field state-carry task family without any read-path redesign?
+
+- Prime admissibility multi-entity router-memory experiment:
+  - task-family note:
+    `docs/research/prime_transport_multi_entity_router_memory_family.md`
+  - experiment note:
+    `docs/research/prime_transport_multi_entity_router_memory_experiment.md`
+  - runner:
+    `tools/prime_transport/run_multi_entity_router_memory_experiment.py`
+  - result artifact:
+    `results/prime_transport_recursive_system/prime_transport_multi_entity_router_memory_experiment.csv`
+  - question:
+    can the unchanged router-memory architecture support exact bounded
+    multi-entity state coordination, not only single-record memory carry?
+
+- Prime admissibility router-memory readiness:
+  - readiness note:
+    `docs/research/prime_transport_router_memory_readiness.md`
+  - next-prototype spec:
+    `docs/research/prime_transport_router_memory_systems_prototype.md`
+  - purpose:
+    freeze the branch-level readiness decision and define the first larger
+    bounded router-native systems prototype to attempt next
+
+- Prime admissibility visible-threshold predictors:
+  - note:
+    `docs/research/prime_transport_visible_threshold_predictors.md`
+  - runner:
+    `tools/prime_transport/analyze_visible_threshold_predictors.py`
+  - row analysis:
+    `results/prime_transport_recursive_system/visible_threshold_predictor_rows.csv`
+  - score table:
+    `results/prime_transport_recursive_system/visible_threshold_predictor_scores.csv`
+  - monotonicity table:
+    `results/prime_transport_recursive_system/visible_threshold_monotonicity.csv`
+  - question:
+    which coarse exact-layer variables are actually predictive of the visible
+    split threshold, and which naive law classes are already ruled out?
+
+- Prime admissibility visible-threshold extension:
+  - note:
+    `docs/research/prime_transport_visible_threshold_extension.md`
+  - added tuplets:
+    `double_twins_p13 = [0,2,26,28]`
+    `double_twins_p17 = [0,2,34,36]`
+    `double_twins_p19 = [0,2,38,40]`
+  - updated threshold summary:
+    `results/prime_transport_recursive_system/threshold_law_summary.csv`
+  - updated predictor scores:
+    `results/prime_transport_recursive_system/visible_threshold_predictor_scores.csv`
+  - question:
+    after breaking the `|A|` versus `nu_p(A)` degeneracy, which exact-layer law
+    classes for visible threshold remain plausible?
+
+- Prime admissibility arrangement statistics:
+  - note:
+    `docs/research/prime_transport_arrangement_statistics.md`
+  - arrangement stats CSV:
+    `results/prime_transport_recursive_system/visible_threshold_arrangement_stats.csv`
+  - updated score table:
+    `results/prime_transport_recursive_system/visible_threshold_predictor_scores.csv`
+  - question:
+    does a small arrangement-sensitive local stencil statistic explain visible
+    threshold variation better than the current coarse predictors?
+
+- Prime admissibility arrangement isolation:
+  - note:
+    `docs/research/prime_transport_arrangement_isolation.md`
+  - runner:
+    `tools/prime_transport/analyze_arrangement_isolation.py`
+  - fixed-family rows:
+    `results/prime_transport_recursive_system/visible_threshold_arrangement_isolation_rows.csv`
+  - fixed-family scores:
+    `results/prime_transport_recursive_system/visible_threshold_arrangement_isolation_scores.csv`
+  - question:
+    when `p` and `nu_p(A)` are held fixed, which simple arrangement statistic
+    best explains residual visible-threshold variation?
 
 ## Batch Template
 - Batch ID:
@@ -2169,3 +2524,171 @@ Use this file to map each run batch to parsed summaries and decision records.
   - upper bank remains unchanged with
     `CHART_H4XH4_FIELD_A150_EVT_T070_CPX8_Q01_T40000` as the promoted default
   - the next honest branch is `INC-0135` lower-bank quality/systems frontier
+
+## Prime Transport Recursive System
+- Canonical notes:
+  - `docs/research/prime_transport_canonical_framework.md`
+  - `docs/research/prime_transport_canonical_vs_downstream.md`
+  - `docs/research/prime_transport_exact_recursive_system.md`
+- Threshold and visibility notes:
+  - `docs/research/prime_transport_threshold_law.md`
+  - `docs/research/prime_transport_visible_threshold_predictors.md`
+  - `docs/research/prime_transport_visible_threshold_extension.md`
+  - `docs/research/prime_transport_arrangement_statistics.md`
+  - `docs/research/prime_transport_arrangement_isolation.md`
+  - `docs/research/prime_transport_interaction_statistics.md`
+  - `docs/research/prime_transport_first_splitting_classes.md`
+  - `docs/research/prime_transport_density_conditioned_first_splitting.md`
+  - `docs/research/prime_transport_tight_density_matched_first_splitting.md`
+  - `docs/research/prime_transport_second_tight_density_matched_first_splitting.md`
+  - `docs/research/prime_transport_visible_threshold_canonical_law_class.md`
+  - `docs/research/prime_transport_exact_layer_synthesis.md`
+- Core exact-layer results:
+  - `results/prime_transport_recursive_system/threshold_law_summary.csv`
+  - `results/prime_transport_recursive_system/threshold_law_detail.csv`
+  - `results/prime_transport_recursive_system/visible_threshold_predictor_rows.csv`
+  - `results/prime_transport_recursive_system/visible_threshold_predictor_scores.csv`
+  - `results/prime_transport_recursive_system/visible_threshold_arrangement_stats.csv`
+  - `results/prime_transport_recursive_system/visible_threshold_arrangement_isolation_rows.csv`
+  - `results/prime_transport_recursive_system/visible_threshold_arrangement_isolation_scores.csv`
+  - `results/prime_transport_recursive_system/visible_threshold_interaction_stats.csv`
+  - `results/prime_transport_recursive_system/visible_threshold_interaction_scores.csv`
+  - `results/prime_transport_recursive_system/visible_threshold_first_splitting_classes.csv`
+  - `results/prime_transport_recursive_system/visible_threshold_first_splitting_event_stats.csv`
+  - `results/prime_transport_recursive_system/visible_threshold_first_splitting_scores.csv`
+  - `results/prime_transport_recursive_system/visible_threshold_density_conditioned_rows.csv`
+  - `results/prime_transport_recursive_system/visible_threshold_density_conditioned_band_scores.csv`
+  - `results/prime_transport_recursive_system/visible_threshold_density_conditioned_residual_scores.csv`
+  - `results/prime_transport_recursive_system/visible_threshold_tight_density_matched_rows.csv`
+  - `results/prime_transport_recursive_system/visible_threshold_tight_density_matched_first_split_classes.csv`
+  - `results/prime_transport_recursive_system/visible_threshold_tight_density_matched_scores.csv`
+  - `results/prime_transport_recursive_system/visible_threshold_second_tight_density_matched_rows.csv`
+  - `results/prime_transport_recursive_system/visible_threshold_second_tight_density_matched_scores.csv`
+  - `results/prime_transport_recursive_system/prime_transport_mock_router_trace_eval_summary.csv`
+  - `results/prime_transport_recursive_system/prime_transport_mock_router_grouping_eval.csv`
+  - `results/prime_transport_recursive_system/prime_transport_mock_router_base_gap_prototype.csv`
+  - `results/prime_transport_recursive_system/prime_transport_mock_router_base_gap_refinement.csv`
+  - `results/prime_transport_recursive_system/prime_transport_base_gap_routing_loop_eval.csv`
+  - `results/prime_transport_recursive_system/prime_transport_base_gap_routing_adapter_demo.csv`
+  - `results/prime_transport_recursive_system/prime_transport_base_gap_benchmark_wrapper.csv`
+  - `results/prime_transport_recursive_system/prime_transport_guarded_benchmark_harness_eval.csv`
+  - `results/prime_transport_recursive_system/prime_transport_base_gap_fallback_burden.csv`
+  - `results/prime_transport_recursive_system/prime_transport_guarded_benchmark_hookup_checklist.csv`
+  - `results/prime_transport_recursive_system/prime_transport_larger_research_side_benchmark.csv`
+  - `results/prime_transport_recursive_system/prime_transport_vs_angular_hopf_head_to_head.csv`
+  - `results/prime_transport_recursive_system/angular_hopf_vs_prime_transport_with_transfers.csv`
+  - `results/prime_transport_recursive_system/prime_transport_guarded_real_signal_trial.csv`
+  - `results/prime_transport_recursive_system/prime_transport_real_signal_reuse_recovery.csv`
+  - `results/prime_transport_recursive_system/prime_transport_next_real_signal_slice_checklist.csv`
+- Validation Notes:
+  - `docs/research/prime_transport_research_side_benchmark_validation.md`
+  - `docs/research/prime_transport_vs_angular_hopf_head_to_head.md`
+  - `docs/research/angular_hopf_vs_prime_transport_with_transfers.md`
+  - `docs/research/prime_transport_routing_decision.md`
+  - `docs/research/prime_transport_guarded_real_signal_trial.md`
+  - `docs/research/prime_transport_real_signal_reuse_recovery.md`
+  - `docs/research/prime_transport_real_signal_reuse_decision.md`
+- Reading:
+  - `first_internal_split_H = 1` across the tested lifts and tuplets
+  - visible split is the nontrivial threshold object
+  - lift prime is still the strongest coarse organizer in the current table
+  - arrangement matters when `p` and `nu_p(A)` are fixed
+  - the first global parent-return/stencil interaction statistics are too weak
+    to replace the coarse predictors
+  - first-splitting-event statistics are much stronger than those global
+    interaction averages
+  - first-splitting multiplicity still carries strong signal after coarse
+    parent-density conditioning
+  - on the first tightly density-matched exact family, first-splitting
+    multiplicity stays strong while `gap_max` becomes weak
+  - the second tightly matched family reproduces the same pattern on a
+    different lift
+  - the current best law class is robustly `density + first-splitting event`
+    across two exact matched families
+  - the exact-layer threshold result is now canonically consolidated as
+    `density + first-splitting event`
+  - the research-side benchmark validation status is now frozen: `base_gap`
+    remains stable across both guarded benchmark stages, while fallback burden
+    remains the main explicit guarded cost
+  - in the first direct head-to-head against the existing canonical angular
+    Hopf routing baseline, `base_gap + fallback` is the stronger bounded
+    practical policy; the angular baseline is compact but far too coarse
+  - after delayed refinement, fallback accounting, and predictive partitioning
+    are transferred back into the unchanged angular Hopf path, the angular side
+    recovers resolution only by promoting almost everything, so `base_gap`
+    retains a structural advantage rather than just a discipline advantage
+  - the current guarded research-side routing decision is now frozen:
+    `base_gap + fallback` is the primary candidate going forward, and angular
+    Hopf is retained as the practical comparison baseline
+  - on the first real MUDBench replay-signal trial, the prime policy retains
+    its fallback/resolution advantage, but its current real-signal keying is
+    too fine to show route reuse on the tiny bounded traces
+  - on the bounded real-signal reuse-recovery test, the zero-reuse issue is
+    traced mainly to exact base phase on short traces; the first tiny
+    coarsening recovers reuse only by losing the fallback advantage
+  - the current real-signal reuse decision is now frozen: keep `base_gap`
+    unchanged for now, and move next to the paired `timing_mode_eval_v1`
+    baseline replay slice as the smallest fair larger reuse test
+  - the exact-layer synthesis note now ties phase-fiber-scale state,
+    predictive compression, delayed visibility, and the canonical threshold-law
+    class into one reference
+  - the offline mock router updates now match the exact bounded traces
+  - literal `R_min` route keys are too fine-grained to expose delayed
+    refinement in trace operation
+  - the best current first coarse routing partition is
+    `base_gap = (b, r, next_return_gap)`
+  - the first full offline prototype confirms that `base_gap` is strong enough
+    to serve as the first serious routing prototype, with near-complete
+    post-promotion resolution and materially less fallback than `gap_only`
+  - adding `phi0` to `base_gap` reduces promotion but makes the partition much
+    finer, so it is not currently a better enough tradeoff to replace
+    `base_gap` as the first prototype target
+  - the cached base-gap routing loop remains stable across the bounded traces
+    and is now mature enough for a guarded non-runtime integration experiment
+  - the selected `base_gap` policy is now packaged as a guarded research-side
+    adapter boundary suitable for the first future benchmark-harness hookup
+  - the same policy is now wrapped around the existing bounded trace-building
+    path as the first research-only benchmark boundary, still without touching
+    the live MUDBench seam
+  - in the first guarded benchmark-harness comparison, `base_gap` sits in the
+    intended middle position between the exact-but-address-like static control
+    and the overfallback-heavy `gap_only` control
+  - the promoted `base_gap` burden is moderately structured overall but not
+    concentrated enough to justify one obvious cheap refinement before the
+    first guarded benchmark-side integration step
+  - the first guarded benchmark-side hookup plan is now specified explicitly
+    around the existing research-only wrapper boundary, with fixed controls and
+    explicit fallback-accounting requirements
+  - the current policy is now explicitly consolidated as ready for a
+    research-side integration trial through the same guarded wrapper boundary
+  - the first research-side integration trial has now been executed through
+    that wrapper boundary and reproduces the prior guarded benchmark result
+  - on the next larger reproducible exact-row trace set, `base_gap` remains
+    stable and its fallback burden does not grow materially
+  - the unchanged router-memory branch now supports a bounded workspace-style
+    system with exact per-entity retrieval, exact shared-ledger retrieval,
+    exact joint snapshots, and zero instability; promoted querying remains the
+    main explicit cost
+  - the first bounded router-memory agent loop preserves exact retrieval and
+    zero instability, but action correctness is only moderate, so the next
+    systems step should improve bounded control policy rather than redesign the
+    memory substrate
+  - a minimal router-memory context packet now improves bounded control quality
+    materially while leaving route reuse, promoted-query burden, and stability
+    unchanged
+  - a stronger bounded ranking controller now improves packet-surface control
+    quality again without changing routing, memory, promotion, packet
+    structure, or stability
+  - a minimal attractor-identity layer improves bounded control quality again
+    without harming retrieval, but it does not reduce promoted-query burden, so
+    it currently behaves as a convergence aid rather than a cost fix
+  - the current best bounded controller stack is now frozen as unchanged
+    router-memory plus unchanged packet surface plus attractor identity, and
+    the next prototype is a harder bounded reassignment / dependency
+    coordination loop on that same stack
+  - the first harder coordination-logic prototype keeps exact retrieval and
+    zero instability on the same stack, while exposing mixed full-loop
+    coordination quality as the next main controller-side problem
+  - the router-native branch now has a compact internal demo package with one
+    overview note, one manifest, the canonical stack, the key drivers and CSVs,
+    the open costs, and the immediate next experiment fixed for restartability
