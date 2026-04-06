@@ -3159,3 +3159,786 @@ residue set of the new stencil.
 - v22 is the strongest stronger-mismatch recovery so far
 - v22 beats both the v14 overall leader and the v21 query-accuracy leader
 - v22 is the clearest evidence so far for adaptive regional geometry
+
+---
+
+## Session Entry: 2026-04-06 — Geometry-Native Hybrid Boundary
+
+### Scope
+- bounded lightly induced split-boundary hybrid on the stronger v12 family
+- same unchanged downstream geometry-native engine
+- same two-region hybrid architecture as v22, but with boundary choice from a
+  small candidate set instead of a fixed midpoint
+- no live router changes
+- no transformer blocks inside the geometry-native path
+
+### Files Added / Updated
+- `tools/prime_transport/geometry_native_sequence_model_v23.py` → created
+- `tools/prime_transport/run_geometry_native_sequence_model_v23.py` → created
+- `results/prime_transport_recursive_system/prime_transport_geometry_native_sequence_model_v23.csv` → created
+- `docs/research/prime_transport_geometry_native_hybrid_boundary.md` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- the mechanism keeps the same two-region hybrid regime logic as v22, but
+  chooses the split boundary from a small bounded candidate set by regional
+  prototype fit before applying local schema induction in each region
+- aggregate v23 geometry-native result:
+  - transfer test accuracy `0.647507429123`
+  - transfer query accuracy `0.728548288345`
+  - test loss `4.979188442230`
+- aggregate v23 tiny transformer result:
+  - transfer test accuracy `0.452194929123`
+  - transfer query accuracy `0.465191572905`
+  - test loss `2.128999710083`
+
+### Status
+- v23 is the new strongest stronger-mismatch recovery so far
+- v23 improves on v22 on both overall accuracy and query accuracy
+- the gain is incremental, which suggests boundary placement is now the main
+  remaining lever
+
+---
+
+## Session Entry: 2026-04-06 — Geometry-Native Hybrid Boundary V24
+
+### Scope
+- bounded contradiction-aware boundary induction on the stronger v12 family
+- same unchanged downstream geometry-native engine
+- same two-region hybrid architecture as v23, but with a contradiction term
+  added to the candidate boundary score and one local refinement step
+- no live router changes
+- no transformer blocks inside the geometry-native path
+
+### Files Added / Updated
+- `tools/prime_transport/geometry_native_sequence_model_v24.py` → created
+- `tools/prime_transport/run_geometry_native_sequence_model_v24.py` → created
+- `results/prime_transport_recursive_system/prime_transport_geometry_native_sequence_model_v24.csv` → created
+- `docs/research/prime_transport_geometry_native_hybrid_boundary_v24.md` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- the mechanism keeps the same two-region hybrid regime logic as v23, but
+  scores candidate boundaries by prototype fit plus local contradiction near
+  the split, with one local refinement step around the best candidate
+- aggregate v24 geometry-native result:
+  - transfer test accuracy `0.649925589561`
+  - transfer query accuracy `0.719008266926`
+  - test loss `4.979606151581`
+- aggregate v24 tiny transformer result:
+  - transfer test accuracy `0.446056544781`
+  - transfer query accuracy `0.462293386459`
+  - test loss `2.306171178818`
+
+### Status
+- v24 is the strongest stronger-mismatch result so far on overall accuracy
+- v24 does not beat v23 on query accuracy
+- the result suggests remaining gains are now mainly about boundary-objective
+  tradeoff rather than missing hybrid architecture structure
+
+---
+
+## Session Entry: 2026-04-06 — Geometry-Native Hybrid Boundary V25
+
+### Scope
+- bounded two-objective / Pareto boundary scoring on the stronger v12 family
+- same unchanged downstream geometry-native engine
+- same two-region hybrid architecture as v22-v24, but with explicit
+  two-objective boundary comparison over the same small candidate set
+- no live router changes
+- no transformer blocks inside the geometry-native path
+
+### Files Added / Updated
+- `tools/prime_transport/geometry_native_sequence_model_v25.py` → created
+- `tools/prime_transport/run_geometry_native_sequence_model_v25.py` → created
+- `results/prime_transport_recursive_system/prime_transport_geometry_native_sequence_model_v25.csv` → created
+- `docs/research/prime_transport_geometry_native_hybrid_boundary_v25.md` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- the mechanism keeps the same two-region hybrid regime logic, but compares
+  candidate boundaries using a two-objective Pareto rule over prototype-fit
+  quality and query-sensitive contradiction quality near the boundary
+- aggregate v25 geometry-native result:
+  - transfer test accuracy `0.634393572807`
+  - transfer query accuracy `0.697614133358`
+  - test loss `5.259162425995`
+- aggregate v25 tiny transformer result:
+  - transfer test accuracy `0.440011173487`
+  - transfer query accuracy `0.453838169575`
+  - test loss `2.288605690002`
+
+### Status
+- v25 does not improve the hybrid tradeoff
+- v25 lands below both v23 and v24 on overall accuracy and query accuracy
+- this is strong evidence that the bounded two-region hybrid line is near its
+  local optimum on this task family
+
+---
+
+## Session Entry: 2026-04-06 — Geometry-Native Regime Field
+
+### Scope
+- bounded learned regional boundary/regime field on the stronger v12 family
+- same unchanged downstream geometry-native engine
+- same two-region hybrid architecture as v22-v25, with a tiny learned scorer
+  selecting among the existing bounded split candidates
+- no live router changes
+- no transformer blocks inside the geometry-native computation path
+
+### Files Added / Updated
+- `tools/prime_transport/geometry_native_sequence_model_v26.py` → created
+- `tools/prime_transport/run_geometry_native_sequence_model_v26.py` → created
+- `results/prime_transport_recursive_system/prime_transport_geometry_native_sequence_model_v26.csv` → created
+- `docs/research/prime_transport_geometry_native_regime_field.md` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- the mechanism keeps the same two-region hybrid regime logic, but trains a
+  tiny learned boundary field over the existing split candidates using compact
+  regional geometry/conflict features and downstream sequence labels from a
+  bounded calibration split
+- aggregate v26 geometry-native result:
+  - transfer test accuracy `0.654854893684`
+  - transfer query accuracy `0.732780933380`
+  - test loss `4.916808128357`
+  - parameter count `6516`
+- aggregate v26 tiny transformer result:
+  - transfer test accuracy `0.461774557829`
+  - transfer query accuracy `0.456240296364`
+  - test loss `2.194231033325`
+
+### Status
+- v26 is the strongest stronger-mismatch result so far
+- v26 beats the handcrafted hybrid family on both the best-overall and
+  best-query reference points
+- this is the clearest support so far for a learned regional regime field on
+  top of geometry-native computation
+
+---
+
+## Session Entry: 2026-04-06 — Geometry-Native Regime Field V27
+
+### Scope
+- bounded stronger-family transfer test for the learned regional-field hybrid
+- same unchanged downstream geometry-native engine
+- same tiny learned regional field and same divisibility-bridge structure as
+  v26, but evaluated on a longer and more entangled shifted family
+- no live router changes
+- no transformer blocks inside the geometry-native computation path
+
+### Files Added / Updated
+- `tools/prime_transport/geometry_native_sequence_model_v27.py` → created
+- `tools/prime_transport/run_geometry_native_sequence_model_v27.py` → created
+- `results/prime_transport_recursive_system/prime_transport_geometry_native_sequence_model_v27.csv` → created
+- `docs/research/prime_transport_geometry_native_regime_field_v27.md` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- the mechanism keeps the same tiny learned regional field as v26, but moves
+  it onto a stronger shifted family with longer sequences, stronger latent-role
+  entanglement, harsher lossy projection, and denser style/query/tag dynamics
+- aggregate v27 geometry-native result:
+  - transfer test accuracy `0.540852844715`
+  - transfer query accuracy `0.584938704967`
+  - test loss `6.327512264252`
+  - parameter count `6516`
+- aggregate v27 tiny transformer result:
+  - transfer test accuracy `0.383219391108`
+  - transfer query accuracy `0.435639232397`
+  - test loss `2.621042013168`
+
+### Status
+- v27 still beats the tiny transformer baseline clearly under stronger shift
+- v27 loses a large amount of the v26 margin from the prior family
+- the result supports the architecture direction but shows the current tiny
+  learned field is not yet robust enough for stronger family transfer
+
+---
+
+## Session Entry: 2026-04-06 — Geometry-Native Regime Field V28
+
+### Scope
+- slightly richer learned regional regime field on the same stronger shifted
+  family as v27
+- same unchanged downstream geometry-native engine
+- same bounded split candidates and same local schema/bridge machinery, but
+  with a slightly richer learned scorer
+- no live router changes
+- no transformer blocks inside the geometry-native computation path
+
+### Files Added / Updated
+- `tools/prime_transport/geometry_native_sequence_model_v28.py` → created
+- `tools/prime_transport/run_geometry_native_sequence_model_v28.py` → created
+- `results/prime_transport_recursive_system/prime_transport_geometry_native_sequence_model_v28.csv` → created
+- `docs/research/prime_transport_geometry_native_regime_field_v28.md` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- the mechanism keeps the same stronger shifted family and same bounded
+  regional decomposition as v27, but uses a slightly richer learned scorer
+  with a wider hidden projection and one extra mixing stage
+- aggregate v28 geometry-native result:
+  - transfer test accuracy `0.548014342785`
+  - transfer query accuracy `0.584723412991`
+  - test loss `6.508901119232`
+  - parameter count `7316`
+- aggregate v28 tiny transformer result:
+  - transfer test accuracy `0.369710296392`
+  - transfer query accuracy `0.438542574644`
+  - test loss `2.805939912796`
+
+### Status
+- v28 improves modestly on v27 in overall accuracy
+- v28 does not improve on v27 in query accuracy
+- the result suggests the next bottleneck is field structure rather than a
+  small increase in learned scorer capacity
+
+---
+
+## Session Entry: 2026-04-06 — Geometry-Native Regime Field V29
+
+### Scope
+- structured learned regional field on the same stronger shifted family as
+  v27-v28
+- same unchanged downstream geometry-native engine
+- same bounded split candidates and same local schema/bridge machinery, but
+  with a tiny convolutional field over the ordered candidate boundaries
+- no live router changes
+- no transformer blocks inside the geometry-native computation path
+
+### Files Added / Updated
+- `tools/prime_transport/geometry_native_sequence_model_v29.py` → created
+- `tools/prime_transport/run_geometry_native_sequence_model_v29.py` → created
+- `results/prime_transport_recursive_system/prime_transport_geometry_native_sequence_model_v29.csv` → created
+- `docs/research/prime_transport_geometry_native_regime_field_v29.md` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- the mechanism keeps the same stronger shifted family and same bounded split
+  candidates as v27-v28, but adds a tiny structured field over the ordered
+  boundary lattice so nearby split candidates share evidence before selection
+- aggregate v29 geometry-native result:
+  - transfer test accuracy `0.549641907215`
+  - transfer query accuracy `0.589491665363`
+  - test loss `6.501174449921`
+  - parameter count `8676`
+- aggregate v29 tiny transformer result:
+  - transfer test accuracy `0.386393219233`
+  - transfer query accuracy `0.457923978567`
+  - test loss `2.942277193069`
+
+### Status
+- v29 improves on both v27 and v28 on the stronger shifted family
+- v29 suggests structured regional field topology helps more than simple
+  scorer-width increases
+- v29 still remains far below the earlier-family v26 margin
+
+---
+
+## Session Entry: 2026-04-06 — Geometry-Native Regime Field V30
+
+### Scope
+- explicit structured chart field over contiguous regions on the same stronger
+  shifted family as v27-v29
+- same unchanged downstream geometry-native engine
+- same local schema/bridge machinery, but with a tiny learned per-block chart
+  field decoded into at most three contiguous regions
+- no live router changes
+- no transformer blocks inside the geometry-native computation path
+
+### Files Added / Updated
+- `tools/prime_transport/geometry_native_sequence_model_v30.py` → created
+- `tools/prime_transport/run_geometry_native_sequence_model_v30.py` → created
+- `results/prime_transport_recursive_system/prime_transport_geometry_native_sequence_model_v30.csv` → created
+- `docs/research/prime_transport_geometry_native_regime_field_v30.md` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- the mechanism replaces split-candidate scoring with an explicit piecewise
+  chart field over contiguous blocks, then collapses that field into up to
+  three contiguous regions and applies the existing geometry-native local
+  variants inside each region
+- aggregate v30 geometry-native result:
+  - transfer test accuracy `0.543050110340`
+  - transfer query accuracy `0.596061289310`
+  - test loss `6.582681179047`
+  - parameter count `8078`
+- aggregate v30 tiny transformer result:
+  - transfer test accuracy `0.391276031733`
+  - transfer query accuracy `0.441137850285`
+  - test loss `2.638148069382`
+
+### Status
+- v30 improves on v29 in query accuracy but not in overall transfer accuracy
+- v30 remains clearly better than the tiny transformer baseline
+- explicit contiguous chart structure looks meaningful, but it is not yet a
+  decisive recovery of the lost v26 stronger-family margin
+
+---
+
+## Session Entry: 2026-04-06 — Geometry-Native Regime Field V31
+
+### Scope
+- small global learned chart field on the same stronger shifted family as
+  v27-v30
+- same unchanged downstream geometry-native engine
+- same local schema/bridge machinery, but with a broader low-rank global chart
+  map over coarse blocks before bounded contiguous decoding
+- no live router changes
+- no transformer blocks inside the geometry-native computation path
+
+### Files Added / Updated
+- `tools/prime_transport/geometry_native_sequence_model_v31.py` → created
+- `tools/prime_transport/run_geometry_native_sequence_model_v31.py` → created
+- `results/prime_transport_recursive_system/prime_transport_geometry_native_sequence_model_v31.csv` → created
+- `docs/research/prime_transport_geometry_native_regime_field_v31.md` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- the mechanism uses a tiny low-rank global chart map over coarse blocks to
+  modulate local blockwise chart scores before bounded contiguous decoding
+- aggregate v31 geometry-native result:
+  - transfer test accuracy `0.527669250965`
+  - transfer query accuracy `0.581842005253`
+  - test loss `6.738704204559`
+  - parameter count `6914`
+- aggregate v31 tiny transformer result:
+  - transfer test accuracy `0.381754547358`
+  - transfer query accuracy `0.432125717402`
+  - test loss `2.734487295151`
+
+### Status
+- v31 remains clearly better than the tiny transformer baseline
+- v31 does not improve on the better shifted-family structured-field results
+  from v29 or v30
+- broader chart-field scope alone does not recover the lost v26 margin on the
+  stronger shifted family
+
+---
+
+## Session Entry: 2026-04-06 — Geometry-Native Regime Field V32
+
+### Scope
+- bounded multiscale chart field on the same stronger shifted family as
+  v27-v31
+- same unchanged downstream geometry-native engine
+- same local schema/bridge machinery, but with local fine-block chart scores
+  plus a nearby coarse regional chart coordinator
+- no live router changes
+- no transformer blocks inside the geometry-native computation path
+
+### Files Added / Updated
+- `tools/prime_transport/geometry_native_sequence_model_v32.py` → created
+- `tools/prime_transport/run_geometry_native_sequence_model_v32.py` → created
+- `results/prime_transport_recursive_system/prime_transport_geometry_native_sequence_model_v32.csv` → created
+- `docs/research/prime_transport_geometry_native_regime_field_v32.md` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- the mechanism uses a two-level multiscale chart field: local fine-block
+  chart scores plus a small coarse neighboring coordinator before bounded
+  contiguous decoding
+- aggregate v32 geometry-native result:
+  - transfer test accuracy `0.547607421875`
+  - transfer query accuracy `0.579540550709`
+  - test loss `6.906696319580`
+  - parameter count `6537`
+- aggregate v32 tiny transformer result:
+  - transfer test accuracy `0.384521484375`
+  - transfer query accuracy `0.444299966097`
+  - test loss `2.868544340134`
+
+### Status
+- v32 clearly beats the tiny transformer baseline
+- v32 recovers some overall accuracy relative to the weaker global-field
+  variant from v31
+- v32 still does not beat the better shifted-family structured-field results
+  from v29 or v30
+
+---
+
+## Session Entry: 2026-04-06 — Geometry-Native Regime Field V33
+
+### Scope
+- sparse region-interaction field on the same stronger shifted family as
+  v29-v32
+- same unchanged downstream geometry-native engine
+- same local schema/bridge machinery, but with one bounded region-level
+  interaction pass over adjacent regions after a v30-style decomposition
+- no live router changes
+- no transformer blocks inside the geometry-native computation path
+
+### Files Added / Updated
+- `tools/prime_transport/geometry_native_sequence_model_v33.py` → created
+- `tools/prime_transport/run_geometry_native_sequence_model_v33.py` → created
+- `results/prime_transport_recursive_system/prime_transport_geometry_native_sequence_model_v33.csv` → created
+- `docs/research/prime_transport_geometry_native_regime_field_v33.md` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- the mechanism keeps a v30-style contiguous decomposition, then passes one
+  sparse adjacent-region interaction round using neighbor average, difference,
+  and product features before choosing each region's geometry-native variant
+- aggregate v33 geometry-native result:
+  - transfer test accuracy `0.539062500000`
+  - transfer query accuracy `0.578022003174`
+  - test loss `6.073722839355`
+  - parameter count `10289`
+- aggregate v33 tiny transformer result:
+  - transfer test accuracy `0.386962890625`
+  - transfer query accuracy `0.443076908588`
+  - test loss `2.301008701324`
+
+### Status
+- v33 remains clearly better than the tiny transformer baseline
+- v33 does not improve on the stronger shifted-family regional/structured
+  leaders from v29 or v30
+- this small sparse routing-style coordination layer does not appear to be the
+  missing piece on this shifted-family benchmark
+
+---
+
+## Session Entry: 2026-04-06 — Prime Transport Inner Architecture Audit
+
+### Scope
+- audit the inner bundle/orbit/transport representation used by the direct
+  sequence-model line
+- compare intended exact-layer / routing abstractions against the actual
+  implementation path in v3, v7, v11-v14, v21, and v29-v33
+- no live router changes
+- no new benchmark mechanism
+
+### Files Added / Updated
+- `docs/research/prime_transport_inner_architecture_audit.md` → created
+- `results/prime_transport_recursive_system/prime_transport_inner_architecture_audit.csv` → created
+- `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- the current sequence-model line does contain explicit discrete chart counters
+  and bounded discourse memory
+- but the learned computation is still a snapshot-feature encoder plus MLP
+  readout, not a native bundle/orbit transport engine
+- divisibility / semiprime transport is represented only as a temporary rewrite
+  of `referent_role` and `referent_entity`, not as persistent state
+- orbital/spin coordinates and admissibility filtering are not natively present
+  in the sequence-model computation path
+
+### Status
+- the single most likely gap is in the inner representation, not just the
+  wrapper/search branch
+- recommended next branch: rebuild part of the inner representation
+
+---
+
+## Session Entry: 2026-04-06 — Prime Transport Inner Representation Rebuild V1
+
+### Scope
+- start the first direct rebuild of the inner representation on the bounded v3
+  discourse/query task
+- introduce native persistent composite transport state, chart/spin
+  coordinates, and admissibility-constrained transitions into the real
+  computation path
+- no live router changes
+- no further wrapper or field tuning
+
+### Files Added / Updated
+- `tools/prime_transport/geometry_native_sequence_model_r1.py` → created
+- `tools/prime_transport/run_geometry_native_sequence_model_r1.py` → created
+- `docs/research/prime_transport_inner_representation_rebuild_v1.md` → created
+- `results/prime_transport_recursive_system/prime_transport_inner_representation_rebuild_v1.csv` → created
+- `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- r1 does successfully move three intended pieces into the actual computation
+  path:
+  - persistent semiprime transport state
+  - native cyclic chart / spin-style coordinates
+  - active admissibility projection on state transitions
+- but performance drops sharply relative to the v3 approximate geometry-native
+  baseline:
+  - v3 reference: test accuracy `0.9978`, query accuracy `0.9878`
+  - r1 rebuild: test accuracy `0.7361`, query accuracy `0.7009`
+  - tiny transformer: test accuracy `0.6958`, query accuracy `0.6707`
+
+### Status
+- this rebuild is a real architectural clarification, not a performance win
+- the inner representation was indeed missing from the computation path
+- once part of it is restored, the current feature-vector-plus-MLP readout
+  proves too weak to use the rebuilt state well
+- next smallest honest rebuild step: replace immediate flattening with a native
+  composite/chart state update-and-readout block
+
+---
+
+## Session Entry: 2026-04-06 — Prime Transport Inner Representation Rebuild V2
+
+### Scope
+- remove the remaining flatten-to-feature-vector plus MLP core from `r1`
+- keep the bounded v3 discourse/query task as the comparison surface
+- keep the native semiprime/chart/admissibility state from `r1`
+- rebuild the learned path as a structured native readout over that state
+
+### Files Added / Updated
+- `tools/prime_transport/geometry_native_sequence_model_r2.py` → created
+- `tools/prime_transport/run_geometry_native_sequence_model_r2.py` → created
+- `docs/research/prime_transport_inner_representation_rebuild_v2.md` → created
+- `results/prime_transport_recursive_system/prime_transport_inner_representation_rebuild_v2.csv` → created
+- `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- `r2` does remove the core flatten-to-MLP path
+- the learned core is now a structured table-driven readout over native state:
+  - chart indices
+  - semiprime pair state
+  - semiprime overlap
+  - admissibility bit
+  - spin bits
+  - dynamic role-to-entity / role-to-tag mappings
+- bounded performance relative to the same v3 task:
+  - v3 reference: test accuracy `0.9978`, query accuracy `0.9878`
+  - r1 rebuild: test accuracy `0.7361`, query accuracy `0.7009`
+  - r2 rebuild: test accuracy `0.7426`, query accuracy `0.7468`
+  - tiny transformer: test accuracy `0.6958`, query accuracy `0.6707`
+
+### Status
+- `r2` is still far from the old approximate v3 line
+- but it is a real architectural improvement over `r1`
+- the core learned path is now structurally honest, and query behavior improves
+  materially with only `219` learned parameters
+- next smallest honest rebuild step: rebuild the native transition operator
+  itself, not just the readout
+
+---
+
+## Session Entry: 2026-04-06 — Prime Transport Inner Representation Rebuild V3
+
+### Scope
+- replace the remaining hand-built proposal-plus-projection transition from
+  `r1`/`r2`
+- keep the bounded v3 discourse/query task
+- keep the no-flatten structured readout from `r2`
+- rebuild transitions as a native factor-space transport operator
+
+### Files Added / Updated
+- `tools/prime_transport/geometry_native_sequence_model_r3.py` → created
+- `tools/prime_transport/run_geometry_native_sequence_model_r3.py` → created
+- `docs/research/prime_transport_inner_representation_rebuild_v3.md` → created
+- `results/prime_transport_recursive_system/prime_transport_inner_representation_rebuild_v3.csv` → created
+- `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- `r3` fully removes proposal-plus-projection
+- the transition is now native factor transport:
+  - decode semiprimes into factor pairs
+  - retain one anchor factor
+  - transport the partner factor using chart, discourse, spin, token, and
+    cross-composite signals
+  - recompose directly into the next semiprime
+- bounded performance:
+  - v3 reference: test accuracy `0.9978`, query accuracy `0.9878`
+  - r1 rebuild: test accuracy `0.7361`, query accuracy `0.7009`
+  - r2 rebuild: test accuracy `0.7426`, query accuracy `0.7468`
+  - r3 rebuild: test accuracy `0.7424`, query accuracy `0.7504`
+  - tiny transformer: test accuracy `0.6958`, query accuracy `0.6707`
+
+### Status
+- `r3` is not a performance recovery
+- but it does complete the third honest rebuild step:
+  - native state
+  - native readout
+  - native transition
+- query behavior improves slightly over `r2`
+- admissibility is now satisfied by construction rather than repair
+- next smallest honest rebuild step: learn the factor-space transport law
+  itself without reintroducing flattening or projection
+
+---
+
+## Session Entry: 2026-04-06 — Prime Transport Inner Representation Rebuild V4
+
+### Scope
+- replace the hand-designed factor transport law from `r3`
+- keep the bounded v3 discourse/query task
+- keep native persistent composite state, native structured readout, and
+  admissibility by construction
+- learn partner-factor motion directly over native structured state
+
+### Files Added / Updated
+- `tools/prime_transport/geometry_native_sequence_model_r4.py` → created
+- `tools/prime_transport/run_geometry_native_sequence_model_r4.py` → created
+- `docs/research/prime_transport_inner_representation_rebuild_v4.md` → created
+- `results/prime_transport_recursive_system/prime_transport_inner_representation_rebuild_v4.csv` → created
+- `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- `r4` learns the transport law as an additive native factor-space kernel over:
+  - mode
+  - token
+  - retained anchor factor
+  - coupled opposite factor
+  - chart turn
+  - discourse turn
+  - spin turn
+  - tag turn
+  - query-token flag
+  - tag-token flag
+- no flatten-to-MLP path was reintroduced
+- no proposal-plus-projection path was reintroduced
+- admissibility remains satisfied by construction:
+  - `admissible_mean = 1.0`
+  - `admissible_min = 1`
+  - `admissible_max = 1`
+- bounded performance:
+  - v3 reference: test accuracy `0.9978`, query accuracy `0.9878`
+  - r1 rebuild: test accuracy `0.7361`, query accuracy `0.7009`
+  - r2 rebuild: test accuracy `0.7426`, query accuracy `0.7468`
+  - r3 rebuild: test accuracy `0.7424`, query accuracy `0.7504`
+  - r4 rebuild: test accuracy `0.7500`, query accuracy `0.7862`
+  - tiny transformer: test accuracy `0.6958`, query accuracy `0.6707`
+
+### Status
+- `r4` is the first clear positive result after the inner rebuild branch began
+- the last major hand-designed bottleneck is now replaced with a learned native
+  transport law
+- the rebuilt line still trails the old approximate v3 reference badly, but it
+  is now both more honest architecturally and better than `r1`-`r3`
+- next smallest honest rebuild step: learn anchor selection or a richer
+  chart-conditioned transport kernel without reintroducing flattening or repair
+
+---
+
+## Session Entry: 2026-04-06 — Prime Transport Inner Representation Rebuild V5
+
+### Scope
+- replace the remaining hand-designed anchor choice from `r4`
+- keep the bounded v3 discourse/query task
+- keep native persistent composite state, native structured readout, and native
+  learned partner transport
+- learn anchor selection directly over native factor/composite/chart state
+
+### Files Added / Updated
+- `tools/prime_transport/geometry_native_sequence_model_r5.py` → created
+- `tools/prime_transport/run_geometry_native_sequence_model_r5.py` → created
+- `docs/research/prime_transport_inner_representation_rebuild_v5.md` → created
+- `results/prime_transport_recursive_system/prime_transport_inner_representation_rebuild_v5.csv` → created
+- `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- `r5` learns anchor selection as additive logits over:
+  - mode
+  - token
+  - candidate factor
+  - other same-semiprime factor
+  - opposite composite left/right factors
+  - chart turn
+  - discourse turn
+  - spin turn
+  - tag turn
+  - query-token flag
+  - tag-token flag
+- no flatten-to-MLP path was reintroduced
+- no projection path was reintroduced
+- admissibility remains satisfied by construction:
+  - `admissible_mean = 1.0`
+  - `admissible_min = 1`
+  - `admissible_max = 1`
+- bounded performance:
+  - v3 reference: test accuracy `0.9978`, query accuracy `0.9878`
+  - r1 rebuild: test accuracy `0.7361`, query accuracy `0.7009`
+  - r2 rebuild: test accuracy `0.7426`, query accuracy `0.7468`
+  - r3 rebuild: test accuracy `0.7424`, query accuracy `0.7504`
+  - r4 rebuild: test accuracy `0.7500`, query accuracy `0.7862`
+  - r5 rebuild: test accuracy `0.7503`, query accuracy `0.7927`
+  - tiny transformer: test accuracy `0.6958`, query accuracy `0.6707`
+
+### Status
+- `r5` is a small but real improvement over `r4`
+- the next major hand-designed bottleneck in the rebuilt line is now gone
+- the rebuilt architecture still trails the old approximate v3 reference by a
+  large margin, but the native line continues improving without giving up its
+  architectural constraints
+- next smallest honest rebuild step: learn a richer joint anchor-plus-transport
+  kernel over the same native state
+
+---
+
+## Session Entry: 2026-04-06 — Prime Transport Inner Representation Rebuild V6
+
+### Scope
+- replace the separate learned anchor selector and learned partner transport
+  from `r5`
+- keep the bounded v3 discourse/query task
+- keep native persistent composite state, native structured readout, and
+  admissibility by construction
+- learn one joint anchor-plus-partner transition operator over native state
+
+### Files Added / Updated
+- `tools/prime_transport/geometry_native_sequence_model_r6.py` → created
+- `tools/prime_transport/run_geometry_native_sequence_model_r6.py` → created
+- `docs/research/prime_transport_inner_representation_rebuild_v6.md` → created
+- `results/prime_transport_recursive_system/prime_transport_inner_representation_rebuild_v6.csv` → created
+- `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- `r6` learns one joint structured kernel over six admissible
+  `(anchor choice, partner factor)` transitions
+- no flatten-to-MLP path was reintroduced
+- no projection path was reintroduced
+- admissibility remains satisfied by construction:
+  - `admissible_mean = 1.0`
+  - `admissible_min = 1`
+  - `admissible_max = 1`
+- bounded performance:
+  - v3 reference: test accuracy `0.9978`, query accuracy `0.9878`
+  - r1 rebuild: test accuracy `0.7361`, query accuracy `0.7009`
+  - r2 rebuild: test accuracy `0.7426`, query accuracy `0.7468`
+  - r3 rebuild: test accuracy `0.7424`, query accuracy `0.7504`
+  - r4 rebuild: test accuracy `0.7500`, query accuracy `0.7862`
+  - r5 rebuild: test accuracy `0.7503`, query accuracy `0.7927`
+  - r6 rebuild: test accuracy `0.7382`, query accuracy `0.7310`
+  - tiny transformer: test accuracy `0.6958`, query accuracy `0.6707`
+
+### Status
+- `r6` is a clean negative relative to `r5`
+- the joint operator is architecturally honest, but the smallest additive joint
+  kernel is worse than the separate learned anchor-plus-partner decomposition
+- if this branch continues, the next honest move is a richer native joint
+  kernel with stronger factor interaction terms, not a return to wrappers or
+  projection
+
+---
+
+## Session Entry: 2026-04-06 — Prime Transport Radial Compatibility Audit
+
+### Scope
+- audit the current native `r6` transport system for radial/fiber/spin class
+  incompatibility
+- no model improvement step
+- no learned changes
+- optional constrained evaluation only
+
+### Files Added / Updated
+- `tools/prime_transport/geometry_native_sequence_model_r6_compat_audit.py` → created
+- `docs/research/prime_transport_radial_compatibility_audit.md` → created
+- `results/prime_transport_recursive_system/prime_transport_radial_compatibility_audit.csv` → created
+- `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- incompatible class comparison/transport is common in `r6`
+- selected transitions:
+  - radial/fiber mismatched `50.82%`
+  - spin mismatched `70.90%`
+- candidate-set pollution is high:
+  - average incompatible candidates per side-step `5.3117 / 6`
+- a simple compatibility filter improves evaluation even without retraining:
+  - loss `0.6617 -> 0.6512`
+  - accuracy `0.7382 -> 0.7436`
+  - query accuracy `0.7310 -> 0.7518`
+
+### Status
+- current `r6` does compare/transport across proxy-incompatible radial/fiber
+  and spin classes often
+- the mismatch correlation is not perfectly clean at the raw transition level
+- but the candidate pollution plus filtered-eval improvement make this look
+  like a real structural bottleneck in the rebuilt line

@@ -634,6 +634,57 @@ Prime admissibility transport note:
   both the v14 midpoint-switch accuracy leader and the v21 query-accuracy
   leader, strongly supporting adaptive regional geometry over either idea
   alone
+- geometry-native-hybrid-boundary update:
+  a lightly induced split boundary improves the v22 hybrid slightly on both
+  overall accuracy and query accuracy, suggesting the remaining gains now come
+  from better regime placement more than from richer local schema logic
+- geometry-native-hybrid-boundary-v24 update:
+  a contradiction-aware boundary score improves the hybrid line again on
+  overall accuracy, but it gives back some query accuracy relative to v23,
+  suggesting the architecture is nearing its bounded optimum and the
+  remaining question is objective tradeoff in boundary placement
+- geometry-native-hybrid-boundary-v25 update:
+  a bounded Pareto / two-objective boundary scorer fails to improve the hybrid
+  tradeoff and lands below both v23 and v24, which is strong evidence that
+  the current two-region hybrid is near its bounded local optimum on this
+  family
+- geometry-native-regime-field update:
+  a very small learned regional boundary/regime field beats the handcrafted
+  hybrid family on both the best-overall and best-query reference points,
+  showing that learned regional structure can add real value while leaving the
+  geometry-native computation core intact
+- geometry-native-regime-field-v27 update:
+  the learned regional-field hybrid retains a clear advantage over the tiny
+  transformer under a stronger shifted family, but the gain weakens sharply
+  relative to v26, showing that the architecture direction survives while the
+  current tiny field is not yet robust cross-family
+- geometry-native-regime-field-v28 update:
+  a slightly richer learned regional field recovers a bit of the v27 overall
+  accuracy loss but does not recover query accuracy, suggesting the next
+  bottleneck is field structure rather than just a small increase in scorer
+  capacity
+- geometry-native-regime-field-v29 update:
+  a shallow structured field over ordered split candidates improves on both
+  v27 and v28 on the shifted family, which supports field topology as a more
+  important lever than scorer width alone
+- geometry-native-regime-field-v30 update:
+  an explicit contiguous chart field improves query accuracy again on the
+  shifted family but gives back overall accuracy relative to v29, suggesting
+  that more explicit regional chart structure is helpful but not yet enough to
+  recover the lost cross-family margin
+- geometry-native-regime-field-v31 update:
+  a small global learned chart field on the shifted family fails to improve on
+  the stronger recent regional/structured variants, suggesting broader scope
+  alone is not sufficient without a better global field design
+- geometry-native-regime-field-v32 update:
+  a bounded multiscale chart field recovers some overall accuracy relative to
+  the weaker global-field variant, but it still does not beat the best
+  shifted-family structured-field results, suggesting this field branch may be
+  nearing its bounded limit on the shifted family
+- geometry-native-regime-field-v33 update:
+  a sparse region-interaction field does not beat the better shifted-family
+  regional/structured field results, suggesting the missing piece is not
+  captured by this small routing-style coordination fabric
 
 ## 5. Hardware Implications
 

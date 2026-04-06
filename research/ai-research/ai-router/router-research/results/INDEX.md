@@ -2792,3 +2792,39 @@ Use this file to map each run batch to parsed summaries and decision records.
   - a bounded two-region hybrid combining coarse segmentation with local
     schema induction becomes the first stronger-mismatch mechanism to beat
     both the v14 overall leader and the v21 query leader on the same setup
+  - a lightly induced split-boundary version of that hybrid improves it again
+    slightly on both overall accuracy and query accuracy, suggesting boundary
+    placement is now the more relevant remaining lever
+  - a contradiction-aware boundary score improves the hybrid line further on
+    overall accuracy but not on query accuracy, suggesting remaining gains are
+    now boundary-objective tradeoffs rather than missing architecture pieces
+  - a bounded Pareto / two-objective boundary scorer does not improve the
+    hybrid tradeoff and instead falls below both v23 and v24, suggesting this
+    bounded hybrid family is now near its local optimum
+  - a very small learned regional boundary/regime field then beats the
+    handcrafted hybrid family, showing that bounded learned regional structure
+    can recover additional headroom without replacing the geometry-native core
+  - under a stronger shifted family, that learned regional-field hybrid still
+    beats the tiny transformer baseline but loses much of the v26 margin,
+    suggesting the architecture direction holds while the current tiny field
+    remains underpowered for stronger transfer
+  - a slightly richer learned regional field recovers some overall accuracy on
+    that stronger shifted family but does not improve query accuracy, which
+    suggests the next bottleneck is field structure rather than small scorer
+    width increases
+  - a shallow structured field over ordered split candidates then improves on
+    both v27 and v28, suggesting topology helps more than simple width
+    increases
+  - an explicit structured chart field over contiguous regions improves query
+    accuracy further but gives back some overall accuracy relative to v29, so
+    explicit chart structure looks promising without yet becoming the best
+    shifted-family solution
+  - a small global learned chart field then falls below both v29 and v30 on
+    the shifted family, suggesting broader chart scope alone is not enough to
+    recover the lost margin
+  - a bounded multiscale chart field then recovers some overall accuracy
+    relative to the global-field variant, but still fails to beat the better
+    shifted-family structured-field results from v29/v30
+  - a sparse region-interaction field then fails to improve on the better
+    shifted-family regional/structured results, so small region-level routing
+    coordination does not appear to unlock the remaining gap
