@@ -472,6 +472,168 @@ Prime admissibility transport note:
   the current branch is now frozen into an internal demo checkpoint with one
   overview note, one manifest, the current best stack, the canonical notes and
   drivers, the open costs, and the next experiment fixed for continued work
+- coordination-policy improvement update:
+  a controller-only conflict-resolution pass on the unchanged packet plus
+  attractor stack improves reassignment / handoff quality to exact and nudges
+  full-loop coordination quality upward, while retrieval, route reuse,
+  promoted-query burden, and instability all remain unchanged
+- coordination-lookahead update:
+  a small one-step replanning controller on the same unchanged stack preserves
+  exact retrieval and zero instability but does not improve aggregate
+  coordination quality over the improved local policy, so this branch should
+  not spend more time on tiny lookahead variants of the same action surface
+- coordination-conflict-arbitration update:
+  an explicit shared conflict / dependency arbitration controller on the same
+  unchanged stack also fails to beat the improved local policy and matches the
+  rejected lookahead aggregate, while retrieval, promoted-query burden, route
+  reuse, and instability remain fixed
+- coordination-frame update:
+  a small explicit coordination-episode layer on the same unchanged stack is
+  the first controller variant beyond the improved local policy that nudges
+  the harder full-loop coordination metric upward, while all substrate-side
+  metrics remain fixed
+- geometry-native-controller update:
+  a first explicit math-native controller signal derived from routing geometry
+  preserves the best coordination-frame result exactly, but does not improve it
+  further, so architecture math is now at parity rather than yet ahead
+- phase-fiber-geometry update:
+  a richer phase-fiber-aware basin tag derived from exact routing geometry
+  preserves retrieval and stability but degrades coordination quality
+  materially, showing that stronger geometry exposure can oversteer the
+  controller if introduced too directly
+- geometry-native-sequence-model update:
+  on a bounded phase-fiber-controlled sequence task where token meaning depends
+  on the evolving exact routing state, a geometry-native model with explicit
+  geometric transport plus routed memory and a tiny learned readout reaches
+  `0.592881917953` test accuracy and `0.885010242462` query accuracy, beating
+  a tiny causal transformer baseline at `0.430338531733` and
+  `0.503764569759` respectively while using far fewer parameters
+- geometry-native-sequence-model-v2 update:
+  on a stronger bounded compositional stack-rewrite task that is less directly
+  aligned to the phase-fiber variables, the geometry-native model reaches
+  exact bounded-task accuracy `1.0` and exact query accuracy `1.0`, while the
+  tiny transformer baseline reaches `0.790161132812` and `0.770186364651`,
+  strengthening the thesis in the bounded experimental sense
+- geometry-native-sequence-model-v3 update:
+  on a more language-like bounded discourse/reference task with overloaded
+  tokens whose interpretation depends on evolving latent role state, the
+  geometry-native model reaches `0.998567700386` test accuracy and
+  `0.991875946522` query accuracy, while the tiny transformer baseline reaches
+  `0.695442736149` and `0.679468214512`, further strengthening the thesis in
+  the bounded contextual-sequence setting
+- geometry-native-sequence-model-v4 update:
+  on the first held-out structural-shift test inside the discourse-style
+  family, where training excludes one explicit speaker-reference query mode and
+  test restores it, the geometry-native model keeps `0.996438443661` held-out
+  test accuracy and `0.979522168636` held-out query accuracy, while the tiny
+  transformer baseline drops to `0.620404422283` and `0.453924924135`,
+  strengthening the thesis beyond same-distribution bounded competence
+- geometry-native-sequence-model-v5 update:
+  on the first multi-axis held-out generalization test inside the discourse
+  family, where training excludes the removed speaker-reference query mode,
+  keeps shorter contexts, and limits style shifts while test restores all of
+  them together, the geometry-native model keeps `0.996558785439` held-out
+  test accuracy and `0.985419213772` held-out query accuracy, while the tiny
+  transformer baseline drops to `0.559709846973` and `0.469015806913`
+- geometry-native-sequence-model-v6 update:
+  on the first cross-family transfer test, where training uses the original
+  discourse/reference family and test uses a related delegation-style family
+  with changed latent role semantics, the geometry-native model reaches
+  `0.994750976562` transfer accuracy and `0.971504330635` transfer query
+  accuracy, while the tiny transformer baseline reaches `0.634033203125` and
+  `0.661365151405`
+- geometry-native-sequence-model-v7 update:
+  on the first reduced-schema-alignment transfer test, where the target family
+  is projected back into the old schema only through a lossy proxy, the prior
+  large geometry-native advantage collapses to near parity overall
+  (`0.479204952717` vs `0.48046875`), though the geometry-native model still
+  retains a small edge on the transfer query metric
+- geometry-native-chart-realignment update:
+  a first small geometry-native chart realignment rule recovers a meaningful
+  part of the v7 reduced-alignment loss, lifting transfer accuracy from
+  `0.479204952717` to `0.568933844566` and transfer query accuracy from
+  `0.544108569622` to `0.624918460846`, and reopens a clear gap over the tiny
+  transformer baseline, though it does not restore the clean shared-schema v6
+  regime
+- geometry-native-multichart update:
+  a bounded three-chart selector using internal predictive coherence remains
+  better than the v7 collapse and better than the tiny transformer baseline,
+  but it does not beat the simpler v8 single-rule chart realignment, so v8
+  remains the best reduced-alignment recovery result so far
+- geometry-native-chart-calibration update:
+  a short prefix-calibrated chart selector still improves on the unrecovered
+  v7 reduced-alignment transfer case and still beats the tiny transformer
+  baseline, but it does not beat the simpler v8 single-rule chart realignment
+  and therefore does not strengthen the adaptive-geometry result beyond v8
+- geometry-native-divisibility-bridge update:
+  a bounded arithmetic transition layer built from prime-coded factors,
+  semiprime bridge states, and small divisibility hubs materially outperforms
+  the earlier chart-based recovery line, lifting reduced-alignment transfer
+  accuracy to `0.883501827717` and transfer query accuracy to
+  `0.969032287598`, which strongly supports the need for explicit transition
+  infrastructure rather than chart selection alone
+- geometry-native-divisibility-bridge-v12 update:
+  under a stronger reduced-alignment mismatch, the divisibility bridge weakens
+  substantially to `0.552269339561` transfer accuracy and
+  `0.584205031395` transfer query accuracy; it still beats the unrecovered v7
+  case and the tiny transformer baseline, but it no longer beats v8, so the
+  transition idea remains promising while fixed bridge robustness remains open
+- geometry-native-bridge-calibration update:
+  a short support-window bridge-family selector recovers part of the v12 loss,
+  improving stronger-mismatch transfer accuracy to `0.593377947807` and
+  transfer query accuracy to `0.633928596973`; it still remains well below the
+  v11 peak, but it now beats both v12 and the earlier v8 chart recovery on the
+  stronger setting
+- geometry-native-bridge-switching update:
+  allowing one bounded mid-sequence bridge re-choice improves the stronger-
+  mismatch line again to `0.606119811535` transfer accuracy and
+  `0.660416662693` transfer query accuracy, which supports local temporal
+  bridge recalibration over sequence-level calibration alone, though the result
+  still remains well below the v11 peak
+- geometry-native-event-switch update:
+  a one-shot event-triggered bridge switch based on local coherence drop still
+  beats the fixed v12 bridge and the tiny transformer baseline, but it does
+  not beat the simpler fixed midpoint switch from v14, so the switch-trigger
+  problem remains open
+- geometry-native-gcd-bridge-revision update:
+  a bounded factor-overlap bridge revision using GCD-style retained-versus-
+  replaced factors remains competitive and beats the fixed v12 bridge and the
+  tiny transformer baseline, but it does not beat the current best v14
+  midpoint switch, so factor-level revision remains promising without yet
+  becoming the strongest recovery mechanism
+- geometry-native-conflict-revision update:
+  a query/binding-conflict-triggered factor revision improves on weaker
+  adaptive variants such as the generic event-triggered switch and the fixed
+  v12 bridge, but it still does not beat the current best v14 midpoint switch,
+  so structural contradiction looks useful without yet becoming the decisive
+  trigger
+- geometry-native-microrepair update:
+  a very small conflict-centered repair window remains better than the fixed
+  v12 bridge and the tiny transformer baseline, but it weakens relative to the
+  broader factor-revision line and does not beat the current best v14 midpoint
+  switch, suggesting the broken region is larger than a tiny local cluster
+- geometry-native-mesorepair update:
+  a moderate contradiction-centered repair region improves on the micro-window
+  variant but still does not beat the current best v14 midpoint switch, so
+  repair scale alone does not explain the remaining stronger-mismatch gap
+- geometry-native-grownrepair update:
+  contradiction-grown regional repair becomes the strongest factor-repair
+  variant so far at `0.604437589645` transfer accuracy, but it still does not
+  beat the current best v14 midpoint switch and remains notably below it on
+  query accuracy, suggesting handcrafted boundary discovery is helping but not
+  sufficient
+- geometry-native-schema-induction update:
+  a bounded regional schema selector becomes the first semi-learned stronger-
+  mismatch mechanism to beat the handcrafted repair line and set the best
+  query accuracy so far at `0.686405777931`, but it still misses the v14
+  midpoint switch slightly on overall accuracy, suggesting light schema
+  induction helps more than more repair heuristics
+- geometry-native-hybrid-regime update:
+  a bounded two-region hybrid that combines coarse regional segmentation with
+  local schema induction becomes the first stronger-mismatch mechanism to beat
+  both the v14 midpoint-switch accuracy leader and the v21 query-accuracy
+  leader, strongly supporting adaptive regional geometry over either idea
+  alone
 
 ## 5. Hardware Implications
 

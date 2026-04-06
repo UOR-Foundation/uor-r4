@@ -2692,3 +2692,103 @@ Use this file to map each run batch to parsed summaries and decision records.
   - the router-native branch now has a compact internal demo package with one
     overview note, one manifest, the canonical stack, the key drivers and CSVs,
     the open costs, and the immediate next experiment fixed for restartability
+  - a first controller-only coordination-policy improvement on the same packet
+    plus attractor surface raises reassignment / handoff correctness to `1.0`
+    and modestly improves full-loop coordination quality without changing
+    retrieval, route reuse, promoted-query burden, or instability
+  - a small one-step lookahead / replanning controller on the same unchanged
+    stack does not beat the improved local coordination policy, while all
+    substrate-side metrics remain fixed
+  - an explicit conflict / dependency arbitration controller on the same
+    unchanged stack also does not beat the improved local coordination policy
+    and matches the rejected lookahead aggregate on the bounded bundles
+  - a small explicit coordination-frame / transaction layer on the same
+    unchanged stack slightly improves the harder full-loop coordination metric
+    over the improved local controller and now stands as the best bounded
+    higher-level controller variant on this branch
+  - a first explicit geometry-native controller signal based on delayed-
+    visibility / branch-depth zone preserves the coordination-frame result
+    exactly but does not improve it further
+  - a richer phase-fiber-aware geometry controller based on a bounded
+    `(r_band, b_sector, phi_bucket, gap_band)` basin tag degrades coordination
+    quality materially while leaving all substrate-side metrics fixed
+  - the first direct geometry-native sequence-model test now shows that a
+    bounded explicit geometry engine over `(b, phi, r, next_return_gap)` can
+    outperform a tiny causal transformer on a small phase-fiber-controlled
+    symbolic sequence task, especially on the state-carrying query steps
+  - the second direct geometry-native sequence-model test now shows that the
+    same geometry-native style also beats a tiny transformer on a stronger
+    bounded stack-rewrite compositional task that is less directly aligned to
+    the phase-fiber variables
+  - the third direct geometry-native sequence-model test now shows that the
+    geometry-native style also beats a tiny transformer on a bounded
+    discourse-style context-dependent task with overloaded token meaning and
+    evolving latent role state
+  - the fourth direct geometry-native sequence-model test now shows that the
+    geometry-native discourse engine also keeps a strong advantage under a
+    held-out structural shift inside that discourse family, rather than only
+    on random same-distribution splits
+  - the fifth direct geometry-native sequence-model test now shows that the
+    geometry-native discourse engine also keeps that advantage under a
+    stronger multi-axis held-out shift combining removed query mode, longer
+    contexts, and denser style dynamics
+  - the sixth direct geometry-native sequence-model test now shows that the
+    geometry-native engine also keeps a strong advantage across a related
+    bounded task-family boundary, not only within one family and its held-out
+    splits
+  - the seventh direct geometry-native sequence-model test now shows the first
+    clear boundary of the current thesis line: when shared abstract-state
+    alignment is reduced enough, the large cross-family advantage collapses to
+    near parity overall, though a small query-specific edge remains
+  - the first geometry-native chart-realignment test now shows that a small
+    local chart recovery rule can reclaim a meaningful part of the v7 loss and
+    restore a clear advantage over the tiny transformer, though not the full
+    shared-schema transfer strength seen in v6
+  - the first bounded multi-chart selector remains better than the v7 collapse
+    and better than the tiny transformer, but it does not materially improve on
+    the simpler v8 single-rule chart realignment
+  - a short prefix-calibrated chart selector also remains better than the v7
+    collapse and better than the tiny transformer baseline, but it still does
+    not beat the simpler v8 single-rule chart realignment, so v8 remains the
+    best reduced-alignment recovery result so far
+  - a bounded divisibility-bridge realignment now materially outperforms the
+    earlier chart-based recovery line on the same reduced-alignment transfer
+    setting, strongly suggesting that arithmetic transition infrastructure is a
+    more powerful missing ingredient than better chart selection alone
+  - under a stronger reduced-alignment mismatch, the divisibility bridge still
+    beats the unrecovered v7 case and the tiny transformer baseline, but its
+    large v11 gain weakens sharply and falls back below v8, so fixed
+    divisibility hubs are promising but not yet robust
+  - a short support-window bridge-family selector now recovers part of that
+    v12 loss, materially beating the fixed v12 bridge and slightly beating the
+    older v8 chart recovery, though it still remains far below the v11 peak
+  - allowing one bounded within-sequence bridge switch improves the stronger-
+    mismatch line again beyond v13, which supports local temporal bridge
+    recalibration as the next useful adaptive-geometry capability, though the
+    result still remains far below the v11 peak
+  - a one-shot event-triggered switch based on local coherence drop does not
+    beat the simpler fixed midpoint switch from v14, so adaptive switching
+    still looks plausible but the trigger criterion remains open
+  - a GCD-style factor-overlap bridge revision remains competitive and beats
+    the fixed v12 bridge plus the tiny transformer baseline, but it still does
+    not beat the current best v14 midpoint switch
+  - a query/binding-conflict-triggered factor revision improves on weaker
+    adaptive variants such as the generic event-triggered switch, but it still
+    does not beat the current best v14 midpoint switch
+  - a very small conflict-centered repair window does not improve on the
+    broader factor-revision line and also does not beat the current best v14
+    midpoint switch
+  - a moderate contradiction-centered repair region improves on the
+    micro-window variant but still does not beat the current best v14 midpoint
+    switch, so repair scale alone remains insufficient
+  - contradiction-grown regional repair becomes the strongest factor-repair
+    variant so far and gets close to the current best v14 midpoint switch on
+    overall accuracy, but it still does not beat it and remains clearly behind
+    on query accuracy
+  - a bounded regional schema-induction stage becomes the first semi-learned
+    stronger-mismatch mechanism to beat the handcrafted repair line and set
+    the best query accuracy so far, but it still misses the v14 midpoint
+    switch slightly on overall transfer accuracy
+  - a bounded two-region hybrid combining coarse segmentation with local
+    schema induction becomes the first stronger-mismatch mechanism to beat
+    both the v14 overall leader and the v21 query leader on the same setup

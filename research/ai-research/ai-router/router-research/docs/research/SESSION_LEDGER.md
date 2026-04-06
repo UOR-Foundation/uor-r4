@@ -2133,3 +2133,1029 @@ residue set of the new stencil.
 - the branch now has a stable internal launchpad for the next coordination-
   quality experiments without needing to reconstruct the control stack from
   many separate notes
+
+---
+
+## Session Entry: 2026-04-05 — Coordination Policy Improvement
+
+### Scope
+- bounded controller-only improvement on the unchanged router-native stack
+- no live router changes
+- no MUDBench seam changes
+- no memory, routing, packet, attractor, or promotion redesign
+- goal: improve harder coordination quality on the same validated substrate
+
+### Files Added / Updated
+- `tools/prime_transport/run_coordination_policy_improvement.py` → created
+- `results/prime_transport_recursive_system/prime_transport_coordination_policy_improvement.csv` → created
+- `docs/research/prime_transport_coordination_policy_improvement.md` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- the most likely bounded controller failure mode is local-versus-shared ledger
+  conflict under partial dependency visibility, combined with over-eager
+  transfer actions
+- the improved policy reconciles local record stage against shared flags and
+  delays transfer until direct local progress paths are exhausted
+- aggregate action correctness rises to `0.8164585414585415`
+- reassignment / handoff correctness reaches `1.0`
+- joint coordination-loop correctness rises to `0.4549983440244225`
+- retrieval stays exact, route reuse stays `0.8425859854431283`, promoted-query
+  burden stays `0.5047922252391286`, and instability stays `0.0`
+
+### Status
+- controller quality improved modestly without changing the stack
+- the branch remains strong enough for a larger bounded systems prototype
+- the next remaining headroom is still coordination-policy quality rather than
+  substrate repair
+
+---
+
+## Session Entry: 2026-04-05 — Coordination Lookahead Test
+
+### Scope
+- bounded controller-only lookahead / replanning test
+- same unchanged router-memory substrate
+- same unchanged packet plus attractor controller surface
+- no live router changes
+- no memory, routing, packet, attractor, query, or promotion redesign
+
+### Files Added / Updated
+- `tools/prime_transport/run_coordination_lookahead.py` → created
+- `results/prime_transport_recursive_system/prime_transport_coordination_lookahead.csv` → created
+- `docs/research/prime_transport_coordination_lookahead.md` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- the small lookahead / replanning controller preserves exact retrieval, route
+  reuse, promoted-query burden, and zero instability
+- it does **not** improve aggregate coordination quality over the improved
+  local coordination policy
+- aggregate action correctness changes from `0.8164585414585415` to
+  `0.8162837162837163`
+- aggregate joint coordination-loop correctness changes from
+  `0.4549983440244225` to `0.45384747564191574`
+
+### Status
+- this specific one-step lookahead is a rejected controller variant
+- the next remaining headroom is still in coordination logic, but likely needs
+  a more structural design than another tiny replanning tweak
+
+---
+
+## Session Entry: 2026-04-05 — Coordination Conflict Arbitration Test
+
+### Scope
+- bounded controller-only conflict / dependency arbitration test
+- same unchanged router-memory substrate
+- same unchanged packet plus attractor controller surface
+- no live router changes
+- no memory, routing, packet, attractor, query, or promotion redesign
+
+### Files Added / Updated
+- `tools/prime_transport/run_coordination_conflict_arbitration.py` → created
+- `results/prime_transport_recursive_system/prime_transport_coordination_conflict_arbitration.csv` → created
+- `docs/research/prime_transport_coordination_conflict_arbitration.md` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- the explicit conflict / dependency arbitration controller preserves exact
+  retrieval, route reuse, promoted-query burden, and zero instability
+- it does **not** improve aggregate coordination quality over the improved
+  local policy
+- aggregate action correctness is `0.8162837162837163`
+- aggregate joint coordination-loop correctness is `0.45384747564191574`
+- on the aggregate row it matches the rejected one-step lookahead controller
+
+### Status
+- this arbitration variant is a second rejected controller family on the
+  current surface
+- the improved local coordination policy remains the best bounded controller
+  tested so far
+- the next larger step should be more structural than another small tweak on
+  the same controller surface
+
+---
+
+## Session Entry: 2026-04-05 — Coordination Frame Experiment
+
+### Scope
+- bounded controller-only coordination-frame / transaction-layer test
+- same unchanged router-memory substrate
+- same unchanged packet plus attractor controller surface
+- no live router changes
+- no memory, routing, packet, attractor, query, or promotion redesign
+
+### Files Added / Updated
+- `tools/prime_transport/run_coordination_frame_experiment.py` → created
+- `results/prime_transport_recursive_system/prime_transport_coordination_frame_experiment.csv` → created
+- `docs/research/prime_transport_coordination_frame_experiment.md` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- the coordination-frame controller preserves exact retrieval, route reuse,
+  promoted-query burden, and zero instability
+- it slightly improves the harder joint coordination-loop metric over the
+  improved local controller
+- aggregate action correctness is `0.8164085914085915`
+- aggregate joint coordination-loop correctness is `0.45520759282124196`
+- aggregate reassignment / handoff correctness remains `1.0`
+
+### Status
+- the coordination frame is now the best bounded higher-level controller
+  variant tested on this stack
+- the gain is real but modest
+- the next larger bounded systems prototype can now reasonably use explicit
+  coordination episodes as the current best controller direction
+
+---
+
+## Session Entry: 2026-04-05 — Geometry-Native Controller Test
+
+### Scope
+- bounded controller-only geometry-native signal test
+- same unchanged router-memory substrate
+- same unchanged packet plus attractor controller surface
+- no live router changes
+- no memory, routing, packet, attractor, query, or promotion redesign
+
+### Files Added / Updated
+- `tools/prime_transport/run_geometry_native_controller.py` → created
+- `results/prime_transport_recursive_system/prime_transport_geometry_native_controller.csv` → created
+- `docs/research/prime_transport_geometry_native_controller.md` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- the first tested math-native controller signal is
+  `visibility_zone = (r_band, next_return_gap_band)`
+- it preserves exact retrieval, route reuse, promoted-query burden, and zero
+  instability
+- it exactly matches the current best coordination-frame aggregate
+- aggregate action correctness remains `0.8164085914085915`
+- aggregate joint coordination-loop correctness remains `0.45520759282124196`
+
+### Status
+- this first geometry-native controller is a parity result, not a new gain
+- the coordination-frame controller remains the best bounded controller result
+- the next math-native step, if desired, should use a richer or differently
+  structured geometry signal
+
+---
+
+## Session Entry: 2026-04-05 — Phase-Fiber Geometry Controller Test
+
+### Scope
+- bounded controller-only richer geometry-signal test
+- same unchanged router-memory substrate
+- same unchanged packet plus attractor controller surface
+- no live router changes
+- no memory, routing, packet, attractor, query, or promotion redesign
+
+### Files Added / Updated
+- `tools/prime_transport/run_phase_fiber_geometry_controller.py` → created
+- `results/prime_transport_recursive_system/prime_transport_phase_fiber_geometry_controller.csv` → created
+- `docs/research/prime_transport_phase_fiber_geometry_controller.md` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- the richer tested math-native signal is
+  `phase_fiber_visibility_basin = (r_band, b_sector, phi_bucket, gap_band)`
+- it preserves exact retrieval, route reuse, promoted-query burden, and zero
+  instability
+- it degrades aggregate action correctness to `0.606943056943057`
+- it degrades aggregate joint coordination-loop correctness to
+  `0.2999959120268171`
+
+### Status
+- this richer phase-fiber-aware basin signal is a rejected controller variant
+- the coordination-frame controller remains the best bounded controller result
+- the next math-native step, if pursued, should be more selective than a broad
+  phase-fiber basin override
+
+---
+
+## Session Entry: 2026-04-05 — Geometry-Native Sequence Model Test
+
+### Scope
+- first direct bounded sequence-model test of the main thesis
+- geometry as the primary sequence-processing engine
+- no live router changes
+- no transformer blocks inside the geometry-native path
+- tiny transformer allowed only as the comparison baseline
+
+### Files Added / Updated
+- `tools/prime_transport/geometry_native_sequence_model.py` → created
+- `tools/prime_transport/run_geometry_native_sequence_model.py` → created
+- `results/prime_transport_recursive_system/prime_transport_geometry_native_sequence_model.csv` → created
+- `docs/research/prime_transport_geometry_native_sequence_model.md` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- the bounded task is a phase-fiber-controlled symbolic stream whose token
+  semantics depend on the evolving exact routing state `(b, phi, r,
+  next_return_gap)`
+- the geometry-native model uses explicit geometric transport, routed
+  structured memory, and a small learned readout
+- aggregate geometry-native result:
+  - test accuracy `0.592881917953`
+  - query accuracy `0.885010242462`
+  - test loss `0.815225899220`
+- aggregate tiny transformer result:
+  - test accuracy `0.430338531733`
+  - query accuracy `0.503764569759`
+  - test loss `1.063794016838`
+
+### Status
+- this is the first direct bounded result in which geometry acts as the main
+  sequence engine rather than only as routing support
+- the result supports continuing the thesis on stronger bounded sequence tests
+- it is not yet a broad replacement claim, because the task is still small and
+  architecture-aligned
+
+---
+
+## Session Entry: 2026-04-05 — Geometry-Native Sequence Model V2
+
+### Scope
+- second direct bounded thesis test
+- stronger and less architecture-aligned sequence task
+- no live router changes
+- no transformer blocks inside the geometry-native path
+- tiny transformer allowed only as the comparison baseline
+
+### Files Added / Updated
+- `tools/prime_transport/geometry_native_sequence_model_v2.py` → created
+- `tools/prime_transport/run_geometry_native_sequence_model_v2.py` → created
+- `results/prime_transport_recursive_system/prime_transport_geometry_native_sequence_model_v2.csv` → created
+- `docs/research/prime_transport_geometry_native_sequence_model_v2.md` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- the new bounded task is a compositional stack-rewrite stream with
+  `PUSH`, `POP`, `SWAP2`, `MERGE`, and `QUERY`
+- the geometry-native model uses explicit geometric transport plus bounded
+  structured stack memory as the main sequence engine
+- aggregate geometry-native result:
+  - test accuracy `1.0`
+  - query accuracy `1.0`
+  - test loss `0.000000022366`
+- aggregate tiny transformer result:
+  - test accuracy `0.790161132812`
+  - query accuracy `0.770186364651`
+  - test loss `0.445333242416`
+
+### Status
+- this strengthens the thesis in the bounded experimental sense
+- the result is still a bounded explicit geometry-native engine result, not a
+  broad learned-sequence replacement claim
+- the next sharp test should be held-out generalization on the same stronger
+  task family
+
+---
+
+## Session Entry: 2026-04-05 — Geometry-Native Sequence Model V3
+
+### Scope
+- third direct bounded thesis test
+- more language-like context-dependent sequence task
+- no live router changes
+- no transformer blocks inside the geometry-native path
+- tiny transformer allowed only as the comparison baseline
+
+### Files Added / Updated
+- `tools/prime_transport/geometry_native_sequence_model_v3.py` → created
+- `tools/prime_transport/run_geometry_native_sequence_model_v3.py` → created
+- `results/prime_transport_recursive_system/prime_transport_geometry_native_sequence_model_v3.csv` → created
+- `docs/research/prime_transport_geometry_native_sequence_model_v3.md` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- the new bounded task is a discourse-style reference stream with overloaded
+  `TAG`, `REFER`, and `ASK` tokens whose meaning depends on evolving speaker,
+  topic, focus, style, and exact geometry
+- the geometry-native model uses explicit geometric transport plus explicit
+  discourse-role memory as the main sequence engine
+- aggregate geometry-native result:
+  - test accuracy `0.998567700386`
+  - query accuracy `0.991875946522`
+  - test loss `0.005087816156`
+- aggregate tiny transformer result:
+  - test accuracy `0.695442736149`
+  - query accuracy `0.679468214512`
+  - test loss `0.693002045155`
+
+### Status
+- this further strengthens the thesis in the bounded contextual-sequence
+  setting
+- the result is still a bounded explicit geometry-native engine result, not a
+  broad natural-language replacement claim
+- the next sharp test should be held-out generalization on the discourse-style
+  family
+
+---
+
+## Session Entry: 2026-04-05 — Geometry-Native Sequence Model V4
+
+### Scope
+- fourth direct bounded thesis test
+- held-out generalization on the discourse-style contextual family
+- no live router changes
+- no transformer blocks inside the geometry-native path
+- tiny transformer allowed only as the comparison baseline
+
+### Files Added / Updated
+- `tools/prime_transport/geometry_native_sequence_model_v4.py` → created
+- `tools/prime_transport/run_geometry_native_sequence_model_v4.py` → created
+- `results/prime_transport_recursive_system/prime_transport_geometry_native_sequence_model_v4.csv` → created
+- `docs/research/prime_transport_geometry_native_sequence_model_v4.md` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- training excludes one explicit overloaded discourse query mode:
+  speaker-reference queries under `style = 2` with distinct speaker/topic
+  assignments
+- test restores that removed mode and evaluates held-out generalization there
+- aggregate geometry-native result:
+  - held-out test accuracy `0.996438443661`
+  - held-out query accuracy `0.979522168636`
+  - test loss `0.017076831311`
+- aggregate tiny transformer result:
+  - held-out test accuracy `0.620404422283`
+  - held-out query accuracy `0.453924924135`
+  - test loss `0.954713940620`
+
+### Status
+- this is the strongest direct thesis result so far
+- it strengthens the thesis beyond same-distribution bounded competence
+- it is still a bounded explicit geometry-native engine result, not a broad
+  natural-language replacement claim
+
+---
+
+## Session Entry: 2026-04-06 — Geometry-Native Sequence Model V5
+
+### Scope
+- fifth direct bounded thesis test
+- multi-axis held-out generalization on the discourse-style contextual family
+- no live router changes
+- no transformer blocks inside the geometry-native path
+- tiny transformer allowed only as the comparison baseline
+
+### Files Added / Updated
+- `tools/prime_transport/geometry_native_sequence_model_v5.py` → created
+- `tools/prime_transport/run_geometry_native_sequence_model_v5.py` → created
+- `results/prime_transport_recursive_system/prime_transport_geometry_native_sequence_model_v5.csv` → created
+- `docs/research/prime_transport_geometry_native_sequence_model_v5.md` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- training excludes the v4 held-out speaker-reference query mode, uses shorter
+  contexts, and allows at most one style shift per sequence
+- test restores the removed query mode inside longer sequences with at least
+  four style shifts and at least three held-out queries
+- aggregate geometry-native result:
+  - held-out test accuracy `0.996558785439`
+  - held-out query accuracy `0.985419213772`
+  - test loss `0.011096824892`
+- aggregate tiny transformer result:
+  - held-out test accuracy `0.559709846973`
+  - held-out query accuracy `0.469015806913`
+  - test loss `1.370441794395`
+
+### Status
+- this is the strongest direct thesis result so far
+- it strengthens the thesis beyond single-axis held-out competence
+- it is still a bounded explicit geometry-native engine result, not a broad
+  natural-language replacement claim
+
+---
+
+## Session Entry: 2026-04-06 — Geometry-Native Sequence Model V6
+
+### Scope
+- sixth direct bounded thesis test
+- cross-family transfer on related contextual sequence families
+- no live router changes
+- no transformer blocks inside the geometry-native path
+- tiny transformer allowed only as the comparison baseline
+
+### Files Added / Updated
+- `tools/prime_transport/geometry_native_sequence_model_v6.py` → created
+- `tools/prime_transport/run_geometry_native_sequence_model_v6.py` → created
+- `results/prime_transport_recursive_system/prime_transport_geometry_native_sequence_model_v6.csv` → created
+- `docs/research/prime_transport_geometry_native_sequence_model_v6.md` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- training uses the original discourse/reference family
+- test uses a related delegation-style family with changed topic update,
+  style update, tag binding, and query-resolution semantics
+- aggregate geometry-native result:
+  - transfer test accuracy `0.994750976562`
+  - transfer query accuracy `0.971504330635`
+  - test loss `0.014314385131`
+- aggregate tiny transformer result:
+  - transfer test accuracy `0.634033203125`
+  - transfer query accuracy `0.661365151405`
+  - test loss `1.114169836044`
+
+### Status
+- this is the strongest direct thesis result so far
+- it strengthens the thesis beyond within-family held-out generalization
+- it is still a bounded explicit geometry-native engine result, not a broad
+  natural-language replacement claim
+
+---
+
+## Session Entry: 2026-04-06 — Geometry-Native Sequence Model V7
+
+### Scope
+- seventh direct bounded thesis test
+- cross-family transfer under reduced shared abstract-state alignment
+- no live router changes
+- no transformer blocks inside the geometry-native path
+- tiny transformer allowed only as the comparison baseline
+
+### Files Added / Updated
+- `tools/prime_transport/geometry_native_sequence_model_v7.py` → created
+- `tools/prime_transport/run_geometry_native_sequence_model_v7.py` → created
+- `results/prime_transport_recursive_system/prime_transport_geometry_native_sequence_model_v7.csv` → created
+- `docs/research/prime_transport_geometry_native_sequence_model_v7.md` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- training uses the original discourse/reference family
+- test uses a related but more entangled target family whose true latent state
+  is projected back into the old schema only through a lossy proxy
+- aggregate geometry-native result:
+  - transfer test accuracy `0.479204952717`
+  - transfer query accuracy `0.544108569622`
+  - test loss `8.150774955750`
+- aggregate tiny transformer result:
+  - transfer test accuracy `0.480468750000`
+  - transfer query accuracy `0.502776086330`
+  - test loss `2.312074422836`
+
+### Status
+- this is the first clear boundary result in the direct thesis line
+- overall transfer advantage collapses to near parity once schema alignment is
+  reduced enough
+- a small query-specific geometry-native edge still survives
+
+---
+
+## Session Entry: 2026-04-06 — Geometry-Native Chart Realignment Test
+
+### Scope
+- first direct adaptive-geometry test after the v7 boundary result
+- same reduced-schema-alignment transfer setting as v7
+- one small local chart realignment rule only
+- no live router changes
+- no transformer blocks inside the geometry-native path
+
+### Files Added / Updated
+- `tools/prime_transport/geometry_native_sequence_model_v8.py` → created
+- `tools/prime_transport/run_geometry_native_sequence_model_v8.py` → created
+- `results/prime_transport_recursive_system/prime_transport_geometry_native_sequence_model_v8.csv` → created
+- `docs/research/prime_transport_geometry_native_chart_realignment.md` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- the realignment mechanism is a local angular role-frame rotation and
+  candidate-basis rebasing selected by
+  `chart_rotation = (b + r + style) mod 3`
+- aggregate v8 geometry-native result:
+  - transfer test accuracy `0.568933844566`
+  - transfer query accuracy `0.624918460846`
+  - test loss `6.270763874054`
+- aggregate v8 tiny transformer result:
+  - transfer test accuracy `0.477711409330`
+  - transfer query accuracy `0.527071118355`
+  - test loss `2.381304502487`
+
+### Status
+- chart realignment recovers a meaningful part of the v7 loss
+- the recovered gain is geometry-native in a meaningful bounded sense
+- the reduced-alignment problem is only partially repaired, not solved
+
+---
+
+## Session Entry: 2026-04-06 — Geometry-Native Multi-Chart Selection
+
+### Scope
+- bounded multi-chart adaptive-geometry test
+- same reduced-schema-alignment transfer setting as v7/v8
+- same unchanged downstream geometry-native engine
+- no live router changes
+- no transformer blocks inside the geometry-native path
+
+### Files Added / Updated
+- `tools/prime_transport/geometry_native_sequence_model_v9.py` → created
+- `tools/prime_transport/run_geometry_native_sequence_model_v9.py` → created
+- `results/prime_transport_recursive_system/prime_transport_geometry_native_sequence_model_v9.csv` → created
+- `docs/research/prime_transport_geometry_native_multichart.md` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- the mechanism uses a fixed family of three local chart variants built from
+  the v8 rule plus offsets `{0,1,2}`
+- per-sequence chart selection is based on mean max-softmax coherence from the
+  existing readout
+- aggregate v9 geometry-native result:
+  - transfer test accuracy `0.547449469566`
+  - transfer query accuracy `0.597468376160`
+  - test loss `6.499938011169`
+- aggregate v9 tiny transformer result:
+  - transfer test accuracy `0.480124086142`
+  - transfer query accuracy `0.491139233112`
+  - test loss `2.158302783966`
+
+### Status
+- multi-chart selection still helps relative to the unrecovered v7 case
+- it remains geometry-native in a meaningful bounded sense
+- it does not materially improve on the simpler v8 single-rule realignment
+
+---
+
+## Session Entry: 2026-04-06 — Geometry-Native Chart Calibration
+
+### Scope
+- bounded chart-selection / calibration test after v8 and v9
+- same reduced-schema-alignment transfer setting as v7/v8/v9
+- same unchanged downstream geometry-native engine
+- no live router changes
+- no transformer blocks inside the geometry-native path
+
+### Files Added / Updated
+- `tools/prime_transport/geometry_native_sequence_model_v10.py` → created
+- `tools/prime_transport/run_geometry_native_sequence_model_v10.py` → created
+- `results/prime_transport_recursive_system/prime_transport_geometry_native_sequence_model_v10.csv` → created
+- `docs/research/prime_transport_geometry_native_chart_calibration.md` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- the mechanism uses a fixed three-chart family with short prefix-based chart
+  calibration before committing to a chart for the full sequence
+- calibration combines prefix query confidence, global confidence, and an
+  inconsistency penalty over repeated recovered referent groups
+- aggregate v10 geometry-native result:
+  - transfer test accuracy `0.539407193661`
+  - transfer query accuracy `0.569453179836`
+  - test loss `6.897306919098`
+- aggregate v10 tiny transformer result:
+  - transfer test accuracy `0.485064327717`
+  - transfer query accuracy `0.500942826271`
+  - test loss `2.247161388397`
+
+### Status
+- v10 still improves on the unrecovered v7 reduced-alignment case
+- v10 still beats the tiny transformer baseline
+- v10 does not beat the simpler v8 single-rule chart realignment
+
+---
+
+## Session Entry: 2026-04-06 — Geometry-Native Divisibility Bridge
+
+### Scope
+- bounded divisibility-mediated realignment test after v7-v10
+- same reduced-schema-alignment transfer setting as v7-v10
+- same unchanged downstream geometry-native engine
+- no live router changes
+- no transformer blocks inside the geometry-native path
+
+### Files Added / Updated
+- `tools/prime_transport/geometry_native_sequence_model_v11.py` → created
+- `tools/prime_transport/run_geometry_native_sequence_model_v11.py` → created
+- `results/prime_transport_recursive_system/prime_transport_geometry_native_sequence_model_v11.csv` → created
+- `docs/research/prime_transport_geometry_native_divisibility_bridge.md` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- the mechanism uses prime-coded atomic role increments, semiprime bridge
+  states, and small divisibility hubs for query and binding transitions
+- aggregate v11 geometry-native result:
+  - transfer test accuracy `0.883501827717`
+  - transfer query accuracy `0.969032287598`
+  - test loss `1.610011100769`
+- aggregate v11 tiny transformer result:
+  - transfer test accuracy `0.477366715670`
+  - transfer query accuracy `0.510322570801`
+  - test loss `2.036663055420`
+
+### Status
+- v11 materially improves on v8, v9, and v10
+- v11 strongly reopens the gap over the tiny transformer baseline
+- divisibility-mediated transition structure now looks like a plausible missing
+  ingredient for reduced-alignment transfer
+
+---
+
+## Session Entry: 2026-04-06 — Geometry-Native Divisibility Bridge v12
+
+### Scope
+- stronger reduced-schema-alignment transfer stress test for the v11 bridge
+- same bounded family and same unchanged downstream geometry-native engine
+- longer sequences plus one additional latent entanglement term and noisier
+  proxy projection
+- no live router changes
+- no transformer blocks inside the geometry-native path
+
+### Files Added / Updated
+- `tools/prime_transport/geometry_native_sequence_model_v12.py` → created
+- `tools/prime_transport/run_geometry_native_sequence_model_v12.py` → created
+- `results/prime_transport_recursive_system/prime_transport_geometry_native_sequence_model_v12.csv` → created
+- `docs/research/prime_transport_geometry_native_divisibility_bridge_v12.md` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- the mechanism keeps the v11 divisibility-bridge design spirit and minimally
+  extends it with a second bounded hub term to mediate the added mismatch
+- aggregate v12 geometry-native result:
+  - transfer test accuracy `0.552269339561`
+  - transfer query accuracy `0.584205031395`
+  - test loss `6.065035820007`
+- aggregate v12 tiny transformer result:
+  - transfer test accuracy `0.452380955219`
+  - transfer query accuracy `0.464435160160`
+  - test loss `2.171264886856`
+
+### Status
+- v12 still improves on the unrecovered v7 case
+- v12 still beats the tiny transformer baseline
+- v12 weakens sharply relative to v11 and no longer beats v8
+
+---
+
+## Session Entry: 2026-04-06 — Geometry-Native Bridge Calibration
+
+### Scope
+- bounded support-window bridge calibration on the stronger v12 family
+- same unchanged downstream geometry-native engine
+- same divisibility-bridge design spirit, but with small bridge-family
+  selection from early local evidence
+- no live router changes
+- no transformer blocks inside the geometry-native path
+
+### Files Added / Updated
+- `tools/prime_transport/geometry_native_sequence_model_v13.py` → created
+- `tools/prime_transport/run_geometry_native_sequence_model_v13.py` → created
+- `results/prime_transport_recursive_system/prime_transport_geometry_native_sequence_model_v13.csv` → created
+- `docs/research/prime_transport_geometry_native_bridge_calibration.md` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- the mechanism calibrates among three bounded bridge variants
+  (`v11_like`, `v12_base`, `hybrid`) using a short support window with query
+  confidence, global confidence, and disagreement penalty
+- aggregate v13 geometry-native result:
+  - transfer test accuracy `0.593377947807`
+  - transfer query accuracy `0.633928596973`
+  - test loss `5.709022045135`
+- aggregate v13 tiny transformer result:
+  - transfer test accuracy `0.459077388048`
+  - transfer query accuracy `0.459033608437`
+  - test loss `2.079487323761`
+
+### Status
+- v13 materially improves on the fixed v12 bridge
+- v13 slightly beats the earlier v8 chart recovery on the stronger setting
+- v13 still remains well below the v11 peak
+
+---
+
+## Session Entry: 2026-04-06 — Geometry-Native Bridge Switching
+
+### Scope
+- bounded within-sequence bridge switching on the stronger v12 family
+- same unchanged downstream geometry-native engine
+- same bounded bridge family as v13, but with one mid-sequence re-choice
+- no live router changes
+- no transformer blocks inside the geometry-native path
+
+### Files Added / Updated
+- `tools/prime_transport/geometry_native_sequence_model_v14.py` → created
+- `tools/prime_transport/run_geometry_native_sequence_model_v14.py` → created
+- `results/prime_transport_recursive_system/prime_transport_geometry_native_sequence_model_v14.csv` → created
+- `docs/research/prime_transport_geometry_native_bridge_switching.md` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- the mechanism selects one bridge for the first half and allows one
+  recalibrated bridge choice for the second half using the same bounded
+  support-window scoring rule as v13
+- aggregate v14 geometry-native result:
+  - transfer test accuracy `0.606119811535`
+  - transfer query accuracy `0.660416662693`
+  - test loss `5.524695396423`
+- aggregate v14 tiny transformer result:
+  - transfer test accuracy `0.444289445877`
+  - transfer query accuracy `0.451562494040`
+  - test loss `2.441468954086`
+
+### Status
+- v14 improves on v13
+- v14 supports local temporal bridge recalibration over sequence-level bridge
+  calibration alone
+- v14 still remains well below the v11 peak
+
+---
+
+## Session Entry: 2026-04-06 — Geometry-Native Event Switch
+
+### Scope
+- bounded event-triggered bridge switching on the stronger v12 family
+- same unchanged downstream geometry-native engine
+- same tiny bridge family as v13/v14, but with one local-trigger switch rule
+- no live router changes
+- no transformer blocks inside the geometry-native path
+
+### Files Added / Updated
+- `tools/prime_transport/geometry_native_sequence_model_v15.py` → created
+- `tools/prime_transport/run_geometry_native_sequence_model_v15.py` → created
+- `results/prime_transport_recursive_system/prime_transport_geometry_native_sequence_model_v15.csv` → created
+- `docs/research/prime_transport_geometry_native_event_switch.md` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- the mechanism begins with the best early bridge and allows one later switch
+  only when local coherence drops and an alternative bridge wins by a bounded
+  margin
+- aggregate v15 geometry-native result:
+  - transfer test accuracy `0.591052830219`
+  - transfer query accuracy `0.637893617153`
+  - test loss `5.772159576416`
+- aggregate v15 tiny transformer result:
+  - transfer test accuracy `0.460844486952`
+  - transfer query accuracy `0.467969596386`
+  - test loss `2.170051097870`
+
+### Status
+- v15 still improves on the fixed v12 bridge
+- v15 still beats the tiny transformer baseline
+- v15 does not beat the simpler fixed midpoint switch from v14
+
+---
+
+## Session Entry: 2026-04-06 — Geometry-Native GCD Bridge Revision
+
+### Scope
+- bounded GCD-style factor-overlap bridge revision on the stronger v12 family
+- same unchanged downstream geometry-native engine
+- same tiny bridge family, but with retained-versus-replaced factor revision
+  instead of whole-bridge switching
+- no live router changes
+- no transformer blocks inside the geometry-native path
+
+### Files Added / Updated
+- `tools/prime_transport/geometry_native_sequence_model_v16.py` → created
+- `tools/prime_transport/run_geometry_native_sequence_model_v16.py` → created
+- `results/prime_transport_recursive_system/prime_transport_geometry_native_sequence_model_v16.csv` → created
+- `docs/research/prime_transport_geometry_native_gcd_bridge_revision.md` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- the mechanism revises bridge suffixes by retaining shared prime factors and
+  replacing only contradicted partner factors when local disagreement-rich
+  evidence supports an alternative bridge
+- aggregate v16 geometry-native result:
+  - transfer test accuracy `0.592540919781`
+  - transfer query accuracy `0.651993811131`
+  - test loss `5.578721046448`
+- aggregate v16 tiny transformer result:
+  - transfer test accuracy `0.457589298487`
+  - transfer query accuracy `0.469704806805`
+  - test loss `2.272322416306`
+
+### Status
+- v16 still improves on the fixed v12 bridge
+- v16 still beats the tiny transformer baseline
+- v16 does not beat the current best v14 midpoint switch
+
+---
+
+## Session Entry: 2026-04-06 — Geometry-Native Conflict Revision
+
+### Scope
+- bounded query/binding-conflict-triggered factor revision on the stronger v12
+  family
+- same unchanged downstream geometry-native engine
+- same tiny bridge family, but with explicit structural conflict as the
+  revision trigger
+- no live router changes
+- no transformer blocks inside the geometry-native path
+
+### Files Added / Updated
+- `tools/prime_transport/geometry_native_sequence_model_v17.py` → created
+- `tools/prime_transport/run_geometry_native_sequence_model_v17.py` → created
+- `results/prime_transport_recursive_system/prime_transport_geometry_native_sequence_model_v17.csv` → created
+- `docs/research/prime_transport_geometry_native_conflict_revision.md` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- the mechanism opens one local revision window only when query-side and
+  binding-side factor conflicts co-occur at a sufficiently high rate and an
+  alternative bridge wins locally, then retains shared factors and replaces
+  contradicted partners
+- aggregate v17 geometry-native result:
+  - transfer test accuracy `0.597052812576`
+  - transfer query accuracy `0.643229186535`
+  - test loss `5.901119232178`
+- aggregate v17 tiny transformer result:
+  - transfer test accuracy `0.459914058447`
+  - transfer query accuracy `0.489458352327`
+  - test loss `2.239838600159`
+
+### Status
+- v17 improves on weaker adaptive variants such as v15
+- v17 still beats the fixed v12 bridge and the tiny transformer baseline
+- v17 does not beat the current best v14 midpoint switch
+
+---
+
+## Session Entry: 2026-04-06 — Geometry-Native Microrepair
+
+### Scope
+- bounded micro-window conflict-centered factor repair on the stronger v12
+  family
+- same unchanged downstream geometry-native engine
+- same tiny bridge family, but with very small local repair scope around the
+  contradiction cluster
+- no live router changes
+- no transformer blocks inside the geometry-native path
+
+### Files Added / Updated
+- `tools/prime_transport/geometry_native_sequence_model_v18.py` → created
+- `tools/prime_transport/run_geometry_native_sequence_model_v18.py` → created
+- `results/prime_transport_recursive_system/prime_transport_geometry_native_sequence_model_v18.csv` → created
+- `docs/research/prime_transport_geometry_native_microrepair.md` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- the mechanism opens one very small repair window around a local
+  query/binding contradiction cluster and retains shared factors while
+  replacing only contradicted partner factors inside that micro-window
+- aggregate v18 geometry-native result:
+  - transfer test accuracy `0.580117166042`
+  - transfer query accuracy `0.636718750000`
+  - test loss `6.090361118317`
+- aggregate v18 tiny transformer result:
+  - transfer test accuracy `0.457589298487`
+  - transfer query accuracy `0.495560944080`
+  - test loss `2.003650903702`
+
+### Status
+- v18 still beats the fixed v12 bridge and the tiny transformer baseline
+- v18 weakens relative to the broader factor-revision line
+- v18 does not beat the current best v14 midpoint switch
+
+---
+
+## Session Entry: 2026-04-06 — Geometry-Native Mesorepair
+
+### Scope
+- bounded meso-window contradiction-centered factor repair on the stronger v12
+  family
+- same unchanged downstream geometry-native engine
+- same tiny bridge family, but with a moderate regional repair window centered
+  on the first strong contradiction cluster
+- no live router changes
+- no transformer blocks inside the geometry-native path
+
+### Files Added / Updated
+- `tools/prime_transport/geometry_native_sequence_model_v19.py` → created
+- `tools/prime_transport/run_geometry_native_sequence_model_v19.py` → created
+- `results/prime_transport_recursive_system/prime_transport_geometry_native_sequence_model_v19.csv` → created
+- `docs/research/prime_transport_geometry_native_mesorepair.md` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- the mechanism opens one moderate-sized repair region around the first strong
+  query/binding contradiction cluster and retains shared factors while
+  replacing contradicted partner factors only inside that region
+- aggregate v19 geometry-native result:
+  - transfer test accuracy `0.587890625000`
+  - transfer query accuracy `0.645161271095`
+  - test loss `5.766983985901`
+- aggregate v19 tiny transformer result:
+  - transfer test accuracy `0.447963953018`
+  - transfer query accuracy `0.484281718731`
+  - test loss `2.139752149582`
+
+### Status
+- v19 improves on the v18 micro-window repair
+- v19 still beats the fixed v12 bridge and the tiny transformer baseline
+- v19 does not beat the current best v14 midpoint switch
+
+---
+
+## Session Entry: 2026-04-06 — Geometry-Native Grown Repair
+
+### Scope
+- bounded contradiction-grown regional repair on the stronger v12 family
+- same unchanged downstream geometry-native engine
+- same tiny bridge family, but with repair boundaries expanded until
+  arithmetic contradiction stabilizes
+- no live router changes
+- no transformer blocks inside the geometry-native path
+
+### Files Added / Updated
+- `tools/prime_transport/geometry_native_sequence_model_v20.py` → created
+- `tools/prime_transport/run_geometry_native_sequence_model_v20.py` → created
+- `results/prime_transport_recursive_system/prime_transport_geometry_native_sequence_model_v20.csv` → created
+- `docs/research/prime_transport_geometry_native_grownrepair.md` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- the mechanism seeds a small contradiction window and grows it outward while
+  arithmetic conflict remains above a stabilization threshold, then applies
+  retained-versus-replaced factor repair only inside the final grown region
+- aggregate v20 geometry-native result:
+  - transfer test accuracy `0.604437589645`
+  - transfer query accuracy `0.643454015255`
+  - test loss `5.770006656647`
+- aggregate v20 tiny transformer result:
+  - transfer test accuracy `0.457682281733`
+  - transfer query accuracy `0.479310333729`
+  - test loss `2.233343601227`
+
+### Status
+- v20 is the strongest factor-repair variant so far
+- v20 still beats the fixed v12 bridge and the tiny transformer baseline
+- v20 still does not beat the current best v14 midpoint switch
+
+---
+
+## Session Entry: 2026-04-06 — Geometry-Native Regional Schema Induction
+
+### Scope
+- bounded regional schema-induction / calibration on the stronger v12 family
+- same unchanged downstream geometry-native engine
+- same tiny divisibility-bridge family, with a tiny support-window prototype
+  selector choosing among existing bounded strategies
+- no live router changes
+- no transformer blocks inside the geometry-native path
+
+### Files Added / Updated
+- `tools/prime_transport/geometry_native_sequence_model_v21.py` → created
+- `tools/prime_transport/run_geometry_native_sequence_model_v21.py` → created
+- `results/prime_transport_recursive_system/prime_transport_geometry_native_sequence_model_v21.csv` → created
+- `docs/research/prime_transport_geometry_native_schema_induction.md` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- the mechanism summarizes short support-window geometry/conflict statistics,
+  fits one prototype centroid per bounded strategy on a calibration split, and
+  then chooses among `v11_like`, `v12_base`, `hybrid`, `midpoint_switch`, and
+  `grownrepair` before the unchanged geometry-native engine proceeds
+- aggregate v21 geometry-native result:
+  - transfer test accuracy `0.605003714561`
+  - transfer query accuracy `0.686405777931`
+  - test loss `5.769324779510`
+- aggregate v21 tiny transformer result:
+  - transfer test accuracy `0.438523054123`
+  - transfer query accuracy `0.456230700016`
+  - test loss `2.415073633194`
+
+### Status
+- v21 beats the handcrafted repair line, including v20 grownrepair
+- v21 sets the best query accuracy so far on the stronger mismatch line
+- v21 still narrowly misses the v14 midpoint switch on overall transfer accuracy
+
+---
+
+## Session Entry: 2026-04-06 — Geometry-Native Hybrid Regional Regime
+
+### Scope
+- bounded hybrid regional segmentation plus local schema induction on the
+  stronger v12 family
+- same unchanged downstream geometry-native engine
+- same divisibility-bridge structure, with one coarse two-region split and a
+  tiny regional schema selector inside each half
+- no live router changes
+- no transformer blocks inside the geometry-native path
+
+### Files Added / Updated
+- `tools/prime_transport/geometry_native_sequence_model_v22.py` → created
+- `tools/prime_transport/run_geometry_native_sequence_model_v22.py` → created
+- `results/prime_transport_recursive_system/prime_transport_geometry_native_sequence_model_v22.csv` → created
+- `docs/research/prime_transport_geometry_native_hybrid_regime.md` → created
+- `EVIDENCE_SUMMARY.md`, `results/INDEX.md`, `docs/research/SESSION_LEDGER.md` → updated
+
+### Result
+- the mechanism splits each sequence into two coarse contiguous regions, fits
+  support-window centroids per region on a calibration split, and then lets
+  each region independently choose among `v11_like`, `v12_base`, and `hybrid`
+  before the unchanged geometry-native engine proceeds
+- aggregate v22 geometry-native result:
+  - transfer test accuracy `0.646577358246`
+  - transfer query accuracy `0.722751319408`
+  - test loss `4.806250572205`
+- aggregate v22 tiny transformer result:
+  - transfer test accuracy `0.449311763048`
+  - transfer query accuracy `0.455555558205`
+  - test loss `2.245343446732`
+
+### Status
+- v22 is the strongest stronger-mismatch recovery so far
+- v22 beats both the v14 overall leader and the v21 query-accuracy leader
+- v22 is the clearest evidence so far for adaptive regional geometry
