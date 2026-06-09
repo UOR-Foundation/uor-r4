@@ -103,22 +103,37 @@ pub struct CorpusItem {
 #[wasm_bindgen]
 #[derive(Serialize, Deserialize)]
 pub struct UorR4Router {
+    #[serde(default)]
     active_streams: HashMap<String, ThoughtStream>,
+    #[serde(default)]
     expert_active_counts: Vec<usize>, // Changed to Vec for clean serde support
+    #[serde(default)]
     connection_drift: f64,
+    #[serde(default)]
     kill_switch_threshold: f64,
+    #[serde(default)]
     is_aligned: bool,
 
     // --- New Prime Router persistent states ---
+    #[serde(default)]
     vocabulary: Vec<String>,
+    #[serde(default)]
     word_primes: HashMap<String, usize>,
+    #[serde(default)]
     vocab_vectors: HashMap<String, Vec<f64>>,
+    #[serde(default)]
     transitions: HashMap<String, HashMap<String, f64>>,
+    #[serde(default)]
     transitions_2nd: HashMap<String, HashMap<String, f64>>,
+    #[serde(default)]
     corpus_index: HashMap<usize, Vec<CorpusItem>>,
+    #[serde(default)]
     corpus_index_by_identity: HashMap<String, HashMap<usize, Vec<CorpusItem>>>,
+    #[serde(default)]
     session_brain_states: HashMap<String, Vec<f64>>,
+    #[serde(default)]
     angle_x: f64,
+    #[serde(default)]
     angle_y: f64,
 }
 
@@ -192,6 +207,7 @@ impl UorR4Router {
         for s in default_sentences {
             self.index_sentence_internal(s, "shared");
         }
+        self.rebuild_transitions();
     }
 
     /// Exposes read-only status of manifold alignment
@@ -329,6 +345,25 @@ impl UorR4Router {
         let key = identity_key(identity);
         let baseline = vec![1.0 / (512.0f64).sqrt(); 512];
         self.session_brain_states.insert(key, baseline);
+    }
+
+    /// Resets the entire router system back to factory defaults
+    pub fn reset_to_defaults(&mut self) {
+        self.active_streams.clear();
+        self.expert_active_counts = vec![0; 64];
+        self.connection_drift = 0.0;
+        self.is_aligned = true;
+        self.vocabulary.clear();
+        self.word_primes.clear();
+        self.vocab_vectors.clear();
+        self.transitions.clear();
+        self.transitions_2nd.clear();
+        self.corpus_index.clear();
+        self.corpus_index_by_identity.clear();
+        self.session_brain_states.clear();
+        self.angle_x = 0.5;
+        self.angle_y = 0.5;
+        self.index_default_corpus();
     }
 
     /// Evolves state vector using user prompt words and returns the new state
