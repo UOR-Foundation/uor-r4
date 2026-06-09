@@ -189,17 +189,35 @@ impl UorR4Router {
 impl UorR4Router {
     /// Internal Rust compilation logic matching the original spec
     fn compile_thought_internal(&self, content: &str) -> ThoughtStream {
-        // 1. Calculate pseudo-sha256 representation matching the 3/8 Resonance Hashing
-        let mut hash_bytes = [0u8; 32];
-        let mut hash_accumulator: i32 = 0;
+        // 1. Calculate the real UOR address using the uor-addr crate.
+        // We construct a JSON payload representing the thought content.
+        let json_payload = serde_json::json!({
+            "content": content
+        });
         
-        for (i, ch) in content.chars().enumerate() {
-            hash_accumulator = hash_accumulator.wrapping_add(ch as i32);
-            hash_bytes[i % 32] = (hash_accumulator & 0xFF) as u8;
+        let json_bytes = serde_json::to_vec(&json_payload).unwrap_or_default();
+        let uor_hash_str = match uor_addr::json::address(&json_bytes) {
+            Ok(outcome) => outcome.address.to_string(),
+            Err(_) => format!("sha256:{:064x}", 0),
+        };
+
+        // Extract the raw hex part of the address (skip "sha256:")
+        let hex_part = uor_hash_str.strip_prefix("sha256:").unwrap_or(&uor_hash_str);
+
+        // Convert the hex string to 32 bytes for the internal representation
+        let mut hash_bytes = [0u8; 32];
+        for i in 0..32 {
+            if let (Some(h1), Some(h2)) = (hex_part.chars().nth(i * 2), hex_part.chars().nth(i * 2 + 1)) {
+                if let (Some(d1), Some(d2)) = (h1.to_digit(16), h2.to_digit(16)) {
+                    hash_bytes[i] = ((d1 << 4) | d2) as u8;
+                }
+            }
         }
 
+        let hash_accumulator: i32 = hash_bytes.iter().map(|&b| b as i32).sum();
+
         let uor_addr = UorAddress { hash_bytes };
-        let uor_uri = uor_addr.to_uri();
+        let uor_uri = uor_hash_str;
 
         // 2. Map coordinates in hyperbolic space using sinusoids on the byte values
         let x_coord = (hash_accumulator as f64 * 0.015).sin() * 110.0;

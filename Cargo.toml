@@ -4,10 +4,16 @@ version = "0.1.0"
 edition = "2021"
 
 [lib]
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "server"
+path = "src/main.rs"
 
 [dependencies]
 wasm-bindgen = "0.2.92"
 serde = { version = "1.0", features = ["derive"] }
 serde-wasm-bindgen = "0.6.5"
 console_error_panic_hook = "0.1.7"
+uor-addr = { version = "0.2.0", default-features = false, features = ["alloc"] }
+serde_json = "1.0"
