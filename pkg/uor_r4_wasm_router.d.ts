@@ -20,17 +20,51 @@ export class UorR4Router {
      */
     connection_drift(): number;
     /**
+     * Evolves state vector using user prompt words and returns the new state
+     */
+    evolve_state(identity: string, text: string, gamma: number): Float64Array;
+    /**
      * Reset the alignment back to native state ($0.00\%$ error) using ZKP 2i Sync-Handshake
      */
     execute_zkp_phase_reset(): string;
     /**
+     * Exports the full router system database to JSON string
+     */
+    export_state(): string;
+    /**
+     * Decodes a response steered by the active brain state vector
+     */
+    generate_geometric_response(text: string, identity: string, max_tokens: number, temp: number, gravity: number, freq_penalty: number, gamma: number): any;
+    /**
      * Returns the active stream list as a JS Array
      */
     get_active_streams(): any;
+    get_angle_x(): number;
+    get_angle_y(): number;
     /**
      * Returns the active counts for the 64 experts
      */
     get_expert_counts(): Uint32Array;
+    /**
+     * Returns the top N resonant sentences sorted by relevance
+     */
+    get_top_resonances(text: string, identity: string, top_n: number): any;
+    /**
+     * Returns the number of words in the vocabulary index
+     */
+    get_vocab_size(): number;
+    /**
+     * Imports a JSON string and restores the router system database
+     */
+    import_state(json_str: string): void;
+    /**
+     * Indexes an entire block of text split into sentences
+     */
+    index_corpus(corpus_text: string, identity: string): number;
+    /**
+     * Indexes a single sentence into the identity's scoped corpus
+     */
+    index_sentence(sentence: string, identity: string): void;
     /**
      * Injects a new thought stream, updates MoE activations, and returns the stream
      */
@@ -47,6 +81,16 @@ export class UorR4Router {
      * Instantiates the R4 Router with perfect, error-free default states
      */
     constructor(threshold: number);
+    /**
+     * Resets the brain state vector for a specific identity
+     */
+    reset_brain(identity: string): void;
+    /**
+     * Returns the routed window and detailed thermodynamic/Hopf metrics for a query
+     */
+    route_query_to_manifold(text: string, identity: string): any;
+    set_angle_x(val: number): void;
+    set_angle_y(val: number): void;
     /**
      * Progresses the connection drift state using delta-time ($dt$) increments.
      * Returns a log message string if a ZKP reset occurs, otherwise returns undefined.
@@ -65,18 +109,33 @@ export interface InitOutput {
     readonly uorr4router_calculate_resonance: (a: number, b: number, c: number) => any;
     readonly uorr4router_compile_thought: (a: number, b: number, c: number) => any;
     readonly uorr4router_connection_drift: (a: number) => number;
+    readonly uorr4router_evolve_state: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
     readonly uorr4router_execute_zkp_phase_reset: (a: number) => [number, number];
+    readonly uorr4router_export_state: (a: number) => [number, number];
+    readonly uorr4router_generate_geometric_response: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => any;
     readonly uorr4router_get_active_streams: (a: number) => any;
+    readonly uorr4router_get_angle_x: (a: number) => number;
+    readonly uorr4router_get_angle_y: (a: number) => number;
     readonly uorr4router_get_expert_counts: (a: number) => [number, number];
+    readonly uorr4router_get_top_resonances: (a: number, b: number, c: number, d: number, e: number, f: number) => any;
+    readonly uorr4router_get_vocab_size: (a: number) => number;
+    readonly uorr4router_import_state: (a: number, b: number, c: number) => [number, number];
+    readonly uorr4router_index_corpus: (a: number, b: number, c: number, d: number, e: number) => number;
+    readonly uorr4router_index_sentence: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly uorr4router_inject_thought_stream: (a: number, b: number, c: number) => any;
     readonly uorr4router_is_aligned: (a: number) => number;
     readonly uorr4router_kill_switch_threshold: (a: number) => number;
     readonly uorr4router_new: (a: number) => number;
+    readonly uorr4router_reset_brain: (a: number, b: number, c: number) => void;
+    readonly uorr4router_route_query_to_manifold: (a: number, b: number, c: number, d: number, e: number) => any;
+    readonly uorr4router_set_angle_x: (a: number, b: number) => void;
+    readonly uorr4router_set_angle_y: (a: number, b: number) => void;
     readonly uorr4router_update_drift_physics: (a: number, b: number, c: number) => [number, number];
     readonly __wbindgen_free: (a: number, b: number, c: number) => void;
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_externrefs: WebAssembly.Table;
+    readonly __externref_table_dealloc: (a: number) => void;
     readonly __wbindgen_start: () => void;
 }
 

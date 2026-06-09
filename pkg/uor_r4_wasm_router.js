@@ -45,6 +45,23 @@ export class UorR4Router {
         return ret;
     }
     /**
+     * Evolves state vector using user prompt words and returns the new state
+     * @param {string} identity
+     * @param {string} text
+     * @param {number} gamma
+     * @returns {Float64Array}
+     */
+    evolve_state(identity, text, gamma) {
+        const ptr0 = passStringToWasm0(identity, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(text, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.uorr4router_evolve_state(this.__wbg_ptr, ptr0, len0, ptr1, len1, gamma);
+        var v3 = getArrayF64FromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 8, 8);
+        return v3;
+    }
+    /**
      * Reset the alignment back to native state ($0.00\%$ error) using ZKP 2i Sync-Handshake
      * @returns {string}
      */
@@ -61,11 +78,60 @@ export class UorR4Router {
         }
     }
     /**
+     * Exports the full router system database to JSON string
+     * @returns {string}
+     */
+    export_state() {
+        let deferred1_0;
+        let deferred1_1;
+        try {
+            const ret = wasm.uorr4router_export_state(this.__wbg_ptr);
+            deferred1_0 = ret[0];
+            deferred1_1 = ret[1];
+            return getStringFromWasm0(ret[0], ret[1]);
+        } finally {
+            wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+        }
+    }
+    /**
+     * Decodes a response steered by the active brain state vector
+     * @param {string} text
+     * @param {string} identity
+     * @param {number} max_tokens
+     * @param {number} temp
+     * @param {number} gravity
+     * @param {number} freq_penalty
+     * @param {number} gamma
+     * @returns {any}
+     */
+    generate_geometric_response(text, identity, max_tokens, temp, gravity, freq_penalty, gamma) {
+        const ptr0 = passStringToWasm0(text, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(identity, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.uorr4router_generate_geometric_response(this.__wbg_ptr, ptr0, len0, ptr1, len1, max_tokens, temp, gravity, freq_penalty, gamma);
+        return ret;
+    }
+    /**
      * Returns the active stream list as a JS Array
      * @returns {any}
      */
     get_active_streams() {
         const ret = wasm.uorr4router_get_active_streams(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @returns {number}
+     */
+    get_angle_x() {
+        const ret = wasm.uorr4router_get_angle_x(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @returns {number}
+     */
+    get_angle_y() {
+        const ret = wasm.uorr4router_get_angle_y(this.__wbg_ptr);
         return ret;
     }
     /**
@@ -77,6 +143,67 @@ export class UorR4Router {
         var v1 = getArrayU32FromWasm0(ret[0], ret[1]).slice();
         wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
         return v1;
+    }
+    /**
+     * Returns the top N resonant sentences sorted by relevance
+     * @param {string} text
+     * @param {string} identity
+     * @param {number} top_n
+     * @returns {any}
+     */
+    get_top_resonances(text, identity, top_n) {
+        const ptr0 = passStringToWasm0(text, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(identity, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.uorr4router_get_top_resonances(this.__wbg_ptr, ptr0, len0, ptr1, len1, top_n);
+        return ret;
+    }
+    /**
+     * Returns the number of words in the vocabulary index
+     * @returns {number}
+     */
+    get_vocab_size() {
+        const ret = wasm.uorr4router_get_vocab_size(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * Imports a JSON string and restores the router system database
+     * @param {string} json_str
+     */
+    import_state(json_str) {
+        const ptr0 = passStringToWasm0(json_str, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.uorr4router_import_state(this.__wbg_ptr, ptr0, len0);
+        if (ret[1]) {
+            throw takeFromExternrefTable0(ret[0]);
+        }
+    }
+    /**
+     * Indexes an entire block of text split into sentences
+     * @param {string} corpus_text
+     * @param {string} identity
+     * @returns {number}
+     */
+    index_corpus(corpus_text, identity) {
+        const ptr0 = passStringToWasm0(corpus_text, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(identity, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.uorr4router_index_corpus(this.__wbg_ptr, ptr0, len0, ptr1, len1);
+        return ret >>> 0;
+    }
+    /**
+     * Indexes a single sentence into the identity's scoped corpus
+     * @param {string} sentence
+     * @param {string} identity
+     */
+    index_sentence(sentence, identity) {
+        const ptr0 = passStringToWasm0(sentence, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(identity, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        wasm.uorr4router_index_sentence(this.__wbg_ptr, ptr0, len0, ptr1, len1);
     }
     /**
      * Injects a new thought stream, updates MoE activations, and returns the stream
@@ -116,6 +243,41 @@ export class UorR4Router {
         return this;
     }
     /**
+     * Resets the brain state vector for a specific identity
+     * @param {string} identity
+     */
+    reset_brain(identity) {
+        const ptr0 = passStringToWasm0(identity, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        wasm.uorr4router_reset_brain(this.__wbg_ptr, ptr0, len0);
+    }
+    /**
+     * Returns the routed window and detailed thermodynamic/Hopf metrics for a query
+     * @param {string} text
+     * @param {string} identity
+     * @returns {any}
+     */
+    route_query_to_manifold(text, identity) {
+        const ptr0 = passStringToWasm0(text, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(identity, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.uorr4router_route_query_to_manifold(this.__wbg_ptr, ptr0, len0, ptr1, len1);
+        return ret;
+    }
+    /**
+     * @param {number} val
+     */
+    set_angle_x(val) {
+        wasm.uorr4router_set_angle_x(this.__wbg_ptr, val);
+    }
+    /**
+     * @param {number} val
+     */
+    set_angle_y(val) {
+        wasm.uorr4router_set_angle_y(this.__wbg_ptr, val);
+    }
+    /**
      * Progresses the connection drift state using delta-time ($dt$) increments.
      * Returns a log message string if a ZKP reset occurs, otherwise returns undefined.
      * @param {number} dt
@@ -144,6 +306,10 @@ function __wbg_get_imports() {
             const ret = Error(getStringFromWasm0(arg0, arg1));
             return ret;
         },
+        __wbg___wbindgen_is_string_6541b0f6ecd4e8e5: function(arg0) {
+            const ret = typeof(arg0) === 'string';
+            return ret;
+        },
         __wbg___wbindgen_throw_bbadd78c1bac3a77: function(arg0, arg1) {
             throw new Error(getStringFromWasm0(arg0, arg1));
         },
@@ -170,6 +336,14 @@ function __wbg_get_imports() {
             const ret = new Error();
             return ret;
         },
+        __wbg_new_883c0db065f06efd: function() {
+            const ret = new Map();
+            return ret;
+        },
+        __wbg_set_5f806304fb633ab3: function(arg0, arg1, arg2) {
+            const ret = arg0.set(arg1, arg2);
+            return ret;
+        },
         __wbg_set_6be42768c690e380: function(arg0, arg1, arg2) {
             arg0[arg1] = arg2;
         },
@@ -188,12 +362,17 @@ function __wbg_get_imports() {
             const ret = arg0;
             return ret;
         },
-        __wbindgen_cast_0000000000000002: function(arg0, arg1) {
+        __wbindgen_cast_0000000000000002: function(arg0) {
+            // Cast intrinsic for `I64 -> Externref`.
+            const ret = arg0;
+            return ret;
+        },
+        __wbindgen_cast_0000000000000003: function(arg0, arg1) {
             // Cast intrinsic for `Ref(String) -> Externref`.
             const ret = getStringFromWasm0(arg0, arg1);
             return ret;
         },
-        __wbindgen_cast_0000000000000003: function(arg0) {
+        __wbindgen_cast_0000000000000004: function(arg0) {
             // Cast intrinsic for `U64 -> Externref`.
             const ret = BigInt.asUintN(64, arg0);
             return ret;
@@ -218,6 +397,11 @@ const UorR4RouterFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(ptr => wasm.__wbg_uorr4router_free(ptr, 1));
 
+function getArrayF64FromWasm0(ptr, len) {
+    ptr = ptr >>> 0;
+    return getFloat64ArrayMemory0().subarray(ptr / 8, ptr / 8 + len);
+}
+
 function getArrayU32FromWasm0(ptr, len) {
     ptr = ptr >>> 0;
     return getUint32ArrayMemory0().subarray(ptr / 4, ptr / 4 + len);
@@ -229,6 +413,14 @@ function getDataViewMemory0() {
         cachedDataViewMemory0 = new DataView(wasm.memory.buffer);
     }
     return cachedDataViewMemory0;
+}
+
+let cachedFloat64ArrayMemory0 = null;
+function getFloat64ArrayMemory0() {
+    if (cachedFloat64ArrayMemory0 === null || cachedFloat64ArrayMemory0.byteLength === 0) {
+        cachedFloat64ArrayMemory0 = new Float64Array(wasm.memory.buffer);
+    }
+    return cachedFloat64ArrayMemory0;
 }
 
 function getStringFromWasm0(ptr, len) {
@@ -288,6 +480,12 @@ function passStringToWasm0(arg, malloc, realloc) {
     return ptr;
 }
 
+function takeFromExternrefTable0(idx) {
+    const value = wasm.__wbindgen_externrefs.get(idx);
+    wasm.__externref_table_dealloc(idx);
+    return value;
+}
+
 let cachedTextDecoder = new TextDecoder('utf-8', { ignoreBOM: true, fatal: true });
 cachedTextDecoder.decode();
 const MAX_SAFARI_DECODE_BYTES = 2146435072;
@@ -323,6 +521,7 @@ function __wbg_finalize_init(instance, module) {
     wasm = instance.exports;
     wasmModule = module;
     cachedDataViewMemory0 = null;
+    cachedFloat64ArrayMemory0 = null;
     cachedUint32ArrayMemory0 = null;
     cachedUint8ArrayMemory0 = null;
     wasm.__wbindgen_start();
