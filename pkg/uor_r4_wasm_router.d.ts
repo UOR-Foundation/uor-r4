@@ -46,6 +46,10 @@ export class UorR4Router {
      */
     get_expert_counts(): Uint32Array;
     /**
+     * Serves all points in the corpus index for the semantic map visualizer
+     */
+    get_semantic_map_points(): any;
+    /**
      * Returns the top N resonant sentences sorted by relevance
      */
     get_top_resonances(text: string, identity: string, top_n: number): any;
@@ -117,6 +121,7 @@ export interface InitOutput {
     readonly uorr4router_get_angle_x: (a: number) => number;
     readonly uorr4router_get_angle_y: (a: number) => number;
     readonly uorr4router_get_expert_counts: (a: number) => [number, number];
+    readonly uorr4router_get_semantic_map_points: (a: number) => any;
     readonly uorr4router_get_top_resonances: (a: number, b: number, c: number, d: number, e: number, f: number) => any;
     readonly uorr4router_get_vocab_size: (a: number) => number;
     readonly uorr4router_import_state: (a: number, b: number, c: number) => [number, number];

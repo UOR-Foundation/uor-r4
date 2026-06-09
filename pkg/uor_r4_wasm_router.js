@@ -145,6 +145,14 @@ export class UorR4Router {
         return v1;
     }
     /**
+     * Serves all points in the corpus index for the semantic map visualizer
+     * @returns {any}
+     */
+    get_semantic_map_points() {
+        const ret = wasm.uorr4router_get_semantic_map_points(this.__wbg_ptr);
+        return ret;
+    }
+    /**
      * Returns the top N resonant sentences sorted by relevance
      * @param {string} text
      * @param {string} identity

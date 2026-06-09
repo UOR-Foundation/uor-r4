@@ -14,6 +14,7 @@ export const uorr4router_get_active_streams: (a: number) => any;
 export const uorr4router_get_angle_x: (a: number) => number;
 export const uorr4router_get_angle_y: (a: number) => number;
 export const uorr4router_get_expert_counts: (a: number) => [number, number];
+export const uorr4router_get_semantic_map_points: (a: number) => any;
 export const uorr4router_get_top_resonances: (a: number, b: number, c: number, d: number, e: number, f: number) => any;
 export const uorr4router_get_vocab_size: (a: number) => number;
 export const uorr4router_import_state: (a: number, b: number, c: number) => [number, number];
