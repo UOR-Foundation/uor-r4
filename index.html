@@ -955,37 +955,24 @@
                 <option value="auto">Auto-Select (Local Ollama / Fallback)</option>
                 <option value="geometric">Pure Geometric (WASM Decoded)</option>
                 <option value="ollama">Local Ollama (Requires HTTP allowed)</option>
-                <option value="gemini">Gemini API (Cloud LLM)</option>
-                <option value="chrome-ai">Chrome Built-in AI (Gemini Nano)</option>
             </select>
-
-            <div id="chromeAiHelp" style="display:none; margin-bottom:0.75rem; padding:0.55rem; background: rgba(255, 179, 0, 0.08); border: 1px dashed var(--amber); border-radius: 4px; font-size: 0.72rem; line-height: 1.3;">
-                <div style="color: var(--amber); font-weight: 600; margin-bottom: 0.25rem; display: flex; align-items: center; gap: 0.25rem;">
-                    <span>⚠️</span> Chrome On-Device AI Disabled
-                </div>
-                <div style="color: var(--text2);">
-                    To enable Gemini Nano:
-                    <ol style="margin-top: 0.2rem; padding-left: 1rem; color: var(--text);">
-                        <li>Set <code>chrome://flags/#optimization-guide-on-device-model</code> to <strong>Enabled BypassPerfRequirement</strong></li>
-                        <li>Set <code>chrome://flags/#prompt-api-for-gemini-nano</code> to <strong>Enabled</strong></li>
-                        <li>Relaunch Chrome</li>
-                        <li>Check download progress at <code>chrome://components</code> under <strong>Optimization Guide On Device Model</strong></li>
-                    </ol>
-                </div>
-            </div>
 
             <div id="ollamaConfigGroup" style="display:none;">
                 <div class="identity-label">Ollama Host URL</div>
                 <input type="text" class="identity-input" id="ollamaUrlInput" value="http://localhost:11434" style="margin-bottom:0.5rem;">
                 <div class="identity-label">Ollama Target Model</div>
                 <input type="text" class="identity-input" id="ollamaModelInput" value="gemma:2b" style="margin-bottom:0.75rem;">
-            </div>
 
-            <div id="geminiConfigGroup" style="display:none;">
-                <div class="identity-label">Gemini API Key</div>
-                <input type="password" class="identity-input" id="geminiApiKeyInput" placeholder="Enter API Key" style="margin-bottom:0.5rem;">
-                <div class="identity-label">Gemini Model</div>
-                <input type="text" class="identity-input" id="geminiModelInput" value="gemini-1.5-flash" style="margin-bottom:0.75rem;">
+                <div style="margin-bottom:0.75rem; padding:0.55rem; background: rgba(0, 229, 255, 0.05); border: 1px dashed rgba(0, 229, 255, 0.3); border-radius: 4px; font-size: 0.72rem; line-height: 1.3;">
+                    <div style="color: var(--cyan); font-weight: 600; margin-bottom: 0.25rem;">Ollama Connection Setup</div>
+                    <div style="color: var(--text2);">
+                        Since this dashboard runs on HTTPS, browsers block connections to local HTTP services by default. To allow access:
+                        <ol style="margin-top: 0.25rem; padding-left: 1rem; color: var(--text); display: flex; flex-direction: column; gap: 0.25rem;">
+                            <li><strong>Enable CORS:</strong> In your Mac terminal, run:<br><code style="font-size:0.65rem; background:rgba(0,0,0,0.3); padding:2px 4px; display:block; margin:2px 0; font-family: 'JetBrains Mono'; color: var(--purple);">launchctl setenv OLLAMA_ORIGINS "*"</code> then completely restart the Ollama app.</li>
+                            <li><strong>Allow Insecure Localhost:</strong> Click the settings/tune icon in the browser address bar &rarr; click <strong>Site Settings</strong> &rarr; find <strong>Insecure content</strong> and change it to <strong>Allow</strong>.</li>
+                        </ol>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -1297,10 +1284,6 @@ const indexStatus = document.getElementById("indexStatus");
 
 const engineSelect       = document.getElementById("engineSelect");
 const ollamaConfigGroup  = document.getElementById("ollamaConfigGroup");
-const geminiConfigGroup  = document.getElementById("geminiConfigGroup");
-const geminiApiKeyInput  = document.getElementById("geminiApiKeyInput");
-const geminiModelInput   = document.getElementById("geminiModelInput");
-const chromeAiHelp       = document.getElementById("chromeAiHelp");
 
 // =====================================================
 // App State
@@ -1355,31 +1338,14 @@ window.switchTab = function(tab) {
 // =====================================================
 // Toggle Config Visibility and Chrome AI Check
 // =====================================================
-function checkChromeAiAvailability() {
-    if (typeof ai !== "undefined" && ai.assistant) return true;
-    if (typeof window.ai !== "undefined") return true;
-    return false;
-}
-
 function updateEngineConfigVisibility() {
     const val = engineSelect?.value || "auto";
-    const isChromeAiAvailable = checkChromeAiAvailability();
-    
-    // Hide all config groups initially
-    if (ollamaConfigGroup) ollamaConfigGroup.style.display = "none";
-    if (geminiConfigGroup) geminiConfigGroup.style.display = "none";
-    if (chromeAiHelp) chromeAiHelp.style.display = "none";
-    
-    if (val === "ollama") {
-        if (ollamaConfigGroup) ollamaConfigGroup.style.display = "block";
-    } else if (val === "gemini") {
-        if (geminiConfigGroup) geminiConfigGroup.style.display = "block";
-    } else if (val === "chrome-ai") {
-        if (!isChromeAiAvailable && chromeAiHelp) {
-            chromeAiHelp.style.display = "block";
+    if (ollamaConfigGroup) {
+        if (val === "ollama" || val === "auto") {
+            ollamaConfigGroup.style.display = "block";
+        } else {
+            ollamaConfigGroup.style.display = "none";
         }
-    } else if (val === "auto") {
-        if (ollamaConfigGroup) ollamaConfigGroup.style.display = "block";
     }
 }
 if (engineSelect) {
@@ -1948,12 +1914,6 @@ function updateTelemetry(data) {
             if (auto.engine === "ollama") {
                 engineVal.textContent = "Transformer (Ollama)";
                 engineVal.style.color = "var(--emerald)";
-            } else if (auto.engine === "gemini") {
-                engineVal.textContent = `Cloud LLM (Gemini)`;
-                engineVal.style.color = "var(--purple)";
-            } else if (auto.engine === "chrome-ai") {
-                engineVal.textContent = "Chrome Gemini Nano";
-                engineVal.style.color = "var(--emerald)";
             } else {
                 engineVal.textContent = "Pure Geometric";
                 engineVal.style.color = "var(--cyan)";
@@ -2286,8 +2246,6 @@ async function sendQuery(text) {
         let engine = "geometric";
         let ollamaUrl = document.getElementById("ollamaUrlInput")?.value.trim() || "http://localhost:11434";
         let ollamaModel = document.getElementById("ollamaModelInput")?.value.trim() || "gemma:2b";
-        let geminiApiKey = geminiApiKeyInput?.value.trim() || "";
-        let geminiModel = geminiModelInput?.value.trim() || "gemini-1.5-flash";
         
         let ollamaOnline = false;
         if (selectedEngineMode === "ollama" || selectedEngineMode === "auto") {
@@ -2309,19 +2267,7 @@ async function sendQuery(text) {
             return;
         }
         
-        if (selectedEngineMode === "gemini" && !geminiApiKey) {
-            chatLogInner.removeChild(loadMsg);
-            addMessage("model", "Error: Gemini API Key is required when Gemini Cloud engine is selected.");
-            chatInput.disabled = false;
-            sendBtn.disabled = false;
-            return;
-        }
-        
-        if (selectedEngineMode === "gemini") {
-            engine = "gemini";
-        } else if (selectedEngineMode === "chrome-ai") {
-            engine = "chrome-ai";
-        } else if (ollamaOnline && selectedEngineMode !== "geometric") {
+        if (ollamaOnline && selectedEngineMode !== "geometric") {
             engine = "ollama";
         }
 
@@ -2384,80 +2330,6 @@ async function sendQuery(text) {
             } catch (err) {
                 console.error("Ollama generation failed, falling back to geometric:", err);
                 finalResponseText = geomResult.text || "Manifold resonance too sparse for synthesis.";
-                generationMode = "geometric-decoded";
-            }
-        } else if (engine === "gemini") {
-            try {
-                const url = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${geminiApiKey}`;
-                const payload = {
-                    contents: [
-                        { role: "user", parts: [{ text: text }] }
-                    ],
-                    systemInstruction: {
-                        parts: [{ text: systemPrompt }]
-                    },
-                    generationConfig: {
-                        temperature: parseFloat(temperature),
-                        maxOutputTokens: parseInt(maxTokens)
-                    }
-                };
-
-                const geminiResp = await fetch(url, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(payload)
-                });
-                if (!geminiResp.ok) {
-                    const errorData = await geminiResp.json();
-                    throw new Error(errorData.error?.message || `HTTP ${geminiResp.status}`);
-                }
-                const geminiData = await geminiResp.json();
-                finalResponseText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
-                
-                if (finalResponseText) {
-                    llmConnected = true;
-                    generationMode = `gemini:${geminiModel}`;
-                } else {
-                    finalResponseText = geomResult.text || "Manifold resonance too sparse for synthesis.";
-                    generationMode = "geometric-decoded";
-                }
-            } catch (err) {
-                console.error("Gemini API generation failed, falling back to geometric:", err);
-                finalResponseText = geomResult.text || "Manifold resonance too sparse (Gemini error: " + err.message + ")";
-                generationMode = "geometric-decoded";
-            }
-        } else if (engine === "chrome-ai") {
-            try {
-                let session = null;
-                if (typeof ai !== "undefined" && ai.assistant) {
-                    session = await ai.assistant.create({
-                        systemPrompt: systemPrompt
-                    });
-                } else if (typeof window.ai !== "undefined") {
-                    session = await window.ai.createTextSession({
-                        systemPrompt: systemPrompt
-                    });
-                }
-                
-                if (!session) {
-                    throw new Error("Chrome Gemini Nano Prompt API is not active or enabled.");
-                }
-                
-                finalResponseText = await session.prompt(text);
-                if (session.destroy) {
-                    await session.destroy();
-                }
-                
-                if (finalResponseText) {
-                    llmConnected = true;
-                    generationMode = "chrome-ai:gemini-nano";
-                } else {
-                    finalResponseText = geomResult.text || "Manifold resonance too sparse for synthesis.";
-                    generationMode = "geometric-decoded";
-                }
-            } catch (err) {
-                console.error("Chrome built-in AI Prompt API failed:", err);
-                finalResponseText = geomResult.text || "Manifold resonance too sparse (Chrome AI error: " + err.message + ")";
                 generationMode = "geometric-decoded";
             }
         } else {
@@ -2713,9 +2585,7 @@ function saveSessionToLocalStorage() {
             routerState: stateStr,
             engineSelect: engineSelect?.value || "auto",
             ollamaUrl: document.getElementById("ollamaUrlInput")?.value || "http://localhost:11434",
-            ollamaModel: document.getElementById("ollamaModelInput")?.value || "gemma:2b",
-            geminiApiKey: geminiApiKeyInput?.value || "",
-            geminiModel: geminiModelInput?.value || "gemini-1.5-flash"
+            ollamaModel: document.getElementById("ollamaModelInput")?.value || "gemma:2b"
         };
         localStorage.setItem("r4_prime_router_session_v4", JSON.stringify(session));
     } catch (e) {
@@ -2746,12 +2616,7 @@ function restoreSessionFromLocalStorage() {
             if (ollamaModelEl && session.ollamaModel) {
                 ollamaModelEl.value = session.ollamaModel;
             }
-            if (geminiApiKeyInput && session.geminiApiKey) {
-                geminiApiKeyInput.value = session.geminiApiKey;
-            }
-            if (geminiModelInput && session.geminiModel) {
-                geminiModelInput.value = session.geminiModel;
-            }
+            // Gemini configs removed
             
             if (session.routerState) {
                 router.import_state(session.routerState);
@@ -2776,18 +2641,7 @@ async function startApp() {
         
         restoreSessionFromLocalStorage();
         
-        // Dynamically tag dropdown options depending on whether local Chrome Gemini Nano is active
-        const isChromeAiAvailable = checkChromeAiAvailability();
-        const chromeAiOption = Array.from(engineSelect.options).find(opt => opt.value === "chrome-ai");
-        if (chromeAiOption) {
-            if (isChromeAiAvailable) {
-                chromeAiOption.textContent = "Chrome Built-in AI (Active)";
-                chromeAiOption.style.color = "var(--emerald)";
-            } else {
-                chromeAiOption.textContent = "Chrome Built-in AI (Not Enabled)";
-                chromeAiOption.style.color = "var(--muted)";
-            }
-        }
+        // Setup checks
 
         await loadSemanticMap();
         
