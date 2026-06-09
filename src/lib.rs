@@ -430,6 +430,47 @@ impl UorR4Router {
             Err(e) => Err(JsValue::from_str(&format!("Failed to parse router state JSON: {}", e)))
         }
     }
+
+    /// Serves all points in the corpus index for the semantic map visualizer
+    pub fn get_semantic_map_points(&self) -> JsValue {
+        #[derive(Serialize)]
+        struct MapPoint {
+            sentence: String,
+            window_index: usize,
+            u: f64,
+            v: f64,
+            v_4d: Vec<f64>,
+            scope: String,
+            kappa: f64,
+            prime_product_mod: i64,
+        }
+
+        let mut points = Vec::new();
+        for (identity_key, store) in &self.corpus_index_by_identity {
+            let scope_name = identity_key.split(':').nth(1).unwrap_or(identity_key).to_string();
+            for (&win_idx, items) in store {
+                for item in items {
+                    let prime_product_val: i64 = item.prime_product.parse().unwrap_or(1);
+                    points.push(MapPoint {
+                        sentence: item.sentence.chars().take(120).collect(),
+                        window_index: win_idx,
+                        u: item.u,
+                        v: item.v,
+                        v_4d: item.v_4d.clone(),
+                        scope: scope_name.clone(),
+                        kappa: item.kappa,
+                        prime_product_mod: prime_product_val % 10007,
+                    });
+                }
+            }
+        }
+
+        let map_val = serde_json::json!({
+            "points": points,
+            "total": points.len(),
+        });
+        serde_wasm_bindgen::to_value(&map_val).unwrap_or(JsValue::NULL)
+    }
 }
 
 // ============================================================
