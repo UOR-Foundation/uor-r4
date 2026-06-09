@@ -33,6 +33,7 @@ jobs:
           mkdir dist
           cp index.html index.css dist/
           cp -r pkg dist/
+          rm .gitignore
 
       - name: Deploy to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
