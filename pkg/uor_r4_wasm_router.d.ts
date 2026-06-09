@@ -8,6 +8,10 @@ export class UorR4Router {
     free(): void;
     [Symbol.dispose](): void;
     /**
+     * Computes live UOR resonance metrics for a given input text
+     */
+    calculate_resonance(text: string): any;
+    /**
      * Compiles a raw string thought parameter down into its content-addressed math state
      */
     compile_thought(content: string): any;
@@ -58,6 +62,7 @@ export interface InitOutput {
     readonly memory: WebAssembly.Memory;
     readonly __wbg_uorr4router_free: (a: number, b: number) => void;
     readonly init_wasm: () => void;
+    readonly uorr4router_calculate_resonance: (a: number, b: number, c: number) => any;
     readonly uorr4router_compile_thought: (a: number, b: number, c: number) => any;
     readonly uorr4router_connection_drift: (a: number) => number;
     readonly uorr4router_execute_zkp_phase_reset: (a: number) => [number, number];

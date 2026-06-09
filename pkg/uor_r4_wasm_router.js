@@ -15,6 +15,17 @@ export class UorR4Router {
         wasm.__wbg_uorr4router_free(ptr, 0);
     }
     /**
+     * Computes live UOR resonance metrics for a given input text
+     * @param {string} text
+     * @returns {any}
+     */
+    calculate_resonance(text) {
+        const ptr0 = passStringToWasm0(text, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.uorr4router_calculate_resonance(this.__wbg_ptr, ptr0, len0);
+        return ret;
+    }
+    /**
      * Compiles a raw string thought parameter down into its content-addressed math state
      * @param {string} content
      * @returns {any}

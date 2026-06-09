@@ -3,6 +3,7 @@
 export const memory: WebAssembly.Memory;
 export const __wbg_uorr4router_free: (a: number, b: number) => void;
 export const init_wasm: () => void;
+export const uorr4router_calculate_resonance: (a: number, b: number, c: number) => any;
 export const uorr4router_compile_thought: (a: number, b: number, c: number) => any;
 export const uorr4router_connection_drift: (a: number) => number;
 export const uorr4router_execute_zkp_phase_reset: (a: number) => [number, number];
