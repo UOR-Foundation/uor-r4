@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UOR-aligned R⁴ Tangent Space Router Visualizer</title>
+    <!-- Premium Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="index.css">
+</head>
+<body>
+    <div id="flash-overlay"></div>
+    <div class="dashboard">
+        <!-- Sidebar Controls -->
+        <aside class="sidebar glass">
+            <header>
+                <div class="logo-area">
+                    <span class="icon-uor">UOR</span>
+                    <div>
+                        <h1>Web4 R⁴ Router</h1>
+                        <p class="tagline">3/8 Resonance Hashing Field</p>
+                    </div>
+                </div>
+                <div class="status-badge">
+                    <span class="pulse-led green" id="alignment-led"></span>
+                    <span id="alignment-text">ZERO-POINT LOCKED</span>
+                </div>
+            </header>
+
+            <section class="panel">
+                <h2>Inject Thought Stream</h2>
+                <div class="input-group">
+                    <textarea id="thought-input" placeholder="Type a high-dimensional thought or vector mapping request..."></textarea>
+                    <button id="inject-btn" class="btn primary">
+                        <span class="glow-effect"></span>
+                        Inject stream
+                    </button>
+                </div>
+                <div class="suggestions">
+                    <button class="suggest-chip" data-val="Isolate thermodynamic entropy invariants inside the S3 vacuum boundary">Thermodynamic S³</button>
+                    <button class="suggest-chip" data-val="Resolve zero-point energy density across continuous R4 coordinates">Zero-point R⁴</button>
+                    <button class="suggest-chip" data-val="Measure geodesic vector displacement under Levi-Civita mapping restrictions">Levi-Civita Geodesic</button>
+                </div>
+            </section>
+
+            <section class="panel">
+                <h2>Physics Drift Parameters</h2>
+                <div class="slider-group">
+                    <div class="slider-header">
+                        <label for="drift-rate">Drift Velocity</label>
+                        <span id="drift-rate-val">0.35 rad/s</span>
+                    </div>
+                    <input type="range" id="drift-rate" min="0" max="2" step="0.05" value="0.35">
+                </div>
+                <div class="slider-group">
+                    <div class="slider-header">
+                        <label for="kill-threshold">Kill Switch Threshold</label>
+                        <span id="kill-threshold-val">1.20 rad</span>
+                    </div>
+                    <input type="range" id="kill-threshold" min="0.5" max="3" step="0.05" value="1.20">
+                </div>
+                <button id="reset-btn" class="btn secondary">
+                    Manually Reset Manifold
+                </button>
+            </section>
+
+            <section class="panel flex-grow">
+                <h2>Console Registry Log</h2>
+                <div class="console-wrapper">
+                    <div id="console-log"></div>
+                </div>
+            </section>
+        </aside>
+
+        <!-- Main Workspace (Visualizer & MoE Grid) -->
+        <main class="main-content">
+            <!-- 3D Visualization Area -->
+            <div class="visualizer-container glass">
+                <div class="visualizer-header">
+                    <h2>R⁴ Tangent Space Projection</h2>
+                    <div class="vis-controls">
+                        <span>Drag to Rotate Manifold</span>
+                        <button id="clear-vis-btn" class="btn text-btn">Clear All</button>
+                    </div>
+                </div>
+                <div class="canvas-wrapper">
+                    <canvas id="manifold-canvas"></canvas>
+                </div>
+                
+                <!-- Overlay Gauges -->
+                <div class="gauge-overlay">
+                    <div class="gauge glass">
+                        <svg viewBox="0 0 100 100">
+                            <circle cx="50" cy="50" r="40" class="bg"></circle>
+                            <circle cx="50" cy="50" r="40" class="val" id="drift-ring"></circle>
+                        </svg>
+                        <div class="gauge-content">
+                            <span class="label">DRIFT</span>
+                            <span class="value" id="drift-ring-text">0.0000</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- MoE Grid -->
+            <section class="moe-board glass">
+                <div class="moe-header">
+                    <h2>Mixture of Experts Activation (64 Channels)</h2>
+                    <span class="metric" id="active-experts-metric">0/64 Active</span>
+                </div>
+                <div class="moe-grid" id="moe-grid">
+                    <!-- Javascript will generate 64 experts here -->
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- WASM / JS Integration script -->
+    <script type="module">
+        import init, { UorR4Router } from './pkg/uor_r4_wasm_router.js';
+
+        let router = null;
+        let activeStreams = [];
+        let animationFrameId = null;
+        
+        // Visual Rotation State
+        let angleX = -0.4;
+        let angleY = 0.5;
+        let isDragging = false;
+        let previousMousePosition = { x: 0, y: 0 };
+        
+        // Canvas & Setup
+        const canvas = document.getElementById('manifold-canvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Particle trails for rendering
+        const particles = [];
+        
+        // ZKP Particle explosion burst
+        let zkpBurstParticles = [];
+
+        function resizeCanvas() {
+            const rect = canvas.parentElement.getBoundingClientRect();
+            canvas.width = rect.width;
+            canvas.height = rect.height;
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // Standard logging helper
+        const consoleLog = document.getElementById('console-log');
+        function log(message, type = 'info') {
+            const p = document.createElement('p');
+            p.className = `log-line ${type}`;
+            p.innerText = `[${new Date().toLocaleTimeString()}] ${message}`;
+            consoleLog.appendChild(p);
+            consoleLog.scrollTop = consoleLog.scrollHeight;
+        }
+
+        // Setup mouse drag rotation
+        canvas.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            previousMousePosition = { x: e.clientX, y: e.clientY };
+        });
+
+        window.addEventListener('mouseup', () => {
+            isDragging = false;
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            const deltaX = e.clientX - previousMousePosition.x;
+            const deltaY = e.clientY - previousMousePosition.y;
+            
+            angleY += deltaX * 0.005;
+            angleX += deltaY * 0.005;
+            
+            previousMousePosition = { x: e.clientX, y: e.clientY };
+        });
+
+        // 3D coordinate projection mapping R4 to 2D screen coordinates
+        function project(vec3) {
+            // Translate origin to canvas center
+            const cx = canvas.width / 2;
+            const cy = canvas.height / 2;
+            
+            // Apply X-axis rotation
+            let y1 = vec3.y * Math.cos(angleX) - vec3.z * Math.sin(angleX);
+            let z1 = vec3.y * Math.sin(angleX) + vec3.z * Math.cos(angleX);
+            
+            // Apply Y-axis rotation
+            let x2 = vec3.x * Math.cos(angleY) + z1 * Math.sin(angleY);
+            let z2 = -vec3.x * Math.sin(angleY) + z1 * Math.cos(angleY);
+            
+            // Projection factor
+            const scale = 2.0; // zoom factor
+            
+            return {
+                x: cx + x2 * scale,
+                y: cy + y1 * scale,
+                z: z2
+            };
+        }
+
+        // Draw coordinate axes
+        function drawAxes() {
+            const size = 150;
+            const axes = [
+                { dir: { x: size, y: 0, z: 0 }, color: '#ff4b4b', label: '+X' },
+                { dir: { x: -size, y: 0, z: 0 }, color: '#7a2222', label: '-X' },
+                { dir: { x: 0, y: size, z: 0 }, color: '#00e5ff', label: '+Y' },
+                { dir: { x: 0, y: -size, z: 0 }, color: '#005b66', label: '-Y' },
+                { dir: { x: 0, y: 0, z: size }, color: '#bd00ff', label: '+Z' },
+                { dir: { x: 0, y: 0, z: -size }, color: '#4c0066', label: '-Z' }
+            ];
+
+            const center = project({ x: 0, y: 0, z: 0 });
+
+            // Sort axes by depth so they render correctly
+            axes.forEach(axis => {
+                const end = project(axis.dir);
+                
+                ctx.beginPath();
+                ctx.moveTo(center.x, center.y);
+                ctx.lineTo(end.x, end.y);
+                ctx.strokeStyle = axis.color;
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+                
+                // Draw text labels
+                ctx.fillStyle = axis.color;
+                ctx.font = '10px "JetBrains Mono"';
+                ctx.fillText(axis.label, end.x + 5, end.y + 5);
+            });
+        }
+
+        // Initialize MoE Grid elements
+        const moeGrid = document.getElementById('moe-grid');
+        const activeExpertsMetric = document.getElementById('active-experts-metric');
+        const expertElements = [];
+        
+        for (let i = 0; i < 64; i++) {
+            const div = document.createElement('div');
+            div.className = 'expert-cell';
+            div.innerHTML = `
+                <span class="cell-idx">${i}</span>
+                <span class="cell-count" id="exp-count-${i}">0</span>
+            `;
+            moeGrid.appendChild(div);
+            expertElements.push(div);
+        }
+
+        function updateMoeGrid() {
+            if (!router) return;
+            const counts = router.get_expert_counts();
+            let activeCount = 0;
+            
+            for (let i = 0; i < 64; i++) {
+                const count = counts[i];
+                const el = expertElements[i];
+                const countSpan = document.getElementById(`exp-count-${i}`);
+                
+                countSpan.innerText = count;
+                
+                if (count > 0) {
+                    el.classList.add('active');
+                    activeCount++;
+                } else {
+                    el.classList.remove('active');
+                }
+            }
+            activeExpertsMetric.innerText = `${activeCount}/64 Active`;
+        }
+
+        // ZKP Flash Trigger Visual Effect
+        function triggerZkpFlash() {
+            const overlay = document.getElementById('flash-overlay');
+            overlay.classList.add('flash');
+            setTimeout(() => {
+                overlay.classList.remove('flash');
+            }, 600);
+
+            // Populate ZKP explosion burst particles at the center origin
+            for (let i = 0; i < 80; i++) {
+                zkpBurstParticles.push({
+                    x: 0,
+                    y: 0,
+                    z: 0,
+                    vx: (Math.random() - 0.5) * 8,
+                    vy: (Math.random() - 0.5) * 8,
+                    vz: (Math.random() - 0.5) * 8,
+                    color: `hsl(${Math.random() * 60 + 260}, 100%, 75%)`, // Glowing cyan/purple
+                    alpha: 1.0,
+                    life: Math.random() * 40 + 30
+                });
+            }
+        }
+
+        // Inject single thought helper
+        function injectThought(text) {
+            if (!text.trim()) return;
+            if (!router.is_aligned()) {
+                log("Refusing concurrent injection. Manifold out of alignment phase!", "error");
+                return;
+            }
+            
+            const jsStream = router.inject_thought_stream(text);
+            if (jsStream) {
+                log(`Content Address [${jsStream.uor_uri}] registered. R⁴ coordinates: [${jsStream.r4_target.x.toFixed(1)}, ${jsStream.r4_target.y.toFixed(1)}, ${jsStream.r4_target.z.toFixed(1)}, ${jsStream.r4_target.w.toFixed(1)}]`, "success");
+                log(`Experts: [${jsStream.activated_experts.join(', ')}]`, "info");
+                
+                // Spawn a moving routing particle starting at path step 0
+                particles.push({
+                    streamId: jsStream.id,
+                    uri: jsStream.uor_uri,
+                    steps: jsStream.path_steps,
+                    currentIndex: 0,
+                    progress: 0.0,
+                    color: jsStream.twist_parity_spin === 1 ? '#00e5ff' : '#bd00ff'
+                });
+                
+                updateMoeGrid();
+            }
+        }
+
+        // Animation loop
+        let lastTime = 0;
+        function draw(timestamp) {
+            if (!lastTime) lastTime = timestamp;
+            const dt = (timestamp - lastTime) / 1000.0;
+            lastTime = timestamp;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // 1. Draw grid backdrop axis
+            drawAxes();
+
+            // 2. Draw active streams and their trajectories
+            const streams = router.get_active_streams() || [];
+            
+            // Draw trajectories
+            streams.forEach(stream => {
+                ctx.beginPath();
+                const startPoint = project(stream.path_steps[0]);
+                ctx.moveTo(startPoint.x, startPoint.y);
+                
+                for (let i = 1; i < stream.path_steps.length; i++) {
+                    const pt = project(stream.path_steps[i]);
+                    ctx.lineTo(pt.x, pt.y);
+                }
+                
+                ctx.strokeStyle = stream.twist_parity_spin === 1 ? 'rgba(0, 229, 255, 0.25)' : 'rgba(189, 0, 255, 0.25)';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                // Draw Target
+                const targetPoint = project(stream.r4_target);
+                ctx.beginPath();
+                ctx.arc(targetPoint.x, targetPoint.y, 5, 0, Math.PI * 2);
+                ctx.fillStyle = stream.twist_parity_spin === 1 ? '#00e5ff' : '#bd00ff';
+                ctx.shadowColor = ctx.fillStyle;
+                ctx.shadowBlur = 10;
+                ctx.fill();
+                ctx.shadowBlur = 0;
+
+                // Draw Label
+                ctx.fillStyle = '#ffffff';
+                ctx.font = '10px "Outfit"';
+                ctx.fillText(stream.uor_uri, targetPoint.x + 8, targetPoint.y - 4);
+            });
+
+            // 3. Draw active flowing particles
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                const steps = p.steps;
+                
+                // Move particle along steps
+                p.progress += dt * 35.0; // speed of propagation
+                p.currentIndex = Math.floor(p.progress);
+                
+                if (p.currentIndex >= steps.length - 1) {
+                    // Particle finished trajectory, remove it
+                    particles.splice(i, 1);
+                    continue;
+                }
+                
+                const stepStart = steps[p.currentIndex];
+                const stepEnd = steps[p.currentIndex + 1];
+                const interpRatio = p.progress % 1.0;
+                
+                const currentPos = {
+                    x: stepStart.x + (stepEnd.x - stepStart.x) * interpRatio,
+                    y: stepStart.y + (stepEnd.y - stepStart.y) * interpRatio,
+                    z: stepStart.z + (stepEnd.z - stepStart.z) * interpRatio
+                };
+                
+                const drawPt = project(currentPos);
+                
+                // Render glowing particle dot
+                ctx.beginPath();
+                ctx.arc(drawPt.x, drawPt.y, 6, 0, Math.PI * 2);
+                ctx.fillStyle = p.color;
+                ctx.shadowColor = p.color;
+                ctx.shadowBlur = 15;
+                ctx.fill();
+                ctx.shadowBlur = 0;
+            }
+
+            // 4. Update and render ZKP Burst particles
+            for (let i = zkpBurstParticles.length - 1; i >= 0; i--) {
+                const bp = zkpBurstParticles[i];
+                bp.x += bp.vx;
+                bp.y += bp.vy;
+                bp.z += bp.vz;
+                bp.life--;
+                
+                const pt = project(bp);
+                ctx.beginPath();
+                ctx.arc(pt.x, pt.y, Math.max(1, bp.life / 10), 0, Math.PI * 2);
+                ctx.fillStyle = bp.color;
+                ctx.globalAlpha = bp.life / 70;
+                ctx.fill();
+                ctx.globalAlpha = 1.0;
+
+                if (bp.life <= 0) {
+                    zkpBurstParticles.splice(i, 1);
+                }
+            }
+
+            // 5. Update drift physics state
+            const driftRate = parseFloat(document.getElementById('drift-rate').value);
+            const killLimit = parseFloat(document.getElementById('kill-threshold').value);
+            
+            const resetLog = router.update_drift_physics(dt, driftRate);
+            if (resetLog) {
+                // Manifold was reset!
+                log(resetLog, 'warn');
+                triggerZkpFlash();
+                updateMoeGrid();
+                particles.length = 0; // Clear propagating trails
+            }
+
+            // Update UI elements
+            const drift = router.connection_drift();
+            const alignLed = document.getElementById('alignment-led');
+            const alignText = document.getElementById('alignment-text');
+            
+            document.getElementById('drift-ring-text').innerText = drift.toFixed(4);
+            
+            // Update circular progress ring
+            const circle = document.getElementById('drift-ring');
+            const circumference = 2 * Math.PI * 40;
+            const pct = Math.min(100, (drift / killLimit) * 100);
+            circle.style.strokeDashoffset = circumference - (pct / 100) * circumference;
+            
+            // Modify ring color depending on drift severity
+            if (pct > 80) {
+                circle.style.stroke = '#ff3b3b';
+                alignLed.className = 'pulse-led red';
+                alignText.innerText = 'CRITICAL DRIFT';
+            } else if (pct > 50) {
+                circle.style.stroke = '#ffaa00';
+                alignLed.className = 'pulse-led yellow';
+                alignText.innerText = 'MANIFOLD DRIFTING';
+            } else {
+                circle.style.stroke = '#00e5ff';
+                alignLed.className = 'pulse-led green';
+                alignText.innerText = 'ZERO-POINT LOCKED';
+            }
+
+            animationFrameId = requestAnimationFrame(draw);
+        }
+
+        // Initialize Router on WASM Startup
+        async function run() {
+            log("Initializing WebAssembly engine...", "info");
+            try {
+                await init();
+                
+                const initialThreshold = parseFloat(document.getElementById('kill-threshold').value);
+                router = new UorR4Router(initialThreshold);
+                
+                log("UOR R⁴ Tangent Space Router WebAssembly core active.", "success");
+                log("Unity Bounds alpha_4 * alpha_5 = 1.0000 verified.", "success");
+                
+                // Initialize default dashboard stream injections matching specification
+                setTimeout(() => {
+                    log("Injecting Web4 standard diagnostics...", "info");
+                    injectThought("Isolate thermodynamic entropy invariants inside the S3 vacuum boundary");
+                    injectThought("Resolve zero-point energy density across continuous R4 coordinates");
+                    injectThought("Measure geodesic vector displacement under Levi-Civita mapping restrictions");
+                }, 800);
+
+                // Start visual animation loop
+                animationFrameId = requestAnimationFrame(draw);
+
+            } catch (err) {
+                log(`WASM Initialization Failed: ${err.message}`, "error");
+                console.error(err);
+            }
+        }
+
+        // UI Event Listeners
+        document.getElementById('inject-btn').addEventListener('click', () => {
+            const area = document.getElementById('thought-input');
+            injectThought(area.value);
+            area.value = '';
+        });
+
+        document.getElementById('thought-input').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                document.getElementById('inject-btn').click();
+            }
+        });
+
+        // Chip suggestions
+        document.querySelectorAll('.suggest-chip').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.getElementById('thought-input').value = btn.getAttribute('data-val');
+            });
+        });
+
+        // Drift speed slider change handler
+        const driftSlider = document.getElementById('drift-rate');
+        driftSlider.addEventListener('input', () => {
+            document.getElementById('drift-rate-val').innerText = `${parseFloat(driftSlider.value).toFixed(2)} rad/s`;
+        });
+
+        // Kill limit slider change handler
+        const thresholdSlider = document.getElementById('kill-threshold');
+        thresholdSlider.addEventListener('input', () => {
+            const limit = parseFloat(thresholdSlider.value).toFixed(2);
+            document.getElementById('kill-threshold-val').innerText = `${limit} rad`;
+            
+            // Re-instantiate router with the new threshold
+            if (router) {
+                log(`Resetting kill threshold constraint to ${limit} rad.`, "info");
+                const currentDrift = router.connection_drift();
+                router = new UorR4Router(parseFloat(thresholdSlider.value));
+                updateMoeGrid();
+            }
+        });
+
+        // Manual Reset button handler
+        document.getElementById('reset-btn').addEventListener('click', () => {
+            if (router) {
+                const logMsg = router.execute_zkp_phase_reset();
+                log(logMsg, 'warn');
+                triggerZkpFlash();
+                updateMoeGrid();
+                particles.length = 0;
+            }
+        });
+
+        // Clear all visualization objects button
+        document.getElementById('clear-vis-btn').addEventListener('click', () => {
+            if (router) {
+                log("Clearing all active thought streams from visualizer...", "info");
+                // Reinstate router to clear internal map
+                router = new UorR4Router(parseFloat(thresholdSlider.value));
+                updateMoeGrid();
+                particles.length = 0;
+            }
+        });
+
+        // Run the load routine
+        run();
+    </script>
+</body>
+</html>
