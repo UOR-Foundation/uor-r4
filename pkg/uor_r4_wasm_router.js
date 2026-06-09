@@ -201,6 +201,9 @@ export class UorR4Router {
         const ret = wasm.uorr4router_index_corpus(this.__wbg_ptr, ptr0, len0, ptr1, len1);
         return ret >>> 0;
     }
+    index_default_corpus() {
+        wasm.uorr4router_index_default_corpus(this.__wbg_ptr);
+    }
     /**
      * Indexes a single sentence into the identity's scoped corpus
      * @param {string} sentence

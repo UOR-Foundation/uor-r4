@@ -19,6 +19,7 @@ export const uorr4router_get_top_resonances: (a: number, b: number, c: number, d
 export const uorr4router_get_vocab_size: (a: number) => number;
 export const uorr4router_import_state: (a: number, b: number, c: number) => [number, number];
 export const uorr4router_index_corpus: (a: number, b: number, c: number, d: number, e: number) => number;
+export const uorr4router_index_default_corpus: (a: number) => void;
 export const uorr4router_index_sentence: (a: number, b: number, c: number, d: number, e: number) => void;
 export const uorr4router_inject_thought_stream: (a: number, b: number, c: number) => any;
 export const uorr4router_is_aligned: (a: number) => number;

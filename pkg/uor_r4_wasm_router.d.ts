@@ -65,6 +65,7 @@ export class UorR4Router {
      * Indexes an entire block of text split into sentences
      */
     index_corpus(corpus_text: string, identity: string): number;
+    index_default_corpus(): void;
     /**
      * Indexes a single sentence into the identity's scoped corpus
      */
@@ -126,6 +127,7 @@ export interface InitOutput {
     readonly uorr4router_get_vocab_size: (a: number) => number;
     readonly uorr4router_import_state: (a: number, b: number, c: number) => [number, number];
     readonly uorr4router_index_corpus: (a: number, b: number, c: number, d: number, e: number) => number;
+    readonly uorr4router_index_default_corpus: (a: number) => void;
     readonly uorr4router_index_sentence: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly uorr4router_inject_thought_stream: (a: number, b: number, c: number) => any;
     readonly uorr4router_is_aligned: (a: number) => number;
