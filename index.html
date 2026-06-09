@@ -268,6 +268,94 @@
                     </div>
                 </div>
 
+                <!-- R⁴ Prime Router Chat -->
+                <div class="glass-panel rounded-xl p-5 border border-cyber-border space-y-4">
+                    <div class="flex flex-wrap items-center justify-between gap-4 border-b border-cyber-border pb-3">
+                        <div>
+                            <h3 class="font-semibold text-sm uppercase tracking-wider text-cyber-accent flex items-center gap-2">
+                                <i class="fa-solid fa-comments"></i> R⁴ Prime Router Chat
+                            </h3>
+                            <p class="text-[10px] text-cyber-muted code-font">CONVERSATIONAL ENGINE & CONTINUOUS LEARNING</p>
+                        </div>
+                        <div class="flex items-center gap-2 text-xs">
+                            <select id="chat-engine-select" class="bg-cyber-bg border border-cyber-border rounded px-2 py-1 text-cyber-accent focus:outline-none text-xs code-font">
+                                <option value="geometric">Geometric Voice (Markov)</option>
+                                <option value="ollama">Ollama Voice (Gemma)</option>
+                            </select>
+                            <button onclick="toggleChatSettings()" class="bg-cyber-bg border border-cyber-border hover:border-cyber-accent/50 p-1 px-2 rounded text-cyber-muted hover:text-cyber-text transition-all" title="Toggle Generation Settings">
+                                <i class="fa-solid fa-cog"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Collapsible Chat Settings -->
+                    <div id="chat-settings-panel" class="hidden grid grid-cols-1 md:grid-cols-3 gap-3 p-3 bg-cyber-bg/50 rounded-lg border border-cyber-border text-xs code-font">
+                        <div class="space-y-1">
+                            <label class="text-cyber-muted block">Identity Scope:</label>
+                            <input type="text" id="chat-identity" value="user:default" class="w-full bg-cyber-panel border border-cyber-border rounded p-1 px-2 text-cyber-text focus:outline-none">
+                        </div>
+                        <div class="space-y-1">
+                            <label class="text-cyber-muted block">Ollama URL:</label>
+                            <input type="text" id="chat-ollama-url" value="http://localhost:11434/api/chat" class="w-full bg-cyber-panel border border-cyber-border rounded p-1 px-2 text-cyber-text focus:outline-none">
+                        </div>
+                        <div class="space-y-1">
+                            <label class="text-cyber-muted block">Ollama Model:</label>
+                            <input type="text" id="chat-ollama-model" value="gemma" class="w-full bg-cyber-panel border border-cyber-border rounded p-1 px-2 text-cyber-text focus:outline-none">
+                        </div>
+                        <div class="space-y-1">
+                            <label class="text-cyber-muted block">Temperature:</label>
+                            <input type="range" id="chat-temp" min="0.1" max="2.0" step="0.1" value="0.7" class="w-full accent-cyber-accent">
+                        </div>
+                        <div class="space-y-1">
+                            <label class="text-cyber-muted block">Steering Gravity:</label>
+                            <input type="range" id="chat-gravity" min="0.0" max="10.0" step="0.5" value="1.0" class="w-full accent-cyber-accent">
+                        </div>
+                        <div class="space-y-1 flex items-end gap-2">
+                            <button onclick="exportSession()" class="flex-1 py-1.5 rounded bg-cyber-panel border border-cyber-border hover:border-cyber-accent text-[10px] font-bold text-cyber-muted hover:text-cyber-accent transition-all">
+                                <i class="fa-solid fa-download"></i> Export Session
+                            </button>
+                            <label class="flex-1 py-1.5 rounded bg-cyber-panel border border-cyber-border hover:border-cyber-accent text-[10px] font-bold text-cyber-muted hover:text-cyber-accent text-center cursor-pointer transition-all">
+                                <i class="fa-solid fa-upload"></i> Import
+                                <input type="file" id="import-session-file" class="hidden" onchange="importSession(event)">
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Chat Messages Window -->
+                    <div class="bg-cyber-bg border border-cyber-border rounded-lg overflow-hidden flex flex-col h-[280px]">
+                        <div id="chat-messages" class="flex-grow p-4 space-y-3 overflow-y-auto text-xs code-font">
+                            <div class="text-cyber-muted italic text-center py-8">No conversation history. Send a message to start!</div>
+                        </div>
+                        <!-- Generation Telemetry Status Bar -->
+                        <div id="chat-status" class="bg-cyber-panel/85 border-t border-cyber-border px-4 py-1.5 text-[9px] code-font text-cyber-muted flex items-center justify-between">
+                            <span>ENGINE: Ready</span>
+                            <span id="chat-meta">Vector Norm: 1.00</span>
+                        </div>
+                    </div>
+
+                    <!-- Chat Input Area -->
+                    <div class="flex gap-2">
+                        <textarea id="chat-input-text" rows="2" class="flex-grow bg-cyber-bg border border-cyber-border rounded-lg px-3 py-2 text-sm text-cyber-text focus:ring-1 focus:ring-cyber-accent focus:border-cyber-accent focus:outline-none transition-all placeholder-cyber-muted/50 resize-none" placeholder="Enter conversation prompt..."></textarea>
+                        <button id="chat-send-btn" onclick="sendChatMessage()" class="bg-gradient-to-r from-cyber-accent to-cyber-purple hover:opacity-90 px-6 rounded-lg font-bold text-cyber-bg text-sm transition-all shadow-md flex items-center justify-center gap-1.5">
+                            <i class="fa-solid fa-paper-plane"></i> Send
+                        </button>
+                    </div>
+
+                    <!-- Knowledge Base (KB) Indexing Area -->
+                    <div class="border-t border-cyber-border/40 pt-4 space-y-3">
+                        <div class="flex items-center justify-between">
+                            <label class="block text-xs font-semibold uppercase tracking-wider text-cyber-muted">Index New Knowledge Shard (Corpus)</label>
+                            <span id="vocab-stats" class="text-[10px] text-cyber-accent code-font">Vocab: 0 words</span>
+                        </div>
+                        <div class="flex gap-2">
+                            <textarea id="kb-corpus-input" rows="2" class="flex-grow bg-cyber-bg/60 border border-cyber-border rounded-lg px-3 py-2 text-xs text-cyber-text focus:ring-1 focus:ring-cyber-accent focus:outline-none transition-all placeholder-cyber-muted/40 resize-none" placeholder="Paste background text here to dynamically update the vocabulary and prime routing coefficients..."></textarea>
+                            <button onclick="indexKbCorpus()" class="bg-cyber-panel border border-cyber-border hover:border-cyber-accent text-cyber-muted hover:text-cyber-accent px-4 rounded-lg font-bold text-xs transition-all flex items-center justify-center gap-1.5">
+                                <i class="fa-solid fa-book"></i> Index
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Experts & Content Matrix Output -->
                 <div class="glass-panel rounded-xl p-5 border border-cyber-border space-y-4">
                     <div class="flex flex-wrap items-center justify-between gap-4 border-b border-cyber-border pb-3">
@@ -793,6 +881,7 @@
         // App States
         let activeTab = 'terminal';
         let routingInProgress = false;
+        let conversationHistory = [];
 
         // Custom 3D Projection Engine variables
         let r4Canvas = document.getElementById('canvas-r4');
@@ -871,8 +960,8 @@
                 previousMousePosition = { x: e.clientX, y: e.clientY };
             });
 
-            canvas.addEventListener('mouseup', () => { isDragging = false; });
-            canvas.addEventListener('mouseleave', () => { isDragging = false; });
+            canvas.addEventListener('mouseup', () => { isDragging = false; saveSession(); });
+            canvas.addEventListener('mouseleave', () => { isDragging = false; saveSession(); });
 
             // Touch support
             canvas.addEventListener('touchstart', (e) => {
@@ -893,7 +982,7 @@
                 previousMousePosition = { x: e.touches[0].clientX, y: e.touches[0].clientY };
             });
 
-            canvas.addEventListener('touchend', () => { isDragging = false; });
+            canvas.addEventListener('touchend', () => { isDragging = false; saveSession(); });
         }
 
         // Initialize Expert Matrix UI with Overlapping opacity mapping
@@ -1108,6 +1197,35 @@
             ctx.arc(center.x, center.y, 4, 0, Math.PI * 2);
             ctx.fillStyle = '#ff4a75';
             ctx.fill();
+
+            // Draw active chat trajectory path (Geodesic Trace)
+            if (activeRoutePath.length > 0) {
+                ctx.beginPath();
+                ctx.lineWidth = 3.0;
+                ctx.strokeStyle = '#00f2fe';
+                ctx.shadowColor = '#00f2fe';
+                ctx.shadowBlur = 10;
+
+                for (let i = 0; i < activeRoutePath.length; i++) {
+                    const pt = activeRoutePath[i];
+                    const p = project3D(pt.x, pt.y, pt.z, width, height);
+                    if (i === 0) ctx.moveTo(p.x, p.y);
+                    else ctx.lineTo(p.x, p.y);
+                }
+                ctx.stroke();
+                ctx.shadowBlur = 0; // Reset shadow
+
+                // Draw pulse at tip
+                const tip = activeRoutePath[activeRoutePath.length - 1];
+                const tipP = project3D(tip.x, tip.y, tip.z, width, height);
+                ctx.beginPath();
+                ctx.arc(tipP.x, tipP.y, 6, 0, Math.PI * 2);
+                ctx.fillStyle = '#ffffff';
+                ctx.fill();
+                ctx.strokeStyle = '#00f2fe';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            }
 
             // 2. Render ALL active thoughts on the canvas concurrently
             thoughtStreams.forEach(thought => {
@@ -1432,6 +1550,397 @@
         }
         window.fireAllThoughts = fireAllThoughts;
 
+        // --- R⁴ Prime Router Chat & KB Functions ---
+        function toggleChatSettings() {
+            const el = document.getElementById('chat-settings-panel');
+            if (el) el.classList.toggle('hidden');
+        }
+        window.toggleChatSettings = toggleChatSettings;
+
+        function indexKbCorpus() {
+            const input = document.getElementById('kb-corpus-input');
+            if (!input || !router) return;
+            const text = input.value.trim();
+            if (!text) return;
+
+            const identity = document.getElementById('chat-identity').value || 'user:default';
+            const count = router.index_corpus(text, identity);
+            input.value = '';
+
+            updateVocabStats();
+            saveSession();
+
+            const consoleOut = document.getElementById('console-output');
+            if (consoleOut) {
+                consoleOut.innerHTML += `<br><span class="text-emerald-400">Indexed ${count} sentences into knowledge base scope [${identity}].</span>`;
+                consoleOut.scrollTop = consoleOut.scrollHeight;
+            }
+        }
+        window.indexKbCorpus = indexKbCorpus;
+
+        function updateVocabStats() {
+            if (!router) return;
+            const vocabSize = router.get_vocab_size();
+            const el = document.getElementById('vocab-stats');
+            if (el) el.innerText = `Vocab: ${vocabSize} words`;
+        }
+
+        function saveSession() {
+            if (!router) return;
+            router.set_angle_x(angleX);
+            router.set_angle_y(angleY);
+            const stateJson = router.export_state();
+            const session = {
+                angleX: angleX,
+                angleY: angleY,
+                conversation: conversationHistory,
+                routerState: stateJson
+            };
+            localStorage.setItem('r4_session', JSON.stringify(session));
+        }
+        window.saveSession = saveSession;
+
+        function exportSession() {
+            if (!router) return;
+            router.set_angle_x(angleX);
+            router.set_angle_y(angleY);
+            const stateJson = router.export_state();
+            const session = {
+                angleX: angleX,
+                angleY: angleY,
+                conversation: conversationHistory,
+                routerState: stateJson
+            };
+
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(session, null, 2));
+            const downloadAnchor = document.createElement('a');
+            downloadAnchor.setAttribute("href", dataStr);
+            downloadAnchor.setAttribute("download", `r4_prime_router_session_${Date.now()}.json`);
+            document.body.appendChild(downloadAnchor);
+            downloadAnchor.click();
+            downloadAnchor.remove();
+        }
+        window.exportSession = exportSession;
+
+        function importSession(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const session = JSON.parse(e.target.result);
+                    if (session.routerState) {
+                        router.import_state(session.routerState);
+                    }
+                    angleX = session.angleX || 0.5;
+                    angleY = session.angleY || 0.6;
+                    conversationHistory = session.conversation || [];
+                    
+                    router.set_angle_x(angleX);
+                    router.set_angle_y(angleY);
+
+                    updateChatUI();
+                    updateVocabStats();
+                    saveSession();
+
+                    const consoleOut = document.getElementById('console-output');
+                    if (consoleOut) {
+                        consoleOut.innerHTML += `<br><span class="text-emerald-400">Successfully imported session data. Restored ${conversationHistory.length} messages.</span>`;
+                        consoleOut.scrollTop = consoleOut.scrollHeight;
+                    }
+                } catch (err) {
+                    alert("Failed to parse imported session file: " + err.message);
+                }
+            };
+            reader.readAsText(file);
+        }
+        window.importSession = importSession;
+
+        function setChatBusy(busy) {
+            const sendBtn = document.getElementById('chat-send-btn');
+            const inputEl = document.getElementById('chat-input-text');
+            if (sendBtn) sendBtn.disabled = busy;
+            if (inputEl) inputEl.disabled = busy;
+        }
+
+        function appendSystemMessage(text) {
+            const chatMessages = document.getElementById('chat-messages');
+            if (!chatMessages) return;
+            const msgEl = document.createElement('div');
+            msgEl.className = "p-2 rounded bg-rose-950/20 border border-rose-500/20 text-rose-400 text-xs italic";
+            msgEl.innerText = text;
+            chatMessages.appendChild(msgEl);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        function updateChatUI() {
+            const chatMessages = document.getElementById('chat-messages');
+            if (!chatMessages) return;
+
+            if (conversationHistory.length === 0) {
+                chatMessages.innerHTML = `<div class="text-cyber-muted italic text-center py-8">No conversation history. Send a message to start!</div>`;
+                return;
+            }
+
+            chatMessages.innerHTML = '';
+            conversationHistory.forEach(msg => {
+                const isUser = msg.role === 'user';
+                const colorClass = isUser ? 'bg-cyber-accentDim/20 border-cyber-accent/30' : 'bg-cyber-panel border-cyber-border';
+                const roleLabel = isUser ? 'USER' : (msg.meta?.engine === 'geometric' ? 'GEOMETRIC VOICE' : 'OLLAMA GEMMA');
+                const roleColor = isUser ? 'text-cyber-accent' : 'text-cyber-purple';
+                const borderAccent = isUser ? 'bg-cyber-accent' : 'bg-cyber-purple';
+
+                const msgEl = document.createElement('div');
+                msgEl.className = `p-2.5 rounded-lg border text-xs space-y-1 relative overflow-hidden ${colorClass}`;
+                msgEl.innerHTML = `
+                    <div class="absolute left-0 top-0 bottom-0 w-1 ${borderAccent}"></div>
+                    <div class="flex justify-between text-[10px] text-cyber-muted pb-1 border-b border-cyber-border/40">
+                        <span class="font-bold ${roleColor} uppercase">${roleLabel}</span>
+                        <span>${new Date(msg.timestamp).toLocaleTimeString()}</span>
+                    </div>
+                    <div class="text-slate-200 mt-1 leading-relaxed whitespace-pre-wrap">${msg.text}</div>
+                `;
+                chatMessages.appendChild(msgEl);
+            });
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+        window.updateChatUI = updateChatUI;
+
+        async function sendChatMessage() {
+            const inputEl = document.getElementById('chat-input-text');
+            if (!inputEl || !router) return;
+            const text = inputEl.value.trim();
+            if (!text) return;
+
+            inputEl.value = '';
+
+            const identity = document.getElementById('chat-identity').value || 'user:default';
+            const engine = document.getElementById('chat-engine-select').value;
+            const temp = parseFloat(document.getElementById('chat-temp').value) || 0.7;
+            const gravity = parseFloat(document.getElementById('chat-gravity').value) || 1.0;
+
+            // 1. Add user message
+            conversationHistory.push({
+                role: 'user',
+                text: text,
+                timestamp: Date.now(),
+                meta: { engine, identity }
+            });
+            updateChatUI();
+            saveSession();
+
+            // 2. Evolve state on user input
+            router.evolve_state(identity, text, 0.5);
+
+            // 3. Trigger generation based on engine
+            if (engine === 'geometric') {
+                runGeometricGeneration(text, identity, temp, gravity);
+            } else {
+                runOllamaGeneration(text, identity, temp);
+            }
+        }
+        window.sendChatMessage = sendChatMessage;
+
+        function runGeometricGeneration(text, identity, temp, gravity) {
+            setChatBusy(true);
+
+            try {
+                const jsVal = router.generate_geometric_response(
+                    text,
+                    identity,
+                    50, // max_tokens
+                    temp,
+                    gravity,
+                    0.5, // freq_penalty
+                    0.5  // gamma
+                );
+
+                if (!jsVal) {
+                    appendSystemMessage("Error: Manifold generated null response.");
+                    setChatBusy(false);
+                    return;
+                }
+
+                const result = jsVal; // serialized object: { text, trajectory }
+                const responseText = result.text;
+                const trajectory = result.trajectory || [];
+
+                animateResponse(responseText, trajectory, 'geometric');
+            } catch (err) {
+                appendSystemMessage("WASM Generation Error: " + err);
+                setChatBusy(false);
+            }
+        }
+
+        async function runOllamaGeneration(text, identity, temp) {
+            setChatBusy(true);
+
+            const ollamaUrl = document.getElementById('chat-ollama-url').value || 'http://localhost:11434/api/chat';
+            const modelName = document.getElementById('chat-ollama-model').value || 'gemma';
+
+            // Retrieve local resonances for grounding context
+            let groundingContext = "";
+            try {
+                const resonances = router.get_top_resonances(text, identity, 3);
+                if (resonances && resonances.length > 0) {
+                    groundingContext = "Use the following local semantic context to ground your answer if applicable:\n" +
+                        resonances.map(r => `[Window ${r.window_index}, relevance ${r.relevance.toFixed(1)}]: ${r.sentence}`).join('\n') + "\n";
+                }
+            } catch (err) {
+                console.error("Failed to query resonance memory: ", err);
+            }
+
+            // Construct prompt/messages
+            const systemPrompt = "You are the R⁴ Prime Router LLM assistant. You are integrated with a WebAssembly tangent space routing engine.\n" + groundingContext;
+
+            const messages = [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: text }
+            ];
+
+            try {
+                const response = await fetch(ollamaUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        model: modelName,
+                        messages: messages,
+                        options: { temperature: temp },
+                        stream: false
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Ollama responded with status ${response.status}`);
+                }
+
+                const data = await response.json();
+                const replyText = data.message.content;
+
+                // Index both input and output for continuous learning
+                router.index_sentence(text, identity);
+                router.index_sentence(replyText, identity);
+                router.evolve_state(identity, replyText, 0.5);
+                updateVocabStats();
+
+                // Compute dummy trajectory steps so we can still draw 3D traces on canvas!
+                const trajectory = [];
+                const words = replyText.split(/\s+/);
+                for (let i = 0; i < Math.min(words.length, 50); i++) {
+                    const w = words[i];
+                    const compiled = router.compile_thought(w);
+                    if (compiled) {
+                        trajectory.push({
+                            step: i,
+                            word: w,
+                            window_index: Math.min(16, 1 + (i % 16)),
+                            scale_x: 1.0,
+                            deficit_angle: 0.1,
+                            kappa: 1.0,
+                            sigma_kl: 0.2,
+                            r4_projection: {
+                                X: compiled.r4_target.x,
+                                Y: compiled.r4_target.y,
+                                Z: compiled.r4_target.z,
+                                w: compiled.r4_target.w
+                            }
+                        });
+                    }
+                }
+
+                animateResponse(replyText, trajectory, 'ollama');
+            } catch (err) {
+                appendSystemMessage("Ollama Connection Error: Make sure Ollama is running locally and allows requests. Details: " + err.message);
+                setChatBusy(false);
+            }
+        }
+
+        function animateResponse(fullText, trajectory, engine) {
+            const chatMessages = document.getElementById('chat-messages');
+            if (!chatMessages) return;
+
+            const placeholder = chatMessages.querySelector('.text-cyber-muted');
+            if (placeholder) placeholder.remove();
+
+            const msgEl = document.createElement('div');
+            msgEl.className = "p-2.5 rounded-lg bg-cyber-panel border border-cyber-border text-xs space-y-1 relative overflow-hidden animate-fade-in";
+            msgEl.innerHTML = `
+                <div class="absolute left-0 top-0 bottom-0 w-1 bg-cyber-purple"></div>
+                <div class="flex justify-between text-[10px] text-cyber-muted pb-1 border-b border-cyber-border/40">
+                    <span class="font-bold text-cyber-purple uppercase">${engine === 'geometric' ? 'Geometric Voice' : 'Ollama Gemma'}</span>
+                    <span id="anim-meta">Tuning manifold...</span>
+                </div>
+                <div id="anim-text-body" class="text-slate-200 mt-1 leading-relaxed whitespace-pre-wrap"></div>
+            `;
+            chatMessages.appendChild(msgEl);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+
+            const textBodyEl = msgEl.querySelector('#anim-text-body');
+            const metaEl = msgEl.querySelector('#anim-meta');
+
+            let stepIdx = 0;
+            activeRoutePath = [];
+
+            const words = fullText.split(/\s+/);
+            const totalSteps = Math.max(words.length, trajectory.length);
+
+            const interval = setInterval(() => {
+                if (stepIdx >= totalSteps) {
+                    clearInterval(interval);
+                    
+                    conversationHistory.push({
+                        role: 'assistant',
+                        text: fullText,
+                        timestamp: Date.now(),
+                        meta: { engine }
+                    });
+                    
+                    activeRoutePath = [];
+                    setChatBusy(false);
+                    saveSession();
+                    updateChatUI();
+                    return;
+                }
+
+                const currentWords = words.slice(0, stepIdx + 1).join(' ');
+                textBodyEl.innerText = currentWords;
+
+                if (trajectory[stepIdx]) {
+                    const step = trajectory[stepIdx];
+                    
+                    activeRoutePath.push({
+                        x: step.r4_projection.X,
+                        y: step.r4_projection.Y,
+                        z: step.r4_projection.Z
+                    });
+
+                    const cellId = `expert-cell-${((step.window_index - 1) * 4 + (step.step % 4)) % 64}`;
+                    const cellEl = document.getElementById(cellId);
+                    if (cellEl) {
+                        cellEl.style.background = '#00f2fe';
+                        cellEl.style.borderColor = '#ffffff';
+                        cellEl.style.boxShadow = '0 0 15px #00f2fe';
+                        setTimeout(() => {
+                            populateExpertMatrix();
+                        }, 200);
+                    }
+
+                    if (metaEl) {
+                        metaEl.innerText = `win:${step.window_index} | κ:${step.kappa > 0 ? '+1' : '-1'} | deficit:${step.deficit_angle.toFixed(3)}`;
+                    }
+
+                    const statusMeta = document.getElementById('chat-meta');
+                    if (statusMeta) {
+                        statusMeta.innerText = `Window: ${step.window_index} | Deficit: ${step.deficit_angle.toFixed(3)} | KL: ${step.sigma_kl.toFixed(3)}`;
+                    }
+                }
+
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+                stepIdx++;
+            }, 60);
+        }
+
         // Recalculate overlapping Mixtures-Of-Experts counts for overlap mapping
         function recalculateExpertOverlaps() {
             expertActiveCounts.fill(0);
@@ -1642,7 +2151,30 @@
                 if (fullCanvas) initInteraction(fullCanvas);
                 calculateResonance();
 
-                loadCascade('diagnostics');
+                // Restore session if exists
+                const saved = localStorage.getItem('r4_session');
+                if (saved) {
+                    try {
+                        const session = JSON.parse(saved);
+                        angleX = session.angleX || 0.5;
+                        angleY = session.angleY || 0.6;
+                        conversationHistory = session.conversation || [];
+                        
+                        if (session.routerState) {
+                            router.import_state(session.routerState);
+                        }
+                        router.set_angle_x(angleX);
+                        router.set_angle_y(angleY);
+
+                        updateChatUI();
+                        updateVocabStats();
+                    } catch (e) {
+                        console.error("Failed to restore saved session: ", e);
+                        loadCascade('diagnostics');
+                    }
+                } else {
+                    loadCascade('diagnostics');
+                }
 
                 lastTime = performance.now();
 

@@ -1,9 +1,12 @@
 //! # UOR-aligned R⁴ Tangent Space Router Implementation (Wasm Library)
 
-use std::collections::HashMap;
+use std::collections::{HashMap, BTreeMap};
 use std::f64::consts::PI;
 use wasm_bindgen::prelude::*;
 use serde::{Serialize, Deserialize};
+use serde_json::Value;
+
+pub mod zeta_zeros;
 
 /// Core mathematical constants representing the 3/8 Resonance Hashing Field.
 pub const ALPHA_4: f64 = 1.0 / (2.0 * PI); // 1 / 2π
@@ -82,15 +85,41 @@ pub struct ResonanceInfo {
     pub uor_signature: String,
 }
 
+/// Scoped corpus sentence indexed on the manifold
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CorpusItem {
+    pub sentence: String,
+    pub state_vector: Vec<f64>,
+    pub kappa: f64,
+    pub deficit_angle: f64,
+    pub prime_product: String, // Stored as String to avoid JS JSON float loss
+    pub words: Vec<String>,
+    pub u: f64,
+    pub v: f64,
+    pub v_4d: Vec<f64>,
+}
 
 /// The unified router core coordinator.
 #[wasm_bindgen]
+#[derive(Serialize, Deserialize)]
 pub struct UorR4Router {
     active_streams: HashMap<String, ThoughtStream>,
-    expert_active_counts: [usize; 64],
+    expert_active_counts: Vec<usize>, // Changed to Vec for clean serde support
     connection_drift: f64,
     kill_switch_threshold: f64,
     is_aligned: bool,
+
+    // --- New Prime Router persistent states ---
+    vocabulary: Vec<String>,
+    word_primes: HashMap<String, usize>,
+    vocab_vectors: HashMap<String, Vec<f64>>,
+    transitions: HashMap<String, HashMap<String, f64>>,
+    transitions_2nd: HashMap<String, HashMap<String, f64>>,
+    corpus_index: HashMap<usize, Vec<CorpusItem>>,
+    corpus_index_by_identity: HashMap<String, HashMap<usize, Vec<CorpusItem>>>,
+    session_brain_states: HashMap<String, Vec<f64>>,
+    angle_x: f64,
+    angle_y: f64,
 }
 
 #[wasm_bindgen]
@@ -98,12 +127,70 @@ impl UorR4Router {
     /// Instantiates the R4 Router with perfect, error-free default states
     #[wasm_bindgen(constructor)]
     pub fn new(threshold: f64) -> Self {
-        Self {
+        let mut router = Self {
             active_streams: HashMap::new(),
-            expert_active_counts: [0; 64],
+            expert_active_counts: vec![0; 64],
             connection_drift: 0.0,
             kill_switch_threshold: threshold,
             is_aligned: true,
+            vocabulary: Vec::new(),
+            word_primes: HashMap::new(),
+            vocab_vectors: HashMap::new(),
+            transitions: HashMap::new(),
+            transitions_2nd: HashMap::new(),
+            corpus_index: HashMap::new(),
+            corpus_index_by_identity: HashMap::new(),
+            session_brain_states: HashMap::new(),
+            angle_x: 0.5,
+            angle_y: 0.5,
+        };
+
+        // Initialize default corpus
+        router.index_default_corpus();
+        router
+    }
+
+    // --- Helper to index default corpus sentences ---
+    fn index_default_corpus(&mut self) {
+        let default_sentences = &[
+            "Welcome to the R4 Prime Router. This is a local geometric world model.",
+            "I can help you coordinate water borehole data for the Gambia project.",
+            "The dry season in the Gambia requires deep aquifer coordination.",
+            "We can map borehole locations directly onto the prime number coordinates.",
+            "No training is required because the Riemann zeta zeroes form a stable coordinate system.",
+            "This engine replaces the transformer MoE gating using sparse orthogonal projections.",
+            "A traditional transformer routes tokens using learned parameters, but we route using prime factor frequency manifolds.",
+            "Each scale window acts as an expert containing specific geometric resonances.",
+            "The deficit angle measures the deflection of your query relative to the hypersphere curvature.",
+            "If the deficit angle is positive, the wave is trapped in a stable periodic orbit.",
+            "Negative deficit angles indicate hyperbolic divergence and scattering.",
+            "A symmetric orbit indicates stable, logical, and focused input sequences.",
+            "Coherence kappa indicates how well the prompt wave aligns with the local zero frequencies.",
+            "To talk to this engine, you must populate its manifold coordinates with a starting text.",
+            "You can paste any text corpus to dynamically index new knowledge into the manifold.",
+            "Once indexed, the router retrieves and synthesizes responses based on state vector similarity.",
+            "The 512 dimensions correspond to the first 512 non-trivial Riemann zeta zeroes.",
+            "Water flow rates in the Gambia depend on the aquifer's soil coherence.",
+            "The prime router helps you find the most efficient path for borehole water flow coordinates.",
+            "We can run this engine entirely locally without internet access or third-party APIs.",
+            "You are talking directly to the mathematical voice of the prime spectrum.",
+            "Ask me about the Gambia borehole locations, or how the R4 routing replaces transformer layers."
+        ];
+
+        // Seed with baseline vocabulary first
+        let mut all_words = Vec::new();
+        for s in default_sentences {
+            all_words.extend(tokenize(s));
+        }
+        all_words.sort();
+        all_words.dedup();
+        for w in &all_words {
+            self.add_word_to_vocabulary(w);
+        }
+
+        // Index each sentence to the shared corpus
+        for s in default_sentences {
+            self.index_sentence_internal(s, "shared");
         }
     }
 
@@ -205,7 +292,7 @@ impl UorR4Router {
         );
 
         // Clear active overlays during reset
-        self.expert_active_counts = [0; 64];
+        self.expert_active_counts = vec![0; 64];
         self.active_streams.clear();
 
         // Safe restabilization
@@ -221,15 +308,136 @@ impl UorR4Router {
 
     /// Returns the active counts for the 64 experts
     pub fn get_expert_counts(&self) -> Vec<usize> {
-        self.expert_active_counts.to_vec()
+        self.expert_active_counts.clone()
+    }
+
+    /// Returns the number of words in the vocabulary index
+    pub fn get_vocab_size(&self) -> usize {
+        self.word_primes.len()
+    }
+
+    // --- New rotation angle handlers ---
+    pub fn get_angle_x(&self) -> f64 { self.angle_x }
+    pub fn set_angle_x(&mut self, val: f64) { self.angle_x = val; }
+    pub fn get_angle_y(&self) -> f64 { self.angle_y }
+    pub fn set_angle_y(&mut self, val: f64) { self.angle_y = val; }
+
+    // --- New Prime Router Public Interfaces ---
+
+    /// Resets the brain state vector for a specific identity
+    pub fn reset_brain(&mut self, identity: &str) {
+        let key = identity_key(identity);
+        let baseline = vec![1.0 / (512.0f64).sqrt(); 512];
+        self.session_brain_states.insert(key, baseline);
+    }
+
+    /// Evolves state vector using user prompt words and returns the new state
+    pub fn evolve_state(&mut self, identity: &str, text: &str, gamma: f64) -> Vec<f64> {
+        self.evolve_brain_state(identity, text, gamma)
+    }
+
+    /// Returns the routed window and detailed thermodynamic/Hopf metrics for a query
+    pub fn route_query_to_manifold(&mut self, text: &str, identity: &str) -> JsValue {
+        let key = identity_key(identity);
+        let active_state = self.session_brain_states
+            .entry(key)
+            .or_insert_with(|| vec![1.0 / (512.0f64).sqrt(); 512])
+            .clone();
+
+        let routing = self.route_query_to_manifold_internal(text, identity, Some(&active_state));
+        serde_wasm_bindgen::to_value(&routing).unwrap_or(JsValue::NULL)
+    }
+
+    /// Indexes a single sentence into the identity's scoped corpus
+    pub fn index_sentence(&mut self, sentence: &str, identity: &str) {
+        self.index_sentence_internal(sentence, identity);
+        self.rebuild_transitions();
+    }
+
+    /// Indexes an entire block of text split into sentences
+    pub fn index_corpus(&mut self, corpus_text: &str, identity: &str) -> usize {
+        let mut count = 0;
+        let sentences = split_sentences(corpus_text);
+        for s in &sentences {
+            if s.len() > 10 {
+                self.index_sentence_internal(s, identity);
+                count += 1;
+            }
+        }
+        if count > 0 {
+            self.rebuild_transitions();
+        }
+        count
+    }
+
+    /// Returns the top N resonant sentences sorted by relevance
+    pub fn get_top_resonances(&mut self, text: &str, identity: &str, top_n: usize) -> JsValue {
+        let key = identity_key(identity);
+        let active_state = self.session_brain_states
+            .entry(key)
+            .or_insert_with(|| vec![1.0 / (512.0f64).sqrt(); 512])
+            .clone();
+
+        let routing = self.route_query_to_manifold_internal(text, identity, Some(&active_state));
+        let res = self.retrieve_geometric_resonance(text, &routing, top_n, &active_state, identity);
+        serde_wasm_bindgen::to_value(&res).unwrap_or(JsValue::NULL)
+    }
+
+    /// Decodes a response steered by the active brain state vector
+    pub fn generate_geometric_response(
+        &mut self,
+        text: &str,
+        identity: &str,
+        max_tokens: usize,
+        temp: f64,
+        gravity: f64,
+        freq_penalty: f64,
+        gamma: f64,
+    ) -> JsValue {
+        let key = identity_key(identity);
+        let active_state = self.session_brain_states
+            .entry(key)
+            .or_insert_with(|| vec![1.0 / (512.0f64).sqrt(); 512])
+            .clone();
+
+        let (response_text, trajectory, final_state) = self.generate_geometric_response_with_trajectory_internal(
+            text, &active_state, max_tokens, temp, gravity, freq_penalty, identity, gamma
+        );
+
+        // Update brain state
+        let key_save = identity_key(identity);
+        self.session_brain_states.insert(key_save, final_state);
+
+        let mut res_map = serde_json::Map::new();
+        res_map.insert("text".to_string(), Value::String(response_text));
+        res_map.insert("trajectory".to_string(), serde_json::to_value(trajectory).unwrap_or(Value::Null));
+        
+        serde_wasm_bindgen::to_value(&Value::Object(res_map)).unwrap_or(JsValue::NULL)
+    }
+
+    /// Exports the full router system database to JSON string
+    pub fn export_state(&self) -> String {
+        serde_json::to_string(self).unwrap_or_default()
+    }
+
+    /// Imports a JSON string and restores the router system database
+    pub fn import_state(&mut self, json_str: &str) -> Result<(), JsValue> {
+        match serde_json::from_str::<Self>(json_str) {
+            Ok(imported) => {
+                *self = imported;
+                Ok(())
+            }
+            Err(e) => Err(JsValue::from_str(&format!("Failed to parse router state JSON: {}", e)))
+        }
     }
 }
 
+// ============================================================
+// Internal Helper Computations
+// ============================================================
 impl UorR4Router {
     /// Internal Rust compilation logic matching the original spec
     fn compile_thought_internal(&self, content: &str) -> ThoughtStream {
-        // 1. Calculate the real UOR address using the uor-addr crate.
-        // We construct a JSON payload representing the thought content.
         let json_payload = serde_json::json!({
             "content": content
         });
@@ -240,10 +448,8 @@ impl UorR4Router {
             Err(_) => format!("sha256:{:064x}", 0),
         };
 
-        // Extract the raw hex part of the address (skip "sha256:")
         let hex_part = uor_hash_str.strip_prefix("sha256:").unwrap_or(&uor_hash_str);
 
-        // Convert the hex string to 32 bytes for the internal representation
         let mut hash_bytes = [0u8; 32];
         for i in 0..32 {
             if let (Some(h1), Some(h2)) = (hex_part.chars().nth(i * 2), hex_part.chars().nth(i * 2 + 1)) {
@@ -258,7 +464,6 @@ impl UorR4Router {
         let uor_addr = UorAddress { hash_bytes };
         let uor_uri = uor_hash_str;
 
-        // 2. Map coordinates in hyperbolic space using sinusoids on the byte values
         let x_coord = (hash_accumulator as f64 * 0.015).sin() * 110.0;
         let y_coord = (hash_accumulator as f64 * 0.025).cos() * 110.0;
         let z_coord = (hash_accumulator as f64 * 0.035).sin() * 90.0;
@@ -266,7 +471,6 @@ impl UorR4Router {
 
         let r4_target = R4Vector { x: x_coord, y: y_coord, z: z_coord, w: w_coord };
 
-        // 3. Extract active Mixture of Experts (MoE) channels via Bit-Parity
         let mut activated_experts = Vec::new();
         for i in 0..64 {
             let byte_idx = i / 8;
@@ -275,13 +479,11 @@ impl UorR4Router {
                 activated_experts.push(i);
             }
         }
-        activated_experts.truncate(8); // limit channels to maintain structural sparsity
+        activated_experts.truncate(8);
 
-        // 4. Calculate orthogonal prime residues modulo-6 path steps
         let mut path_steps = Vec::new();
         for step in 0..=50 {
             let ratio = step as f64 / 50.0;
-            // Generate structured wavy geodesic traces traveling from zero-point origin
             path_steps.push(R4Vector {
                 x: x_coord * ratio + (ratio * PI * 2.0).sin() * 25.0,
                 y: y_coord * ratio + (ratio * PI * 2.0).cos() * 15.0,
@@ -290,7 +492,6 @@ impl UorR4Router {
             });
         }
 
-        // 5. Spin twist parity check
         let twist_parity_spin = if hash_accumulator % 2 == 0 { 1 } else { -1 };
         let alignment_phase = (hash_accumulator.abs() % 314) as f64 / 100.0;
 
@@ -312,9 +513,1445 @@ impl UorR4Router {
             gcd,
         }
     }
+
+    fn add_word_to_vocabulary(&mut self, word: &str) {
+        let w = word.trim().to_lowercase();
+        if w.is_empty() || self.word_primes.contains_key(&w) {
+            return;
+        }
+
+        let mut next_prime = 2;
+        if !self.word_primes.is_empty() {
+            let max_prime = self.word_primes.values().max().cloned().unwrap_or(2);
+            next_prime = max_prime + 1;
+        }
+        while !is_prime_value(next_prime) {
+            next_prime += 1;
+        }
+
+        self.vocabulary.push(w.clone());
+        self.vocabulary.sort();
+        self.word_primes.insert(w.clone(), next_prime);
+
+        // Seed coordinates across 512 zeta zeros via prime log oscillation
+        let vec = get_word_vector(next_prime);
+        self.vocab_vectors.insert(w, vec);
+    }
+
+    fn get_sentence_prime_product(&self, words: &[String]) -> u128 {
+        let mut prod: u128 = 1;
+        let stopwords = query_stopwords();
+        for w in words {
+            if stopwords.contains(&w.as_str()) {
+                continue;
+            }
+            if let Some(&p) = self.word_primes.get(w) {
+                prod = prod.saturating_mul(p as u128);
+            }
+        }
+        prod
+    }
+
+    fn get_sentence_projection(&self, state_vector: &[f64], win_idx: usize) -> (f64, f64) {
+        let q_proj = get_q_proj();
+        let mut u_raw = 0.0;
+        let mut v_raw = 0.0;
+        for i in 0..512 {
+            u_raw += state_vector[i] * q_proj[i][0];
+            v_raw += state_vector[i] * q_proj[i][1];
+        }
+        let angle = (win_idx as f64 / 16.0) * 2.0 * std::f64::consts::PI;
+        let radius = 20.0;
+        let u = radius * angle.cos() + u_raw * 5.0;
+        let v = radius * angle.sin() + v_raw * 5.0;
+        (u, v)
+    }
+
+    fn get_state_4d_projection(&self, state_vector: &[f64]) -> Vec<f64> {
+        let mut w_act = 0.0;
+        let mut w_obj = 0.0;
+        let mut w_temp = 0.0;
+        let mut w_shared = 0.0;
+        for i in 0..128 {
+            w_act += state_vector[i] * state_vector[i];
+            w_obj += state_vector[i + 128] * state_vector[i + 128];
+            w_temp += state_vector[i + 256] * state_vector[i + 256];
+            w_shared += state_vector[i + 384] * state_vector[i + 384];
+        }
+        w_act = w_act.sqrt();
+        w_obj = w_obj.sqrt();
+        w_temp = w_temp.sqrt();
+        w_shared = w_shared.sqrt();
+        
+        let denom = (w_act * w_act + w_obj * w_obj + w_temp * w_temp + w_shared * w_shared).sqrt();
+        if denom < 1e-12 {
+            vec![0.5, 0.5, 0.5, 0.5]
+        } else {
+            vec![w_act / denom, w_obj / denom, w_temp / denom, w_shared / denom]
+        }
+    }
+
+    fn evolve_brain_state(&mut self, identity: &str, query_text: &str, gamma: f64) -> Vec<f64> {
+        let key = identity_key(identity);
+        let mut active_state = self.session_brain_states
+            .entry(key.clone())
+            .or_insert_with(|| vec![1.0 / (512.0f64).sqrt(); 512])
+            .clone();
+        
+        let words = tokenize(query_text);
+        let mut s_vec = vec![0.0; 512];
+        let mut word_count = 0;
+        for w in words {
+            if let Some(v) = self.vocab_vectors.get(&w) {
+                for i in 0..512 {
+                    s_vec[i] += v[i];
+                }
+                word_count += 1;
+            }
+        }
+        
+        if word_count > 0 {
+            let mut s_sum_sq = 0.0;
+            for i in 0..512 {
+                s_sum_sq += s_vec[i] * s_vec[i];
+            }
+            let s_norm = s_sum_sq.sqrt();
+            if s_norm > 0.0 {
+                for i in 0..512 {
+                    s_vec[i] /= s_norm;
+                }
+            }
+            
+            let mut h_new = vec![0.0; 512];
+            let mut h_sum_sq = 0.0;
+            for i in 0..512 {
+                h_new[i] = gamma * active_state[i] + (1.0 - gamma) * s_vec[i];
+                h_sum_sq += h_new[i] * h_new[i];
+            }
+            let h_norm = h_sum_sq.sqrt();
+            if h_norm > 0.0 {
+                for i in 0..512 {
+                    h_new[i] /= h_norm;
+                }
+            }
+            active_state = h_new;
+        }
+        
+        self.session_brain_states.insert(key, active_state.clone());
+        active_state
+    }
+
+    fn route_query_to_manifold_internal(
+        &self,
+        _text: &str,
+        identity: &str,
+        state_vector: Option<&[f64]>,
+    ) -> RoutingData {
+        let active_state = match state_vector {
+            Some(v) => v.to_vec(),
+            None => {
+                let key = identity_key(identity);
+                self.session_brain_states.get(&key).cloned().unwrap_or_else(|| vec![1.0 / (512.0f64).sqrt(); 512])
+            }
+        };
+
+        let (qimc_prime, qimc_index, identity_meta) = identity_to_qimc_prime(identity);
+        let uor_control = derive_uor_control_plane(&identity_meta);
+
+        let mut routed_idx = 0;
+        let mut best_score = -1.0;
+        let mut all_routes = Vec::new();
+
+        // 16 scale windows
+        for win_idx in 1..=16 {
+            let s_idx = (win_idx - 1) * 32;
+            let e_idx = win_idx * 32;
+            let slice = &active_state[s_idx..e_idx];
+
+            let mut sum_sq = 0.0;
+            for &val in slice {
+                sum_sq += val * val;
+            }
+            let norm = sum_sq.sqrt();
+            let bias = uor_control.window_biases.get(&win_idx).copied().unwrap_or(0.0);
+            let score = norm * (1.0 + bias);
+
+            if score > best_score {
+                best_score = score;
+                routed_idx = win_idx;
+            }
+
+            all_routes.push((win_idx, score, slice.to_vec()));
+        }
+
+        let active_range = [(routed_idx - 1) * 32, routed_idx * 32];
+        let routed_slice = &active_state[active_range[0]..active_range[1]];
+        let (sigma_q, sigma_kl, lambda_val, kappa, deficit_angle) = state_metrics_from_weights(routed_slice);
+
+        let v_4d = self.get_state_4d_projection(&active_state);
+        let (sector_id, _bins, hopf_components) = assign_sector_hopf_transport_scalar(
+            &v_4d,
+            512,
+            uor_control.phase_transport_lambda,
+            uor_control.hopf_chi_bins,
+        );
+
+        let payload = serde_json::json!({
+            "identity": identity_meta.identity,
+            "identity_type": identity_meta.identity_type,
+            "identity_uor_address": identity_meta.identity_uor_address,
+            "identity_uor_digest": identity_meta.identity_uor_digest,
+            "identity_uor_hash_algorithm": identity_meta.identity_uor_hash_algorithm,
+            "uor_entropy_bias": uor_control.entropy_bias,
+            "window_index": routed_idx,
+            "scale_x": scale_x_for_window(routed_idx),
+            "kappa": kappa,
+            "deficit_angle": deficit_angle,
+            "hopf_sector": sector_id,
+        });
+        
+        let attestation = generate_uor_attestation(&payload);
+
+        let routed = RoutedResult {
+            window_index: routed_idx,
+            scale_x: scale_x_for_window(routed_idx),
+            metrics: MetricsResult {
+                sigma_q,
+                sigma_kl,
+                lambda_entropy: lambda_val,
+                kappa,
+                deficit_angle,
+            },
+            eigenvalues: vec![0.05, 0.03, 0.01, 0.005, 0.002, 0.0, 0.0, 0.0],
+            active_range: vec![active_range[0], active_range[1]],
+            state_vector: routed_slice.to_vec(),
+            qimc: QimcResult {
+                identity: identity_meta.identity.clone(),
+                identity_type: identity_meta.identity_type.clone(),
+                identity_uor_address: identity_meta.identity_uor_address.clone(),
+                identity_uor_digest: identity_meta.identity_uor_digest.clone(),
+                identity_uor_hash_algorithm: identity_meta.identity_uor_hash_algorithm.clone(),
+                uor_control: UorControlPlanInfo {
+                    entropy_bias: uor_control.entropy_bias,
+                    hopf_chi_bins: uor_control.hopf_chi_bins,
+                },
+                prime: qimc_prime,
+                index: qimc_index,
+            },
+            hopf: HopfResult {
+                rho1: hopf_components["rho1"],
+                rho2: hopf_components["rho2"],
+                chi: hopf_components["chi"],
+                delta: hopf_components["delta"],
+                alpha: hopf_components["alpha"],
+                transported_alpha: hopf_components["transported_alpha"],
+                phase_transport_lambda: uor_control.phase_transport_lambda,
+                hopf_chi_bins: uor_control.hopf_chi_bins,
+                sector_id,
+                subspace_norms: SubspaceNorms {
+                    act: active_state[0..128].iter().map(|&x| x*x).sum::<f64>().sqrt(),
+                    obj: active_state[128..256].iter().map(|&x| x*x).sum::<f64>().sqrt(),
+                    temp: active_state[256..384].iter().map(|&x| x*x).sum::<f64>().sqrt(),
+                    shared: active_state[384..512].iter().map(|&x| x*x).sum::<f64>().sqrt(),
+                },
+            },
+            uor_address: attestation.address.clone(),
+            uor: attestation,
+        };
+
+        let mut routes_output = Vec::new();
+        for (w_idx, score, slice) in all_routes {
+            let (_s_q, _s_kl, _l_v, k_v, d_a) = state_metrics_from_weights(&slice);
+            routes_output.push(RouteInfo {
+                window_index: w_idx,
+                scale_x: scale_x_for_window(w_idx),
+                routing_score: score,
+                kappa: if w_idx == routed_idx { k_v } else { 0.0 },
+                deficit_angle: if w_idx == routed_idx { d_a } else { std::f64::consts::PI },
+                state_vector: slice,
+                active_range: vec![(w_idx - 1) * 32, w_idx * 32],
+            });
+        }
+
+        RoutingData { routed, all_routes: routes_output }
+    }
+
+    fn index_sentence_internal(&mut self, sentence: &str, identity: &str) {
+        let s_clean = sentence.trim();
+        if s_clean.is_empty() || s_clean.len() < 10 {
+            return;
+        }
+        let words = tokenize(s_clean);
+        for w in &words {
+            if w.len() > 1 && !self.word_primes.contains_key(w) {
+                self.add_word_to_vocabulary(w);
+            }
+        }
+        
+        let routing_data = self.route_query_to_manifold_internal(s_clean, identity, None);
+        let best = routing_data.routed;
+        let idx_win = best.window_index;
+        
+        let prime_product = self.get_sentence_prime_product(&words);
+        
+        let mut state_vector = vec![0.0; 512];
+        let s_idx = best.active_range[0];
+        let e_idx = best.active_range[1];
+        for i in s_idx..e_idx {
+            state_vector[i] = best.state_vector[i - s_idx];
+        }
+        
+        let (u, v) = self.get_sentence_projection(&state_vector, idx_win);
+        let v_4d = self.get_state_4d_projection(&state_vector);
+
+        let key = identity_key(identity);
+        let target_index = self.corpus_index_by_identity
+            .entry(key)
+            .or_default();
+        
+        let win_items = target_index.entry(idx_win).or_default();
+        
+        for item in win_items.iter() {
+            if item.sentence.trim().to_lowercase() == s_clean.to_lowercase() {
+                return;
+            }
+        }
+        
+        win_items.push(CorpusItem {
+            sentence: s_clean.to_string(),
+            state_vector,
+            kappa: best.metrics.kappa,
+            deficit_angle: best.metrics.deficit_angle,
+            prime_product: prime_product.to_string(),
+            words,
+            u,
+            v,
+            v_4d,
+        });
+    }
+
+    fn retrieve_geometric_resonance(
+        &self,
+        text: &str,
+        routing_data: &RoutingData,
+        top_n: usize,
+        state_vector: &[f64],
+        identity: &str,
+    ) -> Vec<ResonanceResult> {
+        let query_words = tokenize(text);
+        let stopwords = query_stopwords();
+        let query_primes: Vec<usize> = query_words.iter()
+            .filter(|w| !stopwords.contains(&w.as_str()))
+            .filter_map(|w| self.word_primes.get(w).copied())
+            .collect();
+
+        let mut scored = Vec::new();
+        let key = identity_key(identity);
+        
+        let empty_index = HashMap::new();
+        let scoped_index = self.corpus_index_by_identity.get(&key).unwrap_or(&empty_index);
+        let shared_index = self.corpus_index_by_identity.get("shared:shared").unwrap_or(&empty_index);
+
+        let mut query_projections = HashMap::new();
+        for r in &routing_data.all_routes {
+            let mut full_state = vec![0.0; 512];
+            let start = r.active_range[0];
+            let end = r.active_range[1];
+            for i in start..end {
+                full_state[i] = r.state_vector[i - start];
+            }
+            query_projections.insert(r.window_index, full_state);
+        }
+
+        let all_windows: std::collections::HashSet<usize> = scoped_index.keys()
+            .chain(shared_index.keys())
+            .copied()
+            .collect();
+
+        for &win_idx in &all_windows {
+            let shared_items = shared_index.get(&win_idx);
+            let scoped_items = scoped_index.get(&win_idx);
+
+            let s_idx = (win_idx - 1) * 32;
+            let e_idx = win_idx * 32;
+            let mut sum_sq = 0.0;
+            for i in s_idx..e_idx {
+                sum_sq += state_vector[i] * state_vector[i];
+            }
+            let slice_norm = sum_sq.sqrt();
+
+            let q_vec = match query_projections.get(&win_idx) {
+                Some(qv) => qv,
+                None => continue,
+            };
+
+            let merged_items = shared_items.into_iter().flatten().map(|item| (item, 0.0))
+                .chain(scoped_items.into_iter().flatten().map(|item| (item, 15.0)));
+
+            for (item, scope_boost) in merged_items {
+                let mut shared_count = 0;
+                for &p in &query_primes {
+                    if let Some(word) = self.word_primes.iter().find(|&(_, &val)| val == p).map(|(k, _)| k) {
+                        if item.words.iter().any(|x| x == word) {
+                            shared_count += 1;
+                        }
+                    }
+                }
+
+                let sim = cosine_similarity(q_vec, &item.state_vector);
+                let relevance = (shared_count as f64) * 100.0 + (sim * slice_norm) + scope_boost;
+
+                scored.push(ResonanceResult {
+                    sentence: item.sentence.clone(),
+                    relevance,
+                    window_index: win_idx,
+                    kappa: item.kappa,
+                    deficit_angle: item.deficit_angle,
+                });
+            }
+        }
+
+        scored.sort_by(|a, b| b.relevance.partial_cmp(&a.relevance).unwrap());
+        scored.truncate(top_n);
+        scored
+    }
+
+    fn rebuild_transitions(&mut self) {
+        let mut sentences = Vec::new();
+        let empty_index = HashMap::new();
+        let shared_index = self.corpus_index_by_identity.get("shared:shared").unwrap_or(&empty_index);
+        
+        for win_items in shared_index.values() {
+            for item in win_items {
+                sentences.push(item.sentence.clone());
+            }
+        }
+        for identity_store in self.corpus_index_by_identity.values() {
+            for win_items in identity_store.values() {
+                for item in win_items {
+                    sentences.push(item.sentence.clone());
+                }
+            }
+        }
+
+        self.transitions.clear();
+        self.transitions_2nd.clear();
+
+        for s in &sentences {
+            let words = tokenize(s);
+            if words.is_empty() { continue; }
+            
+            // 1st order
+            for i in 0..words.len() - 1 {
+                let w1 = &words[i];
+                let w2 = &words[i+1];
+                let entry = self.transitions.entry(w1.clone()).or_default();
+                let count = entry.entry(w2.clone()).or_insert(0.0);
+                *count += 1.0;
+            }
+            
+            // 2nd order (trigram)
+            for i in 0..words.len().saturating_sub(2) {
+                let w1 = &words[i];
+                let w2 = &words[i+1];
+                let w3 = &words[i+2];
+                let key = format!("{} {}", w1, w2);
+                let entry = self.transitions_2nd.entry(key).or_default();
+                let count = entry.entry(w3.clone()).or_insert(0.0);
+                *count += 1.0;
+            }
+        }
+
+        // Normalize 1st order
+        for entry in self.transitions.values_mut() {
+            let total: f64 = entry.values().sum();
+            if total > 0.0 {
+                for val in entry.values_mut() {
+                    *val /= total;
+                }
+            }
+        }
+
+        // Normalize 2nd order
+        for entry in self.transitions_2nd.values_mut() {
+            let total: f64 = entry.values().sum();
+            if total > 0.0 {
+                for val in entry.values_mut() {
+                    *val /= total;
+                }
+            }
+        }
+    }
+
+    fn generate_geometric_response_with_trajectory_internal(
+        &self,
+        prompt_text: &str,
+        state_vector: &[f64],
+        max_len: usize,
+        temp: f64,
+        gravity: f64,
+        freq_penalty: f64,
+        identity: &str,
+        gamma: f64,
+    ) -> (String, Vec<TrajectoryStep>, Vec<f64>) {
+        let words = tokenize(prompt_text);
+        if words.is_empty() {
+            return ("manifold base frequency unstable".to_string(), Vec::new(), state_vector.to_vec());
+        }
+
+        // 1. Find start key matching prompts
+        let mut start_key = None;
+        for i in 0..words.len().saturating_sub(1) {
+            let key = format!("{} {}", words[i], words[i+1]);
+            if self.transitions_2nd.contains_key(&key) {
+                start_key = Some(key);
+                break;
+            }
+        }
+
+        if start_key.is_none() {
+            // Find any trigram starting with prompt's last word
+            if let Some(last_word) = words.last() {
+                for key in self.transitions_2nd.keys() {
+                    if key.starts_with(last_word) {
+                        start_key = Some(key.clone());
+                        break;
+                    }
+                }
+            }
+        }
+
+        if start_key.is_none() {
+            // Default random choice
+            if !self.transitions_2nd.is_empty() {
+                let keys: Vec<&String> = self.transitions_2nd.keys().collect();
+                let seed = words.iter().map(|w| w.len()).sum::<usize>();
+                let idx = seed % keys.len();
+                start_key = Some(keys[idx].clone());
+            }
+        }
+
+        let mut generated = Vec::new();
+        if let Some(ref key) = start_key {
+            let parts: Vec<&str> = key.split_whitespace().collect();
+            if parts.len() >= 2 {
+                generated.push(parts[0].to_string());
+                generated.push(parts[1].to_string());
+            }
+        } else {
+            generated.push("manifold".to_string());
+            generated.push("base".to_string());
+        }
+
+        let mut history = HashMap::new();
+        for w in &generated {
+            *history.entry(w.clone()).or_insert(0.0) += 1.0;
+        }
+
+        let mut trajectory = Vec::new();
+        let mut s_local = state_vector.to_vec();
+        
+        let mut accumulated_delta = 0.0;
+        let mut prev_stratum = 0;
+        let mut prev_state_bin = vec![false; 512];
+        let mut prev_state_vec = vec![0.0; 512];
+
+        // Seed generator
+        let mut seed = prompt_text.len() as u64;
+        let mut rand_f = || {
+            seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            (seed >> 32) as f64 / 4294967296.0
+        };
+
+        for step_idx in 0..max_len {
+            let next_word;
+            if step_idx < generated.len() {
+                next_word = generated[step_idx].clone();
+            } else {
+                let w_prev2 = &generated[generated.len() - 2];
+                let w_prev1 = &generated[generated.len() - 1];
+                let key = format!("{} {}", w_prev2, w_prev1);
+                
+                let empty_targets = HashMap::new();
+                let targets = self.transitions_2nd.get(&key).unwrap_or(&empty_targets);
+                
+                if targets.is_empty() {
+                    // Vectorized semantic jump to closest vocabulary word vector
+                    let mut best_word = "manifold".to_string();
+                    let mut best_sim = -1.0;
+                    for (word, vec) in &self.vocab_vectors {
+                        let sim = cosine_similarity(vec, &s_local);
+                        if sim > best_sim {
+                            best_sim = sim;
+                            best_word = word.clone();
+                        }
+                    }
+                    next_word = best_word;
+                } else {
+                    let mut candidates = Vec::new();
+                    let mut scores = Vec::new();
+                    for (c, &p_trans) in targets {
+                        let c_vec = self.vocab_vectors.get(c).cloned().unwrap_or_else(|| vec![0.0; 512]);
+                        let sim = cosine_similarity(&c_vec, &s_local);
+                        let freq = history.get(c).copied().unwrap_or(0.0);
+                        let score = p_trans.ln() + (gravity * sim) - (freq_penalty * freq);
+                        candidates.push(c.clone());
+                        scores.push(score);
+                    }
+
+                    // Softmax selection
+                    let max_score = scores.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+                    let mut sum_exp = 0.0;
+                    let mut probs = Vec::new();
+                    for &s in &scores {
+                        let e = (s - max_score).exp();
+                        probs.push(e);
+                        sum_exp += e;
+                    }
+
+                    if sum_exp > 0.0 {
+                        for p in probs.iter_mut() {
+                            *p /= sum_exp;
+                        }
+                    }
+
+                    if temp > 0.0 {
+                        let r = rand_f();
+                        let mut cum = 0.0;
+                        let mut selected = candidates.last().unwrap().clone();
+                        for (i, p) in probs.iter().enumerate() {
+                            cum += p;
+                            if r <= cum {
+                                selected = candidates[i].clone();
+                                break;
+                            }
+                        }
+                        next_word = selected;
+                    } else {
+                        let mut best_idx = 0;
+                        let mut best_s = scores[0];
+                        for (i, &s) in scores.iter().enumerate() {
+                            if s > best_s {
+                                best_s = s;
+                                best_idx = i;
+                            }
+                        }
+                        next_word = candidates[best_idx].clone();
+                    }
+                }
+                generated.push(next_word.clone());
+            }
+
+            *history.entry(next_word.clone()).or_insert(0.0) += 1.0;
+
+            // Route metrics
+            let r_data = self.route_query_to_manifold_internal("", identity, Some(&s_local));
+            let routed = r_data.routed;
+
+            let s_idx = routed.active_range[0];
+            let e_idx = routed.active_range[1];
+            let mut state_vec = vec![0.0; 512];
+            for i in s_idx..e_idx {
+                state_vec[i] = routed.state_vector[i - s_idx];
+            }
+
+            let mut curr_state_bin = vec![false; 512];
+            let mut stratum = 0;
+            for i in 0..512 {
+                if state_vec[i].abs() > 1e-4 {
+                    curr_state_bin[i] = true;
+                    stratum += 1;
+                }
+            }
+
+            let cascade_len;
+            let catastrophe;
+            let commutator_curv;
+            let winding_number;
+            let dihedral;
+
+            if step_idx == 0 {
+                cascade_len = 0;
+                catastrophe = false;
+                commutator_curv = 0.0;
+                winding_number = 0.0;
+                dihedral = DihedralInfo { s: 0, k: 0, label: "r^0".to_string() };
+            } else {
+                let mut run = 0;
+                let mut max_run = 0;
+                for i in 0..512 {
+                    if prev_state_bin[i] != curr_state_bin[i] {
+                        run += 1;
+                        max_run = max_run.max(run);
+                    } else {
+                        run = 0;
+                    }
+                }
+                cascade_len = max_run;
+                catastrophe = (stratum as i32 - prev_stratum as i32).abs() >= 15;
+
+                let mut dist_e_sq = 0.0;
+                let mut dist_h = 0;
+                for i in 0..512 {
+                    let diff = prev_state_vec[i] - state_vec[i];
+                    dist_e_sq += diff * diff;
+                    if prev_state_bin[i] != curr_state_bin[i] {
+                        dist_h += 1;
+                    }
+                }
+                let dist_e = dist_e_sq.sqrt();
+                let dist_h = dist_h as f64;
+                if dist_e + dist_h > 1e-6 {
+                    commutator_curv = (dist_e - dist_h) / (dist_e + dist_h);
+                } else {
+                    commutator_curv = 0.0;
+                }
+
+                accumulated_delta += routed.hopf.delta;
+                winding_number = accumulated_delta / (2.0 * std::f64::consts::PI);
+                let s_refl = if stratum < prev_stratum { 1 } else { 0 };
+                let k_rot = ((winding_number * 8.0).round() as i32).rem_euclid(8) as usize;
+                dihedral = DihedralInfo {
+                    s: s_refl,
+                    k: k_rot,
+                    label: format!("{}r^{}", if s_refl == 1 { "s" } else { "" }, k_rot),
+                };
+            }
+
+            prev_stratum = stratum;
+            prev_state_bin = curr_state_bin;
+            prev_state_vec = state_vec;
+
+            // R4 Stereographic projection coordinates
+            let mut q4 = vec![0.0; 4];
+            for k in 0..4 {
+                if s_idx + k < 512 {
+                    q4[k] = routed.state_vector[k];
+                }
+            }
+            let mut q4_sum_sq = 0.0;
+            for k in 0..4 {
+                q4_sum_sq += q4[k] * q4[k];
+            }
+            let q4_norm = q4_sum_sq.sqrt();
+            if q4_norm > 1e-9 {
+                for k in 0..4 {
+                    q4[k] /= q4_norm;
+                }
+            }
+            let denom = (1.0 - q4[0]).max(1e-6);
+            let r4_proj = Projection3D {
+                w: q4[0],
+                x: q4[1],
+                y: q4[2],
+                z: q4[3],
+                capital_x: q4[1] / denom,
+                capital_y: q4[2] / denom,
+                capital_z: q4[3] / denom,
+            };
+
+            trajectory.push(TrajectoryStep {
+                step: step_idx + 1,
+                word: next_word.clone(),
+                window_index: routed.window_index,
+                scale_x: routed.scale_x,
+                deficit_angle: routed.metrics.deficit_angle,
+                kappa: routed.metrics.kappa,
+                sigma_kl: routed.metrics.sigma_kl,
+                qimc: routed.qimc,
+                hopf: routed.hopf,
+                r4_projection: r4_proj,
+                quantum: QuantumMetrics {
+                    stratum,
+                    cascade_length: cascade_len,
+                    catastrophe,
+                    winding_number,
+                    commutator_curvature: commutator_curv,
+                    monodromy: dihedral,
+                },
+            });
+
+            // Evolve s_local with the chosen word's vector along geodesic
+            if let Some(v_next) = self.vocab_vectors.get(&next_word) {
+                let mut v_sum_sq = 0.0;
+                for i in 0..512 {
+                    v_sum_sq += v_next[i] * v_next[i];
+                }
+                let v_norm = v_sum_sq.sqrt();
+                let mut v_normed = vec![0.0; 512];
+                if v_norm > 0.0 {
+                    for i in 0..512 {
+                        v_normed[i] = v_next[i] / v_norm;
+                    }
+                }
+                let mut h_new = vec![0.0; 512];
+                let mut h_sum_sq = 0.0;
+                for i in 0..512 {
+                    h_new[i] = gamma * s_local[i] + (1.0 - gamma) * v_normed[i];
+                    h_sum_sq += h_new[i] * h_new[i];
+                }
+                let h_norm = h_sum_sq.sqrt();
+                if h_norm > 0.0 {
+                    for i in 0..512 {
+                        h_new[i] /= h_norm;
+                    }
+                }
+                s_local = h_new;
+            }
+        }
+
+        let decoded_response = generated.join(" ");
+        (decoded_response, trajectory, s_local)
+    }
 }
 
-/// Helper method to create pseudo unique ID strings based on trace accumulator
+// ============================================================
+// Helpers and Types Declarations
+// ============================================================
+
+#[derive(Serialize, Deserialize)]
+pub struct RoutingData {
+    pub routed: RoutedResult,
+    pub all_routes: Vec<RouteInfo>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct RoutedResult {
+    pub window_index: usize,
+    pub scale_x: f64,
+    pub metrics: MetricsResult,
+    pub eigenvalues: Vec<f64>,
+    pub active_range: Vec<usize>,
+    pub state_vector: Vec<f64>,
+    pub qimc: QimcResult,
+    pub hopf: HopfResult,
+    pub uor_address: String,
+    pub uor: UorAttestationResult,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct MetricsResult {
+    pub sigma_q: f64,
+    pub sigma_kl: f64,
+    pub lambda_entropy: f64,
+    pub kappa: f64,
+    pub deficit_angle: f64,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct QimcResult {
+    pub identity: String,
+    pub identity_type: String,
+    pub identity_uor_address: String,
+    pub identity_uor_digest: String,
+    pub identity_uor_hash_algorithm: String,
+    pub uor_control: UorControlPlanInfo,
+    pub prime: usize,
+    pub index: usize,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct UorControlPlanInfo {
+    pub entropy_bias: f64,
+    pub hopf_chi_bins: usize,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct HopfResult {
+    pub rho1: f64,
+    pub rho2: f64,
+    pub chi: f64,
+    pub delta: f64,
+    pub alpha: f64,
+    pub transported_alpha: f64,
+    pub phase_transport_lambda: f64,
+    pub hopf_chi_bins: usize,
+    pub sector_id: usize,
+    pub subspace_norms: SubspaceNorms,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct SubspaceNorms {
+    pub act: f64,
+    pub obj: f64,
+    pub temp: f64,
+    pub shared: f64,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct UorAttestationResult {
+    pub algorithm: String,
+    pub hash_algorithm: String,
+    pub hash_algorithm_id: usize,
+    pub address: String,
+    pub kappa_label: String,
+    pub fingerprint_hex: String,
+    pub verify_result: String,
+    pub multihash_addresses: HashMap<String, String>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct RouteInfo {
+    pub window_index: usize,
+    pub scale_x: f64,
+    pub routing_score: f64,
+    pub kappa: f64,
+    pub deficit_angle: f64,
+    pub state_vector: Vec<f64>,
+    pub active_range: Vec<usize>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct ResonanceResult {
+    pub sentence: String,
+    pub relevance: f64,
+    pub window_index: usize,
+    pub kappa: f64,
+    pub deficit_angle: f64,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct TrajectoryStep {
+    pub step: usize,
+    pub word: String,
+    pub window_index: usize,
+    pub scale_x: f64,
+    pub deficit_angle: f64,
+    pub kappa: f64,
+    pub sigma_kl: f64,
+    pub qimc: QimcResult,
+    pub hopf: HopfResult,
+    pub r4_projection: Projection3D,
+    pub quantum: QuantumMetrics,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct Projection3D {
+    pub w: f64,
+    pub x: f64,
+    pub y: f64,
+    pub z: f64,
+    #[serde(rename = "X")]
+    pub capital_x: f64,
+    #[serde(rename = "Y")]
+    pub capital_y: f64,
+    #[serde(rename = "Z")]
+    pub capital_z: f64,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct QuantumMetrics {
+    pub stratum: usize,
+    pub cascade_length: usize,
+    pub catastrophe: bool,
+    pub winding_number: f64,
+    pub commutator_curvature: f64,
+    pub monodromy: DihedralInfo,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct DihedralInfo {
+    pub s: usize,
+    pub k: usize,
+    pub label: String,
+}
+
+struct UorControlPlane {
+    entropy_bias: f64,
+    phase_transport_lambda: f64,
+    hopf_chi_bins: usize,
+    window_biases: HashMap<usize, f64>,
+}
+
+struct IdentityMeta {
+    identity: String,
+    identity_type: String,
+    identity_uor_address: String,
+    identity_uor_digest: String,
+    identity_uor_hash_algorithm: String,
+    identity_uor_multihash: HashMap<String, String>,
+}
+
+// ─── Free Utility Functions ───
+
+fn wrap_to_pi(theta: f64) -> f64 {
+    (theta + PI).rem_euclid(2.0 * PI) - PI
+}
+
+fn allocate_triplet_bins_budget(
+    total_cap: usize,
+    min_first: usize,
+    min_second: usize,
+    min_third: usize,
+) -> (usize, usize, usize) {
+    let total_cap = total_cap.max(1);
+    let min_first = min_first.max(1);
+    let min_second = min_second.max(1);
+    let min_third = min_third.max(1);
+    
+    let mut best = (1, total_cap, 1);
+    let mut best_score: Option<(usize, i32, i32, usize, i32)> = None;
+    for k_first in min_first..=total_cap {
+        for k_second in min_second..=total_cap {
+            let max_third = total_cap / (k_first * k_second).max(1);
+            if max_third < min_third {
+                break;
+            }
+            for k_third in min_third..=max_third {
+                let product = k_first * k_second * k_third;
+                let favor_base = if k_second >= k_third { 1 } else { 0 };
+                let spread = (k_first as i32 - k_second as i32).abs()
+                    + (k_second as i32 - k_third as i32).abs()
+                    + (k_first as i32 - k_third as i32).abs();
+                let score = (product, favor_base, -spread, k_second, -(k_third as i32));
+                if best_score.is_none() || score > best_score.unwrap() {
+                    best_score = Some(score);
+                    best = (k_first, k_second, k_third);
+                }
+            }
+        }
+    }
+    best
+}
+
+fn is_prime_value(n: usize) -> bool {
+    if n < 2 { return false; }
+    let limit = (n as f64).sqrt() as usize;
+    for i in 2..=limit {
+        if n % i == 0 { return false; }
+    }
+    true
+}
+
+fn get_primes_6k_plus_1(count: usize) -> Vec<usize> {
+    let mut primes = Vec::new();
+    let mut k = 1;
+    while primes.len() < count {
+        let candidate = 6 * k + 1;
+        if is_prime_value(candidate) {
+            primes.push(candidate);
+        }
+        k += 1;
+    }
+    primes
+}
+
+fn identity_key(identity: &str) -> String {
+    let raw = identity.trim();
+    if raw.is_empty() {
+        return "text:shared".to_string();
+    }
+    let lowered = raw.to_lowercase();
+    if lowered == "__shared__" || lowered == "shared" {
+        return "shared:shared".to_string();
+    }
+    if lowered.contains(':') {
+        let parts: Vec<&str> = lowered.splitn(2, ':').collect();
+        if ["sha256", "sha3-256", "blake3", "keccak256", "sha512"].contains(&parts[0]) {
+            return format!("uor:{}", lowered);
+        }
+    }
+    format!("text:{}", lowered)
+}
+
+fn identity_to_qimc_prime(identity: &str) -> (usize, usize, IdentityMeta) {
+    let key = identity_key(identity);
+    let parts: Vec<&str> = key.splitn(2, ':').collect();
+    let id_type = parts[0].to_string();
+    let normalized = parts[1].to_string();
+
+    let digest: String;
+    let mut multihash = HashMap::new();
+
+    if id_type == "uor" {
+        let uor_parts: Vec<&str> = normalized.splitn(2, ':').collect();
+        let algo = uor_parts[0].to_string();
+        digest = uor_parts.get(1).copied().unwrap_or("").to_string();
+        multihash.insert(algo, normalized.clone());
+    } else {
+        // Derive SHA-256 UOR address of canonical representation
+        let canonical_id_json = format!("\"{}\"", normalized);
+        let digest_bytes = sha256_bytes(canonical_id_json.as_bytes());
+        digest = hex::encode(digest_bytes);
+        multihash.insert("sha256".to_string(), format!("sha256:{}", digest));
+    }
+
+    let val = if digest.len() >= 12 {
+        u64::from_str_radix(&digest[..12], 16).unwrap_or(0)
+    } else {
+        0
+    };
+
+    let primes_6k = get_primes_6k_plus_1(512);
+    let idx = ((val % 500) + 1) as usize;
+    let prime = primes_6k[idx - 1];
+
+    let meta = IdentityMeta {
+        identity: normalized.clone(),
+        identity_type: id_type,
+        identity_uor_address: multihash.get("sha256").cloned().unwrap_or_else(|| format!("sha256:{}", digest)),
+        identity_uor_digest: digest,
+        identity_uor_hash_algorithm: "sha256".to_string(),
+        identity_uor_multihash: multihash,
+    };
+
+    (prime, idx, meta)
+}
+
+fn derive_uor_control_plane(identity_meta: &IdentityMeta) -> UorControlPlane {
+    let digest_bytes = hex::decode(&identity_meta.identity_uor_digest).unwrap_or_else(|_| vec![0; 32]);
+    let entropy_bias = (digest_bytes[0] as f64) / 255.0;
+    
+    let phase_transport_lambda = 0.70 + (0.60 * entropy_bias);
+    let mut hopf_chi_bins = 2 + (entropy_bias * 3.0) as usize;
+    if hopf_chi_bins < 2 { hopf_chi_bins = 2; }
+    if hopf_chi_bins > 4 { hopf_chi_bins = 4; }
+
+    let mut window_biases = HashMap::new();
+    for window in 1..=16 {
+        let b = digest_bytes[(window * 3) % digest_bytes.len()];
+        let centered = (b as f64 / 255.0) - 0.5;
+        window_biases.insert(window, centered * 0.04);
+    }
+
+    UorControlPlane {
+        entropy_bias,
+        phase_transport_lambda,
+        hopf_chi_bins,
+        window_biases,
+    }
+}
+
+fn generate_uor_attestation(payload: &Value) -> UorAttestationResult {
+    let sorted_payload = match payload {
+        Value::Object(map) => {
+            let mut btree = BTreeMap::new();
+            for (k, v) in map {
+                btree.insert(k.clone(), v.clone());
+            }
+            serde_json::to_vec(&btree).unwrap_or_default()
+        }
+        _ => serde_json::to_vec(payload).unwrap_or_default(),
+    };
+
+    let digest_bytes = sha256_bytes(&sorted_payload);
+    let digest = hex::encode(digest_bytes);
+    let address = format!("sha256:{}", digest);
+
+    let mut multihash_addresses = HashMap::new();
+    multihash_addresses.insert("sha256".to_string(), address.clone());
+
+    UorAttestationResult {
+        algorithm: "sha256".to_string(),
+        hash_algorithm: "sha256".to_string(),
+        hash_algorithm_id: 1,
+        address,
+        kappa_label: "uor-witness-v1".to_string(),
+        fingerprint_hex: digest,
+        verify_result: "verified".to_string(),
+        multihash_addresses,
+    }
+}
+
+fn hopf_coordinate_components_scalar(normalized_coordinate: &[f64]) -> HashMap<String, f64> {
+    let a = normalized_coordinate[0];
+    let b = normalized_coordinate[1];
+    let c = normalized_coordinate[2];
+    let d = normalized_coordinate[3];
+    let rho1 = (a * a + b * b).sqrt();
+    let rho2 = (c * c + d * d).sqrt();
+    let denom = (rho1 * rho1 + rho2 * rho2).sqrt().max(1e-12);
+    let cos_chi = rho1 / denom;
+    let sin_chi = rho2 / denom;
+    let chi = sin_chi.min(1.0).max(0.0).asin();
+    let chi_u = (sin_chi * sin_chi).min(1.0 - 1e-12).max(0.0);
+    let theta1 = wrap_to_pi(b.atan2(a));
+    let theta2 = wrap_to_pi(d.atan2(c));
+    let delta = wrap_to_pi(theta1 - theta2);
+    let alpha = wrap_to_pi(0.5 * (theta1 + theta2));
+    
+    let mut map = HashMap::new();
+    map.insert("rho1".to_string(), rho1);
+    map.insert("rho2".to_string(), rho2);
+    map.insert("chi".to_string(), chi);
+    map.insert("chi_u".to_string(), chi_u);
+    map.insert("theta1".to_string(), theta1);
+    map.insert("theta2".to_string(), theta2);
+    map.insert("delta".to_string(), delta);
+    map.insert("alpha".to_string(), alpha);
+    map.insert("cos_chi".to_string(), cos_chi);
+    map.insert("sin_chi".to_string(), sin_chi);
+    map
+}
+
+fn hopf_phase_transport_components_scalar(
+    normalized_coordinate: &[f64],
+    phase_transport_lambda: f64,
+) -> HashMap<String, f64> {
+    let mut map = hopf_coordinate_components_scalar(normalized_coordinate);
+    let chi = map["chi"];
+    let delta = map["delta"];
+    let alpha = map["alpha"];
+    let connection_weight = 0.5 * phase_transport_lambda * (2.0 * chi).cos();
+    let phase_shift = wrap_to_pi(connection_weight * delta);
+    let transported_alpha = wrap_to_pi(alpha + phase_shift);
+    
+    map.insert("transport_connection_weight".to_string(), connection_weight);
+    map.insert("transport_phase_shift".to_string(), phase_shift);
+    map.insert("transported_alpha".to_string(), transported_alpha);
+    map
+}
+
+fn assign_sector_hopf_transport_scalar(
+    normalized_coordinate: &[f64],
+    k: usize,
+    phase_transport_lambda: f64,
+    hopf_chi_bins: usize,
+) -> (usize, HashMap<String, usize>, HashMap<String, f64>) {
+    let components = hopf_phase_transport_components_scalar(normalized_coordinate, phase_transport_lambda);
+    let (kchi, kdelta, kalpha) = allocate_triplet_bins_budget(k, hopf_chi_bins.max(2), 2, 2);
+    
+    let delta = components["delta"];
+    let transported_alpha = components["transported_alpha"];
+    let chi_u = components["chi_u"];
+    
+    let u_delta = (delta + std::f64::consts::PI) / (2.0 * std::f64::consts::PI);
+    let u_alpha = (transported_alpha + std::f64::consts::PI) / (2.0 * std::f64::consts::PI);
+    
+    let chi_bin = ((chi_u * kchi as f64) as usize).min(kchi - 1);
+    let delta_bin = ((u_delta * kdelta as f64) as usize).min(kdelta - 1);
+    let alpha_bin = ((u_alpha * kalpha as f64) as usize).min(kalpha - 1);
+    
+    let local_span = kdelta * kalpha;
+    let sector_id = (chi_bin * local_span + delta_bin * kalpha + alpha_bin).min(k - 1);
+    
+    let mut bins = HashMap::new();
+    bins.insert("chi_bins".to_string(), kchi);
+    bins.insert("delta_bins".to_string(), kdelta);
+    bins.insert("alpha_bins".to_string(), kalpha);
+    bins.insert("chi_bin".to_string(), chi_bin);
+    bins.insert("delta_bin".to_string(), delta_bin);
+    bins.insert("alpha_bin".to_string(), alpha_bin);
+    
+    (sector_id, bins, components)
+}
+
+fn get_word_vector(prime: usize) -> Vec<f64> {
+    use crate::zeta_zeros::ZETA_ZEROS;
+    let ln_p = (prime as f64).ln();
+    let mut vec = vec![0.0; 512];
+    let mut sum_sq = 0.0;
+    for i in 0..512 {
+        let val = (ln_p * ZETA_ZEROS[i]).sin();
+        vec[i] = val;
+        sum_sq += val * val;
+    }
+    let norm = sum_sq.sqrt();
+    if norm > 0.0 {
+        for i in 0..512 {
+            vec[i] = (vec[i] / norm) * 0.1;
+        }
+    }
+    vec
+}
+
+fn scale_x_for_window(window_idx: usize) -> f64 {
+    let x_min = 1e4_f64;
+    let x_max = 1e6_f64;
+    let ratio = (window_idx - 1) as f64 / 15.0;
+    (x_min.ln() + ratio * (x_max.ln() - x_min.ln())).exp()
+}
+
+fn get_q_proj() -> Vec<[f64; 2]> {
+    let mut state = 42u64;
+    let mut next_random = || {
+        state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        (state >> 32) as f64 / 4294967296.0
+    };
+    
+    let mut p_proj = vec![[0.0; 2]; 512];
+    for i in 0..512 {
+        let u1 = next_random().max(1e-15);
+        let u2 = next_random();
+        let r = (-2.0 * u1.ln()).sqrt();
+        let theta = 2.0 * std::f64::consts::PI * u2;
+        p_proj[i][0] = r * theta.cos();
+        p_proj[i][1] = r * theta.sin();
+    }
+    
+    let mut q_proj = p_proj.clone();
+    let mut len0_sq = 0.0;
+    for i in 0..512 {
+        len0_sq += q_proj[i][0] * q_proj[i][0];
+    }
+    let len0 = len0_sq.sqrt();
+    if len0 > 0.0 {
+        for i in 0..512 {
+            q_proj[i][0] /= len0;
+        }
+    }
+    let mut dot = 0.0;
+    for i in 0..512 {
+        dot += q_proj[i][0] * q_proj[i][1];
+    }
+    for i in 0..512 {
+        q_proj[i][1] -= dot * q_proj[i][0];
+    }
+    let mut len1_sq = 0.0;
+    for i in 0..512 {
+        len1_sq += q_proj[i][1] * q_proj[i][1];
+    }
+    let len1 = len1_sq.sqrt();
+    if len1 > 0.0 {
+        for i in 0..512 {
+            q_proj[i][1] /= len1;
+        }
+    }
+    
+    q_proj
+}
+
+fn tokenize(text: &str) -> Vec<String> {
+    text.split_whitespace()
+        .map(|w| {
+            w.chars()
+                .filter(|c| c.is_alphanumeric())
+                .collect::<String>()
+                .to_lowercase()
+        })
+        .filter(|s| !s.is_empty())
+        .collect()
+}
+
+fn split_sentences(text: &str) -> Vec<String> {
+    let mut sentences = Vec::new();
+    let mut current = String::new();
+    for c in text.chars() {
+        current.push(c);
+        if c == '.' || c == '?' || c == '!' {
+            let trimmed = current.trim().to_string();
+            if !trimmed.is_empty() {
+                sentences.push(trimmed);
+            }
+            current.clear();
+        }
+    }
+    let trimmed = current.trim().to_string();
+    if !trimmed.is_empty() {
+        sentences.push(trimmed);
+    }
+    sentences
+}
+
+fn cosine_similarity(v1: &[f64], v2: &[f64]) -> f64 {
+    if v1.len() != v2.len() {
+        return 0.0;
+    }
+    let mut dot = 0.0;
+    let mut norm1 = 0.0;
+    let mut norm2 = 0.0;
+    for i in 0..v1.len() {
+        dot += v1[i] * v2[i];
+        norm1 += v1[i] * v1[i];
+        norm2 += v2[i] * v2[i];
+    }
+    if norm1 == 0.0 || norm2 == 0.0 {
+        return 0.0;
+    }
+    dot / (norm1.sqrt() * norm2.sqrt())
+}
+
+fn sigma_q_from_weights(p: &[f64]) -> f64 {
+    let n = p.len();
+    if n <= 1 {
+        return 1.0;
+    }
+    let inv_n = 1.0 / (n as f64);
+    let mut sum_sq_diff = 0.0;
+    for &val in p {
+        let diff = val - inv_n;
+        sum_sq_diff += diff * diff;
+    }
+    1.0 - sum_sq_diff / (1.0 - inv_n)
+}
+
+fn sigma_kl_from_weights(p: &[f64]) -> f64 {
+    let n = p.len();
+    if n <= 1 {
+        return 1.0;
+    }
+    let mut p_clipped = p.to_vec();
+    let eps = 1e-300;
+    let mut sum = 0.0;
+    for val in p_clipped.iter_mut() {
+        if *val < eps {
+            *val = eps;
+        }
+        sum += *val;
+    }
+    if sum > 0.0 {
+        for val in p_clipped.iter_mut() {
+            *val /= sum;
+        }
+    }
+    let log_n = (n as f64).ln();
+    let mut entropy_sum = 0.0;
+    for &val in &p_clipped {
+        entropy_sum += val * (n as f64 * val).ln();
+    }
+    1.0 - entropy_sum / log_n
+}
+
+fn state_metrics_from_weights(p: &[f64]) -> (f64, f64, f64, f64, f64) {
+    let mut p_pos = p.to_vec();
+    let mut sum = 0.0;
+    let mut kappa = 0.0;
+    for val in p_pos.iter_mut() {
+        if *val < 0.0 {
+            *val = 0.0;
+        }
+        sum += *val;
+        if *val > kappa {
+            kappa = *val;
+        }
+    }
+    if sum <= 0.0 {
+        return (1.0, 1.0, 0.0, 0.0, std::f64::consts::PI);
+    }
+    for val in p_pos.iter_mut() {
+        *val /= sum;
+    }
+    let sigma_q = sigma_q_from_weights(&p_pos);
+    let sigma_kl = sigma_kl_from_weights(&p_pos);
+    let one_minus = (1.0 - sigma_q).max(1e-300);
+    let lambda = -one_minus.ln();
+    let deficit_angle = std::f64::consts::PI - lambda;
+    (sigma_q, sigma_kl, lambda, kappa, deficit_angle)
+}
+
+fn sha256_bytes(bytes: &[u8]) -> [u8; 32] {
+    use sha2::{Sha256, Digest};
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    let result = hasher.finalize();
+    let mut output = [0u8; 32];
+    output.copy_from_slice(&result);
+    output
+}
+
+fn query_stopwords() -> std::collections::HashSet<&'static str> {
+    let stopwords = [
+        "the", "of", "is", "a", "in", "and", "to", "for", "on", "with", "at", "by", "an", "be", "this", "that", "from", 
+        "are", "was", "were", "it", "as", "he", "she", "they", "what", "how", "why", "where", "who", "when", 
+        "tell", "me", "about", "describe", "explain", "show", "give", "find", "do", "does", "did", "can", "could", "would", "should"
+    ];
+    let mut set = std::collections::HashSet::new();
+    for s in stopwords {
+        set.insert(s);
+    }
+    set
+}
+
 fn uuid_placeholder(seed: i32) -> String {
     let mut val = seed.abs();
     let mut output = String::new();

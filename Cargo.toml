@@ -17,3 +17,6 @@ serde-wasm-bindgen = "0.6.5"
 console_error_panic_hook = "0.1.7"
 uor-addr = { version = "0.2.0", default-features = false, features = ["alloc"] }
 serde_json = "1.0"
+sha2 = "0.10.8"
+hex = "0.4.3"
+
