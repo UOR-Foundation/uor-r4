@@ -900,6 +900,7 @@
             body { grid-template-columns: 240px 1fr 320px; }
         }
     </style>
+    <script src="https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.46/dist/index.js"></script>
 </head>
 <body>
 
@@ -1390,7 +1391,9 @@ if (mapLegend) {
 // WASM Router Bootstrap & WebLLM
 // =====================================================
 import init, { UorR4Router } from './pkg/uor_r4_wasm_router.js';
-import { CreateMLCEngine } from "https://esm.run/@mlc-ai/web-llm";
+
+// Retrieve CreateMLCEngine dynamically from the globally loaded CDN script
+const CreateMLCEngine = (window.webllm && window.webllm.CreateMLCEngine) ? window.webllm.CreateMLCEngine : null;
 
 let router = null;
 let mlcEngine = null;
@@ -1413,6 +1416,20 @@ async function initWebLLM() {
             statusBadge.style.borderColor = "var(--red)";
         }
         if (progressText) progressText.textContent = "WebGPU unsupported. Using WASM Geometric.";
+        if (engineLabel) engineLabel.textContent = "Pure Geometric (WASM)";
+        mlcLoadingError = true;
+        return;
+    }
+
+    if (!CreateMLCEngine) {
+        console.warn("WebLLM library not loaded or unsupported. Using WASM fallback.");
+        if (statusBadge) {
+            statusBadge.textContent = "Fallback";
+            statusBadge.style.background = "rgba(255, 82, 82, 0.15)";
+            statusBadge.style.color = "var(--red)";
+            statusBadge.style.borderColor = "var(--red)";
+        }
+        if (progressText) progressText.textContent = "WebLLM package unavailable. Using WASM Geometric.";
         if (engineLabel) engineLabel.textContent = "Pure Geometric (WASM)";
         mlcLoadingError = true;
         return;
@@ -2700,6 +2717,11 @@ async function startApp() {
         router = new UorR4Router(1.2);
         
         restoreSessionFromLocalStorage();
+        
+        if (router.get_vocab_size() === 0) {
+            console.log("[*] Vocabulary is empty. Indexing default corpus...");
+            router.index_default_corpus();
+        }
         
         await loadSemanticMap();
         

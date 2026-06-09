@@ -151,7 +151,7 @@ impl UorR4Router {
     }
 
     // --- Helper to index default corpus sentences ---
-    fn index_default_corpus(&mut self) {
+    pub fn index_default_corpus(&mut self) {
         let default_sentences = &[
             "Welcome to the R4 Prime Router. This is a local geometric world model.",
             "I can help you coordinate water borehole data for the Gambia project.",
