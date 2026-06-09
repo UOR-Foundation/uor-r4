@@ -70,7 +70,18 @@ pub struct ThoughtStream {
     pub activated_experts: Vec<usize>,
     pub alignment_phase: f64, // $\theta$ phase state
     pub twist_parity_spin: i8, // $\kappa \in \{-1, 1\}$
+    pub gcd: usize,
 }
+
+/// Dynamic resonance details computed via the 3/8 Resonance Hashing Law.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResonanceInfo {
+    pub total_bytes: usize,
+    pub resonant_bits: usize,
+    pub klein_matches: usize,
+    pub uor_signature: String,
+}
+
 
 /// The unified router core coordinator.
 #[wasm_bindgen]
@@ -109,6 +120,34 @@ impl UorR4Router {
     /// Returns the kill switch threshold limit
     pub fn kill_switch_threshold(&self) -> f64 {
         self.kill_switch_threshold
+    }
+
+    /// Computes live UOR resonance metrics for a given input text
+    pub fn calculate_resonance(&self, text: &str) -> JsValue {
+        let json_payload = serde_json::json!({
+            "content": text
+        });
+        let json_bytes = serde_json::to_vec(&json_payload).unwrap_or_default();
+        let uor_hash_str = match uor_addr::json::address(&json_bytes) {
+            Ok(outcome) => outcome.address.to_string(),
+            Err(_) => format!("sha256:{:064x}", 0),
+        };
+
+        let klein_matches = text.chars()
+            .filter(|&c| {
+                let m = (c as usize) % 50;
+                m == 0 || m == 1 || m == 48 || m == 49
+            })
+            .count();
+
+        let info = ResonanceInfo {
+            total_bytes: text.len(),
+            resonant_bits: text.len() * 8,
+            klein_matches,
+            uor_signature: uor_hash_str,
+        };
+
+        serde_wasm_bindgen::to_value(&info).unwrap_or(JsValue::NULL)
     }
 
     /// Compiles a raw string thought parameter down into its content-addressed math state
@@ -255,6 +294,11 @@ impl UorR4Router {
         let twist_parity_spin = if hash_accumulator % 2 == 0 { 1 } else { -1 };
         let alignment_phase = (hash_accumulator.abs() % 314) as f64 / 100.0;
 
+        let primes = [11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53];
+        let p1 = primes[(hash_accumulator.abs() as usize) % primes.len()];
+        let p2 = primes[((hash_accumulator.abs() + 9) as usize) % primes.len()];
+        let gcd = if p1 == p2 { p1 } else { 1 };
+
         ThoughtStream {
             id: format!("stream-{}", uuid_placeholder(hash_accumulator)),
             raw_content: content.to_string(),
@@ -265,6 +309,7 @@ impl UorR4Router {
             activated_experts,
             alignment_phase,
             twist_parity_spin,
+            gcd,
         }
     }
 }
