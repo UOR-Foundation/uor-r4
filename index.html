@@ -944,22 +944,24 @@
                 <span class="config-val" id="engineVal" style="color: var(--cyan); font-weight: bold;">Geometric</span>
             </div>
             <div class="config-row" style="margin-bottom: 0.75rem; font-size: 0.75rem; color: #888;">
-                <span>↳ WebLLM Gemma-2B / WASM Fallback</span>
+                <span>↳ Tuned by Ollama availability</span>
             </div>
 
             <div class="identity-label">Routing Identity (UOR, address, or text)</div>
             <input type="text" class="identity-input" id="identityInput" value="tenant-alpha" placeholder="sha256:... or tenant-alpha" style="margin-bottom:0.75rem;">
 
-            <div class="section-label">Synthesis Engine</div>
-            <div id="webllmStatusGroup" style="margin-bottom:0.75rem; padding:0.55rem; background: rgba(0, 229, 255, 0.05); border: 1px solid var(--border2); border-radius: 4px; font-size: 0.72rem; line-height: 1.35;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem;">
-                    <span style="font-weight: 600; color: var(--text);">Engine: <span id="webllmEngineLabel" style="color:var(--cyan);">Local Gemma 2B (WebGPU)</span></span>
-                    <span id="webllmStatusBadge" style="font-size:0.65rem; padding: 2px 6px; border-radius: 3px; background: rgba(255,179,0,0.15); color: var(--amber); border: 1px solid var(--amber);">Checking...</span>
-                </div>
-                <div id="webllmProgressTrack" style="height: 4px; background: rgba(255,255,255,0.05); border-radius: 2px; overflow: hidden; margin-top: 0.4rem; display: none;">
-                    <div id="webllmProgressBar" style="height: 100%; width: 0%; background: var(--cyan); transition: width 0.1s;"></div>
-                </div>
-                <div id="webllmProgressText" style="font-size:0.65rem; color: var(--text2); margin-top:0.25rem; font-family:'JetBrains Mono'; word-break: break-word;">WebGPU verification...</div>
+            <div class="section-label">Synthesis Engine Selection</div>
+            <select class="identity-input" id="engineSelect" style="margin-bottom:0.75rem; background: var(--bg); color: var(--cyan); border-color: var(--border2); font-family: 'Outfit', sans-serif;">
+                <option value="auto">Auto-Select (Local Ollama / Fallback)</option>
+                <option value="geometric">Pure Geometric (WASM Decoded)</option>
+                <option value="ollama">Local Ollama (Direct API)</option>
+            </select>
+
+            <div id="ollamaConfigGroup" style="display:none;">
+                <div class="identity-label">Ollama Host URL</div>
+                <input type="text" class="identity-input" id="ollamaUrlInput" value="http://localhost:11434" style="margin-bottom:0.5rem;">
+                <div class="identity-label">Ollama Target Model</div>
+                <input type="text" class="identity-input" id="ollamaModelInput" value="gemma2:2b" style="margin-bottom:0.75rem;">
             </div>
 
             <div class="section-label">Manifold Database & Indexing</div>
@@ -1387,91 +1389,30 @@ if (mapLegend) {
 }
 
 // =====================================================
-// WASM Router Bootstrap & WebLLM
+// WASM Router Bootstrap & Ollama
 // =====================================================
 import init, { UorR4Router } from './pkg/uor_r4_wasm_router.js';
 
-// Retrieve CreateMLCEngine dynamically from the globally loaded CDN script
-let CreateMLCEngine = null;
 let router = null;
-let mlcEngine = null;
-let mlcLoaded = false;
-let mlcLoadingError = false;
 
-async function initWebLLM() {
-    const statusBadge = document.getElementById("webllmStatusBadge");
-    const progressTrack = document.getElementById("webllmProgressTrack");
-    const progressBar = document.getElementById("webllmProgressBar");
-    const progressText = document.getElementById("webllmProgressText");
-    const engineLabel = document.getElementById("webllmEngineLabel");
+const engineSelect       = document.getElementById("engineSelect");
+const ollamaConfigGroup  = document.getElementById("ollamaConfigGroup");
 
-    if (!navigator.gpu) {
-        console.warn("WebGPU not supported in this browser. Falling back to Pure Geometric.");
-        if (statusBadge) {
-            statusBadge.textContent = "Fallback";
-            statusBadge.style.background = "rgba(255, 82, 82, 0.15)";
-            statusBadge.style.color = "var(--red)";
-            statusBadge.style.borderColor = "var(--red)";
+function updateEngineConfigVisibility() {
+    const val = engineSelect?.value || "auto";
+    if (ollamaConfigGroup) {
+        if (val === "ollama" || val === "auto") {
+            ollamaConfigGroup.style.display = "block";
+        } else {
+            ollamaConfigGroup.style.display = "none";
         }
-        if (progressText) progressText.textContent = "WebGPU unsupported. Using WASM Geometric.";
-        if (engineLabel) engineLabel.textContent = "Pure Geometric (WASM)";
-        mlcLoadingError = true;
-        return;
-    }
-
-    try {
-        if (statusBadge) {
-            statusBadge.textContent = "Loading...";
-            statusBadge.style.background = "rgba(255, 179, 0, 0.15)";
-            statusBadge.style.color = "var(--amber)";
-            statusBadge.style.borderColor = "var(--amber)";
-        }
-        if (progressTrack) progressTrack.style.display = "block";
-        if (progressText) progressText.textContent = "Loading WebLLM library...";
-
-        // Dynamically import WebLLM asynchronously
-        const webllm = await import("https://esm.run/@mlc-ai/web-llm@0.2.46");
-        CreateMLCEngine = webllm.CreateMLCEngine;
-
-        if (!CreateMLCEngine) {
-            throw new Error("CreateMLCEngine not found in WebLLM module");
-        }
-
-        if (progressText) progressText.textContent = "Initializing Gemma-2B...";
-
-        // Load Gemma 2B model
-        const modelId = "Gemma-2-2B-it-q4f16_1-MLC";
-        mlcEngine = await CreateMLCEngine(modelId, {
-            initProgressCallback: (report) => {
-                const progress = Math.round(report.progress * 100);
-                if (progressBar) progressBar.style.width = progress + "%";
-                if (progressText) progressText.textContent = report.text;
-            }
-        });
-
-        mlcLoaded = true;
-        if (statusBadge) {
-            statusBadge.textContent = "Active";
-            statusBadge.style.background = "rgba(0, 229, 160, 0.15)";
-            statusBadge.style.color = "var(--emerald)";
-            statusBadge.style.borderColor = "var(--emerald)";
-        }
-        if (progressTrack) progressTrack.style.display = "none";
-        if (progressText) progressText.textContent = "Local Gemma-2B ready.";
-    } catch (err) {
-        console.error("Failed to load WebLLM model:", err);
-        mlcLoadingError = true;
-        if (statusBadge) {
-            statusBadge.textContent = "Fallback";
-            statusBadge.style.background = "rgba(255, 82, 82, 0.15)";
-            statusBadge.style.color = "var(--red)";
-            statusBadge.style.borderColor = "var(--red)";
-        }
-        if (progressTrack) progressTrack.style.display = "none";
-        if (progressText) progressText.textContent = "Error: " + err.message + ". Fallback to WASM.";
-        if (engineLabel) engineLabel.textContent = "Pure Geometric (WASM)";
     }
 }
+if (engineSelect) {
+    engineSelect.addEventListener("change", updateEngineConfigVisibility);
+}
+
+
 
 // =====================================================
 // Semantic Map Loading & Rendering
@@ -1981,8 +1922,8 @@ function updateTelemetry(data) {
         if (gammaVal) gammaVal.textContent = auto.gamma.toFixed(2);
         if (tokensVal) tokensVal.textContent = auto.max_tokens;
         if (engineVal) {
-            if (auto.engine === "webllm") {
-                engineVal.textContent = "Gemma-2B (WebLLM)";
+            if (auto.engine === "ollama") {
+                engineVal.textContent = "Ollama (Gemma)";
                 engineVal.style.color = "var(--emerald)";
             } else {
                 engineVal.textContent = "Pure Geometric";
@@ -2314,9 +2255,33 @@ async function sendQuery(text) {
         maxTokens = Math.max(50, Math.min(500, maxTokens));
 
         // 2. Select Synthesis Engine
+        let selectedEngineMode = engineSelect?.value || "auto";
+        let ollamaUrl = document.getElementById("ollamaUrlInput")?.value.trim() || "http://localhost:11434";
+        let ollamaModel = document.getElementById("ollamaModelInput")?.value.trim() || "gemma2:2b";
+        
+        let ollamaOnline = false;
+        if (selectedEngineMode === "ollama" || selectedEngineMode === "auto") {
+            try {
+                const checkTags = await fetch(`${ollamaUrl}/api/tags`, { method: "GET" });
+                if (checkTags.status === 200) {
+                    ollamaOnline = true;
+                }
+            } catch (err) {
+                console.warn("Ollama check failed, falling back to geometric:", err);
+            }
+        }
+        
+        if (selectedEngineMode === "ollama" && !ollamaOnline) {
+            chatLogInner.removeChild(loadMsg);
+            addMessage("model", `Error: Forced Ollama engine is offline at ${ollamaUrl}. Verify Ollama is running.`);
+            chatInput.disabled = false;
+            sendBtn.disabled = false;
+            return;
+        }
+        
         let engine = "geometric";
-        if (mlcLoaded && mlcEngine) {
-            engine = "webllm";
+        if (ollamaOnline && selectedEngineMode !== "geometric") {
+            engine = "ollama";
         }
 
         // 3. Evolve the brain state
@@ -2344,27 +2309,39 @@ async function sendQuery(text) {
 
         const systemPrompt = `You are the Voice of the R4 Prime Router. The current state of your context hypersphere brain is: Window ${best.window_index} (${theme}), Energy κ=${m.kappa.toFixed(4)}, Curvature θd=${m.deficit_angle.toFixed(4)}, Hopf coordinates (χ=${hopf.chi.toFixed(4)}, δ=${hopf.delta.toFixed(4)}, α=${hopf.alpha.toFixed(4)}). Grounding context sentence: "${ctx_block}". Respond directly to the user query as a geometric router. Keep your response relevant, coherent, and under ${maxTokens} words.`;
 
-        if (engine === "webllm") {
+        if (engine === "ollama") {
             try {
-                const reply = await mlcEngine.chat.completions.create({
+                const ollamaPayload = {
+                    model: ollamaModel,
                     messages: [
                         { role: "system", content: systemPrompt },
                         { role: "user", content: text }
                     ],
-                    temperature: parseFloat(temperature),
-                    max_tokens: parseInt(maxTokens)
+                    stream: false,
+                    options: {
+                        temperature: parseFloat(temperature),
+                        num_predict: parseInt(maxTokens)
+                    }
+                };
+
+                const ollamaResp = await fetch(`${ollamaUrl}/api/chat`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(ollamaPayload)
                 });
-                finalResponseText = reply.choices[0].message.content?.trim() || "";
+                const ollamaData = await ollamaResp.json();
+                finalResponseText = ollamaData.message?.content?.trim() || "";
+                
                 if (finalResponseText) {
                     llmConnected = true;
-                    generationMode = "webllm:gemma-2b";
+                    generationMode = `ollama:${ollamaModel}`;
                 } else {
                     finalResponseText = geomResult.text || "Manifold resonance too sparse for synthesis.";
                     generationMode = "geometric-decoded";
                 }
             } catch (err) {
-                console.error("WebLLM generation failed, falling back to geometric:", err);
-                finalResponseText = geomResult.text || "Manifold resonance too sparse (WebLLM error: " + err.message + ")";
+                console.error("Ollama generation failed, falling back to geometric:", err);
+                finalResponseText = geomResult.text || "Manifold resonance too sparse (Ollama error: " + err.message + ")";
                 generationMode = "geometric-decoded";
             }
         } else {
@@ -2639,20 +2616,21 @@ function pollSysinfo() {
         setEl("corpusCount", cCount.toLocaleString());
     }
 
-    // Set status label based on WebLLM status
+    // Check Ollama status
+    let ollamaUrl = document.getElementById("ollamaUrlInput")?.value.trim() || "http://localhost:11434";
     const ollamaEl = document.getElementById("ollamaStatus");
-    if (ollamaEl) {
-        if (mlcLoaded) {
-            ollamaEl.textContent = "● WebLLM";
-            ollamaEl.style.color = "var(--emerald)";
-        } else if (mlcLoadingError) {
-            ollamaEl.textContent = "○ Fallback";
-            ollamaEl.style.color = "var(--red)";
-        } else {
-            ollamaEl.textContent = "○ Loading";
-            ollamaEl.style.color = "var(--amber)";
-        }
-    }
+    
+    fetch(`${ollamaUrl}/api/tags`, { method: "GET" })
+        .then(r => {
+            if (r.status === 200) {
+                if (ollamaEl) { ollamaEl.textContent = "● Live"; ollamaEl.style.color = "var(--emerald)"; }
+            } else {
+                if (ollamaEl) { ollamaEl.textContent = "○ Offline"; ollamaEl.style.color = "var(--amber)"; }
+            }
+        })
+        .catch(() => {
+            if (ollamaEl) { ollamaEl.textContent = "○ Offline"; ollamaEl.style.color = "var(--amber)"; }
+        });
 }
 
 // =====================================================
@@ -2669,7 +2647,10 @@ function saveSessionToLocalStorage() {
             c2History: c2History,
             currentTrajectory: window.currentTrajectory,
             activeWindowIndex: activeWindowIndex,
-            routerState: stateStr
+            routerState: stateStr,
+            engineSelect: engineSelect?.value || "auto",
+            ollamaUrl: document.getElementById("ollamaUrlInput")?.value || "http://localhost:11434",
+            ollamaModel: document.getElementById("ollamaModelInput")?.value || "gemma2:2b"
         };
         localStorage.setItem("r4_prime_router_session_v4", JSON.stringify(session));
     } catch (e) {
@@ -2689,9 +2670,22 @@ function restoreSessionFromLocalStorage() {
             window.currentTrajectory = session.currentTrajectory || [];
             activeWindowIndex = session.activeWindowIndex !== undefined ? session.activeWindowIndex : activeWindowIndex;
             
+            if (engineSelect && session.engineSelect) {
+                engineSelect.value = session.engineSelect;
+            }
+            const ollamaUrlEl = document.getElementById("ollamaUrlInput");
+            if (ollamaUrlEl && session.ollamaUrl) {
+                ollamaUrlEl.value = session.ollamaUrl;
+            }
+            const ollamaModelEl = document.getElementById("ollamaModelInput");
+            if (ollamaModelEl && session.ollamaModel) {
+                ollamaModelEl.value = session.ollamaModel;
+            }
+            
             if (session.routerState) {
                 router.import_state(session.routerState);
             }
+            updateEngineConfigVisibility();
             console.log("[+] Restored session from localStorage.");
         }
     } catch(e) {
@@ -2726,7 +2720,6 @@ async function startApp() {
         advanceC2Auto();
         
         pollSysinfo();
-        initWebLLM();
         setInterval(pollSysinfo, 3000);
         
         console.log("[+] Application initialized successfully.");
