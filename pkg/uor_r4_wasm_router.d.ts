@@ -91,6 +91,10 @@ export class UorR4Router {
      */
     reset_brain(identity: string): void;
     /**
+     * Resets the entire router system back to factory defaults
+     */
+    reset_to_defaults(): void;
+    /**
      * Returns the routed window and detailed thermodynamic/Hopf metrics for a query
      */
     route_query_to_manifold(text: string, identity: string): any;
@@ -134,6 +138,7 @@ export interface InitOutput {
     readonly uorr4router_kill_switch_threshold: (a: number) => number;
     readonly uorr4router_new: (a: number) => number;
     readonly uorr4router_reset_brain: (a: number, b: number, c: number) => void;
+    readonly uorr4router_reset_to_defaults: (a: number) => void;
     readonly uorr4router_route_query_to_manifold: (a: number, b: number, c: number, d: number, e: number) => any;
     readonly uorr4router_set_angle_x: (a: number, b: number) => void;
     readonly uorr4router_set_angle_y: (a: number, b: number) => void;

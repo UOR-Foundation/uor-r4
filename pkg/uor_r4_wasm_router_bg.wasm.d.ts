@@ -26,6 +26,7 @@ export const uorr4router_is_aligned: (a: number) => number;
 export const uorr4router_kill_switch_threshold: (a: number) => number;
 export const uorr4router_new: (a: number) => number;
 export const uorr4router_reset_brain: (a: number, b: number, c: number) => void;
+export const uorr4router_reset_to_defaults: (a: number) => void;
 export const uorr4router_route_query_to_manifold: (a: number, b: number, c: number, d: number, e: number) => any;
 export const uorr4router_set_angle_x: (a: number, b: number) => void;
 export const uorr4router_set_angle_y: (a: number, b: number) => void;

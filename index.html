@@ -900,7 +900,6 @@
             body { grid-template-columns: 240px 1fr 320px; }
         }
     </style>
-    <script src="https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.46/dist/index.js"></script>
 </head>
 <body>
 
@@ -1393,8 +1392,7 @@ if (mapLegend) {
 import init, { UorR4Router } from './pkg/uor_r4_wasm_router.js';
 
 // Retrieve CreateMLCEngine dynamically from the globally loaded CDN script
-const CreateMLCEngine = (window.webllm && window.webllm.CreateMLCEngine) ? window.webllm.CreateMLCEngine : null;
-
+let CreateMLCEngine = null;
 let router = null;
 let mlcEngine = null;
 let mlcLoaded = false;
@@ -1421,20 +1419,6 @@ async function initWebLLM() {
         return;
     }
 
-    if (!CreateMLCEngine) {
-        console.warn("WebLLM library not loaded or unsupported. Using WASM fallback.");
-        if (statusBadge) {
-            statusBadge.textContent = "Fallback";
-            statusBadge.style.background = "rgba(255, 82, 82, 0.15)";
-            statusBadge.style.color = "var(--red)";
-            statusBadge.style.borderColor = "var(--red)";
-        }
-        if (progressText) progressText.textContent = "WebLLM package unavailable. Using WASM Geometric.";
-        if (engineLabel) engineLabel.textContent = "Pure Geometric (WASM)";
-        mlcLoadingError = true;
-        return;
-    }
-
     try {
         if (statusBadge) {
             statusBadge.textContent = "Loading...";
@@ -1443,6 +1427,16 @@ async function initWebLLM() {
             statusBadge.style.borderColor = "var(--amber)";
         }
         if (progressTrack) progressTrack.style.display = "block";
+        if (progressText) progressText.textContent = "Loading WebLLM library...";
+
+        // Dynamically import WebLLM asynchronously
+        const webllm = await import("https://esm.run/@mlc-ai/web-llm@0.2.46");
+        CreateMLCEngine = webllm.CreateMLCEngine;
+
+        if (!CreateMLCEngine) {
+            throw new Error("CreateMLCEngine not found in WebLLM module");
+        }
+
         if (progressText) progressText.textContent = "Initializing Gemma-2B...";
 
         // Load Gemma 2B model
@@ -2542,8 +2536,7 @@ if (resetBrainBtn) {
         resetBrainBtn.disabled = true;
         try {
             if (!router) throw new Error("WASM router not initialized");
-            const identity = document.getElementById("identityInput")?.value.trim() || "tenant-alpha";
-            router.reset_brain(identity);
+            router.reset_to_defaults();
             
             conversationTrajectory = [];
             c2History = [];
@@ -2574,9 +2567,9 @@ if (resetBrainBtn) {
             }
             
             // Redraw maps and orbits
-            renderSemanticMap(null, []);
+            await loadSemanticMap();
             
-            addMessage("model", `Hypersphere brain state successfully reset to neutral baseline superposition.`);
+            addMessage("model", `Hypersphere brain state and default Gambia borehole corpus successfully restored to factory defaults.`);
             saveSessionToLocalStorage();
         } catch(err) {
             addMessage("model", "Error resetting brain state: " + err.message);
@@ -2718,8 +2711,10 @@ async function startApp() {
         
         restoreSessionFromLocalStorage();
         
-        if (router.get_vocab_size() === 0) {
-            console.log("[*] Vocabulary is empty. Indexing default corpus...");
+        const mapData = router.get_semantic_map_points();
+        const ptsCount = (mapData && mapData.points) ? mapData.points.length : 0;
+        if (router.get_vocab_size() === 0 || ptsCount === 0) {
+            console.log("[*] Vocabulary or corpus is empty. Indexing default corpus...");
             router.index_default_corpus();
         }
         

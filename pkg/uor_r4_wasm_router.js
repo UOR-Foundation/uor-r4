@@ -263,6 +263,12 @@ export class UorR4Router {
         wasm.uorr4router_reset_brain(this.__wbg_ptr, ptr0, len0);
     }
     /**
+     * Resets the entire router system back to factory defaults
+     */
+    reset_to_defaults() {
+        wasm.uorr4router_reset_to_defaults(this.__wbg_ptr);
+    }
+    /**
      * Returns the routed window and detailed thermodynamic/Hopf metrics for a query
      * @param {string} text
      * @param {string} identity
