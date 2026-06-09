@@ -953,15 +953,23 @@
             <div class="section-label">Synthesis Engine Selection</div>
             <select class="identity-input" id="engineSelect" style="margin-bottom:0.75rem; background: var(--bg); color: var(--cyan); border-color: var(--border2); font-family: 'Outfit', sans-serif;">
                 <option value="auto">Auto-Select (Local Ollama / Fallback)</option>
-                <option value="geometric">Force Geometric (WASM Decoded)</option>
-                <option value="ollama">Force Ollama (Gemma LLM)</option>
+                <option value="geometric">Pure Geometric (WASM Decoded)</option>
+                <option value="ollama">Local Ollama (Requires HTTP allowed)</option>
+                <option value="gemini">Gemini API (Cloud LLM)</option>
             </select>
 
-            <div id="ollamaConfigGroup">
+            <div id="ollamaConfigGroup" style="display:none;">
                 <div class="identity-label">Ollama Host URL</div>
                 <input type="text" class="identity-input" id="ollamaUrlInput" value="http://localhost:11434" style="margin-bottom:0.5rem;">
                 <div class="identity-label">Ollama Target Model</div>
                 <input type="text" class="identity-input" id="ollamaModelInput" value="gemma:2b" style="margin-bottom:0.75rem;">
+            </div>
+
+            <div id="geminiConfigGroup" style="display:none;">
+                <div class="identity-label">Gemini API Key</div>
+                <input type="password" class="identity-input" id="geminiApiKeyInput" placeholder="Enter API Key" style="margin-bottom:0.5rem;">
+                <div class="identity-label">Gemini Model</div>
+                <input type="text" class="identity-input" id="geminiModelInput" value="gemini-1.5-flash" style="margin-bottom:0.75rem;">
             </div>
         </div>
 
@@ -1271,6 +1279,12 @@ const kbTextarea  = document.getElementById("kbTextarea");
 const indexBtn    = document.getElementById("indexBtn");
 const indexStatus = document.getElementById("indexStatus");
 
+const engineSelect       = document.getElementById("engineSelect");
+const ollamaConfigGroup  = document.getElementById("ollamaConfigGroup");
+const geminiConfigGroup  = document.getElementById("geminiConfigGroup");
+const geminiApiKeyInput  = document.getElementById("geminiApiKeyInput");
+const geminiModelInput   = document.getElementById("geminiModelInput");
+
 // =====================================================
 // App State
 // =====================================================
@@ -1320,6 +1334,29 @@ window.switchTab = function(tab) {
     if (activeBtn) activeBtn.classList.add('active');
     if (activeContent) activeContent.classList.add('active');
 };
+
+// =====================================================
+// Toggle Config Visibility
+// =====================================================
+function updateEngineConfigVisibility() {
+    const val = engineSelect?.value || "auto";
+    if (val === "ollama") {
+        if (ollamaConfigGroup) ollamaConfigGroup.style.display = "block";
+        if (geminiConfigGroup) geminiConfigGroup.style.display = "none";
+    } else if (val === "gemini") {
+        if (ollamaConfigGroup) ollamaConfigGroup.style.display = "none";
+        if (geminiConfigGroup) geminiConfigGroup.style.display = "block";
+    } else if (val === "auto") {
+        if (ollamaConfigGroup) ollamaConfigGroup.style.display = "block";
+        if (geminiConfigGroup) geminiConfigGroup.style.display = "none";
+    } else {
+        if (ollamaConfigGroup) ollamaConfigGroup.style.display = "none";
+        if (geminiConfigGroup) geminiConfigGroup.style.display = "none";
+    }
+}
+if (engineSelect) {
+    engineSelect.addEventListener("change", updateEngineConfigVisibility);
+}
 
 // =====================================================
 // Build Static UI Elements
@@ -1881,8 +1918,11 @@ function updateTelemetry(data) {
         if (tokensVal) tokensVal.textContent = auto.max_tokens;
         if (engineVal) {
             if (auto.engine === "ollama") {
-                engineVal.textContent = "Transformer (Gemma)";
+                engineVal.textContent = "Transformer (Ollama)";
                 engineVal.style.color = "var(--emerald)";
+            } else if (auto.engine === "gemini") {
+                engineVal.textContent = `Cloud LLM (Gemini)`;
+                engineVal.style.color = "var(--purple)";
             } else {
                 engineVal.textContent = "Pure Geometric";
                 engineVal.style.color = "var(--cyan)";
@@ -2211,10 +2251,12 @@ async function sendQuery(text) {
         maxTokens = Math.max(50, Math.min(500, maxTokens));
 
         // 2. Select Synthesis Engine
-        let selectedEngineMode = document.getElementById("engineSelect")?.value || "auto";
+        let selectedEngineMode = engineSelect?.value || "auto";
         let engine = "geometric";
         let ollamaUrl = document.getElementById("ollamaUrlInput")?.value.trim() || "http://localhost:11434";
         let ollamaModel = document.getElementById("ollamaModelInput")?.value.trim() || "gemma:2b";
+        let geminiApiKey = geminiApiKeyInput?.value.trim() || "";
+        let geminiModel = geminiModelInput?.value.trim() || "gemini-1.5-flash";
         
         let ollamaOnline = false;
         if (selectedEngineMode === "ollama" || selectedEngineMode === "auto") {
@@ -2236,7 +2278,17 @@ async function sendQuery(text) {
             return;
         }
         
-        if (ollamaOnline && selectedEngineMode !== "geometric") {
+        if (selectedEngineMode === "gemini" && !geminiApiKey) {
+            chatLogInner.removeChild(loadMsg);
+            addMessage("model", "Error: Gemini API Key is required when Gemini Cloud engine is selected.");
+            chatInput.disabled = false;
+            sendBtn.disabled = false;
+            return;
+        }
+        
+        if (selectedEngineMode === "gemini") {
+            engine = "gemini";
+        } else if (ollamaOnline && selectedEngineMode !== "geometric") {
             engine = "ollama";
         }
 
@@ -2254,20 +2306,20 @@ async function sendQuery(text) {
         let llmConnected = false;
         let generationMode = "geometric-decoded";
 
+        const best = routingData.routed;
+        const m = best.metrics;
+        const hopf = best.hopf;
+        const theme = WINDOW_THEMES_SHORT[best.window_index] || `Window ${best.window_index}`;
+        const topResonances = router.get_top_resonances(text, identity, 1);
+        const ctx_block = topResonances && topResonances.length > 0
+            ? topResonances[0].sentence
+            : "[no corpus context available]";
+
+        const systemPrompt = `You are the Voice of the R4 Prime Router. The current state of your context hypersphere brain is: Window ${best.window_index} (${theme}), Energy κ=${m.kappa.toFixed(4)}, Curvature θd=${m.deficit_angle.toFixed(4)}, Hopf coordinates (χ=${hopf.chi.toFixed(4)}, δ=${hopf.delta.toFixed(4)}, α=${hopf.alpha.toFixed(4)}). Grounding context sentence: "${ctx_block}". Respond directly to the user query as a geometric router. Keep your response relevant, coherent, and under ${maxTokens} words.`;
+
         if (engine === "ollama") {
             try {
                 // Query Ollama Chat API
-                const best = routingData.routed;
-                const m = best.metrics;
-                const hopf = best.hopf;
-                const theme = WINDOW_THEMES_SHORT[best.window_index] || `Window ${best.window_index}`;
-                const topResonances = router.get_top_resonances(text, identity, 1);
-                const ctx_block = topResonances && topResonances.length > 0
-                    ? topResonances[0].sentence
-                    : "[no corpus context available]";
-
-                const systemPrompt = `You are the Voice of the R4 Prime Router. The current state of your context hypersphere brain is: Window ${best.window_index} (${theme}), Energy κ=${m.kappa.toFixed(4)}, Curvature θd=${m.deficit_angle.toFixed(4)}, Hopf coordinates (χ=${hopf.chi.toFixed(4)}, δ=${hopf.delta.toFixed(4)}, α=${hopf.alpha.toFixed(4)}). Grounding context sentence: "${ctx_block}". Respond directly to the user query as a geometric router. Keep your response relevant, coherent, and under ${maxTokens} words.`;
-
                 const ollamaPayload = {
                     model: ollamaModel,
                     messages: [
@@ -2299,6 +2351,46 @@ async function sendQuery(text) {
             } catch (err) {
                 console.error("Ollama generation failed, falling back to geometric:", err);
                 finalResponseText = geomResult.text || "Manifold resonance too sparse for synthesis.";
+                generationMode = "geometric-decoded";
+            }
+        } else if (engine === "gemini") {
+            try {
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${geminiApiKey}`;
+                const payload = {
+                    contents: [
+                        { role: "user", parts: [{ text: text }] }
+                    ],
+                    systemInstruction: {
+                        parts: [{ text: systemPrompt }]
+                    },
+                    generationConfig: {
+                        temperature: parseFloat(temperature),
+                        maxOutputTokens: parseInt(maxTokens)
+                    }
+                };
+
+                const geminiResp = await fetch(url, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload)
+                });
+                if (!geminiResp.ok) {
+                    const errorData = await geminiResp.json();
+                    throw new Error(errorData.error?.message || `HTTP ${geminiResp.status}`);
+                }
+                const geminiData = await geminiResp.json();
+                finalResponseText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
+                
+                if (finalResponseText) {
+                    llmConnected = true;
+                    generationMode = `gemini:${geminiModel}`;
+                } else {
+                    finalResponseText = geomResult.text || "Manifold resonance too sparse for synthesis.";
+                    generationMode = "geometric-decoded";
+                }
+            } catch (err) {
+                console.error("Gemini API generation failed, falling back to geometric:", err);
+                finalResponseText = geomResult.text || "Manifold resonance too sparse for synthesis (Gemini error: " + err.message + ")";
                 generationMode = "geometric-decoded";
             }
         } else {
@@ -2551,9 +2643,14 @@ function saveSessionToLocalStorage() {
             c2History: c2History,
             currentTrajectory: window.currentTrajectory,
             activeWindowIndex: activeWindowIndex,
-            routerState: stateStr
+            routerState: stateStr,
+            engineSelect: engineSelect?.value || "auto",
+            ollamaUrl: document.getElementById("ollamaUrlInput")?.value || "http://localhost:11434",
+            ollamaModel: document.getElementById("ollamaModelInput")?.value || "gemma:2b",
+            geminiApiKey: geminiApiKeyInput?.value || "",
+            geminiModel: geminiModelInput?.value || "gemini-1.5-flash"
         };
-        localStorage.setItem("r4_prime_router_session_v2", JSON.stringify(session));
+        localStorage.setItem("r4_prime_router_session_v3", JSON.stringify(session));
     } catch (e) {
         console.error("Failed to save session to localStorage:", e);
     }
@@ -2561,7 +2658,7 @@ function saveSessionToLocalStorage() {
 
 function restoreSessionFromLocalStorage() {
     try {
-        const saved = localStorage.getItem("r4_prime_router_session_v2");
+        const saved = localStorage.getItem("r4_prime_router_session_v3");
         if (saved && router) {
             const session = JSON.parse(saved);
             rotX = session.rotX !== undefined ? session.rotX : rotX;
@@ -2571,6 +2668,24 @@ function restoreSessionFromLocalStorage() {
             window.currentTrajectory = session.currentTrajectory || [];
             activeWindowIndex = session.activeWindowIndex !== undefined ? session.activeWindowIndex : activeWindowIndex;
             
+            if (engineSelect && session.engineSelect) {
+                engineSelect.value = session.engineSelect;
+            }
+            const ollamaUrlEl = document.getElementById("ollamaUrlInput");
+            if (ollamaUrlEl && session.ollamaUrl) {
+                ollamaUrlEl.value = session.ollamaUrl;
+            }
+            const ollamaModelEl = document.getElementById("ollamaModelInput");
+            if (ollamaModelEl && session.ollamaModel) {
+                ollamaModelEl.value = session.ollamaModel;
+            }
+            if (geminiApiKeyInput && session.geminiApiKey) {
+                geminiApiKeyInput.value = session.geminiApiKey;
+            }
+            if (geminiModelInput && session.geminiModel) {
+                geminiModelInput.value = session.geminiModel;
+            }
+            
             if (session.routerState) {
                 router.import_state(session.routerState);
             }
@@ -2579,6 +2694,7 @@ function restoreSessionFromLocalStorage() {
     } catch(e) {
         console.error("Failed to restore session:", e);
     }
+    updateEngineConfigVisibility();
 }
 
 window.addEventListener("beforeunload", saveSessionToLocalStorage);
@@ -2601,6 +2717,7 @@ async function startApp() {
         advanceC2Auto();
         
         pollSysinfo();
+        updateEngineConfigVisibility();
         setInterval(pollSysinfo, 3000);
         
         console.log("[+] Application initialized successfully.");
