@@ -1,0 +1,23 @@
+[package]
+name = "uor-foundation-sdk"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+description = "Procedural-macro ergonomics for uor-foundation product, coproduct, and cartesian-product shape construction."
+keywords = ["ontology", "uor", "macros", "type-system", "semantic-web"]
+categories = ["development-tools::procedural-macro-helpers"]
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2 = "1"
+quote = "1"
+syn = { version = "2", features = ["full"] }
+
+[dev-dependencies]
+uor-foundation = { workspace = true }

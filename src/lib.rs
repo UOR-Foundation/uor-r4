@@ -652,6 +652,104 @@ impl UorR4Router {
         });
         serde_wasm_bindgen::to_value(&map_val).unwrap_or(JsValue::NULL)
     }
+
+    /// Runs the formal UOR coordinate reduction pipeline and returns both RoutingData and trace steps as a single JsValue
+    pub fn route_query_to_manifold_uor(&mut self, text: &str, identity: &str) -> JsValue {
+        use uor_foundation::pipeline::PrismModel;
+        let mut buf = [0u8; 640];
+        let query_bytes = text.as_bytes();
+        let identity_bytes = identity.as_bytes();
+        let query_len = query_bytes.len().min(512);
+        let identity_len = identity_bytes.len().min(128);
+        buf[..query_len].copy_from_slice(&query_bytes[..query_len]);
+        buf[512..512 + identity_len].copy_from_slice(&identity_bytes[..identity_len]);
+
+        let input = R4RoutingInput {
+            query: &buf[..512],
+            identity: &buf[512..],
+            data: &buf,
+        };
+
+        // Bind thread-local
+        let self_ptr = self as *mut UorR4Router;
+        ACTIVE_ROUTER.with(|r| {
+            *r.borrow_mut() = Some(self_ptr);
+        });
+
+        // Run dry run through UorR4RouterModel
+        let grounded = match UorR4RouterModel::forward(input) {
+            Ok(g) => g,
+            Err(_) => {
+                // Reset thread-local
+                ACTIVE_ROUTER.with(|r| {
+                    *r.borrow_mut() = None;
+                });
+                return JsValue::NULL;
+            }
+        };
+
+        // Reset thread-local
+        ACTIVE_ROUTER.with(|r| {
+            *r.borrow_mut() = None;
+        });
+
+        let routing_data = match &self.last_routing_data {
+            Some(rd) => rd,
+            None => return JsValue::NULL,
+        };
+
+        let trace = grounded.derivation().replay::<256>();
+        let mut uor_trace_steps = Vec::new();
+        for i in 0..trace.len() {
+            if let Some(event) = trace.event(i as usize) {
+                uor_trace_steps.push(serde_json::json!({
+                    "step": event.step_index(),
+                    "op": format!("{:?}", event.op()),
+                    "target": format!("0x{:032x}", event.target().as_u128()),
+                }));
+            }
+        }
+
+        let uor_payload = serde_json::json!({
+            "algorithm": routing_data.routed.uor.algorithm.clone(),
+            "hash_algorithm": routing_data.routed.uor.hash_algorithm.clone(),
+            "hash_algorithm_id": routing_data.routed.uor.hash_algorithm_id,
+            "address": routing_data.routed.uor.address.clone(),
+            "verify_result": "Verified",
+            "kappa_label": format!("witt:{}", grounded.witt_level_bits()),
+            "fingerprint_hex": hex::encode(grounded.content_fingerprint().as_bytes()),
+            "sigma": grounded.sigma().value(),
+            "d_delta": grounded.d_delta().as_i64(),
+            "euler": grounded.euler().as_i64(),
+            "residual": grounded.residual().as_u32(),
+            "stratum": grounded.triad().stratum(),
+            "multihash_addresses": routing_data.routed.uor.multihash_addresses.clone(),
+        });
+
+        let result = serde_json::json!({
+            "routing_data": routing_data,
+            "uor_trace_steps": uor_trace_steps,
+            "uor_payload": uor_payload,
+        });
+
+        serde_wasm_bindgen::to_value(&result).unwrap_or(JsValue::NULL)
+    }
+
+    /// Projects the active brain state vector into 2D coordinates for the map path tracing
+    pub fn get_sentence_projection_wasm(&self, state_vector: &[f64], win_idx: usize) -> Vec<f64> {
+        let (u, v) = self.get_sentence_projection(state_vector, win_idx);
+        vec![u, v]
+    }
+
+    /// Projects the active brain state vector into 4D coordinates
+    pub fn get_state_4d_projection_wasm(&self, state_vector: &[f64]) -> Vec<f64> {
+        self.get_state_4d_projection(state_vector)
+    }
+
+    /// Retrieves the evolved brain state vector for a given identity
+    pub fn get_brain_state_wasm(&mut self, identity: &str) -> Vec<f64> {
+        self.get_brain_state_native(identity)
+    }
 }
 
 // ============================================================

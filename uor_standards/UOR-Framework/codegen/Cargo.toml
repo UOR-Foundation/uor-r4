@@ -1,0 +1,11 @@
+[package]
+name = "uor-codegen"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "UOR Foundation code generator — produces the uor-foundation Rust trait crate from the ontology"
+publish = false
+
+[dependencies]
+uor-ontology = { path = "../spec" }
+anyhow = { workspace = true }

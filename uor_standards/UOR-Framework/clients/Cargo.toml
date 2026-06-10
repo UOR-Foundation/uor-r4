@@ -1,0 +1,42 @@
+[package]
+name = "uor-clients"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "UOR Foundation client binaries: build, conformance, docs, and website generators"
+publish = false
+
+[[bin]]
+name = "uor-build"
+path = "src/bin/build.rs"
+
+[[bin]]
+name = "uor-conformance"
+path = "src/bin/conformance.rs"
+
+[[bin]]
+name = "uor-docs"
+path = "src/bin/docs.rs"
+
+[[bin]]
+name = "uor-website"
+path = "src/bin/website.rs"
+
+[[bin]]
+name = "uor-crate"
+path = "src/bin/crate_.rs"
+
+[[bin]]
+name = "uor-lean"
+path = "src/bin/lean.rs"
+
+[dependencies]
+uor-ontology = { path = "../spec" }
+uor-codegen = { path = "../codegen" }
+uor-conformance = { path = "../conformance" }
+uor-docs = { path = "../docs" }
+uor-website = { path = "../website" }
+uor-lean-codegen = { path = "../lean-codegen" }
+clap = { workspace = true }
+anyhow = { workspace = true }
+serde_json = { workspace = true }

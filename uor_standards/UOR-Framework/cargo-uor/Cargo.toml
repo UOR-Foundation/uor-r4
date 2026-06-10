@@ -1,0 +1,33 @@
+[package]
+name = "cargo-uor"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "UOR Foundation tooling — check, inspect, and explain compile units"
+readme = "README.md"
+keywords = ["uor", "tooling", "ontology", "cargo-subcommand"]
+categories = ["development-tools", "command-line-utilities"]
+publish = false
+
+[[bin]]
+name = "cargo-uor"
+path = "src/bin/cargo-uor.rs"
+
+[dependencies]
+anyhow = { workspace = true }
+clap = { workspace = true }
+serde_json = { workspace = true }
+uor-foundation = { path = "../foundation" }
+uor-ontology = { path = "../spec" }
+
+[lints.rust]
+missing_docs = "deny"
+
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+missing_errors_doc = "deny"

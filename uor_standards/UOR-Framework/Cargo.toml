@@ -1,0 +1,68 @@
+[workspace]
+members = [
+    "spec",
+    "codegen",
+    "lean-codegen",
+    "foundation",
+    "uor-foundation-sdk",
+    "uor-foundation-verify",
+    "uor-foundation-test-helpers",
+    "conformance",
+    "docs",
+    "website",
+    "clients",
+    "cargo-uor",
+    "xtask",
+    "examples/consumer-smoke",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.5.2"
+edition = "2021"
+rust-version = "1.83"
+license = "MIT"
+repository = "https://github.com/UOR-Foundation/UOR-Framework"
+homepage = "https://uor.foundation/"
+authors = ["The UOR Foundation"]
+
+[workspace.dependencies]
+# v0.2.2 T4.1 (cleanup): uor-foundation is published to crates.io; the
+# verify crate must reference it by version + path so cargo publish
+# accepts the manifest (path-only deps are rejected for published crates).
+uor-foundation = { version = "0.5.2", path = "foundation" }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# RDF / Turtle / N-Triples
+sophia = "0.8"
+sophia_api = "0.8"
+sophia_turtle = "0.8"
+sophia_jsonld = "0.8"
+sophia_inmem = "0.8"
+
+# CLI
+clap = { version = "4", features = ["derive"] }
+
+# Error handling
+anyhow = "1"
+thiserror = "1"
+
+# File traversal
+walkdir = "2"
+
+# Markdown rendering
+pulldown-cmark = "0.11"
+
+# HTML5 parsing (conformance)
+html5ever = "0.27"
+markup5ever = "0.12"
+markup5ever_rcdom = "0.2"
+
+# CSS parsing (conformance)
+cssparser = "0.33"
+
+# TOML parsing (docs front-matter claims)
+toml = "0.8"

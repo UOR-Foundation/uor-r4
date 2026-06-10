@@ -1,0 +1,17 @@
+[package]
+name = "uor-consumer-smoke"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+description = "Cross-crate smoke test: uor-foundation + uor-foundation-sdk via published surface only."
+
+# This crate intentionally depends on the two published crates as if it
+# were an external consumer. No `uor-foundation-test-helpers`, no
+# `#[doc(hidden)]` items, no `pub(crate)` back-doors. If a needed item
+# is unreachable from `uor_foundation::*` or `uor_foundation_sdk::*`, the
+# foundation surface is missing a public re-export — fix that, not this.
+[dependencies]
+uor-foundation = { path = "../../foundation" }
+uor-foundation-sdk = { path = "../../uor-foundation-sdk" }

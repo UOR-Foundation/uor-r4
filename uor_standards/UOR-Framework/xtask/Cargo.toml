@@ -1,0 +1,22 @@
+[package]
+name = "uor-xtask"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "UOR Foundation xtask — repository-wide maintenance commands (ψ-leakage gate, etc.)"
+publish = false
+
+[[bin]]
+name = "xtask"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = { workspace = true }
+clap = { workspace = true }
+# Phase J: xtask delegates to the existing conformance validator so there
+# is exactly one ψ-leakage implementation. The CLI surface is required by
+# target §7.3; the scanning logic lives in conformance/src/validators/docs/psi_leakage.rs.
+uor-conformance = { path = "../conformance" }

@@ -1,0 +1,21 @@
+# UOR Framework clippy configuration
+# All lints are errors. No exceptions without documented justification.
+
+# Deny list applied via #![deny(...)] in each crate's lib.rs / main.rs:
+#   clippy::unwrap_used
+#   clippy::expect_used
+#   clippy::panic
+#   clippy::missing_docs_in_private_items (for public crates)
+#   clippy::missing_errors_doc
+#   clippy::missing_panics_doc
+
+# This file configures lint levels for clippy-specific options.
+
+# Enforce that all public items have documentation comments.
+# Applied at the crate level via #![warn(missing_docs)].
+
+# Minimum code complexity threshold before clippy::too_many_lines warns.
+too-many-lines-threshold = 100
+
+# Enforce consistent naming conventions (matches rustfmt defaults).
+avoid-breaking-exported-api = false

@@ -1,0 +1,39 @@
+[package]
+name = "uor-prism"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme = "../../README.md"
+description = "The Prism standard library (wiki ADR-031): a façade re-exporting uor-foundation's substrate plus the Layer-3 sub-crates (prism-crypto, prism-numerics, prism-tensor, prism-fhe) that contribute built-in axes and built-in types."
+documentation = "https://docs.rs/uor-prism"
+categories = ["compilers", "no-std", "rust-patterns"]
+keywords = ["prism", "uor", "sealed", "verification", "no-std"]
+
+[lib]
+name = "prism"
+
+[dependencies]
+uor-foundation = { workspace = true }
+uor-foundation-sdk = { workspace = true }
+uor-prism-numerics = { workspace = true }
+uor-prism-crypto = { workspace = true }
+uor-prism-tensor = { workspace = true }
+uor-prism-fhe = { workspace = true }
+
+[features]
+default = []
+alloc = ["uor-foundation/alloc"]
+std = ["alloc", "uor-foundation/std"]
+serde = ["alloc", "uor-foundation/serde"]
+observability = ["alloc", "uor-foundation/observability"]
+
+[lints]
+workspace = true
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

@@ -1,0 +1,64 @@
+name: Docs
+
+# Publishes `cargo doc` output to GitHub Pages on every push to main.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow only one concurrent deployment; in-flight runs may finish but
+# new pushes preempt waiting runs.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTDOCFLAGS: "-D rustdoc::broken_intra_doc_links"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Self-enable GitHub Pages (build_type = workflow) if it isn't
+      # already. Without this, `deploy-pages` fails the run with
+      # `HttpError: Not Found` on repos where Pages was never turned
+      # on in Settings. `enablement: true` makes the workflow
+      # idempotently configure Pages via the API on first run.
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo doc --workspace --no-deps
+      - name: Inject root redirect
+        run: |
+          cat > target/doc/index.html <<'HTML'
+          <!doctype html>
+          <meta charset="utf-8">
+          <title>uor-addr docs</title>
+          <meta http-equiv="refresh" content="0;url=uor_addr/index.html">
+          <link rel="canonical" href="uor_addr/index.html">
+          <p>Redirecting to <a href="uor_addr/index.html">uor_addr/index.html</a>.</p>
+          HTML
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: target/doc
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

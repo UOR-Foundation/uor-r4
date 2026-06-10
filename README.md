@@ -73,6 +73,13 @@ graph TD
 
 ## 🚀 Getting Started
 
+### 🌐 GitHub Pages & Static Fallback Mode
+
+This application is configured with a fully self-contained WebAssembly (WASM) fallback mechanism. When deployed to **GitHub Pages** (or run statically without a backend server):
+- **Automatic Fallback**: The client-side dashboard detects that the backend server is offline and automatically initializes the WASM router (`UorR4Router`) locally inside the browser.
+- **Client-Side Simulation**: All prime coordinate mappings, coordinate reductions, thought stream visualizations, QIMC panel attestation updates, MoE expert cell activations, and trace logs are computed directly in your browser using compiled WebAssembly.
+- **Limitation**: Pure geometric synthesis is run locally on the client-side manifold coordinates. To use the full synthesis backend (leveraging local LLMs like Ollama/Gemma), you must clone the repository and run the server locally following the instructions below.
+
 ### Prerequisites
 
 Ensure you have the following installed on your machine:

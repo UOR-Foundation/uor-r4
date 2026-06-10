@@ -1,0 +1,13 @@
+# Rust
+/target
+**/*.rs.bk
+
+# Editor + OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# wiki-link-check cache (cloned wiki working copies)
+.cache/
+.claude/

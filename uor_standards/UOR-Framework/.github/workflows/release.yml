@@ -1,0 +1,184 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  release:
+    name: Build, Conform, and Publish Release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      - name: Validate tag matches Cargo.toml version
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          CARGO_VERSION="$(cargo metadata --format-version 1 --no-deps \
+            | jq -r '.packages[] | select(.name == "uor-foundation") | .version')"
+          if [ "$TAG" != "$CARGO_VERSION" ]; then
+            echo "::error::Tag version ($TAG) does not match Cargo.toml version ($CARGO_VERSION)"
+            exit 1
+          fi
+          echo "Tag v$TAG matches Cargo.toml version $CARGO_VERSION"
+
+      - name: Check formatting
+        run: cargo fmt --check
+
+      - name: Run Clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Run tests
+        run: cargo test
+
+      - name: Generate Rust crate
+        run: cargo run --bin uor-crate
+
+      - name: Verify no drift in generated code
+        run: git diff --exit-code foundation/src/ uor-foundation-sdk/src/
+
+      - name: Check generated crate (no deps)
+        run: cargo check -p uor-foundation --no-default-features
+
+      - name: Generate Lean 4 formalization
+        run: cargo run --bin uor-lean
+
+      - name: Verify no drift in generated Lean 4 code
+        run: git diff --exit-code lean4/
+
+      - name: Build Lean 4 formalization
+        uses: leanprover/lean-action@v1
+
+      - name: Build ontology artifacts
+        run: cargo run --bin uor-build
+
+      - name: Generate documentation
+        run: cargo run --bin uor-docs
+        env:
+          PUBLIC_BASE_PATH: /UOR-Framework
+
+      - name: Generate website
+        run: cargo run --bin uor-website
+        env:
+          PUBLIC_BASE_PATH: /UOR-Framework
+
+      - name: Run conformance suite
+        run: cargo run --bin uor-conformance
+        env:
+          PUBLIC_BASE_PATH: /UOR-Framework
+
+      - name: Verify foundation crate packaging
+        run: cargo publish --dry-run --allow-dirty -p uor-foundation
+
+      - name: Verify SDK crate packaging
+        # The SDK declares `uor-foundation = "^X.Y.Z"`; on a fresh tag the
+        # new foundation isn't on crates.io yet — foundation is published
+        # later in this same job, with the wait-for-index step gating the
+        # SDK publish. Skip the dry-run on first publish; the actual SDK
+        # publish step at the end of this job is the authoritative
+        # verification (and runs after wait-for-index resolves the dep).
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "tag-derived version: $VERSION"
+          if cargo search uor-foundation --limit 50 \
+              | grep -E "^uor-foundation = \"$VERSION\"" >/dev/null; then
+            echo "uor-foundation $VERSION is on crates.io — running SDK dry-run"
+            cargo publish --dry-run --allow-dirty -p uor-foundation-sdk
+          else
+            echo "uor-foundation $VERSION not yet on crates.io — skipping SDK dry-run"
+            echo "(authoritative verification is the publish step at the bottom of this job, after wait-for-index)"
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            public/uor.foundation.jsonld
+            public/uor.foundation.ttl
+            public/uor.foundation.nt
+            public/uor.foundation.owl
+            public/uor.foundation.schema.json
+            public/uor.shapes.ttl
+            public/uor.term.ebnf
+          body: |
+            UOR Foundation ontology release ${{ github.ref_name }}.
+
+            **Artifacts:**
+            - `uor.foundation.jsonld` — JSON-LD 1.1
+            - `uor.foundation.ttl` — Turtle 1.1
+            - `uor.foundation.nt` — N-Triples
+            - `uor.foundation.owl` — OWL 2 RDF/XML
+            - `uor.foundation.schema.json` — JSON Schema (Draft 2020-12)
+            - `uor.shapes.ttl` — SHACL validation shapes
+            - `uor.term.ebnf` — ISO/IEC 14977 EBNF grammar
+
+            **Rust crate:** [`uor-foundation`](https://crates.io/crates/uor-foundation)
+            **Lean 4 package:** [`uor`](https://github.com/UOR-Foundation/UOR-Framework/tree/main/lean4) (Lean Reservoir)
+            Documentation: https://uor-foundation.github.io/UOR-Framework/
+
+      - name: Upload Lean 4 cloud release build
+        run: lake upload "${{ github.ref_name }}"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Publish foundation to crates.io
+        run: cargo publish -p uor-foundation
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Wait for uor-foundation to appear on crates.io index
+        # crates.io propagates with a few-second index delay; the SDK publish
+        # fails with "not found" if issued too quickly.
+        #
+        # The previous implementation used `cargo search`, which reads from
+        # the runner's CACHED `~/.cargo/registry` index. The cache is
+        # restored from the cargo cache action at the top of the job and
+        # was minted before the foundation publish, so `cargo search` saw
+        # a stale view of the registry and the loop timed out on v0.3.1
+        # even though the publish had succeeded. We now query crates.io's
+        # HTTP API directly, bypassing cargo's cache entirely.
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          for i in {1..60}; do
+            if curl -sSf \
+                 -H "User-Agent: UOR-Framework-release-workflow" \
+                 "https://crates.io/api/v1/crates/uor-foundation/$VERSION" \
+                 | grep -q "\"num\":\"$VERSION\""; then
+              echo "uor-foundation $VERSION visible on registry"
+              exit 0
+            fi
+            echo "Waiting for uor-foundation $VERSION ($i/60)..."
+            sleep 5
+          done
+          echo "Timed out waiting for uor-foundation on registry"
+          exit 1
+
+      - name: Publish uor-foundation-sdk to crates.io
+        run: cargo publish -p uor-foundation-sdk
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}

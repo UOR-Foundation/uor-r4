@@ -1,0 +1,8 @@
+[toolchain]
+# Workspace MSRV is 1.83 (declared in Cargo.toml workspace.package). The
+# toolchain channel is left at "stable" so contributors pick up the
+# latest patch + clippy revision; CI verifies MSRV via `cargo +1.83
+# check` separately. Min-const-generics (the substitution-axis carrier
+# per the wiki's ADR-018 + ADR-007) is stable on 1.83+.
+channel = "stable"
+components = ["rustfmt", "clippy"]

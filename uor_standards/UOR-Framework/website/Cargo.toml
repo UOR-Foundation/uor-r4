@@ -1,0 +1,17 @@
+[package]
+name = "uor-website"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "UOR Foundation static site generator — produces the complete https://uor.foundation/ website"
+publish = false
+
+[dependencies]
+uor-ontology = { path = "../spec" }
+uor-docs = { path = "../docs" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+pulldown-cmark = { workspace = true }
+thiserror = { workspace = true }
+walkdir = { workspace = true }

@@ -1,0 +1,25 @@
+[package]
+name = "uor-foundation-verify"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "UOR Foundation — no_std trace-replay verifier. Re-derives certificates from a content-addressed Trace without invoking the deciders."
+documentation = "https://docs.rs/uor-foundation-verify"
+readme = "README.md"
+keywords = ["ontology", "uor", "verification", "trace-replay", "semantic-web"]
+categories = ["data-structures", "science"]
+
+[dependencies]
+uor-foundation = { workspace = true }
+
+[dev-dependencies]
+uor-foundation-test-helpers = { path = "../uor-foundation-test-helpers" }
+
+[features]
+# Default build is strictly no_std. The `serde` feature enables byte-stream
+# trace deserialization via serde; it requires alloc and is off by default.
+default = []
+serde = ["uor-foundation/serde"]

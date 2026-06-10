@@ -1,0 +1,13 @@
+[package]
+name = "uor-lean-codegen"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Ontology-to-Lean 4 code generator for the UOR Foundation"
+publish = false
+
+[dependencies]
+uor-ontology = { path = "../spec" }
+anyhow = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }

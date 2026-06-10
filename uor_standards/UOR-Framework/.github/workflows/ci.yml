@@ -1,0 +1,152 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Build, Test, and Conform
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+          # Phase J (target §7.5) configuration 1: bare-metal no_std target
+          # is a required build for every PR.
+          targets: thumbv7em-none-eabihf
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      - name: Check formatting
+        run: cargo fmt --check
+
+      - name: Run Clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Run tests
+        run: cargo test
+
+      - name: Cross-crate consumer smoke
+        run: |
+          cargo test -p uor-consumer-smoke
+          cargo build -p uor-consumer-smoke --release
+
+      - name: Generate Rust crate
+        run: cargo run --bin uor-crate
+
+      - name: Verify no drift in generated code
+        run: git diff --exit-code foundation/src/ uor-foundation-sdk/src/
+
+      # Phase J (target §7.5): three required no_std build configurations.
+      - name: Build foundation — bare-metal no_std (config 1)
+        run: cargo build -p uor-foundation --no-default-features --target thumbv7em-none-eabihf
+
+      - name: Build foundation — alloc-additive (config 2)
+        run: cargo build -p uor-foundation --no-default-features --features alloc
+
+      - name: Build foundation — all features (config 3)
+        run: cargo build -p uor-foundation --all-features
+
+      - name: Check generated crate (no deps, host target)
+        run: cargo check -p uor-foundation --no-default-features
+
+      # Phase J (target §7.3): ψ-leakage CI gate. Scans consumer-facing
+      # surfaces for the character ψ and fails on any hit outside the
+      # allowlist in conformance::validators::docs::psi_leakage.
+      - name: Phase J ψ-leakage gate
+        run: cargo xtask check-psi
+
+      - name: Verify crate packaging (dry-run)
+        run: cargo publish --dry-run --allow-dirty -p uor-foundation
+
+      - name: Verify SDK crate packaging (dry-run)
+        # The SDK declares `uor-foundation = "^X.Y.Z"`; on a version-bump
+        # commit the new foundation isn't on crates.io yet (release.yml
+        # publishes foundation first and waits for the index to update
+        # before publishing the SDK). Skip the dry-run when the workspace
+        # foundation version isn't indexed; otherwise verify packaging.
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION=$(awk '/^\[workspace\.package\]/{f=1} f && /^version *=/{gsub(/[" ]/,"",$3); print $3; exit}' Cargo.toml)
+          echo "workspace foundation version: $VERSION"
+          if cargo search uor-foundation --limit 50 \
+              | grep -E "^uor-foundation = \"$VERSION\"" >/dev/null; then
+            echo "uor-foundation $VERSION is on crates.io — running SDK dry-run"
+            cargo publish --dry-run --allow-dirty -p uor-foundation-sdk
+          else
+            echo "uor-foundation $VERSION not yet on crates.io — skipping SDK dry-run"
+            echo "(release.yml handles ordered publish via wait-for-index)"
+          fi
+
+      - name: Generate Lean 4 formalization
+        run: cargo run --bin uor-lean
+
+      - name: Verify no drift in generated Lean 4 code
+        run: git diff --exit-code lean4/
+
+      - name: Build Lean 4 formalization
+        uses: leanprover/lean-action@v1
+
+      - name: Build ontology artifacts
+        run: cargo run --bin uor-build
+
+      - name: Generate documentation
+        run: cargo run --bin uor-docs
+        env:
+          PUBLIC_BASE_PATH: /UOR-Framework
+
+      - name: Generate website
+        run: cargo run --bin uor-website
+        env:
+          PUBLIC_BASE_PATH: /UOR-Framework
+
+      - name: Run conformance suite
+        run: cargo run --bin uor-conformance
+        env:
+          PUBLIC_BASE_PATH: /UOR-Framework
+
+      - name: Upload pages artifact
+        # Only deploy Pages on pushes to main (not PRs)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: public/
+
+  deploy-pages:
+    name: Deploy to GitHub Pages
+    needs: validate
+    # Only deploy on pushes to main (not PRs, not tags)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v4

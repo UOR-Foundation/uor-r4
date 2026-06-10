@@ -1,0 +1,287 @@
+// uor-addr WIT — the Component Model interface published by the
+// `uor-addr-wasm` crate. Any host language with a WASM Component
+// Model runtime (jco for JS, wasmtime for Python/Go, etc.) consumes
+// this interface and is guaranteed byte-for-byte κ-label parity with
+// the Rust path.
+//
+// Authority: <https://component-model.bytecodealliance.org/>
+
+package uor:addr@0.1.0;
+
+/// Each realization name is the WIT-snake-case form of the canonical
+/// `uor_addr::<realization>` Rust module path. The κ-label width is
+/// fixed at 71 ASCII bytes (`sha256:` + 64 lowercase-hex).
+interface kappa {
+    /// Failure modes from any `*-address` function.
+    ///
+    /// - `invalid-input`: input bytes rejected by the host-boundary
+    ///   parser (not valid JSON / S-expression / XML / DER / …).
+    /// - `too-large`: **reserved** — never returned under ADR-060
+    ///   (inputs are unbounded; the per-realization caps were removed).
+    ///   Retained as forward-compat contract surface.
+    /// - `pipeline-failure`: defensive — substrate-level shape
+    ///   violation. Unreachable for well-formed inputs.
+    variant address-error {
+        invalid-input,
+        too-large,
+        pipeline-failure,
+    }
+
+    /// Failure modes from `grounded.verify()`. **Reserved forward-compat
+    /// vocabulary** mirroring `prism::replay::ReplayError`: under ADR-060
+    /// `verify()` re-certifies through the owned witness and surfaces a
+    /// coarse replay-failure (mapped to `empty-trace`) or fingerprint
+    /// divergence (mapped to `out-of-order-event`); all five variants are
+    /// *defensive* against substrate corruption and are unreachable for a
+    /// `grounded` resource the component itself emitted.
+    ///
+    /// - `empty-trace`: derivation produced no events.
+    /// - `out-of-order-event`: trace event has a non-monotonic
+    ///   `step_index`.
+    /// - `zero-target`: trace event carried a zero `ContentAddress`.
+    /// - `non-contiguous-steps`: step indices skip values.
+    /// - `capacity-exceeded`: derivation event count exceeded
+    ///   `TR_MAX = 256`.
+    variant verify-error {
+        empty-trace,
+        out-of-order-event,
+        zero-target,
+        non-contiguous-steps,
+        capacity-exceeded,
+    }
+
+    /// σ-axis selector for the `*-address-with-hash` and
+    /// `*-address-with-witness-hash` functions. Variant names are WIT
+    /// identifiers (no numeric-leading words), so the SHA3-256 axis is
+    /// `sha3256` here; its κ-label prefix is still `sha3-256` (produced
+    /// Rust-side, independent of this name).
+    enum hash-algorithm {
+        sha256,
+        blake3,
+        sha3256,
+        keccak256,
+        sha512,
+    }
+
+    /// The 71-byte ASCII κ-label.
+    ///
+    /// Layout: `sha256:` (7 bytes) ‖ 64 lowercase-hex digits.
+    /// Encoded as a UTF-8 string for ergonomic host consumption.
+    type kappa-label = string;
+
+    /// **Opaque foreign-managed witness** — a wasm-component-side
+    /// handle to a Rust `Grounded<AddressLabel>` value carrying the
+    /// ψ-pipeline's emitted derivation. Returned by every
+    /// `*-address-with-witness` constructor; verifiable through
+    /// [`grounded.verify`] without re-invoking SHA-256.
+    ///
+    /// TC-05 conformance (CL-R\*): every `grounded` resource the
+    /// component emits replays through `verify()` to a κ-label
+    /// byte-identical to the one the source `*-address-with-witness`
+    /// call returned (QS-05 replay equivalence — bit-identical
+    /// round-trip).
+    ///
+    /// Lifetime: the resource lives until the host drops it (component
+    /// model `own` semantics). The witness is in-process state — a
+    /// resource minted in one component instance cannot be transported
+    /// to another instance; for cross-process attestation, persist the
+    /// κ-label itself and re-mint at the verifier side.
+    resource grounded {
+        /// Return the κ-label this Grounded carries.
+        kappa-label: func() -> kappa-label;
+
+        /// Return the 32-byte SHA-256 content fingerprint.
+        content-fingerprint: func() -> list<u8>;
+
+        /// Replay the derivation through
+        /// `prism_verify::certify_from_trace` and return the verified
+        /// κ-label. SHA-256 is **not** re-invoked — the verifier
+        /// re-walks the trace events the source pipeline emitted and
+        /// re-packages the certified output. Round-trip equivalence
+        /// to `kappa-label()` is structural: the recovered κ-label
+        /// is byte-identical to the one the source `*-address-with-
+        /// witness` call returned.
+        verify: func() -> result<kappa-label, verify-error>;
+    }
+
+    /// JSON realization (RFC 8259 + RFC 8785 JCS + UAX #15 NFC).
+    json-address: func(input: list<u8>) -> result<kappa-label, address-error>;
+
+    /// JSON realization, returning the verifiable witness handle.
+    json-address-with-witness: func(input: list<u8>) -> result<grounded, address-error>;
+
+    /// S-expression realization (Rivest 1997 canonical form).
+    sexp-address: func(input: list<u8>) -> result<kappa-label, address-error>;
+
+    /// S-expression realization, returning the verifiable witness handle.
+    sexp-address-with-witness: func(input: list<u8>) -> result<grounded, address-error>;
+
+    /// XML realization (W3C XML-C14N 1.1 subset).
+    xml-address: func(input: list<u8>) -> result<kappa-label, address-error>;
+
+    /// XML realization, returning the verifiable witness handle.
+    xml-address-with-witness: func(input: list<u8>) -> result<grounded, address-error>;
+
+    /// ASN.1 realization (ITU-T X.690 DER).
+    asn1-address: func(input: list<u8>) -> result<kappa-label, address-error>;
+
+    /// ASN.1 realization, returning the verifiable witness handle.
+    asn1-address-with-witness: func(input: list<u8>) -> result<grounded, address-error>;
+
+    /// Ring realization (UOR-Framework Amendment 43 §2 canonical bytes).
+    ring-address: func(input: list<u8>) -> result<kappa-label, address-error>;
+
+    /// Ring realization, returning the verifiable witness handle.
+    ring-address-with-witness: func(input: list<u8>) -> result<grounded, address-error>;
+
+    /// Code-module AST realization (CCMAS canonical AST).
+    codemodule-address: func(input: list<u8>) -> result<kappa-label, address-error>;
+
+    /// Code-module AST realization, returning the verifiable witness handle.
+    codemodule-address-with-witness: func(input: list<u8>) -> result<grounded, address-error>;
+
+    /// CBOR realization (RFC 8949 §4.2 deterministic encoding + SHA-256).
+    cbor-address: func(input: list<u8>) -> result<kappa-label, address-error>;
+
+    /// CBOR realization, returning the verifiable witness handle.
+    cbor-address-with-witness: func(input: list<u8>) -> result<grounded, address-error>;
+
+    /// schema.org/Photograph descendant — admits only schema.org/Photograph
+    /// JSON-LD inputs.
+    schema-photo-address: func(input: list<u8>) -> result<kappa-label, address-error>;
+
+    /// schema.org/Photograph descendant, with verifiable witness.
+    schema-photo-address-with-witness: func(input: list<u8>) -> result<grounded, address-error>;
+
+    /// schema.org/Article descendant — admits only schema.org/Article
+    /// JSON-LD inputs (plus subtypes).
+    schema-document-address: func(input: list<u8>) -> result<kappa-label, address-error>;
+
+    /// schema.org/Article descendant, with verifiable witness.
+    schema-document-address-with-witness: func(input: list<u8>) -> result<grounded, address-error>;
+
+    /// in-toto Statement v1 descendant — admits only in-toto v1
+    /// envelopes carrying sigstore / SLSA / SCAI / SPDX SBOM predicates.
+    schema-codemodule-signed-address: func(input: list<u8>) -> result<kappa-label, address-error>;
+
+    /// in-toto Statement v1 descendant, with verifiable witness.
+    schema-codemodule-signed-address-with-witness: func(input: list<u8>) -> result<grounded, address-error>;
+
+    /// GGUF v3 realization (spec-canonical structural commitment; binds
+    /// metadata and tensor weights via streamed digests).
+    gguf-address: func(input: list<u8>) -> result<kappa-label, address-error>;
+
+    /// GGUF v3 realization, returning the verifiable witness handle.
+    gguf-address-with-witness: func(input: list<u8>) -> result<grounded, address-error>;
+
+    /// ONNX IR v13 realization (protobuf-canonical commitment;
+    /// topological node ordering + initializer-weight digests).
+    onnx-address: func(input: list<u8>) -> result<kappa-label, address-error>;
+
+    /// ONNX IR v13 realization, returning the verifiable witness handle.
+    onnx-address-with-witness: func(input: list<u8>) -> result<grounded, address-error>;
+
+    // ─── σ-axis-selecting entry points ───────────────────────────────
+
+    /// `json` realization under a caller-selected σ-axis.
+    json-address-with-hash: func(input: list<u8>, algo: hash-algorithm) -> result<kappa-label, address-error>;
+    /// `json` realization, σ-axis-selected, returning a verifiable witness.
+    json-address-with-witness-hash: func(input: list<u8>, algo: hash-algorithm) -> result<grounded, address-error>;
+
+    /// `sexp` realization under a caller-selected σ-axis.
+    sexp-address-with-hash: func(input: list<u8>, algo: hash-algorithm) -> result<kappa-label, address-error>;
+    /// `sexp` realization, σ-axis-selected, returning a verifiable witness.
+    sexp-address-with-witness-hash: func(input: list<u8>, algo: hash-algorithm) -> result<grounded, address-error>;
+
+    /// `xml` realization under a caller-selected σ-axis.
+    xml-address-with-hash: func(input: list<u8>, algo: hash-algorithm) -> result<kappa-label, address-error>;
+    /// `xml` realization, σ-axis-selected, returning a verifiable witness.
+    xml-address-with-witness-hash: func(input: list<u8>, algo: hash-algorithm) -> result<grounded, address-error>;
+
+    /// `asn1` realization under a caller-selected σ-axis.
+    asn1-address-with-hash: func(input: list<u8>, algo: hash-algorithm) -> result<kappa-label, address-error>;
+    /// `asn1` realization, σ-axis-selected, returning a verifiable witness.
+    asn1-address-with-witness-hash: func(input: list<u8>, algo: hash-algorithm) -> result<grounded, address-error>;
+
+    /// `ring` realization under a caller-selected σ-axis.
+    ring-address-with-hash: func(input: list<u8>, algo: hash-algorithm) -> result<kappa-label, address-error>;
+    /// `ring` realization, σ-axis-selected, returning a verifiable witness.
+    ring-address-with-witness-hash: func(input: list<u8>, algo: hash-algorithm) -> result<grounded, address-error>;
+
+    /// `codemodule` realization under a caller-selected σ-axis.
+    codemodule-address-with-hash: func(input: list<u8>, algo: hash-algorithm) -> result<kappa-label, address-error>;
+    /// `codemodule` realization, σ-axis-selected, returning a verifiable witness.
+    codemodule-address-with-witness-hash: func(input: list<u8>, algo: hash-algorithm) -> result<grounded, address-error>;
+
+    /// `cbor` realization under a caller-selected σ-axis.
+    cbor-address-with-hash: func(input: list<u8>, algo: hash-algorithm) -> result<kappa-label, address-error>;
+    /// `cbor` realization, σ-axis-selected, returning a verifiable witness.
+    cbor-address-with-witness-hash: func(input: list<u8>, algo: hash-algorithm) -> result<grounded, address-error>;
+
+    /// `schema-photo` realization under a caller-selected σ-axis.
+    schema-photo-address-with-hash: func(input: list<u8>, algo: hash-algorithm) -> result<kappa-label, address-error>;
+    /// `schema-photo` realization, σ-axis-selected, returning a verifiable witness.
+    schema-photo-address-with-witness-hash: func(input: list<u8>, algo: hash-algorithm) -> result<grounded, address-error>;
+
+    /// `schema-document` realization under a caller-selected σ-axis.
+    schema-document-address-with-hash: func(input: list<u8>, algo: hash-algorithm) -> result<kappa-label, address-error>;
+    /// `schema-document` realization, σ-axis-selected, returning a verifiable witness.
+    schema-document-address-with-witness-hash: func(input: list<u8>, algo: hash-algorithm) -> result<grounded, address-error>;
+
+    /// `schema-codemodule-signed` realization under a caller-selected σ-axis.
+    schema-codemodule-signed-address-with-hash: func(input: list<u8>, algo: hash-algorithm) -> result<kappa-label, address-error>;
+    /// `schema-codemodule-signed` realization, σ-axis-selected, returning a verifiable witness.
+    schema-codemodule-signed-address-with-witness-hash: func(input: list<u8>, algo: hash-algorithm) -> result<grounded, address-error>;
+
+    /// `gguf` realization under a caller-selected σ-axis.
+    gguf-address-with-hash: func(input: list<u8>, algo: hash-algorithm) -> result<kappa-label, address-error>;
+    /// `gguf` realization, σ-axis-selected, returning a verifiable witness.
+    gguf-address-with-witness-hash: func(input: list<u8>, algo: hash-algorithm) -> result<grounded, address-error>;
+
+    /// `onnx` realization under a caller-selected σ-axis.
+    onnx-address-with-hash: func(input: list<u8>, algo: hash-algorithm) -> result<kappa-label, address-error>;
+    /// `onnx` realization, σ-axis-selected, returning a verifiable witness.
+    onnx-address-with-witness-hash: func(input: list<u8>, algo: hash-algorithm) -> result<grounded, address-error>;
+
+    // ─── κ-label composition (ADR-061) ───────────────────────────────
+    //
+    // The five categorical operations on the Atlas image inside E₈.
+    // Operands are κ-labels (the `kappa-label` string carried by a prior
+    // `*-address` call) under the σ-axis named by `algo`; the composed
+    // κ-label shares that axis (CA-3 σ-axis homogeneity). CS-G2 is a
+    // commutative binary product; the rest are unary endomorphisms. A
+    // malformed operand or a σ-axis mismatch surfaces as `invalid-input`.
+
+    /// CS-G2 commutative binary product of two κ-labels.
+    compose-g2: func(left: kappa-label, right: kappa-label, algo: hash-algorithm) -> result<kappa-label, address-error>;
+    /// CS-G2 product, returning a verifiable witness handle.
+    compose-g2-with-witness: func(left: kappa-label, right: kappa-label, algo: hash-algorithm) -> result<grounded, address-error>;
+
+    /// CS-F4 ± involution quotient of a κ-label.
+    compose-f4: func(operand: kappa-label, algo: hash-algorithm) -> result<kappa-label, address-error>;
+    /// CS-F4 quotient, returning a verifiable witness handle.
+    compose-f4-with-witness: func(operand: kappa-label, algo: hash-algorithm) -> result<grounded, address-error>;
+
+    /// CS-E6 degree-partition filtration of a κ-label.
+    compose-e6: func(operand: kappa-label, algo: hash-algorithm) -> result<kappa-label, address-error>;
+    /// CS-E6 filtration, returning a verifiable witness handle.
+    compose-e6-with-witness: func(operand: kappa-label, algo: hash-algorithm) -> result<grounded, address-error>;
+
+    /// CS-E7 S₄-orbit augmentation of a κ-label.
+    compose-e7: func(operand: kappa-label, algo: hash-algorithm) -> result<kappa-label, address-error>;
+    /// CS-E7 augmentation, returning a verifiable witness handle.
+    compose-e7-with-witness: func(operand: kappa-label, algo: hash-algorithm) -> result<grounded, address-error>;
+
+    /// CS-E8 direct embedding of a κ-label.
+    compose-e8: func(operand: kappa-label, algo: hash-algorithm) -> result<kappa-label, address-error>;
+    /// CS-E8 embedding, returning a verifiable witness handle.
+    compose-e8-with-witness: func(operand: kappa-label, algo: hash-algorithm) -> result<grounded, address-error>;
+}
+
+/// The `uor-addr` component world — exports the `kappa` interface.
+/// Consumers `import` this world via their language's component-model
+/// binding (jco for JS/TS, wasmtime-py for Python, wasmtime-go for Go,
+/// jaco for .NET, …).
+world uor-addr {
+    export kappa;
+}

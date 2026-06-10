@@ -1,0 +1,54 @@
+{
+  "name": "@uor-foundation/uor-addr",
+  "version": "0.2.0",
+  "description": "Typed content-addressing \u2014 deterministic, verifiable sha256:<64hex> \u03ba-labels from JSON / S-expressions / XML / ASN.1 DER / schema.org / in-toto. Wraps the uor-addr-wasm Component Model via jco-transpiled glue.",
+  "type": "module",
+  "main": "dist/uor-addr.js",
+  "types": "dist/uor-addr.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/uor-addr.js",
+      "types": "./dist/uor-addr.d.ts"
+    }
+  },
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node scripts/test.mjs",
+    "prepublishOnly": "npm run build && npm test"
+  },
+  "keywords": [
+    "uor",
+    "content-addressing",
+    "sha256",
+    "kappa-label",
+    "canonicalization",
+    "jcs",
+    "json",
+    "wasm",
+    "component-model"
+  ],
+  "author": "The UOR Foundation <https://uor.foundation>",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/UOR-Foundation/uor-addr.git",
+    "directory": "bindings/npm"
+  },
+  "homepage": "https://github.com/UOR-Foundation/uor-addr/tree/main/bindings/npm",
+  "bugs": "https://github.com/UOR-Foundation/uor-addr/issues",
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@bytecodealliance/jco": "^1.4.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  }
+}

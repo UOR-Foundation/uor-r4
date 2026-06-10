@@ -1,0 +1,997 @@
+# Endpoint-coverage audit: every public symbol in foundation/tests/public-api.snapshot
+# is either (a) mapped to a behavior_*.rs test file that exercises its contract,
+# or (b) documented here as an exempted category. Unmapped symbols fail the
+# `rust/endpoint_coverage` conformance validator.
+#
+# Each mapping entry: `symbol = "behavior_<name>"` where the named test file
+# under foundation/tests/ exists and contains behavioral assertions.
+#
+# Each exemption declares a category of symbols that don't need a direct
+# behavior test because their correctness is either (a) enforced by the
+# type system, (b) indirectly exercised by grouped tests, or (c) a
+# pure documentation constant.
+
+# ─── Exemption: documentation constants ──────────────────────────────────
+# Compile-time constants whose only contract is their literal value. These
+# are pinned by the public-api.snapshot and any regression would already
+# fail the snapshot diff.
+[exempt.documentation_constants]
+description = "Pub const values whose contract is the literal — pinned by snapshot"
+symbols = [
+    "TRACE_REPLAY_FORMAT_VERSION",
+    "JACOBIAN_MAX_SITES",
+    "MAX_BETTI_DIMENSION",
+    "MAX_OP_CHAIN_DEPTH",
+    "RECURSION_TRACE_MAX_DEPTH",
+    "PREFLIGHT_CHECK_IRIS",
+    "REDUCTION_STAGE_IRIS",
+    "INHABITANCE_DISPATCH_TABLE",
+    # Phase X.4: constraint-nerve chain-complex caps.
+    "NERVE_CONSTRAINTS_CAP",
+    "NERVE_SITES_CAP",
+    "NERVE_C1_MAX",
+    "NERVE_C2_MAX",
+    # Phase X.2: cohomology dimension cap.
+    "MAX_COHOMOLOGY_DIMENSION",
+    # v0.2.2 Phase B: shared canonical budget.
+    "WITT_MAX_BITS",
+    "INTERACTION_DIVERGENCE_BUDGET",
+]
+
+# ─── Exemption: sealed supertrait markers ────────────────────────────────
+# Sealed traits implemented only inside the foundation. The
+# escape_hatch_lint validator enforces that downstream cannot implement
+# them; any behavioral contract is indirectly exercised by the concrete
+# sealed types that implement them.
+[exempt.sealed_supertraits]
+description = "Sealed traits (lint-enforced no downstream impls)"
+symbols = [
+    "OntologyTarget",
+    "Certificate",
+    "GroundingMapKind",
+    "ValidationPhase",
+    "Observable",
+    "BoundShape",
+    "GroundedShape",
+    "GroundedValue",
+    "FragmentMarker",
+    "ImpossibilityWitnessKind",
+    "RingOp",
+    "UnaryRingOp",
+    "ValidLevelEmbedding",
+    "Hasher",
+    "HostBounds",
+    "HostTypes",
+    "MarkerTuple",
+    "MarkerIntersection",
+    "MarkersImpliedBy",
+    "Total",
+    "Invertible",
+    "PreservesStructure",
+    "PreservesMetric",
+    "Grounding",
+    "GroundingExt",
+    "GroundingProgramRun",
+    "ConstrainedTypeShape",
+    "FoundationClosed",
+    "IntoBindingValue",
+    "PrismModel",
+]
+
+# ─── Mapping: sealed witnesses ──────────────────────────────────────────
+[coverage.grounded]
+symbols = ["Grounded", "GroundedCoord", "GroundedTuple", "Datum"]
+behavior = "behavior_witness_accessors"
+
+[coverage.certified]
+symbols = ["Certified", "CertificateKind"]
+behavior = "behavior_resolver_tower"
+
+[coverage.triad_stratum]
+symbols = ["Triad", "Stratum"]
+behavior = "behavior_witness_accessors"
+
+[coverage.uor_time]
+symbols = ["UorTime", "LandauerBudget", "Nanos"]
+behavior = "behavior_uor_time"
+
+# v0.2.2 Phase B: TimingPolicy trait parameterizes the preflight/runtime
+# timing check. Budget (Nanos) + canonical Calibration are carried as trait
+# constants; `estimate_preflight_uor_time` derives an a-priori UorTime from
+# input shape. Exercised via behavior_pipeline_determinism's timing-budget
+# rejection tests (indirect coverage through run_* callers).
+[coverage.timing_policy]
+symbols = ["TimingPolicy", "CanonicalTimingPolicy", "estimate_preflight_uor_time"]
+behavior = "behavior_pipeline_determinism"
+
+# v0.2.2 Phase F: preflight_feasibility Bound-arm dispatch.
+# `ConstraintRef::Bound { observable_iri, bound_shape_iri, args_repr }`
+# dispatches on `observable_iri` to per-observable feasibility checks
+# (`ValueModObservable`, `CarryDepthObservable`, `LandauerCost`). Args are
+# parsed via small ASCII-digit helpers (`parse_u32`, `parse_u64`,
+# `parse_u64_pair`, `parse_f64_from_bits_str`). `WITT_MAX_BITS` is the
+# carry-depth ceiling matching target §4.5's W16384 tower.
+# v0.2.2 Phase P.2: public admission for arbitrary ConstrainedTypeShape.
+# `validate_constrained_type` runs preflight_feasibility + package_coherence
+# against `T::CONSTRAINTS` and mints `Validated<T, Runtime>`. The
+# `validate_constrained_type_const` const companion handles compile-time
+# admission for Copy-bounded shapes. Exercised via the
+# `custom_constrained_type` example and downstream tests at large.
+[coverage.shape_admission]
+symbols = ["validate_constrained_type"]
+behavior = "phase_f_preflight_bound"
+
+# v0.2.2 Phase T.1: run_interactive convergence threshold and divergence budget.
+# The driver terminates on commutator-norm below threshold or diverges after
+# INTERACTION_DIVERGENCE_BUDGET consecutive non-decreasing-norm steps.
+[coverage.interaction_convergence]
+symbols = ["INTERACTION_DIVERGENCE_BUDGET"]
+behavior = "phase_m_driver_surface"
+
+[coverage.preflight_bound]
+symbols = [
+    "WITT_MAX_BITS",
+    "parse_u32",
+    "parse_u64",
+    "parse_u64_pair",
+    "parse_u64_bits_str",
+]
+behavior = "phase_f_preflight_bound"
+
+[coverage.calibration]
+symbols = ["Calibration", "CalibrationError"]
+behavior = "behavior_calibration"
+
+[coverage.base_metrics]
+symbols = [
+    "SigmaValue",
+    "JacobianMetric",
+    "DDeltaMetric",
+    "EulerMetric",
+    "ResidualMetric",
+    "BettiMetric",
+]
+behavior = "behavior_witness_accessors"
+
+# ─── Mapping: builders (9 + derived result types) ──────────────────────
+[coverage.builders]
+symbols = [
+    "CompileUnit",
+    "CompileUnitBuilder",
+    "EffectDeclaration",
+    "EffectDeclarationBuilder",
+    "DispatchDeclaration",
+    "DispatchDeclarationBuilder",
+    "PredicateDeclaration",
+    "PredicateDeclarationBuilder",
+    "ParallelDeclaration",
+    "ParallelDeclarationBuilder",
+    "StreamDeclaration",
+    "StreamDeclarationBuilder",
+    "LeaseDeclaration",
+    "LeaseDeclarationBuilder",
+    "WittLevelDeclaration",
+    "WittLevelDeclarationBuilder",
+    "InteractionDeclaration",
+    "InteractionDeclarationBuilder",
+    "InteractionShape",
+    "ConstrainedTypeInput",
+    "GroundingDeclaration",
+    "GroundingDeclarationBuilder",
+    "TypeDeclaration",
+    "DispatchRule",
+    "SourceDeclaration",
+    "SinkDeclaration",
+]
+behavior = "behavior_builder_rejection"
+
+# ─── Mapping: pipeline drivers ─────────────────────────────────────────
+[coverage.pipeline_drivers]
+symbols = [
+    "PipelineFailure",
+    "ReplayError",
+    "StreamDriver",
+    "InteractionDriver",
+    "PeerInput",
+    "PeerPayload",
+    "StepResult",
+    "CommutatorState",
+    "StageOutcome",
+    "FragmentKind",
+    "ConstraintRef",
+]
+behavior = "behavior_pipeline_determinism"
+
+# ─── Mapping: grounding combinators & interpreter ───────────────────────
+[coverage.grounding_combinators]
+symbols = [
+    "GroundingProgram",
+    "GroundingPrimitive",
+    "GroundingPrimitiveOp",
+    "MarkerBits",
+    "TotalMarker",
+    "InvertibleMarker",
+    "PreservesStructureMarker",
+    "IntegerGroundingMap",
+    "Utf8GroundingMap",
+    "JsonGroundingMap",
+    "DigestGroundingMap",
+    "BinaryGroundingMap",
+]
+behavior = "behavior_grounding_interpreter"
+
+# ─── Mapping: observability surface ─────────────────────────────────────
+[coverage.observability]
+symbols = ["Trace", "TraceEvent", "Derivation", "ObservabilitySubscription"]
+behavior = "behavior_observability"
+
+# ─── Mapping: ring ops — 9 ops × 32 levels ─────────────────────────────
+[coverage.ring_ops]
+symbols = [
+    "Add",
+    "Sub",
+    "Mul",
+    "And",
+    "Or",
+    "Xor",
+    "Neg",
+    "BNot",
+    "Succ",
+    "Embed",
+]
+behavior = "behavior_ring_ops_identities"
+
+# ─── Mapping: WittLevel marker structs (32 levels) ────────────────────
+# Note: `WittLevel` itself is a struct in enums.rs, re-exported via
+# `pub use enums::*;` in lib.rs. The public-api.snapshot scanner reads
+# lib.rs/enforcement.rs/pipeline.rs and does not follow re-exports, so
+# `WittLevel` isn't in the snapshot directly — behavior_const_ring_eval
+# exercises its semantics via the per-level marker structs.
+[coverage.witt_level_markers]
+symbols = [
+    "W8", "W16", "W24", "W32", "W40", "W48", "W56", "W64",
+    "W72", "W80", "W88", "W96", "W104", "W112", "W120", "W128",
+    "W160", "W192", "W224", "W256", "W384", "W448", "W512", "W520", "W528",
+    "W1024", "W2048", "W4096", "W8192", "W12288", "W16384", "W32768",
+    "Limbs",
+]
+behavior = "behavior_const_ring_eval"
+
+# ─── Mapping: certificate classes ──────────────────────────────────────
+[coverage.certificates]
+symbols = [
+    "TransformCertificate",
+    "IsometryCertificate",
+    "InvolutionCertificate",
+    "GeodesicCertificate",
+    "MeasurementCertificate",
+    "BornRuleVerification",
+    "CompletenessCertificate",
+    "GroundingCertificate",
+    "LiftChainCertificate",
+    "InhabitanceCertificate",
+    "MultiplicationCertificate",
+    "MultiplicationEvidence",
+    "CompletenessAuditTrail",
+    "ChainAuditTrail",
+    "GeodesicEvidenceBundle",
+    "GenericImpossibilityWitness",
+    "InhabitanceImpossibilityWitness",
+    "MulContext",
+]
+behavior = "behavior_resolver_tower"
+
+# ─── Mapping: bridge + kernel sealed types ─────────────────────────────
+[coverage.bridge_kernel]
+symbols = [
+    "Query",
+    "Coordinate",
+    "BindingQuery",
+    "Binding",
+    "Partition",
+    "PartitionCertificate",
+    "PartitionComponent",
+    "HomologyClass",
+    "CohomologyClass",
+    "CarryProfile",
+    "CarryEvent",
+    "ConvergenceLevel",
+    "DivisionAlgebraWitness",
+    "MonoidalProduct",
+    "MonoidalUnit",
+    "OperadComposition",
+    "RecursionTrace",
+    "AddressRegion",
+    "LinearBudget",
+    "LeaseAllocation",
+    "CarryDepthObservable",
+    "DerivationDepthObservable",
+    "FreeRankObservable",
+    "ConstraintKind",
+    "ValueModObservable",
+]
+behavior = "behavior_witness_accessors"
+
+# ─── Mapping: bound-shape catalogue ────────────────────────────────────
+[coverage.bound_shapes]
+symbols = [
+    "AffineConstraint",
+    "CarryConstraint",
+    "CompositeConstraint",
+    "DepthConstraint",
+    "HammingConstraint",
+    "ResidueConstraint",
+    "SiteConstraint",
+    "AffineEqualBound",
+    "EqualBound",
+    "GreaterEqBound",
+    "LessEqBound",
+    "RangeContainBound",
+    "ResidueClassBound",
+    "HammingMetric",
+    "BoundConstraint",
+    "BoundArgValue",
+    "BoundArgEntry",
+    "BoundArguments",
+    "Conjunction",
+]
+behavior = "behavior_builder_rejection"
+
+# ─── Mapping: phase-marker types ───────────────────────────────────────
+[coverage.phase_markers]
+symbols = ["CompileTime", "Runtime", "Validated", "ValidationPhase"]
+behavior = "behavior_pipeline_determinism"
+
+# ─── Mapping: term AST ─────────────────────────────────────────────────
+[coverage.term_ast]
+symbols = ["Term", "TermArena", "TermList", "Assertion"]
+behavior = "behavior_builder_rejection"
+
+# ─── Mapping: bindings / content-address ───────────────────────────────
+[coverage.content_address]
+symbols = [
+    "BindingsTable",
+    "BindingsTableError",
+    "BindingEntry",
+    "ContentAddress",
+    "ContentFingerprint",
+    "ShapeViolation",
+    "FreeRank",
+    "BoundarySession",
+]
+behavior = "behavior_witness_accessors"
+
+# ─── Mapping: fragment markers ─────────────────────────────────────────
+[coverage.fragment_markers]
+symbols = ["Is2SatShape", "IsHornShape", "IsResidualFragment"]
+behavior = "behavior_resolver_tower"
+
+# ─── Mapping: SAT deciders (public pipeline) ───────────────────────────
+[coverage.sat_deciders]
+symbols = ["decide_two_sat", "decide_horn_sat"]
+behavior = "behavior_sat_deciders"
+
+# ─── Mapping: grammar surface / declarations ───────────────────────────
+# Note: the v0.2.1 unit-struct resolver types (GroundingAwareResolver,
+# TowerCompletenessResolver, etc.) were deleted in Phase B; the free-function
+# resolver path is the sole verdict surface. The public-api.snapshot no
+# longer carries those symbols, so they are not mapped here.
+[coverage.grammar_surface]
+symbols = [
+    "subscribe_trace_events",
+]
+behavior = "behavior_grammar_surface_roundtrip"
+
+# ─── Mapping: pipeline fold digests + helpers ──────────────────────────
+# Only symbols that appear in the public-api.snapshot are listed here.
+# Helper functions that exist in the crate but are only accessible via
+# the pipeline module (not re-exported) are not covered by this map.
+[coverage.pipeline_helpers]
+symbols = [
+    "fold_unit_digest",
+    "fold_stream_digest",
+    "fold_stream_step_digest",
+    "fold_parallel_digest",
+    "fold_interaction_digest",
+    "fold_interaction_step_digest",
+    "fold_constraint_ref",
+    "DispatchTable",
+    "certify_tower_completeness_const",
+    "certify_incremental_completeness_const",
+    "certify_grounding_aware_const",
+    "certify_inhabitance_const",
+    "certify_multiplication_const",
+    "run_reduction_stages",
+    "run_tower_completeness",
+    "run_incremental_completeness",
+    "run_grounding_aware",
+    "run_inhabitance",
+    "run",
+    "run_const",
+    "run_parallel",
+    "run_route",
+    "run_stream",
+    "run_interactive",
+    "preflight_budget_solvency",
+    "preflight_feasibility",
+    "preflight_dispatch_coverage",
+    "preflight_package_coherence",
+    "preflight_timing",
+    "runtime_timing",
+    "SpectralSequencePage",
+]
+behavior = "behavior_pipeline_determinism"
+
+# ─── Mapping: HostTypes + DefaultHostTypes ─────────────────────────────
+[coverage.host_types]
+symbols = ["DefaultHostTypes"]
+behavior = "behavior_grammar_surface_roundtrip"
+
+# ─── Mapping: HostBounds + DefaultHostBounds (wiki ADR-018) ────────────
+# Substitution axis 2 of 3 (HostTypes / HostBounds / Hasher). HostBounds
+# carries every capacity bound that varies along the principal data path:
+# the fingerprint output width range, the trace event-count ceiling, and
+# the algebraic-level bit-width ceiling. The canonical surface is the
+# const-generic on Hasher / ContentFingerprint / Trace; the application's
+# HostBounds impl populates each type's const-generic at instantiation.
+# Foundation exposes no free-standing capacity constants — collapsing the
+# substitution axis is exactly what ADR-018 rejects.
+[coverage.host_bounds]
+symbols = ["HostBounds"]
+behavior = "behavior_host_bounds"
+
+# ─── Mapping: PrismModel + FoundationClosed (wiki ADR-019 + ADR-020) ───
+# ADR-019 names the categorical structure: foundation as a signature
+# endofunctor F, Term as F's initial algebra, pipeline::run as the
+# catamorphism, trace as the anamorphism witness, sealed types as fixed
+# points. ADR-020 codifies the typed-iso contract as a Rust trait:
+# PrismModel carries Input / Output / Route, with Route bound by
+# FoundationClosed (the closure-under-foundation-vocabulary check).
+# FoundationClosed is sealed via a private super-trait so application
+# code cannot bypass the closure check — only foundation itself and the
+# `prism_model!` macro from uor-foundation-sdk produce impls.
+[coverage.prism_model]
+symbols = ["PrismModel", "FoundationClosed"]
+behavior = "behavior_prism_model"
+
+# ─── Mapping: IntoBindingValue (wiki ADR-023, amended by ADR-060) ──────
+# ADR-023 closes the architectural gap ADR-022 left open: how does an
+# `M::Input` value supplied at runtime flow into the `CompileUnit`
+# binding table? Foundation declares `IntoBindingValue<'a>` as the trait
+# every `M::Input` must implement. ADR-060 makes it source-polymorphic:
+# `as_binding_value` returns a `TermValue<'a>` carrier (Inline / Borrowed /
+# Stream) with no `MAX_BYTES` ceiling. `pipeline::run_route` folds the
+# carrier through the application's selected `Hasher` (chunk-by-chunk for
+# `Stream`) to derive the input's content address — arbitrarily large
+# inputs flow natively — and constructs a transient `Binding` for the
+# route's input slot (`Term::Variable { name_index: 0 }` per ADR-022 D3 G2).
+# The trait is sealed via the same `__sdk_seal::Sealed` supertrait as
+# `FoundationClosed` and `PrismModel`. Exercised by
+# behavior_adr_060_large_input_grounded (a multi-KB Borrowed + multi-MiB
+# Stream input flowing through `forward`/`run_route`).
+[coverage.into_binding_value]
+symbols = ["IntoBindingValue"]
+behavior = "behavior_into_binding_value"
+
+# ─── Mapping: catamorphism evaluator (wiki ADR-029) ────────────────────
+# ADR-029 specifies that `pipeline::run` actually evaluates the route's
+# Term tree as a structural fold with per-variant fold rules. The
+# evaluator (`evaluate_term_tree`) produces a `TermValue` (fixed-capacity
+# byte buffer) per variant; `pipeline::run_route` populates the
+# `Grounded`'s output payload (per ADR-028) with the catamorphism's
+# evaluation result. `TERM_VALUE_MAX_BYTES` is the foundation-fixed
+# per-value byte ceiling.
+[coverage.catamorphism_evaluator]
+symbols = ["evaluate_term_tree", "TermValue"]
+behavior = "behavior_catamorphism_evaluator"
+
+# ─── Mapping: route output payload (wiki ADR-028 + ADR-060) ────────────
+# ADR-028 commits the Grounded<T> to carry the catamorphism's evaluation
+# result as an output payload alongside the metadata fingerprint. ADR-060
+# replaced the fixed `ROUTE_OUTPUT_BUFFER_BYTES` ceiling with the
+# source-polymorphic `TermValue<'a, INLINE_BYTES>` carrier whose inline width
+# is derived by `carrier_inline_bytes::<B>()` (the `const fn` snapshot symbol).
+# No coverage entry is needed here: the `behavior_route_output_payload` test's
+# surface is `Grounded` (covered below) and `carrier_inline_bytes` (the
+# `const fn` symbol), both already mapped — adding a stale/duplicate symbol
+# here would be the inconsistency this audit guards against.
+
+# ─── Mapping: closure-body grammar fold-unroll (wiki ADR-026 G14) ──────
+# ADR-026 G14 specifies the `fold_n` lowering rule: counts at or below
+# `pipeline::FOLD_UNROLL_THRESHOLD` unroll into a `Term::Application`
+# chain; counts above use `Term::Recurse`. Foundation fixes the
+# threshold so two implementations compiling the same closure-body emit
+# the same Term tree.
+[coverage.fold_unroll_threshold]
+symbols = ["FOLD_UNROLL_THRESHOLD"]
+behavior = "behavior_fold_unroll_threshold"
+
+# ─── Mapping: ADR-029 anamorphism + recursive fold placeholders ────────
+# ADR-029 specifies that `Term::Recurse` and `Term::Unfold` carry their
+# bound variables via fresh-name-indexed `Term::Variable` placeholders
+# threaded through the catamorphism's evaluator. The two sentinels
+# `RECURSE_PLACEHOLDER_NAME_INDEX` and `UNFOLD_PLACEHOLDER_NAME_INDEX`
+# encode the recursive-call and unfold-state placeholders in stable-Rust
+# 1.83 (no nightly `generic_const_exprs`). `UNFOLD_MAX_ITERATIONS` is the
+# foundation-fixed bound on the anamorphic Kleene-fixpoint iteration —
+# parallel to `FOLD_UNROLL_THRESHOLD` for the catamorphic recursion path.
+[coverage.adr029_placeholders]
+symbols = ["RECURSE_PLACEHOLDER_NAME_INDEX", "UNFOLD_PLACEHOLDER_NAME_INDEX", "UNFOLD_MAX_ITERATIONS"]
+behavior = "behavior_catamorphism_evaluator"
+
+# ─── Mapping: ADR-030 substitution-axis generalization ─────────────────
+# ADR-030 generalizes the substitution-axis "third position" from a
+# single `Hasher` to an open `AxisTuple` of substrate-extension axes.
+# `AxisExtension` is the per-axis sealed trait; `AxisTuple` is the
+# tuple dispatcher; `HashAxis<H>` adapts existing `Hasher` impls.
+# `MAX_AXIS_TUPLE_ARITY` is the foundation-fixed bound (ADR-060 removed the
+# `AXIS_OUTPUT_BYTES_CEILING` byte cap; axis outputs now ride the
+# source-polymorphic `TermValue` carrier). `Term::AxisInvocation` (replaces
+# the legacy `HasherProjection`) encodes the route-level axis selection.
+[coverage.adr030_axis_extension]
+symbols = ["AxisExtension", "AxisTuple", "HashAxis", "MAX_AXIS_TUPLE_ARITY"]
+behavior = "behavior_catamorphism_evaluator"
+
+# ─── Mapping: ADR-055 universal substrate-Term verb body discipline ────
+# ADR-055 commits `SubstrateTermBody` as a supertrait on `AxisExtension`.
+# Every axis impl carries a substrate-Term decomposition (or the empty-
+# arena primitive-fast-path) the catamorphism walks structurally per the
+# amended `Term::AxisInvocation` fold-rule. The behavior file pins:
+# the public trait path, the AxisExtension supertrait bound, HashAxis's
+# primitive-fast-path body_arena, AxisTuple's body_arena_at dispatcher,
+# and the catamorphism's primitive-fast-path branch.
+[coverage.adr055_substrate_term_body]
+symbols = ["SubstrateTermBody"]
+behavior = "behavior_adr_055_substrate_term_body"
+
+# ─── Mapping: ADR-057 bounded recursive structural typing ──────────────
+# ADR-057 commits `ConstraintRef::Recurse { shape_iri, descent_bound }`
+# as the constraint-level bounded-recursion primitive (parallel to
+# `Term::Recurse` at the term level), plus the foundation
+# `pipeline::shape_iri_registry` module with `RegisteredShape` carriers
+# + `lookup_shape` + `__register_shape`. Required for bounded recursive
+# structural typing of JSON, XML, AST shapes, S-expressions, ASN.1 /
+# Protobuf message families, filesystem hierarchies, and other
+# inductively-defined input domains. Test coverage by the
+# `adr057_*` smoke tests pinning ConstraintRef::Recurse round-trip and
+# the registry lookup surface.
+[coverage.adr057_bounded_recursive_typing]
+symbols = ["shape_iri_registry"]
+behavior = "behavior_catamorphism_evaluator"
+
+# ─── Mapping: ADR-033 G20 field-access projection ──────────────────────
+# ADR-033 admits closure-body field access on `partition_product`-shaped
+# inputs (`<expr>.<index>` and `<expr>.<field_name>`). Lowered to
+# `Term::ProjectField`; the proc-macro synthesizes a const-eval lookup
+# against `<SourceTy as PartitionProductFields>::FIELDS[idx]` for the
+# byte offset and length. `PartitionProductFactor<I>` exposes the
+# factor-type at index I so chained field access (`input.outer.inner`)
+# can resolve the inner shape statically at proc-macro time.
+[coverage.adr033_field_projection]
+symbols = ["PartitionProductFields", "PartitionProductFactor"]
+behavior = "behavior_catamorphism_evaluator"
+
+# ─── Mapping: ADR-032 Witt-level domain types ──────────────────────────
+# ADR-032 commits foundation to per-Witt-level zero-sized marker types
+# implementing `ConstrainedTypeShape` with `CYCLE_SIZE = 2^bits` so the
+# SDK's `first_admit(<DomainTy>, |i| …)` lowering reads the correct
+# descent measure at proc-macro time. Foundation emits these in
+# `pipeline::witt_domain::W{n}`.
+[coverage.adr032_witt_domain]
+symbols = ["witt_domain"]
+behavior = "behavior_catamorphism_evaluator"
+
+# ─── Mapping: ADR-034 iteration-counter + structural search ────────────
+# ADR-034 Mechanism 1: `RECURSE_IDX_NAME_INDEX` binds the iteration
+# counter inside `Term::Recurse`'s step body, exposed via the
+# two-parameter closure form `recurse(measure, base, |self, idx| step)`.
+# ADR-034 Mechanism 2: `FIRST_ADMIT_IDX_NAME_INDEX` binds the candidate
+# value inside `Term::FirstAdmit`'s predicate body. The grammar form
+# `first_admit(<DomainTy>, |idx| <pred>)` lowers to `Term::FirstAdmit`
+# (replacing the legacy `Term::Recurse` lowering); the catamorphism's
+# fold-rule iterates idx in 0..N ascending and short-circuits on the
+# first non-zero predicate result, emitting `(0x01, idx_bytes)` or
+# `(0x00, padding)`.
+[coverage.adr034_first_admit_recurse_idx]
+symbols = ["RECURSE_IDX_NAME_INDEX", "FIRST_ADMIT_IDX_NAME_INDEX"]
+behavior = "behavior_catamorphism_evaluator"
+
+# ─── Mapping: ADR-036 ResolverTuple substitution-axis surface ──────────
+# ADR-036 closes ADR-035's "ψ-Term variants need application-supplied
+# content" gap by exposing the application's resolver tuple as a
+# fourth substitution-axis position on `PrismModel<H, B, A, R>`. The
+# `ResolverTuple` sealed trait carries arity + categories metadata; the
+# eight `<Category>Resolver<H>` traits expose `resolve(input, &mut out)`
+# per-category; the eight `Has<Category>Resolver<H>` markers expose the
+# `<category>_resolver()` accessor the catamorphism's ψ-Term fold-rules
+# consult. `NullResolverTuple` + eight `Null<Category>Resolver<H>` impls
+# are the foundation-Null defaults emitting `RESOLVER_ABSENT` on every
+# `resolve` call (recoverable via `Term::Try`'s default-propagation
+# handler per ADR-022 D3 G9). `MAX_RESOLVER_TUPLE_ARITY` and
+# `RESOLVER_ABSENT_DISCRIMINATOR` are the foundation-fixed bounds.
+[coverage.adr036_resolver_tuple]
+symbols = [
+    "ResolverTuple",
+    "ResolverCategory",
+    "MAX_RESOLVER_TUPLE_ARITY",
+    "RESOLVER_ABSENT_DISCRIMINATOR",
+    "NullResolverTuple",
+    "NerveResolver",
+    "ChainComplexResolver",
+    "HomologyGroupResolver",
+    "CochainComplexResolver",
+    "CohomologyGroupResolver",
+    "PostnikovResolver",
+    "HomotopyGroupResolver",
+    "KInvariantResolver",
+    "HasNerveResolver",
+    "HasChainComplexResolver",
+    "HasHomologyGroupResolver",
+    "HasCochainComplexResolver",
+    "HasCohomologyGroupResolver",
+    "HasPostnikovResolver",
+    "HasHomotopyGroupResolver",
+    "HasKInvariantResolver",
+    "NullNerveResolver",
+    "NullChainComplexResolver",
+    "NullHomologyGroupResolver",
+    "NullCochainComplexResolver",
+    "NullCohomologyGroupResolver",
+    "NullPostnikovResolver",
+    "NullHomotopyGroupResolver",
+    "NullKInvariantResolver",
+]
+behavior = "behavior_catamorphism_evaluator"
+
+# ─── Mapping: ADR-016 four UOR-domain mint primitives ──────────────────
+# ADR-016 commits foundation to public mint primitives that are the
+# cross-crate construction surface for the four UOR-domain sealed
+# types. `mint_datum` is the only non-const fn (the others are
+# `pub const fn` rolled into the `const fn` snapshot scanner-artifact
+# entry). All four delegate to the existing `pub(crate)` constructors.
+[coverage.mint_primitives]
+symbols = ["mint_datum"]
+behavior = "behavior_mint_primitives"
+
+# Wiki ADR-024 verb-graph acyclicity is enforced at compile time. The
+# foundation const-fn helpers `shift_term` and `inline_verb_fragment`
+# (in foundation/src/enforcement.rs) implement the inlining; they are
+# `pub const fn` items captured by the rolled-up `const fn` snapshot
+# entry rather than as named symbols. The `verb!` macro performs the
+# local self-reference closure check; cross-verb cycles surface during
+# const-eval of the splicing builder the `prism_model!` macro emits.
+
+# ─── Mapping: DecimalTranscendental (Phase 9) ──────────────────────────
+# Closed-arithmetic + transcendental supertrait bounded onto
+# `HostTypes::Decimal`. Default-host f64/f32 impls delegate to libm.
+[coverage.decimal_transcendental]
+symbols = ["DecimalTranscendental"]
+behavior = "phase9_decimal_transcendental"
+
+# ─── Mapping: Phase-9 bit-pattern constants ────────────────────────────
+# Public IEEE-754 bit-pattern constants for thermodynamic / numerical
+# values that previously appeared as `: f64` hardcodes. Consumers project
+# to `H::Decimal` via `DecimalTranscendental::from_bits` at use sites.
+# Exercised end-to-end by the calibration / uor_time / phase9 tests.
+[coverage.phase9_bit_constants]
+symbols = [
+    "PI_TIMES_H_BAR_BITS",
+    "NANOS_PER_SECOND_BITS",
+    "LN_2_BITS",
+    "CALIBRATION_KBT_LO_BITS",
+    "CALIBRATION_KBT_HI_BITS",
+    "CALIBRATION_THERMAL_POWER_HI_BITS",
+    "CALIBRATION_CHAR_ENERGY_HI_BITS",
+]
+behavior = "phase9_decimal_transcendental"
+
+# ─── Mapping: module re-exports ────────────────────────────────────────
+# Module declarations (pub mod foo) are structural and do not need
+# behavior tests — their contract is the set of items they export, each
+# of which has its own mapping.
+[exempt.module_declarations]
+description = "pub mod foo — structural exports covered by item-level mappings"
+symbols = [
+    "bridge",
+    "enforcement",
+    "enums",
+    "kernel",
+    "pipeline",
+    "user",
+    "calibrations",
+    "combinators",
+    "prelude",
+    "replay",
+    "resolver",
+    "__test_helpers",
+    "__sdk_seal",
+    "transcendentals",
+]
+
+# Snapshot-scanner artifacts: `pub const fn foo(...)` when matched against
+# the `const ` prefix first extracts kind="const" name="fn". These
+# artifact entries are excluded from coverage — the real function names
+# underneath are covered elsewhere.
+[exempt.snapshot_scanner_artifacts]
+description = "Anomalous snapshot entries from the scanner's parse of `pub const fn`"
+symbols = ["fn"]
+
+# ─── Mapping: Phase X.2 cohomology / cup product ────────────────────────
+[coverage.cohomology_cup]
+symbols = [
+    "CohomologyClass",
+    "HomologyClass",
+    "CohomologyError",
+    "mint_cohomology_class",
+    "mint_homology_class",
+    "fold_cup_product",
+]
+behavior = "behavior_cohomology_cup"
+
+# ─── Mapping: Target §3 Sink/Sinking hardening ──────────────────────────
+[coverage.sinking]
+symbols = [
+    "Sinking",
+    "MorphismKind",
+    "ProjectionMapKind",
+    "EmitThrough",
+    "IntegerProjectionMap",
+    "Utf8ProjectionMap",
+    "JsonProjectionMap",
+    "DigestProjectionMap",
+    "BinaryProjectionMap",
+]
+behavior = "phase_x6_sinking"
+
+# ─── Mapping: Product/Coproduct Completion Amendment — PartitionProduct ─
+[coverage.partition_product_witness]
+symbols = [
+    "PartitionProductWitness",
+    "PartitionProductEvidence",
+    "PartitionProductMintInputs",
+    "VerifiedMint",
+]
+behavior = "behavior_partition_product_witness"
+
+# ─── Mapping: Product/Coproduct Completion Amendment — PartitionCoproduct ─
+[coverage.partition_coproduct_witness]
+symbols = [
+    "PartitionCoproductWitness",
+    "PartitionCoproductEvidence",
+    "PartitionCoproductMintInputs",
+]
+behavior = "behavior_partition_coproduct_witness"
+
+# ─── Mapping: Product/Coproduct Completion Amendment — CartesianProduct ─
+[coverage.cartesian_product_witness]
+symbols = [
+    "CartesianProductWitness",
+    "CartesianProductEvidence",
+    "CartesianProductMintInputs",
+    "CartesianProductShape",
+]
+behavior = "behavior_cartesian_product_witness"
+
+# ─── Mapping: Phase 1a (orphan-closure) — fail-fast nerve primitives ─
+# The nerve-Betti primitives and their Cartesian Künneth companion are
+# exercised end-to-end by:
+#   - `phase_x4_betti.rs` — correctness of Betti numbers on in-bounds shapes
+#   - `orphan_closure_capacity_fail_fast.rs` — `NERVE_CAPACITY_EXCEEDED`
+#     emission on oversized shapes
+#   - `behavior_st9_st10_nerve_additivity.rs` — additive-composition via
+#     the mint pipeline
+# The phase_x4_betti file is the canonical behavior-test for both.
+[coverage.nerve_primitives]
+symbols = [
+    "primitive_simplicial_nerve_betti",
+    "primitive_cartesian_nerve_betti",
+]
+behavior = "phase_x4_betti"
+
+# ADR-057: registry-parameterized nerve-Betti companions + the
+# constraint-expansion helper. These are the wiki-faithful ψ_1
+# structural-reading entry points: `primitive_simplicial_nerve_betti_in`
+# and `primitive_cartesian_nerve_betti_in` expand `ConstraintRef::Recurse`
+# entries through the application's ShapeRegistryProvider plus foundation's
+# built-in registry; `expand_constraints_in` is the underlying flattening
+# walker. Exercised by `behavior_adr_057_recursive_typing.rs` tests
+# `primitive_simplicial_nerve_betti_in_*` and
+# `null_resolver_tuple_carries_empty_shape_registry_by_default`.
+[coverage.nerve_primitives_registry_aware]
+symbols = [
+    "primitive_simplicial_nerve_betti_in",
+    "primitive_cartesian_nerve_betti_in",
+    "expand_constraints_in",
+]
+behavior = "behavior_adr_057_recursive_typing"
+
+# ─── Mapping: Product/Coproduct Completion Amendment — PartitionHandle ─
+[coverage.partition_handle_resolver]
+symbols = [
+    "PartitionHandle",
+    "PartitionResolver",
+    "PartitionRecord",
+]
+behavior = "behavior_partition_handle_resolver"
+
+# ─── Mapping: Product/Coproduct Completion Amendment — NullPartition stubs ─
+# The Null* stub family implements the seven Partition<H> sub-traits with
+# resolver-absent defaults so the witness trait impls can return a
+# NullPartition<H> that satisfies the full Partition<H> contract. Each
+# Null* type is a unit stub with PhantomData<H>; their public surface is
+# a consequence of NullPartition's public trait impl exposing them as
+# associated types. Collectively covered by the witness-trait test.
+[coverage.null_partition_stubs]
+symbols = [
+    "NullPartition",
+    "NullDatum",
+    "NullElement",
+    "NullTermExpression",
+    "NullSiteIndex",
+    "NullTagSite",
+    "NullSiteBinding",
+    "NullConstraint",
+    "NullFreeRank",
+    "NullIrreducibleSet",
+    "NullReducibleSet",
+    "NullUnitGroup",
+    "NullComplement",
+    "NullTypeDefinition",
+]
+behavior = "behavior_witness_partition_trait_impls"
+
+# ─── Mapping: Phase 10 — VerifiedMint witness scaffolds + per-family
+# primitive stubs. The `witness_scaffolds` module hosts `Mint{Foo}` /
+# `Mint{Foo}Inputs<H>` / `Certificate` / `OntologyVerifiedMint` for every
+# Path-2 class. The `primitives` module hosts the per-family
+# `verify_*` stubs Phase 12 will fill. Together these close the
+# Path-2 leg of the orphan-closure plan.
+[coverage.phase10_witness_scaffolds]
+symbols = [
+    "primitives",
+    "witness_scaffolds",
+]
+behavior = "phase10_witness_scaffolds"
+
+# ─── Mapping: Phase 11 — Path-3 blanket impls. The `blanket_impls`
+# module hosts hand-written `Validated<T, Phase>` blanket impls for
+# the Path-3-allow-listed observable classes (LandauerBudget,
+# JacobianObservable, CarryDepthObservable, DerivationDepthObservable,
+# FreeRankObservable). The file is `@codegen-exempt` per Phase 11c;
+# the blanket_impls_exempt validator gates the banner.
+[coverage.phase11_blanket_impls]
+symbols = [
+    "blanket_impls",
+]
+behavior = "phase11_blanket_impls"
+
+# ─── Mapping: Phase 17 — ConstraintRef Affine/Conjunction const-buildable
+# refactor. `LeafConstraintRef` is the depth-1 conjunct element type;
+# `AFFINE_MAX_COEFFS` and `CONJUNCTION_MAX_TERMS` cap the fixed-size
+# arrays that replace the pre-Phase-17 `&'static` slices.
+[coverage.phase17_constraintref_fixed_arrays]
+symbols = [
+    "AFFINE_MAX_COEFFS",
+    "CONJUNCTION_MAX_TERMS",
+    "LeafConstraintRef",
+]
+behavior = "behavior_constraintref_fixed_arrays"
+
+# ─── Mapping: ADR-060 — source-polymorphic value carrier. ADR-060 supersedes
+# the ADR-037 byte-width-cap family (the fixed 4096-byte `TERM_VALUE_MAX_BYTES`
+# / `ROUTE_*_BUFFER_BYTES` / per-ψ-stage `*_OUTPUT_BYTES_MAX` ceilings are
+# REMOVED). The carrier is now `TermValue<'a, INLINE_BYTES>` (Inline / Borrowed
+# / Stream); `carrier_inline_bytes::<B>()` derives the foundation inline width
+# from the application's `HostBounds` from the descriptor constants below
+# (`HASHER_IDENTIFIER_BYTES`, `SITE_DESCRIPTOR_BYTES`, `CONSTRAINT_DESCRIPTOR_BYTES`,
+# `BETTI_ELEMENT_BYTES`, `PSI_STAGE_HEADER_BYTES`). The catamorphism-evaluator
+# behavior test exercises the carrier end-to-end (every fold-rule path,
+# resolver-bound ψ-Terms emit RESOLVER_ABSENT under NullResolverTuple), so
+# coverage is satisfied transitively.
+[coverage.adr060_value_carrier]
+symbols = [
+    "ChunkSource",
+    "HASHER_IDENTIFIER_BYTES",
+    "SITE_DESCRIPTOR_BYTES",
+    "CONSTRAINT_DESCRIPTOR_BYTES",
+    "BETTI_ELEMENT_BYTES",
+    "PSI_STAGE_HEADER_BYTES",
+]
+behavior = "behavior_adr_060_arbitrary_scaling"
+
+# ─── Mapping: ADR-041 — typed-coordinate resolver carriers. Nine
+# `#[repr(transparent)]` newtypes wrap byte slices to type-check ψ-stage
+# composition at the resolver-impl boundary. The catamorphism's
+# resolver-bound fold-rules construct these carriers before invoking
+# the application's resolver; the `psi_chain_*` end-to-end smoke tests
+# in `uor-foundation-sdk/tests/smoke.rs` exercise every wrapper through
+# the canonical k-invariants branch and the homology/cohomology branches.
+[coverage.adr041_typed_coordinate_carriers]
+symbols = [
+    "SimplicialComplexBytes",
+    "ChainComplexBytes",
+    "HomologyGroupsBytes",
+    "BettiNumbersBytes",
+    "CochainComplexBytes",
+    "CohomologyGroupsBytes",
+    "PostnikovTowerBytes",
+    "HomotopyGroupsBytes",
+    "KInvariantsBytes",
+]
+behavior = "behavior_catamorphism_evaluator"
+
+# ─── Mapping: ADR-042 — typed Rust inhabitance-verdict surface.
+# Foundation exposes:
+#   - `InhabitanceCertificateView<'a, T, Tag>` — zero-cost view over
+#     `&Grounded<T, Tag>` with κ-label, witness, certificate accessors.
+#   - `InhabitanceImpossibilityCertificate<'a>` — view over
+#     `&PipelineFailure` with the `contradiction_proof` accessor.
+#   - `WitnessValueTuple<'a>` + `WitnessTupleSource` — concrete witness
+#     view backed by Grounded's binding table.
+#   - `inhabitance::dispatch_through_table` — three-arm decider helper.
+# All five symbols are covered end-to-end by the comprehensive ψ-pipeline
+# verification test in `uor-foundation-sdk/tests/smoke.rs` (the
+# `psi_chain_inhabitance_verdict_surface_end_to_end` test exercises
+# every accessor path).
+[coverage.adr042_inhabitance_verdict_surface]
+symbols = [
+    "InhabitanceCertificateView",
+    "InhabitanceImpossibilityCertificate",
+    "WitnessValueTuple",
+    "WitnessTupleSource",
+    "inhabitance",
+]
+behavior = "behavior_catamorphism_evaluator"
+
+# ─── Mapping: ADR-048 — TypedCommitment cost-model surface. Foundation
+# emits the `TypedCommitment` trait + three built-in implementors
+# (EmptyCommitment, SingletonCommitment<P>, AndCommitment<A, B>) plus
+# two wire-format slots (SINGLETON_IRI_SLOT, AND_IRI_SLOT) used by the
+# `CommitmentEvaluated` trace event. End-to-end coverage by the
+# `adr048_*` tests in `uor-foundation-sdk/tests/smoke.rs` exercising
+# the cost-model enforcement path from prism_model! to forward()
+# through commitment.evaluate(kappa_label).
+[coverage.adr048_typed_commitment_cost_model]
+symbols = [
+    "TypedCommitment",
+    "EmptyCommitment",
+    "SingletonCommitment",
+    "AndCommitment",
+    "SINGLETON_IRI_SLOT",
+    "AND_IRI_SLOT",
+    # ADR-040 + ADR-048 catalog correspondence: TargetCommitment is the
+    # canonical search-cost commitment alias for
+    # `SingletonCommitment<LexicographicLessEqThreshold>`, realizing the
+    # `type:LexicographicLessEqBound` bound-shape primitive's dispatch path.
+    "TargetCommitment",
+]
+behavior = "behavior_catamorphism_evaluator"
+
+# ─── Mapping: ADR-049 — ObservablePredicate surface + 5 typed
+# observable primitives + axis::cryptanalyze battery + CryptanalysisReport
+# + TestOutcome. The observable predicate surface and cryptanalysis
+# battery let any implementor consume the canonical hash axis as
+# substrate-attested through Hardening Principle U1–U6 (ADR-047)
+# without re-deriving the empirical-validation harness. End-to-end
+# coverage by `adr049_*` smoke tests.
+[coverage.adr049_observable_predicate_surface]
+symbols = [
+    "ObservablePredicate",
+    "Stratum",
+    "WalshHadamardParity",
+    "UltrametricCloseTo",
+    "AffineParity",
+    # ADR-040 + ADR-049 catalog correspondence: LexicographicLessEqThreshold
+    # is the 5th foundation-published ObservablePredicate impl, realizing the
+    # `type:LexicographicLessEqBound` bound-shape primitive under the
+    # `observable:ValueThresholdObservable` taxonomy subclass.
+    "LexicographicLessEqThreshold",
+    "CryptanalysisReport",
+    "TestOutcome",
+    "axis",
+    "stratum_p_adic_valuation_be",
+    "stratum_p_adic_valuation_xor_be",
+    "walsh_hadamard_parity",
+    "single_bit_value",
+]
+behavior = "behavior_catamorphism_evaluator"

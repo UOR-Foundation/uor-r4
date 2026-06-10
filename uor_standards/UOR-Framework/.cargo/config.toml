@@ -1,0 +1,5 @@
+# Phase J (target §7.3): `cargo xtask` alias so the ψ-leakage CI gate is
+# invokable as a first-class subcommand. `cargo xtask check-psi` routes
+# through the `uor-xtask` workspace member's binary.
+[alias]
+xtask = "run --package uor-xtask --bin xtask --"

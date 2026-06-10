@@ -1,0 +1,13 @@
+[package]
+name = "uor-foundation-test-helpers"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Test-only helpers for constructing crate-internal uor-foundation values. Not published — used as a [dev-dependencies] path-dep by uor-foundation-verify and the foundation's own integration tests."
+publish = false
+
+[dependencies]
+uor-foundation = { path = "../foundation" }

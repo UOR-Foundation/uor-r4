@@ -1,0 +1,93 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/uor-prism",
+    "crates/uor-prism-verify",
+    "crates/uor-prism-numerics",
+    "crates/uor-prism-crypto",
+    "crates/uor-prism-tensor",
+    "crates/uor-prism-fhe",
+    "tools/wiki-link-check",
+]
+
+[workspace.package]
+version = "0.4.0"
+edition = "2021"
+rust-version = "1.83"
+license = "MIT"
+authors = ["The UOR Foundation"]
+repository = "https://github.com/UOR-Foundation/prism"
+homepage = "https://github.com/UOR-Foundation/UOR-Framework/wiki"
+readme = "README.md"
+
+[workspace.dependencies]
+# Per wiki ADR-031, the `prism` standard library and its Layer-3
+# sub-crates close under the foundation substrate (`uor-foundation`) and
+# its SDK macro lane (`uor-foundation-sdk` per ADR-022 / ADR-030 /
+# ADR-036). Both are floored at v0.5 (effective floor 0.5.2 — the
+# resolver/pipeline tower is generalized over the fingerprint width
+# `FP_MAX` so a 64-byte hasher (`Sha512Hasher: Hasher<64>`) flows
+# through the pipeline; 0.5.1 had pinned it to `Hasher<32>`. Builds on
+# the 0.5.0/0.5.1 ADR-060 source-polymorphic value carrier: `TermValue`
+# is the `Inline`/`Borrowed`/`Stream` enum over a `ChunkSource`, the
+# fictional 4096 byte-width caps and `DefaultHostBounds` are removed,
+# and `IntoBindingValue::as_binding_value` returns the carrier directly.
+# Wire format byte-identical (`TRACE_REPLAY_FORMAT_VERSION` stays 10);
+# MSRV stays 1.83).
+uor-foundation = { version = "0.5", default-features = false }
+uor-foundation-sdk = { version = "0.5", default-features = false }
+
+# Standard-library sub-crate cross-deps per ADR-031's layered
+# consumption pattern (numerics → foundation; crypto → foundation +
+# numerics; tensor → foundation + numerics + optionally crypto; fhe →
+# foundation). The `prism` façade depends on all four.
+uor-prism-numerics = { version = "0.4.0", path = "crates/uor-prism-numerics", default-features = false }
+uor-prism-crypto = { version = "0.4.0", path = "crates/uor-prism-crypto", default-features = false }
+uor-prism-tensor = { version = "0.4.0", path = "crates/uor-prism-tensor", default-features = false }
+uor-prism-fhe = { version = "0.4.0", path = "crates/uor-prism-fhe", default-features = false }
+
+# Cryptographic substrate dependencies for `prism-crypto`'s canonical
+# `HashAxis` impls (ADR-031). These are widely-vetted, no_std-clean
+# Rust impls of the canonical hash families the wiki names; they
+# satisfy the conformance-test commitment without the standard library
+# re-implementing primitives from RFCs.
+sha2 = { version = "0.10", default-features = false }
+sha3 = { version = "0.10", default-features = false }
+# blake3 1.6+ pulls `constant_time_eq = "0.4"` which requires
+# Rust edition 2024 / MSRV 1.85. Cap at the ~1.5 line until our
+# workspace MSRV (1.83) catches up to match foundation's floor.
+# Downstream consumers of `uor-prism-crypto` inherit this cap
+# transitively.
+blake3 = { version = ">=1.5, <1.6", default-features = false }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+unreachable_pub = "warn"
+rust_2018_idioms = { level = "warn", priority = -1 }
+
+[workspace.lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+unwrap_used = "warn"
+expect_used = "warn"
+panic = "warn"
+todo = "deny"
+unimplemented = "deny"
+# Proper nouns and identifiers like `UOR-Framework`, `UORassembly`, `TC-04`,
+# `ADR-015` collectively make doc-markdown too noisy. Code identifiers
+# already use backticks per CV-02; we don't need clippy second-guessing
+# the surrounding prose.
+doc_markdown = "allow"
+# Re-exports inherit foundation type names like `PipelineFailure` inside
+# the `pipeline` module; the prefix is foundation-controlled, not ours.
+module_name_repetitions = "allow"
+
+[workspace.lints.rustdoc]
+broken_intra_doc_links = "deny"
+private_intra_doc_links = "warn"
+missing_crate_level_docs = "deny"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1

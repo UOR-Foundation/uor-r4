@@ -1,0 +1,43 @@
+# `cargo-deny` configuration — license + advisory gate for the
+# uor-addr workspace. Run via `cargo deny check` or the `deny` job in
+# `.github/workflows/ci.yml`.
+
+[advisories]
+version = 2
+ignore = []
+
+[licenses]
+version = 2
+# Apache-2.0 is the crate's chosen license. Permissive ecosystem
+# licenses (MIT / BSD / Unicode-DFS / Zlib) are admissible for
+# transitive deps. Strong copyleft (GPL / LGPL / AGPL) is not.
+#
+# MPL-2.0 is admitted for **build-dependencies only** — `cbindgen`
+# is MPL-2.0 and is used by `uor-addr-c/build.rs` to generate the
+# C header at compile time. MPL-2.0 is a file-level weak copyleft;
+# it does not touch the produced artifact (the cbindgen tool never
+# links into the cdylib / staticlib outputs). This is the standard
+# interpretation used by Apache-2.0 projects across the Rust
+# ecosystem (firefox, ripgrep, …).
+allow = [
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "MIT",
+    "MPL-2.0",
+    "Unicode-DFS-2016",
+    "Unicode-3.0",
+    "Zlib",
+]
+confidence-threshold = 0.93
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

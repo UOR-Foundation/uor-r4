@@ -1,0 +1,23 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "UOR Framework"
+type: software
+authors:
+  - name: "The UOR Foundation"
+doi: "10.5281/zenodo.19068826"
+repository-code: "https://github.com/UOR-Foundation/UOR-Framework"
+url: "https://uor.foundation/"
+license: MIT
+version: "0.1.2"
+date-released: "2026-03-31"
+keywords:
+  - ontology
+  - owl
+  - rdf
+  - content-addressing
+  - algebraic-topology
+abstract: >-
+  A Rust workspace implementing the UOR Foundation ontology —
+  a mathematical framework for content-addressed, symmetric,
+  multi-metric object spaces with algebraic structure based
+  on Z/(2^n)Z.

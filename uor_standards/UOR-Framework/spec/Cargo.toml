@@ -1,0 +1,19 @@
+[package]
+name = "uor-ontology"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "UOR Foundation ontology source of truth — all 33 namespaces encoded as typed Rust data with seven serialization formats"
+publish = false
+
+[features]
+default = ["serde", "serializers"]
+serde = ["dep:serde"]
+serializers = ["dep:serde_json"]
+
+[dependencies]
+serde = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }

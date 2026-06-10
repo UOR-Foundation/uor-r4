@@ -1,0 +1,269 @@
+name: CI
+
+# Mirrors `just vv` (see VERIFICATION.md). Every axis runs as its own
+# job; CI fails if any axis fails. The job set parallels the recipe set
+# in `justfile`.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  # Manual + weekly trigger for the gated live external-model V&V
+  # (`external-models` job): it downloads ~635 MB of real GGUF / ONNX
+  # models, so it does not run on every PR.
+  workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * 1" # Mondays 06:00 UTC
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+# Cancel in-progress runs on the same ref when a new push lands.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fmt:
+    name: cargo fmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup show active-toolchain || rustup toolchain install
+      - run: cargo fmt --all --check
+
+  clippy:
+    name: cargo clippy (-D warnings)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+
+  test:
+    name: cargo test (workspace)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      # uor-addr-wasm is excluded: its `wit-bindgen`-generated Component
+      # Model symbols only link cleanly on `wasm32-*` targets. The wasm
+      # build axis below verifies that crate.
+      - run: cargo test --workspace --exclude uor-addr-wasm
+
+  embedded:
+    name: embedded build (thumbv7em-none-eabihf, no_std + no_alloc)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup show active-toolchain || rustup toolchain install
+      - run: rustup target add thumbv7em-none-eabihf
+      - uses: Swatinem/rust-cache@v2
+      # Proves the no_std + no_alloc contract holds on Cortex-M4
+      # bare-metal. See CB-N01 / CB-N02 in CONFORMANCE.md.
+      - run: cargo build -p uor-addr --no-default-features --target thumbv7em-none-eabihf
+      - run: cargo build -p uor-addr-c --no-default-features --target thumbv7em-none-eabihf
+
+  wasm:
+    name: wasm component model (wasm32-unknown-unknown)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup show active-toolchain || rustup toolchain install
+      - run: rustup target add wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - name: Install wasm-tools
+        uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-tools
+      # Build the zero-import core module and componentize it — the same
+      # path the release ships. wasm32-wasip2 is avoided on purpose: it
+      # links std's unused WASI runtime into the component, which only
+      # the Node-only jco preview2-shim can satisfy.
+      - run: cargo build -p uor-addr-wasm --target wasm32-unknown-unknown --release
+      - name: Componentize + assert zero imports
+        run: |
+          wasm-tools component new \
+            target/wasm32-unknown-unknown/release/uor_addr_wasm.wasm \
+            -o target/uor_addr_wasm.wasm
+          if wasm-tools component wit target/uor_addr_wasm.wasm | grep -qi import; then
+            echo "::error::component has host imports — expected zero (pure-compute library)"
+            wasm-tools component wit target/uor_addr_wasm.wasm | grep -i import
+            exit 1
+          fi
+          echo "zero host imports — confirmed"
+      - name: Upload .wasm artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: uor-addr-wasm-component
+          path: target/uor_addr_wasm.wasm
+          if-no-files-found: error
+
+  conformance:
+    name: conformance suite (release)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      # Mirrors `just conformance` — every published-spec test suite
+      # at release-mode speed (parametric extensions tractable).
+      - run: cargo test -p uor-addr --release --test common_surface
+      - run: cargo test -p uor-addr --release --test conformance
+      - run: cargo test -p uor-addr --release --test jcs_rfc8785
+      - run: cargo test -p uor-addr --release --test sexp_conformance
+      - run: cargo test -p uor-addr --release --test sexp_rivest_examples
+      - run: cargo test -p uor-addr --release --test xml_c14n_1_1
+      - run: cargo test -p uor-addr --release --test asn1_x690_der
+      - run: cargo test -p uor-addr --release --test ring_amendment_43
+      - run: cargo test -p uor-addr --release --test codemodule_ccmas
+      - run: cargo test -p uor-addr --release --test schema_org_conformance
+      - run: cargo test -p uor-addr --release --test in_toto_statement_v1
+      - run: cargo test -p uor-addr --release --test variant_storage
+      - run: cargo test -p uor-addr --release --test all_realizations
+      - run: cargo test -p uor-addr --release --test nfc_uax15_normalization_test
+      # Arbitrary-hash σ-axes (sha256 / blake3 / sha3-256 / keccak256) against
+      # authoritative FIPS-180-4 / FIPS-202 / Keccak / BLAKE3 vectors, and the
+      # CBOR realization against RFC 8949 §4.2 (Appendix A vectors).
+      - run: cargo test -p uor-addr --release --test hash_kat
+      - run: cargo test -p uor-addr --release --test cbor_rfc8949
+      # ADR-061 categorical composition of κ-labels (CS-G2/F4/E6/E7/E8 laws).
+      - run: cargo test -p uor-addr --release --test composition
+      # GGUF v3 + ONNX flat-skeleton conformance (canonical-*.py byte-identity).
+      - run: cargo test -p uor-addr --release --test gguf_conformance --test gguf_byte_identity
+      - run: cargo test -p uor-addr --release --test onnx_conformance --test onnx_byte_identity
+      # ADR-060 streaming / bounded-carrier proof (64 MiB synthetic tensors).
+      - run: cargo test -p uor-addr --release --test streaming
+
+  external-models:
+    name: external real-model V&V (CM-EXT + CN-GGUF/ONNX, live)
+    # Gated: downloads ~635 MB of real GGUF / ONNX models, so it runs only
+    # on manual dispatch and the weekly schedule — never on PRs / pushes.
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup show active-toolchain || rustup toolchain install
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: Swatinem/rust-cache@v2
+      - name: Cache downloaded models
+        uses: actions/cache@v4
+        with:
+          path: crates/uor-addr/tests/fixtures/models
+          key: ext-models-v1
+      # Mirrors `just cn`: pinned real-model V&V (file SHA-256, Rust κ ==
+      # pin, independent Python encoder == pin, bounded carrier, witness
+      # round-trip) + the Python ⇄ Rust cross-validation on the synthetic
+      # fixtures. The 531 MB Qwen2-0.5B GGUF exercises the streaming path.
+      - name: CN-GGUF / CN-ONNX (canonical-*.py ⇄ Rust)
+        run: UOR_ADDR_LIVE=1 cargo test -p uor-addr --release --features gguf,onnx --test gguf_cross_validation --test onnx_cross_validation -- --ignored
+      - name: CM-EXT (pinned external models)
+        run: UOR_ADDR_LIVE=1 cargo test -p uor-addr --release --features gguf,onnx --test external_models -- --ignored
+
+  analysis:
+    name: analysis suite (release, CP class)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test -p uor-addr --release --test analysis
+
+  replay:
+    name: TC-05 replay round-trip
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test -p uor-addr --release --test replay
+
+  examples:
+    name: runnable use-case examples
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      # Mirrors `just examples` — every example panics on a failed
+      # invariant, so passing the axis is a structural requirement.
+      - run: cargo run -p uor-addr --example common_surface
+      - run: cargo run -p uor-addr --example address_value
+      - run: cargo run -p uor-addr --example dedupe_cache
+      - run: cargo run -p uor-addr --example typed_distinction
+      - run: cargo run -p uor-addr --example replay_verification
+      - run: cargo run -p uor-addr --example sexp_address
+      - run: cargo run -p uor-addr --example cbor_address
+      - run: cargo run -p uor-addr --example xml_realization
+      - run: cargo run -p uor-addr --example asn1_realization
+      - run: cargo run -p uor-addr --example ring_realization
+      - run: cargo run -p uor-addr --example codemodule_realization
+      - run: cargo run -p uor-addr --example photo_schema
+      - run: cargo run -p uor-addr --example document_schema
+      - run: cargo run -p uor-addr --example codemodule_signed_schema
+      - run: cargo run -p uor-addr --example storage_variant
+      - run: cargo run -p uor-addr --example signed_variant
+      - run: cargo run -p uor-addr --example gguf_model_registry
+      - run: cargo run -p uor-addr --example onnx_provenance
+      - run: cargo run -p uor-addr --example composition
+      - run: cargo run -p uor-addr --example multi_realization
+
+  doc:
+    name: cargo doc (broken-intra-doc-links)
+    runs-on: ubuntu-latest
+    env:
+      RUSTDOCFLAGS: "-D rustdoc::broken_intra_doc_links"
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo doc --workspace --no-deps
+
+  lean:
+    name: Lean proofs (lake build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install elan + Lean toolchain
+        run: |
+          set -euo pipefail
+          curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh \
+            | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: Cache lake build
+        uses: actions/cache@v4
+        with:
+          path: uor-addr-lean/.lake
+          key: ${{ runner.os }}-lake-${{ hashFiles('uor-addr-lean/lakefile.lean', 'uor-addr-lean/lean-toolchain', 'uor-addr-lean/lake-manifest.json') }}
+          restore-keys: ${{ runner.os }}-lake-
+      - run: cd uor-addr-lean && lake build
+
+  deny:
+    name: cargo deny (licenses + advisories)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check
+
+  version-sync:
+    name: version sync (single source of truth)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      # Cargo.toml's [workspace.package].version is the single source
+      # of truth for the release version. Workspace members inherit
+      # it via `version.workspace = true`; downstream bindings
+      # (npm package.json, python pyproject.toml) and the
+      # [workspace.dependencies] inter-crate pins are propagated by
+      # `tools/sync-versions.py`. This gate refuses drift.
+      - run: python3 tools/sync-versions.py --check
