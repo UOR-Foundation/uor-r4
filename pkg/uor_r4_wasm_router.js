@@ -193,6 +193,20 @@ export class UorR4Router {
         return v2;
     }
     /**
+     * Dynamically computes the suggested token limit based on manifold routing metrics
+     * @param {string} text
+     * @param {string} identity
+     * @returns {number}
+     */
+    get_suggested_token_limit(text, identity) {
+        const ptr0 = passStringToWasm0(text, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(identity, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.uorr4router_get_suggested_token_limit(this.__wbg_ptr, ptr0, len0, ptr1, len1);
+        return ret >>> 0;
+    }
+    /**
      * Returns the top N resonant sentences sorted by relevance
      * @param {string} text
      * @param {string} identity

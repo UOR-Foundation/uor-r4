@@ -62,6 +62,10 @@ export class UorR4Router {
      */
     get_state_4d_projection_wasm(state_vector: Float64Array): Float64Array;
     /**
+     * Dynamically computes the suggested token limit based on manifold routing metrics
+     */
+    get_suggested_token_limit(text: string, identity: string): number;
+    /**
      * Returns the top N resonant sentences sorted by relevance
      */
     get_top_resonances(text: string, identity: string, top_n: number): any;
@@ -146,6 +150,7 @@ export interface InitOutput {
     readonly uorr4router_get_semantic_map_points: (a: number) => any;
     readonly uorr4router_get_sentence_projection_wasm: (a: number, b: number, c: number, d: number) => [number, number];
     readonly uorr4router_get_state_4d_projection_wasm: (a: number, b: number, c: number) => [number, number];
+    readonly uorr4router_get_suggested_token_limit: (a: number, b: number, c: number, d: number, e: number) => number;
     readonly uorr4router_get_top_resonances: (a: number, b: number, c: number, d: number, e: number, f: number) => any;
     readonly uorr4router_get_vocab_size: (a: number) => number;
     readonly uorr4router_import_state: (a: number, b: number, c: number) => [number, number];

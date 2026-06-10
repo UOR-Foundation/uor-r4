@@ -2633,10 +2633,7 @@ async function runLocalChat(text, identity) {
     const temperature = Math.min(Math.max(0.2 + 0.8 * Math.abs(theta_d) + ((uor_bias - 0.5) * 0.20), 0.15), 1.1);
     const theme = WINDOW_THEMES[routed.window_index] || "Unknown";
     
-    const input_words = text.trim().split(/\s+/).length;
-    const stratum = routed.state_vector ? routed.state_vector.filter(v => Math.abs(v) > 1e-4).length : 20;
-    const eval_sum = routed.eigenvalues ? routed.eigenvalues.reduce((a,b)=>a+b, 0) : 1.0;
-    let max_tokens = Math.min(Math.max(Math.floor(50.0 + (stratum * 1.5) + (Math.abs(theta_d) * 45.0) + (eval_sum * 110.0) + (input_words * 2.5)), 50), 500);
+    const max_tokens = router.get_suggested_token_limit(text, identity);
 
     const geomResult = router.generate_geometric_response(
         text,
@@ -2680,7 +2677,7 @@ async function runLocalChat(text, identity) {
                 think: false,
                 options: {
                     temperature: temperature,
-                    num_predict: max_tokens
+                    num_predict: Math.max(max_tokens, 300)
                 }
             };
             
@@ -2840,10 +2837,13 @@ async function sendQuery(text) {
                     const gamma = Math.min(Math.max(0.85 - 0.55 * kappa + ((uor_bias - 0.5) * 0.12), 0.15), 0.90);
                     const temperature = Math.min(Math.max(0.2 + 0.8 * Math.abs(theta_d) + ((uor_bias - 0.5) * 0.20), 0.15), 1.1);
                     
-                    const input_words = text.trim().split(/\s+/).length;
-                    const stratum = data.state_vector ? data.state_vector.filter(v => Math.abs(v) > 1e-4).length : 20;
-                    const eval_sum = data.eigenvalues ? data.eigenvalues.reduce((a,b)=>a+b, 0) : 1.0;
-                    let max_tokens = Math.min(Math.max(Math.floor(50.0 + (stratum * 1.5) + (Math.abs(theta_d) * 45.0) + (eval_sum * 110.0) + (input_words * 2.5)), 50), 500);
+                    let max_tokens = data.metrics?.auto_tuned?.max_tokens;
+                    if (!max_tokens) {
+                        const input_words = text.trim().split(/\s+/).length;
+                        const stratum = data.state_vector ? data.state_vector.filter(v => Math.abs(v) > 1e-4).length : 20;
+                        const eval_sum = data.eigenvalues ? data.eigenvalues.reduce((a,b)=>a+b, 0) : 1.0;
+                        max_tokens = Math.min(Math.max(Math.floor(50.0 + (stratum * 1.5) + (Math.abs(theta_d) * 45.0) + (eval_sum * 110.0) + (input_words * 2.5)), 50), 500);
+                    }
                     
                     const systemPrompt = `You are the Voice of the R4 Prime Router. The current state of your context hypersphere brain is: Window ${data.metrics.window_index} (${theme}), Energy κ=${kappa.toFixed(4)}, Curvature θd=${theta_d.toFixed(4)}, Hopf coordinates (χ=${data.metrics.hopf.chi.toFixed(4)}, δ=${data.metrics.hopf.delta.toFixed(4)}, α=${data.metrics.hopf.alpha.toFixed(4)}). Grounding context sentence: "${ctx_block}". IMPORTANT: You MUST incorporate and reference the Grounding context sentence in your response to directly answer the user's query. Respond directly to the user query as a geometric router. Keep your response relevant, coherent, and under ${max_tokens} words. Do NOT output any thinking, thought processes, <thinking> blocks, or XML tags. Speak directly.`;
                     
@@ -2858,7 +2858,7 @@ async function sendQuery(text) {
                         think: false,
                         options: {
                             temperature: temperature,
-                            num_predict: max_tokens
+                            num_predict: Math.max(max_tokens, 300)
                         }
                     };
                     
