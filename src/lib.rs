@@ -650,7 +650,10 @@ impl UorR4Router {
             "points": points,
             "total": points.len(),
         });
-        serde_wasm_bindgen::to_value(&map_val).unwrap_or(JsValue::NULL)
+        match serde_json::to_string(&map_val) {
+            Ok(s) => JsValue::from_str(&s),
+            Err(_) => JsValue::NULL,
+        }
     }
 
     /// Runs the formal UOR coordinate reduction pipeline and returns both RoutingData and trace steps as a single JsValue
@@ -732,7 +735,10 @@ impl UorR4Router {
             "uor_payload": uor_payload,
         });
 
-        serde_wasm_bindgen::to_value(&result).unwrap_or(JsValue::NULL)
+        match serde_json::to_string(&result) {
+            Ok(s) => JsValue::from_str(&s),
+            Err(_) => JsValue::NULL,
+        }
     }
 
     /// Projects the active brain state vector into 2D coordinates for the map path tracing
