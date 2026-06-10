@@ -996,6 +996,11 @@
                 <div class="qimc-row"><span class="qimc-key">UOR Verify</span><span class="qimc-val" id="uorVerify" style="color:var(--amber);">—</span></div>
                 <div class="qimc-row"><span class="qimc-key">UOR Label</span><span class="qimc-val" id="uorLabel" style="font-size:0.62rem; color:var(--text2);">—</span></div>
                 <div class="qimc-row"><span class="qimc-key">UOR Fingerprint</span><span class="qimc-val" id="uorFingerprint" style="font-size:0.55rem; color:var(--text2);">—</span></div>
+                <div class="qimc-row"><span class="qimc-key">UOR Sigma</span><span class="qimc-val" id="uorSigma" style="color:var(--emerald);">—</span></div>
+                <div class="qimc-row"><span class="qimc-key">UOR d_delta</span><span class="qimc-val" id="uordDelta" style="color:var(--cyan);">—</span></div>
+                <div class="qimc-row"><span class="qimc-key">UOR Euler</span><span class="qimc-val" id="uorEuler" style="color:var(--purple);">—</span></div>
+                <div class="qimc-row"><span class="qimc-key">UOR Free Sites</span><span class="qimc-val" id="uorFreeSites" style="color:var(--text2);">—</span></div>
+                <div class="qimc-row"><span class="qimc-key">UOR Stratum</span><span class="qimc-val" id="uorStratum" style="color:var(--cyan);">—</span></div>
                 <div class="qimc-row"><span class="qimc-key">Monodromy</span><span class="qimc-val" id="monoLabel" style="color:var(--amber);">r^0</span></div>
             </div>
         </div>
@@ -2252,6 +2257,31 @@ function updateTelemetry(data, isSysinfo = false) {
         if (m.uor?.fingerprint_hex) {
             safeSetTextContent("uorFingerprint", m.uor.fingerprint_hex.slice(0,28) + "...");
         }
+        if (m.uor?.sigma !== undefined) {
+            safeSetTextContent("uorSigma", m.uor.sigma.toFixed(6));
+        } else {
+            safeSetTextContent("uorSigma", "—");
+        }
+        if (m.uor?.d_delta !== undefined) {
+            safeSetTextContent("uordDelta", m.uor.d_delta);
+        } else {
+            safeSetTextContent("uordDelta", "—");
+        }
+        if (m.uor?.euler !== undefined) {
+            safeSetTextContent("uorEuler", m.uor.euler);
+        } else {
+            safeSetTextContent("uorEuler", "—");
+        }
+        if (m.uor?.residual !== undefined) {
+            safeSetTextContent("uorFreeSites", m.uor.residual);
+        } else {
+            safeSetTextContent("uorFreeSites", "—");
+        }
+        if (m.uor?.stratum !== undefined) {
+            safeSetTextContent("uorStratum", m.uor.stratum);
+        } else {
+            safeSetTextContent("uorStratum", "—");
+        }
     }
 
     if (m.hopf && m.hopf.subspace_norms) {
@@ -2393,6 +2423,13 @@ function updateTelemetry(data, isSysinfo = false) {
 
     if (semanticMapPoints.length > 0) {
         renderSemanticMap(m.window_index, conversationTrajectory, data.top_resonance || []);
+    }
+    
+    if (data.uor_trace_steps && data.uor_trace_steps.length > 0) {
+        logToConsole(`UOR Reduction Witness Certificated! Trace path:`, "accent");
+        data.uor_trace_steps.forEach(step => {
+            logToConsole(`  Step ${step.step}: [${step.op}] → address ${step.target}`, "muted");
+        });
     }
     
     updateSystemMetricsUI(data.routing_latency_ms, data.gen_latency_ms);

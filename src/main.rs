@@ -4,8 +4,9 @@ use std::net::{TcpListener, TcpStream};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use uor_r4_wasm_router::UorR4Router;
+use uor_foundation::pipeline::PrismModel;
 
 #[derive(Deserialize)]
 struct ChatPayload {
@@ -231,8 +232,36 @@ fn handle_connection(mut stream: TcpStream, router: Arc<Mutex<UorR4Router>>, sta
 
         let mut router_guard = router.lock().unwrap();
 
-        // 1. Dry run routing to get baseline parameters
-        let routing = router_guard.route_query_to_manifold_native(&payload.text, &identity);
+        // 1. Dry run routing to get baseline parameters via UOR pipeline
+        let mut buf = [0u8; 640];
+        let query_bytes = payload.text.as_bytes();
+        let identity_bytes = identity.as_bytes();
+        let query_len = query_bytes.len().min(512);
+        let identity_len = identity_bytes.len().min(128);
+        buf[..query_len].copy_from_slice(&query_bytes[..query_len]);
+        buf[512..512 + identity_len].copy_from_slice(&identity_bytes[..identity_len]);
+
+        let input = uor_r4_wasm_router::R4RoutingInput {
+            query: &buf[..512],
+            identity: &buf[512..],
+            data: &buf,
+        };
+
+        // Bind thread-local
+        let router_ptr = &mut *router_guard as *mut UorR4Router;
+        uor_r4_wasm_router::ACTIVE_ROUTER.with(|r| {
+            *r.borrow_mut() = Some(router_ptr);
+        });
+
+        // Run dry run through UorR4RouterModel
+        let _grounded_dry = uor_r4_wasm_router::UorR4RouterModel::forward(input).expect("Dry run routing failed");
+
+        // Reset thread-local
+        uor_r4_wasm_router::ACTIVE_ROUTER.with(|r| {
+            *r.borrow_mut() = None;
+        });
+
+        let routing = router_guard.last_routing_data().clone().expect("No routing data generated");
         let kappa = routing.routed.metrics.kappa;
         let theta_d = routing.routed.metrics.deficit_angle;
         let eval_sum: f64 = routing.routed.eigenvalues.iter().sum();
@@ -270,9 +299,22 @@ fn handle_connection(mut stream: TcpStream, router: Arc<Mutex<UorR4Router>>, sta
         // 3. Evolve the brain state
         router_guard.evolve_state(&identity, &payload.text, gamma);
 
-        // 4. Run final routing on evolved state
+        // 4. Run final routing on evolved state via UOR pipeline
         let t_route = Instant::now();
-        let routing_data = router_guard.route_query_to_manifold_native(&payload.text, &identity);
+
+        // Bind thread-local
+        uor_r4_wasm_router::ACTIVE_ROUTER.with(|r| {
+            *r.borrow_mut() = Some(router_ptr);
+        });
+
+        let grounded = uor_r4_wasm_router::UorR4RouterModel::forward(input).expect("Final routing failed");
+
+        // Reset thread-local
+        uor_r4_wasm_router::ACTIVE_ROUTER.with(|r| {
+            *r.borrow_mut() = None;
+        });
+
+        let routing_data = router_guard.last_routing_data().clone().expect("No final routing data generated");
         let route_ms = t_route.elapsed().as_secs_f64() * 1000.0;
 
         // 5. Decode response
@@ -407,6 +449,34 @@ fn handle_connection(mut stream: TcpStream, router: Arc<Mutex<UorR4Router>>, sta
 
         let top_resonances_5 = router_guard.get_top_resonances_native(&payload.text, &identity, 5);
 
+        let trace = grounded.derivation().replay::<256>();
+        let mut uor_trace_steps = Vec::new();
+        for i in 0..trace.len() {
+            if let Some(event) = trace.event(i as usize) {
+                uor_trace_steps.push(serde_json::json!({
+                    "step": event.step_index(),
+                    "op": format!("{:?}", event.op()),
+                    "target": format!("0x{:032x}", event.target().as_u128()),
+                }));
+            }
+        }
+
+        let uor_payload = serde_json::json!({
+            "algorithm": routing_data.routed.uor.algorithm.clone(),
+            "hash_algorithm": routing_data.routed.uor.hash_algorithm.clone(),
+            "hash_algorithm_id": routing_data.routed.uor.hash_algorithm_id,
+            "address": routing_data.routed.uor.address.clone(),
+            "verify_result": "Verified",
+            "kappa_label": format!("witt:{}", grounded.witt_level_bits()),
+            "fingerprint_hex": hex::encode(grounded.content_fingerprint().as_bytes()),
+            "sigma": grounded.sigma().value(),
+            "d_delta": grounded.d_delta().as_i64(),
+            "euler": grounded.euler().as_i64(),
+            "residual": grounded.residual().as_u32(),
+            "stratum": grounded.triad().stratum(),
+            "multihash_addresses": routing_data.routed.uor.multihash_addresses.clone(),
+        });
+
         let response_payload = serde_json::json!({
             "text": payload.text,
             "archetype": archetype,
@@ -431,7 +501,7 @@ fn handle_connection(mut stream: TcpStream, router: Arc<Mutex<UorR4Router>>, sta
                 "qimc": routing_data.routed.qimc,
                 "hopf": routing_data.routed.hopf,
                 "uor_address": routing_data.routed.uor_address,
-                "uor": routing_data.routed.uor,
+                "uor": uor_payload,
                 "auto_tuned": {
                     "gamma": gamma,
                     "temperature": temperature,
@@ -449,7 +519,8 @@ fn handle_connection(mut stream: TcpStream, router: Arc<Mutex<UorR4Router>>, sta
             "active_streams": router_guard.get_active_streams_native(),
             "expert_counts": router_guard.get_expert_counts(),
             "routing_latency_ms": route_ms.round(),
-            "gen_latency_ms": gen_ms.round()
+            "gen_latency_ms": gen_ms.round(),
+            "uor_trace_steps": uor_trace_steps,
         });
 
         send_json_response(stream, 200, &response_payload.to_string());
@@ -550,13 +621,41 @@ fn handle_connection(mut stream: TcpStream, router: Arc<Mutex<UorR4Router>>, sta
         let expert_counts = router_guard.get_expert_counts();
 
         let identity = "tenant-alpha";
-        let routing_data = router_guard.route_query_to_manifold_native("Welcome", &identity);
+        
+        let mut buf = [0u8; 640];
+        let query_bytes = "Welcome".as_bytes();
+        let identity_bytes = identity.as_bytes();
+        let query_len = query_bytes.len().min(512);
+        let identity_len = identity_bytes.len().min(128);
+        buf[..query_len].copy_from_slice(&query_bytes[..query_len]);
+        buf[512..512 + identity_len].copy_from_slice(&identity_bytes[..identity_len]);
+
+        let input = uor_r4_wasm_router::R4RoutingInput {
+            query: &buf[..512],
+            identity: &buf[512..],
+            data: &buf,
+        };
+
+        // Bind thread-local
+        let router_ptr = &mut *router_guard as *mut UorR4Router;
+        uor_r4_wasm_router::ACTIVE_ROUTER.with(|r| {
+            *r.borrow_mut() = Some(router_ptr);
+        });
+
+        // Run through UorR4RouterModel
+        let grounded = uor_r4_wasm_router::UorR4RouterModel::forward(input).expect("Sysinfo routing failed");
+
+        // Reset thread-local
+        uor_r4_wasm_router::ACTIVE_ROUTER.with(|r| {
+            *r.borrow_mut() = None;
+        });
+
+        let routing_data = router_guard.last_routing_data().clone().expect("No sysinfo routing data generated");
         let active_state = router_guard.get_brain_state_native(&identity);
         let (u, v) = router_guard.get_sentence_projection_native(&active_state, routing_data.routed.window_index);
         let v_4d = router_guard.get_state_4d_projection_native(&active_state);
         let kappa = routing_data.routed.metrics.kappa;
         let theta_d = routing_data.routed.metrics.deficit_angle;
-        let eval_sum: f64 = routing_data.routed.eigenvalues.iter().sum();
         let uor_bias = routing_data.routed.qimc.uor_control.entropy_bias;
         
         let gamma = (0.85 - 0.55 * kappa + ((uor_bias - 0.5) * 0.12)).clamp(0.15, 0.90);
@@ -573,6 +672,34 @@ fn handle_connection(mut stream: TcpStream, router: Arc<Mutex<UorR4Router>>, sta
         );
 
         let top_resonances_5 = router_guard.get_top_resonances_native("Welcome", &identity, 5);
+
+        let trace = grounded.derivation().replay::<256>();
+        let mut uor_trace_steps = Vec::new();
+        for i in 0..trace.len() {
+            if let Some(event) = trace.event(i as usize) {
+                uor_trace_steps.push(serde_json::json!({
+                    "step": event.step_index(),
+                    "op": format!("{:?}", event.op()),
+                    "target": format!("0x{:032x}", event.target().as_u128()),
+                }));
+            }
+        }
+
+        let uor_payload = serde_json::json!({
+            "algorithm": routing_data.routed.uor.algorithm.clone(),
+            "hash_algorithm": routing_data.routed.uor.hash_algorithm.clone(),
+            "hash_algorithm_id": routing_data.routed.uor.hash_algorithm_id,
+            "address": routing_data.routed.uor.address.clone(),
+            "verify_result": "Verified",
+            "kappa_label": format!("witt:{}", grounded.witt_level_bits()),
+            "fingerprint_hex": hex::encode(grounded.content_fingerprint().as_bytes()),
+            "sigma": grounded.sigma().value(),
+            "d_delta": grounded.d_delta().as_i64(),
+            "euler": grounded.euler().as_i64(),
+            "residual": grounded.residual().as_u32(),
+            "stratum": grounded.triad().stratum(),
+            "multihash_addresses": routing_data.routed.uor.multihash_addresses.clone(),
+        });
 
         let info = serde_json::json!({
             "uptime_seconds": start_time.elapsed().as_secs_f64().round(),
@@ -604,7 +731,7 @@ fn handle_connection(mut stream: TcpStream, router: Arc<Mutex<UorR4Router>>, sta
                 "qimc": routing_data.routed.qimc,
                 "hopf": routing_data.routed.hopf,
                 "uor_address": routing_data.routed.uor_address,
-                "uor": routing_data.routed.uor,
+                "uor": uor_payload,
                 "auto_tuned": {
                     "gamma": gamma,
                     "temperature": temperature,
@@ -619,6 +746,7 @@ fn handle_connection(mut stream: TcpStream, router: Arc<Mutex<UorR4Router>>, sta
             "all_routes": routing_data.all_routes,
             "top_resonance": top_resonances_5,
             "trajectory": geom_result.trajectory,
+            "uor_trace_steps": uor_trace_steps,
         });
 
         send_json_response(stream, 200, &info.to_string());

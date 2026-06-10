@@ -204,6 +204,8 @@ pub struct UorR4Router {
     angle_x: f64,
     #[serde(default)]
     angle_y: f64,
+    #[serde(skip)]
+    last_routing_data: Option<RoutingData>,
 }
 
 #[derive(Serialize)]
@@ -234,6 +236,7 @@ impl UorR4Router {
             session_brain_states: HashMap::new(),
             angle_x: 0.5,
             angle_y: 0.5,
+            last_routing_data: None,
         };
 
         // Initialize default corpus
@@ -439,6 +442,7 @@ impl UorR4Router {
         self.session_brain_states.clear();
         self.angle_x = 0.5;
         self.angle_y = 0.5;
+        self.last_routing_data = None;
         self.index_default_corpus();
     }
 
@@ -1542,13 +1546,13 @@ impl UorR4Router {
 // Helpers and Types Declarations
 // ============================================================
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct RoutingData {
     pub routed: RoutedResult,
     pub all_routes: Vec<RouteInfo>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct RoutedResult {
     pub window_index: usize,
     pub scale_x: f64,
@@ -1562,7 +1566,7 @@ pub struct RoutedResult {
     pub uor: UorAttestationResult,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct MetricsResult {
     pub sigma_q: f64,
     pub sigma_kl: f64,
@@ -1571,7 +1575,7 @@ pub struct MetricsResult {
     pub deficit_angle: f64,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct QimcResult {
     pub identity: String,
     pub identity_type: String,
@@ -1583,13 +1587,13 @@ pub struct QimcResult {
     pub index: usize,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct UorControlPlanInfo {
     pub entropy_bias: f64,
     pub hopf_chi_bins: usize,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct HopfResult {
     pub rho1: f64,
     pub rho2: f64,
@@ -1603,7 +1607,7 @@ pub struct HopfResult {
     pub subspace_norms: SubspaceNorms,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct SubspaceNorms {
     pub act: f64,
     pub obj: f64,
@@ -1611,7 +1615,7 @@ pub struct SubspaceNorms {
     pub shared: f64,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct UorAttestationResult {
     pub algorithm: String,
     pub hash_algorithm: String,
@@ -1623,7 +1627,7 @@ pub struct UorAttestationResult {
     pub multihash_addresses: HashMap<String, String>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct RouteInfo {
     pub window_index: usize,
     pub scale_x: f64,
@@ -2351,4 +2355,271 @@ impl UorR4Router {
         self.active_streams.values().cloned().collect()
     }
 }
+
+impl UorR4Router {
+    pub fn last_routing_data(&self) -> &Option<RoutingData> {
+        &self.last_routing_data
+    }
+}
+
+// =====================================================================
+// UOR-Framework Coordinate Reduction & Axis Rebase (ADR-022 / ADR-030)
+// =====================================================================
+
+use std::cell::RefCell;
+use uor_foundation::enforcement::{GroundedShape, ShapeViolation, Hasher};
+use uor_foundation::pipeline::{
+    ConstrainedTypeShape, ConstraintRef, IntoBindingValue, TermValue, PartitionProductFields,
+    AxisExtension
+};
+use uor_foundation::{DefaultHostTypes, HostBounds};
+
+thread_local! {
+    pub static ACTIVE_ROUTER: RefCell<Option<*mut UorR4Router>> = RefCell::new(None);
+}
+
+// Custom R4 Host Bounds
+#[derive(Clone, Copy)]
+pub struct R4HostBounds;
+
+impl HostBounds for R4HostBounds {
+    const FINGERPRINT_MIN_BYTES: usize = 16;
+    const FINGERPRINT_MAX_BYTES: usize = 32;
+    const TRACE_MAX_EVENTS: usize = 256;
+    const WITT_LEVEL_MAX_BITS: u32 = 64;
+    const FOLD_UNROLL_THRESHOLD: usize = 8;
+    const BETTI_DIMENSION_MAX: usize = 8;
+    const NERVE_CONSTRAINTS_MAX: usize = 8;
+    const NERVE_SITES_MAX: usize = 8;
+    const JACOBIAN_SITES_MAX: usize = 8;
+    const RECURSION_TRACE_DEPTH_MAX: usize = 16;
+    const OP_CHAIN_DEPTH_MAX: usize = 8;
+    const AFFINE_COEFFS_MAX: usize = 8;
+    const CONJUNCTION_TERMS_MAX: usize = 8;
+    const UNFOLD_ITERATIONS_MAX: usize = 256;
+}
+
+pub const R4_INLINE_BYTES: usize = uor_foundation::pipeline::carrier_inline_bytes::<R4HostBounds>();
+pub const R4_FP_MAX: usize = 32;
+
+// Custom Axis trait using uor_foundation_sdk::axis!
+uor_foundation_sdk::axis! {
+    /// Custom R4 routing axis.
+    pub trait R4Axis: AxisExtension {
+        const AXIS_ADDRESS: &'static str = "https://uor.foundation/axis/R4Axis";
+        const MAX_OUTPUT_BYTES: usize = 28;
+        fn route_query(input: &[u8], out: &mut [u8]) -> Result<usize, ShapeViolation>;
+    }
+}
+
+pub struct R4RouterAxisImpl;
+
+impl R4Axis for R4RouterAxisImpl {
+    const AXIS_ADDRESS: &'static str = "https://uor.foundation/axis/R4Axis/Impl";
+    const MAX_OUTPUT_BYTES: usize = 28;
+
+    fn route_query(input: &[u8], out: &mut [u8]) -> Result<usize, ShapeViolation> {
+        if input.len() < 640 {
+            return Err(ShapeViolation {
+                shape_iri: <Self as R4Axis>::AXIS_ADDRESS,
+                constraint_iri: "https://uor.foundation/axis/R4Axis/inputSize",
+                property_iri: "https://uor.foundation/axis/inputBytes",
+                expected_range: "https://uor.foundation/axis/Bytes640",
+                min_count: 640,
+                max_count: 640,
+                kind: uor_foundation::ViolationKind::ValueCheck,
+            });
+        }
+        if out.len() < 28 {
+            return Err(ShapeViolation {
+                shape_iri: <Self as R4Axis>::AXIS_ADDRESS,
+                constraint_iri: "https://uor.foundation/axis/R4Axis/outputSize",
+                property_iri: "https://uor.foundation/axis/outputBytes",
+                expected_range: "https://uor.foundation/axis/Bytes28",
+                min_count: 28,
+                max_count: 28,
+                kind: uor_foundation::ViolationKind::ValueCheck,
+            });
+        }
+
+        // Get the active router from thread-local
+        let router = ACTIVE_ROUTER.with(|r| {
+            r.borrow().and_then(|ptr| unsafe { Some(&mut *ptr) })
+        }).ok_or_else(|| ShapeViolation {
+            shape_iri: <Self as R4Axis>::AXIS_ADDRESS,
+            constraint_iri: "https://uor.foundation/axis/R4Axis/routerBound",
+            property_iri: "https://uor.foundation/axis/routerActive",
+            expected_range: "https://uor.foundation/axis/RouterActive",
+            min_count: 1,
+            max_count: 1,
+            kind: uor_foundation::ViolationKind::ValueCheck,
+        })?;
+
+        // Extract input parameters
+        let query_bytes = &input[0..512];
+        let identity_bytes = &input[512..640];
+
+        let query_str = std::str::from_utf8(query_bytes)
+            .unwrap_or("")
+            .trim_end_matches('\0');
+        let identity_str = std::str::from_utf8(identity_bytes)
+            .unwrap_or("")
+            .trim_end_matches('\0');
+
+        // Execute routing
+        let routing_data = router.route_query_to_manifold_native(query_str, identity_str);
+
+        let window_idx = routing_data.routed.window_index as u32;
+        let deficit_angle = routing_data.routed.metrics.deficit_angle;
+        let kappa = routing_data.routed.metrics.kappa;
+        let entropy = routing_data.routed.metrics.lambda_entropy;
+
+        // Save routing data
+        router.last_routing_data = Some(routing_data);
+
+        // Serialize output into out
+        out[0..4].copy_from_slice(&window_idx.to_be_bytes());
+        out[4..12].copy_from_slice(&deficit_angle.to_be_bytes());
+        out[12..20].copy_from_slice(&kappa.to_be_bytes());
+        out[20..28].copy_from_slice(&entropy.to_be_bytes());
+
+        Ok(28)
+    }
+}
+
+axis_extension_impl_for_r4_axis!(R4RouterAxisImpl);
+
+// Custom input shape carrying query and identity
+#[derive(Clone, Copy)]
+pub struct R4RoutingInput<'a> {
+    pub query: &'a [u8],
+    pub identity: &'a [u8],
+    pub data: &'a [u8], // Packed contiguous buffer of 640 bytes (512 query + 128 identity)
+}
+
+impl ConstrainedTypeShape for R4RoutingInput<'_> {
+    const IRI: &'static str = "urn:uor:product:Bytes512:Bytes128";
+    const SITE_COUNT: usize = 640;
+    const CONSTRAINTS: &'static [ConstraintRef] = &[];
+    const CYCLE_SIZE: u64 = u64::MAX;
+}
+
+impl uor_foundation::pipeline::__sdk_seal::Sealed for R4RoutingInput<'_> {}
+
+impl<'a> IntoBindingValue<'a> for R4RoutingInput<'a> {
+    fn as_binding_value<const INLINE_BYTES: usize>(&self) -> TermValue<'a, INLINE_BYTES> {
+        TermValue::borrowed(self.data)
+    }
+}
+
+impl PartitionProductFields for R4RoutingInput<'_> {
+    const FIELDS: &'static [(u32, u32)] = &[(0, 512), (512, 128)];
+    const FIELD_NAMES: &'static [&'static str] = &["query", "identity"];
+}
+
+// Custom output shape carrying routing metrics
+#[derive(Debug, Clone, Copy)]
+pub struct R4RoutingOutput;
+
+impl ConstrainedTypeShape for R4RoutingOutput {
+    const IRI: &'static str = "urn:uor:product:R4RoutingOutput";
+    const SITE_COUNT: usize = 28;
+    const CONSTRAINTS: &'static [ConstraintRef] = &[];
+    const CYCLE_SIZE: u64 = u64::MAX;
+}
+
+impl uor_foundation::pipeline::__sdk_seal::Sealed for R4RoutingOutput {}
+impl GroundedShape for R4RoutingOutput {}
+
+impl<'a> IntoBindingValue<'a> for R4RoutingOutput {
+    fn as_binding_value<const INLINE_BYTES: usize>(&self) -> TermValue<'a, INLINE_BYTES> {
+        TermValue::empty()
+    }
+}
+
+impl PartitionProductFields for R4RoutingOutput {
+    const FIELDS: &'static [(u32, u32)] = &[(0, 4), (4, 8), (12, 8), (20, 8)];
+    const FIELD_NAMES: &'static [&'static str] = &["window_idx", "deficit_angle", "kappa", "entropy"];
+}
+
+// Custom Hasher + AxisTuple implementation to bypass the blanket impl conflict
+#[derive(Clone)]
+pub struct R4HasherAndAxis {
+    buffer: Vec<u8>,
+}
+
+impl Hasher<R4_FP_MAX> for R4HasherAndAxis {
+    const OUTPUT_BYTES: usize = R4_FP_MAX;
+
+    fn initial() -> Self {
+        Self { buffer: Vec::new() }
+    }
+
+    fn fold_byte(mut self, b: u8) -> Self {
+        self.buffer.push(b);
+        self
+    }
+
+    fn fold_bytes(mut self, bytes: &[u8]) -> Self {
+        self.buffer.extend_from_slice(bytes);
+        self
+    }
+
+    fn finalize(self) -> [u8; R4_FP_MAX] {
+        let mut out = [0u8; R4_FP_MAX];
+        if self.buffer.len() >= 640 {
+            if let Ok(_len) = R4RouterAxisImpl::route_query(&self.buffer, &mut out) {
+                // Done
+            } else {
+                let sha = sha256_bytes(&self.buffer);
+                out.copy_from_slice(&sha);
+            }
+        } else {
+            let sha = sha256_bytes(&self.buffer);
+            out.copy_from_slice(&sha);
+        }
+        out
+    }
+}
+
+pub struct UorR4RouterModel;
+pub struct UorR4RouterRoute;
+
+impl uor_foundation::pipeline::__sdk_seal::Sealed for UorR4RouterModel {}
+impl uor_foundation::pipeline::__sdk_seal::Sealed for UorR4RouterRoute {}
+
+impl uor_foundation::pipeline::FoundationClosed<R4_INLINE_BYTES> for UorR4RouterRoute {
+    fn arena_slice() -> &'static [uor_foundation::enforcement::Term<'static, R4_INLINE_BYTES>] {
+        &[
+            uor_foundation::enforcement::Term::Variable { name_index: 0 },
+            uor_foundation::enforcement::Term::AxisInvocation {
+                axis_index: 0,
+                kernel_id: 0,
+                input_index: 0,
+            },
+        ]
+    }
+}
+
+impl<'a> uor_foundation::pipeline::PrismModel<'a, DefaultHostTypes, R4HostBounds, R4HasherAndAxis, R4_INLINE_BYTES, R4_FP_MAX>
+    for UorR4RouterModel
+{
+    type Input = R4RoutingInput<'a>;
+    type Output = R4RoutingOutput;
+    type Route = UorR4RouterRoute;
+
+    fn forward(input: Self::Input) -> Result<uor_foundation::enforcement::Grounded<'a, Self::Output, R4_INLINE_BYTES, R4_FP_MAX>, uor_foundation::PipelineFailure> {
+        uor_foundation::pipeline::run_route::<
+            DefaultHostTypes,
+            R4HostBounds,
+            R4HasherAndAxis,
+            Self,
+            uor_foundation::pipeline::NullResolverTuple,
+            uor_foundation::pipeline::EmptyCommitment,
+            R4_INLINE_BYTES,
+            R4_FP_MAX,
+        >(input, &uor_foundation::pipeline::NullResolverTuple, &uor_foundation::pipeline::EmptyCommitment)
+    }
+}
+
 
