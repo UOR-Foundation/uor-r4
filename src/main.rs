@@ -85,7 +85,53 @@ fn main() {
         let _ = std::fs::write("manifold_cache_rust.json", state_json);
     }
 
-    let listener = TcpListener::bind("127.0.0.1:8000").unwrap();
+    let listener = match TcpListener::bind("127.0.0.1:8000") {
+        Ok(l) => l,
+        Err(e) => {
+            if e.kind() == std::io::ErrorKind::AddrInUse {
+                println!("[!] Port 8000 is already in use.");
+                if let Some(pid) = find_pid_by_port(8000) {
+                    println!("[*] Found process occupying port 8000: PID {}", pid);
+                    print!("Would you like to terminate this process and start the server? [y/N]: ");
+                    use std::io::Write;
+                    let _ = std::io::stdout().flush();
+                    let mut input = String::new();
+                    if std::io::stdin().read_line(&mut input).is_ok() {
+                        let trimmed = input.trim().to_lowercase();
+                        if trimmed == "y" || trimmed == "yes" {
+                            println!("[*] Terminating process {}...", pid);
+                            if kill_process(pid) {
+                                // Wait 1 second for port to release
+                                std::thread::sleep(std::time::Duration::from_millis(1000));
+                                match TcpListener::bind("127.0.0.1:8000") {
+                                    Ok(l) => l,
+                                    Err(e2) => {
+                                        eprintln!("[-] Failed to bind to port 8000 after terminating process: {}", e2);
+                                        std::process::exit(1);
+                                    }
+                                }
+                            } else {
+                                eprintln!("[-] Failed to terminate process {}. Please close it manually and retry.", pid);
+                                std::process::exit(1);
+                            }
+                        } else {
+                            println!("[*] Exiting gracefully.");
+                            std::process::exit(0);
+                        }
+                    } else {
+                        println!("[-] Non-interactive session or read error. Exiting gracefully.");
+                        std::process::exit(1);
+                    }
+                } else {
+                    eprintln!("[-] Port 8000 is occupied, but could not determine process ID. Please close it manually and retry.");
+                    std::process::exit(1);
+                }
+            } else {
+                eprintln!("[-] Failed to bind to 127.0.0.1:8000: {}", e);
+                std::process::exit(1);
+            }
+        }
+    };
     println!("Local server running at http://127.0.0.1:8000/");
 
     for stream in listener.incoming() {
@@ -937,4 +983,37 @@ fn post_json(url: &str, body: &str) -> Result<String, String> {
     } else {
         Ok(decode_chunked(&response))
     }
+}
+
+fn find_pid_by_port(port: u16) -> Option<u32> {
+    let output = std::process::Command::new("lsof")
+        .args(&["-t", "-i", &format!(":{}", port)])
+        .output()
+        .ok()?;
+    if output.status.success() {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let first_line = stdout.lines().next()?;
+        first_line.trim().parse::<u32>().ok()
+    } else {
+        None
+    }
+}
+
+fn kill_process(pid: u32) -> bool {
+    let _ = std::process::Command::new("kill")
+        .arg(&pid.to_string())
+        .status();
+    std::thread::sleep(std::time::Duration::from_millis(200));
+    let check = std::process::Command::new("kill")
+        .args(&["-0", &pid.to_string()])
+        .status();
+    if let Ok(status) = check {
+        if status.success() {
+            let force = std::process::Command::new("kill")
+                .args(&["-9", &pid.to_string()])
+                .status();
+            return force.map(|s| s.success()).unwrap_or(false);
+        }
+    }
+    true
 }
