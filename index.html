@@ -2607,7 +2607,10 @@ async function runLocalChat(text, identity) {
     let llm_connected = false;
 
     const selectedEngineMode = engineSelect?.value || "auto";
-    const ollamaUrl = document.getElementById("ollamaUrlInput")?.value.trim() || "http://localhost:11434";
+    let ollamaUrl = document.getElementById("ollamaUrlInput")?.value.trim() || "http://localhost:11434";
+    if (ollamaUrl && !ollamaUrl.startsWith("http://") && !ollamaUrl.startsWith("https://")) {
+        ollamaUrl = "http://" + ollamaUrl;
+    }
     const ollamaModel = document.getElementById("ollamaModelInput")?.value.trim() || "gemma4:e2b";
 
     if ((selectedEngineMode === "ollama" || selectedEngineMode === "auto") && window.ollamaLive) {
@@ -2740,14 +2743,24 @@ async function sendQuery(text) {
 
     const identity = document.getElementById("identityInput")?.value.trim() || "tenant-alpha";
     const selectedEngineMode = engineSelect?.value || "auto";
-    const ollamaUrl = document.getElementById("ollamaUrlInput")?.value.trim() || "http://localhost:11434";
+    let ollamaUrl = document.getElementById("ollamaUrlInput")?.value.trim() || "http://localhost:11434";
+    if (ollamaUrl && !ollamaUrl.startsWith("http://") && !ollamaUrl.startsWith("https://")) {
+        ollamaUrl = "http://" + ollamaUrl;
+    }
     const ollamaModel = document.getElementById("ollamaModelInput")?.value.trim() || "gemma4:e2b";
+    const isWebpageLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
 
     try {
+        let backendEngineMode = selectedEngineMode;
+        const shouldDirectQueryOllama = !localWasmMode && !isWebpageLocal && (selectedEngineMode === "ollama" || (selectedEngineMode === "auto" && window.ollamaLive));
+        if (shouldDirectQueryOllama) {
+            backendEngineMode = "geometric";
+        }
+
         const payload = {
             text: text,
             identity: identity,
-            engine: selectedEngineMode,
+            engine: backendEngineMode,
             ollama_url: ollamaUrl,
             ollama_model: ollamaModel
         };
@@ -2767,6 +2780,77 @@ async function sendQuery(text) {
             }
 
             data = await response.json();
+
+            if (shouldDirectQueryOllama) {
+                try {
+                    const topResonances = data.top_resonance || [];
+                    const ctx_block = (topResonances.length > 0) ? (topResonances[0].sentence || "[no corpus context available]") : "[no corpus context available]";
+                    const theme = WINDOW_THEMES[data.metrics.window_index] || "Unknown";
+                    
+                    const kappa = data.metrics.kappa;
+                    const theta_d = data.metrics.deficit_angle;
+                    const uor_bias = data.metrics.qimc?.uor_control?.entropy_bias || 0.5;
+                    const gamma = Math.min(Math.max(0.85 - 0.55 * kappa + ((uor_bias - 0.5) * 0.12), 0.15), 0.90);
+                    const temperature = Math.min(Math.max(0.2 + 0.8 * Math.abs(theta_d) + ((uor_bias - 0.5) * 0.20), 0.15), 1.1);
+                    
+                    const input_words = text.trim().split(/\s+/).length;
+                    const stratum = data.state_vector ? data.state_vector.filter(v => Math.abs(v) > 1e-4).length : 20;
+                    const eval_sum = data.eigenvalues ? data.eigenvalues.reduce((a,b)=>a+b, 0) : 1.0;
+                    let max_tokens = Math.min(Math.max(Math.floor(50.0 + (stratum * 1.5) + (Math.abs(theta_d) * 45.0) + (eval_sum * 110.0) + (input_words * 2.5)), 50), 500);
+                    
+                    const systemPrompt = `You are the Voice of the R4 Prime Router. The current state of your context hypersphere brain is: Window ${data.metrics.window_index} (${theme}), Energy κ=${kappa.toFixed(4)}, Curvature θd=${theta_d.toFixed(4)}, Hopf coordinates (χ=${data.metrics.hopf.chi.toFixed(4)}, δ=${data.metrics.hopf.delta.toFixed(4)}, α=${data.metrics.hopf.alpha.toFixed(4)}). Grounding context sentence: "${ctx_block}". IMPORTANT: You MUST incorporate and reference the Grounding context sentence in your response to directly answer the user's query. Respond directly to the user query as a geometric router. Keep your response relevant, coherent, and under ${max_tokens} words. Do NOT output any thinking, thought processes, <thinking> blocks, or XML tags. Speak directly.`;
+                    
+                    const directPayload = {
+                        model: ollamaModel,
+                        messages: [
+                            { role: "system", content: systemPrompt },
+                            { role: "user", content: text }
+                        ],
+                        stream: false,
+                        keep_alive: -1,
+                        think: false,
+                        options: {
+                            temperature: temperature,
+                            num_predict: max_tokens
+                        }
+                    };
+                    
+                    const ollamaResponse = await fetch(`${ollamaUrl}/api/chat`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(directPayload)
+                    });
+                    
+                    if (ollamaResponse.ok) {
+                        const respJson = await ollamaResponse.json();
+                        const content = respJson.message?.content || "";
+                        if (content.trim()) {
+                            data.description = content.trim();
+                            data.generation_mode = `ollama:${ollamaModel} (direct-remote-browser)`;
+                            data.summary = `W${data.metrics.window_index} (${theme}) | Scale ${data.metrics.scale_x || 1.0} | kappa=${kappa.toFixed(4)} theta_d=${theta_d.toFixed(4)} | ${data.generation_mode}`;
+                            data.llm_connected = true;
+                            
+                            // Index the response back to remote server for continuous learning
+                            try {
+                                await fetch("/api/corpus", {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ corpus: text, identity: identity })
+                                });
+                                await fetch("/api/corpus", {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ corpus: content.trim(), identity: identity })
+                                });
+                            } catch (eIndex) {
+                                console.warn("Continuous learning indexing failed:", eIndex);
+                            }
+                        }
+                    }
+                } catch (eDirect) {
+                    console.error("Direct browser query to Ollama failed, falling back to backend geometric response:", eDirect);
+                }
+            }
         }
 
         chatLogInner.removeChild(loadMsg);
@@ -3213,10 +3297,14 @@ function pollSysinfo() {
 
     // Check Ollama status
     let ollamaUrl = document.getElementById("ollamaUrlInput")?.value.trim() || "http://localhost:11434";
+    if (ollamaUrl && !ollamaUrl.startsWith("http://") && !ollamaUrl.startsWith("https://")) {
+        ollamaUrl = "http://" + ollamaUrl;
+    }
     const ollamaEl = document.getElementById("ollamaStatus");
+    const isWebpageLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
     
     let targetTagsUrl = `${ollamaUrl}/api/tags`;
-    if (!localWasmMode && (ollamaUrl.includes("localhost") || ollamaUrl.includes("127.0.0.1"))) {
+    if (!localWasmMode && isWebpageLocal && (ollamaUrl.includes("localhost") || ollamaUrl.includes("127.0.0.1"))) {
         targetTagsUrl = "/api/tags";
     }
 
