@@ -2588,9 +2588,9 @@ async function runLocalChat(text, identity) {
     const kappa = routed.metrics.kappa;
     const theta_d = routed.metrics.deficit_angle;
     const uor_bias = routed.qimc.uor_control.entropy_bias;
-    
     const gamma = Math.min(Math.max(0.85 - 0.55 * kappa + ((uor_bias - 0.5) * 0.12), 0.15), 0.90);
     const temperature = Math.min(Math.max(0.2 + 0.8 * Math.abs(theta_d) + ((uor_bias - 0.5) * 0.20), 0.15), 1.1);
+    const theme = WINDOW_THEMES[routed.window_index] || "Unknown";
     
     const geomResult = router.generate_geometric_response(
         text,
@@ -2601,8 +2601,64 @@ async function runLocalChat(text, identity) {
         4.0,
         gamma
     );
+
+    let responseText = "";
+    let generation_mode = "geometric-local";
+    let llm_connected = false;
+
+    const selectedEngineMode = engineSelect?.value || "auto";
+    const ollamaUrl = document.getElementById("ollamaUrlInput")?.value.trim() || "http://localhost:11434";
+    const ollamaModel = document.getElementById("ollamaModelInput")?.value.trim() || "gemma4:e2b";
+
+    if ((selectedEngineMode === "ollama" || selectedEngineMode === "auto") && window.ollamaLive) {
+        const topResonances = router.get_top_resonances(text, identity, 1) || [];
+        let ctx_block = "[no corpus context available]";
+        if (topResonances.length > 0) {
+            ctx_block = topResonances[0].sentence || "[no corpus context available]";
+        }
+        
+        const prompt = `You are the R4 Prime Router (UOR Framework Standard) reasoning engine. We are routing coordinates in a continuous 512-dimensional manifold mapped to the first 512 Riemann Zeta Zeroes.\n\n[Active expert context: ${theme}]\n\n[Grounded context sentences: ${ctx_block}]\n\nUser query: ${text}\n\nInstructions: You MUST incorporate and reference the Grounded context sentence in your response to directly answer the user's query. Respond directly to the user query as a geometric router. Keep your response relevant, coherent, and under ${modelMaxTokens} words.`;
+
+        try {
+            const ollamaPayload = {
+                model: ollamaModel,
+                messages: [
+                    {
+                        role: "user",
+                        content: prompt
+                    }
+                ],
+                options: {
+                    temperature: temperature,
+                    num_predict: modelMaxTokens
+                },
+                stream: false
+            };
+            
+            const response = await fetch(`${ollamaUrl}/api/chat`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(ollamaPayload)
+            });
+
+            if (response.ok) {
+                const respJson = await response.json();
+                const content = respJson.message?.content || "";
+                responseText = content.trim();
+                if (responseText) {
+                    llm_connected = true;
+                    generation_mode = `ollama:${ollamaModel} (local-direct)`;
+                }
+            }
+        } catch (e) {
+            console.error("Direct local Ollama query failed, falling back to pure geometric:", e);
+        }
+    }
+
+    if (!responseText) {
+        responseText = geomResult.text || "Manifold resonance too sparse for synthesis.";
+    }
     
-    const responseText = geomResult.text || "Manifold resonance too sparse for synthesis.";
     router.index_sentence(responseText, identity);
     
     // Inject thought streams
@@ -2616,8 +2672,6 @@ async function runLocalChat(text, identity) {
     
     const archetype = (theta_d > -1.0) ? "Symmetric Orbit (Resonant)" :
                       (theta_d < -1.4) ? "Hyperbolic Flare (Divergent)" : "Orthogonal Drift (Steady)";
-                      
-    const theme = WINDOW_THEMES[routed.window_index] || "Unknown";
     
     const top_resonances_5 = router.get_top_resonances(text, identity, 5) || [];
 
@@ -2625,9 +2679,9 @@ async function runLocalChat(text, identity) {
         "text": text,
         "archetype": archetype,
         "description": responseText,
-        "summary": `W${routed.window_index} (${theme}) | Scale ${routed.scale_x.toFixed(0)} | kappa=${kappa.toFixed(4)} theta_d=${theta_d.toFixed(4)} | geometric-local`,
-        "llm_connected": false,
-        "generation_mode": "geometric-local",
+        "summary": `W${routed.window_index} (${theme}) | Scale ${routed.scale_x.toFixed(0)} | kappa=${kappa.toFixed(4)} theta_d=${theta_d.toFixed(4)} | ${generation_mode}`,
+        "llm_connected": llm_connected,
+        "generation_mode": generation_mode,
         "active_projection": {
             "u": proj2d[0],
             "v": proj2d[1],
@@ -2649,7 +2703,7 @@ async function runLocalChat(text, identity) {
                 "gamma": gamma,
                 "temperature": temperature,
                 "max_tokens": modelMaxTokens,
-                "engine": "geometric-local",
+                "engine": generation_mode,
                 "uor_entropy_bias": uor_bias
             }
         },
@@ -3162,7 +3216,7 @@ function pollSysinfo() {
     const ollamaEl = document.getElementById("ollamaStatus");
     
     let targetTagsUrl = `${ollamaUrl}/api/tags`;
-    if (ollamaUrl.includes("localhost") || ollamaUrl.includes("127.0.0.1")) {
+    if (!localWasmMode && (ollamaUrl.includes("localhost") || ollamaUrl.includes("127.0.0.1"))) {
         targetTagsUrl = "/api/tags";
     }
 
@@ -3170,9 +3224,11 @@ function pollSysinfo() {
         .then(r => {
             if (r.status === 200) {
                 if (ollamaEl) { ollamaEl.textContent = "● Live"; ollamaEl.style.color = "var(--emerald)"; }
+                window.ollamaLive = true;
                 return r.json();
             } else {
                 if (ollamaEl) { ollamaEl.textContent = "○ Offline"; ollamaEl.style.color = "var(--amber)"; }
+                window.ollamaLive = false;
                 return null;
             }
         })
@@ -3198,6 +3254,7 @@ function pollSysinfo() {
         })
         .catch(() => {
             if (ollamaEl) { ollamaEl.textContent = "○ Offline"; ollamaEl.style.color = "var(--amber)"; }
+            window.ollamaLive = false;
         });
 }
 
