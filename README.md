@@ -80,14 +80,41 @@ This application is configured with a fully self-contained WebAssembly (WASM) fa
 - **Client-Side Simulation**: All prime coordinate mappings, coordinate reductions, thought stream visualizations, QIMC panel attestation updates, MoE expert cell activations, and trace logs are computed directly in your browser using compiled WebAssembly.
 - **Limitation**: Pure geometric synthesis is run locally on the client-side manifold coordinates. To use the full synthesis backend (leveraging local LLMs like Ollama/Gemma), you must clone the repository and run the server locally following the instructions below.
 
-### Prerequisites
+### Prerequisites & Ollama Configuration
 
 Ensure you have the following installed on your machine:
 * **Rust** (MSRV 1.65+): `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`
-* **Ollama** (Optional, for local LLM synthesis): Download from [ollama.com](https://ollama.com). Pull the model:
-  ```bash
-  ollama pull gemma:2b
-  ```
+* **Ollama** (Required for LLM-driven synthesis):
+  1. Download and install from [ollama.com](https://ollama.com).
+  2. Pull the default routing model (e.g. `gemma:2b` or `gemma2:2b` / `gemma4:e2b`):
+     ```bash
+     ollama pull gemma:2b
+     ```
+  3. **Configure CORS (Disable CORS)**: By default, browsers prevent web apps hosted on external domains (like GitHub Pages) from talking to `localhost`. You must allow origins on Ollama:
+     * **macOS**: Set the environment variable via launchctl or terminal:
+       * *Terminal Option*: Quit Ollama from the menu bar, then run:
+         ```bash
+         OLLAMA_ORIGINS="*" ollama serve
+         ```
+       * *System-wide Option*:
+         ```bash
+         launchctl setenv OLLAMA_ORIGINS "*"
+         ```
+         Then relaunch the Ollama app from Applications.
+     * **Linux**: Edit the systemd service configuration:
+       ```bash
+       sudo systemctl edit ollama.service
+       ```
+       Add the following under the `[Service]` section:
+       ```ini
+       Environment="OLLAMA_ORIGINS=*"
+       ```
+       Save and restart:
+       ```bash
+       sudo systemctl daemon-reload
+       sudo systemctl restart ollama
+       ```
+     * **Windows**: Quit Ollama from the taskbar tray, set the user/system environment variable `OLLAMA_ORIGINS` to `*` via Settings, and relaunch Ollama.
 
 ### Configuration
 
@@ -108,13 +135,16 @@ cargo run --release --bin server
 
 ## 💻 How to Use the App
 
-1. **Access the Dashboard**: Open your browser and go to `http://127.0.0.1:8000/` (loads [index.html](index.html)).
-2. **Select Synthesis Engine**: Choose between **Pure Geometric** (local decoding on the manifold coordinates) or **Ollama (Gemma)** (routed prompt steered by prime coordinates and grounded context sentences).
-3. **Submit Queries**: Type prompts in the chat box. On submission:
+1. **Access the Dashboard**: Open your browser and go to `http://127.0.0.1:8000/` (loads [index.html](index.html)) or visit the static site deployment.
+2. **First Load Corpus Setup**:
+   - **Default Corpus**: On first load, a default bootstrap corpus is automatically indexed by the local WebAssembly router or loaded by the server to populate baseline vocabulary and resonance paths.
+   - **Custom Manifold Loading**: To make the router more intelligent, you can paste custom texts under **Index Text to Manifold** or import a pre-saved `manifold.json` using the **Import Manifold** button.
+3. **Select Synthesis Engine**: Choose between **Pure Geometric** (local decoding on the manifold coordinates) or **Ollama (Gemma)** (routed prompt steered by prime coordinates and grounded context sentences).
+4. **Submit Queries**: Type prompts in the chat box. On submission:
    * The **3D Trajectory visualizer** will project a white pulse path showing the reasoning coordinate evolution.
    * The **QIMC Panel** will display the active prime, the witness validation state (`Verified`), and formal UOR metrics.
    * The **Cascade Trace Logs** console (bottom-right) will output the official step-by-step UOR reduction events in real time.
-4. **Index Knowledge**: Paste textual reference materials in the bottom-left text area and click **Index Manifold** to dynamically inject new knowledge coordinates into the local brain.
+5. **Index Knowledge**: Paste textual reference materials in the bottom-left text area and click **Index Manifold** to dynamically inject new knowledge coordinates into the local brain.
 
 ---
 
