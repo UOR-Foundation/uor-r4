@@ -14,7 +14,7 @@ With this release, the entire coordination engine is rebased onto the **UOR foun
 
 This codebase leverages three core UOR specifications to track, index, and verify thought trajectories:
 
-1. **[UOR-Framework](https://github.com/UOR-Foundation/UOR-Framework)**: Tracks internal reasoning states and active expert selections as formal, ontological objects. In [lib.rs](file:///Users/adminamn/gemini-dev/rust/uor-r4-wasm-router/src/lib.rs), the `ThoughtStream` struct models the agent's thought trajectories, while UOR's witness proof mechanism generates mathematical certificates (`Grounded`) to prove that a specific path has been correctly evaluated at a given Witt-level stratum.
+1. **[UOR-Framework](https://github.com/UOR-Foundation/UOR-Framework)**: Tracks internal reasoning states and active expert selections as formal, ontological objects. In [src/lib.rs](src/lib.rs), the `ThoughtStream` struct models the agent's thought trajectories, while UOR's witness proof mechanism generates mathematical certificates (`Grounded`) to prove that a specific path has been correctly evaluated at a given Witt-level stratum.
 2. **[uor-addr](https://github.com/UOR-Foundation/uor-addr)**: Provides content addressing for agent-produced content. Every query and response is serialized into a canonical JSON payload, and its unique, chain-agnostic identifier is computed using `uor_addr::json::address`. This allows every thought in the system to be tracked, linked, and verified in an immutable graph using URI patterns (e.g. `uor-addr-xxxxxxxx`).
 3. **[prism](https://github.com/UOR-Foundation/prism)**: Implements the universal coordinate system for information. It maps natural language inputs into continuous mathematical coordinates ($R^4$ tangent vectors). The coordination engine uses coordinate reduction folds to match inputs against the local knowledge manifold.
 
@@ -22,7 +22,7 @@ This codebase leverages three core UOR specifications to track, index, and verif
 
 ## ⚡ Core Features
 
-- **Algebraic Shape Constraints**: Mapped query contexts and metrics onto formal UOR shapes (`R4RoutingInput` and `R4RoutingOutput`) inside [lib.rs](file:///Users/adminamn/gemini-dev/rust/uor-r4-wasm-router/src/lib.rs) using the `partition_product!` standard.
+- **Algebraic Shape Constraints**: Mapped query contexts and metrics onto formal UOR shapes (`R4RoutingInput` and `R4RoutingOutput`) inside [src/lib.rs](src/lib.rs) using the `partition_product!` standard.
 - **Formal Coordinate Reduction**: Queries are processed through `uor_foundation::pipeline::run_route` by the `UorR4RouterModel` (implementing `PrismModel`), providing formal type-level checking and verification.
 - **Real-Time Attestation Witnesses**: Every route execution outputs a `Grounded` witness containing a cryptographic certificate with the following metrics:
   * **UOR Sigma**: The grounding completion ratio ($\sigma \in [0.0, 1.0]$).
@@ -33,6 +33,24 @@ This codebase leverages three core UOR specifications to track, index, and verif
 - **Wasm-Optimized Zero Allocation**: Borrowed input lifetimes in `R4RoutingInput` pass query buffers on the stack without heap allocation, maximizing execution speed.
 - **Interactive 3D Visualizer**: Real-time projection of coordinates onto the $S^2$ base sphere with Hopf fiber rings ($S^1$) and animated trajectory paths.
 - **Continuous Manifold Learning**: Learns dynamically during chats by folding prompt-response pairs back into its local JSON database (`manifold_cache_rust.json`).
+
+---
+
+## 📡 OpenTelemetry & Hash Standardization
+
+### Distributed Tracing with OpenTelemetry
+The coordination engine integrates OpenTelemetry (OTel) tracing paradigms to track active geodesic trajectories and cascade paths:
+- **Traces & Spans**: A **Trace** represents the complete life cycle of an input query routing through the manifold and steering the synthesis engine. Individual operations (such as prime frequency projections, Hopf coordinate mappings, and LLM text generation) are mapped as individual **Spans** within the trace context.
+- **Trace Context Propagation**: The OTel `TraceId` (16-byte hex value) and `SpanId` (8-byte hex value) are captured at the server layer. These IDs flow directly into the tangent space vectors ($R^4$), allowing distributed debuggers to trace the physical trajectory and coordinate calculations linked back to a specific HTTP execution span.
+
+### Unified Hash Standardization
+The router serves as a bridge between the physical and logical layers of the network stack by unifying hash representations into continuous $R^4$ space:
+- **UOR Addresses**: The UOR Framework utilizes content addressing to identify information nodes based on their content multihash.
+- **MAC Addressing**: Hardware-layer identifiers are captured and mapped into coordinates to resolve localized node topologies.
+- **Blockchain Mappings**: Chain-agnostic transaction hashes and state roots are mapped to the geometric manifold, binding the execution of a routing trajectory to a verifiable, immutable ledger state.
+- **Traces and Spans**: The 16-byte OTel `TraceId` and `SpanId` are parsed into 32-byte content address boundaries, converting tracing metadata into addressable UOR nodes.
+
+By mapping all of these disparate identifiers (OTel TraceIds, MAC addresses, transaction hashes, and UOR addresses) into standard 32-byte content addresses, the router unifies them as inputs to the same coordinate reduction fold.
 
 ---
 
@@ -66,10 +84,10 @@ Ensure you have the following installed on your machine:
 
 ### Configuration
 
-The project workspace integrates path dependencies to local standards crates in [Cargo.toml](file:///Users/adminamn/gemini-dev/rust/uor-r4-wasm-router/Cargo.toml):
-* `uor-foundation` ([UOR-Framework/foundation](file:///Users/adminamn/gemini-dev/rust/uor-r4-wasm-router/uor_standards/UOR-Framework/foundation))
-* `uor-prism` ([prism/crates/uor-prism](file:///Users/adminamn/gemini-dev/rust/uor-r4-wasm-router/uor_standards/prism/crates/uor-prism))
-* `uor-addr` ([uor-addr/crates/uor-addr](file:///Users/adminamn/gemini-dev/rust/uor-r4-wasm-router/uor_standards/uor-addr/crates/uor-addr))
+The project workspace integrates path dependencies to local standards crates in [Cargo.toml](Cargo.toml):
+* `uor-foundation` ([UOR-Framework/foundation](https://github.com/UOR-Foundation/UOR-Framework/tree/main/foundation))
+* `uor-prism` ([prism/crates/uor-prism](https://github.com/UOR-Foundation/prism/tree/main/crates/uor-prism))
+* `uor-addr` ([uor-addr/crates/uor-addr](https://github.com/UOR-Foundation/uor-addr/tree/main/crates/uor-addr))
 
 ### Running the Server
 
@@ -83,7 +101,7 @@ cargo run --release --bin server
 
 ## 💻 How to Use the App
 
-1. **Access the Dashboard**: Open your browser and go to `http://127.0.0.1:8000/` (loads [index.html](file:///Users/adminamn/gemini-dev/rust/uor-r4-wasm-router/index.html)).
+1. **Access the Dashboard**: Open your browser and go to `http://127.0.0.1:8000/` (loads [index.html](index.html)).
 2. **Select Synthesis Engine**: Choose between **Pure Geometric** (local decoding on the manifold coordinates) or **Ollama (Gemma)** (routed prompt steered by prime coordinates and grounded context sentences).
 3. **Submit Queries**: Type prompts in the chat box. On submission:
    * The **3D Trajectory visualizer** will project a white pulse path showing the reasoning coordinate evolution.
