@@ -1241,6 +1241,38 @@
 <script type="module">
 const safeSetTextContent = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
 
+const unwrapResult = (res) => {
+    if (!res) return null;
+    if (typeof res === "string") {
+        try {
+            return JSON.parse(res);
+        } catch (e) {
+            console.error("Failed to parse stringified WASM result:", e);
+            return null;
+        }
+    }
+    if (res instanceof Map || (typeof res.get === "function" && typeof res.has === "function")) {
+        const obj = {};
+        res.forEach((value, key) => {
+            obj[key] = unwrapResult(value);
+        });
+        return obj;
+    }
+    if (Array.isArray(res)) {
+        return res.map(item => unwrapResult(item));
+    }
+    if (typeof res === "object") {
+        const obj = {};
+        for (const key in res) {
+            if (Object.prototype.hasOwnProperty.call(res, key)) {
+                obj[key] = unwrapResult(res[key]);
+            }
+        }
+        return obj;
+    }
+    return res;
+};
+
 // =====================================================
 // DOM References
 // =====================================================
@@ -1377,11 +1409,11 @@ async function tryInitLocalWasm() {
         const count = router.get_vocab_size();
         safeSetTextContent("corpusCount", count.toLocaleString());
         
-        const active = router.get_active_streams();
+        const active = unwrapResult(router.get_active_streams());
         syncActiveStreams(active);
         updateStreamsList();
         
-        const experts = router.get_expert_counts();
+        const experts = unwrapResult(router.get_expert_counts());
         populateExpertMatrix(experts);
         
         await loadSemanticMap();
@@ -1428,7 +1460,7 @@ window.loadSemanticMap = async function() {
             const response = await fetch("/api/map");
             dataRaw = await response.json();
         }
-        const data = (typeof dataRaw === "string") ? JSON.parse(dataRaw) : dataRaw;
+        const data = unwrapResult(dataRaw);
         semanticMapPoints = data.points || [];
         
         // Pre-compute 3D stereographic projection coordinates from v_4d
@@ -2573,10 +2605,10 @@ async function runLocalChat(text, identity) {
     
     // 1. Run formal UOR pipeline
     const uorResultRaw = router.route_query_to_manifold_uor(text, identity);
-    if (!uorResultRaw) {
+    const uorResult = unwrapResult(uorResultRaw);
+    if (!uorResult) {
         throw new Error("Local routing failed");
     }
-    const uorResult = (typeof uorResultRaw === "string") ? JSON.parse(uorResultRaw) : uorResultRaw;
     
     const routing_data = uorResult.routing_data;
     const routed = routing_data.routed;
@@ -2616,7 +2648,7 @@ async function runLocalChat(text, identity) {
     const ollamaModel = document.getElementById("ollamaModelInput")?.value.trim() || "gemma4:e2b";
 
     if ((selectedEngineMode === "ollama" || selectedEngineMode === "auto") && window.ollamaLive) {
-        const topResonances = router.get_top_resonances(text, identity, 1) || [];
+        const topResonances = unwrapResult(router.get_top_resonances(text, identity, 1)) || [];
         let ctx_block = "[no corpus context available]";
         if (topResonances.length > 0) {
             ctx_block = topResonances[0].sentence || "[no corpus context available]";
@@ -2678,7 +2710,7 @@ async function runLocalChat(text, identity) {
     const archetype = (theta_d > -1.0) ? "Symmetric Orbit (Resonant)" :
                       (theta_d < -1.4) ? "Hyperbolic Flare (Divergent)" : "Orthogonal Drift (Steady)";
     
-    const top_resonances_5 = router.get_top_resonances(text, identity, 5) || [];
+    const top_resonances_5 = unwrapResult(router.get_top_resonances(text, identity, 5)) || [];
 
     const payload = {
         "text": text,
@@ -3267,9 +3299,9 @@ function pollSysinfo() {
     
     if (localWasmMode && router) {
         setEl("corpusCount", router.get_vocab_size().toLocaleString());
-        syncActiveStreams(router.get_active_streams());
+        syncActiveStreams(unwrapResult(router.get_active_streams()));
         updateStreamsList();
-        populateExpertMatrix(router.get_expert_counts());
+        populateExpertMatrix(unwrapResult(router.get_expert_counts()));
     } else {
         fetch("/api/sysinfo")
             .then(r => {
