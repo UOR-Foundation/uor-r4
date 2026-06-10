@@ -10,6 +10,14 @@ Traditional transformers route token inputs using learned parameter gates, which
 
 With this release, the entire coordination engine is rebased onto the **UOR foundation ontology**, converting the routing mechanism into a formally verifiable, type-safe coordinate reduction pipeline.
 
+## 🔗 UOR Standards & Repository Integrations
+
+This codebase leverages three core UOR specifications to track, index, and verify thought trajectories:
+
+1. **[UOR-Framework](https://github.com/UOR-Foundation/UOR-Framework)**: Tracks internal reasoning states and active expert selections as formal, ontological objects. In [lib.rs](file:///Users/adminamn/gemini-dev/rust/uor-r4-wasm-router/src/lib.rs), the `ThoughtStream` struct models the agent's thought trajectories, while UOR's witness proof mechanism generates mathematical certificates (`Grounded`) to prove that a specific path has been correctly evaluated at a given Witt-level stratum.
+2. **[uor-addr](https://github.com/UOR-Foundation/uor-addr)**: Provides content addressing for agent-produced content. Every query and response is serialized into a canonical JSON payload, and its unique, chain-agnostic identifier is computed using `uor_addr::json::address`. This allows every thought in the system to be tracked, linked, and verified in an immutable graph using URI patterns (e.g. `uor-addr-xxxxxxxx`).
+3. **[prism](https://github.com/UOR-Foundation/prism)**: Implements the universal coordinate system for information. It maps natural language inputs into continuous mathematical coordinates ($R^4$ tangent vectors). The coordination engine uses coordinate reduction folds to match inputs against the local knowledge manifold.
+
 ---
 
 ## ⚡ Core Features
