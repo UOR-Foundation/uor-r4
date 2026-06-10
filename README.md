@@ -58,15 +58,15 @@ By mapping all of these disparate identifiers (OTel TraceIds, MAC addresses, tra
 
 ```mermaid
 graph TD
-    A[User Prompt / Client Query] -->|HTTP POST| B[main.rs Server Endpoint]
-    B -->|Stack Allocate [u8; 640]| C[R4RoutingInput]
-    C -->|PrismModel::forward| D[run_route Pipeline]
-    D -->|Coordinate Reduction Fold| E[R4RouterAxisImpl]
-    E -->|Thread-Local ACTIVE_ROUTER| F[route_query_to_manifold_native]
-    F -->|Compute Hopf, QIMC & Eigenvalues| G[RoutingData]
-    D -->|Mint Witness| H[Grounded Proof Certificate]
-    B -->|Replay Witness Derivation| I[UOR Trace Steps]
-    B -->|JSON Response Payload| J[index.html Telemetry Dashboard]
+    A["User Prompt / Client Query"] -->|HTTP POST| B["main.rs Server Endpoint"]
+    B -->|Stack Allocate 640-byte Buffer| C["R4RoutingInput"]
+    C -->|PrismModel::forward| D["run_route Pipeline"]
+    D -->|Coordinate Reduction Fold| E["R4RouterAxisImpl"]
+    E -->|Thread-Local ACTIVE_ROUTER| F["route_query_to_manifold_native"]
+    F -->|Compute Hopf, QIMC & Eigenvalues| G["RoutingData"]
+    D -->|Mint Witness| H["Grounded Proof Certificate"]
+    B -->|Replay Witness Derivation| I["UOR Trace Steps"]
+    B -->|JSON Response Payload| J["index.html Telemetry Dashboard"]
 ```
 
 ---
