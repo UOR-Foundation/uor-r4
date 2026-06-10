@@ -1242,24 +1242,27 @@
 const safeSetTextContent = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
 
 const unwrapResult = (res) => {
-    if (!res) return null;
+    if (res === null || res === undefined) return null;
     if (typeof res === "string") {
-        try {
-            return JSON.parse(res);
-        } catch (e) {
-            console.error("Failed to parse stringified WASM result:", e);
-            return null;
+        const trimmed = res.trim();
+        if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+            try {
+                return JSON.parse(res);
+            } catch (e) {
+                console.warn("WASM returned a string that started with JSON delimiters but failed to parse:", e);
+            }
         }
+        return res;
     }
-    if (res instanceof Map || (typeof res.get === "function" && typeof res.has === "function")) {
-        const obj = {};
-        res.forEach((value, key) => {
-            obj[key] = unwrapResult(value);
-        });
-        return obj;
-    }
-    if (Array.isArray(res)) {
-        return res.map(item => unwrapResult(item));
+    if (typeof res === "object" && typeof res[Symbol.iterator] === "function") {
+        if (res instanceof Map || (typeof res.get === "function" && typeof res.has === "function")) {
+            const obj = {};
+            res.forEach((value, key) => {
+                obj[key] = unwrapResult(value);
+            });
+            return obj;
+        }
+        return Array.from(res).map(item => unwrapResult(item));
     }
     if (typeof res === "object") {
         const obj = {};
@@ -1406,6 +1409,10 @@ async function tryInitLocalWasm() {
         console.log("Local WebAssembly Router Initialized Successfully!");
         
         // Populate baseline metrics since server is offline
+        if (router.get_vocab_size() === 0) {
+            console.log("[*] Vocabulary is empty. Indexing default corpus...");
+            router.index_default_corpus();
+        }
         const count = router.get_vocab_size();
         safeSetTextContent("corpusCount", count.toLocaleString());
         
@@ -3392,7 +3399,7 @@ function saveSessionToLocalStorage() {
             c2History: c2History,
             currentTrajectory: window.currentTrajectory,
             activeWindowIndex: activeWindowIndex,
-            routerState: null,
+            routerState: (localWasmMode && router) ? router.export_state() : null,
             engineSelect: engineSelect?.value || "auto",
             ollamaUrl: document.getElementById("ollamaUrlInput")?.value || "http://localhost:11434",
             ollamaModel: document.getElementById("ollamaModelInput")?.value || "gemma4:e2b",
@@ -3431,6 +3438,15 @@ function restoreSessionFromLocalStorage() {
             const ollamaModelEl = document.getElementById("ollamaModelInput");
             if (ollamaModelEl && session.ollamaModel) {
                 ollamaModelEl.value = session.ollamaModel;
+            }
+            
+            if (localWasmMode && router && session.routerState) {
+                try {
+                    router.import_state(session.routerState);
+                    console.log("[+] Restored router state from localStorage.");
+                } catch(eState) {
+                    console.warn("Failed to restore router state:", eState);
+                }
             }
             
             chatHistory = session.chatHistory || [];
