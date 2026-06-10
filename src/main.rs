@@ -417,7 +417,7 @@ fn handle_connection(mut stream: TcpStream, router: Arc<Mutex<UorR4Router>>, sta
                 "think": false,
                 "options": {
                     "temperature": temperature,
-                    "num_predict": max_tokens
+                    "num_predict": max_tokens.max(300)
                 }
             });
 

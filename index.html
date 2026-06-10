@@ -2680,7 +2680,7 @@ async function runLocalChat(text, identity) {
                 think: false,
                 options: {
                     temperature: temperature,
-                    num_predict: max_tokens
+                    num_predict: Math.max(max_tokens, 300)
                 }
             };
             
@@ -2858,7 +2858,7 @@ async function sendQuery(text) {
                         think: false,
                         options: {
                             temperature: temperature,
-                            num_predict: max_tokens
+                            num_predict: Math.max(max_tokens, 300)
                         }
                     };
                     
