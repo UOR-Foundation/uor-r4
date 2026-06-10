@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - r4-prime-router
   workflow_dispatch:
 
 permissions:
