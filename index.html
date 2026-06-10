@@ -3393,6 +3393,57 @@ function pollSysinfo() {
 }
 
 // =====================================================
+// IndexedDB Persistence Helpers
+// =====================================================
+const dbName = "R4ManifoldDB";
+const storeName = "stateStore";
+
+function openDB() {
+    return new Promise((resolve, reject) => {
+        const request = indexedDB.open(dbName, 1);
+        request.onupgradeneeded = (e) => {
+            const db = e.target.result;
+            if (!db.objectStoreNames.contains(storeName)) {
+                db.createObjectStore(storeName);
+            }
+        };
+        request.onsuccess = (e) => resolve(e.target.result);
+        request.onerror = (e) => reject(e.target.error);
+    });
+}
+
+async function saveLargeState(key, val) {
+    try {
+        const db = await openDB();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction(storeName, "readwrite");
+            const store = tx.objectStore(storeName);
+            const request = store.put(val, key);
+            request.onsuccess = () => resolve();
+            request.onerror = (e) => reject(e.target.error);
+        });
+    } catch(err) {
+        console.error("IndexedDB save failed:", err);
+    }
+}
+
+async function getLargeState(key) {
+    try {
+        const db = await openDB();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction(storeName, "readonly");
+            const store = tx.objectStore(storeName);
+            const request = store.get(key);
+            request.onsuccess = (e) => resolve(e.target.result);
+            request.onerror = (e) => reject(e.target.error);
+        });
+    } catch(err) {
+        console.error("IndexedDB fetch failed:", err);
+        return null;
+    }
+}
+
+// =====================================================
 // Local Storage Session Management
 // =====================================================
 function saveSessionToLocalStorage() {
@@ -3404,7 +3455,7 @@ function saveSessionToLocalStorage() {
             c2History: c2History,
             currentTrajectory: window.currentTrajectory,
             activeWindowIndex: activeWindowIndex,
-            routerState: (localWasmMode && router) ? router.export_state() : null,
+            routerState: null, // Stored in IndexedDB to avoid QuotaExceededError
             engineSelect: engineSelect?.value || "auto",
             ollamaUrl: document.getElementById("ollamaUrlInput")?.value || "http://localhost:11434",
             ollamaModel: document.getElementById("ollamaModelInput")?.value || "gemma4:e2b",
@@ -3416,12 +3467,22 @@ function saveSessionToLocalStorage() {
         // Remove item first to bypass browser double-allocation quota limits on replace
         localStorage.removeItem("r4_prime_router_session_v4");
         localStorage.setItem("r4_prime_router_session_v4", serialized);
+
+        // Async save large WASM state to IndexedDB
+        if (localWasmMode && router) {
+            const stateStr = router.export_state();
+            saveLargeState("routerState", stateStr).then(() => {
+                console.log(`[Session] Saved large router state to IndexedDB. Size = ${(stateStr.length / (1024 * 1024)).toFixed(2)} MB`);
+            }).catch(err => {
+                console.error("Failed to save router state to IndexedDB:", err);
+            });
+        }
     } catch (e) {
         console.error("Failed to save session to localStorage:", e);
     }
 }
 
-function restoreSessionFromLocalStorage() {
+async function restoreSessionFromLocalStorage() {
     try {
         const saved = localStorage.getItem("r4_prime_router_session_v4");
         if (saved) {
@@ -3445,10 +3506,18 @@ function restoreSessionFromLocalStorage() {
                 ollamaModelEl.value = session.ollamaModel;
             }
             
-            if (localWasmMode && router && session.routerState) {
+            if (localWasmMode && router) {
                 try {
-                    router.import_state(session.routerState);
-                    console.log("[+] Restored router state from localStorage.");
+                    // Try to restore from IndexedDB first
+                    const dbState = await getLargeState("routerState");
+                    if (dbState) {
+                        router.import_state(dbState);
+                        console.log("[+] Restored router state from IndexedDB.");
+                    } else if (session.routerState) {
+                        // Fallback to old localStorage state if present
+                        router.import_state(session.routerState);
+                        console.log("[+] Restored router state from localStorage fallback.");
+                    }
                 } catch(eState) {
                     console.warn("Failed to restore router state:", eState);
                 }
@@ -3492,7 +3561,7 @@ async function startApp() {
             await tryInitLocalWasm();
         }
 
-        restoreSessionFromLocalStorage();
+        await restoreSessionFromLocalStorage();
         populateExpertMatrix([]);
         
         await loadSemanticMap();
