@@ -1212,9 +1212,9 @@ impl UorR4Router {
 
             for (item, scope_boost) in merged_items {
                 let mut shared_count = 0;
-                for &p in &query_primes {
-                    if let Some(word) = self.word_primes.iter().find(|&(_, &val)| val == p).map(|(k, _)| k) {
-                        if item.words.iter().any(|x| x == word) {
+                for word in &item.words {
+                    if let Some(&p) = self.word_primes.get(word) {
+                        if query_primes.contains(&p) {
                             shared_count += 1;
                         }
                     }
@@ -1413,17 +1413,39 @@ impl UorR4Router {
                         }
                         next_word = best_word;
                     } else {
-                        // Vectorized semantic jump to closest vocabulary word vector
+                        // Vectorized semantic jump to closest vocabulary word vector (with threshold/stride to prevent freezing)
                         let mut best_word = "manifold".to_string();
-                        let mut best_dot = f64::MIN;
-                        for (word, vec) in &self.vocab_vectors {
-                            let mut dot = 0.0;
-                            for i in 0..512 {
-                                dot += vec[i] * s_local[i];
-                            }
-                            if dot > best_dot {
-                                best_dot = dot;
-                                best_word = word.clone();
+                        if !self.vocab_vectors.is_empty() {
+                            let mut best_dot = f64::MIN;
+                            let max_search = 1000;
+                            if self.vocab_vectors.len() <= max_search {
+                                for (word, vec) in &self.vocab_vectors {
+                                    let mut dot = 0.0;
+                                    for i in 0..512 {
+                                        dot += vec[i] * s_local[i];
+                                    }
+                                    if dot > best_dot {
+                                        best_dot = dot;
+                                        best_word = word.clone();
+                                    }
+                                }
+                            } else {
+                                let stride = self.vocab_vectors.len() / max_search;
+                                let stride = if stride == 0 { 1 } else { stride };
+                                let mut count = 0;
+                                for (word, vec) in &self.vocab_vectors {
+                                    if count % stride == 0 {
+                                        let mut dot = 0.0;
+                                        for i in 0..512 {
+                                            dot += vec[i] * s_local[i];
+                                        }
+                                        if dot > best_dot {
+                                            best_dot = dot;
+                                            best_word = word.clone();
+                                        }
+                                    }
+                                    count += 1;
+                                }
                             }
                         }
                         next_word = best_word;
@@ -2723,6 +2745,48 @@ impl<'a> uor_foundation::pipeline::PrismModel<'a, DefaultHostTypes, R4HostBounds
             R4_INLINE_BYTES,
             R4_FP_MAX,
         >(input, &uor_foundation::pipeline::NullResolverTuple, &uor_foundation::pipeline::EmptyCommitment)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_indexing_and_resonance_retrieval() {
+        let mut router = UorR4Router::new(0.5);
+        let identity = "tenant-alpha";
+        
+        // Index a test sentence containing specific keywords
+        let doc = "The quick brown fox jumps over the lazy dog and talks about quantum gravity.";
+        router.index_sentence(doc, identity);
+
+        // Retrieve resonances using keywords
+        let results = router.get_top_resonances_native("quantum gravity", identity, 5);
+        assert!(!results.is_empty(), "Should retrieve at least one resonant result");
+        assert!(results[0].sentence.contains("quantum gravity"), "The top resonant result should contain the target keywords");
+    }
+
+    #[test]
+    fn test_no_freeze_large_vocabulary_fallback() {
+        let mut router = UorR4Router::new(0.5);
+        let identity = "tenant-alpha";
+
+        // Add 2000 dummy words to simulate a large loaded corpus vocabulary
+        for i in 0..2000 {
+            router.add_word_to_vocabulary(&format!("word{}", i));
+        }
+
+        // Generate response under fallback conditions (should not freeze or timeout)
+        let _res = router.generate_geometric_response_native(
+            "unknown query that triggers fallback",
+            identity,
+            10,
+            0.7,
+            10.0,
+            4.0,
+            0.5
+        );
     }
 }
 
