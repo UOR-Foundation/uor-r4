@@ -2709,6 +2709,7 @@ async function runLocalChat(text, identity) {
     }
     
     router.index_sentence(responseText, identity);
+    debouncedSaveRouterState();
     
     // Inject thought streams
     router.inject_thought_stream(text);
@@ -2958,6 +2959,7 @@ if (indexBtn) {
             await loadSemanticMap();
             
             saveSessionToLocalStorage();
+            if (localWasmMode) saveRouterStateToIndexedDB();
         } catch(err) {
             indexStatus.style.color = "var(--red)";
             indexStatus.textContent = `Indexing error: ${err.message}`;
@@ -3032,6 +3034,7 @@ if (importTrigger && importFile) {
                 
                 // Save session
                 saveSessionToLocalStorage();
+                if (localWasmMode) saveRouterStateToIndexedDB();
                 
                 alert("✓ Manifold state successfully imported from " + file.name);
             } catch (err) {
@@ -3103,6 +3106,7 @@ if (resetBrainBtn) {
             chatLogInner.innerHTML = "";
             addMessage("model", `Hypersphere brain state successfully restored to defaults.`, false);
             saveSessionToLocalStorage();
+            if (localWasmMode) saveRouterStateToIndexedDB();
         } catch(err) {
             addMessage("model", "Error resetting brain state: " + err.message);
         } finally {
@@ -3443,9 +3447,29 @@ async function getLargeState(key) {
     }
 }
 
-// =====================================================
-// Local Storage Session Management
-// =====================================================
+function saveRouterStateToIndexedDB() {
+    if (localWasmMode && router) {
+        try {
+            const stateStr = router.export_state();
+            saveLargeState("routerState", stateStr).then(() => {
+                console.log(`[IndexedDB] Saved large router state. Size = ${(stateStr.length / (1024 * 1024)).toFixed(2)} MB`);
+            }).catch(err => {
+                console.error("Failed to save router state to IndexedDB:", err);
+            });
+        } catch(e) {
+            console.error("Failed to export router state:", e);
+        }
+    }
+}
+
+let saveTimeout = null;
+function debouncedSaveRouterState() {
+    if (saveTimeout) clearTimeout(saveTimeout);
+    saveTimeout = setTimeout(() => {
+        saveRouterStateToIndexedDB();
+    }, 5000); // Debounce save by 5 seconds
+}
+
 function saveSessionToLocalStorage() {
     try {
         const session = {
@@ -3455,28 +3479,18 @@ function saveSessionToLocalStorage() {
             c2History: c2History,
             currentTrajectory: window.currentTrajectory,
             activeWindowIndex: activeWindowIndex,
-            routerState: null, // Stored in IndexedDB to avoid QuotaExceededError
+            routerState: null, // Always null in localStorage to avoid QuotaExceededError
             engineSelect: engineSelect?.value || "auto",
             ollamaUrl: document.getElementById("ollamaUrlInput")?.value || "http://localhost:11434",
             ollamaModel: document.getElementById("ollamaModelInput")?.value || "gemma4:e2b",
             chatHistory: chatHistory
         };
         const serialized = JSON.stringify(session);
-        console.log(`[Session] Saving session to localStorage. Size = ${(serialized.length / 1024).toFixed(2)} KB`);
+        console.log(`[Session] Saving session metadata to localStorage. Size = ${(serialized.length / 1024).toFixed(2)} KB`);
         
         // Remove item first to bypass browser double-allocation quota limits on replace
         localStorage.removeItem("r4_prime_router_session_v4");
         localStorage.setItem("r4_prime_router_session_v4", serialized);
-
-        // Async save large WASM state to IndexedDB
-        if (localWasmMode && router) {
-            const stateStr = router.export_state();
-            saveLargeState("routerState", stateStr).then(() => {
-                console.log(`[Session] Saved large router state to IndexedDB. Size = ${(stateStr.length / (1024 * 1024)).toFixed(2)} MB`);
-            }).catch(err => {
-                console.error("Failed to save router state to IndexedDB:", err);
-            });
-        }
     } catch (e) {
         console.error("Failed to save session to localStorage:", e);
     }
