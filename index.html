@@ -2633,10 +2633,15 @@ async function runLocalChat(text, identity) {
     const temperature = Math.min(Math.max(0.2 + 0.8 * Math.abs(theta_d) + ((uor_bias - 0.5) * 0.20), 0.15), 1.1);
     const theme = WINDOW_THEMES[routed.window_index] || "Unknown";
     
+    const input_words = text.trim().split(/\s+/).length;
+    const stratum = routed.state_vector ? routed.state_vector.filter(v => Math.abs(v) > 1e-4).length : 20;
+    const eval_sum = routed.eigenvalues ? routed.eigenvalues.reduce((a,b)=>a+b, 0) : 1.0;
+    let max_tokens = Math.min(Math.max(Math.floor(50.0 + (stratum * 1.5) + (Math.abs(theta_d) * 45.0) + (eval_sum * 110.0) + (input_words * 2.5)), 50), 500);
+
     const geomResult = router.generate_geometric_response(
         text,
         identity,
-        modelMaxTokens,
+        max_tokens,
         temperature,
         10.0,
         4.0,
@@ -2660,23 +2665,23 @@ async function runLocalChat(text, identity) {
         if (topResonances.length > 0) {
             ctx_block = topResonances[0].sentence || "[no corpus context available]";
         }
-        
-        const prompt = `You are the R4 Prime Router (UOR Framework Standard) reasoning engine. We are routing coordinates in a continuous 512-dimensional manifold mapped to the first 512 Riemann Zeta Zeroes.\n\n[Active expert context: ${theme}]\n\n[Grounded context sentences: ${ctx_block}]\n\nUser query: ${text}\n\nInstructions: You MUST incorporate and reference the Grounded context sentence in your response to directly answer the user's query. Respond directly to the user query as a geometric router. Keep your response relevant, coherent, and under ${modelMaxTokens} words.`;
+
+        const systemPrompt = `You are the Voice of the R4 Prime Router. The current state of your context hypersphere brain is: Window ${routed.window_index} (${theme}), Energy κ=${kappa.toFixed(4)}, Curvature θd=${theta_d.toFixed(4)}, Hopf coordinates (χ=${routed.hopf.chi.toFixed(4)}, δ=${routed.hopf.delta.toFixed(4)}, α=${routed.hopf.alpha.toFixed(4)}). Grounding context sentence: "${ctx_block}". IMPORTANT: You MUST incorporate and reference the Grounding context sentence in your response to directly answer the user's query. Respond directly to the user query as a geometric router. Keep your response relevant, coherent, and under ${max_tokens} words. Do NOT output any thinking, thought processes, <thinking> blocks, or XML tags. Speak directly.`;
 
         try {
             const ollamaPayload = {
                 model: ollamaModel,
                 messages: [
-                    {
-                        role: "user",
-                        content: prompt
-                    }
+                    { role: "system", content: systemPrompt },
+                    { role: "user", content: text }
                 ],
+                stream: false,
+                keep_alive: -1,
+                think: false,
                 options: {
                     temperature: temperature,
-                    num_predict: modelMaxTokens
-                },
-                stream: false
+                    num_predict: max_tokens
+                }
             };
             
             const response = await fetch(`${ollamaUrl}/api/chat`, {
@@ -2746,7 +2751,7 @@ async function runLocalChat(text, identity) {
             "auto_tuned": {
                 "gamma": gamma,
                 "temperature": temperature,
-                "max_tokens": modelMaxTokens,
+                "max_tokens": max_tokens,
                 "engine": generation_mode,
                 "uor_entropy_bias": uor_bias
             }
@@ -2756,9 +2761,9 @@ async function runLocalChat(text, identity) {
         "state_vector": routed.state_vector,
         "all_routes": routing_data.all_routes,
         "top_resonance": top_resonances_5,
-        "trajectory": geomResult.trajectory,
-        "active_streams": router.get_active_streams(),
-        "expert_counts": router.get_expert_counts(),
+        "trajectory": geomResult?.trajectory || [],
+        "active_streams": unwrapResult(router.get_active_streams()),
+        "expert_counts": unwrapResult(router.get_expert_counts()),
         "routing_latency_ms": 1,
         "gen_latency_ms": 1,
         "uor_trace_steps": uor_trace_steps
@@ -3388,6 +3393,57 @@ function pollSysinfo() {
 }
 
 // =====================================================
+// IndexedDB Persistence Helpers
+// =====================================================
+const dbName = "R4ManifoldDB";
+const storeName = "stateStore";
+
+function openDB() {
+    return new Promise((resolve, reject) => {
+        const request = indexedDB.open(dbName, 1);
+        request.onupgradeneeded = (e) => {
+            const db = e.target.result;
+            if (!db.objectStoreNames.contains(storeName)) {
+                db.createObjectStore(storeName);
+            }
+        };
+        request.onsuccess = (e) => resolve(e.target.result);
+        request.onerror = (e) => reject(e.target.error);
+    });
+}
+
+async function saveLargeState(key, val) {
+    try {
+        const db = await openDB();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction(storeName, "readwrite");
+            const store = tx.objectStore(storeName);
+            const request = store.put(val, key);
+            request.onsuccess = () => resolve();
+            request.onerror = (e) => reject(e.target.error);
+        });
+    } catch(err) {
+        console.error("IndexedDB save failed:", err);
+    }
+}
+
+async function getLargeState(key) {
+    try {
+        const db = await openDB();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction(storeName, "readonly");
+            const store = tx.objectStore(storeName);
+            const request = store.get(key);
+            request.onsuccess = (e) => resolve(e.target.result);
+            request.onerror = (e) => reject(e.target.error);
+        });
+    } catch(err) {
+        console.error("IndexedDB fetch failed:", err);
+        return null;
+    }
+}
+
+// =====================================================
 // Local Storage Session Management
 // =====================================================
 function saveSessionToLocalStorage() {
@@ -3399,7 +3455,7 @@ function saveSessionToLocalStorage() {
             c2History: c2History,
             currentTrajectory: window.currentTrajectory,
             activeWindowIndex: activeWindowIndex,
-            routerState: (localWasmMode && router) ? router.export_state() : null,
+            routerState: null, // Stored in IndexedDB to avoid QuotaExceededError
             engineSelect: engineSelect?.value || "auto",
             ollamaUrl: document.getElementById("ollamaUrlInput")?.value || "http://localhost:11434",
             ollamaModel: document.getElementById("ollamaModelInput")?.value || "gemma4:e2b",
@@ -3411,12 +3467,22 @@ function saveSessionToLocalStorage() {
         // Remove item first to bypass browser double-allocation quota limits on replace
         localStorage.removeItem("r4_prime_router_session_v4");
         localStorage.setItem("r4_prime_router_session_v4", serialized);
+
+        // Async save large WASM state to IndexedDB
+        if (localWasmMode && router) {
+            const stateStr = router.export_state();
+            saveLargeState("routerState", stateStr).then(() => {
+                console.log(`[Session] Saved large router state to IndexedDB. Size = ${(stateStr.length / (1024 * 1024)).toFixed(2)} MB`);
+            }).catch(err => {
+                console.error("Failed to save router state to IndexedDB:", err);
+            });
+        }
     } catch (e) {
         console.error("Failed to save session to localStorage:", e);
     }
 }
 
-function restoreSessionFromLocalStorage() {
+async function restoreSessionFromLocalStorage() {
     try {
         const saved = localStorage.getItem("r4_prime_router_session_v4");
         if (saved) {
@@ -3440,10 +3506,18 @@ function restoreSessionFromLocalStorage() {
                 ollamaModelEl.value = session.ollamaModel;
             }
             
-            if (localWasmMode && router && session.routerState) {
+            if (localWasmMode && router) {
                 try {
-                    router.import_state(session.routerState);
-                    console.log("[+] Restored router state from localStorage.");
+                    // Try to restore from IndexedDB first
+                    const dbState = await getLargeState("routerState");
+                    if (dbState) {
+                        router.import_state(dbState);
+                        console.log("[+] Restored router state from IndexedDB.");
+                    } else if (session.routerState) {
+                        // Fallback to old localStorage state if present
+                        router.import_state(session.routerState);
+                        console.log("[+] Restored router state from localStorage fallback.");
+                    }
                 } catch(eState) {
                     console.warn("Failed to restore router state:", eState);
                 }
@@ -3487,7 +3561,7 @@ async function startApp() {
             await tryInitLocalWasm();
         }
 
-        restoreSessionFromLocalStorage();
+        await restoreSessionFromLocalStorage();
         populateExpertMatrix([]);
         
         await loadSemanticMap();
