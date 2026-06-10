@@ -1421,13 +1421,14 @@ window.loadSemanticMap = async function() {
     btn.textContent = "Loading...";
     btn.disabled = true;
     try {
-        let data;
+        let dataRaw;
         if (localWasmMode && router) {
-            data = router.get_semantic_map_points();
+            dataRaw = router.get_semantic_map_points();
         } else {
             const response = await fetch("/api/map");
-            data = await response.json();
+            dataRaw = await response.json();
         }
+        const data = (typeof dataRaw === "string") ? JSON.parse(dataRaw) : dataRaw;
         semanticMapPoints = data.points || [];
         
         // Pre-compute 3D stereographic projection coordinates from v_4d
@@ -2571,10 +2572,11 @@ async function runLocalChat(text, identity) {
     }
     
     // 1. Run formal UOR pipeline
-    const uorResult = router.route_query_to_manifold_uor(text, identity);
-    if (!uorResult) {
+    const uorResultRaw = router.route_query_to_manifold_uor(text, identity);
+    if (!uorResultRaw) {
         throw new Error("Local routing failed");
     }
+    const uorResult = (typeof uorResultRaw === "string") ? JSON.parse(uorResultRaw) : uorResultRaw;
     
     const routing_data = uorResult.routing_data;
     const routed = routing_data.routed;
