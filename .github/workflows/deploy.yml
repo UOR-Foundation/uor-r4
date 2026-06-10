@@ -31,7 +31,7 @@ jobs:
       - name: Prepare deployment folder
         run: |
           mkdir dist
-          cp index.html index.css dist/
+          cp index.html index.css geometric_prime_router_webapp.html dist/
           cp -r pkg dist/
           rm -f dist/pkg/.gitignore
           rm -f .gitignore
