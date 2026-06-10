@@ -557,6 +557,31 @@ impl UorR4Router {
         serde_wasm_bindgen::to_value(&res).unwrap_or(JsValue::NULL)
     }
 
+    /// Dynamically computes the suggested token limit based on manifold routing metrics
+    pub fn get_suggested_token_limit(&self, text: &str, identity: &str) -> usize {
+        let key = identity_key(identity);
+        let active_state = self.session_brain_states.get(&key)
+            .cloned()
+            .unwrap_or_else(|| vec![1.0 / (512.0f64).sqrt(); 512]);
+
+        let routing = self.route_query_to_manifold_internal(text, identity, Some(&active_state));
+        let routed = &routing.routed;
+        
+        let stratum = routed.state_vector.iter().filter(|&&v| v.abs() > 1e-4).count();
+        let eval_sum: f64 = routed.eigenvalues.iter().sum();
+        let theta_d = routed.metrics.deficit_angle;
+        let input_words = tokenize(text).len();
+
+        let base = 50.0;
+        let stratum_contrib = stratum as f64 * 1.5;
+        let angle_contrib = theta_d.abs() * 45.0;
+        let eval_contrib = eval_sum * 110.0;
+        let word_contrib = input_words as f64 * 2.5;
+
+        let total = (base + stratum_contrib + angle_contrib + eval_contrib + word_contrib) as usize;
+        total.clamp(50, 500)
+    }
+
     /// Decodes a response steered by the active brain state vector
     pub fn generate_geometric_response(
         &mut self,

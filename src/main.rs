@@ -270,7 +270,6 @@ fn handle_connection(mut stream: TcpStream, router: Arc<Mutex<UorR4Router>>, sta
             }
         };
 
-        let t_total = Instant::now();
         let identity = payload.identity.unwrap_or_else(|| "tenant-alpha".to_string());
         let engine_mode = payload.engine.unwrap_or_else(|| "auto".to_string());
         let ollama_url = payload.ollama_url.unwrap_or_else(|| "http://127.0.0.1:11434".to_string());
@@ -310,14 +309,11 @@ fn handle_connection(mut stream: TcpStream, router: Arc<Mutex<UorR4Router>>, sta
         let routing = router_guard.last_routing_data().clone().expect("No routing data generated");
         let kappa = routing.routed.metrics.kappa;
         let theta_d = routing.routed.metrics.deficit_angle;
-        let eval_sum: f64 = routing.routed.eigenvalues.iter().sum();
-        let stratum = routing.routed.state_vector.iter().filter(|&&v| v.abs() > 1e-4).count();
         let uor_bias = routing.routed.qimc.uor_control.entropy_bias;
 
         // Auto-tuned params
         let gamma = (0.85 - 0.55 * kappa + ((uor_bias - 0.5) * 0.12)).clamp(0.15, 0.90);
         let temperature = (0.2 + 0.8 * theta_d.abs().tanh() + ((uor_bias - 0.5) * 0.20)).clamp(0.15, 1.1);
-        let input_words = payload.text.split_whitespace().count();
 
         // 2. Select Synthesis Engine
         let mut ollama_online = false;
@@ -338,9 +334,8 @@ fn handle_connection(mut stream: TcpStream, router: Arc<Mutex<UorR4Router>>, sta
             "geometric"
         };
 
-        // Determine dynamic max_tokens based on selected engine
-        let mut max_tokens = (50.0 + (stratum as f64 * 1.5) + (theta_d.abs() * 45.0) + (eval_sum * 110.0) + (input_words as f64 * 2.5)) as usize;
-        max_tokens = max_tokens.clamp(50, 500);
+        // Determine dynamic suggested token limit from the router itself
+        let max_tokens = router_guard.get_suggested_token_limit(&payload.text, &identity);
 
         // 3. Evolve the brain state
         router_guard.evolve_state(&identity, &payload.text, gamma);
