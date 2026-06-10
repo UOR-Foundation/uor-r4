@@ -85,17 +85,84 @@ pub struct ResonanceInfo {
     pub uor_signature: String,
 }
 
+mod sparse_vector_serde {
+    use serde::{Serialize, Deserialize, Serializer, Deserializer};
+
+    #[derive(Serialize, Deserialize)]
+    struct SparseVecRepresentation {
+        start_idx: usize,
+        values: Vec<f64>,
+    }
+
+    pub fn serialize<S>(vec: &Vec<f64>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut start_idx = 0;
+        let mut end_idx = 0;
+        let mut found = false;
+
+        for (i, &val) in vec.iter().enumerate() {
+            if val != 0.0 {
+                if !found {
+                    start_idx = i;
+                    found = true;
+                }
+                end_idx = i + 1;
+            }
+        }
+
+        let representation = if found {
+            SparseVecRepresentation {
+                start_idx,
+                values: vec[start_idx..end_idx].to_vec(),
+            }
+        } else {
+            SparseVecRepresentation {
+                start_idx: 0,
+                values: Vec::new(),
+            }
+        };
+
+        representation.serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Vec<f64>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let representation = SparseVecRepresentation::deserialize(deserializer)?;
+        let mut vec = vec![0.0; 512];
+        let end_idx = representation.start_idx + representation.values.len();
+        if end_idx <= 512 {
+            for (i, &val) in representation.values.iter().enumerate() {
+                vec[representation.start_idx + i] = val;
+            }
+        }
+        Ok(vec)
+    }
+}
+
 /// Scoped corpus sentence indexed on the manifold
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Default, Clone)]
 pub struct CorpusItem {
+    #[serde(default)]
     pub sentence: String,
+    #[serde(default, with = "sparse_vector_serde")]
     pub state_vector: Vec<f64>,
+    #[serde(default)]
     pub kappa: f64,
+    #[serde(default)]
     pub deficit_angle: f64,
+    #[serde(default)]
     pub prime_product: String, // Stored as String to avoid JS JSON float loss
+    #[serde(default)]
     pub words: Vec<String>,
+    #[serde(default)]
     pub u: f64,
+    #[serde(default)]
     pub v: f64,
+    #[serde(default)]
     pub v_4d: Vec<f64>,
 }
 
@@ -120,10 +187,12 @@ pub struct UorR4Router {
     #[serde(default)]
     word_primes: HashMap<String, usize>,
     #[serde(default)]
+    max_prime: usize,
+    #[serde(skip)]
     vocab_vectors: HashMap<String, Vec<f64>>,
-    #[serde(default)]
+    #[serde(skip)]
     transitions: HashMap<String, HashMap<String, f64>>,
-    #[serde(default)]
+    #[serde(skip)]
     transitions_2nd: HashMap<String, HashMap<String, f64>>,
     #[serde(default)]
     corpus_index: HashMap<usize, Vec<CorpusItem>>,
@@ -135,6 +204,12 @@ pub struct UorR4Router {
     angle_x: f64,
     #[serde(default)]
     angle_y: f64,
+}
+
+#[derive(Serialize)]
+pub struct GeometricResponse {
+    pub text: String,
+    pub trajectory: Vec<TrajectoryStep>,
 }
 
 #[wasm_bindgen]
@@ -150,6 +225,7 @@ impl UorR4Router {
             is_aligned: true,
             vocabulary: Vec::new(),
             word_primes: HashMap::new(),
+            max_prime: 0,
             vocab_vectors: HashMap::new(),
             transitions: HashMap::new(),
             transitions_2nd: HashMap::new(),
@@ -385,20 +461,79 @@ impl UorR4Router {
 
     /// Indexes a single sentence into the identity's scoped corpus
     pub fn index_sentence(&mut self, sentence: &str, identity: &str) {
-        self.index_sentence_internal(sentence, identity);
-        self.rebuild_transitions();
+        let s_clean = sentence.trim();
+        if s_clean.is_empty() || s_clean.len() > 1000 {
+            return;
+        }
+        let s_lower = s_clean.to_lowercase();
+        let key = identity_key(identity);
+        let mut already_exists = false;
+        if let Some(target_index) = self.corpus_index_by_identity.get(&key) {
+            for win_items in target_index.values() {
+                for item in win_items {
+                    if item.sentence.to_lowercase() == s_lower {
+                        already_exists = true;
+                        break;
+                    }
+                }
+                if already_exists { break; }
+            }
+        }
+        if !already_exists {
+            self.index_sentence_internal(s_clean, identity);
+            self.rebuild_transitions();
+        }
     }
 
     /// Indexes an entire block of text split into sentences
     pub fn index_corpus(&mut self, corpus_text: &str, identity: &str) -> usize {
         let mut count = 0;
         let sentences = split_sentences(corpus_text);
-        for s in &sentences {
-            if s.len() > 10 {
-                self.index_sentence_internal(s, identity);
-                count += 1;
+        
+        let key = identity_key(identity);
+        let mut existing = std::collections::HashSet::new();
+        if let Some(target_index) = self.corpus_index_by_identity.get(&key) {
+            for win_items in target_index.values() {
+                for item in win_items {
+                    existing.insert(item.sentence.to_lowercase());
+                }
             }
         }
+        if let Some(shared_index) = self.corpus_index_by_identity.get("shared:shared") {
+            for win_items in shared_index.values() {
+                for item in win_items {
+                    existing.insert(item.sentence.to_lowercase());
+                }
+            }
+        }
+
+        let mut unique_sentences = Vec::new();
+        for s in &sentences {
+            let s_clean = s.trim();
+            let word_count = s_clean.split_whitespace().count();
+            if s_clean.len() > 30 && s_clean.len() < 400 && word_count > 4 {
+                let s_lower = s_clean.to_lowercase();
+                if !existing.contains(&s_lower) {
+                    existing.insert(s_lower);
+                    unique_sentences.push(s_clean.to_string());
+                }
+            }
+        }
+
+        if unique_sentences.is_empty() {
+            return 0;
+        }
+
+        println!("[*] Found {} new unique sentences to index.", unique_sentences.len());
+
+        for (i, s) in unique_sentences.iter().enumerate() {
+            if i > 0 && i % 2000 == 0 {
+                println!("    - Indexing progress: {}/{}...", i, unique_sentences.len());
+            }
+            self.index_sentence_internal(s, identity);
+            count += 1;
+        }
+
         if count > 0 {
             self.rebuild_transitions();
         }
@@ -443,11 +578,11 @@ impl UorR4Router {
         let key_save = identity_key(identity);
         self.session_brain_states.insert(key_save, final_state);
 
-        let mut res_map = serde_json::Map::new();
-        res_map.insert("text".to_string(), Value::String(response_text));
-        res_map.insert("trajectory".to_string(), serde_json::to_value(trajectory).unwrap_or(Value::Null));
-        
-        serde_wasm_bindgen::to_value(&Value::Object(res_map)).unwrap_or(JsValue::NULL)
+        let geom_res = GeometricResponse {
+            text: response_text,
+            trajectory,
+        };
+        serde_wasm_bindgen::to_value(&geom_res).unwrap_or(JsValue::NULL)
     }
 
     /// Exports the full router system database to JSON string
@@ -458,7 +593,14 @@ impl UorR4Router {
     /// Imports a JSON string and restores the router system database
     pub fn import_state(&mut self, json_str: &str) -> Result<(), JsValue> {
         match serde_json::from_str::<Self>(json_str) {
-            Ok(imported) => {
+            Ok(mut imported) => {
+                for (word, &prime) in &imported.word_primes {
+                    let vec = get_word_vector(prime);
+                    imported.vocab_vectors.insert(word.clone(), vec);
+                }
+                imported.max_prime = imported.word_primes.values().max().copied().unwrap_or(0);
+                // Rebuild transitions dynamically
+                imported.rebuild_transitions();
                 *self = imported;
                 Ok(())
             }
@@ -597,16 +739,18 @@ impl UorR4Router {
         }
 
         let mut next_prime = 2;
-        if !self.word_primes.is_empty() {
-            let max_prime = self.word_primes.values().max().cloned().unwrap_or(2);
-            next_prime = max_prime + 1;
+        if self.max_prime > 0 {
+            next_prime = self.max_prime + 1;
+        } else if !self.word_primes.is_empty() {
+            let max_p = self.word_primes.values().max().cloned().unwrap_or(2);
+            next_prime = max_p + 1;
         }
         while !is_prime_value(next_prime) {
             next_prime += 1;
         }
 
+        self.max_prime = next_prime;
         self.vocabulary.push(w.clone());
-        self.vocabulary.sort();
         self.word_primes.insert(w.clone(), next_prime);
 
         // Seed coordinates across 512 zeta zeros via prime log oscillation
@@ -887,12 +1031,6 @@ impl UorR4Router {
         
         let win_items = target_index.entry(idx_win).or_default();
         
-        for item in win_items.iter() {
-            if item.sentence.trim().to_lowercase() == s_clean.to_lowercase() {
-                return;
-            }
-        }
-        
         win_items.push(CorpusItem {
             sentence: s_clean.to_string(),
             state_vector,
@@ -993,29 +1131,11 @@ impl UorR4Router {
     }
 
     fn rebuild_transitions(&mut self) {
-        let mut sentences = Vec::new();
-        let empty_index = HashMap::new();
-        let shared_index = self.corpus_index_by_identity.get("shared:shared").unwrap_or(&empty_index);
-        
-        for win_items in shared_index.values() {
-            for item in win_items {
-                sentences.push(item.sentence.clone());
-            }
-        }
-        for identity_store in self.corpus_index_by_identity.values() {
-            for win_items in identity_store.values() {
-                for item in win_items {
-                    sentences.push(item.sentence.clone());
-                }
-            }
-        }
-
         self.transitions.clear();
         self.transitions_2nd.clear();
 
-        for s in &sentences {
-            let words = tokenize(s);
-            if words.is_empty() { continue; }
+        let mut process_words = |words: &[String]| {
+            if words.is_empty() { return; }
             
             // 1st order
             for i in 0..words.len() - 1 {
@@ -1035,6 +1155,14 @@ impl UorR4Router {
                 let entry = self.transitions_2nd.entry(key).or_default();
                 let count = entry.entry(w3.clone()).or_insert(0.0);
                 *count += 1.0;
+            }
+        };
+
+        for identity_store in self.corpus_index_by_identity.values() {
+            for win_items in identity_store.values() {
+                for item in win_items {
+                    process_words(&item.words);
+                }
             }
         }
 
@@ -1057,6 +1185,10 @@ impl UorR4Router {
                 }
             }
         }
+
+        // Also sort and dedup vocabulary
+        self.vocabulary.sort();
+        self.vocabulary.dedup();
     }
 
     fn generate_geometric_response_with_trajectory_internal(
@@ -1152,17 +1284,42 @@ impl UorR4Router {
                 let targets = self.transitions_2nd.get(&key).unwrap_or(&empty_targets);
                 
                 if targets.is_empty() {
-                    // Vectorized semantic jump to closest vocabulary word vector
-                    let mut best_word = "manifold".to_string();
-                    let mut best_sim = -1.0;
-                    for (word, vec) in &self.vocab_vectors {
-                        let sim = cosine_similarity(vec, &s_local);
-                        if sim > best_sim {
-                            best_sim = sim;
-                            best_word = word.clone();
+                    // Single-word backoff
+                    let last_word = &generated[generated.len() - 1];
+                    let empty_first = HashMap::new();
+                    let matching_targets = self.transitions.get(last_word).unwrap_or(&empty_first);
+                    if !matching_targets.is_empty() {
+                        let mut best_word = "manifold".to_string();
+                        let mut best_dot = f64::MIN;
+                        for next_w in matching_targets.keys() {
+                            if let Some(c_vec) = self.vocab_vectors.get(next_w) {
+                                let mut dot = 0.0;
+                                for i in 0..512 {
+                                    dot += c_vec[i] * s_local[i];
+                                }
+                                if dot > best_dot {
+                                    best_dot = dot;
+                                    best_word = next_w.clone();
+                                }
+                            }
                         }
+                        next_word = best_word;
+                    } else {
+                        // Vectorized semantic jump to closest vocabulary word vector
+                        let mut best_word = "manifold".to_string();
+                        let mut best_dot = f64::MIN;
+                        for (word, vec) in &self.vocab_vectors {
+                            let mut dot = 0.0;
+                            for i in 0..512 {
+                                dot += vec[i] * s_local[i];
+                            }
+                            if dot > best_dot {
+                                best_dot = dot;
+                                best_word = word.clone();
+                            }
+                        }
+                        next_word = best_word;
                     }
-                    next_word = best_word;
                 } else {
                     let mut candidates = Vec::new();
                     let mut scores = Vec::new();
@@ -2045,3 +2202,153 @@ pub fn init_wasm() -> Result<(), JsValue> {
     console_error_panic_hook::set_once();
     Ok(())
 }
+
+impl UorR4Router {
+    pub fn get_total_indexed_sentences(&self) -> usize {
+        self.corpus_index_by_identity.values()
+            .map(|store| store.values().map(|items| items.len()).sum::<usize>())
+            .sum()
+    }
+
+    pub fn get_sentence_projection_native(&self, state_vector: &[f64], win_idx: usize) -> (f64, f64) {
+        self.get_sentence_projection(state_vector, win_idx)
+    }
+
+    pub fn get_state_4d_projection_native(&self, state_vector: &[f64]) -> Vec<f64> {
+        self.get_state_4d_projection(state_vector)
+    }
+
+    pub fn identity_key_native(&self, identity: &str) -> String {
+        identity_key(identity)
+    }
+
+    pub fn get_brain_state_native(&mut self, identity: &str) -> Vec<f64> {
+        let key = identity_key(identity);
+        self.session_brain_states
+            .entry(key)
+            .or_insert_with(|| vec![1.0 / (512.0f64).sqrt(); 512])
+            .clone()
+    }
+
+    pub fn route_query_to_manifold_native(&mut self, text: &str, identity: &str) -> RoutingData {
+        let key = identity_key(identity);
+        let active_state = self.session_brain_states
+            .entry(key)
+            .or_insert_with(|| vec![1.0 / (512.0f64).sqrt(); 512])
+            .clone();
+
+        self.route_query_to_manifold_internal(text, identity, Some(&active_state))
+    }
+
+    pub fn get_top_resonances_native(&mut self, text: &str, identity: &str, top_n: usize) -> Vec<ResonanceResult> {
+        let key = identity_key(identity);
+        let active_state = self.session_brain_states
+            .entry(key)
+            .or_insert_with(|| vec![1.0 / (512.0f64).sqrt(); 512])
+            .clone();
+
+        let routing = self.route_query_to_manifold_internal(text, identity, Some(&active_state));
+        self.retrieve_geometric_resonance(text, &routing, top_n, &active_state, identity)
+    }
+
+    pub fn generate_geometric_response_native(
+        &mut self,
+        text: &str,
+        identity: &str,
+        max_tokens: usize,
+        temp: f64,
+        gravity: f64,
+        freq_penalty: f64,
+        gamma: f64,
+    ) -> GeometricResponse {
+        let key = identity_key(identity);
+        let active_state = self.session_brain_states
+            .entry(key)
+            .or_insert_with(|| vec![1.0 / (512.0f64).sqrt(); 512])
+            .clone();
+
+        let (response_text, trajectory, final_state) = self.generate_geometric_response_with_trajectory_internal(
+            text, &active_state, max_tokens, temp, gravity, freq_penalty, identity, gamma
+        );
+
+        // Update brain state
+        let key_save = identity_key(identity);
+        self.session_brain_states.insert(key_save, final_state);
+
+        GeometricResponse {
+            text: response_text,
+            trajectory,
+        }
+    }
+
+    pub fn get_semantic_map_points_native(&self) -> serde_json::Value {
+        #[derive(Serialize)]
+        struct MapPoint {
+            sentence: String,
+            window_index: usize,
+            u: f64,
+            v: f64,
+            v_4d: Vec<f64>,
+            scope: String,
+            kappa: f64,
+            prime_product_mod: i64,
+        }
+
+        let mut points = Vec::new();
+        for (identity_key, store) in &self.corpus_index_by_identity {
+            let scope_name = identity_key.split(':').nth(1).unwrap_or(identity_key).to_string();
+            for (&win_idx, items) in store {
+                for item in items {
+                    let prime_product_val: i64 = item.prime_product.parse().unwrap_or(1);
+                    points.push(MapPoint {
+                        sentence: item.sentence.chars().take(120).collect(),
+                        window_index: win_idx,
+                        u: item.u,
+                        v: item.v,
+                        v_4d: item.v_4d.clone(),
+                        scope: scope_name.clone(),
+                        kappa: item.kappa,
+                        prime_product_mod: prime_product_val % 10007,
+                    });
+                }
+            }
+        }
+
+        serde_json::json!({
+            "points": points,
+            "total": points.len(),
+        })
+    }
+
+    pub fn import_state_native(&mut self, json_str: &str) -> Result<(), serde_json::Error> {
+        let mut imported: Self = serde_json::from_str(json_str)?;
+        for (word, &prime) in &imported.word_primes {
+            let vec = get_word_vector(prime);
+            imported.vocab_vectors.insert(word.clone(), vec);
+        }
+        imported.max_prime = imported.word_primes.values().max().copied().unwrap_or(0);
+        imported.rebuild_transitions();
+        *self = imported;
+        Ok(())
+    }
+
+    pub fn inject_thought_stream_native(&mut self, content: &str) -> ThoughtStream {
+        let stream = self.compile_thought_internal(content);
+        for &ch in &stream.activated_experts {
+            if ch < 64 {
+                if ch >= self.expert_active_counts.len() {
+                    self.expert_active_counts.resize(ch + 1, 0);
+                }
+                self.expert_active_counts[ch] += 1;
+            }
+        }
+        let id = stream.id.clone();
+        self.active_streams.insert(id, stream.clone());
+        stream
+    }
+
+    pub fn get_active_streams_native(&self) -> Vec<ThoughtStream> {
+        self.active_streams.values().cloned().collect()
+    }
+}
+
