@@ -996,6 +996,11 @@
                 <div class="qimc-row"><span class="qimc-key">UOR Verify</span><span class="qimc-val" id="uorVerify" style="color:var(--amber);">—</span></div>
                 <div class="qimc-row"><span class="qimc-key">UOR Label</span><span class="qimc-val" id="uorLabel" style="font-size:0.62rem; color:var(--text2);">—</span></div>
                 <div class="qimc-row"><span class="qimc-key">UOR Fingerprint</span><span class="qimc-val" id="uorFingerprint" style="font-size:0.55rem; color:var(--text2);">—</span></div>
+                <div class="qimc-row"><span class="qimc-key">UOR Sigma</span><span class="qimc-val" id="uorSigma" style="color:var(--emerald);">—</span></div>
+                <div class="qimc-row"><span class="qimc-key">UOR d_delta</span><span class="qimc-val" id="uordDelta" style="color:var(--cyan);">—</span></div>
+                <div class="qimc-row"><span class="qimc-key">UOR Euler</span><span class="qimc-val" id="uorEuler" style="color:var(--purple);">—</span></div>
+                <div class="qimc-row"><span class="qimc-key">UOR Free Sites</span><span class="qimc-val" id="uorFreeSites" style="color:var(--text2);">—</span></div>
+                <div class="qimc-row"><span class="qimc-key">UOR Stratum</span><span class="qimc-val" id="uorStratum" style="color:var(--cyan);">—</span></div>
                 <div class="qimc-row"><span class="qimc-key">Monodromy</span><span class="qimc-val" id="monoLabel" style="color:var(--amber);">r^0</span></div>
             </div>
         </div>
@@ -1354,9 +1359,37 @@ if (mapLegend) {
 // =====================================================
 // WASM Router Bootstrap & Ollama
 // =====================================================
-// import init, { UorR4Router } from './pkg/uor_r4_wasm_router.js';
-
 let router = null;
+let wasmInitialized = false;
+let localWasmMode = false;
+
+async function tryInitLocalWasm() {
+    if (wasmInitialized) return true;
+    try {
+        const { default: init, UorR4Router } = await import('./pkg/uor_r4_wasm_router.js');
+        await init();
+        router = new UorR4Router(1.2);
+        wasmInitialized = true;
+        console.log("Local WebAssembly Router Initialized Successfully!");
+        
+        // Populate baseline metrics since server is offline
+        const count = router.get_vocab_size();
+        safeSetTextContent("corpusCount", count.toLocaleString());
+        
+        const active = router.get_active_streams();
+        syncActiveStreams(active);
+        updateStreamsList();
+        
+        const experts = router.get_expert_counts();
+        populateExpertMatrix(experts);
+        
+        await loadSemanticMap();
+        return true;
+    } catch (e) {
+        console.error("Failed to load local WASM router:", e);
+        return false;
+    }
+}
 
 const engineSelect       = document.getElementById("engineSelect");
 const ollamaConfigGroup  = document.getElementById("ollamaConfigGroup");
@@ -1387,8 +1420,13 @@ window.loadSemanticMap = async function() {
     btn.textContent = "Loading...";
     btn.disabled = true;
     try {
-        const response = await fetch("/api/map");
-        const data = await response.json();
+        let data;
+        if (localWasmMode && router) {
+            data = router.get_semantic_map_points();
+        } else {
+            const response = await fetch("/api/map");
+            data = await response.json();
+        }
         semanticMapPoints = data.points || [];
         
         // Pre-compute 3D stereographic projection coordinates from v_4d
@@ -2252,6 +2290,31 @@ function updateTelemetry(data, isSysinfo = false) {
         if (m.uor?.fingerprint_hex) {
             safeSetTextContent("uorFingerprint", m.uor.fingerprint_hex.slice(0,28) + "...");
         }
+        if (m.uor?.sigma !== undefined) {
+            safeSetTextContent("uorSigma", m.uor.sigma.toFixed(6));
+        } else {
+            safeSetTextContent("uorSigma", "—");
+        }
+        if (m.uor?.d_delta !== undefined) {
+            safeSetTextContent("uordDelta", m.uor.d_delta);
+        } else {
+            safeSetTextContent("uordDelta", "—");
+        }
+        if (m.uor?.euler !== undefined) {
+            safeSetTextContent("uorEuler", m.uor.euler);
+        } else {
+            safeSetTextContent("uorEuler", "—");
+        }
+        if (m.uor?.residual !== undefined) {
+            safeSetTextContent("uorFreeSites", m.uor.residual);
+        } else {
+            safeSetTextContent("uorFreeSites", "—");
+        }
+        if (m.uor?.stratum !== undefined) {
+            safeSetTextContent("uorStratum", m.uor.stratum);
+        } else {
+            safeSetTextContent("uorStratum", "—");
+        }
     }
 
     if (m.hopf && m.hopf.subspace_norms) {
@@ -2395,6 +2458,13 @@ function updateTelemetry(data, isSysinfo = false) {
         renderSemanticMap(m.window_index, conversationTrajectory, data.top_resonance || []);
     }
     
+    if (data.uor_trace_steps && data.uor_trace_steps.length > 0) {
+        logToConsole(`UOR Reduction Witness Certificated! Trace path:`, "accent");
+        data.uor_trace_steps.forEach(step => {
+            logToConsole(`  Step ${step.step}: [${step.op}] → address ${step.target}`, "muted");
+        });
+    }
+    
     updateSystemMetricsUI(data.routing_latency_ms, data.gen_latency_ms);
 }
 
@@ -2489,6 +2559,116 @@ function addMessage(sender, content, save = true) {
 }
 
 // =====================================================
+// Local WASM Chat Simulation
+// =====================================================
+async function runLocalChat(text, identity) {
+    if (!router) {
+        const ok = await tryInitLocalWasm();
+        if (!ok || !router) {
+            throw new Error("WASM router failed to initialize locally");
+        }
+    }
+    
+    // 1. Run formal UOR pipeline
+    const uorResult = router.route_query_to_manifold_uor(text, identity);
+    if (!uorResult) {
+        throw new Error("Local routing failed");
+    }
+    
+    const routing_data = uorResult.routing_data;
+    const routed = routing_data.routed;
+    const uor_trace_steps = uorResult.uor_trace_steps;
+    const uor_payload = uorResult.uor_payload;
+    
+    // 2. Local index/evolve
+    router.index_sentence(text, identity);
+    
+    // Auto-tuned params
+    const kappa = routed.metrics.kappa;
+    const theta_d = routed.metrics.deficit_angle;
+    const uor_bias = routed.qimc.uor_control.entropy_bias;
+    
+    const gamma = Math.min(Math.max(0.85 - 0.55 * kappa + ((uor_bias - 0.5) * 0.12), 0.15), 0.90);
+    const temperature = Math.min(Math.max(0.2 + 0.8 * Math.abs(theta_d) + ((uor_bias - 0.5) * 0.20), 0.15), 1.1);
+    
+    const geomResult = router.generate_geometric_response(
+        text,
+        identity,
+        modelMaxTokens,
+        temperature,
+        10.0,
+        4.0,
+        gamma
+    );
+    
+    const responseText = geomResult.text || "Manifold resonance too sparse for synthesis.";
+    router.index_sentence(responseText, identity);
+    
+    // Inject thought streams
+    router.inject_thought_stream(text);
+    router.inject_thought_stream(responseText);
+    
+    // 3. Evolve brain state to project for trajectory
+    const active_state = router.get_brain_state_wasm(identity);
+    const proj2d = router.get_sentence_projection_wasm(active_state, routed.window_index);
+    const v_4d = router.get_state_4d_projection_wasm(active_state);
+    
+    const archetype = (theta_d > -1.0) ? "Symmetric Orbit (Resonant)" :
+                      (theta_d < -1.4) ? "Hyperbolic Flare (Divergent)" : "Orthogonal Drift (Steady)";
+                      
+    const theme = WINDOW_THEMES[routed.window_index] || "Unknown";
+    
+    const top_resonances_5 = router.get_top_resonances(text, identity, 5) || [];
+
+    const payload = {
+        "text": text,
+        "archetype": archetype,
+        "description": responseText,
+        "summary": `W${routed.window_index} (${theme}) | Scale ${routed.scale_x.toFixed(0)} | kappa=${kappa.toFixed(4)} theta_d=${theta_d.toFixed(4)} | geometric-local`,
+        "llm_connected": false,
+        "generation_mode": "geometric-local",
+        "active_projection": {
+            "u": proj2d[0],
+            "v": proj2d[1],
+            "v_4d": v_4d
+        },
+        "metrics": {
+            "window_index": routed.window_index,
+            "scale_x": routed.scale_x,
+            "kappa": kappa,
+            "deficit_angle": theta_d,
+            "lambda_entropy": routed.metrics.lambda_entropy,
+            "sigma_kl": routed.metrics.sigma_kl,
+            "top_eigenvalue_pct": (routed.eigenvalues[0] / (routed.eigenvalues.reduce((a,b)=>a+b, 0) || 1)) * 100,
+            "qimc": routed.qimc,
+            "hopf": routed.hopf,
+            "uor_address": routed.uor_address,
+            "uor": uor_payload,
+            "auto_tuned": {
+                "gamma": gamma,
+                "temperature": temperature,
+                "max_tokens": modelMaxTokens,
+                "engine": "geometric-local",
+                "uor_entropy_bias": uor_bias
+            }
+        },
+        "eigenvalues": routed.eigenvalues,
+        "active_range": routed.active_range,
+        "state_vector": routed.state_vector,
+        "all_routes": routing_data.all_routes,
+        "top_resonance": top_resonances_5,
+        "trajectory": geomResult.trajectory,
+        "active_streams": router.get_active_streams(),
+        "expert_counts": router.get_expert_counts(),
+        "routing_latency_ms": 1,
+        "gen_latency_ms": 1,
+        "uor_trace_steps": uor_trace_steps
+    };
+    
+    return payload;
+}
+
+// =====================================================
 // Send Query
 // =====================================================
 async function sendQuery(text) {
@@ -2517,17 +2697,23 @@ async function sendQuery(text) {
             ollama_model: ollamaModel
         };
 
-        const response = await fetch("/api/chat", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload)
-        });
+        let data;
+        if (localWasmMode) {
+            data = await runLocalChat(text, identity);
+        } else {
+            const response = await fetch("/api/chat", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload)
+            });
 
-        if (!response.ok) {
-            throw new Error(`HTTP error: ${response.status}`);
+            if (!response.ok) {
+                throw new Error(`HTTP error: ${response.status}`);
+            }
+
+            data = await response.json();
         }
 
-        const data = await response.json();
         chatLogInner.removeChild(loadMsg);
 
         // Add model response
@@ -2564,16 +2750,23 @@ if (indexBtn) {
         indexStatus.textContent = "Indexing manifold... please wait";
         try {
             const identity = document.getElementById("identityInput")?.value.trim() || "tenant-alpha";
-            const response = await fetch("/api/corpus", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ corpus, identity })
-            });
-            if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
-            const data = await response.json();
+            let count;
+            if (localWasmMode) {
+                if (!router) throw new Error("WASM router not initialized");
+                count = router.index_corpus(corpus, identity);
+            } else {
+                const response = await fetch("/api/corpus", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ corpus, identity })
+                });
+                if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
+                const data = await response.json();
+                count = data.count;
+            }
             
             indexStatus.style.color = "var(--emerald)";
-            indexStatus.textContent = `✓ Indexed ${data.count} sentences`;
+            indexStatus.textContent = `✓ Indexed ${count} sentences`;
             kbTextarea.value = "";
             
             // Reload semantic map to show newly indexed points
@@ -2602,9 +2795,15 @@ const exportBtn = document.getElementById("exportManifoldBtn");
 if (exportBtn) {
     exportBtn.addEventListener("click", async () => {
         try {
-            const response = await fetch("/api/export");
-            if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
-            const stateStr = await response.text();
+            let stateStr;
+            if (localWasmMode) {
+                if (!router) throw new Error("WASM router not initialized");
+                stateStr = router.export_state();
+            } else {
+                const response = await fetch("/api/export");
+                if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
+                stateStr = await response.text();
+            }
             const blob = new Blob([stateStr], { type: "application/json" });
             const url = URL.createObjectURL(blob);
             const a = document.createElement("a");
@@ -2631,12 +2830,17 @@ if (importTrigger && importFile) {
         reader.onload = async (evt) => {
             try {
                 const stateStr = evt.target.result;
-                const response = await fetch("/api/import", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: stateStr
-                });
-                if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
+                if (localWasmMode) {
+                    if (!router) throw new Error("WASM router not initialized");
+                    router.import_state(stateStr);
+                } else {
+                    const response = await fetch("/api/import", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: stateStr
+                    });
+                    if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
+                }
                 
                 // Refresh semantic map
                 await loadSemanticMap();
@@ -2659,12 +2863,17 @@ if (resetBrainBtn) {
         resetBrainBtn.disabled = true;
         try {
             const identity = document.getElementById("identityInput")?.value.trim() || "tenant-alpha";
-            const response = await fetch("/api/reset", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ identity })
-            });
-            if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
+            if (localWasmMode) {
+                if (!router) throw new Error("WASM router not initialized");
+                router.reset_brain(identity);
+            } else {
+                const response = await fetch("/api/reset", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ identity })
+                });
+                if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
+            }
             
             conversationTrajectory = [];
             c2History = [];
@@ -2915,22 +3124,37 @@ function pollSysinfo() {
     if (ramBar) { ramBar.style.width = Math.min((ram / 512) * 100, 100) + "%"; }
     if (ramVal) ramVal.textContent = ram + "MB";
     
-    fetch("/api/sysinfo")
-        .then(r => r.json())
-        .then(info => {
-            if (info && info.sentences_indexed !== undefined) {
-                setEl("corpusCount", info.sentences_indexed.toLocaleString());
-            }
-            if (info && info.active_streams) {
-                syncActiveStreams(info.active_streams);
-                updateStreamsList();
-            }
-            if (info && info.expert_counts) {
-                populateExpertMatrix(info.expert_counts);
-            }
-            updateTelemetry(info, true);
-        })
-        .catch(err => console.error("Sysinfo poll failed:", err));
+    if (localWasmMode && router) {
+        setEl("corpusCount", router.get_vocab_size().toLocaleString());
+        syncActiveStreams(router.get_active_streams());
+        updateStreamsList();
+        populateExpertMatrix(router.get_expert_counts());
+    } else {
+        fetch("/api/sysinfo")
+            .then(r => {
+                if (!r.ok) throw new Error("HTTP error " + r.status);
+                return r.json();
+            })
+            .then(info => {
+                localWasmMode = false;
+                if (info && info.sentences_indexed !== undefined) {
+                    setEl("corpusCount", info.sentences_indexed.toLocaleString());
+                }
+                if (info && info.active_streams) {
+                    syncActiveStreams(info.active_streams);
+                    updateStreamsList();
+                }
+                if (info && info.expert_counts) {
+                    populateExpertMatrix(info.expert_counts);
+                }
+                updateTelemetry(info, true);
+            })
+            .catch(err => {
+                console.warn("Sysinfo poll failed, switching to local WASM fallback mode:", err);
+                localWasmMode = true;
+                tryInitLocalWasm();
+            });
+    }
 
     // Check Ollama status
     let ollamaUrl = document.getElementById("ollamaUrlInput")?.value.trim() || "http://localhost:11434";
@@ -3052,6 +3276,21 @@ window.addEventListener("beforeunload", saveSessionToLocalStorage);
 // =====================================================
 async function startApp() {
     try {
+        // Probe if backend is online, otherwise default to local WASM mode
+        try {
+            const probe = await fetch("/api/sysinfo");
+            if (probe.ok) {
+                localWasmMode = false;
+                console.log("[+] Server detected, using backend routing.");
+            } else {
+                throw new Error("Server returned non-ok status");
+            }
+        } catch (e) {
+            console.warn("[!] Server offline or static deployment detected. Initializing local WASM fallback:", e);
+            localWasmMode = true;
+            await tryInitLocalWasm();
+        }
+
         restoreSessionFromLocalStorage();
         populateExpertMatrix([]);
         

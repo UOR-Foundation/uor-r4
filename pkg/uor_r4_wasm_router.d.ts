@@ -42,6 +42,10 @@ export class UorR4Router {
     get_angle_x(): number;
     get_angle_y(): number;
     /**
+     * Retrieves the evolved brain state vector for a given identity
+     */
+    get_brain_state_wasm(identity: string): Float64Array;
+    /**
      * Returns the active counts for the 64 experts
      */
     get_expert_counts(): Uint32Array;
@@ -49,6 +53,14 @@ export class UorR4Router {
      * Serves all points in the corpus index for the semantic map visualizer
      */
     get_semantic_map_points(): any;
+    /**
+     * Projects the active brain state vector into 2D coordinates for the map path tracing
+     */
+    get_sentence_projection_wasm(state_vector: Float64Array, win_idx: number): Float64Array;
+    /**
+     * Projects the active brain state vector into 4D coordinates
+     */
+    get_state_4d_projection_wasm(state_vector: Float64Array): Float64Array;
     /**
      * Returns the top N resonant sentences sorted by relevance
      */
@@ -98,6 +110,10 @@ export class UorR4Router {
      * Returns the routed window and detailed thermodynamic/Hopf metrics for a query
      */
     route_query_to_manifold(text: string, identity: string): any;
+    /**
+     * Runs the formal UOR coordinate reduction pipeline and returns both RoutingData and trace steps as a single JsValue
+     */
+    route_query_to_manifold_uor(text: string, identity: string): any;
     set_angle_x(val: number): void;
     set_angle_y(val: number): void;
     /**
@@ -125,8 +141,11 @@ export interface InitOutput {
     readonly uorr4router_get_active_streams: (a: number) => any;
     readonly uorr4router_get_angle_x: (a: number) => number;
     readonly uorr4router_get_angle_y: (a: number) => number;
+    readonly uorr4router_get_brain_state_wasm: (a: number, b: number, c: number) => [number, number];
     readonly uorr4router_get_expert_counts: (a: number) => [number, number];
     readonly uorr4router_get_semantic_map_points: (a: number) => any;
+    readonly uorr4router_get_sentence_projection_wasm: (a: number, b: number, c: number, d: number) => [number, number];
+    readonly uorr4router_get_state_4d_projection_wasm: (a: number, b: number, c: number) => [number, number];
     readonly uorr4router_get_top_resonances: (a: number, b: number, c: number, d: number, e: number, f: number) => any;
     readonly uorr4router_get_vocab_size: (a: number) => number;
     readonly uorr4router_import_state: (a: number, b: number, c: number) => [number, number];
@@ -140,6 +159,7 @@ export interface InitOutput {
     readonly uorr4router_reset_brain: (a: number, b: number, c: number) => void;
     readonly uorr4router_reset_to_defaults: (a: number) => void;
     readonly uorr4router_route_query_to_manifold: (a: number, b: number, c: number, d: number, e: number) => any;
+    readonly uorr4router_route_query_to_manifold_uor: (a: number, b: number, c: number, d: number, e: number) => any;
     readonly uorr4router_set_angle_x: (a: number, b: number) => void;
     readonly uorr4router_set_angle_y: (a: number, b: number) => void;
     readonly uorr4router_update_drift_physics: (a: number, b: number, c: number) => [number, number];

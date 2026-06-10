@@ -135,6 +135,19 @@ export class UorR4Router {
         return ret;
     }
     /**
+     * Retrieves the evolved brain state vector for a given identity
+     * @param {string} identity
+     * @returns {Float64Array}
+     */
+    get_brain_state_wasm(identity) {
+        const ptr0 = passStringToWasm0(identity, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.uorr4router_get_brain_state_wasm(this.__wbg_ptr, ptr0, len0);
+        var v2 = getArrayF64FromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 8, 8);
+        return v2;
+    }
+    /**
      * Returns the active counts for the 64 experts
      * @returns {Uint32Array}
      */
@@ -151,6 +164,33 @@ export class UorR4Router {
     get_semantic_map_points() {
         const ret = wasm.uorr4router_get_semantic_map_points(this.__wbg_ptr);
         return ret;
+    }
+    /**
+     * Projects the active brain state vector into 2D coordinates for the map path tracing
+     * @param {Float64Array} state_vector
+     * @param {number} win_idx
+     * @returns {Float64Array}
+     */
+    get_sentence_projection_wasm(state_vector, win_idx) {
+        const ptr0 = passArrayF64ToWasm0(state_vector, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.uorr4router_get_sentence_projection_wasm(this.__wbg_ptr, ptr0, len0, win_idx);
+        var v2 = getArrayF64FromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 8, 8);
+        return v2;
+    }
+    /**
+     * Projects the active brain state vector into 4D coordinates
+     * @param {Float64Array} state_vector
+     * @returns {Float64Array}
+     */
+    get_state_4d_projection_wasm(state_vector) {
+        const ptr0 = passArrayF64ToWasm0(state_vector, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.uorr4router_get_state_4d_projection_wasm(this.__wbg_ptr, ptr0, len0);
+        var v2 = getArrayF64FromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 8, 8);
+        return v2;
     }
     /**
      * Returns the top N resonant sentences sorted by relevance
@@ -280,6 +320,20 @@ export class UorR4Router {
         const ptr1 = passStringToWasm0(identity, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len1 = WASM_VECTOR_LEN;
         const ret = wasm.uorr4router_route_query_to_manifold(this.__wbg_ptr, ptr0, len0, ptr1, len1);
+        return ret;
+    }
+    /**
+     * Runs the formal UOR coordinate reduction pipeline and returns both RoutingData and trace steps as a single JsValue
+     * @param {string} text
+     * @param {string} identity
+     * @returns {any}
+     */
+    route_query_to_manifold_uor(text, identity) {
+        const ptr0 = passStringToWasm0(text, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(identity, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.uorr4router_route_query_to_manifold_uor(this.__wbg_ptr, ptr0, len0, ptr1, len1);
         return ret;
     }
     /**
@@ -458,6 +512,13 @@ function getUint8ArrayMemory0() {
         cachedUint8ArrayMemory0 = new Uint8Array(wasm.memory.buffer);
     }
     return cachedUint8ArrayMemory0;
+}
+
+function passArrayF64ToWasm0(arg, malloc) {
+    const ptr = malloc(arg.length * 8, 8) >>> 0;
+    getFloat64ArrayMemory0().set(arg, ptr / 8);
+    WASM_VECTOR_LEN = arg.length;
+    return ptr;
 }
 
 function passStringToWasm0(arg, malloc, realloc) {
