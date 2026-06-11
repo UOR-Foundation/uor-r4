@@ -70,6 +70,10 @@ export class UorR4Router {
      */
     get_top_resonances(text: string, identity: string, top_n: number): any;
     /**
+     * Returns the total number of indexed sentences in the corpus
+     */
+    get_total_indexed_sentences(): number;
+    /**
      * Returns the number of words in the vocabulary index
      */
     get_vocab_size(): number;
@@ -152,6 +156,7 @@ export interface InitOutput {
     readonly uorr4router_get_state_4d_projection_wasm: (a: number, b: number, c: number) => [number, number];
     readonly uorr4router_get_suggested_token_limit: (a: number, b: number, c: number, d: number, e: number) => number;
     readonly uorr4router_get_top_resonances: (a: number, b: number, c: number, d: number, e: number, f: number) => any;
+    readonly uorr4router_get_total_indexed_sentences: (a: number) => number;
     readonly uorr4router_get_vocab_size: (a: number) => number;
     readonly uorr4router_import_state: (a: number, b: number, c: number) => [number, number];
     readonly uorr4router_index_corpus: (a: number, b: number, c: number, d: number, e: number) => number;

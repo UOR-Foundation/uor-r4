@@ -20,6 +20,7 @@ export const uorr4router_get_sentence_projection_wasm: (a: number, b: number, c:
 export const uorr4router_get_state_4d_projection_wasm: (a: number, b: number, c: number) => [number, number];
 export const uorr4router_get_suggested_token_limit: (a: number, b: number, c: number, d: number, e: number) => number;
 export const uorr4router_get_top_resonances: (a: number, b: number, c: number, d: number, e: number, f: number) => any;
+export const uorr4router_get_total_indexed_sentences: (a: number) => number;
 export const uorr4router_get_vocab_size: (a: number) => number;
 export const uorr4router_import_state: (a: number, b: number, c: number) => [number, number];
 export const uorr4router_index_corpus: (a: number, b: number, c: number, d: number, e: number) => number;

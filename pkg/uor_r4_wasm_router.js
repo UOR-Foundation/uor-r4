@@ -222,6 +222,14 @@ export class UorR4Router {
         return ret;
     }
     /**
+     * Returns the total number of indexed sentences in the corpus
+     * @returns {number}
+     */
+    get_total_indexed_sentences() {
+        const ret = wasm.uorr4router_get_total_indexed_sentences(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
      * Returns the number of words in the vocabulary index
      * @returns {number}
      */
