@@ -894,6 +894,14 @@
         @media (max-width: 1100px) {
             body { grid-template-columns: 240px 1fr 320px; }
         }
+        @keyframes pulse-cyan {
+            0% { box-shadow: 0 0 0 0 rgba(0, 229, 255, 0.4); }
+            70% { box-shadow: 0 0 0 6px rgba(0, 229, 255, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(0, 229, 255, 0); }
+        }
+        .pulse-highlight {
+            animation: pulse-cyan 2s infinite;
+        }
     </style>
 </head>
 <body>
@@ -979,6 +987,9 @@
             </div>
             <input type="file" id="importManifoldFile" accept=".json" style="display: none;">
             
+            <button class="identity-input" id="saveManifoldBtn" style="margin-bottom: 0.75rem; background: rgba(0, 242, 254, 0.1); color: var(--cyan); border-color: var(--cyan); cursor: pointer; font-size: 0.72rem; font-family: 'Outfit', sans-serif; display: none; transition: all 0.3s ease;">
+                Save State to Browser (IndexedDB)
+            </button>
             <button class="identity-input" id="resetBrainBtn" style="margin-bottom: 0.75rem; background: rgba(255, 82, 82, 0.1); color: var(--red); border-color: var(--red); cursor: pointer; font-size: 0.72rem; font-family: 'Outfit', sans-serif;">
                 Reset Brain to Neutral
             </button>
@@ -1244,14 +1255,6 @@ const safeSetTextContent = (id, val) => { const el = document.getElementById(id)
 const unwrapResult = (res) => {
     if (res === null || res === undefined) return null;
     if (typeof res === "string") {
-        const trimmed = res.trim();
-        if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
-            try {
-                return JSON.parse(res);
-            } catch (e) {
-                console.warn("WASM returned a string that started with JSON delimiters but failed to parse:", e);
-            }
-        }
         return res;
     }
     if (typeof res === "object" && typeof res[Symbol.iterator] === "function") {
@@ -1413,7 +1416,7 @@ async function tryInitLocalWasm() {
             console.log("[*] Vocabulary is empty. Indexing default corpus...");
             router.index_default_corpus();
         }
-        const count = router.get_vocab_size();
+        const count = router.get_total_indexed_sentences();
         safeSetTextContent("corpusCount", count.toLocaleString());
         
         const active = unwrapResult(router.get_active_streams());
@@ -1460,14 +1463,14 @@ window.loadSemanticMap = async function() {
     btn.textContent = "Loading...";
     btn.disabled = true;
     try {
-        let dataRaw;
+        let data;
         if (localWasmMode && router) {
-            dataRaw = router.get_semantic_map_points();
+            const dataRaw = router.get_semantic_map_points();
+            data = dataRaw ? JSON.parse(dataRaw) : { points: [] };
         } else {
             const response = await fetch("/api/map");
-            dataRaw = await response.json();
+            data = await response.json();
         }
-        const data = unwrapResult(dataRaw);
         semanticMapPoints = data.points || [];
         
         // Pre-compute 3D stereographic projection coordinates from v_4d
@@ -2612,7 +2615,7 @@ async function runLocalChat(text, identity) {
     
     // 1. Run formal UOR pipeline
     const uorResultRaw = router.route_query_to_manifold_uor(text, identity);
-    const uorResult = unwrapResult(uorResultRaw);
+    const uorResult = uorResultRaw ? JSON.parse(uorResultRaw) : null;
     if (!uorResult) {
         throw new Error("Local routing failed");
     }
@@ -2959,7 +2962,7 @@ if (indexBtn) {
             await loadSemanticMap();
             
             saveSessionToLocalStorage();
-            if (localWasmMode) saveRouterStateToIndexedDB();
+            if (localWasmMode) debouncedSaveRouterState();
         } catch(err) {
             indexStatus.style.color = "var(--red)";
             indexStatus.textContent = `Indexing error: ${err.message}`;
@@ -3042,6 +3045,15 @@ if (importTrigger && importFile) {
             }
         };
         reader.readAsText(file);
+    });
+}
+
+const saveManifoldBtn = document.getElementById("saveManifoldBtn");
+if (saveManifoldBtn) {
+    saveManifoldBtn.addEventListener("click", () => {
+        saveManifoldBtn.disabled = true;
+        saveRouterStateToIndexedDB();
+        setTimeout(() => { saveManifoldBtn.disabled = false; }, 2000);
     });
 }
 
@@ -3314,7 +3326,7 @@ function pollSysinfo() {
     if (ramVal) ramVal.textContent = ram + "MB";
     
     if (localWasmMode && router) {
-        setEl("corpusCount", router.get_vocab_size().toLocaleString());
+        setEl("corpusCount", router.get_total_indexed_sentences().toLocaleString());
         syncActiveStreams(unwrapResult(router.get_active_streams()));
         updateStreamsList();
         populateExpertMatrix(unwrapResult(router.get_expert_counts()));
@@ -3447,12 +3459,39 @@ async function getLargeState(key) {
     }
 }
 
+let unsavedChanges = false;
+
+function updateSaveButtonState() {
+    const saveBtn = document.getElementById("saveManifoldBtn");
+    if (!saveBtn) return;
+    if (localWasmMode && router) {
+        saveBtn.style.display = "block";
+        if (unsavedChanges) {
+            saveBtn.style.background = "rgba(0, 242, 254, 0.25)";
+            saveBtn.style.borderColor = "var(--cyan)";
+            saveBtn.style.color = "#ffffff";
+            saveBtn.textContent = "💾 Save State to Browser (Unsaved Changes)";
+            saveBtn.classList.add("pulse-highlight");
+        } else {
+            saveBtn.style.background = "rgba(255, 255, 255, 0.02)";
+            saveBtn.style.borderColor = "var(--border2)";
+            saveBtn.style.color = "var(--text)";
+            saveBtn.textContent = "✓ Saved to Browser (IndexedDB)";
+            saveBtn.classList.remove("pulse-highlight");
+        }
+    } else {
+        saveBtn.style.display = "none";
+    }
+}
+
 function saveRouterStateToIndexedDB() {
     if (localWasmMode && router) {
         try {
             const stateStr = router.export_state();
             saveLargeState("routerState", stateStr).then(() => {
                 console.log(`[IndexedDB] Saved large router state. Size = ${(stateStr.length / (1024 * 1024)).toFixed(2)} MB`);
+                unsavedChanges = false;
+                updateSaveButtonState();
             }).catch(err => {
                 console.error("Failed to save router state to IndexedDB:", err);
             });
@@ -3464,6 +3503,18 @@ function saveRouterStateToIndexedDB() {
 
 let saveTimeout = null;
 function debouncedSaveRouterState() {
+    if (!localWasmMode || !router) return;
+    
+    const count = router.get_total_indexed_sentences();
+    if (count > 10000) {
+        unsavedChanges = true;
+        updateSaveButtonState();
+        return;
+    }
+
+    unsavedChanges = true;
+    updateSaveButtonState();
+    
     if (saveTimeout) clearTimeout(saveTimeout);
     saveTimeout = setTimeout(() => {
         saveRouterStateToIndexedDB();
@@ -3535,6 +3586,7 @@ async function restoreSessionFromLocalStorage() {
                 } catch(eState) {
                     console.warn("Failed to restore router state:", eState);
                 }
+                updateSaveButtonState();
             }
             
             chatHistory = session.chatHistory || [];

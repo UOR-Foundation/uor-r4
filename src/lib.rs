@@ -411,6 +411,13 @@ impl UorR4Router {
         self.word_primes.len()
     }
 
+    /// Returns the total number of indexed sentences in the corpus
+    pub fn get_total_indexed_sentences(&self) -> usize {
+        self.corpus_index_by_identity.values()
+            .map(|store| store.values().map(|items| items.len()).sum::<usize>())
+            .sum()
+    }
+
     // --- New rotation angle handlers ---
     pub fn get_angle_x(&self) -> f64 { self.angle_x }
     pub fn set_angle_x(&mut self, val: f64) { self.angle_x = val; }
@@ -485,7 +492,6 @@ impl UorR4Router {
         }
         if !already_exists {
             self.index_sentence_internal(s_clean, identity);
-            self.rebuild_transitions();
         }
     }
 
@@ -1164,6 +1170,29 @@ impl UorR4Router {
         
         let win_items = target_index.entry(idx_win).or_default();
         
+        // Incrementally update transitions (1st and 2nd order)
+        if !words.is_empty() {
+            // 1st order
+            for i in 0..words.len() - 1 {
+                let w1 = &words[i];
+                let w2 = &words[i+1];
+                let entry = self.transitions.entry(w1.clone()).or_default();
+                let count = entry.entry(w2.clone()).or_insert(0.0);
+                *count += 1.0;
+            }
+            
+            // 2nd order (trigram)
+            for i in 0..words.len().saturating_sub(2) {
+                let w1 = &words[i];
+                let w2 = &words[i+1];
+                let w3 = &words[i+2];
+                let key_trigram = format!("{} {}", w1, w2);
+                let entry = self.transitions_2nd.entry(key_trigram).or_default();
+                let count = entry.entry(w3.clone()).or_insert(0.0);
+                *count += 1.0;
+            }
+        }
+        
         win_items.push(CorpusItem {
             sentence: s_clean.to_string(),
             state_vector,
@@ -1295,26 +1324,6 @@ impl UorR4Router {
             for win_items in identity_store.values() {
                 for item in win_items {
                     process_words(&item.words);
-                }
-            }
-        }
-
-        // Normalize 1st order
-        for entry in self.transitions.values_mut() {
-            let total: f64 = entry.values().sum();
-            if total > 0.0 {
-                for val in entry.values_mut() {
-                    *val /= total;
-                }
-            }
-        }
-
-        // Normalize 2nd order
-        for entry in self.transitions_2nd.values_mut() {
-            let total: f64 = entry.values().sum();
-            if total > 0.0 {
-                for val in entry.values_mut() {
-                    *val /= total;
                 }
             }
         }
@@ -1478,7 +1487,9 @@ impl UorR4Router {
                 } else {
                     let mut candidates = Vec::new();
                     let mut scores = Vec::new();
-                    for (c, &p_trans) in targets {
+                    let total_count: f64 = targets.values().sum();
+                    for (c, &count_trans) in targets {
+                        let p_trans = if total_count > 0.0 { count_trans / total_count } else { 1e-10 };
                         let c_vec = self.vocab_vectors.get(c).cloned().unwrap_or_else(|| vec![0.0; 512]);
                         let sim = cosine_similarity(&c_vec, &s_local);
                         let freq = history.get(c).copied().unwrap_or(0.0);
@@ -2359,11 +2370,6 @@ pub fn init_wasm() -> Result<(), JsValue> {
 }
 
 impl UorR4Router {
-    pub fn get_total_indexed_sentences(&self) -> usize {
-        self.corpus_index_by_identity.values()
-            .map(|store| store.values().map(|items| items.len()).sum::<usize>())
-            .sum()
-    }
 
     pub fn get_sentence_projection_native(&self, state_vector: &[f64], win_idx: usize) -> (f64, f64) {
         self.get_sentence_projection(state_vector, win_idx)
