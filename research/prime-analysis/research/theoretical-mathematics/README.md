@@ -9,6 +9,4 @@ This directory consolidates research in mathematics, physics, and computational 
 4. **[golden-harmonics](golden-harmonics/)**: Entropy alignments, phi-pi resonances, and 3D Rose Curve maps.
 5. **[geometric-routing-hopf](geometric-routing-hopf/)**: Hopf routing visual explanations, polar plots, and eigenvalue transformations.
 6. **[theoretical-physics-uor](theoretical-physics-uor/)**: wavefunction peaks and supersymmetric quantum mechanics.
-7. **[metatron-engine](metatron-engine/)**: Metatron animation frames and specifications.
-8. **[linear-a-decipherment](linear-a-decipherment/)**: Brazil syllabaries and decipherment papers.
-9. **[gambling-mathematics](gambling-mathematics/)**: 3D Blackjack and Card Counting HTML applications.
+7. **[gambling-mathematics](gambling-mathematics/)**: 3D Blackjack and Card Counting HTML applications.
