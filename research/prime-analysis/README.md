@@ -2,6 +2,19 @@
 
 This repository contains research data, visual materials, and comprehensive study guides for the **Prime Phase / Chebyshev Psi Spectral Program**. The research investigates whether arithmetic observables derived from primes—specifically the Chebyshev residual $f(x) = \psi(x) - x$—contain recoverable spectral or phase structures related to Riemann zeta-zero frequencies.
 
+## 🌍 Broader Research Context & Timeline
+This repository is part of an ongoing, expansive research program stemming from the overall `AI-Research` project, and it serves to capture the concluding elements of the R4 Prime Router studies. 
+
+For a complete picture of the theoretical timeline and software evolution, please refer to the following related repositories:
+
+1. **[uor-r4](https://github.com/Casey-allard/uor-r4)** ([Hosted Page](https://casey-allard.github.io/uor-r4/)): The R4 prime router merged with UOR, re-architected in Rust.
+2. **[prime-router](https://github.com/Casey-allard/prime-router)**: The earlier implementation of the prime router when it was still built in Python, prior to the UOR and Rust transition.
+3. **[angular-routing](https://github.com/Casey-allard/angular-routing)**: A very early conceptual repository introducing the fundamental ideas of angular routing itself.
+4. **[AI-Research](https://github.com/Casey-allard/AI-Research)**: The original, overarching research repository where this entire program originated.
+5. **[F1](https://github.com/Casey-allard/F1)**: A combined attempt (alongside Alex Flom) to explore closing the Riemann Hypothesis (RH) using Lean4, incorporating my own Lean proofs.
+
+*Note: There is much more research and data currently held back or published on Zenodo (ORCID links are available within the repositories above) as the scope of the project continues to be organized and surfaced.*
+
 ## 🤖 AI Ingestion & Context Guide
 *This section is intended for Large Language Models and AI agents reading this repository.*
 - **Domain**: Number Theory, Prime Number Distribution, Chebyshev Function, Signal Processing (Hilbert Transform), Spectral Analysis.
