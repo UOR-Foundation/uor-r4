@@ -35,3 +35,13 @@ The following videos accompany the research documents and slides:
 | [![Video](https://img.youtube.com/vi/Dm_iYDz_-V8/mqdefault.jpg)](https://youtu.be/Dm_iYDz_-V8) | [![Video](https://img.youtube.com/vi/PSUDVtYphWA/mqdefault.jpg)](https://youtu.be/PSUDVtYphWA) | [![Video](https://img.youtube.com/vi/9ajC8xLb7_Q/mqdefault.jpg)](https://youtu.be/9ajC8xLb7_Q) |
 | [![Video](https://img.youtube.com/vi/PCO5_6UlHc4/mqdefault.jpg)](https://youtu.be/PCO5_6UlHc4) | | |
 
+## Interactive Simulations
+The following interactive web applications provide real-time geometric and mathematical modeling of the prime spaces discussed in this repository. **Click on the links below to run the simulations directly in your browser:**
+
+- 🌌 [Geometric Prime Router Webapp](https://casey-allard.github.io/Prime-Analysis/simulations/geometric_prime_router_webapp.html)
+- ⚙️ [R4 Prime Router Visualizer](https://casey-allard.github.io/Prime-Analysis/simulations/r4_prime_router_visualizer.html)
+- 🧬 [R4 Prime Geometry Transmutation Flow](https://casey-allard.github.io/Prime-Analysis/simulations/r4_prime_geometry_transmutation_flow.html)
+- 🌐 [Riemann Hypothesis 3D Explorer](https://casey-allard.github.io/Prime-Analysis/simulations/riemann_hypothesis_3d_explorer.html)
+- 📊 [Research Report: The Unity Framework](https://casey-allard.github.io/Prime-Analysis/simulations/research_report_the_unity_framework.html)
+- 🖥️ [Prime R4 Dissertation Simulator](https://casey-allard.github.io/Prime-Analysis/simulations/prime_r4_dissertation_simulator.html)
+
