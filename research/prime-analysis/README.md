@@ -24,3 +24,14 @@ To get acquainted with the research, we recommend reading the following document
 ## Research Methodology Highlights
 - **Canonical Pipeline**: Strict data separation, causal detrending, and analytic phase extraction via Hilbert transforms.
 - **Time-Ordered Splits**: 70% train and 30% test splits to validate out-of-sample predictability without future data leakage.
+
+## Companion Videos
+The following videos accompany the research documents and slides:
+
+| | | |
+|:---:|:---:|:---:|
+| [![Video](https://img.youtube.com/vi/Q5fA82QyxzQ/mqdefault.jpg)](https://youtu.be/Q5fA82QyxzQ) | [![Video](https://img.youtube.com/vi/85xJHeXVNl8/mqdefault.jpg)](https://youtu.be/85xJHeXVNl8) | [![Video](https://img.youtube.com/vi/AlNRb3daNWU/mqdefault.jpg)](https://youtu.be/AlNRb3daNWU) |
+| [![Video](https://img.youtube.com/vi/-exWPeYmszo/mqdefault.jpg)](https://youtu.be/-exWPeYmszo) | [![Video](https://img.youtube.com/vi/ETsbBztd6zc/mqdefault.jpg)](https://youtu.be/ETsbBztd6zc) | [![Video](https://img.youtube.com/vi/OI3guYQkfN8/mqdefault.jpg)](https://youtu.be/OI3guYQkfN8) |
+| [![Video](https://img.youtube.com/vi/Dm_iYDz_-V8/mqdefault.jpg)](https://youtu.be/Dm_iYDz_-V8) | [![Video](https://img.youtube.com/vi/PSUDVtYphWA/mqdefault.jpg)](https://youtu.be/PSUDVtYphWA) | [![Video](https://img.youtube.com/vi/9ajC8xLb7_Q/mqdefault.jpg)](https://youtu.be/9ajC8xLb7_Q) |
+| [![Video](https://img.youtube.com/vi/PCO5_6UlHc4/mqdefault.jpg)](https://youtu.be/PCO5_6UlHc4) | | |
+
