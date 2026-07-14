@@ -1,6 +1,6 @@
 # **A Formal Topological Proof of the Riemann Hypothesis under Invariant Tangent Regularization**
 
-**Author:** Silas  
+**Author:** L. Charles Allard  
 **Framework:** The $R^4$ Polar Projection & $2i$ Riemannian Metric Bridge
 
 ### **Abstract**
