@@ -10,6 +10,28 @@ Traditional transformers route token inputs using learned parameter gates, which
 
 With this release, the entire coordination engine is rebased onto the **UOR foundation ontology**, converting the routing mechanism into a formally verifiable, type-safe coordinate reduction pipeline.
 
+---
+
+## 🧮 Transformerless: Mul-Free Table-Native Inference (migrated)
+
+The **transformerless** program now lives in this repository as the [`uor-tless`](crates/uor-tless) crate: cross-compilation of a transformer language model into a **multiplication-free, table-native, certifiable inference artifact** (migrated 2026-07-18 from the standalone `transformerless` repository, which it supersedes).
+
+- [`docs/transformerless/TRANSFORMERLESS.md`](docs/transformerless/TRANSFORMERLESS.md) — the extrapolation: the UOR equivalence frame, the two-surface source interface, the "vector at each bit" coordinate geometry.
+- [`docs/transformerless/PROOF.md`](docs/transformerless/PROOF.md) — the proof structure (P1–P5) and the measured certificate.
+- [`docs/transformerless/COMPARISON.md`](docs/transformerless/COMPARISON.md) — measured same-machine comparison against classical runtimes.
+
+```bash
+cargo run -p uor-tless --release -- setup          # external prerequisites
+cargo run -p uor-tless --release -- teacher-kappa  # κ-pin the source checkpoint
+cargo test -p uor-tless                            # P-1..P-4 library witnesses
+# migration acceptance (needs the source checkpoint):
+cargo test -p uor-tless --release --test kappa_reproduction -- --ignored
+```
+
+**UOR rebase** (Phase 3): the artifact container and individual graded-store entries are uor-addr content (CBOR realization, blake3 axis); `TlessAxis` exposes the mul-free prediction path as an axis kernel whose 31-byte record carries the resolution witness and op census; and `UorTlessModel` (PrismModel) mints a `Grounded` certificate per prediction with hash-free replay verification — see [`src/tless_uor.rs`](src/tless_uor.rs) and endpoint 5 below.
+
+---
+
 ## 🔗 UOR Standards & Repository Integrations
 
 This codebase leverages three core UOR specifications to track, index, and verify thought trajectories:
@@ -69,9 +91,52 @@ graph TD
     B -->|JSON Response Payload| J["index.html Telemetry Dashboard"]
 ```
 
+### 📦 Workspace crates
+
+The repository is a cargo workspace; the root package `uor-r4-wasm-router` is a **facade** (re-exports + `prelude`) plus the `server` binary. The library code lives in four crates:
+
+| crate | contents |
+|---|---|
+| [`uor-r4-core`](crates/uor-r4-core) | pure mathematics — zeta-zero embeddings, Hopf coordinates, prime/QIMC identity layer, state metrics (no wasm, no UOR-framework deps) |
+| [`uor-r4-router`](crates/uor-r4-router) | the engine — `UorR4Router` state, manifold indexing, geometric Markov generation, plus its UOR witness layer (`R4Axis`, shapes, `UorR4RouterModel`) |
+| [`uor-tless`](crates/uor-tless) | the transformerless engine — multiplication-free table-native inference (compiler, runtime, certifier) |
+| [`uor-tless-bindings`](crates/uor-tless-bindings) | the UOR rebase of `uor-tless` — `TlessAxis`, shapes, `UorTlessModel`, uor-addr addressing, per-prediction `Grounded` certificates |
+
+Library usage — one dependency, everything through the facade:
+
+```rust
+use uor_r4_wasm_router::prelude::*;
+
+let mut router = UorR4Router::new(0.85);
+router.index_sentence("Once upon a time…", "tenant-alpha");
+```
+
+…or depend on a single layer (e.g. `uor-r4-core` for the mathematics only).
+
 ---
 
 ## 🚀 Getting Started
+
+### Development Container
+
+With Docker and a Dev Containers-compatible editor installed, open this
+repository and choose **Reopen in Container**. The container installs the Rust
+tooling and targets needed by the native server, browser WASM build, and the
+vendored standards crates. It also forwards the app on port 8000 and Ollama on
+port 11434.
+
+Once setup completes:
+
+```bash
+cargo test
+cargo run --bin server
+```
+
+Build the browser package with:
+
+```bash
+wasm-pack build --target web
+```
 
 ### 🌐 GitHub Pages & Static Fallback Mode
 
@@ -184,6 +249,29 @@ cargo run --release --bin server
 ### 4. Database Export / Import
 * **Endpoint**: `/api/export` (GET) / `/api/import` (POST)
 * **Description**: Extracts or restores the complete router vocabulary, prime products, and sentence manifolds in JSON format.
+
+### 5. Transformerless Prediction (witnessed)
+* **Endpoint**: `/api/tless/predict`
+* **Method**: `POST`
+* **Payload**:
+  ```json
+  { "window": [1, 298, 263, 221, 437, 238, 15, 1979] }
+  ```
+  `window` holds token ids, oldest first; only the 8 most recent are read.
+* **Response**: the prediction (`token`, `depth`, graded `code`, evidence `count`), the per-prediction op `census` (adds/xors/shifts/compares/table-reads, `multiply: 0` — no multiply exists in the kernel), the artifact `kappa` (raw blake3, the PROOF.md pin) and uor-addr `address` (CBOR realization, blake3 axis), the store `kappa`, the `uor` witness block (`fingerprint_hex`, `sigma`, `d_delta`, `euler`, `residual`, `stratum`), and `uor_trace_steps` replayed from the `Grounded` derivation.
+* **State**: loads the TLA3 artifact + TLS1 store from `TLESS_ARTIFACTS` / `TLESS_STORE` (defaults `/tmp/tless_artifacts.bin`, `/tmp/tless_store.bin`; build with `uor-tless compile` and `uor-tless store`). The state is shared across connections behind a mutex, so indexing is immediately visible to every later request.
+
+### 6. Transformerless Index (learn text into the store)
+* **Endpoint**: `/api/tless/index`
+* **Method**: `POST`
+* **Payload**: `{ "text": "Once upon a time, there was a little dog named Rex." }`
+* **Response**: token count, `evidence_positions` written, and the new store `kappa`. Text is tokenized (`TLESS_TOKENIZER`, default `/tmp/ref/tokenizer.bin`) and added to the graded store as (context-code → next-token) evidence; the κ change is the attestation trail of what was learned.
+
+### 7. Transformerless Generate (attributable, mul-free)
+* **Endpoint**: `/api/tless/generate`
+* **Method**: `POST`
+* **Payload**: `{ "text": "Once upon a time, there was a little", "max_tokens": 24 }` (or `{"window": [1, 298, 263]}`)
+* **Response**: generated `text` and `tokens`, with per-step witnesses — each step's `token`, resolution `depth` (deepest populated class), and evidence `count` — plus the store `kappa`. Generation is greedy over the graded store: every token is attributable to specific store entries.
 
 ---
 

@@ -3,6 +3,56 @@
 version = 4
 
 [[package]]
+name = "anstream"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "824a212faf96e9acacdbd09febd34438f8f711fb84e09a8916013cd7815ca28d"
+dependencies = [
+ "anstyle",
+ "anstyle-parse",
+ "anstyle-query",
+ "anstyle-wincon",
+ "colorchoice",
+ "is_terminal_polyfill",
+ "utf8parse",
+]
+
+[[package]]
+name = "anstyle"
+version = "1.0.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "940b3a0ca603d1eade50a4846a2afffd5ef57a9feac2c0e2ec2e14f9ead76000"
+
+[[package]]
+name = "anstyle-parse"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "52ce7f38b242319f7cabaa6813055467063ecdc9d355bbb4ce0c68908cd8130e"
+dependencies = [
+ "utf8parse",
+]
+
+[[package]]
+name = "anstyle-query"
+version = "1.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "40c48f72fd53cd289104fc64099abca73db4166ad86ea0b4341abe65af83dadc"
+dependencies = [
+ "windows-sys",
+]
+
+[[package]]
+name = "anstyle-wincon"
+version = "3.0.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "291e6a250ff86cd4a820112fb8898808a366d8f9f58ce16d1f538353ad55747d"
+dependencies = [
+ "anstyle",
+ "once_cell_polyfill",
+ "windows-sys",
+]
+
+[[package]]
 name = "arrayref"
 version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -16,9 +66,9 @@ checksum = "7c02d123df017efcdfbd739ef81735b36c5ba83ec3c59c80a9d7ecc718f92e50"
 
 [[package]]
 name = "blake3"
-version = "1.5.5"
+version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b8ee0c1824c4dea5b5f81736aff91bae041d2c07ee1192bec91054e10e3e601e"
+checksum = "0231f06152bf547e9c2b5194f247cd97aacf6dcd8b15d8e5ec0663f64580da87"
 dependencies = [
  "arrayref",
  "arrayvec",
@@ -57,6 +107,52 @@ name = "cfg-if"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801"
+
+[[package]]
+name = "clap"
+version = "4.6.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dd059f9da4f5c36b3787f65d38ccaab1cc315f07b01f89abc8359ee6a8205011"
+dependencies = [
+ "clap_builder",
+ "clap_derive",
+]
+
+[[package]]
+name = "clap_builder"
+version = "4.6.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f09628afdcc538b57f3c6341e9c8e9970f18e4a481690a64974d7023bd33548b"
+dependencies = [
+ "anstream",
+ "anstyle",
+ "clap_lex",
+ "strsim",
+]
+
+[[package]]
+name = "clap_derive"
+version = "4.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f2ce8604710f6733aa641a2b3731eaa1e8b3d9973d5e3565da11800813f997a9"
+dependencies = [
+ "heck",
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "clap_lex"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c8d4a3bb8b1e0c1050499d1815f5ab16d04f0959b233085fb31653fbfc9d98f9"
+
+[[package]]
+name = "colorchoice"
+version = "1.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1d07550c9036bf2ae0c684c4297d503f838287c83c53686d05370d0e139ae570"
 
 [[package]]
 name = "console_error_panic_hook"
@@ -144,10 +240,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "heck"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
+
+[[package]]
 name = "hex"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
+
+[[package]]
+name = "is_terminal_polyfill"
+version = "1.70.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a6cb138bb79a146c1bd460005623e142ef0181e3d0219cb493e02f7d08a35695"
 
 [[package]]
 name = "itoa"
@@ -198,6 +306,12 @@ name = "once_cell"
 version = "1.21.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
+
+[[package]]
+name = "once_cell_polyfill"
+version = "1.70.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
 name = "pin-project-lite"
@@ -323,6 +437,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5"
 
 [[package]]
+name = "strsim"
+version = "0.11.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
+
+[[package]]
 name = "syn"
 version = "2.0.117"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -352,7 +472,7 @@ dependencies = [
  "ryu",
  "uor-foundation 0.5.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "uor-foundation-sdk 0.5.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "uor-prism 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "uor-prism",
 ]
 
 [[package]]
@@ -392,15 +512,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "uor-prism"
-version = "0.4.0"
+name = "uor-foundation-verify"
+version = "0.5.2"
 dependencies = [
- "uor-foundation 0.5.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "uor-foundation-sdk 0.5.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "uor-prism-crypto 0.4.0",
- "uor-prism-fhe 0.4.0",
- "uor-prism-numerics 0.4.0",
- "uor-prism-tensor 0.4.0",
+ "uor-foundation 0.5.2",
 ]
 
 [[package]]
@@ -411,21 +526,10 @@ checksum = "6d31f122d1466f5a48780fec22cdbef89dbd345e2b9aab8d8ebe89b5502fbb56"
 dependencies = [
  "uor-foundation 0.5.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "uor-foundation-sdk 0.5.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "uor-prism-crypto 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "uor-prism-fhe 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "uor-prism-numerics 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "uor-prism-tensor 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
-name = "uor-prism-crypto"
-version = "0.4.0"
-dependencies = [
- "blake3",
- "sha2",
- "sha3",
- "uor-foundation 0.5.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "uor-foundation-sdk 0.5.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "uor-prism-crypto",
+ "uor-prism-fhe",
+ "uor-prism-numerics",
+ "uor-prism-tensor",
 ]
 
 [[package]]
@@ -444,24 +548,8 @@ dependencies = [
 [[package]]
 name = "uor-prism-fhe"
 version = "0.4.0"
-dependencies = [
- "uor-foundation 0.5.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "uor-foundation-sdk 0.5.2 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
-name = "uor-prism-fhe"
-version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "80bc3e193c5ca7a505d6db4937e30562d276ce6a90e9b0bb181815de64cd8ef2"
-dependencies = [
- "uor-foundation 0.5.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "uor-foundation-sdk 0.5.2 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
-name = "uor-prism-numerics"
-version = "0.4.0"
 dependencies = [
  "uor-foundation 0.5.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "uor-foundation-sdk 0.5.2 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -480,25 +568,26 @@ dependencies = [
 [[package]]
 name = "uor-prism-tensor"
 version = "0.4.0"
-dependencies = [
- "uor-foundation 0.5.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "uor-foundation-sdk 0.5.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "uor-prism-numerics 0.4.0",
-]
-
-[[package]]
-name = "uor-prism-tensor"
-version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b69a4f7b49a8acc21823ca567fb962124d3d6b5b2891e20f5308ac1602211601"
 dependencies = [
  "uor-foundation 0.5.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "uor-foundation-sdk 0.5.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "uor-prism-numerics 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "uor-prism-numerics",
 ]
 
 [[package]]
-name = "uor-r4-wasm-router"
+name = "uor-r4-core"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "serde",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
+name = "uor-r4-router"
 version = "0.1.0"
 dependencies = [
  "console_error_panic_hook",
@@ -510,9 +599,51 @@ dependencies = [
  "uor-addr",
  "uor-foundation 0.5.2",
  "uor-foundation-sdk 0.5.2",
- "uor-prism 0.4.0",
+ "uor-r4-core",
  "wasm-bindgen",
 ]
+
+[[package]]
+name = "uor-r4-wasm-router"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "hex",
+ "serde",
+ "serde_json",
+ "uor-foundation 0.5.2",
+ "uor-r4-core",
+ "uor-r4-router",
+ "uor-tless",
+ "uor-tless-bindings",
+]
+
+[[package]]
+name = "uor-tless"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "serde_json",
+]
+
+[[package]]
+name = "uor-tless-bindings"
+version = "0.1.0"
+dependencies = [
+ "uor-addr",
+ "uor-foundation 0.5.2",
+ "uor-foundation-sdk 0.5.2",
+ "uor-foundation-verify",
+ "uor-r4-core",
+ "uor-r4-router",
+ "uor-tless",
+]
+
+[[package]]
+name = "utf8parse"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 
 [[package]]
 name = "version_check"
@@ -563,6 +694,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7acbf7616c27b194bbb550bf77ed0c2c3e5b7fd1260a93082b95fb7f47959b92"
 dependencies = [
  "unicode-ident",
+]
+
+[[package]]
+name = "windows-link"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f0805222e57f7521d6a62e36fa9163bc891acd422f971defe97d64e70d0a4fe5"
+
+[[package]]
+name = "windows-sys"
+version = "0.61.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ae137229bcbd6cdf0f7b80a31df61766145077ddf49416a728b02cb3921ff3fc"
+dependencies = [
+ "windows-link",
 ]
 
 [[package]]

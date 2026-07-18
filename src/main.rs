@@ -1,12 +1,51 @@
+use clap::Parser;
+use serde::Deserialize;
 use std::fs;
 use std::io::{prelude::*, BufReader};
 use std::net::{TcpListener, TcpStream};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
-use serde::Deserialize;
-use uor_r4_wasm_router::UorR4Router;
 use uor_foundation::pipeline::PrismModel;
+use uor_r4_wasm_router::tless_uor::{self, TlessAxis};
+use uor_r4_wasm_router::UorR4Router;
+
+/// R⁴ Tangent Space Router server (UOR Framework standard).
+#[derive(Parser, Debug, Clone)]
+#[command(name = "server", version, about, long_about = None)]
+struct Cli {
+    /// Host interface to bind
+    #[arg(long, env = "UOR_R4_HOST", default_value = "127.0.0.1")]
+    host: String,
+
+    /// Port to listen on
+    #[arg(long, env = "UOR_R4_PORT", default_value_t = 8000)]
+    port: u16,
+
+    /// Router manifold cache file (loaded at startup, saved after mutations)
+    #[arg(long, env = "UOR_R4_MANIFOLD_CACHE", default_value = "manifold_cache_rust.json")]
+    manifold_cache: String,
+
+    /// TLA3 artifact container for the transformerless engine
+    #[arg(long, env = "TLESS_ARTIFACTS", default_value = "/tmp/tless_artifacts.bin")]
+    tless_artifacts: String,
+
+    /// TLS1 graded store for the transformerless engine
+    #[arg(long, env = "TLESS_STORE", default_value = "/tmp/tless_store.bin")]
+    tless_store: String,
+
+    /// llama2.c tokenizer.bin for tless text indexing/generation
+    #[arg(long, env = "TLESS_TOKENIZER", default_value = "/tmp/ref/tokenizer.bin")]
+    tless_tokenizer: String,
+
+    /// Default Ollama base URL for LLM synthesis
+    #[arg(long, env = "UOR_R4_OLLAMA_URL", default_value = "http://127.0.0.1:11434")]
+    ollama_url: String,
+
+    /// Default Ollama model
+    #[arg(long, env = "UOR_R4_OLLAMA_MODEL", default_value = "gemma4:e2b")]
+    ollama_model: String,
+}
 
 #[derive(Deserialize)]
 struct ChatPayload {
@@ -51,9 +90,21 @@ fn get_window_theme(win_idx: usize) -> &'static str {
 }
 
 fn main() {
+    let cli = Arc::new(Cli::parse());
     println!("Initializing R4 Prime Router Backend Server...");
+    println!(
+        "[*] config: {}:{} | cache={} | tless=({}, {}) | ollama={} {}",
+        cli.host, cli.port, cli.manifold_cache, cli.tless_artifacts, cli.tless_store,
+        cli.ollama_url, cli.ollama_model
+    );
+    tless_uor::configure_tless_paths(tless_uor::TlessPaths {
+        artifacts: cli.tless_artifacts.clone(),
+        store: cli.tless_store.clone(),
+        tokenizer: cli.tless_tokenizer.clone(),
+    });
     let start_time = Instant::now();
     let router = Arc::new(Mutex::new(UorR4Router::new(0.85)));
+    let tless: Arc<Mutex<Option<tless_uor::TlessState>>> = Arc::new(Mutex::new(None));
 
     // Load cache on startup
     {
@@ -74,6 +125,7 @@ fn main() {
         }
 
         if !cache_loaded {
+            println!("[*] Indexing wiki corpus...");
             index_wiki_corpus(&mut r);
         }
 
@@ -92,7 +144,9 @@ fn main() {
                 println!("[!] Port 8000 is already in use.");
                 if let Some(pid) = find_pid_by_port(8000) {
                     println!("[*] Found process occupying port 8000: PID {}", pid);
-                    print!("Would you like to terminate this process and start the server? [y/N]: ");
+                    print!(
+                        "Would you like to terminate this process and start the server? [y/N]: "
+                    );
                     use std::io::Write;
                     let _ = std::io::stdout().flush();
                     let mut input = String::new();
@@ -137,8 +191,9 @@ fn main() {
     for stream in listener.incoming() {
         if let Ok(stream) = stream {
             let r_clone = Arc::clone(&router);
+            let t_clone = Arc::clone(&tless);
             std::thread::spawn(move || {
-                handle_connection(stream, r_clone, start_time);
+                handle_connection(stream, r_clone, t_clone, start_time);
             });
         }
     }
@@ -167,7 +222,10 @@ fn index_wiki_corpus(router: &mut UorR4Router) {
     println!("[*] Loading and indexing wiki corpus from {:?}", wiki_file);
     if let Ok(content) = std::fs::read_to_string(&wiki_file) {
         let count = router.index_corpus(&content, "shared");
-        println!("[+] Successfully indexed {} sentences from wiki_corpus.txt.", count);
+        println!(
+            "[+] Successfully indexed {} sentences from wiki_corpus.txt.",
+            count
+        );
     }
 }
 
@@ -197,16 +255,47 @@ fn index_extra_reading_files(router: &mut UorR4Router) {
             let path = entry.path();
             if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("txt") {
                 if let Ok(content) = std::fs::read_to_string(&path) {
-                    println!("[*] Reading and indexing extra_reading file: {:?}", path.file_name().unwrap_or_default());
+                    println!(
+                        "[*] Reading and indexing extra_reading file: {:?}",
+                        path.file_name().unwrap_or_default()
+                    );
                     let count = router.index_corpus(&content, "shared");
-                    println!("[+] Indexed {} sentences from {:?}", count, path.file_name().unwrap_or_default());
+                    println!(
+                        "[+] Indexed {} sentences from {:?}",
+                        count,
+                        path.file_name().unwrap_or_default()
+                    );
                 }
             }
         }
     }
 }
 
-fn handle_connection(mut stream: TcpStream, router: Arc<Mutex<UorR4Router>>, start_time: Instant) {
+/// Run `f` with the shared transformerless state bound on this thread
+/// (lazy-loads from TLESS_ARTIFACTS / TLESS_STORE on first use). The state
+/// Mutex is held across the call so concurrent requests serialize; the axis
+/// reads the thread-local binding only inside this region.
+fn with_tless_server_state<R>(
+    slot: &Arc<Mutex<Option<tless_uor::TlessState>>>,
+    f: impl FnOnce(&mut tless_uor::TlessState) -> R,
+) -> Option<R> {
+    let mut g = slot.lock().unwrap();
+    if g.is_none() {
+        *g = tless_uor::load_tless_state();
+    }
+    let st = g.as_mut()?;
+    tless_uor::bind_tless_state(st as *mut _);
+    let r = f(st);
+    tless_uor::unbind_tless_state();
+    Some(r)
+}
+
+fn handle_connection(
+    mut stream: TcpStream,
+    router: Arc<Mutex<UorR4Router>>,
+    tless: Arc<Mutex<Option<tless_uor::TlessState>>>,
+    start_time: Instant,
+) {
     let mut buf_reader = BufReader::new(&mut stream);
 
     let mut request_line = String::new();
@@ -220,8 +309,17 @@ fn handle_connection(mut stream: TcpStream, router: Arc<Mutex<UorR4Router>>, sta
     }
     let method = parts[0];
     let path_str = parts[1];
-    let clean_path = path_str.split('?').next().unwrap().split('#').next().unwrap();
-    eprintln!("[REQUEST] {} {} -> clean_path: {}", method, path_str, clean_path);
+    let clean_path = path_str
+        .split('?')
+        .next()
+        .unwrap()
+        .split('#')
+        .next()
+        .unwrap();
+    eprintln!(
+        "[REQUEST] {} {} -> clean_path: {}",
+        method, path_str, clean_path
+    );
 
     if method == "OPTIONS" {
         let response = "HTTP/1.1 200 OK\r\n\
@@ -265,15 +363,25 @@ fn handle_connection(mut stream: TcpStream, router: Arc<Mutex<UorR4Router>>, sta
         let payload: ChatPayload = match serde_json::from_slice(&body) {
             Ok(p) => p,
             Err(e) => {
-                send_json_response(stream, 400, &format!("{{\"error\":\"Invalid JSON: {}\"}}", e));
+                send_json_response(
+                    stream,
+                    400,
+                    &format!("{{\"error\":\"Invalid JSON: {}\"}}", e),
+                );
                 return;
             }
         };
 
-        let identity = payload.identity.unwrap_or_else(|| "tenant-alpha".to_string());
+        let identity = payload
+            .identity
+            .unwrap_or_else(|| "tenant-alpha".to_string());
         let engine_mode = payload.engine.unwrap_or_else(|| "auto".to_string());
-        let ollama_url = payload.ollama_url.unwrap_or_else(|| "http://127.0.0.1:11434".to_string());
-        let ollama_model = payload.ollama_model.unwrap_or_else(|| "gemma4:e2b".to_string());
+        let ollama_url = payload
+            .ollama_url
+            .unwrap_or_else(|| "http://127.0.0.1:11434".to_string());
+        let ollama_model = payload
+            .ollama_model
+            .unwrap_or_else(|| "gemma4:e2b".to_string());
 
         let mut router_guard = router.lock().unwrap();
 
@@ -299,28 +407,36 @@ fn handle_connection(mut stream: TcpStream, router: Arc<Mutex<UorR4Router>>, sta
         });
 
         // Run dry run through UorR4RouterModel
-        let _grounded_dry = uor_r4_wasm_router::UorR4RouterModel::forward(input).expect("Dry run routing failed");
+        let _grounded_dry =
+            uor_r4_wasm_router::UorR4RouterModel::forward(input).expect("Dry run routing failed");
 
         // Reset thread-local
         uor_r4_wasm_router::ACTIVE_ROUTER.with(|r| {
             *r.borrow_mut() = None;
         });
 
-        let routing = router_guard.last_routing_data().clone().expect("No routing data generated");
+        let routing = router_guard
+            .last_routing_data()
+            .clone()
+            .expect("No routing data generated");
         let kappa = routing.routed.metrics.kappa;
         let theta_d = routing.routed.metrics.deficit_angle;
         let uor_bias = routing.routed.qimc.uor_control.entropy_bias;
 
         // Auto-tuned params
         let gamma = (0.85 - 0.55 * kappa + ((uor_bias - 0.5) * 0.12)).clamp(0.15, 0.90);
-        let temperature = (0.2 + 0.8 * theta_d.abs().tanh() + ((uor_bias - 0.5) * 0.20)).clamp(0.15, 1.1);
+        let temperature =
+            (0.2 + 0.8 * theta_d.abs().tanh() + ((uor_bias - 0.5) * 0.20)).clamp(0.15, 1.1);
 
         // 2. Select Synthesis Engine
         let mut ollama_online = false;
         if engine_mode == "ollama" || engine_mode == "auto" {
             match get_request(&format!("{}/api/tags", ollama_url)) {
                 Ok(resp) => {
-                    eprintln!("[DEBUG] get_request /api/tags succeeded. Response preview: {}", resp.chars().take(200).collect::<String>());
+                    eprintln!(
+                        "[DEBUG] get_request /api/tags succeeded. Response preview: {}",
+                        resp.chars().take(200).collect::<String>()
+                    );
                     ollama_online = true;
                 }
                 Err(e) => {
@@ -348,23 +464,23 @@ fn handle_connection(mut stream: TcpStream, router: Arc<Mutex<UorR4Router>>, sta
             *r.borrow_mut() = Some(router_ptr);
         });
 
-        let grounded = uor_r4_wasm_router::UorR4RouterModel::forward(input).expect("Final routing failed");
+        let grounded =
+            uor_r4_wasm_router::UorR4RouterModel::forward(input).expect("Final routing failed");
 
         // Reset thread-local
         uor_r4_wasm_router::ACTIVE_ROUTER.with(|r| {
             *r.borrow_mut() = None;
         });
 
-        let routing_data = router_guard.last_routing_data().clone().expect("No final routing data generated");
+        let routing_data = router_guard
+            .last_routing_data()
+            .clone()
+            .expect("No final routing data generated");
         let route_ms = t_route.elapsed().as_secs_f64() * 1000.0;
 
         // 5. Decode response
         let t_gen = Instant::now();
-        let geom_max_tokens = if engine == "ollama" {
-            25
-        } else {
-            max_tokens
-        };
+        let geom_max_tokens = if engine == "ollama" { 25 } else { max_tokens };
 
         let geom_result = router_guard.generate_geometric_response_native(
             &payload.text,
@@ -416,16 +532,20 @@ fn handle_connection(mut stream: TcpStream, router: Arc<Mutex<UorR4Router>>, sta
                 }
             });
 
-            match post_json(&format!("{}/api/chat", ollama_url), &ollama_payload.to_string()) {
+            match post_json(
+                &format!("{}/api/chat", ollama_url),
+                &ollama_payload.to_string(),
+            ) {
                 Ok(resp_body) => {
                     eprintln!("[DEBUG] post_json response body: {}", resp_body);
                     match serde_json::from_str::<serde_json::Value>(&resp_body) {
                         Ok(resp_json) => {
-                            let content = resp_json.get("message")
+                            let content = resp_json
+                                .get("message")
                                 .and_then(|m| m.get("content"))
                                 .and_then(|c| c.as_str())
                                 .unwrap_or("");
-                            
+
                             final_response_text = content.trim().to_string();
                             if !final_response_text.is_empty() {
                                 llm_connected = true;
@@ -433,12 +553,18 @@ fn handle_connection(mut stream: TcpStream, router: Arc<Mutex<UorR4Router>>, sta
                             }
                         }
                         Err(e) => {
-                            eprintln!("[-] Failed to parse Ollama JSON response: {}. Body: {}", e, resp_body);
+                            eprintln!(
+                                "[-] Failed to parse Ollama JSON response: {}. Body: {}",
+                                e, resp_body
+                            );
                         }
                     }
                 }
                 Err(e) => {
-                    eprintln!("[-] Ollama generation failed, falling back to geometric: {}", e);
+                    eprintln!(
+                        "[-] Ollama generation failed, falling back to geometric: {}",
+                        e
+                    );
                 }
             }
         }
@@ -476,7 +602,8 @@ fn handle_connection(mut stream: TcpStream, router: Arc<Mutex<UorR4Router>>, sta
 
         // Project the evolved brain state to 2D for the map path tracing
         let active_state = router_guard.get_brain_state_native(&identity);
-        let (u, v) = router_guard.get_sentence_projection_native(&active_state, routing_data.routed.window_index);
+        let (u, v) = router_guard
+            .get_sentence_projection_native(&active_state, routing_data.routed.window_index);
         let v_4d = router_guard.get_state_4d_projection_native(&active_state);
 
         let theme = get_window_theme(routing_data.routed.window_index);
@@ -568,11 +695,264 @@ fn handle_connection(mut stream: TcpStream, router: Arc<Mutex<UorR4Router>>, sta
         return;
     }
 
+    if clean_path == "/api/tless/predict" && method == "POST" {
+        let payload: serde_json::Value = match serde_json::from_slice(&body) {
+            Ok(p) => p,
+            Err(e) => {
+                send_json_response(
+                    stream,
+                    400,
+                    &format!("{{\"error\":\"Invalid JSON: {}\"}}", e),
+                );
+                return;
+            }
+        };
+        let mut window_tokens: Vec<u16> = payload
+            .get("window")
+            .and_then(|w| w.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_u64().map(|x| x as u16))
+                    .collect()
+            })
+            .unwrap_or_default();
+        if window_tokens.is_empty() {
+            send_json_response(
+                stream,
+                400,
+                "{\"error\":\"`window` must be a non-empty array of token ids\"}",
+            );
+            return;
+        }
+        // keep the WINDOW most recent tokens, oldest first
+        if window_tokens.len() > 8 {
+            window_tokens = window_tokens.split_off(window_tokens.len() - 8);
+        }
+        let mut buf = [0u8; 16];
+        for (i, t) in window_tokens.iter().enumerate() {
+            buf[2 * i..2 * i + 2].copy_from_slice(&t.to_le_bytes());
+        }
+        let outcome = with_tless_server_state(&tless, |_st| {
+            let input = tless_uor::TlessPredictInput {
+                window: &buf,
+                data: &buf,
+            };
+            match tless_uor::UorTlessModel::forward(input) {
+                Ok(grounded) => {
+                    // the deterministic record again via the axis, for the JSON fields
+                    let mut out = [0u8; 32];
+                    let _ = tless_uor::TlessAxisImpl::predict(&buf, &mut out);
+                    let token = u16::from_be_bytes([out[0], out[1]]);
+                    let depth = out[2];
+                    let code: Vec<u8> = out[3..7].to_vec();
+                    let count = u32::from_be_bytes(out[7..11].try_into().unwrap());
+                    let census = |i: usize| u32::from_be_bytes(out[i..i + 4].try_into().unwrap());
+
+                    let (artifact_kappa, artifact_address, store_kappa) =
+                        tless_uor::with_tless_state(|st| {
+                            (
+                                st.artifact_kappa.clone(),
+                                st.artifact_address.clone(),
+                                st.store_kappa.clone(),
+                            )
+                        })
+                        .unwrap_or_default();
+
+                    let trace = grounded.derivation().replay::<256>();
+                    let mut uor_trace_steps = Vec::new();
+                    for i in 0..trace.len() {
+                        if let Some(event) = trace.event(i as usize) {
+                            uor_trace_steps.push(serde_json::json!({
+                                "step": event.step_index(),
+                                "op": format!("{:?}", event.op()),
+                                "target": format!("0x{:032x}", event.target().as_u128()),
+                            }));
+                        }
+                    }
+
+                    let response_payload = serde_json::json!({
+                        "window": window_tokens,
+                        "prediction": {
+                            "token": token,
+                            "depth": depth,
+                            "code": code,
+                            "count": count,
+                        },
+                        "census": {
+                            "adds": census(11),
+                            "xors": census(15),
+                            "shifts": census(19),
+                            "compares": census(23),
+                            "table_reads": census(27),
+                            "multiply": 0,
+                        },
+                        "artifact": {
+                            "kappa": artifact_kappa,
+                            "address": artifact_address,
+                        },
+                        "store": { "kappa": store_kappa },
+                        "uor": {
+                            "verify_result": "Verified",
+                            "kappa_label": format!("witt:{}", grounded.witt_level_bits()),
+                            "fingerprint_hex": hex::encode(grounded.content_fingerprint().as_bytes()),
+                            "sigma": grounded.sigma().value(),
+                            "d_delta": grounded.d_delta().as_i64(),
+                            "euler": grounded.euler().as_i64(),
+                            "residual": grounded.residual().as_u32(),
+                            "stratum": grounded.triad().stratum(),
+                        },
+                        "uor_trace_steps": uor_trace_steps,
+                    });
+                    (200, response_payload.to_string())
+                }
+                Err(e) => (
+                    500,
+                    format!("{{\"error\":\"tless pipeline failed: {:?}\"}}", e),
+                ),
+            }
+        });
+        match outcome {
+            Some((code, body)) => send_json_response(stream, code, &body),
+            None => send_json_response(
+                stream,
+                503,
+                "{\"error\":\"tless state unavailable — run `uor-tless compile` and `uor-tless store` (or set TLESS_ARTIFACTS / TLESS_STORE)\"}",
+            ),
+        }
+        return;
+    }
+
+    if clean_path == "/api/tless/index" && method == "POST" {
+        let payload: serde_json::Value = match serde_json::from_slice(&body) {
+            Ok(p) => p,
+            Err(e) => {
+                send_json_response(
+                    stream,
+                    400,
+                    &format!("{{\"error\":\"Invalid JSON: {}\"}}", e),
+                );
+                return;
+            }
+        };
+        let text = payload.get("text").and_then(|t| t.as_str()).unwrap_or("");
+        if text.is_empty() {
+            send_json_response(stream, 400, "{\"error\":\"`text` must be non-empty\"}");
+            return;
+        }
+        let Some(tokens) = tless_uor::tless_tokenize(text) else {
+            send_json_response(
+                stream,
+                503,
+                "{\"error\":\"tokenizer unavailable — set TLESS_TOKENIZER (default /tmp/ref/tokenizer.bin)\"}",
+            );
+            return;
+        };
+        let outcome = with_tless_server_state(&tless, |_st| {
+            let positions = tless_uor::index_token_stream(&tokens).unwrap_or(0);
+            let kappa = tless_uor::with_tless_state(|st| st.store_kappa.clone()).unwrap_or_default();
+            serde_json::json!({
+                "indexed_text_bytes": text.len(),
+                "tokens": tokens.len(),
+                "evidence_positions": positions,
+                "store": { "kappa": kappa },
+            })
+            .to_string()
+        });
+        match outcome {
+            Some(body) => send_json_response(stream, 200, &body),
+            None => send_json_response(
+                stream,
+                503,
+                "{\"error\":\"tless state unavailable — run `uor-tless compile` and `uor-tless store`\"}",
+            ),
+        }
+        return;
+    }
+
+    if clean_path == "/api/tless/generate" && method == "POST" {
+        let payload: serde_json::Value = match serde_json::from_slice(&body) {
+            Ok(p) => p,
+            Err(e) => {
+                send_json_response(
+                    stream,
+                    400,
+                    &format!("{{\"error\":\"Invalid JSON: {}\"}}", e),
+                );
+                return;
+            }
+        };
+        let seed: Vec<u16> = if let Some(arr) = payload.get("window").and_then(|w| w.as_array()) {
+            arr.iter()
+                .filter_map(|v| v.as_u64().map(|x| x as u16))
+                .collect()
+        } else if let Some(text) = payload.get("text").and_then(|t| t.as_str()) {
+            match tless_uor::tless_tokenize(text) {
+                Some(t) => t,
+                None => {
+                    send_json_response(
+                        stream,
+                        503,
+                        "{\"error\":\"tokenizer unavailable — set TLESS_TOKENIZER\"}",
+                    );
+                    return;
+                }
+            }
+        } else {
+            vec![1]
+        };
+        if seed.is_empty() {
+            send_json_response(stream, 400, "{\"error\":\"empty seed\"}");
+            return;
+        }
+        let max_tokens = payload
+            .get("max_tokens")
+            .and_then(|m| m.as_u64())
+            .unwrap_or(24)
+            .clamp(1, 256) as usize;
+        let outcome = with_tless_server_state(&tless, |_st| {
+            let steps = tless_uor::generate_steps(&seed, max_tokens).unwrap_or_default();
+            let tokens: Vec<u16> = steps.iter().map(|p| p.token).collect();
+            let text = tless_uor::tless_detokenize(&tokens).unwrap_or_default();
+            let kappa = tless_uor::with_tless_state(|st| st.store_kappa.clone()).unwrap_or_default();
+            let step_json: Vec<_> = steps
+                .iter()
+                .map(|p| {
+                    serde_json::json!({
+                        "token": p.token,
+                        "depth": p.depth,
+                        "count": p.count,
+                    })
+                })
+                .collect();
+            serde_json::json!({
+                "seed": seed,
+                "tokens": tokens,
+                "text": text,
+                "steps": step_json,
+                "store": { "kappa": kappa },
+            })
+            .to_string()
+        });
+        match outcome {
+            Some(body) => send_json_response(stream, 200, &body),
+            None => send_json_response(
+                stream,
+                503,
+                "{\"error\":\"tless state unavailable — run `uor-tless compile` and `uor-tless store`\"}",
+            ),
+        }
+        return;
+    }
+
     if clean_path == "/api/corpus" && method == "POST" {
         let payload: CorpusPayload = match serde_json::from_slice(&body) {
             Ok(p) => p,
             Err(e) => {
-                send_json_response(stream, 400, &format!("{{\"error\":\"Invalid JSON: {}\"}}", e));
+                send_json_response(
+                    stream,
+                    400,
+                    &format!("{{\"error\":\"Invalid JSON: {}\"}}", e),
+                );
                 return;
             }
         };
@@ -592,7 +972,8 @@ fn handle_connection(mut stream: TcpStream, router: Arc<Mutex<UorR4Router>>, sta
     }
 
     if clean_path == "/api/reset" && method == "POST" {
-        let payload: ResetPayload = serde_json::from_slice(&body).unwrap_or(ResetPayload { identity: None });
+        let payload: ResetPayload =
+            serde_json::from_slice(&body).unwrap_or(ResetPayload { identity: None });
 
         let mut router_guard = router.lock().unwrap();
         if let Some(ref identity) = payload.identity {
@@ -628,7 +1009,11 @@ fn handle_connection(mut stream: TcpStream, router: Arc<Mutex<UorR4Router>>, sta
             }
         };
         if let Err(e) = router_guard.import_state_native(&state_str) {
-            send_json_response(stream, 400, &format!("{{\"error\":\"Import failed: {}\"}}", e));
+            send_json_response(
+                stream,
+                400,
+                &format!("{{\"error\":\"Import failed: {}\"}}", e),
+            );
             return;
         }
 
@@ -649,7 +1034,11 @@ fn handle_connection(mut stream: TcpStream, router: Arc<Mutex<UorR4Router>>, sta
                 send_json_response(stream, 200, &body);
             }
             Err(e) => {
-                send_json_response(stream, 502, &format!("{{\"error\":\"Ollama unreachable: {}\"}}", e));
+                send_json_response(
+                    stream,
+                    502,
+                    &format!("{{\"error\":\"Ollama unreachable: {}\"}}", e),
+                );
             }
         }
         return;
@@ -662,7 +1051,7 @@ fn handle_connection(mut stream: TcpStream, router: Arc<Mutex<UorR4Router>>, sta
         let expert_counts = router_guard.get_expert_counts();
 
         let identity = "tenant-alpha";
-        
+
         let mut buf = [0u8; 640];
         let query_bytes = "Welcome".as_bytes();
         let identity_bytes = identity.as_bytes();
@@ -684,23 +1073,29 @@ fn handle_connection(mut stream: TcpStream, router: Arc<Mutex<UorR4Router>>, sta
         });
 
         // Run through UorR4RouterModel
-        let grounded = uor_r4_wasm_router::UorR4RouterModel::forward(input).expect("Sysinfo routing failed");
+        let grounded =
+            uor_r4_wasm_router::UorR4RouterModel::forward(input).expect("Sysinfo routing failed");
 
         // Reset thread-local
         uor_r4_wasm_router::ACTIVE_ROUTER.with(|r| {
             *r.borrow_mut() = None;
         });
 
-        let routing_data = router_guard.last_routing_data().clone().expect("No sysinfo routing data generated");
+        let routing_data = router_guard
+            .last_routing_data()
+            .clone()
+            .expect("No sysinfo routing data generated");
         let active_state = router_guard.get_brain_state_native(&identity);
-        let (u, v) = router_guard.get_sentence_projection_native(&active_state, routing_data.routed.window_index);
+        let (u, v) = router_guard
+            .get_sentence_projection_native(&active_state, routing_data.routed.window_index);
         let v_4d = router_guard.get_state_4d_projection_native(&active_state);
         let kappa = routing_data.routed.metrics.kappa;
         let theta_d = routing_data.routed.metrics.deficit_angle;
         let uor_bias = routing_data.routed.qimc.uor_control.entropy_bias;
-        
+
         let gamma = (0.85 - 0.55 * kappa + ((uor_bias - 0.5) * 0.12)).clamp(0.15, 0.90);
-        let temperature = (0.2 + 0.8 * theta_d.abs().tanh() + ((uor_bias - 0.5) * 0.20)).clamp(0.15, 1.1);
+        let temperature =
+            (0.2 + 0.8 * theta_d.abs().tanh() + ((uor_bias - 0.5) * 0.20)).clamp(0.15, 1.1);
 
         let geom_result = router_guard.generate_geometric_response_native(
             "Welcome",
@@ -858,7 +1253,10 @@ fn send_json_response(mut stream: TcpStream, status_code: u16, body: &str) {
          Access-Control-Allow-Methods: POST, GET, OPTIONS\r\n\
          Access-Control-Allow-Headers: Content-Type\r\n\r\n\
          {}",
-        status_code, status_text, body.len(), body
+        status_code,
+        status_text,
+        body.len(),
+        body
     );
     let _ = stream.write_all(response.as_bytes());
 }
@@ -912,13 +1310,21 @@ fn get_request(url: &str) -> Result<String, String> {
 
     let host_parts: Vec<&str> = host_port.split(':').collect();
     let host = host_parts[0];
-    let port: u16 = if host_parts.len() > 1 { host_parts[1].parse().unwrap_or(11434) } else { 11434 };
+    let port: u16 = if host_parts.len() > 1 {
+        host_parts[1].parse().unwrap_or(11434)
+    } else {
+        11434
+    };
 
     let addr = format!("{}:{}", host, port);
     let mut stream = TcpStream::connect(&addr).map_err(|e| e.to_string())?;
 
-    stream.set_read_timeout(Some(std::time::Duration::from_secs(5))).unwrap_or(());
-    stream.set_write_timeout(Some(std::time::Duration::from_secs(5))).unwrap_or(());
+    stream
+        .set_read_timeout(Some(std::time::Duration::from_secs(5)))
+        .unwrap_or(());
+    stream
+        .set_write_timeout(Some(std::time::Duration::from_secs(5)))
+        .unwrap_or(());
 
     let req_str = format!(
         "GET {} HTTP/1.1\r\n\
@@ -927,10 +1333,14 @@ fn get_request(url: &str) -> Result<String, String> {
         path, host_port
     );
 
-    stream.write_all(req_str.as_bytes()).map_err(|e| e.to_string())?;
+    stream
+        .write_all(req_str.as_bytes())
+        .map_err(|e| e.to_string())?;
 
     let mut response = String::new();
-    stream.read_to_string(&mut response).map_err(|e| e.to_string())?;
+    stream
+        .read_to_string(&mut response)
+        .map_err(|e| e.to_string())?;
 
     if let Some(pos) = response.find("\r\n\r\n") {
         let body = &response[pos + 4..];
@@ -949,13 +1359,21 @@ fn post_json(url: &str, body: &str) -> Result<String, String> {
 
     let host_parts: Vec<&str> = host_port.split(':').collect();
     let host = host_parts[0];
-    let port: u16 = if host_parts.len() > 1 { host_parts[1].parse().unwrap_or(11434) } else { 11434 };
+    let port: u16 = if host_parts.len() > 1 {
+        host_parts[1].parse().unwrap_or(11434)
+    } else {
+        11434
+    };
 
     let addr = format!("{}:{}", host, port);
     let mut stream = TcpStream::connect(&addr).map_err(|e| e.to_string())?;
 
-    stream.set_read_timeout(Some(std::time::Duration::from_secs(120))).unwrap_or(());
-    stream.set_write_timeout(Some(std::time::Duration::from_secs(120))).unwrap_or(());
+    stream
+        .set_read_timeout(Some(std::time::Duration::from_secs(120)))
+        .unwrap_or(());
+    stream
+        .set_write_timeout(Some(std::time::Duration::from_secs(120)))
+        .unwrap_or(());
 
     let req_str = format!(
         "POST {} HTTP/1.1\r\n\
@@ -964,13 +1382,20 @@ fn post_json(url: &str, body: &str) -> Result<String, String> {
          Content-Length: {}\r\n\
          Connection: close\r\n\r\n\
          {}",
-         path, host_port, body.len(), body
+        path,
+        host_port,
+        body.len(),
+        body
     );
 
-    stream.write_all(req_str.as_bytes()).map_err(|e| e.to_string())?;
+    stream
+        .write_all(req_str.as_bytes())
+        .map_err(|e| e.to_string())?;
 
     let mut response = String::new();
-    stream.read_to_string(&mut response).map_err(|e| e.to_string())?;
+    stream
+        .read_to_string(&mut response)
+        .map_err(|e| e.to_string())?;
 
     if let Some(pos) = response.find("\r\n\r\n") {
         let body = &response[pos + 4..];

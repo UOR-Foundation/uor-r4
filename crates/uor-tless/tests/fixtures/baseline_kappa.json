@@ -1,0 +1,70 @@
+{
+  "description": "Migration oracle for the transformerless -> uor-tless port. Captured 2026-07-18 from `transformerless certify` in the pre-migration repo on macOS arm64 (Apple libm), against corpus fixtures c_meta.bin/c_recs.bin (150000 tokens, 754 stories). The token-side pins derive only from the source embedding table and reproduce cross-platform (they match the Linux-container pins documented in PROOF.md). The bundle-derived pins descend from the teacher-labeled corpus, whose sampling runs through libm exp/ln; they are platform-sensitive and the values here are the macOS pins. The documented Linux pins are kept under documented_linux_reference for cross-checking.",
+  "source": {
+    "kappa": "blake3:0ae7339518cb124bb9a8fcef88e5dfb615d9e56c55a118e55817dd077c77455d",
+    "bytes": 60816028
+  },
+  "token_codebook_stages": [
+    "blake3:6a6a65937be02adaa0987615600b7b07b889f3d0e719e08093baa2a47debd74e",
+    "blake3:43fc7c6c9b4835f6d8be4f577558ec1a7aefca67455c6d1766e8ee1357ed847d",
+    "blake3:05177802fc01f1a7614cc2ac4d5c20078fc852ccc023f5633cb0d35354e4149c",
+    "blake3:5a49c7454190b20e1b5534c65cf193cc622433a32ad74e7b8e3ea3906f4e2058"
+  ],
+  "stage_exponents": [7, 9, 9, 9],
+  "stage_shifts": [2, 0, 0, 0],
+  "stage_books": [
+    "blake3:548150611861003dae74c7a748fc35399968f75729c59ee4be6ce98ed24db470",
+    "blake3:65e445d1a8fbfdc8f696437674176aa5bc396d98e2b1513d726ed0ebe6972229",
+    "blake3:fbfa464c090ece55ac19f3471d4e3cd31f8d21a58242dc83faeb4ea8fc1d1221",
+    "blake3:8f1bedf86529dcc062663e8b974619867fdd3bce53598e8d4327546943e2c7e0"
+  ],
+  "token_codes": "blake3:e3ad935bdc368c7e2cb4a89dc9d8a6d2866ecf70b41784e3dd587dda075bb6d1",
+  "bundle_derived_macos": {
+    "threshold_vector": "blake3:722c66812596c708f38471a7c66bb0f4fd8669286eeea5f6f6ccd2198ff885be",
+    "context_codebook_stages": [
+      "blake3:216d43b34f1d693f5382ea6bb2a9724534010b61af1f9748f701080fcf762e75",
+      "blake3:73cc5ea5119c8c47a876fe8a0e14f15063043d5c9f6e9d497253f7d429c43643",
+      "blake3:44fa1fddf190e84dbfd62373834acfc8640a37cd83bb2a5eac4684ff4a73dc9d",
+      "blake3:f9f3455902dbc16513002093ec771a9fb85ef8001b2eb84ffb2f0bdfac1b016d"
+    ],
+    "class_signatures": [
+      "blake3:c34909c467bcabede0e15aab402d144c5acccfa8d9861ef5b1aaad1c419ade61",
+      "blake3:24dca1d2d4c2c7da2a28459a4b477cff3ea72af233208411b190aa17e2a913e4",
+      "blake3:58e180ff91379a65fa8dce6f84e6e815f757267ec2e133565deda4ceaa747b47",
+      "blake3:7d0b526a4972eabb04a19ab8de7fb8344bc1d21ee3187e2663c86d7257f5c1fe"
+    ],
+    "container": {
+      "kappa": "blake3:3b12f93efaa72dae22af1254830c78827b1e28064293cc7a926f5825563658b6",
+      "bytes": 1641736,
+      "format": "TLA3"
+    }
+  },
+  "certificate_macos": {
+    "corpus": { "tokens": 150000, "stories": 754, "held_out": 30036 },
+    "teacher_floor_bits_per_token": 1.6548,
+    "teacher_ceiling_agreement_pct": 69.5,
+    "rows": [
+      { "design": "A-binary", "mul_free": true, "top1_pct": 28.3, "agreement_pct": 31.5, "wb_bits_per_token": 6.5634, "store_keys": 92464 },
+      { "design": "A-f32", "mul_free": false, "top1_pct": 30.7, "agreement_pct": 34.4, "wb_bits_per_token": 6.3663, "store_keys": 91442 },
+      { "design": "B-bit-prefix", "mul_free": true, "top1_pct": 24.8, "agreement_pct": 27.5, "wb_bits_per_token": 7.8262, "store_keys": 324128 }
+    ],
+    "census_per_token": { "add": 59598, "xor": 36864, "shift": 22734, "compare": 1322, "table_read": 54999, "multiply": 0 },
+    "compression_representation": [
+      { "depth": 1, "bytes": 105728, "ratio_vs_source": 348.7, "mean_cosine": 0.9580 },
+      { "depth": 2, "bytes": 211456, "ratio_vs_source": 174.3, "mean_cosine": 0.9636 },
+      { "depth": 3, "bytes": 317184, "ratio_vs_source": 116.2, "mean_cosine": 0.9666 },
+      { "depth": 4, "bytes": 422912, "ratio_vs_source": 87.2, "mean_cosine": 0.9692 }
+    ],
+    "compression_artifact": { "runtime_tables_bytes": 462080, "store_bytes": 1724733, "total_bytes": 2186813, "ratio_vs_source": 27.8 }
+  },
+  "documented_linux_reference": {
+    "threshold_vector_prefix": "blake3:0fdc1a2c",
+    "context_codebook_prefixes": ["blake3:a8375646", "blake3:e13f7dfc", "blake3:314f4ebf", "blake3:7ff65bcc"],
+    "class_signature_prefixes": ["blake3:774419a7", "blake3:19537955", "blake3:da2fec0f", "blake3:fa266671"],
+    "container_prefix": "blake3:be366bd6",
+    "corpus": { "tokens": 150000, "stories": 757, "held_out": 30192 },
+    "teacher_floor_bits_per_token": 1.5960,
+    "teacher_ceiling_agreement_pct": 70.4,
+    "a_binary_row": { "top1_pct": 28.9, "agreement_pct": 31.7, "wb_bits_per_token": 6.5427, "store_keys": 89200 }
+  }
+}
