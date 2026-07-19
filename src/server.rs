@@ -685,24 +685,23 @@ fn handle_connection(
         let mut llm_connected = false;
         let mut generation_mode = "geometric-decoded".to_string();
 
-        if engine_mode == "transformerless" || engine_mode == "attention" {
+        if engine_mode == "attention" {
             let mut oracle_guard = oracle.lock().unwrap();
             if let Some(ref mut o) = *oracle_guard {
-                if let Some((text, count)) = generate_attention_text(o, &payload.text, max_tokens.max(1024)) {
+                if let Some((text, count)) = generate_attention_text(o, &payload.text, max_tokens.max(256)) {
                     final_response_text = text;
                     llm_connected = true;
                     generation_mode = "attention".to_string();
                     tokens_generated = count;
                 }
-            } else if engine_mode == "transformerless" {
-                // Fallback to table-native transformerless lookup if the full Llama oracle is not loaded
-                let prompt = payload.text.clone();
-                if let Some(text) = generate_tless_text(&tless, &prompt, max_tokens.max(24)) {
-                    final_response_text = text;
-                    llm_connected = true;
-                    generation_mode = "transformerless".to_string();
-                    tokens_generated = final_response_text.split_whitespace().count();
-                }
+            }
+        } else if engine_mode == "transformerless" {
+            let prompt = payload.text.clone();
+            if let Some(text) = generate_tless_text(&tless, &prompt, max_tokens.max(32)) {
+                final_response_text = text;
+                llm_connected = true;
+                generation_mode = "transformerless".to_string();
+                tokens_generated = final_response_text.split_whitespace().count();
             }
         }
 
