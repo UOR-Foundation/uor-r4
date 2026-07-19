@@ -1,29 +1,56 @@
 {
-  "name": "UOR R4 Router Devcontainer",
+  "name": "UOR R4 Router",
+  "image": "mcr.microsoft.com/devcontainers/rust:1-bookworm",
+
   "features": {
-    "ghcr.io/devcontainers/features/rust:1": {},
-    "ghcr.io/guiyomh/features/just:0": {},
-    "ghcr.io/lumenpink/devcontainer-features/wasm-pack:0": {},
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "22"
+    },
     "ghcr.io/devcontainers/features/python:1": {
       "version": "3.12"
     },
-    "ghcr.io/devcontainers/features/node:1": {
-      "version": "20"
-    },
+    "ghcr.io/guiyomh/features/just:0": {},
+    "ghcr.io/lumenpink/devcontainer-features/wasm-pack:0": {},
     "ghcr.io/devcontainers-contrib/features/apt-packages:1": {
-      "packages": "patchelf,gcc-aarch64-linux-gnu"
+      "packages": "gcc-aarch64-linux-gnu,patchelf,pkg-config"
     }
   },
+
+  "remoteUser": "vscode",
+  "updateRemoteUserUID": true,
+  "init": true,
+  "forwardPorts": [8000],
+  "portsAttributes": {
+    "8000": {
+      "label": "UOR R4 Router",
+      "onAutoForward": "openBrowserOnce"
+    }
+  },
+
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
+
   "customizations": {
     "vscode": {
       "extensions": [
         "rust-lang.rust-analyzer",
         "tamasfe.even-better-toml",
-        "anthropic.claude-code",
-        "leanprover.lean4"
+        "vadimcn.vscode-lldb",
+        "ms-vscode.wasm-dwarf-debugging"
       ],
       "settings": {
-        "rust-analyzer.cargo.target": "wasm32-unknown-unknown"
+        "editor.formatOnSave": true,
+        "[rust]": {
+          "editor.defaultFormatter": "rust-lang.rust-analyzer"
+        },
+        "rust-analyzer.check.command": "clippy",
+        "rust-analyzer.cargo.allTargets": true,
+        "rust-analyzer.procMacro.enable": true,
+        "files.watcherExclude": {
+          "**/target/**": true
+        },
+        "search.exclude": {
+          "**/target": true
+        }
       }
     }
   }

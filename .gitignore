@@ -3,3 +3,6 @@
 .DS_Store
 node_modules/
 dist/
+manifold_cache_rust.json
+.uor-models/
+uor_standards/

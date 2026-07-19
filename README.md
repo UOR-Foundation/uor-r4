@@ -1,195 +1,461 @@
-# R⁴ Tangent Space Router (UOR Framework Standard)
+# R⁴ Local Transformerless AI
 
-A high-dimensional continuous $R^4$ tangent space router, rebased under the official **Universal Object Reference (UOR) Framework** and **Prism Model** standards. This system replaces traditional transformer MoE gating mechanisms with a stable, zero-allocation coordinate reduction pipeline mapped across the first 512 non-trivial Riemann zeta zeroes.
+R⁴ is a local, CPU-first AI and geometric routing system aligned with the
+[Universal Object Reference Framework](https://github.com/UOR-Foundation/UOR-Framework),
+[Prism](https://github.com/UOR-Foundation/prism), and
+[uor-addr](https://github.com/UOR-Foundation/uor-addr).
 
----
+Transformerless inference is core R⁴ functionality. It is not an external
+provider adapter or a separate product: the compiler, runtime, tokenizer,
+graded store, witnesses, and model-source adapters live under
+[`uor_r4_core::transformerless`](crates/uor-r4-core/src/transformerless).
+R⁴ does not require Ollama, llama.cpp, OpenAI, Anthropic, or another inference
+service at runtime.
 
-## 📖 Overview
+## Current status
 
-Traditional transformers route token inputs using learned parameter gates, which are computationally expensive and act as a black box. The **R⁴ Prime Router** maps natural language queries onto a 512-dimensional prime-factor frequency manifold. By leveraging the **3/8 Resonance Hashing Law**, the router coordinates and synthesizes reasoning trajectories along geometric paths ($R^4$ tangent space vectors), resulting in near-instant local routing.
+R⁴ currently provides:
 
-With this release, the entire coordination engine is rebased onto the **UOR foundation ontology**, converting the routing mechanism into a formally verifiable, type-safe coordinate reduction pipeline.
+- a geometric text router and browser dashboard;
+- a CPU-only transformerless compiler and table-native inference runtime;
+- TLA3 compatibility and vocabulary-sized TLA4 artifacts;
+- TLS1 graded evidence stores;
+- direct BF16 Safetensors loading for compatible, unsharded Llama-family
+  Hugging Face models, without Candle;
+- byte-level BPE tokenizer export;
+- resumable compilation with progress reporting;
+- content-addressed model objects and manifests using UOR CIDs;
+- witnessed prediction, indexing, and generation APIs;
+- one-shot and interactive chat as application examples of the core runtime.
 
-## 🔗 UOR Standards & Repository Integrations
+There is an important boundary in the current workflow: compiling a Hugging
+Face model produces continuation evidence and runtime artifacts, but it does
+not automatically prove instruction-following quality. `ask` accepts only an
+imported `instruction-chat` manifest with a CID-addressed passing evaluation
+report. The repository does not yet provide the instruction-evaluation command
+that creates that report. This guard prevents a fast but low-quality
+continuation artifact from being presented as an accurate question-answering
+model.
 
-This codebase leverages three core UOR specifications to track, index, and verify thought trajectories:
+| Operation | Works from a fresh checkout? | Additional state |
+|---|---:|---|
+| Geometric router and dashboard | Yes | None |
+| Legacy TinyStories certification/benchmark | After `setup` and corpus generation | Pinned llama2.c checkpoint |
+| Compile a compatible Hugging Face source | After downloading the source | Pinned model revision |
+| `ask` and interactive chat | No | Compiled, evaluated, imported `instruction-chat` manifest |
 
-1. **[UOR-Framework](https://github.com/UOR-Foundation/UOR-Framework)**: Tracks internal reasoning states and active expert selections as formal, ontological objects. In [src/lib.rs](src/lib.rs), the `ThoughtStream` struct models the agent's thought trajectories, while UOR's witness proof mechanism generates mathematical certificates (`Grounded`) to prove that a specific path has been correctly evaluated at a given Witt-level stratum.
-2. **[uor-addr](https://github.com/UOR-Foundation/uor-addr)**: Provides content addressing for agent-produced content. Every query and response is serialized into a canonical JSON payload, and its unique, chain-agnostic identifier is computed using `uor_addr::json::address`. This allows every thought in the system to be tracked, linked, and verified in an immutable graph using URI patterns (e.g. `uor-addr-xxxxxxxx`).
-3. **[prism](https://github.com/UOR-Foundation/prism)**: Implements the universal coordinate system for information. It maps natural language inputs into continuous mathematical coordinates ($R^4$ tangent vectors). The coordination engine uses coordinate reduction folds to match inputs against the local knowledge manifold.
+## Documentation
 
----
+- [ELI5 explainer](docs/explainers/ELI5.md)
+- [Undergraduate explainer](docs/explainers/UNDERGRADUATE.md)
+- [Transformerless design](docs/transformerless/TRANSFORMERLESS.md)
+- [Proof and certificate](docs/transformerless/PROOF.md)
+- [Performance comparison](docs/transformerless/COMPARISON.md)
+- [Local-only runtime contract](docs/transformerless/LOCAL_ONLY.md)
+- [Roadmap](ROADMAP.md)
 
-## ⚡ Core Features
+## Requirements
 
-- **Algebraic Shape Constraints**: Mapped query contexts and metrics onto formal UOR shapes (`R4RoutingInput` and `R4RoutingOutput`) inside [src/lib.rs](src/lib.rs) using the `partition_product!` standard.
-- **Formal Coordinate Reduction**: Queries are processed through `uor_foundation::pipeline::run_route` by the `UorR4RouterModel` (implementing `PrismModel`), providing formal type-level checking and verification.
-- **Real-Time Attestation Witnesses**: Every route execution outputs a `Grounded` witness containing a cryptographic certificate with the following metrics:
-  * **UOR Sigma**: The grounding completion ratio ($\sigma \in [0.0, 1.0]$).
-  * **UOR $d_\Delta$**: Metric incompatibility between ring distance and Hamming distance.
-  * **UOR Euler**: Nerve Euler characteristic ($\chi$) of the constraints.
-  * **UOR Free Sites**: The residual free-site rank.
-  * **UOR Stratum**: The two-adic valuation stratum coordinate.
-- **Wasm-Optimized Zero Allocation**: Borrowed input lifetimes in `R4RoutingInput` pass query buffers on the stack without heap allocation, maximizing execution speed.
-- **Interactive 3D Visualizer**: Real-time projection of coordinates onto the $S^2$ base sphere with Hopf fiber rings ($S^1$) and animated trajectory paths.
-- **Continuous Manifold Learning**: Learns dynamically during chats by folding prompt-response pairs back into its local JSON database (`manifold_cache_rust.json`).
+- Current stable Rust and Cargo.
+- `hf` from the Hugging Face CLI for `model download` or
+  `cargo run --release -- compile --model`.
+- `curl` and `unzip` only for the legacy TinyStories setup workflow.
 
----
+Inference is CPU-only. GPU features, `--device`, Metal, CUDA, and Candle are
+intentionally not part of this runtime.
 
-## 📡 OpenTelemetry & Hash Standardization
+## Quick start
 
-### Distributed Tracing with OpenTelemetry
-The coordination engine integrates OpenTelemetry (OTel) tracing paradigms to track active geodesic trajectories and cascade paths:
-- **Traces & Spans**: A **Trace** represents the complete life cycle of an input query routing through the manifold and steering the synthesis engine. Individual operations (such as prime frequency projections, Hopf coordinate mappings, and LLM text generation) are mapped as individual **Spans** within the trace context.
-- **Trace Context Propagation**: The OTel `TraceId` (16-byte hex value) and `SpanId` (8-byte hex value) are captured at the server layer. These IDs flow directly into the tangent space vectors ($R^4$), allowing distributed debuggers to trace the physical trajectory and coordinate calculations linked back to a specific HTTP execution span.
+Verify the workspace:
 
-### Unified Hash Standardization
-The router serves as a bridge between the physical and logical layers of the network stack by unifying hash representations into continuous $R^4$ space:
-- **UOR Addresses**: The UOR Framework utilizes content addressing to identify information nodes based on their content multihash.
-- **MAC Addressing**: Hardware-layer identifiers are captured and mapped into coordinates to resolve localized node topologies.
-- **Blockchain Mappings**: Chain-agnostic transaction hashes and state roots are mapped to the geometric manifold, binding the execution of a routing trajectory to a verifiable, immutable ledger state.
-- **Traces and Spans**: The 16-byte OTel `TraceId` and `SpanId` are parsed into 32-byte content address boundaries, converting tracing metadata into addressable UOR nodes.
+```bash
+cargo check --workspace
+cargo test --workspace
+```
 
-By mapping all of these disparate identifiers (OTel TraceIds, MAC addresses, transaction hashes, and UOR addresses) into standard 32-byte content addresses, the router unifies them as inputs to the same coordinate reduction fold.
+The project exposes one executable, `r4`. With no subcommand it runs the HTTP
+server:
 
----
+```bash
+cargo run
+# equivalent after a release build: ./target/release/r4
+```
 
-## 🏗️ Architecture
+Open <http://127.0.0.1:8000>. The geometric router and dashboard work without a
+chat model. Use another listener when needed:
+
+```bash
+cargo run -- --host 0.0.0.0 --port 9000
+```
+
+Build the browser package with:
+
+```bash
+wasm-pack build --target web
+```
+
+Static deployments use geometric synthesis in WebAssembly. Transformerless
+artifact loading and synthesis run through the native server.
+
+## Model lifecycle
+
+The local lifecycle is:
+
+```text
+pinned source -> resumable compile -> CID-addressed local ask/chat
+                                     -> evaluation -> named manifest import
+```
+
+Downloading and compiling are explicit offline operations. Neither `ask` nor
+the HTTP server downloads a model or contacts an inference provider.
+
+### 1. Download pinned compiler input
+
+```bash
+cargo run -- download \
+  --repository HuggingFaceTB/SmolLM2-135M-Instruct \
+  --revision 7e27bd9f95328f0f3b08261d1252705110c806f8 \
+  --name smollm2-135m-instruct
+```
+
+The default destination is
+`.uor-models/sources/smollm2-135m-instruct`. Override it with `--output`:
+
+```bash
+cargo run -- download \
+  --repository HuggingFaceTB/SmolLM2-135M-Instruct \
+  --revision 7e27bd9f95328f0f3b08261d1252705110c806f8 \
+  --name smollm2-135m-instruct \
+  --output /path/to/model-sources/smollm2-135m-instruct
+```
+
+The downloader prints the repository and destination immediately, streams the
+`hf` process, and emits a heartbeat every two seconds with file count, bytes,
+and elapsed time.
+
+### 2. Compile the source
+
+Compile an already downloaded directory:
+
+```bash
+cargo run --release -- compile \
+  --source .uor-models/sources/smollm2-135m-instruct \
+  --output .uor-models/compiled/smollm2-135m-instruct \
+  --seconds 300 \
+  --target 20000 \
+  --sequence-length 128
+```
+
+Or let the compiler download an immutable revision through `hf`:
+
+```bash
+cargo run --release -- compile \
+  --model HuggingFaceTB/SmolLM2-135M-Instruct \
+  --revision 7e27bd9f95328f0f3b08261d1252705110c806f8 \
+  --seconds 300 \
+  --target 20000 \
+  --sequence-length 128
+```
+
+`--revision` must be a full 40-character commit hash. `--seconds` limits the
+teacher-generation work performed by one invocation, while `--target` is the
+teacher-token goal. Hugging Face compilation defaults to 20,000 tokens and
+128-token teacher stories. The bounded story length keeps attention cost and
+KV memory proportional to the eight-token deployed runtime window; increase
+`--target` or `--sequence-length` explicitly for quality experiments. Repeat
+the same command to resume an incomplete corpus.
+
+On macOS, offline Hugging Face teacher execution uses Apple Accelerate's
+SIMD-optimized CPU BLAS. Linux and Windows use explicit NEON on AArch64 or
+runtime-detected AVX2/FMA on x86-64, with a dependency-free scalar fallback.
+These compiler accelerators do not add a runtime dependency or change the
+allocation-free table-native inference path. Set `TLESS_TEACHER_EXACT=1` to
+force the slower, reduction-order-preserving scalar path for diagnostic
+comparisons. The pinned legacy proof workflow always uses that exact path.
+
+When compilation completes, the output directory contains:
+
+```text
+tless_artifacts.bin
+tless_store.bin
+tokenizer.bin
+```
+
+Interactive terminals show progress bars. Redirected output receives periodic
+`progress:` lines suitable for build logs. Source loading and compilation may
+allocate; the allocation-free guarantee applies to the deployed prediction hot
+path, which uses fixed and caller-owned buffers.
+
+### 3. Ask locally
+
+Compilation produces a directly loadable local bundle. On first use, R⁴
+content-addresses the artifact, store, and tokenizer in `.uor-models/objects`:
+
+```bash
+cargo run --release -- ask "why is the sky blue?"
+```
+
+This direct path verifies container integrity but does not claim that the
+compiled approximation has passed an instruction-quality evaluation. The CLI
+logs that distinction. Compilation success and answer quality are separate
+properties.
+
+### 4. Evaluate instruction quality
+
+Run held-out instruction and grounding evaluation against the compiled bundle
+and retain a machine-readable report. This evaluation tooling is the remaining
+end-to-end workflow gap in the repository. Do not mark an artifact as passing
+merely to bypass the chat quality gate.
+
+### 5. Import the evaluated bundle
+
+```bash
+cargo run -- import \
+  --name my-chat-model \
+  --source-model HuggingFaceTB/SmolLM2-135M-Instruct@7e27bd9f95328f0f3b08261d1252705110c806f8 \
+  --capability instruction-chat \
+  --artifacts .uor-models/compiled/smollm2-135m-instruct/tless_artifacts.bin \
+  --store .uor-models/compiled/smollm2-135m-instruct/tless_store.bin \
+  --tokenizer .uor-models/compiled/smollm2-135m-instruct/tokenizer.bin \
+  --evaluation-report /path/to/instruction-eval.json \
+  --instruction-eval-passed \
+  --grounded-answer-rate 0.80 \
+  --repetition-rate 0.01
+```
+
+The model store defaults to `.uor-models`; set `UOR_MODEL_STORE` to relocate
+it. Objects are stored once under `objects/blake3/<digest>`. Reads verify both
+the declared byte length and UOR CID. The import command prints the manifest
+CID.
+
+Continuation-only bundles may be imported for certification and benchmarking,
+but `ask` refuses to load them.
+
+### 6. Ask or chat with an imported manifest
+
+One-shot `ask` calls the R⁴ library directly without a server or network hop:
+
+```bash
+cargo run --release -- ask \
+  --model my-chat-model \
+  "why is the sky blue?"
+```
+
+Interactive chat retains turn history:
+
+```bash
+cargo run --release -- chat --model my-chat-model
+```
+
+`--model` is optional. Selection order is `TLESS_MODEL`, the newest JSON
+descriptor in `models/`, then `smollm2-135m-instruct`. A descriptor selects a
+name; R⁴ first uses an imported manifest and otherwise falls back to a complete
+local bundle under `.uor-models/compiled/<name>`.
+
+Library consumers can use the chat example directly:
+
+```rust,no_run
+use uor_r4_wasm_router::chat::ChatEngine;
+
+let mut chat = ChatEngine::builder().model("my-chat-model").build()?;
+let answer = chat.ask("why is the sky blue?")?;
+println!("{}", answer.text);
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+Chat is an application of transformerless R⁴, not a separate crate or
+inference layer.
+
+## Legacy benchmark and certification workflow
+
+The pinned llama2.c TinyStories path remains available for proof reproduction
+and same-machine performance comparison.
+
+```bash
+cargo run --release -- setup
+cargo run --release -- gen 300 150000
+# repeat gen until it reports done=1
+cargo run --release -- compile
+cargo run --release -- store
+cargo run --release -- certify
+cargo run --release -- compare
+cargo run --release -- scenarios
+```
+
+Its default files are:
+
+```text
+/tmp/tless_artifacts.bin
+/tmp/tless_store.bin
+/tmp/ref/tokenizer.bin
+```
+
+This is a TinyStories continuation artifact, not an instruction-chat model.
+Use `compare-report` for the recorded certificate without loading the source
+checkpoint:
+
+```bash
+cargo run --release -- compare-report
+```
+
+See [COMPARISON.md](docs/transformerless/COMPARISON.md) for the measured quality
+and throughput evidence.
+
+## CLI reference
+
+Build once and invoke `r4` directly, or use the equivalent Cargo commands:
+
+```bash
+cargo build --release
+./target/release/r4 --help
+./target/release/r4 ask "why is the sky blue?"
+
+cargo run -- --help
+cargo run -- ask --help
+cargo run -- compile --help
+cargo run -- download --help
+cargo run -- import --help
+```
+
+All subcommands support `-v`, `-vv`, and `-vvv` for info, debug, and trace
+logging. Tracing uses a dependency-light subscriber.
+
+The server defaults are:
+
+| Option | Environment | Default |
+|---|---|---|
+| `--host` | `UOR_R4_HOST` | `127.0.0.1` |
+| `--port` | `UOR_R4_PORT` | `8000` |
+| `--manifold-cache` | `UOR_R4_MANIFOLD_CACHE` | `manifold_cache_rust.json` |
+| `--tless-artifacts` | `TLESS_ARTIFACTS` | `/tmp/tless_artifacts.bin` |
+| `--tless-store` | `TLESS_STORE` | `/tmp/tless_store.bin` |
+| `--tless-tokenizer` | `TLESS_TOKENIZER` | `/tmp/ref/tokenizer.bin` |
+
+## Architecture
 
 ```mermaid
-graph TD
-    A["User Prompt / Client Query"] -->|HTTP POST| B["main.rs Server Endpoint"]
-    B -->|Stack Allocate 640-byte Buffer| C["R4RoutingInput"]
-    C -->|PrismModel::forward| D["run_route Pipeline"]
-    D -->|Coordinate Reduction Fold| E["R4RouterAxisImpl"]
-    E -->|Thread-Local ACTIVE_ROUTER| F["route_query_to_manifold_native"]
-    F -->|Compute Hopf, QIMC & Eigenvalues| G["RoutingData"]
-    D -->|Mint Witness| H["Grounded Proof Certificate"]
-    B -->|Replay Witness Derivation| I["UOR Trace Steps"]
-    B -->|JSON Response Payload| J["index.html Telemetry Dashboard"]
+flowchart LR
+    Source["Pinned local model source"] --> Compiler["R⁴ transformerless compiler"]
+    Compiler --> Artifact["TLA3/TLA4 artifact"]
+    Compiler --> Store["TLS1 graded store"]
+    Compiler --> Tokenizer["Tokenizer"]
+    Artifact --> Runtime["Allocation-free CPU prediction kernel"]
+    Store --> Runtime
+    Tokenizer --> Runtime
+    Prompt["Prompt"] --> Router["R⁴ geometric router"]
+    Router --> Runtime
+    Runtime --> Witness["UOR CID + Grounded witness"]
+    Runtime --> Apps["r4 ask / r4 chat / HTTP API"]
 ```
 
----
+The workspace has one public package and two internal implementation crates:
 
-## 🚀 Getting Started
+| Package | Responsibility |
+|---|---|
+| `uor-r4-wasm-router` | Public facade, UOR witness integration, HTTP server, WASM surface, and the single `r4` executable |
+| [`uor-r4-core`](crates/uor-r4-core) | Core R⁴ mathematics and transformerless compiler/runtime/tokenizer/certifier |
+| [`uor-r4-router`](crates/uor-r4-router) | Manifold state, indexing, geometric routing, and router witnesses |
 
-### 🌐 GitHub Pages & Static Fallback Mode
+The public [`tless_uor`](src/tless_uor.rs) module provides `TlessAxis`,
+`UorTlessModel`, CID addressing, and per-prediction `Grounded` certificates.
+The root [`chat`](src/chat.rs) and [`model`](src/model.rs) modules are
+application-level consumers of the core runtime.
 
-This application is configured with a fully self-contained WebAssembly (WASM) fallback mechanism. When deployed to **GitHub Pages** (or run statically without a backend server):
-- **Automatic Fallback**: The client-side dashboard detects that the backend server is offline and automatically initializes the WASM router (`UorR4Router`) locally inside the browser.
-- **Client-Side Simulation**: All prime coordinate mappings, coordinate reductions, thought stream visualizations, QIMC panel attestation updates, MoE expert cell activations, and trace logs are computed directly in your browser using compiled WebAssembly.
-- **Limitation**: Pure geometric synthesis is run locally on the client-side manifold coordinates. To use the full synthesis backend (leveraging local LLMs like Ollama/Gemma), you must clone the repository and run the server locally following the instructions below.
+## HTTP API
 
-### Prerequisites & Ollama Configuration
+### `POST /api/chat`
 
-Ensure you have the following installed on your machine:
-* **Rust** (MSRV 1.65+): `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`
-* **Ollama** (Required for LLM-driven synthesis):
-  1. Download and install from [ollama.com](https://ollama.com).
-  2. Pull the default routing model (e.g. `gemma:2b` or `gemma2:2b` / `gemma4:e2b`):
-     ```bash
-     ollama pull gemma:2b
-     ```
-  3. **Configure CORS (Disable CORS)**: By default, browsers prevent web apps hosted on external domains (like GitHub Pages) from talking to `localhost`. You must allow origins on Ollama:
-     * **macOS**: Set the environment variable via launchctl or terminal:
-       * *Terminal Option*: Quit Ollama from the menu bar, then run:
-         ```bash
-         OLLAMA_ORIGINS="*" ollama serve
-         ```
-       * *System-wide Option*:
-         ```bash
-         launchctl setenv OLLAMA_ORIGINS "*"
-         ```
-         Then relaunch the Ollama app from Applications.
-     * **Linux**: Edit the systemd service configuration:
-       ```bash
-       sudo systemctl edit ollama.service
-       ```
-       Add the following under the `[Service]` section:
-       ```ini
-       Environment="OLLAMA_ORIGINS=*"
-       ```
-       Save and restart:
-       ```bash
-       sudo systemctl daemon-reload
-       sudo systemctl restart ollama
-       ```
-     * **Windows**: Quit Ollama from the taskbar tray, set the user/system environment variable `OLLAMA_ORIGINS` to `*` via Settings, and relaunch Ollama.
+Routes and synthesizes a prompt:
 
-### Configuration
+```json
+{
+  "text": "dry season aquifer depth in the Gambia",
+  "identity": "tenant-alpha",
+  "engine": "transformerless"
+}
+```
 
-The project workspace integrates path dependencies to local standards crates in [Cargo.toml](Cargo.toml):
-* `uor-foundation` ([UOR-Framework/foundation](https://github.com/UOR-Foundation/UOR-Framework/tree/main/foundation))
-* `uor-prism` ([prism/crates/uor-prism](https://github.com/UOR-Foundation/prism/tree/main/crates/uor-prism))
-* `uor-addr` ([uor-addr/crates/uor-addr](https://github.com/UOR-Foundation/uor-addr/tree/main/crates/uor-addr))
+### `GET /api/sysinfo`
 
-### Running the Server
+Returns initialization metrics, uptime, and UOR validation state.
 
-Start the local server target:
+### `POST /api/corpus`
+
+Indexes text into the geometric manifold:
+
+```json
+{
+  "corpus": "Text to index into the manifold.",
+  "identity": "tenant-alpha"
+}
+```
+
+### `GET /api/export` and `POST /api/import`
+
+Export or restore router vocabulary, prime products, and sentence manifolds.
+
+### `POST /api/tless/predict`
+
+Runs one witnessed token prediction:
+
+```json
+{ "window": [1, 298, 263, 221, 437, 238, 15, 1979] }
+```
+
+Only the eight most recent token IDs are read. The response includes the token,
+resolution depth, graded code, evidence count, operation census, artifact and
+store kappas, UOR address, and `Grounded` witness metrics.
+
+### `POST /api/tless/index`
+
+Adds tokenized text to the graded store:
+
+```json
+{ "text": "Once upon a time, there was a little dog named Rex." }
+```
+
+The response includes token count, evidence positions written, and the updated
+store kappa.
+
+### `POST /api/tless/generate`
+
+Runs attributable greedy generation:
+
+```json
+{ "text": "Once upon a time, there was a little", "max_tokens": 24 }
+```
+
+The response includes generated text and tokens plus each step's resolution
+depth and evidence count.
+
+## Testing and quality gates
+
 ```bash
-cargo run --release --bin server
+cargo fmt --all -- --check
+cargo check --workspace --all-targets --offline
+cargo test --workspace --all-targets --offline
+cargo clippy --workspace --all-targets --offline -- -D warnings
 ```
-*The server loads the manifold cache from `manifold_cache_rust.json` and starts listening on **`http://127.0.0.1:8000`**.*
 
----
+Reproduce the transformerless proof witnesses with:
 
-## 💻 How to Use the App
-
-1. **Access the Dashboard**: Open your browser and go to `http://127.0.0.1:8000/` (loads [index.html](index.html)) or visit the static site deployment.
-2. **First Load Corpus Setup**:
-   - **Default Corpus**: On first load, a default bootstrap corpus is automatically indexed by the local WebAssembly router or loaded by the server to populate baseline vocabulary and resonance paths.
-   - **Custom Manifold Loading**: To make the router more intelligent, you can paste custom texts under **Index Text to Manifold** or import a pre-saved `manifold.json` using the **Import Manifold** button.
-3. **Select Synthesis Engine**: Choose between **Pure Geometric** (local decoding on the manifold coordinates) or **Ollama (Gemma)** (routed prompt steered by prime coordinates and grounded context sentences).
-4. **Submit Queries**: Type prompts in the chat box. On submission:
-   * The **3D Trajectory visualizer** will project a white pulse path showing the reasoning coordinate evolution.
-   * The **QIMC Panel** will display the active prime, the witness validation state (`Verified`), and formal UOR metrics.
-   * The **Cascade Trace Logs** console (bottom-right) will output the official step-by-step UOR reduction events in real time.
-5. **Index Knowledge**: Paste textual reference materials in the bottom-left text area and click **Index Manifold** to dynamically inject new knowledge coordinates into the local brain.
-
----
-
-## 📡 API Reference
-
-### 1. Chat Generation
-* **Endpoint**: `/api/chat`
-* **Method**: `POST`
-* **Payload**:
-  ```json
-  {
-    "text": "dry season aquifer depth in the Gambia",
-    "identity": "tenant-alpha",
-    "engine": "auto",
-    "ollama_url": "http://127.0.0.1:11434",
-    "ollama_model": "gemma4:e2b"
-  }
-  ```
-* **Response**: Contains `description`, `metrics` (including `uor` validation struct), `trajectory`, and `uor_trace_steps`.
-
-### 2. System Status
-* **Endpoint**: `/api/sysinfo`
-* **Method**: `GET`
-* **Response**: Baseline metrics, uptime, and UOR validation state for initialization.
-
-### 3. Bulk Indexing
-* **Endpoint**: `/api/corpus`
-* **Method**: `POST`
-* **Payload**:
-  ```json
-  {
-    "corpus": "Full text corpus to index into the manifold...",
-    "identity": "tenant-alpha"
-  }
-  ```
-
-### 4. Database Export / Import
-* **Endpoint**: `/api/export` (GET) / `/api/import` (POST)
-* **Description**: Extracts or restores the complete router vocabulary, prime products, and sentence manifolds in JSON format.
-
----
-
-## 🧪 Testing
-
-To run the full suite of unit and compilation tests:
 ```bash
-cargo test
+cargo test -p uor-r4-core
+cargo test -p uor-r4-core --release --test kappa_reproduction -- --ignored
 ```
+
+The ignored reproduction and real-SmolLM2 adapter tests require their external
+model fixtures.
+
+## Common errors
+
+- **Downloaded source data is not a compiled chat bundle:** run the exact
+  `compile --source ...` command printed by `ask`.
+- **Compiled bundle has no quality attestation:** local `ask` can still run it
+  and content-addresses its files. Evaluate and `import` it before presenting
+  its output as instruction-quality validated.
+- **Manifest not found:** select an imported manifest name/CID or set
+  `TLESS_MODEL`.
+- **Tokenizer or transformerless state unavailable:** build the legacy files or
+  pass the three `TLESS_*` paths explicitly.
+- **No `metal` feature or `--device`:** expected; inference is CPU-only.
