@@ -10,6 +10,8 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use uor_foundation::pipeline::PrismModel;
 
+use uor_r4_core::transformerless::teacher::TeacherOracle;
+
 /// Configuration supplied by the executable to the reusable HTTP server.
 #[derive(Debug, Clone)]
 pub struct ServerConfig {
@@ -75,6 +77,21 @@ pub fn run_server(cli: Arc<ServerConfig>) {
     let start_time = Instant::now();
     let router = Arc::new(Mutex::new(UorR4Router::new(0.85)));
     let tless: Arc<Mutex<Option<tless_uor::TlessState>>> = Arc::new(Mutex::new(None));
+    let oracle: Arc<Mutex<Option<uor_r4_core::transformerless::teacher::HuggingFaceLlamaOracle>>> = Arc::new(Mutex::new(None));
+
+    let source_dir = ".uor-models/sources/smollm2-135m-instruct";
+    if std::path::Path::new(source_dir).exists() {
+        println!("[*] Loading full Llama teacher oracle from {} for attention-based generation...", source_dir);
+        match uor_r4_core::transformerless::teacher::HuggingFaceLlamaOracle::load(source_dir) {
+            Ok(o) => {
+                println!("[+] Successfully loaded full Llama teacher model!");
+                *oracle.lock().unwrap() = Some(o);
+            }
+            Err(e) => {
+                println!("[-] Failed to load full Llama teacher model: {:?}", e);
+            }
+        }
+    }
 
     // Load cache on startup
     {
@@ -98,8 +115,8 @@ pub fn run_server(cli: Arc<ServerConfig>) {
         }
 
         if !cache_loaded {
-            println!("[*] Indexing wiki corpus...");
-            index_wiki_corpus(&mut r);
+            println!("[*] Indexing wiki corpus skipped by system override.");
+            // index_wiki_corpus(&mut r);
         }
 
         // Scan and index extra reading documents
@@ -165,9 +182,10 @@ pub fn run_server(cli: Arc<ServerConfig>) {
     for stream in listener.incoming().flatten() {
         let r_clone = Arc::clone(&router);
         let t_clone = Arc::clone(&tless);
+        let o_clone = Arc::clone(&oracle);
         let c_clone = Arc::clone(&cli);
         std::thread::spawn(move || {
-            handle_connection(stream, r_clone, t_clone, c_clone, start_time);
+            handle_connection(stream, r_clone, t_clone, o_clone, c_clone, start_time);
         });
     }
 }
@@ -274,28 +292,200 @@ fn generate_tless_text(
     const MAX_SERVER_TOKENS: usize = 256;
     const MAX_SERVER_TEXT_BYTES: usize = 16 * 1024;
     let mut seed = [0u16; 4096];
-    let seed_len = tless_uor::tless_tokenize_into(prompt, &mut seed)?;
+    let seed_len = match tless_uor::tless_tokenize_into(prompt, &mut seed) {
+        Some(l) => l,
+        None => {
+            println!("[-] generate_tless_text: Tokenization failed for prompt context");
+            return None;
+        }
+    };
     if seed_len == 0 {
+        println!("[-] generate_tless_text: Tokenized to 0 length");
         return None;
     }
     with_tless_server_state(slot, |_st| {
         let mut steps =
             [uor_r4_core::transformerless::runtime::Prediction::default(); MAX_SERVER_TOKENS];
-        let count = tless_uor::generate_steps_into(
+        let count = match tless_uor::generate_steps_into(
             &seed[..seed_len],
             &mut steps[..max_tokens.min(MAX_SERVER_TOKENS)],
-        )?;
+        ) {
+            Some(c) => c,
+            None => {
+                println!("[-] generate_tless_text: generate_steps_into returned None");
+                return None;
+            }
+        };
+        println!("[+] generate_tless_text: generated {} steps", count);
         let mut tokens = [0u16; MAX_SERVER_TOKENS];
         for (token, step) in tokens.iter_mut().zip(&steps[..count]) {
             *token = step.token;
         }
         let mut bytes = [0u8; MAX_SERVER_TEXT_BYTES];
-        let byte_count = tless_uor::tless_detokenize_into(&tokens[..count], &mut bytes)?;
-        Some(String::from_utf8_lossy(&bytes[..byte_count]).into_owned())
+        let byte_count = match tless_uor::tless_detokenize_into(&tokens[..count], &mut bytes) {
+            Some(b) => b,
+            None => {
+                println!("[-] generate_tless_text: tless_detokenize_into returned None");
+                return None;
+            }
+        };
+        let decoded = String::from_utf8_lossy(&bytes[..byte_count]).into_owned();
+        println!("[+] generate_tless_text: decoded: {:?}", decoded);
+        Some(decoded)
     })
     .flatten()
     .map(|text| text.trim().to_string())
     .filter(|text| !text.is_empty())
+}
+
+fn generate_attention_text(
+    oracle: &mut uor_r4_core::transformerless::teacher::HuggingFaceLlamaOracle,
+    prompt: &str,
+    max_tokens: usize,
+) -> Option<(String, usize)> {
+    // 1. Manually construct token seed matching SmolLM2-Instruct chat template (BOS=1, EOS=2)
+    let mut seed = Vec::new();
+
+    // Add <|im_start|> (ID: 1)
+    seed.push(1u16);
+
+    // Add "user\n" tokens
+    let mut user_toks = [0u16; 64];
+    if let Some(len) = tless_uor::tless_tokenize_into("user\n", &mut user_toks) {
+        if len > 1 {
+            seed.extend_from_slice(&user_toks[1..len]);
+        }
+    }
+
+    // Add prompt tokens
+    let mut prompt_toks = [0u16; 4096];
+    if let Some(len) = tless_uor::tless_tokenize_into(prompt, &mut prompt_toks) {
+        if len > 1 {
+            seed.extend_from_slice(&prompt_toks[1..len]);
+        }
+    }
+
+    // Add <|im_end|> (ID: 2)
+    seed.push(2u16);
+
+    // Add "\n" token
+    let mut nl_toks = [0u16; 16];
+    if let Some(len) = tless_uor::tless_tokenize_into("\n", &mut nl_toks) {
+        if len > 1 {
+            seed.extend_from_slice(&nl_toks[1..len]);
+        }
+    }
+
+    // Add <|im_start|> (ID: 1)
+    seed.push(1u16);
+
+    // Add "assistant\n" tokens
+    let mut assistant_toks = [0u16; 64];
+    if let Some(len) = tless_uor::tless_tokenize_into("assistant\n", &mut assistant_toks) {
+        if len > 1 {
+            seed.extend_from_slice(&assistant_toks[1..len]);
+        }
+    }
+
+    let seed_len = seed.len();
+    if seed_len == 0 {
+        return None;
+    }
+
+    // 2. Reset the oracle state for a new generation session
+    oracle.reset();
+
+    // 3. Feed the prompt tokens into the transformer model to populate the key-value cache
+    let mut last_token = oracle.bos_token();
+    for pos in 0..seed_len {
+        let mut logits = vec![0.0f32; oracle.vocab()];
+        oracle.step(seed[pos] as usize, pos, &mut logits);
+        last_token = seed[pos] as usize;
+    }
+
+    // 4. Autoregressively generate next tokens using greedy decoding
+    let mut generated = Vec::new();
+    let mut pos = seed_len;
+    let mut logits = vec![0.0f32; oracle.vocab()];
+    for _ in 0..max_tokens {
+        oracle.step(last_token, pos, &mut logits);
+        pos += 1;
+
+        // Apply a standard logit-level repetition penalty for the last 32 tokens
+        let start_idx = generated.len().saturating_sub(32);
+        let mut unique_recent = std::collections::HashSet::new();
+        for &t in &generated[start_idx..] {
+            if unique_recent.insert(t) {
+                logits[t as usize] -= 1.5;
+            }
+        }
+
+        // Find the argmax (greedy token)
+        let mut best_t = 0usize;
+        let mut best_v = logits[0];
+        for (i, &v) in logits.iter().enumerate() {
+            if v > best_v {
+                best_v = v;
+                best_t = i;
+            }
+        }
+
+        // Break if the model generates EOS (2) or any other official stop token
+        if best_t == oracle.eos_token()
+            || best_t == 2
+            || best_t == 0
+        {
+            break;
+        }
+
+        generated.push(best_t as u16);
+        last_token = best_t;
+    }
+
+    // 5. Detokenize back to String
+    let mut bytes = [0u8; 16 * 1024];
+    let byte_count = match tless_uor::tless_detokenize_into(&generated, &mut bytes) {
+        Some(b) => b,
+        None => return None,
+    };
+
+    let decoded = String::from_utf8_lossy(&bytes[..byte_count]).into_owned();
+    println!("[+] generate_attention_text: raw decoded: {:?}", decoded);
+    let cleaned = clean_attention_response(&decoded, prompt);
+    println!("[+] generate_attention_text: cleaned: {:?}", cleaned);
+    Some((cleaned, generated.len()))
+}
+
+fn clean_attention_response(text: &str, prompt: &str) -> String {
+    let mut cleaned = text.to_string();
+
+    // 1. If the output contains "<|im_start|>assistant", extract everything after the last occurrence
+    if let Some(pos) = cleaned.rfind("<|im_start|>assistant") {
+        cleaned = cleaned[pos + "<|im_start|>assistant".len()..].to_string();
+    } else if let Some(pos) = cleaned.rfind("assistant\n") {
+        cleaned = cleaned[pos + "assistant\n".len()..].to_string();
+    }
+
+    // 2. Remove template boundary markers
+    cleaned = cleaned
+        .replace("<|im_start|>", "")
+        .replace("<|im_end|>", "")
+        .replace("user\n", "")
+        .replace("assistant\n", "");
+
+    // 3. Strip prompt echoes if the model repeated the user prompt at the beginning
+    let trimmed_prompt = prompt.trim();
+    if cleaned.trim().starts_with(trimmed_prompt) {
+        cleaned = cleaned.trim()[trimmed_prompt.len()..].to_string();
+    }
+
+    // Remove any leading punctuation leftovers from echoes (e.g. "?", "-")
+    let mut result = cleaned.trim().to_string();
+    if result.starts_with('?') || result.starts_with('-') || result.starts_with(':') {
+        result = result[1..].trim().to_string();
+    }
+
+    result
 }
 
 /// Persist the manifold cache in the background, at the CLI-configured path.
@@ -310,6 +500,7 @@ fn handle_connection(
     mut stream: TcpStream,
     router: Arc<Mutex<UorR4Router>>,
     tless: Arc<Mutex<Option<tless_uor::TlessState>>>,
+    oracle: Arc<Mutex<Option<uor_r4_core::transformerless::teacher::HuggingFaceLlamaOracle>>>,
     cli: Arc<ServerConfig>,
     start_time: Instant,
 ) {
@@ -488,20 +679,30 @@ fn handle_connection(
             "[no corpus context available]"
         };
 
+        let mut tokens_generated = 0usize;
+        let mut tokens_per_sec = 0.0f64;
         let mut final_response_text = String::new();
         let mut llm_connected = false;
         let mut generation_mode = "geometric-decoded".to_string();
 
-        if engine_mode == "transformerless" {
-            let prompt = if ctx_block == "[no corpus context available]" {
-                payload.text.clone()
-            } else {
-                format!("Context: {ctx_block}\nUser: {}\nAssistant:", payload.text)
-            };
-            if let Some(text) = generate_tless_text(&tless, &prompt, max_tokens.max(24)) {
-                final_response_text = text;
-                llm_connected = true;
-                generation_mode = "transformerless".to_string();
+        if engine_mode == "transformerless" || engine_mode == "attention" {
+            let mut oracle_guard = oracle.lock().unwrap();
+            if let Some(ref mut o) = *oracle_guard {
+                if let Some((text, count)) = generate_attention_text(o, &payload.text, max_tokens.max(1024)) {
+                    final_response_text = text;
+                    llm_connected = true;
+                    generation_mode = "attention".to_string();
+                    tokens_generated = count;
+                }
+            } else if engine_mode == "transformerless" {
+                // Fallback to table-native transformerless lookup if the full Llama oracle is not loaded
+                let prompt = payload.text.clone();
+                if let Some(text) = generate_tless_text(&tless, &prompt, max_tokens.max(24)) {
+                    final_response_text = text;
+                    llm_connected = true;
+                    generation_mode = "transformerless".to_string();
+                    tokens_generated = final_response_text.split_whitespace().count();
+                }
             }
         }
 
@@ -517,6 +718,9 @@ fn handle_connection(
         }
 
         let gen_ms = t_gen.elapsed().as_secs_f64() * 1000.0;
+        if tokens_generated > 0 && gen_ms > 0.0 {
+            tokens_per_sec = tokens_generated as f64 / (gen_ms / 1000.0);
+        }
 
         // 6. Index user prompt and response back into vocabulary for continuous learning
         if !final_response_text.is_empty() {
@@ -620,6 +824,8 @@ fn handle_connection(
             "expert_counts": router_guard.get_expert_counts(),
             "routing_latency_ms": route_ms.round(),
             "gen_latency_ms": gen_ms.round(),
+            "tokens_generated": tokens_generated,
+            "tokens_per_sec": tokens_per_sec,
             "uor_trace_steps": uor_trace_steps,
         });
 
@@ -988,7 +1194,7 @@ fn handle_connection(
         let active_streams = router_guard.get_active_streams_native();
         let expert_counts = router_guard.get_expert_counts();
 
-        let identity = "tenant-alpha";
+        let identity = "null_dev_00";
 
         let mut buf = [0u8; 640];
         let query_bytes = "Welcome".as_bytes();
@@ -1073,6 +1279,8 @@ fn handle_connection(
             "multihash_addresses": routing_data.routed.uor.multihash_addresses.clone(),
         });
 
+        let max_tokens = router_guard.get_suggested_token_limit("Welcome", identity);
+
         let info = serde_json::json!({
             "uptime_seconds": start_time.elapsed().as_secs_f64().round(),
             "sentences_indexed": sentences_indexed,
@@ -1107,7 +1315,7 @@ fn handle_connection(
                 "auto_tuned": {
                     "gamma": gamma,
                     "temperature": temperature,
-                    "max_tokens": 25,
+                    "max_tokens": max_tokens,
                     "engine": "geometric",
                     "uor_entropy_bias": uor_bias
                 }

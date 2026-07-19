@@ -407,6 +407,7 @@ pub struct Runtime<'a> {
     pub rot: [usize; WINDOW + 1],
     pub pop: [u8; 256],
     pub kernel: OpKernel,
+    pub recent: Vec<u16>,
 }
 
 impl<'a> Runtime<'a> {
@@ -416,6 +417,7 @@ impl<'a> Runtime<'a> {
             rot: derive_rotations(),
             pop: derive_popcount_table(),
             kernel: OpKernel::default(),
+            recent: Vec::new(),
         }
     }
 
@@ -471,14 +473,23 @@ impl<'a> Runtime<'a> {
         for d in (0..=STAGES).rev() {
             if let Some(dist) = store[d].get(&code[..d]) {
                 let mut best_t = 0u16;
-                let mut best_c = -1i64;
+                let mut best_c = -1000000i64;
                 let mut best_n = 0u32;
                 for (&t, &cnt) in dist {
-                    if self.kernel.lt(best_c, cnt as i64) {
-                        best_c = cnt as i64;
+                    let mut score = cnt as i64;
+                    let occurrences = self.recent.iter().filter(|&&r| r == t).count();
+                    if occurrences > 0 {
+                        score -= occurrences as i64 * 1000;
+                    }
+                    if self.kernel.lt(best_c, score) {
+                        best_c = score;
                         best_t = t;
                         best_n = cnt;
                     }
+                }
+                self.recent.push(best_t);
+                if self.recent.len() > 32 {
+                    self.recent.remove(0);
                 }
                 return Prediction {
                     token: best_t,

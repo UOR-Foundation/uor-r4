@@ -952,11 +952,12 @@
             </div>
 
             <div class="identity-label">Routing Identity (UOR, address, or text)</div>
-            <input type="text" class="identity-input" id="identityInput" value="tenant-alpha" placeholder="sha256:... or tenant-alpha" style="margin-bottom:0.75rem;">
+            <input type="text" class="identity-input" id="identityInput" value="null_dev_00" placeholder="sha256:... or null_dev_00" style="margin-bottom:0.75rem;">
 
             <div class="section-label">Synthesis Engine Selection</div>
             <select class="identity-input" id="engineSelect" style="margin-bottom:0.75rem; background: var(--bg); color: var(--cyan); border-color: var(--border2); font-family: 'Outfit', sans-serif;">
                 <option value="transformerless">Transformerless (Local)</option>
+                <option value="attention">Full Attention Llama (CPU)</option>
                 <option value="geometric">Pure Geometric (WASM Decoded)</option>
             </select>
 
@@ -1058,6 +1059,7 @@
                 <div class="sys-kv"><span class="sys-k">Requests</span><span class="sys-v" id="reqTotal">—</span></div>
                 <div class="sys-kv"><span class="sys-k">P50 route</span><span class="sys-v" id="routeP50">—ms</span></div>
                 <div class="sys-kv"><span class="sys-k">P95 gen</span><span class="sys-v" id="genP95">—ms</span></div>
+                <div class="sys-kv"><span class="sys-k">Speed</span><span class="sys-v" id="genSpeed" style="color:var(--cyan);">— tok/s</span></div>
                 <div class="sys-kv"><span class="sys-k">TLess</span><span class="sys-v" id="tlessStatus" style="color:var(--muted);">—</span></div>
                 <div class="sys-kv"><span class="sys-k">Corpus</span><span class="sys-v" id="corpusCount">—</span></div>
             </div>
@@ -2485,7 +2487,7 @@ function updateTelemetry(data, isSysinfo = false) {
         });
     }
     
-    updateSystemMetricsUI(data.routing_latency_ms, data.gen_latency_ms);
+    updateSystemMetricsUI(data.routing_latency_ms, data.gen_latency_ms, data.tokens_per_sec);
 }
 
 function renderTrajectoryTimeline(trajectory) {
@@ -2712,7 +2714,7 @@ async function sendQuery(text) {
     chatLogInner.appendChild(loadMsg);
     scrollToBottom();
 
-    const identity = document.getElementById("identityInput")?.value.trim() || "tenant-alpha";
+    const identity = document.getElementById("identityInput")?.value.trim() || "null_dev_00";
     const selectedEngineMode = engineSelect?.value || "transformerless";
     const isWebpageLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
 
@@ -2778,7 +2780,7 @@ if (indexBtn) {
         indexStatus.style.color = "var(--text2)";
         indexStatus.textContent = "Indexing manifold... please wait";
         try {
-            const identity = document.getElementById("identityInput")?.value.trim() || "tenant-alpha";
+            const identity = document.getElementById("identityInput")?.value.trim() || "null_dev_00";
             let count;
             if (localWasmMode) {
                 if (!router) throw new Error("WASM router not initialized");
@@ -2902,7 +2904,7 @@ if (resetBrainBtn) {
     resetBrainBtn.addEventListener("click", async () => {
         resetBrainBtn.disabled = true;
         try {
-            const identity = document.getElementById("identityInput")?.value.trim() || "tenant-alpha";
+            const identity = document.getElementById("identityInput")?.value.trim() || "null_dev_00";
             if (localWasmMode) {
                 if (!router) throw new Error("WASM router not initialized");
                 router.reset_brain(identity);
@@ -3112,7 +3114,7 @@ let routeLatencyHistory = [];
 let genLatencyHistory = [];
 const startTime = Date.now();
 
-function updateSystemMetricsUI(routeMs, genMs) {
+function updateSystemMetricsUI(routeMs, genMs, tokensPerSec) {
     if (routeMs !== undefined) {
         routeLatencyHistory.push(routeMs);
         if (routeLatencyHistory.length > 50) routeLatencyHistory.shift();
@@ -3138,6 +3140,9 @@ function updateSystemMetricsUI(routeMs, genMs) {
     setEl("reqTotal", requestCount);
     setEl("routeP50", p50(routeLatencyHistory).toFixed(1) + "ms");
     setEl("genP95", p95(genLatencyHistory).toFixed(0) + "ms");
+    if (tokensPerSec !== undefined && tokensPerSec > 0) {
+        setEl("genSpeed", tokensPerSec.toFixed(1) + " tok/s");
+    }
 }
 
 function pollSysinfo() {
@@ -3172,6 +3177,7 @@ function pollSysinfo() {
             })
             .then(info => {
                 localWasmMode = false;
+                updateConnectionStatusUI();
                 if (info && info.sentences_indexed !== undefined) {
                     setEl("corpusCount", info.sentences_indexed.toLocaleString());
                 }
@@ -3187,6 +3193,7 @@ function pollSysinfo() {
             .catch(err => {
                 console.warn("Sysinfo poll failed, switching to local WASM fallback mode:", err);
                 localWasmMode = true;
+                updateConnectionStatusUI();
                 tryInitLocalWasm();
             });
     }
@@ -3402,6 +3409,30 @@ async function restoreSessionFromLocalStorage() {
 
 window.addEventListener("beforeunload", saveSessionToLocalStorage);
 
+function updateConnectionStatusUI() {
+    const dot = document.querySelector(".chat-header-dot");
+    const route = document.getElementById("chatHeaderRoute");
+    if (localWasmMode) {
+        if (dot) {
+            dot.style.background = "#ffb300";
+            dot.style.boxShadow = "0 0 8px #ffb300";
+        }
+        if (route) {
+            route.textContent = "⚠️ WASM FALLBACK (Server Offline)";
+            route.style.color = "var(--amber)";
+        }
+    } else {
+        if (dot) {
+            dot.style.background = "var(--emerald)";
+            dot.style.boxShadow = "0 0 8px var(--emerald)";
+        }
+        if (route) {
+            route.textContent = "🟢 Connected (Transformerless CPU)";
+            route.style.color = "var(--emerald)";
+        }
+    }
+}
+
 // =====================================================
 // Startup
 // =====================================================
@@ -3412,6 +3443,7 @@ async function startApp() {
             const probe = await fetch("/api/sysinfo");
             if (probe.ok) {
                 localWasmMode = false;
+                updateConnectionStatusUI();
                 console.log("[+] Server detected, using backend routing.");
             } else {
                 throw new Error("Server returned non-ok status");
@@ -3419,6 +3451,7 @@ async function startApp() {
         } catch (e) {
             console.warn("[!] Server offline or static deployment detected. Initializing local WASM fallback:", e);
             localWasmMode = true;
+            updateConnectionStatusUI();
             await tryInitLocalWasm();
         }
 

@@ -250,7 +250,7 @@ pub const SIG_WORDS: usize = SIG_BYTES.div_ceil(8);
 
 /// The train/held-out story cut (80/20), computed compiler-side.
 pub fn train_cut(c: &Corpus) -> u32 {
-    (c.stories as f64 * 0.8) as u32
+    ((c.stories as f64 * 0.8) as u32).max(1)
 }
 
 pub const ART_PATH: &str = "/tmp/tless_artifacts.bin";
@@ -500,7 +500,7 @@ pub fn compile(oracle: &dyn TeacherOracle, corpus: &Corpus) -> Compiled {
     let rot = derive_rotations();
 
     // 3: thresholds = per-dimension train means of the runtime bundle.
-    let cut = (corpus.stories as f64 * 0.8) as u32;
+    let cut = train_cut(corpus);
     let mut sums = [0i128; D];
     let mut ntrain = 0i128;
     let mut threshold_progress = super::progress::Progress::new("context thresholds", corpus.n);
