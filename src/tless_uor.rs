@@ -123,6 +123,7 @@ fn tokenizer_path() -> String {
 
 /// Load state bytes from the configured paths (explicit config, then env
 /// TLESS_ARTIFACTS / TLESS_STORE, then the /tmp defaults).
+#[cfg(not(target_arch = "wasm32"))]
 pub fn load_tless_state() -> Option<TlessState> {
     let art_path = artifacts_path();
     let store_path = store_path();
