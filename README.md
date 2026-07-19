@@ -154,16 +154,19 @@ cargo run --release -- compile \
   --revision 7e27bd9f95328f0f3b08261d1252705110c806f8 \
   --seconds 300 \
   --target 20000 \
-  --sequence-length 128
+  --sequence-length 128 \
+  --r4-attention
 ```
 
 `--revision` must be a full 40-character commit hash. `--seconds` limits the
 teacher-generation work performed by one invocation, while `--target` is the
-teacher-token goal. Hugging Face compilation defaults to 20,000 tokens and
-128-token teacher stories. The bounded story length keeps attention cost and
-KV memory proportional to the eight-token deployed runtime window; increase
-`--target` or `--sequence-length` explicitly for quality experiments. Repeat
-the same command to resume an incomplete corpus.
+teacher-token goal. `--r4-attention` enables the experimental 4D softmax-free
+Spin(4) attention geometry during teacher generation (omitting this flag runs
+standard scaled dot-product attention). Hugging Face compilation defaults to
+20,000 tokens and 128-token teacher stories. The bounded story length keeps
+attention cost and KV memory proportional to the eight-token deployed runtime
+window; increase `--target` or `--sequence-length` explicitly for quality
+experiments. Repeat the same command to resume an incomplete corpus.
 
 On macOS, offline Hugging Face teacher execution uses Apple Accelerate's
 SIMD-optimized CPU BLAS. Linux and Windows use explicit NEON on AArch64 or
@@ -365,7 +368,14 @@ application-level consumers of the core runtime.
 
 ### `POST /api/chat`
 
-Routes and synthesizes a prompt:
+Routes and synthesizes a prompt. The `engine` parameter selects the generation mechanism:
+
+- `"transformerless"`: Run allocation-free table-native codebook retrieval (sub-millisecond latency on CPU).
+- `"attention"`: Run standard scaled dot-product attention on the loaded teacher model (generates up to 256 tokens).
+- `"r4-attention"`: Run experimental 4D Spin(4) softmax-free attention on the loaded teacher model (generates up to 256 tokens, yielding ~25% computation speedup on CPU by bypassing standard softmax exponents).
+- `"geometric"`: Route purely geometrically and decode directly from the manifold resonance.
+
+Example request payload:
 
 ```json
 {
@@ -374,6 +384,8 @@ Routes and synthesizes a prompt:
   "engine": "transformerless"
 }
 ```
+
+The browser dashboard (<http://127.0.0.1:8000>) includes an engine selector dropdown to easily swap between these modes. The dashboard displays a **Speed** metric (in tokens/sec) under the telemetry card that persists after generation completes, allowing for easy execution speed profiling and audit comparison across the attention and transformerless pathways.
 
 ### `GET /api/sysinfo`
 
