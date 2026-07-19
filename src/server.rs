@@ -585,6 +585,7 @@ fn handle_connection(
         // sessions keep working, but all local synthesis is transformerless.
         let engine_mode = match payload.engine.as_deref() {
             Some("geometric") => "geometric",
+            Some("attention") => "attention",
             Some("auto" | "ollama" | "transformerless") | None => "transformerless",
             Some(_) => "transformerless",
         };
