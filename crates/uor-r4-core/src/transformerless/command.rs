@@ -43,6 +43,7 @@ struct CompileOptions {
     seconds: u64,
     target: usize,
     sequence_length: usize,
+    r4_attention: bool,
 }
 
 fn parse_compile_options(args: &[String]) -> Result<CompileOptions, String> {
@@ -54,10 +55,16 @@ fn parse_compile_options(args: &[String]) -> Result<CompileOptions, String> {
         seconds: 300,
         target: 20_000,
         sequence_length: 128,
+        r4_attention: false,
     };
     let mut index = 0usize;
     while index < args.len() {
         let flag = &args[index];
+        if flag == "--r4-attention" {
+            options.r4_attention = true;
+            index += 1;
+            continue;
+        }
         let value = args
             .get(index + 1)
             .ok_or_else(|| format!("missing value for {flag}"))?;
@@ -232,6 +239,9 @@ pub fn compile_hugging_face(args: &[String]) -> Result<(), String> {
     let mut oracle =
         HuggingFaceLlamaOracle::load_with_sequence_length(&source, options.sequence_length)
             .map_err(|error| format!("failed to load Hugging Face model: {error}"))?;
+    if options.r4_attention {
+        oracle.set_r4_attention(true);
+    }
     compiler::generate_to(&mut oracle, options.seconds, options.target, meta, records);
     let Some(corpus) = compiler::load_corpus_from(meta, records) else {
         println!(

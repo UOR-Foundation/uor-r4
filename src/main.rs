@@ -145,6 +145,9 @@ struct CompileArgs {
     /// Teacher context allocation and story length.
     #[arg(long, default_value_t = 128)]
     sequence_length: usize,
+    /// Enable experimental R4 Spin(4) softmax-free attention during compilation.
+    #[arg(long, default_value_t = false)]
+    r4_attention: bool,
 }
 
 #[derive(Args, Debug)]
@@ -336,6 +339,9 @@ fn compile(args: &CompileArgs) -> Result<(), RunError> {
         "--sequence-length".to_owned(),
         args.sequence_length.to_string(),
     ]);
+    if args.r4_attention {
+        values.push("--r4-attention".to_owned());
+    }
     transformerless_command::compile_hugging_face(&values).map_err(RunError::Command)
 }
 
