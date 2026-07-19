@@ -104,6 +104,7 @@ pub enum ModelError {
         root: PathBuf,
     },
     SourceNotCompiled(PathBuf),
+    CompiledNotImported(PathBuf),
 }
 
 impl fmt::Display for ModelError {
@@ -153,13 +154,18 @@ impl fmt::Display for ModelError {
             }
             Self::ManifestNotFound { reference, root } => write!(
                 formatter,
-                "compiled model manifest '{reference}' was not found under {}; run the offline transformerless compile and `model import` workflow first",
+                "compiled model manifest '{reference}' was not found under {}; run `cargo run --release -- compile` and optionally `cargo run -- import` first",
                 root.display()
             ),
             Self::SourceNotCompiled(path) => write!(
                 formatter,
-                "{} is downloaded source data, not a compiled transformerless chat bundle; compile it with `cargo run --release --bin transformerless -- compile --source {}` and then evaluate and import the resulting artifact before using `ask`",
+                "{} is downloaded source data, not a compiled transformerless chat bundle; compile it with `cargo run --release -- compile --source {}` before using `ask`",
                 path.display(),
+                path.display()
+            ),
+            Self::CompiledNotImported(path) => write!(
+                formatter,
+                "compiled transformerless bundle found at {} but it has no imported manifest; direct local chat may load it, or use `cargo run -- import --help` to attach a quality attestation and persist a named manifest",
                 path.display()
             ),
         }
@@ -244,6 +250,9 @@ impl ModelStore {
     pub fn read_manifest(&self, reference: &str) -> Result<ModelManifest, ModelError> {
         let supplied_path = Path::new(reference);
         if supplied_path.exists() {
+            if is_compiled_bundle(supplied_path) {
+                return Err(ModelError::CompiledNotImported(supplied_path.to_path_buf()));
+            }
             return Err(ModelError::SourceNotCompiled(supplied_path.to_path_buf()));
         }
         let bytes = if reference.starts_with("blake3:") {
@@ -260,6 +269,10 @@ impl ModelStore {
             match std::fs::read(path) {
                 Ok(bytes) => bytes,
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                    let compiled = self.root.join("compiled").join(safe_name(reference));
+                    if is_compiled_bundle(&compiled) {
+                        return Err(ModelError::CompiledNotImported(compiled));
+                    }
                     let source = self.root.join("sources").join(safe_name(reference));
                     if source.is_dir() {
                         return Err(ModelError::SourceNotCompiled(source));
@@ -284,6 +297,13 @@ impl ModelStore {
         }
         Ok(self.root.join("objects").join("blake3").join(hash))
     }
+}
+
+fn is_compiled_bundle(path: &Path) -> bool {
+    path.is_dir()
+        && ["tless_artifacts.bin", "tless_store.bin", "tokenizer.bin"]
+            .iter()
+            .all(|name| path.join(name).is_file())
 }
 
 fn address_container(bytes: &[u8]) -> String {
@@ -627,6 +647,26 @@ mod tests {
             .read_manifest("downloaded-model")
             .unwrap_err();
         assert!(matches!(error, ModelError::SourceNotCompiled(path) if path == source));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn compiled_bundle_is_distinguished_from_downloaded_source() {
+        let root = std::env::temp_dir().join(format!(
+            "uor-r4-compiled-bundle-test-{}",
+            std::process::id()
+        ));
+        let source = root.join("sources").join("compiled-model");
+        let compiled = root.join("compiled").join("compiled-model");
+        std::fs::create_dir_all(&source).unwrap();
+        std::fs::create_dir_all(&compiled).unwrap();
+        for name in ["tless_artifacts.bin", "tless_store.bin", "tokenizer.bin"] {
+            std::fs::write(compiled.join(name), []).unwrap();
+        }
+        let error = ModelStore::new(&root)
+            .read_manifest("compiled-model")
+            .unwrap_err();
+        assert!(matches!(error, ModelError::CompiledNotImported(path) if path == compiled));
         std::fs::remove_dir_all(root).unwrap();
     }
 }

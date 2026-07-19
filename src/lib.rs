@@ -72,7 +72,7 @@ mod facade_smoke_tests {
         let runtime_sources = concat!(
             include_str!("chat.rs"),
             include_str!("server.rs"),
-            include_str!("bin/ask.rs"),
+            include_str!("main.rs"),
         );
         for dependency in ["reqwest", "ureq", "ollama-rs", "async-openai", "anthropic"] {
             assert!(

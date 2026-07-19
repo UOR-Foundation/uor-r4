@@ -139,6 +139,8 @@ mod witnesses {
 #[cfg(not(target_arch = "wasm32"))]
 pub mod certify;
 #[cfg(not(target_arch = "wasm32"))]
+pub mod command;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod compare;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod compiler;

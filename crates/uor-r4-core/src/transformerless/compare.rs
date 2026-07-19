@@ -52,7 +52,7 @@ fn print_recorded_classical_comparison() {
 pub fn compare(oracle: &mut dyn TeacherOracle) {
     if cfg!(debug_assertions) {
         eprintln!(
-            "warning: debug builds distort throughput; rerun with:\n  cargo run --release --bin transformerless -- compare\n"
+            "warning: debug builds distort throughput; rerun with:\n  cargo run --release -- compare\n"
         );
     }
     let c = compiler::load_corpus().expect("corpus incomplete: run `transformerless gen` first");

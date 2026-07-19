@@ -1,23 +1,24 @@
-use clap::{Parser, Subcommand};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 use std::fmt;
 use std::io::{self, BufRead, Write};
+use std::path::PathBuf;
 use std::sync::Arc;
+use uor_r4_core::transformerless::command as transformerless_command;
 use uor_r4_wasm_router::chat::{ChatAnswer, ChatEngine, ChatError};
-use uor_r4_wasm_router::model::default_model_reference;
+use uor_r4_wasm_router::model::{
+    default_model_reference, download_source, ModelCapability, ModelError, ModelManifest,
+    ModelStore, QualityAttestation, SourceDownload,
+};
 use uor_r4_wasm_router::server::{self, ServerConfig};
 use uor_r4_wasm_router::tless_uor;
 
-/// R⁴ Tangent Space Router server and local chat CLI.
-#[derive(Parser, Debug, Clone)]
-#[command(name = "server", version, about, long_about = None)]
+/// R⁴ local AI: compile, manage, ask, chat, benchmark, or serve.
+#[derive(Parser, Debug)]
+#[command(name = "r4", version, about, long_about = None)]
 struct Cli {
     /// Increase log verbosity (-v info, -vv debug, -vvv trace).
     #[arg(short, long, action = clap::ArgAction::Count, global = true)]
     verbose: u8,
-
-    /// CID-addressed chat model name or blake3 CID.
-    #[arg(long, env = "TLESS_MODEL", global = true)]
-    model: Option<String>,
 
     /// Host interface to bind.
     #[arg(long, env = "UOR_R4_HOST", default_value = "127.0.0.1", global = true)]
@@ -36,7 +37,7 @@ struct Cli {
     )]
     manifold_cache: String,
 
-    /// TLA3 artifact container for the transformerless engine.
+    /// Legacy transformerless artifact container.
     #[arg(
         long,
         env = "TLESS_ARTIFACTS",
@@ -45,7 +46,7 @@ struct Cli {
     )]
     tless_artifacts: String,
 
-    /// TLS1 graded store for the transformerless engine.
+    /// Legacy transformerless graded store.
     #[arg(
         long,
         env = "TLESS_STORE",
@@ -54,7 +55,7 @@ struct Cli {
     )]
     tless_store: String,
 
-    /// llama2.c tokenizer used by transformerless generation.
+    /// Legacy llama2.c tokenizer.
     #[arg(
         long,
         env = "TLESS_TOKENIZER",
@@ -67,14 +68,135 @@ struct Cli {
     command: Option<Command>,
 }
 
-#[derive(Subcommand, Debug, Clone)]
+#[derive(Subcommand, Debug)]
 enum Command {
     /// Run the HTTP server (the default).
     Serve,
-    /// Ask one question using the transformerless library directly.
-    Ask { question: String },
+    /// Ask one question using the local transformerless library directly.
+    Ask(AskArgs),
     /// Start an interactive, stateful local chat.
-    Chat,
+    Chat(ChatArgs),
+    /// Compile a local or pinned Hugging Face model into an R⁴ bundle.
+    Compile(CompileArgs),
+    /// Download pinned open weights for offline compilation.
+    Download(DownloadArgs),
+    /// Import an evaluated compiled bundle into the UOR CID store.
+    Import(ImportArgs),
+    /// Print legacy proof-workflow prerequisites.
+    Setup,
+    /// Generate the legacy resumable teacher corpus.
+    Gen {
+        #[arg(default_value_t = 300)]
+        seconds: u64,
+        #[arg(default_value_t = 150_000)]
+        target: usize,
+    },
+    /// Build the legacy graded store.
+    Store,
+    /// Run the transformerless certificate workflow.
+    Certify,
+    /// Run the measured local comparison.
+    Compare,
+    /// Print the recorded comparison certificate.
+    CompareReport,
+    /// Run the transformerless scenario suite.
+    Scenarios,
+    /// Print the legacy teacher checkpoint κ.
+    TeacherKappa,
+}
+
+#[derive(Args, Debug)]
+struct AskArgs {
+    /// CID manifest name/CID, or a locally compiled bundle name.
+    #[arg(long, env = "TLESS_MODEL")]
+    model: Option<String>,
+    /// Question to ask. Multiple unquoted words are accepted.
+    #[arg(required = true, num_args = 1..)]
+    question: Vec<String>,
+}
+
+#[derive(Args, Debug)]
+struct ChatArgs {
+    /// CID manifest name/CID, or a locally compiled bundle name.
+    #[arg(long, env = "TLESS_MODEL")]
+    model: Option<String>,
+}
+
+#[derive(Args, Debug)]
+struct CompileArgs {
+    /// Existing local Hugging Face model directory.
+    #[arg(long, conflicts_with = "model")]
+    source: Option<PathBuf>,
+    /// Hugging Face owner/repository to download and compile.
+    #[arg(long, conflicts_with = "source")]
+    model: Option<String>,
+    /// Immutable 40-character Hugging Face commit SHA.
+    #[arg(long, requires = "model")]
+    revision: Option<String>,
+    /// Compiled bundle directory [default: .uor-models/compiled/<name>].
+    #[arg(long)]
+    output: Option<PathBuf>,
+    /// Maximum teacher-generation time for this resumable invocation.
+    #[arg(long, default_value_t = 300)]
+    seconds: u64,
+    /// Teacher-token goal.
+    #[arg(long, default_value_t = 20_000)]
+    target: usize,
+    /// Teacher context allocation and story length.
+    #[arg(long, default_value_t = 128)]
+    sequence_length: usize,
+}
+
+#[derive(Args, Debug)]
+struct DownloadArgs {
+    #[arg(long)]
+    repository: String,
+    #[arg(long)]
+    revision: String,
+    #[arg(long)]
+    name: String,
+    /// Download destination [default: .uor-models/sources/<name>].
+    #[arg(long)]
+    output: Option<PathBuf>,
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum Capability {
+    Continuation,
+    InstructionChat,
+}
+
+impl From<Capability> for ModelCapability {
+    fn from(value: Capability) -> Self {
+        match value {
+            Capability::Continuation => Self::Continuation,
+            Capability::InstructionChat => Self::InstructionChat,
+        }
+    }
+}
+
+#[derive(Args, Debug)]
+struct ImportArgs {
+    #[arg(long)]
+    name: String,
+    #[arg(long)]
+    source_model: String,
+    #[arg(long, value_enum)]
+    capability: Capability,
+    #[arg(long)]
+    artifacts: PathBuf,
+    #[arg(long)]
+    store: PathBuf,
+    #[arg(long)]
+    tokenizer: PathBuf,
+    #[arg(long)]
+    evaluation_report: Option<PathBuf>,
+    #[arg(long, default_value_t = false)]
+    instruction_eval_passed: bool,
+    #[arg(long, default_value_t = 0.0)]
+    grounded_answer_rate: f32,
+    #[arg(long, default_value_t = 1.0)]
+    repetition_rate: f32,
 }
 
 impl Cli {
@@ -96,12 +218,6 @@ impl Cli {
             tokenizer: self.tless_tokenizer.clone(),
         });
     }
-
-    fn build_chat_engine(&self) -> Result<ChatEngine, ChatError> {
-        ChatEngine::builder()
-            .model(self.model.clone().unwrap_or_else(default_model_reference))
-            .build()
-    }
 }
 
 trait Chat {
@@ -117,14 +233,18 @@ impl Chat for ChatEngine {
 #[derive(Debug)]
 enum RunError {
     Chat(ChatError),
+    Model(ModelError),
     Io(io::Error),
+    Command(String),
 }
 
 impl fmt::Display for RunError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Chat(error) => error.fmt(formatter),
+            Self::Model(error) => error.fmt(formatter),
             Self::Io(error) => error.fmt(formatter),
+            Self::Command(error) => formatter.write_str(error),
         }
     }
 }
@@ -132,6 +252,12 @@ impl fmt::Display for RunError {
 impl From<ChatError> for RunError {
     fn from(error: ChatError) -> Self {
         Self::Chat(error)
+    }
+}
+
+impl From<ModelError> for RunError {
+    fn from(error: ModelError) -> Self {
+        Self::Model(error)
     }
 }
 
@@ -146,8 +272,7 @@ fn answer_once(
     question: &str,
     output: &mut impl Write,
 ) -> Result<(), RunError> {
-    let answer = chat.ask(question)?;
-    writeln!(output, "{}", answer.text)?;
+    writeln!(output, "{}", chat.ask(question)?.text)?;
     Ok(())
 }
 
@@ -180,22 +305,122 @@ fn interactive_chat(
     Ok(())
 }
 
-fn run_ask(cli: &Cli, question: &str) -> Result<(), RunError> {
-    let mut chat = cli.build_chat_engine()?;
-    answer_once(&mut chat, question, &mut io::stdout().lock())
+fn build_chat_engine(model: Option<&str>) -> Result<ChatEngine, ChatError> {
+    ChatEngine::builder()
+        .model(model.map_or_else(default_model_reference, ToOwned::to_owned))
+        .build()
 }
 
-fn run_chat(cli: &Cli) -> Result<(), RunError> {
-    let mut chat = cli.build_chat_engine()?;
-    interactive_chat(&mut chat, &mut io::stdin().lock(), &mut io::stdout().lock())?;
+fn compile(args: &CompileArgs) -> Result<(), RunError> {
+    if args.sequence_length == 0 {
+        return Err(RunError::Command(
+            "--sequence-length must be greater than zero".to_owned(),
+        ));
+    }
+    let mut values = Vec::new();
+    if let Some(source) = &args.source {
+        values.extend(["--source".to_owned(), source.display().to_string()]);
+    }
+    if let Some(model) = &args.model {
+        values.extend(["--model".to_owned(), model.clone()]);
+    }
+    if let Some(revision) = &args.revision {
+        values.extend(["--revision".to_owned(), revision.clone()]);
+    }
+    if let Some(output) = &args.output {
+        values.extend(["--output".to_owned(), output.display().to_string()]);
+    }
+    values.extend(["--seconds".to_owned(), args.seconds.to_string()]);
+    values.extend(["--target".to_owned(), args.target.to_string()]);
+    values.extend([
+        "--sequence-length".to_owned(),
+        args.sequence_length.to_string(),
+    ]);
+    transformerless_command::compile_hugging_face(&values).map_err(RunError::Command)
+}
+
+fn download(args: &DownloadArgs) -> Result<(), RunError> {
+    let path = download_source(&SourceDownload {
+        repository: args.repository.clone(),
+        revision: args.revision.clone(),
+        name: args.name.clone(),
+        output: args.output.clone(),
+    })?;
+    println!("{}", path.display());
     Ok(())
+}
+
+fn import(args: &ImportArgs) -> Result<(), RunError> {
+    let model_store = ModelStore::from_env();
+    let artifacts = model_store.put(&std::fs::read(&args.artifacts)?)?;
+    let store = model_store.put(&std::fs::read(&args.store)?)?;
+    let tokenizer = model_store.put(&std::fs::read(&args.tokenizer)?)?;
+    let evaluation_report = args
+        .evaluation_report
+        .as_ref()
+        .map(std::fs::read)
+        .transpose()?
+        .map(|bytes| model_store.put(&bytes))
+        .transpose()?;
+    let manifest = ModelManifest {
+        schema: 1,
+        name: args.name.clone(),
+        source_model: args.source_model.clone(),
+        capability: args.capability.into(),
+        artifacts,
+        store,
+        tokenizer,
+        evaluation_report,
+        quality: QualityAttestation {
+            instruction_eval_passed: args.instruction_eval_passed,
+            grounded_answer_rate: args.grounded_answer_rate,
+            repetition_rate: args.repetition_rate,
+        },
+    };
+    manifest.validate_for_chat().or_else(|error| {
+        (manifest.capability == ModelCapability::Continuation)
+            .then_some(())
+            .ok_or(error)
+    })?;
+    println!("{}", model_store.write_manifest(&manifest)?);
+    Ok(())
+}
+
+fn run_core(name: &str, arguments: &[String]) -> Result<(), RunError> {
+    let mut values = vec![name.to_owned()];
+    values.extend_from_slice(arguments);
+    transformerless_command::run(&values).map_err(RunError::Command)
 }
 
 fn run(cli: &Cli) -> Result<(), RunError> {
     cli.configure_tless();
     match cli.command.as_ref() {
-        Some(Command::Ask { question }) => run_ask(cli, question),
-        Some(Command::Chat) => run_chat(cli),
+        Some(Command::Ask(args)) => {
+            let mut chat = build_chat_engine(args.model.as_deref())?;
+            answer_once(
+                &mut chat,
+                &args.question.join(" "),
+                &mut io::stdout().lock(),
+            )
+        }
+        Some(Command::Chat(args)) => {
+            let mut chat = build_chat_engine(args.model.as_deref())?;
+            interactive_chat(&mut chat, &mut io::stdin().lock(), &mut io::stdout().lock())?;
+            Ok(())
+        }
+        Some(Command::Compile(args)) => compile(args),
+        Some(Command::Download(args)) => download(args),
+        Some(Command::Import(args)) => import(args),
+        Some(Command::Setup) => run_core("setup", &[]),
+        Some(Command::Gen { seconds, target }) => {
+            run_core("gen", &[seconds.to_string(), target.to_string()])
+        }
+        Some(Command::Store) => run_core("store", &[]),
+        Some(Command::Certify) => run_core("certify", &[]),
+        Some(Command::Compare) => run_core("compare", &[]),
+        Some(Command::CompareReport) => run_core("compare-report", &[]),
+        Some(Command::Scenarios) => run_core("scenarios", &[]),
+        Some(Command::TeacherKappa) => run_core("teacher-kappa", &[]),
         Some(Command::Serve) | None => {
             server::run_server(Arc::new(cli.server_config()));
             Ok(())
@@ -222,7 +447,6 @@ mod tests {
         answers: VecDeque<String>,
         questions: Vec<String>,
     }
-
     impl FakeChat {
         fn with_answers(answers: &[&str]) -> Self {
             Self {
@@ -231,7 +455,6 @@ mod tests {
             }
         }
     }
-
     impl Chat for FakeChat {
         fn ask(&mut self, question: &str) -> Result<ChatAnswer, ChatError> {
             self.questions.push(question.to_owned());
@@ -246,25 +469,39 @@ mod tests {
     fn help_definition_is_valid() {
         Cli::command().debug_assert();
         let help = Cli::command().render_long_help().to_string();
-        assert!(help.contains("Usage:"));
-        assert!(help.contains("serve"));
-        assert!(help.contains("ask"));
-        assert!(help.contains("chat"));
+        for command in [
+            "serve", "ask", "chat", "compile", "download", "import", "compare",
+        ] {
+            assert!(help.contains(command));
+        }
     }
 
     #[test]
     fn parses_defaults_flags_and_subcommands() {
-        let cli = Cli::try_parse_from(["server"]).unwrap();
+        let cli = Cli::try_parse_from(["r4"]).unwrap();
         assert_eq!(cli.host, "127.0.0.1");
         assert_eq!(cli.port, 8000);
-        assert!(cli.model.is_none());
         assert!(cli.command.is_none());
 
-        let cli = Cli::try_parse_from(["server", "ask", "hello world", "--port", "9001", "-vvv"])
-            .unwrap();
+        let cli =
+            Cli::try_parse_from(["r4", "ask", "hello", "world", "--port", "9001", "-vvv"]).unwrap();
         assert_eq!(cli.port, 9001);
         assert_eq!(cli.verbose, 3);
-        assert!(matches!(cli.command, Some(Command::Ask { .. })));
+        let Some(Command::Ask(args)) = cli.command else {
+            panic!("expected ask")
+        };
+        assert_eq!(args.question.join(" "), "hello world");
+    }
+
+    #[test]
+    fn parses_compile_command() {
+        let cli = Cli::try_parse_from(["r4", "compile", "--source", "/models/local"]).unwrap();
+        let Some(Command::Compile(args)) = cli.command else {
+            panic!("expected compile")
+        };
+        assert_eq!(args.source, Some(PathBuf::from("/models/local")));
+        assert_eq!(args.target, 20_000);
+        assert_eq!(args.sequence_length, 128);
     }
 
     #[test]

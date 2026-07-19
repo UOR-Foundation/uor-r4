@@ -58,7 +58,7 @@ model.
 
 - Current stable Rust and Cargo.
 - `hf` from the Hugging Face CLI for `model download` or
-  `transformerless compile --model`.
+  `cargo run --release -- compile --model`.
 - `curl` and `unzip` only for the legacy TinyStories setup workflow.
 
 Inference is CPU-only. GPU features, `--device`, Metal, CUDA, and Candle are
@@ -73,18 +73,19 @@ cargo check --workspace
 cargo test --workspace
 ```
 
-The default binary is the HTTP server:
+The project exposes one executable, `r4`. With no subcommand it runs the HTTP
+server:
 
 ```bash
 cargo run
-# equivalent to: cargo run --bin server
+# equivalent after a release build: ./target/release/r4
 ```
 
 Open <http://127.0.0.1:8000>. The geometric router and dashboard work without a
 chat model. Use another listener when needed:
 
 ```bash
-cargo run --bin server -- --host 0.0.0.0 --port 9000
+cargo run -- --host 0.0.0.0 --port 9000
 ```
 
 Build the browser package with:
@@ -98,10 +99,11 @@ artifact loading and synthesis run through the native server.
 
 ## Model lifecycle
 
-The complete lifecycle is:
+The local lifecycle is:
 
 ```text
-pinned source -> resumable compile -> instruction evaluation -> CID import -> ask/chat
+pinned source -> resumable compile -> CID-addressed local ask/chat
+                                     -> evaluation -> named manifest import
 ```
 
 Downloading and compiling are explicit offline operations. Neither `ask` nor
@@ -110,7 +112,7 @@ the HTTP server downloads a model or contacts an inference provider.
 ### 1. Download pinned compiler input
 
 ```bash
-cargo run --bin model -- download \
+cargo run -- download \
   --repository HuggingFaceTB/SmolLM2-135M-Instruct \
   --revision 7e27bd9f95328f0f3b08261d1252705110c806f8 \
   --name smollm2-135m-instruct
@@ -120,7 +122,7 @@ The default destination is
 `.uor-models/sources/smollm2-135m-instruct`. Override it with `--output`:
 
 ```bash
-cargo run --bin model -- download \
+cargo run -- download \
   --repository HuggingFaceTB/SmolLM2-135M-Instruct \
   --revision 7e27bd9f95328f0f3b08261d1252705110c806f8 \
   --name smollm2-135m-instruct \
@@ -136,26 +138,40 @@ and elapsed time.
 Compile an already downloaded directory:
 
 ```bash
-cargo run --release --bin transformerless -- compile \
+cargo run --release -- compile \
   --source .uor-models/sources/smollm2-135m-instruct \
   --output .uor-models/compiled/smollm2-135m-instruct \
   --seconds 300 \
-  --target 150000
+  --target 20000 \
+  --sequence-length 128
 ```
 
 Or let the compiler download an immutable revision through `hf`:
 
 ```bash
-cargo run --release --bin transformerless -- compile \
+cargo run --release -- compile \
   --model HuggingFaceTB/SmolLM2-135M-Instruct \
   --revision 7e27bd9f95328f0f3b08261d1252705110c806f8 \
   --seconds 300 \
-  --target 150000
+  --target 20000 \
+  --sequence-length 128
 ```
 
 `--revision` must be a full 40-character commit hash. `--seconds` limits the
 teacher-generation work performed by one invocation, while `--target` is the
-teacher-token goal. Repeat the same command to resume an incomplete corpus.
+teacher-token goal. Hugging Face compilation defaults to 20,000 tokens and
+128-token teacher stories. The bounded story length keeps attention cost and
+KV memory proportional to the eight-token deployed runtime window; increase
+`--target` or `--sequence-length` explicitly for quality experiments. Repeat
+the same command to resume an incomplete corpus.
+
+On macOS, offline Hugging Face teacher execution uses Apple Accelerate's
+SIMD-optimized CPU BLAS. Linux and Windows use explicit NEON on AArch64 or
+runtime-detected AVX2/FMA on x86-64, with a dependency-free scalar fallback.
+These compiler accelerators do not add a runtime dependency or change the
+allocation-free table-native inference path. Set `TLESS_TEACHER_EXACT=1` to
+force the slower, reduction-order-preserving scalar path for diagnostic
+comparisons. The pinned legacy proof workflow always uses that exact path.
 
 When compilation completes, the output directory contains:
 
@@ -170,17 +186,31 @@ Interactive terminals show progress bars. Redirected output receives periodic
 allocate; the allocation-free guarantee applies to the deployed prediction hot
 path, which uses fixed and caller-owned buffers.
 
-### 3. Evaluate instruction quality
+### 3. Ask locally
+
+Compilation produces a directly loadable local bundle. On first use, R⁴
+content-addresses the artifact, store, and tokenizer in `.uor-models/objects`:
+
+```bash
+cargo run --release -- ask "why is the sky blue?"
+```
+
+This direct path verifies container integrity but does not claim that the
+compiled approximation has passed an instruction-quality evaluation. The CLI
+logs that distinction. Compilation success and answer quality are separate
+properties.
+
+### 4. Evaluate instruction quality
 
 Run held-out instruction and grounding evaluation against the compiled bundle
 and retain a machine-readable report. This evaluation tooling is the remaining
 end-to-end workflow gap in the repository. Do not mark an artifact as passing
 merely to bypass the chat quality gate.
 
-### 4. Import the evaluated bundle
+### 5. Import the evaluated bundle
 
 ```bash
-cargo run --bin model -- import \
+cargo run -- import \
   --name my-chat-model \
   --source-model HuggingFaceTB/SmolLM2-135M-Instruct@7e27bd9f95328f0f3b08261d1252705110c806f8 \
   --capability instruction-chat \
@@ -201,12 +231,12 @@ CID.
 Continuation-only bundles may be imported for certification and benchmarking,
 but `ask` refuses to load them.
 
-### 5. Ask or chat
+### 6. Ask or chat with an imported manifest
 
 One-shot `ask` calls the R⁴ library directly without a server or network hop:
 
 ```bash
-cargo run --release --bin ask -- \
+cargo run --release -- ask \
   --model my-chat-model \
   "why is the sky blue?"
 ```
@@ -214,20 +244,13 @@ cargo run --release --bin ask -- \
 Interactive chat retains turn history:
 
 ```bash
-cargo run --release --bin server -- --model my-chat-model chat
-```
-
-The compatibility form uses the same direct library path:
-
-```bash
-cargo run --release --bin server -- \
-  --model my-chat-model \
-  ask "why is the sky blue?"
+cargo run --release -- chat --model my-chat-model
 ```
 
 `--model` is optional. Selection order is `TLESS_MODEL`, the newest JSON
 descriptor in `models/`, then `smollm2-135m-instruct`. A descriptor selects a
-name only; a corresponding imported manifest must exist.
+name; R⁴ first uses an imported manifest and otherwise falls back to a complete
+local bundle under `.uor-models/compiled/<name>`.
 
 Library consumers can use the chat example directly:
 
@@ -249,14 +272,14 @@ The pinned llama2.c TinyStories path remains available for proof reproduction
 and same-machine performance comparison.
 
 ```bash
-cargo run --release --bin transformerless -- setup
-cargo run --release --bin transformerless -- gen 300 150000
+cargo run --release -- setup
+cargo run --release -- gen 300 150000
 # repeat gen until it reports done=1
-cargo run --release --bin transformerless -- compile
-cargo run --release --bin transformerless -- store
-cargo run --release --bin transformerless -- certify
-cargo run --release --bin transformerless -- compare
-cargo run --release --bin transformerless -- scenarios
+cargo run --release -- compile
+cargo run --release -- store
+cargo run --release -- certify
+cargo run --release -- compare
+cargo run --release -- scenarios
 ```
 
 Its default files are:
@@ -272,7 +295,7 @@ Use `compare-report` for the recorded certificate without loading the source
 checkpoint:
 
 ```bash
-cargo run --release --bin transformerless -- compare-report
+cargo run --release -- compare-report
 ```
 
 See [COMPARISON.md](docs/transformerless/COMPARISON.md) for the measured quality
@@ -280,14 +303,21 @@ and throughput evidence.
 
 ## CLI reference
 
+Build once and invoke `r4` directly, or use the equivalent Cargo commands:
+
 ```bash
-cargo run --bin server -- --help
-cargo run --bin ask -- --help
-cargo run --bin model -- --help
-cargo run --bin transformerless
+cargo build --release
+./target/release/r4 --help
+./target/release/r4 ask "why is the sky blue?"
+
+cargo run -- --help
+cargo run -- ask --help
+cargo run -- compile --help
+cargo run -- download --help
+cargo run -- import --help
 ```
 
-The server and `ask` support `-v`, `-vv`, and `-vvv` for info, debug, and trace
+All subcommands support `-v`, `-vv`, and `-vvv` for info, debug, and trace
 logging. Tracing uses a dependency-light subscriber.
 
 The server defaults are:
@@ -315,14 +345,14 @@ flowchart LR
     Prompt["Prompt"] --> Router["R⁴ geometric router"]
     Router --> Runtime
     Runtime --> Witness["UOR CID + Grounded witness"]
-    Runtime --> Apps["ask / chat / HTTP API"]
+    Runtime --> Apps["r4 ask / r4 chat / HTTP API"]
 ```
 
 The workspace has one public package and two internal implementation crates:
 
 | Package | Responsibility |
 |---|---|
-| `uor-r4-wasm-router` | Public facade, UOR witness integration, HTTP server, WASM surface, and application binaries |
+| `uor-r4-wasm-router` | Public facade, UOR witness integration, HTTP server, WASM surface, and the single `r4` executable |
 | [`uor-r4-core`](crates/uor-r4-core) | Core R⁴ mathematics and transformerless compiler/runtime/tokenizer/certifier |
 | [`uor-r4-router`](crates/uor-r4-router) | Manifold state, indexing, geometric routing, and router witnesses |
 
@@ -420,11 +450,10 @@ model fixtures.
 ## Common errors
 
 - **Downloaded source data is not a compiled chat bundle:** run the exact
-  `transformerless compile --source ...` command printed by `ask`, then evaluate
-  and import the result.
-- **Compilation completed but `ask` rejects the model:** compilation does not
-  create an instruction-quality attestation. Supply a genuine passing report to
-  `model import`.
+  `compile --source ...` command printed by `ask`.
+- **Compiled bundle has no quality attestation:** local `ask` can still run it
+  and content-addresses its files. Evaluate and `import` it before presenting
+  its output as instruction-quality validated.
 - **Manifest not found:** select an imported manifest name/CID or set
   `TLESS_MODEL`.
 - **Tokenizer or transformerless state unavailable:** build the legacy files or

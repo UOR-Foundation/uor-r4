@@ -15,23 +15,15 @@ resolver = "2"
 name = "uor-r4-wasm-router"
 version = "0.1.0"
 edition = "2021"
-default-run = "server"
+default-run = "r4"
 autobins = false
 
 [lib]
 crate-type = ["cdylib", "rlib"]
 
 [[bin]]
-name = "server"
+name = "r4"
 path = "src/main.rs"
-
-[[bin]]
-name = "ask"
-path = "src/bin/ask.rs"
-
-[[bin]]
-name = "model"
-path = "src/bin/model.rs"
 
 [dependencies]
 uor-r4-core = { path = "crates/uor-r4-core" }

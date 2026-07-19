@@ -25,11 +25,11 @@
 //! table + next-token oracle); this crate ships the llama-family adapter,
 //! and qwen/phi-class sources differ only in that adapter.
 
-use std::path::{Path, PathBuf};
-use uor_r4_core::transformerless::{
+use super::{
     certify, compare, compiler, runtime, scenarios,
     teacher::{HuggingFaceLlamaOracle, LlamaOracle},
 };
+use std::path::{Path, PathBuf};
 
 const DEFAULT_CHECKPOINT: &str = "/tmp/ref/out/model.bin";
 const STORE_PATH: &str = "/tmp/tless_store.bin";
@@ -42,6 +42,7 @@ struct CompileOptions {
     output: Option<PathBuf>,
     seconds: u64,
     target: usize,
+    sequence_length: usize,
 }
 
 fn parse_compile_options(args: &[String]) -> Result<CompileOptions, String> {
@@ -51,7 +52,8 @@ fn parse_compile_options(args: &[String]) -> Result<CompileOptions, String> {
         source: None,
         output: None,
         seconds: 300,
-        target: 150_000,
+        target: 20_000,
+        sequence_length: 128,
     };
     let mut index = 0usize;
     while index < args.len() {
@@ -73,6 +75,14 @@ fn parse_compile_options(args: &[String]) -> Result<CompileOptions, String> {
                 options.target = value
                     .parse()
                     .map_err(|_| format!("invalid --target value: {value}"))?;
+            }
+            "--sequence-length" => {
+                options.sequence_length = value
+                    .parse()
+                    .map_err(|_| format!("invalid --sequence-length value: {value}"))?;
+                if options.sequence_length == 0 {
+                    return Err("--sequence-length must be greater than zero".to_owned());
+                }
             }
             _ => return Err(format!("unknown compile option: {flag}")),
         }
@@ -184,7 +194,11 @@ fn download_hf_source(repository: &str, revision: &str, destination: &Path) -> R
     Ok(())
 }
 
-fn compile_hugging_face(args: &[String]) -> Result<(), String> {
+pub fn compile_hugging_face(args: &[String]) -> Result<(), String> {
+    #[cfg(debug_assertions)]
+    eprintln!(
+        "warning: debug builds make teacher generation much slower; use `cargo run --release -- compile ...`"
+    );
     let options = parse_compile_options(args)?;
     let slug = source_slug(&options);
     let source = options
@@ -215,8 +229,9 @@ fn compile_hugging_face(args: &[String]) -> Result<(), String> {
     let records = records
         .to_str()
         .ok_or_else(|| "corpus records path is not UTF-8".to_owned())?;
-    let mut oracle = HuggingFaceLlamaOracle::load(&source)
-        .map_err(|error| format!("failed to load Hugging Face model: {error}"))?;
+    let mut oracle =
+        HuggingFaceLlamaOracle::load_with_sequence_length(&source, options.sequence_length)
+            .map_err(|error| format!("failed to load Hugging Face model: {error}"))?;
     compiler::generate_to(&mut oracle, options.seconds, options.target, meta, records);
     let Some(corpus) = compiler::load_corpus_from(meta, records) else {
         println!(
@@ -244,11 +259,13 @@ fn compile_hugging_face(args: &[String]) -> Result<(), String> {
     )
     .map_err(|error| error.to_string())?;
     println!("compile complete: {}", output.display());
+    println!(
+        "bundle ready for local `ask`; use `cargo run -- import --help` to attach a quality attestation and persist a named manifest (name: {slug})"
+    );
     Ok(())
 }
 
-fn main() {
-    let args: Vec<String> = std::env::args().skip(1).collect();
+pub fn run(args: &[String]) -> Result<(), String> {
     match args.first().map(|s| s.as_str()) {
         Some("setup") => setup(),
         Some("gen") => {
@@ -267,15 +284,15 @@ fn main() {
                 let oracle = LlamaOracle::load(DEFAULT_CHECKPOINT);
                 let art = compiler::compile(&oracle, &c);
                 compiler::save_artifacts(&art);
-            } else if let Err(error) = compile_hugging_face(&args[1..]) {
-                eprintln!("compile failed: {error}");
-                std::process::exit(2);
+            } else {
+                compile_hugging_face(&args[1..])?;
             }
         }
         Some("store") => {
             let c = compiler::load_corpus()
                 .expect("corpus incomplete: run `transformerless gen` first");
-            let art = compiler::load_artifacts().expect("run `transformerless compile` first");
+            let art =
+                compiler::load_artifacts().expect("run `cargo run --release -- compile` first");
             let (store, _) = runtime::build_store(&art, &c);
             let bytes = runtime::store_bytes(&store);
             std::fs::write(STORE_PATH, &bytes).unwrap();
@@ -306,11 +323,12 @@ fn main() {
         _ => {
             println!(
                 "R4 transformerless — cross-compile a transformer into a mul-free table artifact\n\
-                 commands: setup | gen [secs] [target] | compile [--model REPO --revision SHA | --source DIR] [--output DIR] [--seconds N] [--target N] | store | certify | compare | compare-report | scenarios | teacher-kappa\n\
+                 commands: setup | gen [secs] [target] | compile [--model REPO --revision SHA | --source DIR] [--output DIR] [--seconds N] [--target N] [--sequence-length N] | store | certify | compare | compare-report | scenarios | teacher-kappa\n\
                  docs: docs/TRANSFORMERLESS.md (extrapolation), docs/PROOF.md (proof + certificate)"
             );
         }
     }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -330,6 +348,8 @@ mod tests {
             "60",
             "--target",
             "1000",
+            "--sequence-length",
+            "64",
         ]
         .map(str::to_owned);
         let options = parse_compile_options(&args).expect("valid options");
@@ -340,6 +360,7 @@ mod tests {
         assert_eq!(options.output, Some(PathBuf::from("/tmp/compiled")));
         assert_eq!(options.seconds, 60);
         assert_eq!(options.target, 1000);
+        assert_eq!(options.sequence_length, 64);
         assert_eq!(source_slug(&options), "smollm2-135m-instruct");
     }
 
@@ -348,7 +369,17 @@ mod tests {
         let args = ["--source", "/models/local", "--target", "10"].map(str::to_owned);
         let options = parse_compile_options(&args).expect("valid local source");
         assert_eq!(options.source, Some(PathBuf::from("/models/local")));
+        assert_eq!(options.target, 10);
+        assert_eq!(options.sequence_length, 128);
         assert_eq!(source_slug(&options), "local");
+    }
+
+    #[test]
+    fn hugging_face_compile_defaults_are_bounded() {
+        let args = ["--source", "/models/local"].map(str::to_owned);
+        let options = parse_compile_options(&args).expect("valid local source");
+        assert_eq!(options.target, 20_000);
+        assert_eq!(options.sequence_length, 128);
     }
 
     #[test]

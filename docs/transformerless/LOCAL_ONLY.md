@@ -9,7 +9,7 @@ Production transformerless inference is CPU-only. There are no `metal`,
 invocation is:
 
 ```bash
-cargo run --bin ask -- "why is the sky blue?"
+cargo run -- ask "why is the sky blue?"
 ```
 
 The inference hot path uses fixed-size stack storage or buffers supplied by

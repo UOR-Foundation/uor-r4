@@ -748,7 +748,7 @@ fn handle_connection(
             None => send_json_response(
                 stream,
                 503,
-                "{\"error\":\"transformerless state unavailable — run `transformerless compile` and `transformerless store` (or set TLESS_ARTIFACTS / TLESS_STORE)\"}",
+                "{\"error\":\"transformerless state unavailable — run `cargo run --release -- compile` and `cargo run --release -- store` (or set TLESS_ARTIFACTS / TLESS_STORE)\"}",
             ),
         }
         return;
@@ -796,7 +796,7 @@ fn handle_connection(
             None => send_json_response(
                 stream,
                 503,
-                "{\"error\":\"transformerless state unavailable — run `transformerless compile` and `transformerless store`\"}",
+                "{\"error\":\"transformerless state unavailable — run `cargo run --release -- compile` and `cargo run --release -- store`\"}",
             ),
         }
         return;
@@ -881,7 +881,7 @@ fn handle_connection(
             None => send_json_response(
                 stream,
                 503,
-                "{\"error\":\"transformerless state unavailable — run `transformerless compile` and `transformerless store`\"}",
+                "{\"error\":\"transformerless state unavailable — run `cargo run --release -- compile` and `cargo run --release -- store`\"}",
             ),
         }
         return;

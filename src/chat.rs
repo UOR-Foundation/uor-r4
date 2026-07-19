@@ -122,7 +122,18 @@ impl ChatEngineBuilder {
     pub fn build(self) -> Result<ChatEngine, ChatError> {
         let reference = self.model.as_deref().ok_or(ChatError::MissingModel)?;
         let model_store = ModelStore::from_env();
-        let manifest = model_store.read_manifest(reference)?;
+        let manifest = match model_store.read_manifest(reference) {
+            Ok(manifest) => manifest,
+            Err(ModelError::CompiledNotImported(path)) => {
+                return build_local_compiled_engine(
+                    &model_store,
+                    &path,
+                    reference,
+                    self.max_tokens,
+                );
+            }
+            Err(error) => return Err(error.into()),
+        };
         manifest.validate_for_chat()?;
         if let Some(report) = &manifest.evaluation_report {
             let _ = model_store.get(report)?;
@@ -152,6 +163,44 @@ impl ChatEngineBuilder {
             max_tokens: self.max_tokens,
         })
     }
+}
+
+fn build_local_compiled_engine(
+    model_store: &ModelStore,
+    directory: &std::path::Path,
+    reference: &str,
+    max_tokens: usize,
+) -> Result<ChatEngine, ChatError> {
+    let artifact_bytes = std::fs::read(directory.join("tless_artifacts.bin"))?;
+    let store_bytes = std::fs::read(directory.join("tless_store.bin"))?;
+    let tokenizer_bytes = std::fs::read(directory.join("tokenizer.bin"))?;
+    let artifacts =
+        compiler::parse_artifacts(&artifact_bytes).ok_or(ChatError::InvalidArtifacts)?;
+    let store = runtime::parse_store(&store_bytes).ok_or(ChatError::InvalidStore)?;
+
+    // Content-address all local compiler outputs immediately. A manifest and
+    // quality report remain optional metadata; integrity does not.
+    let artifact_object = model_store.put(&artifact_bytes)?;
+    let store_object = model_store.put(&store_bytes)?;
+    let tokenizer_object = model_store.put(&tokenizer_bytes)?;
+    let tokenizer_path = write_tokenizer_cache(&tokenizer_object.cid, &tokenizer_bytes)?;
+    let tokenizer = Tokenizer::try_load(&tokenizer_path)?;
+    tracing::warn!(
+        model = reference,
+        directory = %directory.display(),
+        artifact_cid = %artifact_object.cid,
+        store_cid = %store_object.cid,
+        tokenizer_cid = %tokenizer_object.cid,
+        "using a locally compiled bundle without an instruction-quality attestation"
+    );
+    Ok(ChatEngine {
+        artifacts,
+        store,
+        tokenizer,
+        history: [0; MAX_CHAT_HISTORY],
+        history_len: 0,
+        max_tokens,
+    })
 }
 
 /// Stateful local chat engine with no HTTP server or background worker.

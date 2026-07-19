@@ -2,9 +2,9 @@
 //! Arithmetic order mirrors the C exactly: sequential adds in matmul rows,
 //! rmsnorm/softmax/RoPE/SwiGLU op-for-op, libm via glibc on gnu targets.
 //! The Safetensors adapter also loads pinned Hugging Face SmolLM2 weights
-//! into this same source-only teacher surface. matmul is parallelized over OUTPUT ROWS only; each row's chain is the
-//! same serial reduction, so threaded output is bit-identical to serial
-//! (witnessed in greedy_check).
+//! into this same source-only teacher surface. The pinned legacy teacher keeps
+//! the original reduction order; native Hugging Face compilation may use an
+//! optimized CPU matrix-vector backend.
 
 pub struct Config {
     pub dim: usize,
@@ -66,6 +66,11 @@ impl State {
             logits: vec![0.0; c.vocab],
         }
     }
+
+    /// Begin a new sequence without reallocating or clearing the KV cache.
+    /// Forward overwrites the current position before reading positions
+    /// `0..=pos`, so data from the preceding sequence is unreachable.
+    fn reset(&mut self) {}
 }
 
 fn rmsnorm(o: &mut [f32], x: &[f32], weight: &[f32]) {
@@ -109,61 +114,245 @@ fn softmax(x: &mut [f32]) {
     }
 }
 
-/// W (d,n) @ x (n,) -> xout (d,). Row-parallel; each row is the C serial
-/// chain, so the result is bit-identical to a serial loop.
-fn matmul(xout: &mut [f32], x: &[f32], w: &[f32], n: usize, threads: usize) {
-    let d = xout.len();
-    if threads <= 1 || d < 64 {
-        // 4 rows in flight to hide FP add latency. Each row's accumulation
-        // chain is unchanged (strictly sequential in j), so every output
-        // bit matches the naive loop.
-        let mut i = 0usize;
-        while i + 4 <= d {
-            let r0 = &w[i * n..i * n + n];
-            let r1 = &w[(i + 1) * n..(i + 1) * n + n];
-            let r2 = &w[(i + 2) * n..(i + 2) * n + n];
-            let r3 = &w[(i + 3) * n..(i + 3) * n + n];
-            let (mut v0, mut v1, mut v2, mut v3) = (0.0f32, 0.0f32, 0.0f32, 0.0f32);
-            for j in 0..n {
-                let xj = x[j];
-                v0 += r0[j] * xj;
-                v1 += r1[j] * xj;
-                v2 += r2[j] * xj;
-                v3 += r3[j] * xj;
-            }
-            xout[i] = v0;
-            xout[i + 1] = v1;
-            xout[i + 2] = v2;
-            xout[i + 3] = v3;
-            i += 4;
-        }
-        while i < d {
-            let mut val = 0.0f32;
-            let row = &w[i * n..i * n + n];
-            for j in 0..n {
-                val += row[j] * x[j];
-            }
-            xout[i] = val;
-            i += 1;
-        }
-        return;
+/// W (d,n) @ x (n,) -> xout (d,). The exact path preserves the original C
+/// reduction order for certificate reproduction. Hugging Face compilation
+/// may select the optimized CPU path because those source logits are teacher
+/// data rather than part of the pinned legacy proof.
+fn matmul(xout: &mut [f32], x: &[f32], w: &[f32], n: usize, fast: bool) {
+    if fast {
+        return matmul_fast(xout, x, w, n);
     }
-    let chunk = d.div_ceil(threads);
-    std::thread::scope(|s| {
-        for (ci, out) in xout.chunks_mut(chunk).enumerate() {
-            let base = ci * chunk;
-            s.spawn(move || {
-                for (o, i) in out.iter_mut().zip(base..) {
-                    let mut val = 0.0f32;
-                    let row = &w[i * n..i * n + n];
-                    for j in 0..n {
-                        val += row[j] * x[j];
-                    }
-                    *o = val;
-                }
-            });
+    let d = xout.len();
+    // Four rows in flight hide FP add latency while retaining each row's
+    // strictly sequential accumulation chain and therefore its exact bits.
+    let mut i = 0usize;
+    while i + 4 <= d {
+        let r0 = &w[i * n..i * n + n];
+        let r1 = &w[(i + 1) * n..(i + 1) * n + n];
+        let r2 = &w[(i + 2) * n..(i + 2) * n + n];
+        let r3 = &w[(i + 3) * n..(i + 3) * n + n];
+        let (mut v0, mut v1, mut v2, mut v3) = (0.0f32, 0.0f32, 0.0f32, 0.0f32);
+        for j in 0..n {
+            let xj = x[j];
+            v0 += r0[j] * xj;
+            v1 += r1[j] * xj;
+            v2 += r2[j] * xj;
+            v3 += r3[j] * xj;
         }
-    });
+        xout[i] = v0;
+        xout[i + 1] = v1;
+        xout[i + 2] = v2;
+        xout[i + 3] = v3;
+        i += 4;
+    }
+    while i < d {
+        let mut value = 0.0f32;
+        let row = &w[i * n..i * n + n];
+        for j in 0..n {
+            value += row[j] * x[j];
+        }
+        xout[i] = value;
+        i += 1;
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn matmul_fast(xout: &mut [f32], x: &[f32], w: &[f32], n: usize) {
+    const CBLAS_ROW_MAJOR: i32 = 101;
+    const CBLAS_NO_TRANSPOSE: i32 = 111;
+    debug_assert!(w.len() >= xout.len() * n);
+    // SAFETY: all pointers refer to initialized, non-overlapping f32 slices;
+    // their dimensions and strides describe W[xout.len(), n] and x[n].
+    unsafe {
+        cblas_sgemv(
+            CBLAS_ROW_MAJOR,
+            CBLAS_NO_TRANSPOSE,
+            i32::try_from(xout.len()).expect("teacher output dimension exceeds CBLAS i32"),
+            i32::try_from(n).expect("teacher input dimension exceeds CBLAS i32"),
+            1.0,
+            w.as_ptr(),
+            i32::try_from(n).expect("teacher stride exceeds CBLAS i32"),
+            x.as_ptr(),
+            1,
+            0.0,
+            xout.as_mut_ptr(),
+            1,
+        );
+    }
+}
+
+#[cfg(target_os = "macos")]
+#[link(name = "Accelerate", kind = "framework")]
+unsafe extern "C" {
+    fn cblas_sgemv(
+        order: i32,
+        transpose: i32,
+        rows: i32,
+        columns: i32,
+        alpha: f32,
+        matrix: *const f32,
+        leading_dimension: i32,
+        vector: *const f32,
+        vector_stride: i32,
+        beta: f32,
+        output: *mut f32,
+        output_stride: i32,
+    );
+}
+
+#[cfg(not(target_os = "macos"))]
+fn matmul_fast(xout: &mut [f32], x: &[f32], w: &[f32], n: usize) {
+    debug_assert_eq!(x.len(), n);
+    debug_assert!(w.len() >= xout.len() * n);
+    for (output, row) in xout.iter_mut().zip(w.chunks_exact(n)) {
+        *output = dot_fast(row, x);
+    }
+}
+
+#[cfg(all(not(target_os = "macos"), target_arch = "aarch64"))]
+fn dot_fast(weights: &[f32], values: &[f32]) -> f32 {
+    // NEON is part of the AArch64 architecture baseline.
+    // SAFETY: the helper only performs unaligned loads within these equal-size
+    // slices, and its required target feature is always present on AArch64.
+    unsafe { dot_neon(weights, values) }
+}
+
+#[cfg(all(target_arch = "aarch64", any(not(target_os = "macos"), test)))]
+#[target_feature(enable = "neon")]
+unsafe fn dot_neon(weights: &[f32], values: &[f32]) -> f32 {
+    use core::arch::aarch64::{vaddq_f32, vaddvq_f32, vdupq_n_f32, vfmaq_f32, vld1q_f32};
+
+    debug_assert_eq!(weights.len(), values.len());
+    let mut sums = [vdupq_n_f32(0.0); 4];
+    let mut index = 0usize;
+    while index + 16 <= weights.len() {
+        for (lane, sum) in sums.iter_mut().enumerate() {
+            let offset = index + lane * 4;
+            // SAFETY: the loop condition guarantees four readable values from
+            // each pointer, and NEON's vld1q instruction permits unaligned data.
+            let (weight, value) = unsafe {
+                (
+                    vld1q_f32(weights.as_ptr().add(offset)),
+                    vld1q_f32(values.as_ptr().add(offset)),
+                )
+            };
+            *sum = vfmaq_f32(*sum, weight, value);
+        }
+        index += 16;
+    }
+    let combined = vaddq_f32(vaddq_f32(sums[0], sums[1]), vaddq_f32(sums[2], sums[3]));
+    let mut result = vaddvq_f32(combined);
+    for (&weight, &value) in weights[index..].iter().zip(&values[index..]) {
+        result += weight * value;
+    }
+    result
+}
+
+#[cfg(all(not(target_os = "macos"), target_arch = "x86_64"))]
+fn dot_fast(weights: &[f32], values: &[f32]) -> f32 {
+    if std::arch::is_x86_feature_detected!("avx2") && std::arch::is_x86_feature_detected!("fma") {
+        // SAFETY: runtime detection above establishes both target features;
+        // the helper bounds every unaligned load to the input slices.
+        unsafe { dot_avx2_fma(weights, values) }
+    } else {
+        dot_portable(weights, values)
+    }
+}
+
+#[cfg(all(not(target_os = "macos"), target_arch = "x86_64"))]
+#[target_feature(enable = "avx2,fma")]
+unsafe fn dot_avx2_fma(weights: &[f32], values: &[f32]) -> f32 {
+    use core::arch::x86_64::{
+        _mm256_add_ps, _mm256_fmadd_ps, _mm256_loadu_ps, _mm256_setzero_ps, _mm256_storeu_ps,
+    };
+
+    debug_assert_eq!(weights.len(), values.len());
+    let mut sums = [_mm256_setzero_ps(); 4];
+    let mut index = 0usize;
+    while index + 32 <= weights.len() {
+        for (lane, sum) in sums.iter_mut().enumerate() {
+            let offset = index + lane * 8;
+            // SAFETY: the loop condition guarantees eight readable values
+            // from each pointer; loadu explicitly supports unaligned data.
+            let (weight, value) = unsafe {
+                (
+                    _mm256_loadu_ps(weights.as_ptr().add(offset)),
+                    _mm256_loadu_ps(values.as_ptr().add(offset)),
+                )
+            };
+            *sum = _mm256_fmadd_ps(weight, value, *sum);
+        }
+        index += 32;
+    }
+    let combined = _mm256_add_ps(
+        _mm256_add_ps(sums[0], sums[1]),
+        _mm256_add_ps(sums[2], sums[3]),
+    );
+    let mut lanes = [0.0f32; 8];
+    // SAFETY: `lanes` has room for all eight values written by the intrinsic.
+    unsafe { _mm256_storeu_ps(lanes.as_mut_ptr(), combined) };
+    let mut result = lanes.into_iter().sum::<f32>();
+    for (&weight, &value) in weights[index..].iter().zip(&values[index..]) {
+        result += weight * value;
+    }
+    result
+}
+
+#[cfg(all(
+    not(target_os = "macos"),
+    not(any(target_arch = "aarch64", target_arch = "x86_64"))
+))]
+fn dot_fast(weights: &[f32], values: &[f32]) -> f32 {
+    dot_portable(weights, values)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn dot_portable(weights: &[f32], values: &[f32]) -> f32 {
+    debug_assert_eq!(weights.len(), values.len());
+    let mut partial = [0.0f32; 8];
+    let mut weight_chunks = weights.chunks_exact(8);
+    let mut input_chunks = values.chunks_exact(8);
+    for (weight_chunk, value_chunk) in weight_chunks.by_ref().zip(input_chunks.by_ref()) {
+        for lane in 0..8 {
+            partial[lane] += weight_chunk[lane] * value_chunk[lane];
+        }
+    }
+    let mut result = partial.into_iter().sum::<f32>();
+    for (&weight, &value) in weight_chunks
+        .remainder()
+        .iter()
+        .zip(input_chunks.remainder())
+    {
+        result += weight * value;
+    }
+    result
+}
+
+#[cfg(target_os = "macos")]
+fn fast_matmul_backend() -> &'static str {
+    "Apple Accelerate CPU SIMD"
+}
+
+#[cfg(all(not(target_os = "macos"), target_arch = "aarch64"))]
+fn fast_matmul_backend() -> &'static str {
+    "AArch64 NEON CPU"
+}
+
+#[cfg(all(not(target_os = "macos"), target_arch = "x86_64"))]
+fn fast_matmul_backend() -> &'static str {
+    if std::arch::is_x86_feature_detected!("avx2") && std::arch::is_x86_feature_detected!("fma") {
+        "x86-64 AVX2/FMA CPU"
+    } else {
+        "portable CPU"
+    }
+}
+
+#[cfg(all(
+    not(target_os = "macos"),
+    not(any(target_arch = "aarch64", target_arch = "x86_64"))
+))]
+fn fast_matmul_backend() -> &'static str {
+    "portable CPU"
 }
 
 impl Llama {
@@ -284,7 +473,7 @@ impl Llama {
 
     /// One forward step. After return, st.x holds the post-final-rmsnorm
     /// hidden state (the kNN-LM context vector) and st.logits the logits.
-    pub fn forward(&self, st: &mut State, token: usize, pos: usize, threads: usize) {
+    pub fn forward(&self, st: &mut State, token: usize, pos: usize, fast_matmul: bool) {
         let c = &self.cfg;
         let (dim, hid) = (c.dim, c.hidden);
         let kv_dim = c.dim * c.n_kv_heads / c.n_heads;
@@ -307,15 +496,27 @@ impl Llama {
                 &st.xb,
                 &w[self.wq + l * dim * dim..],
                 dim,
-                threads,
+                fast_matmul,
             );
             {
                 let k = &mut st.key_cache[loff + pos * kv_dim..loff + (pos + 1) * kv_dim];
-                matmul(k, &st.xb, &w[self.wk + l * dim * kv_dim..], dim, threads);
+                matmul(
+                    k,
+                    &st.xb,
+                    &w[self.wk + l * dim * kv_dim..],
+                    dim,
+                    fast_matmul,
+                );
             }
             {
                 let v = &mut st.value_cache[loff + pos * kv_dim..loff + (pos + 1) * kv_dim];
-                matmul(v, &st.xb, &w[self.wv + l * dim * kv_dim..], dim, threads);
+                matmul(
+                    v,
+                    &st.xb,
+                    &w[self.wv + l * dim * kv_dim..],
+                    dim,
+                    fast_matmul,
+                );
             }
 
             // RoPE: converted llama2.c checkpoints interleave pairs; native
@@ -391,7 +592,7 @@ impl Llama {
                 &st.xb,
                 &w[self.wo + l * dim * dim..],
                 dim,
-                threads,
+                fast_matmul,
             );
             for i in 0..dim {
                 st.x[i] += st.xb2[i];
@@ -407,14 +608,14 @@ impl Llama {
                 &st.xb,
                 &w[self.w1 + l * dim * hid..],
                 dim,
-                threads,
+                fast_matmul,
             );
             matmul(
                 &mut st.hb2,
                 &st.xb,
                 &w[self.w3 + l * dim * hid..],
                 dim,
-                threads,
+                fast_matmul,
             );
             for i in 0..hid {
                 let mut val = st.hb[i];
@@ -427,7 +628,7 @@ impl Llama {
                 &st.hb,
                 &w[self.w2 + l * hid * dim..],
                 hid,
-                threads,
+                fast_matmul,
             );
             for i in 0..dim {
                 st.x[i] += st.xb[i];
@@ -440,7 +641,7 @@ impl Llama {
             let (wslice, x) = (&w[rf..rf + dim], &mut st.x);
             rmsnorm_inplace(x, wslice);
         }
-        matmul(&mut st.logits, &st.x, &w[self.wcls..], dim, threads);
+        matmul(&mut st.logits, &st.x, &w[self.wcls..], dim, fast_matmul);
     }
 }
 
@@ -521,10 +722,10 @@ impl TeacherOracle for LlamaOracle {
         );
     }
     fn reset(&mut self) {
-        self.state = State::new(&self.model.cfg);
+        self.state.reset();
     }
     fn step(&mut self, token: usize, pos: usize, logits: &mut [f32]) {
-        self.model.forward(&mut self.state, token, pos, 1);
+        self.model.forward(&mut self.state, token, pos, false);
         logits.copy_from_slice(&self.state.logits);
     }
 }
@@ -575,10 +776,32 @@ pub struct HuggingFaceLlamaOracle {
     source_bytes: usize,
     bos_token: usize,
     eos_token: usize,
+    fast_matmul: bool,
 }
 
 impl HuggingFaceLlamaOracle {
     pub fn load(source: impl AsRef<std::path::Path>) -> Result<Self, Box<dyn std::error::Error>> {
+        Self::load_inner(source, None)
+    }
+
+    /// Load an offline teacher with a bounded context allocation. Compilation
+    /// only needs short trajectories because the deployed runtime consumes an
+    /// eight-token window; bounding teacher stories avoids quadratic attention
+    /// work at source-model maximum context lengths.
+    pub fn load_with_sequence_length(
+        source: impl AsRef<std::path::Path>,
+        sequence_length: usize,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        if sequence_length == 0 {
+            return Err("teacher sequence length must be greater than zero".into());
+        }
+        Self::load_inner(source, Some(sequence_length))
+    }
+
+    fn load_inner(
+        source: impl AsRef<std::path::Path>,
+        sequence_length: Option<usize>,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
         let source = source.as_ref();
         let config: HuggingFaceConfig =
             serde_json::from_slice(&std::fs::read(source.join("config.json"))?)?;
@@ -592,7 +815,9 @@ impl HuggingFaceLlamaOracle {
             n_heads: config.num_attention_heads,
             n_kv_heads: config.num_key_value_heads,
             vocab: config.vocab_size,
-            seq_len: config.max_position_embeddings,
+            seq_len: sequence_length
+                .unwrap_or(config.max_position_embeddings)
+                .min(config.max_position_embeddings),
             rope_theta: config.rope_theta,
             rms_norm_eps: config.rms_norm_eps,
             rope_interleaved: config.rope_interleaved,
@@ -651,7 +876,15 @@ impl HuggingFaceLlamaOracle {
         let source_bytes = model_bytes.len();
         let model = Llama::from_flat(cfg, weights, config.tie_word_embeddings);
         let state = State::new(&model.cfg);
-        eprintln!("teacher model ready (κ {kappa})");
+        let fast_matmul = std::env::var_os("TLESS_TEACHER_EXACT").is_none();
+        eprintln!(
+            "teacher model ready (κ {kappa}, matmul={})",
+            if fast_matmul {
+                fast_matmul_backend()
+            } else {
+                "exact scalar"
+            }
+        );
         Ok(Self {
             model,
             state,
@@ -659,6 +892,7 @@ impl HuggingFaceLlamaOracle {
             source_bytes,
             bos_token: config.bos_token_id,
             eos_token: config.eos_token_id,
+            fast_matmul,
         })
     }
 }
@@ -729,13 +963,61 @@ impl TeacherOracle for HuggingFaceLlamaOracle {
         }
     }
     fn reset(&mut self) {
-        self.state = State::new(&self.model.cfg);
+        self.state.reset();
     }
     fn step(&mut self, token: usize, pos: usize, logits: &mut [f32]) {
-        self.model.forward(&mut self.state, token, pos, 1);
+        self.model
+            .forward(&mut self.state, token, pos, self.fast_matmul);
         logits.copy_from_slice(&self.state.logits);
     }
 }
 
 /// Backward-compatible name for the first supported Hugging Face model.
 pub type SmolLm2Oracle = HuggingFaceLlamaOracle;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[cfg(target_arch = "aarch64")]
+    #[test]
+    fn neon_dot_tracks_scalar_result() {
+        const COLUMNS: usize = 73;
+        let values: Vec<f32> = (0..COLUMNS)
+            .map(|index| ((index * 17 % 31) as f32 - 15.0) / 16.0)
+            .collect();
+        let weights: Vec<f32> = (0..COLUMNS)
+            .map(|index| ((index * 29 % 43) as f32 - 21.0) / 32.0)
+            .collect();
+        let expected = weights
+            .iter()
+            .zip(&values)
+            .map(|(weight, value)| weight * value)
+            .sum::<f32>();
+        // SAFETY: NEON is part of the AArch64 baseline and both slices have
+        // identical lengths.
+        let actual = unsafe { dot_neon(&weights, &values) };
+        let tolerance = 1e-5f32.max(expected.abs() * 1e-5);
+        assert!((expected - actual).abs() <= tolerance);
+    }
+
+    #[test]
+    fn fast_matmul_tracks_exact_cpu_result() {
+        const ROWS: usize = 67;
+        const COLUMNS: usize = 73;
+        let input: Vec<f32> = (0..COLUMNS)
+            .map(|index| ((index * 17 % 31) as f32 - 15.0) / 16.0)
+            .collect();
+        let weights: Vec<f32> = (0..ROWS * COLUMNS)
+            .map(|index| ((index * 29 % 43) as f32 - 21.0) / 32.0)
+            .collect();
+        let mut exact = [0.0f32; ROWS];
+        let mut fast = [0.0f32; ROWS];
+        matmul(&mut exact, &input, &weights, COLUMNS, false);
+        matmul(&mut fast, &input, &weights, COLUMNS, true);
+        for (expected, actual) in exact.into_iter().zip(fast) {
+            let tolerance = 1e-5f32.max(expected.abs() * 1e-5);
+            assert!((expected - actual).abs() <= tolerance);
+        }
+    }
+}

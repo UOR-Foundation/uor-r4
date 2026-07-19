@@ -142,6 +142,7 @@ pub fn generate_to(
     }
     let vocab = oracle.vocab();
     let seq_len = oracle.seq_len();
+    let starting_tokens = n;
     let mut logits = vec![0f32; vocab];
     let mut progress = super::progress::Progress::new("teacher corpus", target);
     progress.set(n as usize);
@@ -216,6 +217,14 @@ pub fn generate_to(
         "corpus: {} / {} tokens, {} stories, done={}",
         n, target, stories, done
     );
+    let elapsed = t0.elapsed().as_secs_f64();
+    let generated = n.saturating_sub(starting_tokens);
+    if generated != 0 && elapsed > 0.0 {
+        println!(
+            "teacher throughput: {generated} tokens in {elapsed:.2}s ({:.1} tokens/s)",
+            generated as f64 / elapsed
+        );
+    }
     if done == 1 {
         progress.finish();
     }

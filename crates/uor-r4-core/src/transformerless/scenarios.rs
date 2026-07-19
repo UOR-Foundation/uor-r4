@@ -395,7 +395,7 @@ pub fn scenarios(oracle: &mut dyn TeacherOracle) {
     }
 
     // Artifact + store (train split only; every scenario is unseen).
-    let art = compiler::load_artifacts().expect("run `transformerless compile` first");
+    let art = compiler::load_artifacts().expect("run `cargo run --release -- compile` first");
     let c150 = compiler::load_corpus().expect("run `transformerless gen` first");
     let (store, _) = build_store(&art, &c150);
     let rot = derive_rotations();
