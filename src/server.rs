@@ -479,9 +479,15 @@ fn clean_attention_response(text: &str, prompt: &str) -> String {
         cleaned = cleaned.trim()[trimmed_prompt.len()..].to_string();
     }
 
-    // Remove any leading punctuation leftovers from echoes (e.g. "?", "-")
+    // Remove any leading punctuation leftovers from echoes (e.g. "?", "-", ",", ".")
     let mut result = cleaned.trim().to_string();
-    if result.starts_with('?') || result.starts_with('-') || result.starts_with(':') {
+    while result.starts_with('?')
+        || result.starts_with('-')
+        || result.starts_with(':')
+        || result.starts_with(',')
+        || result.starts_with('.')
+        || result.starts_with(';')
+    {
         result = result[1..].trim().to_string();
     }
 
