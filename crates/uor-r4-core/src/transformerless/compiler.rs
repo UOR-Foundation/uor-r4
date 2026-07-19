@@ -20,9 +20,7 @@
 //! architecture-generic (llama / qwen / phi differ only in the teacher
 //! adapter). This crate instantiates the llama-family adapter.
 
-#[cfg(not(target_arch = "wasm32"))]
 use super::teacher::TeacherOracle;
-#[cfg(not(target_arch = "wasm32"))]
 use std::io::Write;
 
 pub const STAGES: usize = 4;
@@ -60,19 +58,16 @@ pub struct Corpus {
     pub t_lp: Vec<f32>,
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 pub fn corpus_paths() -> (&'static str, &'static str) {
     ("/tmp/c_meta.bin", "/tmp/c_recs.bin")
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 pub fn load_corpus() -> Option<Corpus> {
     let (mp, rp) = corpus_paths();
     load_corpus_from(mp, rp)
 }
 
 /// Load a corpus record stream from explicit paths (fixtures, mirrors).
-#[cfg(not(target_arch = "wasm32"))]
 pub fn load_corpus_from(mp: &str, rp: &str) -> Option<Corpus> {
     let meta = std::fs::read(mp).ok()?;
     if meta.len() != 25 || meta[24] != 1 {
@@ -116,14 +111,12 @@ pub fn load_corpus_from(mp: &str, rp: &str) -> Option<Corpus> {
 
 /// Generate (or extend, resumably) the teacher-labeled corpus. Whole-story
 /// chunking keeps the stream deterministic under any budget chunking.
-#[cfg(not(target_arch = "wasm32"))]
 pub fn generate(oracle: &mut dyn TeacherOracle, budget_s: u64, target: usize) {
     let (mp, rp) = corpus_paths();
     generate_to(oracle, budget_s, target, mp, rp);
 }
 
 /// Generate a resumable teacher corpus at explicit paths.
-#[cfg(not(target_arch = "wasm32"))]
 pub fn generate_to(
     oracle: &mut dyn TeacherOracle,
     budget_s: u64,
@@ -285,7 +278,6 @@ pub struct Compiled {
     pub token_stage_kappas: Vec<String>,
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 fn kmeans_rvq(
     vecs: &[f32],
     nvec: usize,
@@ -363,7 +355,6 @@ fn kmeans_rvq(
 /// averages each bucket, then removes that centroid before the next stage.
 /// This keeps SmolLM2 compilation bounded instead of performing billions of
 /// exhaustive centroid-distance evaluations.
-#[cfg(not(target_arch = "wasm32"))]
 fn hashed_rvq(vecs: &[f32], nvec: usize, stages: usize) -> (Vec<Vec<f32>>, Vec<u8>) {
     let mut residual = vecs.to_vec();
     let mut codebooks = Vec::with_capacity(stages);
@@ -417,7 +408,6 @@ pub fn kappa_of_f32s(v: &[f32]) -> String {
     format!("blake3:{}", hasher.finalize().to_hex())
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 pub fn compile(oracle: &dyn TeacherOracle, corpus: &Corpus) -> Compiled {
     // 1–2: token codebook and integer token vectors, read exclusively
     // through the oracle's embedding surface.
@@ -625,7 +615,6 @@ pub fn artifact_kappa(a: &Compiled) -> String {
     format!("blake3:{}", blake3::hash(&artifact_bytes(a)).to_hex())
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 pub fn save_artifacts(a: &Compiled) {
     let b = artifact_bytes(a);
     std::fs::write(ART_PATH, &b).unwrap();
@@ -637,13 +626,11 @@ pub fn save_artifacts(a: &Compiled) {
     );
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 pub fn load_artifacts() -> Option<Compiled> {
     load_artifacts_from(ART_PATH)
 }
 
 /// Load artifacts from an explicit path (fixtures, mirrors).
-#[cfg(not(target_arch = "wasm32"))]
 pub fn load_artifacts_from(path: &str) -> Option<Compiled> {
     let b = std::fs::read(path).ok()?;
     let art = parse_artifacts(&b)?;
