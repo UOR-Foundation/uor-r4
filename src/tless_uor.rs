@@ -123,16 +123,39 @@ fn tokenizer_path() -> String {
 
 /// Load state bytes from the configured paths (explicit config, then env
 /// TLESS_ARTIFACTS / TLESS_STORE, then the /tmp defaults).
-#[cfg(not(target_arch = "wasm32"))]
 pub fn load_tless_state() -> Option<TlessState> {
     let art_path = artifacts_path();
     let store_path = store_path();
-    let art = std::fs::read(&art_path)
-        .ok()
-        .and_then(|b| compiler::parse_artifacts(&b))?;
-    let store = std::fs::read(&store_path)
-        .ok()
-        .and_then(|b| runtime::parse_store(&b))?;
+    println!("[*] Loading tless state from art={} and store={}", art_path, store_path);
+    let art_bytes = match std::fs::read(&art_path) {
+        Ok(b) => b,
+        Err(e) => {
+            println!("[-] Failed to read artifacts file at {}: {:?}", art_path, e);
+            return None;
+        }
+    };
+    let art = match compiler::parse_artifacts(&art_bytes) {
+        Some(a) => a,
+        None => {
+            println!("[-] Failed to parse artifacts from {}", art_path);
+            return None;
+        }
+    };
+    let store_bytes = match std::fs::read(&store_path) {
+        Ok(b) => b,
+        Err(e) => {
+            println!("[-] Failed to read store file at {}: {:?}", store_path, e);
+            return None;
+        }
+    };
+    let store = match runtime::parse_store(&store_bytes) {
+        Some(s) => s,
+        None => {
+            println!("[-] Failed to parse store from {}", store_path);
+            return None;
+        }
+    };
+    println!("[+] Successfully loaded tless state (online)!");
     Some(make_tless_state(art, store))
 }
 
