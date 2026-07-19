@@ -479,7 +479,8 @@ impl<'a> Runtime<'a> {
                     let mut score = cnt as i64;
                     let occurrences = self.recent.iter().filter(|&&r| r == t).count();
                     if occurrences > 0 {
-                        score -= occurrences as i64 * 1000;
+                        let val = occurrences as i64;
+                        score -= (val << 10) - (val << 4) - (val << 3);
                     }
                     if self.kernel.lt(best_c, score) {
                         best_c = score;

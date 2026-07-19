@@ -592,6 +592,7 @@ fn handle_connection(
         let engine_mode = match payload.engine.as_deref() {
             Some("geometric") => "geometric",
             Some("attention") => "attention",
+            Some("r4-attention") => "r4-attention",
             Some("auto" | "ollama" | "transformerless") | None => "transformerless",
             Some(_) => "transformerless",
         };
@@ -692,15 +693,21 @@ fn handle_connection(
         let mut llm_connected = false;
         let mut generation_mode = "geometric-decoded".to_string();
 
-        if engine_mode == "attention" {
+        if engine_mode == "attention" || engine_mode == "r4-attention" {
             let mut oracle_guard = oracle.lock().unwrap();
             if let Some(ref mut o) = *oracle_guard {
+                o.set_r4_attention(engine_mode == "r4-attention");
                 if let Some((text, count)) = generate_attention_text(o, &payload.text, max_tokens.max(256)) {
                     final_response_text = text;
                     llm_connected = true;
-                    generation_mode = "attention".to_string();
+                    generation_mode = if engine_mode == "r4-attention" {
+                        "r4-attention".to_string()
+                    } else {
+                        "attention".to_string()
+                    };
                     tokens_generated = count;
                 }
+                o.set_r4_attention(false);
             }
         } else if engine_mode == "transformerless" {
             let prompt = payload.text.clone();
