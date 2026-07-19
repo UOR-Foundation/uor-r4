@@ -948,25 +948,18 @@
                 <span class="config-val" id="engineVal" style="color: var(--cyan); font-weight: bold;">Geometric</span>
             </div>
             <div class="config-row" style="margin-bottom: 0.75rem; font-size: 0.75rem; color: #888;">
-                <span>↳ Tuned by Ollama availability</span>
+                <span>↳ Transformerless with geometric fallback</span>
             </div>
 
             <div class="identity-label">Routing Identity (UOR, address, or text)</div>
-            <input type="text" class="identity-input" id="identityInput" value="tenant-alpha" placeholder="sha256:... or tenant-alpha" style="margin-bottom:0.75rem;">
+            <input type="text" class="identity-input" id="identityInput" value="null_dev_00" placeholder="sha256:... or null_dev_00" style="margin-bottom:0.75rem;">
 
             <div class="section-label">Synthesis Engine Selection</div>
             <select class="identity-input" id="engineSelect" style="margin-bottom:0.75rem; background: var(--bg); color: var(--cyan); border-color: var(--border2); font-family: 'Outfit', sans-serif;">
-                <option value="auto">Auto-Select (Local Ollama / Fallback)</option>
+                <option value="transformerless">Transformerless (Local)</option>
+                <option value="attention">Full Attention Llama (CPU)</option>
                 <option value="geometric">Pure Geometric (WASM Decoded)</option>
-                <option value="ollama">Local Ollama (Direct API)</option>
             </select>
-
-            <div id="ollamaConfigGroup" style="display:none;">
-                <div class="identity-label">Ollama Host URL</div>
-                <input type="text" class="identity-input" id="ollamaUrlInput" value="http://localhost:11434" style="margin-bottom:0.5rem;">
-                <div class="identity-label">Ollama Target Model</div>
-                <input type="text" class="identity-input" id="ollamaModelInput" value="gemma4:e2b" style="margin-bottom:0.75rem;">
-            </div>
 
             <div class="section-label">Manifold Database & Indexing</div>
             <textarea class="identity-input" id="kbTextarea" placeholder="Paste custom sentences or paragraphs here to index them into the router manifold..." style="height: 60px; font-size: 0.72rem; font-family: 'Outfit', sans-serif; resize: vertical; margin-bottom: 0.5rem; background: var(--bg); color: var(--text); border: 1px solid var(--border2); padding: 0.4rem; border-radius: 4px; width: 100%;"></textarea>
@@ -1066,7 +1059,8 @@
                 <div class="sys-kv"><span class="sys-k">Requests</span><span class="sys-v" id="reqTotal">—</span></div>
                 <div class="sys-kv"><span class="sys-k">P50 route</span><span class="sys-v" id="routeP50">—ms</span></div>
                 <div class="sys-kv"><span class="sys-k">P95 gen</span><span class="sys-v" id="genP95">—ms</span></div>
-                <div class="sys-kv"><span class="sys-k">Ollama</span><span class="sys-v" id="ollamaStatus" style="color:var(--muted);">—</span></div>
+                <div class="sys-kv"><span class="sys-k">Speed</span><span class="sys-v" id="genSpeed" style="color:var(--cyan);">— tok/s</span></div>
+                <div class="sys-kv"><span class="sys-k">TLess</span><span class="sys-v" id="tlessStatus" style="color:var(--muted);">—</span></div>
                 <div class="sys-kv"><span class="sys-k">Corpus</span><span class="sys-v" id="corpusCount">—</span></div>
             </div>
         </div>
@@ -1396,7 +1390,7 @@ if (mapLegend) {
 }
 
 // =====================================================
-// WASM Router Bootstrap & Ollama
+// WASM Router Bootstrap
 // =====================================================
 let router = null;
 let wasmInitialized = false;
@@ -1435,22 +1429,6 @@ async function tryInitLocalWasm() {
 }
 
 const engineSelect       = document.getElementById("engineSelect");
-const ollamaConfigGroup  = document.getElementById("ollamaConfigGroup");
-
-function updateEngineConfigVisibility() {
-    const val = engineSelect?.value || "auto";
-    if (ollamaConfigGroup) {
-        if (val === "ollama" || val === "auto") {
-            ollamaConfigGroup.style.display = "block";
-        } else {
-            ollamaConfigGroup.style.display = "none";
-        }
-    }
-}
-if (engineSelect) {
-    engineSelect.addEventListener("change", updateEngineConfigVisibility);
-    updateEngineConfigVisibility();
-}
 
 
 
@@ -2278,8 +2256,8 @@ function updateTelemetry(data, isSysinfo = false) {
         if (gammaVal) gammaVal.textContent = auto.gamma.toFixed(2);
         if (tokensVal) tokensVal.textContent = auto.max_tokens;
         if (engineVal) {
-            if (auto.engine === "ollama") {
-                engineVal.textContent = "Ollama (Gemma)";
+            if (auto.engine === "transformerless") {
+                engineVal.textContent = "Transformerless";
                 engineVal.style.color = "var(--emerald)";
             } else {
                 engineVal.textContent = "Pure Geometric";
@@ -2509,7 +2487,7 @@ function updateTelemetry(data, isSysinfo = false) {
         });
     }
     
-    updateSystemMetricsUI(data.routing_latency_ms, data.gen_latency_ms);
+    updateSystemMetricsUI(data.routing_latency_ms, data.gen_latency_ms, data.tokens_per_sec);
 }
 
 function renderTrajectoryTimeline(trajectory) {
@@ -2652,58 +2630,6 @@ async function runLocalChat(text, identity) {
     let generation_mode = "geometric-local";
     let llm_connected = false;
 
-    const selectedEngineMode = engineSelect?.value || "auto";
-    let ollamaUrl = document.getElementById("ollamaUrlInput")?.value.trim() || "http://localhost:11434";
-    if (ollamaUrl && !ollamaUrl.startsWith("http://") && !ollamaUrl.startsWith("https://")) {
-        ollamaUrl = "http://" + ollamaUrl;
-    }
-    const ollamaModel = document.getElementById("ollamaModelInput")?.value.trim() || "gemma4:e2b";
-
-    if ((selectedEngineMode === "ollama" || selectedEngineMode === "auto") && window.ollamaLive) {
-        const topResonances = unwrapResult(router.get_top_resonances(text, identity, 1)) || [];
-        let ctx_block = "[no corpus context available]";
-        if (topResonances.length > 0) {
-            ctx_block = topResonances[0].sentence || "[no corpus context available]";
-        }
-
-        const systemPrompt = `You are the Voice of the R4 Prime Router. The current state of your context hypersphere brain is: Window ${routed.window_index} (${theme}), Energy κ=${kappa.toFixed(4)}, Curvature θd=${theta_d.toFixed(4)}, Hopf coordinates (χ=${routed.hopf.chi.toFixed(4)}, δ=${routed.hopf.delta.toFixed(4)}, α=${routed.hopf.alpha.toFixed(4)}). Grounding context sentence: "${ctx_block}". IMPORTANT: You MUST incorporate and reference the Grounding context sentence in your response to directly answer the user's query. Respond directly to the user query as a geometric router. Keep your response relevant, coherent, and under ${max_tokens} words. Do NOT output any thinking, thought processes, <thinking> blocks, or XML tags. Speak directly.`;
-
-        try {
-            const ollamaPayload = {
-                model: ollamaModel,
-                messages: [
-                    { role: "system", content: systemPrompt },
-                    { role: "user", content: text }
-                ],
-                stream: false,
-                keep_alive: -1,
-                think: false,
-                options: {
-                    temperature: temperature,
-                    num_predict: Math.max(max_tokens, 300)
-                }
-            };
-            
-            const response = await fetch(`${ollamaUrl}/api/chat`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(ollamaPayload)
-            });
-
-            if (response.ok) {
-                const respJson = await response.json();
-                const content = respJson.message?.content || "";
-                responseText = content.trim();
-                if (responseText) {
-                    llm_connected = true;
-                    generation_mode = `ollama:${ollamaModel} (local-direct)`;
-                }
-            }
-        } catch (e) {
-            console.error("Direct local Ollama query failed, falling back to pure geometric:", e);
-        }
-    }
-
     if (!responseText) {
         responseText = geomResult.text || "Manifold resonance too sparse for synthesis.";
     }
@@ -2788,28 +2714,17 @@ async function sendQuery(text) {
     chatLogInner.appendChild(loadMsg);
     scrollToBottom();
 
-    const identity = document.getElementById("identityInput")?.value.trim() || "tenant-alpha";
-    const selectedEngineMode = engineSelect?.value || "auto";
-    let ollamaUrl = document.getElementById("ollamaUrlInput")?.value.trim() || "http://localhost:11434";
-    if (ollamaUrl && !ollamaUrl.startsWith("http://") && !ollamaUrl.startsWith("https://")) {
-        ollamaUrl = "http://" + ollamaUrl;
-    }
-    const ollamaModel = document.getElementById("ollamaModelInput")?.value.trim() || "gemma4:e2b";
+    const identity = document.getElementById("identityInput")?.value.trim() || "null_dev_00";
+    const selectedEngineMode = engineSelect?.value || "transformerless";
     const isWebpageLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
 
     try {
         let backendEngineMode = selectedEngineMode;
-        const shouldDirectQueryOllama = !localWasmMode && !isWebpageLocal && (selectedEngineMode === "ollama" || (selectedEngineMode === "auto" && window.ollamaLive));
-        if (shouldDirectQueryOllama) {
-            backendEngineMode = "geometric";
-        }
 
         const payload = {
             text: text,
             identity: identity,
-            engine: backendEngineMode,
-            ollama_url: ollamaUrl,
-            ollama_model: ollamaModel
+            engine: backendEngineMode
         };
 
         let data;
@@ -2828,79 +2743,6 @@ async function sendQuery(text) {
 
             data = await response.json();
 
-            if (shouldDirectQueryOllama) {
-                try {
-                    const topResonances = data.top_resonance || [];
-                    const ctx_block = (topResonances.length > 0) ? (topResonances[0].sentence || "[no corpus context available]") : "[no corpus context available]";
-                    const theme = WINDOW_THEMES[data.metrics.window_index] || "Unknown";
-                    
-                    const kappa = data.metrics.kappa;
-                    const theta_d = data.metrics.deficit_angle;
-                    const uor_bias = data.metrics.qimc?.uor_control?.entropy_bias || 0.5;
-                    const gamma = Math.min(Math.max(0.85 - 0.55 * kappa + ((uor_bias - 0.5) * 0.12), 0.15), 0.90);
-                    const temperature = Math.min(Math.max(0.2 + 0.8 * Math.abs(theta_d) + ((uor_bias - 0.5) * 0.20), 0.15), 1.1);
-                    
-                    let max_tokens = data.metrics?.auto_tuned?.max_tokens;
-                    if (!max_tokens) {
-                        const input_words = text.trim().split(/\s+/).length;
-                        const stratum = data.state_vector ? data.state_vector.filter(v => Math.abs(v) > 1e-4).length : 20;
-                        const eval_sum = data.eigenvalues ? data.eigenvalues.reduce((a,b)=>a+b, 0) : 1.0;
-                        max_tokens = Math.min(Math.max(Math.floor(50.0 + (stratum * 1.5) + (Math.abs(theta_d) * 45.0) + (eval_sum * 110.0) + (input_words * 2.5)), 50), 500);
-                    }
-                    
-                    const systemPrompt = `You are the Voice of the R4 Prime Router. The current state of your context hypersphere brain is: Window ${data.metrics.window_index} (${theme}), Energy κ=${kappa.toFixed(4)}, Curvature θd=${theta_d.toFixed(4)}, Hopf coordinates (χ=${data.metrics.hopf.chi.toFixed(4)}, δ=${data.metrics.hopf.delta.toFixed(4)}, α=${data.metrics.hopf.alpha.toFixed(4)}). Grounding context sentence: "${ctx_block}". IMPORTANT: You MUST incorporate and reference the Grounding context sentence in your response to directly answer the user's query. Respond directly to the user query as a geometric router. Keep your response relevant, coherent, and under ${max_tokens} words. Do NOT output any thinking, thought processes, <thinking> blocks, or XML tags. Speak directly.`;
-                    
-                    const directPayload = {
-                        model: ollamaModel,
-                        messages: [
-                            { role: "system", content: systemPrompt },
-                            { role: "user", content: text }
-                        ],
-                        stream: false,
-                        keep_alive: -1,
-                        think: false,
-                        options: {
-                            temperature: temperature,
-                            num_predict: Math.max(max_tokens, 300)
-                        }
-                    };
-                    
-                    const ollamaResponse = await fetch(`${ollamaUrl}/api/chat`, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify(directPayload)
-                    });
-                    
-                    if (ollamaResponse.ok) {
-                        const respJson = await ollamaResponse.json();
-                        const content = respJson.message?.content || "";
-                        if (content.trim()) {
-                            data.description = content.trim();
-                            data.generation_mode = `ollama:${ollamaModel} (direct-remote-browser)`;
-                            data.summary = `W${data.metrics.window_index} (${theme}) | Scale ${data.metrics.scale_x || 1.0} | kappa=${kappa.toFixed(4)} theta_d=${theta_d.toFixed(4)} | ${data.generation_mode}`;
-                            data.llm_connected = true;
-                            
-                            // Index the response back to remote server for continuous learning
-                            try {
-                                await fetch("/api/corpus", {
-                                    method: "POST",
-                                    headers: { "Content-Type": "application/json" },
-                                    body: JSON.stringify({ corpus: text, identity: identity })
-                                });
-                                await fetch("/api/corpus", {
-                                    method: "POST",
-                                    headers: { "Content-Type": "application/json" },
-                                    body: JSON.stringify({ corpus: content.trim(), identity: identity })
-                                });
-                            } catch (eIndex) {
-                                console.warn("Continuous learning indexing failed:", eIndex);
-                            }
-                        }
-                    }
-                } catch (eDirect) {
-                    console.error("Direct browser query to Ollama failed, falling back to backend geometric response:", eDirect);
-                }
-            }
         }
 
         chatLogInner.removeChild(loadMsg);
@@ -2938,7 +2780,7 @@ if (indexBtn) {
         indexStatus.style.color = "var(--text2)";
         indexStatus.textContent = "Indexing manifold... please wait";
         try {
-            const identity = document.getElementById("identityInput")?.value.trim() || "tenant-alpha";
+            const identity = document.getElementById("identityInput")?.value.trim() || "null_dev_00";
             let count;
             if (localWasmMode) {
                 if (!router) throw new Error("WASM router not initialized");
@@ -3062,7 +2904,7 @@ if (resetBrainBtn) {
     resetBrainBtn.addEventListener("click", async () => {
         resetBrainBtn.disabled = true;
         try {
-            const identity = document.getElementById("identityInput")?.value.trim() || "tenant-alpha";
+            const identity = document.getElementById("identityInput")?.value.trim() || "null_dev_00";
             if (localWasmMode) {
                 if (!router) throw new Error("WASM router not initialized");
                 router.reset_brain(identity);
@@ -3089,13 +2931,7 @@ if (resetBrainBtn) {
             safeSetTextContent("qCommutator",    "—");
             safeSetTextContent("monoLabel",      "r^0");
             
-            // Reset Ollama defaults
-            const ollamaUrlEl = document.getElementById("ollamaUrlInput");
-            if (ollamaUrlEl) ollamaUrlEl.value = "http://localhost:11434";
-            const ollamaModelEl = document.getElementById("ollamaModelInput");
-            if (ollamaModelEl) ollamaModelEl.value = "gemma4:e2b";
-            if (engineSelect) engineSelect.value = "auto";
-            updateEngineConfigVisibility();
+            if (engineSelect) engineSelect.value = "transformerless";
             
             // Reset metric cards
             safeSetTextContent("metricDeficit", "0.0000");
@@ -3278,7 +3114,7 @@ let routeLatencyHistory = [];
 let genLatencyHistory = [];
 const startTime = Date.now();
 
-function updateSystemMetricsUI(routeMs, genMs) {
+function updateSystemMetricsUI(routeMs, genMs, tokensPerSec) {
     if (routeMs !== undefined) {
         routeLatencyHistory.push(routeMs);
         if (routeLatencyHistory.length > 50) routeLatencyHistory.shift();
@@ -3304,6 +3140,9 @@ function updateSystemMetricsUI(routeMs, genMs) {
     setEl("reqTotal", requestCount);
     setEl("routeP50", p50(routeLatencyHistory).toFixed(1) + "ms");
     setEl("genP95", p95(genLatencyHistory).toFixed(0) + "ms");
+    if (tokensPerSec !== undefined && tokensPerSec > 0) {
+        setEl("genSpeed", tokensPerSec.toFixed(1) + " tok/s");
+    }
 }
 
 function pollSysinfo() {
@@ -3338,6 +3177,7 @@ function pollSysinfo() {
             })
             .then(info => {
                 localWasmMode = false;
+                updateConnectionStatusUI();
                 if (info && info.sentences_indexed !== undefined) {
                     setEl("corpusCount", info.sentences_indexed.toLocaleString());
                 }
@@ -3353,58 +3193,31 @@ function pollSysinfo() {
             .catch(err => {
                 console.warn("Sysinfo poll failed, switching to local WASM fallback mode:", err);
                 localWasmMode = true;
+                updateConnectionStatusUI();
                 tryInitLocalWasm();
             });
     }
 
-    // Check Ollama status
-    let ollamaUrl = document.getElementById("ollamaUrlInput")?.value.trim() || "http://localhost:11434";
-    if (ollamaUrl && !ollamaUrl.startsWith("http://") && !ollamaUrl.startsWith("https://")) {
-        ollamaUrl = "http://" + ollamaUrl;
-    }
-    const ollamaEl = document.getElementById("ollamaStatus");
-    const isWebpageLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
-    
-    let targetTagsUrl = `${ollamaUrl}/api/tags`;
-    if (!localWasmMode && isWebpageLocal && (ollamaUrl.includes("localhost") || ollamaUrl.includes("127.0.0.1"))) {
-        targetTagsUrl = "/api/tags";
-    }
+    // Check the in-process transformerless artifact status.
+    const tlessEl = document.getElementById("tlessStatus");
 
-    fetch(targetTagsUrl, { method: "GET" })
+    fetch("/api/tags", { method: "GET" })
         .then(r => {
             if (r.status === 200) {
-                if (ollamaEl) { ollamaEl.textContent = "● Live"; ollamaEl.style.color = "var(--emerald)"; }
-                window.ollamaLive = true;
+                if (tlessEl) { tlessEl.textContent = "● Ready"; tlessEl.style.color = "var(--emerald)"; }
                 return r.json();
             } else {
-                if (ollamaEl) { ollamaEl.textContent = "○ Offline"; ollamaEl.style.color = "var(--amber)"; }
-                window.ollamaLive = false;
+                if (tlessEl) { tlessEl.textContent = "○ Offline"; tlessEl.style.color = "var(--amber)"; }
                 return null;
             }
         })
         .then(data => {
             if (!data) return;
             const models = data.models || [];
-            const modelNames = models.map(m => m.model || m.name);
-            const modelInput = document.getElementById("ollamaModelInput");
-            if (modelInput) {
-                const currentVal = modelInput.value.trim();
-                if (!modelNames.includes(currentVal)) {
-                    // Try to find a gemma4 model
-                    const gemma4Model = modelNames.find(name => name.toLowerCase().includes("gemma4"));
-                    if (gemma4Model) {
-                        modelInput.value = gemma4Model;
-                        saveSessionToLocalStorage();
-                    } else if (modelNames.length > 0) {
-                        modelInput.value = modelNames[0];
-                        saveSessionToLocalStorage();
-                    }
-                }
-            }
+            if (tlessEl) tlessEl.textContent = data.ready ? "● Ready" : "○ Artifacts missing";
         })
         .catch(() => {
-            if (ollamaEl) { ollamaEl.textContent = "○ Offline"; ollamaEl.style.color = "var(--amber)"; }
-            window.ollamaLive = false;
+            if (tlessEl) { tlessEl.textContent = "○ Offline"; tlessEl.style.color = "var(--amber)"; }
         });
 }
 
@@ -3531,9 +3344,7 @@ function saveSessionToLocalStorage() {
             currentTrajectory: window.currentTrajectory,
             activeWindowIndex: activeWindowIndex,
             routerState: null, // Always null in localStorage to avoid QuotaExceededError
-            engineSelect: engineSelect?.value || "auto",
-            ollamaUrl: document.getElementById("ollamaUrlInput")?.value || "http://localhost:11434",
-            ollamaModel: document.getElementById("ollamaModelInput")?.value || "gemma4:e2b",
+            engineSelect: engineSelect?.value || "transformerless",
             chatHistory: chatHistory
         };
         const serialized = JSON.stringify(session);
@@ -3562,14 +3373,6 @@ async function restoreSessionFromLocalStorage() {
             if (engineSelect && session.engineSelect) {
                 engineSelect.value = session.engineSelect;
             }
-            const ollamaUrlEl = document.getElementById("ollamaUrlInput");
-            if (ollamaUrlEl && session.ollamaUrl) {
-                ollamaUrlEl.value = session.ollamaUrl;
-            }
-            const ollamaModelEl = document.getElementById("ollamaModelInput");
-            if (ollamaModelEl && session.ollamaModel) {
-                ollamaModelEl.value = session.ollamaModel;
-            }
             
             if (localWasmMode && router) {
                 try {
@@ -3597,7 +3400,6 @@ async function restoreSessionFromLocalStorage() {
                 });
             }
             
-            updateEngineConfigVisibility();
             console.log("[+] Restored session from localStorage.");
         }
     } catch(e) {
@@ -3606,6 +3408,30 @@ async function restoreSessionFromLocalStorage() {
 }
 
 window.addEventListener("beforeunload", saveSessionToLocalStorage);
+
+function updateConnectionStatusUI() {
+    const dot = document.querySelector(".chat-header-dot");
+    const route = document.getElementById("chatHeaderRoute");
+    if (localWasmMode) {
+        if (dot) {
+            dot.style.background = "#ffb300";
+            dot.style.boxShadow = "0 0 8px #ffb300";
+        }
+        if (route) {
+            route.textContent = "⚠️ WASM FALLBACK (Server Offline)";
+            route.style.color = "var(--amber)";
+        }
+    } else {
+        if (dot) {
+            dot.style.background = "var(--emerald)";
+            dot.style.boxShadow = "0 0 8px var(--emerald)";
+        }
+        if (route) {
+            route.textContent = "🟢 Connected (Transformerless CPU)";
+            route.style.color = "var(--emerald)";
+        }
+    }
+}
 
 // =====================================================
 // Startup
@@ -3617,6 +3443,7 @@ async function startApp() {
             const probe = await fetch("/api/sysinfo");
             if (probe.ok) {
                 localWasmMode = false;
+                updateConnectionStatusUI();
                 console.log("[+] Server detected, using backend routing.");
             } else {
                 throw new Error("Server returned non-ok status");
@@ -3624,6 +3451,7 @@ async function startApp() {
         } catch (e) {
             console.warn("[!] Server offline or static deployment detected. Initializing local WASM fallback:", e);
             localWasmMode = true;
+            updateConnectionStatusUI();
             await tryInitLocalWasm();
         }
 
