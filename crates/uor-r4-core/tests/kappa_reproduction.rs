@@ -1,17 +1,20 @@
-//! κ-reproduction acceptance test for the transformerless → uor-tless
+//! κ-reproduction acceptance test for the transformerless → R4 integration
 //! migration: the ported pipeline must reproduce every artifact κ of the
 //! pre-migration baseline (tests/fixtures/baseline_kappa.json), bit
 //! identically, on this platform. This is the migration proof (PROOF.md P3):
 //! the port is behaviorally identical iff all pins match.
 //!
 //! Ignored by default: it needs the source checkpoint (60 MB, see
-//! `uor-tless setup`) and a release build for sane runtime. Run explicitly:
+//! `transformerless setup`) and a release build for sane runtime. Run explicitly:
 //!
-//!   cargo test -p uor-tless --release --test kappa_reproduction -- --ignored
+//!   cargo test -p uor-r4-core --release --test kappa_reproduction -- --ignored
 //!
 //! Checkpoint path override: TLESS_CHECKPOINT=/path/to/model.bin
 
-use uor_tless::{compiler, teacher::{LlamaOracle, TeacherOracle}};
+use uor_r4_core::transformerless::{
+    compiler,
+    teacher::{LlamaOracle, TeacherOracle},
+};
 
 fn kappa_of(bytes: &[u8]) -> String {
     format!("blake3:{}", blake3::hash(bytes).to_hex())
@@ -30,10 +33,10 @@ fn strings(v: &serde_json::Value, key: &str) -> Vec<String> {
 #[ignore]
 fn kappa_reproduction() {
     let dir = env!("CARGO_MANIFEST_DIR");
-    let ckpt = std::env::var("TLESS_CHECKPOINT")
-        .unwrap_or_else(|_| "/tmp/ref/out/model.bin".to_string());
+    let ckpt =
+        std::env::var("TLESS_CHECKPOINT").unwrap_or_else(|_| "/tmp/ref/out/model.bin".to_string());
     if std::fs::metadata(&ckpt).is_err() {
-        eprintln!("skipping: source checkpoint not found at {ckpt} (see `uor-tless setup`)");
+        eprintln!("skipping: source checkpoint not found at {ckpt} (see `transformerless setup`)");
         return;
     }
     let baseline: serde_json::Value = serde_json::from_str(
@@ -49,22 +52,30 @@ fn kappa_reproduction() {
     let art = compiler::compile(&oracle, &corpus);
 
     // Source pin.
-    assert_eq!(oracle.kappa(), baseline["source"]["kappa"].as_str().unwrap(), "source κ");
+    assert_eq!(
+        oracle.kappa(),
+        baseline["source"]["kappa"].as_str().unwrap(),
+        "source κ"
+    );
 
     // Token side — derives only from the embedding table; platform-independent.
-    assert_eq!(art.token_stage_kappas, strings(&baseline, "token_codebook_stages"), "token codebook stage κs");
+    assert_eq!(
+        art.token_stage_kappas,
+        strings(&baseline, "token_codebook_stages"),
+        "token codebook stage κs"
+    );
     let books: Vec<String> = art
         .stage_books
         .iter()
         .map(|b| kappa_of(&b.iter().map(|&x| x as u8).collect::<Vec<u8>>()))
         .collect();
     assert_eq!(books, strings(&baseline, "stage_books"), "stage book κs");
-    assert_eq!(kappa_of(&art.token_codes), baseline["token_codes"].as_str().unwrap(), "token codes κ");
-    let shifts: Vec<u64> = art
-        .stage_shifts
-        .iter()
-        .map(|&s| s as u64)
-        .collect();
+    assert_eq!(
+        kappa_of(&art.token_codes),
+        baseline["token_codes"].as_str().unwrap(),
+        "token codes κ"
+    );
+    let shifts: Vec<u64> = art.stage_shifts.iter().map(|&s| s as u64).collect();
     let want_shifts: Vec<u64> = baseline["stage_shifts"]
         .as_array()
         .unwrap()
@@ -75,10 +86,26 @@ fn kappa_reproduction() {
 
     // Bundle-derived — platform-sensitive section (macOS pins).
     let bd = &baseline["bundle_derived_macos"];
-    let thr: Vec<u8> = art.thresholds.iter().flat_map(|t| t.to_le_bytes()).collect();
-    assert_eq!(kappa_of(&thr), bd["threshold_vector"].as_str().unwrap(), "threshold vector κ");
-    let ctx: Vec<String> = art.ctx_cb.iter().map(|cb| compiler::kappa_of_f32s(cb)).collect();
-    assert_eq!(ctx, strings(bd, "context_codebook_stages"), "context codebook κs");
+    let thr: Vec<u8> = art
+        .thresholds
+        .iter()
+        .flat_map(|t| t.to_le_bytes())
+        .collect();
+    assert_eq!(
+        kappa_of(&thr),
+        bd["threshold_vector"].as_str().unwrap(),
+        "threshold vector κ"
+    );
+    let ctx: Vec<String> = art
+        .ctx_cb
+        .iter()
+        .map(|cb| compiler::kappa_of_f32s(cb))
+        .collect();
+    assert_eq!(
+        ctx,
+        strings(bd, "context_codebook_stages"),
+        "context codebook κs"
+    );
     let sigs: Vec<String> = art.class_sigs.iter().map(|s| kappa_of(s)).collect();
     assert_eq!(sigs, strings(bd, "class_signatures"), "class signature κs");
 

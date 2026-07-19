@@ -26,7 +26,7 @@ pub use runtime::{derive_popcount_table, hamming, sign_signature, OpKernel};
 
 #[cfg(test)]
 mod witnesses {
-    use crate::runtime::{derive_popcount_table, hamming, sign_signature, OpKernel};
+    use super::runtime::{derive_popcount_table, hamming, sign_signature, OpKernel};
 
     /// P-1: the popcount table matches its definition on all 256 bytes and
     /// carries the stratum partition sizes C(8,k).
@@ -104,7 +104,8 @@ mod witnesses {
                 } else {
                     b' '
                 };
-                let operand_l = |c: u8| c.is_ascii_alphanumeric() || c == b'_' || c == b')' || c == b']';
+                let operand_l =
+                    |c: u8| c.is_ascii_alphanumeric() || c == b'_' || c == b')' || c == b']';
                 let operand_r = |c: u8| c.is_ascii_alphanumeric() || c == b'_' || c == b'(';
                 if operand_l(prev) && operand_r(next) {
                     offenders.push(format!("line {}: {}", ln + 1, code));
@@ -136,11 +137,13 @@ mod witnesses {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-pub mod compiler;
-pub mod runtime;
-#[cfg(not(target_arch = "wasm32"))]
 pub mod certify;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod compare;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod compiler;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod progress;
+pub mod runtime;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod scenarios;

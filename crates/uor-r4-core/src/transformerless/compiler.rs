@@ -20,7 +20,7 @@
 //! architecture-generic (llama / qwen / phi differ only in the teacher
 //! adapter). This crate instantiates the llama-family adapter.
 
-use crate::teacher::TeacherOracle;
+use super::teacher::TeacherOracle;
 use std::io::Write;
 
 pub const STAGES: usize = 4;
@@ -98,13 +98,32 @@ pub fn load_corpus_from(mp: &str, rp: &str) -> Option<Corpus> {
             input.push(next[i - 1]);
         }
     }
-    Some(Corpus { n, stories, story, input, next, t_argmax, t_lp })
+    Some(Corpus {
+        n,
+        stories,
+        story,
+        input,
+        next,
+        t_argmax,
+        t_lp,
+    })
 }
 
 /// Generate (or extend, resumably) the teacher-labeled corpus. Whole-story
 /// chunking keeps the stream deterministic under any budget chunking.
 pub fn generate(oracle: &mut dyn TeacherOracle, budget_s: u64, target: usize) {
     let (mp, rp) = corpus_paths();
+    generate_to(oracle, budget_s, target, mp, rp);
+}
+
+/// Generate a resumable teacher corpus at explicit paths.
+pub fn generate_to(
+    oracle: &mut dyn TeacherOracle,
+    budget_s: u64,
+    target: usize,
+    mp: &str,
+    rp: &str,
+) {
     let (mut n, mut stories, mut rng, mut done) = match std::fs::read(mp) {
         Ok(b) if b.len() == 25 => (
             u64::from_le_bytes(b[0..8].try_into().unwrap()),
@@ -124,33 +143,38 @@ pub fn generate(oracle: &mut dyn TeacherOracle, budget_s: u64, target: usize) {
     let vocab = oracle.vocab();
     let seq_len = oracle.seq_len();
     let mut logits = vec![0f32; vocab];
-    let mut recs = std::fs::OpenOptions::new().create(true).append(true).open(rp).unwrap();
+    let mut progress = super::progress::Progress::new("teacher corpus", target);
+    progress.set(n as usize);
+    let mut recs = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(rp)
+        .unwrap();
     let t0 = std::time::Instant::now();
     while done == 0 && t0.elapsed().as_secs() < budget_s {
         oracle.reset();
-        let mut token = 1usize;
-        let mut rbuf: Vec<u8> = Vec::new();
+        let mut token = oracle.bos_token();
         for pos in 0..seq_len {
+            progress.set(n as usize);
             oracle.step(token, pos, &mut logits);
-            let mut probs = logits.clone();
-            let mut mx = probs[0];
-            for &v in &probs[1..] {
+            let mut mx = logits[0];
+            for &v in &logits[1..] {
                 if v > mx {
                     mx = v;
                 }
             }
             let mut sum = 0.0f32;
-            for p in probs.iter_mut() {
+            for p in &mut logits {
                 *p = (*p - mx).exp();
                 sum += *p;
             }
-            for p in probs.iter_mut() {
+            for p in &mut logits {
                 *p /= sum;
             }
             let u = (xorshift(&mut rng) >> 40) as f32 / (1u64 << 24) as f32;
             let mut cdf = 0.0f32;
             let mut next = vocab - 1;
-            for (i, &p) in probs.iter().enumerate() {
+            for (i, &p) in logits.iter().enumerate() {
                 cdf += p;
                 if u < cdf {
                     next = i;
@@ -159,34 +183,42 @@ pub fn generate(oracle: &mut dyn TeacherOracle, budget_s: u64, target: usize) {
             }
             let mut am = 0usize;
             for i in 1..vocab {
-                if probs[i] > probs[am] {
+                if logits[i] > logits[am] {
                     am = i;
                 }
             }
-            rbuf.extend_from_slice(&(stories as u32).to_le_bytes());
-            rbuf.extend_from_slice(&(next as u16).to_le_bytes());
-            rbuf.extend_from_slice(&(am as u16).to_le_bytes());
-            rbuf.extend_from_slice(&probs[next].max(1e-30).ln().to_le_bytes());
+            let mut record = [0u8; 12];
+            record[0..4].copy_from_slice(&(stories as u32).to_le_bytes());
+            record[4..6].copy_from_slice(&(next as u16).to_le_bytes());
+            record[6..8].copy_from_slice(&(am as u16).to_le_bytes());
+            record[8..12].copy_from_slice(&logits[next].max(1e-30).ln().to_le_bytes());
+            recs.write_all(&record).unwrap();
             n += 1;
+            progress.set(n as usize);
             if n as usize >= target {
                 done = 1;
                 break;
             }
-            if next == 1 {
+            if next == oracle.eos_token() {
                 break;
             }
             token = next;
         }
-        recs.write_all(&rbuf).unwrap();
         stories += 1;
-        let mut b = Vec::with_capacity(25);
-        b.extend_from_slice(&n.to_le_bytes());
-        b.extend_from_slice(&stories.to_le_bytes());
-        b.extend_from_slice(&rng.to_le_bytes());
-        b.push(done);
+        let mut b = [0u8; 25];
+        b[0..8].copy_from_slice(&n.to_le_bytes());
+        b[8..16].copy_from_slice(&stories.to_le_bytes());
+        b[16..24].copy_from_slice(&rng.to_le_bytes());
+        b[24] = done;
         std::fs::write(mp, b).unwrap();
     }
-    println!("corpus: {} / {} tokens, {} stories, done={}", n, target, stories, done);
+    println!(
+        "corpus: {} / {} tokens, {} stories, done={}",
+        n, target, stories, done
+    );
+    if done == 1 {
+        progress.finish();
+    }
 }
 
 // ------------------------------------------------------------- artifacts --
@@ -205,7 +237,7 @@ pub fn derive_rotations() -> [usize; WINDOW + 1] {
 /// Signature geometry, computed compiler-side so the runtime source
 /// carries no const arithmetic either.
 pub const SIG_BYTES: usize = D / 8;
-pub const SIG_WORDS: usize = (SIG_BYTES + 7) / 8;
+pub const SIG_WORDS: usize = SIG_BYTES.div_ceil(8);
 
 /// The train/held-out story cut (80/20), computed compiler-side.
 pub fn train_cut(c: &Corpus) -> u32 {
@@ -248,6 +280,8 @@ fn kmeans_rvq(
     let mut codebooks: Vec<Vec<f32>> = Vec::new();
     let mut codes = vec![0u8; nvec * stages];
     for stage in 0..stages {
+        eprintln!("embedding RVQ stage {}/{}", stage + 1, stages);
+        let mut progress = super::progress::Progress::new("RVQ assignment", iters * nvec);
         let mut cent = vec![0f32; k * D];
         let mut seed = 0xC0DEB00C ^ stage as u64;
         let mut used = vec![false; nvec];
@@ -260,8 +294,9 @@ fn kmeans_rvq(
             cent[kk * D..(kk + 1) * D].copy_from_slice(&residual[idx * D..(idx + 1) * D]);
         }
         let mut assign = vec![0usize; nvec];
-        for _ in 0..iters {
+        for iteration in 0..iters {
             for v in 0..nvec {
+                progress.set(iteration * nvec + v);
                 let rv = &residual[v * D..(v + 1) * D];
                 let (mut bd, mut bk) = (f32::MAX, 0usize);
                 for kk in 0..k {
@@ -294,6 +329,7 @@ fn kmeans_rvq(
                 }
             }
         }
+        progress.finish();
         for v in 0..nvec {
             codes[v * stages + stage] = assign[v] as u8;
             for j in 0..D {
@@ -305,29 +341,93 @@ fn kmeans_rvq(
     (codebooks, codes)
 }
 
+/// Linear-time deterministic RVQ used for larger source vocabularies. Each
+/// stage hashes the residual's signed, quantized geometry into 256 buckets,
+/// averages each bucket, then removes that centroid before the next stage.
+/// This keeps SmolLM2 compilation bounded instead of performing billions of
+/// exhaustive centroid-distance evaluations.
+fn hashed_rvq(vecs: &[f32], nvec: usize, stages: usize) -> (Vec<Vec<f32>>, Vec<u8>) {
+    let mut residual = vecs.to_vec();
+    let mut codebooks = Vec::with_capacity(stages);
+    let mut codes = vec![0u8; nvec * stages];
+    for stage in 0..stages {
+        eprintln!("hashed RVQ stage {}/{}", stage + 1, stages);
+        let mut progress = super::progress::Progress::new("hashed RVQ", nvec);
+        let mut sums = vec![0.0f32; K * D];
+        let mut counts = [0u32; K];
+        for vector in 0..nvec {
+            progress.set(vector);
+            let row = &residual[vector * D..(vector + 1) * D];
+            let mut hash = 0xcbf2_9ce4_8422_2325u64 ^ stage as u64;
+            for &value in row {
+                let quantized = (value * 127.0).round().clamp(-127.0, 127.0) as i8;
+                hash ^= quantized as u8 as u64;
+                hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+            }
+            let bucket = (hash & 0xff) as usize;
+            codes[vector * stages + stage] = bucket as u8;
+            counts[bucket] += 1;
+            for dimension in 0..D {
+                sums[bucket * D + dimension] += row[dimension];
+            }
+        }
+        progress.finish();
+        for bucket in 0..K {
+            if counts[bucket] != 0 {
+                let inverse = 1.0 / counts[bucket] as f32;
+                for dimension in 0..D {
+                    sums[bucket * D + dimension] *= inverse;
+                }
+            }
+        }
+        for vector in 0..nvec {
+            let bucket = codes[vector * stages + stage] as usize;
+            for dimension in 0..D {
+                residual[vector * D + dimension] -= sums[bucket * D + dimension];
+            }
+        }
+        codebooks.push(sums);
+    }
+    (codebooks, codes)
+}
+
 pub fn kappa_of_f32s(v: &[f32]) -> String {
-    let bytes: Vec<u8> = v.iter().flat_map(|f| f.to_le_bytes()).collect();
-    format!("blake3:{}", blake3::hash(&bytes).to_hex())
+    let mut hasher = blake3::Hasher::new();
+    for value in v {
+        hasher.update(&value.to_le_bytes());
+    }
+    format!("blake3:{}", hasher.finalize().to_hex())
 }
 
 pub fn compile(oracle: &dyn TeacherOracle, corpus: &Corpus) -> Compiled {
     // 1–2: token codebook and integer token vectors, read exclusively
     // through the oracle's embedding surface.
-    assert_eq!(oracle.vocab(), V, "compiler geometry vs source vocab");
+    let vocab = oracle.vocab();
+    assert!(
+        vocab <= usize::from(u16::MAX) + 1,
+        "source vocabulary exceeds u16 token ids"
+    );
     assert_eq!(oracle.dim(), D, "compiler geometry vs source dim");
-    println!("source κ: {} ({} bytes)", oracle.kappa(), oracle.source_bytes());
-    let mut vecs = vec![0f32; V * D];
-    for t in 0..V {
+    println!(
+        "source κ: {} ({} bytes)",
+        oracle.kappa(),
+        oracle.source_bytes()
+    );
+    let mut vecs = vec![0f32; vocab * D];
+    let mut embedding_progress = super::progress::Progress::new("extracting embeddings", vocab);
+    for t in 0..vocab {
+        embedding_progress.set(t);
         oracle.embedding(t, &mut vecs[t * D..(t + 1) * D]);
     }
+    embedding_progress.finish();
     let mut mean = vec![0f32; D];
-    for v in 0..V {
+    for v in 0..vocab {
         for j in 0..D {
             mean[j] += vecs[v * D + j];
         }
     }
-    mean.iter_mut().for_each(|m| *m /= V as f32);
-    for v in 0..V {
+    mean.iter_mut().for_each(|m| *m /= vocab as f32);
+    for v in 0..vocab {
         let row = &mut vecs[v * D..(v + 1) * D];
         for j in 0..D {
             row[j] -= mean[j];
@@ -335,7 +435,11 @@ pub fn compile(oracle: &dyn TeacherOracle, corpus: &Corpus) -> Compiled {
         let n = row.iter().map(|x| x * x).sum::<f32>().sqrt().max(1e-9);
         row.iter_mut().for_each(|x| *x /= n);
     }
-    let (emb_cb, emb_codes) = kmeans_rvq(&vecs, V, STAGES, K, EMB_ITERS);
+    let (emb_cb, emb_codes) = if vocab == V {
+        kmeans_rvq(&vecs, vocab, STAGES, K, EMB_ITERS)
+    } else {
+        hashed_rvq(&vecs, vocab, STAGES)
+    };
     let emb_stage_kappas: Vec<String> = emb_cb.iter().map(|cb| kappa_of_f32s(cb)).collect();
     for (i, k) in emb_stage_kappas.iter().enumerate() {
         println!("token codebook stage {} κ: {}", i, k);
@@ -355,13 +459,23 @@ pub fn compile(oracle: &dyn TeacherOracle, corpus: &Corpus) -> Compiled {
     }
     let emax = *exps.iter().max().unwrap();
     let stage_shifts: Vec<u8> = exps.iter().map(|&e| (emax - e) as u8).collect();
-    println!("stage fixed-point exponents e_k = {:?}, decode shifts = {:?}", exps, stage_shifts);
+    println!(
+        "stage fixed-point exponents e_k = {:?}, decode shifts = {:?}",
+        exps, stage_shifts
+    );
     let token_codes = emb_codes; // [V × STAGES], compressed representation
     for (i, book) in stage_books.iter().enumerate() {
         let bytes: Vec<u8> = book.iter().map(|&b| b as u8).collect();
-        println!("stage book {} (i8) κ: blake3:{}", i, blake3::hash(&bytes).to_hex());
+        println!(
+            "stage book {} (i8) κ: blake3:{}",
+            i,
+            blake3::hash(&bytes).to_hex()
+        );
     }
-    println!("token codes κ: blake3:{}", blake3::hash(&token_codes).to_hex());
+    println!(
+        "token codes κ: blake3:{}",
+        blake3::hash(&token_codes).to_hex()
+    );
 
     // Partial artifact so the RUNTIME's own bundle path produces the
     // training bundles (store/query identity by construction).
@@ -380,20 +494,30 @@ pub fn compile(oracle: &dyn TeacherOracle, corpus: &Corpus) -> Compiled {
     let cut = (corpus.stories as f64 * 0.8) as u32;
     let mut sums = [0i128; D];
     let mut ntrain = 0i128;
+    let mut threshold_progress = super::progress::Progress::new("context thresholds", corpus.n);
     for i in 0..corpus.n {
+        threshold_progress.set(i);
         if corpus.story[i] >= cut {
             continue;
         }
-        let b = crate::runtime::bundle_plain(&art, &rot, corpus, i);
+        let b = super::runtime::bundle_plain(&art, &rot, corpus, i);
         for (s, &v) in sums.iter_mut().zip(b.iter()) {
             *s += v as i128;
         }
         ntrain += 1;
     }
+    threshold_progress.finish();
     art.thresholds = sums.iter().map(|&s| (s / ntrain) as i64).collect();
     {
-        let bytes: Vec<u8> = art.thresholds.iter().flat_map(|t| t.to_le_bytes()).collect();
-        println!("threshold vector κ: blake3:{}", blake3::hash(&bytes).to_hex());
+        let bytes: Vec<u8> = art
+            .thresholds
+            .iter()
+            .flat_map(|t| t.to_le_bytes())
+            .collect();
+        println!(
+            "threshold vector κ: blake3:{}",
+            blake3::hash(&bytes).to_hex()
+        );
     }
 
     // 4: context RVQ on (centered, normalized) runtime bundles; binarize
@@ -401,9 +525,11 @@ pub fn compile(oracle: &dyn TeacherOracle, corpus: &Corpus) -> Compiled {
     let train_idx: Vec<usize> = (0..corpus.n).filter(|&i| corpus.story[i] < cut).collect();
     let mut s = 0x5A3B1Eu64;
     let mut samp = vec![0f32; CTX_SAMPLE * D];
+    let mut context_progress = super::progress::Progress::new("context samples", CTX_SAMPLE);
     for v in 0..CTX_SAMPLE {
+        context_progress.set(v);
         let i = train_idx[(xorshift(&mut s) as usize) % train_idx.len()];
-        let b = crate::runtime::bundle_plain(&art, &rot, corpus, i);
+        let b = super::runtime::bundle_plain(&art, &rot, corpus, i);
         let mut row = [0f32; D];
         let mut nn = 0f32;
         for d in 0..D {
@@ -416,7 +542,12 @@ pub fn compile(oracle: &dyn TeacherOracle, corpus: &Corpus) -> Compiled {
             samp[v * D + d] = row[d] / nn;
         }
     }
-    let (ctx_cb, _) = kmeans_rvq(&samp, CTX_SAMPLE, STAGES, K, CTX_ITERS);
+    context_progress.finish();
+    let (ctx_cb, _) = if vocab == V {
+        kmeans_rvq(&samp, CTX_SAMPLE, STAGES, K, CTX_ITERS)
+    } else {
+        hashed_rvq(&samp, CTX_SAMPLE, STAGES)
+    };
     for (st, cb) in ctx_cb.iter().enumerate() {
         println!("context codebook stage {} κ: {}", st, kappa_of_f32s(cb));
         let mut sigs = vec![0u8; K * D / 8];
@@ -427,7 +558,11 @@ pub fn compile(oracle: &dyn TeacherOracle, corpus: &Corpus) -> Compiled {
                 }
             }
         }
-        println!("class signature stage {} κ: blake3:{}", st, blake3::hash(&sigs).to_hex());
+        println!(
+            "class signature stage {} κ: blake3:{}",
+            st,
+            blake3::hash(&sigs).to_hex()
+        );
         art.class_sigs.push(sigs);
     }
     art.ctx_cb = ctx_cb;
@@ -439,7 +574,14 @@ pub fn compile(oracle: &dyn TeacherOracle, corpus: &Corpus) -> Compiled {
 /// Flat, versioned serialization of the compiled artifacts (κ-pins are
 /// re-derivable from the bytes; the store is rebuilt from the corpus).
 pub fn artifact_bytes(a: &Compiled) -> Vec<u8> {
-    let mut b: Vec<u8> = b"TLA3".to_vec();
+    let vocab = a.token_codes.len() / STAGES;
+    let mut b: Vec<u8> = if vocab == V {
+        b"TLA3".to_vec()
+    } else {
+        let mut bytes = b"TLA4".to_vec();
+        bytes.extend_from_slice(&(vocab as u32).to_le_bytes());
+        bytes
+    };
     b.extend_from_slice(&a.stage_shifts);
     b.extend_from_slice(&a.token_codes);
     for book in &a.stage_books {
@@ -487,24 +629,36 @@ pub fn load_artifacts_from(path: &str) -> Option<Compiled> {
     Some(art)
 }
 
-/// Parse a TLA3 container from bytes; the κ-pins re-derive from the bytes.
+/// Parse a TLA3 or vocabulary-sized TLA4 container from bytes.
 pub fn parse_artifacts(b: &[u8]) -> Option<Compiled> {
-    let tc = V * STAGES;
+    let (vocab, mut o) = match b.get(..4)? {
+        b"TLA3" => (V, 4usize),
+        b"TLA4" => (
+            u32::from_le_bytes(b.get(4..8)?.try_into().ok()?) as usize,
+            8usize,
+        ),
+        _ => return None,
+    };
+    let tc = vocab.checked_mul(STAGES)?;
     let bk = STAGES * K * D;
     let th = D * 8;
     let cs = STAGES * K * D / 8;
     let cc = STAGES * K * D * 4;
-    if b.len() != 4 + STAGES + tc + bk + th + cs + cc || &b[0..4] != b"TLA3" {
+    if b.len() != o + STAGES + tc + bk + th + cs + cc {
         return None;
     }
-    let mut o = 4usize;
     let stage_shifts = b[o..o + STAGES].to_vec();
     o += STAGES;
     let token_codes = b[o..o + tc].to_vec();
     o += tc;
     let mut stage_books = Vec::new();
     for _ in 0..STAGES {
-        stage_books.push(b[o..o + K * D].iter().map(|&x| x as i8).collect::<Vec<i8>>());
+        stage_books.push(
+            b[o..o + K * D]
+                .iter()
+                .map(|&x| x as i8)
+                .collect::<Vec<i8>>(),
+        );
         o += K * D;
     }
     let mut thresholds = vec![0i64; D];
@@ -526,5 +680,13 @@ pub fn parse_artifacts(b: &[u8]) -> Option<Compiled> {
         }
         ctx_cb.push(cb);
     }
-    Some(Compiled { token_codes, stage_books, stage_shifts, thresholds, class_sigs, ctx_cb, token_stage_kappas: Vec::new() })
+    Some(Compiled {
+        token_codes,
+        stage_books,
+        stage_shifts,
+        thresholds,
+        class_sigs,
+        ctx_cb,
+        token_stage_kappas: Vec::new(),
+    })
 }

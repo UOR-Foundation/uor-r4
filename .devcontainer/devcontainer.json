@@ -19,15 +19,11 @@
   "remoteUser": "vscode",
   "updateRemoteUserUID": true,
   "init": true,
-  "forwardPorts": [8000, 11434],
+  "forwardPorts": [8000],
   "portsAttributes": {
     "8000": {
       "label": "UOR R4 Router",
       "onAutoForward": "openBrowserOnce"
-    },
-    "11434": {
-      "label": "Ollama",
-      "onAutoForward": "silent"
     }
   },
 

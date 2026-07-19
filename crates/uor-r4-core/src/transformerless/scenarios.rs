@@ -29,10 +29,81 @@
 //! so their scenario-level predictions coincide with the teacher rows by
 //! definition; their throughput is in docs/COMPARISON.md.
 
-use crate::compiler::{self, Corpus};
-use crate::runtime::{build_store, code_plain, derive_rotations, predict_plain, Store};
-use crate::teacher::TeacherOracle;
+use super::compiler::{self, Corpus};
+use super::runtime::{build_store, code_plain, derive_rotations, predict_plain, Store};
+use super::teacher::TeacherOracle;
 use std::collections::BTreeMap;
+use std::io;
+use std::path::Path;
+
+const MAX_TOKEN_BYTES: usize = 1024;
+
+/// Convert a Hugging Face byte-level BPE vocabulary into the compact token
+/// table consumed by the allocation-free runtime tokenizer.
+pub fn export_hf_bytelevel_tokenizer(
+    source: impl AsRef<Path>,
+    destination: impl AsRef<Path>,
+) -> io::Result<()> {
+    let value: serde_json::Value = serde_json::from_slice(&std::fs::read(source)?)
+        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+    let vocab = value
+        .pointer("/model/vocab")
+        .and_then(serde_json::Value::as_object)
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "missing BPE vocabulary"))?;
+    let mut tokens = vec![Vec::new(); vocab.len()];
+    let byte_map = bytelevel_inverse();
+    for (piece, id) in vocab {
+        let id = id
+            .as_u64()
+            .and_then(|value| usize::try_from(value).ok())
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "invalid token id"))?;
+        let output = tokens
+            .get_mut(id)
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "sparse token ids"))?;
+        for ch in piece.chars() {
+            if let Some(byte) = byte_map.get(&ch) {
+                output.push(*byte);
+            } else {
+                let mut utf8 = [0u8; 4];
+                output.extend_from_slice(ch.encode_utf8(&mut utf8).as_bytes());
+            }
+        }
+    }
+    let mut bytes = Vec::new();
+    for token in tokens {
+        let length = i32::try_from(token.len())
+            .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "token too long"))?;
+        bytes.extend_from_slice(&length.to_le_bytes());
+        bytes.extend_from_slice(&token);
+    }
+    std::fs::write(destination, bytes)
+}
+
+fn bytelevel_inverse() -> BTreeMap<char, u8> {
+    let mut bytes: Vec<u8> = (b'!'..=b'~')
+        .chain(0xA1..=0xAC)
+        .chain(0xAE..=0xFF)
+        .collect();
+    let mut codepoints: Vec<u32> = bytes.iter().map(|byte| u32::from(*byte)).collect();
+    let mut extra = 0u32;
+    for byte in 0u8..=u8::MAX {
+        if !bytes.contains(&byte) {
+            bytes.push(byte);
+            codepoints.push(256 + extra);
+            extra += 1;
+        }
+    }
+    bytes
+        .into_iter()
+        .zip(codepoints)
+        .map(|(byte, codepoint)| {
+            (
+                char::from_u32(codepoint).expect("byte-level codepoint is valid"),
+                byte,
+            )
+        })
+        .collect()
+}
 
 // ------------------------------------------------------------ tokenizer --
 
@@ -50,58 +121,115 @@ pub struct Tokenizer {
 }
 
 impl Tokenizer {
-    pub fn load(path: &str) -> Self {
-        let b = std::fs::read(path).expect("tokenizer.bin");
-        let mut vocab = Vec::with_capacity(32000);
-        let mut o = 0usize;
-        while o < b.len() {
-            let len = i32::from_le_bytes(b[o..o + 4].try_into().unwrap()) as usize;
-            vocab.push(b[o + 4..o + 4 + len].to_vec());
-            o += 4 + len;
+    /// Load and validate a tokenizer without panicking on malformed input.
+    pub fn try_load(path: impl AsRef<Path>) -> io::Result<Self> {
+        let bytes = std::fs::read(path)?;
+        let mut vocab = Vec::with_capacity(32_000);
+        let mut offset = 0usize;
+        while offset < bytes.len() {
+            let length_bytes = bytes.get(offset..offset + 4).ok_or_else(|| {
+                io::Error::new(io::ErrorKind::InvalidData, "truncated tokenizer length")
+            })?;
+            let length = i32::from_le_bytes(
+                length_bytes
+                    .try_into()
+                    .expect("the checked tokenizer length is four bytes"),
+            );
+            let length = usize::try_from(length).map_err(|_| {
+                io::Error::new(io::ErrorKind::InvalidData, "negative tokenizer length")
+            })?;
+            let start = offset + 4;
+            let end = start.checked_add(length).ok_or_else(|| {
+                io::Error::new(io::ErrorKind::InvalidData, "tokenizer length overflow")
+            })?;
+            let token = bytes.get(start..end).ok_or_else(|| {
+                io::Error::new(io::ErrorKind::InvalidData, "truncated tokenizer token")
+            })?;
+            vocab.push(token.to_vec());
+            offset = end;
+        }
+        if vocab.len() > usize::from(u16::MAX) + 1 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "tokenizer vocabulary exceeds u16 token ids",
+            ));
         }
         let mut map = BTreeMap::new();
-        for (i, v) in vocab.iter().enumerate() {
-            map.entry(v.clone()).or_insert(i as u16);
+        for (index, token) in vocab.iter().enumerate() {
+            let id = u16::try_from(index).expect("validated tokenizer vocabulary fits u16");
+            map.entry(token.clone()).or_insert(id);
         }
-        Tokenizer { vocab, map }
+        Ok(Tokenizer { vocab, map })
+    }
+
+    pub fn load(path: &str) -> Self {
+        Self::try_load(path).expect("tokenizer file must be readable and well-formed")
     }
 
     pub fn encode(&self, text: &str) -> Vec<u16> {
-        let marked: String = format!(" {}", text);
-        let mut toks: Vec<u16> = Vec::new();
-        for ch in marked.chars() {
-            let s = ch.to_string().into_bytes();
-            match self.map.get(&s) {
-                Some(&id) => toks.push(id),
+        let mut toks = vec![0u16; text.chars().count().saturating_add(2)];
+        let count = self
+            .encode_into(text, &mut toks)
+            .expect("token buffer sized from input characters");
+        toks.truncate(count);
+        toks
+    }
+
+    /// Encode into caller-owned storage without allocating.
+    pub fn encode_into(&self, text: &str, out: &mut [u16]) -> io::Result<usize> {
+        let capacity_error = || io::Error::new(io::ErrorKind::InvalidInput, "token buffer full");
+        let mut len = 1usize;
+        *out.first_mut().ok_or_else(capacity_error)? = 1;
+        for ch in std::iter::once(' ').chain(text.chars()) {
+            let mut utf8 = [0u8; 4];
+            let bytes = ch.encode_utf8(&mut utf8).as_bytes();
+            let token = match self.map.get(bytes) {
+                Some(&id) => id,
                 None => {
-                    let cp = ch as u32;
-                    assert!(cp <= 0xFF, "scenario text must stay in U+00..U+FF");
-                    toks.push(3 + cp as u16); // codepoint tokens
+                    for byte in bytes {
+                        let id = self.map.get(&[*byte][..]).copied().ok_or_else(|| {
+                            io::Error::new(
+                                io::ErrorKind::InvalidInput,
+                                "tokenizer has no byte fallback",
+                            )
+                        })?;
+                        *out.get_mut(len).ok_or_else(capacity_error)? = id;
+                        len += 1;
+                    }
+                    continue;
                 }
-            }
+            };
+            *out.get_mut(len).ok_or_else(capacity_error)? = token;
+            len += 1;
         }
         loop {
             let mut best: Option<(u16, usize)> = None;
-            for i in 0..toks.len().saturating_sub(1) {
-                let mut cat = self.vocab[toks[i] as usize].clone();
-                cat.extend_from_slice(&self.vocab[toks[i + 1] as usize]);
-                if let Some(&id) = self.map.get(&cat) {
-                    if best.map_or(true, |(b, _)| id < b) {
+            for i in 1..len.saturating_sub(1) {
+                let left = &self.vocab[out[i] as usize];
+                let right = &self.vocab[out[i + 1] as usize];
+                let pair_len = left.len().saturating_add(right.len());
+                if pair_len > MAX_TOKEN_BYTES {
+                    continue;
+                }
+                let mut pair = [0u8; MAX_TOKEN_BYTES];
+                pair[..left.len()].copy_from_slice(left);
+                pair[left.len()..pair_len].copy_from_slice(right);
+                if let Some(&id) = self.map.get(&pair[..pair_len]) {
+                    if best.is_none_or(|(b, _)| id < b) {
                         best = Some((id, i));
                     }
                 }
             }
             match best {
                 Some((id, i)) => {
-                    toks[i] = id;
-                    toks.remove(i + 1);
+                    out[i] = id;
+                    out.copy_within(i + 2..len, i + 1);
+                    len -= 1;
                 }
                 None => break,
             }
         }
-        let mut out = vec![1u16]; // BOS
-        out.extend(toks);
-        out
+        Ok(len)
     }
 
     pub fn decode(&self, toks: &[u16]) -> String {
@@ -113,6 +241,31 @@ impl Tokenizer {
             bytes.extend_from_slice(&self.vocab[t as usize]);
         }
         String::from_utf8_lossy(&bytes).into_owned()
+    }
+
+    /// Decode into caller-owned byte storage without allocating.
+    pub fn decode_into(&self, toks: &[u16], out: &mut [u8]) -> io::Result<usize> {
+        let mut len = 0usize;
+        for &token in toks {
+            if token == 1 || token == 2 {
+                continue;
+            }
+            let bytes = self.vocab.get(token as usize).ok_or_else(|| {
+                io::Error::new(io::ErrorKind::InvalidInput, "token id outside vocabulary")
+            })?;
+            let end = len.checked_add(bytes.len()).ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "decoded output length overflow",
+                )
+            })?;
+            let target = out.get_mut(len..end).ok_or_else(|| {
+                io::Error::new(io::ErrorKind::InvalidInput, "decoded output buffer full")
+            })?;
+            target.copy_from_slice(bytes);
+            len = end;
+        }
+        Ok(len)
     }
 }
 
@@ -206,7 +359,10 @@ pub fn scenarios(oracle: &mut dyn TeacherOracle) {
     let probe = "Once upon a time, there was a little dog.";
     let ids = tok.encode(probe);
     assert_eq!(tok.decode(&ids).trim_start(), probe, "tokenizer round-trip");
-    println!("tokenizer witness: round-trip exact on probe ({} tokens)", ids.len());
+    println!(
+        "tokenizer witness: round-trip exact on probe ({} tokens)",
+        ids.len()
+    );
 
     let cap = oracle.seq_len() - 2;
     let vocab = oracle.vocab();
@@ -228,7 +384,10 @@ pub fn scenarios(oracle: &mut dyn TeacherOracle) {
             oracle.step(best, pos, &mut logits);
         }
         let cont = tok.decode(&seq[ids.len()..]);
-        println!("tokenizer fluency gate — teacher continues the probe with: \"{}\"", cont.trim());
+        println!(
+            "tokenizer fluency gate — teacher continues the probe with: \"{}\"",
+            cont.trim()
+        );
         assert!(
             cont.split_whitespace().count() >= 3,
             "teacher continuation not fluent; encoding suspect"
@@ -236,8 +395,8 @@ pub fn scenarios(oracle: &mut dyn TeacherOracle) {
     }
 
     // Artifact + store (train split only; every scenario is unseen).
-    let art = compiler::load_artifacts().expect("run `uor-tless compile` first");
-    let c150 = compiler::load_corpus().expect("run `uor-tless gen` first");
+    let art = compiler::load_artifacts().expect("run `transformerless compile` first");
+    let c150 = compiler::load_corpus().expect("run `transformerless gen` first");
     let (store, _) = build_store(&art, &c150);
     let rot = derive_rotations();
     let store_ref: &Store = &store;
@@ -299,12 +458,12 @@ pub fn scenarios(oracle: &mut dyn TeacherOracle) {
 
         // 3. metrics
         let (mut agree, mut tl1, mut th1) = (0u64, 0u64, 0u64);
-        for i in 0..n_eval {
-            if preds[i] == cs.t_argmax[i] {
+        for (i, &prediction) in preds.iter().enumerate() {
+            if prediction == cs.t_argmax[i] {
                 agree += 1;
             }
             if sc.real_text {
-                if preds[i] == cs.next[i] {
+                if prediction == cs.next[i] {
                     tl1 += 1;
                 }
                 if cs.t_argmax[i] == cs.next[i] {
@@ -319,8 +478,16 @@ pub fn scenarios(oracle: &mut dyn TeacherOracle) {
             sc.class,
             n_eval,
             pct(agree),
-            if sc.real_text { format!("{:.1}%", pct(tl1)) } else { "—".into() },
-            if sc.real_text { format!("{:.1}%", pct(th1)) } else { "—".into() },
+            if sc.real_text {
+                format!("{:.1}%", pct(tl1))
+            } else {
+                "—".into()
+            },
+            if sc.real_text {
+                format!("{:.1}%", pct(th1))
+            } else {
+                "—".into()
+            },
         );
 
         let e = agg.entry(sc.class).or_insert(ClassAgg {
@@ -352,8 +519,14 @@ pub fn scenarios(oracle: &mut dyn TeacherOracle) {
         let ag = 100.0 * e.agree as f64 / e.positions as f64;
         let (tl, th) = if e.real_positions > 0 {
             (
-                format!("{:.1}%", 100.0 * e.tless_top1 as f64 / e.real_positions as f64),
-                format!("{:.1}%", 100.0 * e.teacher_top1 as f64 / e.real_positions as f64),
+                format!(
+                    "{:.1}%",
+                    100.0 * e.tless_top1 as f64 / e.real_positions as f64
+                ),
+                format!(
+                    "{:.1}%",
+                    100.0 * e.teacher_top1 as f64 / e.real_positions as f64
+                ),
             )
         } else {
             ("—".into(), "—".into())

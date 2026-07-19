@@ -18,8 +18,8 @@
 //! - The store is built by calling THESE functions, so store keys and
 //!   query keys come from one code path by construction.
 
-use crate::compiler::{Compiled, Corpus, D, STAGES, WINDOW};
-pub use crate::compiler::{derive_rotations, train_cut, SIG_BYTES, SIG_WORDS};
+pub use super::compiler::{derive_rotations, train_cut, SIG_BYTES, SIG_WORDS};
+use super::compiler::{Compiled, Corpus, D, STAGES, WINDOW};
 
 /// Complete arithmetic interface of the runtime, with an operation census.
 /// There is no multiplication method; the census has no multiplication
@@ -133,7 +133,11 @@ pub type Store = Vec<BTreeMap<Vec<u8>, BTreeMap<u16, u32>>>;
 /// .nth(..)` — O(1) slicing on slices, no index products in this source.
 pub fn decode_row_plain(art: &Compiled, t: u16, out: &mut [i32; D]) {
     out.fill(0);
-    let codes = art.token_codes.chunks_exact(STAGES).nth(t as usize).unwrap();
+    let codes = art
+        .token_codes
+        .chunks_exact(STAGES)
+        .nth(t as usize)
+        .unwrap();
     for ((book, &code), &sh) in art.stage_books.iter().zip(codes).zip(&art.stage_shifts) {
         let row = book.chunks_exact(D).nth(code as usize).unwrap();
         for (o, &b) in out.iter_mut().zip(row) {
@@ -146,7 +150,11 @@ pub fn decode_row_plain(art: &Compiled, t: u16, out: &mut [i32; D]) {
 /// the exact bytes and shifts the runtime reads, truncated at `depth`.
 pub fn decode_row_prefix_plain(art: &Compiled, t: u16, depth: usize, out: &mut [i32; D]) {
     out.fill(0);
-    let codes = art.token_codes.chunks_exact(STAGES).nth(t as usize).unwrap();
+    let codes = art
+        .token_codes
+        .chunks_exact(STAGES)
+        .nth(t as usize)
+        .unwrap();
     for ((book, &code), &sh) in art
         .stage_books
         .iter()
@@ -165,7 +173,11 @@ pub fn decode_row_prefix_plain(art: &Compiled, t: u16, depth: usize, out: &mut [
 /// as a table read and every accumulation as an add.
 pub fn decode_row_kernel(k: &mut OpKernel, art: &Compiled, t: u16, out: &mut [i32; D]) {
     out.fill(0);
-    let codes = art.token_codes.chunks_exact(STAGES).nth(t as usize).unwrap();
+    let codes = art
+        .token_codes
+        .chunks_exact(STAGES)
+        .nth(t as usize)
+        .unwrap();
     for ((book, &code), &sh) in art.stage_books.iter().zip(codes).zip(&art.stage_shifts) {
         let code = k.table_fetch(code as i64) as usize;
         let row = book.chunks_exact(D).nth(code).unwrap();
@@ -194,11 +206,12 @@ fn history_token(c: &Corpus, i: usize, j: usize) -> Option<u16> {
 pub fn bundle_plain(art: &Compiled, rot: &[usize; WINDOW + 1], c: &Corpus, i: usize) -> [i64; D] {
     let mut acc = [0i64; D];
     let mut row = [0i32; D];
-    for j in 1..=WINDOW {
-        let Some(t) = history_token(c, i, j) else { continue };
+    for (j, &r) in rot.iter().enumerate().skip(1) {
+        let Some(t) = history_token(c, i, j) else {
+            continue;
+        };
         decode_row_plain(art, t, &mut row);
         let w = (WINDOW - j) as u32;
-        let r = rot[j];
         // acc[(d + r) mod D] += row[d] << w, as two straight runs
         let (lo, hi) = acc.split_at_mut(r);
         for (a, &v) in hi.iter_mut().zip(row.iter()) {
@@ -221,11 +234,12 @@ pub fn bundle_kernel(
 ) -> [i64; D] {
     let mut acc = [0i64; D];
     let mut row = [0i32; D];
-    for j in 1..=WINDOW {
-        let Some(t) = history_token(c, i, j) else { continue };
+    for (j, &r) in rot.iter().enumerate().skip(1) {
+        let Some(t) = history_token(c, i, j) else {
+            continue;
+        };
         decode_row_kernel(k, art, t, &mut row);
         let w = (WINDOW - j) as u32;
-        let r = rot[j];
         let (lo, hi) = acc.split_at_mut(r);
         for (a, &v) in hi.iter_mut().zip(row.iter()) {
             let s = k.shl(v as i64, w);
@@ -349,6 +363,7 @@ pub fn code_plain(art: &Compiled, rot: &[usize; WINDOW + 1], c: &Corpus, i: usiz
 
 /// A prediction with its resolution witness: the store level that answered
 /// (deepest populated class) and the winning entry's evidence count.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Prediction {
     pub token: u16,
     pub depth: usize,
@@ -371,7 +386,11 @@ pub fn predict_witness_plain(store: &Store, code: &[u8; STAGES]) -> Prediction {
                     best_n = cnt;
                 }
             }
-            return Prediction { token: best_t, depth: d, count: best_n };
+            return Prediction {
+                token: best_t,
+                depth: d,
+                count: best_n,
+            };
         }
     }
     unreachable!("level 0 is always populated")
@@ -461,28 +480,43 @@ impl<'a> Runtime<'a> {
                         best_n = cnt;
                     }
                 }
-                return Prediction { token: best_t, depth: d, count: best_n };
+                return Prediction {
+                    token: best_t,
+                    depth: d,
+                    count: best_n,
+                };
             }
         }
         unreachable!("level 0 is always populated")
     }
 
-    /// Greedy generation from a seed window: repeatedly resolve the deepest
-    /// populated class and append the winning token. Every step ships its
-    /// witness (token, depth, evidence count) — attributable by construction.
-    pub fn generate_greedy(&mut self, store: &Store, seed: &[u16], len: usize) -> Vec<Prediction> {
-        let mut window: Vec<u16> = seed.to_vec();
-        let mut out = Vec::with_capacity(len);
-        for _ in 0..len {
-            let code = self.assign_window(&window);
+    /// Allocation-free greedy generation into caller-owned storage.
+    ///
+    /// Returns the number of predictions written. Only the most recent
+    /// [`WINDOW`] seed tokens are copied into a fixed stack buffer.
+    pub fn generate_greedy_into(
+        &mut self,
+        store: &Store,
+        seed: &[u16],
+        out: &mut [Prediction],
+    ) -> usize {
+        let mut window = [0u16; WINDOW];
+        let seed = &seed[seed.len().saturating_sub(WINDOW)..];
+        let mut window_len = seed.len();
+        window[..window_len].copy_from_slice(seed);
+        for slot in out.iter_mut() {
+            let code = self.assign_window(&window[..window_len]);
             let p = self.predict_witness(store, &code);
-            window.push(p.token);
-            while window.len() > WINDOW {
-                window.remove(0);
+            if window_len < WINDOW {
+                window[window_len] = p.token;
+                window_len += 1;
+            } else {
+                window.copy_within(1.., 0);
+                window[WINDOW - 1] = p.token;
             }
-            out.push(p);
+            *slot = p;
         }
-        out
+        out.len()
     }
 }
 
@@ -507,11 +541,11 @@ pub fn build_store(art: &Compiled, c: &Corpus) -> (Store, Vec<[u8; STAGES]>) {
     let cut = train_cut(c);
     let codes: Vec<[u8; STAGES]> = (0..c.n).map(|i| code_plain(art, &rot, c, i)).collect();
     let mut store: Store = (0..=STAGES).map(|_| BTreeMap::new()).collect();
-    for i in 0..c.n {
+    for (i, code) in codes.iter().enumerate().take(c.n) {
         if c.story[i] >= cut {
             continue;
         }
-        add_evidence(&mut store, &codes[i], c.next[i]);
+        add_evidence(&mut store, code, c.next[i]);
     }
     (store, codes)
 }

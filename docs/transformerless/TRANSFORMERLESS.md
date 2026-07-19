@@ -1,8 +1,8 @@
 # Transformerless: Cross-Compiling Language Models into Table-Native Artifacts
 
 > **Migrated (2026-07-18):** this document moved from the `transformerless`
-> repository into uor-r4, where the implementation now lives as the
-> `uor-tless` crate (`crates/uor-tless`). The "parent platform" referenced
+> repository into uor-r4, where the implementation now lives inside
+> `uor_r4_core::transformerless` (`crates/uor-r4-core/src/transformerless`). The "parent platform" referenced
 > in §5–§6 is this repository's UOR substrate (uor-addr, uor-foundation).
 
 This document is the extrapolation companion to the implementation in this

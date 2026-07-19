@@ -2,10 +2,19 @@
 name = "uor-r4-core"
 version = "0.1.0"
 edition = "2021"
-description = "Pure mathematics of the R4 Tangent Space Router: zeta-zero embeddings, Hopf coordinates, prime/QIMC identity layer, state metrics — no wasm, no UOR-framework dependencies"
+description = "Core R4 engine: geometric routing mathematics and integrated transformerless local inference"
+
+[[bin]]
+name = "transformerless"
+path = "src/bin/transformerless.rs"
 
 [dependencies]
 sha2 = "0.10.8"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 hex = "0.4.3"
+blake3 = "=1.5.0"
+safetensors = { version = "0.6", default-features = false, features = ["std"] }
+
+[dev-dependencies]
+serde_json = "1.0"

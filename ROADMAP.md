@@ -3,8 +3,9 @@
 p0:
 
 - [x] Wrap in transformerless into r4 (or inverse) — **done 2026-07-18**: the
-  full transformerless program is migrated into this repo as
-  [`crates/uor-tless`](crates/uor-tless) (κ-reproduction proven bit-exactly),
+  full transformerless program is integrated into
+  [`uor-r4-core::transformerless`](crates/uor-r4-core/src/transformerless)
+  (κ-reproduction proven bit-exactly),
   rebased onto the UOR substrate (`src/tless_uor.rs`: uor-addr addressing,
   `TlessAxis`, per-prediction `Grounded` witnesses), and exposed at
   `/api/tless/{predict,index,generate}`. The old repository is superseded.

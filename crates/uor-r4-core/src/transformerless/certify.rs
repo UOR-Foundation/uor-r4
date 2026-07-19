@@ -16,11 +16,11 @@
 //!     rate–distortion table of the shipped token representation, and the
 //!     end-to-end artifact accounting against the source bytes.
 
-use crate::compiler::{self, D, K, STAGES, V};
-use crate::teacher::TeacherOracle;
-use crate::runtime::{
+use super::compiler::{self, D, K, STAGES, V};
+use super::runtime::{
     self, build_store, bundle_kernel, bundle_plain, code_plain, predict_plain, Runtime, Store,
 };
+use super::teacher::TeacherOracle;
 use std::collections::BTreeMap;
 
 fn build_store_generic(
@@ -34,8 +34,12 @@ fn build_store_generic(
         if c.story[i] >= cut {
             continue;
         }
-        for d in 0..=depths {
-            *levels[d].entry(key(i, d)).or_default().entry(c.next[i]).or_default() += 1;
+        for (d, level) in levels.iter_mut().enumerate().take(depths + 1) {
+            *level
+                .entry(key(i, d))
+                .or_default()
+                .entry(c.next[i])
+                .or_default() += 1;
         }
     }
     levels
@@ -84,8 +88,8 @@ fn eval(
             agree += 1;
         }
         let mut lams: Vec<(f64, &BTreeMap<u16, u32>, u32)> = Vec::new();
-        for d in 0..=depths {
-            if let Some(dist) = store[d].get(&key(i, d)) {
+        for (d, level) in store.iter().enumerate().take(depths + 1) {
+            if let Some(dist) = level.get(&key(i, d)) {
                 let total: u32 = dist.values().sum();
                 let lam = total as f64 / (total as f64 + dist.len() as f64);
                 lams.push((lam, dist, total));
@@ -118,10 +122,13 @@ fn eval(
 }
 
 pub fn certify(oracle: &dyn TeacherOracle) {
-    let c = compiler::load_corpus().expect("corpus incomplete: run `uor-tless gen` first");
+    let c = compiler::load_corpus().expect("corpus incomplete: run `transformerless gen` first");
     let cut = (c.stories as f64 * 0.8) as u32;
     let ntest = (0..c.n).filter(|&i| c.story[i] >= cut).count();
-    println!("corpus: {} tokens, {} stories, held-out {}", c.n, c.stories, ntest);
+    println!(
+        "corpus: {} tokens, {} stories, held-out {}",
+        c.n, c.stories, ntest
+    );
 
     let (mut floor, mut ceil) = (0f64, 0u64);
     for i in 0..c.n {
@@ -226,13 +233,21 @@ pub fn certify(oracle: &dyn TeacherOracle) {
         .collect();
     let store_f32 = {
         let mut s: Store = (0..=STAGES).map(|_| BTreeMap::new()).collect();
-        for i in 0..c.n {
+        for (i, code) in codes_f32.iter().enumerate().take(c.n) {
             if c.story[i] >= cut {
                 continue;
             }
-            *s[0].entry(vec![]).or_default().entry(c.next[i]).or_default() += 1;
+            *s[0]
+                .entry(vec![])
+                .or_default()
+                .entry(c.next[i])
+                .or_default() += 1;
             for d in 1..=STAGES {
-                *s[d].entry(codes_f32[i][..d].to_vec()).or_default().entry(c.next[i]).or_default() += 1;
+                *s[d]
+                    .entry(code[..d].to_vec())
+                    .or_default()
+                    .entry(c.next[i])
+                    .or_default() += 1;
             }
         }
         s
@@ -244,8 +259,9 @@ pub fn certify(oracle: &dyn TeacherOracle) {
     );
 
     // ---- B: bit-prefix coordinate — signature bytes, no classes
-    let sigs: Vec<[u8; runtime::SIG_BYTES]> =
-        (0..c.n).map(|i| runtime::sig_plain(&art, &bundles[i])).collect();
+    let sigs: Vec<[u8; runtime::SIG_BYTES]> = (0..c.n)
+        .map(|i| runtime::sig_plain(&art, &bundles[i]))
+        .collect();
     let bdepths = 6usize;
     let key_b = |i: usize, d: usize| -> Vec<u8> { sigs[i][..d].to_vec() };
     let store_b = build_store_generic(&c, bdepths, &key_b);
@@ -266,7 +282,10 @@ pub fn certify(oracle: &dyn TeacherOracle) {
     assert_eq!(reloaded.class_sigs, art.class_sigs);
     compiler::save_artifacts(&reloaded);
     let resaved = std::fs::read(compiler::ART_PATH).unwrap();
-    assert_eq!(saved, resaved, "container round-trip must be byte-identical");
+    assert_eq!(
+        saved, resaved,
+        "container round-trip must be byte-identical"
+    );
     println!(
         "compression witness (container): save → load → save is byte-identical ({} bytes, κ stable)",
         saved.len()

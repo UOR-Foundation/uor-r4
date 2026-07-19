@@ -1,9 +1,9 @@
 # Measured Comparison Against Classical Runtimes
 
 > **Migrated (2026-07-18):** this document moved from the `transformerless`
-> repository into uor-r4, where the implementation now lives as the
-> `uor-tless` crate (`crates/uor-tless`). Command invocations read
-> `uor-tless …`. Measurements below are the pre-migration record (Linux
+> repository into uor-r4, where it is integrated as
+> `uor_r4_core::transformerless`. Command invocations use the
+> `transformerless` binary. Measurements below are the pre-migration record (Linux
 > container).
 
 Every number in this document was measured on the same machine (single-core
@@ -72,7 +72,7 @@ Readings, in order of importance:
 
 ## Scenario suite: real-world prompts and diverse input
 
-`uor-tless scenarios` runs a fourteen-scenario suite over four input
+`transformerless scenarios` runs a fourteen-scenario suite over four input
 classes, every stream unseen by the store (train split only), teacher and
 artifact fed the identical token stream. The tokenizer is witnessed in-run:
 byte-exact round-trip, plus a fluency gate — the teacher must continue a
@@ -247,5 +247,5 @@ new row, not a re-measurement of the CPU row.
 ## In-crate reproduction
 
     # this crate (after `gen` and `compile`; see README)
-    uor-tless compare
-    uor-tless scenarios
+    transformerless compare
+    transformerless scenarios

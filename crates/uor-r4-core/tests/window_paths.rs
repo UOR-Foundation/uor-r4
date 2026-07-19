@@ -3,8 +3,8 @@
 //! TLA3 container roundtrip (PROOF.md P5(a) as a unit test), and the TLS1
 //! store container.
 
-use uor_tless::compiler::{self, Corpus, STAGES, WINDOW};
-use uor_tless::runtime::{self, OpKernel, Store};
+use uor_r4_core::transformerless::compiler::{self, Corpus, STAGES, WINDOW};
+use uor_r4_core::transformerless::runtime::{self, OpKernel, Store};
 
 fn fixture() -> (compiler::Compiled, Corpus) {
     let dir = env!("CARGO_MANIFEST_DIR");
@@ -34,7 +34,9 @@ fn container_roundtrip_byte_identical() {
     .unwrap();
     assert_eq!(
         format!("blake3:{}", blake3::hash(&bytes).to_hex()),
-        baseline["bundle_derived_macos"]["container"]["kappa"].as_str().unwrap(),
+        baseline["bundle_derived_macos"]["container"]["kappa"]
+            .as_str()
+            .unwrap(),
         "fixture container matches the baseline κ"
     );
 }
@@ -90,7 +92,10 @@ fn store_container_roundtrip() {
         runtime::parse_store(&bytes[..bytes.len() - 1]).is_none(),
         "truncated container rejected"
     );
-    assert!(runtime::parse_store(b"XXXX").is_none(), "bad magic rejected");
+    assert!(
+        runtime::parse_store(b"XXXX").is_none(),
+        "bad magic rejected"
+    );
 }
 
 #[test]

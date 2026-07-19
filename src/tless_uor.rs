@@ -1,4 +1,4 @@
-//! UOR rebase of the migrated transformerless engine (the `uor-tless` crate).
+//! UOR bindings for R4's integrated transformerless inference module.
 //!
 //! Three bindings, mirroring the R4Axis pattern in this crate:
 //!
@@ -25,8 +25,8 @@ use uor_foundation::enforcement::{GroundedShape, Hasher, ShapeViolation};
 use uor_foundation::pipeline::{
     ConstrainedTypeShape, ConstraintRef, IntoBindingValue, PartitionProductFields, TermValue,
 };
-use uor_tless::compiler::{self, Compiled, WINDOW};
-use uor_tless::runtime::{self, Store};
+use uor_r4_core::transformerless::compiler::{self, Compiled, WINDOW};
+use uor_r4_core::transformerless::runtime::{self, Store};
 
 use uor_r4_router::{R4HostBounds, R4_FP_MAX, R4_INLINE_BYTES};
 
@@ -46,7 +46,8 @@ pub struct TlessState {
 }
 
 thread_local! {
-    pub static ACTIVE_TLESS: RefCell<Option<*mut TlessState>> = RefCell::new(None);
+    pub static ACTIVE_TLESS: RefCell<Option<*mut TlessState>> = const { RefCell::new(None) };
+    static OWNED_TLESS: RefCell<Option<TlessState>> = const { RefCell::new(None) };
 }
 
 /// Build a state from a loaded artifact + store (κs and address computed).
@@ -76,10 +77,9 @@ pub fn unbind_tless_state() {
     ACTIVE_TLESS.with(|s| *s.borrow_mut() = None);
 }
 
-/// Bind an owned state on this thread (tests, WASM injection): the state is
-/// leaked for the process lifetime.
+/// Install an owned state on this thread without leaking a heap allocation.
 pub fn set_tless_state(art: Compiled, store: Store) {
-    bind_tless_state(Box::leak(Box::new(make_tless_state(art, store))));
+    OWNED_TLESS.with(|state| *state.borrow_mut() = Some(make_tless_state(art, store)));
 }
 
 /// Explicit path configuration (the server CLI); each accessor falls back
@@ -102,7 +102,7 @@ fn artifacts_path() -> String {
         .get()
         .map(|p| p.artifacts.clone())
         .or_else(|| std::env::var("TLESS_ARTIFACTS").ok())
-        .unwrap_or_else(|_| "/tmp/tless_artifacts.bin".to_string())
+        .unwrap_or_else(|| "/tmp/tless_artifacts.bin".to_string())
 }
 
 fn store_path() -> String {
@@ -110,7 +110,7 @@ fn store_path() -> String {
         .get()
         .map(|p| p.store.clone())
         .or_else(|| std::env::var("TLESS_STORE").ok())
-        .unwrap_or_else(|_| "/tmp/tless_store.bin".to_string())
+        .unwrap_or_else(|| "/tmp/tless_store.bin".to_string())
 }
 
 fn tokenizer_path() -> String {
@@ -118,7 +118,7 @@ fn tokenizer_path() -> String {
         .get()
         .map(|p| p.tokenizer.clone())
         .or_else(|| std::env::var("TLESS_TOKENIZER").ok())
-        .unwrap_or_else(|_| "/tmp/ref/tokenizer.bin".to_string())
+        .unwrap_or_else(|| "/tmp/ref/tokenizer.bin".to_string())
 }
 
 /// Load state bytes from the configured paths (explicit config, then env
@@ -140,12 +140,14 @@ pub fn load_tless_state() -> Option<TlessState> {
 /// the server binds explicitly around its shared Mutex).
 #[cfg(not(target_arch = "wasm32"))]
 pub fn ensure_tless_state() -> bool {
-    if ACTIVE_TLESS.with(|s| s.borrow().is_some()) {
+    if ACTIVE_TLESS.with(|state| state.borrow().is_some())
+        || OWNED_TLESS.with(|state| state.borrow().is_some())
+    {
         return true;
     }
     match load_tless_state() {
         Some(st) => {
-            bind_tless_state(Box::leak(Box::new(st)));
+            OWNED_TLESS.with(|state| *state.borrow_mut() = Some(st));
             true
         }
         None => false,
@@ -156,7 +158,8 @@ pub fn ensure_tless_state() -> bool {
 /// `set_tless_state`.
 #[cfg(target_arch = "wasm32")]
 pub fn ensure_tless_state() -> bool {
-    ACTIVE_TLESS.with(|s| s.borrow().is_some())
+    ACTIVE_TLESS.with(|state| state.borrow().is_some())
+        || OWNED_TLESS.with(|state| state.borrow().is_some())
 }
 
 /// Read-only access to the bound state.
@@ -164,13 +167,21 @@ pub fn with_tless_state<R>(f: impl FnOnce(&TlessState) -> R) -> Option<R> {
     // SAFETY: the binding contract above — the pointee is live and
     // unaliased for the binding's duration (server: MutexGuard held;
     // tests: leaked box).
-    ACTIVE_TLESS.with(|s| s.borrow().as_ref().map(|&p| unsafe { &*p }).map(f))
+    let active = ACTIVE_TLESS.with(|state| *state.borrow());
+    match active {
+        Some(pointer) => Some(f(unsafe { &*pointer })),
+        None => OWNED_TLESS.with(|state| state.borrow().as_ref().map(f)),
+    }
 }
 
 /// Mutable access to the bound state (same contract as
 /// `with_tless_state`; the server holds the state Mutex across the call).
 fn with_tless_state_mut<R>(f: impl FnOnce(&mut TlessState) -> R) -> Option<R> {
-    ACTIVE_TLESS.with(|s| s.borrow().as_ref().map(|&p| unsafe { &mut *p }).map(f))
+    let active = ACTIVE_TLESS.with(|state| *state.borrow());
+    match active {
+        Some(pointer) => Some(f(unsafe { &mut *pointer })),
+        None => OWNED_TLESS.with(|state| state.borrow_mut().as_mut().map(f)),
+    }
 }
 
 // =====================================================================
@@ -255,22 +266,26 @@ pub fn delete_store_entry(depth: usize, key: &[u8]) -> Option<(String, BTreeMap<
 // =====================================================================
 
 thread_local! {
-    static TLESS_TOKENIZER: RefCell<Option<uor_tless::scenarios::Tokenizer>> = RefCell::new(None);
+    static TLESS_TOKENIZER: RefCell<Option<uor_r4_core::transformerless::scenarios::Tokenizer>> = const { RefCell::new(None) };
 }
 
 /// Inject a tokenizer (WASM, tests).
-pub fn set_tless_tokenizer(t: uor_tless::scenarios::Tokenizer) {
+pub fn set_tless_tokenizer(t: uor_r4_core::transformerless::scenarios::Tokenizer) {
     TLESS_TOKENIZER.with(|tk| *tk.borrow_mut() = Some(t));
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn with_tokenizer<R>(f: impl FnOnce(&uor_tless::scenarios::Tokenizer) -> R) -> Option<R> {
+fn with_tokenizer<R>(
+    f: impl FnOnce(&uor_r4_core::transformerless::scenarios::Tokenizer) -> R,
+) -> Option<R> {
     TLESS_TOKENIZER.with(|t| {
         let mut g = t.borrow_mut();
         if g.is_none() {
             let path = tokenizer_path();
             if std::fs::metadata(&path).is_ok() {
-                *g = Some(uor_tless::scenarios::Tokenizer::load(&path));
+                *g = Some(uor_r4_core::transformerless::scenarios::Tokenizer::load(
+                    &path,
+                ));
             }
         }
         g.as_ref().map(f)
@@ -278,7 +293,9 @@ fn with_tokenizer<R>(f: impl FnOnce(&uor_tless::scenarios::Tokenizer) -> R) -> O
 }
 
 #[cfg(target_arch = "wasm32")]
-fn with_tokenizer<R>(f: impl FnOnce(&uor_tless::scenarios::Tokenizer) -> R) -> Option<R> {
+fn with_tokenizer<R>(
+    f: impl FnOnce(&uor_r4_core::transformerless::scenarios::Tokenizer) -> R,
+) -> Option<R> {
     TLESS_TOKENIZER.with(|t| t.borrow().as_ref().map(f))
 }
 
@@ -287,9 +304,19 @@ pub fn tless_tokenize(text: &str) -> Option<Vec<u16>> {
     with_tokenizer(|t| t.encode(text))
 }
 
+/// Tokenize into caller-owned storage without allocating.
+pub fn tless_tokenize_into(text: &str, out: &mut [u16]) -> Option<usize> {
+    with_tokenizer(|tokenizer| tokenizer.encode_into(text, out).ok()).flatten()
+}
+
 /// Detokenize token ids with the bound tokenizer.
 pub fn tless_detokenize(tokens: &[u16]) -> Option<String> {
     with_tokenizer(|t| t.decode(tokens))
+}
+
+/// Detokenize into caller-owned byte storage without allocating.
+pub fn tless_detokenize_into(tokens: &[u16], out: &mut [u8]) -> Option<usize> {
+    with_tokenizer(|tokenizer| tokenizer.decode_into(tokens, out).ok()).flatten()
 }
 
 /// Index a token stream into the bound graded store as additional evidence
@@ -317,7 +344,17 @@ pub fn index_token_stream(tokens: &[u16]) -> Option<usize> {
 pub fn generate_steps(seed: &[u16], len: usize) -> Option<Vec<runtime::Prediction>> {
     with_tless_state(|st| {
         let mut rt = runtime::Runtime::new(&st.art);
-        rt.generate_greedy(&st.store, seed, len)
+        let mut predictions = vec![runtime::Prediction::default(); len];
+        rt.generate_greedy_into(&st.store, seed, &mut predictions);
+        predictions
+    })
+}
+
+/// Allocation-free generation into caller-owned prediction storage.
+pub fn generate_steps_into(seed: &[u16], out: &mut [runtime::Prediction]) -> Option<usize> {
+    with_tless_state(|st| {
+        let mut rt = runtime::Runtime::new(&st.art);
+        rt.generate_greedy_into(&st.store, seed, out)
     })
 }
 
@@ -394,7 +431,7 @@ impl TlessAxis for TlessAxisImpl {
             out[27..31].copy_from_slice(&(k.table_reads as u32).to_be_bytes());
             TLESS_OUTPUT_BYTES
         })
-        .ok_or_else(|| ShapeViolation {
+        .ok_or(ShapeViolation {
             shape_iri: <TlessAxisImpl as TlessAxis>::AXIS_ADDRESS,
             constraint_iri: "https://uor.foundation/axis/TlessAxis/stateBound",
             property_iri: "https://uor.foundation/axis/tlessState",
@@ -587,12 +624,12 @@ impl<'a>
 mod tests {
     use super::*;
     use uor_foundation::pipeline::PrismModel;
-    use uor_tless::compiler::STAGES;
+    use uor_r4_core::transformerless::compiler::STAGES;
 
     fn fixture_state() {
         let dir = concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../uor-tless/tests/fixtures"
+            "/crates/uor-r4-core/tests/fixtures"
         );
         let bytes = std::fs::read(format!("{dir}/tless_artifacts.bin")).unwrap();
         let art = compiler::parse_artifacts(&bytes).expect("fixture TLA3 parses");
@@ -669,7 +706,7 @@ mod tests {
     fn deletion_is_address_attested() {
         let dir = concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../uor-tless/tests/fixtures"
+            "/crates/uor-r4-core/tests/fixtures"
         );
         let bytes = std::fs::read(format!("{dir}/tless_artifacts.bin")).unwrap();
         let art = compiler::parse_artifacts(&bytes).expect("fixture TLA3 parses");
@@ -684,7 +721,7 @@ mod tests {
         assert_eq!(addr, pre_addr, "the attestation is the removed entry's κ");
         assert_eq!(dist.get(&2), Some(&5), "evidence returned");
         with_tless_state(|st| {
-            assert!(st.store[1].get(&vec![9u8]).is_none(), "entry removed");
+            assert!(!st.store[1].contains_key(&vec![9u8]), "entry removed");
             assert_ne!(st.store_kappa, pre_store_kappa, "store κ updated");
             let p = runtime::predict_witness_plain(&st.store, &[9, 0, 0, 0]);
             assert_eq!((p.token, p.depth), (1, 0), "resolution backs off");

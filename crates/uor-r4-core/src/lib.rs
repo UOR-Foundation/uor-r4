@@ -1,16 +1,17 @@
-//! Pure mathematics of the R⁴ Tangent Space Router: zeta-zero word
-//! embeddings, Hopf coordinates, prime/QIMC identity layer, state metrics.
-//! No wasm, no UOR-framework dependencies.
+//! Core implementation of R⁴: zeta-zero embeddings, Hopf coordinates,
+//! prime/QIMC identity, state metrics, and integrated local transformerless
+//! compilation and inference. No WASM or UOR-framework dependencies.
 
-use std::collections::{BTreeMap, HashMap};
-use std::f64::consts::PI;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::{BTreeMap, HashMap};
+use std::f64::consts::PI;
 
+pub mod transformerless;
 pub mod zeta_zeros;
 
 pub const ALPHA_4: f64 = 1.0 / (2.0 * PI); // 1 / 2π
-pub const ALPHA_5: f64 = 2.0 * PI;         // 2π (Unity Constraint: ALPHA_4 * ALPHA_5 = 1)
+pub const ALPHA_5: f64 = 2.0 * PI; // 2π (Unity Constraint: ALPHA_4 * ALPHA_5 = 1)
 
 /// Represents a high-dimensional vector in continuous R⁴ Space.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -23,7 +24,12 @@ pub struct R4Vector {
 
 impl R4Vector {
     pub fn origin() -> Self {
-        Self { x: 0.0, y: 0.0, z: 0.0, w: 0.0 }
+        Self {
+            x: 0.0,
+            y: 0.0,
+            z: 0.0,
+            w: 0.0,
+        }
     }
 
     pub fn minkowski_norm(&self) -> f64 {
@@ -31,7 +37,8 @@ impl R4Vector {
     }
 
     pub fn tangent_direction_from_origin(&self) -> Self {
-        let magnitude = (self.x * self.x + self.y * self.y + self.z * self.z + self.w * self.w).sqrt();
+        let magnitude =
+            (self.x * self.x + self.y * self.y + self.z * self.z + self.w * self.w).sqrt();
         if magnitude == 0.0 {
             Self::origin()
         } else {
@@ -89,7 +96,7 @@ pub fn allocate_triplet_bins_budget(
     let min_first = min_first.max(1);
     let min_second = min_second.max(1);
     let min_third = min_third.max(1);
-    
+
     let mut best = (1, total_cap, 1);
     let mut best_score: Option<(usize, i32, i32, usize, i32)> = None;
     for k_first in min_first..=total_cap {
@@ -116,10 +123,14 @@ pub fn allocate_triplet_bins_budget(
 }
 
 pub fn is_prime_value(n: usize) -> bool {
-    if n < 2 { return false; }
+    if n < 2 {
+        return false;
+    }
     let limit = (n as f64).sqrt() as usize;
     for i in 2..=limit {
-        if n % i == 0 { return false; }
+        if n.is_multiple_of(i) {
+            return false;
+        }
     }
     true
 }
@@ -190,7 +201,10 @@ pub fn identity_to_qimc_prime(identity: &str) -> (usize, usize, IdentityMeta) {
     let meta = IdentityMeta {
         identity: normalized.clone(),
         identity_type: id_type,
-        identity_uor_address: multihash.get("sha256").cloned().unwrap_or_else(|| format!("sha256:{}", digest)),
+        identity_uor_address: multihash
+            .get("sha256")
+            .cloned()
+            .unwrap_or_else(|| format!("sha256:{}", digest)),
         identity_uor_digest: digest,
         identity_uor_hash_algorithm: "sha256".to_string(),
         identity_uor_multihash: multihash,
@@ -200,13 +214,12 @@ pub fn identity_to_qimc_prime(identity: &str) -> (usize, usize, IdentityMeta) {
 }
 
 pub fn derive_uor_control_plane(identity_meta: &IdentityMeta) -> UorControlPlane {
-    let digest_bytes = hex::decode(&identity_meta.identity_uor_digest).unwrap_or_else(|_| vec![0; 32]);
+    let digest_bytes =
+        hex::decode(&identity_meta.identity_uor_digest).unwrap_or_else(|_| vec![0; 32]);
     let entropy_bias = (digest_bytes[0] as f64) / 255.0;
-    
+
     let phase_transport_lambda = 0.70 + (0.60 * entropy_bias);
-    let mut hopf_chi_bins = 2 + (entropy_bias * 3.0) as usize;
-    if hopf_chi_bins < 2 { hopf_chi_bins = 2; }
-    if hopf_chi_bins > 4 { hopf_chi_bins = 4; }
+    let hopf_chi_bins = (2 + (entropy_bias * 3.0) as usize).clamp(2, 4);
 
     let mut window_biases = HashMap::new();
     for window in 1..=16 {
@@ -264,13 +277,13 @@ pub fn hopf_coordinate_components_scalar(normalized_coordinate: &[f64]) -> HashM
     let denom = (rho1 * rho1 + rho2 * rho2).sqrt().max(1e-12);
     let cos_chi = rho1 / denom;
     let sin_chi = rho2 / denom;
-    let chi = sin_chi.min(1.0).max(0.0).asin();
-    let chi_u = (sin_chi * sin_chi).min(1.0 - 1e-12).max(0.0);
+    let chi = sin_chi.clamp(0.0, 1.0).asin();
+    let chi_u = (sin_chi * sin_chi).clamp(0.0, 1.0 - 1e-12);
     let theta1 = wrap_to_pi(b.atan2(a));
     let theta2 = wrap_to_pi(d.atan2(c));
     let delta = wrap_to_pi(theta1 - theta2);
     let alpha = wrap_to_pi(0.5 * (theta1 + theta2));
-    
+
     let mut map = HashMap::new();
     map.insert("rho1".to_string(), rho1);
     map.insert("rho2".to_string(), rho2);
@@ -296,7 +309,7 @@ pub fn hopf_phase_transport_components_scalar(
     let connection_weight = 0.5 * phase_transport_lambda * (2.0 * chi).cos();
     let phase_shift = wrap_to_pi(connection_weight * delta);
     let transported_alpha = wrap_to_pi(alpha + phase_shift);
-    
+
     map.insert("transport_connection_weight".to_string(), connection_weight);
     map.insert("transport_phase_shift".to_string(), phase_shift);
     map.insert("transported_alpha".to_string(), transported_alpha);
@@ -309,23 +322,24 @@ pub fn assign_sector_hopf_transport_scalar(
     phase_transport_lambda: f64,
     hopf_chi_bins: usize,
 ) -> (usize, HashMap<String, usize>, HashMap<String, f64>) {
-    let components = hopf_phase_transport_components_scalar(normalized_coordinate, phase_transport_lambda);
+    let components =
+        hopf_phase_transport_components_scalar(normalized_coordinate, phase_transport_lambda);
     let (kchi, kdelta, kalpha) = allocate_triplet_bins_budget(k, hopf_chi_bins.max(2), 2, 2);
-    
+
     let delta = components["delta"];
     let transported_alpha = components["transported_alpha"];
     let chi_u = components["chi_u"];
-    
+
     let u_delta = (delta + std::f64::consts::PI) / (2.0 * std::f64::consts::PI);
     let u_alpha = (transported_alpha + std::f64::consts::PI) / (2.0 * std::f64::consts::PI);
-    
+
     let chi_bin = ((chi_u * kchi as f64) as usize).min(kchi - 1);
     let delta_bin = ((u_delta * kdelta as f64) as usize).min(kdelta - 1);
     let alpha_bin = ((u_alpha * kalpha as f64) as usize).min(kalpha - 1);
-    
+
     let local_span = kdelta * kalpha;
     let sector_id = (chi_bin * local_span + delta_bin * kalpha + alpha_bin).min(k - 1);
-    
+
     let mut bins = HashMap::new();
     bins.insert("chi_bins".to_string(), kchi);
     bins.insert("delta_bins".to_string(), kdelta);
@@ -333,7 +347,7 @@ pub fn assign_sector_hopf_transport_scalar(
     bins.insert("chi_bin".to_string(), chi_bin);
     bins.insert("delta_bin".to_string(), delta_bin);
     bins.insert("alpha_bin".to_string(), alpha_bin);
-    
+
     (sector_id, bins, components)
 }
 
@@ -342,15 +356,15 @@ pub fn get_word_vector(prime: usize) -> Vec<f64> {
     let ln_p = (prime as f64).ln();
     let mut vec = vec![0.0; 512];
     let mut sum_sq = 0.0;
-    for i in 0..512 {
-        let val = (ln_p * ZETA_ZEROS[i]).sin();
-        vec[i] = val;
+    for (value, zeta_zero) in vec.iter_mut().zip(ZETA_ZEROS) {
+        let val = (ln_p * zeta_zero).sin();
+        *value = val;
         sum_sq += val * val;
     }
     let norm = sum_sq.sqrt();
     if norm > 0.0 {
-        for i in 0..512 {
-            vec[i] = (vec[i] / norm) * 0.1;
+        for value in &mut vec {
+            *value = (*value / norm) * 0.1;
         }
     }
     vec
@@ -366,49 +380,51 @@ pub fn scale_x_for_window(window_idx: usize) -> f64 {
 pub fn get_q_proj() -> Vec<[f64; 2]> {
     let mut state = 42u64;
     let mut next_random = || {
-        state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        state = state
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         (state >> 32) as f64 / 4294967296.0
     };
-    
+
     let mut p_proj = vec![[0.0; 2]; 512];
-    for i in 0..512 {
+    for projection in &mut p_proj {
         let u1 = next_random().max(1e-15);
         let u2 = next_random();
         let r = (-2.0 * u1.ln()).sqrt();
         let theta = 2.0 * std::f64::consts::PI * u2;
-        p_proj[i][0] = r * theta.cos();
-        p_proj[i][1] = r * theta.sin();
+        projection[0] = r * theta.cos();
+        projection[1] = r * theta.sin();
     }
-    
+
     let mut q_proj = p_proj.clone();
     let mut len0_sq = 0.0;
-    for i in 0..512 {
-        len0_sq += q_proj[i][0] * q_proj[i][0];
+    for projection in &q_proj {
+        len0_sq += projection[0] * projection[0];
     }
     let len0 = len0_sq.sqrt();
     if len0 > 0.0 {
-        for i in 0..512 {
-            q_proj[i][0] /= len0;
+        for projection in &mut q_proj {
+            projection[0] /= len0;
         }
     }
     let mut dot = 0.0;
-    for i in 0..512 {
-        dot += q_proj[i][0] * q_proj[i][1];
+    for projection in &q_proj {
+        dot += projection[0] * projection[1];
     }
-    for i in 0..512 {
-        q_proj[i][1] -= dot * q_proj[i][0];
+    for projection in &mut q_proj {
+        projection[1] -= dot * projection[0];
     }
     let mut len1_sq = 0.0;
-    for i in 0..512 {
-        len1_sq += q_proj[i][1] * q_proj[i][1];
+    for projection in &q_proj {
+        len1_sq += projection[1] * projection[1];
     }
     let len1 = len1_sq.sqrt();
     if len1 > 0.0 {
-        for i in 0..512 {
-            q_proj[i][1] /= len1;
+        for projection in &mut q_proj {
+            projection[1] /= len1;
         }
     }
-    
+
     q_proj
 }
 
@@ -531,7 +547,7 @@ pub fn state_metrics_from_weights(p: &[f64]) -> (f64, f64, f64, f64, f64) {
 }
 
 pub fn sha256_bytes(bytes: &[u8]) -> [u8; 32] {
-    use sha2::{Sha256, Digest};
+    use sha2::{Digest, Sha256};
     let mut hasher = Sha256::new();
     hasher.update(bytes);
     let result = hasher.finalize();
@@ -540,17 +556,13 @@ pub fn sha256_bytes(bytes: &[u8]) -> [u8; 32] {
     output
 }
 
-pub fn query_stopwords() -> std::collections::HashSet<&'static str> {
-    let stopwords = [
-        "the", "of", "is", "a", "in", "and", "to", "for", "on", "with", "at", "by", "an", "be", "this", "that", "from", 
-        "are", "was", "were", "it", "as", "he", "she", "they", "what", "how", "why", "where", "who", "when", 
-        "tell", "me", "about", "describe", "explain", "show", "give", "find", "do", "does", "did", "can", "could", "would", "should"
-    ];
-    let mut set = std::collections::HashSet::new();
-    for s in stopwords {
-        set.insert(s);
-    }
-    set
+pub fn query_stopwords() -> &'static [&'static str] {
+    &[
+        "the", "of", "is", "a", "in", "and", "to", "for", "on", "with", "at", "by", "an", "be",
+        "this", "that", "from", "are", "was", "were", "it", "as", "he", "she", "they", "what",
+        "how", "why", "where", "who", "when", "tell", "me", "about", "describe", "explain", "show",
+        "give", "find", "do", "does", "did", "can", "could", "would", "should",
+    ]
 }
 
 pub fn uuid_placeholder(seed: i32) -> String {

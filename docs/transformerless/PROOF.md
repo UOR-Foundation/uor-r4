@@ -1,9 +1,9 @@
 # Proof and Certificate
 
 > **Migrated (2026-07-18):** this document moved from the `transformerless`
-> repository into uor-r4, where the implementation now lives as the
-> `uor-tless` crate (`crates/uor-tless`). Command invocations read
-> `uor-tless …`. Measurements below are the pre-migration certificate
+> repository into uor-r4, where it is integrated as
+> `uor_r4_core::transformerless`. Command invocations use the
+> `transformerless` binary. Measurements below are the pre-migration certificate
 > (Linux container) unless otherwise noted; see the platform note in P3.
 
 The transformerless claim decomposes into four propositions. Each is proven
@@ -13,7 +13,7 @@ measurement — and nothing is asserted beyond what its proof form supports.
 ## P1 — The runtime performs no multiplication. (By construction, measured.)
 
 Every arithmetic operation on the inference path goes through `OpKernel`
-(crates/uor-tless/src/lib.rs), whose complete method set is:
+(crates/uor-r4-core/src/transformerless/runtime.rs), whose complete method set is:
 
     add(i64, i64)   shl(i64, u32)   xor(u8, u8)   lt(i64, i64)
     table_u8(&[u8], u8)   table_i32(&[i32], usize)
@@ -129,9 +129,9 @@ them the corpus statistics (754 stories, 30,036 held-out) and certificate
 rows (A-binary: 28.3% top-1, 31.5% agreement, 6.5634 WB bits/token,
 92,464 keys) — differ, because corpus sampling runs through libm
 `exp`/`ln`, which is not bit-stable across platforms. The macOS pins are
-captured in full in `crates/uor-tless/tests/fixtures/baseline_kappa.json`
+captured in full in `crates/uor-r4-core/tests/fixtures/baseline_kappa.json`
 and asserted bit-identically by the κ-reproduction test
-(`cargo test -p uor-tless --release --test kappa_reproduction -- --ignored`),
+(`cargo test -p uor-r4-core --release --test kappa_reproduction -- --ignored`),
 which is the migration's acceptance proof.
 
 Library witnesses (cargo test): P-1 the popcount table matches its
@@ -143,7 +143,7 @@ P-3 sign signatures agree with the direct definition bit for bit.
 ## type-enforced; instantiated for one family.)
 
 The two-surface claim is enforced by the type system, not by inspection:
-`TeacherOracle` (crates/uor-tless/src/teacher.rs) exposes exactly the embedding surface
+`TeacherOracle` (crates/uor-r4-core/src/transformerless/teacher.rs) exposes exactly the embedding surface
 (`embedding`) and the behavior surface (`reset`/`step`), plus geometry and
 κ accessors, and the compiler, certifier, comparator, and scenario suite
 are all written against `dyn TeacherOracle`. No consumer can reach an

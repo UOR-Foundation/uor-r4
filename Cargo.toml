@@ -1,11 +1,12 @@
 [workspace]
-members = ["crates/*"]
-default-members = [
-    ".",
-    "crates/uor-tless",
+members = [
     "crates/uor-r4-core",
     "crates/uor-r4-router",
-    "crates/uor-tless-bindings",
+]
+default-members = [
+    ".",
+    "crates/uor-r4-core",
+    "crates/uor-r4-router",
 ]
 exclude = ["uor_standards"]
 resolver = "2"
@@ -14,6 +15,8 @@ resolver = "2"
 name = "uor-r4-wasm-router"
 version = "0.1.0"
 edition = "2021"
+default-run = "server"
+autobins = false
 
 [lib]
 crate-type = ["cdylib", "rlib"]
@@ -22,14 +25,26 @@ crate-type = ["cdylib", "rlib"]
 name = "server"
 path = "src/main.rs"
 
+[[bin]]
+name = "ask"
+path = "src/bin/ask.rs"
+
+[[bin]]
+name = "model"
+path = "src/bin/model.rs"
+
 [dependencies]
 uor-r4-core = { path = "crates/uor-r4-core" }
 uor-r4-router = { path = "crates/uor-r4-router" }
-uor-tless-bindings = { path = "crates/uor-tless-bindings" }
-uor-tless = { path = "crates/uor-tless" }
+uor-addr = { path = "uor_standards/uor-addr/crates/uor-addr", default-features = false, features = ["alloc"] }
+uor-foundation-sdk = { path = "uor_standards/UOR-Framework/uor-foundation-sdk" }
 uor-foundation = { path = "uor_standards/UOR-Framework/foundation", default-features = false, features = ["std", "serde"] }
-clap = { version = "4.5", features = ["derive", "env"] }
+clap = { version = "4.5", default-features = false, features = ["std", "derive", "env", "help", "usage", "error-context"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 hex = "0.4.3"
+tracing = { version = "0.1", default-features = false, features = ["std"] }
+blake3 = "=1.5.0"
 
+[dev-dependencies]
+uor-foundation-verify = { path = "uor_standards/UOR-Framework/uor-foundation-verify" }

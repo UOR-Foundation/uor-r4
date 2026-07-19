@@ -6,12 +6,56 @@
 //! classical runtimes are recorded with versions and reproduction commands
 //! in docs/COMPARISON.md.
 
-use crate::compiler::{self, Compiled};
-use crate::runtime::{build_store, code_plain, derive_rotations, predict_plain, Runtime};
-use crate::teacher::TeacherOracle;
+use super::compiler::{self, Compiled};
+use super::runtime::{build_store, code_plain, derive_rotations, predict_plain, Runtime};
+use super::teacher::TeacherOracle;
+
+const RECORDED_TLESS_TPS: f64 = 77_342.0;
+const RECORDED_LLAMA_Q8_TPS: f64 = 344.28;
+const RECORDED_LLAMA_F32_TPS: f64 = 157.43;
+const RECORDED_TEACHER_AGREEMENT: f64 = 31.7;
+
+fn print_recorded_classical_comparison() {
+    let q8_speedup = RECORDED_TLESS_TPS / RECORDED_LLAMA_Q8_TPS;
+    let f32_speedup = RECORDED_TLESS_TPS / RECORDED_LLAMA_F32_TPS;
+
+    println!("recorded same-machine classical baseline (single thread, same κ-pinned source):");
+    println!("| runtime | tok/s | relative throughput | teacher agreement |");
+    println!("|---|---:|---:|---:|");
+    println!(
+        "| transformerless mul-free | {:.0} | **{:.0}× llama.cpp q8_0** | {:.1}% |",
+        RECORDED_TLESS_TPS, q8_speedup, RECORDED_TEACHER_AGREEMENT
+    );
+    println!(
+        "| llama.cpp q8_0 CPU | {:.2} | 1.00× | 100% (source model) |",
+        RECORDED_LLAMA_Q8_TPS
+    );
+    println!(
+        "| llama.cpp f32 CPU | {:.2} | {:.2}× q8_0 | 100% (source model) |",
+        RECORDED_LLAMA_F32_TPS,
+        RECORDED_LLAMA_F32_TPS / RECORDED_LLAMA_Q8_TPS
+    );
+    println!();
+    println!(
+        "headline: transformerless was measured at {:.0}× llama.cpp q8_0 and {:.0}× llama.cpp f32.",
+        q8_speedup, f32_speedup
+    );
+    println!(
+        "tradeoff: that speed is at {:.1}% teacher-argmax agreement, not quality parity; llama.cpp executes the source model.",
+        RECORDED_TEACHER_AGREEMENT
+    );
+    println!(
+        "conditions and exact llama.cpp reproduction commands: docs/transformerless/COMPARISON.md"
+    );
+}
 
 pub fn compare(oracle: &mut dyn TeacherOracle) {
-    let c = compiler::load_corpus().expect("corpus incomplete: run `uor-tless gen` first");
+    if cfg!(debug_assertions) {
+        eprintln!(
+            "warning: debug builds distort throughput; rerun with:\n  cargo run --release --bin transformerless -- compare\n"
+        );
+    }
+    let c = compiler::load_corpus().expect("corpus incomplete: run `transformerless gen` first");
     let art: Compiled = match compiler::load_artifacts() {
         Some(a) => {
             println!("compiled artifacts loaded from {}", compiler::ART_PATH);
@@ -101,6 +145,17 @@ pub fn compare(oracle: &mut dyn TeacherOracle) {
     );
     println!();
     println!(
+        "live result: transformerless is **{:.0}× faster** than the in-crate source-model teacher on this machine ({:.0} vs {:.0} tok/s).",
+        mulfree_tps / teacher_tps,
+        mulfree_tps,
+        teacher_tps
+    );
+    println!(
+        "live quality: {:.1}% agreement with teacher argmax over {} timed held-out positions.",
+        mulfree_agree, timed
+    );
+    println!();
+    println!(
         "artifact footprint (compressed, as shipped): runtime tables {:.2} MB (codes {:.0} KB + books {:.0} KB + thresholds {:.1} KB + signatures {:.0} KB) + store ≈ {:.1} MB ({} keys) = {:.2} MB total",
         runtime_bytes as f64 / 1e6,
         art.token_codes.len() as f64 / 1e3,
@@ -112,7 +167,24 @@ pub fn compare(oracle: &mut dyn TeacherOracle) {
         (runtime_bytes + store_bytes) as f64 / 1e6
     );
     println!();
-    println!(
-        "external classical runtimes (llama.cpp f32/q8_0, run.c, OpenMP APE) are\nrecorded with versions and reproduction commands in docs/COMPARISON.md."
-    );
+    print_recorded_classical_comparison();
+}
+
+/// Print the certified comparison table without loading a checkpoint or
+/// corpus. Useful for demos; `compare` remains the live benchmark command.
+pub fn report() {
+    println!("Transformerless performance certificate");
+    println!("=======================================");
+    print_recorded_classical_comparison();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn recorded_speedups_match_the_certificate() {
+        assert!((RECORDED_TLESS_TPS / RECORDED_LLAMA_Q8_TPS - 224.65).abs() < 0.1);
+        assert!((RECORDED_TLESS_TPS / RECORDED_LLAMA_F32_TPS - 491.28).abs() < 0.1);
+    }
 }

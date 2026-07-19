@@ -1,0 +1,16 @@
+{
+  "repository": "HuggingFaceTB/SmolLM2-135M-Instruct",
+  "revision": "7e27bd9f95328f0f3b08261d1252705110c806f8",
+  "license": "Apache-2.0",
+  "architecture": "LlamaForCausalLM",
+  "weight_format": "safetensors",
+  "hidden_size": 576,
+  "intermediate_size": 1536,
+  "vocabulary_size": 49152,
+  "layers": 30,
+  "attention_heads": 9,
+  "key_value_heads": 3,
+  "bos_token_id": 1,
+  "eos_token_id": 2,
+  "source_directory": ".uor-models/sources/smollm2-135m-instruct"
+}
