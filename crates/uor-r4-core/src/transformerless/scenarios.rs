@@ -31,7 +31,6 @@
 
 use super::compiler::{self, Corpus};
 use super::runtime::{build_store, code_plain, derive_rotations, predict_plain, Store};
-#[cfg(not(target_arch = "wasm32"))]
 use super::teacher::TeacherOracle;
 use std::collections::BTreeMap;
 use std::io;
@@ -353,7 +352,6 @@ struct ClassAgg {
     teacher_steps: u64,
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 pub fn scenarios(oracle: &mut dyn TeacherOracle) {
     let tok = Tokenizer::load("/tmp/ref/tokenizer.bin");
 

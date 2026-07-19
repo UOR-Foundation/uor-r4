@@ -142,8 +142,10 @@ pub mod certify;
 pub mod command;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod compare;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod compiler;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod progress;
 pub mod runtime;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod scenarios;
