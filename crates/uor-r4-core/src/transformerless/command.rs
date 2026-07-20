@@ -27,7 +27,7 @@
 
 use super::{
     certify, compare, compiler, runtime, scenarios,
-    teacher::{HuggingFaceLlamaOracle, LlamaOracle},
+    teacher::{HuggingFaceLlamaOracle, LlamaOracle, TeacherOracle},
 };
 use std::path::{Path, PathBuf};
 
@@ -252,6 +252,11 @@ pub fn compile_hugging_face(args: &[String]) -> Result<(), String> {
     };
     eprintln!("teacher corpus complete; compiling table-native artifact...");
     let artifacts = compiler::compile(&oracle, &corpus);
+    eprintln!("inducing hierarchical codes...");
+    let hc = compiler::induce_hierarchical_codes(&artifacts.token_codes, oracle.vocab(), &corpus);
+    let hc_json = serde_json::to_string_pretty(&hc).map_err(|error| error.to_string())?;
+    std::fs::write(output.join("hierarchical_codes.json"), hc_json)
+        .map_err(|error| error.to_string())?;
     eprintln!("writing artifact...");
     std::fs::write(
         output.join("tless_artifacts.bin"),
