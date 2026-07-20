@@ -2770,3 +2770,33 @@ impl<'a>
         )
     }
 }
+
+#[wasm_bindgen]
+pub fn vsa_encode_statement(subj: &str, pred: &str, obj: &str, space: &str) -> Vec<u8> {
+    let hv = uor_r4_core::semantic::encode_statement(subj, pred, obj, space);
+    let mut bytes = Vec::with_capacity(128);
+    for &val in &hv.0 {
+        bytes.extend_from_slice(&val.to_le_bytes());
+    }
+    bytes
+}
+
+#[wasm_bindgen]
+pub fn vsa_encode_event(subj: &str, act: &str, time: &str, loc: &str, space: &str) -> Vec<u8> {
+    let hv = uor_r4_core::semantic::encode_event(subj, act, time, loc, space);
+    let mut bytes = Vec::with_capacity(128);
+    for &val in &hv.0 {
+        bytes.extend_from_slice(&val.to_le_bytes());
+    }
+    bytes
+}
+
+#[wasm_bindgen]
+pub fn vsa_encode_graph_edge(src: &str, rel: &str, tgt: &str, space: &str) -> Vec<u8> {
+    let hv = uor_r4_core::semantic::encode_graph_edge(src, rel, tgt, space);
+    let mut bytes = Vec::with_capacity(128);
+    for &val in &hv.0 {
+        bytes.extend_from_slice(&val.to_le_bytes());
+    }
+    bytes
+}
