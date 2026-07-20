@@ -268,6 +268,45 @@ pub fn compile_hugging_face(args: &[String]) -> Result<(), String> {
         output.join("tokenizer.bin"),
     )
     .map_err(|error| error.to_string())?;
+
+    // Helper to calculate Blake3 hash CID
+    let calculate_file_hash = |path: &Path| -> Result<String, String> {
+        let content = std::fs::read(path).map_err(|error| error.to_string())?;
+        let hash = blake3::hash(&content);
+        Ok(format!("blake3:{}", hash.to_hex()))
+    };
+
+    let artifacts_path = output.join("tless_artifacts.bin");
+    let store_path = output.join("tless_store.bin");
+
+    let artifacts_cid = calculate_file_hash(&artifacts_path)?;
+    let store_cid = calculate_file_hash(&store_path)?;
+    let corpus_cid = calculate_file_hash(Path::new(&meta))?;
+
+    let manifest = crate::semantic::SemanticSpaceManifestV1 {
+        space_name: slug.clone(),
+        parent_space_cid: None,
+        schema_roots: vec!["blake3:schema_root_r4_v1".to_string()],
+        axis_definitions: vec![
+            "blake3:axis_type".to_string(),
+            "blake3:axis_entity".to_string(),
+            "blake3:axis_relation".to_string(),
+        ],
+        codebook_cids: vec![artifacts_cid],
+        threshold_cids: vec![store_cid],
+        metric_cids: vec!["blake3:metric_hamming_1024".to_string()],
+        operator_registry_cid: "blake3:operator_registry_r4_v1".to_string(),
+        corpus_root_cids: vec![corpus_cid],
+        compiler_cid: "blake3:compiler_r4_v0.1.0".to_string(),
+        quality_certificate_cid: "blake3:quality_certificate_r4_v1".to_string(),
+        epoch: 1,
+    };
+
+    let manifest_json = serde_json::to_string_pretty(&manifest).map_err(|error| error.to_string())?;
+    std::fs::write(output.join("space_manifest.json"), manifest_json)
+        .map_err(|error| error.to_string())?;
+    eprintln!("space manifest generated: space_manifest.json");
+
     println!("compile complete: {}", output.display());
     println!(
         "bundle ready for local `ask`; use `cargo run -- import --help` to attach a quality attestation and persist a named manifest (name: {slug})"
