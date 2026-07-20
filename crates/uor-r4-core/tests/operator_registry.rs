@@ -91,7 +91,7 @@ fn test_reasoning_plan_execution_and_budget_enforcement() {
         operators: vec!["blake3:op1".to_string()],
         facet_policy: FacetPolicy { priority_order: vec![] },
         backoff_policy: BackoffPolicy { max_backoff_steps: 2, allow_any_facet: true },
-        required_evidence: EvidencePolicy { min_evidence_count: 1, require_provenance: false },
+        required_evidence: EvidencePolicy { min_evidence_count: 0, require_provenance: false },
         deterministic_limits: Limits {
             max_probes: 10,
             max_operators: 5,
@@ -134,6 +134,93 @@ fn test_reasoning_plan_execution_and_budget_enforcement() {
     };
     let err_probe = plan_limited_probe.execute(&registry, &start);
     assert!(err_probe.is_err());
+}
+
+#[test]
+fn test_proof_carrying_clause_validation() {
+    use uor_r4_core::semantic::{
+        ReasoningPlanV1, OperatorRegistry, TypedOperator, OperatorType, WeightedRoute, Constraint
+    };
+    use uor_r4_core::semantic::reasoning::{FacetPolicy, BackoffPolicy, EvidencePolicy, Limits};
+
+    let mut registry = OperatorRegistry::new("blake3:space_1".to_string());
+
+    let mut transition_table = HashMap::new();
+    transition_table.insert(vec![1, 2], vec![vec![3, 4, 5]]);
+    registry.register_operator(TypedOperator {
+        cid: "blake3:op1".to_string(),
+        name: "op1".to_string(),
+        op_type: OperatorType::RelationTraversal,
+        input_type: "A".to_string(),
+        output_type: "B".to_string(),
+        transition_table,
+    });
+
+    let start = WeightedRoute {
+        axis: 1,
+        path: vec![1, 2],
+        score: 1.0,
+    };
+
+    // A. Required constraint clause satisfied, min_evidence_count = 1
+    let plan_ok = ReasoningPlanV1 {
+        query_cid: "blake3:query_ok".to_string(),
+        semantic_space_cid: "blake3:space_1".to_string(),
+        clauses: vec![
+            Constraint {
+                facet: "entity".to_string(),
+                path: vec![3, 4], // prefix of [3, 4, 5]
+                required: true,
+            }
+        ],
+        operators: vec!["blake3:op1".to_string()],
+        facet_policy: FacetPolicy { priority_order: vec![] },
+        backoff_policy: BackoffPolicy { max_backoff_steps: 2, allow_any_facet: true },
+        required_evidence: EvidencePolicy { min_evidence_count: 1, require_provenance: false },
+        deterministic_limits: Limits {
+            max_probes: 10,
+            max_operators: 5,
+            timeout_ms: 100,
+        },
+    };
+
+    let witness = plan_ok.execute(&registry, &start).unwrap();
+    assert!(witness.plan_cid.starts_with("blake3:plan_"));
+    assert!(witness.result_cid.starts_with("blake3:result_"));
+    assert_eq!(witness.evidence_cids.len(), 1);
+    assert_eq!(witness.contradiction_cids.len(), 0);
+
+    // B. Required constraint clause unsatisfied
+    let plan_unsatisfied_required = ReasoningPlanV1 {
+        clauses: vec![
+            Constraint {
+                facet: "entity".to_string(),
+                path: vec![9, 9], // not prefix of [3, 4, 5]
+                required: true,
+            }
+        ],
+        ..plan_ok.clone()
+    };
+    let err_unsat_req = plan_unsatisfied_required.execute(&registry, &start);
+    assert!(err_unsat_req.is_err());
+    assert!(err_unsat_req.unwrap_err().contains("Plan validation failed"));
+
+    // C. Optional constraint clause unsatisfied (recorded as contradiction)
+    let plan_optional_unsat = ReasoningPlanV1 {
+        clauses: vec![
+            Constraint {
+                facet: "entity".to_string(),
+                path: vec![9, 9],
+                required: false,
+            }
+        ],
+        required_evidence: EvidencePolicy { min_evidence_count: 0, require_provenance: false },
+        ..plan_ok.clone()
+    };
+    let witness_opt = plan_optional_unsat.execute(&registry, &start).unwrap();
+    assert_eq!(witness_opt.evidence_cids.len(), 0);
+    assert_eq!(witness_opt.contradiction_cids.len(), 1);
+    assert_eq!(witness_opt.contradiction_cids[0], "blake3:clause_proof_0_entity");
 }
 
 #[test]
