@@ -249,7 +249,8 @@ pub struct UorR4Router {
 
     // --- New Prime Router persistent states ---
     #[serde(default)]
-    vocabulary: Vec<String>,
+    #[wasm_bindgen(skip)]
+    pub vocabulary: Vec<String>,
     #[serde(default)]
     word_primes: HashMap<String, usize>,
     #[serde(default)]
