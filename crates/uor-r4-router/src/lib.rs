@@ -1635,13 +1635,20 @@ impl UorR4Router {
                 break;
             }
 
-            // Selective backoff on the facet with the longest path
+            // Selective backoff on the facet with the longest path.
+            // Tie-breaker: choose lexicographically larger facet name first (e.g. type > entity)
             let mut longest_facet: Option<String> = None;
             let mut max_len = 0;
             for (facet, path) in &working_coords.coordinates {
                 if path.len() > max_len {
                     max_len = path.len();
                     longest_facet = Some(facet.clone());
+                } else if path.len() == max_len && max_len > 0 {
+                    if let Some(ref current_longest) = longest_facet {
+                        if facet > current_longest {
+                            longest_facet = Some(facet.clone());
+                        }
+                    }
                 }
             }
 
