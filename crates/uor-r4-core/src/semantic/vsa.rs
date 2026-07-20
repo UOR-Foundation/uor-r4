@@ -115,3 +115,74 @@ pub fn expand_atom(prefix: &str, cid: &str, space: &str) -> Hypervector {
     }
     Hypervector(data)
 }
+
+/// Encode a subject-predicate-object statement semantic triple
+pub fn encode_statement(
+    subject_cid: &str,
+    predicate_cid: &str,
+    object_cid: &str,
+    space: &str,
+) -> Hypervector {
+    let r_subj = expand_atom("role", "subject", space);
+    let r_pred = expand_atom("role", "predicate", space);
+    let r_obj = expand_atom("role", "object", space);
+
+    let h_subj = expand_atom("entity", subject_cid, space);
+    let h_pred = expand_atom("relation", predicate_cid, space);
+    let h_obj = expand_atom("entity", object_cid, space);
+
+    let b_subj = r_subj.bind(&h_subj);
+    let b_pred = r_pred.bind(&h_pred);
+    let b_obj = r_obj.bind(&h_obj);
+
+    Hypervector::bundle(&[b_subj, b_pred, b_obj])
+}
+
+/// Encode a temporal event linking subject, action, timestamp, and location
+pub fn encode_event(
+    subject_cid: &str,
+    action_cid: &str,
+    timestamp_cid: &str,
+    location_cid: &str,
+    space: &str,
+) -> Hypervector {
+    let r_subj = expand_atom("role", "subject", space);
+    let r_act = expand_atom("role", "action", space);
+    let r_time = expand_atom("role", "time", space);
+    let r_loc = expand_atom("role", "location", space);
+
+    let h_subj = expand_atom("entity", subject_cid, space);
+    let h_act = expand_atom("relation", action_cid, space);
+    let h_time = expand_atom("temporal", timestamp_cid, space);
+    let h_loc = expand_atom("entity", location_cid, space);
+
+    let b_subj = r_subj.bind(&h_subj);
+    let b_act = r_act.bind(&h_act);
+    let b_time = r_time.bind(&h_time);
+    let b_loc = r_loc.bind(&h_loc);
+
+    Hypervector::bundle(&[b_subj, b_act, b_time, b_loc])
+}
+
+/// Encode a directed target graph relationship
+pub fn encode_graph_edge(
+    source_cid: &str,
+    relation_cid: &str,
+    target_cid: &str,
+    space: &str,
+) -> Hypervector {
+    let r_src = expand_atom("role", "source", space);
+    let r_rel = expand_atom("role", "relation", space);
+    let r_tgt = expand_atom("role", "target", space);
+
+    let h_src = expand_atom("entity", source_cid, space);
+    let h_rel = expand_atom("relation", relation_cid, space);
+    let h_tgt = expand_atom("entity", target_cid, space);
+
+    let b_src = r_src.bind(&h_src);
+    let b_rel = r_rel.bind(&h_rel);
+    // Target is permuted by 1 to enforce edge directionality
+    let b_tgt = r_tgt.bind(&h_tgt).permute(1);
+
+    Hypervector::bundle(&[b_src, b_rel, b_tgt])
+}
