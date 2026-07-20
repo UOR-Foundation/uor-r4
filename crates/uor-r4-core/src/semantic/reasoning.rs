@@ -94,3 +94,80 @@ pub struct SemanticInferenceWitnessV1 {
     pub result_cid: KappaLabel,
     pub operation_census: OperationCensus,
 }
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub enum OperatorType {
+    RelationTraversal,
+    Conjunction,
+    Disjunction,
+    Negation,
+    Projection,
+    TemporalOrdering,
+    Backoff,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct TypedOperator {
+    pub cid: KappaLabel,
+    pub name: String,
+    pub op_type: OperatorType,
+    pub input_type: String,
+    pub output_type: String,
+    pub transition_table: std::collections::HashMap<Vec<u16>, Vec<Vec<u16>>>, // input -> outputs
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct OperatorRegistry {
+    pub space_cid: KappaLabel,
+    pub operators: std::collections::HashMap<KappaLabel, TypedOperator>,
+}
+
+impl OperatorRegistry {
+    pub fn new(space_cid: KappaLabel) -> Self {
+        Self {
+            space_cid,
+            operators: std::collections::HashMap::new(),
+        }
+    }
+
+    pub fn register_operator(&mut self, op: TypedOperator) {
+        self.operators.insert(op.cid.clone(), op);
+    }
+
+    pub fn evaluate(
+        &self,
+        op_cid: &str,
+        input_route: &WeightedRoute,
+    ) -> Result<Vec<WeightedRoute>, String> {
+        let op = self
+            .operators
+            .get(op_cid)
+            .ok_or_else(|| format!("Operator {} not found in registry", op_cid))?;
+
+        // Simple relation traversal resolution
+        if let Some(transitions) = op.transition_table.get(&input_route.path) {
+            let mut results = Vec::new();
+            for path in transitions {
+                results.push(WeightedRoute {
+                    axis: input_route.axis,
+                    path: path.clone(),
+                    score: input_route.score * 0.95, // apply transition decay
+                });
+            }
+            Ok(results)
+        } else {
+            // Fallback default backoff operator logic
+            if op.op_type == OperatorType::Backoff && input_route.path.len() > 1 {
+                let mut backed_off = input_route.path.clone();
+                backed_off.pop();
+                Ok(vec![WeightedRoute {
+                    axis: input_route.axis,
+                    path: backed_off,
+                    score: input_route.score * 0.8,
+                }])
+            } else {
+                Ok(vec![])
+            }
+        }
+    }
+}
