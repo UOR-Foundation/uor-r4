@@ -133,6 +133,22 @@ pub struct CorpusItem {
     pub v_4d: Vec<f64>,
 }
 
+#[derive(Debug, Serialize, Deserialize, Default, Clone, PartialEq)]
+pub struct MultiFacetStore {
+    #[serde(default)]
+    pub type_index: HashMap<Vec<u16>, Vec<usize>>,
+    #[serde(default)]
+    pub entity_index: HashMap<Vec<u16>, Vec<usize>>,
+    #[serde(default)]
+    pub relation_index: HashMap<Vec<u16>, Vec<usize>>,
+    #[serde(default)]
+    pub temporal_index: HashMap<Vec<u16>, Vec<usize>>,
+    #[serde(default)]
+    pub intent_index: HashMap<Vec<u16>, Vec<usize>>,
+    #[serde(default)]
+    pub provenance_index: HashMap<Vec<u16>, Vec<usize>>,
+}
+
 /// The unified router core coordinator.
 #[wasm_bindgen]
 #[derive(Serialize, Deserialize)]
@@ -173,12 +189,38 @@ pub struct UorR4Router {
     angle_y: f64,
     #[serde(skip)]
     last_routing_data: Option<RoutingData>,
+    #[serde(default)]
+    #[wasm_bindgen(skip)]
+    pub facet_store: MultiFacetStore,
 }
 
 #[derive(Serialize)]
 pub struct GeometricResponse {
     pub text: String,
     pub trajectory: Vec<TrajectoryStep>,
+}
+
+impl UorR4Router {
+    pub fn index_semantic_object(&mut self, id: usize, coords: &geometry::FacetCoordinates) {
+        if let Some(path) = coords.coordinates.get("type") {
+            self.facet_store.type_index.entry(path.clone()).or_default().push(id);
+        }
+        if let Some(path) = coords.coordinates.get("entity") {
+            self.facet_store.entity_index.entry(path.clone()).or_default().push(id);
+        }
+        if let Some(path) = coords.coordinates.get("relation") {
+            self.facet_store.relation_index.entry(path.clone()).or_default().push(id);
+        }
+        if let Some(path) = coords.coordinates.get("temporal") {
+            self.facet_store.temporal_index.entry(path.clone()).or_default().push(id);
+        }
+        if let Some(path) = coords.coordinates.get("intent") {
+            self.facet_store.intent_index.entry(path.clone()).or_default().push(id);
+        }
+        if let Some(path) = coords.coordinates.get("provenance") {
+            self.facet_store.provenance_index.entry(path.clone()).or_default().push(id);
+        }
+    }
 }
 
 #[wasm_bindgen]
@@ -204,6 +246,7 @@ impl UorR4Router {
             angle_x: 0.5,
             angle_y: 0.5,
             last_routing_data: None,
+            facet_store: MultiFacetStore::default(),
         };
 
         // Initialize default corpus
