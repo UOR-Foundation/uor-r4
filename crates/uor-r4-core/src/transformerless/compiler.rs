@@ -21,6 +21,7 @@
 //! adapter). This crate instantiates the llama-family adapter.
 
 use super::teacher::TeacherOracle;
+use std::collections::HashMap;
 use std::io::Write;
 
 pub const STAGES: usize = 4;
@@ -819,4 +820,61 @@ pub fn parse_artifacts(b: &[u8]) -> Option<Compiled> {
         ctx_cb,
         token_stage_kappas: Vec::new(),
     })
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+pub struct HierarchicalCodes {
+    pub token_type_prefixes: HashMap<String, Vec<u8>>,
+    pub relational_prefixes: Vec<Vec<u32>>,
+}
+
+pub fn induce_hierarchical_codes(
+    token_codes: &[u8],
+    vocab: usize,
+    corpus: &Corpus,
+) -> HierarchicalCodes {
+    let mut token_type_prefixes = HashMap::new();
+    for token_id in 0..vocab {
+        let offset = token_id * STAGES;
+        if offset + STAGES <= token_codes.len() {
+            let prefix = token_codes[offset..offset + STAGES].to_vec();
+            token_type_prefixes.insert(token_id.to_string(), prefix);
+        }
+    }
+
+    let mut transition_counts = HashMap::new();
+    for i in 0..corpus.n {
+        let story_id = corpus.story[i];
+        let token = corpus.next[i];
+        
+        if i + 1 < corpus.n && corpus.story[i + 1] == story_id {
+            let next_tok = corpus.next[i + 1];
+            let pair = vec![token, next_tok];
+            *transition_counts.entry(pair).or_insert(0) += 1;
+            
+            if i + 2 < corpus.n && corpus.story[i + 2] == story_id {
+                let next_next_tok = corpus.next[i + 2];
+                let triplet = vec![token, next_tok, next_next_tok];
+                *transition_counts.entry(triplet).or_insert(0) += 1;
+            }
+        }
+    }
+
+    let mut frequent_paths: Vec<(Vec<u32>, usize)> = transition_counts
+        .into_iter()
+        .filter(|(_, count)| *count >= 5)
+        .collect();
+
+    frequent_paths.sort_by(|a, b| b.1.cmp(&a.1));
+
+    let relational_prefixes = frequent_paths
+        .into_iter()
+        .take(100)
+        .map(|(path, _)| path)
+        .collect();
+
+    HierarchicalCodes {
+        token_type_prefixes,
+        relational_prefixes,
+    }
 }
