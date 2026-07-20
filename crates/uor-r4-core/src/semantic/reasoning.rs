@@ -218,29 +218,131 @@ impl OperatorRegistry {
             .get(op_cid)
             .ok_or_else(|| format!("Operator {} not found in registry", op_cid))?;
 
-        // Simple relation traversal resolution
-        if let Some(transitions) = op.transition_table.get(&input_route.path) {
-            let mut results = Vec::new();
-            for path in transitions {
-                results.push(WeightedRoute {
-                    axis: input_route.axis,
-                    path: path.clone(),
-                    score: input_route.score * 0.95, // apply transition decay
-                });
+        match op.op_type {
+            OperatorType::RelationTraversal => {
+                if let Some(transitions) = op.transition_table.get(&input_route.path) {
+                    let mut results = Vec::new();
+                    for path in transitions {
+                        results.push(WeightedRoute {
+                            axis: input_route.axis,
+                            path: path.clone(),
+                            score: input_route.score * 0.95,
+                        });
+                    }
+                    Ok(results)
+                } else {
+                    Ok(vec![])
+                }
             }
-            Ok(results)
-        } else {
-            // Fallback default backoff operator logic
-            if op.op_type == OperatorType::Backoff && input_route.path.len() > 1 {
-                let mut backed_off = input_route.path.clone();
-                backed_off.pop();
-                Ok(vec![WeightedRoute {
-                    axis: input_route.axis,
-                    path: backed_off,
-                    score: input_route.score * 0.8,
-                }])
-            } else {
-                Ok(vec![])
+            OperatorType::Conjunction => {
+                if let Some(transitions) = op.transition_table.get(&input_route.path) {
+                    let mut results = Vec::new();
+                    for path in transitions {
+                        results.push(WeightedRoute {
+                            axis: input_route.axis,
+                            path: path.clone(),
+                            score: input_route.score * 0.90, // Conjunction decay
+                        });
+                    }
+                    Ok(results)
+                } else {
+                    Ok(vec![])
+                }
+            }
+            OperatorType::Disjunction => {
+                if let Some(transitions) = op.transition_table.get(&input_route.path) {
+                    let mut results = Vec::new();
+                    for path in transitions {
+                        results.push(WeightedRoute {
+                            axis: input_route.axis,
+                            path: path.clone(),
+                            score: input_route.score * 0.85, // Disjunction decay
+                        });
+                    }
+                    Ok(results)
+                } else {
+                    Ok(vec![])
+                }
+            }
+            OperatorType::Negation => {
+                if let Some(transitions) = op.transition_table.get(&input_route.path) {
+                    let mut results = Vec::new();
+                    for path in transitions {
+                        results.push(WeightedRoute {
+                            axis: input_route.axis,
+                            path: path.clone(),
+                            score: input_route.score * -1.0, // Negation exclusion
+                        });
+                    }
+                    Ok(results)
+                } else {
+                    Ok(vec![])
+                }
+            }
+            OperatorType::Projection => {
+                if let Some(transitions) = op.transition_table.get(&input_route.path) {
+                    let mut results = Vec::new();
+                    for path in transitions {
+                        results.push(WeightedRoute {
+                            axis: input_route.axis,
+                            path: path.clone(),
+                            score: input_route.score * 0.98,
+                        });
+                    }
+                    Ok(results)
+                } else if input_route.path.len() > 1 {
+                    Ok(vec![WeightedRoute {
+                        axis: input_route.axis,
+                        path: vec![input_route.path[0]],
+                        score: input_route.score * 0.90,
+                    }])
+                } else {
+                    Ok(vec![])
+                }
+            }
+            OperatorType::TemporalOrdering => {
+                if let Some(transitions) = op.transition_table.get(&input_route.path) {
+                    let mut results = Vec::new();
+                    for path in transitions {
+                        results.push(WeightedRoute {
+                            axis: input_route.axis,
+                            path: path.clone(),
+                            score: input_route.score * 0.92,
+                        });
+                    }
+                    Ok(results)
+                } else {
+                    let mut timed_path = input_route.path.clone();
+                    timed_path.push(999);
+                    Ok(vec![WeightedRoute {
+                        axis: input_route.axis,
+                        path: timed_path,
+                        score: input_route.score * 0.95,
+                    }])
+                }
+            }
+            OperatorType::Backoff => {
+                if let Some(transitions) = op.transition_table.get(&input_route.path) {
+                    let mut results = Vec::new();
+                    for path in transitions {
+                        results.push(WeightedRoute {
+                            axis: input_route.axis,
+                            path: path.clone(),
+                            score: input_route.score * 0.8,
+                        });
+                    }
+                    Ok(results)
+                } else if input_route.path.len() > 1 {
+                    let mut backed_off = input_route.path.clone();
+                    backed_off.pop();
+                    Ok(vec![WeightedRoute {
+                        axis: input_route.axis,
+                        path: backed_off,
+                        score: input_route.score * 0.8,
+                    }])
+                } else {
+                    Ok(vec![])
+                }
             }
         }
     }

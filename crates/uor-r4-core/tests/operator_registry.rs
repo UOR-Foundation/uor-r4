@@ -135,3 +135,76 @@ fn test_reasoning_plan_execution_and_budget_enforcement() {
     let err_probe = plan_limited_probe.execute(&registry, &start);
     assert!(err_probe.is_err());
 }
+
+#[test]
+fn test_logical_and_temporal_operators() {
+    let mut registry = OperatorRegistry::new("blake3:space_1".to_string());
+
+    // Conjunction
+    let mut transitions_conj = HashMap::new();
+    transitions_conj.insert(vec![1, 1], vec![vec![1, 1, 1], vec![1, 1, 2]]);
+    registry.register_operator(TypedOperator {
+        cid: "blake3:op_conj".to_string(),
+        name: "conj".to_string(),
+        op_type: OperatorType::Conjunction,
+        input_type: "Any".to_string(),
+        output_type: "Any".to_string(),
+        transition_table: transitions_conj,
+    });
+
+    // Negation
+    let mut transitions_neg = HashMap::new();
+    transitions_neg.insert(vec![2, 2], vec![vec![2, 2, 99]]);
+    registry.register_operator(TypedOperator {
+        cid: "blake3:op_neg".to_string(),
+        name: "neg".to_string(),
+        op_type: OperatorType::Negation,
+        input_type: "Any".to_string(),
+        output_type: "Any".to_string(),
+        transition_table: transitions_neg,
+    });
+
+    // Projection
+    registry.register_operator(TypedOperator {
+        cid: "blake3:op_proj".to_string(),
+        name: "proj".to_string(),
+        op_type: OperatorType::Projection,
+        input_type: "Any".to_string(),
+        output_type: "Any".to_string(),
+        transition_table: HashMap::new(),
+    });
+
+    // TemporalOrdering
+    registry.register_operator(TypedOperator {
+        cid: "blake3:op_temp".to_string(),
+        name: "temp".to_string(),
+        op_type: OperatorType::TemporalOrdering,
+        input_type: "Any".to_string(),
+        output_type: "Any".to_string(),
+        transition_table: HashMap::new(),
+    });
+
+    // Assert Conjunction splits paths and applies conjunction decay (0.90)
+    let input_conj = WeightedRoute { axis: 1, path: vec![1, 1], score: 1.0 };
+    let res_conj = registry.evaluate("blake3:op_conj", &input_conj).unwrap();
+    assert_eq!(res_conj.len(), 2);
+    assert_eq!(res_conj[0].score, 0.90);
+
+    // Assert Negation returns negative/complement scores (-1.0 multiplier)
+    let input_neg = WeightedRoute { axis: 1, path: vec![2, 2], score: 1.0 };
+    let res_neg = registry.evaluate("blake3:op_neg", &input_neg).unwrap();
+    assert_eq!(res_neg.len(), 1);
+    assert_eq!(res_neg[0].score, -1.0);
+
+    // Assert default Projection truncates paths to length 1
+    let input_proj = WeightedRoute { axis: 1, path: vec![10, 20, 30], score: 1.0 };
+    let res_proj = registry.evaluate("blake3:op_proj", &input_proj).unwrap();
+    assert_eq!(res_proj[0].path, vec![10]);
+    assert_eq!(res_proj[0].score, 0.90);
+
+    // Assert default TemporalOrdering appends 999
+    let input_temp = WeightedRoute { axis: 1, path: vec![100], score: 1.0 };
+    let res_temp = registry.evaluate("blake3:op_temp", &input_temp).unwrap();
+    assert_eq!(res_temp[0].path, vec![100, 999]);
+    assert_eq!(res_temp[0].score, 0.95);
+}
