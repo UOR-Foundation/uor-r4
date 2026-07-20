@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::f64::consts::PI;
 use uor_r4_core::*;
+use uor_r4_core::semantic::WeightedRoute;
+use crate::geometry::GeometryError;
 use wasm_bindgen::prelude::*;
 
 pub mod geometry;
@@ -150,6 +152,17 @@ pub struct MultiFacetStore {
     pub provenance_index: HashMap<Vec<u32>, Vec<usize>>,
 }
 
+#[wasm_bindgen]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub enum GeometryType {
+    Spectral,
+    Vsa,
+}
+
+fn default_geometry_type() -> GeometryType {
+    GeometryType::Spectral
+}
+
 /// The unified router core coordinator.
 #[wasm_bindgen]
 #[derive(Serialize, Deserialize)]
@@ -193,6 +206,8 @@ pub struct UorR4Router {
     #[serde(default)]
     #[wasm_bindgen(skip)]
     pub facet_store: MultiFacetStore,
+    #[serde(default = "default_geometry_type")]
+    pub geometry_type: GeometryType,
 }
 
 #[derive(Serialize)]
@@ -226,6 +241,14 @@ impl UorR4Router {
 
 #[wasm_bindgen]
 impl UorR4Router {
+    #[wasm_bindgen]
+    pub fn set_geometry_type(&mut self, geom: &str) {
+        self.geometry_type = match geom {
+            "vsa" | "Vsa" | "VSA" => GeometryType::Vsa,
+            _ => GeometryType::Spectral,
+        };
+    }
+
     /// Instantiates the R4 Router with perfect, error-free default states
     #[wasm_bindgen(constructor)]
     pub fn new(threshold: f64) -> Self {
@@ -248,6 +271,7 @@ impl UorR4Router {
             angle_y: 0.5,
             last_routing_data: None,
             facet_store: MultiFacetStore::default(),
+            geometry_type: default_geometry_type(),
         };
 
         // Initialize default corpus
@@ -1071,7 +1095,7 @@ impl UorR4Router {
 
     fn route_query_to_manifold_internal(
         &self,
-        _text: &str,
+        text: &str,
         identity: &str,
         state_vector: Option<&[f64]>,
     ) -> RoutingData {
@@ -1086,45 +1110,74 @@ impl UorR4Router {
             }
         };
 
+        match self.geometry_type {
+            GeometryType::Spectral => {
+                let geom = geometry::SpectralGeometry {
+                    space_cid: "blake3:spectral_space".to_string(),
+                    active_state: Some(&active_state),
+                    identity: Some(identity),
+                };
+                self.route_query_to_manifold_internal_generic(&geom, text, identity, &active_state)
+            }
+            GeometryType::Vsa => {
+                let geom = geometry::VsaGeometry {
+                    space_cid: "blake3:vsa_space".to_string(),
+                };
+                self.route_query_to_manifold_internal_generic(&geom, text, identity, &active_state)
+            }
+        }
+    }
+
+    fn route_query_to_manifold_internal_generic<G: geometry::SemanticGeometry>(
+        &self,
+        geometry: &G,
+        text: &str,
+        identity: &str,
+        active_state: &[f64],
+    ) -> RoutingData {
         let (qimc_prime, qimc_index, identity_meta) = identity_to_qimc_prime(identity);
         let uor_control = derive_uor_control_plane(&identity_meta);
 
-        let mut routed_idx = 0;
-        let mut best_score = -1.0;
-        let mut all_routes = Vec::new();
+        let obj = geometry::TypedObject {
+            object_type: "query".to_string(),
+            content: text.to_string(),
+        };
 
-        // 16 scale windows
-        for win_idx in 1..=16 {
-            let s_idx = (win_idx - 1) * 32;
-            let e_idx = win_idx * 32;
-            let slice = &active_state[s_idx..e_idx];
-
-            let mut sum_sq = 0.0;
-            for &val in slice {
-                sum_sq += val * val;
+        let grounded = geometry.ground(&obj).unwrap_or_else(|_| {
+            let mut v = vec![0.0; 1024];
+            v[..512].copy_from_slice(active_state);
+            geometry::GroundedSemantics {
+                vsa_vector: v.iter().map(|&x| x as f32).collect(),
+                roles: vec![],
             }
-            let norm = sum_sq.sqrt();
-            let bias = uor_control
-                .window_biases
-                .get(&win_idx)
-                .copied()
-                .unwrap_or(0.0);
-            let score = norm * (1.0 + bias);
+        });
 
-            if score > best_score {
-                best_score = score;
-                routed_idx = win_idx;
-            }
+        let coords = geometry.encode(&grounded).unwrap_or_else(|_| {
+            let mut h = HashMap::new();
+            h.insert("window".to_string(), vec![1]);
+            geometry::FacetCoordinates { coordinates: h }
+        });
 
-            all_routes.push((win_idx, score, slice.to_vec()));
-        }
+        let routes = geometry.soft_route(&coords, 16).unwrap_or_else(|_| {
+            vec![WeightedRoute {
+                axis: 1,
+                path: vec![1],
+                score: 1.0,
+            }]
+        });
 
+        let routed_idx = routes.iter()
+            .max_by(|a, b| a.score.partial_cmp(&b.score).unwrap())
+            .map(|r| r.axis as usize)
+            .unwrap_or(1);
+
+        let active_state_refined: Vec<f64> = grounded.vsa_vector[..512].iter().map(|&x| x as f64).collect();
         let active_range = [(routed_idx - 1) * 32, routed_idx * 32];
-        let routed_slice = &active_state[active_range[0]..active_range[1]];
+        let routed_slice = &active_state_refined[active_range[0]..active_range[1]];
         let (sigma_q, sigma_kl, lambda_val, kappa, deficit_angle) =
             state_metrics_from_weights(routed_slice);
 
-        let v_4d = self.get_state_4d_projection(&active_state);
+        let v_4d = self.get_state_4d_projection(&active_state_refined);
         let (sector_id, _bins, hopf_components) = assign_sector_hopf_transport_scalar(
             &v_4d,
             512,
@@ -1185,22 +1238,22 @@ impl UorR4Router {
                 hopf_chi_bins: uor_control.hopf_chi_bins,
                 sector_id,
                 subspace_norms: SubspaceNorms {
-                    act: active_state[0..128]
+                    act: active_state_refined[0..128]
                         .iter()
                         .map(|&x| x * x)
                         .sum::<f64>()
                         .sqrt(),
-                    obj: active_state[128..256]
+                    obj: active_state_refined[128..256]
                         .iter()
                         .map(|&x| x * x)
                         .sum::<f64>()
                         .sqrt(),
-                    temp: active_state[256..384]
+                    temp: active_state_refined[256..384]
                         .iter()
                         .map(|&x| x * x)
                         .sum::<f64>()
                         .sqrt(),
-                    shared: active_state[384..512]
+                    shared: active_state_refined[384..512]
                         .iter()
                         .map(|&x| x * x)
                         .sum::<f64>()
@@ -1212,20 +1265,21 @@ impl UorR4Router {
         };
 
         let mut routes_output = Vec::new();
-        for (w_idx, score, slice) in all_routes {
-            let (_s_q, _s_kl, _l_v, k_v, d_a) = state_metrics_from_weights(&slice);
+        for r in &routes {
+            let slice = &active_state_refined[(r.axis as usize - 1) * 32..r.axis as usize * 32];
+            let (_s_q, _s_kl, _l_v, k_v, d_a) = state_metrics_from_weights(slice);
             routes_output.push(RouteInfo {
-                window_index: w_idx,
-                scale_x: scale_x_for_window(w_idx),
-                routing_score: score,
-                kappa: if w_idx == routed_idx { k_v } else { 0.0 },
-                deficit_angle: if w_idx == routed_idx {
+                window_index: r.axis as usize,
+                scale_x: scale_x_for_window(r.axis as usize),
+                routing_score: r.score as f64,
+                kappa: if r.axis as usize == routed_idx { k_v } else { 0.0 },
+                deficit_angle: if r.axis as usize == routed_idx {
                     d_a
                 } else {
                     std::f64::consts::PI
                 },
-                state_vector: slice,
-                active_range: vec![(w_idx - 1) * 32, w_idx * 32],
+                state_vector: slice.to_vec(),
+                active_range: vec![(r.axis as usize - 1) * 32, r.axis as usize * 32],
             });
         }
 
@@ -2188,6 +2242,24 @@ mod tests {
             4.0,
             0.5,
         );
+    }
+
+    #[test]
+    fn test_pluggable_geometry_routing() {
+        let mut router = UorR4Router::new(0.5);
+        let identity = "tenant-alpha";
+
+        // 1. Verify default (Spectral) mode
+        assert_eq!(router.geometry_type, GeometryType::Spectral);
+        let routing_spectral = router.route_query_to_manifold_native("hello world", identity);
+        assert!(routing_spectral.routed.window_index >= 1);
+
+        // 2. Configure to VSA mode
+        router.set_geometry_type("vsa");
+        assert_eq!(router.geometry_type, GeometryType::Vsa);
+        let routing_vsa = router.route_query_to_manifold_native("hello world", identity);
+        assert!(routing_vsa.routed.metrics.deficit_angle.is_finite());
+        assert!(routing_vsa.routed.metrics.kappa > 0.0);
     }
 }
 

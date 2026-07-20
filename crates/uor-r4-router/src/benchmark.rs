@@ -20,6 +20,8 @@ pub fn run_ablation_benchmark(
     // 1. Benchmark Spectral Geometry
     let geom_spectral = SpectralGeometry {
         space_cid: "blake3:spectral_space".to_string(),
+        active_state: None,
+        identity: None,
     };
     results.push(evaluate_geometry("Spectral Heuristic", &geom_spectral, router, queries));
 
