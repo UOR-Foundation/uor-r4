@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::f64::consts::PI;
 use uor_r4_core::*;
 use uor_r4_core::semantic::WeightedRoute;
-use crate::geometry::GeometryError;
+use crate::geometry::{GeometryError, SemanticGeometry};
 use wasm_bindgen::prelude::*;
 
 pub mod geometry;
@@ -152,6 +152,75 @@ pub struct MultiFacetStore {
     pub provenance_index: HashMap<Vec<u32>, Vec<usize>>,
 }
 
+impl MultiFacetStore {
+    pub fn compute_epoch_root(&self) -> String {
+        let mut entries = Vec::new();
+        let mut add_idx = |name: &str, idx: &HashMap<Vec<u32>, Vec<usize>>| {
+            let mut keys: Vec<&Vec<u32>> = idx.keys().collect();
+            keys.sort();
+            for k in keys {
+                let mut v = idx.get(k).unwrap().clone();
+                v.sort();
+                let key_str = k.iter().map(|x| x.to_string()).collect::<Vec<_>>().join(",");
+                let val_str = v.iter().map(|x| x.to_string()).collect::<Vec<_>>().join(",");
+                entries.push(format!("{}:{}:{}", name, key_str, val_str));
+            }
+        };
+        add_idx("type", &self.type_index);
+        add_idx("entity", &self.entity_index);
+        add_idx("relation", &self.relation_index);
+        add_idx("temporal", &self.temporal_index);
+        add_idx("intent", &self.intent_index);
+        add_idx("provenance", &self.provenance_index);
+
+        if entries.is_empty() {
+            return "blake3:0000000000000000000000000000000000000000000000000000000000000000".to_string();
+        }
+
+        let leaf_refs: Vec<&[u8]> = entries.iter().map(|s| s.as_bytes()).collect();
+        let (root, _) = uor_r4_core::semantic::merkle::compute_merkle_root_and_proof(&leaf_refs, 0).unwrap();
+        format!("blake3:{}", hex::encode(root))
+    }
+
+    pub fn compute_inclusion_proof(&self, facet: &str, path: &[u32]) -> Option<(String, Vec<String>, usize)> {
+        let mut entries = Vec::new();
+        let mut target_entry = None;
+
+        let mut add_idx = |name: &str, idx: &HashMap<Vec<u32>, Vec<usize>>| {
+            let mut keys: Vec<&Vec<u32>> = idx.keys().collect();
+            keys.sort();
+            for k in keys {
+                let mut v = idx.get(k).unwrap().clone();
+                v.sort();
+                let key_str = k.iter().map(|x| x.to_string()).collect::<Vec<_>>().join(",");
+                let val_str = v.iter().map(|x| x.to_string()).collect::<Vec<_>>().join(",");
+                let entry = format!("{}:{}:{}", name, key_str, val_str);
+                
+                if name == facet && k == path {
+                    target_entry = Some(entry.clone());
+                }
+                entries.push(entry);
+            }
+        };
+
+        add_idx("type", &self.type_index);
+        add_idx("entity", &self.entity_index);
+        add_idx("relation", &self.relation_index);
+        add_idx("temporal", &self.temporal_index);
+        add_idx("intent", &self.intent_index);
+        add_idx("provenance", &self.provenance_index);
+
+        let target = target_entry?;
+        let target_idx = entries.iter().position(|e| e == &target)?;
+
+        let leaf_refs: Vec<&[u8]> = entries.iter().map(|s| s.as_bytes()).collect();
+        let (_root, proof_bytes) = uor_r4_core::semantic::merkle::compute_merkle_root_and_proof(&leaf_refs, target_idx).unwrap();
+        
+        let proof_hex = proof_bytes.into_iter().map(|p| hex::encode(p)).collect();
+        Some((target, proof_hex, target_idx))
+    }
+}
+
 #[wasm_bindgen]
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum GeometryType {
@@ -218,24 +287,42 @@ pub struct GeometricResponse {
 
 impl UorR4Router {
     pub fn index_semantic_object(&mut self, id: usize, coords: &geometry::FacetCoordinates) {
+        let index_prefix = |index: &mut HashMap<Vec<u32>, Vec<usize>>, path: &Vec<u32>| {
+            for i in 1..=path.len() {
+                let prefix = path[..i].to_vec();
+                let list = index.entry(prefix).or_default();
+                if !list.contains(&id) {
+                    list.push(id);
+                }
+            }
+        };
+
         if let Some(path) = coords.coordinates.get("type") {
-            self.facet_store.type_index.entry(path.clone()).or_default().push(id);
+            index_prefix(&mut self.facet_store.type_index, path);
         }
         if let Some(path) = coords.coordinates.get("entity") {
-            self.facet_store.entity_index.entry(path.clone()).or_default().push(id);
+            index_prefix(&mut self.facet_store.entity_index, path);
         }
         if let Some(path) = coords.coordinates.get("relation") {
-            self.facet_store.relation_index.entry(path.clone()).or_default().push(id);
+            index_prefix(&mut self.facet_store.relation_index, path);
         }
         if let Some(path) = coords.coordinates.get("temporal") {
-            self.facet_store.temporal_index.entry(path.clone()).or_default().push(id);
+            index_prefix(&mut self.facet_store.temporal_index, path);
         }
         if let Some(path) = coords.coordinates.get("intent") {
-            self.facet_store.intent_index.entry(path.clone()).or_default().push(id);
+            index_prefix(&mut self.facet_store.intent_index, path);
         }
         if let Some(path) = coords.coordinates.get("provenance") {
-            self.facet_store.provenance_index.entry(path.clone()).or_default().push(id);
+            index_prefix(&mut self.facet_store.provenance_index, path);
         }
+    }
+
+    pub fn get_store_inclusion_proof_native(&self, facet: &str, path_str: &str) -> Option<(String, Vec<String>, usize)> {
+        let path: Vec<u32> = path_str
+            .split(',')
+            .filter_map(|s| s.parse::<u32>().ok())
+            .collect();
+        self.facet_store.compute_inclusion_proof(facet, &path)
     }
 }
 
@@ -247,6 +334,27 @@ impl UorR4Router {
             "vsa" | "Vsa" | "VSA" => GeometryType::Vsa,
             _ => GeometryType::Spectral,
         };
+    }
+
+    #[wasm_bindgen]
+    pub fn get_store_epoch_root(&self) -> String {
+        self.facet_store.compute_epoch_root()
+    }
+
+
+
+    #[wasm_bindgen]
+    pub fn get_store_inclusion_proof(&self, facet: &str, path_str: &str) -> JsValue {
+        if let Some((target, proof, target_idx)) = self.get_store_inclusion_proof_native(facet, path_str) {
+            let res = serde_json::json!({
+                "target": target,
+                "proof": proof,
+                "target_idx": target_idx,
+            });
+            serde_wasm_bindgen::to_value(&res).unwrap_or(JsValue::NULL)
+        } else {
+            JsValue::NULL
+        }
     }
 
     /// Instantiates the R4 Router with perfect, error-free default states
@@ -478,6 +586,13 @@ impl UorR4Router {
         self.session_brain_states.insert(key, baseline);
     }
 
+    #[wasm_bindgen]
+    pub fn clear_corpus(&mut self) {
+        self.corpus_index.clear();
+        self.corpus_index_by_identity.clear();
+        self.facet_store = MultiFacetStore::default();
+    }
+
     /// Resets the entire router system back to factory defaults
     pub fn reset_to_defaults(&mut self) {
         self.active_streams.clear();
@@ -607,15 +722,7 @@ impl UorR4Router {
 
     /// Returns the top N resonant sentences sorted by relevance
     pub fn get_top_resonances(&mut self, text: &str, identity: &str, top_n: usize) -> JsValue {
-        let key = identity_key(identity);
-        let active_state = self
-            .session_brain_states
-            .entry(key)
-            .or_insert_with(|| vec![1.0 / (512.0f64).sqrt(); 512])
-            .clone();
-
-        let routing = self.route_query_to_manifold_internal(text, identity, Some(&active_state));
-        let res = self.retrieve_geometric_resonance(text, &routing, top_n, &active_state, identity);
+        let res = self.get_top_resonances_native(text, identity, top_n);
         serde_wasm_bindgen::to_value(&res).unwrap_or(JsValue::NULL)
     }
 
@@ -1343,7 +1450,7 @@ impl UorR4Router {
             }
         }
 
-        win_items.push(CorpusItem {
+        let item = CorpusItem {
             sentence: s_clean.to_string(),
             state_vector,
             kappa: best.metrics.kappa,
@@ -1353,7 +1460,26 @@ impl UorR4Router {
             u,
             v,
             v_4d,
-        });
+        };
+
+        win_items.push(item.clone());
+
+        let item_id = self.corpus_index.len();
+        self.corpus_index.insert(item_id, vec![item]);
+
+        // Induced multi-facet index coordinates
+        let geom = geometry::VsaGeometry {
+            space_cid: "blake3:vsa_space".to_string(),
+        };
+        let obj = geometry::TypedObject {
+            object_type: "sentence".to_string(),
+            content: s_clean.to_string(),
+        };
+        if let Ok(grounded) = geom.ground(&obj) {
+            if let Ok(coords) = geom.encode(&grounded) {
+                self.index_semantic_object(item_id, &coords);
+            }
+        }
     }
 
     fn retrieve_geometric_resonance(
@@ -1447,6 +1573,108 @@ impl UorR4Router {
         }
 
         scored.sort_by(|a, b| b.relevance.partial_cmp(&a.relevance).unwrap());
+        scored.truncate(top_n);
+        scored
+    }
+
+    fn retrieve_vsa_multi_facet_resonance(
+        &self,
+        text: &str,
+        top_n: usize,
+    ) -> Vec<ResonanceResult> {
+        let geom = geometry::VsaGeometry {
+            space_cid: "blake3:vsa_space".to_string(),
+        };
+        let obj = geometry::TypedObject {
+            object_type: "query".to_string(),
+            content: text.to_string(),
+        };
+
+        let grounded = match geom.ground(&obj) {
+            Ok(g) => g,
+            Err(_) => return Vec::new(),
+        };
+        let coords = match geom.encode(&grounded) {
+            Ok(c) => c,
+            Err(_) => return Vec::new(),
+        };
+
+        let mut working_coords = coords.clone();
+        let mut candidate_ids = Vec::new();
+
+        loop {
+            let mut lists = Vec::new();
+            for (facet, path) in &working_coords.coordinates {
+                let list = match facet.as_str() {
+                    "type" => self.facet_store.type_index.get(path),
+                    "entity" => self.facet_store.entity_index.get(path),
+                    "relation" => self.facet_store.relation_index.get(path),
+                    "temporal" => self.facet_store.temporal_index.get(path),
+                    "intent" => self.facet_store.intent_index.get(path),
+                    "provenance" => self.facet_store.provenance_index.get(path),
+                    _ => None,
+                };
+                if let Some(l) = list {
+                    lists.push(l.clone());
+                } else {
+                    lists.push(Vec::new());
+                }
+            }
+
+            if lists.is_empty() {
+                break;
+            }
+
+            let mut intersection = lists[0].clone();
+            for next_list in lists.iter().skip(1) {
+                intersection.retain(|x| next_list.contains(x));
+            }
+
+            if !intersection.is_empty() {
+                candidate_ids = intersection;
+                break;
+            }
+
+            // Selective backoff on the facet with the longest path
+            let mut longest_facet: Option<String> = None;
+            let mut max_len = 0;
+            for (facet, path) in &working_coords.coordinates {
+                if path.len() > max_len {
+                    max_len = path.len();
+                    longest_facet = Some(facet.clone());
+                }
+            }
+
+            if let Some(facet_to_backoff) = longest_facet {
+                let path = working_coords.coordinates.get_mut(&facet_to_backoff).unwrap();
+                path.pop();
+                if path.is_empty() {
+                    working_coords.coordinates.remove(&facet_to_backoff);
+                }
+            } else {
+                break;
+            }
+        }
+
+        let mut scored = Vec::new();
+        for &id in &candidate_ids {
+            if let Some(items) = self.corpus_index.get(&id) {
+                for item in items {
+                    let g_f64: Vec<f64> = grounded.vsa_vector.iter().map(|&x| x as f64).collect();
+                    let sim = cosine_similarity(&g_f64, &item.state_vector);
+
+                    scored.push(ResonanceResult {
+                        sentence: item.sentence.clone(),
+                        relevance: sim * 100.0,
+                        window_index: id % 16 + 1,
+                        kappa: item.kappa,
+                        deficit_angle: item.deficit_angle,
+                    });
+                }
+            }
+        }
+
+        scored.sort_by(|a, b| b.relevance.partial_cmp(&a.relevance).unwrap_or(std::cmp::Ordering::Equal));
         scored.truncate(top_n);
         scored
     }
@@ -1960,7 +2188,7 @@ pub struct RouteInfo {
     pub active_range: Vec<usize>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ResonanceResult {
     pub sentence: String,
     pub relevance: f64,
@@ -2063,15 +2291,19 @@ impl UorR4Router {
         identity: &str,
         top_n: usize,
     ) -> Vec<ResonanceResult> {
-        let key = identity_key(identity);
-        let active_state = self
-            .session_brain_states
-            .entry(key)
-            .or_insert_with(|| vec![1.0 / (512.0f64).sqrt(); 512])
-            .clone();
+        if self.geometry_type == GeometryType::Vsa {
+            self.retrieve_vsa_multi_facet_resonance(text, top_n)
+        } else {
+            let key = identity_key(identity);
+            let active_state = self
+                .session_brain_states
+                .entry(key)
+                .or_insert_with(|| vec![1.0 / (512.0f64).sqrt(); 512])
+                .clone();
 
-        let routing = self.route_query_to_manifold_internal(text, identity, Some(&active_state));
-        self.retrieve_geometric_resonance(text, &routing, top_n, &active_state, identity)
+            let routing = self.route_query_to_manifold_internal(text, identity, Some(&active_state));
+            self.retrieve_geometric_resonance(text, &routing, top_n, &active_state, identity)
+        }
     }
 
     // Native compatibility surface mirrors the wasm API; callers already
