@@ -396,6 +396,38 @@ pub fn predict_witness_plain(store: &Store, code: &[u8; STAGES]) -> Prediction {
     unreachable!("level 0 is always populated")
 }
 
+/// Plain-form prediction with semantic priors: deepest populated class argmax biased by priors.
+pub fn predict_witness_plain_with_priors(
+    store: &Store,
+    code: &[u8; STAGES],
+    priors: &std::collections::HashMap<u16, u32>,
+) -> Prediction {
+    for d in (0..=STAGES).rev() {
+        if let Some(dist) = store[d].get(&code[..d]) {
+            let mut best_t = 0u16;
+            let mut best_c = -1i64;
+            let mut best_n = 0u32;
+            for (&t, &cnt) in dist {
+                let prior = priors.get(&t).cloned().unwrap_or(0);
+                let p_i = prior as i64;
+                let bias = (p_i << 6) + (p_i << 5) + (p_i << 2);
+                let score = cnt as i64 + bias;
+                if score > best_c {
+                    best_c = score;
+                    best_t = t;
+                    best_n = cnt;
+                }
+            }
+            return Prediction {
+                token: best_t,
+                depth: d,
+                count: best_n,
+            };
+        }
+    }
+    unreachable!("level 0 is always populated")
+}
+
 /// Plain-form prediction: the witness variant's token, one code path.
 pub fn predict_plain(store: &Store, code: &[u8; STAGES]) -> u16 {
     predict_witness_plain(store, code).token
@@ -482,6 +514,49 @@ impl<'a> Runtime<'a> {
                         let val = occurrences as i64;
                         score -= (val << 10) - (val << 4) - (val << 3);
                     }
+                    if self.kernel.lt(best_c, score) {
+                        best_c = score;
+                        best_t = t;
+                        best_n = cnt;
+                    }
+                }
+                self.recent.push(best_t);
+                if self.recent.len() > 32 {
+                    self.recent.remove(0);
+                }
+                return Prediction {
+                    token: best_t,
+                    depth: d,
+                    count: best_n,
+                };
+            }
+        }
+        unreachable!("level 0 is always populated")
+    }
+
+    /// Kernel-counted prediction with resolution witness and semantic context priors.
+    pub fn predict_witness_with_priors(
+        &mut self,
+        store: &Store,
+        code: &[u8; STAGES],
+        priors: &std::collections::HashMap<u16, u32>,
+    ) -> Prediction {
+        for d in (0..=STAGES).rev() {
+            if let Some(dist) = store[d].get(&code[..d]) {
+                let mut best_t = 0u16;
+                let mut best_c = -1000000i64;
+                let mut best_n = 0u32;
+                for (&t, &cnt) in dist {
+                    let mut score = cnt as i64;
+                    let occurrences = self.recent.iter().filter(|&&r| r == t).count();
+                    if occurrences > 0 {
+                        let val = occurrences as i64;
+                        score -= (val << 10) - (val << 4) - (val << 3);
+                    }
+                    let prior = priors.get(&t).cloned().unwrap_or(0);
+                    let p_i = prior as i64;
+                    let bias = (p_i << 5) + (p_i << 4) + (p_i << 1);
+                    score += bias;
                     if self.kernel.lt(best_c, score) {
                         best_c = score;
                         best_t = t;

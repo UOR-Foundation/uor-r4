@@ -116,3 +116,27 @@ fn predict_witness_depth_and_count() {
         "backoff reaches level 0"
     );
 }
+
+#[test]
+fn test_generative_priors() {
+    use std::collections::HashMap;
+
+    let mut store: Store = (0..=STAGES).map(|_| Default::default()).collect();
+    // Token 1 has count 10 (higher default)
+    store[0].entry(vec![]).or_default().insert(1, 10);
+    // Token 2 has count 5 (lower default)
+    store[0].entry(vec![]).or_default().insert(2, 5);
+
+    let code = [0u8; STAGES];
+
+    // 1. Default prediction: selects token 1
+    let default_pred = runtime::predict_witness_plain(&store, &code);
+    assert_eq!(default_pred.token, 1);
+
+    // 2. Prior prediction: boost token 2 by prior score of 1 (equivalent to +100 in score)
+    let mut priors = HashMap::new();
+    priors.insert(2, 1u32);
+
+    let prior_pred = runtime::predict_witness_plain_with_priors(&store, &code, &priors);
+    assert_eq!(prior_pred.token, 2, "Semantic prior successfully shifted argmax to token 2");
+}
