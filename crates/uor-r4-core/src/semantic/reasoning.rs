@@ -95,6 +95,7 @@ impl ReasoningPlanV1 {
         let mut applied_operators = Vec::new();
         let mut op_steps = 0;
         let mut probe_count = 0;
+        let mut join_count = 0;
 
         for op_cid in &self.operators {
             if op_steps >= self.deterministic_limits.max_operators as u64 {
@@ -115,6 +116,13 @@ impl ReasoningPlanV1 {
                 probe_count += 1;
 
                 let outputs = registry.evaluate(op_cid, route)?;
+                
+                if let Some(op) = registry.operators.get(op_cid) {
+                    if op.op_type == OperatorType::Conjunction {
+                        join_count += 1;
+                    }
+                }
+
                 applied_operators.push(OperatorExecution {
                     operator_cid: op_cid.clone(),
                     input_route: route.path.clone(),
@@ -128,26 +136,75 @@ impl ReasoningPlanV1 {
             op_steps += 1;
         }
 
+        // 2. Plan Validation / Constraint checking
+        let mut evidence_cids = Vec::new();
+        let mut contradiction_cids = Vec::new();
+
+        for (idx, clause) in self.clauses.iter().enumerate() {
+            let mut satisfied = false;
+            for route in &current_routes {
+                if route.path.starts_with(&clause.path) {
+                    satisfied = true;
+                    break;
+                }
+            }
+
+            let proof_cid = format!("blake3:clause_proof_{}_{}", idx, clause.facet);
+            if satisfied {
+                evidence_cids.push(proof_cid);
+            } else {
+                if clause.required {
+                    return Err(format!(
+                        "Plan validation failed: required clause for facet '{}' path {:?} not satisfied",
+                        clause.facet, clause.path
+                    ));
+                } else {
+                    contradiction_cids.push(proof_cid);
+                }
+            }
+        }
+
+        if evidence_cids.len() < self.required_evidence.min_evidence_count as usize {
+            return Err(format!(
+                "Evidence validation failed: found {} satisfied clauses, required at least {}",
+                evidence_cids.len(), self.required_evidence.min_evidence_count
+            ));
+        }
+
+        // Compute deterministic plan CID by hashing its fields
+        let plan_json = serde_json::to_string(self).unwrap_or_default();
+        let plan_cid = format!("blake3:plan_{}", blake3::hash(plan_json.as_bytes()).to_hex());
+
+        // Compute deterministic result CID by hashing the final routes
+        let routes_json = serde_json::to_string(&current_routes).unwrap_or_default();
+        let result_cid = format!("blake3:result_{}", blake3::hash(routes_json.as_bytes()).to_hex());
+
+        let score_components = current_routes
+            .iter()
+            .enumerate()
+            .map(|(i, r)| CandidateScore {
+                candidate_cid: format!("blake3:candidate_{}", i),
+                raw_score: r.score,
+                breakdown: format!("route_score_axis_{}", r.axis),
+            })
+            .collect();
+
         Ok(SemanticInferenceWitnessV1 {
             query_cid: self.query_cid.clone(),
-            plan_cid: format!("blake3:plan_{}", self.query_cid),
+            plan_cid,
             semantic_space_cid: self.semantic_space_cid.clone(),
             store_root_cids: vec!["blake3:store_root".to_string()],
             generated_routes: current_routes.clone(),
             probed_regions,
             applied_operators,
-            evidence_cids: vec!["blake3:evidence_1".to_string()],
-            contradiction_cids: vec![],
-            score_components: vec![CandidateScore {
-                candidate_cid: "blake3:candidate_1".to_string(),
-                raw_score: current_routes.first().map(|r| r.score).unwrap_or(0.0),
-                breakdown: "reasoning-chain".to_string(),
-            }],
-            result_cid: "blake3:result_grounded".to_string(),
+            evidence_cids,
+            contradiction_cids,
+            score_components,
+            result_cid,
             operation_census: OperationCensus {
                 total_probes: probe_count,
                 total_operator_steps: op_steps,
-                total_joins: 0,
+                total_joins: join_count,
             },
         })
     }
