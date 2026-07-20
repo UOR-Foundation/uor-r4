@@ -137,17 +137,17 @@ pub struct CorpusItem {
 #[derive(Debug, Serialize, Deserialize, Default, Clone, PartialEq)]
 pub struct MultiFacetStore {
     #[serde(default)]
-    pub type_index: HashMap<Vec<u16>, Vec<usize>>,
+    pub type_index: HashMap<Vec<u32>, Vec<usize>>,
     #[serde(default)]
-    pub entity_index: HashMap<Vec<u16>, Vec<usize>>,
+    pub entity_index: HashMap<Vec<u32>, Vec<usize>>,
     #[serde(default)]
-    pub relation_index: HashMap<Vec<u16>, Vec<usize>>,
+    pub relation_index: HashMap<Vec<u32>, Vec<usize>>,
     #[serde(default)]
-    pub temporal_index: HashMap<Vec<u16>, Vec<usize>>,
+    pub temporal_index: HashMap<Vec<u32>, Vec<usize>>,
     #[serde(default)]
-    pub intent_index: HashMap<Vec<u16>, Vec<usize>>,
+    pub intent_index: HashMap<Vec<u32>, Vec<usize>>,
     #[serde(default)]
-    pub provenance_index: HashMap<Vec<u16>, Vec<usize>>,
+    pub provenance_index: HashMap<Vec<u32>, Vec<usize>>,
 }
 
 /// The unified router core coordinator.

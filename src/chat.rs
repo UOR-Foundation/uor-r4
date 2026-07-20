@@ -208,7 +208,7 @@ pub struct ChatEngine {
     artifacts: Compiled,
     store: Store,
     tokenizer: Tokenizer,
-    history: [u16; MAX_CHAT_HISTORY],
+    history: [u32; MAX_CHAT_HISTORY],
     history_len: usize,
     max_tokens: usize,
 }
@@ -240,12 +240,12 @@ fn hologram_answer(
     artifacts: &Compiled,
     store: &Store,
     tokenizer: &Tokenizer,
-    history: &mut [u16; MAX_CHAT_HISTORY],
+    history: &mut [u32; MAX_CHAT_HISTORY],
     history_len: &mut usize,
     question: &str,
     max_tokens: usize,
 ) -> Result<ChatAnswer, ChatError> {
-    let mut question_tokens = [0u16; MAX_CHAT_HISTORY];
+    let mut question_tokens = [0u32; MAX_CHAT_HISTORY];
     let question_count = tokenizer.encode_into(question, &mut question_tokens)?;
     let question_tokens = if *history_len == 0 {
         &question_tokens[..question_count]
@@ -260,7 +260,7 @@ fn hologram_answer(
         &history[..*history_len],
         &mut predictions[..max_tokens.min(MAX_CHAT_TOKENS)],
     );
-    let mut generated = [0u16; MAX_CHAT_TOKENS];
+    let mut generated = [0u32; MAX_CHAT_TOKENS];
     let mut generated_count = 0usize;
     for prediction in &predictions[..prediction_count] {
         if prediction.token == 1 {
@@ -292,7 +292,7 @@ fn hologram_answer(
     })
 }
 
-fn append_history(history: &mut [u16; MAX_CHAT_HISTORY], len: &mut usize, tokens: &[u16]) {
+fn append_history(history: &mut [u32; MAX_CHAT_HISTORY], len: &mut usize, tokens: &[u32]) {
     let tokens = &tokens[tokens.len().saturating_sub(MAX_CHAT_HISTORY)..];
     let overflow = len
         .saturating_add(tokens.len())
@@ -305,7 +305,7 @@ fn append_history(history: &mut [u16; MAX_CHAT_HISTORY], len: &mut usize, tokens
     *len += tokens.len();
 }
 
-fn repeated_suffix(tokens: &[u16], width: usize) -> bool {
+fn repeated_suffix(tokens: &[u32], width: usize) -> bool {
     if tokens.len() < width * 2 {
         return false;
     }

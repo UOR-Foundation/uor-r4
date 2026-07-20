@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use uor_foundation::pipeline::PrismModel;
 
-use uor_r4_core::transformerless::teacher::TeacherOracle;
+use uor_r4_core::transformerless::teacher::{TeacherOracle, BehaviorSource};
 
 /// Configuration supplied by the executable to the reusable HTTP server.
 #[derive(Debug, Clone)]
@@ -291,7 +291,7 @@ fn generate_tless_text(
 ) -> Option<String> {
     const MAX_SERVER_TOKENS: usize = 256;
     const MAX_SERVER_TEXT_BYTES: usize = 16 * 1024;
-    let mut seed = [0u16; 4096];
+    let mut seed = [0u32; 4096];
     let seed_len = match tless_uor::tless_tokenize_into(prompt, &mut seed) {
         Some(l) => l,
         None => {
@@ -317,7 +317,7 @@ fn generate_tless_text(
             }
         };
         println!("[+] generate_tless_text: generated {} steps", count);
-        let mut tokens = [0u16; MAX_SERVER_TOKENS];
+        let mut tokens = [0u32; MAX_SERVER_TOKENS];
         for (token, step) in tokens.iter_mut().zip(&steps[..count]) {
             *token = step.token;
         }
@@ -347,10 +347,10 @@ fn generate_attention_text(
     let mut seed = Vec::new();
 
     // Add <|im_start|> (ID: 1)
-    seed.push(1u16);
+    seed.push(1u32);
 
     // Add "user\n" tokens
-    let mut user_toks = [0u16; 64];
+    let mut user_toks = [0u32; 64];
     if let Some(len) = tless_uor::tless_tokenize_into("user\n", &mut user_toks) {
         if len > 1 {
             seed.extend_from_slice(&user_toks[1..len]);
@@ -358,7 +358,7 @@ fn generate_attention_text(
     }
 
     // Add prompt tokens
-    let mut prompt_toks = [0u16; 4096];
+    let mut prompt_toks = [0u32; 4096];
     if let Some(len) = tless_uor::tless_tokenize_into(prompt, &mut prompt_toks) {
         if len > 1 {
             seed.extend_from_slice(&prompt_toks[1..len]);
@@ -366,10 +366,10 @@ fn generate_attention_text(
     }
 
     // Add <|im_end|> (ID: 2)
-    seed.push(2u16);
+    seed.push(2u32);
 
     // Add "\n" token
-    let mut nl_toks = [0u16; 16];
+    let mut nl_toks = [0u32; 16];
     if let Some(len) = tless_uor::tless_tokenize_into("\n", &mut nl_toks) {
         if len > 1 {
             seed.extend_from_slice(&nl_toks[1..len]);
@@ -377,10 +377,10 @@ fn generate_attention_text(
     }
 
     // Add <|im_start|> (ID: 1)
-    seed.push(1u16);
+    seed.push(1u32);
 
     // Add "assistant\n" tokens
-    let mut assistant_toks = [0u16; 64];
+    let mut assistant_toks = [0u32; 64];
     if let Some(len) = tless_uor::tless_tokenize_into("assistant\n", &mut assistant_toks) {
         if len > 1 {
             seed.extend_from_slice(&assistant_toks[1..len]);
@@ -438,7 +438,7 @@ fn generate_attention_text(
             break;
         }
 
-        generated.push(best_t as u16);
+        generated.push(best_t as u32);
         last_token = best_t;
     }
 
@@ -858,12 +858,12 @@ fn handle_connection(
                 return;
             }
         };
-        let mut window_tokens: Vec<u16> = payload
+        let mut window_tokens: Vec<u32> = payload
             .get("window")
             .and_then(|w| w.as_array())
             .map(|arr| {
                 arr.iter()
-                    .filter_map(|v| v.as_u64().map(|x| x as u16))
+                    .filter_map(|v| v.as_u64().map(|x| x as u32))
                     .collect()
             })
             .unwrap_or_default();
@@ -879,9 +879,9 @@ fn handle_connection(
         if window_tokens.len() > 8 {
             window_tokens = window_tokens.split_off(window_tokens.len() - 8);
         }
-        let mut buf = [0u8; 16];
+        let mut buf = [0u8; 32];
         for (i, t) in window_tokens.iter().enumerate() {
-            buf[2 * i..2 * i + 2].copy_from_slice(&t.to_le_bytes());
+            buf[4 * i..4 * i + 4].copy_from_slice(&t.to_le_bytes());
         }
         let outcome = with_tless_server_state(&tless, |_st| {
             let input = tless_uor::TlessPredictInput {
@@ -891,13 +891,13 @@ fn handle_connection(
             match tless_uor::UorTlessModel::forward(input) {
                 Ok(grounded) => {
                     // the deterministic record again via the axis, for the JSON fields
-                    let mut out = [0u8; 32];
+                    let mut out = [0u8; 36];
                     let _ = tless_uor::TlessAxisImpl::predict(&buf, &mut out);
-                    let token = u16::from_be_bytes([out[0], out[1]]);
-                    let depth = out[2];
-                    let code: Vec<u8> = out[3..7].to_vec();
-                    let count = u32::from_be_bytes(out[7..11].try_into().unwrap());
-                    let census = |i: usize| u32::from_be_bytes(out[i..i + 4].try_into().unwrap());
+                    let token = u32::from_be_bytes([out[0], out[1], out[2], out[3]]);
+                    let depth = out[4];
+                    let code: Vec<u8> = out[5..9].to_vec();
+                    let count = u32::from_be_bytes(out[9..13].try_into().unwrap());
+                    let census = |i: usize| u32::from_be_bytes(out[i + 2..i + 6].try_into().unwrap());
 
                     let (artifact_kappa, artifact_address, store_kappa) =
                         tless_uor::with_tless_state(|st| {
@@ -1033,9 +1033,9 @@ fn handle_connection(
                 return;
             }
         };
-        let seed: Vec<u16> = if let Some(arr) = payload.get("window").and_then(|w| w.as_array()) {
+        let seed: Vec<u32> = if let Some(arr) = payload.get("window").and_then(|w| w.as_array()) {
             arr.iter()
-                .filter_map(|v| v.as_u64().map(|x| x as u16))
+                .filter_map(|v| v.as_u64().map(|x| x as u32))
                 .collect()
         } else if let Some(text) = payload.get("text").and_then(|t| t.as_str()) {
             match tless_uor::tless_tokenize(text) {
@@ -1066,7 +1066,7 @@ fn handle_connection(
             let step_count =
                 tless_uor::generate_steps_into(&seed, &mut steps[..max_tokens]).unwrap_or(0);
             let steps = &steps[..step_count];
-            let mut tokens = [0u16; 256];
+            let mut tokens = [0u32; 256];
             for (token, prediction) in tokens.iter_mut().zip(steps) {
                 *token = prediction.token;
             }

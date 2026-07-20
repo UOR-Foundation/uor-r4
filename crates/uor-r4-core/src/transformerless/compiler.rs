@@ -47,15 +47,16 @@ pub fn xorshift(s: &mut u64) -> u64 {
 /// Teacher-labeled corpus record stream (identical wire format to the
 /// research pipeline, so existing state is adoptable):
 /// meta: n u64 | stories u64 | rng u64 | done u8
-/// recs: per token: story u32 | next u16 | teacher_argmax u16 | teacher_lp f32
+/// recs: per token: story u32 | next u32 | top_tokens [u32; 3] | top_weights [u32; 3]
 pub struct Corpus {
     pub n: usize,
     pub stories: u64,
     pub story: Vec<u32>,
-    pub input: Vec<u16>,
-    pub next: Vec<u16>,
-    pub t_argmax: Vec<u16>,
-    pub t_lp: Vec<f32>,
+    pub input: Vec<u32>,
+    pub next: Vec<u32>,
+    pub t_argmax: Vec<u32>,
+    pub top_tokens: Vec<[u32; 3]>,
+    pub top_weights: Vec<[u32; 3]>,
 }
 
 pub fn corpus_paths() -> (&'static str, &'static str) {
@@ -76,24 +77,60 @@ pub fn load_corpus_from(mp: &str, rp: &str) -> Option<Corpus> {
     let n = u64::from_le_bytes(meta[0..8].try_into().unwrap()) as usize;
     let stories = u64::from_le_bytes(meta[8..16].try_into().unwrap());
     let rb = std::fs::read(rp).ok()?;
-    if rb.len() != n * 12 {
+    let is_legacy = rb.len() == n * 12;
+    if rb.len() != n * 32 && !is_legacy {
         return None;
     }
     let mut story = Vec::with_capacity(n);
     let mut next = Vec::with_capacity(n);
     let mut t_argmax = Vec::with_capacity(n);
-    let mut t_lp = Vec::with_capacity(n);
+    let mut top_tokens = Vec::with_capacity(n);
+    let mut top_weights = Vec::with_capacity(n);
     for i in 0..n {
-        let o = i * 12;
-        story.push(u32::from_le_bytes(rb[o..o + 4].try_into().unwrap()));
-        next.push(u16::from_le_bytes(rb[o + 4..o + 6].try_into().unwrap()));
-        t_argmax.push(u16::from_le_bytes(rb[o + 6..o + 8].try_into().unwrap()));
-        t_lp.push(f32::from_le_bytes(rb[o + 8..o + 12].try_into().unwrap()));
+        if is_legacy {
+            let o = i * 12;
+            story.push(u32::from_le_bytes(rb[o..o + 4].try_into().unwrap()));
+            let nxt = u16::from_le_bytes(rb[o + 4..o + 6].try_into().unwrap()) as u32;
+            next.push(nxt);
+            let argmax = u16::from_le_bytes(rb[o + 6..o + 8].try_into().unwrap()) as u32;
+            t_argmax.push(argmax);
+            let lp = f32::from_le_bytes(rb[o + 8..o + 12].try_into().unwrap());
+            let next_prob = (lp.exp() * 100.0).clamp(0.0, 100.0) as u32;
+
+            let mut tokens_val = [0u32; 3];
+            let mut weights_val = [0u32; 3];
+            tokens_val[0] = argmax;
+            if nxt == argmax {
+                weights_val[0] = next_prob.max(50);
+            } else {
+                weights_val[0] = (100 - next_prob).min(90);
+                tokens_val[1] = nxt;
+                weights_val[1] = next_prob;
+            }
+            top_tokens.push(tokens_val);
+            top_weights.push(weights_val);
+        } else {
+            let o = i * 32;
+            story.push(u32::from_le_bytes(rb[o..o + 4].try_into().unwrap()));
+            let nxt = u32::from_le_bytes(rb[o + 4..o + 8].try_into().unwrap());
+            next.push(nxt);
+            let mut tokens_val = [0u32; 3];
+            let mut weights_val = [0u32; 3];
+            for j in 0..3 {
+                let offset_tok = o + 8 + j * 4;
+                let offset_wt = o + 20 + j * 4;
+                tokens_val[j] = u32::from_le_bytes(rb[offset_tok..offset_tok + 4].try_into().unwrap());
+                weights_val[j] = u32::from_le_bytes(rb[offset_wt..offset_wt + 4].try_into().unwrap());
+            }
+            t_argmax.push(tokens_val[0]);
+            top_tokens.push(tokens_val);
+            top_weights.push(weights_val);
+        }
     }
     let mut input = Vec::with_capacity(n);
     for i in 0..n {
         if i == 0 || story[i] != story[i - 1] {
-            input.push(1u16);
+            input.push(1u32);
         } else {
             input.push(next[i - 1]);
         }
@@ -105,7 +142,8 @@ pub fn load_corpus_from(mp: &str, rp: &str) -> Option<Corpus> {
         input,
         next,
         t_argmax,
-        t_lp,
+        top_tokens,
+        top_weights,
     })
 }
 
@@ -140,9 +178,9 @@ pub fn generate_to(
         println!("corpus already complete: {} tokens", n);
         return;
     }
+    let starting_tokens = n;
     let vocab = oracle.vocab();
     let seq_len = oracle.seq_len();
-    let starting_tokens = n;
     let mut logits = vec![0f32; vocab];
     let mut progress = super::progress::Progress::new("teacher corpus", target);
     progress.set(n as usize);
@@ -172,6 +210,41 @@ pub fn generate_to(
             for p in &mut logits {
                 *p /= sum;
             }
+            
+            // Find top-3 tokens and their normalized weights
+            let mut top_candidates: Vec<(usize, f32)> = logits
+                .iter()
+                .enumerate()
+                .map(|(i, &p)| (i, p))
+                .collect();
+            top_candidates.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+            
+            let mut top_tokens_idx = [0u32; 3];
+            let mut top_weights_val = [0u32; 3];
+            
+            let mut sum_top3 = 0.0f32;
+            for i in 0..3 {
+                if i < top_candidates.len() {
+                    sum_top3 += top_candidates[i].1;
+                }
+            }
+            if sum_top3 > 1e-9 {
+                let mut accumulated = 0;
+                for i in 0..3 {
+                    if i < top_candidates.len() {
+                        top_tokens_idx[i] = top_candidates[i].0 as u32;
+                        let w = ((top_candidates[i].1 / sum_top3) * 100.0).round() as u32;
+                        top_weights_val[i] = w;
+                        accumulated += w;
+                    }
+                }
+                if accumulated != 100 && top_weights_val[0] > 0 {
+                    let diff = 100 - accumulated;
+                    top_weights_val[0] = (top_weights_val[0] as i32 + diff as i32).max(0) as u32;
+                }
+            }
+            
+            // Sample the next token using the full logits cdf
             let u = (xorshift(&mut rng) >> 40) as f32 / (1u64 << 24) as f32;
             let mut cdf = 0.0f32;
             let mut next = vocab - 1;
@@ -182,17 +255,17 @@ pub fn generate_to(
                     break;
                 }
             }
-            let mut am = 0usize;
-            for i in 1..vocab {
-                if logits[i] > logits[am] {
-                    am = i;
-                }
-            }
-            let mut record = [0u8; 12];
+            
+            let mut record = [0u8; 32];
             record[0..4].copy_from_slice(&(stories as u32).to_le_bytes());
-            record[4..6].copy_from_slice(&(next as u16).to_le_bytes());
-            record[6..8].copy_from_slice(&(am as u16).to_le_bytes());
-            record[8..12].copy_from_slice(&logits[next].max(1e-30).ln().to_le_bytes());
+            record[4..8].copy_from_slice(&(next as u32).to_le_bytes());
+            for i in 0..3 {
+                let offset_tok = 8 + i * 4;
+                let offset_wt = 20 + i * 4;
+                record[offset_tok..offset_tok + 4].copy_from_slice(&top_tokens_idx[i].to_le_bytes());
+                record[offset_wt..offset_wt + 4].copy_from_slice(&top_weights_val[i].to_le_bytes());
+            }
+            
             recs.write_all(&record).unwrap();
             n += 1;
             progress.set(n as usize);
@@ -278,35 +351,135 @@ pub struct Compiled {
     pub token_stage_kappas: Vec<String>,
 }
 
-fn kmeans_rvq(
+fn hash_index(seed: &[u8; 32], dim: usize, key: &str) -> u64 {
+    let mut hasher = blake3::Hasher::new();
+    hasher.update(seed);
+    hasher.update(&dim.to_le_bytes());
+    hasher.update(key.as_bytes());
+    let digest = hasher.finalize();
+    let bytes = digest.as_bytes();
+    u64::from_le_bytes(bytes[0..8].try_into().unwrap())
+}
+
+fn deterministic_bucket(seed: &[u8; 32], h: usize, target_dim: usize) -> usize {
+    (hash_index(seed, h, "bucket") as usize) % target_dim
+}
+
+fn deterministic_sign(seed: &[u8; 32], h: usize) -> f32 {
+    if (hash_index(seed, h, "sign") % 2) == 0 {
+        1.0
+    } else {
+        -1.0
+    }
+}
+
+pub fn deterministic_project(
+    seed_bytes: &[u8; 32],
+    vocab: usize,
+    source_dim: usize,
+    target_dim: usize,
+    oracle: &dyn TeacherOracle,
+) -> Vec<f32> {
+    let mut projected_vecs = vec![0f32; vocab * target_dim];
+    let chunk_size = 1000;
+    let mut raw_chunk = vec![0f32; chunk_size * source_dim];
+    
+    let mut sum_vec = vec![0f64; source_dim];
+    for chunk_start in (0..vocab).step_by(chunk_size) {
+        let chunk_end = (chunk_start + chunk_size).min(vocab);
+        let count = chunk_end - chunk_start;
+        oracle.read_embedding_rows(chunk_start..chunk_end, &mut raw_chunk[..count * source_dim]).unwrap();
+        for i in 0..count {
+            for j in 0..source_dim {
+                sum_vec[j] += raw_chunk[i * source_dim + j] as f64;
+            }
+        }
+    }
+    let mut mean = vec![0f32; source_dim];
+    for j in 0..source_dim {
+        mean[j] = (sum_vec[j] / vocab as f64) as f32;
+    }
+    
+    let mut progress = super::progress::Progress::new("projecting embeddings", vocab);
+    for chunk_start in (0..vocab).step_by(chunk_size) {
+        let chunk_end = (chunk_start + chunk_size).min(vocab);
+        let count = chunk_end - chunk_start;
+        oracle.read_embedding_rows(chunk_start..chunk_end, &mut raw_chunk[..count * source_dim]).unwrap();
+        
+        for i in 0..count {
+            let t = chunk_start + i;
+            progress.set(t);
+            let mut projected_row = vec![0f32; target_dim];
+            
+            for h in 0..source_dim {
+                let centered_val = raw_chunk[i * source_dim + h] - mean[h];
+                let target = deterministic_bucket(seed_bytes, h, target_dim);
+                let sign = deterministic_sign(seed_bytes, h);
+                projected_row[target] += sign * centered_val;
+            }
+            
+            let n = projected_row.iter().map(|x| x * x).sum::<f32>().sqrt().max(1e-9);
+            for d in 0..target_dim {
+                projected_row[d] /= n;
+            }
+            
+            projected_vecs[t * target_dim..(t + 1) * target_dim].copy_from_slice(&projected_row);
+        }
+    }
+    progress.finish();
+    projected_vecs
+}
+
+fn sampled_kmeans_rvq(
     vecs: &[f32],
     nvec: usize,
     stages: usize,
     k: usize,
     iters: usize,
+    seed_bytes: &[u8; 32],
 ) -> (Vec<Vec<f32>>, Vec<u8>) {
+    let mut rng_seed = 0xDECAFBADu64;
+    for &b in seed_bytes.iter().take(8) {
+        rng_seed = rng_seed.wrapping_add(b as u64).rotate_left(8);
+    }
+    
+    let mut indices: Vec<usize> = (0..nvec).collect();
+    for i in (1..nvec).rev() {
+        let j = (xorshift(&mut rng_seed) as usize) % (i + 1);
+        indices.swap(i, j);
+    }
+    
+    let sample_size = nvec.min(10000);
+    let mut sample_vecs = vec![0f32; sample_size * D];
+    for i in 0..sample_size {
+        let src_idx = indices[i];
+        sample_vecs[i * D..(i + 1) * D].copy_from_slice(&vecs[src_idx * D..(src_idx + 1) * D]);
+    }
+
     let mut residual = vecs.to_vec();
+    let mut sample_residual = sample_vecs.to_vec();
     let mut codebooks: Vec<Vec<f32>> = Vec::new();
     let mut codes = vec![0u8; nvec * stages];
+    
     for stage in 0..stages {
-        eprintln!("embedding RVQ stage {}/{}", stage + 1, stages);
-        let mut progress = super::progress::Progress::new("RVQ assignment", iters * nvec);
+        eprintln!("sampled RVQ stage {}/{}", stage + 1, stages);
+        let mut progress = super::progress::Progress::new("RVQ assignment", iters * sample_size);
         let mut cent = vec![0f32; k * D];
-        let mut seed = 0xC0DEB00C ^ stage as u64;
-        let mut used = vec![false; nvec];
+        let mut cent_seed = 0xC0DEB00C ^ stage as u64 ^ rng_seed;
+        let mut used = vec![false; sample_size];
         for kk in 0..k {
-            let mut idx = (xorshift(&mut seed) as usize) % nvec;
+            let mut idx = (xorshift(&mut cent_seed) as usize) % sample_size;
             while used[idx] {
-                idx = (idx + 1) % nvec;
+                idx = (idx + 1) % sample_size;
             }
             used[idx] = true;
-            cent[kk * D..(kk + 1) * D].copy_from_slice(&residual[idx * D..(idx + 1) * D]);
+            cent[kk * D..(kk + 1) * D].copy_from_slice(&sample_residual[idx * D..(idx + 1) * D]);
         }
-        let mut assign = vec![0usize; nvec];
+        let mut assign = vec![0usize; sample_size];
         for iteration in 0..iters {
-            for v in 0..nvec {
-                progress.set(iteration * nvec + v);
-                let rv = &residual[v * D..(v + 1) * D];
+            for v in 0..sample_size {
+                progress.set(iteration * sample_size + v);
+                let rv = &sample_residual[v * D..(v + 1) * D];
                 let (mut bd, mut bk) = (f32::MAX, 0usize);
                 for kk in 0..k {
                     let c = &cent[kk * D..(kk + 1) * D];
@@ -324,10 +497,10 @@ fn kmeans_rvq(
             }
             let mut sum = vec![0f32; k * D];
             let mut cnt = vec![0u32; k];
-            for v in 0..nvec {
+            for v in 0..sample_size {
                 cnt[assign[v]] += 1;
                 for j in 0..D {
-                    sum[assign[v] * D + j] += residual[v * D + j];
+                    sum[assign[v] * D + j] += sample_residual[v * D + j];
                 }
             }
             for kk in 0..k {
@@ -339,63 +512,36 @@ fn kmeans_rvq(
             }
         }
         progress.finish();
+        
         for v in 0..nvec {
-            codes[v * stages + stage] = assign[v] as u8;
-            for j in 0..D {
-                residual[v * D + j] -= cent[assign[v] * D + j];
-            }
-        }
-        codebooks.push(cent);
-    }
-    (codebooks, codes)
-}
-
-/// Linear-time deterministic RVQ used for larger source vocabularies. Each
-/// stage hashes the residual's signed, quantized geometry into 256 buckets,
-/// averages each bucket, then removes that centroid before the next stage.
-/// This keeps SmolLM2 compilation bounded instead of performing billions of
-/// exhaustive centroid-distance evaluations.
-fn hashed_rvq(vecs: &[f32], nvec: usize, stages: usize) -> (Vec<Vec<f32>>, Vec<u8>) {
-    let mut residual = vecs.to_vec();
-    let mut codebooks = Vec::with_capacity(stages);
-    let mut codes = vec![0u8; nvec * stages];
-    for stage in 0..stages {
-        eprintln!("hashed RVQ stage {}/{}", stage + 1, stages);
-        let mut progress = super::progress::Progress::new("hashed RVQ", nvec);
-        let mut sums = vec![0.0f32; K * D];
-        let mut counts = [0u32; K];
-        for vector in 0..nvec {
-            progress.set(vector);
-            let row = &residual[vector * D..(vector + 1) * D];
-            let mut hash = 0xcbf2_9ce4_8422_2325u64 ^ stage as u64;
-            for &value in row {
-                let quantized = (value * 127.0).round().clamp(-127.0, 127.0) as i8;
-                hash ^= quantized as u8 as u64;
-                hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
-            }
-            let bucket = (hash & 0xff) as usize;
-            codes[vector * stages + stage] = bucket as u8;
-            counts[bucket] += 1;
-            for dimension in 0..D {
-                sums[bucket * D + dimension] += row[dimension];
-            }
-        }
-        progress.finish();
-        for bucket in 0..K {
-            if counts[bucket] != 0 {
-                let inverse = 1.0 / counts[bucket] as f32;
-                for dimension in 0..D {
-                    sums[bucket * D + dimension] *= inverse;
+            let rv = &residual[v * D..(v + 1) * D];
+            let (mut bd, mut bk) = (f32::MAX, 0usize);
+            for kk in 0..k {
+                let c = &cent[kk * D..(kk + 1) * D];
+                let mut d2 = 0f32;
+                for j in 0..D {
+                    let t = rv[j] - c[j];
+                    d2 += t * t;
+                }
+                if d2 < bd {
+                    bd = d2;
+                    bk = kk;
                 }
             }
-        }
-        for vector in 0..nvec {
-            let bucket = codes[vector * stages + stage] as usize;
-            for dimension in 0..D {
-                residual[vector * D + dimension] -= sums[bucket * D + dimension];
+            codes[v * stages + stage] = bk as u8;
+            for j in 0..D {
+                residual[v * D + j] -= cent[bk * D + j];
             }
         }
-        codebooks.push(sums);
+        
+        for v in 0..sample_size {
+            let src_idx = indices[v];
+            for j in 0..D {
+                sample_residual[v * D + j] = residual[src_idx * D + j];
+            }
+        }
+        
+        codebooks.push(cent);
     }
     (codebooks, codes)
 }
@@ -409,46 +555,25 @@ pub fn kappa_of_f32s(v: &[f32]) -> String {
 }
 
 pub fn compile(oracle: &dyn TeacherOracle, corpus: &Corpus) -> Compiled {
-    // 1–2: token codebook and integer token vectors, read exclusively
-    // through the oracle's embedding surface.
-    let vocab = oracle.vocab();
+    let vocab = oracle.vocab_size();
     assert!(
-        vocab <= usize::from(u16::MAX) + 1,
-        "source vocabulary exceeds u16 token ids"
+        vocab <= u32::MAX as usize,
+        "source vocabulary exceeds u32 token ids"
     );
-    assert_eq!(oracle.dim(), D, "compiler geometry vs source dim");
     println!(
         "source κ: {} ({} bytes)",
         oracle.kappa(),
         oracle.source_bytes()
     );
-    let mut vecs = vec![0f32; vocab * D];
-    let mut embedding_progress = super::progress::Progress::new("extracting embeddings", vocab);
-    for t in 0..vocab {
-        embedding_progress.set(t);
-        oracle.embedding(t, &mut vecs[t * D..(t + 1) * D]);
-    }
-    embedding_progress.finish();
-    let mut mean = vec![0f32; D];
-    for v in 0..vocab {
-        for j in 0..D {
-            mean[j] += vecs[v * D + j];
-        }
-    }
-    mean.iter_mut().for_each(|m| *m /= vocab as f32);
-    for v in 0..vocab {
-        let row = &mut vecs[v * D..(v + 1) * D];
-        for j in 0..D {
-            row[j] -= mean[j];
-        }
-        let n = row.iter().map(|x| x * x).sum::<f32>().sqrt().max(1e-9);
-        row.iter_mut().for_each(|x| *x /= n);
-    }
-    let (emb_cb, emb_codes) = if vocab == V {
-        kmeans_rvq(&vecs, vocab, STAGES, K, EMB_ITERS)
-    } else {
-        hashed_rvq(&vecs, vocab, STAGES)
-    };
+    
+    let seed_string = format!("{}{}{}", oracle.kappa(), oracle.tokenizer_address(), "r4-geometric-projection-v1");
+    let seed_hash = blake3::hash(seed_string.as_bytes());
+    let seed_bytes = seed_hash.as_bytes();
+    
+    let source_dim = oracle.source_dimension();
+    let vecs = deterministic_project(seed_bytes, vocab, source_dim, D, oracle);
+    
+    let (emb_cb, emb_codes) = sampled_kmeans_rvq(&vecs, vocab, STAGES, K, EMB_ITERS, seed_bytes);
     let emb_stage_kappas: Vec<String> = emb_cb.iter().map(|cb| kappa_of_f32s(cb)).collect();
     for (i, k) in emb_stage_kappas.iter().enumerate() {
         println!("token codebook stage {} κ: {}", i, k);
@@ -552,11 +677,7 @@ pub fn compile(oracle: &dyn TeacherOracle, corpus: &Corpus) -> Compiled {
         }
     }
     context_progress.finish();
-    let (ctx_cb, _) = if vocab == V {
-        kmeans_rvq(&samp, CTX_SAMPLE, STAGES, K, CTX_ITERS)
-    } else {
-        hashed_rvq(&samp, CTX_SAMPLE, STAGES)
-    };
+    let (ctx_cb, _) = sampled_kmeans_rvq(&samp, CTX_SAMPLE, STAGES, K, CTX_ITERS, seed_bytes);
     for (st, cb) in ctx_cb.iter().enumerate() {
         println!("context codebook stage {} κ: {}", st, kappa_of_f32s(cb));
         let mut sigs = vec![0u8; K * D / 8];

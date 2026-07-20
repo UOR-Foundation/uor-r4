@@ -53,7 +53,7 @@ fn window_path_matches_corpus_path() {
         if (1..WINDOW).any(|back| c.story[i - back] != c.story[i]) {
             continue;
         }
-        let window: Vec<u16> = ((i + 1 - WINDOW)..=i).map(|idx| c.input[idx]).collect();
+        let window: Vec<u32> = ((i + 1 - WINDOW)..=i).map(|idx| c.input[idx]).collect();
         assert_eq!(
             runtime::bundle_window_plain(&art, &rot, &window),
             runtime::bundle_plain(&art, &rot, &c, i),

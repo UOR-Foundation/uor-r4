@@ -4,7 +4,7 @@ use super::reference::KappaLabel;
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Constraint {
     pub facet: String,
-    pub path: Vec<u16>,
+    pub path: Vec<u32>,
     pub required: bool,
 }
 
@@ -35,7 +35,7 @@ pub struct Limits {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct WeightedRoute {
     pub axis: u32,
-    pub path: Vec<u16>,
+    pub path: Vec<u32>,
     pub score: f32,
 }
 
@@ -49,8 +49,8 @@ pub struct RegionProbe {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct OperatorExecution {
     pub operator_cid: KappaLabel,
-    pub input_route: Vec<u16>,
-    pub output_routes: Vec<Vec<u16>>,
+    pub input_route: Vec<u32>,
+    pub output_routes: Vec<Vec<u32>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -187,7 +187,7 @@ pub struct TypedOperator {
     pub op_type: OperatorType,
     pub input_type: String,
     pub output_type: String,
-    pub transition_table: std::collections::HashMap<Vec<u16>, Vec<Vec<u16>>>, // input -> outputs
+    pub transition_table: std::collections::HashMap<Vec<u32>, Vec<Vec<u32>>>, // input -> outputs
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]

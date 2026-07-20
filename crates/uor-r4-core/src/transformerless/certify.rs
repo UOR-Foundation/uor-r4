@@ -16,17 +16,18 @@
 //!     rate–distortion table of the shipped token representation, and the
 //!     end-to-end artifact accounting against the source bytes.
 
-use super::compiler::{self, D, K, STAGES, V};
+use super::compiler::{self, D, K, STAGES, V, WINDOW};
 use super::runtime::{
     self, build_store, bundle_kernel, bundle_plain, code_plain, predict_plain, Runtime, Store,
 };
 use super::teacher::TeacherOracle;
 use std::collections::BTreeMap;
 
-fn build_store_generic(
+fn build_prefix_store(
+    art: &compiler::Compiled,
+    rot: &[usize; WINDOW + 1],
     c: &compiler::Corpus,
     depths: usize,
-    key: &dyn Fn(usize, usize) -> Vec<u8>,
 ) -> Store {
     let cut = (c.stories as f64 * 0.8) as u32;
     let mut levels: Store = (0..=depths).map(|_| BTreeMap::new()).collect();
@@ -34,22 +35,34 @@ fn build_store_generic(
         if c.story[i] >= cut {
             continue;
         }
-        for (d, level) in levels.iter_mut().enumerate().take(depths + 1) {
-            *level
-                .entry(key(i, d))
-                .or_default()
-                .entry(c.next[i])
-                .or_default() += 1;
+        let code = code_plain(art, rot, c, i);
+        for k_idx in 0..3 {
+            let tok = c.top_tokens[i][k_idx];
+            let weight = c.top_weights[i][k_idx];
+            if weight > 0 {
+                *levels[0]
+                    .entry(vec![])
+                    .or_default()
+                    .entry(tok)
+                    .or_default() += weight;
+                for d in 1..=depths {
+                    *levels[d]
+                        .entry(code[..d].to_vec())
+                        .or_default()
+                        .entry(tok)
+                        .or_default() += weight;
+                }
+            }
         }
     }
     levels
 }
 
-fn deepest_argmax(store: &Store, key: &dyn Fn(usize) -> Vec<u8>, depths: usize) -> u16 {
+fn deepest_argmax(store: &Store, key: &dyn Fn(usize) -> Vec<u8>, depths: usize) -> u32 {
     for d in (0..=depths).rev() {
         if let Some(dist) = store[d].get(&key(d)) {
             // canonical argmax: highest count, ties to smallest token id.
-            let mut best_t = 0u16;
+            let mut best_t = 0u32;
             let mut best_c = -1i64;
             for (&t, &cnt) in dist {
                 if (cnt as i64) > best_c {
@@ -87,7 +100,7 @@ fn eval(
         if pred == c.t_argmax[i] {
             agree += 1;
         }
-        let mut lams: Vec<(f64, &BTreeMap<u16, u32>, u32)> = Vec::new();
+        let mut lams: Vec<(f64, &BTreeMap<u32, u32>, u32)> = Vec::new();
         for (d, level) in store.iter().enumerate().take(depths + 1) {
             if let Some(dist) = level.get(&key(i, d)) {
                 let total: u32 = dist.values().sum();
@@ -135,8 +148,17 @@ pub fn certify(oracle: &dyn TeacherOracle) {
         if c.story[i] < cut {
             continue;
         }
-        floor += -(c.t_lp[i] as f64) / std::f64::consts::LN_2;
-        if c.t_argmax[i] == c.next[i] {
+        let prob = if c.top_tokens[i][0] == c.next[i] {
+            c.top_weights[i][0] as f64 / 100.0
+        } else if c.top_tokens[i][1] == c.next[i] {
+            c.top_weights[i][1] as f64 / 100.0
+        } else if c.top_tokens[i][2] == c.next[i] {
+            c.top_weights[i][2] as f64 / 100.0
+        } else {
+            0.01
+        };
+        floor += -prob.ln() / std::f64::consts::LN_2;
+        if c.top_tokens[i][0] == c.next[i] {
             ceil += 1;
         }
     }
@@ -231,27 +253,7 @@ pub fn certify(oracle: &dyn TeacherOracle) {
             code
         })
         .collect();
-    let store_f32 = {
-        let mut s: Store = (0..=STAGES).map(|_| BTreeMap::new()).collect();
-        for (i, code) in codes_f32.iter().enumerate().take(c.n) {
-            if c.story[i] >= cut {
-                continue;
-            }
-            *s[0]
-                .entry(vec![])
-                .or_default()
-                .entry(c.next[i])
-                .or_default() += 1;
-            for d in 1..=STAGES {
-                *s[d]
-                    .entry(code[..d].to_vec())
-                    .or_default()
-                    .entry(c.next[i])
-                    .or_default() += 1;
-            }
-        }
-        s
-    };
+    let store_f32 = build_store_generic(&c, STAGES, &|i, d| codes_f32[i][..d].to_vec());
     let m = eval(&c, &store_f32, STAGES, &|i, d| codes_f32[i][..d].to_vec());
     println!(
         "A-f32 (ablation, multiplies at assignment): top1 {:.1}% | agreement {:.1}% | WB {:.4} bits/token | {} keys",
@@ -295,25 +297,11 @@ pub fn certify(oracle: &dyn TeacherOracle) {
     // prefix depth d (i8 book sums — the exact bytes the runtime reads)
     // against the source's centered, normalized embedding rows, read
     // through the same oracle surface the compiler used.
-    let mut src = vec![0f32; V * D];
-    for t in 0..V {
-        oracle.embedding(t, &mut src[t * D..(t + 1) * D]);
-    }
-    let mut mean = vec![0f32; D];
-    for v in 0..V {
-        for j in 0..D {
-            mean[j] += src[v * D + j];
-        }
-    }
-    mean.iter_mut().for_each(|m| *m /= V as f32);
-    for v in 0..V {
-        let row = &mut src[v * D..(v + 1) * D];
-        for j in 0..D {
-            row[j] -= mean[j];
-        }
-        let n = row.iter().map(|x| x * x).sum::<f32>().sqrt().max(1e-9);
-        row.iter_mut().for_each(|x| *x /= n);
-    }
+    let seed_string = format!("{}{}{}", oracle.kappa(), oracle.tokenizer_address(), "r4-geometric-projection-v1");
+    let seed_hash = blake3::hash(seed_string.as_bytes());
+    let seed_bytes = seed_hash.as_bytes();
+    let source_dim = oracle.source_dimension();
+    let src = compiler::deterministic_project(seed_bytes, V, source_dim, D, oracle);
     let src_bytes = V * D * 4;
     println!(
         "compression (representation): source embedding table {} bytes (f32 {}×{})",
@@ -323,7 +311,7 @@ pub fn certify(oracle: &dyn TeacherOracle) {
         let mut acc = 0f64;
         for t in 0..V {
             let mut rec = [0i32; D];
-            runtime::decode_row_prefix_plain(&art, t as u16, depth, &mut rec);
+            runtime::decode_row_prefix_plain(&art, t as u32, depth, &mut rec);
             let s = &src[t * D..(t + 1) * D];
             let (mut dot, mut na, mut nb) = (0f64, 0f64, 0f64);
             for j in 0..D {
@@ -361,4 +349,37 @@ pub fn certify(oracle: &dyn TeacherOracle) {
         oracle.source_bytes(),
         oracle.source_bytes() as f64 / (runtime_bytes + store_bytes) as f64
     );
+}
+
+fn build_store_generic(
+    c: &compiler::Corpus,
+    depths: usize,
+    key: &dyn Fn(usize, usize) -> Vec<u8>,
+) -> Store {
+    let cut = (c.stories as f64 * 0.8) as u32;
+    let mut levels: Store = (0..=depths).map(|_| BTreeMap::new()).collect();
+    for i in 0..c.n {
+        if c.story[i] >= cut {
+            continue;
+        }
+        for k_idx in 0..3 {
+            let tok = c.top_tokens[i][k_idx];
+            let weight = c.top_weights[i][k_idx];
+            if weight > 0 {
+                *levels[0]
+                    .entry(vec![])
+                    .or_default()
+                    .entry(tok)
+                    .or_default() += weight;
+                for d in 1..=depths {
+                    *levels[d]
+                        .entry(key(i, d))
+                        .or_default()
+                        .entry(tok)
+                        .or_default() += weight;
+                }
+            }
+        }
+    }
+    levels
 }
