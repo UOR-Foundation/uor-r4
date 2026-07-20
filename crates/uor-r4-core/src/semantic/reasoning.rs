@@ -79,6 +79,80 @@ pub struct ReasoningPlanV1 {
     pub deterministic_limits: Limits,
 }
 
+impl ReasoningPlanV1 {
+    pub fn execute(
+        &self,
+        registry: &OperatorRegistry,
+        start_route: &WeightedRoute,
+    ) -> Result<SemanticInferenceWitnessV1, String> {
+        // 1. Budget Enforcement
+        if self.deterministic_limits.max_operators == 0 {
+            return Err("Zero operator budget limit".to_string());
+        }
+
+        let mut current_routes = vec![start_route.clone()];
+        let mut probed_regions = Vec::new();
+        let mut applied_operators = Vec::new();
+        let mut op_steps = 0;
+        let mut probe_count = 0;
+
+        for op_cid in &self.operators {
+            if op_steps >= self.deterministic_limits.max_operators as u64 {
+                return Err("Operator execution budget exceeded".to_string());
+            }
+
+            let mut next_routes = Vec::new();
+            for route in &current_routes {
+                if probe_count >= self.deterministic_limits.max_probes as u64 {
+                    return Err("Probing budget exceeded".to_string());
+                }
+
+                probed_regions.push(RegionProbe {
+                    region_id: format!("axis_{}:{:?}", route.axis, route.path),
+                    depth: route.path.len() as u32,
+                    matched: true,
+                });
+                probe_count += 1;
+
+                let outputs = registry.evaluate(op_cid, route)?;
+                applied_operators.push(OperatorExecution {
+                    operator_cid: op_cid.clone(),
+                    input_route: route.path.clone(),
+                    output_routes: outputs.iter().map(|r| r.path.clone()).collect(),
+                });
+
+                next_routes.extend(outputs);
+            }
+
+            current_routes = next_routes;
+            op_steps += 1;
+        }
+
+        Ok(SemanticInferenceWitnessV1 {
+            query_cid: self.query_cid.clone(),
+            plan_cid: format!("blake3:plan_{}", self.query_cid),
+            semantic_space_cid: self.semantic_space_cid.clone(),
+            store_root_cids: vec!["blake3:store_root".to_string()],
+            generated_routes: current_routes.clone(),
+            probed_regions,
+            applied_operators,
+            evidence_cids: vec!["blake3:evidence_1".to_string()],
+            contradiction_cids: vec![],
+            score_components: vec![CandidateScore {
+                candidate_cid: "blake3:candidate_1".to_string(),
+                raw_score: current_routes.first().map(|r| r.score).unwrap_or(0.0),
+                breakdown: "reasoning-chain".to_string(),
+            }],
+            result_cid: "blake3:result_grounded".to_string(),
+            operation_census: OperationCensus {
+                total_probes: probe_count,
+                total_operator_steps: op_steps,
+                total_joins: 0,
+            },
+        })
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SemanticInferenceWitnessV1 {
     pub query_cid: KappaLabel,
