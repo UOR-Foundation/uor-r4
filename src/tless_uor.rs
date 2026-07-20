@@ -443,7 +443,47 @@ impl TlessAxis for TlessAxisImpl {
         with_tless_state(|st| {
             let mut rt = runtime::Runtime::new(&st.art);
             let code = rt.assign_window(&window);
-            let p = rt.predict_witness(&st.store, &code);
+
+            let mut priors = std::collections::HashMap::new();
+            let mut query_text = String::new();
+            
+            uor_r4_router::ACTIVE_ROUTER.with(|r| {
+                if let Some(ptr) = *r.borrow() {
+                    let router = unsafe { &mut *ptr };
+                    for &tok_id in &window {
+                        if (tok_id as usize) < router.vocabulary.len() {
+                            query_text.push_str(&router.vocabulary[tok_id as usize]);
+                            query_text.push(' ');
+                        }
+                    }
+                    if !query_text.is_empty() {
+                        let resonances = router.get_top_resonances_native(&query_text, "shared", 5);
+                        let mut word_to_tok = std::collections::HashMap::new();
+                        for (idx, word) in router.vocabulary.iter().enumerate() {
+                            word_to_tok.insert(word.to_lowercase(), idx as u32);
+                        }
+                        for res in resonances {
+                            for word in res.sentence.split_whitespace() {
+                                let cleaned: String = word
+                                    .to_lowercase()
+                                    .chars()
+                                    .filter(|c| c.is_alphanumeric())
+                                    .collect();
+                                if let Some(&tok_id) = word_to_tok.get(&cleaned) {
+                                    *priors.entry(tok_id).or_insert(0) += 5;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+            let p = if priors.is_empty() {
+                rt.predict_witness(&st.store, &code)
+            } else {
+                rt.predict_witness_with_priors(&st.store, &code, &priors)
+            };
+
             let k = &rt.kernel;
             out[0..4].copy_from_slice(&p.token.to_be_bytes());
             out[4] = p.depth as u8;
