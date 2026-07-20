@@ -43,6 +43,11 @@ fn test_manifest_roundtrip() {
         compiler_cid: "blake3:compiler".to_string(),
         quality_certificate_cid: "blake3:quality_cert".to_string(),
         epoch: 42,
+        learning_origin: Some(uor_r4_core::semantic::LearningOrigin {
+            kind: "teacher-distillation".to_string(),
+            teacher_model: Some("HuggingFaceTB/SmolLM2-135M-Instruct".to_string()),
+            teacher_revision: Some("abcdef1234567890".to_string()),
+        }),
     };
 
     let serialized = serde_json::to_string(&manifest).unwrap();

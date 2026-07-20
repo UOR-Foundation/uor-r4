@@ -16,7 +16,7 @@ pub struct GroundedSemantics {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct FacetCoordinates {
-    pub coordinates: HashMap<String, Vec<u16>>,
+    pub coordinates: HashMap<String, Vec<u32>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -130,7 +130,7 @@ impl SemanticGeometry for VsaGeometry {
         let mut type_path = Vec::new();
         if !grounded.vsa_vector.is_empty() {
             let sum_first_half: f32 = grounded.vsa_vector[0..512].iter().sum();
-            type_path.push((sum_first_half.abs() as u16) % 100);
+            type_path.push((sum_first_half.abs() as u32) % 100);
         }
         coords.insert("type".to_string(), type_path);
         coords.insert("entity".to_string(), vec![100, 200]);

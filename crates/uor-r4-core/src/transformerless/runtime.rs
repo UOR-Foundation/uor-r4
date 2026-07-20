@@ -127,11 +127,11 @@ pub fn sign_signature(k: &mut OpKernel, values: &[i64], thresholds: &[i64]) -> [
 
 use std::collections::BTreeMap;
 
-pub type Store = Vec<BTreeMap<Vec<u8>, BTreeMap<u16, u32>>>;
+pub type Store = Vec<BTreeMap<Vec<u8>, BTreeMap<u32, u32>>>;
 /// Decode one token row from the compressed artifact: per stage, one code
 /// read then D book reads and D adds. Row location is `chunks_exact(..)
 /// .nth(..)` — O(1) slicing on slices, no index products in this source.
-pub fn decode_row_plain(art: &Compiled, t: u16, out: &mut [i32; D]) {
+pub fn decode_row_plain(art: &Compiled, t: u32, out: &mut [i32; D]) {
     out.fill(0);
     let codes = art
         .token_codes
@@ -148,7 +148,7 @@ pub fn decode_row_plain(art: &Compiled, t: u16, out: &mut [i32; D]) {
 
 /// Prefix-depth decode (used by the certifier's rate–distortion table):
 /// the exact bytes and shifts the runtime reads, truncated at `depth`.
-pub fn decode_row_prefix_plain(art: &Compiled, t: u16, depth: usize, out: &mut [i32; D]) {
+pub fn decode_row_prefix_plain(art: &Compiled, t: u32, depth: usize, out: &mut [i32; D]) {
     out.fill(0);
     let codes = art
         .token_codes
@@ -171,7 +171,7 @@ pub fn decode_row_prefix_plain(art: &Compiled, t: u16, depth: usize, out: &mut [
 
 /// Kernel-counted decode: identical values; every element fetch recorded
 /// as a table read and every accumulation as an add.
-pub fn decode_row_kernel(k: &mut OpKernel, art: &Compiled, t: u16, out: &mut [i32; D]) {
+pub fn decode_row_kernel(k: &mut OpKernel, art: &Compiled, t: u32, out: &mut [i32; D]) {
     out.fill(0);
     let codes = art
         .token_codes
@@ -189,7 +189,7 @@ pub fn decode_row_kernel(k: &mut OpKernel, art: &Compiled, t: u16, out: &mut [i3
     }
 }
 
-fn history_token(c: &Corpus, i: usize, j: usize) -> Option<u16> {
+fn history_token(c: &Corpus, i: usize, j: usize) -> Option<u32> {
     if j == 1 {
         return Some(c.input[i]);
     }
@@ -258,7 +258,7 @@ pub fn bundle_kernel(
 /// `bundle_plain`'s j-th history token, so a window equal to a position's
 /// in-story history produces an identical bundle. Only the WINDOW most
 /// recent tokens are read.
-pub fn bundle_window_plain(art: &Compiled, rot: &[usize; WINDOW + 1], window: &[u16]) -> [i64; D] {
+pub fn bundle_window_plain(art: &Compiled, rot: &[usize; WINDOW + 1], window: &[u32]) -> [i64; D] {
     let mut acc = [0i64; D];
     let mut row = [0i32; D];
     for (back, &t) in window.iter().rev().take(WINDOW).enumerate() {
@@ -283,7 +283,7 @@ pub fn bundle_window_kernel(
     k: &mut OpKernel,
     art: &Compiled,
     rot: &[usize; WINDOW + 1],
-    window: &[u16],
+    window: &[u32],
 ) -> [i64; D] {
     let mut acc = [0i64; D];
     let mut row = [0i32; D];
@@ -365,7 +365,7 @@ pub fn code_plain(art: &Compiled, rot: &[usize; WINDOW + 1], c: &Corpus, i: usiz
 /// (deepest populated class) and the winning entry's evidence count.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Prediction {
-    pub token: u16,
+    pub token: u32,
     pub depth: usize,
     pub count: u32,
 }
@@ -376,7 +376,7 @@ pub struct Prediction {
 pub fn predict_witness_plain(store: &Store, code: &[u8; STAGES]) -> Prediction {
     for d in (0..=STAGES).rev() {
         if let Some(dist) = store[d].get(&code[..d]) {
-            let mut best_t = 0u16;
+            let mut best_t = 0u32;
             let mut best_c = -1i64;
             let mut best_n = 0u32;
             for (&t, &cnt) in dist {
@@ -400,11 +400,11 @@ pub fn predict_witness_plain(store: &Store, code: &[u8; STAGES]) -> Prediction {
 pub fn predict_witness_plain_with_priors(
     store: &Store,
     code: &[u8; STAGES],
-    priors: &std::collections::HashMap<u16, u32>,
+    priors: &std::collections::HashMap<u32, u32>,
 ) -> Prediction {
     for d in (0..=STAGES).rev() {
         if let Some(dist) = store[d].get(&code[..d]) {
-            let mut best_t = 0u16;
+            let mut best_t = 0u32;
             let mut best_c = -1i64;
             let mut best_n = 0u32;
             for (&t, &cnt) in dist {
@@ -429,7 +429,7 @@ pub fn predict_witness_plain_with_priors(
 }
 
 /// Plain-form prediction: the witness variant's token, one code path.
-pub fn predict_plain(store: &Store, code: &[u8; STAGES]) -> u16 {
+pub fn predict_plain(store: &Store, code: &[u8; STAGES]) -> u32 {
     predict_witness_plain(store, code).token
 }
 
@@ -439,7 +439,7 @@ pub struct Runtime<'a> {
     pub rot: [usize; WINDOW + 1],
     pub pop: [u8; 256],
     pub kernel: OpKernel,
-    pub recent: Vec<u16>,
+    pub recent: Vec<u32>,
 }
 
 impl<'a> Runtime<'a> {
@@ -462,7 +462,7 @@ impl<'a> Runtime<'a> {
 
     /// Corpus-free kernel path: window of token ids, oldest first;
     /// identical values to the plain window path, every op counted.
-    pub fn assign_window(&mut self, window: &[u16]) -> [u8; STAGES] {
+    pub fn assign_window(&mut self, window: &[u32]) -> [u8; STAGES] {
         let rot = self.rot;
         let b = bundle_window_kernel(&mut self.kernel, self.art, &rot, window);
         let sig = sign_signature(&mut self.kernel, &b, &self.art.thresholds);
@@ -495,7 +495,7 @@ impl<'a> Runtime<'a> {
     }
 
     /// Kernel-counted prediction: the witness variant's token, one code path.
-    pub fn predict(&mut self, store: &Store, code: &[u8; STAGES]) -> u16 {
+    pub fn predict(&mut self, store: &Store, code: &[u8; STAGES]) -> u32 {
         self.predict_witness(store, code).token
     }
 
@@ -504,7 +504,7 @@ impl<'a> Runtime<'a> {
     pub fn predict_witness(&mut self, store: &Store, code: &[u8; STAGES]) -> Prediction {
         for d in (0..=STAGES).rev() {
             if let Some(dist) = store[d].get(&code[..d]) {
-                let mut best_t = 0u16;
+                let mut best_t = 0u32;
                 let mut best_c = -1000000i64;
                 let mut best_n = 0u32;
                 for (&t, &cnt) in dist {
@@ -539,11 +539,11 @@ impl<'a> Runtime<'a> {
         &mut self,
         store: &Store,
         code: &[u8; STAGES],
-        priors: &std::collections::HashMap<u16, u32>,
+        priors: &std::collections::HashMap<u32, u32>,
     ) -> Prediction {
         for d in (0..=STAGES).rev() {
             if let Some(dist) = store[d].get(&code[..d]) {
-                let mut best_t = 0u16;
+                let mut best_t = 0u32;
                 let mut best_c = -1000000i64;
                 let mut best_n = 0u32;
                 for (&t, &cnt) in dist {
@@ -584,10 +584,10 @@ impl<'a> Runtime<'a> {
     pub fn generate_greedy_into(
         &mut self,
         store: &Store,
-        seed: &[u16],
+        seed: &[u32],
         out: &mut [Prediction],
     ) -> usize {
-        let mut window = [0u16; WINDOW];
+        let mut window = [0u32; WINDOW];
         let seed = &seed[seed.len().saturating_sub(WINDOW)..];
         let mut window_len = seed.len();
         window[..window_len].copy_from_slice(seed);
@@ -610,14 +610,14 @@ impl<'a> Runtime<'a> {
 /// Add one (context code → next token) evidence count across every grade
 /// level — the store's single write path, used by `build_store` at compile
 /// time and by online indexing at runtime alike.
-pub fn add_evidence(store: &mut Store, code: &[u8; STAGES], next: u16) {
-    *store[0].entry(vec![]).or_default().entry(next).or_default() += 1;
+pub fn add_evidence(store: &mut Store, code: &[u8; STAGES], next: u32, weight: u32) {
+    *store[0].entry(vec![]).or_default().entry(next).or_default() += weight;
     for d in 1..=STAGES {
         *store[d]
             .entry(code[..d].to_vec())
             .or_default()
             .entry(next)
-            .or_default() += 1;
+            .or_default() += weight;
     }
 }
 
@@ -632,7 +632,13 @@ pub fn build_store(art: &Compiled, c: &Corpus) -> (Store, Vec<[u8; STAGES]>) {
         if c.story[i] >= cut {
             continue;
         }
-        add_evidence(&mut store, code, c.next[i]);
+        for k_idx in 0..3 {
+            let tok = c.top_tokens[i][k_idx];
+            let weight = c.top_weights[i][k_idx];
+            if weight > 0 {
+                add_evidence(&mut store, code, tok, weight);
+            }
+        }
     }
     (store, codes)
 }
@@ -690,12 +696,12 @@ pub fn parse_store(b: &[u8]) -> Option<Store> {
             o += 4;
             let mut dist = BTreeMap::new();
             for _ in 0..n_entries {
-                if o + 6 > b.len() {
+                if o + 8 > b.len() {
                     return None;
                 }
-                let t = u16::from_le_bytes(b[o..o + 2].try_into().ok()?);
-                let cnt = u32::from_le_bytes(b[o + 2..o + 6].try_into().ok()?);
-                o += 6;
+                let t = u32::from_le_bytes(b[o..o + 4].try_into().ok()?);
+                let cnt = u32::from_le_bytes(b[o + 4..o + 8].try_into().ok()?);
+                o += 8;
                 dist.insert(t, cnt);
             }
             level.insert(key, dist);
@@ -716,6 +722,6 @@ pub fn store_kappa(store: &Store) -> String {
 /// Remove one graded store entry, returning its evidence — the deletion
 /// half of the provenance/deletion promise (TRANSFORMERLESS.md §5): to
 /// remove a contribution is to remove its κ.
-pub fn remove_entry(store: &mut Store, depth: usize, key: &[u8]) -> Option<BTreeMap<u16, u32>> {
+pub fn remove_entry(store: &mut Store, depth: usize, key: &[u8]) -> Option<BTreeMap<u32, u32>> {
     store.get_mut(depth)?.remove(key)
 }

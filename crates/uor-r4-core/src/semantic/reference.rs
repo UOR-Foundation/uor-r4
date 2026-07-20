@@ -16,7 +16,7 @@ pub struct SemanticRouteReferenceV1 {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct FacetRoute {
     pub axis: u32,
-    pub path: Vec<u16>,
+    pub path: Vec<u32>,
     pub confidence_q16: u16,
     pub valid_from_epoch: u64,
     pub evidence_root_cid: KappaLabel,

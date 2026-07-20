@@ -690,6 +690,22 @@ impl Llama {
     }
 }
 
+pub trait RepresentationSource {
+    fn vocab_size(&self) -> usize;
+    fn source_dimension(&self) -> usize;
+    fn tokenizer_address(&self) -> &str;
+    fn read_embedding_rows(
+        &self,
+        range: std::ops::Range<usize>,
+        output: &mut [f32],
+    ) -> Result<(), String>;
+}
+
+pub trait BehaviorSource {
+    fn reset(&mut self);
+    fn step(&mut self, token: usize, pos: usize, logits: &mut [f32]);
+}
+
 /// The TWO-SURFACE interface every source architecture must expose to the
 /// compiler: the embedding table (representation) and a sequential
 /// next-token forward (behavior). The compiler is written against this
@@ -697,7 +713,7 @@ impl Llama {
 /// claim (PROOF.md P4) is enforced by construction, not by inspection.
 /// A qwen- or phi-class source implements this trait and nothing
 /// downstream changes.
-pub trait TeacherOracle {
+pub trait TeacherOracle: RepresentationSource + BehaviorSource {
     fn vocab(&self) -> usize;
     fn dim(&self) -> usize;
     fn seq_len(&self) -> usize;
@@ -713,12 +729,8 @@ pub trait TeacherOracle {
     fn source_bytes(&self) -> usize;
     /// Copy the embedding row of `token` into `out` (len == dim).
     fn embedding(&self, token: usize, out: &mut [f32]);
-    /// Run one sequential forward step; write logits (len == vocab).
-    /// Positions must be fed in order from 0 within one session; call
-    /// `reset` to start a new sequence.
-    fn reset(&mut self);
-    fn step(&mut self, token: usize, pos: usize, logits: &mut [f32]);
 }
+
 
 /// The llama-family adapter: `Llama` plus its recurrent state.
 pub struct LlamaOracle {
@@ -744,6 +756,43 @@ impl LlamaOracle {
     }
 }
 
+impl RepresentationSource for LlamaOracle {
+    fn vocab_size(&self) -> usize {
+        self.model.cfg.vocab
+    }
+    fn source_dimension(&self) -> usize {
+        self.model.cfg.dim
+    }
+    fn tokenizer_address(&self) -> &str {
+        "local-llama-tokenizer"
+    }
+    fn read_embedding_rows(
+        &self,
+        range: std::ops::Range<usize>,
+        output: &mut [f32],
+    ) -> Result<(), String> {
+        let d = self.model.cfg.dim;
+        let count = range.end - range.start;
+        if output.len() < count * d {
+            return Err("output buffer too small".to_string());
+        }
+        let start_offset = self.model.emb + range.start * d;
+        let end_offset = self.model.emb + range.end * d;
+        output[..count * d].copy_from_slice(&self.model.w[start_offset..end_offset]);
+        Ok(())
+    }
+}
+
+impl BehaviorSource for LlamaOracle {
+    fn reset(&mut self) {
+        self.state.reset();
+    }
+    fn step(&mut self, token: usize, pos: usize, logits: &mut [f32]) {
+        self.model.forward(&mut self.state, token, pos, false);
+        logits.copy_from_slice(&self.state.logits);
+    }
+}
+
 impl TeacherOracle for LlamaOracle {
     fn vocab(&self) -> usize {
         self.model.cfg.vocab
@@ -765,13 +814,6 @@ impl TeacherOracle for LlamaOracle {
         out.copy_from_slice(
             &self.model.w[self.model.emb + token * d..self.model.emb + (token + 1) * d],
         );
-    }
-    fn reset(&mut self) {
-        self.state.reset();
-    }
-    fn step(&mut self, token: usize, pos: usize, logits: &mut [f32]) {
-        self.model.forward(&mut self.state, token, pos, false);
-        logits.copy_from_slice(&self.state.logits);
     }
 }
 
@@ -981,6 +1023,44 @@ fn append_tensor(
     Ok(())
 }
 
+impl RepresentationSource for HuggingFaceLlamaOracle {
+    fn vocab_size(&self) -> usize {
+        self.model.cfg.vocab
+    }
+    fn source_dimension(&self) -> usize {
+        self.model.cfg.dim
+    }
+    fn tokenizer_address(&self) -> &str {
+        "huggingface-tokenizer"
+    }
+    fn read_embedding_rows(
+        &self,
+        range: std::ops::Range<usize>,
+        output: &mut [f32],
+    ) -> Result<(), String> {
+        let d = self.model.cfg.dim;
+        let count = range.end - range.start;
+        if output.len() < count * d {
+            return Err("output buffer too small".to_string());
+        }
+        let start_offset = self.model.emb + range.start * d;
+        let end_offset = self.model.emb + range.end * d;
+        output[..count * d].copy_from_slice(&self.model.w[start_offset..end_offset]);
+        Ok(())
+    }
+}
+
+impl BehaviorSource for HuggingFaceLlamaOracle {
+    fn reset(&mut self) {
+        self.state.reset();
+    }
+    fn step(&mut self, token: usize, pos: usize, logits: &mut [f32]) {
+        self.model
+            .forward(&mut self.state, token, pos, self.fast_matmul);
+        logits.copy_from_slice(&self.state.logits);
+    }
+}
+
 impl TeacherOracle for HuggingFaceLlamaOracle {
     fn vocab(&self) -> usize {
         self.model.cfg.vocab
@@ -1017,14 +1097,6 @@ impl TeacherOracle for HuggingFaceLlamaOracle {
             let bucket = &row[start..end];
             *value = bucket.iter().sum::<f32>() / bucket.len() as f32;
         }
-    }
-    fn reset(&mut self) {
-        self.state.reset();
-    }
-    fn step(&mut self, token: usize, pos: usize, logits: &mut [f32]) {
-        self.model
-            .forward(&mut self.state, token, pos, self.fast_matmul);
-        logits.copy_from_slice(&self.state.logits);
     }
 }
 

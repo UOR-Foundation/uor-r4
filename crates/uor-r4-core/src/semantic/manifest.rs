@@ -2,6 +2,13 @@ use serde::{Deserialize, Serialize};
 use super::reference::KappaLabel;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct LearningOrigin {
+    pub kind: String, // e.g. "teacher-distillation" or "native-corpus"
+    pub teacher_model: Option<String>,
+    pub teacher_revision: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SemanticSpaceManifestV1 {
     pub space_name: String,
     pub parent_space_cid: Option<KappaLabel>,
@@ -15,4 +22,5 @@ pub struct SemanticSpaceManifestV1 {
     pub compiler_cid: KappaLabel,
     pub quality_certificate_cid: KappaLabel,
     pub epoch: u64,
+    pub learning_origin: Option<LearningOrigin>,
 }

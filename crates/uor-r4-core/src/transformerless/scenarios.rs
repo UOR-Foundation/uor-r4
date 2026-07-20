@@ -117,14 +117,14 @@ fn bytelevel_inverse() -> BTreeMap<char, u8> {
 /// rule both systems share; the fluency gate validates its adequacy).
 pub struct Tokenizer {
     pub vocab: Vec<Vec<u8>>,
-    map: BTreeMap<Vec<u8>, u16>,
+    map: BTreeMap<Vec<u8>, u32>,
 }
 
 impl Tokenizer {
     /// Load and validate a tokenizer without panicking on malformed input.
     pub fn try_load(path: impl AsRef<Path>) -> io::Result<Self> {
         let bytes = std::fs::read(path)?;
-        let mut vocab = Vec::with_capacity(32_000);
+        let mut vocab = Vec::new();
         let mut offset = 0usize;
         while offset < bytes.len() {
             let length_bytes = bytes.get(offset..offset + 4).ok_or_else(|| {
@@ -133,30 +133,25 @@ impl Tokenizer {
             let length = i32::from_le_bytes(
                 length_bytes
                     .try_into()
-                    .expect("the checked tokenizer length is four bytes"),
+                    .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?,
             );
-            let length = usize::try_from(length).map_err(|_| {
-                io::Error::new(io::ErrorKind::InvalidData, "negative tokenizer length")
-            })?;
-            let start = offset + 4;
-            let end = start.checked_add(length).ok_or_else(|| {
-                io::Error::new(io::ErrorKind::InvalidData, "tokenizer length overflow")
-            })?;
-            let token = bytes.get(start..end).ok_or_else(|| {
+            offset += 4;
+            if length < 0 {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "negative token length",
+                ));
+            }
+            let length = length as usize;
+            let token = bytes.get(offset..offset + length).ok_or_else(|| {
                 io::Error::new(io::ErrorKind::InvalidData, "truncated tokenizer token")
             })?;
             vocab.push(token.to_vec());
-            offset = end;
-        }
-        if vocab.len() > usize::from(u16::MAX) + 1 {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "tokenizer vocabulary exceeds u16 token ids",
-            ));
+            offset += length;
         }
         let mut map = BTreeMap::new();
         for (index, token) in vocab.iter().enumerate() {
-            let id = u16::try_from(index).expect("validated tokenizer vocabulary fits u16");
+            let id = index as u32;
             map.entry(token.clone()).or_insert(id);
         }
         Ok(Tokenizer { vocab, map })
@@ -166,8 +161,8 @@ impl Tokenizer {
         Self::try_load(path).expect("tokenizer file must be readable and well-formed")
     }
 
-    pub fn encode(&self, text: &str) -> Vec<u16> {
-        let mut toks = vec![0u16; text.chars().count().saturating_add(2)];
+    pub fn encode(&self, text: &str) -> Vec<u32> {
+        let mut toks = vec![0u32; text.chars().count().saturating_add(2)];
         let count = self
             .encode_into(text, &mut toks)
             .expect("token buffer sized from input characters");
@@ -176,7 +171,7 @@ impl Tokenizer {
     }
 
     /// Encode into caller-owned storage without allocating.
-    pub fn encode_into(&self, text: &str, out: &mut [u16]) -> io::Result<usize> {
+    pub fn encode_into(&self, text: &str, out: &mut [u32]) -> io::Result<usize> {
         let capacity_error = || io::Error::new(io::ErrorKind::InvalidInput, "token buffer full");
         let mut len = 1usize;
         *out.first_mut().ok_or_else(capacity_error)? = 1;
@@ -203,7 +198,7 @@ impl Tokenizer {
             len += 1;
         }
         loop {
-            let mut best: Option<(u16, usize)> = None;
+            let mut best: Option<(u32, usize)> = None;
             for i in 1..len.saturating_sub(1) {
                 let left = &self.vocab[out[i] as usize];
                 let right = &self.vocab[out[i + 1] as usize];
@@ -232,7 +227,7 @@ impl Tokenizer {
         Ok(len)
     }
 
-    pub fn decode(&self, toks: &[u16]) -> String {
+    pub fn decode(&self, toks: &[u32]) -> String {
         let mut bytes = Vec::new();
         for &t in toks {
             if t == 1 || t == 2 {
@@ -244,7 +239,7 @@ impl Tokenizer {
     }
 
     /// Decode into caller-owned byte storage without allocating.
-    pub fn decode_into(&self, toks: &[u16], out: &mut [u8]) -> io::Result<usize> {
+    pub fn decode_into(&self, toks: &[u32], out: &mut [u8]) -> io::Result<usize> {
         let mut len = 0usize;
         for &token in toks {
             if token == 1 || token == 2 {
@@ -324,7 +319,7 @@ fn scenario_set() -> Vec<Scenario> {
 
 /// Adapter: a token sequence as a single-story Corpus, so the scenario
 /// path runs the IDENTICAL runtime functions certified in PROOF.md.
-fn as_corpus(tokens: &[u16], t_argmax: &[u16]) -> Corpus {
+fn as_corpus(tokens: &[u32], t_argmax: &[u32]) -> Corpus {
     let n = tokens.len();
     Corpus {
         n,
@@ -337,7 +332,8 @@ fn as_corpus(tokens: &[u16], t_argmax: &[u16]) -> Corpus {
             nx
         },
         t_argmax: t_argmax.to_vec(),
-        t_lp: vec![0.0; n],
+        top_tokens: vec![[0u32; 3]; n],
+        top_weights: vec![[0u32; 3]; n],
     }
 }
 
@@ -380,7 +376,7 @@ pub fn scenarios(oracle: &mut dyn TeacherOracle) {
                     best = i;
                 }
             }
-            seq.push(best as u16);
+            seq.push(best as u32);
             oracle.step(best, pos, &mut logits);
         }
         let cont = tok.decode(&seq[ids.len()..]);
@@ -407,8 +403,8 @@ pub fn scenarios(oracle: &mut dyn TeacherOracle) {
     println!("|---|---|---|---|---|---|");
 
     for sc in scenario_set() {
-        // 1. token stream: prompt (+ teacher greedy continuation if prompt scenario)
-        let prompt: Vec<u16> = if sc.text.is_empty() {
+        // 1. token stream: prompt (+ teacher greedy greedy continuation if prompt scenario)
+        let prompt: Vec<u32> = if sc.text.is_empty() {
             vec![1]
         } else {
             let mut p = tok.encode(&sc.text);
@@ -417,7 +413,7 @@ pub fn scenarios(oracle: &mut dyn TeacherOracle) {
         };
         oracle.reset();
         let mut seq = prompt.clone();
-        let mut t_argmax: Vec<u16> = Vec::new();
+        let mut t_argmax: Vec<u32> = Vec::new();
         let t0 = std::time::Instant::now();
         for (pos, &t) in prompt.iter().enumerate() {
             oracle.step(t as usize, pos, &mut logits);
@@ -427,13 +423,13 @@ pub fn scenarios(oracle: &mut dyn TeacherOracle) {
                     best = i;
                 }
             }
-            t_argmax.push(best as u16);
+            t_argmax.push(best as u32);
         }
         if !sc.real_text {
             let cont = 64usize.min(cap.saturating_sub(prompt.len()));
             for _ in 0..cont {
                 let last = *t_argmax.last().unwrap() as usize;
-                seq.push(last as u16);
+                seq.push(last as u32);
                 let pos = seq.len() - 1;
                 oracle.step(last, pos, &mut logits);
                 let mut best = 0usize;
@@ -442,7 +438,7 @@ pub fn scenarios(oracle: &mut dyn TeacherOracle) {
                         best = i;
                     }
                 }
-                t_argmax.push(best as u16);
+                t_argmax.push(best as u32);
             }
         }
         let teacher_ns = t0.elapsed().as_nanos();
@@ -451,7 +447,7 @@ pub fn scenarios(oracle: &mut dyn TeacherOracle) {
         let cs = as_corpus(&seq, &t_argmax);
         let n_eval = cs.n - 1; // positions with a defined next token
         let t0 = std::time::Instant::now();
-        let preds: Vec<u16> = (0..n_eval)
+        let preds: Vec<u32> = (0..n_eval)
             .map(|i| predict_plain(store_ref, &code_plain(&art, &rot, &cs, i)))
             .collect();
         let tless_ns = t0.elapsed().as_nanos();

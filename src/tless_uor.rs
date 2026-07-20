@@ -248,7 +248,7 @@ pub fn address_container(tla3: &[u8]) -> Result<String, String> {
 pub fn address_store_entry(
     depth: usize,
     key: &[u8],
-    dist: &BTreeMap<u16, u32>,
+    dist: &BTreeMap<u32, u32>,
 ) -> Result<String, String> {
     let mut item = Vec::with_capacity(16 + key.len() + dist.len() * 7);
     cbor_header(&mut item, 5, 3); // map(3)
@@ -274,7 +274,7 @@ pub fn address_store_entry(
 /// Address-attested deletion: remove the graded store entry at
 /// (depth, key), returning its pre-removal κ-address and evidence. The
 /// returned address is the deletion attestation — the κ that was removed.
-pub fn delete_store_entry(depth: usize, key: &[u8]) -> Option<(String, BTreeMap<u16, u32>)> {
+pub fn delete_store_entry(depth: usize, key: &[u8]) -> Option<(String, BTreeMap<u32, u32>)> {
     with_tless_state_mut(|st| {
         let dist = st.store.get(depth)?.get(key)?.clone();
         let addr = address_store_entry(depth, key, &dist).ok()?;
@@ -323,22 +323,22 @@ fn with_tokenizer<R>(
 }
 
 /// Tokenize text (BOS-prefixed) with the bound tokenizer.
-pub fn tless_tokenize(text: &str) -> Option<Vec<u16>> {
+pub fn tless_tokenize(text: &str) -> Option<Vec<u32>> {
     with_tokenizer(|t| t.encode(text))
 }
 
 /// Tokenize into caller-owned storage without allocating.
-pub fn tless_tokenize_into(text: &str, out: &mut [u16]) -> Option<usize> {
+pub fn tless_tokenize_into(text: &str, out: &mut [u32]) -> Option<usize> {
     with_tokenizer(|tokenizer| tokenizer.encode_into(text, out).ok()).flatten()
 }
 
 /// Detokenize token ids with the bound tokenizer.
-pub fn tless_detokenize(tokens: &[u16]) -> Option<String> {
+pub fn tless_detokenize(tokens: &[u32]) -> Option<String> {
     with_tokenizer(|t| t.decode(tokens))
 }
 
 /// Detokenize into caller-owned byte storage without allocating.
-pub fn tless_detokenize_into(tokens: &[u16], out: &mut [u8]) -> Option<usize> {
+pub fn tless_detokenize_into(tokens: &[u32], out: &mut [u8]) -> Option<usize> {
     with_tokenizer(|tokenizer| tokenizer.decode_into(tokens, out).ok()).flatten()
 }
 
@@ -346,7 +346,7 @@ pub fn tless_detokenize_into(tokens: &[u16], out: &mut [u8]) -> Option<usize> {
 /// (document-isolated: context never crosses the stream start). Returns the
 /// number of (code, next) evidence positions written. The store κ changes —
 /// that change is the attestation trail of what was learned.
-pub fn index_token_stream(tokens: &[u16]) -> Option<usize> {
+pub fn index_token_stream(tokens: &[u32]) -> Option<usize> {
     with_tless_state_mut(|st| {
         let rot = runtime::derive_rotations();
         let mut n = 0usize;
@@ -354,7 +354,7 @@ pub fn index_token_stream(tokens: &[u16]) -> Option<usize> {
             let window = &tokens[i.saturating_sub(WINDOW - 1)..=i];
             let b = runtime::bundle_window_plain(&st.art, &rot, window);
             let code = runtime::assign_plain(&st.art, &runtime::sig_plain(&st.art, &b));
-            runtime::add_evidence(&mut st.store, &code, tokens[i + 1]);
+            runtime::add_evidence(&mut st.store, &code, tokens[i + 1], 1);
             n += 1;
         }
         st.store_kappa = runtime::store_kappa(&st.store);
@@ -364,7 +364,7 @@ pub fn index_token_stream(tokens: &[u16]) -> Option<usize> {
 
 /// Greedy generation from a seed window against the bound store: per-step
 /// witnesses (token, depth, evidence count), attributable by construction.
-pub fn generate_steps(seed: &[u16], len: usize) -> Option<Vec<runtime::Prediction>> {
+pub fn generate_steps(seed: &[u32], len: usize) -> Option<Vec<runtime::Prediction>> {
     with_tless_state(|st| {
         let mut rt = runtime::Runtime::new(&st.art);
         let mut predictions = vec![runtime::Prediction::default(); len];
@@ -374,7 +374,7 @@ pub fn generate_steps(seed: &[u16], len: usize) -> Option<Vec<runtime::Predictio
 }
 
 /// Allocation-free generation into caller-owned prediction storage.
-pub fn generate_steps_into(seed: &[u16], out: &mut [runtime::Prediction]) -> Option<usize> {
+pub fn generate_steps_into(seed: &[u32], out: &mut [runtime::Prediction]) -> Option<usize> {
     with_tless_state(|st| {
         let mut rt = runtime::Runtime::new(&st.art);
         rt.generate_greedy_into(&st.store, seed, out)
@@ -382,17 +382,14 @@ pub fn generate_steps_into(seed: &[u16], out: &mut [runtime::Prediction]) -> Opt
 }
 
 // =====================================================================
-// TlessAxis: mul-free prediction with census witness
-// =====================================================================
-
-pub const TLESS_INPUT_BYTES: usize = WINDOW * 2; // 16
-pub const TLESS_OUTPUT_BYTES: usize = 31;
+pub const TLESS_INPUT_BYTES: usize = WINDOW * 4; // 32
+pub const TLESS_OUTPUT_BYTES: usize = 33;
 
 uor_foundation_sdk::axis! {
     /// Mul-free table-native prediction axis (transformerless runtime).
     pub trait TlessAxis: AxisExtension {
         const AXIS_ADDRESS: &'static str = "https://uor.foundation/axis/TlessAxis";
-        const MAX_OUTPUT_BYTES: usize = 32;
+        const MAX_OUTPUT_BYTES: usize = 36;
         fn predict(input: &[u8], out: &mut [u8]) -> Result<usize, ShapeViolation>;
     }
 }
@@ -404,7 +401,7 @@ fn tless_violation(constraint: &'static str, min: usize, max: usize) -> ShapeVio
         shape_iri: <TlessAxisImpl as TlessAxis>::AXIS_ADDRESS,
         constraint_iri: constraint,
         property_iri: "https://uor.foundation/axis/inputBytes",
-        expected_range: "https://uor.foundation/axis/Bytes16",
+        expected_range: "https://uor.foundation/axis/Bytes32",
         min_count: min as u32,
         max_count: max as u32,
         kind: uor_foundation::ViolationKind::ValueCheck,
@@ -413,10 +410,10 @@ fn tless_violation(constraint: &'static str, min: usize, max: usize) -> ShapeVio
 
 impl TlessAxis for TlessAxisImpl {
     const AXIS_ADDRESS: &'static str = "https://uor.foundation/axis/TlessAxis/Impl";
-    const MAX_OUTPUT_BYTES: usize = 32;
+    const MAX_OUTPUT_BYTES: usize = 36;
 
-    /// input: WINDOW u16 token ids, little-endian, oldest first.
-    /// output (31 bytes, big-endian fields): token u16 | depth u8 |
+    /// input: WINDOW u32 token ids, little-endian, oldest first.
+    /// output (33 bytes, big-endian fields): token u32 | depth u8 |
     /// code [u8; 4] | count u32 | adds | xors | shifts | compares |
     /// table_reads (u32 each). No multiply field exists, by design.
     fn predict(input: &[u8], out: &mut [u8]) -> Result<usize, ShapeViolation> {
@@ -434,24 +431,29 @@ impl TlessAxis for TlessAxisImpl {
                 TLESS_OUTPUT_BYTES,
             ));
         }
-        let mut window = [0u16; WINDOW];
+        let mut window = [0u32; WINDOW];
         for (i, w) in window.iter_mut().enumerate() {
-            *w = u16::from_le_bytes([input[2 * i], input[2 * i + 1]]);
+            *w = u32::from_le_bytes([
+                input[4 * i],
+                input[4 * i + 1],
+                input[4 * i + 2],
+                input[4 * i + 3],
+            ]);
         }
         with_tless_state(|st| {
             let mut rt = runtime::Runtime::new(&st.art);
             let code = rt.assign_window(&window);
             let p = rt.predict_witness(&st.store, &code);
             let k = &rt.kernel;
-            out[0..2].copy_from_slice(&p.token.to_be_bytes());
-            out[2] = p.depth as u8;
-            out[3..7].copy_from_slice(&code);
-            out[7..11].copy_from_slice(&p.count.to_be_bytes());
-            out[11..15].copy_from_slice(&(k.adds as u32).to_be_bytes());
-            out[15..19].copy_from_slice(&(k.xors as u32).to_be_bytes());
-            out[19..23].copy_from_slice(&(k.shifts as u32).to_be_bytes());
-            out[23..27].copy_from_slice(&(k.compares as u32).to_be_bytes());
-            out[27..31].copy_from_slice(&(k.table_reads as u32).to_be_bytes());
+            out[0..4].copy_from_slice(&p.token.to_be_bytes());
+            out[4] = p.depth as u8;
+            out[5..9].copy_from_slice(&code);
+            out[9..13].copy_from_slice(&p.count.to_be_bytes());
+            out[13..17].copy_from_slice(&(k.adds as u32).to_be_bytes());
+            out[17..21].copy_from_slice(&(k.xors as u32).to_be_bytes());
+            out[21..25].copy_from_slice(&(k.shifts as u32).to_be_bytes());
+            out[25..29].copy_from_slice(&(k.compares as u32).to_be_bytes());
+            out[29..33].copy_from_slice(&(k.table_reads as u32).to_be_bytes());
             TLESS_OUTPUT_BYTES
         })
         .ok_or(ShapeViolation {
@@ -475,7 +477,7 @@ axis_extension_impl_for_tless_axis!(TlessAxisImpl);
 #[derive(Clone, Copy)]
 pub struct TlessPredictInput<'a> {
     pub window: &'a [u8],
-    pub data: &'a [u8], // packed WINDOW×u16 LE, 16 bytes
+    pub data: &'a [u8], // packed WINDOW×u32 LE, 32 bytes
 }
 
 impl ConstrainedTypeShape for TlessPredictInput<'_> {
@@ -494,7 +496,7 @@ impl<'a> IntoBindingValue<'a> for TlessPredictInput<'a> {
 }
 
 impl PartitionProductFields for TlessPredictInput<'_> {
-    const FIELDS: &'static [(u32, u32)] = &[(0, 16)];
+    const FIELDS: &'static [(u32, u32)] = &[(0, 32)];
     const FIELD_NAMES: &'static [&'static str] = &["window"];
 }
 
@@ -665,22 +667,22 @@ mod tests {
     fn axis_predict_carries_census_witness() {
         fixture_state();
         let mut input = [0u8; TLESS_INPUT_BYTES];
-        for (i, w) in [1u16, 2, 3, 4, 5, 6, 7, 8].iter().enumerate() {
-            input[2 * i..2 * i + 2].copy_from_slice(&w.to_le_bytes());
+        for (i, w) in [1u32, 2, 3, 4, 5, 6, 7, 8].iter().enumerate() {
+            input[4 * i..4 * i + 4].copy_from_slice(&w.to_le_bytes());
         }
-        let mut out = [0u8; 32];
+        let mut out = [0u8; 36];
         let n = TlessAxisImpl::predict(&input, &mut out).expect("predict");
         assert_eq!(n, TLESS_OUTPUT_BYTES);
-        let token = u16::from_be_bytes([out[0], out[1]]);
-        let depth = out[2];
-        let count = u32::from_be_bytes(out[7..11].try_into().unwrap());
-        let adds = u32::from_be_bytes(out[11..15].try_into().unwrap());
-        let table_reads = u32::from_be_bytes(out[27..31].try_into().unwrap());
+        let token = u32::from_be_bytes([out[0], out[1], out[2], out[3]]);
+        let depth = out[4];
+        let count = u32::from_be_bytes(out[9..13].try_into().unwrap());
+        let adds = u32::from_be_bytes(out[13..17].try_into().unwrap());
+        let table_reads = u32::from_be_bytes(out[29..33].try_into().unwrap());
         assert_eq!(token, 1, "only level-0 entry populated");
         assert_eq!(depth, 0, "synthetic store answers at level 0");
         assert_eq!(count, 10);
         assert!(adds > 0 && table_reads > 0, "census recorded the path");
-        // No multiply field exists in the record: bytes 11..31 are exactly
+        // No multiply field exists in the record: bytes 13..33 are exactly
         // the five census counters, and OpKernel has no multiply to count.
     }
 
@@ -688,8 +690,8 @@ mod tests {
     fn grounded_mints_and_replays() {
         fixture_state();
         let mut buf = [0u8; TLESS_INPUT_BYTES];
-        for (i, w) in [1u16, 2, 3, 4, 5, 6, 7, 8].iter().enumerate() {
-            buf[2 * i..2 * i + 2].copy_from_slice(&w.to_le_bytes());
+        for (i, w) in [1u32, 2, 3, 4, 5, 6, 7, 8].iter().enumerate() {
+            buf[4 * i..4 * i + 4].copy_from_slice(&w.to_le_bytes());
         }
         let input = TlessPredictInput {
             window: &buf,
@@ -719,7 +721,7 @@ mod tests {
         // occupies the same depth-1 area as [1], whose evidence says 5 —
         // graded backoff, not level 0.
         let steps = generate_steps(&[1], 4).expect("generate");
-        let tokens: Vec<u16> = steps.iter().map(|p| p.token).collect();
+        let tokens: Vec<u32> = steps.iter().map(|p| p.token).collect();
         assert_eq!(tokens, vec![5, 6, 7, 5]);
         let depths: Vec<usize> = steps.iter().map(|p| p.depth).collect();
         assert_eq!(depths, vec![4, 4, 4, 1]);
@@ -759,7 +761,7 @@ mod tests {
         assert_eq!(a1, a2, "content addressing is deterministic");
         assert!(a1.starts_with("blake3:"));
         let mut d1 = BTreeMap::new();
-        d1.insert(1u16, 10u32);
+        d1.insert(1u32, 10u32);
         let e1 = address_store_entry(0, &[], &d1).expect("entry");
         let e2 = address_store_entry(1, &[9], &d1).expect("entry");
         assert!(e1.starts_with("blake3:") && e2.starts_with("blake3:"));

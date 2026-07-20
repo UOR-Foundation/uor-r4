@@ -283,6 +283,20 @@ pub fn compile_hugging_face(args: &[String]) -> Result<(), String> {
     let store_cid = calculate_file_hash(&store_path)?;
     let corpus_cid = calculate_file_hash(Path::new(&meta))?;
 
+    let origin = if let Some(model_name) = options.model.clone() {
+        Some(crate::semantic::LearningOrigin {
+            kind: "teacher-distillation".to_string(),
+            teacher_model: Some(model_name),
+            teacher_revision: options.revision.clone(),
+        })
+    } else {
+        Some(crate::semantic::LearningOrigin {
+            kind: "native-corpus".to_string(),
+            teacher_model: None,
+            teacher_revision: None,
+        })
+    };
+
     let manifest = crate::semantic::SemanticSpaceManifestV1 {
         space_name: slug.clone(),
         parent_space_cid: None,
@@ -300,6 +314,7 @@ pub fn compile_hugging_face(args: &[String]) -> Result<(), String> {
         compiler_cid: "blake3:compiler_r4_v0.1.0".to_string(),
         quality_certificate_cid: "blake3:quality_certificate_r4_v1".to_string(),
         epoch: 1,
+        learning_origin: origin,
     };
 
     let manifest_json = serde_json::to_string_pretty(&manifest).map_err(|error| error.to_string())?;
