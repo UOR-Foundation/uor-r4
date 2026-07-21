@@ -252,6 +252,12 @@ pub fn compile_hugging_face(args: &[String]) -> Result<(), String> {
     };
     eprintln!("teacher corpus complete; compiling table-native artifact...");
     let artifacts = compiler::compile(&oracle, &corpus);
+    eprintln!("calibrating masked-hamming region radii...");
+    let calibration = compiler::calibrate_hamming_regions(&artifacts, &corpus);
+    let calibration_json =
+        serde_json::to_string_pretty(&calibration).map_err(|error| error.to_string())?;
+    std::fs::write(output.join("hamming_calibration.json"), calibration_json)
+        .map_err(|error| error.to_string())?;
     eprintln!("inducing hierarchical codes...");
     let hc = compiler::induce_hierarchical_codes(&artifacts.token_codes, oracle.vocab(), &corpus);
     let hc_json = serde_json::to_string_pretty(&hc).map_err(|error| error.to_string())?;
@@ -322,7 +328,8 @@ pub fn compile_hugging_face(args: &[String]) -> Result<(), String> {
         learning_origin: origin,
     };
 
-    let manifest_json = serde_json::to_string_pretty(&manifest).map_err(|error| error.to_string())?;
+    let manifest_json =
+        serde_json::to_string_pretty(&manifest).map_err(|error| error.to_string())?;
     std::fs::write(output.join("space_manifest.json"), manifest_json)
         .map_err(|error| error.to_string())?;
     eprintln!("space manifest generated: space_manifest.json");
