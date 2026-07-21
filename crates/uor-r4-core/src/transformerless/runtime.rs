@@ -673,7 +673,7 @@ impl<'a> Runtime<'a> {
 /// level — the store's single write path, used by `build_store` at compile
 /// time and by online indexing at runtime alike.
 pub fn add_evidence(store: &mut Store, code: &[u8; STAGES], next: u32, weight: u32) {
-    add_evidence_multi(store, &[vec![Vec::new()]], code, next, weight);
+    add_evidence_multi(store, &[], code, next, weight);
 }
 
 /// Add one (context memberships → next token) evidence count using bounded
@@ -713,16 +713,12 @@ pub fn add_evidence_multi(
 pub fn build_store(art: &Compiled, c: &Corpus) -> (Store, Vec<[u8; STAGES]>) {
     let rot = derive_rotations();
     let cut = train_cut(c);
+    let mut store: Store = (0..=STAGES).map(|_| BTreeMap::new()).collect();
     let mut codes: Vec<[u8; STAGES]> = Vec::with_capacity(c.n);
-    let mut memberships: Vec<Vec<Vec<Vec<u8>>>> = Vec::with_capacity(c.n);
     for i in 0..c.n {
         let b = bundle_plain(art, &rot, c, i);
         let (code, by_depth) = assign_memberships_plain(art, &sig_plain(art, &b));
         codes.push(code);
-        memberships.push(by_depth);
-    }
-    let mut store: Store = (0..=STAGES).map(|_| BTreeMap::new()).collect();
-    for (i, code) in codes.iter().enumerate().take(c.n) {
         if c.story[i] >= cut {
             continue;
         }
@@ -730,7 +726,7 @@ pub fn build_store(art: &Compiled, c: &Corpus) -> (Store, Vec<[u8; STAGES]>) {
             let tok = c.top_tokens[i][k_idx];
             let weight = c.top_weights[i][k_idx];
             if weight > 0 {
-                add_evidence_multi(&mut store, &memberships[i], code, tok, weight);
+                add_evidence_multi(&mut store, &by_depth, &codes[i], tok, weight);
             }
         }
     }
