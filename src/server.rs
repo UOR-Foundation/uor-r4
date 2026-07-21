@@ -935,6 +935,7 @@ fn handle_connection(
                             "shifts": census(19),
                             "compares": census(23),
                             "table_reads": census(27),
+                            "candidate_scans": census(31),
                             "multiply": 0,
                         },
                         "artifact": {

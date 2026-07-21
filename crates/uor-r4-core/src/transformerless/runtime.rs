@@ -31,9 +31,14 @@ pub struct OpKernel {
     pub shifts: u64,
     pub compares: u64,
     pub table_reads: u64,
+    pub candidate_scans: u64,
 }
 
 impl OpKernel {
+    #[inline]
+    pub fn candidate_scan(&mut self) {
+        self.candidate_scans += 1;
+    }
     #[inline]
     pub fn add(&mut self, a: i64, b: i64) -> i64 {
         self.adds += 1;
@@ -74,8 +79,8 @@ impl OpKernel {
 
     pub fn report(&self) -> String {
         format!(
-            "op census: add {} | xor {} | shift {} | compare {} | table-read {} | multiply — no such operation exists in the kernel",
-            self.adds, self.xors, self.shifts, self.compares, self.table_reads
+            "op census: add {} | xor {} | shift {} | compare {} | table-read {} | candidate-scan {} | multiply — no such operation exists in the kernel",
+            self.adds, self.xors, self.shifts, self.compares, self.table_reads, self.candidate_scans
         )
     }
 }
@@ -449,7 +454,7 @@ impl<'a> Runtime<'a> {
             rot: derive_rotations(),
             pop: derive_popcount_table(),
             kernel: OpKernel::default(),
-            recent: Vec::new(),
+            recent: Vec::with_capacity(36),
         }
     }
 
@@ -478,6 +483,7 @@ impl<'a> Runtime<'a> {
             let mut best_d = i64::MAX;
             let mut best_k = 0u8;
             for (kk, cs) in sigs.chunks_exact(SIG_BYTES).enumerate() {
+                self.kernel.candidate_scan();
                 let mut d = 0i64;
                 for (&a, &bb) in sig.iter().zip(cs) {
                     let x = self.kernel.xor(a, bb);
@@ -508,6 +514,7 @@ impl<'a> Runtime<'a> {
                 let mut best_c = -1000000i64;
                 let mut best_n = 0u32;
                 for (&t, &cnt) in dist {
+                    self.kernel.candidate_scan();
                     let mut score = cnt as i64;
                     let occurrences = self.recent.iter().filter(|&&r| r == t).count();
                     if occurrences > 0 {
@@ -547,6 +554,7 @@ impl<'a> Runtime<'a> {
                 let mut best_c = -1000000i64;
                 let mut best_n = 0u32;
                 for (&t, &cnt) in dist {
+                    self.kernel.candidate_scan();
                     let mut score = cnt as i64;
                     let occurrences = self.recent.iter().filter(|&&r| r == t).count();
                     if occurrences > 0 {

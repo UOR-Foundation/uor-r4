@@ -84,7 +84,7 @@ fn measure<T>(f: impl FnOnce() -> T) -> (T, Census) {
 // ------------------------------------------------------------ op census --
 
 /// Snapshot of the runtime's `OpKernel` counters (the kernel itself is not
-/// `Clone`, so copy the five public fields).
+/// `Clone`, so copy the public fields).
 #[derive(Clone, Copy)]
 struct Ops {
     adds: u64,
@@ -92,6 +92,7 @@ struct Ops {
     shifts: u64,
     compares: u64,
     table_reads: u64,
+    candidate_scans: u64,
 }
 
 impl Ops {
@@ -102,6 +103,7 @@ impl Ops {
             shifts: k.shifts,
             compares: k.compares,
             table_reads: k.table_reads,
+            candidate_scans: k.candidate_scans,
         }
     }
     fn since(self, before: Ops) -> Ops {
@@ -111,6 +113,7 @@ impl Ops {
             shifts: self.shifts - before.shifts,
             compares: self.compares - before.compares,
             table_reads: self.table_reads - before.table_reads,
+            candidate_scans: self.candidate_scans - before.candidate_scans,
         }
     }
 }
@@ -122,7 +125,7 @@ const GEN_TOKENS: usize = 32;
 /// Fixed seed window: deterministic, and every id is below the smallest
 /// supported vocabulary (TLA3, V = 32000), so the same seed drives both the
 /// fixture and the real smollm2 artifacts.
-const SEED: [u16; WINDOW] = [1, 40, 416, 1024, 2048, 4096, 8192, 16384];
+const SEED: [u32; WINDOW] = [1, 40, 416, 1024, 2048, 4096, 8192, 16384];
 
 fn real_path(name: &str) -> String {
     let dir = env!("CARGO_MANIFEST_DIR");
@@ -186,7 +189,7 @@ fn parse_store_measured() -> (Store, String) {
     let mut store: Store = (0..=STAGES).map(|_| Default::default()).collect();
     for i in 0..64u16 {
         let code = [(i % 251) as u8, (i / 2) as u8, 0, 0];
-        runtime::add_evidence(&mut store, &code, i);
+        runtime::add_evidence(&mut store, &code, i as u32, 1);
     }
     (store, "synthetic (add_evidence, gate closed)".to_string())
 }
@@ -214,6 +217,7 @@ fn allocation_census() {
     let ((code, wit, n, gen_ops), gen_cen) = measure(|| {
         let code = rt.assign_window(&SEED);
         let tok = rt.predict(&store, &code);
+        rt.recent.clear();
         let wit = rt.predict_witness(&store, &code);
         assert_eq!(tok, wit.token, "predict and predict_witness agree");
         let before = Ops::of(&rt.kernel);
@@ -240,20 +244,21 @@ fn allocation_census() {
     let t = GEN_TOKENS as f64;
     println!(
         "[kernel] ops over {GEN_TOKENS} generated tokens: adds {} | xors {} | \
-         shifts {} | compares {} | table-reads {}",
-        gen_ops.adds, gen_ops.xors, gen_ops.shifts, gen_ops.compares, gen_ops.table_reads
+         shifts {} | compares {} | table-reads {} | candidate-scans {}",
+        gen_ops.adds, gen_ops.xors, gen_ops.shifts, gen_ops.compares, gen_ops.table_reads, gen_ops.candidate_scans
     );
     println!(
         "[kernel] per generated token (avg): adds {:.1} | xors {:.1} | \
-         shifts {:.1} | compares {:.1} | table-reads {:.1}",
+         shifts {:.1} | compares {:.1} | table-reads {:.1} | candidate-scans {:.1}",
         gen_ops.adds as f64 / t,
         gen_ops.xors as f64 / t,
         gen_ops.shifts as f64 / t,
         gen_ops.compares as f64 / t,
-        gen_ops.table_reads as f64 / t
+        gen_ops.table_reads as f64 / t,
+        gen_ops.candidate_scans as f64 / t
     );
     println!("[kernel] cumulative {}", rt.kernel.report());
-    let tokens: Vec<u16> = out.iter().map(|p| p.token).collect();
+    let tokens: Vec<u32> = out.iter().map(|p| p.token).collect();
     let depths: Vec<usize> = out.iter().map(|p| p.depth).collect();
     println!("[gen] tokens {tokens:?}");
     println!("[gen] depths {depths:?}");
@@ -264,7 +269,7 @@ fn allocation_census() {
     let (_, ev_cen) = measure(|| {
         for i in 0..64u16 {
             let code = [(i % 251) as u8, ((i / 4) % 256) as u8, (i % 17) as u8, 0];
-            runtime::add_evidence(&mut scratch, &code, i.wrapping_mul(7));
+            runtime::add_evidence(&mut scratch, &code, (i.wrapping_mul(7)) as u32, 1);
         }
     });
     println!(
