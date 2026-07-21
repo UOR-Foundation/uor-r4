@@ -562,16 +562,16 @@ impl<'a> IntoBindingValue<'a> for TlessPredictOutput {
 
 impl PartitionProductFields for TlessPredictOutput {
     const FIELDS: &'static [(u32, u32)] = &[
-        (0, 2),
-        (2, 1),
-        (3, 4),
-        (7, 4),
-        (11, 4),
-        (15, 4),
-        (19, 4),
-        (23, 4),
-        (27, 4),
-        (31, 4),
+        (0, 4),
+        (4, 1),
+        (5, 4),
+        (9, 4),
+        (13, 4),
+        (17, 4),
+        (21, 4),
+        (25, 4),
+        (29, 4),
+        (33, 4),
     ];
     const FIELD_NAMES: &'static [&'static str] = &[
         "token",
