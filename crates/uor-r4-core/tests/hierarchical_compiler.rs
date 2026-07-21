@@ -68,7 +68,7 @@ fn hamming_calibration_emits_histograms_and_radii() {
     signatures[1][0] = 1;
 
     let report = calibrate_hamming_regions_from_signatures(&class_sigs, &signatures);
-    assert_eq!(report.signature_bits, 288);
+    assert_eq!(report.signature_bits, (SIG_BYTES * 8) as u16);
     assert_eq!(report.quantile_numerator, 95);
     assert_eq!(report.quantile_denominator, 100);
     assert_eq!(report.regions.len(), STAGES * K);
@@ -90,4 +90,15 @@ fn hamming_calibration_emits_histograms_and_radii() {
     assert_eq!(stage0_class1.sample_count, 1);
     assert_eq!(stage0_class1.acceptance_radius, 0);
     assert_eq!(stage0_class1.hamming_histogram[0], 1);
+}
+
+#[test]
+fn hamming_calibration_ignores_invalid_stage_layout() {
+    let class_sigs = vec![vec![]; STAGES];
+    let signatures = vec![[0u8; SIG_BYTES]; 1];
+
+    let report = calibrate_hamming_regions_from_signatures(&class_sigs, &signatures);
+    assert_eq!(report.regions.len(), STAGES * K);
+    assert!(report.regions.iter().all(|region| region.sample_count == 0));
+    assert!(report.regions.iter().all(|region| region.acceptance_radius == 0));
 }

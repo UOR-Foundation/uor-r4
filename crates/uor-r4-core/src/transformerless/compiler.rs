@@ -371,15 +371,23 @@ pub struct HammingCalibrationReport {
 }
 
 fn quantile_radius(histogram: &[u32], numerator: u32, denominator: u32) -> u16 {
-    let total: u32 = histogram.iter().sum();
+    let total: u64 = histogram.iter().map(|&count| u64::from(count)).sum();
     if total == 0 {
         return 0;
     }
-    let target = total.saturating_mul(numerator);
-    let mut cumulative = 0u32;
+    if denominator == 0 {
+        return histogram.len().saturating_sub(1) as u16;
+    }
+    let numerator = u64::from(numerator);
+    let denominator = u64::from(denominator);
+    let target = total
+        .saturating_mul(numerator)
+        .saturating_add(denominator.saturating_sub(1))
+        / denominator;
+    let mut cumulative = 0u64;
     for (distance, &count) in histogram.iter().enumerate() {
-        cumulative = cumulative.saturating_add(count);
-        if cumulative.saturating_mul(denominator) >= target {
+        cumulative = cumulative.saturating_add(u64::from(count));
+        if cumulative >= target {
             return distance as u16;
         }
     }
@@ -400,7 +408,13 @@ pub fn calibrate_hamming_regions_from_signatures(
             bytes[..chunk.len()].copy_from_slice(chunk);
             *word = u64::from_le_bytes(bytes);
         }
-        for (stage, stage_sigs) in class_sigs.iter().enumerate().take(STAGES) {
+        for stage in 0..STAGES {
+            let Some(stage_sigs) = class_sigs.get(stage) else {
+                continue;
+            };
+            if stage_sigs.len() < K * SIG_BYTES {
+                continue;
+            }
             let mut best_dist = u32::MAX;
             let mut best_class = 0usize;
             for (class, class_sig) in stage_sigs.chunks_exact(SIG_BYTES).enumerate().take(K) {
@@ -415,7 +429,9 @@ pub fn calibrate_hamming_regions_from_signatures(
                     best_class = class;
                 }
             }
-            histograms[stage][best_class][best_dist as usize] += 1;
+            if best_dist <= D as u32 {
+                histograms[stage][best_class][best_dist as usize] += 1;
+            }
         }
     }
     let mut regions = Vec::with_capacity(STAGES * K);
