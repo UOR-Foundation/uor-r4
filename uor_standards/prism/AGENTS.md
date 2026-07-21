@@ -489,6 +489,25 @@ Anchors are computed by the GitHub anchor algorithm
 (see § 6 below). The CI gate `wiki-link-check` rejects any URL whose
 page or anchor does not exist in the wiki source repository.
 
+### 5.4 Signaling active work via issue assignees
+
+Across UOR-Foundation repositories, GitHub issue **assignment is the
+work-in-progress signal**:
+
+1. When an agent or maintainer starts work on an issue, they assign it
+   to the account doing the work (self-assign:
+   `gh issue edit <N> --add-assignee @me`). An assigned issue means
+   "actively being worked — do not duplicate."
+2. When work lands, the issue is closed with a reference to the
+   commit(s) that satisfy it. When work is abandoned or blocked, the
+   assignee is removed (optionally with a status comment) so the issue
+   returns to the pool.
+3. Milestones mirror plan phases (e.g. `uor-r4` graph-compiler
+   Phase 0–11): an issue's milestone says *when* it is planned, its
+   assignee says *whether* it is in flight.
+4. Assignment never claims review or merge authority — it is a
+   coordination signal only.
+
 ## 6. Wiki backlink validation (`tools/wiki-link-check`)
 
 A workspace binary (not published to crates.io) that enforces every

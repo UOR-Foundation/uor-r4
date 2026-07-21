@@ -1,0 +1,115 @@
+# Glossary — R⁴ Holographic Graph Compiler
+
+Phase 0 deliverable of `docs/r4_graph_compiler_implementation_plan.md` (§5).
+This document freezes shared terminology. Where the graph-compiler plan (PDF §5, §9) and the
+existing transformerless docs use different words for the same thing, both are listed and the
+graph term is normative for new work. See the terminology bridge in the plan (§14).
+
+## Core roles
+
+- **Teacher (T)** — the pinned source model used only during offline compilation: a deterministic
+  evaluation procedure `T: C → Δ(V)` for a pinned Hugging Face revision and deterministic execution
+  mode. Accessed exclusively through the two-surface `TeacherOracle` (embedding table + next-token
+  oracle), plus an optional compiler-only trace surface (hidden states, top-k logits).
+- **Observation (o)** — the primary compilation sample: a bounded token context `c`, one or more
+  teacher-derived representation vectors `h(c)`, the teacher distribution `T(c)`, and optional
+  perturbation traces. Never an isolated token.
+- **Observation corpus (O)** — the content-addressed set of observations, split into construction
+  and held-out certification partitions. Today: the `Corpus` record stream (`compiler.rs`).
+- **Certifier** — offline instrumentation that measures fidelity, stability, operation counts,
+  allocation behavior, and artifact integrity. Never participates in inference.
+
+## Graph structure
+
+- **Semantic region (n)** — a predictively coherent area of teacher behavior, represented at
+  runtime by a packed prototype `p_n`, comparison mask `m_n`, calibrated acceptance radius `r_n`,
+  and packed edge ranges. Successor of the transformerless "context class". Regions are
+  multiresolution and overlapping; they are not semantic atoms.
+- **Membership** — region activation at a given resolution depth, defined by the masked-Hamming
+  predicate: `active(n, x) iff popcount((H(x) XOR p_n) AND m_n) ≤ r_n`. An observation may hold a
+  bounded set of memberships at each depth (successor of the graded code `[u8;4]`).
+- **Semantic code H(x)** — the compiled Boolean encoding of a context (today: the 36-byte sign-bit
+  signature). Locality-preserving by design; **not** a cryptographic digest.
+- **Refinement edges (E_r)** — parent/child edges implementing zoom-out/zoom-in across resolutions
+  (successor of store prefix levels). Multiple parents allowed: the graph is a DAG with
+  cross-links, not a tree.
+- **Overlap / neighbor edges (E_o)** — lateral edges between co-active or adjacent regions.
+  Explicit overlap (intersection) nodes are sparse and must be justified by held-out gain.
+- **Forward transition edges (E_f)** — likely semantic successors of the active cloud.
+- **Reverse indexes (E_b)** — teacher-supported predecessor evidence; built by sorting the same
+  canonical edge IDs used by E_f (Theorem 7). Evidence lookup, not mathematical inversion.
+- **Semantic cloud (A)** — the set of currently active regions (the "frontier"). `F` denotes the
+  predicted next cloud.
+
+## Runtime
+
+- **Runtime state** — fixed-capacity, caller-owned: active frontier, rolling context code, bounded
+  token shortlist, optional witness buffer. Successor of the 8-token window + `Runtime` struct.
+- **Frontier** — bounded set of active regions; each entry stores region ID, fixed-point score
+  (`ScoreQ`), membership margin, and depth. Max width is an artifact-declared constant.
+- **Step (R_G)** — one token of inference: consume state + newest token, produce new state +
+  prediction, with zero allocation, no float, no multiply, no locks, no unbounded search.
+- **Normative kernel** — the only arithmetic the runtime may use: word XOR/AND/OR, shifts,
+  rotates, popcount, integer add/sub, compares, declared saturating arithmetic, table reads
+  (today: `OpKernel` + census). Scalar safe Rust defines normative semantics; accelerated kernels
+  are replaceable and equivalence-tested.
+- **Bounded-work constants** — manifest-declared limits: `A` frontier width, `C` candidate regions
+  per active node, `W` signature words per region, `E` emission entries per region, `K` token
+  shortlist size, `D` decision-program depth. Per-step work is O(D + A·C·W + A·E·K).
+- **ScoreQ** — quantized fixed-point log-domain score. Replaces all floating-point scores in
+  deployed paths.
+- **Scoring model** — `S(v) = B(v) + Σ_{n∈A} ΔE(n,v) + Σ_{m∈F} ΔT(m,v) + ΔX(X,v)`: root token
+  prior + emission residuals of the active cloud + transition residuals of the predicted cloud +
+  optional exact-context residual. Each table is sparse; no contribution is counted twice
+  (Theorem 10).
+- **Root prior B(v)** — base token distribution stored at the graph root (successor of store
+  level-0 backoff counts).
+- **Emission residual ΔE** — per-region correction to token scores relative to its parent.
+- **Transition residual ΔT** — per-predicted-region correction for likely next tokens.
+- **Exact-context residual ΔX / EXCT store** — residual evidence keyed by exact context, capturing
+  behavior the compressed graph does not explain (successor of the TLS1 graded store).
+- **Resolution status** — every step returns exactly one of:
+  **Supported** (strong interior evidence), **Boundary** (several plausible overlapping regions),
+  **BackedOff** (only a broader region met support), **Novel** (no calibrated region covers the
+  input), **Contradictory** (active regions make materially incompatible predictions).
+  Deterministic (Theorem 12); the manifest declares per-status behavior (continue, widen, consult
+  EXCT, certified fallback, or abstain — default policy per decision D4).
+- **Multi-timescale state** — hierarchy of fixed-capacity states: token, local phrase/event,
+  segment, document/session; none grows dynamically.
+
+## Artifacts and identity
+
+- **R4G1** — the versioned packed artifact container (sections HEAD/CODE/NODE/EDGE/ROUT/EMIT/
+  EXCT/PROV/CERT). Succeeds TLA3/TLA4/TLS1. See `docs/transformerless/R4G1.md`.
+- **κ (kappa) / content CID** — content address (blake3 label or UOR CID) preserving identity and
+  provenance of bytes. CIDs are **not** semantic hashes and are never used as routing codes.
+- **Semantic route code** — a compiled, versioned, intentionally locality-preserving code used for
+  region routing. Separate lineage from CIDs; never an authorization or security identity.
+- **Witness** — a bounded, replayable record of one prediction: graph CID, input code, active
+  regions + margins, traversed decisions, applied edges, contributing emission entries, exact
+  entry, selected token, op census. An independent verifier replays it without the teacher
+  (Theorem 6).
+- **Epoch / patch** — immutable base graphs are amended only by content-addressed patch epochs
+  (parent CID, additions, score residuals, tombstones, compatibility limits, certificate). Lookup
+  consults a manifest-bounded number of layers; compaction emits a new canonical base.
+- **Route translation** — evidence mapping regions of one epoch to retained/split/merged/removed
+  regions of the next.
+
+## Certification
+
+- **Teacher-fidelity certificate** — measured agreement of graph and teacher on a pinned
+  evaluation set: top-1 agreement, top-k recall, bits/token, divergences, with CIDs, confidence
+  intervals, slices, and protocol. Valid only on the declared distribution (decision D3).
+- **Semantic-coherence certificate** — separate evidence that regions generalize: cross-context
+  reuse, perturbation stability, boundary behavior, rare-context retention, anti-memorization.
+  Predictive coherence alone does not make a region "semantic".
+- **Rate-distortion curve** — artifact bytes + runtime ops vs. teacher information retained,
+  measured at broad/intermediate/full-cloud/residual-augmented depths.
+- **Reference classifier** — the exact compiler-side region-membership procedure; the normative
+  semantics every optimized router is measured against (shortlist recall, Gate H).
+- **M.V.G. checkpoint** — the minimum-viable-graph go/no-go review at the end of Phase 5
+  (decision D1), comparing the graph against pre-agreed targets recorded in
+  `docs/transformerless/BASELINE.md`.
+- **Baseline** — the current certified transformerless artifact (TLA3/TLS1) and its measured
+  fidelity: 28.9% top-1, 31.7% teacher-argmax agreement, 6.54 bits/token, 89,200 store keys
+  (PROOF.md P2). Gate C compares the graph against this baseline before replacement.
