@@ -891,8 +891,10 @@ fn handle_connection(
             match tless_uor::UorTlessModel::forward(input) {
                 Ok(grounded) => {
                     // the deterministic record again via the axis, for the JSON fields
-                    let mut out = [0u8; 40];
-                    let _ = tless_uor::TlessAxisImpl::predict(&buf, &mut out);
+                    let mut out = [0u8; tless_uor::TLESS_OUTPUT_BYTES];
+                    if let Err(e) = tless_uor::TlessAxisImpl::predict(&buf, &mut out) {
+                        return (500, format!("{{\"error\":\"axis predict failed: {:?}\"}}", e));
+                    }
                     let token = u32::from_be_bytes([out[0], out[1], out[2], out[3]]);
                     let depth = out[4];
                     let code: Vec<u8> = out[5..9].to_vec();
