@@ -1,11 +1,14 @@
-use uor_r4_core::transformerless::compiler::{Corpus, induce_hierarchical_codes, STAGES};
+use uor_r4_core::transformerless::compiler::{
+    calibrate_hamming_regions_from_signatures, induce_hierarchical_codes, Corpus, K, SIG_BYTES,
+    STAGES,
+};
 
 #[test]
 fn test_induce_hierarchical_codes() {
     let n = 20;
     let story = vec![1u32; n];
     let mut next = vec![0u32; n];
-    
+
     // Pattern: 10 -> 20 -> 30 repeated 6 times
     for chunk in 0..6 {
         let base = chunk * 3;
@@ -15,7 +18,7 @@ fn test_induce_hierarchical_codes() {
             next[base + 2] = 30;
         }
     }
-    
+
     let corpus = Corpus {
         n,
         stories: 1,
@@ -38,12 +41,64 @@ fn test_induce_hierarchical_codes() {
 
     // Verify stable type prefixes
     assert_eq!(hc.token_type_prefixes.get("10"), Some(&vec![1, 2, 3, 4]));
-    
+
     // Verify relational prefixes (transition pair and triplet)
-    assert!(!hc.relational_prefixes.is_empty(), "Relational prefixes should not be empty");
-    
+    assert!(
+        !hc.relational_prefixes.is_empty(),
+        "Relational prefixes should not be empty"
+    );
+
     let has_pair = hc.relational_prefixes.iter().any(|path| path == &[10, 20]);
-    let has_triplet = hc.relational_prefixes.iter().any(|path| path == &[10, 20, 30]);
+    let has_triplet = hc
+        .relational_prefixes
+        .iter()
+        .any(|path| path == &[10, 20, 30]);
     assert!(has_pair, "Should contain transition pair [10, 20]");
-    assert!(has_triplet, "Should contain transition triplet [10, 20, 30]");
+    assert!(
+        has_triplet,
+        "Should contain transition triplet [10, 20, 30]"
+    );
+}
+
+#[test]
+fn hamming_calibration_emits_histograms_and_radii() {
+    let mut class_sigs = vec![vec![0u8; K * SIG_BYTES]; STAGES];
+    class_sigs[0][SIG_BYTES] = 1;
+    let mut signatures = vec![[0u8; SIG_BYTES]; 2];
+    signatures[1][0] = 1;
+
+    let report = calibrate_hamming_regions_from_signatures(&class_sigs, &signatures);
+    assert_eq!(report.signature_bits, (SIG_BYTES * 8) as u16);
+    assert_eq!(report.quantile_numerator, 95);
+    assert_eq!(report.quantile_denominator, 100);
+    assert_eq!(report.regions.len(), STAGES * K);
+
+    let stage0_class0 = report
+        .regions
+        .iter()
+        .find(|region| region.stage == 0 && region.class == 0)
+        .expect("stage 0 class 0");
+    assert_eq!(stage0_class0.sample_count, 1);
+    assert_eq!(stage0_class0.acceptance_radius, 0);
+    assert_eq!(stage0_class0.hamming_histogram[0], 1);
+
+    let stage0_class1 = report
+        .regions
+        .iter()
+        .find(|region| region.stage == 0 && region.class == 1)
+        .expect("stage 0 class 1");
+    assert_eq!(stage0_class1.sample_count, 1);
+    assert_eq!(stage0_class1.acceptance_radius, 0);
+    assert_eq!(stage0_class1.hamming_histogram[0], 1);
+}
+
+#[test]
+fn hamming_calibration_ignores_invalid_stage_layout() {
+    let class_sigs = vec![vec![]; STAGES];
+    let signatures = vec![[0u8; SIG_BYTES]; 1];
+
+    let report = calibrate_hamming_regions_from_signatures(&class_sigs, &signatures);
+    assert_eq!(report.regions.len(), STAGES * K);
+    assert!(report.regions.iter().all(|region| region.sample_count == 0));
+    assert!(report.regions.iter().all(|region| region.acceptance_radius == 0));
 }
