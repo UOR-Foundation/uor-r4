@@ -1,0 +1,16 @@
+[package]
+name = "uor-r4-graph-format"
+version = "0.1.0"
+edition = "2021"
+description = "R4G1 packed graph artifact container: no_std-compatible fixed-width types, stage-1 structural validation, canonical serializer, and borrowed GraphView"
+
+[features]
+default = ["std"]
+std = ["alloc"]
+alloc = []
+
+[dependencies]
+# Pinned to the workspace-wide blake3 version. `default-features = false`
+# drops the `std` feature so the crate stays no_std-compatible; feature
+# unification re-enables `std` for std consumers of the workspace.
+blake3 = { version = "=1.5.0", default-features = false }

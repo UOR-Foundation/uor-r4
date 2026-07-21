@@ -65,7 +65,7 @@ re-measured on the HF path once issue #34 lands.
 | File | Bytes | Note |
 |---|---|---|
 | `tless_artifacts.bin` (TLA4) | 1,710,348 | codebooks, thresholds, class sigs (incl. certifier-only f32 `ctx_cb`) |
-| `tless_store.bin` (TLS1) | 494,286 | graded evidence store |
+| `tless_store.bin` (TLS1) | 494,286 | graded evidence store — **stale: u16-era entries (6 B); current u32 parser rejects it. Regenerate via recompile; incident validates R4G1's versioning rules** |
 | `tokenizer.bin` | 528,975 | byte-level BPE export |
 | total deployed | 2,733,609 | vs. ~271 MB BF16 source (~99× smaller, nominal) |
 
@@ -74,14 +74,18 @@ end-to-end vs. 60.8 MB source (PROOF.md P5).
 
 ### 3.3 Runtime contract
 
+All fresh numbers verified 2026-07-21 by `tests/allocation_census.rs` against the real SmolLM2
+artifacts (deterministic across runs; debug profile).
+
 | Metric | Value | Status |
 |---|---|---|
 | multiplies in runtime kernel | 0 (machine-checked source scan, witness P-4) | cited/enforced |
 | integer ops per token | ~1.8×10⁵ | cited (PROOF.md P1, legacy path) |
-| op census, SmolLM2 path (fresh, 32 greedy tokens, debug) | **144,498 avg ops/token**: adds 48,526 · xors 36,864 · shifts 11,662 · compares 1,334 · table-reads 46,112 | fresh — `tests/allocation_census.rs` (deterministic across runs) |
-| allocations per generated token | **0** (asserted over 32 tokens across `assign_window`, `predict`, `predict_witness`, `generate_greedy_into`; `Runtime::new` also 0) | fresh, Gate B pattern proven |
-| allocations at parse/load (fresh) | artifacts: 18 allocs / 1.71 MB; store: **57,092 allocs / 4.69 MB for a 494 KB container** (~9.5× — per-key `Vec<u8>` + `BTreeMap` nodes) | fresh; Phase 1 R4G1 packed layout is the fix |
-| allocations on write path (`add_evidence` ×64) | 563 allocs / 44.7 KB | fresh, known; formalized as patch epochs in Phase 9 |
+| op census, SmolLM2 path (32 greedy tokens) | **144,496 avg ops/token**: adds 48,530 · xors 36,864 · shifts 11,666 · compares 1,324 · table-reads 46,112 | fresh |
+| allocations per generated token, steady state | **0** (asserted over 32 tokens across `assign_window`, `predict`, `predict_witness`, `generate_greedy_into`; `Runtime::new` also 0) | fresh, Gate B pattern holds |
+| allocations, warm-up (finding) | **5 allocs / 496 B during the first ~34 predictions** — `Runtime.recent` (repetition guard) is a `Vec` that grows to steady-state capacity. The "allocation-free hot path" is amortized, not unconditional. Graph-runtime fixed-capacity `RuntimeState` (Phase 5) removes this by construction | fresh |
+| allocations at parse/load | artifacts: 18 allocs / 1.71 MB; store (real, legacy TLS1-u16 parse): **57,498 allocs / 5.40 MB for a 494 KB container** (~10.9× — per-key `Vec<u8>` + `BTreeMap` nodes) | fresh; Phase 1 R4G1 packed layout is the fix |
+| allocations on write path (`add_evidence` ×64) | 563 allocs / 51.1 KB | fresh, known; formalized as patch epochs in Phase 9 |
 | bytes read / cache misses per token | deferred | needs pinned runner (D7) |
 | per-token latency | pending | needs bench harness (criterion) |
 
