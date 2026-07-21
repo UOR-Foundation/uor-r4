@@ -335,7 +335,7 @@ impl OperatorRegistry {
                         results.push(WeightedRoute {
                             axis: input_route.axis,
                             path: path.clone(),
-                            score: input_route.score * -1.0, // Negation exclusion
+                            score: -input_route.score, // Negation exclusion
                         });
                     }
                     Ok(results)

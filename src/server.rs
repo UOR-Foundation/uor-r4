@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use uor_foundation::pipeline::PrismModel;
 
-use uor_r4_core::transformerless::teacher::{TeacherOracle, BehaviorSource};
+use uor_r4_core::transformerless::teacher::{BehaviorSource, TeacherOracle};
 
 /// Configuration supplied by the executable to the reusable HTTP server.
 #[derive(Debug, Clone)]
@@ -77,11 +77,15 @@ pub fn run_server(cli: Arc<ServerConfig>) {
     let start_time = Instant::now();
     let router = Arc::new(Mutex::new(UorR4Router::new(0.85)));
     let tless: Arc<Mutex<Option<tless_uor::TlessState>>> = Arc::new(Mutex::new(None));
-    let oracle: Arc<Mutex<Option<uor_r4_core::transformerless::teacher::HuggingFaceLlamaOracle>>> = Arc::new(Mutex::new(None));
+    let oracle: Arc<Mutex<Option<uor_r4_core::transformerless::teacher::HuggingFaceLlamaOracle>>> =
+        Arc::new(Mutex::new(None));
 
     let source_dir = ".uor-models/sources/smollm2-135m-instruct";
     if std::path::Path::new(source_dir).exists() {
-        println!("[*] Loading full Llama teacher oracle from {} for attention-based generation...", source_dir);
+        println!(
+            "[*] Loading full Llama teacher oracle from {} for attention-based generation...",
+            source_dir
+        );
         match uor_r4_core::transformerless::teacher::HuggingFaceLlamaOracle::load(source_dir) {
             Ok(o) => {
                 println!("[+] Successfully loaded full Llama teacher model!");
@@ -190,6 +194,8 @@ pub fn run_server(cli: Arc<ServerConfig>) {
     }
 }
 
+// Personal-path wiki indexer; retained for local experiments.
+#[allow(dead_code)]
 fn index_wiki_corpus(router: &mut UorR4Router) {
     let paths = vec![
         std::path::PathBuf::from("/Users/adminamn/gemini-dev/wiki_corpus.txt"),
@@ -397,19 +403,17 @@ fn generate_attention_text(
 
     // 3. Feed the prompt tokens into the transformer model to populate the key-value cache
     let mut last_token = oracle.bos_token();
-    for pos in 0..seed_len {
+    for (pos, &tok) in seed.iter().enumerate() {
         let mut logits = vec![0.0f32; oracle.vocab()];
-        oracle.step(seed[pos] as usize, pos, &mut logits);
-        last_token = seed[pos] as usize;
+        oracle.step(tok as usize, pos, &mut logits);
+        last_token = tok as usize;
     }
 
     // 4. Autoregressively generate next tokens using greedy decoding
     let mut generated = Vec::new();
-    let mut pos = seed_len;
     let mut logits = vec![0.0f32; oracle.vocab()];
-    for _ in 0..max_tokens {
+    for pos in seed_len..seed_len + max_tokens {
         oracle.step(last_token, pos, &mut logits);
-        pos += 1;
 
         // Apply a standard logit-level repetition penalty for the last 32 tokens
         let start_idx = generated.len().saturating_sub(32);
@@ -431,10 +435,7 @@ fn generate_attention_text(
         }
 
         // Break if the model generates EOS (2) or any other official stop token
-        if best_t == oracle.eos_token()
-            || best_t == 2
-            || best_t == 0
-        {
+        if best_t == oracle.eos_token() || best_t == 2 || best_t == 0 {
             break;
         }
 
@@ -444,10 +445,7 @@ fn generate_attention_text(
 
     // 5. Detokenize back to String
     let mut bytes = [0u8; 16 * 1024];
-    let byte_count = match tless_uor::tless_detokenize_into(&generated, &mut bytes) {
-        Some(b) => b,
-        None => return None,
-    };
+    let byte_count = tless_uor::tless_detokenize_into(&generated, &mut bytes)?;
 
     let decoded = String::from_utf8_lossy(&bytes[..byte_count]).into_owned();
     println!("[+] generate_attention_text: raw decoded: {:?}", decoded);
@@ -697,7 +695,9 @@ fn handle_connection(
             let mut oracle_guard = oracle.lock().unwrap();
             if let Some(ref mut o) = *oracle_guard {
                 o.set_r4_attention(engine_mode == "r4-attention");
-                if let Some((text, count)) = generate_attention_text(o, &payload.text, max_tokens.max(256)) {
+                if let Some((text, count)) =
+                    generate_attention_text(o, &payload.text, max_tokens.max(256))
+                {
                     final_response_text = text;
                     llm_connected = true;
                     generation_mode = if engine_mode == "r4-attention" {
@@ -899,7 +899,8 @@ fn handle_connection(
                     let depth = out[4];
                     let code: Vec<u8> = out[5..9].to_vec();
                     let count = u32::from_be_bytes(out[9..13].try_into().unwrap());
-                    let census = |i: usize| u32::from_be_bytes(out[i + 2..i + 6].try_into().unwrap());
+                    let census =
+                        |i: usize| u32::from_be_bytes(out[i + 2..i + 6].try_into().unwrap());
 
                     let (artifact_kappa, artifact_address, store_kappa) =
                         tless_uor::with_tless_state(|st| {

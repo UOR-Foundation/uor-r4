@@ -593,6 +593,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "uor-r4-graph-format"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+]
+
+[[package]]
 name = "uor-r4-proof-model"
 version = "0.1.0"
 dependencies = [

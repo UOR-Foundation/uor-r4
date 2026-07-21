@@ -10,11 +10,7 @@ impl Hypervector {
 
     /// bind(A, B) = A ^ B (XOR is its own inverse for binary hypervectors)
     pub fn bind(&self, other: &Self) -> Self {
-        let mut res = [0u64; 16];
-        for i in 0..16 {
-            res[i] = self.0[i] ^ other.0[i];
-        }
-        Self(res)
+        Self(std::array::from_fn(|i| self.0[i] ^ other.0[i]))
     }
 
     /// unbind(A, AxB) = B (same as bind)
@@ -30,7 +26,7 @@ impl Hypervector {
         let mut res = [0u64; 16];
         let half = vectors.len() / 2;
         // Count 1s at each bit position
-        for i in 0..16 {
+        for (i, word) in res.iter_mut().enumerate() {
             let mut accumulated = 0u64;
             for bit in 0..64 {
                 let mut ones = 0;
@@ -43,7 +39,7 @@ impl Hypervector {
                     accumulated |= 1u64 << bit;
                 }
             }
-            res[i] = accumulated;
+            *word = accumulated;
         }
         Self(res)
     }
@@ -66,9 +62,9 @@ impl Hypervector {
 
         if bit_shift > 0 {
             let mut carry = 0u64;
-            for i in 0..16 {
-                let next_carry = res[i] >> (64 - bit_shift);
-                res[i] = (res[i] << bit_shift) | carry;
+            for word in res.iter_mut() {
+                let next_carry = *word >> (64 - bit_shift);
+                *word = (*word << bit_shift) | carry;
                 carry = next_carry;
             }
             res[0] |= carry;

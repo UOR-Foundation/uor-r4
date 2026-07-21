@@ -10,7 +10,9 @@ fn test_router_facet_indexing() {
         coordinates: HashMap::new(),
     };
     coords.coordinates.insert("type".to_string(), vec![1, 2, 3]);
-    coords.coordinates.insert("entity".to_string(), vec![10, 20]);
+    coords
+        .coordinates
+        .insert("entity".to_string(), vec![10, 20]);
     coords.coordinates.insert("relation".to_string(), vec![99]);
 
     router.index_semantic_object(101, &coords);

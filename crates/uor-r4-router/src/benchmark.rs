@@ -1,5 +1,5 @@
+use crate::geometry::{SemanticGeometry, SpectralGeometry, TypedObject, VsaGeometry};
 use crate::UorR4Router;
-use crate::geometry::{FacetCoordinates, SemanticGeometry, SpectralGeometry, VsaGeometry, TypedObject};
 use std::time::Instant;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
@@ -23,13 +23,23 @@ pub fn run_ablation_benchmark(
         active_state: None,
         identity: None,
     };
-    results.push(evaluate_geometry("Spectral Heuristic", &geom_spectral, router, queries));
+    results.push(evaluate_geometry(
+        "Spectral Heuristic",
+        &geom_spectral,
+        router,
+        queries,
+    ));
 
     // 2. Benchmark VSA Geometry
     let geom_vsa = VsaGeometry {
         space_cid: "blake3:vsa_space".to_string(),
     };
-    results.push(evaluate_geometry("VSA Grounded", &geom_vsa, router, queries));
+    results.push(evaluate_geometry(
+        "VSA Grounded",
+        &geom_vsa,
+        router,
+        queries,
+    ));
 
     results
 }
@@ -66,7 +76,11 @@ fn evaluate_geometry<G: SemanticGeometry>(
 
     let q_len = queries.len() as f32;
     let recall = if q_len > 0.0 { recall_sum / q_len } else { 0.0 };
-    let hits_at_3 = if q_len > 0.0 { hits as f32 / q_len } else { 0.0 };
+    let hits_at_3 = if q_len > 0.0 {
+        hits as f32 / q_len
+    } else {
+        0.0
+    };
 
     // Measure unlearning latency (deleting a route)
     let start = Instant::now();

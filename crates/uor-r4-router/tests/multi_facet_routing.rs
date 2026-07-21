@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use uor_r4_core::semantic::{KappaLabel, WeightedRoute};
 use uor_r4_router::geometry::{
-    SemanticGeometry, TypedObject, GroundedSemantics, FacetCoordinates, Operator, GeometryError
+    FacetCoordinates, GeometryError, GroundedSemantics, Operator, SemanticGeometry, TypedObject,
 };
 
 pub struct MockGeometry {
@@ -31,7 +31,11 @@ impl SemanticGeometry for MockGeometry {
         Ok(FacetCoordinates { coordinates })
     }
 
-    fn soft_route(&self, coordinates: &FacetCoordinates, max_routes: usize) -> Result<Vec<WeightedRoute>, GeometryError> {
+    fn soft_route(
+        &self,
+        coordinates: &FacetCoordinates,
+        max_routes: usize,
+    ) -> Result<Vec<WeightedRoute>, GeometryError> {
         let mut routes = Vec::new();
         if let Some(path) = coordinates.coordinates.get("type") {
             routes.push(WeightedRoute {
@@ -50,7 +54,11 @@ impl SemanticGeometry for MockGeometry {
         Ok(routes.into_iter().take(max_routes).collect())
     }
 
-    fn apply_operator(&self, route: &WeightedRoute, operator: &Operator) -> Result<Vec<WeightedRoute>, GeometryError> {
+    fn apply_operator(
+        &self,
+        route: &WeightedRoute,
+        operator: &Operator,
+    ) -> Result<Vec<WeightedRoute>, GeometryError> {
         if operator.name == "identity" {
             Ok(vec![route.clone()])
         } else {
@@ -75,7 +83,10 @@ fn test_mock_geometry_grounding_and_routing() {
 
     let coords = geom.encode(&grounded).unwrap();
     assert_eq!(coords.coordinates.get("type").unwrap(), &vec![1, 2, 3]);
-    assert_eq!(coords.coordinates.get("entity").unwrap(), &vec![10, 20, 30, 40]);
+    assert_eq!(
+        coords.coordinates.get("entity").unwrap(),
+        &vec![10, 20, 30, 40]
+    );
 
     let routes = geom.soft_route(&coords, 5).unwrap();
     assert_eq!(routes.len(), 2);
@@ -90,8 +101,12 @@ fn test_selective_backoff() {
         coordinates: HashMap::new(),
     };
     coords.coordinates.insert("type".to_string(), vec![1, 2, 3]);
-    coords.coordinates.insert("entity".to_string(), vec![10, 20, 30, 40]);
-    coords.coordinates.insert("relation".to_string(), vec![5, 6]);
+    coords
+        .coordinates
+        .insert("entity".to_string(), vec![10, 20, 30, 40]);
+    coords
+        .coordinates
+        .insert("relation".to_string(), vec![5, 6]);
 
     // Backoff entity axis only
     if let Some(entity_path) = coords.coordinates.get_mut("entity") {

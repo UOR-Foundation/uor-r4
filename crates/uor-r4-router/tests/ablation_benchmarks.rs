@@ -1,6 +1,6 @@
-use uor_r4_router::UorR4Router;
-use uor_r4_router::geometry::TypedObject;
 use uor_r4_router::benchmark::run_ablation_benchmark;
+use uor_r4_router::geometry::TypedObject;
+use uor_r4_router::UorR4Router;
 
 #[test]
 fn test_ablation_benchmarks() {

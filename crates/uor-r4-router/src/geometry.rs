@@ -1,9 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use uor_r4_core::semantic::{KappaLabel, WeightedRoute, expand_atom};
-use uor_r4_core::{
-    identity_to_qimc_prime, derive_uor_control_plane
-};
+use uor_r4_core::semantic::{expand_atom, KappaLabel, WeightedRoute};
+use uor_r4_core::{derive_uor_control_plane, identity_to_qimc_prime};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct TypedObject {
@@ -40,8 +38,16 @@ pub trait SemanticGeometry {
     fn space_manifest(&self) -> KappaLabel;
     fn ground(&self, object: &TypedObject) -> Result<GroundedSemantics, GeometryError>;
     fn encode(&self, grounded: &GroundedSemantics) -> Result<FacetCoordinates, GeometryError>;
-    fn soft_route(&self, coordinates: &FacetCoordinates, max_routes: usize) -> Result<Vec<WeightedRoute>, GeometryError>;
-    fn apply_operator(&self, route: &WeightedRoute, operator: &Operator) -> Result<Vec<WeightedRoute>, GeometryError>;
+    fn soft_route(
+        &self,
+        coordinates: &FacetCoordinates,
+        max_routes: usize,
+    ) -> Result<Vec<WeightedRoute>, GeometryError>;
+    fn apply_operator(
+        &self,
+        route: &WeightedRoute,
+        operator: &Operator,
+    ) -> Result<Vec<WeightedRoute>, GeometryError>;
 }
 
 // 1. Spectral Geometry (Heuristic Baseline)
@@ -73,7 +79,10 @@ impl<'a> SemanticGeometry for SpectralGeometry<'a> {
     }
 
     fn encode(&self, grounded: &GroundedSemantics) -> Result<FacetCoordinates, GeometryError> {
-        let active_state: Vec<f64> = grounded.vsa_vector[..512].iter().map(|&x| x as f64).collect();
+        let active_state: Vec<f64> = grounded.vsa_vector[..512]
+            .iter()
+            .map(|&x| x as f64)
+            .collect();
         let identity = self.identity.unwrap_or("");
         let (_qimc_prime, _qimc_index, identity_meta) = identity_to_qimc_prime(identity);
         let uor_control = derive_uor_control_plane(&identity_meta);
@@ -108,18 +117,26 @@ impl<'a> SemanticGeometry for SpectralGeometry<'a> {
 
         let mut coords = HashMap::new();
         coords.insert("window".to_string(), vec![routed_idx as u32]);
-        
+
         let mut score_bits = Vec::with_capacity(16);
         for &score in &window_scores {
             score_bits.push((score as f32).to_bits());
         }
         coords.insert("scores".to_string(), score_bits);
 
-        Ok(FacetCoordinates { coordinates: coords })
+        Ok(FacetCoordinates {
+            coordinates: coords,
+        })
     }
 
-    fn soft_route(&self, coordinates: &FacetCoordinates, _max_routes: usize) -> Result<Vec<WeightedRoute>, GeometryError> {
-        let window_idx = coordinates.coordinates.get("window")
+    fn soft_route(
+        &self,
+        coordinates: &FacetCoordinates,
+        _max_routes: usize,
+    ) -> Result<Vec<WeightedRoute>, GeometryError> {
+        let window_idx = coordinates
+            .coordinates
+            .get("window")
             .and_then(|w| w.first())
             .copied()
             .unwrap_or(1);
@@ -144,7 +161,11 @@ impl<'a> SemanticGeometry for SpectralGeometry<'a> {
         Ok(routes)
     }
 
-    fn apply_operator(&self, route: &WeightedRoute, operator: &Operator) -> Result<Vec<WeightedRoute>, GeometryError> {
+    fn apply_operator(
+        &self,
+        route: &WeightedRoute,
+        operator: &Operator,
+    ) -> Result<Vec<WeightedRoute>, GeometryError> {
         if operator.name == "identity" {
             Ok(vec![route.clone()])
         } else {
@@ -173,7 +194,11 @@ impl SemanticGeometry for VsaGeometry {
         for i in 0..16 {
             let val = hv.0[i];
             for bit in 0..64 {
-                let bit_val = if (val & (1u64 << bit)) != 0 { 1.0 } else { -1.0 };
+                let bit_val = if (val & (1u64 << bit)) != 0 {
+                    1.0
+                } else {
+                    -1.0
+                };
                 float_vec.push(bit_val);
             }
         }
@@ -193,10 +218,16 @@ impl SemanticGeometry for VsaGeometry {
         }
         coords.insert("type".to_string(), type_path);
         coords.insert("entity".to_string(), vec![100, 200]);
-        Ok(FacetCoordinates { coordinates: coords })
+        Ok(FacetCoordinates {
+            coordinates: coords,
+        })
     }
 
-    fn soft_route(&self, coordinates: &FacetCoordinates, max_routes: usize) -> Result<Vec<WeightedRoute>, GeometryError> {
+    fn soft_route(
+        &self,
+        coordinates: &FacetCoordinates,
+        max_routes: usize,
+    ) -> Result<Vec<WeightedRoute>, GeometryError> {
         let mut routes = Vec::new();
         for (facet, path) in &coordinates.coordinates {
             let axis = match facet.as_str() {
@@ -213,7 +244,11 @@ impl SemanticGeometry for VsaGeometry {
         Ok(routes.into_iter().take(max_routes).collect())
     }
 
-    fn apply_operator(&self, route: &WeightedRoute, operator: &Operator) -> Result<Vec<WeightedRoute>, GeometryError> {
+    fn apply_operator(
+        &self,
+        route: &WeightedRoute,
+        operator: &Operator,
+    ) -> Result<Vec<WeightedRoute>, GeometryError> {
         if operator.name == "vsa-identity" {
             Ok(vec![route.clone()])
         } else {

@@ -126,7 +126,10 @@ fn tokenizer_path() -> String {
 pub fn load_tless_state() -> Option<TlessState> {
     let art_path = artifacts_path();
     let store_path = store_path();
-    println!("[*] Loading tless state from art={} and store={}", art_path, store_path);
+    println!(
+        "[*] Loading tless state from art={} and store={}",
+        art_path, store_path
+    );
     let art_bytes = match std::fs::read(&art_path) {
         Ok(b) => b,
         Err(e) => {
@@ -446,7 +449,7 @@ impl TlessAxis for TlessAxisImpl {
 
             let mut priors = std::collections::HashMap::new();
             let mut query_text = String::new();
-            
+
             uor_r4_router::ACTIVE_ROUTER.with(|r| {
                 if let Some(ptr) = *r.borrow() {
                     let router = unsafe { &mut *ptr };

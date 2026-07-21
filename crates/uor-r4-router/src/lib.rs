@@ -2,16 +2,16 @@
 //! indexing, geometric Markov generation, thought streams. The wasm-bindgen
 //! surface travels with the struct; the cdylib link stays at the facade.
 
+use crate::geometry::SemanticGeometry;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::f64::consts::PI;
-use uor_r4_core::*;
 use uor_r4_core::semantic::WeightedRoute;
-use crate::geometry::{GeometryError, SemanticGeometry};
+use uor_r4_core::*;
 use wasm_bindgen::prelude::*;
 
-pub mod geometry;
 pub mod benchmark;
+pub mod geometry;
 
 /// A content-addressed identifier derived via the 3/8 Resonance Hashing Law.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -161,8 +161,16 @@ impl MultiFacetStore {
             for k in keys {
                 let mut v = idx.get(k).unwrap().clone();
                 v.sort();
-                let key_str = k.iter().map(|x| x.to_string()).collect::<Vec<_>>().join(",");
-                let val_str = v.iter().map(|x| x.to_string()).collect::<Vec<_>>().join(",");
+                let key_str = k
+                    .iter()
+                    .map(|x| x.to_string())
+                    .collect::<Vec<_>>()
+                    .join(",");
+                let val_str = v
+                    .iter()
+                    .map(|x| x.to_string())
+                    .collect::<Vec<_>>()
+                    .join(",");
                 entries.push(format!("{}:{}:{}", name, key_str, val_str));
             }
         };
@@ -174,15 +182,21 @@ impl MultiFacetStore {
         add_idx("provenance", &self.provenance_index);
 
         if entries.is_empty() {
-            return "blake3:0000000000000000000000000000000000000000000000000000000000000000".to_string();
+            return "blake3:0000000000000000000000000000000000000000000000000000000000000000"
+                .to_string();
         }
 
         let leaf_refs: Vec<&[u8]> = entries.iter().map(|s| s.as_bytes()).collect();
-        let (root, _) = uor_r4_core::semantic::merkle::compute_merkle_root_and_proof(&leaf_refs, 0).unwrap();
+        let (root, _) =
+            uor_r4_core::semantic::merkle::compute_merkle_root_and_proof(&leaf_refs, 0).unwrap();
         format!("blake3:{}", hex::encode(root))
     }
 
-    pub fn compute_inclusion_proof(&self, facet: &str, path: &[u32]) -> Option<(String, Vec<String>, usize)> {
+    pub fn compute_inclusion_proof(
+        &self,
+        facet: &str,
+        path: &[u32],
+    ) -> Option<(String, Vec<String>, usize)> {
         let mut entries = Vec::new();
         let mut target_entry = None;
 
@@ -192,10 +206,18 @@ impl MultiFacetStore {
             for k in keys {
                 let mut v = idx.get(k).unwrap().clone();
                 v.sort();
-                let key_str = k.iter().map(|x| x.to_string()).collect::<Vec<_>>().join(",");
-                let val_str = v.iter().map(|x| x.to_string()).collect::<Vec<_>>().join(",");
+                let key_str = k
+                    .iter()
+                    .map(|x| x.to_string())
+                    .collect::<Vec<_>>()
+                    .join(",");
+                let val_str = v
+                    .iter()
+                    .map(|x| x.to_string())
+                    .collect::<Vec<_>>()
+                    .join(",");
                 let entry = format!("{}:{}:{}", name, key_str, val_str);
-                
+
                 if name == facet && k == path {
                     target_entry = Some(entry.clone());
                 }
@@ -214,9 +236,11 @@ impl MultiFacetStore {
         let target_idx = entries.iter().position(|e| e == &target)?;
 
         let leaf_refs: Vec<&[u8]> = entries.iter().map(|s| s.as_bytes()).collect();
-        let (_root, proof_bytes) = uor_r4_core::semantic::merkle::compute_merkle_root_and_proof(&leaf_refs, target_idx).unwrap();
-        
-        let proof_hex = proof_bytes.into_iter().map(|p| hex::encode(p)).collect();
+        let (_root, proof_bytes) =
+            uor_r4_core::semantic::merkle::compute_merkle_root_and_proof(&leaf_refs, target_idx)
+                .unwrap();
+
+        let proof_hex = proof_bytes.into_iter().map(hex::encode).collect();
         Some((target, proof_hex, target_idx))
     }
 }
@@ -318,7 +342,11 @@ impl UorR4Router {
         }
     }
 
-    pub fn get_store_inclusion_proof_native(&self, facet: &str, path_str: &str) -> Option<(String, Vec<String>, usize)> {
+    pub fn get_store_inclusion_proof_native(
+        &self,
+        facet: &str,
+        path_str: &str,
+    ) -> Option<(String, Vec<String>, usize)> {
         let path: Vec<u32> = path_str
             .split(',')
             .filter_map(|s| s.parse::<u32>().ok())
@@ -342,11 +370,11 @@ impl UorR4Router {
         self.facet_store.compute_epoch_root()
     }
 
-
-
     #[wasm_bindgen]
     pub fn get_store_inclusion_proof(&self, facet: &str, path_str: &str) -> JsValue {
-        if let Some((target, proof, target_idx)) = self.get_store_inclusion_proof_native(facet, path_str) {
+        if let Some((target, proof, target_idx)) =
+            self.get_store_inclusion_proof_native(facet, path_str)
+        {
             let res = serde_json::json!({
                 "target": target,
                 "proof": proof,
@@ -1274,12 +1302,16 @@ impl UorR4Router {
             }]
         });
 
-        let routed_idx = routes.iter()
+        let routed_idx = routes
+            .iter()
             .max_by(|a, b| a.score.partial_cmp(&b.score).unwrap())
             .map(|r| r.axis as usize)
             .unwrap_or(1);
 
-        let active_state_refined: Vec<f64> = grounded.vsa_vector[..512].iter().map(|&x| x as f64).collect();
+        let active_state_refined: Vec<f64> = grounded.vsa_vector[..512]
+            .iter()
+            .map(|&x| x as f64)
+            .collect();
         let active_range = [(routed_idx - 1) * 32, routed_idx * 32];
         let routed_slice = &active_state_refined[active_range[0]..active_range[1]];
         let (sigma_q, sigma_kl, lambda_val, kappa, deficit_angle) =
@@ -1380,7 +1412,11 @@ impl UorR4Router {
                 window_index: r.axis as usize,
                 scale_x: scale_x_for_window(r.axis as usize),
                 routing_score: r.score as f64,
-                kappa: if r.axis as usize == routed_idx { k_v } else { 0.0 },
+                kappa: if r.axis as usize == routed_idx {
+                    k_v
+                } else {
+                    0.0
+                },
                 deficit_angle: if r.axis as usize == routed_idx {
                     d_a
                 } else {
@@ -1578,11 +1614,7 @@ impl UorR4Router {
         scored
     }
 
-    fn retrieve_vsa_multi_facet_resonance(
-        &self,
-        text: &str,
-        top_n: usize,
-    ) -> Vec<ResonanceResult> {
+    fn retrieve_vsa_multi_facet_resonance(&self, text: &str, top_n: usize) -> Vec<ResonanceResult> {
         let geom = geometry::VsaGeometry {
             space_cid: "blake3:vsa_space".to_string(),
         };
@@ -1654,7 +1686,10 @@ impl UorR4Router {
             }
 
             if let Some(facet_to_backoff) = longest_facet {
-                let path = working_coords.coordinates.get_mut(&facet_to_backoff).unwrap();
+                let path = working_coords
+                    .coordinates
+                    .get_mut(&facet_to_backoff)
+                    .unwrap();
                 path.pop();
                 if path.is_empty() {
                     working_coords.coordinates.remove(&facet_to_backoff);
@@ -1682,7 +1717,11 @@ impl UorR4Router {
             }
         }
 
-        scored.sort_by(|a, b| b.relevance.partial_cmp(&a.relevance).unwrap_or(std::cmp::Ordering::Equal));
+        scored.sort_by(|a, b| {
+            b.relevance
+                .partial_cmp(&a.relevance)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         scored.truncate(top_n);
         scored
     }
@@ -2309,7 +2348,8 @@ impl UorR4Router {
                 .or_insert_with(|| vec![1.0 / (512.0f64).sqrt(); 512])
                 .clone();
 
-            let routing = self.route_query_to_manifold_internal(text, identity, Some(&active_state));
+            let routing =
+                self.route_query_to_manifold_internal(text, identity, Some(&active_state));
             self.retrieve_geometric_resonance(text, &routing, top_n, &active_state, identity)
         }
     }

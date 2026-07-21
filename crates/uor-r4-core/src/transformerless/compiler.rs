@@ -344,9 +344,8 @@ pub struct Compiled {
     pub thresholds: Vec<i64>,
     /// binarized context-class signatures per stage: STAGES × [K × D/8 bytes].
     pub class_sigs: Vec<Vec<u8>>,
-    /// f32 context centroids — CERTIFIER-side only (binarization ablation);
-    /// populated in-memory during compilation and never serialized to artifact
-    /// files. Empty when a Compiled is loaded from a stored container.
+    /// f32 context centroids — CERTIFIER-side only (the binarization
+    /// ablation); not part of the runtime artifact accounting.
     pub ctx_cb: Vec<Vec<f32>>,
     /// κ-labels of the f32 token-codebook stages, recorded at compile time
     /// (the stages themselves quantize into `stage_books`; the labels are
@@ -490,7 +489,7 @@ fn deterministic_bucket(seed: &[u8; 32], h: usize, target_dim: usize) -> usize {
 }
 
 fn deterministic_sign(seed: &[u8; 32], h: usize) -> f32 {
-    if (hash_index(seed, h, "sign") % 2) == 0 {
+    if hash_index(seed, h, "sign").is_multiple_of(2) {
         1.0
     } else {
         -1.0
@@ -552,8 +551,8 @@ pub fn deterministic_project(
                 .sum::<f32>()
                 .sqrt()
                 .max(1e-9);
-            for d in 0..target_dim {
-                projected_row[d] /= n;
+            for x in projected_row.iter_mut() {
+                *x /= n;
             }
 
             projected_vecs[t * target_dim..(t + 1) * target_dim].copy_from_slice(&projected_row);
@@ -841,12 +840,15 @@ pub fn compile(oracle: &dyn TeacherOracle, corpus: &Corpus) -> Compiled {
 
 /// Flat, versioned serialization of the compiled artifacts (κ-pins are
 /// re-derivable from the bytes; the store is rebuilt from the corpus).
-///
-/// Format TLA5: always includes a u32 vocab prefix; ctx_cb is not serialized.
 pub fn artifact_bytes(a: &Compiled) -> Vec<u8> {
     let vocab = a.token_codes.len() / STAGES;
-    let mut b: Vec<u8> = b"TLA5".to_vec();
-    b.extend_from_slice(&(vocab as u32).to_le_bytes());
+    let mut b: Vec<u8> = if vocab == V {
+        b"TLA3".to_vec()
+    } else {
+        let mut bytes = b"TLA4".to_vec();
+        bytes.extend_from_slice(&(vocab as u32).to_le_bytes());
+        bytes
+    };
     b.extend_from_slice(&a.stage_shifts);
     b.extend_from_slice(&a.token_codes);
     for book in &a.stage_books {
@@ -857,6 +859,11 @@ pub fn artifact_bytes(a: &Compiled) -> Vec<u8> {
     }
     for s in &a.class_sigs {
         b.extend_from_slice(s);
+    }
+    for cb in &a.ctx_cb {
+        for f in cb {
+            b.extend_from_slice(&f.to_le_bytes());
+        }
     }
     b
 }
@@ -889,23 +896,13 @@ pub fn load_artifacts_from(path: &str) -> Option<Compiled> {
     Some(art)
 }
 
-/// Parse a TLA3, TLA4, or TLA5 container from bytes.
-///
-/// TLA3/TLA4 are legacy formats that include f32 ctx_cb bytes; these are
-/// silently discarded on load (ctx_cb is not part of the deployed artifact).
-/// TLA5 is the current format: always includes a u32 vocab prefix, no ctx_cb.
+/// Parse a TLA3 or vocabulary-sized TLA4 container from bytes.
 pub fn parse_artifacts(b: &[u8]) -> Option<Compiled> {
-    let (vocab, mut o, has_ctx_cb) = match b.get(..4)? {
-        b"TLA3" => (V, 4usize, true),
+    let (vocab, mut o) = match b.get(..4)? {
+        b"TLA3" => (V, 4usize),
         b"TLA4" => (
             u32::from_le_bytes(b.get(4..8)?.try_into().ok()?) as usize,
             8usize,
-            true,
-        ),
-        b"TLA5" => (
-            u32::from_le_bytes(b.get(4..8)?.try_into().ok()?) as usize,
-            8usize,
-            false,
         ),
         _ => return None,
     };
@@ -913,7 +910,7 @@ pub fn parse_artifacts(b: &[u8]) -> Option<Compiled> {
     let bk = STAGES * K * D;
     let th = D * 8;
     let cs = STAGES * K * D / 8;
-    let cc = if has_ctx_cb { STAGES * K * D * 4 } else { 0 };
+    let cc = STAGES * K * D * 4;
     if b.len() != o + STAGES + tc + bk + th + cs + cc {
         return None;
     }
@@ -941,19 +938,22 @@ pub fn parse_artifacts(b: &[u8]) -> Option<Compiled> {
         class_sigs.push(b[o..o + K * D / 8].to_vec());
         o += K * D / 8;
     }
-    // Legacy TLA3/TLA4 containers include f32 ctx_cb bytes; advance past them
-    // without reading. TLA5 containers do not include ctx_cb at all.
-    if has_ctx_cb {
-        o += STAGES * K * D * 4;
+    let mut ctx_cb = Vec::new();
+    for _ in 0..STAGES {
+        let mut cb = vec![0f32; K * D];
+        for f in cb.iter_mut() {
+            *f = f32::from_le_bytes(b[o..o + 4].try_into().unwrap());
+            o += 4;
+        }
+        ctx_cb.push(cb);
     }
-    let _ = o; // all bytes consumed
     Some(Compiled {
         token_codes,
         stage_books,
         stage_shifts,
         thresholds,
         class_sigs,
-        ctx_cb: Vec::new(),
+        ctx_cb,
         token_stage_kappas: Vec::new(),
     })
 }
@@ -1001,7 +1001,7 @@ pub fn induce_hierarchical_codes(
         .filter(|(_, count)| *count >= 5)
         .collect();
 
-    frequent_paths.sort_by(|a, b| b.1.cmp(&a.1));
+    frequent_paths.sort_by_key(|entry| std::cmp::Reverse(entry.1));
 
     let relational_prefixes = frequent_paths
         .into_iter()

@@ -23,6 +23,8 @@ use super::runtime::{
 use super::teacher::TeacherOracle;
 use std::collections::BTreeMap;
 
+// Retained for the Phase-4 EXCT prefix-store path; not yet called.
+#[allow(dead_code)]
 fn build_prefix_store(
     art: &compiler::Compiled,
     rot: &[usize; WINDOW + 1],
@@ -368,12 +370,8 @@ fn build_store_generic(
             let weight = c.top_weights[i][k_idx];
             if weight > 0 {
                 *levels[0].entry(vec![]).or_default().entry(tok).or_default() += weight;
-                for d in 1..=depths {
-                    *levels[d]
-                        .entry(key(i, d))
-                        .or_default()
-                        .entry(tok)
-                        .or_default() += weight;
+                for (d, level) in levels.iter_mut().enumerate().take(depths + 1).skip(1) {
+                    *level.entry(key(i, d)).or_default().entry(tok).or_default() += weight;
                 }
             }
         }
