@@ -413,9 +413,9 @@ impl TlessAxis for TlessAxisImpl {
     const MAX_OUTPUT_BYTES: usize = 40;
 
     /// input: WINDOW u32 token ids, little-endian, oldest first.
-    /// output (33 bytes, big-endian fields): token u32 | depth u8 |
+    /// output (37 bytes, big-endian fields): token u32 | depth u8 |
     /// code [u8; 4] | count u32 | adds | xors | shifts | compares |
-    /// table_reads (u32 each). No multiply field exists, by design.
+    /// table_reads | candidate_scans (u32 each). No multiply field exists, by design.
     fn predict(input: &[u8], out: &mut [u8]) -> Result<usize, ShapeViolation> {
         if input.len() < TLESS_INPUT_BYTES {
             return Err(tless_violation(
