@@ -95,6 +95,16 @@ artifacts (deterministic across runs; debug profile).
   `crates/uor-r4-core/tests/fixtures/baseline_kappa.json` (`--release --test kappa_reproduction
   -- --ignored`). Cross-platform byte equality is **not** claimed today (platform SIMD FP in the
   compiler) — this is exactly what D2 addresses.
+- **Baseline anchor moved 2026-07-21** (maintainer decision): the pin was stale from
+  `b142c93`-era after two deliberate compiler redesigns — `5baa7c0` (phase-10: u32 token IDs, new
+  corpus record layout with top-3 tokens/weights, oracle separation) and `bbdd596` (hash-index
+  RVQ projection, relational prefixes). Investigation before re-pinning: (1) compiler determinism
+  verified — two independent compiles produced identical 27-κ sets; (2) stage-0 drift traced to
+  those redesigns, not to nondeterminism or platform wobble. The same u32 migration is what
+  invalidated the on-disk TLS1 store (§3.2). Re-pinning helper: `dump_baseline_kappa` in
+  `tests/kappa_reproduction.rs`. Lesson recorded for Gate E: an unversioned baseline plus a
+  redesigned compiler = a broken reproduction gate; R4G1's HEAD records compiler identity for
+  exactly this reason.
 
 ## 4. M.V.G. checkpoint targets (D1) — DRAFT
 

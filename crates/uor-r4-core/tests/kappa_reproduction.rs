@@ -122,3 +122,64 @@ fn kappa_reproduction() {
         "container κ"
     );
 }
+
+/// Re-pinning helper: compiles against the same fixtures and prints a complete
+/// baseline JSON (asserted fields) on stdout. Use when the compiler is
+/// intentionally redesigned and the pins must move:
+///
+///   cargo test -p uor-r4-core --release --test kappa_reproduction -- \
+///     --ignored --nocapture dump_baseline_kappa > /tmp/new_baseline.json
+///
+/// then review the diff against tests/fixtures/baseline_kappa.json before
+/// adopting (a maintainer decision, never automatic).
+#[test]
+#[ignore]
+fn dump_baseline_kappa() {
+    let dir = env!("CARGO_MANIFEST_DIR");
+    let ckpt =
+        std::env::var("TLESS_CHECKPOINT").unwrap_or_else(|_| "/tmp/ref/out/model.bin".to_string());
+    if std::fs::metadata(&ckpt).is_err() {
+        eprintln!("skipping: source checkpoint not found at {ckpt}");
+        return;
+    }
+    let corpus = compiler::load_corpus_from(
+        &format!("{dir}/tests/fixtures/c_meta.bin"),
+        &format!("{dir}/tests/fixtures/c_recs.bin"),
+    )
+    .expect("corpus fixtures load");
+    let oracle = LlamaOracle::load(&ckpt);
+    let art = compiler::compile(&oracle, &corpus);
+
+    let books: Vec<String> = art
+        .stage_books
+        .iter()
+        .map(|b| kappa_of(&b.iter().map(|&x| x as u8).collect::<Vec<u8>>()))
+        .collect();
+    let thr: Vec<u8> = art
+        .thresholds
+        .iter()
+        .flat_map(|t| t.to_le_bytes())
+        .collect();
+    let ctx: Vec<String> = art
+        .ctx_cb
+        .iter()
+        .map(|cb| compiler::kappa_of_f32s(cb))
+        .collect();
+    let sigs: Vec<String> = art.class_sigs.iter().map(|s| kappa_of(s)).collect();
+    let container = compiler::artifact_bytes(&art);
+
+    let out = serde_json::json!({
+        "source": { "kappa": oracle.kappa(), "bytes": oracle.source_bytes() },
+        "token_codebook_stages": art.token_stage_kappas,
+        "stage_books": books,
+        "token_codes": kappa_of(&art.token_codes),
+        "stage_shifts": art.stage_shifts.iter().map(|&s| s as u64).collect::<Vec<_>>(),
+        "bundle_derived_macos": {
+            "threshold_vector": kappa_of(&thr),
+            "context_codebook_stages": ctx,
+            "class_signatures": sigs,
+            "container": { "bytes": container.len() as u64, "kappa": kappa_of(&container) },
+        },
+    });
+    println!("{}", serde_json::to_string_pretty(&out).unwrap());
+}
