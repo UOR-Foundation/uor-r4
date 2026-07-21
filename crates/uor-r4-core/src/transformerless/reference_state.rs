@@ -42,6 +42,9 @@ impl<const CAP: usize> ActiveFrontier<CAP> {
     }
 
     pub fn clear(&mut self) {
+        for entry in &mut self.entries[..self.len] {
+            *entry = ActiveFrontierEntry::default();
+        }
         self.len = 0;
     }
 
@@ -126,5 +129,18 @@ mod tests {
             ..packed
         };
         assert_eq!(out_of_bounds.overlap_range(10), None);
+    }
+
+    #[test]
+    fn clear_resets_used_entries() {
+        let mut frontier = ActiveFrontier::<2>::default();
+        assert!(frontier.push(ActiveFrontierEntry {
+            region_id: 7,
+            score_q: 100,
+            margin: 2,
+            depth: 3,
+        }));
+        frontier.clear();
+        assert_eq!(frontier, ActiveFrontier::<2>::default());
     }
 }
