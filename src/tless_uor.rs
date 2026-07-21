@@ -383,13 +383,13 @@ pub fn generate_steps_into(seed: &[u32], out: &mut [runtime::Prediction]) -> Opt
 
 // =====================================================================
 pub const TLESS_INPUT_BYTES: usize = WINDOW * 4; // 32
-pub const TLESS_OUTPUT_BYTES: usize = 33;
+pub const TLESS_OUTPUT_BYTES: usize = 37;
 
 uor_foundation_sdk::axis! {
     /// Mul-free table-native prediction axis (transformerless runtime).
     pub trait TlessAxis: AxisExtension {
         const AXIS_ADDRESS: &'static str = "https://uor.foundation/axis/TlessAxis";
-        const MAX_OUTPUT_BYTES: usize = 36;
+        const MAX_OUTPUT_BYTES: usize = 40;
         fn predict(input: &[u8], out: &mut [u8]) -> Result<usize, ShapeViolation>;
     }
 }
@@ -410,12 +410,12 @@ fn tless_violation(constraint: &'static str, min: usize, max: usize) -> ShapeVio
 
 impl TlessAxis for TlessAxisImpl {
     const AXIS_ADDRESS: &'static str = "https://uor.foundation/axis/TlessAxis/Impl";
-    const MAX_OUTPUT_BYTES: usize = 36;
+    const MAX_OUTPUT_BYTES: usize = 40;
 
     /// input: WINDOW u32 token ids, little-endian, oldest first.
-    /// output (33 bytes, big-endian fields): token u32 | depth u8 |
+    /// output (37 bytes, big-endian fields): token u32 | depth u8 |
     /// code [u8; 4] | count u32 | adds | xors | shifts | compares |
-    /// table_reads (u32 each). No multiply field exists, by design.
+    /// table_reads | candidate_scans (u32 each). No multiply field exists, by design.
     fn predict(input: &[u8], out: &mut [u8]) -> Result<usize, ShapeViolation> {
         if input.len() < TLESS_INPUT_BYTES {
             return Err(tless_violation(
@@ -494,6 +494,7 @@ impl TlessAxis for TlessAxisImpl {
             out[21..25].copy_from_slice(&(k.shifts as u32).to_be_bytes());
             out[25..29].copy_from_slice(&(k.compares as u32).to_be_bytes());
             out[29..33].copy_from_slice(&(k.table_reads as u32).to_be_bytes());
+            out[33..37].copy_from_slice(&(k.candidate_scans as u32).to_be_bytes());
             TLESS_OUTPUT_BYTES
         })
         .ok_or(ShapeViolation {
@@ -561,15 +562,16 @@ impl<'a> IntoBindingValue<'a> for TlessPredictOutput {
 
 impl PartitionProductFields for TlessPredictOutput {
     const FIELDS: &'static [(u32, u32)] = &[
-        (0, 2),
-        (2, 1),
-        (3, 4),
-        (7, 4),
-        (11, 4),
-        (15, 4),
-        (19, 4),
-        (23, 4),
-        (27, 4),
+        (0, 4),
+        (4, 1),
+        (5, 4),
+        (9, 4),
+        (13, 4),
+        (17, 4),
+        (21, 4),
+        (25, 4),
+        (29, 4),
+        (33, 4),
     ];
     const FIELD_NAMES: &'static [&'static str] = &[
         "token",
@@ -581,6 +583,7 @@ impl PartitionProductFields for TlessPredictOutput {
         "shifts",
         "compares",
         "table_reads",
+        "candidate_scans",
     ];
 }
 
@@ -710,7 +713,7 @@ mod tests {
         for (i, w) in [1u32, 2, 3, 4, 5, 6, 7, 8].iter().enumerate() {
             input[4 * i..4 * i + 4].copy_from_slice(&w.to_le_bytes());
         }
-        let mut out = [0u8; 36];
+        let mut out = [0u8; 40];
         let n = TlessAxisImpl::predict(&input, &mut out).expect("predict");
         assert_eq!(n, TLESS_OUTPUT_BYTES);
         let token = u32::from_be_bytes([out[0], out[1], out[2], out[3]]);
@@ -718,12 +721,13 @@ mod tests {
         let count = u32::from_be_bytes(out[9..13].try_into().unwrap());
         let adds = u32::from_be_bytes(out[13..17].try_into().unwrap());
         let table_reads = u32::from_be_bytes(out[29..33].try_into().unwrap());
+        let candidate_scans = u32::from_be_bytes(out[33..37].try_into().unwrap());
         assert_eq!(token, 1, "only level-0 entry populated");
         assert_eq!(depth, 0, "synthetic store answers at level 0");
         assert_eq!(count, 10);
-        assert!(adds > 0 && table_reads > 0, "census recorded the path");
-        // No multiply field exists in the record: bytes 13..33 are exactly
-        // the five census counters, and OpKernel has no multiply to count.
+        assert!(adds > 0 && table_reads > 0 && candidate_scans > 0, "census recorded the path");
+        // No multiply field exists in the record: bytes 13..37 are exactly
+        // the six census counters, and OpKernel has no multiply to count.
     }
 
     #[test]
