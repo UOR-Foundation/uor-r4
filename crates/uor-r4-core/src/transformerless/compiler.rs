@@ -408,7 +408,7 @@ pub fn calibrate_hamming_regions_from_signatures(
             bytes[..chunk.len()].copy_from_slice(chunk);
             *word = u64::from_le_bytes(bytes);
         }
-        for stage in 0..STAGES {
+        for (stage, stage_histograms) in histograms.iter_mut().enumerate().take(STAGES) {
             let Some(stage_sigs) = class_sigs.get(stage) else {
                 continue;
             };
@@ -430,7 +430,7 @@ pub fn calibrate_hamming_regions_from_signatures(
                 }
             }
             if best_dist <= D as u32 {
-                histograms[stage][best_class][best_dist as usize] += 1;
+                stage_histograms[best_class][best_dist as usize] += 1;
             }
         }
     }
