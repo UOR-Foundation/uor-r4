@@ -199,8 +199,8 @@ Seven new crates join the existing three. Dependency direction is strict:
 |---|---|---|
 | `crates/uor-r4-graph-format` | no_std-compatible packed R4G1 types, parser, canonical serializer, checksums, versioning, two-stage validation, `GraphView` borrowed slices (caller-owned bytes primary — target-neutral, D6) | Generalizes TLA3/TLS1 (`compiler.rs:585`, `runtime.rs:559`) |
 | `crates/uor-r4-graph-runtime` | Allocation-free runtime: fixed-capacity `RuntimeState`, normative scalar kernel, `ResolutionStatus`, witness generation, validated dispatch for arch kernels; primary deployment target per D6 | Generalizes `runtime.rs` (`OpKernel`, `assign`, `predict`, `generate_greedy_into`) |
-| `crates/uor-r4-graph-compiler` | Observation orchestration, cover induction, overlap calibration, graph induction, residualization, Boolean synthesis, packing, checkpoint/resume, deterministic compile mode (D2) | Generalizes `compiler.rs` (Corpus, RVQ, train_cut, κ pinning) |
-| `crates/uor-r4-graph-certify` | Teacher comparison, held-out evaluation, allocation tests, op census, cache/perf benchmarks, witness replay, certificate emission | Absorbs `certify.rs`, `compare.rs` |
+| `crates/uor-r4-graph-compiler` | Observation orchestration, cover induction, overlap calibration, graph induction, residualization, Boolean synthesis, packing, checkpoint/resume, deterministic compile mode (D2) | Generalizes `compiler.rs` (Corpus, RVQ, train_cut, κ pinning); parallelism + memory budget per §4.1 |
+| `crates/uor-r4-graph-certify` | Teacher comparison, held-out evaluation, allocation tests, op census, cache/perf benchmarks, witness replay, certificate emission | Absorbs `certify.rs`, `compare.rs`; same §4.1 rules |
 | `crates/uor-r4-model-source` | HF source adapters (pinned download, safetensors load, tokenizer export); preserves the two-surface `TeacherOracle` and adds optional hidden-state/logit trace surface | Absorbs `teacher.rs` adapter, `scenarios.rs` tokenizer export, `src/model.rs` downloader |
 | `crates/uor-r4-graph-cli` | `download`, `observe`, `compile`, `inspect`, `certify`, `compare`, `bench` | Absorbs `command.rs`; root `r4` binary delegates |
 | `crates/uor-r4-proof-model` | Executable specification types + property tests; later Kani/Verus models without coupling production code to a proof tool | Extends witness tests P-1…P-4 (`transformerless/mod.rs:28-137`) |
@@ -210,6 +210,50 @@ Engineering standard (PDF §20) applies to all new crates: newtypes for `NodeId`
 enums at library boundaries; private fields except packed wire structs; **no unsafe** in the
 portable runtime (later SIMD/mmap unsafe isolated in adapter modules with SAFETY comments + Miri);
 borrowing over cloning; no wildcard imports outside tests.
+
+### 4.1 Compiler-wide requirements — parallelism, determinism, memory budget
+
+Applies to every `uor-r4-graph-compiler` and `uor-r4-graph-certify` stage (Phases 2–4, 6, 8+).
+The runtime contract (§6) is unaffected: parallelism never reaches the deployed kernel.
+
+**Parallelism model.** A work-stealing pool (e.g. `rayon`) lives in the compiler/certify crates
+only; it must never become a dependency of format/runtime/proof-model. Per-stage shape:
+
+| Stage | Parallel unit | Ordering rule |
+|---|---|---|
+| Observation generation / extraction | across sequences/contexts; each worker owns a decoding state, weights shared read-only | partition by content-addressed sample ID **before** any parallelism (PDF §22); per-shard outputs merged in shard-ID order |
+| Cover induction (k-means family) | per-point assignment | centroid update = ordered reduction (per-shard partials combined in shard-ID order, f64 or fixed-point accumulators); iterations stay sequential |
+| Graph construction | per-node edge building | dedup/canonicalization after a deterministic sort |
+| Boolean synthesis (Phase 6) | per-candidate search | deterministic candidate ordering |
+| Residuals / packing / certification | per-region streaming; per-eval-point | ordered aggregation for certificate statistics |
+
+**Determinism rules (Gate E / D2).**
+
+1. Thread count is a pure performance knob: a compile at T=1 and at T=N must produce byte-identical
+   κ. CI asserts this on a pinned mini-corpus (T=1 vs T=4 → identical artifact bytes).
+2. No naive parallel FP reductions: FP addition is non-associative, so all reductions are ordered
+   (shard-ID order) with f64 or fixed-point accumulators.
+3. Certificate-bearing compiles use scalar kernels only (no Accelerate/NEON matmul): platform SIMD
+   reorders FP sums internally and breaks cross-platform byte equality (D2). Platform-accelerated
+   mode is for local iteration, validated by behavioral equivalence (PDF §15).
+4. Seeds pinned; any shuffling derives from a seeded PRNG over sample IDs, never iteration order.
+
+**Memory budget.** A `--memory-budget` flag derives shard sizes from
+`peak ≈ M_weights + T × (S_shard + M_state) + M_cluster ≤ budget`:
+
+- Weights: safetensors mmap'd. Default mode converts to f32 resident (~540 MB at 135M) for speed;
+  low-memory mode converts per row from mapped BF16 (257 MB, touched pages only).
+- Observations: streamed in shards, never a full in-RAM observation matrix; quantized to i8/sign
+  codes at extraction time (f32 transient within a shard) — ~0.3 KB vs ~3 KB per observation.
+- Clustering: streaming algorithms only (mini-batch spherical k-means, CLARA-style sampled
+  medoids); no full n×n distance matrices, no naive HDBSCAN; distance computation always blocked.
+- Cluster state: centroids only (k×d×4 B; e.g. 4096×288×4 ≈ 4.7 MB).
+- Checkpoints: every stage spills content-addressed shards to disk and resumes (extends the
+  existing corpus append-only resumability, `compiler.rs:120`).
+- Worked example: 2 GB budget, 8 workers, mmap'd weights ⇒ ~190 MB/shard ⇒ ~700k quantized
+  observations in flight per worker.
+- Note: generation within one sequence is autoregressive and never parallelizes; parallelism comes
+  from many sequences.
 
 ---
 
@@ -283,6 +327,8 @@ against the reference classifier.
   partition work by content-addressed sample IDs (PDF §22). Extend `TeacherOracle` (in
   `uor-r4-model-source`) with an optional trace surface: final hidden states, top-k logits,
   perturbation responses — compiler-only, cfg-gated.
+- Compiler parallelism, determinism, and memory budget follow §4.1: sharded observation pipeline,
+  ordered reductions, mmap'd weights, streaming clustering, checkpointed spills, T-invariance.
 - Implement the deterministic compile mode chosen in D2 (normative scalar FP path / pinned
   backends) so certificate-bearing outputs can satisfy Gate E across platforms.
 - Cover induction: recursive/spherical k-means or medoid/density variants over compiler-side
@@ -497,6 +543,7 @@ Adopted from PDF §16–§18, §21 without dilution:
 | T11 epoch traceability | immutable ordered layers, evidence refs | chain validation tests | 9 |
 | T12 resolution-status determinism | integer features + manifest thresholds | property tests | 5 |
 | Empirical fidelity (§26) | pinned eval sets, declared metrics/thresholds | certificate with CIDs, CIs, slices | 3,4,8 |
+| Compile-time determinism (D2) | §4.1 ordered reductions, T-invariance | CI: T=1 vs T=4 compile → identical κ | 2 |
 
 Existing P1–P5 propositions (PROOF.md) map onto T2 (P1), §26 (P2), Gate E (P3), A5/P4
 (TeacherOracle discipline), and Gate D/rate-distortion (P5). PROOF.md gets a successor section
@@ -512,7 +559,7 @@ once the graph path lands; the old propositions remain valid for the legacy base
 | B Runtime contract | 0 alloc/token; no float/multiply in kernel; no locks; bounded frontier/probes; Miri clean | allocation-test suite (pattern: `tests/allocation_census.rs`); kernel source scan + disassembly audit; `cargo miri test` |
 | C Fidelity | graph ≥ TLA3 baseline on declared held-out metrics before replacing default | `r4 certify` graph vs. baseline report (top-1, agreement, bits/token, declared CIs); HF-path certificate tooling per issue #34; M.V.G. checkpoint targets (D1) reviewed at end of Phase 5 |
 | D Performance | fewer instructions/bytes/latency per token at equal fidelity | criterion/iai benchmarks with hardware metadata + regression thresholds (pinned runner per D7) |
-| E Reproducibility | identical pinned inputs → byte-identical graph + certificate, per the D2 semantics (byte equality on the canonical deterministic compiler; behavioral equivalence across platforms otherwise) | deterministic rebuild test in CI (extends `kappa_reproduction.rs`) |
+| E Reproducibility | identical pinned inputs → byte-identical graph + certificate, per the D2 semantics (byte equality on the canonical deterministic compiler; behavioral equivalence across platforms otherwise); T-invariant compile per §4.1 | deterministic rebuild test in CI (extends `kappa_reproduction.rs`); T=1 vs T=4 mini-corpus compile → identical κ |
 | F Proof status | every theorem/assumption linked to test/formal result or marked unproven | proof-status matrix CI check |
 | G Semantic validity | reuse, perturbation stability, sufficiency, anti-memorization shown | semantic-coherence certificate thresholds |
 | H Routing safety | shortlist recall + fallback limits met; verifier normative | recall certificate vs. reference classifier |
@@ -529,7 +576,7 @@ The table is the source content.
 
 1. R4G1 wire-format RFC + GraphView validation invariants → Phase 0/1 (issue #11; draft at `docs/transformerless/R4G1.md`).
 2. Fixed-width newtypes; eliminate semantic `usize` (`Prediction.depth` at `runtime.rs:369`, router result structs) → Phase 1 (#12).
-3. Counting-allocator tests around existing `Runtime` APIs → Phase 0/5 (#13; harness landed as `crates/uor-r4-core/tests/allocation_census.rs`).
+3. Counting-allocator tests around existing `Runtime` APIs → Phase 0/5 (#13; done: `crates/uor-r4-core/tests/allocation_census.rs`).
 4. Per-token op + candidate-scan instrumentation → Phase 2 (#14).
 5. Per-class Hamming distance distributions + calibrated radii compiler output → Phase 2 (#15).
 6. Bounded multi-membership assignment, keep nearest-class fallback → Phase 2 (#16).
@@ -565,6 +612,8 @@ The table is the source content.
 | Boolean approximation error | shortlist + exact verifier + fallback; recall certification (Gate H) |
 | SIMD unsafety/nondeterminism | safe scalar norm; isolated adapters; equivalence tests; disable flag |
 | Cross-platform compiler FP drift | D2 canonical deterministic compile mode for certificate-bearing artifacts |
+| Parallel-compile nondeterminism | §4.1: content-addressed sharding, ordered reductions, T-invariance CI assert, scalar canonical mode |
+| Compiler memory blowup | §4.1: mmap weights, streamed quantized shards, mini-batch clustering, budget-derived shard sizes, disk checkpoints |
 | Overclaiming | proof-status matrix (Gate F); structural vs. empirical claims separated in every certificate |
 | Semantic memorization (phrase tables) | multi-view invariance, MDL penalty, reuse thresholds (Gate G) |
 | Novelty overconfidence | calibrated radii, support/disagreement signals, explicit status, fallback/abstain (D4) |
@@ -634,6 +683,9 @@ New `.github/workflows/ci.yml` (the repo currently has no test CI — only Pages
 - allocation-freedom suite (counting allocator; pattern in `tests/allocation_census.rs`)
 - kernel source-scan + op-census invariants (ported P-4 pattern)
 - deterministic rebuild / κ-reproduction (pinned fixtures; semantics per D2)
+- compiler T-invariance: pinned mini-corpus compiled at T=1 vs T=4 → byte-identical κ (§4.1, Gate E)
+- compiler memory-budget smoke: pinned mini-corpus compile under a small `--memory-budget` completes
+  via shard spill, κ identical to unbudgeted run (§4.1)
 - fuzz smoke runs (parser/validator/witness targets)
 - dependency + license audit (`cargo deny` or `cargo audit`)
 - proof-status matrix consistency check (Phase 10)
