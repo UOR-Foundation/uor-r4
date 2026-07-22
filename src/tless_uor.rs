@@ -2,7 +2,7 @@
 //!
 //! Three bindings, mirroring the R4Axis pattern in this crate:
 //!
-//! - **Addressing**: the TLA3 artifact container and individual store
+//! - **Addressing**: the TLA5 artifact container and individual store
 //!   entries become uor-addr content (CBOR realization, blake3 axis). The
 //!   proof pins stay raw-blake3 of the container bytes; the uor-addr κ-label
 //!   addresses the CBOR canonical form — two labels, one artifact, both
@@ -37,7 +37,7 @@ use uor_r4_router::{R4HostBounds, R4_FP_MAX, R4_INLINE_BYTES};
 pub struct TlessState {
     pub art: Compiled,
     pub store: Store,
-    /// raw blake3 κ of the TLA3 container (the PROOF.md pin)
+    /// raw blake3 κ of the TLA5 container (the PROOF.md pin)
     pub artifact_kappa: String,
     /// uor-addr κ-label of the container (CBOR realization, blake3 axis)
     pub artifact_address: String,
@@ -233,10 +233,10 @@ fn cbor_byte_string(bytes: &[u8]) -> Vec<u8> {
     out
 }
 
-/// Content-address a TLA3 artifact container: the container as a CBOR byte
+/// Content-address a TLA5 artifact container: the container as a CBOR byte
 /// string, addressed on the blake3 axis → "blake3:<hex>" κ-label.
-pub fn address_container(tla3: &[u8]) -> Result<String, String> {
-    uor_addr::cbor::address_blake3(&cbor_byte_string(tla3))
+pub fn address_container(tla5: &[u8]) -> Result<String, String> {
+    uor_addr::cbor::address_blake3(&cbor_byte_string(tla5))
         .map(|out| out.address.as_str().to_string())
         .map_err(|e| format!("{e:?}"))
 }
@@ -700,7 +700,7 @@ mod tests {
             "/crates/uor-r4-core/tests/fixtures"
         );
         let bytes = std::fs::read(format!("{dir}/tless_artifacts.bin")).unwrap();
-        let art = compiler::parse_artifacts(&bytes).expect("fixture TLA3 parses");
+        let art = compiler::parse_artifacts(&bytes).expect("fixture TLA5 parses");
         let mut store: Store = (0..=STAGES).map(|_| Default::default()).collect();
         store[0].entry(vec![]).or_default().insert(1, 10);
         set_tless_state(art, store);
@@ -778,7 +778,7 @@ mod tests {
             "/crates/uor-r4-core/tests/fixtures"
         );
         let bytes = std::fs::read(format!("{dir}/tless_artifacts.bin")).unwrap();
-        let art = compiler::parse_artifacts(&bytes).expect("fixture TLA3 parses");
+        let art = compiler::parse_artifacts(&bytes).expect("fixture TLA5 parses");
         let mut store: Store = (0..=STAGES).map(|_| Default::default()).collect();
         store[0].entry(vec![]).or_default().insert(1, 10);
         store[1].entry(vec![9]).or_default().insert(2, 5);

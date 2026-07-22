@@ -1196,7 +1196,7 @@ fn handle_connection(
             "models": if ready { vec![serde_json::json!({
                 "name": "uor-transformerless",
                 "model": "uor-transformerless",
-                "details": { "family": "r4-transformerless", "format": "TLA3/TLS1" }
+                "details": { "family": "r4-transformerless", "format": "TLA5/TLS1" }
             })] } else { Vec::<serde_json::Value>::new() },
             "ready": ready
         });

@@ -161,7 +161,7 @@ fn parse_artifacts_measured() -> (Compiled, String) {
         }
         println!("[parse] artifacts: {path} did not parse, trying next candidate");
     }
-    panic!("no parsable TLA3/TLA4 artifact container found");
+    panic!("no parsable TLA3/TLA4/TLA5 artifact container found");
 }
 
 /// Parse the TLS1 store, measuring the parse. Falls back to a small
