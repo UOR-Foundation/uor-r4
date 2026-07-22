@@ -577,10 +577,10 @@ impl UorR4Router {
     }
 
     /// Returns the active counts for the 64 experts
-    pub fn get_expert_counts(&self) -> Vec<usize> {
+    pub fn get_expert_counts(&self) -> Vec<u32> {
         self.expert_active_counts
             .iter()
-            .map(|&c| c as usize)
+            .map(|&c| c as u32)
             .collect()
     }
 
