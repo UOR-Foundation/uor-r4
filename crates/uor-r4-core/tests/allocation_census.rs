@@ -350,7 +350,7 @@ fn allocation_census() {
     );
     println!("[kernel] cumulative {}", rt.kernel.report());
     let tokens: Vec<u32> = out.iter().map(|p| p.token).collect();
-    let depths: Vec<usize> = out.iter().map(|p| p.depth).collect();
+    let depths: Vec<u8> = out.iter().map(|p| p.depth).collect();
     println!("[gen] tokens {tokens:?}");
     println!("[gen] depths {depths:?}");
 

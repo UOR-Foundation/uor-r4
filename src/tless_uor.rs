@@ -489,7 +489,7 @@ impl TlessAxis for TlessAxisImpl {
 
             let k = &rt.kernel;
             out[0..4].copy_from_slice(&p.token.to_be_bytes());
-            out[4] = p.depth as u8;
+            out[4] = p.depth;
             out[5..9].copy_from_slice(&code);
             out[9..13].copy_from_slice(&p.count.to_be_bytes());
             out[13..17].copy_from_slice(&(k.adds as u32).to_be_bytes());
@@ -774,7 +774,7 @@ mod tests {
         let steps = generate_steps(&[1], 4).expect("generate");
         let tokens: Vec<u32> = steps.iter().map(|p| p.token).collect();
         assert_eq!(tokens, vec![5, 6, 7, 5]);
-        let depths: Vec<usize> = steps.iter().map(|p| p.depth).collect();
+        let depths: Vec<u8> = steps.iter().map(|p| p.depth).collect();
         assert_eq!(depths, vec![4, 4, 4, 3]);
     }
 

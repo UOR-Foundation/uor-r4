@@ -425,7 +425,9 @@ pub fn code_plain(art: &Compiled, rot: &[usize; WINDOW + 1], c: &Corpus, i: usiz
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Prediction {
     pub token: u32,
-    pub depth: usize,
+    /// Resolution depth (0..=STAGES): fixed-width, never `usize`, at the
+    /// serialization boundary (issue #12).
+    pub depth: u8,
     pub count: u32,
 }
 
@@ -447,7 +449,7 @@ pub fn predict_witness_plain(store: &Store, code: &[u8; STAGES]) -> Prediction {
             }
             return Prediction {
                 token: best_t,
-                depth: d,
+                depth: d as u8,
                 count: best_n,
             };
         }
@@ -479,7 +481,7 @@ pub fn predict_witness_plain_with_priors(
             }
             return Prediction {
                 token: best_t,
-                depth: d,
+                depth: d as u8,
                 count: best_n,
             };
         }
@@ -587,7 +589,7 @@ impl<'a> Runtime<'a> {
                 }
                 return Prediction {
                     token: best_t,
-                    depth: d,
+                    depth: d as u8,
                     count: best_n,
                 };
             }
@@ -631,7 +633,7 @@ impl<'a> Runtime<'a> {
                 }
                 return Prediction {
                     token: best_t,
-                    depth: d,
+                    depth: d as u8,
                     count: best_n,
                 };
             }
