@@ -1,6 +1,7 @@
 //! Source-bias amplification, rare-group erasure, and provenance-deletion harness
 //! (Phase 3 / PDF §14 / Plan §9.21).
 
+use crate::transformerless::transitions::TransitionGraph;
 use blake3::Hasher;
 use serde::{Deserialize, Serialize};
 
@@ -70,18 +71,18 @@ impl FairnessAndProvenanceCertificate {
     }
 
     /// Compute self-referential BLAKE3 CID over certificate payload.
-pub fn compute_cid(&self) -> String {
-    let mut clone = self.clone();
-    clone.certificate_cid.clear();
+    pub fn compute_cid(&self) -> String {
+        let mut clone = self.clone();
+        clone.certificate_cid.clear();
 
-    let mut bytes = Vec::new();
-    ciborium::into_writer(&clone, &mut bytes)
-        .expect("fairness/provenance certificate CBOR serialization must succeed");
+        let mut bytes = Vec::new();
+        ciborium::into_writer(&clone, &mut bytes)
+            .expect("fairness/provenance certificate CBOR serialization must succeed");
 
-    let mut hasher = Hasher::new();
-    hasher.update(&bytes);
-    format!("kappa:blake3:{}", hasher.finalize().to_hex())
-}
+        let mut hasher = Hasher::new();
+        hasher.update(&bytes);
+        format!("kappa:blake3:{}", hasher.finalize().to_hex())
+    }
 
     pub fn verify_cid(&self) -> bool {
         self.certificate_cid == self.compute_cid()
@@ -165,14 +166,35 @@ impl FairnessEvaluator {
         (bias_metrics, rare_group_retention)
     }
 
+    /// Verify that every provenance edge attributed to `deleted_slice_id` has
+    /// been tombstoned in `graph` (weight forced to 0), returning a witness on
+    /// success or an error describing the first integrity violation.
     pub fn verify_provenance_deletion(
         deleted_slice_id: &str,
-        tombstoned_nodes: usize,
-    ) -> ProvenanceDeletionWitness {
-        ProvenanceDeletionWitness {
-            deleted_slice_id: deleted_slice_id.to_string(),
-            tombstoned_provenance_nodes: tombstoned_nodes,
-            graph_integrity_verified: true,
+        graph: &TransitionGraph,
+        tombstoned_edge_ids: &[usize],
+    ) -> Result<ProvenanceDeletionWitness, String> {
+        for &edge_id in tombstoned_edge_ids {
+            let edge = graph.edges.get(edge_id).ok_or_else(|| {
+                format!(
+                    "provenance deletion for slice '{deleted_slice_id}' references edge {edge_id} \
+                     out of bounds (graph has {} edges)",
+                    graph.edges.len()
+                )
+            })?;
+            if edge.weight != 0 {
+                return Err(format!(
+                    "provenance deletion for slice '{deleted_slice_id}' failed: edge {edge_id} \
+                     still has non-zero weight {}",
+                    edge.weight
+                ));
+            }
         }
+
+        Ok(ProvenanceDeletionWitness {
+            deleted_slice_id: deleted_slice_id.to_string(),
+            tombstoned_provenance_nodes: tombstoned_edge_ids.len(),
+            graph_integrity_verified: true,
+        })
     }
 }
