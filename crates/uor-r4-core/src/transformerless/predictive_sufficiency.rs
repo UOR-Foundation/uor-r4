@@ -149,11 +149,16 @@ impl PredictiveSufficiencyEvaluator {
             graph_top5.sort_by(|a, b| b.1.total_cmp(a.1));
 
             teacher_top
-                .map(|teacher_top| {
-                    graph_top5
+                .map(|teacher_idx| {
+                    if graph_top5
                         .iter()
                         .take(5)
-                        .any(|(index, _)| *index == teacher_top) as u8 as f64
+                        .any(|(index, _)| *index == teacher_idx)
+                    {
+                        1.0
+                    } else {
+                        0.0
+                    }
                 })
                 .unwrap_or(0.0)
         } else {
