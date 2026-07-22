@@ -602,6 +602,7 @@ name = "uor-r4-graph-format"
 version = "0.1.0"
 dependencies = [
  "blake3",
+ "serde",
 ]
 
 [[package]]

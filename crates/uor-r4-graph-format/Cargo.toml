@@ -14,3 +14,6 @@ alloc = []
 # drops the `std` feature so the crate stays no_std-compatible; feature
 # unification re-enables `std` for std consumers of the workspace.
 blake3 = { version = "=1.5.0", default-features = false }
+# Serde on the wire newtypes (ScoreQ and peers flow into certificates and
+# manifests); no_std-compatible via derive-only, no std/alloc requirement.
+serde = { version = "1.0", default-features = false, features = ["derive"] }

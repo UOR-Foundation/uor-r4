@@ -27,10 +27,21 @@ pub struct TokenId(pub u32);
 /// descriptors (`{width, shift, zero_point}`) and shift+add decoding land
 /// with the EMIT tables in a later Phase-1 slice.
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default, serde::Serialize, serde::Deserialize,
+)]
 pub struct ScoreQ(pub i32);
 
 impl ScoreQ {
+    /// Scale factor of the Q16.16 format (2^16).
+    pub const SCALE: f32 = 65536.0;
+    /// Additive identity.
+    pub const ZERO: ScoreQ = ScoreQ(0);
+    /// Minimum representable score.
+    pub const MIN: ScoreQ = ScoreQ(i32::MIN);
+    /// Maximum representable score.
+    pub const MAX: ScoreQ = ScoreQ(i32::MAX);
+
     /// Wrap a raw Q16.16 bit pattern.
     pub const fn from_raw(raw: i32) -> Self {
         Self(raw)
@@ -39,6 +50,67 @@ impl ScoreQ {
     /// The raw Q16.16 bit pattern.
     pub const fn raw(self) -> i32 {
         self.0
+    }
+
+    /// Construct from a log-domain float (compiler-side convenience; std only
+    /// — the deployed runtime never converts floats).
+    /// NaN maps to ZERO; out-of-range values clamp.
+    #[cfg(feature = "std")]
+    pub fn from_logprob(lp: f32) -> Self {
+        if lp.is_nan() {
+            return Self::ZERO;
+        }
+        let scaled = (lp * Self::SCALE).round();
+        ScoreQ(scaled.clamp(i32::MIN as f32, i32::MAX as f32) as i32)
+    }
+
+    /// Convert back to a log-domain float (compiler-side convenience; std only).
+    #[cfg(feature = "std")]
+    pub fn to_logprob(self) -> f32 {
+        self.0 as f32 / Self::SCALE
+    }
+
+    /// Saturating addition (multiplication-free arithmetic).
+    pub fn saturating_add(self, rhs: Self) -> Self {
+        ScoreQ(self.0.saturating_add(rhs.0))
+    }
+
+    /// Saturating subtraction (multiplication-free arithmetic).
+    pub fn saturating_sub(self, rhs: Self) -> Self {
+        ScoreQ(self.0.saturating_sub(rhs.0))
+    }
+}
+
+impl core::ops::Add for ScoreQ {
+    type Output = Self;
+    fn add(self, rhs: Self) -> Self {
+        self.saturating_add(rhs)
+    }
+}
+
+impl core::ops::AddAssign for ScoreQ {
+    fn add_assign(&mut self, rhs: Self) {
+        *self = self.saturating_add(rhs);
+    }
+}
+
+impl core::ops::Sub for ScoreQ {
+    type Output = Self;
+    fn sub(self, rhs: Self) -> Self {
+        self.saturating_sub(rhs)
+    }
+}
+
+impl core::ops::SubAssign for ScoreQ {
+    fn sub_assign(&mut self, rhs: Self) {
+        *self = self.saturating_sub(rhs);
+    }
+}
+
+#[cfg(feature = "std")]
+impl core::fmt::Display for ScoreQ {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "ScoreQ({:.4})", self.to_logprob())
     }
 }
 
