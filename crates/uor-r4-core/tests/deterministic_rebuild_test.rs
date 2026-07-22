@@ -7,8 +7,6 @@
 use uor_r4_core::transformerless::{
     certificate::{Certificate, ClaimKind, EmpiricalClaim, ProtocolAttestation},
     compiler,
-    score_q::ScoreQ,
-    transitions::{EdgeKind, TransitionGraph},
 };
 
 fn blake3_kappa(bytes: &[u8]) -> String {
@@ -86,6 +84,7 @@ fn test_deterministic_transition_graph_rebuild() {
     assert_eq!(g1.reverse_offsets, g2.reverse_offsets, "Reverse offset maps must match");
     assert!(g1.verify_theorem_7().is_ok());
     assert!(g2.verify_theorem_7().is_ok());
+}
 
 #[test]
 fn test_deterministic_certificate_rebuild() {

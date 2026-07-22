@@ -20,8 +20,8 @@ fn test_score_q_conversions_and_precision() {
 
 #[test]
 fn test_score_q_saturating_arithmetic() {
-    let a = ScoreQ::from_logprob(-1.5);
-    let b = ScoreQ::from_logprob(-0.5);
+    let a = ScoreQ::from_logprob(-1.5f32);
+    let b = ScoreQ::from_logprob(-0.5f32);
     let c = a + b;
     let expected = -2.0;
     assert!((c.to_logprob() - expected).abs() < 1e-4);

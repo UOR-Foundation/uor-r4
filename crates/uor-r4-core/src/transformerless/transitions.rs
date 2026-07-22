@@ -68,7 +68,8 @@ impl TransitionGraph {
 
     /// Add a canonical edge to the graph.
     pub fn add_edge(&mut self, src: u32, dst: u32, weight: u32, kind: EdgeKind) -> u32 {
-        self.add_edge_with_score(src, dst, weight, ScoreQ::from_raw(weight as i32), kind)
+        let raw = weight.min(i32::MAX as u32) as i32;
+        self.add_edge_with_score(src, dst, weight, ScoreQ::from_raw(raw), kind)
     }
 
     /// Build and sort the reverse edge index $E_b$, validating Theorem 7 consistency.
@@ -103,16 +104,35 @@ impl TransitionGraph {
     /// For every dst node, all reverse index entries in its slice MUST refer to
     /// valid canonical edge IDs whose destination equals dst.
     pub fn verify_theorem_7(&self) -> Result<(), &'static str> {
+        if self.edges.is_empty() {
+            return Ok(());
+        }
+        if self.reverse_index.len() != self.edges.len() {
+            return Err("Theorem 7 violation: reverse index does not cover all edges");
+        }
+        let total_count: usize = self.reverse_offsets.values().map(|&(_, c)| c).sum();
+        if total_count != self.reverse_index.len() {
+            return Err("Theorem 7 violation: reverse offsets do not cover reverse index");
+        }
+        for &edge_id in &self.reverse_index {
+            if edge_id as usize >= self.edges.len() {
+                return Err("Theorem 7 violation: invalid canonical edge ID in reverse index");
+            }
+        }
+        for i in 1..self.reverse_index.len() {
+            let prev_dst = self.edges[self.reverse_index[i - 1] as usize].dst;
+            let cur_dst = self.edges[self.reverse_index[i] as usize].dst;
+            if prev_dst > cur_dst {
+                return Err("Theorem 7 violation: reverse index not sorted by dst");
+            }
+        }
         for (&dst, &(start, count)) in &self.reverse_offsets {
             if start + count > self.reverse_index.len() {
                 return Err("Theorem 7 violation: reverse index range out of bounds");
             }
             for i in start..start + count {
                 let edge_id = self.reverse_index[i];
-                let edge = self
-                    .edges
-                    .get(edge_id as usize)
-                    .ok_or("Theorem 7 violation: invalid canonical edge ID in reverse index")?;
+                let edge = &self.edges[edge_id as usize];
                 if edge.dst != dst {
                     return Err("Theorem 7 violation: reverse index target mismatched edge dst");
                 }
@@ -151,7 +171,8 @@ where
     }
 
     // Group transitions by src node
-    let mut transitions_by_src: HashMap<u32, Vec<(u32, u32)>> = HashMap::new();
+    let mut transitions_by_src: std::collections::BTreeMap<u32, Vec<(u32, u32)>> =
+        std::collections::BTreeMap::new();
     for ((src, dst), weight) in transition_counts {
         transitions_by_src.entry(src).or_default().push((dst, weight));
     }

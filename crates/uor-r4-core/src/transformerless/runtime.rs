@@ -21,6 +21,8 @@
 pub use super::compiler::{derive_rotations, train_cut, SIG_BYTES, SIG_WORDS};
 use super::compiler::{Compiled, Corpus, D, STAGES, WINDOW};
 
+const TOP_M_MEMBERSHIPS: usize = 3;
+
 /// Complete arithmetic interface of the runtime, with an operation census.
 /// There is no multiplication method; the census has no multiplication
 /// field. Both absences are the point.
@@ -333,6 +335,15 @@ pub fn sig_plain(art: &Compiled, bundle: &[i64; D]) -> [u8; SIG_BYTES] {
 /// the fused form of the kernel's xor + table + add loop; equality with
 /// the kernel path is witnessed per certification run.
 pub fn assign_plain(art: &Compiled, sig: &[u8; SIG_BYTES]) -> [u8; STAGES] {
+    assign_memberships_plain(art, sig).0
+}
+
+/// Bounded multi-membership assignment per depth, with nearest-class
+/// membership retained at every depth as the fallback floor.
+pub fn assign_memberships_plain(
+    art: &Compiled,
+    sig: &[u8; SIG_BYTES],
+) -> ([u8; STAGES], Vec<Vec<Vec<u8>>>) {
     let mut words = [0u64; SIG_WORDS];
     for (w, chunk) in words.iter_mut().zip(sig.chunks(8)) {
         let mut b = [0u8; 8];
@@ -340,9 +351,9 @@ pub fn assign_plain(art: &Compiled, sig: &[u8; SIG_BYTES]) -> [u8; STAGES] {
         *w = u64::from_le_bytes(b);
     }
     let mut code = [0u8; STAGES];
+    let mut stage_top: Vec<Vec<(u8, u32)>> = Vec::with_capacity(STAGES);
     for (st_code, sigs) in code.iter_mut().zip(art.class_sigs.iter()) {
-        let mut best_d = u32::MAX;
-        let mut best_k = 0u8;
+        let mut top: Vec<(u8, u32)> = Vec::with_capacity(TOP_M_MEMBERSHIPS);
         for (kk, cs) in sigs.chunks_exact(SIG_BYTES).enumerate() {
             let mut dist = 0u32;
             for (&w, chunk) in words.iter().zip(cs.chunks(8)) {
@@ -350,14 +361,57 @@ pub fn assign_plain(art: &Compiled, sig: &[u8; SIG_BYTES]) -> [u8; STAGES] {
                 b[..chunk.len()].copy_from_slice(chunk);
                 dist += (w ^ u64::from_le_bytes(b)).count_ones();
             }
-            if dist < best_d {
-                best_d = dist;
-                best_k = kk as u8;
+            let mut inserted = false;
+            for (idx, &(_, d0)) in top.iter().enumerate() {
+                if dist < d0 {
+                    top.insert(idx, (kk as u8, dist));
+                    inserted = true;
+                    break;
+                }
+            }
+            if !inserted && top.len() < TOP_M_MEMBERSHIPS {
+                top.push((kk as u8, dist));
+            }
+            if inserted && top.len() > TOP_M_MEMBERSHIPS {
+                top.pop();
             }
         }
-        *st_code = best_k;
+        *st_code = top.first().map(|(k, _)| *k).unwrap_or(0);
+        stage_top.push(top);
     }
-    code
+    let mut by_depth: Vec<Vec<Vec<u8>>> = (0..=STAGES).map(|_| Vec::new()).collect();
+    by_depth[0].push(Vec::new());
+    let mut beam: Vec<(Vec<u8>, u32)> = vec![(Vec::new(), 0)];
+    let mut nearest = Vec::with_capacity(STAGES);
+    for (depth_idx, stage) in stage_top.iter().enumerate() {
+        if let Some(&(k, _)) = stage.first() {
+            nearest.push(k);
+        }
+        let mut next_beam: Vec<(Vec<u8>, u32)> = Vec::new();
+        for (prefix, score) in &beam {
+            for &(k, d) in stage {
+                let mut next = prefix.clone();
+                next.push(k);
+                next_beam.push((next, score.saturating_add(d)));
+            }
+        }
+        next_beam.sort_by(|a, b| a.1.cmp(&b.1).then_with(|| a.0.cmp(&b.0)));
+        if next_beam.len() > TOP_M_MEMBERSHIPS {
+            next_beam.truncate(TOP_M_MEMBERSHIPS);
+        }
+        let depth = depth_idx + 1;
+        let nearest_prefix = nearest.clone();
+        if next_beam.iter().all(|(key, _)| key != &nearest_prefix) {
+            if next_beam.len() == TOP_M_MEMBERSHIPS {
+                next_beam.pop();
+            }
+            next_beam.push((nearest_prefix, u32::MAX));
+            next_beam.sort_by(|a, b| a.0.cmp(&b.0));
+        }
+        by_depth[depth] = next_beam.iter().map(|(key, _)| key.clone()).collect();
+        beam = next_beam;
+    }
+    (code, by_depth)
 }
 
 /// Full plain path: position → graded class code.
@@ -619,10 +673,35 @@ impl<'a> Runtime<'a> {
 /// level — the store's single write path, used by `build_store` at compile
 /// time and by online indexing at runtime alike.
 pub fn add_evidence(store: &mut Store, code: &[u8; STAGES], next: u32, weight: u32) {
+    add_evidence_multi(store, &[], code, next, weight);
+}
+
+/// Add one (context memberships → next token) evidence count using bounded
+/// memberships per depth; nearest-class prefixes are used as the fallback
+/// floor whenever a depth has no candidates.
+pub fn add_evidence_multi(
+    store: &mut Store,
+    by_depth: &[Vec<Vec<u8>>],
+    fallback_code: &[u8; STAGES],
+    next: u32,
+    weight: u32,
+) {
     *store[0].entry(vec![]).or_default().entry(next).or_default() += weight;
     for d in 1..=STAGES {
+        if let Some(keys) = by_depth.get(d) {
+            if !keys.is_empty() {
+                for key in keys {
+                    *store[d]
+                        .entry(key.clone())
+                        .or_default()
+                        .entry(next)
+                        .or_default() += weight;
+                }
+                continue;
+            }
+        }
         *store[d]
-            .entry(code[..d].to_vec())
+            .entry(fallback_code[..d].to_vec())
             .or_default()
             .entry(next)
             .or_default() += weight;
@@ -634,9 +713,12 @@ pub fn add_evidence(store: &mut Store, code: &[u8; STAGES], next: u32, weight: u
 pub fn build_store(art: &Compiled, c: &Corpus) -> (Store, Vec<[u8; STAGES]>) {
     let rot = derive_rotations();
     let cut = train_cut(c);
-    let codes: Vec<[u8; STAGES]> = (0..c.n).map(|i| code_plain(art, &rot, c, i)).collect();
     let mut store: Store = (0..=STAGES).map(|_| BTreeMap::new()).collect();
-    for (i, code) in codes.iter().enumerate().take(c.n) {
+    let mut codes: Vec<[u8; STAGES]> = Vec::with_capacity(c.n);
+    for i in 0..c.n {
+        let b = bundle_plain(art, &rot, c, i);
+        let (code, by_depth) = assign_memberships_plain(art, &sig_plain(art, &b));
+        codes.push(code);
         if c.story[i] >= cut {
             continue;
         }
@@ -644,7 +726,7 @@ pub fn build_store(art: &Compiled, c: &Corpus) -> (Store, Vec<[u8; STAGES]>) {
             let tok = c.top_tokens[i][k_idx];
             let weight = c.top_weights[i][k_idx];
             if weight > 0 {
-                add_evidence(&mut store, code, tok, weight);
+                add_evidence_multi(&mut store, &by_depth, &codes[i], tok, weight);
             }
         }
     }
