@@ -831,27 +831,16 @@ fn compile_r4g1_bundle(
     r4g1: &Arc<Mutex<Option<R4g1State>>>,
     downloaded_source: Option<&Path>,
 ) -> Result<serde_json::Value, String> {
+    // A downloaded source is authoritative for the browser workflow. Even
+    // when an older corpus bundle already exists, resume the teacher compile
+    // first so the requested target (currently 200k tokens) is actually
+    // reached instead of silently rebuilding the old ~20k corpus.
+    let source_root = downloaded_source
+        .map(compile_bundle_from_source)
+        .transpose()?;
     let (artifacts, corpus_meta, corpus_recs, cover_output, graph_output, graph_path) =
-        match r4g1_compile_paths(cli) {
-            Ok((corpus_meta, corpus_recs, cover_output, graph_output)) => {
-                let artifacts = PathBuf::from(&cli.tless_artifacts);
-                let graph_path = cli
-                    .r4g1_artifact
-                    .as_ref()
-                    .map(PathBuf::from)
-                    .unwrap_or_else(|| graph_output.join("score.r4g1"));
-                (
-                    artifacts,
-                    corpus_meta,
-                    corpus_recs,
-                    cover_output,
-                    graph_output,
-                    graph_path,
-                )
-            }
-            Err(error) => {
-                let source = downloaded_source.ok_or(error)?;
-                let root = compile_bundle_from_source(source)?;
+        match source_root {
+            Some(root) => {
                 let artifacts = root.join("tless_artifacts.bin");
                 let corpus_meta = root.join("corpus.meta");
                 let corpus_recs = root.join("corpus.records");
@@ -874,6 +863,25 @@ fn compile_r4g1_bundle(
                     graph_path,
                 )
             }
+            None => match r4g1_compile_paths(cli) {
+                Ok((corpus_meta, corpus_recs, cover_output, graph_output)) => {
+                    let artifacts = PathBuf::from(&cli.tless_artifacts);
+                    let graph_path = cli
+                        .r4g1_artifact
+                        .as_ref()
+                        .map(PathBuf::from)
+                        .unwrap_or_else(|| graph_output.join("score.r4g1"));
+                    (
+                        artifacts,
+                        corpus_meta,
+                        corpus_recs,
+                        cover_output,
+                        graph_output,
+                        graph_path,
+                    )
+                }
+                Err(error) => return Err(error),
+            },
         };
     for path in [&artifacts, &corpus_meta, &corpus_recs] {
         if !path.is_file() {
