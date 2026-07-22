@@ -114,7 +114,20 @@ impl ShortlistEvaluator {
             }
         }
 
-        let gate_h_passed = r5 >= min_top5_recall_threshold && worst_err <= 1000;
+        const MAX_WORST_ROUTING_ERROR: i32 = 1_000;
+
+        // Fallback is required when the reference target is missing from the shortlist.
+        let fallback_rate = fnr;
+
+        // Fidelity of the direct (non-fallback) path, conditioned on not requiring fallback.
+        let direct_denom = n - fn_count as f64;
+        let conditional_direct_fidelity = if direct_denom > 0.0 {
+            top1_matches as f64 / direct_denom
+        } else {
+            0.0
+        };
+
+        let gate_h_passed = r5 >= min_top5_recall_threshold && worst_err <= MAX_WORST_ROUTING_ERROR;
         let trigger_gated_fallback_active = r5 < min_top5_recall_threshold;
 
         ShortlistRecallReport {
@@ -125,8 +138,8 @@ impl ShortlistEvaluator {
                 top10_recall: r10,
                 top20_recall: r20,
                 false_negative_rate: fnr,
-                fallback_rate: if trigger_gated_fallback_active { 0.25 } else { 0.05 },
-                conditional_direct_fidelity: r1,
+                fallback_rate,
+                conditional_direct_fidelity,
                 worst_routing_error: worst_err,
                 gate_h_passed,
             },
