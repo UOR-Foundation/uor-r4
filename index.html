@@ -948,7 +948,7 @@
                 <span class="config-val" id="engineVal" style="color: var(--cyan); font-weight: bold;">Geometric</span>
             </div>
             <div class="config-row" style="margin-bottom: 0.75rem; font-size: 0.75rem; color: #888;">
-                <span>↳ Transformerless with geometric fallback</span>
+                <span>↳ R4G1 graph runtime with legacy fallback</span>
             </div>
 
             <div class="identity-label">Routing Identity (UOR, address, or text)</div>
@@ -956,7 +956,7 @@
 
             <div class="section-label">Synthesis Engine Selection</div>
             <select class="identity-input" id="engineSelect" style="margin-bottom:0.75rem; background: var(--bg); color: var(--cyan); border-color: var(--border2); font-family: 'Outfit', sans-serif;">
-                <option value="transformerless">Transformerless (Local)</option>
+                <option value="transformerless">Transformerless / R4G1 (Server)</option>
                 <option value="attention">Full Attention Llama (CPU)</option>
                 <option value="r4-attention">Experimental R4 Attention (CPU)</option>
                 <option value="geometric">Pure Geometric (WASM Decoded)</option>
@@ -969,6 +969,20 @@
                 Index Text to Manifold
             </button>
             <div id="indexStatus" style="font-size: 0.68rem; margin-top: -0.5rem; margin-bottom: 0.75rem; display: none;"></div>
+
+            <button class="identity-input" id="downloadHfBtn" style="margin-bottom: 0.35rem; background: rgba(245, 166, 35, 0.12); color: var(--amber); border-color: var(--amber); cursor: pointer; font-weight: 600; font-family: 'Outfit', sans-serif;">
+                Download Pinned Hugging Face Weights
+            </button>
+            <div id="hfDownloadStatus" style="font-size: 0.68rem; margin-bottom: 0.75rem; color: var(--text2);">
+                Hugging Face source download is idle
+            </div>
+
+            <button class="identity-input" id="compileR4g1Btn" style="margin-bottom: 0.35rem; background: rgba(0, 242, 254, 0.12); color: var(--cyan); border-color: var(--cyan); cursor: pointer; font-weight: 600; font-family: 'Outfit', sans-serif;">
+                Compile / Refresh R4G1 Graph
+            </button>
+            <div id="r4g1CompileStatus" style="font-size: 0.68rem; margin-bottom: 0.75rem; color: var(--text2);">
+                Server compilation is idle
+            </div>
 
             <div class="section-label">Manifold State (Weights)</div>
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 0.75rem;">
@@ -1290,6 +1304,10 @@ const engineVal   = document.getElementById("engineVal");
 const kbTextarea  = document.getElementById("kbTextarea");
 const indexBtn    = document.getElementById("indexBtn");
 const indexStatus = document.getElementById("indexStatus");
+const compileR4g1Btn = document.getElementById("compileR4g1Btn");
+const r4g1CompileStatus = document.getElementById("r4g1CompileStatus");
+const downloadHfBtn = document.getElementById("downloadHfBtn");
+const hfDownloadStatus = document.getElementById("hfDownloadStatus");
 
 // =====================================================
 // App State
@@ -1396,6 +1414,7 @@ if (mapLegend) {
 let router = null;
 let wasmInitialized = false;
 let localWasmMode = false;
+let serverR4g1Ready = false;
 
 async function tryInitLocalWasm() {
     if (wasmInitialized) return true;
@@ -1405,6 +1424,10 @@ async function tryInitLocalWasm() {
         router = new UorR4Router(1.2);
         wasmInitialized = true;
         console.log("Local WebAssembly Router Initialized Successfully!");
+        if (engineVal) {
+            engineVal.textContent = "Geometric WASM";
+            engineVal.style.color = "var(--amber)";
+        }
         
         // Populate baseline metrics since server is offline
         if (router.get_vocab_size() === 0) {
@@ -2257,8 +2280,11 @@ function updateTelemetry(data, isSysinfo = false) {
         if (gammaVal) gammaVal.textContent = auto.gamma.toFixed(2);
         if (tokensVal) tokensVal.textContent = auto.max_tokens;
         if (engineVal) {
-            if (auto.engine === "transformerless") {
-                engineVal.textContent = "Transformerless";
+            if (auto.engine === "r4g1") {
+                engineVal.textContent = "R4G1 Graph";
+                engineVal.style.color = "var(--emerald)";
+            } else if (auto.engine === "transformerless-legacy") {
+                engineVal.textContent = "Legacy TLA/TLS";
                 engineVal.style.color = "var(--emerald)";
             } else {
                 engineVal.textContent = "Pure Geometric";
@@ -2815,6 +2841,167 @@ if (indexBtn) {
     });
 }
 
+function renderHfDownloadStatus(data) {
+    if (!data || !hfDownloadStatus) return;
+    if (downloadHfBtn) downloadHfBtn.disabled = Boolean(data.running);
+    hfDownloadStatus.textContent = data.message || "Hugging Face source download is idle";
+    hfDownloadStatus.style.color = data.running
+        ? "var(--amber)"
+        : data.ready
+            ? "var(--emerald)"
+            : data.message?.includes("failed")
+                ? "var(--red)"
+                : "var(--text2)";
+}
+
+async function fetchHfDownloadStatus() {
+    if (localWasmMode) {
+        renderHfDownloadStatus({
+            running: false,
+            ready: false,
+            message: "Hugging Face downloads require the native server"
+        });
+        return null;
+    }
+    const response = await fetch("/api/huggingface/status");
+    if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
+    const data = await response.json();
+    renderHfDownloadStatus(data);
+    return data;
+}
+
+if (downloadHfBtn) {
+    downloadHfBtn.addEventListener("click", async () => {
+        if (localWasmMode) {
+            renderHfDownloadStatus({
+                running: false,
+                ready: false,
+                message: "Hugging Face downloads require the native server"
+            });
+            return;
+        }
+        downloadHfBtn.disabled = true;
+        renderHfDownloadStatus({
+            running: true,
+            message: "Starting pinned Hugging Face weight download..."
+        });
+        try {
+            const response = await fetch("/api/huggingface/download", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: "{}"
+            });
+            const started = await response.json();
+            if (!response.ok) throw new Error(started.message || started.error || `HTTP error: ${response.status}`);
+
+            const deadline = Date.now() + 30 * 60 * 1000;
+            while (Date.now() < deadline) {
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                const status = await fetchHfDownloadStatus();
+                if (status && !status.running) break;
+            }
+            if (Date.now() >= deadline) throw new Error("Hugging Face download timed out");
+        } catch (err) {
+            renderHfDownloadStatus({
+                running: false,
+                ready: false,
+                message: `Hugging Face download error: ${err.message}`
+            });
+        } finally {
+            downloadHfBtn.disabled = false;
+            fetchHfDownloadStatus().catch(() => {});
+        }
+    });
+}
+
+function renderR4g1CompileStatus(data) {
+    if (!data) return;
+    serverR4g1Ready = Boolean(data.ready);
+    updateConnectionStatusUI();
+    if (compileR4g1Btn) compileR4g1Btn.disabled = Boolean(data.running);
+    if (!r4g1CompileStatus) return;
+
+    let message = data.message || (data.running ? "R4G1 compilation is running..." : "Server compilation is idle");
+    const graph = data.report?.gate_c?.graph_no_exct;
+    if (!data.running && graph && typeof graph.top1_agreement === "number") {
+        message += ` · Gate C top-1 ${(graph.top1_agreement * 100).toFixed(2)}%`;
+    }
+    r4g1CompileStatus.textContent = message;
+    r4g1CompileStatus.style.color = data.running
+        ? "var(--amber)"
+        : data.ready
+            ? "var(--emerald)"
+            : data.message?.includes("failed")
+                ? "var(--red)"
+                : "var(--text2)";
+}
+
+async function fetchR4g1CompileStatus() {
+    if (localWasmMode) {
+        renderR4g1CompileStatus({
+            running: false,
+            ready: false,
+            message: "R4G1 compilation requires the native server"
+        });
+        return null;
+    }
+    const response = await fetch("/api/r4g1/status");
+    if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
+    const data = await response.json();
+    renderR4g1CompileStatus(data);
+    return data;
+}
+
+if (compileR4g1Btn) {
+    compileR4g1Btn.addEventListener("click", async () => {
+        if (localWasmMode) {
+            renderR4g1CompileStatus({
+                running: false,
+                ready: false,
+                message: "R4G1 compilation requires the native server"
+            });
+            return;
+        }
+
+        compileR4g1Btn.disabled = true;
+        renderR4g1CompileStatus({
+            running: true,
+            ready: serverR4g1Ready,
+            message: "Starting R4G1 cover and scoring compilation..."
+        });
+        try {
+            const response = await fetch("/api/r4g1/compile", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: "{}"
+            });
+            const started = await response.json();
+            if (!response.ok) throw new Error(started.message || started.error || `HTTP error: ${response.status}`);
+
+            const deadline = Date.now() + 30 * 60 * 1000;
+            while (Date.now() < deadline) {
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                const status = await fetchR4g1CompileStatus();
+                if (status && !status.running) {
+                    if (!status.ready) throw new Error(status.message || "R4G1 compilation failed");
+                    await loadSemanticMap();
+                    break;
+                }
+            }
+            if (Date.now() >= deadline) throw new Error("R4G1 compilation timed out");
+        } catch (err) {
+            renderR4g1CompileStatus({
+                running: false,
+                ready: serverR4g1Ready,
+                message: `R4G1 compilation error: ${err.message}`
+            });
+        } finally {
+            compileR4g1Btn.disabled = false;
+            fetchR4g1CompileStatus().catch(() => {});
+        }
+    });
+}
+
 // =====================================================
 // Event Listeners
 // =====================================================
@@ -3189,6 +3376,8 @@ function pollSysinfo() {
                 if (info && info.expert_counts) {
                     populateExpertMatrix(info.expert_counts);
                 }
+                serverR4g1Ready = Boolean(info && info.r4g1_ready);
+                updateConnectionStatusUI();
                 updateTelemetry(info, true);
             })
             .catch(err => {
@@ -3220,6 +3409,11 @@ function pollSysinfo() {
         .catch(() => {
             if (tlessEl) { tlessEl.textContent = "○ Offline"; tlessEl.style.color = "var(--amber)"; }
         });
+
+    if (!localWasmMode) {
+        fetchHfDownloadStatus().catch(() => {});
+        fetchR4g1CompileStatus().catch(() => {});
+    }
 }
 
 // =====================================================
@@ -3419,7 +3613,7 @@ function updateConnectionStatusUI() {
             dot.style.boxShadow = "0 0 8px #ffb300";
         }
         if (route) {
-            route.textContent = "⚠️ WASM FALLBACK (Server Offline)";
+            route.textContent = "⚠️ WASM GEOMETRIC FALLBACK (Server Offline)";
             route.style.color = "var(--amber)";
         }
     } else {
@@ -3428,7 +3622,9 @@ function updateConnectionStatusUI() {
             dot.style.boxShadow = "0 0 8px var(--emerald)";
         }
         if (route) {
-            route.textContent = "🟢 Connected (Transformerless CPU)";
+            route.textContent = serverR4g1Ready
+                ? "🟢 Connected (R4G1 Graph Runtime)"
+                : "🟡 Connected (Legacy TLA/TLS Runtime)";
             route.style.color = "var(--emerald)";
         }
     }

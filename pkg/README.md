@@ -265,6 +265,12 @@ into the running server. Static WASM deployments cannot run this compiler.
 Static deployments still use the geometric WASM fallback because they have no
 native filesystem-backed graph loader yet.
 
+The native dashboard also exposes **Download Pinned Hugging Face Weights**.
+It downloads the repository and immutable revision from
+`models/smollm2-135m-instruct.json` into `.uor-models/sources/`; it does not
+download anything until the button is pressed. Afterward, run the bundle
+compiler and then the R4G1 graph compiler.
+
 ### 4. Ask locally
 
 Compilation produces a directly loadable local bundle. On first use, R⁴
@@ -423,6 +429,8 @@ The server defaults are:
 | `--tless-store` | `TLESS_STORE` | `/tmp/tless_store.bin` |
 | `--tless-tokenizer` | `TLESS_TOKENIZER` | `/tmp/ref/tokenizer.bin` |
 | `--r4g1-artifact` | `R4G1_ARTIFACT` | `<compiled>/graph/score.r4g1` when present |
+| `--tless-corpus-meta` | `TLESS_CORPUS_META` | Beside the configured artifact when present |
+| `--tless-corpus-recs` | `TLESS_CORPUS_RECS` | Beside the configured artifact when present |
 
 ## Architecture
 
@@ -496,6 +504,12 @@ Returns initialization metrics, uptime, and UOR validation state.
 Starts and monitors the native server's cover → score compilation job. The
 resulting graph is loaded only after validation succeeds; the status response
 also includes the generated `score_report.json` when available.
+
+### `POST /api/huggingface/download` and `GET /api/huggingface/status`
+
+Starts and monitors an explicit download of the pinned Hugging Face source
+defined by `models/smollm2-135m-instruct.json`. The server requires the `hf`
+CLI to be installed and does not accept an unpinned revision from the browser.
 
 ### `POST /api/corpus`
 
