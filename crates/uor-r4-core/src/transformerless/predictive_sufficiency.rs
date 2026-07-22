@@ -114,18 +114,17 @@ impl PredictiveSufficiencyEvaluator {
         let ce = Self::compute_cross_entropy(teacher_probs, graph_probs);
 
         let top1_acc = if !teacher_probs.is_empty() && !graph_probs.is_empty() {
-            let max_t = teacher_probs
-                .iter()
-                .enumerate()
-                .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
-                .map(|x| x.0)
-                .unwrap_or(0);
-            let max_g = graph_probs
-                .iter()
-                .enumerate()
-                .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
-                .map(|x| x.0)
-                .unwrap_or(0);
+            let argmax = |xs: &[f64]| -> usize {
+                xs.iter()
+                    .enumerate()
+                    .filter(|(_, v)| v.is_finite())
+                    .max_by(|a, b| a.1.total_cmp(b.1))
+                    .map(|(i, _)| i)
+                    .unwrap_or(0)
+            };
+
+            let max_t = argmax(teacher_probs);
+            let max_g = argmax(graph_probs);
             if max_t == max_g {
                 1.0
             } else {
