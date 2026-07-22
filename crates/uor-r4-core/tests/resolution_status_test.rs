@@ -120,12 +120,14 @@ fn test_custom_fallback_policy() {
 #[test]
 fn test_fallback_actions_cover_d4_behavior_codes() {
     let actions = [
-        FallbackAction::Continue,
-        FallbackAction::Widen,
-        FallbackAction::ConsultExact,
-        FallbackAction::CertifiedFallback,
-        FallbackAction::Abstain,
+        (FallbackAction::Continue, "Continue"),
+        (FallbackAction::Widen, "Widen"),
+        (FallbackAction::ConsultExact, "ConsultExact"),
+        (FallbackAction::CertifiedFallback, "CertifiedFallback"),
+        (FallbackAction::Abstain, "Abstain"),
     ];
 
-    assert_eq!(actions.len(), 5);
+    for (action, code) in actions {
+        assert_eq!(serde_json::to_value(action).unwrap(), code);
+    }
 }
