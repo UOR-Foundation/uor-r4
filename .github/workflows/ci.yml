@@ -88,6 +88,20 @@ jobs:
         run: TLESS_CHECKPOINT=/tmp/ref/out/model.bin cargo test -p uor-r4-core --release --test kappa_reproduction -- --ignored
         continue-on-error: true
 
+  wasm:
+    name: wasm-pack build (dashboard facade, deploy.yml parity)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust (stable) + wasm32 target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          target: wasm32-unknown-unknown
+      - name: Install wasm-pack
+        run: cargo install wasm-pack --locked
+      - name: wasm-pack build --target web
+        run: wasm-pack build --target web
+
   audit:
     name: cargo audit
     runs-on: ubuntu-latest
