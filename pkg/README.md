@@ -18,8 +18,9 @@ R⁴ currently provides:
 
 - a geometric text router and browser dashboard;
 - a CPU-only transformerless compiler and table-native inference runtime;
-- TLA3 compatibility and vocabulary-sized TLA4 artifacts;
-- TLS1 graded evidence stores;
+- TLA3/TLA4 compatibility and the current TLA5 artifact format (no f32
+  centroids in deployed containers);
+- TLS1 graded evidence stores (plus a legacy u16-era reader);
 - direct BF16 Safetensors loading for compatible, unsharded Llama-family
   Hugging Face models, without Candle;
 - byte-level BPE tokenizer export;
@@ -27,6 +28,18 @@ R⁴ currently provides:
 - content-addressed model objects and manifests using UOR CIDs;
 - witnessed prediction, indexing, and generation APIs;
 - one-shot and interactive chat as application examples of the core runtime.
+
+The **R⁴ holographic graph compiler** program (multiresolution, overlapping
+semantic graphs with an allocation-free integer runtime) is underway on top of
+this engine — see `docs/r4_graph_compiler_implementation_plan.md`. Already
+landed: the R4G1 packed artifact format with two-stage validation
+(`crates/uor-r4-graph-format`), the TLA/TLS1 → R4G1 migration converter, the
+observation pipeline (content-addressed sample IDs, deterministic shard
+spill/resume), multiresolution cover induction (spherical k-means with
+calibrated overlapping memberships), semantic transitions + reverse indexes,
+ScoreQ fixed-point residuals, and the executable proof model
+(`crates/uor-r4-proof-model`). CI runs fmt/clippy/tests/no_std/deterministic-
+rebuild/audit/fuzz/wasm gates on every push (`.github/workflows/ci.yml`).
 
 There is an important boundary in the current workflow: compiling a Hugging
 Face model produces continuation evidence and runtime artifacts, but it does
@@ -38,6 +51,7 @@ question-answering model.
 
 | Operation | Works from a fresh checkout? | Additional state |
 |---|---:|---|
+| Build and test the workspace | Yes (UOR standards are pinned git deps) | None |
 | Geometric router and dashboard | Yes | None |
 | Legacy TinyStories certification/benchmark | After `setup` and corpus generation | Pinned llama2.c checkpoint |
 | Compile a compatible Hugging Face source | After downloading the source | Pinned model revision |
@@ -45,12 +59,15 @@ question-answering model.
 
 ## Documentation
 
+- [AGENTS.md](AGENTS.md) — contributor/agent operating manual: gates, invariants, κ re-pin procedure
 - [ELI5 explainer](docs/explainers/ELI5.md)
 - [Undergraduate explainer](docs/explainers/UNDERGRADUATE.md)
 - [Transformerless design](docs/transformerless/TRANSFORMERLESS.md)
 - [Proof and certificate](docs/transformerless/PROOF.md)
 - [Performance comparison](docs/transformerless/COMPARISON.md)
 - [Local-only runtime contract](docs/transformerless/LOCAL_ONLY.md)
+- [R⁴ graph compiler implementation plan](docs/r4_graph_compiler_implementation_plan.md)
+- [Glossary](docs/transformerless/GLOSSARY.md) · [R4G1 wire format](docs/transformerless/R4G1.md) · [Baseline](docs/transformerless/BASELINE.md) · [Threat model](docs/transformerless/THREAT_MODEL.md)
 - [Roadmap](ROADMAP.md)
 
 ## Requirements
