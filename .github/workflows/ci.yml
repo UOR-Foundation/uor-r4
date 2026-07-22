@@ -139,7 +139,7 @@ jobs:
         uses: dtolnay/rust-toolchain@nightly
 
       - name: Install cargo-fuzz
-        uses: taiki-e/install-action@cargo-fuzz
+        run: cargo install cargo-fuzz --locked
 
       - name: Cache fuzz build
         uses: actions/cache@v4
