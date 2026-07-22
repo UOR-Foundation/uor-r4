@@ -471,18 +471,12 @@ checksum = "e6e4313cd5fcd3dad5cafa179702e2b244f760991f45397d14d4ebf38247da75"
 [[package]]
 name = "uor-addr"
 version = "0.2.0"
+source = "git+https://github.com/UOR-Foundation/uor-addr.git?rev=165b51e3e2113ee5d032730cde709335d4fe9b60#165b51e3e2113ee5d032730cde709335d4fe9b60"
 dependencies = [
  "ryu",
  "uor-foundation 0.5.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "uor-foundation-sdk 0.5.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "uor-prism",
-]
-
-[[package]]
-name = "uor-foundation"
-version = "0.5.2"
-dependencies = [
- "libm",
 ]
 
 [[package]]
@@ -495,12 +489,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "uor-foundation-sdk"
+name = "uor-foundation"
 version = "0.5.2"
+source = "git+https://github.com/UOR-Foundation/UOR-Framework.git?rev=51c01382200b0179d6640b07e9c8119364ab69a1#51c01382200b0179d6640b07e9c8119364ab69a1"
 dependencies = [
- "proc-macro2",
- "quote",
- "syn",
+ "libm",
 ]
 
 [[package]]
@@ -515,10 +508,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "uor-foundation-sdk"
+version = "0.5.2"
+source = "git+https://github.com/UOR-Foundation/UOR-Framework.git?rev=51c01382200b0179d6640b07e9c8119364ab69a1#51c01382200b0179d6640b07e9c8119364ab69a1"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "uor-foundation-verify"
 version = "0.5.2"
+source = "git+https://github.com/UOR-Foundation/UOR-Framework.git?rev=51c01382200b0179d6640b07e9c8119364ab69a1#51c01382200b0179d6640b07e9c8119364ab69a1"
 dependencies = [
- "uor-foundation 0.5.2",
+ "uor-foundation 0.5.2 (git+https://github.com/UOR-Foundation/UOR-Framework.git?rev=51c01382200b0179d6640b07e9c8119364ab69a1)",
 ]
 
 [[package]]
@@ -619,8 +623,8 @@ dependencies = [
  "serde_json",
  "sha2",
  "uor-addr",
- "uor-foundation 0.5.2",
- "uor-foundation-sdk 0.5.2",
+ "uor-foundation 0.5.2 (git+https://github.com/UOR-Foundation/UOR-Framework.git?rev=51c01382200b0179d6640b07e9c8119364ab69a1)",
+ "uor-foundation-sdk 0.5.2 (git+https://github.com/UOR-Foundation/UOR-Framework.git?rev=51c01382200b0179d6640b07e9c8119364ab69a1)",
  "uor-r4-core",
  "wasm-bindgen",
 ]
@@ -636,8 +640,8 @@ dependencies = [
  "serde_json",
  "tracing",
  "uor-addr",
- "uor-foundation 0.5.2",
- "uor-foundation-sdk 0.5.2",
+ "uor-foundation 0.5.2 (git+https://github.com/UOR-Foundation/UOR-Framework.git?rev=51c01382200b0179d6640b07e9c8119364ab69a1)",
+ "uor-foundation-sdk 0.5.2 (git+https://github.com/UOR-Foundation/UOR-Framework.git?rev=51c01382200b0179d6640b07e9c8119364ab69a1)",
  "uor-foundation-verify",
  "uor-r4-core",
  "uor-r4-router",

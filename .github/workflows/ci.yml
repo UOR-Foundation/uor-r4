@@ -4,10 +4,9 @@ name: ci
 # Covers: fmt, clippy (-D warnings), tests (nextest + doc), allocation-freedom,
 # no_std ladder, deterministic rebuild, κ-reproduction, dependency audit, fuzz smoke.
 #
-# IMPORTANT: this workspace has path dependencies on uor_standards/*, which are
-# gitignored and not part of this repository. CI checks them out from their
-# upstream repos at the pinned revisions below (bump deliberately). Fresh clones
-# of uor-r4 need the same three checkouts to build locally.
+# Dependencies on the UOR standards (uor-addr, UOR-Framework) are pinned git
+# dependencies in Cargo.toml (rev-locked), so a plain checkout of this repo
+# builds; no extra repository checkouts are needed.
 # NOTE: κ-reproduction is macOS-pinned per decision D2 (libm-sensitive teacher
 # logprobs); on Linux it is expected to skip (checkpoint download is best-effort)
 # or fail on platform drift — the canonical deterministic compile mode (Phase 2)
@@ -25,9 +24,6 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
-  UOR_ADDR_REV: 165b51e3e2113ee5d032730cde709335d4fe9b60
-  UOR_FRAMEWORK_REV: 51c01382200b0179d6640b07e9c8119364ab69a1
-  PRISM_REV: 507995bab43c0cb06ec244c96e6fc25b3f502204
 
 jobs:
   gates:
@@ -35,27 +31,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Checkout uor-addr (path dependency)
-        uses: actions/checkout@v4
-        with:
-          repository: UOR-Foundation/uor-addr
-          ref: ${{ env.UOR_ADDR_REV }}
-          path: uor_standards/uor-addr
-
-      - name: Checkout UOR-Framework (path dependency)
-        uses: actions/checkout@v4
-        with:
-          repository: UOR-Foundation/UOR-Framework
-          ref: ${{ env.UOR_FRAMEWORK_REV }}
-          path: uor_standards/UOR-Framework
-
-      - name: Checkout prism (path dependency)
-        uses: actions/checkout@v4
-        with:
-          repository: UOR-Foundation/prism
-          ref: ${{ env.PRISM_REV }}
-          path: uor_standards/prism
 
       - name: Install Rust (stable)
         uses: dtolnay/rust-toolchain@stable
@@ -127,13 +102,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Checkout uor-addr (path dependency)
-        uses: actions/checkout@v4
-        with:
-          repository: UOR-Foundation/uor-addr
-          ref: ${{ env.UOR_ADDR_REV }}
-          path: uor_standards/uor-addr
 
       - name: Install Rust (nightly)
         uses: dtolnay/rust-toolchain@nightly
