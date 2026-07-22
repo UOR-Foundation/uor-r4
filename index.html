@@ -970,8 +970,10 @@
             </button>
             <div id="indexStatus" style="font-size: 0.68rem; margin-top: -0.5rem; margin-bottom: 0.75rem; display: none;"></div>
 
+            <input type="text" class="identity-input" id="hfModelInput" value="HuggingFaceTB/SmolLM2-135M-Instruct@7e27bd9f95328f0f3b08261d1252705110c806f8" placeholder="owner/repository@40-character-commit" style="margin-bottom: 0.35rem; font-size: 0.68rem; background: var(--bg); color: var(--text); border: 1px solid var(--border2); padding: 0.4rem; border-radius: 4px; width: 100%;">
+            <div style="font-size: 0.64rem; margin-bottom: 0.35rem; color: var(--text2);">Use an immutable commit: owner/repository@40-character-commit</div>
             <button class="identity-input" id="downloadHfBtn" style="margin-bottom: 0.35rem; background: rgba(245, 166, 35, 0.12); color: var(--amber); border-color: var(--amber); cursor: pointer; font-weight: 600; font-family: 'Outfit', sans-serif;">
-                Download Pinned Hugging Face Weights
+                Download Hugging Face Weights
             </button>
             <div id="hfDownloadStatus" style="font-size: 0.68rem; margin-bottom: 0.75rem; color: var(--text2);">
                 Hugging Face source download is idle
@@ -1308,6 +1310,7 @@ const compileR4g1Btn = document.getElementById("compileR4g1Btn");
 const r4g1CompileStatus = document.getElementById("r4g1CompileStatus");
 const downloadHfBtn = document.getElementById("downloadHfBtn");
 const hfDownloadStatus = document.getElementById("hfDownloadStatus");
+const hfModelInput = document.getElementById("hfModelInput");
 
 // =====================================================
 // App State
@@ -2881,15 +2884,16 @@ if (downloadHfBtn) {
             return;
         }
         downloadHfBtn.disabled = true;
+        const model = hfModelInput?.value.trim() || "";
         renderHfDownloadStatus({
             running: true,
-            message: "Starting pinned Hugging Face weight download..."
+            message: "Starting Hugging Face weight download..."
         });
         try {
             const response = await fetch("/api/huggingface/download", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: "{}"
+                body: JSON.stringify({ model })
             });
             const started = await response.json();
             if (!response.ok) throw new Error(started.message || started.error || `HTTP error: ${response.status}`);
@@ -2973,7 +2977,7 @@ if (compileR4g1Btn) {
             const response = await fetch("/api/r4g1/compile", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: "{}"
+                body: JSON.stringify({ model: hfModelInput?.value.trim() || "" })
             });
             const started = await response.json();
             if (!response.ok) throw new Error(started.message || started.error || `HTTP error: ${response.status}`);
