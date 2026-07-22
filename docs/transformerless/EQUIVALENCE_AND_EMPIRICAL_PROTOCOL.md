@@ -51,21 +51,25 @@ Every empirical claim MUST ship a claim record containing:
 
 ### 2.1 Required estimators and intervals
 
-- **Rates/proportions** (agreement, recall, abstention): Wilson interval (or exact binomial for very
-  small `n`).
+- **Rates/proportions** (agreement, recall, abstention): Wilson score interval or exact binomial
+  (Clopper–Pearson) interval at any `n`; the chosen method MUST be recorded in the claim record.
 - **Means** (bits/token, latency, bytes-read/token): bootstrap percentile interval (paired bootstrap
   when comparing systems on the same examples).
 - **Comparative deltas** (graph vs baseline): paired delta CI on the same held-out examples.
 
 Default confidence level is 95% (`alpha = 0.05`) unless a stricter level is declared in advance.
+Sidedness is normative and MUST be recorded in the claim record:
+
+- one-sided `(1 - alpha)` CIs for lower-bounded, upper-bounded, and non-inferiority claims;
+- two-sided `(1 - alpha)` CIs for equivalence claims.
 
 ### 2.2 Claim acceptance rules
 
-- Lower-bounded claim (`metric >= t`): accepted iff CI lower bound `>= t`.
-- Upper-bounded claim (`metric <= t`): accepted iff CI upper bound `<= t`.
-- Equivalence claim (`|delta| <= epsilon`): accepted iff CI for `delta` is fully contained in
+- Lower-bounded claim (`metric >= t`): accepted iff the one-sided CI lower bound `>= t`.
+- Upper-bounded claim (`metric <= t`): accepted iff the one-sided CI upper bound `<= t`.
+- Equivalence claim (`|delta| <= epsilon`): accepted iff the two-sided CI for `delta` is fully contained in
   `[-epsilon, +epsilon]`.
-- Non-inferiority claim (`delta >= -epsilon`): accepted iff CI lower bound `>= -epsilon`.
+- Non-inferiority claim (`delta >= -epsilon`): accepted iff the one-sided CI lower bound `>= -epsilon`.
 
 Point estimates without confidence bounds are descriptive only and MUST NOT be used as gate-passing
 evidence.
