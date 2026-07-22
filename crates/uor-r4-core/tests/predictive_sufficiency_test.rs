@@ -28,8 +28,8 @@ fn test_kl_divergence_and_cross_entropy() {
 fn test_predictive_sufficiency_evaluator_depths() {
     let teacher = vec![0.7, 0.2, 0.1];
     let broad = vec![0.33, 0.33, 0.34];
-    let intermediate = vec![0.5, 0.3, 0.2];
-    let full = vec![0.65, 0.25, 0.1];
+    let _intermediate = vec![0.5, 0.3, 0.2];
+    let _full = vec![0.65, 0.25, 0.1];
     let residual = vec![0.7, 0.2, 0.1];
 
     let ops = OpKernel::default();
