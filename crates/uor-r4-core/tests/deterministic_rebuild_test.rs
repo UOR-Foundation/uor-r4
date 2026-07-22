@@ -32,16 +32,9 @@ fn test_deterministic_container_rebuild() {
     let ser1 = compiler::artifact_bytes(&art1);
     let ser2 = compiler::artifact_bytes(&art2);
 
-    // 1. Assert byte-identical container output (Gate E)
-    assert_eq!(
-        ser1.len(),
-        ser2.len(),
-        "Container byte lengths must match exactly"
-    );
-    assert_eq!(
-        ser1, ser2,
-        "Rebuilt artifact container bytes must be 100% byte-identical"
-    );
+    // 1. Assert byte-identical container output against the pinned fixture (Gate E)
+    assert_eq!(ser1.as_slice(), bytes.as_slice(), "Rebuilt bytes must match fixture bytes");
+    assert_eq!(ser2.as_slice(), bytes.as_slice(), "Rebuilt bytes must match fixture bytes");
 
     // 2. Assert identical BLAKE3 CIDs
     let cid1 = blake3_kappa(&ser1);
