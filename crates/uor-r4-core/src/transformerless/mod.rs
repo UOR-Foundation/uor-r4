@@ -141,6 +141,8 @@ mod witnesses {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
+pub mod anti_degeneracy;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod certify;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod certificate;
