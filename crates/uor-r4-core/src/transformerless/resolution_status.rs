@@ -41,7 +41,10 @@ impl CalibratedFeatures {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum FallbackAction {
+    Continue,
+    Widen,
     ConsultExact,
+    CertifiedFallback,
     Abstain,
     BasePrior,
     FallbackToken(u32),

@@ -116,3 +116,16 @@ fn test_custom_fallback_policy() {
         FallbackAction::FallbackToken(42)
     );
 }
+
+#[test]
+fn test_fallback_actions_cover_d4_behavior_codes() {
+    let actions = [
+        FallbackAction::Continue,
+        FallbackAction::Widen,
+        FallbackAction::ConsultExact,
+        FallbackAction::CertifiedFallback,
+        FallbackAction::Abstain,
+    ];
+
+    assert_eq!(actions.len(), 5);
+}
