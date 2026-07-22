@@ -32,10 +32,9 @@ There is an important boundary in the current workflow: compiling a Hugging
 Face model produces continuation evidence and runtime artifacts, but it does
 not automatically prove instruction-following quality. `ask` accepts only an
 imported `instruction-chat` manifest with a CID-addressed passing evaluation
-report. The repository does not yet provide the instruction-evaluation command
-that creates that report. This guard prevents a fast but low-quality
-continuation artifact from being presented as an accurate question-answering
-model.
+report produced by `evaluate-report`. This guard prevents a fast but
+low-quality continuation artifact from being presented as an accurate
+question-answering model.
 
 | Operation | Works from a fresh checkout? | Additional state |
 |---|---:|---|
@@ -215,9 +214,11 @@ cargo run --release -- evaluate-report \
   --report .uor-models/compiled/smollm2-135m-instruct/instruction-eval.json
 ```
 
-The report captures held-out D3 top-1 accuracy, teacher-argmax agreement,
-Witten–Bell bits/token vs the teacher floor, plus source/artifact/store/tokenizer/corpus
-CIDs. Do not mark an artifact as passing merely to bypass the chat quality gate.
+The report file stores an envelope with the held-out D3 metrics (top-1
+accuracy, teacher-argmax agreement, Witten–Bell bits/token vs the teacher
+floor), source/artifact/store/tokenizer/corpus CIDs, and
+`report_cid_of_report_bytes` for the inner metrics payload. Do not mark an
+artifact as passing merely to bypass the chat quality gate.
 
 ### 5. Import the evaluated bundle
 

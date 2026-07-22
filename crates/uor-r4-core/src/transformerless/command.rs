@@ -27,10 +27,11 @@
 
 use super::{
     certify, compare, compiler, runtime, scenarios,
-    teacher::{BehaviorSource, HuggingFaceLlamaOracle, LlamaOracle, TeacherOracle},
+    teacher::{HuggingFaceLlamaOracle, LlamaOracle},
 };
 use serde::Serialize;
 use std::collections::BTreeMap;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 
 const DEFAULT_CHECKPOINT: &str = "/tmp/ref/out/model.bin";
@@ -66,6 +67,12 @@ struct EvaluationReport {
     source: EvaluationSource,
     artifacts: EvaluationArtifacts,
     metrics: EvaluationMetrics,
+}
+
+#[derive(Debug, Serialize)]
+struct EvaluationReportEnvelope {
+    report: EvaluationReport,
+    report_cid_of_report_bytes: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -218,8 +225,17 @@ fn parse_evaluate_report_options(args: &[String]) -> Result<EvaluateReportOption
 }
 
 fn file_cid(path: &Path) -> Result<String, String> {
-    let content = std::fs::read(path).map_err(|error| error.to_string())?;
-    Ok(format!("blake3:{}", blake3::hash(&content).to_hex()))
+    let mut file = std::fs::File::open(path).map_err(|error| error.to_string())?;
+    let mut hasher = blake3::Hasher::new();
+    let mut buffer = [0u8; 8192];
+    loop {
+        let bytes_read = file.read(&mut buffer).map_err(|error| error.to_string())?;
+        if bytes_read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..bytes_read]);
+    }
+    Ok(format!("blake3:{}", hasher.finalize().to_hex()))
 }
 
 fn collect_file_entries(
@@ -304,7 +320,7 @@ fn witten_bell_probability(
             probability += weight * count as f64 / levels[index].2 as f64;
         }
     }
-    (probability + remaining / 32000.0).max(1e-30)
+    (probability + remaining / compiler::V as f64).max(1e-30)
 }
 
 fn evaluate_report(args: &[String]) -> Result<(), String> {
@@ -362,15 +378,15 @@ fn evaluate_report(args: &[String]) -> Result<(), String> {
             story_position = 0;
             oracle.reset();
         }
+        if corpus.story[index] < held_out_cut {
+            continue;
+        }
         oracle.step(
             corpus.input[index] as usize,
             story_position,
             &mut teacher_logits,
         );
         story_position += 1;
-        if corpus.story[index] < held_out_cut {
-            continue;
-        }
         held_out_tokens += 1;
         let code = runtime::code_plain(&artifacts, &rotations, &corpus, index);
         let prediction = deepest_argmax(&store, &code).ok_or_else(|| {
@@ -449,9 +465,15 @@ fn evaluate_report(args: &[String]) -> Result<(), String> {
     if let Some(parent) = report_path.parent() {
         std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
     }
-    let report_json = serde_json::to_string_pretty(&report).map_err(|error| error.to_string())?;
-    std::fs::write(&report_path, report_json).map_err(|error| error.to_string())?;
-    let report_cid = file_cid(&report_path)?;
+    let report_json = serde_json::to_vec_pretty(&report).map_err(|error| error.to_string())?;
+    let report_cid = format!("blake3:{}", blake3::hash(&report_json).to_hex());
+    let envelope = EvaluationReportEnvelope {
+        report,
+        report_cid_of_report_bytes: report_cid.clone(),
+    };
+    let envelope_json =
+        serde_json::to_string_pretty(&envelope).map_err(|error| error.to_string())?;
+    std::fs::write(&report_path, envelope_json).map_err(|error| error.to_string())?;
 
     println!(
         "evaluation report written: {} ({})",
