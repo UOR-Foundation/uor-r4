@@ -194,6 +194,125 @@ pub fn load_corpus_from(mp: &str, rp: &str) -> Option<Corpus> {
     })
 }
 
+/// One teacher decode step of corpus/observation generation: softmax the
+/// logits in place, extract the top-3 tokens with normalized integer
+/// weights, and sample the next token from the full CDF. Consumes exactly
+/// one `rng` draw. Shared by the resumable corpus writer and the sharded
+/// observation pipeline (`super::observe`) so both emit byte-identical v3
+/// records for the same teacher stream; the arithmetic below is the
+/// κ-pinned record semantics and must not change.
+pub fn softmax_top3_sample(logits: &mut [f32], rng: &mut u64) -> (usize, [u32; 3], [u32; 3]) {
+    let mut mx = logits[0];
+    for &v in &logits[1..] {
+        if v > mx {
+            mx = v;
+        }
+    }
+    let mut sum = 0.0f32;
+    for p in logits.iter_mut() {
+        *p = (*p - mx).exp();
+        sum += *p;
+    }
+    for p in logits.iter_mut() {
+        *p /= sum;
+    }
+
+    // Find top-3 tokens and their normalized weights
+    let mut top_candidates: Vec<(usize, f32)> =
+        logits.iter().enumerate().map(|(i, &p)| (i, p)).collect();
+    top_candidates.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+    let mut top_tokens_idx = [0u32; 3];
+    let mut top_weights_val = [0u32; 3];
+
+    let mut sum_top3 = 0.0f32;
+    for i in 0..3 {
+        if i < top_candidates.len() {
+            sum_top3 += top_candidates[i].1;
+        }
+    }
+    if sum_top3 > 1e-9 {
+        let mut accumulated = 0;
+        for i in 0..3 {
+            if i < top_candidates.len() {
+                top_tokens_idx[i] = top_candidates[i].0 as u32;
+                let w = ((top_candidates[i].1 / sum_top3) * 100.0).round() as u32;
+                top_weights_val[i] = w;
+                accumulated += w;
+            }
+        }
+        if accumulated != 100 && top_weights_val[0] > 0 {
+            // Signed arithmetic: rounding the three weights can overshoot
+            // 100 (e.g. 34+34+34). Release builds already treat the
+            // difference as signed via a wrapping u32 subtraction; compute
+            // it in i32 directly so debug builds produce the same bytes
+            // instead of panicking on the underflow.
+            let diff = 100i32 - accumulated as i32;
+            top_weights_val[0] = (top_weights_val[0] as i32 + diff).max(0) as u32;
+        }
+    }
+
+    // Sample the next token using the full logits cdf
+    let u = (xorshift(rng) >> 40) as f32 / (1u64 << 24) as f32;
+    let mut cdf = 0.0f32;
+    let mut next = logits.len() - 1;
+    for (i, &p) in logits.iter().enumerate() {
+        cdf += p;
+        if u < cdf {
+            next = i;
+            break;
+        }
+    }
+    (next, top_tokens_idx, top_weights_val)
+}
+
+/// Tokenizer-neutral byte anchors of one sampled token within its story.
+/// Without per-token byte lengths the anchors are the v3 "unknown" value
+/// (u32::MAX), matching the v2 backfill semantics on load.
+pub fn byte_anchors(
+    token_byte_lengths: Option<&[u32]>,
+    story_byte_offset: u32,
+    next: usize,
+) -> (u32, u32) {
+    let Some(lengths) = token_byte_lengths else {
+        return (u32::MAX, u32::MAX);
+    };
+    let token_bytes = lengths.get(next).copied().unwrap_or(0);
+    (
+        story_byte_offset,
+        story_byte_offset.saturating_add(token_bytes),
+    )
+}
+
+/// Encode one v3 corpus/observation record (48 bytes):
+///   story u32 | next u32 | top_tokens [u32; 3] | top_weights [u32; 3]
+///   | span_start u32 | span_end u32 | byte_start u32 | byte_end u32
+pub fn encode_v3_record(
+    story: u32,
+    next: u32,
+    top_tokens: &[u32; 3],
+    top_weights: &[u32; 3],
+    span: (u32, u32),
+    bytes: (u32, u32),
+) -> [u8; 48] {
+    let (span_start, span_end) = span;
+    let (byte_start, byte_end) = bytes;
+    let mut record = [0u8; 48];
+    record[0..4].copy_from_slice(&story.to_le_bytes());
+    record[4..8].copy_from_slice(&next.to_le_bytes());
+    for i in 0..3 {
+        let offset_tok = 8 + i * 4;
+        let offset_wt = 20 + i * 4;
+        record[offset_tok..offset_tok + 4].copy_from_slice(&top_tokens[i].to_le_bytes());
+        record[offset_wt..offset_wt + 4].copy_from_slice(&top_weights[i].to_le_bytes());
+    }
+    record[32..36].copy_from_slice(&span_start.to_le_bytes());
+    record[36..40].copy_from_slice(&span_end.to_le_bytes());
+    record[40..44].copy_from_slice(&byte_start.to_le_bytes());
+    record[44..48].copy_from_slice(&byte_end.to_le_bytes());
+    record
+}
+
 /// Generate (or extend, resumably) the teacher-labeled corpus. Whole-story
 /// chunking keeps the stream deterministic under any budget chunking.
 pub fn generate(oracle: &mut dyn TeacherOracle, budget_s: u64, target: usize) {
@@ -272,93 +391,20 @@ pub fn generate_to_with_token_byte_lengths(
         for pos in 0..seq_len {
             progress.set(n as usize);
             oracle.step(token, pos, &mut logits);
-            let mut mx = logits[0];
-            for &v in &logits[1..] {
-                if v > mx {
-                    mx = v;
-                }
-            }
-            let mut sum = 0.0f32;
-            for p in &mut logits {
-                *p = (*p - mx).exp();
-                sum += *p;
-            }
-            for p in &mut logits {
-                *p /= sum;
-            }
+            let (next, top_tokens_idx, top_weights_val) =
+                softmax_top3_sample(&mut logits, &mut rng);
 
-            // Find top-3 tokens and their normalized weights
-            let mut top_candidates: Vec<(usize, f32)> =
-                logits.iter().enumerate().map(|(i, &p)| (i, p)).collect();
-            top_candidates
-                .sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-
-            let mut top_tokens_idx = [0u32; 3];
-            let mut top_weights_val = [0u32; 3];
-
-            let mut sum_top3 = 0.0f32;
-            for i in 0..3 {
-                if i < top_candidates.len() {
-                    sum_top3 += top_candidates[i].1;
-                }
-            }
-            if sum_top3 > 1e-9 {
-                let mut accumulated = 0;
-                for i in 0..3 {
-                    if i < top_candidates.len() {
-                        top_tokens_idx[i] = top_candidates[i].0 as u32;
-                        let w = ((top_candidates[i].1 / sum_top3) * 100.0).round() as u32;
-                        top_weights_val[i] = w;
-                        accumulated += w;
-                    }
-                }
-                if accumulated != 100 && top_weights_val[0] > 0 {
-                    let diff = 100 - accumulated;
-                    top_weights_val[0] = (top_weights_val[0] as i32 + diff as i32).max(0) as u32;
-                }
-            }
-
-            // Sample the next token using the full logits cdf
-            let u = (xorshift(&mut rng) >> 40) as f32 / (1u64 << 24) as f32;
-            let mut cdf = 0.0f32;
-            let mut next = vocab - 1;
-            for (i, &p) in logits.iter().enumerate() {
-                cdf += p;
-                if u < cdf {
-                    next = i;
-                    break;
-                }
-            }
-
-            let mut record = [0u8; 48];
-            record[0..4].copy_from_slice(&(stories as u32).to_le_bytes());
-            record[4..8].copy_from_slice(&(next as u32).to_le_bytes());
-            for i in 0..3 {
-                let offset_tok = 8 + i * 4;
-                let offset_wt = 20 + i * 4;
-                record[offset_tok..offset_tok + 4]
-                    .copy_from_slice(&top_tokens_idx[i].to_le_bytes());
-                record[offset_wt..offset_wt + 4].copy_from_slice(&top_weights_val[i].to_le_bytes());
-            }
             let span_start = pos as u32;
             let span_end = span_start.saturating_add(1);
-            let byte_start = if token_byte_lengths.is_some() {
-                story_byte_offset
-            } else {
-                u32::MAX
-            };
-            let token_bytes = token_byte_lengths
-                .and_then(|lengths| lengths.get(next).copied())
-                .unwrap_or(0);
-            let byte_end = if token_byte_lengths.is_some() {
-                byte_start.saturating_add(token_bytes)
-            } else {
-                u32::MAX
-            };
-            record[32..36].copy_from_slice(&span_start.to_le_bytes());
-            record[36..40].copy_from_slice(&span_end.to_le_bytes());
-            record[40..44].copy_from_slice(&byte_start.to_le_bytes());
-            record[44..48].copy_from_slice(&byte_end.to_le_bytes());
+            let (byte_start, byte_end) = byte_anchors(token_byte_lengths, story_byte_offset, next);
+            let record = encode_v3_record(
+                stories as u32,
+                next as u32,
+                &top_tokens_idx,
+                &top_weights_val,
+                (span_start, span_end),
+                (byte_start, byte_end),
+            );
 
             recs.write_all(&record[..record_size]).unwrap();
             if token_byte_lengths.is_some() {

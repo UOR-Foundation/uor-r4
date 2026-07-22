@@ -745,6 +745,61 @@ pub trait TeacherOracle: RepresentationSource + BehaviorSource {
     fn source_bytes(&self) -> usize;
     /// Copy the embedding row of `token` into `out` (len == dim).
     fn embedding(&self, token: usize, out: &mut [f32]);
+
+    /// Optional compiler-only trace surface (graph-compiler plan §5 Phase
+    /// 2): the final hidden state (post-final-rmsnorm activation) of the
+    /// last `step`, if the oracle retains it. Defaults to `None` so
+    /// existing oracles are unaffected.
+    fn hidden_state(&self) -> Option<&[f32]> {
+        None
+    }
+
+    /// Optional compiler-only trace surface: the top-k (token, probability)
+    /// pairs of the last `step`'s softmax distribution, ordered by
+    /// descending probability with a canonical tie-break (higher
+    /// probability, then lower token id). Writes at most
+    /// `min(k, out.len())` pairs and returns the count written. Defaults
+    /// to 0 so existing oracles are unaffected.
+    fn top_k(&self, k: usize, out: &mut [(u32, f32)]) -> usize {
+        let _ = (k, out);
+        0
+    }
+}
+
+/// Shared top-k trace computation over the raw logits a llama-family
+/// `State` retains after `step`. Softmax is computed in the same f32
+/// max-subtracted form the corpus generator uses; ordering is canonical
+/// (probability descending, token id ascending on ties).
+fn top_k_from_logits(logits: &[f32], k: usize, out: &mut [(u32, f32)]) -> usize {
+    let count = k.min(out.len()).min(logits.len());
+    if count == 0 {
+        return 0;
+    }
+    let mut max = logits[0];
+    for &logit in &logits[1..] {
+        if logit > max {
+            max = logit;
+        }
+    }
+    let mut sum = 0.0f32;
+    let mut probs = vec![0.0f32; logits.len()];
+    for (prob, &logit) in probs.iter_mut().zip(logits.iter()) {
+        *prob = (logit - max).exp();
+        sum += *prob;
+    }
+    for prob in probs.iter_mut() {
+        *prob /= sum;
+    }
+    let mut order: Vec<u32> = (0..logits.len() as u32).collect();
+    order.sort_by(|a, b| {
+        probs[*b as usize]
+            .total_cmp(&probs[*a as usize])
+            .then_with(|| a.cmp(b))
+    });
+    for (dest, &token) in out.iter_mut().zip(order.iter()).take(count) {
+        *dest = (token, probs[token as usize]);
+    }
+    count
 }
 
 /// The llama-family adapter: `Llama` plus its recurrent state.
@@ -829,6 +884,12 @@ impl TeacherOracle for LlamaOracle {
         out.copy_from_slice(
             &self.model.w[self.model.emb + token * d..self.model.emb + (token + 1) * d],
         );
+    }
+    fn hidden_state(&self) -> Option<&[f32]> {
+        Some(&self.state.x)
+    }
+    fn top_k(&self, k: usize, out: &mut [(u32, f32)]) -> usize {
+        top_k_from_logits(&self.state.logits, k, out)
     }
 }
 
@@ -1112,6 +1173,12 @@ impl TeacherOracle for HuggingFaceLlamaOracle {
             let bucket = &row[start..end];
             *value = bucket.iter().sum::<f32>() / bucket.len() as f32;
         }
+    }
+    fn hidden_state(&self) -> Option<&[f32]> {
+        Some(&self.state.x)
+    }
+    fn top_k(&self, k: usize, out: &mut [(u32, f32)]) -> usize {
+        top_k_from_logits(&self.state.logits, k, out)
     }
 }
 

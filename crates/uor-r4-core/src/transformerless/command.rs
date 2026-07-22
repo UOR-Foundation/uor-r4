@@ -26,7 +26,7 @@
 //! and qwen/phi-class sources differ only in that adapter.
 
 use super::{
-    certify, compare, compiler, convert_r4g1, runtime, scenarios,
+    certify, compare, compiler, convert_r4g1, observe, runtime, scenarios,
     teacher::{BehaviorSource, HuggingFaceLlamaOracle, LlamaOracle, TeacherOracle},
 };
 use serde::Serialize;
@@ -58,6 +58,131 @@ struct EvaluateReportOptions {
     compiled: PathBuf,
     report: Option<PathBuf>,
     sequence_length: usize,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct ObserveOptions {
+    source: PathBuf,
+    checkpoint: Option<PathBuf>,
+    output: PathBuf,
+    seconds: u64,
+    target: usize,
+    shards: u8,
+    sequence_length: usize,
+}
+
+fn parse_observe_options(args: &[String]) -> Result<ObserveOptions, String> {
+    let mut options = ObserveOptions {
+        source: PathBuf::from(DEFAULT_HF_SOURCE_PATH),
+        checkpoint: None,
+        output: PathBuf::from("obs"),
+        seconds: 300,
+        target: 20_000,
+        shards: 4,
+        sequence_length: 128,
+    };
+    let mut index = 0usize;
+    while index < args.len() {
+        let flag = &args[index];
+        let value = args
+            .get(index + 1)
+            .ok_or_else(|| format!("missing value for {flag}"))?;
+        match flag.as_str() {
+            "--source" => options.source = PathBuf::from(value),
+            "--checkpoint" => options.checkpoint = Some(PathBuf::from(value)),
+            "--out" => options.output = PathBuf::from(value),
+            "--seconds" => {
+                options.seconds = value
+                    .parse()
+                    .map_err(|_| format!("invalid --seconds value: {value}"))?;
+            }
+            "--target" => {
+                options.target = value
+                    .parse()
+                    .map_err(|_| format!("invalid --target value: {value}"))?;
+            }
+            "--shards" => {
+                options.shards = value
+                    .parse()
+                    .map_err(|_| format!("invalid --shards value: {value}"))?;
+                if options.shards > observe::MAX_SHARD_BITS {
+                    return Err(format!(
+                        "--shards must be at most {} (2^N shard files)",
+                        observe::MAX_SHARD_BITS
+                    ));
+                }
+            }
+            "--sequence-length" => {
+                options.sequence_length = value
+                    .parse()
+                    .map_err(|_| format!("invalid --sequence-length value: {value}"))?;
+                if options.sequence_length == 0 {
+                    return Err("--sequence-length must be greater than zero".to_owned());
+                }
+            }
+            _ => return Err(format!("unknown observe option: {flag}")),
+        }
+        index += 2;
+    }
+    Ok(options)
+}
+
+/// Observation pipeline v2 (plan §5 Phase 2): the same teacher generation
+/// as [`compile_hugging_face`]'s corpus step, spilled into content-
+/// addressed, resumable shards instead of one corpus stream.
+pub fn observe_command(args: &[String]) -> Result<(), String> {
+    #[cfg(debug_assertions)]
+    eprintln!(
+        "warning: debug builds make teacher generation much slower; use `cargo run --release -- observe ...`"
+    );
+    let options = parse_observe_options(args)?;
+    std::fs::create_dir_all(&options.output).map_err(|error| error.to_string())?;
+    let token_byte_lengths: Option<Vec<u32>>;
+    let mut oracle: Box<dyn TeacherOracle> = if let Some(checkpoint) = &options.checkpoint {
+        // Legacy llama2.c checkpoint: no HF tokenizer tree, so byte
+        // anchors stay at the v3 "unknown" value.
+        token_byte_lengths = None;
+        let path = checkpoint
+            .to_str()
+            .ok_or_else(|| "checkpoint path is not UTF-8".to_owned())?;
+        Box::new(LlamaOracle::load(path))
+    } else {
+        let oracle = HuggingFaceLlamaOracle::load_with_sequence_length(
+            &options.source,
+            options.sequence_length,
+        )
+        .map_err(|error| format!("failed to load Hugging Face model: {error}"))?;
+        eprintln!("exporting tokenizer...");
+        token_byte_lengths = Some(
+            scenarios::export_hf_bytelevel_tokenizer_with_lengths(
+                options.source.join("tokenizer.json"),
+                options.output.join("tokenizer.bin"),
+            )
+            .map_err(|error| error.to_string())?,
+        );
+        Box::new(oracle)
+    };
+    let summary = observe::observe_sharded(
+        oracle.as_mut(),
+        options.seconds,
+        options.target,
+        options.shards,
+        &options.output,
+        token_byte_lengths.as_deref(),
+    )?;
+    if summary.done {
+        println!(
+            "observe complete: {} records at {}",
+            summary.records,
+            options.output.display()
+        );
+    } else {
+        println!(
+            "observation corpus is not complete; rerun the same command to resume {}",
+            options.output.display()
+        );
+    }
+    Ok(())
 }
 
 #[derive(Debug, Serialize)]
@@ -752,6 +877,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
         }
         Some("compare-report") => compare::report(),
         Some("evaluate-report") => evaluate_report(&args[1..])?,
+        Some("observe") => observe_command(&args[1..])?,
         Some("scenarios") => {
             let mut oracle = LlamaOracle::load(DEFAULT_CHECKPOINT);
             scenarios::scenarios(&mut oracle);
@@ -769,6 +895,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
             println!(
                 "R4 transformerless — cross-compile a transformer into a mul-free table artifact\n\
                  commands: setup | gen [secs] [target] | compile [--model REPO --revision SHA | --source DIR] [--output DIR] [--seconds N] [--target N] [--sequence-length N] | store | certify | compare | compare-report | scenarios | teacher-kappa | convert-r4g1 --artifacts <TLA> --store <TLS1> [--calibration <hamming_calibration.json>] --out <R4G1>\n\
+                 observation pipeline: observe [--source DIR | --checkpoint BIN] [--seconds N] [--target N] [--shards N] [--out DIR] [--sequence-length N]\n\
                  hf evaluation: evaluate-report [--source DIR] [--compiled DIR] [--report PATH] [--sequence-length N]\n\
                  docs: docs/TRANSFORMERLESS.md (extrapolation), docs/PROOF.md (proof + certificate)"
             );
@@ -864,5 +991,46 @@ mod tests {
         assert_eq!(options.compiled, PathBuf::from("/tmp/compiled"));
         assert_eq!(options.report, Some(PathBuf::from("/tmp/out.json")));
         assert_eq!(options.sequence_length, 256);
+    }
+
+    #[test]
+    fn observe_defaults_and_overrides() {
+        let options = parse_observe_options(&[]).expect("defaults");
+        assert_eq!(options.source, PathBuf::from(DEFAULT_HF_SOURCE_PATH));
+        assert_eq!(options.checkpoint, None);
+        assert_eq!(options.output, PathBuf::from("obs"));
+        assert_eq!(options.seconds, 300);
+        assert_eq!(options.target, 20_000);
+        assert_eq!(options.shards, 4);
+        assert_eq!(options.sequence_length, 128);
+
+        let args = [
+            "--checkpoint",
+            "/tmp/ref/out/model.bin",
+            "--seconds",
+            "1",
+            "--target",
+            "64",
+            "--shards",
+            "3",
+            "--out",
+            "/tmp/obs",
+        ]
+        .map(str::to_owned);
+        let options = parse_observe_options(&args).expect("valid options");
+        assert_eq!(
+            options.checkpoint,
+            Some(PathBuf::from("/tmp/ref/out/model.bin"))
+        );
+        assert_eq!(options.seconds, 1);
+        assert_eq!(options.target, 64);
+        assert_eq!(options.shards, 3);
+        assert_eq!(options.output, PathBuf::from("/tmp/obs"));
+    }
+
+    #[test]
+    fn observe_rejects_excessive_shard_fanout() {
+        let args = ["--shards", "9"].map(str::to_owned);
+        assert!(parse_observe_options(&args).is_err());
     }
 }

@@ -164,6 +164,8 @@ pub mod fairness_provenance;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod graph_patch;
 #[cfg(not(target_arch = "wasm32"))]
+pub mod observe;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod performance_certificate;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod predictive_sufficiency;
