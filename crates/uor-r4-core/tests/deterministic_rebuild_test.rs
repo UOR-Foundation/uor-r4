@@ -55,24 +55,37 @@ fn test_deterministic_container_rebuild() {
 
 #[test]
 fn test_deterministic_transition_graph_rebuild() {
-    // Construct synthetic edges twice with deterministic seed order
-    let mut g1 = TransitionGraph::new();
-    let mut g2 = TransitionGraph::new();
+    // Compile a transition graph twice through the real corpus->graph path.
+    let corpus = uor_r4_core::transformerless::compiler::Corpus {
+        n: 6,
+        stories: 1,
+        story: vec![1, 1, 1, 1, 1, 1],
+        input: vec![100, 200, 100, 200, 100, 300],
+        next: vec![200, 100, 200, 100, 300, 400],
+        t_argmax: vec![200, 100, 200, 100, 300, 400],
+        top_tokens: vec![[200, 0, 0]; 6],
+        top_weights: vec![[100, 0, 0]; 6],
+    };
+    let region_assigner = |tok: u32| tok / 10;
 
-    for &(src, dst, weight) in &[(10, 20, 5), (30, 20, 8), (10, 40, 3), (20, 50, 12)] {
-        g1.add_edge_with_score(src, dst, weight, ScoreQ::from_raw(weight as i32), EdgeKind::Forward);
-        g2.add_edge_with_score(src, dst, weight, ScoreQ::from_raw(weight as i32), EdgeKind::Forward);
-    }
-
-    g1.build_reverse_index().expect("build g1 reverse index");
-    g2.build_reverse_index().expect("build g2 reverse index");
+    let g1 = uor_r4_core::transformerless::transitions::compile_transitions_from_corpus(
+        &corpus,
+        region_assigner,
+        10,
+    )
+    .expect("compile g1");
+    let g2 = uor_r4_core::transformerless::transitions::compile_transitions_from_corpus(
+        &corpus,
+        region_assigner,
+        10,
+    )
+    .expect("compile g2");
 
     assert_eq!(g1.edges, g2.edges, "Canonical edge vectors must match");
     assert_eq!(g1.reverse_index, g2.reverse_index, "Reverse index arrays must match");
     assert_eq!(g1.reverse_offsets, g2.reverse_offsets, "Reverse offset maps must match");
     assert!(g1.verify_theorem_7().is_ok());
     assert!(g2.verify_theorem_7().is_ok());
-}
 
 #[test]
 fn test_deterministic_certificate_rebuild() {
