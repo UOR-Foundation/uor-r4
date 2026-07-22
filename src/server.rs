@@ -4,6 +4,7 @@ use crate::r4g1::{self, R4g1State};
 use crate::tless_uor::{self, TlessAxis};
 use crate::UorR4Router;
 use serde::Deserialize;
+use std::any::Any;
 use std::fs;
 use std::io::{prelude::*, BufReader};
 use std::net::{TcpListener, TcpStream};
@@ -824,7 +825,31 @@ fn compile_bundle_from_source(source: &Path) -> Result<PathBuf, String> {
             ));
         }
     }
+    let meta = output.join("corpus.meta");
+    let records = output.join("corpus.records");
+    let meta_str = meta
+        .to_str()
+        .ok_or_else(|| format!("corpus metadata path is not UTF-8: {}", meta.display()))?;
+    let records_str = records
+        .to_str()
+        .ok_or_else(|| format!("corpus records path is not UTF-8: {}", records.display()))?;
+    if uor_r4_core::transformerless::compiler::load_corpus_from(meta_str, records_str).is_none() {
+        return Err(format!(
+            "teacher corpus is incomplete at {}; click Compile / Refresh again to resume generation toward {} samples",
+            output.display(), R4G1_CORPUS_TARGET
+        ));
+    }
     Ok(output)
+}
+
+fn panic_payload_message(payload: &(dyn Any + Send)) -> String {
+    if let Some(message) = payload.downcast_ref::<&str>() {
+        (*message).to_owned()
+    } else if let Some(message) = payload.downcast_ref::<String>() {
+        message.clone()
+    } else {
+        "panic payload was not a string".to_owned()
+    }
 }
 
 fn compile_r4g1_bundle(
@@ -966,7 +991,12 @@ fn spawn_r4g1_compile(
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             compile_r4g1_bundle(&cli, &r4g1, downloaded_source.as_deref().map(Path::new))
         }))
-        .map_err(|_| "R4G1 compilation panicked".to_owned())
+        .map_err(|payload| {
+            format!(
+                "R4G1 compilation panicked: {}",
+                panic_payload_message(&*payload)
+            )
+        })
         .and_then(|result| result);
 
         let mut current = status.lock().unwrap();
@@ -1070,7 +1100,12 @@ fn spawn_huggingface_download(
             let destination = download_source(&source).map_err(|error| error.to_string())?;
             Ok::<_, String>((repository, name, destination))
         }))
-        .map_err(|_| "Hugging Face download panicked".to_owned())
+        .map_err(|payload| {
+            format!(
+                "Hugging Face download panicked: {}",
+                panic_payload_message(&*payload)
+            )
+        })
         .and_then(|result| result);
 
         let mut current = status.lock().unwrap();
