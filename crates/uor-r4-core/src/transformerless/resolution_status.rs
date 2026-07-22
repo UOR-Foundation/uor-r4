@@ -32,7 +32,7 @@ impl CalibratedFeatures {
         if self.hamming_dist > self.calibrated_radius.saturating_mul(2) {
             return ResolutionStatus::Novel;
         }
-        if self.hamming_dist > self.calibrated_radius || self.score_margin.abs_diff(0) < 10 {
+        if self.hamming_dist > self.calibrated_radius || self.score_margin.unsigned_abs() < 10 {
             return ResolutionStatus::Boundary;
         }
         ResolutionStatus::Supported
