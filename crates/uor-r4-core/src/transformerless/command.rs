@@ -196,6 +196,7 @@ struct CoverOptions {
     memory_budget_mb: u64,
     min_support: usize,
     entropy_gain_bits: f64,
+    radius_quantile: u32,
     output: PathBuf,
 }
 
@@ -211,6 +212,7 @@ fn parse_cover_options(args: &[String]) -> Result<CoverOptions, String> {
         memory_budget_mb: cover::DEFAULT_MEMORY_BUDGET_MB,
         min_support: cover::DEFAULT_MIN_SUPPORT,
         entropy_gain_bits: cover::DEFAULT_SPLIT_ENTROPY_GAIN_BITS,
+        radius_quantile: cover::RADIUS_QUANTILE_NUMERATOR,
         output: PathBuf::from("cover"),
     };
     let mut index = 0usize;
@@ -269,6 +271,14 @@ fn parse_cover_options(args: &[String]) -> Result<CoverOptions, String> {
                     .map_err(|_| format!("invalid --entropy-gain value: {value}"))?;
                 if !options.entropy_gain_bits.is_finite() || options.entropy_gain_bits < 0.0 {
                     return Err("--entropy-gain must be a finite non-negative number".to_owned());
+                }
+            }
+            "--radius-quantile" => {
+                options.radius_quantile = value
+                    .parse()
+                    .map_err(|_| format!("invalid --radius-quantile value: {value}"))?;
+                if options.radius_quantile == 0 || options.radius_quantile > 100 {
+                    return Err("--radius-quantile must be between 1 and 100".to_owned());
                 }
             }
             "--out" => options.output = PathBuf::from(value),
@@ -330,6 +340,8 @@ pub fn cover_command(args: &[String]) -> Result<(), String> {
         memory_budget_bytes: options.memory_budget_mb * 1024 * 1024,
         min_support: options.min_support,
         entropy_gain_bits: options.entropy_gain_bits,
+        radius_quantile_numerator: options.radius_quantile,
+        radius_quantile_denominator: 100,
         ..cover::CoverConfig::default()
     };
     eprintln!(
@@ -626,6 +638,7 @@ pub fn score_command(args: &[String]) -> Result<(), String> {
             transitions: &transitions,
             emissions: &emissions,
             exct_tls1: &tls1,
+            exct_top_x: config.exct_top_x,
         },
     )?;
     let graph_kappa = format!("blake3:{}", blake3::hash(&artifact_bytes).to_hex());
@@ -1400,7 +1413,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
                 "R4 transformerless — cross-compile a transformer into a mul-free table artifact\n\
                  commands: setup | gen [secs] [target] | compile [--model REPO --revision SHA | --source DIR] [--output DIR] [--seconds N] [--target N] [--sequence-length N] | store | certify | compare | compare-report | scenarios | teacher-kappa | convert-r4g1 --artifacts <TLA> --store <TLS1> [--calibration <hamming_calibration.json>] --out <R4G1>\n\
                  observation pipeline: observe [--source DIR | --checkpoint BIN] [--seconds N] [--target N] [--shards N] [--out DIR] [--sequence-length N]\n\
-                 cover induction: cover [--corpus-meta P --corpus-recs P] [--artifacts P] [--depths N] [--k0 N] [--regions-budget N] [--memory-budget MB] [--min-support N] [--entropy-gain BITS] [--out DIR]\n\
+                 cover induction: cover [--corpus-meta P --corpus-recs P] [--artifacts P] [--depths N] [--k0 N] [--regions-budget N] [--memory-budget MB] [--min-support N] [--entropy-gain BITS] [--radius-quantile PCT] [--out DIR]\n\
                  score (phase 4): score [--corpus-meta P --corpus-recs P] [--artifacts P] [--cover P] [--transition-out-degree N] [--emission-entries N] [--root-top-b N] [--exct-top-x N] [--witness-sample N] [--out DIR]\n\
                  hf evaluation: evaluate-report [--source DIR] [--compiled DIR] [--report PATH] [--sequence-length N]\n\
                  docs: docs/TRANSFORMERLESS.md (extrapolation), docs/PROOF.md (proof + certificate)"

@@ -25,6 +25,7 @@ const R4G1_COVER_REGIONS: &str = "2048";
 const R4G1_COVER_MEMORY_MB: &str = "2048";
 const R4G1_COVER_MIN_SUPPORT: &str = "32";
 const R4G1_COVER_ENTROPY_GAIN: &str = "0.10";
+const R4G1_COVER_RADIUS_QUANTILE: &str = "80";
 const R4G1_SCORE_TRANSITION_DEGREE: &str = "16";
 const R4G1_SCORE_EMISSION_ENTRIES: &str = "256";
 const R4G1_SCORE_ROOT_TOP_B: &str = "256";
@@ -911,6 +912,8 @@ fn compile_r4g1_bundle(
         R4G1_COVER_MIN_SUPPORT.to_owned(),
         "--entropy-gain".to_owned(),
         R4G1_COVER_ENTROPY_GAIN.to_owned(),
+        "--radius-quantile".to_owned(),
+        R4G1_COVER_RADIUS_QUANTILE.to_owned(),
         "--out".to_owned(),
         cover_output.display().to_string(),
     ];

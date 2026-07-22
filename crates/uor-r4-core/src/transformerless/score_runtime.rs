@@ -28,10 +28,11 @@
 //! accumulation core — candidate union, contribution application, the
 //! canonical argmax — uses ScoreQ saturating add/sub, integer compares,
 //! and table reads only: no float, no multiply, no divide, no modulo.
-//! The single exception is delimited by `BEGIN/END COMPILER-SIDE FLOAT`
-//! markers and documented at [`quantize_exct`]; the machine-checked
-//! source scan (`tests/score.rs`) asserts the rest of this file carries
-//! no `f32`/`f64` and no `*` `/` `%` value arithmetic.
+//! Legacy TLS1 compatibility keeps one compiler-side float helper delimited
+//! by `BEGIN/END COMPILER-SIDE FLOAT` markers and documented at
+//! [`quantize_exct`]. The deployed RX1 path never calls it; the machine-
+//! checked source scan (`tests/score.rs`) asserts the accumulation core
+//! carries no `f32`/`f64` and no `*` `/` `%` value arithmetic.
 //!
 //! # Scoring semantics (normative)
 //!
@@ -66,18 +67,17 @@
 //!   candidate once (the witness records the applied edges and the
 //!   offset); F emission lists generate candidates but contribute no
 //!   residuals.
-//! - **Candidates**: the union of the emission lists of A ∪ F ∪ chain,
-//!   the root prior's top-`root_top_b` tokens (precomputed at
-//!   construction), and — under Rule 2 only — the EXCT probe's
-//!   top-`exct_top_x` tokens. Every candidate receives exactly one
-//!   root-prior contribution (the stored B(v), or the baked smoothing
-//!   floor for tokens absent from the root block).
+//! - **Candidates**: under Rule 1, the union of the emission lists of A ∪ F
+//!   ∪ chain plus the root prior's top-`root_top_b` tokens. Under Rule 2,
+//!   only the EXCT probe's admitted local entries are scored; mixing global
+//!   root candidates into that local distribution would change the graded-
+//!   store argmax. Every scored candidate receives one root-prior contribution
+//!   before its residual, with the baked smoothing floor for absent tokens.
 //! - **EXCT precedence (Rule 2)**: the existing prefix probe from
 //!   `runtime::predict_witness_plain` (deepest populated prefix). Total
 //!   evidence ≥ [`EXCT_SUPPORT_MIN`] ⇒ `S(v) = B(v) + ΔX(X,v)` over the
-//!   root-top-B ∪ probe-top-X candidate set, graph candidate generation
-//!   skipped; below the gate the probe is recorded (admitted 0) and
-//!   Rule 1 decides.
+//!   admitted local entries, graph candidate generation skipped; below the
+//!   gate the probe is recorded (admitted 0) and Rule 1 decides.
 //! - **Status**: every prediction reports exactly one [`ScoreStatus`] —
 //!   `ExactContext` (Rule 2 fired), `Graph` (Rule 1 with a non-empty
 //!   selected chain), `Novel` (Rule 1 with no covered chain — Phase 5
@@ -145,6 +145,10 @@ pub const EDGE_KIND_FORWARD: u8 = 2;
 /// Bounded multi-membership per depth (matches `cover::TOP_M` and the
 /// runtime's top-M).
 pub const TOP_M: usize = 3;
+
+/// EXCT section body marker for compile-time integer residual tables.
+/// The four-byte storage descriptor still prefixes this body on disk.
+pub const RESIDUAL_EXCT_MAGIC: [u8; 4] = *b"RX1\0";
 
 /// Rule 2 (D4 EXCT precedence) support gate: the exact-context evidence
 /// dominates the graph residuals only when the probed deepest-populated
@@ -538,6 +542,54 @@ pub struct ScoreOutcome {
     pub witness: ScoreWitness,
 }
 
+#[derive(Debug, Clone)]
+struct ResidualExctContext {
+    total: u32,
+    entries: BTreeMap<u32, ScoreQ>,
+}
+
+fn parse_residual_exct(body: &[u8]) -> Option<Vec<BTreeMap<Vec<u8>, ResidualExctContext>>> {
+    if body.len() < 8 || body[..4] != RESIDUAL_EXCT_MAGIC {
+        return None;
+    }
+    let levels = body[4] as usize;
+    if levels != STAGES + 1 || body[5..8] != [0u8; 3] {
+        return None;
+    }
+    let mut offset = 8usize;
+    let mut parsed = Vec::with_capacity(levels);
+    for level in 0..levels {
+        let key_count = u32::from_le_bytes(body.get(offset..offset + 4)?.try_into().ok()?) as usize;
+        offset += 4;
+        let mut contexts = BTreeMap::new();
+        for _ in 0..key_count {
+            let key_len = usize::from(*body.get(offset)?);
+            offset += 1;
+            if key_len != level {
+                return None;
+            }
+            let key = body.get(offset..offset + key_len)?.to_vec();
+            offset += key_len;
+            let total = u32::from_le_bytes(body.get(offset..offset + 4)?.try_into().ok()?);
+            offset += 4;
+            let entry_count =
+                u32::from_le_bytes(body.get(offset..offset + 4)?.try_into().ok()?) as usize;
+            offset += 4;
+            let mut entries = BTreeMap::new();
+            for _ in 0..entry_count {
+                let token = u32::from_le_bytes(body.get(offset..offset + 4)?.try_into().ok()?);
+                let residual =
+                    i32::from_le_bytes(body.get(offset + 4..offset + 8)?.try_into().ok()?);
+                offset += 8;
+                entries.insert(token, ScoreQ::from_raw(residual));
+            }
+            contexts.insert(key, ResidualExctContext { total, entries });
+        }
+        parsed.push(contexts);
+    }
+    (offset == body.len()).then_some(parsed)
+}
+
 /// The reference scorer: validated R4G1 bytes (+ the teacher TLA
 /// container when EXCT evidence is wired) parsed once into bounded
 /// lookup structures. Construction fails closed — invalid bytes or CIDs
@@ -553,6 +605,7 @@ pub struct GraphScorer {
     root_top: Vec<u32>,
     /// Per-region emission maps (index = region id), token → ΔE.
     emissions: Vec<BTreeMap<u32, ScoreQ>>,
+    residual_exct: Option<Vec<BTreeMap<Vec<u8>, ResidualExctContext>>>,
     store: Option<Store>,
     artifacts: Option<Compiled>,
     vocab: u32,
@@ -650,28 +703,45 @@ impl GraphScorer {
             node_index += 1;
         }
 
-        // EXCT: the TLS1 carryover (converter convention). When the
-        // artifact carries EXCT, consulting it requires the teacher
-        // container for class-code derivation; a `None` teacher means
-        // exact-context evidence is simply not consulted (Gate C mode
-        // (a) runs the same artifact without EXCT).
+        // EXCT: prefer compile-time residual tables. They can be used by
+        // the deployed integer-only runtime; raw TLS1 remains accepted for
+        // legacy Gate C/converter artifacts and uses the old certifier-side
+        // quantization path.
         let exct = view.section(SectionId::EXCT);
-        let (store, artifacts) = match (exct, teacher_container) {
-            (Some(bytes), Some(teacher)) => {
-                if blake3::hash(teacher).as_bytes() != &head.teacher_cid().0 {
-                    return Err("teacher container does not match HEAD teacher_cid".to_owned());
-                }
-                let parsed = compiler::parse_artifacts(teacher)
-                    .ok_or("teacher container is not a TLA artifact container")?;
+        let (residual_exct, store, artifacts) = match exct {
+            Some(bytes) => {
                 let body = bytes
                     .get(uor_r4_graph_format::STORAGE_DESCRIPTOR_LEN..)
                     .ok_or("EXCT section shorter than its descriptor")?;
-                let store = runtime::parse_store(body)
-                    .or_else(|| runtime::parse_store_legacy_u16(body))
-                    .ok_or("EXCT remainder is not a TLS1 store (either era)")?;
-                (Some(store), Some(parsed))
+                if let Some(residuals) = parse_residual_exct(body) {
+                    let artifacts = teacher_container
+                        .map(|teacher| {
+                            if blake3::hash(teacher).as_bytes() != &head.teacher_cid().0 {
+                                return Err(
+                                    "teacher container does not match HEAD teacher_cid".to_owned()
+                                );
+                            }
+                            compiler::parse_artifacts(teacher).ok_or_else(|| {
+                                "teacher container is not a TLA artifact container".to_owned()
+                            })
+                        })
+                        .transpose()?;
+                    (Some(residuals), None, artifacts)
+                } else if let Some(teacher) = teacher_container {
+                    if blake3::hash(teacher).as_bytes() != &head.teacher_cid().0 {
+                        return Err("teacher container does not match HEAD teacher_cid".to_owned());
+                    }
+                    let parsed = compiler::parse_artifacts(teacher)
+                        .ok_or("teacher container is not a TLA artifact container")?;
+                    let store = runtime::parse_store(body)
+                        .or_else(|| runtime::parse_store_legacy_u16(body))
+                        .ok_or("EXCT remainder is not a TLS1 store (either era)")?;
+                    (None, Some(store), Some(parsed))
+                } else {
+                    return Err("EXCT remainder is neither residualized RX1 nor TLS1".to_owned());
+                }
             }
-            _ => (None, None),
+            None => (None, None, None),
         };
 
         Ok(GraphScorer {
@@ -683,6 +753,7 @@ impl GraphScorer {
             root_floor,
             root_top,
             emissions,
+            residual_exct,
             store,
             artifacts,
             vocab: head.vocab_size(),
@@ -693,7 +764,7 @@ impl GraphScorer {
 
     /// True when exact-context evidence is wired.
     pub fn has_exct(&self) -> bool {
-        self.store.is_some()
+        self.residual_exct.is_some() || self.store.is_some()
     }
 
     /// The compiled vocabulary size (HEAD).
@@ -719,8 +790,8 @@ impl GraphScorer {
     /// predicted cloud F, the bounded candidate set, and S(v) for every
     /// candidate by integer ScoreQ accumulation; select by the canonical
     /// tie-break; emit the bounded witness. The arithmetic of this
-    /// function is integer-only (module docs; the EXCT probe's ΔX
-    /// quantization is the delimited compiler-side exception).
+    /// function is integer-only. Legacy raw TLS1 EXCT has a delimited
+    /// certifier-side float fallback; deployed RX1 EXCT is already quantized.
     pub fn score_candidates(&self, sig: &[u8; SIG_BYTES]) -> Result<ScoreOutcome, String> {
         let mut k = OpKernel::default();
 
@@ -853,39 +924,71 @@ impl GraphScorer {
         // probe log-prob minus the stored root prior (integer sub).
         let mut exct_probe: Option<ExctProbe> = None;
         let mut exact_residuals: Vec<(u32, ScoreQ)> = Vec::new();
-        if let (Some(store), Some(art)) = (&self.store, &self.artifacts) {
+        if let Some(art) = &self.artifacts {
             let code = runtime::assign_plain(art, sig);
-            for level in (0..=STAGES).rev() {
-                if let Some(dist) = store[level].get(&code[..level]) {
-                    let total: u32 = dist.values().sum();
-                    let mut ranked: Vec<(u32, u32)> = dist.iter().map(|(&t, &c)| (t, c)).collect();
-                    ranked.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
-                    let supported = total >= EXCT_SUPPORT_MIN;
-                    let mut admitted = 0u32;
-                    if supported {
-                        for &(token, count) in ranked.iter().take(self.exct_top_x) {
-                            k.table_reads += 1;
-                            let value = quantize_exct(count, total, self.vocab)
-                                .saturating_sub(self.root_score(token));
-                            exact_residuals.push((token, value));
-                            admitted += 1;
+            if let Some(residual_exct) = &self.residual_exct {
+                for level in (0..=STAGES).rev() {
+                    if let Some(context) = residual_exct[level].get(&code[..level]) {
+                        let supported = context.total >= EXCT_SUPPORT_MIN;
+                        let admitted = if supported {
+                            context.entries.len().min(self.exct_top_x) as u32
+                        } else {
+                            0
+                        };
+                        if supported {
+                            exact_residuals.extend(
+                                context.entries.iter().take(self.exct_top_x).map(
+                                    |(&token, &residual)| {
+                                        k.table_reads += 1;
+                                        (token, residual)
+                                    },
+                                ),
+                            );
                         }
+                        exct_probe = Some(ExctProbe {
+                            level: level as u8,
+                            key: code[..level].to_vec(),
+                            total: context.total,
+                            admitted,
+                        });
+                        break;
                     }
-                    exct_probe = Some(ExctProbe {
-                        level: level as u8,
-                        key: code[..level].to_vec(),
-                        total,
-                        admitted,
-                    });
-                    break;
+                }
+            } else if let Some(store) = &self.store {
+                for level in (0..=STAGES).rev() {
+                    if let Some(dist) = store[level].get(&code[..level]) {
+                        let total: u32 = dist.values().sum();
+                        let mut ranked: Vec<(u32, u32)> =
+                            dist.iter().map(|(&t, &c)| (t, c)).collect();
+                        ranked.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+                        let supported = total >= EXCT_SUPPORT_MIN;
+                        let mut admitted = 0u32;
+                        if supported {
+                            for &(token, count) in ranked.iter().take(self.exct_top_x) {
+                                k.table_reads += 1;
+                                let value = quantize_exct(count, total, self.vocab)
+                                    .saturating_sub(self.root_score(token));
+                                exact_residuals.push((token, value));
+                                admitted += 1;
+                            }
+                        }
+                        exct_probe = Some(ExctProbe {
+                            level: level as u8,
+                            key: code[..level].to_vec(),
+                            total,
+                            admitted,
+                        });
+                        break;
+                    }
                 }
             }
         }
 
         // D4 EXCT precedence: once the exact prefix has enough evidence,
-        // discard graph candidates and score only the root prior plus the
-        // exact-context residuals. This prevents an unrelated graph branch
-        // from overpowering a confidently observed context.
+        // discard the graph and global-root candidate sets and rank only the
+        // admitted local entries. Mixing global root candidates into a local
+        // distribution lets a globally common token beat the locally dominant
+        // exact-context token, which diverges from the graded-store semantics.
         let exact_context = exct_probe
             .as_ref()
             .is_some_and(|probe| probe.admitted > 0 && !exact_residuals.is_empty());
@@ -896,15 +999,6 @@ impl GraphScorer {
             predicted.clear();
             edges_applied.clear();
             transition_offset = ScoreQ::ZERO;
-            for &token in &self.root_top {
-                let entry = candidates
-                    .entry(token)
-                    .or_insert_with(|| (ScoreQ::ZERO, Vec::new()));
-                entry.1.push(Contribution {
-                    id: ContributionId::RootPrior { token },
-                    value: self.root_score(token),
-                });
-            }
             for (token, value) in exact_residuals {
                 let entry = candidates
                     .entry(token)

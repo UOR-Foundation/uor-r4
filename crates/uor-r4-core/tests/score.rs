@@ -250,6 +250,7 @@ fn synthetic_scored_artifact() -> (
             transitions: &transitions,
             emissions: &emissions,
             exct_tls1: &tls1,
+            exct_top_x: score::DEFAULT_EXCT_TOP_X,
         },
     )
     .expect("emit succeeds");
@@ -325,6 +326,7 @@ fn hand_artifact() -> (Vec<u8>, Vec<u8>, Store) {
         [(10u32, 3u32), (20, 1), (50, 2)].into_iter().collect(),
     );
     let tls1 = runtime::store_bytes(&store);
+    let config = ScoreConfig::default();
     let (bytes, _) = score::emit_scored_r4g1(
         &artifact_container,
         (b"hand-meta", b"hand-recs"),
@@ -335,6 +337,7 @@ fn hand_artifact() -> (Vec<u8>, Vec<u8>, Store) {
             transitions: &transitions,
             emissions: &emissions,
             exct_tls1: &tls1,
+            exct_top_x: config.exct_top_x,
         },
     )
     .expect("hand emit succeeds");
@@ -583,6 +586,7 @@ fn theorem_10_overlapping_active_and_predicted_counts_emission_once() {
             transitions: &transitions,
             emissions: &emissions,
             exct_tls1: &tls1,
+            exct_top_x: score::DEFAULT_EXCT_TOP_X,
         },
     )
     .expect("emit");
@@ -708,6 +712,7 @@ fn determinism_double_run_t_invariance_and_shuffled_observations() {
                 transitions: &transitions,
                 emissions: &emissions,
                 exct_tls1: &tls1,
+                exct_top_x: config.exct_top_x,
             },
         )
         .expect("emit")
@@ -797,6 +802,7 @@ fn cover_artifact_recovery_is_byte_identical_to_reinduction() {
                 transitions: &transitions,
                 emissions: &emissions,
                 exct_tls1: &tls1,
+                exct_top_x: config.exct_top_x,
             },
         )
         .expect("emit")
@@ -1086,6 +1092,7 @@ fn fixture_corpus_end_to_end() {
             transitions: &transitions,
             emissions: &emissions,
             exct_tls1: &tls1,
+            exct_top_x: config.exct_top_x,
         },
     )
     .expect("fixture emit");
@@ -1137,6 +1144,7 @@ fn fixture_corpus_end_to_end() {
             transitions: &transitions,
             emissions: &emissions,
             exct_tls1: &tls1,
+            exct_top_x: config.exct_top_x,
         },
     )
     .expect("fixture emit");

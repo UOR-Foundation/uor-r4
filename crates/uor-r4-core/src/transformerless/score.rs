@@ -45,15 +45,12 @@
 //!   exist this phase — Theorem 10 non-duplication holds by
 //!   construction (root-plus-residual decomposition; each contribution
 //!   attached to exactly one node).
-//! - **EXCT**: the existing TLS1 graded store bytes verbatim after the
-//!   v0 storage descriptor `{width: i32, shift: 0, zero_point: 0}` —
-//!   the converter's migration carryover convention. ΔX lookup
-//!   semantics are the existing prefix probe from
-//!   `runtime::predict_witness_plain` (deepest populated prefix), with
-//!   `ΔX(X,v) = ScoreQ::from_logprob(ln P(v|X)) − B(v)` quantized from
-//!   the probed counts at score time (the reference scorer's single
-//!   documented compiler-side float; residualized EXCT tables are the
-//!   Phase-5 migration that removes it).
+//! - **EXCT**: the compiler reads the TLS1 graded store as input, then emits
+//!   a residualized RX1 table after the v0 storage descriptor. Each retained
+//!   prefix entry stores `ΔX(X,v) = Q(ln P(v|X)) − B(v)` as an integer
+//!   `ScoreQ`; the deployed scorer performs only table reads and integer
+//!   addition. Legacy raw TLS1 graph artifacts remain readable by the
+//!   certifier for migration compatibility.
 //!
 //! # Wire layout (EMIT remainder)
 //!
@@ -99,7 +96,7 @@ use super::runtime::{self, Store};
 use super::score_runtime::{
     binary_memberships, binary_top1_covered, regions_from_view, structural_edges_from_view,
     verify_witness_replay, GraphScorer, RegionParams, StructuralEdge, EDGE_KIND_FORWARD,
-    EDGE_KIND_NEIGHBOR, EDGE_KIND_REFINEMENT,
+    EDGE_KIND_NEIGHBOR, EDGE_KIND_REFINEMENT, RESIDUAL_EXCT_MAGIC,
 };
 use uor_r4_graph_format::ScoreQ;
 
@@ -446,14 +443,64 @@ pub struct ScoredGraphSections<'a> {
     pub transitions: &'a [TransitionEdge],
     /// Root prior + per-region residual lists.
     pub emissions: &'a EmissionTables,
-    /// Raw TLS1 container bytes (the EXCT carryover).
+    /// TLS1 container bytes used as compiler input for residualized EXCT.
     pub exct_tls1: &'a [u8],
+    /// Number of exact-context residual entries retained per prefix.
+    pub exct_top_x: usize,
+}
+
+/// Encode the exact-context store as compile-time ScoreQ residuals. The
+/// runtime only reads the resulting integer values; it never evaluates ln or
+/// performs probe-time quantization.
+fn emit_residual_exct(
+    store: &Store,
+    root_prior: &BTreeMap<u32, ScoreQ>,
+    root_floor: ScoreQ,
+    vocab: u32,
+    top_x: usize,
+) -> Result<Vec<u8>, String> {
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(&RESIDUAL_EXCT_MAGIC);
+    bytes.push(u8::try_from(store.len()).map_err(|_| "EXCT level count exceeds u8".to_owned())?);
+    bytes.extend_from_slice(&[0u8; 3]);
+    for (level, contexts) in store.iter().enumerate() {
+        let key_count = u32::try_from(contexts.len())
+            .map_err(|_| format!("EXCT level {level} has too many contexts"))?;
+        bytes.extend_from_slice(&key_count.to_le_bytes());
+        for (key, distribution) in contexts {
+            let key_len = u8::try_from(key.len())
+                .map_err(|_| format!("EXCT key at level {level} is too long"))?;
+            bytes.push(key_len);
+            bytes.extend_from_slice(key);
+            let total: u64 = distribution.values().map(|&count| u64::from(count)).sum();
+            let total = total.min(u64::from(u32::MAX)) as u32;
+            let mut ranked: Vec<(u32, u32)> = distribution
+                .iter()
+                .map(|(&token, &count)| (token, count))
+                .collect();
+            ranked.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+            ranked.truncate(top_x);
+            let entry_count = u32::try_from(ranked.len())
+                .map_err(|_| "EXCT residual entry count exceeds u32".to_owned())?;
+            bytes.extend_from_slice(&total.to_le_bytes());
+            bytes.extend_from_slice(&entry_count.to_le_bytes());
+            for (token, count) in ranked {
+                let exact =
+                    ScoreQ::from_logprob(smoothed_ln(u64::from(count), u64::from(total), vocab));
+                let root = root_prior.get(&token).copied().unwrap_or(root_floor);
+                let residual = exact.saturating_sub(root);
+                bytes.extend_from_slice(&token.to_le_bytes());
+                bytes.extend_from_slice(&residual.raw().to_le_bytes());
+            }
+        }
+    }
+    Ok(bytes)
 }
 
 /// Emit the scored graph as an R4G1 container: the cover's HEAD/NODE/
 /// ROUT conventions with E_f merged into EDGE (kind tags distinguish
 /// E_r/E_o/E_f), the EMIT residual tables with per-node ranges wired,
-/// and the TLS1 EXCT carryover. Fails closed: Theorem 7 is verified
+/// and the residualized RX1 EXCT table. Fails closed: Theorem 7 is verified
 /// before serialization, and the bytes are re-validated with
 /// `GraphView::parse` + `verify_cids` before they are returned.
 pub fn emit_scored_r4g1(
@@ -468,6 +515,7 @@ pub fn emit_scored_r4g1(
         transitions,
         emissions,
         exct_tls1,
+        exct_top_x,
     } = *sections;
     if regions.len() != emissions.region_lists.len() {
         return Err("emission lists do not match the region count".to_owned());
@@ -625,10 +673,20 @@ pub fn emit_scored_r4g1(
         edge_section.extend_from_slice(&id.to_le_bytes());
     }
 
-    // EXCT: descriptor + the raw TLS1 carryover.
-    let mut exct = Vec::with_capacity(4 + exct_tls1.len());
+    // EXCT: descriptor + compile-time residualized exact-context tables.
+    let store = runtime::parse_store(exct_tls1)
+        .or_else(|| runtime::parse_store_legacy_u16(exct_tls1))
+        .ok_or("EXCT input is not a TLS1 store")?;
+    let exct_body = emit_residual_exct(
+        &store,
+        &emissions.root_prior,
+        emissions.root_floor,
+        vocab_size,
+        exct_top_x,
+    )?;
+    let mut exct = Vec::with_capacity(4 + exct_body.len());
     exct.extend_from_slice(&[2, 0, 0, 0]);
-    exct.extend_from_slice(exct_tls1);
+    exct.extend_from_slice(&exct_body);
 
     // HEAD: the fixed 224-byte v0 prefix (convert_r4g1 conventions).
     let (meta, recs) = corpus_cid_material;
@@ -1054,9 +1112,8 @@ pub fn build_score_report(
             platform: "compiler-side f64 ln quantization is macOS-pinned (libm-sensitive \
                        cross-platform), the same status as the existing κ baseline; the D2 \
                        canonical deterministic compile mode resolves cross-platform byte \
-                       equality later. The runtime scoring path is integer-only except the \
-                       documented EXCT probe-time quantization (Phase-5 residualized EXCT \
-                       removes it)"
+                       equality later. RX1 EXCT residuals are quantized at compile time, so \
+                       the deployed scoring path is integer-only; raw TLS1 is legacy-only"
                 .to_owned(),
         },
         determinism: ScoreReportDeterminism {

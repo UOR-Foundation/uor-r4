@@ -56,16 +56,15 @@ impl R4g1State {
             .and_then(|value| usize::try_from(value).ok())
             .filter(|&value| value > 0)
             .unwrap_or(DEFAULT_EXCT_TOP_X);
-        // EXCT is a compiler-era carryover that requires probe-time
-        // log-quantization in the reference scorer. The deployed R4G1 path
-        // uses the packed HEAD/NODE/EDGE/ROUT/EMIT sections only, preserving
-        // the integer-only runtime contract. The teacher bytes are still
-        // needed below to decode token rows and derive input signatures.
-        let scorer = GraphScorer::from_artifact(&graph_bytes, None, root_top_b, exct_top_x)
-            .map_err(|error| format!("{}: {error}", graph_path.display()))?;
+        // The compiled RX1 EXCT table contains integer residuals. Supplying
+        // the teacher artifact here is only for integer class-code lookup;
+        // no probe-time log quantization occurs in the deployed path.
+        let scorer =
+            GraphScorer::from_artifact(&graph_bytes, Some(&teacher_bytes), root_top_b, exct_top_x)
+                .map_err(|error| format!("{}: {error}", graph_path.display()))?;
         if let Some(report) = score_report {
             let graph_agreement = report
-                .pointer("/gate_c/graph_no_exct/top1_agreement")
+                .pointer("/gate_c/graph_with_exct/top1_agreement")
                 .and_then(serde_json::Value::as_f64);
             let baseline_agreement = report
                 .pointer("/gate_c/tla3_baseline/top1_agreement")
@@ -73,7 +72,7 @@ impl R4g1State {
             if let (Some(graph), Some(baseline)) = (graph_agreement, baseline_agreement) {
                 if graph < baseline {
                     return Err(format!(
-                        "R4G1 quality gate failed: graph top-1 {:.2}% is below TLA baseline {:.2}%",
+                        "R4G1 quality gate failed: graph runtime top-1 {:.2}% is below TLA baseline {:.2}%",
                         graph * 100.0,
                         baseline * 100.0
                     ));
