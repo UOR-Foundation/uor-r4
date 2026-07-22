@@ -100,5 +100,8 @@ fn hamming_calibration_ignores_invalid_stage_layout() {
     let report = calibrate_hamming_regions_from_signatures(&class_sigs, &signatures);
     assert_eq!(report.regions.len(), STAGES * K);
     assert!(report.regions.iter().all(|region| region.sample_count == 0));
-    assert!(report.regions.iter().all(|region| region.acceptance_radius == 0));
+    assert!(report
+        .regions
+        .iter()
+        .all(|region| region.acceptance_radius == 0));
 }

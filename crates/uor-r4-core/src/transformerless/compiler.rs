@@ -120,8 +120,10 @@ pub fn load_corpus_from(mp: &str, rp: &str) -> Option<Corpus> {
             for j in 0..3 {
                 let offset_tok = o + 8 + j * 4;
                 let offset_wt = o + 20 + j * 4;
-                tokens_val[j] = u32::from_le_bytes(rb[offset_tok..offset_tok + 4].try_into().unwrap());
-                weights_val[j] = u32::from_le_bytes(rb[offset_wt..offset_wt + 4].try_into().unwrap());
+                tokens_val[j] =
+                    u32::from_le_bytes(rb[offset_tok..offset_tok + 4].try_into().unwrap());
+                weights_val[j] =
+                    u32::from_le_bytes(rb[offset_wt..offset_wt + 4].try_into().unwrap());
             }
             t_argmax.push(tokens_val[0]);
             top_tokens.push(tokens_val);
@@ -211,18 +213,16 @@ pub fn generate_to(
             for p in &mut logits {
                 *p /= sum;
             }
-            
+
             // Find top-3 tokens and their normalized weights
-            let mut top_candidates: Vec<(usize, f32)> = logits
-                .iter()
-                .enumerate()
-                .map(|(i, &p)| (i, p))
-                .collect();
-            top_candidates.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-            
+            let mut top_candidates: Vec<(usize, f32)> =
+                logits.iter().enumerate().map(|(i, &p)| (i, p)).collect();
+            top_candidates
+                .sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
             let mut top_tokens_idx = [0u32; 3];
             let mut top_weights_val = [0u32; 3];
-            
+
             let mut sum_top3 = 0.0f32;
             for i in 0..3 {
                 if i < top_candidates.len() {
@@ -244,7 +244,7 @@ pub fn generate_to(
                     top_weights_val[0] = (top_weights_val[0] as i32 + diff as i32).max(0) as u32;
                 }
             }
-            
+
             // Sample the next token using the full logits cdf
             let u = (xorshift(&mut rng) >> 40) as f32 / (1u64 << 24) as f32;
             let mut cdf = 0.0f32;
@@ -256,17 +256,18 @@ pub fn generate_to(
                     break;
                 }
             }
-            
+
             let mut record = [0u8; 32];
             record[0..4].copy_from_slice(&(stories as u32).to_le_bytes());
             record[4..8].copy_from_slice(&(next as u32).to_le_bytes());
             for i in 0..3 {
                 let offset_tok = 8 + i * 4;
                 let offset_wt = 20 + i * 4;
-                record[offset_tok..offset_tok + 4].copy_from_slice(&top_tokens_idx[i].to_le_bytes());
+                record[offset_tok..offset_tok + 4]
+                    .copy_from_slice(&top_tokens_idx[i].to_le_bytes());
                 record[offset_wt..offset_wt + 4].copy_from_slice(&top_weights_val[i].to_le_bytes());
             }
-            
+
             recs.write_all(&record).unwrap();
             n += 1;
             progress.set(n as usize);
@@ -506,12 +507,14 @@ pub fn deterministic_project(
     let mut projected_vecs = vec![0f32; vocab * target_dim];
     let chunk_size = 1000;
     let mut raw_chunk = vec![0f32; chunk_size * source_dim];
-    
+
     let mut sum_vec = vec![0f64; source_dim];
     for chunk_start in (0..vocab).step_by(chunk_size) {
         let chunk_end = (chunk_start + chunk_size).min(vocab);
         let count = chunk_end - chunk_start;
-        oracle.read_embedding_rows(chunk_start..chunk_end, &mut raw_chunk[..count * source_dim]).unwrap();
+        oracle
+            .read_embedding_rows(chunk_start..chunk_end, &mut raw_chunk[..count * source_dim])
+            .unwrap();
         for i in 0..count {
             for j in 0..source_dim {
                 sum_vec[j] += raw_chunk[i * source_dim + j] as f64;
@@ -522,30 +525,37 @@ pub fn deterministic_project(
     for j in 0..source_dim {
         mean[j] = (sum_vec[j] / vocab as f64) as f32;
     }
-    
+
     let mut progress = super::progress::Progress::new("projecting embeddings", vocab);
     for chunk_start in (0..vocab).step_by(chunk_size) {
         let chunk_end = (chunk_start + chunk_size).min(vocab);
         let count = chunk_end - chunk_start;
-        oracle.read_embedding_rows(chunk_start..chunk_end, &mut raw_chunk[..count * source_dim]).unwrap();
-        
+        oracle
+            .read_embedding_rows(chunk_start..chunk_end, &mut raw_chunk[..count * source_dim])
+            .unwrap();
+
         for i in 0..count {
             let t = chunk_start + i;
             progress.set(t);
             let mut projected_row = vec![0f32; target_dim];
-            
+
             for h in 0..source_dim {
                 let centered_val = raw_chunk[i * source_dim + h] - mean[h];
                 let target = deterministic_bucket(seed_bytes, h, target_dim);
                 let sign = deterministic_sign(seed_bytes, h);
                 projected_row[target] += sign * centered_val;
             }
-            
-            let n = projected_row.iter().map(|x| x * x).sum::<f32>().sqrt().max(1e-9);
+
+            let n = projected_row
+                .iter()
+                .map(|x| x * x)
+                .sum::<f32>()
+                .sqrt()
+                .max(1e-9);
             for d in 0..target_dim {
                 projected_row[d] /= n;
             }
-            
+
             projected_vecs[t * target_dim..(t + 1) * target_dim].copy_from_slice(&projected_row);
         }
     }
@@ -565,13 +575,13 @@ fn sampled_kmeans_rvq(
     for &b in seed_bytes.iter().take(8) {
         rng_seed = rng_seed.wrapping_add(b as u64).rotate_left(8);
     }
-    
+
     let mut indices: Vec<usize> = (0..nvec).collect();
     for i in (1..nvec).rev() {
         let j = (xorshift(&mut rng_seed) as usize) % (i + 1);
         indices.swap(i, j);
     }
-    
+
     let sample_size = nvec.min(10000);
     let mut sample_vecs = vec![0f32; sample_size * D];
     for i in 0..sample_size {
@@ -583,7 +593,7 @@ fn sampled_kmeans_rvq(
     let mut sample_residual = sample_vecs.to_vec();
     let mut codebooks: Vec<Vec<f32>> = Vec::new();
     let mut codes = vec![0u8; nvec * stages];
-    
+
     for stage in 0..stages {
         eprintln!("sampled RVQ stage {}/{}", stage + 1, stages);
         let mut progress = super::progress::Progress::new("RVQ assignment", iters * sample_size);
@@ -635,7 +645,7 @@ fn sampled_kmeans_rvq(
             }
         }
         progress.finish();
-        
+
         for v in 0..nvec {
             let rv = &residual[v * D..(v + 1) * D];
             let (mut bd, mut bk) = (f32::MAX, 0usize);
@@ -656,14 +666,14 @@ fn sampled_kmeans_rvq(
                 residual[v * D + j] -= cent[bk * D + j];
             }
         }
-        
+
         for v in 0..sample_size {
             let src_idx = indices[v];
             for j in 0..D {
                 sample_residual[v * D + j] = residual[src_idx * D + j];
             }
         }
-        
+
         codebooks.push(cent);
     }
     (codebooks, codes)
@@ -688,14 +698,19 @@ pub fn compile(oracle: &dyn TeacherOracle, corpus: &Corpus) -> Compiled {
         oracle.kappa(),
         oracle.source_bytes()
     );
-    
-    let seed_string = format!("{}{}{}", oracle.kappa(), oracle.tokenizer_address(), "r4-geometric-projection-v1");
+
+    let seed_string = format!(
+        "{}{}{}",
+        oracle.kappa(),
+        oracle.tokenizer_address(),
+        "r4-geometric-projection-v1"
+    );
     let seed_hash = blake3::hash(seed_string.as_bytes());
     let seed_bytes = seed_hash.as_bytes();
-    
+
     let source_dim = oracle.source_dimension();
     let vecs = deterministic_project(seed_bytes, vocab, source_dim, D, oracle);
-    
+
     let (emb_cb, emb_codes) = sampled_kmeans_rvq(&vecs, vocab, STAGES, K, EMB_ITERS, seed_bytes);
     let emb_stage_kappas: Vec<String> = emb_cb.iter().map(|cb| kappa_of_f32s(cb)).collect();
     for (i, k) in emb_stage_kappas.iter().enumerate() {
@@ -967,12 +982,12 @@ pub fn induce_hierarchical_codes(
     for i in 0..corpus.n {
         let story_id = corpus.story[i];
         let token = corpus.next[i];
-        
+
         if i + 1 < corpus.n && corpus.story[i + 1] == story_id {
             let next_tok = corpus.next[i + 1];
             let pair = vec![token, next_tok];
             *transition_counts.entry(pair).or_insert(0) += 1;
-            
+
             if i + 2 < corpus.n && corpus.story[i + 2] == story_id {
                 let next_next_tok = corpus.next[i + 2];
                 let triplet = vec![token, next_tok, next_next_tok];

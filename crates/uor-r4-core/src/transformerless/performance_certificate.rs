@@ -82,7 +82,8 @@ impl PerformanceCertificate {
     }
 
     pub fn from_cbor_bytes(bytes: &[u8]) -> Result<Self, String> {
-        let cert: PerformanceCertificate = ciborium::from_reader(bytes).map_err(|e| e.to_string())?;
+        let cert: PerformanceCertificate =
+            ciborium::from_reader(bytes).map_err(|e| e.to_string())?;
         if !cert.verify_cid() {
             return Err("PerformanceCertificate CID verification failed".to_string());
         }

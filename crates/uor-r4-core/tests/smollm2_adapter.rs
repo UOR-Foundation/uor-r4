@@ -1,6 +1,6 @@
 use uor_r4_core::transformerless::compiler::D;
 use uor_r4_core::transformerless::scenarios::{export_hf_bytelevel_tokenizer, Tokenizer};
-use uor_r4_core::transformerless::teacher::{SmolLm2Oracle, TeacherOracle, BehaviorSource};
+use uor_r4_core::transformerless::teacher::{BehaviorSource, SmolLm2Oracle, TeacherOracle};
 
 #[test]
 #[ignore = "requires the downloaded 257 MiB SmolLM2 source"]

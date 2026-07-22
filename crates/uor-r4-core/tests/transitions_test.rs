@@ -20,7 +20,10 @@ fn test_transition_graph_manual_edges_and_theorem_7() {
     assert!(graph.verify_theorem_7().is_ok());
 
     // Verify reverse index for dst = 20
-    let &(start, count) = graph.reverse_offsets.get(&20).expect("dst 20 in reverse map");
+    let &(start, count) = graph
+        .reverse_offsets
+        .get(&20)
+        .expect("dst 20 in reverse map");
     assert_eq!(count, 2);
     let rev_slice = &graph.reverse_index[start..start + count];
     for &edge_id in rev_slice {
@@ -44,8 +47,8 @@ fn test_compile_transitions_from_synthetic_corpus() {
     // Simple region assigner mapping token_id -> region_id
     let region_assigner = |tok: u32| tok / 10; // 100->10, 200->20, 300->30, 400->40
 
-    let graph = compile_transitions_from_corpus(&corpus, region_assigner, 10)
-        .expect("compile transitions");
+    let graph =
+        compile_transitions_from_corpus(&corpus, region_assigner, 10).expect("compile transitions");
 
     // Verify Theorem 7
     assert!(graph.verify_theorem_7().is_ok());
@@ -84,6 +87,10 @@ fn test_bounded_transitions_per_node() {
         .expect("compile bounded transitions");
 
     let edges_from_10 = graph.forward_map.get(&10).expect("edges from 10");
-    assert_eq!(edges_from_10.len(), 2, "bounded to max 2 transitions per node");
+    assert_eq!(
+        edges_from_10.len(),
+        2,
+        "bounded to max 2 transitions per node"
+    );
     assert!(graph.verify_theorem_7().is_ok());
 }

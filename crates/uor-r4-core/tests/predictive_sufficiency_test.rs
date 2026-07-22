@@ -29,7 +29,10 @@ fn test_kl_divergence_and_cross_entropy() {
 
     let q2 = vec![0.8, 0.1, 0.1];
     let kl_diff = PredictiveSufficiencyEvaluator::compute_kl_divergence(&p, &q2);
-    assert!(kl_diff > 0.0, "KL divergence must be positive for distinct distributions");
+    assert!(
+        kl_diff > 0.0,
+        "KL divergence must be positive for distinct distributions"
+    );
 
     let ce = PredictiveSufficiencyEvaluator::compute_cross_entropy(&p, &q2);
     assert!(ce > 0.0);

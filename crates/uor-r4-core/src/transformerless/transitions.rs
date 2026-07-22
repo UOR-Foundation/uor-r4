@@ -176,7 +176,10 @@ where
     let mut transitions_by_src: std::collections::BTreeMap<u32, Vec<(u32, u32)>> =
         std::collections::BTreeMap::new();
     for ((src, dst), weight) in transition_counts {
-        transitions_by_src.entry(src).or_default().push((dst, weight));
+        transitions_by_src
+            .entry(src)
+            .or_default()
+            .push((dst, weight));
     }
 
     let mut graph = TransitionGraph::new();

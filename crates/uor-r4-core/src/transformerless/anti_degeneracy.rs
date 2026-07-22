@@ -28,7 +28,11 @@ impl PerturbationSuite {
             } => {
                 let rate = mask_rate.clamp(0.0, 1.0);
                 for (i, tok) in out.iter_mut().enumerate() {
-                    let pseudo_rand = (seed.wrapping_add(i as u64).wrapping_mul(6364136223846793005) >> 33) as f64 / 2147483648.0;
+                    let pseudo_rand = (seed
+                        .wrapping_add(i as u64)
+                        .wrapping_mul(6364136223846793005)
+                        >> 33) as f64
+                        / 2147483648.0;
                     if pseudo_rand < rate {
                         *tok = *mask_token;
                     }
@@ -37,14 +41,19 @@ impl PerturbationSuite {
             PerturbationKind::SpanSubstitution { substitute_rate } => {
                 let rate = substitute_rate.clamp(0.0, 1.0);
                 for (i, tok) in out.iter_mut().enumerate() {
-                    let pseudo_rand = (seed.wrapping_add((i as u64).wrapping_mul(17)).wrapping_mul(6364136223846793005) >> 33) as f64 / 2147483648.0;
+                    let pseudo_rand = (seed
+                        .wrapping_add((i as u64).wrapping_mul(17))
+                        .wrapping_mul(6364136223846793005)
+                        >> 33) as f64
+                        / 2147483648.0;
                     if pseudo_rand < rate {
                         *tok = tok.wrapping_add(100);
                     }
                 }
             }
             PerturbationKind::Truncation { keep_fraction } => {
-                let keep_len = ((tokens.len() as f64) * keep_fraction.clamp(0.0, 1.0)).round() as usize;
+                let keep_len =
+                    ((tokens.len() as f64) * keep_fraction.clamp(0.0, 1.0)).round() as usize;
                 out.truncate(keep_len.max(1));
             }
             PerturbationKind::Reorder { shuffle_window } => {
@@ -86,7 +95,11 @@ impl ParaphraseEvaluator {
             return 0.0;
         }
         let min_len = trajectory1.len().min(trajectory2.len());
-        let matches = trajectory1.iter().zip(trajectory2.iter()).filter(|(a, b)| a == b).count();
+        let matches = trajectory1
+            .iter()
+            .zip(trajectory2.iter())
+            .filter(|(a, b)| a == b)
+            .count();
         matches as f64 / min_len as f64
     }
 }
@@ -102,9 +115,7 @@ impl PolysemyEvaluator {
         let total_diffs: usize = contexts_a
             .iter()
             .zip(contexts_b.iter())
-            .map(|(ca, cb)| {
-                ca.iter().zip(cb.iter()).filter(|(a, b)| a != b).count()
-            })
+            .map(|(ca, cb)| ca.iter().zip(cb.iter()).filter(|(a, b)| a != b).count())
             .sum();
         let total_compared: usize = contexts_a
             .iter()

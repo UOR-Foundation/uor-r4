@@ -571,23 +571,35 @@ impl Llama {
                     // Compute R4 Hypersphere alignment and linear/polynomial normalization
                     let mut sum_scores = 0.0f32;
                     for (t, attention) in att.iter_mut().enumerate() {
-                        let k = &st.key_cache[loff + t * kv_dim + (h / kv_mul) * head_size..][..head_size];
-                        
+                        let k = &st.key_cache[loff + t * kv_dim + (h / kv_mul) * head_size..]
+                            [..head_size];
+
                         // We slice the vectors into 4D chunks
                         let mut head_score = 0.0f32;
                         let chunks = head_size / 4;
                         for chunk_idx in 0..chunks {
                             let q_chunk = &q[chunk_idx * 4..(chunk_idx + 1) * 4];
                             let k_chunk = &k[chunk_idx * 4..(chunk_idx + 1) * 4];
-                            
+
                             // 4D vector norms
-                            let q_norm = (q_chunk[0]*q_chunk[0] + q_chunk[1]*q_chunk[1] + q_chunk[2]*q_chunk[2] + q_chunk[3]*q_chunk[3]).sqrt();
-                            let k_norm = (k_chunk[0]*k_chunk[0] + k_chunk[1]*k_chunk[1] + k_chunk[2]*k_chunk[2] + k_chunk[3]*k_chunk[3]).sqrt();
-                            
+                            let q_norm = (q_chunk[0] * q_chunk[0]
+                                + q_chunk[1] * q_chunk[1]
+                                + q_chunk[2] * q_chunk[2]
+                                + q_chunk[3] * q_chunk[3])
+                                .sqrt();
+                            let k_norm = (k_chunk[0] * k_chunk[0]
+                                + k_chunk[1] * k_chunk[1]
+                                + k_chunk[2] * k_chunk[2]
+                                + k_chunk[3] * k_chunk[3])
+                                .sqrt();
+
                             if q_norm > 1e-8 && k_norm > 1e-8 {
-                                let dot = q_chunk[0]*k_chunk[0] + q_chunk[1]*k_chunk[1] + q_chunk[2]*k_chunk[2] + q_chunk[3]*k_chunk[3];
+                                let dot = q_chunk[0] * k_chunk[0]
+                                    + q_chunk[1] * k_chunk[1]
+                                    + q_chunk[2] * k_chunk[2]
+                                    + q_chunk[3] * k_chunk[3];
                                 let cos_sim = dot / (q_norm * k_norm);
-                                
+
                                 // Map similarity from [-1, 1] to [0, 1] linearly/polynomially
                                 let alignment = (cos_sim + 1.0) / 2.0;
                                 head_score += alignment;
@@ -595,21 +607,25 @@ impl Llama {
                                 head_score += 0.5; // Neutral alignment
                             }
                         }
-                        
+
                         *attention = head_score;
                         sum_scores += head_score;
                     }
-                    
+
                     // Normalize linearly (softmax-free)
-                    let scale = if sum_scores > 1e-8 { 1.0 / sum_scores } else { 1.0 };
+                    let scale = if sum_scores > 1e-8 {
+                        1.0 / sum_scores
+                    } else {
+                        1.0
+                    };
                     for attention in att.iter_mut() {
                         *attention *= scale;
                     }
                 } else {
                     // Standard Llama scaled dot-product attention
                     for (t, attention) in att.iter_mut().enumerate() {
-                        let k =
-                            &st.key_cache[loff + t * kv_dim + (h / kv_mul) * head_size..][..head_size];
+                        let k = &st.key_cache[loff + t * kv_dim + (h / kv_mul) * head_size..]
+                            [..head_size];
                         let mut score = 0.0f32;
                         for i in 0..head_size {
                             score += q[i] * k[i];
@@ -730,7 +746,6 @@ pub trait TeacherOracle: RepresentationSource + BehaviorSource {
     /// Copy the embedding row of `token` into `out` (len == dim).
     fn embedding(&self, token: usize, out: &mut [f32]);
 }
-
 
 /// The llama-family adapter: `Llama` plus its recurrent state.
 pub struct LlamaOracle {

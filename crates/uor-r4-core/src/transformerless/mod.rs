@@ -22,11 +22,11 @@
 #[cfg(not(target_arch = "wasm32"))]
 pub mod teacher;
 
+#[cfg(not(target_arch = "wasm32"))]
+pub use certificate::Certificate;
 pub use reference_state::{ActiveFrontier, ActiveFrontierEntry, PackedEdgeRanges};
 pub use runtime::{derive_popcount_table, hamming, sign_signature, OpKernel};
 pub use score_q::ScoreQ;
-#[cfg(not(target_arch = "wasm32"))]
-pub use certificate::Certificate;
 
 #[cfg(test)]
 mod witnesses {
@@ -143,9 +143,9 @@ mod witnesses {
 #[cfg(not(target_arch = "wasm32"))]
 pub mod anti_degeneracy;
 #[cfg(not(target_arch = "wasm32"))]
-pub mod certify;
-#[cfg(not(target_arch = "wasm32"))]
 pub mod certificate;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod certify;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod command;
 #[cfg(not(target_arch = "wasm32"))]
@@ -157,17 +157,17 @@ pub mod fairness_provenance;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod graph_patch;
 #[cfg(not(target_arch = "wasm32"))]
-pub mod progress;
-#[cfg(not(target_arch = "wasm32"))]
 pub mod performance_certificate;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod predictive_sufficiency;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod progress;
 pub mod reference_state;
 pub mod resolution_status;
 pub mod runtime;
-pub mod score_q;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod scenarios;
+pub mod score_q;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod shortlist_evaluator;
 #[cfg(not(target_arch = "wasm32"))]

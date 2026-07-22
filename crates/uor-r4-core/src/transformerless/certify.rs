@@ -40,11 +40,7 @@ fn build_prefix_store(
             let tok = c.top_tokens[i][k_idx];
             let weight = c.top_weights[i][k_idx];
             if weight > 0 {
-                *levels[0]
-                    .entry(vec![])
-                    .or_default()
-                    .entry(tok)
-                    .or_default() += weight;
+                *levels[0].entry(vec![]).or_default().entry(tok).or_default() += weight;
                 for d in 1..=depths {
                     *levels[d]
                         .entry(code[..d].to_vec())
@@ -297,7 +293,12 @@ pub fn certify(oracle: &dyn TeacherOracle) {
     // prefix depth d (i8 book sums — the exact bytes the runtime reads)
     // against the source's centered, normalized embedding rows, read
     // through the same oracle surface the compiler used.
-    let seed_string = format!("{}{}{}", oracle.kappa(), oracle.tokenizer_address(), "r4-geometric-projection-v1");
+    let seed_string = format!(
+        "{}{}{}",
+        oracle.kappa(),
+        oracle.tokenizer_address(),
+        "r4-geometric-projection-v1"
+    );
     let seed_hash = blake3::hash(seed_string.as_bytes());
     let seed_bytes = seed_hash.as_bytes();
     let source_dim = oracle.source_dimension();
@@ -366,11 +367,7 @@ fn build_store_generic(
             let tok = c.top_tokens[i][k_idx];
             let weight = c.top_weights[i][k_idx];
             if weight > 0 {
-                *levels[0]
-                    .entry(vec![])
-                    .or_default()
-                    .entry(tok)
-                    .or_default() += weight;
+                *levels[0].entry(vec![]).or_default().entry(tok).or_default() += weight;
                 for d in 1..=depths {
                     *levels[d]
                         .entry(key(i, d))

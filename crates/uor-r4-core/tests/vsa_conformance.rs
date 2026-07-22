@@ -1,5 +1,5 @@
 use uor_r4_core::semantic::{
-    Hypervector, expand_atom, encode_statement, encode_event, encode_graph_edge
+    encode_event, encode_graph_edge, encode_statement, expand_atom, Hypervector,
 };
 
 #[test]
@@ -11,11 +11,19 @@ fn test_vsa_algebra_identities() {
     // 1. Self-Inverse (Hamming similarity of bind(A, bind(A, B)) with B is 1.0)
     let bound = a.bind(&b);
     let unbound = a.unbind(&bound);
-    assert_eq!(unbound.similarity(&b), 1.0, "unbind should recover original hypervector");
+    assert_eq!(
+        unbound.similarity(&b),
+        1.0,
+        "unbind should recover original hypervector"
+    );
 
     // 2. Commutativity of Bind: bind(A, B) == bind(B, A)
     let bound_ba = b.bind(&a);
-    assert_eq!(bound.similarity(&bound_ba), 1.0, "bind should be commutative");
+    assert_eq!(
+        bound.similarity(&bound_ba),
+        1.0,
+        "bind should be commutative"
+    );
 
     // 3. Permutation circular shifts: permute(A, 1024) == A
     let perm_zero = a.permute(0);
@@ -27,7 +35,7 @@ fn test_vsa_algebra_identities() {
 #[test]
 fn test_vsa_grounding_conformance_signatures() {
     let space = "test_space";
-    
+
     // Statements
     let stmt = encode_statement("Paris", "capital_of", "France", space);
     // Events

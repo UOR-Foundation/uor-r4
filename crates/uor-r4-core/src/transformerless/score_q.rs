@@ -8,7 +8,19 @@ use std::ops::{Add, AddAssign, Sub, SubAssign};
 
 /// Q16.16 fixed-point log-domain score representation.
 /// 16 integer bits (signed), 16 fractional bits. Scale factor = 65536.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize, Default)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    serde::Serialize,
+    serde::Deserialize,
+    Default,
+)]
 pub struct ScoreQ(pub i32);
 
 impl ScoreQ {
@@ -107,9 +119,13 @@ impl StorageDescriptor {
     pub fn decode(&self, raw_entry: i32) -> ScoreQ {
         let centered = raw_entry.saturating_sub(self.zero_point);
         let raw_score = if self.shift >= 0 {
-            centered
-                .checked_shl(self.shift as u32)
-                .unwrap_or_else(|| if centered.is_negative() { i32::MIN } else { i32::MAX })
+            centered.checked_shl(self.shift as u32).unwrap_or_else(|| {
+                if centered.is_negative() {
+                    i32::MIN
+                } else {
+                    i32::MAX
+                }
+            })
         } else {
             centered
                 .checked_shr((-self.shift) as u32)

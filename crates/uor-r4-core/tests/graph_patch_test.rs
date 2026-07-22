@@ -9,7 +9,9 @@ fn test_graph_patch_application_and_theorem_11() {
     let mut base_graph = TransitionGraph::new();
     base_graph.add_edge_with_score(10, 20, 5, ScoreQ::from_raw(100), EdgeKind::Forward);
     base_graph.add_edge_with_score(30, 20, 8, ScoreQ::from_raw(200), EdgeKind::Forward);
-    base_graph.build_reverse_index().expect("build base reverse index");
+    base_graph
+        .build_reverse_index()
+        .expect("build base reverse index");
 
     let new_edge = Edge {
         id: 2,
