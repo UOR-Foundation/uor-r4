@@ -151,3 +151,5 @@ pub mod reference_state;
 pub mod runtime;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod scenarios;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod transitions;
