@@ -26,13 +26,13 @@ impl CalibratedFeatures {
         if self.frontier_density > 100 {
             return ResolutionStatus::Contradictory;
         }
-        if self.hamming_dist > self.calibrated_radius * 2 {
-            return ResolutionStatus::Novel;
-        }
         if self.is_backed_off {
             return ResolutionStatus::BackedOff;
         }
-        if self.hamming_dist > self.calibrated_radius || self.score_margin.abs() < 10 {
+        if self.hamming_dist > self.calibrated_radius.saturating_mul(2) {
+            return ResolutionStatus::Novel;
+        }
+        if self.hamming_dist > self.calibrated_radius || self.score_margin.abs_diff(0) < 10 {
             return ResolutionStatus::Boundary;
         }
         ResolutionStatus::Supported
