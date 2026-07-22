@@ -1,17 +1,23 @@
 //! Executable proof module: Zero-allocation step contract verification.
 
 use std::alloc::{GlobalAlloc, Layout, System};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::cell::Cell;
 
-static ALLOC_COUNT: AtomicUsize = AtomicUsize::new(0);
-static ALLOC_BYTES: AtomicUsize = AtomicUsize::new(0);
+thread_local! {
+    /// Counters are per-thread: libtest runs each test on its own thread, so
+    /// a parallel test's allocations can never leak into another test's
+    /// measured section (the previous process-global counters raced and made
+    /// the harness flaky under parallel execution).
+    static ALLOC_COUNT: Cell<usize> = const { Cell::new(0) };
+    static ALLOC_BYTES: Cell<usize> = const { Cell::new(0) };
+}
 
 struct CountingAllocator;
 
 unsafe impl GlobalAlloc for CountingAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        ALLOC_COUNT.fetch_add(1, Ordering::SeqCst);
-        ALLOC_BYTES.fetch_add(layout.size(), Ordering::SeqCst);
+        ALLOC_COUNT.with(|c| c.set(c.get() + 1));
+        ALLOC_BYTES.with(|c| c.set(c.get() + layout.size()));
         // SAFETY: forwarding to the system allocator with the same layout.
         unsafe { System.alloc(layout) }
     }
@@ -26,19 +32,21 @@ unsafe impl GlobalAlloc for CountingAllocator {
 static GLOBAL: CountingAllocator = CountingAllocator;
 
 pub fn reset_alloc_counters() {
-    ALLOC_COUNT.store(0, Ordering::SeqCst);
-    ALLOC_BYTES.store(0, Ordering::SeqCst);
+    ALLOC_COUNT.with(|c| c.set(0));
+    ALLOC_BYTES.with(|c| c.set(0));
 }
 
 pub fn current_alloc_count() -> usize {
-    ALLOC_COUNT.load(Ordering::SeqCst)
+    ALLOC_COUNT.with(|c| c.get())
 }
 
 pub fn current_alloc_bytes() -> usize {
-    ALLOC_BYTES.load(Ordering::SeqCst)
+    ALLOC_BYTES.with(|c| c.get())
 }
 
-/// Verify that executing closure `f` performs zero heap allocations.
+/// Verify that executing closure `f` performs zero heap allocations on the
+/// calling thread. (Allocations performed by threads `f` may spawn are out of
+/// scope — the step contract being proven is about the calling path.)
 pub fn verify_zero_allocation<F, R>(f: F) -> Result<R, String>
 where
     F: FnOnce() -> R,
