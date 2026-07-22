@@ -76,15 +76,18 @@ impl GraphPatch {
         patch
     }
 
-    /// Compute self-referential BLAKE3 CID over patch payload.
-    pub fn compute_cid(&self) -> String {
-        let mut clone = self.clone();
-        clone.patch_cid.clear();
-        let bytes = serde_json::to_vec(&clone).unwrap_or_default();
-        let mut hasher = Hasher::new();
-        hasher.update(&bytes);
-        format!("kappa:blake3:{}", hasher.finalize().to_hex())
-    }
+pub fn compute_cid(&self) -> String {
+    let mut clone = self.clone();
+    clone.patch_cid.clear();
+
+    let bytes = clone
+        .to_cbor_bytes()
+        .expect("GraphPatch CBOR serialization for CID");
+
+    let mut hasher = Hasher::new();
+    hasher.update(&bytes);
+    format!("kappa:blake3:{}", hasher.finalize().to_hex())
+}
 
     pub fn verify_cid(&self) -> bool {
         self.patch_cid == self.compute_cid()
