@@ -83,18 +83,20 @@ impl PredictiveSufficiencyEvaluator {
             .sum::<f64>()
     }
 
-    /// Compute Cross-Entropy H(P, Q) = -sum(P(i) * log(Q(i)))
+    /// Compute Cross-Entropy H(P, Q) = -sum(P(i) * log2(Q(i)))
     pub fn compute_cross_entropy(p: &[f64], q: &[f64]) -> f64 {
         if p.len() != q.len() || p.is_empty() {
-            return 0.0;
+            return f64::NAN;
         }
         let eps = 1e-12;
-        -p.iter()
+        p.iter()
             .zip(q.iter())
             .map(|(&pi, &qi)| {
-                let pi_c = pi.max(eps);
+                if pi <= 0.0 {
+                    return 0.0;
+                }
                 let qi_c = qi.max(eps);
-                pi_c * qi_c.ln()
+                -pi * qi_c.log2()
             })
             .sum::<f64>()
     }
