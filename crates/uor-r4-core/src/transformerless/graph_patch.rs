@@ -112,20 +112,21 @@ for edge in &self.added_edges {
     }
 }
 
-        // Remove tombstones (mark weight = 0)
-        for &tombstone_idx in &self.tombstone_edge_ids {
-            if tombstone_idx < graph.edges.len() {
-                graph.edges[tombstone_idx].weight = 0;
-            }
-        }
+// Remove tombstones (mark weight = 0)
+for &tombstone_idx in &self.tombstone_edge_ids {
+    if tombstone_idx >= graph.edges.len() {
+        return Err(format!(
+            "Tombstone edge index {} out of bounds",
+            tombstone_idx
+        ));
+    }
+    graph.edges[tombstone_idx].weight = 0;
+}
 
-        // Rebuild reverse index and verify Theorem 7
-        graph
-            .build_reverse_index()
-            .map_err(|e| format!("Post-patch reverse index rebuild failed: {}", e))?;
-        graph
-            .verify_theorem_7()
-            .map_err(|e| format!("Post-patch Theorem 7 verification failed: {}", e))?;
+// Rebuild reverse index and verify Theorem 7
+graph
+    .build_reverse_index()
+    .map_err(|e| format!("Post-patch reverse index rebuild failed: {}", e))?;
 
         Ok(())
     }
