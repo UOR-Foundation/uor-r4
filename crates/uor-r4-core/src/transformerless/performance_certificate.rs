@@ -61,7 +61,11 @@ impl PerformanceCertificate {
     pub fn compute_cid(&self) -> String {
         let mut clone = self.clone();
         clone.certificate_cid.clear();
-        let bytes = serde_json::to_vec(&clone).unwrap_or_default();
+
+        let mut bytes = Vec::new();
+        ciborium::into_writer(&clone, &mut bytes)
+            .expect("performance certificate CBOR serialization must succeed");
+
         let mut hasher = Hasher::new();
         hasher.update(&bytes);
         format!("kappa:blake3:{}", hasher.finalize().to_hex())
