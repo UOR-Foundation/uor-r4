@@ -23,6 +23,7 @@
 pub mod teacher;
 
 pub use runtime::{derive_popcount_table, hamming, sign_signature, OpKernel};
+pub use score_q::ScoreQ;
 
 #[cfg(test)]
 mod witnesses {
@@ -147,6 +148,7 @@ pub mod compiler;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod progress;
 pub mod runtime;
+pub mod score_q;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod scenarios;
 #[cfg(not(target_arch = "wasm32"))]
