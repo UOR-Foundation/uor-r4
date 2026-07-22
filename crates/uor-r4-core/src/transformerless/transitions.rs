@@ -8,7 +8,7 @@ use super::compiler::Corpus;
 use super::score_q::ScoreQ;
 use std::collections::HashMap;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[repr(u8)]
 pub enum EdgeKind {
     Refinement = 0,
@@ -16,7 +16,7 @@ pub enum EdgeKind {
     Forward = 2,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Edge {
     pub id: u32,
     pub src: u32,

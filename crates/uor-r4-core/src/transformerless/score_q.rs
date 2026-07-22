@@ -8,7 +8,7 @@ use std::ops::{Add, AddAssign, Sub, SubAssign};
 
 /// Q16.16 fixed-point log-domain score representation.
 /// 16 integer bits (signed), 16 fractional bits. Scale factor = 65536.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize, Default)]
 pub struct ScoreQ(pub i32);
 
 impl ScoreQ {

@@ -153,6 +153,8 @@ pub mod compare;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod compiler;
 #[cfg(not(target_arch = "wasm32"))]
+pub mod graph_patch;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod progress;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod performance_certificate;
