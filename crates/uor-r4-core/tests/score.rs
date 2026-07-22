@@ -16,7 +16,7 @@ use uor_r4_core::transformerless::runtime::{self, Store};
 use uor_r4_core::transformerless::score::{self, EmissionTables, ScoreConfig, TransitionEdge};
 use uor_r4_core::transformerless::score_runtime::{
     verify_witness_replay, Contribution, ContributionId, GraphScorer, RegionParams, ReplayError,
-    StructuralEdge, EDGE_KIND_FORWARD, TOP_M,
+    ScoreStatus, StructuralEdge, EDGE_KIND_FORWARD, TOP_M,
 };
 use uor_r4_core::transformerless::transitions::{EdgeKind, TransitionGraph};
 use uor_r4_graph_format::{GraphView, ScoreQ, SectionId};
@@ -348,26 +348,28 @@ fn hand_computed_scores_match_the_scorer_exactly() {
     // Context signature all zeros: region 1 at distance 0 (within its
     // radius 4), region 2 at distance 288 (out of range) — A = {region 0}.
     let outcome = scorer.score_candidates(&[0x00; SIG_BYTES]).expect("scores");
-    // S(v) = B(v) + ΔE(1,v) + ΔE(2,v) + w(1→2), with w = 42 folded into
-    // every candidate (ΔT(m,v) = w + ΔE(m,v), module docs):
+    // Only the selected covered refinement chain contributes residuals;
+    // predicted-node emissions contribute candidates but do not stack a
+    // sibling branch onto the active chain:
     //   S(10) = 100 + 1000 +    0 + 42 = 1142
-    //   S(20) = 200 + (-500) + 2000 + 42 = 1742   <- argmax
-    //   S(30) = 300 +    0 +  100 + 42 =  442
+    //   S(20) = 200 + (-500) +    0 + 42 = -258
+    //   S(30) = 300 +    0 +    0 + 42 =  342
     //   S(40) =  50 +    0 +    0 + 42 =   92
-    let expected: Vec<(u32, i32)> = vec![(10, 1142), (20, 1742), (30, 442), (40, 92)];
+    let expected: Vec<(u32, i32)> = vec![(10, 1142), (20, -258), (30, 342), (40, 92)];
     let got: Vec<(u32, i32)> = outcome
         .candidates
         .iter()
         .map(|&(t, s)| (t, s.raw()))
         .collect();
     assert_eq!(got, expected, "integer S(v) per candidate");
-    assert_eq!(outcome.selected, 20);
-    assert_eq!(outcome.selected_score, ScoreQ::from_raw(1742));
+    assert_eq!(outcome.selected, 10);
+    assert_eq!(outcome.selected_score, ScoreQ::from_raw(1142));
 
     let witness = &outcome.witness;
     assert_eq!(witness.active.len(), 1);
     assert_eq!(witness.active[0].region, 0);
     assert_eq!(witness.active[0].margin, 4);
+    assert_eq!(witness.chain, vec![1]);
     assert_eq!(witness.predicted, vec![2]);
     assert_eq!(witness.edges_applied.len(), 1);
     assert_eq!(witness.transition_offset, ScoreQ::from_raw(42));
@@ -377,16 +379,12 @@ fn hand_computed_scores_match_the_scorer_exactly() {
         witness.selected_contributions,
         vec![
             Contribution {
-                id: ContributionId::RootPrior { token: 20 },
-                value: ScoreQ::from_raw(200),
+                id: ContributionId::RootPrior { token: 10 },
+                value: ScoreQ::from_raw(100),
             },
             Contribution {
-                id: ContributionId::Emission { node: 1, token: 20 },
-                value: ScoreQ::from_raw(-500),
-            },
-            Contribution {
-                id: ContributionId::Emission { node: 2, token: 20 },
-                value: ScoreQ::from_raw(2000),
+                id: ContributionId::Emission { node: 1, token: 10 },
+                value: ScoreQ::from_raw(1000),
             },
         ],
         "canonical contribution order and values"
@@ -405,7 +403,7 @@ fn canonical_tie_break_prefers_the_lowest_token_id() {
     // edges from node 2), so candidates come from region 2's emissions
     // and the root prior.
     let outcome = scorer.score_candidates(&[0xFF; SIG_BYTES]).expect("scores");
-    // S(20) = 200 + 2000 + 0 = 2200; S(30) = 300 + 100 = 400;
+    // S(20) = 200 + 2000 = 2200; S(30) = 300 + 100 = 400;
     // S(10) = 100; S(40) = 50 → selected 20, and the scan kept the
     // first (lowest-token) candidate on every strict `>`.
     assert_eq!(outcome.selected, 20);
@@ -428,18 +426,22 @@ fn exct_probe_contributes_exact_context_residuals() {
     assert_eq!(probe.admitted, 3);
     // ΔX(X,v) = ScoreQ::from_logprob(ln((c+1)/(t+V))) − B(v); token 50
     // enters the candidate set only through EXCT (B(50) = floor), so
-    // S(50) = floor + (quantize(2) − floor) + offset = quantize(2) + 42.
+    // S(50) = floor + (quantize(2) − floor) = quantize(2); exact-context
+    // evidence takes precedence over graph transitions.
     let quantize = |count: u32| {
         let p = (f64::from(count) + 1.0) / (f64::from(6) + 64.0);
         ScoreQ::from_logprob(p.ln() as f32)
     };
-    let expected_50 = quantize(2).saturating_add(ScoreQ::from_raw(42));
+    let expected_50 = quantize(2);
     let got_50 = outcome
         .candidates
         .iter()
         .find(|&&(t, _)| t == 50)
         .map(|&(_, s)| s);
-    assert_eq!(got_50, Some(expected_50), "S(50) = ΔX + offset");
+    assert_eq!(got_50, Some(expected_50), "S(50) = ΔX");
+    assert_eq!(outcome.witness.status, ScoreStatus::ExactContext);
+    assert!(outcome.witness.active.is_empty());
+    assert!(outcome.witness.predicted.is_empty());
     let _ = store;
     // The full witness replays independently (Theorem 6).
     verify_witness_replay(&bytes, Some(&tla), &outcome.witness, 64, 64).expect("replay");

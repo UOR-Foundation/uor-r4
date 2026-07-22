@@ -38,35 +38,45 @@ impl R4g1State {
                 teacher_path.display()
             )
         })?;
+        let score_report = graph_path
+            .parent()
+            .and_then(|parent| std::fs::read(parent.join("score_report.json")).ok())
+            .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok());
+        let root_top_b = score_report
+            .as_ref()
+            .and_then(|report| report.pointer("/config/root_top_b"))
+            .and_then(serde_json::Value::as_u64)
+            .and_then(|value| usize::try_from(value).ok())
+            .filter(|&value| value > 0)
+            .unwrap_or(DEFAULT_ROOT_TOP_B);
+        let exct_top_x = score_report
+            .as_ref()
+            .and_then(|report| report.pointer("/config/exct_top_x"))
+            .and_then(serde_json::Value::as_u64)
+            .and_then(|value| usize::try_from(value).ok())
+            .filter(|&value| value > 0)
+            .unwrap_or(DEFAULT_EXCT_TOP_X);
         // EXCT is a compiler-era carryover that requires probe-time
         // log-quantization in the reference scorer. The deployed R4G1 path
         // uses the packed HEAD/NODE/EDGE/ROUT/EMIT sections only, preserving
         // the integer-only runtime contract. The teacher bytes are still
         // needed below to decode token rows and derive input signatures.
-        let scorer =
-            GraphScorer::from_artifact(&graph_bytes, None, DEFAULT_ROOT_TOP_B, DEFAULT_EXCT_TOP_X)
-                .map_err(|error| format!("{}: {error}", graph_path.display()))?;
-        if let Some(report_path) = graph_path
-            .parent()
-            .map(|parent| parent.join("score_report.json"))
-        {
-            if let Ok(report_bytes) = std::fs::read(report_path) {
-                if let Ok(report) = serde_json::from_slice::<serde_json::Value>(&report_bytes) {
-                    let graph_agreement = report
-                        .pointer("/gate_c/graph_no_exct/top1_agreement")
-                        .and_then(serde_json::Value::as_f64);
-                    let baseline_agreement = report
-                        .pointer("/gate_c/tla3_baseline/top1_agreement")
-                        .and_then(serde_json::Value::as_f64);
-                    if let (Some(graph), Some(baseline)) = (graph_agreement, baseline_agreement) {
-                        if graph < baseline {
-                            return Err(format!(
-                                "R4G1 quality gate failed: graph top-1 {:.2}% is below TLA baseline {:.2}%",
-                                graph * 100.0,
-                                baseline * 100.0
-                            ));
-                        }
-                    }
+        let scorer = GraphScorer::from_artifact(&graph_bytes, None, root_top_b, exct_top_x)
+            .map_err(|error| format!("{}: {error}", graph_path.display()))?;
+        if let Some(report) = score_report {
+            let graph_agreement = report
+                .pointer("/gate_c/graph_no_exct/top1_agreement")
+                .and_then(serde_json::Value::as_f64);
+            let baseline_agreement = report
+                .pointer("/gate_c/tla3_baseline/top1_agreement")
+                .and_then(serde_json::Value::as_f64);
+            if let (Some(graph), Some(baseline)) = (graph_agreement, baseline_agreement) {
+                if graph < baseline {
+                    return Err(format!(
+                        "R4G1 quality gate failed: graph top-1 {:.2}% is below TLA baseline {:.2}%",
+                        graph * 100.0,
+                        baseline * 100.0
+                    ));
                 }
             }
         }

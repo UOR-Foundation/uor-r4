@@ -265,7 +265,7 @@ fn smoothed_ln(count: u64, total: u64, vocab: u32) -> f32 {
 /// is the level-0 store distribution.
 pub fn compile_emissions(
     corpus: &Corpus,
-    store: &Store,
+    _store: &Store,
     regions: &[RegionParams],
     train: &[Observation],
     max_depth: usize,
@@ -278,8 +278,19 @@ pub fn compile_emissions(
     // at each depth (within the calibrated radius — the backoff floor is
     // a routing behavior, never region content; see `binary_top1_covered`).
     let mut evidence: Vec<BTreeMap<u32, u64>> = vec![BTreeMap::new(); regions.len()];
+    // The root prior must use the same teacher top-3 evidence as region
+    // residuals. Using sampled `next` counts here mixes two distributions
+    // and makes every residual compare against the wrong parent model.
+    let mut root_dist: BTreeMap<u32, u64> = BTreeMap::new();
     for observation in train {
         let i = observation.position as usize;
+        for k_idx in 0..3 {
+            let token = corpus.top_tokens[i][k_idx];
+            let weight = corpus.top_weights[i][k_idx];
+            if weight > 0 {
+                *root_dist.entry(token).or_insert(0) += u64::from(weight);
+            }
+        }
         for depth in 1..=max_depth {
             let Some((top1, _)) =
                 binary_top1_covered(&mut k, &pop, regions, depth, &observation.sig)
@@ -297,12 +308,7 @@ pub fn compile_emissions(
         }
     }
 
-    // Root prior B(v) from the level-0 store distribution.
-    let root_dist: BTreeMap<u32, u64> = store
-        .first()
-        .and_then(|level| level.get(&[][..]))
-        .map(|dist| dist.iter().map(|(&t, &c)| (t, u64::from(c))).collect())
-        .unwrap_or_default();
+    // Root prior B(v) from the same teacher-weighted evidence stream.
     let root_total: u64 = root_dist.values().sum();
     let root_floor = ScoreQ::from_logprob(smoothed_ln(0, root_total, vocab));
     let root_prior: BTreeMap<u32, ScoreQ> = root_dist
@@ -808,8 +814,20 @@ pub struct GateCOutcome {
     pub graph_no_exct: GateCMetrics,
     pub graph_with_exct: GateCMetrics,
     pub tla3_baseline: GateCMetrics,
+    /// Candidate-set recall is reported separately from selected-token
+    /// agreement. A low value means the scorer cannot recover the teacher
+    /// token regardless of how its weights are tuned.
+    pub candidate_recall: CandidateRecall,
     pub witness_replays: usize,
     pub witness_replay_failures: usize,
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct CandidateRecall {
+    pub graph_no_exct_top1: f64,
+    pub graph_no_exct_top3: f64,
+    pub graph_with_exct_top1: f64,
+    pub graph_with_exct_top3: f64,
 }
 
 /// The Gate C measurement (plan §8 gate C): top-1 teacher-argmax
@@ -843,6 +861,10 @@ pub fn evaluate_gate_c(
     let mut hits_no_exct = 0u64;
     let mut hits_with_exct = 0u64;
     let mut hits_baseline = 0u64;
+    let mut candidate_top1_no_exct = 0u64;
+    let mut candidate_top3_no_exct = 0u64;
+    let mut candidate_top1_with_exct = 0u64;
+    let mut candidate_top3_with_exct = 0u64;
     for (index, observation) in held_out.iter().enumerate() {
         let position = observation.position as usize;
         let teacher_argmax = corpus.t_argmax[position];
@@ -852,6 +874,28 @@ pub fn evaluate_gate_c(
         let no_exct = scorer_no_exct.score_candidates(&observation.sig)?;
         let with_exct = scorer_with_exct.score_candidates(&observation.sig)?;
         let baseline = runtime::predict_witness_plain(store, &code);
+
+        let contains = |candidates: &[(u32, ScoreQ)], token: u32| {
+            candidates.iter().any(|&(candidate, _)| candidate == token)
+        };
+        if contains(&no_exct.candidates, teacher_argmax) {
+            candidate_top1_no_exct += 1;
+        }
+        if contains(&with_exct.candidates, teacher_argmax) {
+            candidate_top1_with_exct += 1;
+        }
+        if corpus.top_tokens[position]
+            .iter()
+            .any(|&token| contains(&no_exct.candidates, token))
+        {
+            candidate_top3_no_exct += 1;
+        }
+        if corpus.top_tokens[position]
+            .iter()
+            .any(|&token| contains(&with_exct.candidates, token))
+        {
+            candidate_top3_with_exct += 1;
+        }
 
         if no_exct.selected == teacher_argmax {
             hits_no_exct += 1;
@@ -900,6 +944,12 @@ pub fn evaluate_gate_c(
         positions: n,
         top1_agreement: hits_baseline as f64 / nf,
         bits_per_token: bits_baseline / nf,
+    };
+    outcome.candidate_recall = CandidateRecall {
+        graph_no_exct_top1: candidate_top1_no_exct as f64 / nf,
+        graph_no_exct_top3: candidate_top3_no_exct as f64 / nf,
+        graph_with_exct_top1: candidate_top1_with_exct as f64 / nf,
+        graph_with_exct_top3: candidate_top3_with_exct as f64 / nf,
     };
     Ok(outcome)
 }

@@ -185,7 +185,7 @@ pub fn observe_command(args: &[String]) -> Result<(), String> {
     Ok(())
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq)]
 struct CoverOptions {
     corpus_meta: PathBuf,
     corpus_recs: PathBuf,
@@ -194,6 +194,8 @@ struct CoverOptions {
     k0: usize,
     regions_budget: usize,
     memory_budget_mb: u64,
+    min_support: usize,
+    entropy_gain_bits: f64,
     output: PathBuf,
 }
 
@@ -207,6 +209,8 @@ fn parse_cover_options(args: &[String]) -> Result<CoverOptions, String> {
         k0: cover::DEFAULT_K0,
         regions_budget: cover::DEFAULT_REGIONS_BUDGET,
         memory_budget_mb: cover::DEFAULT_MEMORY_BUDGET_MB,
+        min_support: cover::DEFAULT_MIN_SUPPORT,
+        entropy_gain_bits: cover::DEFAULT_SPLIT_ENTROPY_GAIN_BITS,
         output: PathBuf::from("cover"),
     };
     let mut index = 0usize;
@@ -247,6 +251,25 @@ fn parse_cover_options(args: &[String]) -> Result<CoverOptions, String> {
                 options.memory_budget_mb = value
                     .parse()
                     .map_err(|_| format!("invalid --memory-budget value: {value}"))?;
+                if options.memory_budget_mb == 0 {
+                    return Err("--memory-budget must be at least 1 MiB".to_owned());
+                }
+            }
+            "--min-support" => {
+                options.min_support = value
+                    .parse()
+                    .map_err(|_| format!("invalid --min-support value: {value}"))?;
+                if options.min_support == 0 {
+                    return Err("--min-support must be at least 1".to_owned());
+                }
+            }
+            "--entropy-gain" => {
+                options.entropy_gain_bits = value
+                    .parse()
+                    .map_err(|_| format!("invalid --entropy-gain value: {value}"))?;
+                if !options.entropy_gain_bits.is_finite() || options.entropy_gain_bits < 0.0 {
+                    return Err("--entropy-gain must be a finite non-negative number".to_owned());
+                }
             }
             "--out" => options.output = PathBuf::from(value),
             _ => return Err(format!("unknown cover option: {flag}")),
@@ -305,6 +328,8 @@ pub fn cover_command(args: &[String]) -> Result<(), String> {
         k0: options.k0,
         regions_budget: options.regions_budget,
         memory_budget_bytes: options.memory_budget_mb * 1024 * 1024,
+        min_support: options.min_support,
+        entropy_gain_bits: options.entropy_gain_bits,
         ..cover::CoverConfig::default()
     };
     eprintln!(
@@ -401,6 +426,11 @@ struct ScoreOptions {
     corpus_recs: PathBuf,
     artifacts: PathBuf,
     cover: Option<PathBuf>,
+    transition_out_degree: usize,
+    emission_entries: usize,
+    root_top_b: usize,
+    exct_top_x: usize,
+    witness_sample: usize,
     output: PathBuf,
 }
 
@@ -411,6 +441,11 @@ fn parse_score_options(args: &[String]) -> Result<ScoreOptions, String> {
         corpus_recs: PathBuf::from(default_recs),
         artifacts: PathBuf::from(compiler::ART_PATH),
         cover: None,
+        transition_out_degree: score::DEFAULT_TRANSITION_OUT_DEGREE,
+        emission_entries: score::DEFAULT_EMISSION_ENTRIES,
+        root_top_b: score::DEFAULT_ROOT_TOP_B,
+        exct_top_x: score::DEFAULT_EXCT_TOP_X,
+        witness_sample: score::DEFAULT_WITNESS_SAMPLE,
         output: PathBuf::from("score"),
     };
     let mut index = 0usize;
@@ -424,6 +459,43 @@ fn parse_score_options(args: &[String]) -> Result<ScoreOptions, String> {
             "--corpus-recs" => options.corpus_recs = PathBuf::from(value),
             "--artifacts" => options.artifacts = PathBuf::from(value),
             "--cover" => options.cover = Some(PathBuf::from(value)),
+            "--transition-out-degree" => {
+                options.transition_out_degree = value
+                    .parse()
+                    .map_err(|_| format!("invalid --transition-out-degree value: {value}"))?;
+                if options.transition_out_degree == 0 {
+                    return Err("--transition-out-degree must be at least 1".to_owned());
+                }
+            }
+            "--emission-entries" => {
+                options.emission_entries = value
+                    .parse()
+                    .map_err(|_| format!("invalid --emission-entries value: {value}"))?;
+                if options.emission_entries == 0 {
+                    return Err("--emission-entries must be at least 1".to_owned());
+                }
+            }
+            "--root-top-b" => {
+                options.root_top_b = value
+                    .parse()
+                    .map_err(|_| format!("invalid --root-top-b value: {value}"))?;
+                if options.root_top_b == 0 {
+                    return Err("--root-top-b must be at least 1".to_owned());
+                }
+            }
+            "--exct-top-x" => {
+                options.exct_top_x = value
+                    .parse()
+                    .map_err(|_| format!("invalid --exct-top-x value: {value}"))?;
+                if options.exct_top_x == 0 {
+                    return Err("--exct-top-x must be at least 1".to_owned());
+                }
+            }
+            "--witness-sample" => {
+                options.witness_sample = value
+                    .parse()
+                    .map_err(|_| format!("invalid --witness-sample value: {value}"))?;
+            }
             "--out" => options.output = PathBuf::from(value),
             _ => return Err(format!("unknown score option: {flag}")),
         }
@@ -477,7 +549,13 @@ pub fn score_command(args: &[String]) -> Result<(), String> {
     corpus_hasher.update(&recs_bytes);
     let corpus_kappa = format!("blake3:{}", corpus_hasher.finalize().to_hex());
 
-    let config = score::ScoreConfig::default();
+    let config = score::ScoreConfig {
+        transition_out_degree: options.transition_out_degree,
+        emission_entries: options.emission_entries,
+        root_top_b: options.root_top_b,
+        exct_top_x: options.exct_top_x,
+        witness_sample: options.witness_sample,
+    };
     let (train_positions, held_out_positions) = cover::split_positions(&corpus);
     let train = cover::build_observations(&artifacts, &corpus, &train_positions);
     let held_out = cover::build_observations(&artifacts, &corpus, &held_out_positions);
@@ -617,6 +695,13 @@ pub fn score_command(args: &[String]) -> Result<(), String> {
         "  witness replay: {}/{} ok",
         gate_c.witness_replays - gate_c.witness_replay_failures,
         gate_c.witness_replays
+    );
+    println!(
+        "  candidate recall — no EXCT top-1/top-3: {:.1}%/{:.1}% | with EXCT: {:.1}%/{:.1}%",
+        100.0 * gate_c.candidate_recall.graph_no_exct_top1,
+        100.0 * gate_c.candidate_recall.graph_no_exct_top3,
+        100.0 * gate_c.candidate_recall.graph_with_exct_top1,
+        100.0 * gate_c.candidate_recall.graph_with_exct_top3,
     );
     println!(
         "  artifact: {} ({} bytes, κ {})",
@@ -1315,8 +1400,8 @@ pub fn run(args: &[String]) -> Result<(), String> {
                 "R4 transformerless — cross-compile a transformer into a mul-free table artifact\n\
                  commands: setup | gen [secs] [target] | compile [--model REPO --revision SHA | --source DIR] [--output DIR] [--seconds N] [--target N] [--sequence-length N] | store | certify | compare | compare-report | scenarios | teacher-kappa | convert-r4g1 --artifacts <TLA> --store <TLS1> [--calibration <hamming_calibration.json>] --out <R4G1>\n\
                  observation pipeline: observe [--source DIR | --checkpoint BIN] [--seconds N] [--target N] [--shards N] [--out DIR] [--sequence-length N]\n\
-                 cover induction: cover [--corpus-meta P --corpus-recs P] [--artifacts P] [--depths N] [--k0 N] [--regions-budget N] [--memory-budget MB] [--out DIR]\n\
-                 score (phase 4): score [--corpus-meta P --corpus-recs P] [--artifacts P] [--cover P] [--out DIR]\n\
+                 cover induction: cover [--corpus-meta P --corpus-recs P] [--artifacts P] [--depths N] [--k0 N] [--regions-budget N] [--memory-budget MB] [--min-support N] [--entropy-gain BITS] [--out DIR]\n\
+                 score (phase 4): score [--corpus-meta P --corpus-recs P] [--artifacts P] [--cover P] [--transition-out-degree N] [--emission-entries N] [--root-top-b N] [--exct-top-x N] [--witness-sample N] [--out DIR]\n\
                  hf evaluation: evaluate-report [--source DIR] [--compiled DIR] [--report PATH] [--sequence-length N]\n\
                  docs: docs/TRANSFORMERLESS.md (extrapolation), docs/PROOF.md (proof + certificate)"
             );
@@ -1463,6 +1548,14 @@ mod tests {
         assert_eq!(options.corpus_recs, PathBuf::from(default_recs));
         assert_eq!(options.artifacts, PathBuf::from(compiler::ART_PATH));
         assert_eq!(options.cover, None);
+        assert_eq!(
+            options.transition_out_degree,
+            score::DEFAULT_TRANSITION_OUT_DEGREE
+        );
+        assert_eq!(options.emission_entries, score::DEFAULT_EMISSION_ENTRIES);
+        assert_eq!(options.root_top_b, score::DEFAULT_ROOT_TOP_B);
+        assert_eq!(options.exct_top_x, score::DEFAULT_EXCT_TOP_X);
+        assert_eq!(options.witness_sample, score::DEFAULT_WITNESS_SAMPLE);
         assert_eq!(options.output, PathBuf::from("score"));
 
         let args = [
@@ -1474,6 +1567,16 @@ mod tests {
             "/tmp/a.bin",
             "--cover",
             "/tmp/cover.r4g1",
+            "--transition-out-degree",
+            "16",
+            "--emission-entries",
+            "256",
+            "--root-top-b",
+            "256",
+            "--exct-top-x",
+            "128",
+            "--witness-sample",
+            "32",
             "--out",
             "/tmp/scored",
         ]
@@ -1483,6 +1586,11 @@ mod tests {
         assert_eq!(options.corpus_recs, PathBuf::from("/tmp/r.bin"));
         assert_eq!(options.artifacts, PathBuf::from("/tmp/a.bin"));
         assert_eq!(options.cover, Some(PathBuf::from("/tmp/cover.r4g1")));
+        assert_eq!(options.transition_out_degree, 16);
+        assert_eq!(options.emission_entries, 256);
+        assert_eq!(options.root_top_b, 256);
+        assert_eq!(options.exct_top_x, 128);
+        assert_eq!(options.witness_sample, 32);
         assert_eq!(options.output, PathBuf::from("/tmp/scored"));
 
         let bad = ["--regions-budget", "4"].map(str::to_owned);

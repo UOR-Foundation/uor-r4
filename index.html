@@ -2926,6 +2926,12 @@ function renderR4g1CompileStatus(data) {
     if (!r4g1CompileStatus) return;
 
     let message = data.message || (data.running ? "R4G1 compilation is running..." : "Server compilation is idle");
+    if (!data.running && message.includes("quality gate failed")) {
+        message = message.replace(
+            "R4G1 compilation failed:",
+            "R4G1 graph was compiled but rejected by the quality gate:"
+        );
+    }
     const graph = data.report?.gate_c?.graph_no_exct;
     if (!data.running && graph && typeof graph.top1_agreement === "number") {
         message += ` · Gate C top-1 ${(graph.top1_agreement * 100).toFixed(2)}%`;
@@ -2935,7 +2941,7 @@ function renderR4g1CompileStatus(data) {
         ? "var(--amber)"
         : data.ready
             ? "var(--emerald)"
-            : data.message?.includes("failed")
+            : data.message?.includes("failed") || data.message?.includes("rejected")
                 ? "var(--red)"
                 : "var(--text2)";
 }

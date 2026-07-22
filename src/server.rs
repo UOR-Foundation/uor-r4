@@ -14,6 +14,22 @@ use uor_foundation::pipeline::PrismModel;
 
 use uor_r4_core::transformerless::teacher::{BehaviorSource, TeacherOracle};
 
+// The browser-triggered build must have enough teacher evidence and graph
+// capacity to be a meaningful quality attempt. These are still bounded,
+// resumable compiler inputs; the quality gate remains authoritative.
+const R4G1_CORPUS_SECONDS: &str = "1800";
+const R4G1_CORPUS_TARGET: &str = "200000";
+const R4G1_COVER_DEPTHS: &str = "5";
+const R4G1_COVER_K0: &str = "16";
+const R4G1_COVER_REGIONS: &str = "2048";
+const R4G1_COVER_MEMORY_MB: &str = "2048";
+const R4G1_COVER_MIN_SUPPORT: &str = "32";
+const R4G1_COVER_ENTROPY_GAIN: &str = "0.10";
+const R4G1_SCORE_TRANSITION_DEGREE: &str = "16";
+const R4G1_SCORE_EMISSION_ENTRIES: &str = "256";
+const R4G1_SCORE_ROOT_TOP_B: &str = "256";
+const R4G1_SCORE_EXCT_TOP_X: &str = "128";
+
 /// Configuration supplied by the executable to the reusable HTTP server.
 #[derive(Debug, Clone)]
 pub struct ServerConfig {
@@ -786,9 +802,9 @@ fn compile_bundle_from_source(source: &Path) -> Result<PathBuf, String> {
         "--output".to_owned(),
         output.display().to_string(),
         "--seconds".to_owned(),
-        "300".to_owned(),
+        R4G1_CORPUS_SECONDS.to_owned(),
         "--target".to_owned(),
-        "20000".to_owned(),
+        R4G1_CORPUS_TARGET.to_owned(),
         "--sequence-length".to_owned(),
         "128".to_owned(),
     ];
@@ -875,6 +891,18 @@ fn compile_r4g1_bundle(
         corpus_recs.display().to_string(),
         "--artifacts".to_owned(),
         artifacts.display().to_string(),
+        "--depths".to_owned(),
+        R4G1_COVER_DEPTHS.to_owned(),
+        "--k0".to_owned(),
+        R4G1_COVER_K0.to_owned(),
+        "--regions-budget".to_owned(),
+        R4G1_COVER_REGIONS.to_owned(),
+        "--memory-budget".to_owned(),
+        R4G1_COVER_MEMORY_MB.to_owned(),
+        "--min-support".to_owned(),
+        R4G1_COVER_MIN_SUPPORT.to_owned(),
+        "--entropy-gain".to_owned(),
+        R4G1_COVER_ENTROPY_GAIN.to_owned(),
         "--out".to_owned(),
         cover_output.display().to_string(),
     ];
@@ -890,6 +918,14 @@ fn compile_r4g1_bundle(
         artifacts.display().to_string(),
         "--cover".to_owned(),
         cover_artifact.display().to_string(),
+        "--transition-out-degree".to_owned(),
+        R4G1_SCORE_TRANSITION_DEGREE.to_owned(),
+        "--emission-entries".to_owned(),
+        R4G1_SCORE_EMISSION_ENTRIES.to_owned(),
+        "--root-top-b".to_owned(),
+        R4G1_SCORE_ROOT_TOP_B.to_owned(),
+        "--exct-top-x".to_owned(),
+        R4G1_SCORE_EXCT_TOP_X.to_owned(),
         "--out".to_owned(),
         graph_output.display().to_string(),
     ];

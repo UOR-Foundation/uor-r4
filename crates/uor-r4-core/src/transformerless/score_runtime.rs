@@ -1,13 +1,30 @@
 //! The Phase-4 reference scorer: the witness-replayable, integer-only
 //! scoring model of the graph-compiler plan (§5 Phase 4, §6 runtime
-//! contract, glossary "Scoring model"):
+//! contract, glossary "Scoring model") after the issue-#64 redesign.
+//! Two rules, both scored per context:
 //!
 //! ```text
-//! S(v) = B(v) + Σ_{n∈A} ΔE(n,v) + Σ_{m∈F} ΔT(m,v) + ΔX(X,v)
+//! Rule 2 (D4 EXCT precedence): S(v) = B(v) + ΔX(X,v)
+//!     when the deepest-populated-prefix EXCT probe resolves with total
+//!     evidence ≥ EXCT_SUPPORT_MIN — exact-context evidence dominates and
+//!     graph residuals are skipped entirely (status ExactContext).
+//! Rule 1 (chain-telescoped):   S_graph(v) = T_selected(v) + ΔT-offset
+//!     with T_r(v) = B(v) + Σ_{n ∈ chain(r)} ΔE(n,v) over the covered
+//!     refinement chain of the selected active region (status Graph, or
+//!     Novel when no active region has a covered chain at all).
 //! ```
 //!
-//! over a validated R4G1 artifact produced by [`super::score`]. Every
-//! contribution is a [`ScoreQ`] (Q16.16 log-domain integer); the
+//! The redesign fixes the confirmed double counting of the literal
+//! Σ-over-cloud formula `B + Σ_{n∈A} ΔE + Σ_{m∈F} ΔT + ΔX` (Gate C:
+//! 0.3% vs 31.7% TLA3 baseline; one token took +91.7 nats from 13
+//! sibling-subtree emission lists and won 98% of 2,000 probes): emission
+//! residuals are applied only along ONE refinement chain per context, so
+//! correlated residuals of sibling regions sharing a refinement parent
+//! can no longer stack. The old formula is retained as
+//! [`GraphScorer::score_candidates_legacy`] for the Gate C side-by-side
+//! comparison only; it is not the shipping semantics.
+//!
+//! Every contribution is a [`ScoreQ`] (Q16.16 log-domain integer); the
 //! accumulation core — candidate union, contribution application, the
 //! canonical argmax — uses ScoreQ saturating add/sub, integer compares,
 //! and table reads only: no float, no multiply, no divide, no modulo.
@@ -25,20 +42,46 @@
 //!   filter, nearest-region fallback), recomputed here over the region
 //!   parameters recovered from the artifact's NODE/ROUT sections so the
 //!   artifact alone is the scoring authority.
+//! - **Covered chain of an active region r** (Rule 1): r's refinement
+//!   ancestor path from the depth-1 region down to r, truncated at the
+//!   first node whose calibrated radius does not cover the context
+//!   signature — the [`binary_top1_covered`] radius semantics applied
+//!   per node (within-radius masked Hamming; the nearest-region fallback
+//!   is a routing behavior and never makes a node covered). The chain is
+//!   the contiguous covered prefix root → … → deepest covered ancestor
+//!   of r, so the telescoped sum `B + Σ ΔE` composes the refinement
+//!   corrections instead of stacking siblings (each chain node enters at
+//!   most once per candidate — Theorem 10 by construction).
+//! - **Cloud combination**: the selected region is the active region
+//!   whose covered chain is DEEPEST (the graph analog of the baseline's
+//!   deepest-populated-class rule); ties break by higher membership
+//!   margin (`radius − distance` of the active region itself), then by
+//!   the lowest region id. Only the selected chain's emission lists
+//!   apply ΔE.
 //! - **Predicted cloud F**: the union of E_f edge targets of the active
 //!   regions. Each predicted region m keeps its single best incoming
 //!   edge (highest `score_q`, ties to the lowest canonical edge id).
-//! - **ΔT(m,v)** := w(n_m→m) + ΔE(m,v). The edge-weight part is
-//!   token-independent, so it is algebraically folded into the scalar
-//!   `transition_offset = Σ_m w(n_m→m)` added to every candidate once
-//!   (addition commutes; the witness records the applied edges and the
-//!   offset). The emission part applies per candidate as usual.
-//! - **Candidates**: the union of the emission lists of A ∪ F, the root
-//!   prior's top-`root_top_b` tokens (precomputed at construction), and
-//!   the EXCT probe's top-`exct_top_x` tokens when EXCT evidence is
-//!   wired. Every candidate receives exactly one root-prior contribution
-//!   (the stored B(v), or the baked smoothing floor for tokens absent
-//!   from the root block).
+//!   Under Rule 1 the token-independent edge-weight part is folded into
+//!   the scalar `transition_offset = Σ_m w(n_m→m)` added to every
+//!   candidate once (the witness records the applied edges and the
+//!   offset); F emission lists generate candidates but contribute no
+//!   residuals.
+//! - **Candidates**: the union of the emission lists of A ∪ F ∪ chain,
+//!   the root prior's top-`root_top_b` tokens (precomputed at
+//!   construction), and — under Rule 2 only — the EXCT probe's
+//!   top-`exct_top_x` tokens. Every candidate receives exactly one
+//!   root-prior contribution (the stored B(v), or the baked smoothing
+//!   floor for tokens absent from the root block).
+//! - **EXCT precedence (Rule 2)**: the existing prefix probe from
+//!   `runtime::predict_witness_plain` (deepest populated prefix). Total
+//!   evidence ≥ [`EXCT_SUPPORT_MIN`] ⇒ `S(v) = B(v) + ΔX(X,v)` over the
+//!   root-top-B ∪ probe-top-X candidate set, graph candidate generation
+//!   skipped; below the gate the probe is recorded (admitted 0) and
+//!   Rule 1 decides.
+//! - **Status**: every prediction reports exactly one [`ScoreStatus`] —
+//!   `ExactContext` (Rule 2 fired), `Graph` (Rule 1 with a non-empty
+//!   selected chain), `Novel` (Rule 1 with no covered chain — Phase 5
+//!   consumes this).
 //! - **Selection**: the canonical tie-break — highest score, then the
 //!   lowest token id (matches `runtime::predict_witness_plain`'s rule).
 //!
@@ -46,28 +89,32 @@
 //!
 //! Contribution IDs are canonical: `RootPrior(token)`, `Emission(node,
 //! token)`, `ExactContext(token)`, and one applied-edge id per predicted
-//! region. A node's emission list is applied at most once per context
-//! even when the node is simultaneously active (ΔE) and predicted (ΔT)
-//! — A ∪ F is deduplicated by node before any emission is read — so no
-//! emission entry can enter S(v) twice. The induced cover has no
-//! explicit overlap nodes, so there are no interaction residuals this
-//! phase: the root-plus-residual decomposition attaches every
-//! contribution to exactly one node. The witness verifier independently
-//! rejects duplicate contribution IDs (belt-and-braces, Theorem 10).
+//! region. Chain nodes are distinct refinement ancestors of one region,
+//! so a node's emission list enters S(v) at most once per context — even
+//! when the node is simultaneously active (ΔE) and predicted (ΔT), the
+//! A ∪ F ∪ chain candidate union is deduplicated by node before any
+//! emission is read, and only the selected chain applies. The induced
+//! cover has no explicit overlap nodes, so there are no interaction
+//! residuals this phase: the root-plus-residual decomposition attaches
+//! every contribution to exactly one node. The witness verifier
+//! independently rejects duplicate contribution IDs (belt-and-braces,
+//! Theorem 10).
 //!
 //! # Witness and independent replay (Theorem 6)
 //!
 //! [`GraphScorer::score_candidates`] emits a bounded [`ScoreWitness`]:
-//! graph CID, input code, active regions + margins, predicted cloud,
-//! applied transition edges + folded offset, the EXCT probe record (when
-//! used), the selected token with its full contribution list and score,
-//! the candidate count, and the op census. [`verify_witness_replay`]
-//! rebuilds a fresh scorer **from the validated R4G1 bytes** (plus the
-//! teacher TLA container when EXCT evidence is present — checked against
-//! HEAD `teacher_cid`, so the class-code derivation chains to pinned
-//! content), recomputes the entire prediction without any compiler
-//! state, and requires bit-exact equality of every witness field;
-//! duplicate contribution IDs are rejected out of hand.
+//! graph CID, input code, the status (which rule fired), the selected
+//! covered chain (empty under ExactContext/Novel), active regions +
+//! margins, predicted cloud, applied transition edges + folded offset,
+//! the EXCT probe record (when consulted), the selected token with its
+//! full contribution list and score, the candidate count, and the op
+//! census. [`verify_witness_replay`] rebuilds a fresh scorer **from the
+//! validated R4G1 bytes** (plus the teacher TLA container when EXCT
+//! evidence is present — checked against HEAD `teacher_cid`, so the
+//! class-code derivation chains to pinned content), recomputes the
+//! entire prediction without any compiler state, and requires bit-exact
+//! equality of every witness field; duplicate contribution IDs are
+//! rejected out of hand.
 //!
 //! # Op census
 //!
@@ -98,6 +145,16 @@ pub const EDGE_KIND_FORWARD: u8 = 2;
 /// Bounded multi-membership per depth (matches `cover::TOP_M` and the
 /// runtime's top-M).
 pub const TOP_M: usize = 3;
+
+/// Rule 2 (D4 EXCT precedence) support gate: the exact-context evidence
+/// dominates the graph residuals only when the probed deepest-populated
+/// prefix's total evidence count reaches this bound; below it the probe
+/// is recorded (admitted 0) and the chain-telescoped Rule 1 score
+/// decides. The value 5 matches the baseline's confident-prefix regime:
+/// a prefix with fewer observations is too thin to outrank compressed
+/// graph residuals (issue #64; the gate is witness-recorded, so the
+/// threshold is part of the replayed semantics).
+pub const EXCT_SUPPORT_MIN: u32 = 5;
 
 /// Byte length of one EMIT entry: `(i32 token, i32 score_q)`.
 pub const EMIT_ENTRY_BYTES: usize = 8;
@@ -300,6 +357,45 @@ pub fn binary_top1_covered(
     }
 }
 
+/// The covered refinement chain of `region` (Rule 1, module docs): the
+/// region's ancestor path from the depth-1 region down to `region`,
+/// truncated at the first node whose calibrated radius does not cover
+/// the context signature — the [`binary_top1_covered`] radius semantics
+/// per node (the nearest-region fallback never makes a node covered).
+/// Returns the contiguous covered prefix as node ids in root-to-leaf
+/// order; the root itself is implicit via B(v). An empty vector means no
+/// covered chain exists for this region (the depth-1 ancestor is already
+/// out of range). A malformed parent cycle terminates deterministically
+/// at the region count.
+fn covered_chain(
+    k: &mut OpKernel,
+    pop: &[u8; 256],
+    regions: &[RegionParams],
+    region: u32,
+    sig: &[u8; SIG_BYTES],
+) -> Vec<u32> {
+    let mut path: Vec<u32> = Vec::new();
+    let mut current = Some(region);
+    while let Some(id) = current {
+        if path.len() >= regions.len() {
+            break;
+        }
+        path.push(id);
+        current = regions[id as usize].parent;
+    }
+    let mut chain = Vec::with_capacity(path.len());
+    for &id in path.iter().rev() {
+        let dist = hamming_counted(k, pop, sig, &regions[id as usize].sig);
+        k.compares += 1;
+        if dist <= u32::from(regions[id as usize].radius) {
+            chain.push(id + 1); // region id -> node id
+        } else {
+            break;
+        }
+    }
+    chain
+}
+
 // BEGIN COMPILER-SIDE FLOAT QUANTIZATION ---------------------------------
 // The one floating-point site of the reference scoring path (macOS-pinned
 // libm, exactly the status of the existing κ baseline; the D2 canonical
@@ -375,6 +471,24 @@ pub struct ExctProbe {
     pub admitted: u32,
 }
 
+/// Which scoring rule produced the prediction (module docs; Phase 5
+/// consumes this status per decision D4). Recorded in every witness.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ScoreStatus {
+    /// Rule 2 fired: the EXCT probe resolved with total evidence ≥
+    /// [`EXCT_SUPPORT_MIN`]; `S(v) = B(v) + ΔX(X,v)`, graph residuals
+    /// skipped entirely.
+    ExactContext,
+    /// Rule 1 fired with a non-empty selected covered chain:
+    /// `S(v) = B(v) + Σ_{chain} ΔE + ΔT-offset`.
+    Graph,
+    /// Rule 1 fired but no active region has a covered chain (every
+    /// membership is the nearest-region fallback floor): the score is
+    /// the root prior plus the folded transition offset, and the context
+    /// is outside every calibrated radius.
+    Novel,
+}
+
 /// The bounded, replayable record of one prediction (glossary
 /// "Witness"; plan §24, Theorem 6). Everything the independent verifier
 /// needs is recomputed from the validated artifact bytes; the witness
@@ -385,8 +499,14 @@ pub struct ScoreWitness {
     pub graph_cid: [u8; 32],
     /// H(x): the context's sign-bit signature.
     pub input_sig: [u8; SIG_BYTES],
-    /// Active cloud A (ascending region id) with margins.
+    /// Which rule fired (module docs).
+    pub status: ScoreStatus,
+    /// Active cloud A (ascending region id) with margins; empty under
+    /// Rule 2 (graph candidate generation skipped).
     pub active: Vec<ActiveRegion>,
+    /// The selected covered chain (node ids, root-to-leaf order); empty
+    /// under Rule 2 and under `Novel`.
+    pub chain: Vec<u32>,
     /// Predicted cloud F (ascending node id).
     pub predicted: Vec<u32>,
     /// Applied transition edges (ascending edge id).
@@ -609,6 +729,14 @@ impl GraphScorer {
         for depth in 1..=self.max_depth {
             for (region, dist) in binary_memberships(&mut k, &self.pop, &self.regions, depth, sig) {
                 let radius = u32::from(self.regions[region as usize].radius);
+                // A nearest-region fallback is routing-only. It must not inject
+                // that region's learned emission residuals into an uncovered
+                // context; doing so turns the backoff path into a confident,
+                // unrelated prediction. The compiler uses the same covered-only
+                // rule when building region evidence.
+                if dist > radius {
+                    continue;
+                }
                 let margin = radius as i64 - dist as i64;
                 active.push(ActiveRegion {
                     region,
@@ -619,6 +747,26 @@ impl GraphScorer {
             }
         }
         active.sort_by_key(|a| a.region);
+
+        // Select one deepest covered refinement chain. Applying every active
+        // region's residual stacks correlated sibling distributions and was
+        // the source of the pathological high-confidence gibberish output.
+        let mut selected_chain = Vec::new();
+        let mut selected_chain_region = u32::MAX;
+        let mut selected_chain_margin = i16::MIN;
+        for member in &active {
+            let chain = covered_chain(&mut k, &self.pop, &self.regions, member.region, sig);
+            let better = chain.len() > selected_chain.len()
+                || (chain.len() == selected_chain.len()
+                    && (member.margin > selected_chain_margin
+                        || (member.margin == selected_chain_margin
+                            && member.region < selected_chain_region)));
+            if better {
+                selected_chain = chain;
+                selected_chain_region = member.region;
+                selected_chain_margin = member.margin;
+            }
+        }
 
         // Predicted cloud F: union of E_f targets of the active regions,
         // keeping the single best incoming edge per predicted region
@@ -643,21 +791,25 @@ impl GraphScorer {
                 }
             }
         }
-        let predicted: Vec<u32> = best_edge.keys().copied().collect();
-        let edges_applied: Vec<EdgeUse> = best_edge.values().copied().collect();
+        let mut predicted: Vec<u32> = best_edge.keys().copied().collect();
+        let mut edges_applied: Vec<EdgeUse> = best_edge.values().copied().collect();
         let mut transition_offset = ScoreQ::ZERO;
         for edge in &edges_applied {
             transition_offset = transition_offset.saturating_add(edge.score_q);
             k.adds += 1;
         }
 
-        // Candidate accumulation: every node of A ∪ F applies its
-        // emission list exactly once (Theorem 10 by construction).
+        // Candidate accumulation: active and predicted nodes contribute
+        // candidate tokens, but only the selected covered chain contributes
+        // residual scores. This keeps sibling emissions from stacking while
+        // preserving their tokens as bounded candidates.
         let mut candidates: BTreeMap<u32, (ScoreQ, Vec<Contribution>)> = BTreeMap::new();
         let mut contributing: BTreeSet<u32> = active_nodes.clone();
         for &node in &predicted {
             contributing.insert(node);
         }
+        contributing.extend(selected_chain.iter().copied());
+        let chain_nodes: BTreeSet<u32> = selected_chain.iter().copied().collect();
         for &node in &contributing {
             let emissions = &self.emissions[(node - 1) as usize];
             for (&token, &value) in emissions {
@@ -672,12 +824,14 @@ impl GraphScorer {
                         value: self.root_score(token),
                     });
                 }
-                entry.0 = entry.0.saturating_add(value);
-                k.adds += 1;
-                entry.1.push(Contribution {
-                    id: ContributionId::Emission { node, token },
-                    value,
-                });
+                if chain_nodes.contains(&node) {
+                    entry.0 = entry.0.saturating_add(value);
+                    k.adds += 1;
+                    entry.1.push(Contribution {
+                        id: ContributionId::Emission { node, token },
+                        value,
+                    });
+                }
             }
         }
         // Root prior top-B tokens join the candidate set.
@@ -698,6 +852,7 @@ impl GraphScorer {
         // prefix) over the exact-context store; ΔX(X,v) = quantized
         // probe log-prob minus the stored root prior (integer sub).
         let mut exct_probe: Option<ExctProbe> = None;
+        let mut exact_residuals: Vec<(u32, ScoreQ)> = Vec::new();
         if let (Some(store), Some(art)) = (&self.store, &self.artifacts) {
             let code = runtime::assign_plain(art, sig);
             for level in (0..=STAGES).rev() {
@@ -705,28 +860,16 @@ impl GraphScorer {
                     let total: u32 = dist.values().sum();
                     let mut ranked: Vec<(u32, u32)> = dist.iter().map(|(&t, &c)| (t, c)).collect();
                     ranked.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+                    let supported = total >= EXCT_SUPPORT_MIN;
                     let mut admitted = 0u32;
-                    for &(token, count) in ranked.iter().take(self.exct_top_x) {
-                        k.table_reads += 1;
-                        let value = quantize_exct(count, total, self.vocab)
-                            .saturating_sub(self.root_score(token));
-                        k.adds += 1;
-                        let entry = candidates
-                            .entry(token)
-                            .or_insert_with(|| (ScoreQ::ZERO, Vec::new()));
-                        if entry.1.is_empty() {
-                            entry.1.push(Contribution {
-                                id: ContributionId::RootPrior { token },
-                                value: self.root_score(token),
-                            });
+                    if supported {
+                        for &(token, count) in ranked.iter().take(self.exct_top_x) {
+                            k.table_reads += 1;
+                            let value = quantize_exct(count, total, self.vocab)
+                                .saturating_sub(self.root_score(token));
+                            exact_residuals.push((token, value));
+                            admitted += 1;
                         }
-                        entry.0 = entry.0.saturating_add(value);
-                        k.adds += 1;
-                        entry.1.push(Contribution {
-                            id: ContributionId::ExactContext { token },
-                            value,
-                        });
-                        admitted += 1;
                     }
                     exct_probe = Some(ExctProbe {
                         level: level as u8,
@@ -736,6 +879,47 @@ impl GraphScorer {
                     });
                     break;
                 }
+            }
+        }
+
+        // D4 EXCT precedence: once the exact prefix has enough evidence,
+        // discard graph candidates and score only the root prior plus the
+        // exact-context residuals. This prevents an unrelated graph branch
+        // from overpowering a confidently observed context.
+        let exact_context = exct_probe
+            .as_ref()
+            .is_some_and(|probe| probe.admitted > 0 && !exact_residuals.is_empty());
+        if exact_context {
+            candidates.clear();
+            active.clear();
+            selected_chain.clear();
+            predicted.clear();
+            edges_applied.clear();
+            transition_offset = ScoreQ::ZERO;
+            for &token in &self.root_top {
+                let entry = candidates
+                    .entry(token)
+                    .or_insert_with(|| (ScoreQ::ZERO, Vec::new()));
+                entry.1.push(Contribution {
+                    id: ContributionId::RootPrior { token },
+                    value: self.root_score(token),
+                });
+            }
+            for (token, value) in exact_residuals {
+                let entry = candidates
+                    .entry(token)
+                    .or_insert_with(|| (ScoreQ::ZERO, Vec::new()));
+                if entry.1.is_empty() {
+                    entry.1.push(Contribution {
+                        id: ContributionId::RootPrior { token },
+                        value: self.root_score(token),
+                    });
+                }
+                entry.0 = entry.0.saturating_add(value);
+                entry.1.push(Contribution {
+                    id: ContributionId::ExactContext { token },
+                    value,
+                });
             }
         }
 
@@ -778,7 +962,15 @@ impl GraphScorer {
         let witness = ScoreWitness {
             graph_cid: self.graph_cid,
             input_sig: *sig,
+            status: if exact_context {
+                ScoreStatus::ExactContext
+            } else if selected_chain.is_empty() {
+                ScoreStatus::Novel
+            } else {
+                ScoreStatus::Graph
+            },
             active,
+            chain: selected_chain,
             predicted,
             edges_applied,
             transition_offset,
@@ -816,6 +1008,10 @@ pub enum ReplayError {
     /// The recomputed active cloud (regions, distances, margins)
     /// differs.
     ActiveMismatch,
+    /// The recomputed scoring rule differs.
+    StatusMismatch,
+    /// The recomputed selected covered chain differs.
+    ChainMismatch,
     /// The recomputed predicted cloud differs.
     PredictedMismatch,
     /// The recomputed applied-edge set or folded offset differs.
@@ -845,6 +1041,8 @@ impl std::fmt::Display for ReplayError {
             ReplayError::TeacherMissing => write!(f, "EXCT claimed but no teacher container"),
             ReplayError::TeacherCidMismatch => write!(f, "teacher CID mismatch"),
             ReplayError::ActiveMismatch => write!(f, "active cloud mismatch"),
+            ReplayError::StatusMismatch => write!(f, "score status mismatch"),
+            ReplayError::ChainMismatch => write!(f, "selected chain mismatch"),
             ReplayError::PredictedMismatch => write!(f, "predicted cloud mismatch"),
             ReplayError::EdgesMismatch => write!(f, "applied edges mismatch"),
             ReplayError::ExctMismatch => write!(f, "EXCT probe mismatch"),
@@ -910,6 +1108,12 @@ pub fn verify_witness_replay(
 
     if recomputed.active != witness.active {
         return Err(ReplayError::ActiveMismatch);
+    }
+    if recomputed.status != witness.status {
+        return Err(ReplayError::StatusMismatch);
+    }
+    if recomputed.chain != witness.chain {
+        return Err(ReplayError::ChainMismatch);
     }
     if recomputed.predicted != witness.predicted {
         return Err(ReplayError::PredictedMismatch);
