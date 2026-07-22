@@ -70,8 +70,8 @@ fn test_zero_allocation_proof_harness() {
 
     // Heap allocation should be detected by the harness
     let alloc_res = allocation_proof::verify_zero_allocation(|| {
-        let mut v = Vec::new();
-        v.push(1u8);
+        #[allow(clippy::useless_vec)] // must heap-allocate for the harness to detect
+        let v = vec![1u8];
         v.len()
     });
     assert!(alloc_res.is_err());

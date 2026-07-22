@@ -31,25 +31,31 @@ impl Default for ProofStatusMatrix {
                     name: "Allocation Freedom".to_string(),
                     theorem_id: "PDF §16".to_string(),
                     status: ProofStatus::Verified,
-                    description: "Zero allocation step contract enforced by counting allocator tests".to_string(),
+                    description:
+                        "Zero allocation step contract enforced by counting allocator tests"
+                            .to_string(),
                 },
                 TheoremEntry {
                     name: "Bounded Ranges".to_string(),
                     theorem_id: "Theorem 8".to_string(),
                     status: ProofStatus::Verified,
-                    description: "Section relative packed range boundaries verified bounds-checked".to_string(),
+                    description: "Section relative packed range boundaries verified bounds-checked"
+                        .to_string(),
                 },
                 TheoremEntry {
                     name: "Deterministic Top-K".to_string(),
                     theorem_id: "PDF §23".to_string(),
                     status: ProofStatus::Verified,
-                    description: "Canonical tie-breaking (highest score, then lowest TokenId)".to_string(),
+                    description: "Canonical tie-breaking (highest score, then lowest TokenId)"
+                        .to_string(),
                 },
                 TheoremEntry {
                     name: "Reverse Index Consistency".to_string(),
                     theorem_id: "Theorem 7".to_string(),
                     status: ProofStatus::Verified,
-                    description: "Reverse edge indexes reference exact canonical edge IDs sorted by target".to_string(),
+                    description:
+                        "Reverse edge indexes reference exact canonical edge IDs sorted by target"
+                            .to_string(),
                 },
             ],
         }
