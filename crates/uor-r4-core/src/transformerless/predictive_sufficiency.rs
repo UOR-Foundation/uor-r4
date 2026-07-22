@@ -35,6 +35,8 @@ impl RateDistortionReport {
 
     /// Returns list of (Rate in bytes+ops, Distortion in KL-divergence bits).
     pub fn compute_rate_distortion_curve(&self) -> Vec<(f64, f64)> {
+        const OPS_TO_BYTES_WEIGHT: f64 = 0.1;
+
         self.points
             .iter()
             .map(|p| {
@@ -44,7 +46,7 @@ impl RateDistortionReport {
                     + p.op_budget.compares
                     + p.op_budget.table_reads
                     + p.op_budget.candidate_scans) as f64;
-                let rate = (p.bytes_footprint as f64) + 0.1 * total_ops;
+                let rate = (p.bytes_footprint as f64) + OPS_TO_BYTES_WEIGHT * total_ops;
                 let distortion = p.kl_divergence;
                 (rate, distortion)
             })
