@@ -32,7 +32,7 @@ impl CalibratedFeatures {
         if self.is_backed_off {
             return ResolutionStatus::BackedOff;
         }
-        if self.hamming_dist > self.calibrated_radius || self.score_margin.abs() < 10 {
+        if self.hamming_dist > self.calibrated_radius || self.score_margin.unsigned_abs() < 10 {
             return ResolutionStatus::Boundary;
         }
         ResolutionStatus::Supported
