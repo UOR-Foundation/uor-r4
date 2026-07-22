@@ -27,7 +27,7 @@
 
 use super::{
     certify, compare, compiler, runtime, scenarios,
-    teacher::{HuggingFaceLlamaOracle, LlamaOracle},
+    teacher::{BehaviorSource, HuggingFaceLlamaOracle, LlamaOracle, TeacherOracle},
 };
 use serde::Serialize;
 use std::collections::BTreeMap;
