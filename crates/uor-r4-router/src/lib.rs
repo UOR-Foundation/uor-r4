@@ -137,19 +137,45 @@ pub struct CorpusItem {
     pub v_4d: Vec<f64>,
 }
 
+/// Serde helper: `HashMap<Vec<u32>, Vec<u64>>` cannot serialize as a JSON
+/// object (keys must be strings), which previously made `export_state` fail
+/// silently whenever a facet index was populated (issue #62). Encodes each
+/// map as an array of `(key, values)` pairs, sorted by key so exports are
+/// deterministic across runs.
+mod vec_u32_key_map {
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+    use std::collections::HashMap;
+
+    pub fn serialize<S: Serializer>(
+        map: &HashMap<Vec<u32>, Vec<u64>>,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
+        let mut pairs: Vec<(&Vec<u32>, &Vec<u64>)> = map.iter().collect();
+        pairs.sort();
+        pairs.serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<HashMap<Vec<u32>, Vec<u64>>, D::Error> {
+        let pairs: Vec<(Vec<u32>, Vec<u64>)> = Vec::deserialize(deserializer)?;
+        Ok(pairs.into_iter().collect())
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Default, Clone, PartialEq)]
 pub struct MultiFacetStore {
-    #[serde(default)]
+    #[serde(default, with = "vec_u32_key_map")]
     pub type_index: HashMap<Vec<u32>, Vec<u64>>,
-    #[serde(default)]
+    #[serde(default, with = "vec_u32_key_map")]
     pub entity_index: HashMap<Vec<u32>, Vec<u64>>,
-    #[serde(default)]
+    #[serde(default, with = "vec_u32_key_map")]
     pub relation_index: HashMap<Vec<u32>, Vec<u64>>,
-    #[serde(default)]
+    #[serde(default, with = "vec_u32_key_map")]
     pub temporal_index: HashMap<Vec<u32>, Vec<u64>>,
-    #[serde(default)]
+    #[serde(default, with = "vec_u32_key_map")]
     pub intent_index: HashMap<Vec<u32>, Vec<u64>>,
-    #[serde(default)]
+    #[serde(default, with = "vec_u32_key_map")]
     pub provenance_index: HashMap<Vec<u32>, Vec<u64>>,
 }
 
@@ -2593,18 +2619,18 @@ mod tests {
     #[test]
     fn test_export_import_state_round_trip() {
         // The persisted router state (u64 keys/values) must survive a JSON
-        // export/import cycle.
+        // export/import cycle — including a populated MultiFacetStore (issue
+        // #62: Vec<u32> keys used to make export_state silently return "").
         let mut router = UorR4Router::new(0.5);
         router.inject_thought_stream_native("fixed width integers cross the wire");
-        // MultiFacetStore's Vec<u32> map keys predate issue #12 and cannot
-        // serialize as JSON object keys, so export_state only succeeds with an
-        // empty facet store; clear it (the corpus indexes go with it).
-        router.clear_corpus();
+        router
+            .facet_store
+            .type_index
+            .insert(vec![1, 2, 3], vec![7, 11]);
         let exported = router.export_state();
         assert!(!exported.is_empty(), "export_state must produce JSON");
 
         let mut restored = UorR4Router::new(0.5);
-        restored.clear_corpus();
         restored
             .import_state_native(&exported)
             .expect("exported state must re-import cleanly");
@@ -2617,6 +2643,11 @@ mod tests {
             restored.get_active_streams_native().len(),
             1,
             "thought streams must survive the state round trip"
+        );
+        assert_eq!(
+            restored.facet_store.type_index.get(&vec![1, 2, 3]),
+            Some(&vec![7, 11]),
+            "facet store entries must survive the state round trip"
         );
         assert_eq!(
             restored.get_expert_counts(),
