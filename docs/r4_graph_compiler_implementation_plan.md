@@ -595,7 +595,7 @@ The table is the source content.
 19. Tokenizer-neutral span and byte anchors in observation schema → Phase 2 (#29).
 20. Immutable graph patch + route-translation RFC → Phase 9 (#30).
 21. Source-bias amplification, rare-group erasure, provenance-deletion tests → Phase 3/9 (#31).
-22. Threat model: semantic collisions, frontier exhaustion, candidate explosion, integer saturation → Phase 0 doc (#32; `docs/transformerless/THREAT_MODEL.md`), suites in 5/6/9.
+22. Threat model: semantic collisions, frontier exhaustion, candidate explosion, integer saturation → Phase 0 doc (#32; `docs/transformerless/THREAT_MODEL.md`), suites in 5/6/9 (Gate I).
 23. Behavioral graph-equivalence + confidence-bounded empirical claims spec → Phase 0/3 (#33, feeds D2).
 24. Evaluation-report tooling for HF-compiled (SmolLM2) models → Phase 0/2 (#34; blocks Gate C harness).
 
