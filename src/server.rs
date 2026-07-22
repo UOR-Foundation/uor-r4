@@ -751,11 +751,13 @@ fn handle_connection(
 
         // Project the evolved brain state to 2D for the map path tracing
         let active_state = router_guard.get_brain_state_native(&identity);
-        let (u, v) = router_guard
-            .get_sentence_projection_native(&active_state, routing_data.routed.window_index);
+        let (u, v) = router_guard.get_sentence_projection_native(
+            &active_state,
+            routing_data.routed.window_index as usize,
+        );
         let v_4d = router_guard.get_state_4d_projection_native(&active_state);
 
-        let theme = get_window_theme(routing_data.routed.window_index);
+        let theme = get_window_theme(routing_data.routed.window_index as usize);
         let archetype = if theta_d > -1.0 {
             "Symmetric Orbit (Resonant)"
         } else if theta_d < -1.4 {
@@ -1250,8 +1252,10 @@ fn handle_connection(
             .clone()
             .expect("No sysinfo routing data generated");
         let active_state = router_guard.get_brain_state_native(identity);
-        let (u, v) = router_guard
-            .get_sentence_projection_native(&active_state, routing_data.routed.window_index);
+        let (u, v) = router_guard.get_sentence_projection_native(
+            &active_state,
+            routing_data.routed.window_index as usize,
+        );
         let v_4d = router_guard.get_state_4d_projection_native(&active_state);
         let kappa = routing_data.routed.metrics.kappa;
         let theta_d = routing_data.routed.metrics.deficit_angle;
@@ -1588,7 +1592,7 @@ fn answer_question(
     CliAnswer {
         text: answer_text,
         mode,
-        window_index: routing_data.routed.window_index,
+        window_index: routing_data.routed.window_index as usize,
         kappa: routing_data.routed.metrics.kappa,
         theta_d: routing_data.routed.metrics.deficit_angle,
         fingerprint_hex: hex::encode(grounded.content_fingerprint().as_bytes()),

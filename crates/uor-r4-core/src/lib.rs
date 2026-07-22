@@ -57,7 +57,7 @@ impl R4Vector {
 pub struct UorAttestationResult {
     pub algorithm: String,
     pub hash_algorithm: String,
-    pub hash_algorithm_id: usize,
+    pub hash_algorithm_id: u64,
     pub address: String,
     pub kappa_label: String,
     pub fingerprint_hex: String,

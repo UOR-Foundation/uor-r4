@@ -40,18 +40,18 @@ pub struct ThoughtStream {
     pub uor_uri: String,
     pub r4_target: R4Vector,
     pub path_steps: Vec<R4Vector>,
-    pub activated_experts: Vec<usize>,
+    pub activated_experts: Vec<u64>,
     pub alignment_phase: f64,  // $\theta$ phase state
     pub twist_parity_spin: i8, // $\kappa \in \{-1, 1\}$
-    pub gcd: usize,
+    pub gcd: u64,
 }
 
 /// Dynamic resonance details computed via the 3/8 Resonance Hashing Law.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResonanceInfo {
-    pub total_bytes: usize,
-    pub resonant_bits: usize,
-    pub klein_matches: usize,
+    pub total_bytes: u64,
+    pub resonant_bits: u64,
+    pub klein_matches: u64,
     pub uor_signature: String,
 }
 
@@ -60,7 +60,7 @@ mod sparse_vector_serde {
 
     #[derive(Serialize, Deserialize)]
     struct SparseVecRepresentation {
-        start_idx: usize,
+        start_idx: u64,
         values: Vec<f64>,
     }
 
@@ -84,7 +84,7 @@ mod sparse_vector_serde {
 
         let representation = if found {
             SparseVecRepresentation {
-                start_idx,
+                start_idx: start_idx as u64,
                 values: vec[start_idx..end_idx].to_vec(),
             }
         } else {
@@ -103,10 +103,11 @@ mod sparse_vector_serde {
     {
         let representation = SparseVecRepresentation::deserialize(deserializer)?;
         let mut vec = vec![0.0; 512];
-        let end_idx = representation.start_idx + representation.values.len();
+        let start_idx = representation.start_idx as usize;
+        let end_idx = start_idx + representation.values.len();
         if end_idx <= 512 {
             for (i, &val) in representation.values.iter().enumerate() {
-                vec[representation.start_idx + i] = val;
+                vec[start_idx + i] = val;
             }
         }
         Ok(vec)
@@ -139,23 +140,23 @@ pub struct CorpusItem {
 #[derive(Debug, Serialize, Deserialize, Default, Clone, PartialEq)]
 pub struct MultiFacetStore {
     #[serde(default)]
-    pub type_index: HashMap<Vec<u32>, Vec<usize>>,
+    pub type_index: HashMap<Vec<u32>, Vec<u64>>,
     #[serde(default)]
-    pub entity_index: HashMap<Vec<u32>, Vec<usize>>,
+    pub entity_index: HashMap<Vec<u32>, Vec<u64>>,
     #[serde(default)]
-    pub relation_index: HashMap<Vec<u32>, Vec<usize>>,
+    pub relation_index: HashMap<Vec<u32>, Vec<u64>>,
     #[serde(default)]
-    pub temporal_index: HashMap<Vec<u32>, Vec<usize>>,
+    pub temporal_index: HashMap<Vec<u32>, Vec<u64>>,
     #[serde(default)]
-    pub intent_index: HashMap<Vec<u32>, Vec<usize>>,
+    pub intent_index: HashMap<Vec<u32>, Vec<u64>>,
     #[serde(default)]
-    pub provenance_index: HashMap<Vec<u32>, Vec<usize>>,
+    pub provenance_index: HashMap<Vec<u32>, Vec<u64>>,
 }
 
 impl MultiFacetStore {
     pub fn compute_epoch_root(&self) -> String {
         let mut entries = Vec::new();
-        let mut add_idx = |name: &str, idx: &HashMap<Vec<u32>, Vec<usize>>| {
+        let mut add_idx = |name: &str, idx: &HashMap<Vec<u32>, Vec<u64>>| {
             let mut keys: Vec<&Vec<u32>> = idx.keys().collect();
             keys.sort();
             for k in keys {
@@ -200,7 +201,7 @@ impl MultiFacetStore {
         let mut entries = Vec::new();
         let mut target_entry = None;
 
-        let mut add_idx = |name: &str, idx: &HashMap<Vec<u32>, Vec<usize>>| {
+        let mut add_idx = |name: &str, idx: &HashMap<Vec<u32>, Vec<u64>>| {
             let mut keys: Vec<&Vec<u32>> = idx.keys().collect();
             keys.sort();
             for k in keys {
@@ -263,7 +264,7 @@ pub struct UorR4Router {
     #[serde(default)]
     active_streams: HashMap<String, ThoughtStream>,
     #[serde(default)]
-    expert_active_counts: Vec<usize>, // Changed to Vec for clean serde support
+    expert_active_counts: Vec<u64>, // Changed to Vec for clean serde support
     #[serde(default)]
     connection_drift: f64,
     #[serde(default)]
@@ -276,9 +277,9 @@ pub struct UorR4Router {
     #[wasm_bindgen(skip)]
     pub vocabulary: Vec<String>,
     #[serde(default)]
-    word_primes: HashMap<String, usize>,
+    word_primes: HashMap<String, u64>,
     #[serde(default)]
-    max_prime: usize,
+    max_prime: u64,
     #[serde(skip)]
     vocab_vectors: HashMap<String, Vec<f64>>,
     #[serde(skip)]
@@ -286,9 +287,9 @@ pub struct UorR4Router {
     #[serde(skip)]
     transitions_2nd: HashMap<String, HashMap<String, f64>>,
     #[serde(default)]
-    corpus_index: HashMap<usize, Vec<CorpusItem>>,
+    corpus_index: HashMap<u64, Vec<CorpusItem>>,
     #[serde(default)]
-    corpus_index_by_identity: HashMap<String, HashMap<usize, Vec<CorpusItem>>>,
+    corpus_index_by_identity: HashMap<String, HashMap<u64, Vec<CorpusItem>>>,
     #[serde(default)]
     session_brain_states: HashMap<String, Vec<f64>>,
     #[serde(default)]
@@ -312,7 +313,8 @@ pub struct GeometricResponse {
 
 impl UorR4Router {
     pub fn index_semantic_object(&mut self, id: usize, coords: &geometry::FacetCoordinates) {
-        let index_prefix = |index: &mut HashMap<Vec<u32>, Vec<usize>>, path: &Vec<u32>| {
+        let id = id as u64;
+        let index_prefix = |index: &mut HashMap<Vec<u32>, Vec<u64>>, path: &Vec<u32>| {
             for i in 1..=path.len() {
                 let prefix = path[..i].to_vec();
                 let list = index.entry(prefix).or_default();
@@ -496,9 +498,9 @@ impl UorR4Router {
             .count();
 
         let info = ResonanceInfo {
-            total_bytes: text.len(),
-            resonant_bits: text.len() * 8,
-            klein_matches,
+            total_bytes: text.len() as u64,
+            resonant_bits: text.len() as u64 * 8,
+            klein_matches: klein_matches as u64,
             uor_signature: uor_hash_str,
         };
 
@@ -522,7 +524,7 @@ impl UorR4Router {
         // Map the MoE active overlays
         for &ch in &stream.activated_experts {
             if ch < 64 {
-                self.expert_active_counts[ch] += 1;
+                self.expert_active_counts[ch as usize] += 1;
             }
         }
 
@@ -576,7 +578,10 @@ impl UorR4Router {
 
     /// Returns the active counts for the 64 experts
     pub fn get_expert_counts(&self) -> Vec<usize> {
-        self.expert_active_counts.clone()
+        self.expert_active_counts
+            .iter()
+            .map(|&c| c as usize)
+            .collect()
     }
 
     /// Returns the number of words in the vocabulary index
@@ -840,7 +845,7 @@ impl UorR4Router {
         match serde_json::from_str::<Self>(json_str) {
             Ok(mut imported) => {
                 for (word, &prime) in &imported.word_primes {
-                    let vec = get_word_vector(prime);
+                    let vec = get_word_vector(prime as usize);
                     imported.vocab_vectors.insert(word.clone(), vec);
                 }
                 imported.max_prime = imported.word_primes.values().max().copied().unwrap_or(0);
@@ -861,7 +866,7 @@ impl UorR4Router {
         #[derive(Serialize)]
         struct MapPoint {
             sentence: String,
-            window_index: usize,
+            window_index: u64,
             u: f64,
             v: f64,
             v_4d: Vec<f64>,
@@ -1059,7 +1064,7 @@ impl UorR4Router {
             let byte_idx = i / 8;
             let bit_idx = i % 8;
             if (hash_bytes[byte_idx] & (1 << bit_idx)) != 0 {
-                activated_experts.push(i);
+                activated_experts.push(i as u64);
             }
         }
         activated_experts.truncate(8);
@@ -1110,7 +1115,7 @@ impl UorR4Router {
             let max_p = self.word_primes.values().max().cloned().unwrap_or(2);
             next_prime = max_p + 1;
         }
-        while !is_prime_value(next_prime) {
+        while !is_prime_value(next_prime as usize) {
             next_prime += 1;
         }
 
@@ -1119,7 +1124,7 @@ impl UorR4Router {
         self.word_primes.insert(w.clone(), next_prime);
 
         // Seed coordinates across 512 zeta zeros via prime log oscillation
-        let vec = get_word_vector(next_prime);
+        let vec = get_word_vector(next_prime as usize);
         self.vocab_vectors.insert(w, vec);
     }
 
@@ -1342,7 +1347,7 @@ impl UorR4Router {
         let attestation = generate_uor_attestation(&payload);
 
         let routed = RoutedResult {
-            window_index: routed_idx,
+            window_index: routed_idx as u64,
             scale_x: scale_x_for_window(routed_idx),
             metrics: MetricsResult {
                 sigma_q,
@@ -1352,7 +1357,7 @@ impl UorR4Router {
                 deficit_angle,
             },
             eigenvalues: vec![0.05, 0.03, 0.01, 0.005, 0.002, 0.0, 0.0, 0.0],
-            active_range: vec![active_range[0], active_range[1]],
+            active_range: vec![active_range[0] as u64, active_range[1] as u64],
             state_vector: routed_slice.to_vec(),
             qimc: QimcResult {
                 identity: identity_meta.identity.clone(),
@@ -1362,10 +1367,10 @@ impl UorR4Router {
                 identity_uor_hash_algorithm: identity_meta.identity_uor_hash_algorithm.clone(),
                 uor_control: UorControlPlanInfo {
                     entropy_bias: uor_control.entropy_bias,
-                    hopf_chi_bins: uor_control.hopf_chi_bins,
+                    hopf_chi_bins: uor_control.hopf_chi_bins as u64,
                 },
-                prime: qimc_prime,
-                index: qimc_index,
+                prime: qimc_prime as u64,
+                index: qimc_index as u64,
             },
             hopf: HopfResult {
                 rho1: hopf_components["rho1"],
@@ -1375,8 +1380,8 @@ impl UorR4Router {
                 alpha: hopf_components["alpha"],
                 transported_alpha: hopf_components["transported_alpha"],
                 phase_transport_lambda: uor_control.phase_transport_lambda,
-                hopf_chi_bins: uor_control.hopf_chi_bins,
-                sector_id,
+                hopf_chi_bins: uor_control.hopf_chi_bins as u64,
+                sector_id: sector_id as u64,
                 subspace_norms: SubspaceNorms {
                     act: active_state_refined[0..128]
                         .iter()
@@ -1409,7 +1414,7 @@ impl UorR4Router {
             let slice = &active_state_refined[(r.axis as usize - 1) * 32..r.axis as usize * 32];
             let (_s_q, _s_kl, _l_v, k_v, d_a) = state_metrics_from_weights(slice);
             routes_output.push(RouteInfo {
-                window_index: r.axis as usize,
+                window_index: r.axis as u64,
                 scale_x: scale_x_for_window(r.axis as usize),
                 routing_score: r.score as f64,
                 kappa: if r.axis as usize == routed_idx {
@@ -1423,7 +1428,10 @@ impl UorR4Router {
                     std::f64::consts::PI
                 },
                 state_vector: slice.to_vec(),
-                active_range: vec![(r.axis as usize - 1) * 32, r.axis as usize * 32],
+                active_range: vec![
+                    ((r.axis as usize - 1) * 32) as u64,
+                    (r.axis as usize * 32) as u64,
+                ],
             });
         }
 
@@ -1452,11 +1460,11 @@ impl UorR4Router {
         let prime_product = self.get_sentence_prime_product(&words);
 
         let mut state_vector = vec![0.0; 512];
-        let s_idx = best.active_range[0];
-        let e_idx = best.active_range[1];
+        let s_idx = best.active_range[0] as usize;
+        let e_idx = best.active_range[1] as usize;
         state_vector[s_idx..e_idx].copy_from_slice(&best.state_vector[..e_idx - s_idx]);
 
-        let (u, v) = self.get_sentence_projection(&state_vector, idx_win);
+        let (u, v) = self.get_sentence_projection(&state_vector, idx_win as usize);
         let v_4d = self.get_state_4d_projection(&state_vector);
 
         let key = identity_key(identity);
@@ -1502,7 +1510,7 @@ impl UorR4Router {
         win_items.push(item.clone());
 
         let item_id = self.corpus_index.len();
-        self.corpus_index.insert(item_id, vec![item]);
+        self.corpus_index.insert(item_id as u64, vec![item]);
 
         // Induced multi-facet index coordinates
         let geom = geometry::VsaGeometry {
@@ -1529,7 +1537,7 @@ impl UorR4Router {
     ) -> Vec<ResonanceResult> {
         let query_words = tokenize(text);
         let stopwords = query_stopwords();
-        let query_primes: Vec<usize> = query_words
+        let query_primes: Vec<u64> = query_words
             .iter()
             .filter(|w| !stopwords.contains(&w.as_str()))
             .filter_map(|w| self.word_primes.get(w).copied())
@@ -1551,13 +1559,13 @@ impl UorR4Router {
         let mut query_projections = HashMap::new();
         for r in &routing_data.all_routes {
             let mut full_state = vec![0.0; 512];
-            let start = r.active_range[0];
-            let end = r.active_range[1];
+            let start = r.active_range[0] as usize;
+            let end = r.active_range[1] as usize;
             full_state[start..end].copy_from_slice(&r.state_vector[..end - start]);
             query_projections.insert(r.window_index, full_state);
         }
 
-        let all_windows: std::collections::HashSet<usize> = scoped_index
+        let all_windows: std::collections::HashSet<u64> = scoped_index
             .keys()
             .chain(shared_index.keys())
             .copied()
@@ -1567,8 +1575,8 @@ impl UorR4Router {
             let shared_items = shared_index.get(&win_idx);
             let scoped_items = scoped_index.get(&win_idx);
 
-            let s_idx = (win_idx - 1) * 32;
-            let e_idx = win_idx * 32;
+            let s_idx = (win_idx as usize - 1) * 32;
+            let e_idx = win_idx as usize * 32;
             let sum_sq = state_vector[s_idx..e_idx]
                 .iter()
                 .map(|value| value * value)
@@ -1845,7 +1853,7 @@ impl UorR4Router {
         let mut s_local = state_vector.to_vec();
 
         let mut accumulated_delta = 0.0;
-        let mut prev_stratum = 0;
+        let mut prev_stratum = 0usize;
         let mut prev_state_bin = vec![false; 512];
         let mut prev_state_vec = vec![0.0; 512];
 
@@ -1998,13 +2006,13 @@ impl UorR4Router {
             let r_data = self.route_query_to_manifold_internal("", identity, Some(&s_local));
             let routed = r_data.routed;
 
-            let s_idx = routed.active_range[0];
-            let e_idx = routed.active_range[1];
+            let s_idx = routed.active_range[0] as usize;
+            let e_idx = routed.active_range[1] as usize;
             let mut state_vec = vec![0.0; 512];
             state_vec[s_idx..e_idx].copy_from_slice(&routed.state_vector[..e_idx - s_idx]);
 
             let mut curr_state_bin = vec![false; 512];
-            let mut stratum = 0;
+            let mut stratum = 0usize;
             for i in 0..512 {
                 if state_vec[i].abs() > 1e-4 {
                     curr_state_bin[i] = true;
@@ -2065,7 +2073,7 @@ impl UorR4Router {
                 let k_rot = ((winding_number * 8.0).round() as i32).rem_euclid(8) as usize;
                 dihedral = DihedralInfo {
                     s: s_refl,
-                    k: k_rot,
+                    k: k_rot as u64,
                     label: format!("{}r^{}", if s_refl == 1 { "s" } else { "" }, k_rot),
                 };
             }
@@ -2100,7 +2108,7 @@ impl UorR4Router {
             };
 
             trajectory.push(TrajectoryStep {
-                step: step_idx + 1,
+                step: (step_idx + 1) as u64,
                 word: next_word.clone(),
                 window_index: routed.window_index,
                 scale_x: routed.scale_x,
@@ -2111,8 +2119,8 @@ impl UorR4Router {
                 hopf: routed.hopf,
                 r4_projection: r4_proj,
                 quantum: QuantumMetrics {
-                    stratum,
-                    cascade_length: cascade_len,
+                    stratum: stratum as u64,
+                    cascade_length: cascade_len as u64,
                     catastrophe,
                     winding_number,
                     commutator_curvature: commutator_curv,
@@ -2163,11 +2171,11 @@ pub struct RoutingData {
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct RoutedResult {
-    pub window_index: usize,
+    pub window_index: u64,
     pub scale_x: f64,
     pub metrics: MetricsResult,
     pub eigenvalues: Vec<f64>,
-    pub active_range: Vec<usize>,
+    pub active_range: Vec<u64>,
     pub state_vector: Vec<f64>,
     pub qimc: QimcResult,
     pub hopf: HopfResult,
@@ -2192,14 +2200,14 @@ pub struct QimcResult {
     pub identity_uor_digest: String,
     pub identity_uor_hash_algorithm: String,
     pub uor_control: UorControlPlanInfo,
-    pub prime: usize,
-    pub index: usize,
+    pub prime: u64,
+    pub index: u64,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct UorControlPlanInfo {
     pub entropy_bias: f64,
-    pub hopf_chi_bins: usize,
+    pub hopf_chi_bins: u64,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -2211,8 +2219,8 @@ pub struct HopfResult {
     pub alpha: f64,
     pub transported_alpha: f64,
     pub phase_transport_lambda: f64,
-    pub hopf_chi_bins: usize,
-    pub sector_id: usize,
+    pub hopf_chi_bins: u64,
+    pub sector_id: u64,
     pub subspace_norms: SubspaceNorms,
 }
 
@@ -2226,29 +2234,29 @@ pub struct SubspaceNorms {
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct RouteInfo {
-    pub window_index: usize,
+    pub window_index: u64,
     pub scale_x: f64,
     pub routing_score: f64,
     pub kappa: f64,
     pub deficit_angle: f64,
     pub state_vector: Vec<f64>,
-    pub active_range: Vec<usize>,
+    pub active_range: Vec<u64>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ResonanceResult {
     pub sentence: String,
     pub relevance: f64,
-    pub window_index: usize,
+    pub window_index: u64,
     pub kappa: f64,
     pub deficit_angle: f64,
 }
 
 #[derive(Serialize, Deserialize)]
 pub struct TrajectoryStep {
-    pub step: usize,
+    pub step: u64,
     pub word: String,
-    pub window_index: usize,
+    pub window_index: u64,
     pub scale_x: f64,
     pub deficit_angle: f64,
     pub kappa: f64,
@@ -2275,8 +2283,8 @@ pub struct Projection3D {
 
 #[derive(Serialize, Deserialize)]
 pub struct QuantumMetrics {
-    pub stratum: usize,
-    pub cascade_length: usize,
+    pub stratum: u64,
+    pub cascade_length: u64,
     pub catastrophe: bool,
     pub winding_number: f64,
     pub commutator_curvature: f64,
@@ -2285,8 +2293,8 @@ pub struct QuantumMetrics {
 
 #[derive(Serialize, Deserialize)]
 pub struct DihedralInfo {
-    pub s: usize,
-    pub k: usize,
+    pub s: u64,
+    pub k: u64,
     pub label: String,
 }
 
@@ -2400,7 +2408,7 @@ impl UorR4Router {
         #[derive(Serialize)]
         struct MapPoint {
             sentence: String,
-            window_index: usize,
+            window_index: u64,
             u: f64,
             v: f64,
             v_4d: Vec<f64>,
@@ -2442,7 +2450,7 @@ impl UorR4Router {
     pub fn import_state_native(&mut self, json_str: &str) -> Result<(), serde_json::Error> {
         let mut imported: Self = serde_json::from_str(json_str)?;
         for (word, &prime) in &imported.word_primes {
-            let vec = get_word_vector(prime);
+            let vec = get_word_vector(prime as usize);
             imported.vocab_vectors.insert(word.clone(), vec);
         }
         imported.max_prime = imported.word_primes.values().max().copied().unwrap_or(0);
@@ -2455,6 +2463,7 @@ impl UorR4Router {
         let stream = self.compile_thought_internal(content);
         for &ch in &stream.activated_experts {
             if ch < 64 {
+                let ch = ch as usize;
                 if ch >= self.expert_active_counts.len() {
                     self.expert_active_counts.resize(ch + 1, 0);
                 }
@@ -2540,6 +2549,80 @@ mod tests {
         let routing_vsa = router.route_query_to_manifold_native("hello world", identity);
         assert!(routing_vsa.routed.metrics.deficit_angle.is_finite());
         assert!(routing_vsa.routed.metrics.kappa > 0.0);
+    }
+
+    #[test]
+    fn test_serialized_structs_fixed_width_json_shape() {
+        // u64 fields must serialize as plain JSON numbers, identically to the
+        // former usize wire shape (issue #12).
+        let route = RouteInfo {
+            window_index: 3,
+            scale_x: 1.5,
+            routing_score: 0.25,
+            kappa: 0.75,
+            deficit_angle: -0.5,
+            state_vector: vec![0.1, 0.2],
+            active_range: vec![64, 96],
+        };
+        let json = serde_json::to_string(&route).unwrap();
+        assert_eq!(
+            json,
+            r#"{"window_index":3,"scale_x":1.5,"routing_score":0.25,"kappa":0.75,"deficit_angle":-0.5,"state_vector":[0.1,0.2],"active_range":[64,96]}"#
+        );
+        let round: RouteInfo = serde_json::from_str(&json).unwrap();
+        assert_eq!(round.window_index, 3u64);
+        assert_eq!(round.active_range, vec![64u64, 96u64]);
+
+        let info = ResonanceInfo {
+            total_bytes: 5,
+            resonant_bits: 40,
+            klein_matches: 2,
+            uor_signature: "sha256:abc".to_string(),
+        };
+        let json = serde_json::to_string(&info).unwrap();
+        assert_eq!(
+            json,
+            r#"{"total_bytes":5,"resonant_bits":40,"klein_matches":2,"uor_signature":"sha256:abc"}"#
+        );
+        let round: ResonanceInfo = serde_json::from_str(&json).unwrap();
+        assert_eq!(round.total_bytes, 5u64);
+        assert_eq!(round.resonant_bits, 40u64);
+        assert_eq!(round.klein_matches, 2u64);
+    }
+
+    #[test]
+    fn test_export_import_state_round_trip() {
+        // The persisted router state (u64 keys/values) must survive a JSON
+        // export/import cycle.
+        let mut router = UorR4Router::new(0.5);
+        router.inject_thought_stream_native("fixed width integers cross the wire");
+        // MultiFacetStore's Vec<u32> map keys predate issue #12 and cannot
+        // serialize as JSON object keys, so export_state only succeeds with an
+        // empty facet store; clear it (the corpus indexes go with it).
+        router.clear_corpus();
+        let exported = router.export_state();
+        assert!(!exported.is_empty(), "export_state must produce JSON");
+
+        let mut restored = UorR4Router::new(0.5);
+        restored.clear_corpus();
+        restored
+            .import_state_native(&exported)
+            .expect("exported state must re-import cleanly");
+        assert_eq!(
+            restored.get_vocab_size(),
+            router.get_vocab_size(),
+            "vocabulary must survive the state round trip"
+        );
+        assert_eq!(
+            restored.get_active_streams_native().len(),
+            1,
+            "thought streams must survive the state round trip"
+        );
+        assert_eq!(
+            restored.get_expert_counts(),
+            router.get_expert_counts(),
+            "expert counts must survive the state round trip"
+        );
     }
 }
 
