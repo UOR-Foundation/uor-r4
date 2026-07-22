@@ -4,10 +4,14 @@
 //! checked arithmetic only — no unsafe, no transmute, no pointer casts,
 //! and no heap-resident deserialized structures (RFC §1 rules 3 and 5).
 //! A [`GraphView`] can therefore be constructed only over bytes that have
-//! passed every stage-1 invariant.
+//! passed every stage-1 invariant, plus the stage-2 semantic invariants
+//! when a HEAD section is present (see [`GraphView::parse`]).
 
 use crate::error::FormatError;
+use crate::head::Head;
 use crate::header::{self, Header, HEADER_LEN, SECTION_ENTRY_LEN};
+use crate::records::{self, PackedEdge, PackedNode, PACKED_EDGE_LEN, PACKED_NODE_LEN};
+use crate::stage2;
 use crate::types::SectionId;
 
 /// One decoded section-table entry.
@@ -121,19 +125,35 @@ pub(crate) fn validate(bytes: &[u8]) -> Result<Header, FormatError> {
 /// Borrows the caller-owned (or memory-mapped) artifact bytes; section
 /// payloads are exposed as borrowed slices only — nothing is deserialized
 /// into heap structures (RFC §1 rule 5). Construct via
-/// [`GraphView::parse`], which runs the full stage-1 validation first.
+/// [`GraphView::parse`], which runs the full stage-1 validation first,
+/// followed by stage-2 semantic validation whenever a HEAD section is
+/// present. The decoded HEAD prefix (fixed size, `Copy`) is carried by
+/// value; everything else decodes on demand.
 #[derive(Debug, Clone, Copy)]
 pub struct GraphView<'a> {
     bytes: &'a [u8],
     header: Header,
+    head: Option<Head>,
 }
 
 impl<'a> GraphView<'a> {
-    /// Validate `bytes` per RFC §6 stage 1 and, on success, return the
-    /// borrowed view. This is the only way to construct a `GraphView`.
+    /// Validate `bytes` per RFC §6 — stage 1 always, then stage 2 when a
+    /// HEAD section is present — and, on success, return the borrowed
+    /// view. This is the only way to construct a `GraphView`.
+    ///
+    /// A container without HEAD stays stage-1-only (bootstrap fixtures,
+    /// pure section carriers): [`GraphView::head`] returns `None` and the
+    /// typed node/edge accessors report nothing, leaving the sections as
+    /// opaque bytes.
     pub fn parse(bytes: &'a [u8]) -> Result<Self, FormatError> {
         let header = validate(bytes)?;
-        Ok(Self { bytes, header })
+        let mut view = Self {
+            bytes,
+            header,
+            head: None,
+        };
+        view.head = stage2::validate(&view)?;
+        Ok(view)
     }
 
     /// The decoded fixed header.
@@ -174,6 +194,98 @@ impl<'a> GraphView<'a> {
             section_count: self.header.section_count,
             next: 0,
         }
+    }
+
+    /// The decoded HEAD payload, when a HEAD section is present. Only
+    /// `Some` for artifacts that passed stage-2 validation.
+    pub fn head(&self) -> Option<Head> {
+        self.head
+    }
+
+    /// Declared node count from HEAD, when present. Stage 2 guarantees
+    /// the NODE section holds exactly this many records.
+    pub fn node_count(&self) -> Option<u32> {
+        self.head.map(|h| h.node_count())
+    }
+
+    /// Declared edge count from HEAD, when present. Stage 2 guarantees
+    /// the EDGE section holds exactly this many canonical edges plus the
+    /// same number of reverse-index entries.
+    pub fn edge_count(&self) -> Option<u32> {
+        self.head.map(|h| h.edge_count())
+    }
+
+    /// Decode one packed node by index, on demand. Returns `None` when
+    /// `index >= node_count` or the artifact is stage-1-only (no HEAD).
+    pub fn node(&self, index: u32) -> Option<PackedNode> {
+        if index >= self.node_count()? {
+            return None;
+        }
+        let bytes = self.section(SectionId::NODE)?;
+        let start = index as usize * PACKED_NODE_LEN;
+        let record = bytes.get(start..start + PACKED_NODE_LEN)?;
+        Some(records::decode_node(record))
+    }
+
+    /// Iterate the packed node records in canonical order, decoding on
+    /// demand. Empty when the artifact is stage-1-only (no HEAD).
+    pub fn nodes(&self) -> Nodes<'a> {
+        let count = self.node_count().unwrap_or(0);
+        let bytes = match count {
+            // Stage 2 guarantees NODE is present when the count is
+            // non-zero; the fallback keeps the iterator empty rather
+            // than panicking.
+            0 => &[],
+            _ => self.section(SectionId::NODE).unwrap_or(&[]),
+        };
+        Nodes {
+            bytes,
+            next: 0,
+            remaining: count,
+        }
+    }
+
+    /// Decode one packed canonical edge by index (its stable edge ID),
+    /// on demand. Returns `None` when `index >= edge_count` or the
+    /// artifact is stage-1-only (no HEAD).
+    pub fn edge(&self, index: u32) -> Option<PackedEdge> {
+        if index >= self.edge_count()? {
+            return None;
+        }
+        let bytes = self.section(SectionId::EDGE)?;
+        let start = index as usize * PACKED_EDGE_LEN;
+        let record = bytes.get(start..start + PACKED_EDGE_LEN)?;
+        Some(records::decode_edge(record))
+    }
+
+    /// Iterate the packed canonical edges in edge-ID order, decoding on
+    /// demand. Empty when the artifact is stage-1-only (no HEAD).
+    pub fn edges(&self) -> Edges<'a> {
+        let count = self.edge_count().unwrap_or(0);
+        let bytes = match count {
+            0 => &[],
+            _ => self.section(SectionId::EDGE).unwrap_or(&[]),
+        };
+        Edges {
+            bytes,
+            next: 0,
+            remaining: count,
+        }
+    }
+
+    /// Read one reverse-index entry (an edge ID) by position. The
+    /// reverse index follows the canonical edge array inside the EDGE
+    /// section. Returns `None` when `index >= edge_count` or the
+    /// artifact is stage-1-only (no HEAD).
+    pub fn reverse_edge_id(&self, index: u32) -> Option<u32> {
+        let edge_count = self.edge_count()?;
+        if index >= edge_count {
+            return None;
+        }
+        let bytes = self.section(SectionId::EDGE)?;
+        let start = (edge_count as usize * PACKED_EDGE_LEN) + (index as usize * 4);
+        let entry = bytes.get(start..start + 4)?;
+        Some(header::read_u32_le(entry, 0))
     }
 
     /// Recompute both integrity CIDs against the bytes and compare with
@@ -243,6 +355,67 @@ impl<'a> Iterator for Sections<'a> {
 }
 
 impl ExactSizeIterator for Sections<'_> {}
+
+/// Iterator over the packed node records of a [`GraphView`], decoding
+/// each 30-byte record on demand (zero-copy, no heap).
+#[derive(Debug, Clone)]
+pub struct Nodes<'a> {
+    bytes: &'a [u8],
+    next: u32,
+    remaining: u32,
+}
+
+impl Iterator for Nodes<'_> {
+    type Item = PackedNode;
+
+    fn next(&mut self) -> Option<PackedNode> {
+        if self.remaining == 0 {
+            return None;
+        }
+        let start = self.next as usize * PACKED_NODE_LEN;
+        let record = self.bytes.get(start..start + PACKED_NODE_LEN)?;
+        self.next += 1;
+        self.remaining -= 1;
+        Some(records::decode_node(record))
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.remaining as usize, Some(self.remaining as usize))
+    }
+}
+
+impl ExactSizeIterator for Nodes<'_> {}
+
+/// Iterator over the packed canonical edges of a [`GraphView`], in
+/// edge-ID order, decoding each 16-byte record on demand (zero-copy,
+/// no heap).
+#[derive(Debug, Clone)]
+pub struct Edges<'a> {
+    bytes: &'a [u8],
+    next: u32,
+    remaining: u32,
+}
+
+impl Iterator for Edges<'_> {
+    type Item = PackedEdge;
+
+    fn next(&mut self) -> Option<PackedEdge> {
+        if self.remaining == 0 {
+            return None;
+        }
+        let start = self.next as usize * PACKED_EDGE_LEN;
+        let record = self.bytes.get(start..start + PACKED_EDGE_LEN)?;
+        self.next += 1;
+        self.remaining -= 1;
+        Some(records::decode_edge(record))
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.remaining as usize, Some(self.remaining as usize))
+    }
+}
+
+impl ExactSizeIterator for Edges<'_> {}
 
 /// One section as borrowed from the artifact.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

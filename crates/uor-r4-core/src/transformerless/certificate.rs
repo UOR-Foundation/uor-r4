@@ -53,6 +53,9 @@ pub enum CertificateError {
 }
 
 impl Certificate {
+    // Args mirror the schema's CID fields one-to-one (issue #20); a params
+    // struct can replace them if the schema grows further.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         source_cid: impl Into<String>,
         corpus_cid: impl Into<String>,

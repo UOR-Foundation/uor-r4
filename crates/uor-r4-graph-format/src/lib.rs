@@ -10,7 +10,7 @@
 //! The authoritative specification is `docs/transformerless/R4G1.md`
 //! (wire-format RFC, DRAFT); terminology lives in
 //! `docs/transformerless/GLOSSARY.md`. This crate implements the first
-//! slice of Phase 1 of `docs/r4_graph_compiler_implementation_plan.md`:
+//! Phase-1 slices of `docs/r4_graph_compiler_implementation_plan.md`:
 //!
 //! - fixed-width domain newtypes ([`NodeId`], [`SectionOffset`],
 //!   [`TokenId`], [`ScoreQ`], [`Depth`], [`Radius`], [`ArtifactCid`],
@@ -19,16 +19,20 @@
 //!   endianness marker, alignment, `total_len`, section-table bounds,
 //!   canonical (sorted) ordering, non-overlap, checked offset arithmetic,
 //!   and rejection of unknown mandatory sections / feature bits;
+//! - the stage-2 semantic validator (RFC §6 items 4–9): the fixed
+//!   224-byte HEAD payload ([`Head`]), packed-range resolution for the
+//!   v0 draft-line [`PackedNode`]/[`PackedEdge`] layouts, edge endpoints
+//!   and the reverse-index existence approximation of Theorem 7,
+//!   HEAD-bound honesty, the ROUT v0 bytecode set, and EMIT/EXCT
+//!   [`StorageDescriptor`]s;
 //! - the canonical serializer ([`ArtifactBuilder`], behind `alloc`):
 //!   deterministic bytes for identical inputs (Gate E, RFC §1 rule 7);
 //! - [`GraphView`], a zero-copy borrowed view over caller-owned (or
 //!   memory-mapped) bytes, constructible only after successful stage-1
-//!   validation, with [`GraphView::verify_cids`] for the blake3 integrity
-//!   CIDs (RFC §6 invariant 9).
-//!
-//! Stage-2 semantic validation (packed-range resolution, edge targets,
-//! ROUT bytecode, HEAD-bound honesty) is a later Phase-1 slice and is not
-//! implemented here.
+//!   validation plus stage-2 whenever a HEAD section is present, with
+//!   typed decode-on-demand node/edge accessors and
+//!   [`GraphView::verify_cids`] for the blake3 integrity CIDs (RFC §6
+//!   invariant 9).
 //!
 //! ## CID hashing convention (normative for this crate)
 //!
@@ -60,18 +64,28 @@
 extern crate alloc;
 
 mod error;
+mod head;
 mod header;
+mod records;
+mod rout;
 #[cfg(feature = "alloc")]
 mod ser;
+mod stage2;
 mod types;
 mod view;
 
-pub use error::FormatError;
+pub use error::{BoundKind, FormatError, RangeField};
+pub use head::{Head, FALLBACK_POLICY_COUNT, HEAD_PAYLOAD_LEN};
 pub use header::{
     Header, ARTIFACT_CID_OFFSET, ARTIFACT_HASH_START, ENDIANNESS_LITTLE, FORMAT_VERSION_MAJOR,
     FORMAT_VERSION_MINOR, HEADER_LEN, HEAD_CID_OFFSET, MAGIC, SECTION_ENTRY_LEN,
 };
+pub use records::{
+    PackedEdge, PackedNode, StorageDescriptor, PACKED_EDGE_LEN, PACKED_NODE_LEN,
+    STORAGE_DESCRIPTOR_LEN,
+};
+pub use rout::{OP_HALT, OP_JMP_FWD, OP_LEAF, OP_TEST_POPCOUNT_LE};
 #[cfg(feature = "alloc")]
 pub use ser::ArtifactBuilder;
 pub use types::{ArtifactCid, Depth, NodeId, Radius, ScoreQ, SectionId, SectionOffset, TokenId};
-pub use view::{GraphView, SectionRef, Sections};
+pub use view::{Edges, GraphView, Nodes, SectionRef, Sections};

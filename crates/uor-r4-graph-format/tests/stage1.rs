@@ -2,7 +2,16 @@
 //! R4G1 container. Every stage-1 invariant of RFC §6 has at least one
 //! rejection test; positive paths round-trip through the canonical
 //! serializer and `GraphView`.
+//!
+//! Positive-path fixtures carry stage-2-valid section payloads (a real
+//! 224-byte HEAD, matching NODE/EMIT), because `GraphView::parse` now
+//! runs stage-2 semantic validation whenever a HEAD section is present.
+//! Payload builders live in `tests/common/`; stage-2 semantics proper
+//! are covered in `tests/stage2.rs`.
 
+mod common;
+
+use common::{head_payload, node_section, storage_section, HeadFields, NodeFields};
 use uor_r4_graph_format::{
     ArtifactBuilder, Depth, FormatError, GraphView, NodeId, Radius, ScoreQ, SectionId,
     SectionOffset, TokenId, HEADER_LEN,
@@ -56,14 +65,29 @@ fn valid_fixture() -> Vec<u8> {
     )
 }
 
+/// Sample HEAD payload declaring a single node (matches `sample_node`).
+fn sample_head() -> Vec<u8> {
+    head_payload(&HeadFields {
+        node_count: 1,
+        ..HeadFields::default()
+    })
+}
+
+/// Sample NODE payload: one zeroed 30-byte PackedNode (all ranges empty,
+/// depth 0 — valid against `sample_head`).
+fn sample_node() -> Vec<u8> {
+    node_section(&[NodeFields::default()])
+}
+
 /// Canonically serialized sample artifact (HEAD/NODE/EMIT + one unknown
-/// optional section), valid CIDs included.
+/// optional section), valid CIDs included. All section payloads are
+/// stage-2-valid so `GraphView::parse` accepts the whole artifact.
 fn build_sample() -> Vec<u8> {
     let mut b = ArtifactBuilder::new(3);
     // Deliberately unsorted insertion order.
-    b.add_section(SectionId::NODE, 7, &[0u8; 13]);
-    b.add_section(SectionId::HEAD, 0, b"head-body-v1");
-    b.add_section(SectionId::EMIT, 0, b"emit");
+    b.add_section(SectionId::NODE, 7, &sample_node());
+    b.add_section(SectionId::HEAD, 0, &sample_head());
+    b.add_section(SectionId::EMIT, 0, &storage_section(1, 0, 0, &[]));
     b.add_section(SectionId(0x8000_0042), 0, b"opaque");
     b.build().expect("sample artifact must build")
 }
@@ -82,9 +106,12 @@ fn round_trip_sections() {
     let bytes = build_sample();
     let view = GraphView::parse(&bytes).expect("canonical bytes must validate");
 
-    assert_eq!(view.section(SectionId::HEAD), Some(&b"head-body-v1"[..]));
-    assert_eq!(view.section(SectionId::NODE), Some(&[0u8; 13][..]));
-    assert_eq!(view.section(SectionId::EMIT), Some(&b"emit"[..]));
+    assert_eq!(view.section(SectionId::HEAD), Some(&sample_head()[..]));
+    assert_eq!(view.section(SectionId::NODE), Some(&sample_node()[..]));
+    assert_eq!(
+        view.section(SectionId::EMIT),
+        Some(&storage_section(1, 0, 0, &[])[..])
+    );
     assert_eq!(view.section(SectionId(0x8000_0042)), Some(&b"opaque"[..]));
     assert_eq!(view.section(SectionId::EDGE), None);
 
@@ -157,13 +184,13 @@ fn head_cid_tamper_detected() {
 fn artifact_cid_tamper_detected() {
     let bytes = build_sample();
     let view = GraphView::parse(&bytes).unwrap();
-    let node_off =
-        view.section(SectionId::NODE).unwrap().as_ptr() as usize - bytes.as_ptr() as usize;
+    let opaque_off =
+        view.section(SectionId(0x8000_0042)).unwrap().as_ptr() as usize - bytes.as_ptr() as usize;
 
-    // Flip a non-HEAD payload byte: head_cid still matches, artifact_cid
-    // does not.
+    // Flip a payload byte in the unknown optional section: stage-2 does
+    // not inspect it, head_cid still matches, artifact_cid does not.
     let mut tampered = bytes.clone();
-    tampered[node_off + 3] ^= 0xFF;
+    tampered[opaque_off + 1] ^= 0xFF;
     let view = GraphView::parse(&tampered).unwrap();
     assert_eq!(view.verify_cids(), Err(FormatError::ArtifactCidMismatch));
 
@@ -176,18 +203,21 @@ fn artifact_cid_tamper_detected() {
 
 #[test]
 fn unknown_optional_section_skipped() {
+    let head = head_payload(&HeadFields::default());
+    let mut body = head.clone();
+    body.extend_from_slice(&[0xAA, 0xBB, 0xCC, 0xDD]);
     let bytes = assemble(
         3,
         0,
         None,
         &[
-            [0x01, 0, 120, 4],        // HEAD
-            [0x8000_0040, 0, 128, 4], // unknown optional
+            [0x01, 0, 120, 224],      // HEAD
+            [0x8000_0040, 0, 344, 4], // unknown optional
         ],
-        &[1, 2, 3, 4, 0, 0, 0, 0, 0xAA, 0xBB, 0xCC, 0xDD],
+        &body,
     );
     let view = GraphView::parse(&bytes).expect("unknown optional section must be skipped");
-    assert_eq!(view.section(SectionId::HEAD), Some(&[1, 2, 3, 4][..]));
+    assert_eq!(view.section(SectionId::HEAD), Some(&head[..]));
     // Retained as opaque bytes, reachable by raw ID.
     assert_eq!(
         view.section(SectionId(0x8000_0040)),
@@ -199,7 +229,8 @@ fn unknown_optional_section_skipped() {
 #[test]
 fn unknown_optional_feature_bits_ignored() {
     // Bits 16..=31 are the optional feature space.
-    let bytes = assemble(3, 0x1234_0000, None, &[[0x01, 0, 104, 4]], &[1, 2, 3, 4]);
+    let head = head_payload(&HeadFields::default());
+    let bytes = assemble(3, 0x1234_0000, None, &[[0x01, 0, 104, 224]], &head);
     let view = GraphView::parse(&bytes).expect("optional feature bits must be ignored");
     assert_eq!(view.header().flags, 0x1234_0000);
 }

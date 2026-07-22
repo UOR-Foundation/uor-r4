@@ -1,7 +1,8 @@
 use core::ops::Range;
 
-/// Fixed-point score used by reference frontier entries.
-pub type ScoreQ = i32;
+/// Fixed-point score used by reference frontier entries — the single shared
+/// definition (consolidated with `score_q`; PR #40's local alias removed).
+pub use super::score_q::ScoreQ;
 
 /// One active region tracked during bounded refinement.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -89,20 +90,20 @@ fn resolve_range(start: u32, len: u32, edge_count: usize) -> Option<Range<usize>
 
 #[cfg(test)]
 mod tests {
-    use super::{ActiveFrontier, ActiveFrontierEntry, PackedEdgeRanges};
+    use super::{ActiveFrontier, ActiveFrontierEntry, PackedEdgeRanges, ScoreQ};
 
     #[test]
     fn active_frontier_enforces_capacity() {
         let mut frontier = ActiveFrontier::<2>::default();
         assert!(frontier.push(ActiveFrontierEntry {
             region_id: 3,
-            score_q: 42,
+            score_q: ScoreQ(42),
             margin: 7,
             depth: 1,
         }));
         assert!(frontier.push(ActiveFrontierEntry {
             region_id: 5,
-            score_q: 21,
+            score_q: ScoreQ(21),
             margin: -3,
             depth: 2,
         }));
@@ -136,7 +137,7 @@ mod tests {
         let mut frontier = ActiveFrontier::<2>::default();
         assert!(frontier.push(ActiveFrontierEntry {
             region_id: 7,
-            score_q: 100,
+            score_q: ScoreQ(100),
             margin: 2,
             depth: 3,
         }));

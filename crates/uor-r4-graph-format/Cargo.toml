@@ -2,7 +2,7 @@
 name = "uor-r4-graph-format"
 version = "0.1.0"
 edition = "2021"
-description = "R4G1 packed graph artifact container: no_std-compatible fixed-width types, stage-1 structural validation, canonical serializer, and borrowed GraphView"
+description = "R4G1 packed graph artifact container: no_std-compatible fixed-width types, two-stage (structural + semantic) validation, canonical serializer, and borrowed GraphView"
 
 [features]
 default = ["std"]

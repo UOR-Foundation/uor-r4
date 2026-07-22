@@ -88,6 +88,21 @@ pub struct Header {
     pub head_cid: ArtifactCid,
 }
 
+/// Read a little-endian u16 without unsafe/transmute.
+pub(crate) fn read_u16_le(bytes: &[u8], at: usize) -> u16 {
+    u16::from_le_bytes([bytes[at], bytes[at + 1]])
+}
+
+/// Read a little-endian i16 without unsafe/transmute.
+pub(crate) fn read_i16_le(bytes: &[u8], at: usize) -> i16 {
+    i16::from_le_bytes([bytes[at], bytes[at + 1]])
+}
+
+/// Read a little-endian i32 without unsafe/transmute.
+pub(crate) fn read_i32_le(bytes: &[u8], at: usize) -> i32 {
+    i32::from_le_bytes([bytes[at], bytes[at + 1], bytes[at + 2], bytes[at + 3]])
+}
+
 /// Read a little-endian u32 without unsafe/transmute.
 pub(crate) fn read_u32_le(bytes: &[u8], at: usize) -> u32 {
     u32::from_le_bytes([bytes[at], bytes[at + 1], bytes[at + 2], bytes[at + 3]])
@@ -107,7 +122,7 @@ pub(crate) fn read_u64_le(bytes: &[u8], at: usize) -> u64 {
     ])
 }
 
-fn read_cid(bytes: &[u8], at: usize) -> ArtifactCid {
+pub(crate) fn read_cid(bytes: &[u8], at: usize) -> ArtifactCid {
     let mut cid = [0u8; 32];
     cid.copy_from_slice(&bytes[at..at + 32]);
     ArtifactCid(cid)
