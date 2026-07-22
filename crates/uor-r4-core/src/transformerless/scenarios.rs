@@ -40,6 +40,7 @@ const MAX_TOKEN_BYTES: usize = 1024;
 
 /// Convert a Hugging Face byte-level BPE vocabulary into the compact token
 /// table consumed by the allocation-free runtime tokenizer.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn export_hf_bytelevel_tokenizer(
     source: impl AsRef<Path>,
     destination: impl AsRef<Path>,
@@ -49,6 +50,7 @@ pub fn export_hf_bytelevel_tokenizer(
 
 /// Export the runtime tokenizer and return per-token UTF-8 byte lengths for
 /// observation byte-anchor generation.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn export_hf_bytelevel_tokenizer_with_lengths(
     source: impl AsRef<Path>,
     destination: impl AsRef<Path>,
@@ -144,6 +146,7 @@ pub struct Tokenizer {
 
 impl Tokenizer {
     /// Load and validate a tokenizer without panicking on malformed input.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn try_load(path: impl AsRef<Path>) -> io::Result<Self> {
         let bytes = std::fs::read(path)?;
         let mut vocab = Vec::new();
@@ -179,6 +182,7 @@ impl Tokenizer {
         Ok(Tokenizer { vocab, map })
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn load(path: &str) -> Self {
         Self::try_load(path).expect("tokenizer file must be readable and well-formed")
     }
@@ -374,6 +378,7 @@ struct ClassAgg {
     teacher_steps: u64,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 pub fn scenarios(oracle: &mut dyn TeacherOracle) {
     let tok = Tokenizer::load("/tmp/ref/tokenizer.bin");
 

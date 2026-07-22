@@ -357,6 +357,7 @@ fn fast_matmul_backend() -> &'static str {
 }
 
 impl Llama {
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn load(path: &str) -> Llama {
         let raw = std::fs::read(path).expect("checkpoint");
         let i32at = |o: usize| i32::from_le_bytes(raw[o..o + 4].try_into().unwrap());
@@ -811,6 +812,7 @@ pub struct LlamaOracle {
 }
 
 impl LlamaOracle {
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn load(path: &str) -> Self {
         let bytes = std::fs::read(path).expect("source checkpoint");
         let kappa = format!("blake3:{}", blake3::hash(&bytes).to_hex());
@@ -943,6 +945,7 @@ pub struct HuggingFaceLlamaOracle {
 }
 
 impl HuggingFaceLlamaOracle {
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn load(source: impl AsRef<std::path::Path>) -> Result<Self, Box<dyn std::error::Error>> {
         Self::load_inner(source, None)
     }
@@ -951,6 +954,7 @@ impl HuggingFaceLlamaOracle {
     /// only needs short trajectories because the deployed runtime consumes an
     /// eight-token window; bounding teacher stories avoids quadratic attention
     /// work at source-model maximum context lengths.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn load_with_sequence_length(
         source: impl AsRef<std::path::Path>,
         sequence_length: usize,
@@ -971,6 +975,7 @@ impl HuggingFaceLlamaOracle {
         self.model.cfg.r4_attention
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     fn load_inner(
         source: impl AsRef<std::path::Path>,
         sequence_length: Option<usize>,
@@ -1071,6 +1076,7 @@ impl HuggingFaceLlamaOracle {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn append_layers(
     tensors: &safetensors::SafeTensors<'_>,
     layers: usize,
@@ -1083,6 +1089,7 @@ fn append_layers(
     Ok(())
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn append_tensor(
     tensors: &safetensors::SafeTensors<'_>,
     name: &str,

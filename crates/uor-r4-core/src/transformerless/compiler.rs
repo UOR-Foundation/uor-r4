@@ -22,6 +22,7 @@
 
 use super::teacher::TeacherOracle;
 use std::collections::HashMap;
+#[cfg(not(target_arch = "wasm32"))]
 use std::io::Write;
 
 pub const STAGES: usize = 4;
@@ -68,16 +69,19 @@ pub struct Corpus {
     pub byte_end: Vec<u32>,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 pub fn corpus_paths() -> (&'static str, &'static str) {
     ("/tmp/c_meta.bin", "/tmp/c_recs.bin")
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 pub fn load_corpus() -> Option<Corpus> {
     let (mp, rp) = corpus_paths();
     load_corpus_from(mp, rp)
 }
 
 /// Load a corpus record stream from explicit paths (fixtures, mirrors).
+#[cfg(not(target_arch = "wasm32"))]
 pub fn load_corpus_from(mp: &str, rp: &str) -> Option<Corpus> {
     let meta = std::fs::read(mp).ok()?;
     if meta.len() != 25 || meta[24] != 1 {
@@ -315,12 +319,14 @@ pub fn encode_v3_record(
 
 /// Generate (or extend, resumably) the teacher-labeled corpus. Whole-story
 /// chunking keeps the stream deterministic under any budget chunking.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn generate(oracle: &mut dyn TeacherOracle, budget_s: u64, target: usize) {
     let (mp, rp) = corpus_paths();
     generate_to(oracle, budget_s, target, mp, rp);
 }
 
 /// Generate a resumable teacher corpus at explicit paths.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn generate_to(
     oracle: &mut dyn TeacherOracle,
     budget_s: u64,
@@ -333,6 +339,7 @@ pub fn generate_to(
 
 /// Generate a resumable teacher corpus with optional per-token byte lengths
 /// used to populate tokenizer-neutral byte anchors.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn generate_to_with_token_byte_lengths(
     oracle: &mut dyn TeacherOracle,
     budget_s: u64,
@@ -513,7 +520,11 @@ pub struct HammingCalibrationReport {
     pub regions: Vec<RegionHammingCalibration>,
 }
 
-fn quantile_radius(histogram: &[u32], numerator: u32, denominator: u32) -> u16 {
+/// 95th-percentile-style quantile of a distance histogram, shared by the
+/// class-signature calibration above and the cover region calibration
+/// (`super::cover`): the smallest distance whose cumulative count reaches
+/// `ceil(total · numerator / denominator)`.
+pub(crate) fn quantile_radius(histogram: &[u32], numerator: u32, denominator: u32) -> u16 {
     let total: u64 = histogram.iter().map(|&count| u64::from(count)).sum();
     if total == 0 {
         return 0;
@@ -1014,6 +1025,7 @@ pub fn artifact_kappa(a: &Compiled) -> String {
     format!("blake3:{}", blake3::hash(&artifact_bytes(a)).to_hex())
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 pub fn save_artifacts(a: &Compiled) {
     let b = artifact_bytes(a);
     std::fs::write(ART_PATH, &b).unwrap();
@@ -1025,11 +1037,13 @@ pub fn save_artifacts(a: &Compiled) {
     );
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 pub fn load_artifacts() -> Option<Compiled> {
     load_artifacts_from(ART_PATH)
 }
 
 /// Load artifacts from an explicit path (fixtures, mirrors).
+#[cfg(not(target_arch = "wasm32"))]
 pub fn load_artifacts_from(path: &str) -> Option<Compiled> {
     let b = std::fs::read(path).ok()?;
     let art = parse_artifacts(&b)?;

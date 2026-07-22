@@ -19,7 +19,8 @@
 //! Multiplication is confined to the COMPILER (offline, once, κ-pinned
 //! outputs) and to the CERTIFIER (instrumentation). See docs/PROOF.md.
 
-#[cfg(not(target_arch = "wasm32"))]
+// teacher/compiler are portable (math, types, containers); only their
+// fs-dependent functions are cfg-gated per item (see those files).
 pub mod teacher;
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -155,7 +156,8 @@ pub mod certify;
 pub mod command;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod compare;
-#[cfg(not(target_arch = "wasm32"))]
+// Portable items are available on all targets; fs-dependent functions
+// (corpus load/generate, artifact save/load) are cfg-gated per item.
 pub mod compiler;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod convert_r4g1;
@@ -169,16 +171,16 @@ pub mod observe;
 pub mod performance_certificate;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod predictive_sufficiency;
-#[cfg(not(target_arch = "wasm32"))]
+// Progress is portable (stderr); only read_file is fs-gated (see progress.rs).
 pub mod progress;
 pub mod reference_state;
 pub mod resolution_status;
 pub mod runtime;
 pub mod runtime_state;
-#[cfg(not(target_arch = "wasm32"))]
+// Tokenizer + encode/decode are portable; loaders/exports are fs-gated (see scenarios.rs).
 pub mod scenarios;
 pub mod score_q;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod shortlist_evaluator;
-#[cfg(not(target_arch = "wasm32"))]
+// Transitions are portable (pure graph math, no fs).
 pub mod transitions;

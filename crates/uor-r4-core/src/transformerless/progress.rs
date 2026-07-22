@@ -74,6 +74,7 @@ impl Drop for Progress {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 pub fn read_file(path: impl AsRef<Path>, label: &'static str) -> io::Result<Vec<u8>> {
     let path = path.as_ref();
     let total = usize::try_from(std::fs::metadata(path)?.len()).unwrap_or(usize::MAX);
