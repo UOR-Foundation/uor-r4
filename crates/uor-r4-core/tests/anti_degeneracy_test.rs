@@ -11,11 +11,14 @@ fn test_perturbation_suite_transformations() {
     // Masking
     let masked = PerturbationSuite::apply_perturbation(
         &tokens,
-        &PerturbationKind::Masking { mask_rate: 0.5 },
+        &PerturbationKind::Masking {
+            mask_rate: 0.5,
+            mask_token: u32::MAX,
+        },
         seed,
     );
     assert_eq!(masked.len(), tokens.len());
-    assert!(masked.iter().any(|&t| t == 0));
+    assert!(masked.iter().any(|&t| t == u32::MAX));
 
     // Span substitution
     let substituted = PerturbationSuite::apply_perturbation(

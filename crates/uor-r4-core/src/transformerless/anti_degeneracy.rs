@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum PerturbationKind {
-    Masking { mask_rate: f64 },
+    Masking { mask_rate: f64, mask_token: u32 },
     SpanSubstitution { substitute_rate: f64 },
     Truncation { keep_fraction: f64 },
     Reorder { shuffle_window: usize },
@@ -22,13 +22,15 @@ impl PerturbationSuite {
         }
         let mut out = tokens.to_vec();
         match kind {
-            PerturbationKind::Masking { mask_rate } => {
+            PerturbationKind::Masking {
+                mask_rate,
+                mask_token,
+            } => {
                 let rate = mask_rate.clamp(0.0, 1.0);
-                let mask_token = 0u32;
                 for (i, tok) in out.iter_mut().enumerate() {
                     let pseudo_rand = (seed.wrapping_add(i as u64).wrapping_mul(6364136223846793005) >> 33) as f64 / 2147483648.0;
                     if pseudo_rand < rate {
-                        *tok = mask_token;
+                        *tok = *mask_token;
                     }
                 }
             }
