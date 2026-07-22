@@ -107,12 +107,14 @@ artifacts (deterministic across runs; debug profile).
   redesigned compiler = a broken reproduction gate; R4G1's HEAD records compiler identity for
   exactly this reason.
 
-## 4. M.V.G. checkpoint targets (D1) — DRAFT
+## 4. M.V.G. checkpoint targets (D1) — CONFIRMED
 
-To be confirmed by the maintainer before Phase 0 exit. Absolute values are set relative to the
-first HF-path certificate (issue #34); reference points are the cited legacy numbers above.
+**Confirmed by the maintainer 2026-07-22 ("all defaults", unamended).** Absolute values are set
+relative to the first HF-path certificate (PR #41 tooling); reference points are the cited
+legacy numbers above. These are the go/no-go contract for the Phase-5 checkpoint review:
+missing 1–2 or 4 ⇒ stop or redesign; missing 3/5/6 ⇒ redesign discussion.
 
-Draft pass conditions for the Phase-5 minimum viable graph, all on the declared distribution (§2):
+Pass conditions for the Phase-5 minimum viable graph, all on the declared distribution (§2):
 
 1. Teacher-argmax agreement ≥ (HF-path TLA3 baseline + 5 percentage points), and in no case
    worse than that baseline (Gate C floor).
