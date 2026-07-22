@@ -265,11 +265,12 @@ into the running server. Static WASM deployments cannot run this compiler.
 Static deployments still use the geometric WASM fallback because they have no
 native filesystem-backed graph loader yet.
 
-The native dashboard also exposes **Download Pinned Hugging Face Weights**.
-It downloads the repository and immutable revision from
-`models/smollm2-135m-instruct.json` into `.uor-models/sources/`; it does not
-download anything until the button is pressed. Afterward, run the bundle
-compiler and then the R4G1 graph compiler.
+The native dashboard also exposes **Download Hugging Face Weights**. Its input
+defaults to the pinned `owner/repository@commit` from
+`models/smollm2-135m-instruct.json`, but accepts any repository paired with a
+full 40-character commit. Downloads go into `.uor-models/sources/`; nothing is
+downloaded until the button is pressed. Afterward, run the bundle compiler and
+then the R4G1 graph compiler.
 
 ### 4. Ask locally
 
@@ -507,9 +508,10 @@ also includes the generated `score_report.json` when available.
 
 ### `POST /api/huggingface/download` and `GET /api/huggingface/status`
 
-Starts and monitors an explicit download of the pinned Hugging Face source
-defined by `models/smollm2-135m-instruct.json`. The server requires the `hf`
-CLI to be installed and does not accept an unpinned revision from the browser.
+Starts and monitors an explicit download. The optional JSON body is
+`{"model":"owner/repository@<40-character-commit>"}`; omitting it uses the
+pinned source defined by `models/smollm2-135m-instruct.json`. The server
+requires the `hf` CLI and rejects unpinned revisions.
 
 ### `POST /api/corpus`
 

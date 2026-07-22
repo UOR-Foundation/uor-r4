@@ -46,6 +46,11 @@ struct ResetPayload {
     identity: Option<String>,
 }
 
+#[derive(Debug, Deserialize, Default)]
+struct HuggingFaceDownloadPayload {
+    model: Option<String>,
+}
+
 #[derive(Clone, Debug)]
 struct R4g1CompileStatus {
     running: bool,
@@ -858,13 +863,47 @@ fn pinned_huggingface_source() -> Result<SourceDownload, String> {
     })
 }
 
-fn spawn_huggingface_download(status: Arc<Mutex<HuggingFaceDownloadStatus>>) {
+fn source_from_model_spec(model: &str) -> Result<SourceDownload, String> {
+    let (repository, revision) = model
+        .trim()
+        .split_once('@')
+        .ok_or_else(|| "custom model must use owner/repository@<40-character-commit>".to_owned())?;
+    if repository.is_empty()
+        || revision.len() != 40
+        || !revision.bytes().all(|byte| byte.is_ascii_hexdigit())
+    {
+        return Err("custom model must use owner/repository@<40-character-commit>".to_owned());
+    }
+    let name = repository
+        .rsplit('/')
+        .next()
+        .filter(|name| !name.is_empty())
+        .ok_or_else(|| "custom model repository must use owner/repository".to_owned())?;
+    Ok(SourceDownload {
+        repository: repository.to_owned(),
+        revision: revision.to_owned(),
+        name: format!("{}-{}", name, &revision[..12]),
+        output: None,
+    })
+}
+
+fn huggingface_source(model: Option<&str>) -> Result<SourceDownload, String> {
+    match model.map(str::trim).filter(|model| !model.is_empty()) {
+        Some(model) => source_from_model_spec(model),
+        None => pinned_huggingface_source(),
+    }
+}
+
+fn spawn_huggingface_download(
+    status: Arc<Mutex<HuggingFaceDownloadStatus>>,
+    source: SourceDownload,
+) {
     std::thread::spawn(move || {
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let source = pinned_huggingface_source()?;
             let name = source.name.clone();
+            let repository = source.repository.clone();
             let destination = download_source(&source).map_err(|error| error.to_string())?;
-            Ok::<_, String>((name, destination))
+            Ok::<_, String>((repository, name, destination))
         }))
         .map_err(|_| "Hugging Face download panicked".to_owned())
         .and_then(|result| result);
@@ -872,10 +911,10 @@ fn spawn_huggingface_download(status: Arc<Mutex<HuggingFaceDownloadStatus>>) {
         let mut current = status.lock().unwrap();
         current.running = false;
         match result {
-            Ok((name, destination)) => {
+            Ok((repository, name, destination)) => {
                 current.ready = true;
                 current.source = Some(destination.display().to_string());
-                current.message = format!("Downloaded pinned Hugging Face source {name}");
+                current.message = format!("Downloaded Hugging Face source {repository} ({name})");
             }
             Err(error) => {
                 current.message = format!("Hugging Face download failed: {error}");
@@ -1638,6 +1677,32 @@ fn handle_connection(
     }
 
     if clean_path == "/api/huggingface/download" && method == "POST" {
+        let payload: HuggingFaceDownloadPayload = if body.is_empty() {
+            HuggingFaceDownloadPayload::default()
+        } else {
+            match serde_json::from_slice(&body) {
+                Ok(payload) => payload,
+                Err(error) => {
+                    send_json_response(
+                        stream,
+                        400,
+                        &format!("{{\"error\":\"Invalid JSON: {error}\"}}"),
+                    );
+                    return;
+                }
+            }
+        };
+        let source = match huggingface_source(payload.model.as_deref()) {
+            Ok(source) => source,
+            Err(error) => {
+                send_json_response(
+                    stream,
+                    400,
+                    &serde_json::json!({ "error": error }).to_string(),
+                );
+                return;
+            }
+        };
         let mut status = hf_download.lock().unwrap();
         if status.running {
             send_json_response(
@@ -1653,16 +1718,20 @@ fn handle_connection(
             return;
         }
         status.running = true;
-        status.message =
-            "Downloading pinned Hugging Face weights; this may take a few minutes...".to_owned();
+        status.ready = false;
+        let revision_preview: String = source.revision.chars().take(12).collect();
+        status.message = format!(
+            "Downloading {}@{}; this may take a few minutes...",
+            source.repository, revision_preview
+        );
         drop(status);
-        spawn_huggingface_download(Arc::clone(&hf_download));
+        spawn_huggingface_download(Arc::clone(&hf_download), source);
         send_json_response(
             stream,
             202,
             &serde_json::json!({
                 "running": true,
-                "message": "Pinned Hugging Face download started"
+                "message": "Hugging Face download started"
             })
             .to_string(),
         );
