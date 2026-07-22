@@ -57,12 +57,12 @@ pub struct FallbackPolicy {
 }
 
 impl Default for FallbackPolicy {
-    /// Default policy per Decision D4: consult EXCT for Supported/Boundary, back off to BasePrior, and abstain on Novel/Contradictory.
+    /// Default policy per Decision D4: consult EXCT for Supported/Boundary, and abstain on BackedOff/Novel/Contradictory.
     fn default() -> Self {
         FallbackPolicy {
             supported_action: FallbackAction::ConsultExact,
             boundary_action: FallbackAction::ConsultExact,
-            backed_off_action: FallbackAction::BasePrior,
+            backed_off_action: FallbackAction::Abstain,
             novel_action: FallbackAction::Abstain,
             contradictory_action: FallbackAction::Abstain,
         }

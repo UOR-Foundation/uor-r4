@@ -89,7 +89,7 @@ fn test_fallback_policy_decision_d4() {
     );
     assert_eq!(
         policy.action_for(ResolutionStatus::BackedOff),
-        FallbackAction::BasePrior
+        FallbackAction::Abstain
     );
     assert_eq!(
         policy.action_for(ResolutionStatus::Novel),
