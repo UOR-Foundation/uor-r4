@@ -106,13 +106,19 @@ pub fn compute_cid(&self) -> String {
 
         // Add new edges
         for edge in &self.added_edges {
-            graph.add_edge_with_score(
+            let new_id = graph.add_edge_with_score(
                 edge.src,
                 edge.dst,
                 edge.weight,
                 edge.score,
-                edge.kind.clone(),
+                edge.kind,
             );
+            if new_id != edge.id {
+                return Err(format!(
+                    "Added edge ID mismatch: patch expected {}, graph assigned {}",
+                    edge.id, new_id
+                ));
+            }
         }
 
         // Remove tombstones (mark weight = 0)
