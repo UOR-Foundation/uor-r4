@@ -1,6 +1,6 @@
 //! Executable proof module: Packed section range boundary verification.
 
-/// Verify that packed section range `(start, len)` is strictly bounded within section length `total_len`.
+/// Verify that packed section range `(start, len)` is bounded within section length `total_len` (i.e., `start + len <= total_len`).
 pub fn verify_range_bounds(
     start: usize,
     len: usize,
