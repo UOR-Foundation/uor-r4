@@ -19,12 +19,17 @@ impl ScoreQ {
 
     /// Construct ScoreQ from log probability (float).
     pub fn from_logprob(lp: f32) -> Self {
+<<<<<<< HEAD
         if lp.is_nan() {
             return Self::ZERO;
         }
         let scaled = (lp * Self::SCALE).round();
         let clamped = scaled.clamp(i32::MIN as f32, i32::MAX as f32);
         ScoreQ(clamped as i32)
+=======
+        let val = (lp * Self::SCALE).round().clamp(i32::MIN as f32, i32::MAX as f32);
+        ScoreQ(val as i32)
+>>>>>>> origin/main
     }
 
     /// Convert ScoreQ back to log probability (float).
@@ -106,11 +111,22 @@ impl StorageDescriptor {
     /// Decode raw integer entry into ScoreQ using shift + zero_point (mul-free).
     pub fn decode(&self, raw_entry: i32) -> ScoreQ {
         let centered = raw_entry.saturating_sub(self.zero_point);
+<<<<<<< HEAD
         let shift = self.shift.clamp(-31, 31);
         let raw_score = if shift >= 0 {
             centered << (shift as u32)
         } else {
             centered >> ((-shift) as u32)
+=======
+        let raw_score = if self.shift >= 0 {
+            centered
+                .checked_shl(self.shift as u32)
+                .unwrap_or_else(|| if centered.is_negative() { i32::MIN } else { i32::MAX })
+        } else {
+            centered
+                .checked_shr((-self.shift) as u32)
+                .unwrap_or_else(|| if centered.is_negative() { -1 } else { 0 })
+>>>>>>> origin/main
         };
         ScoreQ(raw_score)
     }

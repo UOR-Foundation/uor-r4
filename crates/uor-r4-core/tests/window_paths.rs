@@ -3,7 +3,7 @@
 //! TLA5 container roundtrip (PROOF.md P5(a) as a unit test), and the TLS1
 //! store container.
 
-use uor_r4_core::transformerless::compiler::{self, Corpus, STAGES, WINDOW};
+use uor_r4_core::transformerless::compiler::{self, Corpus, SIG_BYTES, STAGES, WINDOW};
 use uor_r4_core::transformerless::runtime::{self, OpKernel, Store};
 
 fn fixture() -> (compiler::Compiled, Corpus) {
@@ -138,5 +138,70 @@ fn test_generative_priors() {
     priors.insert(2, 1u32);
 
     let prior_pred = runtime::predict_witness_plain_with_priors(&store, &code, &priors);
-    assert_eq!(prior_pred.token, 2, "Semantic prior successfully shifted argmax to token 2");
+    assert_eq!(
+        prior_pred.token, 2,
+        "Semantic prior successfully shifted argmax to token 2"
+    );
+}
+
+#[test]
+fn assign_memberships_plain_is_bounded_and_keeps_nearest_floor() {
+    let (art, c) = fixture();
+    let rot = compiler::derive_rotations();
+    let sig = runtime::sig_plain(&art, &runtime::bundle_plain(&art, &rot, &c, WINDOW));
+    let (nearest, by_depth) = runtime::assign_memberships_plain(&art, &sig);
+
+    assert_eq!(nearest, runtime::assign_plain(&art, &sig));
+    assert_eq!(by_depth.len(), STAGES + 1);
+    assert_eq!(by_depth[0], vec![Vec::<u8>::new()]);
+
+    for depth in 1..=STAGES {
+        assert!(
+            !by_depth[depth].is_empty(),
+            "depth {depth} must have memberships"
+        );
+        assert!(
+            by_depth[depth].len() <= 3,
+            "depth {depth} exceeds top-M bound"
+        );
+        assert!(
+            by_depth[depth].iter().all(|key| key.len() == depth),
+            "depth {depth} membership key shape"
+        );
+        assert!(
+            by_depth[depth]
+                .iter()
+                .any(|key| key.as_slice() == &nearest[..depth]),
+            "nearest-class prefix must remain as fallback floor at depth {depth}"
+        );
+    }
+
+    let zero_sig = [0u8; SIG_BYTES];
+    let (nearest_zero, by_depth_zero) = runtime::assign_memberships_plain(&art, &zero_sig);
+    for depth in 1..=STAGES {
+        assert!(
+            by_depth_zero[depth]
+                .iter()
+                .any(|key| key.as_slice() == &nearest_zero[..depth]),
+            "fallback floor also holds for synthetic signatures at depth {depth}"
+        );
+    }
+}
+
+#[test]
+fn add_evidence_multi_uses_fallback_when_depth_memberships_missing() {
+    let mut store: Store = (0..=STAGES).map(|_| Default::default()).collect();
+    let code = [1u8, 2, 3, 4];
+    let by_depth: Vec<Vec<Vec<u8>>> = (0..=STAGES).map(|_| Vec::new()).collect();
+
+    runtime::add_evidence_multi(&mut store, &by_depth, &code, 11, 7);
+
+    assert_eq!(store[0][&vec![]][&11], 7);
+    for depth in 1..=STAGES {
+        let key = code[..depth].to_vec();
+        assert_eq!(
+            store[depth][&key][&11], 7,
+            "depth {depth} fallback key used"
+        );
+    }
 }

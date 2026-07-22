@@ -353,6 +353,127 @@ pub struct Compiled {
     pub token_stage_kappas: Vec<String>,
 }
 
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct RegionHammingCalibration {
+    pub stage: u8,
+    pub class: u16,
+    pub mask_bits: u16,
+    pub sample_count: u32,
+    pub acceptance_radius: u16,
+    pub hamming_histogram: Vec<u32>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct HammingCalibrationReport {
+    pub signature_bits: u16,
+    pub quantile_numerator: u16,
+    pub quantile_denominator: u16,
+    pub regions: Vec<RegionHammingCalibration>,
+}
+
+fn quantile_radius(histogram: &[u32], numerator: u32, denominator: u32) -> u16 {
+    let total: u64 = histogram.iter().map(|&count| u64::from(count)).sum();
+    if total == 0 {
+        return 0;
+    }
+    if denominator == 0 {
+        return histogram.len().saturating_sub(1) as u16;
+    }
+    let numerator = u64::from(numerator);
+    let denominator = u64::from(denominator);
+    let target = total
+        .saturating_mul(numerator)
+        .saturating_add(denominator.saturating_sub(1))
+        / denominator;
+    let mut cumulative = 0u64;
+    for (distance, &count) in histogram.iter().enumerate() {
+        cumulative = cumulative.saturating_add(u64::from(count));
+        if cumulative >= target {
+            return distance as u16;
+        }
+    }
+    histogram.len().saturating_sub(1) as u16
+}
+
+pub fn calibrate_hamming_regions_from_signatures(
+    class_sigs: &[Vec<u8>],
+    signatures: &[[u8; SIG_BYTES]],
+) -> HammingCalibrationReport {
+    const NUMERATOR: u32 = 95;
+    const DENOMINATOR: u32 = 100;
+    let mut histograms = vec![vec![vec![0u32; D + 1]; K]; STAGES];
+    for sig in signatures {
+        let mut words = [0u64; SIG_WORDS];
+        for (word, chunk) in words.iter_mut().zip(sig.chunks(8)) {
+            let mut bytes = [0u8; 8];
+            bytes[..chunk.len()].copy_from_slice(chunk);
+            *word = u64::from_le_bytes(bytes);
+        }
+        for (stage, stage_histograms) in histograms.iter_mut().enumerate().take(STAGES) {
+            let Some(stage_sigs) = class_sigs.get(stage) else {
+                continue;
+            };
+            if stage_sigs.len() < K * SIG_BYTES {
+                continue;
+            }
+            let mut best_dist = u32::MAX;
+            let mut best_class = 0usize;
+            for (class, class_sig) in stage_sigs.chunks_exact(SIG_BYTES).enumerate().take(K) {
+                let mut dist = 0u32;
+                for (&word, chunk) in words.iter().zip(class_sig.chunks(8)) {
+                    let mut bytes = [0u8; 8];
+                    bytes[..chunk.len()].copy_from_slice(chunk);
+                    dist += (word ^ u64::from_le_bytes(bytes)).count_ones();
+                }
+                if dist < best_dist {
+                    best_dist = dist;
+                    best_class = class;
+                }
+            }
+            if best_dist <= D as u32 {
+                stage_histograms[best_class][best_dist as usize] += 1;
+            }
+        }
+    }
+    let mut regions = Vec::with_capacity(STAGES * K);
+    for (stage, stage_histograms) in histograms.iter().enumerate() {
+        for (class, histogram) in stage_histograms.iter().enumerate() {
+            let sample_count = histogram.iter().sum();
+            regions.push(RegionHammingCalibration {
+                stage: stage as u8,
+                class: class as u16,
+                mask_bits: D as u16,
+                sample_count,
+                acceptance_radius: quantile_radius(histogram, NUMERATOR, DENOMINATOR),
+                hamming_histogram: histogram.clone(),
+            });
+        }
+    }
+    HammingCalibrationReport {
+        signature_bits: D as u16,
+        quantile_numerator: NUMERATOR as u16,
+        quantile_denominator: DENOMINATOR as u16,
+        regions,
+    }
+}
+
+pub fn calibrate_hamming_regions(art: &Compiled, corpus: &Corpus) -> HammingCalibrationReport {
+    let cut = train_cut(corpus);
+    let held_out: Vec<usize> = (0..corpus.n).filter(|&i| corpus.story[i] >= cut).collect();
+    let indices: Vec<usize> = if held_out.is_empty() {
+        (0..corpus.n).collect()
+    } else {
+        held_out
+    };
+    let rot = derive_rotations();
+    let mut signatures = Vec::with_capacity(indices.len());
+    for i in indices {
+        let bundle = super::runtime::bundle_plain(art, &rot, corpus, i);
+        signatures.push(super::runtime::sig_plain(art, &bundle));
+    }
+    calibrate_hamming_regions_from_signatures(&art.class_sigs, &signatures)
+}
+
 fn hash_index(seed: &[u8; 32], dim: usize, key: &str) -> u64 {
     let mut hasher = blake3::Hasher::new();
     hasher.update(seed);
