@@ -73,24 +73,27 @@ impl ShortlistEvaluator {
         let mut fn_count = 0;
 
         for (list, &ref_target) in shortlists.iter().zip(references.iter()) {
-            let contains_target = list.contains(&ref_target);
-            if !contains_target {
-                fn_count += 1;
-            }
-            if list.first() == Some(&ref_target) {
-                top1_matches += 1;
-            }
-            if list.iter().take(3).any(|&t| t == ref_target) {
-                top3_matches += 1;
-            }
-            if list.iter().take(5).any(|&t| t == ref_target) {
-                top5_matches += 1;
-            }
-            if list.iter().take(10).any(|&t| t == ref_target) {
-                top10_matches += 1;
-            }
-            if list.iter().take(20).any(|&t| t == ref_target) {
-                top20_matches += 1;
+            match list.iter().position(|&t| t == ref_target) {
+                None => {
+                    fn_count += 1;
+                }
+                Some(idx) => {
+                    if idx == 0 {
+                        top1_matches += 1;
+                    }
+                    if idx < 3 {
+                        top3_matches += 1;
+                    }
+                    if idx < 5 {
+                        top5_matches += 1;
+                    }
+                    if idx < 10 {
+                        top10_matches += 1;
+                    }
+                    if idx < 20 {
+                        top20_matches += 1;
+                    }
+                }
             }
         }
 
