@@ -163,4 +163,6 @@ pub mod score_q;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod scenarios;
 #[cfg(not(target_arch = "wasm32"))]
+pub mod shortlist_evaluator;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod transitions;
