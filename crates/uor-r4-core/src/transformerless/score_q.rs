@@ -106,10 +106,11 @@ impl StorageDescriptor {
     /// Decode raw integer entry into ScoreQ using shift + zero_point (mul-free).
     pub fn decode(&self, raw_entry: i32) -> ScoreQ {
         let centered = raw_entry.saturating_sub(self.zero_point);
-        let raw_score = if self.shift >= 0 {
-            centered.wrapping_shl(self.shift as u32)
+        let shift = self.shift.clamp(-31, 31);
+        let raw_score = if shift >= 0 {
+            centered << (shift as u32)
         } else {
-            centered.wrapping_shr((-self.shift) as u32)
+            centered >> ((-shift) as u32)
         };
         ScoreQ(raw_score)
     }
