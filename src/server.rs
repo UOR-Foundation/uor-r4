@@ -435,24 +435,27 @@ fn generate_r4g1_text(
     const MAX_SERVER_TOKENS: usize = 256;
     const MAX_SERVER_TEXT_BYTES: usize = 16 * 1024;
     let mut seed = [0u32; 4096];
-    let seed_len = tless_uor::tless_tokenize_into(prompt, &mut seed)?;
-    if seed_len == 0 {
-        return None;
-    }
-
     let mut generated = [0u32; MAX_SERVER_TOKENS];
-    let count = {
+    let mut bytes = [0u8; MAX_SERVER_TEXT_BYTES];
+    let byte_count = {
         let guard = slot.lock().unwrap();
         let state = guard.as_ref()?;
-        state
+        let seed_len = state
+            .encode_into(prompt, &mut seed)
+            .or_else(|| tless_uor::tless_tokenize_into(prompt, &mut seed))?;
+        if seed_len == 0 {
+            return None;
+        }
+        let count = state
             .generate_into(
                 &seed[..seed_len],
                 &mut generated[..max_tokens.min(MAX_SERVER_TOKENS)],
             )
-            .ok()?
+            .ok()?;
+        state
+            .decode_into(&generated[..count], &mut bytes)
+            .or_else(|| tless_uor::tless_detokenize_into(&generated[..count], &mut bytes))?
     };
-    let mut bytes = [0u8; MAX_SERVER_TEXT_BYTES];
-    let byte_count = tless_uor::tless_detokenize_into(&generated[..count], &mut bytes)?;
     let text = String::from_utf8_lossy(&bytes[..byte_count])
         .trim()
         .to_owned();
@@ -739,12 +742,96 @@ fn r4g1_compile_paths(cli: &ServerConfig) -> Result<(PathBuf, PathBuf, PathBuf, 
     ))
 }
 
+fn compile_bundle_from_source(source: &Path) -> Result<PathBuf, String> {
+    let name = source
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| {
+            format!(
+                "source path is not a valid model directory: {}",
+                source.display()
+            )
+        })?;
+    let output = PathBuf::from(".uor-models/compiled").join(name);
+    let args = vec![
+        "--source".to_owned(),
+        source.display().to_string(),
+        "--output".to_owned(),
+        output.display().to_string(),
+        "--seconds".to_owned(),
+        "300".to_owned(),
+        "--target".to_owned(),
+        "20000".to_owned(),
+        "--sequence-length".to_owned(),
+        "128".to_owned(),
+    ];
+    uor_r4_core::transformerless::command::compile_hugging_face(&args)?;
+    for file in [
+        "tless_artifacts.bin",
+        "tless_store.bin",
+        "tokenizer.bin",
+        "corpus.meta",
+        "corpus.records",
+    ] {
+        if !output.join(file).is_file() {
+            return Err(format!(
+                "transformerless bundle compilation is incomplete; missing {}. Retry the compile action to resume the corpus",
+                output.join(file).display()
+            ));
+        }
+    }
+    Ok(output)
+}
+
 fn compile_r4g1_bundle(
     cli: &ServerConfig,
     r4g1: &Arc<Mutex<Option<R4g1State>>>,
+    downloaded_source: Option<&Path>,
 ) -> Result<serde_json::Value, String> {
-    let artifacts = PathBuf::from(&cli.tless_artifacts);
-    let (corpus_meta, corpus_recs, cover_output, graph_output) = r4g1_compile_paths(cli)?;
+    let (artifacts, corpus_meta, corpus_recs, cover_output, graph_output, graph_path) =
+        match r4g1_compile_paths(cli) {
+            Ok((corpus_meta, corpus_recs, cover_output, graph_output)) => {
+                let artifacts = PathBuf::from(&cli.tless_artifacts);
+                let graph_path = cli
+                    .r4g1_artifact
+                    .as_ref()
+                    .map(PathBuf::from)
+                    .unwrap_or_else(|| graph_output.join("score.r4g1"));
+                (
+                    artifacts,
+                    corpus_meta,
+                    corpus_recs,
+                    cover_output,
+                    graph_output,
+                    graph_path,
+                )
+            }
+            Err(error) => {
+                let source = downloaded_source.ok_or(error)?;
+                let root = compile_bundle_from_source(source)?;
+                let artifacts = root.join("tless_artifacts.bin");
+                let corpus_meta = root.join("corpus.meta");
+                let corpus_recs = root.join("corpus.records");
+                let cover_output = root.join("graph-cover");
+                let graph_path = cli
+                    .r4g1_artifact
+                    .as_ref()
+                    .map(PathBuf::from)
+                    .unwrap_or_else(|| root.join("graph").join("score.r4g1"));
+                let graph_output = graph_path
+                    .parent()
+                    .unwrap_or_else(|| Path::new("."))
+                    .to_path_buf();
+                (
+                    artifacts,
+                    corpus_meta,
+                    corpus_recs,
+                    cover_output,
+                    graph_output,
+                    graph_path,
+                )
+            }
+        };
     for path in [&artifacts, &corpus_meta, &corpus_recs] {
         if !path.is_file() {
             return Err(format!(
@@ -781,11 +868,6 @@ fn compile_r4g1_bundle(
     ];
     uor_r4_core::transformerless::command::score_command(&score_args)?;
 
-    let graph_path = cli
-        .r4g1_artifact
-        .as_ref()
-        .map(PathBuf::from)
-        .unwrap_or_else(|| graph_output.join("score.r4g1"));
     let state = R4g1State::load(&graph_path, &artifacts)
         .map_err(|error| format!("compiled graph was written but failed validation: {error}"))?;
     *r4g1.lock().unwrap() = Some(state);
@@ -804,10 +886,11 @@ fn spawn_r4g1_compile(
     cli: Arc<ServerConfig>,
     r4g1: Arc<Mutex<Option<R4g1State>>>,
     status: Arc<Mutex<R4g1CompileStatus>>,
+    downloaded_source: Option<String>,
 ) {
     std::thread::spawn(move || {
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            compile_r4g1_bundle(&cli, &r4g1)
+            compile_r4g1_bundle(&cli, &r4g1, downloaded_source.as_deref().map(Path::new))
         }))
         .map_err(|_| "R4G1 compilation panicked".to_owned())
         .and_then(|result| result);
@@ -1762,6 +1845,7 @@ fn handle_connection(
             Arc::clone(&cli),
             Arc::clone(&r4g1),
             Arc::clone(&r4g1_compile),
+            hf_download.lock().unwrap().source.clone(),
         );
         send_json_response(
             stream,

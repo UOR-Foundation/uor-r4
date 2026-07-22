@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 
 use uor_r4_core::transformerless::compiler::{self, Compiled, WINDOW};
 use uor_r4_core::transformerless::runtime;
+use uor_r4_core::transformerless::scenarios::Tokenizer;
 use uor_r4_core::transformerless::score::DEFAULT_EXCT_TOP_X;
 use uor_r4_core::transformerless::score::DEFAULT_ROOT_TOP_B;
 use uor_r4_core::transformerless::score_runtime::GraphScorer;
@@ -18,6 +19,7 @@ pub struct R4g1State {
     artifacts: Compiled,
     scorer: GraphScorer,
     rotations: [usize; WINDOW + 1],
+    tokenizer: Option<Tokenizer>,
 }
 
 impl R4g1State {
@@ -44,12 +46,28 @@ impl R4g1State {
         let scorer =
             GraphScorer::from_artifact(&graph_bytes, None, DEFAULT_ROOT_TOP_B, DEFAULT_EXCT_TOP_X)
                 .map_err(|error| format!("{}: {error}", graph_path.display()))?;
+        let tokenizer = teacher_path
+            .parent()
+            .map(|parent| parent.join("tokenizer.bin"))
+            .filter(|path| path.is_file())
+            .and_then(|path| Tokenizer::try_load(path).ok());
 
         Ok(Self {
             artifacts,
             scorer,
             rotations: compiler::derive_rotations(),
+            tokenizer,
         })
+    }
+
+    /// Encode with the bundle-matched tokenizer when one is available.
+    pub fn encode_into(&self, text: &str, out: &mut [u32]) -> Option<usize> {
+        self.tokenizer.as_ref()?.encode_into(text, out).ok()
+    }
+
+    /// Decode with the bundle-matched tokenizer when one is available.
+    pub fn decode_into(&self, tokens: &[u32], out: &mut [u8]) -> Option<usize> {
+        self.tokenizer.as_ref()?.decode_into(tokens, out).ok()
     }
 
     /// Score one token window using the validated graph artifact.

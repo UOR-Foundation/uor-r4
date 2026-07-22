@@ -270,7 +270,10 @@ defaults to the pinned `owner/repository@commit` from
 `models/smollm2-135m-instruct.json`, but accepts any repository paired with a
 full 40-character commit. Downloads go into `.uor-models/sources/`; nothing is
 downloaded until the button is pressed. Afterward, run the bundle compiler and
-then the R4G1 graph compiler.
+then the R4G1 graph compiler. If the downloaded source is present and the
+compiled bundle is not, the native **Compile / Refresh R4G1 Graph** action now
+runs the bundle compiler first, then cover and score compilation, as one server
+job.
 
 ### 4. Ask locally
 
