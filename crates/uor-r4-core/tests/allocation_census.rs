@@ -245,7 +245,12 @@ fn allocation_census() {
     println!(
         "[kernel] ops over {GEN_TOKENS} generated tokens: adds {} | xors {} | \
          shifts {} | compares {} | table-reads {} | candidate-scans {}",
-        gen_ops.adds, gen_ops.xors, gen_ops.shifts, gen_ops.compares, gen_ops.table_reads, gen_ops.candidate_scans
+        gen_ops.adds,
+        gen_ops.xors,
+        gen_ops.shifts,
+        gen_ops.compares,
+        gen_ops.table_reads,
+        gen_ops.candidate_scans
     );
     println!(
         "[kernel] per generated token (avg): adds {:.1} | xors {:.1} | \

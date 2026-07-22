@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use super::reference::KappaLabel;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Constraint {
@@ -116,7 +116,7 @@ impl ReasoningPlanV1 {
                 probe_count += 1;
 
                 let outputs = registry.evaluate(op_cid, route)?;
-                
+
                 if let Some(op) = registry.operators.get(op_cid) {
                     if op.op_type == OperatorType::Conjunction {
                         join_count += 1;
@@ -167,17 +167,24 @@ impl ReasoningPlanV1 {
         if evidence_cids.len() < self.required_evidence.min_evidence_count as usize {
             return Err(format!(
                 "Evidence validation failed: found {} satisfied clauses, required at least {}",
-                evidence_cids.len(), self.required_evidence.min_evidence_count
+                evidence_cids.len(),
+                self.required_evidence.min_evidence_count
             ));
         }
 
         // Compute deterministic plan CID by hashing its fields
         let plan_json = serde_json::to_string(self).unwrap_or_default();
-        let plan_cid = format!("blake3:plan_{}", blake3::hash(plan_json.as_bytes()).to_hex());
+        let plan_cid = format!(
+            "blake3:plan_{}",
+            blake3::hash(plan_json.as_bytes()).to_hex()
+        );
 
         // Compute deterministic result CID by hashing the final routes
         let routes_json = serde_json::to_string(&current_routes).unwrap_or_default();
-        let result_cid = format!("blake3:result_{}", blake3::hash(routes_json.as_bytes()).to_hex());
+        let result_cid = format!(
+            "blake3:result_{}",
+            blake3::hash(routes_json.as_bytes()).to_hex()
+        );
 
         let score_components = current_routes
             .iter()

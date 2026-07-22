@@ -50,7 +50,9 @@ fn test_perturbation_suite_transformations() {
     // Counterfactual
     let counterfactual = PerturbationSuite::apply_perturbation(
         &tokens,
-        &PerturbationKind::Counterfactual { flip_polarity: true },
+        &PerturbationKind::Counterfactual {
+            flip_polarity: true,
+        },
         seed,
     );
     assert_eq!(counterfactual.len(), tokens.len());

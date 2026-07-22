@@ -72,7 +72,10 @@ fn test_calibrated_feature_classification_theorem_12() {
         frontier_density: 150,
         is_backed_off: false,
     };
-    assert_eq!(feat_contradictory.classify(), ResolutionStatus::Contradictory);
+    assert_eq!(
+        feat_contradictory.classify(),
+        ResolutionStatus::Contradictory
+    );
 }
 
 #[test]

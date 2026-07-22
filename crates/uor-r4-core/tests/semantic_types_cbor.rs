@@ -1,8 +1,11 @@
-use uor_r4_core::semantic::{
-    SemanticRouteReferenceV1, FacetRoute, SemanticSpaceManifestV1, ReasoningPlanV1,
-    SemanticInferenceWitnessV1, Constraint, WeightedRoute
+use uor_r4_core::semantic::reasoning::{
+    BackoffPolicy, CandidateScore, EvidencePolicy, FacetPolicy, Limits, OperationCensus,
+    OperatorExecution, RegionProbe,
 };
-use uor_r4_core::semantic::reasoning::{FacetPolicy, BackoffPolicy, EvidencePolicy, Limits, RegionProbe, OperatorExecution, CandidateScore, OperationCensus};
+use uor_r4_core::semantic::{
+    Constraint, FacetRoute, ReasoningPlanV1, SemanticInferenceWitnessV1, SemanticRouteReferenceV1,
+    SemanticSpaceManifestV1, WeightedRoute,
+};
 
 #[test]
 fn test_semantic_reference_roundtrip() {
@@ -124,6 +127,7 @@ fn test_plan_and_witness_roundtrip() {
     };
 
     let serialized_witness = serde_json::to_string(&witness).unwrap();
-    let deserialized_witness: SemanticInferenceWitnessV1 = serde_json::from_str(&serialized_witness).unwrap();
+    let deserialized_witness: SemanticInferenceWitnessV1 =
+        serde_json::from_str(&serialized_witness).unwrap();
     assert_eq!(witness, deserialized_witness);
 }

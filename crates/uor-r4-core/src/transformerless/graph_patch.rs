@@ -9,6 +9,14 @@ use blake3::Hasher;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RouteMapping {
+    Retained(u32),
+    Split(Vec<u32>),
+    Merged(u32),
+    Removed,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct RouteTranslationMap {
     pub mappings: BTreeMap<u32, RouteMapping>,
@@ -68,18 +76,19 @@ impl GraphPatch {
         patch
     }
 
-pub fn compute_cid(&self) -> String {
-    let mut clone = self.clone();
-    clone.patch_cid.clear();
+    /// Compute self-referential BLAKE3 CID over patch payload.
+    pub fn compute_cid(&self) -> String {
+        let mut clone = self.clone();
+        clone.patch_cid.clear();
 
-    let bytes = clone
-        .to_cbor_bytes()
-        .expect("GraphPatch CBOR serialization for CID");
+        let bytes = clone
+            .to_cbor_bytes()
+            .expect("GraphPatch CBOR serialization for CID");
 
-    let mut hasher = Hasher::new();
-    hasher.update(&bytes);
-    format!("kappa:blake3:{}", hasher.finalize().to_hex())
-}
+        let mut hasher = Hasher::new();
+        hasher.update(&bytes);
+        format!("kappa:blake3:{}", hasher.finalize().to_hex())
+    }
 
     pub fn verify_cid(&self) -> bool {
         self.patch_cid == self.compute_cid()
@@ -91,44 +100,45 @@ pub fn compute_cid(&self) -> String {
         for &(edge_idx, ref score) in &self.residual_updates {
             let edge_idx = edge_idx as usize;
             if edge_idx >= graph.edges.len() {
-                return Err(format!("Residual update edge index {} out of bounds", edge_idx));
+                return Err(format!(
+                    "Residual update edge index {} out of bounds",
+                    edge_idx
+                ));
             }
             graph.edges[edge_idx].score = *score;
         }
 
-// Add new edges
-for edge in &self.added_edges {
-    let new_id = graph.add_edge_with_score(
-        edge.src,
-        edge.dst,
-        edge.weight,
-        edge.score,
-        edge.kind,
-    );
-    if new_id != edge.id {
-        return Err(format!(
-            "Added edge ID mismatch: patch has {}, graph assigned {}",
-            edge.id, new_id
-        ));
-    }
-}
+        // Add new edges
+        for edge in &self.added_edges {
+            let new_id =
+                graph.add_edge_with_score(edge.src, edge.dst, edge.weight, edge.score, edge.kind);
+            if new_id != edge.id {
+                return Err(format!(
+                    "Added edge ID mismatch: patch has {}, graph assigned {}",
+                    edge.id, new_id
+                ));
+            }
+        }
 
-// Remove tombstones (mark weight = 0)
-for &tombstone_idx in &self.tombstone_edge_ids {
-    let tombstone_idx = tombstone_idx as usize;
-    if tombstone_idx >= graph.edges.len() {
-        return Err(format!(
-            "Tombstone edge index {} out of bounds",
-            tombstone_idx
-        ));
-    }
-    graph.edges[tombstone_idx].weight = 0;
-}
+        // Remove tombstones (mark weight = 0)
+        for &tombstone_idx in &self.tombstone_edge_ids {
+            let tombstone_idx = tombstone_idx as usize;
+            if tombstone_idx >= graph.edges.len() {
+                return Err(format!(
+                    "Tombstone edge index {} out of bounds",
+                    tombstone_idx
+                ));
+            }
+            graph.edges[tombstone_idx].weight = 0;
+        }
 
-// Rebuild reverse index and verify Theorem 7
-graph
-    .build_reverse_index()
-    .map_err(|e| format!("Post-patch reverse index rebuild failed: {}", e))?;
+        // Rebuild reverse index and verify Theorem 7
+        graph
+            .build_reverse_index()
+            .map_err(|e| format!("Post-patch reverse index rebuild failed: {}", e))?;
+        graph
+            .verify_theorem_7()
+            .map_err(|e| format!("Post-patch Theorem 7 verification failed: {}", e))?;
 
         Ok(())
     }
@@ -151,7 +161,7 @@ graph
 pub struct Theorem11Verifier;
 
 impl Theorem11Verifier {
-    /// Formally verify Theorem 11 route translation and score consistency.
+    /// Verify Theorem 11 for retained routes: parent and patched scores must match.
     pub fn verify_theorem_11(
         parent: &TransitionGraph,
         patched: &TransitionGraph,

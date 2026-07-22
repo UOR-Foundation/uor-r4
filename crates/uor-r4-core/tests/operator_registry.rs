@@ -1,7 +1,5 @@
 use std::collections::HashMap;
-use uor_r4_core::semantic::{
-    OperatorRegistry, TypedOperator, OperatorType, WeightedRoute
-};
+use uor_r4_core::semantic::{OperatorRegistry, OperatorType, TypedOperator, WeightedRoute};
 
 #[test]
 fn test_operator_registry_and_evaluation() {
@@ -66,10 +64,10 @@ fn test_operator_registry_backoff_fallback() {
 
 #[test]
 fn test_reasoning_plan_execution_and_budget_enforcement() {
+    use uor_r4_core::semantic::reasoning::{BackoffPolicy, EvidencePolicy, FacetPolicy, Limits};
     use uor_r4_core::semantic::{
-        ReasoningPlanV1, OperatorRegistry, TypedOperator, OperatorType, WeightedRoute
+        OperatorRegistry, OperatorType, ReasoningPlanV1, TypedOperator, WeightedRoute,
     };
-    use uor_r4_core::semantic::reasoning::{FacetPolicy, BackoffPolicy, EvidencePolicy, Limits};
 
     let mut registry = OperatorRegistry::new("blake3:space_1".to_string());
 
@@ -89,9 +87,17 @@ fn test_reasoning_plan_execution_and_budget_enforcement() {
         semantic_space_cid: "blake3:space_1".to_string(),
         clauses: vec![],
         operators: vec!["blake3:op1".to_string()],
-        facet_policy: FacetPolicy { priority_order: vec![] },
-        backoff_policy: BackoffPolicy { max_backoff_steps: 2, allow_any_facet: true },
-        required_evidence: EvidencePolicy { min_evidence_count: 0, require_provenance: false },
+        facet_policy: FacetPolicy {
+            priority_order: vec![],
+        },
+        backoff_policy: BackoffPolicy {
+            max_backoff_steps: 2,
+            allow_any_facet: true,
+        },
+        required_evidence: EvidencePolicy {
+            min_evidence_count: 0,
+            require_provenance: false,
+        },
         deterministic_limits: Limits {
             max_probes: 10,
             max_operators: 5,
@@ -138,10 +144,10 @@ fn test_reasoning_plan_execution_and_budget_enforcement() {
 
 #[test]
 fn test_proof_carrying_clause_validation() {
+    use uor_r4_core::semantic::reasoning::{BackoffPolicy, EvidencePolicy, FacetPolicy, Limits};
     use uor_r4_core::semantic::{
-        ReasoningPlanV1, OperatorRegistry, TypedOperator, OperatorType, WeightedRoute, Constraint
+        Constraint, OperatorRegistry, OperatorType, ReasoningPlanV1, TypedOperator, WeightedRoute,
     };
-    use uor_r4_core::semantic::reasoning::{FacetPolicy, BackoffPolicy, EvidencePolicy, Limits};
 
     let mut registry = OperatorRegistry::new("blake3:space_1".to_string());
 
@@ -166,17 +172,23 @@ fn test_proof_carrying_clause_validation() {
     let plan_ok = ReasoningPlanV1 {
         query_cid: "blake3:query_ok".to_string(),
         semantic_space_cid: "blake3:space_1".to_string(),
-        clauses: vec![
-            Constraint {
-                facet: "entity".to_string(),
-                path: vec![3, 4], // prefix of [3, 4, 5]
-                required: true,
-            }
-        ],
+        clauses: vec![Constraint {
+            facet: "entity".to_string(),
+            path: vec![3, 4], // prefix of [3, 4, 5]
+            required: true,
+        }],
         operators: vec!["blake3:op1".to_string()],
-        facet_policy: FacetPolicy { priority_order: vec![] },
-        backoff_policy: BackoffPolicy { max_backoff_steps: 2, allow_any_facet: true },
-        required_evidence: EvidencePolicy { min_evidence_count: 1, require_provenance: false },
+        facet_policy: FacetPolicy {
+            priority_order: vec![],
+        },
+        backoff_policy: BackoffPolicy {
+            max_backoff_steps: 2,
+            allow_any_facet: true,
+        },
+        required_evidence: EvidencePolicy {
+            min_evidence_count: 1,
+            require_provenance: false,
+        },
         deterministic_limits: Limits {
             max_probes: 10,
             max_operators: 5,
@@ -192,35 +204,39 @@ fn test_proof_carrying_clause_validation() {
 
     // B. Required constraint clause unsatisfied
     let plan_unsatisfied_required = ReasoningPlanV1 {
-        clauses: vec![
-            Constraint {
-                facet: "entity".to_string(),
-                path: vec![9, 9], // not prefix of [3, 4, 5]
-                required: true,
-            }
-        ],
+        clauses: vec![Constraint {
+            facet: "entity".to_string(),
+            path: vec![9, 9], // not prefix of [3, 4, 5]
+            required: true,
+        }],
         ..plan_ok.clone()
     };
     let err_unsat_req = plan_unsatisfied_required.execute(&registry, &start);
     assert!(err_unsat_req.is_err());
-    assert!(err_unsat_req.unwrap_err().contains("Plan validation failed"));
+    assert!(err_unsat_req
+        .unwrap_err()
+        .contains("Plan validation failed"));
 
     // C. Optional constraint clause unsatisfied (recorded as contradiction)
     let plan_optional_unsat = ReasoningPlanV1 {
-        clauses: vec![
-            Constraint {
-                facet: "entity".to_string(),
-                path: vec![9, 9],
-                required: false,
-            }
-        ],
-        required_evidence: EvidencePolicy { min_evidence_count: 0, require_provenance: false },
+        clauses: vec![Constraint {
+            facet: "entity".to_string(),
+            path: vec![9, 9],
+            required: false,
+        }],
+        required_evidence: EvidencePolicy {
+            min_evidence_count: 0,
+            require_provenance: false,
+        },
         ..plan_ok.clone()
     };
     let witness_opt = plan_optional_unsat.execute(&registry, &start).unwrap();
     assert_eq!(witness_opt.evidence_cids.len(), 0);
     assert_eq!(witness_opt.contradiction_cids.len(), 1);
-    assert_eq!(witness_opt.contradiction_cids[0], "blake3:clause_proof_0_entity");
+    assert_eq!(
+        witness_opt.contradiction_cids[0],
+        "blake3:clause_proof_0_entity"
+    );
 }
 
 #[test]
@@ -272,25 +288,41 @@ fn test_logical_and_temporal_operators() {
     });
 
     // Assert Conjunction splits paths and applies conjunction decay (0.90)
-    let input_conj = WeightedRoute { axis: 1, path: vec![1, 1], score: 1.0 };
+    let input_conj = WeightedRoute {
+        axis: 1,
+        path: vec![1, 1],
+        score: 1.0,
+    };
     let res_conj = registry.evaluate("blake3:op_conj", &input_conj).unwrap();
     assert_eq!(res_conj.len(), 2);
     assert_eq!(res_conj[0].score, 0.90);
 
     // Assert Negation returns negative/complement scores (-1.0 multiplier)
-    let input_neg = WeightedRoute { axis: 1, path: vec![2, 2], score: 1.0 };
+    let input_neg = WeightedRoute {
+        axis: 1,
+        path: vec![2, 2],
+        score: 1.0,
+    };
     let res_neg = registry.evaluate("blake3:op_neg", &input_neg).unwrap();
     assert_eq!(res_neg.len(), 1);
     assert_eq!(res_neg[0].score, -1.0);
 
     // Assert default Projection truncates paths to length 1
-    let input_proj = WeightedRoute { axis: 1, path: vec![10, 20, 30], score: 1.0 };
+    let input_proj = WeightedRoute {
+        axis: 1,
+        path: vec![10, 20, 30],
+        score: 1.0,
+    };
     let res_proj = registry.evaluate("blake3:op_proj", &input_proj).unwrap();
     assert_eq!(res_proj[0].path, vec![10]);
     assert_eq!(res_proj[0].score, 0.90);
 
     // Assert default TemporalOrdering appends 999
-    let input_temp = WeightedRoute { axis: 1, path: vec![100], score: 1.0 };
+    let input_temp = WeightedRoute {
+        axis: 1,
+        path: vec![100],
+        score: 1.0,
+    };
     let res_temp = registry.evaluate("blake3:op_temp", &input_temp).unwrap();
     assert_eq!(res_temp[0].path, vec![100, 999]);
     assert_eq!(res_temp[0].score, 0.95);

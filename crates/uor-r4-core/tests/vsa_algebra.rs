@@ -1,4 +1,4 @@
-use uor_r4_core::semantic::{Hypervector, expand_atom};
+use uor_r4_core::semantic::{expand_atom, Hypervector};
 
 #[test]
 fn test_vsa_binding_and_unbinding() {
@@ -82,7 +82,11 @@ fn test_encode_statement_and_role_swapping() {
 
     // Swapped statement should be distinguishable (similarity < 0.80) to original
     let sim_swapped = statement_1.similarity(&statement_2_swapped);
-    assert!(sim_swapped < 0.80, "Role swapped similarity: {}", sim_swapped);
+    assert!(
+        sim_swapped < 0.80,
+        "Role swapped similarity: {}",
+        sim_swapped
+    );
 
     // Verify component presence by unbinding
     let r_subj = expand_atom("role", "subject", space);
@@ -91,7 +95,11 @@ fn test_encode_statement_and_role_swapping() {
     // Unbind subject role from statement_1. It should have high similarity to Paris entity
     let retrieved_subj = statement_1.unbind(&r_subj);
     let sim_retrieved = retrieved_subj.similarity(&h_paris);
-    assert!(sim_retrieved > 0.60, "Retrieved subject similarity: {}", sim_retrieved);
+    assert!(
+        sim_retrieved > 0.60,
+        "Retrieved subject similarity: {}",
+        sim_retrieved
+    );
 }
 
 #[test]
@@ -109,4 +117,3 @@ fn test_encode_event_and_graph_edge_directionality() {
     let sim_edge = edge_a_to_b.similarity(&edge_b_to_a);
     assert!(sim_edge < 0.65, "Directed edge similarity: {}", sim_edge);
 }
-
