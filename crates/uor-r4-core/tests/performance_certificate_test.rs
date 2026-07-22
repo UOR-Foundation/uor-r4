@@ -1,5 +1,5 @@
 use uor_r4_core::transformerless::{
-    performance_certificate::{HardwareMetadata, PerformanceCertificate, PerformanceProfiler},
+    performance_certificate::{PerformanceCertificate, PerformanceProfiler},
     runtime::OpKernel,
 };
 
