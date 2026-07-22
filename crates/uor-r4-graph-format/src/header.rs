@@ -27,8 +27,11 @@ pub const HEADER_LEN: usize = 88;
 pub const SECTION_ENTRY_LEN: usize = 16;
 /// Only accepted endianness marker: little-endian.
 pub const ENDIANNESS_LITTLE: u8 = 0x01;
-/// The single active format major version (RFC §8).
-pub const FORMAT_VERSION_MAJOR: u8 = 1;
+/// The single active format major version: the draft line (RFC §8 version
+/// gate, 2026-07-21): pre-freeze artifacts MUST use `major = 0`; stable R4G1
+/// starts at `major >= 1` only after packed widths are frozen in Phase 1.
+/// Until then, readers reject any artifact claiming `major >= 1`.
+pub const FORMAT_VERSION_MAJOR: u8 = 0;
 /// Minor version emitted by the serializer. Readers accept any minor
 /// under a supported major (minor bumps add only optional content,
 /// RFC §8).

@@ -23,7 +23,7 @@ fn assemble(
     let total_len = (HEADER_LEN + 16 * entries.len() + body.len()) as u64;
     let mut out = Vec::new();
     out.extend_from_slice(b"R4G1");
-    out.push(1); // major
+    out.push(0); // major (draft line, RFC §8 version gate)
     out.push(0); // minor
     out.push(0x01); // endianness marker
     out.push(alignment_log2);
@@ -89,7 +89,7 @@ fn round_trip_sections() {
     assert_eq!(view.section(SectionId::EDGE), None);
 
     let header = view.header();
-    assert_eq!(header.major, 1);
+    assert_eq!(header.major, 0);
     assert_eq!(header.minor, 0);
     assert_eq!(header.alignment_log2, 3);
     assert_eq!(header.section_count, 4);
@@ -215,7 +215,11 @@ fn reject_bad_magic() {
 
 #[test]
 fn reject_unsupported_major_version() {
+    // Draft-line gate (RFC §8): pre-freeze readers accept only major 0;
+    // a stable-line claim (major >= 1) must be rejected until widths freeze.
     let mut bytes = valid_fixture();
+    bytes[4] = 1;
+    assert_eq!(err_of(&bytes), FormatError::UnsupportedMajorVersion(1));
     bytes[4] = 2;
     assert_eq!(err_of(&bytes), FormatError::UnsupportedMajorVersion(2));
 }

@@ -182,4 +182,13 @@ fn dump_baseline_kappa() {
         },
     });
     println!("{}", serde_json::to_string_pretty(&out).unwrap());
+
+    // With TLESS_REPIN_WRITE=1, also regenerate the fixture container that
+    // window_paths::container_roundtrip_byte_identical pins against the
+    // baseline κ. Only run alongside an intentional re-pin.
+    if std::env::var("TLESS_REPIN_WRITE").as_deref() == Ok("1") {
+        let fixture = format!("{dir}/tests/fixtures/tless_artifacts.bin");
+        std::fs::write(&fixture, &container).expect("write fixture container");
+        eprintln!("wrote {} bytes to {fixture}", container.len());
+    }
 }

@@ -728,7 +728,10 @@ mod tests {
         assert_eq!(token, 1, "only level-0 entry populated");
         assert_eq!(depth, 0, "synthetic store answers at level 0");
         assert_eq!(count, 10);
-        assert!(adds > 0 && table_reads > 0 && candidate_scans > 0, "census recorded the path");
+        assert!(
+            adds > 0 && table_reads > 0 && candidate_scans > 0,
+            "census recorded the path"
+        );
         // No multiply field exists in the record: bytes 13..37 are exactly
         // the six census counters, and OpKernel has no multiply to count.
     }
@@ -764,14 +767,15 @@ mod tests {
         assert_ne!(kappa_before, kappa_after, "store κ moved with the evidence");
 
         // the store replays the indexed stream at full depth, then resolves
-        // the unseen continuation by coarse class similarity: [1,5,6,7]
-        // occupies the same depth-1 area as [1], whose evidence says 5 —
-        // graded backoff, not level 0.
+        // the unseen continuation one level coarser (graded backoff, not
+        // level 0). The exact backoff level depends on the fixture artifact's
+        // class signatures; fixture re-pinned to the hierarchical-compiler
+        // era on 2026-07-21 (was depth 1 on the b142c93-era fixture).
         let steps = generate_steps(&[1], 4).expect("generate");
         let tokens: Vec<u32> = steps.iter().map(|p| p.token).collect();
         assert_eq!(tokens, vec![5, 6, 7, 5]);
         let depths: Vec<usize> = steps.iter().map(|p| p.depth).collect();
-        assert_eq!(depths, vec![4, 4, 4, 1]);
+        assert_eq!(depths, vec![4, 4, 4, 3]);
     }
 
     #[test]
