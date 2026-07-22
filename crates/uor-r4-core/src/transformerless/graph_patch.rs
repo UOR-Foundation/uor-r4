@@ -41,8 +41,8 @@ pub struct GraphPatch {
     pub epoch_id: u64,
     pub patch_cid: String,
     pub added_edges: Vec<Edge>,
-    pub residual_updates: Vec<(usize, ScoreQ)>,
-    pub tombstone_edge_ids: Vec<usize>,
+    pub residual_updates: Vec<(u32, ScoreQ)>,
+    pub tombstone_edge_ids: Vec<u32>,
     pub route_translation: RouteTranslationMap,
 }
 
@@ -51,8 +51,8 @@ impl GraphPatch {
         parent_graph_cid: impl Into<String>,
         epoch_id: u64,
         added_edges: Vec<Edge>,
-        residual_updates: Vec<(usize, ScoreQ)>,
-        tombstone_edge_ids: Vec<usize>,
+        residual_updates: Vec<(u32, ScoreQ)>,
+        tombstone_edge_ids: Vec<u32>,
         route_translation: RouteTranslationMap,
     ) -> Self {
         let mut patch = GraphPatch {
@@ -89,6 +89,7 @@ pub fn compute_cid(&self) -> String {
     pub fn apply(&self, graph: &mut TransitionGraph) -> Result<(), String> {
         // Update ScoreQ residuals
         for &(edge_idx, ref score) in &self.residual_updates {
+            let edge_idx = edge_idx as usize;
             if edge_idx >= graph.edges.len() {
                 return Err(format!("Residual update edge index {} out of bounds", edge_idx));
             }
@@ -114,6 +115,7 @@ for edge in &self.added_edges {
 
 // Remove tombstones (mark weight = 0)
 for &tombstone_idx in &self.tombstone_edge_ids {
+    let tombstone_idx = tombstone_idx as usize;
     if tombstone_idx >= graph.edges.len() {
         return Err(format!(
             "Tombstone edge index {} out of bounds",
