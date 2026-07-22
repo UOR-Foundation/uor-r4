@@ -71,6 +71,10 @@ fn test_deterministic_transition_graph_rebuild() {
         t_argmax: vec![200, 100, 200, 100, 300, 400],
         top_tokens: vec![[200, 0, 0]; 6],
         top_weights: vec![[100, 0, 0]; 6],
+        span_start: vec![0, 1, 2, 3, 4, 5],
+        span_end: vec![1, 2, 3, 4, 5, 6],
+        byte_start: vec![u32::MAX; 6],
+        byte_end: vec![u32::MAX; 6],
     };
     let region_assigner = |tok: u32| tok / 10;
 

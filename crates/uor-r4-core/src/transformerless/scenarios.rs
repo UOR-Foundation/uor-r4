@@ -44,6 +44,35 @@ pub fn export_hf_bytelevel_tokenizer(
     source: impl AsRef<Path>,
     destination: impl AsRef<Path>,
 ) -> io::Result<()> {
+    export_hf_bytelevel_tokenizer_with_lengths(source, destination).map(|_| ())
+}
+
+/// Export the runtime tokenizer and return per-token UTF-8 byte lengths for
+/// observation byte-anchor generation.
+pub fn export_hf_bytelevel_tokenizer_with_lengths(
+    source: impl AsRef<Path>,
+    destination: impl AsRef<Path>,
+) -> io::Result<Vec<u32>> {
+    let tokens = hf_bytelevel_tokens(source)?;
+    let lengths = tokens
+        .iter()
+        .map(|token| {
+            u32::try_from(token.len())
+                .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "token too long"))
+        })
+        .collect::<io::Result<Vec<_>>>()?;
+    let mut bytes = Vec::new();
+    for token in tokens {
+        let length = i32::try_from(token.len())
+            .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "token too long"))?;
+        bytes.extend_from_slice(&length.to_le_bytes());
+        bytes.extend_from_slice(&token);
+    }
+    std::fs::write(destination, bytes)?;
+    Ok(lengths)
+}
+
+fn hf_bytelevel_tokens(source: impl AsRef<Path>) -> io::Result<Vec<Vec<u8>>> {
     let value: serde_json::Value = serde_json::from_slice(&std::fs::read(source)?)
         .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
     let vocab = value
@@ -69,14 +98,7 @@ pub fn export_hf_bytelevel_tokenizer(
             }
         }
     }
-    let mut bytes = Vec::new();
-    for token in tokens {
-        let length = i32::try_from(token.len())
-            .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "token too long"))?;
-        bytes.extend_from_slice(&length.to_le_bytes());
-        bytes.extend_from_slice(&token);
-    }
-    std::fs::write(destination, bytes)
+    Ok(tokens)
 }
 
 fn bytelevel_inverse() -> BTreeMap<char, u8> {
@@ -334,6 +356,10 @@ fn as_corpus(tokens: &[u32], t_argmax: &[u32]) -> Corpus {
         t_argmax: t_argmax.to_vec(),
         top_tokens: vec![[0u32; 3]; n],
         top_weights: vec![[0u32; 3]; n],
+        span_start: (0..n).map(|idx| idx as u32).collect(),
+        span_end: (0..n).map(|idx| idx as u32 + 1).collect(),
+        byte_start: vec![u32::MAX; n],
+        byte_end: vec![u32::MAX; n],
     }
 }
 

@@ -48,7 +48,11 @@ pub fn xorshift(s: &mut u64) -> u64 {
 /// Teacher-labeled corpus record stream (identical wire format to the
 /// research pipeline, so existing state is adoptable):
 /// meta: n u64 | stories u64 | rng u64 | done u8
-/// recs: per token: story u32 | next u32 | top_tokens [u32; 3] | top_weights [u32; 3]
+/// recs (v3): per token:
+///   story u32 | next u32 | top_tokens [u32; 3] | top_weights [u32; 3]
+///   | span_start u32 | span_end u32 | byte_start u32 | byte_end u32
+/// legacy record sizes are still accepted on load:
+///   v1=12 bytes (story,next,argmax,logprob) and v2=32 bytes (no anchors).
 pub struct Corpus {
     pub n: usize,
     pub stories: u64,
@@ -58,6 +62,10 @@ pub struct Corpus {
     pub t_argmax: Vec<u32>,
     pub top_tokens: Vec<[u32; 3]>,
     pub top_weights: Vec<[u32; 3]>,
+    pub span_start: Vec<u32>,
+    pub span_end: Vec<u32>,
+    pub byte_start: Vec<u32>,
+    pub byte_end: Vec<u32>,
 }
 
 pub fn corpus_paths() -> (&'static str, &'static str) {
@@ -78,19 +86,33 @@ pub fn load_corpus_from(mp: &str, rp: &str) -> Option<Corpus> {
     let n = u64::from_le_bytes(meta[0..8].try_into().unwrap()) as usize;
     let stories = u64::from_le_bytes(meta[8..16].try_into().unwrap());
     let rb = std::fs::read(rp).ok()?;
-    let is_legacy = rb.len() == n * 12;
-    if rb.len() != n * 32 && !is_legacy {
+    let record_size = if rb.len() == n * 48 {
+        48usize
+    } else if rb.len() == n * 32 {
+        32usize
+    } else if rb.len() == n * 12 {
+        12usize
+    } else {
         return None;
-    }
+    };
+    let is_legacy = record_size == 12;
+    let has_anchors = record_size == 48;
     let mut story = Vec::with_capacity(n);
     let mut next = Vec::with_capacity(n);
     let mut t_argmax = Vec::with_capacity(n);
     let mut top_tokens = Vec::with_capacity(n);
     let mut top_weights = Vec::with_capacity(n);
+    let mut span_start = Vec::with_capacity(n);
+    let mut span_end = Vec::with_capacity(n);
+    let mut byte_start = Vec::with_capacity(n);
+    let mut byte_end = Vec::with_capacity(n);
+    let mut current_story = None;
+    let mut position_in_story = 0u32;
     for i in 0..n {
         if is_legacy {
             let o = i * 12;
-            story.push(u32::from_le_bytes(rb[o..o + 4].try_into().unwrap()));
+            let story_id = u32::from_le_bytes(rb[o..o + 4].try_into().unwrap());
+            story.push(story_id);
             let nxt = u16::from_le_bytes(rb[o + 4..o + 6].try_into().unwrap()) as u32;
             next.push(nxt);
             let argmax = u16::from_le_bytes(rb[o + 6..o + 8].try_into().unwrap()) as u32;
@@ -111,8 +133,9 @@ pub fn load_corpus_from(mp: &str, rp: &str) -> Option<Corpus> {
             top_tokens.push(tokens_val);
             top_weights.push(weights_val);
         } else {
-            let o = i * 32;
-            story.push(u32::from_le_bytes(rb[o..o + 4].try_into().unwrap()));
+            let o = i * record_size;
+            let story_id = u32::from_le_bytes(rb[o..o + 4].try_into().unwrap());
+            story.push(story_id);
             let nxt = u32::from_le_bytes(rb[o + 4..o + 8].try_into().unwrap());
             next.push(nxt);
             let mut tokens_val = [0u32; 3];
@@ -128,7 +151,24 @@ pub fn load_corpus_from(mp: &str, rp: &str) -> Option<Corpus> {
             t_argmax.push(tokens_val[0]);
             top_tokens.push(tokens_val);
             top_weights.push(weights_val);
+            if has_anchors {
+                span_start.push(u32::from_le_bytes(rb[o + 32..o + 36].try_into().unwrap()));
+                span_end.push(u32::from_le_bytes(rb[o + 36..o + 40].try_into().unwrap()));
+                byte_start.push(u32::from_le_bytes(rb[o + 40..o + 44].try_into().unwrap()));
+                byte_end.push(u32::from_le_bytes(rb[o + 44..o + 48].try_into().unwrap()));
+                continue;
+            }
         }
+        let story_id = story[i];
+        if current_story != Some(story_id) {
+            current_story = Some(story_id);
+            position_in_story = 0;
+        }
+        span_start.push(position_in_story);
+        span_end.push(position_in_story.saturating_add(1));
+        byte_start.push(u32::MAX);
+        byte_end.push(u32::MAX);
+        position_in_story = position_in_story.saturating_add(1);
     }
     let mut input = Vec::with_capacity(n);
     for i in 0..n {
@@ -147,6 +187,10 @@ pub fn load_corpus_from(mp: &str, rp: &str) -> Option<Corpus> {
         t_argmax,
         top_tokens,
         top_weights,
+        span_start,
+        span_end,
+        byte_start,
+        byte_end,
     })
 }
 
@@ -164,6 +208,19 @@ pub fn generate_to(
     target: usize,
     mp: &str,
     rp: &str,
+) {
+    generate_to_with_token_byte_lengths(oracle, budget_s, target, mp, rp, None);
+}
+
+/// Generate a resumable teacher corpus with optional per-token byte lengths
+/// used to populate tokenizer-neutral byte anchors.
+pub fn generate_to_with_token_byte_lengths(
+    oracle: &mut dyn TeacherOracle,
+    budget_s: u64,
+    target: usize,
+    mp: &str,
+    rp: &str,
+    token_byte_lengths: Option<&[u32]>,
 ) {
     let (mut n, mut stories, mut rng, mut done) = match std::fs::read(mp) {
         Ok(b) if b.len() == 25 => (
@@ -184,6 +241,21 @@ pub fn generate_to(
     let starting_tokens = n;
     let vocab = oracle.vocab();
     let seq_len = oracle.seq_len();
+    let default_record_size = 48usize;
+    let record_size = match std::fs::read(rp) {
+        Ok(records) if records.is_empty() => default_record_size,
+        Ok(records) if n != 0 && records.len() == (n as usize) * 48 => 48usize,
+        Ok(records) if n != 0 && records.len() == (n as usize) * 32 => 32usize,
+        Ok(records) if n != 0 && records.len() == (n as usize) * 12 => 12usize,
+        Ok(records) if n == 0 && records.len() % 48 == 0 => 48usize,
+        Ok(records) if n == 0 && records.len() % 32 == 0 => 32usize,
+        Ok(records) if n == 0 && records.len() % 12 == 0 => 12usize,
+        Ok(records) => panic!(
+            "corpus record file has invalid length {} (expected 12/32/48-byte records)",
+            records.len()
+        ),
+        Err(_) => default_record_size,
+    };
     let mut logits = vec![0f32; vocab];
     let mut progress = super::progress::Progress::new("teacher corpus", target);
     progress.set(n as usize);
@@ -196,6 +268,7 @@ pub fn generate_to(
     while done == 0 && t0.elapsed().as_secs() < budget_s {
         oracle.reset();
         let mut token = oracle.bos_token();
+        let mut story_byte_offset = 0u32;
         for pos in 0..seq_len {
             progress.set(n as usize);
             oracle.step(token, pos, &mut logits);
@@ -257,7 +330,7 @@ pub fn generate_to(
                 }
             }
 
-            let mut record = [0u8; 32];
+            let mut record = [0u8; 48];
             record[0..4].copy_from_slice(&(stories as u32).to_le_bytes());
             record[4..8].copy_from_slice(&(next as u32).to_le_bytes());
             for i in 0..3 {
@@ -267,8 +340,30 @@ pub fn generate_to(
                     .copy_from_slice(&top_tokens_idx[i].to_le_bytes());
                 record[offset_wt..offset_wt + 4].copy_from_slice(&top_weights_val[i].to_le_bytes());
             }
+            let span_start = pos as u32;
+            let span_end = span_start.saturating_add(1);
+            let byte_start = if token_byte_lengths.is_some() {
+                story_byte_offset
+            } else {
+                u32::MAX
+            };
+            let token_bytes = token_byte_lengths
+                .and_then(|lengths| lengths.get(next).copied())
+                .unwrap_or(0);
+            let byte_end = if token_byte_lengths.is_some() {
+                byte_start.saturating_add(token_bytes)
+            } else {
+                u32::MAX
+            };
+            record[32..36].copy_from_slice(&span_start.to_le_bytes());
+            record[36..40].copy_from_slice(&span_end.to_le_bytes());
+            record[40..44].copy_from_slice(&byte_start.to_le_bytes());
+            record[44..48].copy_from_slice(&byte_end.to_le_bytes());
 
-            recs.write_all(&record).unwrap();
+            recs.write_all(&record[..record_size]).unwrap();
+            if token_byte_lengths.is_some() {
+                story_byte_offset = byte_end;
+            }
             n += 1;
             progress.set(n as usize);
             if n as usize >= target {
