@@ -136,7 +136,8 @@ where
     }
 
     // Group transitions by src node
-    let mut transitions_by_src: HashMap<u32, Vec<(u32, u32)>> = HashMap::new();
+    let mut transitions_by_src: std::collections::BTreeMap<u32, Vec<(u32, u32)>> =
+        std::collections::BTreeMap::new();
     for ((src, dst), weight) in transition_counts {
         transitions_by_src.entry(src).or_default().push((dst, weight));
     }
