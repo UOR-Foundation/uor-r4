@@ -107,6 +107,11 @@ impl Certificate {
                 actual: self.certificate_cid.clone(),
             });
         }
+        if !self.attestation.deterministic_canonical_mode {
+            return Err(CertificateError::AttestationFailed(
+                "deterministic canonical mode not verified".to_string(),
+            ));
+        }
         if !self.attestation.zero_allocation_verified {
             return Err(CertificateError::AttestationFailed(
                 "zero allocation check failed".to_string(),
