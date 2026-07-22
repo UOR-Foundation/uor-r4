@@ -24,6 +24,26 @@ fn test_calibrated_feature_classification_theorem_12() {
     };
     assert_eq!(feat_boundary.classify(), ResolutionStatus::Boundary);
 
+    // 2b. Boundary via low score margin (abs margin < 10)
+    let feat_low_margin = CalibratedFeatures {
+        hamming_dist: 5,
+        calibrated_radius: 20,
+        score_margin: 0,
+        frontier_density: 10,
+        is_backed_off: false,
+    };
+    assert_eq!(feat_low_margin.classify(), ResolutionStatus::Boundary);
+
+    // 2c. Extreme negative margin should not panic (i32::MIN)
+    let feat_min_margin = CalibratedFeatures {
+        hamming_dist: 5,
+        calibrated_radius: 20,
+        score_margin: i32::MIN,
+        frontier_density: 10,
+        is_backed_off: false,
+    };
+    assert_eq!(feat_min_margin.classify(), ResolutionStatus::Supported);
+
     // 3. BackedOff
     let feat_backed_off = CalibratedFeatures {
         hamming_dist: 5,
@@ -69,7 +89,7 @@ fn test_fallback_policy_decision_d4() {
     );
     assert_eq!(
         policy.action_for(ResolutionStatus::BackedOff),
-        FallbackAction::BasePrior
+        FallbackAction::Abstain
     );
     assert_eq!(
         policy.action_for(ResolutionStatus::Novel),
@@ -95,4 +115,19 @@ fn test_custom_fallback_policy() {
         custom_policy.action_for(ResolutionStatus::Novel),
         FallbackAction::FallbackToken(42)
     );
+}
+
+#[test]
+fn test_fallback_actions_cover_d4_behavior_codes() {
+    let actions = [
+        (FallbackAction::Continue, "Continue"),
+        (FallbackAction::Widen, "Widen"),
+        (FallbackAction::ConsultExact, "ConsultExact"),
+        (FallbackAction::CertifiedFallback, "CertifiedFallback"),
+        (FallbackAction::Abstain, "Abstain"),
+    ];
+
+    for (action, code) in actions {
+        assert_eq!(serde_json::to_value(action).unwrap(), code);
+    }
 }

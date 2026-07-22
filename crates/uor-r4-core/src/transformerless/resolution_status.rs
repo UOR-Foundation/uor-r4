@@ -26,11 +26,11 @@ impl CalibratedFeatures {
         if self.frontier_density > 100 {
             return ResolutionStatus::Contradictory;
         }
-        if self.hamming_dist > self.calibrated_radius.saturating_mul(2) {
-            return ResolutionStatus::Novel;
-        }
         if self.is_backed_off {
             return ResolutionStatus::BackedOff;
+        }
+        if self.hamming_dist > self.calibrated_radius.saturating_mul(2) {
+            return ResolutionStatus::Novel;
         }
         if self.hamming_dist > self.calibrated_radius || self.score_margin.unsigned_abs() < 10 {
             return ResolutionStatus::Boundary;
@@ -41,7 +41,10 @@ impl CalibratedFeatures {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum FallbackAction {
+    Continue,
+    Widen,
     ConsultExact,
+    CertifiedFallback,
     Abstain,
     BasePrior,
     FallbackToken(u32),
@@ -57,12 +60,12 @@ pub struct FallbackPolicy {
 }
 
 impl Default for FallbackPolicy {
-    /// Default policy per Decision D4: consult EXCT for Supported/Boundary, back off to BasePrior, and abstain on Novel/Contradictory.
+    /// Default policy per Decision D4: consult EXCT for Supported/Boundary, and abstain on BackedOff/Novel/Contradictory.
     fn default() -> Self {
         FallbackPolicy {
             supported_action: FallbackAction::ConsultExact,
             boundary_action: FallbackAction::ConsultExact,
-            backed_off_action: FallbackAction::BasePrior,
+            backed_off_action: FallbackAction::Abstain,
             novel_action: FallbackAction::Abstain,
             contradictory_action: FallbackAction::Abstain,
         }
