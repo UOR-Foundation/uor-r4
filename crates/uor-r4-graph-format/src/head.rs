@@ -213,8 +213,11 @@ impl Head {
         self.reserved
     }
 
-    /// Declared signature width in bytes; must equal
-    /// [`Head::signature_words`] × 8 (stage-2 cross-check).
+    /// Declared signature width in bytes — byte-exact semantics over
+    /// word-aligned storage: must satisfy
+    /// `(W-1)*8 < signature_bytes <= `[`Head::signature_words`]` * 8`
+    /// (stage-2 cross-check). The padding bytes between the signature
+    /// and each region's W-word prototype/mask extent must be zero.
     pub fn signature_bytes(&self) -> u16 {
         self.signature_bytes
     }

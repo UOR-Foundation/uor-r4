@@ -79,14 +79,17 @@ fn sample_node() -> Vec<u8> {
     node_section(&[NodeFields::default()])
 }
 
-/// Canonically serialized sample artifact (HEAD/NODE/EMIT + one unknown
-/// optional section), valid CIDs included. All section payloads are
-/// stage-2-valid so `GraphView::parse` accepts the whole artifact.
+/// Canonically serialized sample artifact (HEAD/NODE/ROUT/EMIT + one
+/// unknown optional section), valid CIDs included. All section payloads
+/// are stage-2-valid so `GraphView::parse` accepts the whole artifact.
+/// The zeroed 64-byte ROUT covers the zeroed node's W=8 prototype/mask
+/// word extents and validates as a lone HALT op.
 fn build_sample() -> Vec<u8> {
     let mut b = ArtifactBuilder::new(3);
     // Deliberately unsorted insertion order.
     b.add_section(SectionId::NODE, 7, &sample_node());
     b.add_section(SectionId::HEAD, 0, &sample_head());
+    b.add_section(SectionId::ROUT, 0, &[0u8; 64]);
     b.add_section(SectionId::EMIT, 0, &storage_section(1, 0, 0, &[]));
     b.add_section(SectionId(0x8000_0042), 0, b"opaque");
     b.build().expect("sample artifact must build")
@@ -108,6 +111,7 @@ fn round_trip_sections() {
 
     assert_eq!(view.section(SectionId::HEAD), Some(&sample_head()[..]));
     assert_eq!(view.section(SectionId::NODE), Some(&sample_node()[..]));
+    assert_eq!(view.section(SectionId::ROUT), Some(&[0u8; 64][..]));
     assert_eq!(
         view.section(SectionId::EMIT),
         Some(&storage_section(1, 0, 0, &[])[..])
@@ -119,16 +123,16 @@ fn round_trip_sections() {
     assert_eq!(header.major, 0);
     assert_eq!(header.minor, 0);
     assert_eq!(header.alignment_log2, 3);
-    assert_eq!(header.section_count, 4);
+    assert_eq!(header.section_count, 5);
     assert_eq!(header.total_len, bytes.len() as u64);
     assert_eq!(view.as_bytes(), &bytes[..]);
 
     // Iteration is in canonical (sorted by id) order; the NODE entry
     // keeps its per-entry flags.
     let sections: Vec<_> = view.sections().collect();
-    assert_eq!(sections.len(), 4);
+    assert_eq!(sections.len(), 5);
     let ids: Vec<u32> = sections.iter().map(|s| s.id.raw()).collect();
-    assert_eq!(ids, [0x01, 0x03, 0x06, 0x8000_0042]);
+    assert_eq!(ids, [0x01, 0x03, 0x05, 0x06, 0x8000_0042]);
     assert_eq!(sections[1].flags, 7);
 
     // Every section offset is aligned to 1 << alignment_log2.

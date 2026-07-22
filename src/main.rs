@@ -105,6 +105,14 @@ enum Command {
     Scenarios,
     /// Print the legacy teacher checkpoint κ.
     TeacherKappa,
+    /// Forward a command to the legacy transformerless toolset, e.g.
+    /// `r4 transformerless convert-r4g1 --artifacts <TLA> --store <TLS1>
+    /// [--calibration <hamming_calibration.json>] --out <R4G1>`.
+    Transformerless {
+        /// Subcommand and arguments forwarded verbatim.
+        #[arg(required = true, num_args = 1.., trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
 }
 
 #[derive(Args, Debug)]
@@ -469,6 +477,9 @@ fn run(cli: &Cli) -> Result<(), RunError> {
         Some(Command::CompareReport) => run_core("compare-report", &[]),
         Some(Command::Scenarios) => run_core("scenarios", &[]),
         Some(Command::TeacherKappa) => run_core("teacher-kappa", &[]),
+        Some(Command::Transformerless { args }) => {
+            transformerless_command::run(args).map_err(RunError::Command)
+        }
         Some(Command::Serve) | None => {
             server::run_server(Arc::new(cli.server_config()));
             Ok(())

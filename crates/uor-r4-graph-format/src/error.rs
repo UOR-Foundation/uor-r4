@@ -48,7 +48,8 @@ pub enum BoundKind {
     EmissionEntries,
     /// `depth_count` vs. the observed max node `depth`.
     DepthCount,
-    /// `signature_bytes` vs. `W * 8` (cross-check).
+    /// `signature_bytes` vs. the W-word storage width (cross-check:
+    /// `(W-1)*8 < signature_bytes <= W*8`, RFC §4.1).
     SignatureBytes,
 }
 
@@ -160,11 +161,22 @@ pub enum FormatError {
         section_len: u64,
     },
     /// A packed-node range field does not resolve within its target
-    /// section under checked arithmetic (RFC §6 item 4).
+    /// section under checked arithmetic (RFC §6 item 4). For
+    /// `Prototype`/`Mask` the full W-word extent from the word start
+    /// must lie within the ROUT section.
     RangeOutOfBounds {
         /// Node (record) index carrying the bad range.
         node: u32,
         /// Which range field failed to resolve.
+        field: RangeField,
+    },
+    /// A prototype/mask window's padding bytes — between the byte-exact
+    /// `signature_bytes` and the end of its W-word storage extent — are
+    /// not all zero (RFC §4.1 word-aligned signature storage).
+    NonZeroSignaturePadding {
+        /// Node (record) index carrying the bad window.
+        node: u32,
+        /// Which window (`Prototype` or `Mask`) carried non-zero padding.
         field: RangeField,
     },
     /// An edge endpoint is ≥ `node_count` (RFC §6 item 5).
@@ -197,8 +209,9 @@ pub enum FormatError {
         bound: BoundKind,
         /// Value declared in HEAD.
         declared: u32,
-        /// Maximum actually observed (for `SignatureBytes`: the honest
-        /// value `W * 8`).
+        /// Maximum actually observed (for `SignatureBytes`: the storage
+        /// width `W * 8`; the declared value must satisfy
+        /// `(W-1)*8 < signature_bytes <= W*8`).
         observed: u32,
     },
     /// ROUT bytecode opcode outside the v0 set (RFC §6 item 6).
@@ -351,6 +364,10 @@ impl fmt::Display for FormatError {
             FormatError::RangeOutOfBounds { node, field } => write!(
                 f,
                 "node {node}: {field} range does not resolve within its target section"
+            ),
+            FormatError::NonZeroSignaturePadding { node, field } => write!(
+                f,
+                "node {node}: {field} padding bytes past signature_bytes are not all zero"
             ),
             FormatError::EdgeEndpointOutOfBounds { edge, src, dst } => write!(
                 f,

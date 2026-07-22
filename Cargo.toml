@@ -12,7 +12,7 @@ default-members = [
     "crates/uor-r4-router",
     "crates/uor-r4-proof-model",
 ]
-exclude = ["uor_standards"]
+exclude = ["uor_standards", "crates/uor-r4-graph-format/fuzz"]
 resolver = "2"
 
 [package]

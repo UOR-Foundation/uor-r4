@@ -806,6 +806,57 @@ pub fn parse_store(b: &[u8]) -> Option<Store> {
     Some(store)
 }
 
+/// Parse the legacy pre-u32 TLS1 variant: 6-byte `(u16 token, u32 count)`
+/// evidence entries, written by pre-u32-migration compilers. The on-disk
+/// `.uor-models` store is of this era, so the R4G1 migration converter
+/// accepts both store eras; the wire layout is otherwise identical to
+/// `parse_store` (magic, per-level key lengths, exact consumption).
+pub fn parse_store_legacy_u16(b: &[u8]) -> Option<Store> {
+    if b.len() < 4 || &b[0..4] != b"TLS1" {
+        return None;
+    }
+    let mut o = 4usize;
+    let mut store: Store = Vec::new();
+    for d in 0..=STAGES {
+        if o + 4 > b.len() {
+            return None;
+        }
+        let n_keys = u32::from_le_bytes(b[o..o + 4].try_into().ok()?) as usize;
+        o += 4;
+        let mut level = BTreeMap::new();
+        for _ in 0..n_keys {
+            if o >= b.len() {
+                return None;
+            }
+            let klen = b[o] as usize;
+            o += 1;
+            if klen != d || o + klen + 4 > b.len() {
+                return None;
+            }
+            let key = b[o..o + klen].to_vec();
+            o += klen;
+            let n_entries = u32::from_le_bytes(b[o..o + 4].try_into().ok()?) as usize;
+            o += 4;
+            let mut dist = BTreeMap::new();
+            for _ in 0..n_entries {
+                if o + 6 > b.len() {
+                    return None;
+                }
+                let t = u32::from(u16::from_le_bytes(b[o..o + 2].try_into().ok()?));
+                let cnt = u32::from_le_bytes(b[o + 2..o + 6].try_into().ok()?);
+                o += 6;
+                dist.insert(t, cnt);
+            }
+            level.insert(key, dist);
+        }
+        store.push(level);
+    }
+    if o != b.len() {
+        return None;
+    }
+    Some(store)
+}
+
 /// κ-label of a store's TLS1 bytes.
 pub fn store_kappa(store: &Store) -> String {
     format!("blake3:{}", blake3::hash(&store_bytes(store)).to_hex())

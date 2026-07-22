@@ -21,9 +21,12 @@
 //! - Node emission ranges are byte ranges over the EMIT remainder
 //!   (after the 4-byte storage descriptor); entry-typed resolution
 //!   waits for the EMIT table layout.
-//! - Prototype/mask word starts are checked against the ROUT section
-//!   size in u64 words; the W-word extent per node is not yet
-//!   cross-checked (needs a ROUT region layout).
+//!
+//! Prototype/mask resolution is word-exact: each node's word start plus
+//! the full W-word extent must lie within the ROUT section, and — when
+//! `signature_bytes < W * 8` (word-aligned storage of a byte-exact
+//! signature, RFC §4.1) — the padding bytes between the signature and
+//! the end of every validated prototype/mask window must be zero.
 
 use crate::error::{BoundKind, FormatError, RangeField};
 use crate::head::Head;
@@ -45,13 +48,17 @@ pub(crate) fn validate(view: &GraphView) -> Result<Option<Head>, FormatError> {
         None => return Ok(None),
     };
 
-    // HEAD-internal honesty: signature_bytes must equal W u64 words.
-    let honest_signature_bytes = u32::from(head.signature_words()) * 8;
-    if u32::from(head.signature_bytes()) != honest_signature_bytes {
+    // HEAD-internal honesty: signature storage is word-aligned. The
+    // byte-exact signature width must fit within W u64 words and exceed
+    // W-1 words — `(W-1)*8 < signature_bytes <= W*8` (RFC §4.1) — so W=5
+    // words store a real 36-byte signature with 4 zero padding bytes.
+    let storage_bytes = u32::from(head.signature_words()) * 8;
+    let signature_bytes = u32::from(head.signature_bytes());
+    if signature_bytes > storage_bytes || signature_bytes <= storage_bytes.saturating_sub(8) {
         return Err(FormatError::DishonestBounds {
             bound: BoundKind::SignatureBytes,
-            declared: u32::from(head.signature_bytes()),
-            observed: honest_signature_bytes,
+            declared: signature_bytes,
+            observed: storage_bytes,
         });
     }
 
@@ -67,6 +74,17 @@ pub(crate) fn validate(view: &GraphView) -> Result<Option<Head>, FormatError> {
     };
     if let Some(bytes) = view.section(SectionId::EXCT) {
         StorageDescriptor::parse(SectionId::EXCT, bytes)?;
+    }
+
+    // ROUT section-internal bytecode validation (RFC §6 item 6) runs
+    // before the per-node cross-references into the section, mirroring
+    // the EMIT/EXCT descriptor ordering above. The section size in u64
+    // words then anchors prototype/mask word starts, W-word extents,
+    // and the zero-padding rule.
+    let rout_bytes = view.section(SectionId::ROUT);
+    let rout_words = rout_bytes.map_or(0, |bytes| bytes.len() as u64 / 8);
+    if let Some(bytes) = rout_bytes {
+        rout::validate(bytes, &head)?;
     }
 
     // NODE is present iff node_count > 0, and its record count must
@@ -111,11 +129,6 @@ pub(crate) fn validate(view: &GraphView) -> Result<Option<Head>, FormatError> {
         }
     };
 
-    // ROUT size in u64 words, for prototype/mask word-start resolution.
-    let rout_words = view
-        .section(SectionId::ROUT)
-        .map_or(0, |bytes| bytes.len() as u64 / 8);
-
     // Per-node range resolution and HEAD-bound honesty (RFC §6
     // items 4 and 7).
     if let Some(bytes) = node_bytes {
@@ -144,17 +157,43 @@ pub(crate) fn validate(view: &GraphView) -> Result<Option<Head>, FormatError> {
                     field: RangeField::Emission,
                 });
             }
-            if u64::from(node.prototype_word_start) > rout_words {
+            // Word starts plus the full W-word extent must resolve
+            // within the ROUT section.
+            let signature_words = u64::from(head.signature_words());
+            if u64::from(node.prototype_word_start) + signature_words > rout_words {
                 return Err(FormatError::RangeOutOfBounds {
                     node: i,
                     field: RangeField::Prototype,
                 });
             }
-            if u64::from(node.mask_word_start) > rout_words {
+            if u64::from(node.mask_word_start) + signature_words > rout_words {
                 return Err(FormatError::RangeOutOfBounds {
                     node: i,
                     field: RangeField::Mask,
                 });
+            }
+            // Zero-padding rule (RFC §4.1): with word-aligned storage of
+            // a byte-exact signature, the bytes between the signature
+            // and the end of every validated prototype/mask window must
+            // be zero. The extents above place both windows in bounds.
+            let signature_bytes = head.signature_bytes() as usize;
+            let storage_bytes = head.signature_words() as usize * 8;
+            if signature_bytes < storage_bytes {
+                if let Some(rout) = rout_bytes {
+                    for (word_start, field) in [
+                        (node.prototype_word_start, RangeField::Prototype),
+                        (node.mask_word_start, RangeField::Mask),
+                    ] {
+                        let begin = word_start as usize * 8 + signature_bytes;
+                        let end = word_start as usize * 8 + storage_bytes;
+                        let Some(padding) = rout.get(begin..end) else {
+                            return Err(FormatError::RangeOutOfBounds { node: i, field });
+                        };
+                        if padding.iter().any(|&byte| byte != 0) {
+                            return Err(FormatError::NonZeroSignaturePadding { node: i, field });
+                        }
+                    }
+                }
             }
             if node.child_len > head.max_frontier_width() {
                 return Err(FormatError::DishonestBounds {
@@ -217,11 +256,6 @@ pub(crate) fn validate(view: &GraphView) -> Result<Option<Head>, FormatError> {
                 return Err(FormatError::ReverseIndexMissing { edge: i });
             }
         }
-    }
-
-    // ROUT bytecode (RFC §6 item 6).
-    if let Some(bytes) = view.section(SectionId::ROUT) {
-        rout::validate(bytes, &head)?;
     }
 
     Ok(Some(head))

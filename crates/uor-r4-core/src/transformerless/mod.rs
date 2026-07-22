@@ -161,6 +161,8 @@ pub mod performance_certificate;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod predictive_sufficiency;
 #[cfg(not(target_arch = "wasm32"))]
+pub mod convert_r4g1;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod progress;
 pub mod reference_state;
 pub mod resolution_status;

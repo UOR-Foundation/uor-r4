@@ -1,0 +1,29 @@
+[package]
+name = "uor-r4-graph-format-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+uor-r4-graph-format = { path = ".." }
+
+# Prevent this from interfering with the main workspace's dependency
+# resolution: the fuzz crate is excluded from the root workspace and
+# stands alone.
+[workspace]
+
+[[bin]]
+name = "parse_arbitrary"
+path = "fuzz_targets/parse_arbitrary.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "mutate_valid"
+path = "fuzz_targets/mutate_valid.rs"
+test = false
+doc = false

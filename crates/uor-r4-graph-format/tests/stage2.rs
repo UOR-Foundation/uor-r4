@@ -17,7 +17,8 @@ use uor_r4_graph_format::{
 
 /// The happy-path packed node records: two nodes whose ranges resolve
 /// against `valid_edges` (2 edges), `valid_emit` (8-byte remainder), and
-/// `valid_rout` (27 bytes = 3 u64 words).
+/// `valid_rout` (64 bytes = 8 u64 words, so the W=8 prototype/mask
+/// extents starting at word 0 resolve exactly).
 fn valid_nodes() -> [NodeFields; 2] {
     [
         NodeFields {
@@ -72,8 +73,9 @@ fn valid_edges() -> [EdgeFields; 2] {
 }
 
 /// The happy-path ROUT section: TEST, JMP over the LEAF, LEAF with a
-/// 4-byte shortlist range, HALT — then the 4-byte trailing shortlist
-/// table (opaque in v0). 27 bytes total, i.e. 3 u64 words.
+/// 4-byte shortlist range, HALT — then the trailing shortlist table,
+/// padded to 64 bytes (8 u64 words) so the W=8 prototype/mask extents
+/// the nodes declare resolve within the section.
 fn valid_rout() -> Vec<u8> {
     let mut out = Vec::new();
     out.extend_from_slice(&op_test_popcount_le(0, 0xFFFF, 3));
@@ -81,6 +83,7 @@ fn valid_rout() -> Vec<u8> {
     out.extend_from_slice(&op_leaf(0, 4));
     out.extend_from_slice(&op_halt());
     out.extend_from_slice(&[0xDE, 0xAD, 0xBE, 0xEF]); // shortlist table
+    out.resize(64, 0); // trailing table padding: W-word extents resolve
     out
 }
 
@@ -395,7 +398,7 @@ fn reject_emission_range_out_of_bounds() {
 fn reject_prototype_word_out_of_bounds() {
     let mut f = Fixture::valid();
     let mut nodes = valid_nodes();
-    nodes[0].prototype_word_start = 4; // ROUT is 27 bytes = 3 u64 words
+    nodes[0].prototype_word_start = 4; // ROUT is 64 bytes = 8 words; 4 + W(8) = 12 > 8
     f.nodes = Some(node_section(&nodes));
     assert_eq!(
         err_of(&f.build()),
@@ -410,7 +413,7 @@ fn reject_prototype_word_out_of_bounds() {
 fn reject_mask_word_out_of_bounds() {
     let mut f = Fixture::valid();
     let mut nodes = valid_nodes();
-    nodes[0].mask_word_start = 4;
+    nodes[0].mask_word_start = 1; // 1 + W(8) = 9 > 8 words
     f.nodes = Some(node_section(&nodes));
     assert_eq!(
         err_of(&f.build()),
@@ -531,14 +534,111 @@ fn reject_node_depth_exceeds_depth_count() {
 
 #[test]
 fn reject_signature_bytes_mismatch() {
+    // Word-aligned storage rule (RFC §4.1): (W-1)*8 < signature_bytes
+    // <= W*8. With W = 8 the honest range is 57..=64.
     let mut f = Fixture::valid();
-    f.head.signature_bytes = 63; // W = 8 implies 64
+    f.head.signature_bytes = 56; // one full word short of the W = 8 storage
     assert_eq!(
         err_of(&f.build()),
         FormatError::DishonestBounds {
             bound: BoundKind::SignatureBytes,
-            declared: 63,
+            declared: 56,
             observed: 64,
+        }
+    );
+
+    let mut f = Fixture::valid();
+    f.head.signature_bytes = 65; // past the W = 8 storage width
+    assert_eq!(
+        err_of(&f.build()),
+        FormatError::DishonestBounds {
+            bound: BoundKind::SignatureBytes,
+            declared: 65,
+            observed: 64,
+        }
+    );
+}
+
+#[test]
+fn signature_bytes_within_word_of_storage_parses() {
+    // 63 bytes of signature in 64 bytes of storage: word-aligned with
+    // one byte of (zero) padding — accepted.
+    let mut f = Fixture::valid();
+    f.head.signature_bytes = 63;
+    GraphView::parse(&f.build()).expect("byte-exact signature within one word must parse");
+}
+
+// ── Word-aligned signature storage: W=5, 36-byte signatures ──────────
+
+/// A one-node fixture with the migration geometry: W = 5 words of
+/// storage per 36-byte signature (4 padding bytes), the node's
+/// prototype/mask windows inside an 11-word ROUT section laid out as
+/// `[program][prototype words][mask words]`.
+fn word_aligned_fixture() -> Fixture {
+    let mut rout = Vec::new();
+    rout.extend_from_slice(&op_halt());
+    rout.extend_from_slice(&[0u8; 7]); // program padding to 8 bytes
+    let mut prototype = [0u8; 40];
+    prototype[..36].fill(0xA5); // 36-byte signature, 4 zero padding bytes
+    rout.extend_from_slice(&prototype);
+    let mut mask = [0u8; 40];
+    mask[..36].fill(0xFF); // 36 one-bits, then 4 zero padding bytes
+    rout.extend_from_slice(&mask);
+    Fixture {
+        head: HeadFields {
+            signature_words: 5,
+            signature_bytes: 36,
+            node_count: 1,
+            edge_count: 0,
+            depth_count: 2,
+            ..HeadFields::default()
+        },
+        head_override: None,
+        nodes: Some(node_section(&[NodeFields {
+            prototype_word_start: 1, // word 0 is the padded HALT program
+            mask_word_start: 6,
+            depth: 1,
+            ..NodeFields::default()
+        }])),
+        edges: None,
+        rout: Some(rout),
+        emit: None,
+        exct: None,
+    }
+}
+
+#[test]
+fn word_aligned_signature_storage_parses() {
+    let bytes = word_aligned_fixture().build();
+    GraphView::parse(&bytes).expect("36-byte signature in 5 words must parse");
+}
+
+#[test]
+fn reject_nonzero_prototype_padding() {
+    let mut f = word_aligned_fixture();
+    let mut rout = f.rout.take().unwrap();
+    rout[8 + 36] = 1; // first padding byte of the prototype window
+    f.rout = Some(rout);
+    assert_eq!(
+        err_of(&f.build()),
+        FormatError::NonZeroSignaturePadding {
+            node: 0,
+            field: RangeField::Prototype,
+        }
+    );
+}
+
+#[test]
+fn reject_nonzero_mask_padding() {
+    let mut f = word_aligned_fixture();
+    let mut rout = f.rout.take().unwrap();
+    rout[8 + 40 + 39] = 0x80; // last padding byte of the mask window
+    f.rout = Some(rout);
+    assert_eq!(
+        err_of(&f.build()),
+        FormatError::NonZeroSignaturePadding {
+            node: 0,
+            field: RangeField::Mask,
         }
     );
 }
