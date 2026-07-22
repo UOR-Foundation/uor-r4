@@ -103,9 +103,13 @@ impl StorageDescriptor {
     pub fn decode(&self, raw_entry: i32) -> ScoreQ {
         let centered = raw_entry.saturating_sub(self.zero_point);
         let raw_score = if self.shift >= 0 {
-            centered.wrapping_shl(self.shift as u32)
+            centered
+                .checked_shl(self.shift as u32)
+                .unwrap_or_else(|| if centered.is_negative() { i32::MIN } else { i32::MAX })
         } else {
-            centered.wrapping_shr((-self.shift) as u32)
+            centered
+                .checked_shr((-self.shift) as u32)
+                .unwrap_or_else(|| if centered.is_negative() { -1 } else { 0 })
         };
         ScoreQ(raw_score)
     }
