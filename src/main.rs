@@ -82,6 +82,8 @@ enum Command {
     Download(DownloadArgs),
     /// Import an evaluated compiled bundle into the UOR CID store.
     Import(ImportArgs),
+    /// Evaluate an HF-compiled bundle and emit an instruction-quality report.
+    EvaluateReport(EvaluateReportArgs),
     /// Print legacy proof-workflow prerequisites.
     Setup,
     /// Generate the legacy resumable teacher corpus.
@@ -200,6 +202,22 @@ struct ImportArgs {
     grounded_answer_rate: f32,
     #[arg(long, default_value_t = 1.0)]
     repetition_rate: f32,
+}
+
+#[derive(Args, Debug)]
+struct EvaluateReportArgs {
+    /// Existing local Hugging Face model directory [default: .uor-models/sources/smollm2-135m-instruct].
+    #[arg(long)]
+    source: Option<PathBuf>,
+    /// Compiled bundle directory [default: .uor-models/compiled/smollm2-135m-instruct].
+    #[arg(long)]
+    compiled: Option<PathBuf>,
+    /// Evaluation report output path [default: <compiled>/instruction-eval.json].
+    #[arg(long)]
+    report: Option<PathBuf>,
+    /// Teacher sequence length used for source-model loading.
+    #[arg(long, default_value_t = 128)]
+    sequence_length: usize,
 }
 
 impl Cli {
@@ -392,6 +410,29 @@ fn import(args: &ImportArgs) -> Result<(), RunError> {
     Ok(())
 }
 
+fn evaluate_report(args: &EvaluateReportArgs) -> Result<(), RunError> {
+    if args.sequence_length == 0 {
+        return Err(RunError::Command(
+            "--sequence-length must be greater than zero".to_owned(),
+        ));
+    }
+    let mut values = Vec::new();
+    if let Some(source) = &args.source {
+        values.extend(["--source".to_owned(), source.display().to_string()]);
+    }
+    if let Some(compiled) = &args.compiled {
+        values.extend(["--compiled".to_owned(), compiled.display().to_string()]);
+    }
+    if let Some(report) = &args.report {
+        values.extend(["--report".to_owned(), report.display().to_string()]);
+    }
+    values.extend([
+        "--sequence-length".to_owned(),
+        args.sequence_length.to_string(),
+    ]);
+    run_core("evaluate-report", &values)
+}
+
 fn run_core(name: &str, arguments: &[String]) -> Result<(), RunError> {
     let mut values = vec![name.to_owned()];
     values.extend_from_slice(arguments);
@@ -417,6 +458,7 @@ fn run(cli: &Cli) -> Result<(), RunError> {
         Some(Command::Compile(args)) => compile(args),
         Some(Command::Download(args)) => download(args),
         Some(Command::Import(args)) => import(args),
+        Some(Command::EvaluateReport(args)) => evaluate_report(args),
         Some(Command::Setup) => run_core("setup", &[]),
         Some(Command::Gen { seconds, target }) => {
             run_core("gen", &[seconds.to_string(), target.to_string()])
@@ -476,7 +518,14 @@ mod tests {
         Cli::command().debug_assert();
         let help = Cli::command().render_long_help().to_string();
         for command in [
-            "serve", "ask", "chat", "compile", "download", "import", "compare",
+            "serve",
+            "ask",
+            "chat",
+            "compile",
+            "download",
+            "import",
+            "evaluate-report",
+            "compare",
         ] {
             assert!(help.contains(command));
         }
@@ -508,6 +557,30 @@ mod tests {
         assert_eq!(args.source, Some(PathBuf::from("/models/local")));
         assert_eq!(args.target, 20_000);
         assert_eq!(args.sequence_length, 128);
+    }
+
+    #[test]
+    fn parses_evaluate_report_command() {
+        let cli = Cli::try_parse_from([
+            "r4",
+            "evaluate-report",
+            "--source",
+            "/models/source",
+            "--compiled",
+            "/models/compiled",
+            "--report",
+            "/tmp/report.json",
+            "--sequence-length",
+            "256",
+        ])
+        .unwrap();
+        let Some(Command::EvaluateReport(args)) = cli.command else {
+            panic!("expected evaluate-report")
+        };
+        assert_eq!(args.source, Some(PathBuf::from("/models/source")));
+        assert_eq!(args.compiled, Some(PathBuf::from("/models/compiled")));
+        assert_eq!(args.report, Some(PathBuf::from("/tmp/report.json")));
+        assert_eq!(args.sequence_length, 256);
     }
 
     #[test]
