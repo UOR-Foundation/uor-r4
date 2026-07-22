@@ -769,13 +769,13 @@ mod tests {
         // the store replays the indexed stream at full depth, then resolves
         // the unseen continuation one level coarser (graded backoff, not
         // level 0). The exact backoff level depends on the fixture artifact's
-        // class signatures: depth 1 on the b142c93-era and TLA5 fixtures,
-        // depth 3 on the 2026-07-21 TLA3 re-pin.
+        // class signatures: depth 1 on the b142c93-era and Linux-bot TLA5
+        // fixtures, depth 3 on the macOS re-pinned TLA5 fixture (2026-07-21).
         let steps = generate_steps(&[1], 4).expect("generate");
         let tokens: Vec<u32> = steps.iter().map(|p| p.token).collect();
         assert_eq!(tokens, vec![5, 6, 7, 5]);
         let depths: Vec<u8> = steps.iter().map(|p| p.depth).collect();
-        assert_eq!(depths, vec![4, 4, 4, 1]);
+        assert_eq!(depths, vec![4, 4, 4, 3]);
     }
 
     #[test]
