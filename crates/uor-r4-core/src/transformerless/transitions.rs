@@ -88,16 +88,35 @@ impl TransitionGraph {
     /// For every dst node, all reverse index entries in its slice MUST refer to
     /// valid canonical edge IDs whose destination equals dst.
     pub fn verify_theorem_7(&self) -> Result<(), &'static str> {
+        if self.edges.is_empty() {
+            return Ok(());
+        }
+        if self.reverse_index.len() != self.edges.len() {
+            return Err("Theorem 7 violation: reverse index does not cover all edges");
+        }
+        let total_count: usize = self.reverse_offsets.values().map(|&(_, c)| c).sum();
+        if total_count != self.reverse_index.len() {
+            return Err("Theorem 7 violation: reverse offsets do not cover reverse index");
+        }
+        for &edge_id in &self.reverse_index {
+            if edge_id as usize >= self.edges.len() {
+                return Err("Theorem 7 violation: invalid canonical edge ID in reverse index");
+            }
+        }
+        for i in 1..self.reverse_index.len() {
+            let prev_dst = self.edges[self.reverse_index[i - 1] as usize].dst;
+            let cur_dst = self.edges[self.reverse_index[i] as usize].dst;
+            if prev_dst > cur_dst {
+                return Err("Theorem 7 violation: reverse index not sorted by dst");
+            }
+        }
         for (&dst, &(start, count)) in &self.reverse_offsets {
             if start + count > self.reverse_index.len() {
                 return Err("Theorem 7 violation: reverse index range out of bounds");
             }
             for i in start..start + count {
                 let edge_id = self.reverse_index[i];
-                let edge = self
-                    .edges
-                    .get(edge_id as usize)
-                    .ok_or("Theorem 7 violation: invalid canonical edge ID in reverse index")?;
+                let edge = &self.edges[edge_id as usize];
                 if edge.dst != dst {
                     return Err("Theorem 7 violation: reverse index target mismatched edge dst");
                 }
