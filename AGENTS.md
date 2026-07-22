@@ -85,6 +85,9 @@ audit, and nightly fuzz smoke — keep it green.
   four gates + κ-reproduction on a merge preview first; resolve conflicts
   hunk-by-hunk — whole-file `checkout --theirs/--ours` has silently dropped
   upstream features before (the TLA5 incident).
+- **Committing while subagents work in-tree**: add files **by name**, never
+  `git add -A` — in-flight agent work (unregistered modules, half-written
+  tests) must not be swept into unrelated commits (the cover.rs incident).
 - **Tests that encode era sensitivity**: `src/tless_uor.rs`
   `indexing_and_generation_update_store` asserts resolution depths that depend
   on the fixture artifact's class signatures — update the expected depths with
