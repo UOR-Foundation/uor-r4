@@ -977,6 +977,14 @@ fn huggingface_source(model: Option<&str>) -> Result<SourceDownload, String> {
     }
 }
 
+fn downloaded_source_path(source: &SourceDownload) -> PathBuf {
+    source.output.clone().unwrap_or_else(|| {
+        PathBuf::from(".uor-models")
+            .join("sources")
+            .join(&source.name)
+    })
+}
+
 fn spawn_huggingface_download(
     status: Arc<Mutex<HuggingFaceDownloadStatus>>,
     source: SourceDownload,
@@ -1822,6 +1830,21 @@ fn handle_connection(
     }
 
     if clean_path == "/api/r4g1/compile" && method == "POST" {
+        let payload: HuggingFaceDownloadPayload = if body.is_empty() {
+            HuggingFaceDownloadPayload::default()
+        } else {
+            match serde_json::from_slice(&body) {
+                Ok(payload) => payload,
+                Err(error) => {
+                    send_json_response(
+                        stream,
+                        400,
+                        &format!("{{\"error\":\"Invalid JSON: {error}\"}}"),
+                    );
+                    return;
+                }
+            }
+        };
         let mut status = r4g1_compile.lock().unwrap();
         if status.running {
             send_json_response(
@@ -1841,11 +1864,17 @@ fn handle_connection(
         status.report = None;
         drop(status);
 
+        let downloaded_source = hf_download.lock().unwrap().source.clone().or_else(|| {
+            let source = huggingface_source(payload.model.as_deref()).ok()?;
+            let path = downloaded_source_path(&source);
+            path.is_dir().then(|| path.display().to_string())
+        });
+
         spawn_r4g1_compile(
             Arc::clone(&cli),
             Arc::clone(&r4g1),
             Arc::clone(&r4g1_compile),
-            hf_download.lock().unwrap().source.clone(),
+            downloaded_source,
         );
         send_json_response(
             stream,

@@ -2977,7 +2977,7 @@ if (compileR4g1Btn) {
             const response = await fetch("/api/r4g1/compile", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: "{}"
+                body: JSON.stringify({ model: hfModelInput?.value.trim() || "" })
             });
             const started = await response.json();
             if (!response.ok) throw new Error(started.message || started.error || `HTTP error: ${response.status}`);
