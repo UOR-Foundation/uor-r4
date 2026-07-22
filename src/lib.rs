@@ -33,6 +33,8 @@ pub mod chat;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod model;
 #[cfg(not(target_arch = "wasm32"))]
+pub mod r4g1;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod telemetry;
 
 /// Native HTTP server and terminal chat application.
