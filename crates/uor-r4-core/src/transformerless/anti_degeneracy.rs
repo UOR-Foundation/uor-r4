@@ -123,6 +123,10 @@ pub struct SemanticCoherenceCertificate {
     pub region_reuse_rate: f64,
     pub invariance_score: f64,
     pub boundary_stability: f64,
+    /// Informational only: the MDL objective J(C) value at certificate creation time.
+    /// This field is **not** checked by [`SemanticCoherenceCertificate::verify()`]; it
+    /// is recorded for observability purposes and does not contribute to certificate
+    /// validity.
     pub mdl_cost_j_c: f64,
     pub anti_memorization_passed: bool,
 }
