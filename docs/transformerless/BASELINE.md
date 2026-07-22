@@ -31,16 +31,17 @@ formally committed. Full text: plan §2.
 
 ## 2. Evaluation distribution declaration (D3)
 
-Working assumption, to be finalized before the first graph certificate:
+**Decided 2026-07-22 (maintainer):**
 
 - **Continuity partition**: the existing teacher-generated story corpus (`Corpus`,
   `compiler.rs:51`) with its 80/20 construction/held-out split (`train_cut`), so new numbers are
   comparable to the cited P2 certificate.
-- **Natural partition (OPEN)**: one redistributable natural corpus, pinned by CID with SPDX
-  license recorded in PROV. Candidates: a Simple English Wikipedia sample or TinyStories val
-  split. Selection is a Phase 0/2 open task — it must exist before the first HF fidelity
-  certificate (issue #34) is meaningful.
-- Corpus manifests live under `.uor-models/`; CIDs are referenced in artifact HEAD/PROV.
+- **Natural partition**: a pinned **Simple English Wikipedia** sample, license **CC BY-SA 4.0**
+  (recorded in PROV as SPDX `CC-BY-SA-4.0`). Sizing and split rules are fixed at first use
+  (target: a few thousand articles, construction/held-out by content hash), pinned by CID; the
+  corpus manifest lives under `.uor-models/` and its CID is referenced in artifact HEAD/PROV.
+  (Alternative considered: TinyStories validation split — cleaner licensing-wise but keeps the
+  evaluation synthetic; rejected in favor of a genuinely natural distribution.)
 - All fidelity claims carry: distribution id, n, confidence interval, slices, seeds, stopping
   rule (Gate K). No claim generalizes beyond the declared distribution.
 
