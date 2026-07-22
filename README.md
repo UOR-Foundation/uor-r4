@@ -206,9 +206,18 @@ properties.
 ### 4. Evaluate instruction quality
 
 Run held-out instruction and grounding evaluation against the compiled bundle
-and retain a machine-readable report. This evaluation tooling is the remaining
-end-to-end workflow gap in the repository. Do not mark an artifact as passing
-merely to bypass the chat quality gate.
+and retain a machine-readable report:
+
+```bash
+cargo run --release -- evaluate-report \
+  --source .uor-models/sources/smollm2-135m-instruct \
+  --compiled .uor-models/compiled/smollm2-135m-instruct \
+  --report .uor-models/compiled/smollm2-135m-instruct/instruction-eval.json
+```
+
+The report captures held-out D3 top-1 accuracy, teacher-argmax agreement,
+Witten–Bell bits/token vs the teacher floor, plus source/artifact/store/tokenizer/corpus
+CIDs. Do not mark an artifact as passing merely to bypass the chat quality gate.
 
 ### 5. Import the evaluated bundle
 
