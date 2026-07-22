@@ -20,6 +20,7 @@
 
 pub use super::compiler::{derive_rotations, train_cut, SIG_BYTES, SIG_WORDS};
 use super::compiler::{Compiled, Corpus, D, STAGES, WINDOW};
+use super::runtime_state::RuntimeState;
 
 const TOP_M_MEMBERSHIPS: usize = 3;
 
@@ -498,7 +499,7 @@ pub struct Runtime<'a> {
     pub rot: [usize; WINDOW + 1],
     pub pop: [u8; 256],
     pub kernel: OpKernel,
-    pub recent: Vec<u32>,
+    pub state: RuntimeState,
 }
 
 impl<'a> Runtime<'a> {
@@ -508,7 +509,7 @@ impl<'a> Runtime<'a> {
             rot: derive_rotations(),
             pop: derive_popcount_table(),
             kernel: OpKernel::default(),
-            recent: Vec::with_capacity(36),
+            state: RuntimeState::default(),
         }
     }
 
@@ -570,7 +571,7 @@ impl<'a> Runtime<'a> {
                 for (&t, &cnt) in dist {
                     self.kernel.candidate_scan();
                     let mut score = cnt as i64;
-                    let occurrences = self.recent.iter().filter(|&&r| r == t).count();
+                    let occurrences = self.state.token_occurrences(t);
                     if occurrences > 0 {
                         let val = occurrences as i64;
                         score -= (val << 10) - (val << 4) - (val << 3);
@@ -581,10 +582,7 @@ impl<'a> Runtime<'a> {
                         best_n = cnt;
                     }
                 }
-                self.recent.push(best_t);
-                if self.recent.len() > 32 {
-                    self.recent.remove(0);
-                }
+                self.state.record_token(best_t);
                 return Prediction {
                     token: best_t,
                     depth: d,
@@ -610,7 +608,7 @@ impl<'a> Runtime<'a> {
                 for (&t, &cnt) in dist {
                     self.kernel.candidate_scan();
                     let mut score = cnt as i64;
-                    let occurrences = self.recent.iter().filter(|&&r| r == t).count();
+                    let occurrences = self.state.token_occurrences(t);
                     if occurrences > 0 {
                         let val = occurrences as i64;
                         score -= (val << 10) - (val << 4) - (val << 3);
@@ -625,10 +623,7 @@ impl<'a> Runtime<'a> {
                         best_n = cnt;
                     }
                 }
-                self.recent.push(best_t);
-                if self.recent.len() > 32 {
-                    self.recent.remove(0);
-                }
+                self.state.record_token(best_t);
                 return Prediction {
                     token: best_t,
                     depth: d,

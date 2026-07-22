@@ -217,7 +217,7 @@ fn allocation_census() {
     let ((code, wit, n, gen_ops), gen_cen) = measure(|| {
         let code = rt.assign_window(&SEED);
         let tok = rt.predict(&store, &code);
-        rt.recent.clear();
+        rt.state.clear_token_state();
         let wit = rt.predict_witness(&store, &code);
         assert_eq!(tok, wit.token, "predict and predict_witness agree");
         let before = Ops::of(&rt.kernel);
@@ -245,7 +245,12 @@ fn allocation_census() {
     println!(
         "[kernel] ops over {GEN_TOKENS} generated tokens: adds {} | xors {} | \
          shifts {} | compares {} | table-reads {} | candidate-scans {}",
-        gen_ops.adds, gen_ops.xors, gen_ops.shifts, gen_ops.compares, gen_ops.table_reads, gen_ops.candidate_scans
+        gen_ops.adds,
+        gen_ops.xors,
+        gen_ops.shifts,
+        gen_ops.compares,
+        gen_ops.table_reads,
+        gen_ops.candidate_scans
     );
     println!(
         "[kernel] per generated token (avg): adds {:.1} | xors {:.1} | \
