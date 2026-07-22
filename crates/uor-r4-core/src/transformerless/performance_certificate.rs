@@ -100,7 +100,8 @@ impl PerformanceProfiler {
         ops: OpKernel,
         max_bytes_limit: u64,
     ) -> PerformanceCertificate {
-        let line_size = 64u64;
+        let hw = HardwareMetadata::default();
+        let line_size = hw.cache_line_size_bytes as u64;
         let cache_misses = (bytes_read + line_size - 1) / line_size + (section_accesses as u64);
         let branch_misses = ops.compares / 32 + ops.candidate_scans / 16;
 
@@ -111,6 +112,6 @@ impl PerformanceProfiler {
             ops_breakdown: ops,
         };
 
-        PerformanceCertificate::new(HardwareMetadata::default(), metrics, max_bytes_limit)
+        PerformanceCertificate::new(hw, metrics, max_bytes_limit)
     }
 }
