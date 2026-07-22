@@ -593,6 +593,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "uor-r4-proof-model"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "uor-r4-core",
+]
+
+[[package]]
 name = "uor-r4-router"
 version = "0.1.0"
 dependencies = [
