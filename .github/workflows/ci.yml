@@ -1,0 +1,157 @@
+name: ci
+
+# Quality gates per docs/r4_graph_compiler_implementation_plan.md §13 (issue #58).
+# Covers: fmt, clippy (-D warnings), tests (nextest + doc), allocation-freedom,
+# no_std ladder, deterministic rebuild, κ-reproduction, dependency audit, fuzz smoke.
+#
+# IMPORTANT: this workspace has path dependencies on uor_standards/*, which are
+# gitignored and not part of this repository. CI checks them out from their
+# upstream repos at the pinned revisions below (bump deliberately). Fresh clones
+# of uor-r4 need the same three checkouts to build locally.
+# NOTE: κ-reproduction is macOS-pinned per decision D2 (libm-sensitive teacher
+# logprobs); on Linux it is expected to skip (checkpoint download is best-effort)
+# or fail on platform drift — the canonical deterministic compile mode (Phase 2)
+# is what makes it a true cross-platform gate.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  UOR_ADDR_REV: 165b51e3e2113ee5d032730cde709335d4fe9b60
+  UOR_FRAMEWORK_REV: 51c01382200b0179d6640b07e9c8119364ab69a1
+  PRISM_REV: 507995bab43c0cb06ec244c96e6fc25b3f502204
+
+jobs:
+  gates:
+    name: fmt / clippy / tests / no_std / κ
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Checkout uor-addr (path dependency)
+        uses: actions/checkout@v4
+        with:
+          repository: UOR-Foundation/uor-addr
+          ref: ${{ env.UOR_ADDR_REV }}
+          path: uor_standards/uor-addr
+
+      - name: Checkout UOR-Framework (path dependency)
+        uses: actions/checkout@v4
+        with:
+          repository: UOR-Foundation/UOR-Framework
+          ref: ${{ env.UOR_FRAMEWORK_REV }}
+          path: uor_standards/UOR-Framework
+
+      - name: Checkout prism (path dependency)
+        uses: actions/checkout@v4
+        with:
+          repository: UOR-Foundation/prism
+          ref: ${{ env.PRISM_REV }}
+          path: uor_standards/prism
+
+      - name: Install Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: cargo-${{ runner.os }}-
+
+      - name: cargo fmt --check
+        run: cargo fmt --check
+
+      - name: cargo clippy (-D warnings)
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@cargo-nextest
+
+      - name: cargo nextest run --workspace
+        run: cargo nextest run --workspace
+
+      - name: cargo test --doc
+        run: cargo test --doc --workspace
+
+      - name: no_std ladder (graph-format)
+        run: |
+          cargo check -p uor-r4-graph-format --no-default-features
+          cargo check -p uor-r4-graph-format --no-default-features --features alloc
+
+      - name: Deterministic rebuild (Gate E slice)
+        run: cargo test -p uor-r4-core --test deterministic_rebuild_test -- --nocapture
+
+      - name: Cache κ checkpoint (stories15M)
+        uses: actions/cache@v4
+        with:
+          path: /tmp/ref
+          key: kappa-checkpoint-stories15m-v1
+
+      - name: Download κ checkpoint if not cached
+        run: |
+          if [ ! -f /tmp/ref/out/model.bin ]; then
+            curl -sL -o /tmp/run.com https://github.com/trholding/llama2.c/releases/download/experimental/run.com
+            cd /tmp && unzip -o run.com out/model.bin tokenizer.bin -d ref
+          fi
+          ls -la /tmp/ref/out/model.bin
+
+      - name: κ-reproduction (macOS-pinned baseline; informational on Linux)
+        run: TLESS_CHECKPOINT=/tmp/ref/out/model.bin cargo test -p uor-r4-core --release --test kappa_reproduction -- --ignored
+        continue-on-error: true
+
+  audit:
+    name: cargo audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: rustsec/audit-check@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  fuzz-smoke:
+    name: fuzz smoke (nightly libfuzzer)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Checkout uor-addr (path dependency)
+        uses: actions/checkout@v4
+        with:
+          repository: UOR-Foundation/uor-addr
+          ref: ${{ env.UOR_ADDR_REV }}
+          path: uor_standards/uor-addr
+
+      - name: Install Rust (nightly)
+        uses: dtolnay/rust-toolchain@nightly
+
+      - name: Install cargo-fuzz
+        uses: taiki-e/install-action@cargo-fuzz
+
+      - name: Cache fuzz build
+        uses: actions/cache@v4
+        with:
+          path: crates/uor-r4-graph-format/fuzz/target
+          key: fuzz-${{ runner.os }}-${{ hashFiles('crates/uor-r4-graph-format/fuzz/Cargo.toml') }}
+          restore-keys: fuzz-${{ runner.os }}-
+
+      - name: fuzz parse_arbitrary (60s)
+        working-directory: crates/uor-r4-graph-format
+        run: cargo fuzz run parse_arbitrary -- -max_total_time=60 -print_final_stats=1
+
+      - name: fuzz mutate_valid (60s)
+        working-directory: crates/uor-r4-graph-format
+        run: cargo fuzz run mutate_valid -- -max_total_time=60 -print_final_stats=1
