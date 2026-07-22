@@ -20,10 +20,9 @@ fn test_deterministic_container_rebuild() {
     let dir = env!("CARGO_MANIFEST_DIR");
     let fixture_path = format!("{dir}/tests/fixtures/tless_artifacts.bin");
 
-    let Ok(bytes) = std::fs::read(&fixture_path) else {
-        eprintln!("skipping: fixture file not present at {fixture_path}");
-        return;
-    };
+    let bytes = std::fs::read(&fixture_path).unwrap_or_else(|e| {
+        panic!("fixture required for Gate E (Decision D2) at {fixture_path}: {e}")
+    });
 
     // Parse the baseline compiled container twice
     let art1 = compiler::parse_artifacts(&bytes).expect("parse run 1");
