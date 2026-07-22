@@ -139,6 +139,9 @@ where
 
     // Iterate over sequential positions in the corpus
     let n = corpus.n;
+    if corpus.story.len() < n || corpus.input.len() < n || corpus.next.len() < n {
+        return Err("corpus vectors shorter than corpus.n");
+    }
     if n > 1 {
         for i in 0..(n - 1) {
             // Keep transitions within the same story sequence
