@@ -103,11 +103,14 @@ impl ShortlistEvaluator {
 
         // Compute worst routing error max |scores_graph - scores_teacher|
         let mut worst_err: i32 = 0;
-        let len = scores_graph.len().min(scores_teacher.len());
-        for i in 0..len {
-            let diff = (scores_graph[i] - scores_teacher[i]).abs();
-            if diff > worst_err {
-                worst_err = diff;
+        if scores_graph.len() != scores_teacher.len() {
+            worst_err = i32::MAX;
+        } else {
+            for (&g, &t) in scores_graph.iter().zip(scores_teacher.iter()) {
+                let diff = (g - t).abs();
+                if diff > worst_err {
+                    worst_err = diff;
+                }
             }
         }
 
