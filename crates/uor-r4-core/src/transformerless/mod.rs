@@ -157,6 +157,7 @@ pub mod progress;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod predictive_sufficiency;
 pub mod reference_state;
+pub mod resolution_status;
 pub mod runtime;
 pub mod score_q;
 #[cfg(not(target_arch = "wasm32"))]
