@@ -26,7 +26,7 @@ const TOP_M_MEMBERSHIPS: usize = 3;
 /// Complete arithmetic interface of the runtime, with an operation census.
 /// There is no multiplication method; the census has no multiplication
 /// field. Both absences are the point.
-#[derive(Default)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
 pub struct OpKernel {
     pub adds: u64,
     pub xors: u64,
