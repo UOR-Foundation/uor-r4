@@ -41,7 +41,7 @@ struct ResetPayload {
     identity: Option<String>,
 }
 
-fn get_window_theme(win_idx: usize) -> &'static str {
+fn get_window_theme(win_idx: u32) -> &'static str {
     match win_idx {
         1 => "Origins & Foundations",
         2 => "Duality & Polarity",
@@ -751,8 +751,10 @@ fn handle_connection(
 
         // Project the evolved brain state to 2D for the map path tracing
         let active_state = router_guard.get_brain_state_native(&identity);
-        let (u, v) = router_guard
-            .get_sentence_projection_native(&active_state, routing_data.routed.window_index);
+        let (u, v) = router_guard.get_sentence_projection_native(
+            &active_state,
+            routing_data.routed.window_index as usize,
+        );
         let v_4d = router_guard.get_state_4d_projection_native(&active_state);
 
         let theme = get_window_theme(routing_data.routed.window_index);
@@ -1250,8 +1252,10 @@ fn handle_connection(
             .clone()
             .expect("No sysinfo routing data generated");
         let active_state = router_guard.get_brain_state_native(identity);
-        let (u, v) = router_guard
-            .get_sentence_projection_native(&active_state, routing_data.routed.window_index);
+        let (u, v) = router_guard.get_sentence_projection_native(
+            &active_state,
+            routing_data.routed.window_index as usize,
+        );
         let v_4d = router_guard.get_state_4d_projection_native(&active_state);
         let kappa = routing_data.routed.metrics.kappa;
         let theta_d = routing_data.routed.metrics.deficit_angle;
@@ -1476,7 +1480,7 @@ fn autotune(kappa: f64, theta_d: f64, uor_bias: f64) -> (f64, f64) {
 struct CliAnswer {
     text: String,
     mode: String,
-    window_index: usize,
+    window_index: u32,
     kappa: f64,
     theta_d: f64,
     fingerprint_hex: String,
