@@ -61,7 +61,11 @@ impl PerformanceCertificate {
     pub fn compute_cid(&self) -> String {
         let mut clone = self.clone();
         clone.certificate_cid.clear();
-        let bytes = serde_json::to_vec(&clone).unwrap_or_default();
+
+        let mut bytes = Vec::new();
+        ciborium::into_writer(&clone, &mut bytes)
+            .expect("performance certificate CBOR serialization must succeed");
+
         let mut hasher = Hasher::new();
         hasher.update(&bytes);
         format!("kappa:blake3:{}", hasher.finalize().to_hex())
@@ -96,7 +100,8 @@ impl PerformanceProfiler {
         ops: OpKernel,
         max_bytes_limit: u64,
     ) -> PerformanceCertificate {
-        let line_size = 64u64;
+        let hw = HardwareMetadata::default();
+        let line_size = hw.cache_line_size_bytes as u64;
         let cache_misses = (bytes_read + line_size - 1) / line_size + (section_accesses as u64);
         let branch_misses = ops.compares / 32 + ops.candidate_scans / 16;
 
@@ -107,6 +112,6 @@ impl PerformanceProfiler {
             ops_breakdown: ops,
         };
 
-        PerformanceCertificate::new(HardwareMetadata::default(), metrics, max_bytes_limit)
+        PerformanceCertificate::new(hw, metrics, max_bytes_limit)
     }
 }

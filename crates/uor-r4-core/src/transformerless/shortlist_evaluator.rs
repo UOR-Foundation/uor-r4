@@ -73,24 +73,27 @@ impl ShortlistEvaluator {
         let mut fn_count = 0;
 
         for (list, &ref_target) in shortlists.iter().zip(references.iter()) {
-            let contains_target = list.contains(&ref_target);
-            if !contains_target {
-                fn_count += 1;
-            }
-            if list.first() == Some(&ref_target) {
-                top1_matches += 1;
-            }
-            if list.iter().take(3).any(|&t| t == ref_target) {
-                top3_matches += 1;
-            }
-            if list.iter().take(5).any(|&t| t == ref_target) {
-                top5_matches += 1;
-            }
-            if list.iter().take(10).any(|&t| t == ref_target) {
-                top10_matches += 1;
-            }
-            if list.iter().take(20).any(|&t| t == ref_target) {
-                top20_matches += 1;
+            match list.iter().position(|&t| t == ref_target) {
+                None => {
+                    fn_count += 1;
+                }
+                Some(idx) => {
+                    if idx == 0 {
+                        top1_matches += 1;
+                    }
+                    if idx < 3 {
+                        top3_matches += 1;
+                    }
+                    if idx < 5 {
+                        top5_matches += 1;
+                    }
+                    if idx < 10 {
+                        top10_matches += 1;
+                    }
+                    if idx < 20 {
+                        top20_matches += 1;
+                    }
+                }
             }
         }
 
@@ -101,17 +104,34 @@ impl ShortlistEvaluator {
         let r20 = top20_matches as f64 / n;
         let fnr = fn_count as f64 / n;
 
-        // Compute worst routing error max |scores_graph - scores_teacher|
-        let mut worst_err: i32 = 0;
-        let len = scores_graph.len().min(scores_teacher.len());
-        for i in 0..len {
-            let diff = (scores_graph[i] - scores_teacher[i]).abs();
-            if diff > worst_err {
-                worst_err = diff;
-            }
-        }
+        // Compute worst routing error max |scores_graph - scores_teacher|.
+        // If the score vectors are different lengths, treat this as an evaluation failure.
+        let worst_err: i32 = if scores_graph.len() != scores_teacher.len() {
+            i32::MAX
+        } else {
+            scores_graph
+                .iter()
+                .zip(scores_teacher.iter())
+                .map(|(&g, &t)| ((g as i64) - (t as i64)).abs())
+                .max()
+                .unwrap_or(0)
+                .min(i32::MAX as i64) as i32
+        };
 
-        let gate_h_passed = r5 >= min_top5_recall_threshold && worst_err <= 1000;
+        const MAX_WORST_ROUTING_ERROR: i32 = 1_000;
+
+        // Fallback is required when the reference target is missing from the shortlist.
+        let fallback_rate = fnr;
+
+        // Fidelity of the direct (non-fallback) path, conditioned on not requiring fallback.
+        let direct_denom = n - fn_count as f64;
+        let conditional_direct_fidelity = if direct_denom > 0.0 {
+            top1_matches as f64 / direct_denom
+        } else {
+            0.0
+        };
+
+        let gate_h_passed = r5 >= min_top5_recall_threshold && worst_err <= MAX_WORST_ROUTING_ERROR;
         let trigger_gated_fallback_active = r5 < min_top5_recall_threshold;
 
         ShortlistRecallReport {
@@ -122,8 +142,8 @@ impl ShortlistEvaluator {
                 top10_recall: r10,
                 top20_recall: r20,
                 false_negative_rate: fnr,
-                fallback_rate: if trigger_gated_fallback_active { 0.25 } else { 0.05 },
-                conditional_direct_fidelity: r1,
+                fallback_rate,
+                conditional_direct_fidelity,
                 worst_routing_error: worst_err,
                 gate_h_passed,
             },

@@ -49,8 +49,8 @@ pub struct GraphPatch {
     pub epoch_id: u64,
     pub patch_cid: String,
     pub added_edges: Vec<Edge>,
-    pub residual_updates: Vec<(usize, ScoreQ)>,
-    pub tombstone_edge_ids: Vec<usize>,
+    pub residual_updates: Vec<(u32, ScoreQ)>,
+    pub tombstone_edge_ids: Vec<u32>,
     pub route_translation: RouteTranslationMap,
 }
 
@@ -59,8 +59,8 @@ impl GraphPatch {
         parent_graph_cid: impl Into<String>,
         epoch_id: u64,
         added_edges: Vec<Edge>,
-        residual_updates: Vec<(usize, ScoreQ)>,
-        tombstone_edge_ids: Vec<usize>,
+        residual_updates: Vec<(u32, ScoreQ)>,
+        tombstone_edge_ids: Vec<u32>,
         route_translation: RouteTranslationMap,
     ) -> Self {
         let mut patch = GraphPatch {
@@ -77,18 +77,18 @@ impl GraphPatch {
     }
 
     /// Compute self-referential BLAKE3 CID over patch payload.
-pub fn compute_cid(&self) -> String {
-    let mut clone = self.clone();
-    clone.patch_cid.clear();
+    pub fn compute_cid(&self) -> String {
+        let mut clone = self.clone();
+        clone.patch_cid.clear();
 
-    let mut bytes = Vec::new();
-    ciborium::into_writer(&clone, &mut bytes)
-        .expect("graph patch CBOR serialization must succeed");
+        let bytes = clone
+            .to_cbor_bytes()
+            .expect("GraphPatch CBOR serialization for CID");
 
-    let mut hasher = Hasher::new();
-    hasher.update(&bytes);
-    format!("kappa:blake3:{}", hasher.finalize().to_hex())
-}
+        let mut hasher = Hasher::new();
+        hasher.update(&bytes);
+        format!("kappa:blake3:{}", hasher.finalize().to_hex())
+    }
 
     pub fn verify_cid(&self) -> bool {
         self.patch_cid == self.compute_cid()
@@ -98,24 +98,23 @@ pub fn compute_cid(&self) -> String {
     pub fn apply(&self, graph: &mut TransitionGraph) -> Result<(), String> {
         // Update ScoreQ residuals
         for &(edge_idx, ref score) in &self.residual_updates {
+            let edge_idx = edge_idx as usize;
             if edge_idx >= graph.edges.len() {
-                return Err(format!("Residual update edge index {} out of bounds", edge_idx));
+                return Err(format!(
+                    "Residual update edge index {} out of bounds",
+                    edge_idx
+                ));
             }
             graph.edges[edge_idx].score = *score;
         }
 
         // Add new edges
         for edge in &self.added_edges {
-            let new_id = graph.add_edge_with_score(
-                edge.src,
-                edge.dst,
-                edge.weight,
-                edge.score,
-                edge.kind,
-            );
+            let new_id =
+                graph.add_edge_with_score(edge.src, edge.dst, edge.weight, edge.score, edge.kind);
             if new_id != edge.id {
                 return Err(format!(
-                    "Added edge ID mismatch: patch expected {}, graph assigned {}",
+                    "Added edge ID mismatch: patch has {}, graph assigned {}",
                     edge.id, new_id
                 ));
             }
@@ -123,9 +122,14 @@ pub fn compute_cid(&self) -> String {
 
         // Remove tombstones (mark weight = 0)
         for &tombstone_idx in &self.tombstone_edge_ids {
-            if tombstone_idx < graph.edges.len() {
-                graph.edges[tombstone_idx].weight = 0;
+            let tombstone_idx = tombstone_idx as usize;
+            if tombstone_idx >= graph.edges.len() {
+                return Err(format!(
+                    "Tombstone edge index {} out of bounds",
+                    tombstone_idx
+                ));
             }
+            graph.edges[tombstone_idx].weight = 0;
         }
 
         // Rebuild reverse index and verify Theorem 7
