@@ -303,7 +303,6 @@ fn allocation_census() {
     let mut out = [Prediction::default(); GEN_TOKENS];
     let ((code, wit, n, gen_ops), gen_cen) = measure(|| {
         let code = rt.assign_window(&SEED);
-
         let wit = rt.predict_witness(&store, &code);
         let _ = rt.predict(&store, &code); // exercise the stateful entry point
         let before = Ops::of(&rt.kernel);

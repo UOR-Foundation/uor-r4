@@ -26,6 +26,11 @@ pub mod teacher;
 pub use certificate::Certificate;
 pub use reference_state::{ActiveFrontier, ActiveFrontierEntry, PackedEdgeRanges};
 pub use runtime::{derive_popcount_table, hamming, sign_signature, OpKernel};
+pub use runtime_state::{
+    ReservedState, ReservedStateUpdate, RuntimeState, RuntimeStateLevel, SemanticStateSlot,
+    TokenState, LOCAL_STATE_CAPACITY, SEGMENT_STATE_CAPACITY, SESSION_STATE_CAPACITY,
+    TOKEN_STATE_CAPACITY,
+};
 pub use score_q::ScoreQ;
 
 #[cfg(test)]
@@ -167,6 +172,7 @@ pub mod progress;
 pub mod reference_state;
 pub mod resolution_status;
 pub mod runtime;
+pub mod runtime_state;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod scenarios;
 pub mod score_q;
