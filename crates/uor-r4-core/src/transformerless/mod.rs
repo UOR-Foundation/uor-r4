@@ -149,3 +149,5 @@ pub mod progress;
 pub mod runtime;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod scenarios;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod transitions;
