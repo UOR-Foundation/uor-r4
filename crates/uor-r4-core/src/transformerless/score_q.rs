@@ -19,8 +19,12 @@ impl ScoreQ {
 
     /// Construct ScoreQ from log probability (float).
     pub fn from_logprob(lp: f32) -> Self {
-        let val = (lp * Self::SCALE).round().clamp(i32::MIN as f32, i32::MAX as f32);
-        ScoreQ(val as i32)
+        if lp.is_nan() {
+            return Self::ZERO;
+        }
+        let scaled = (lp * Self::SCALE).round();
+        let clamped = scaled.clamp(i32::MIN as f32, i32::MAX as f32);
+        ScoreQ(clamped as i32)
     }
 
     /// Convert ScoreQ back to log probability (float).

@@ -34,9 +34,9 @@
       "blake3:7d0b526a4972eabb04a19ab8de7fb8344bc1d21ee3187e2663c86d7257f5c1fe"
     ],
     "container": {
-      "kappa": "blake3:3b12f93efaa72dae22af1254830c78827b1e28064293cc7a926f5825563658b6",
-      "bytes": 1641736,
-      "format": "TLA3"
+      "kappa": "blake3:43329db3fe482195a92fdd54d0bde54a23c9ff4ceae84f991b86c72497f5e9a0",
+      "bytes": 462092,
+      "format": "TLA5"
     }
   },
   "certificate_macos": {

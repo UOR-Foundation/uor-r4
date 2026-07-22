@@ -68,8 +68,7 @@ impl TransitionGraph {
 
     /// Add a canonical edge to the graph.
     pub fn add_edge(&mut self, src: u32, dst: u32, weight: u32, kind: EdgeKind) -> u32 {
-        let raw = weight.min(i32::MAX as u32) as i32;
-        self.add_edge_with_score(src, dst, weight, ScoreQ::from_raw(raw), kind)
+        self.add_edge_with_score(src, dst, weight, ScoreQ::ZERO, kind)
     }
 
     /// Build and sort the reverse edge index $E_b$, validating Theorem 7 consistency.
@@ -159,6 +158,9 @@ where
 
     // Iterate over sequential positions in the corpus
     let n = corpus.n;
+    if corpus.story.len() < n || corpus.input.len() < n || corpus.next.len() < n {
+        return Err("corpus vectors shorter than corpus.n");
+    }
     if n > 1 {
         for i in 0..(n - 1) {
             // Keep transitions within the same story sequence
