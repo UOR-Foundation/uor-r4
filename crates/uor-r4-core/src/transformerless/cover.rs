@@ -98,9 +98,7 @@ use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 
-use super::compiler::{
-    self, quantile_radius, Corpus, D, SIG_BYTES, SIG_WORDS, STAGES, WINDOW,
-};
+use super::compiler::{self, quantile_radius, Corpus, D, SIG_BYTES, SIG_WORDS, STAGES, WINDOW};
 use super::observe;
 use super::runtime;
 
@@ -282,7 +280,9 @@ pub fn split_positions(corpus: &Corpus) -> (Vec<usize>, Vec<usize>) {
 /// to `[1, n_obs]`; budgets below the reserve degrade to batches of one.
 /// Batch size never influences results (module docs).
 pub fn derive_batch_size(memory_budget_bytes: u64, regions_budget: usize, n_obs: usize) -> usize {
-    let cluster_state = (regions_budget as u64).saturating_mul(D as u64).saturating_mul(4);
+    let cluster_state = (regions_budget as u64)
+        .saturating_mul(D as u64)
+        .saturating_mul(4);
     let available = memory_budget_bytes
         .saturating_sub(MEMORY_RESERVE_BYTES)
         .saturating_sub(cluster_state);
@@ -306,7 +306,11 @@ fn blake3_u64(seed: &[u8; 32], key: &str) -> u64 {
     let mut hasher = blake3::Hasher::new();
     hasher.update(seed);
     hasher.update(key.as_bytes());
-    u64::from_le_bytes(hasher.finalize().as_bytes()[0..8].try_into().expect("8-byte slice"))
+    u64::from_le_bytes(
+        hasher.finalize().as_bytes()[0..8]
+            .try_into()
+            .expect("8-byte slice"),
+    )
 }
 
 /// Dot product of two unit f32 vectors, accumulated in index order
@@ -357,12 +361,19 @@ pub struct KMeansResult {
 /// order and accumulates per-centroid f64 sums in global point order, so
 /// results are independent of `batch_size` and of any worker count.
 pub fn spherical_kmeans(
-    points: &[Vec<f32>],
+    points: &[&[f32]],
     k: usize,
     seed: &[u8; 32],
     batch_size: usize,
 ) -> KMeansResult {
     let n = points.len();
+    if n == 0 {
+        return KMeansResult {
+            centroids: Vec::new(),
+            assignment: Vec::new(),
+            iterations: 0,
+        };
+    }
     let k_eff = k.min(n).max(1);
     let batch_size = batch_size.max(1).min(n.max(1));
 
@@ -370,7 +381,7 @@ pub fn spherical_kmeans(
     // point (ties to the lowest index).
     let mut centroids: Vec<Vec<f32>> = Vec::with_capacity(k_eff);
     let first = (blake3_u64(seed, "first-centroid") as usize) % n;
-    centroids.push(points[first].clone());
+    centroids.push(points[first].to_vec());
     while centroids.len() < k_eff {
         let mut best_idx = 0usize;
         let mut best_dist = -1f32;
@@ -387,7 +398,7 @@ pub fn spherical_kmeans(
                 best_idx = i;
             }
         }
-        centroids.push(points[best_idx].clone());
+        centroids.push(points[best_idx].to_vec());
     }
 
     let mut assignment = vec![0u32; n];
@@ -427,7 +438,10 @@ pub fn spherical_kmeans(
         let mut reseeded: Vec<usize> = Vec::new();
         for (k, centroid) in centroids.iter().enumerate() {
             if counts[k] > 0 {
-                let mut next: Vec<f32> = sums[k].iter().map(|&s| (s / counts[k] as f64) as f32).collect();
+                let mut next: Vec<f32> = sums[k]
+                    .iter()
+                    .map(|&s| (s / counts[k] as f64) as f32)
+                    .collect();
                 normalize(&mut next);
                 new_centroids.push(next);
             } else {
@@ -435,12 +449,13 @@ pub fn spherical_kmeans(
                 reseeded.push(k);
             }
         }
+        let mut chosen: Vec<usize> = Vec::with_capacity(reseeded.len());
         for &empty in &reseeded {
             let mut best_idx = 0usize;
             let mut best_dist = -1f32;
             for (i, point) in points.iter().enumerate() {
-                if reseeded.iter().any(|&k| k != empty && i == 0 && false) {
-                    continue;
+                if chosen.contains(&i) {
+                    continue; // one reseed per point: no duplicate centroids
                 }
                 let mut min_dist = f32::MAX;
                 for (k, centroid) in new_centroids.iter().enumerate() {
@@ -457,13 +472,15 @@ pub fn spherical_kmeans(
                     best_idx = i;
                 }
             }
-            new_centroids[empty] = points[best_idx].clone();
+            chosen.push(best_idx);
+            new_centroids[empty] = points[best_idx].to_vec();
         }
         // Convergence: bit-identical centroids (exact f32 compare).
-        let converged = new_centroids
-            .iter()
-            .zip(centroids.iter())
-            .all(|(a, b)| a.iter().zip(b.iter()).all(|(x, y)| x.to_bits() == y.to_bits()));
+        let converged = new_centroids.iter().zip(centroids.iter()).all(|(a, b)| {
+            a.iter()
+                .zip(b.iter())
+                .all(|(x, y)| x.to_bits() == y.to_bits())
+        });
         centroids = new_centroids;
         if converged {
             break;
@@ -561,6 +578,25 @@ fn hamming_sig(a: &[u8; SIG_BYTES], b: &[u8; SIG_BYTES]) -> u32 {
         dist += (x ^ y).count_ones();
     }
     dist
+}
+
+/// Calibrated acceptance radius of one region: the 95th percentile of the
+/// members' masked-Hamming distances to the prototype (all-ones mask),
+/// reusing [`quantile_radius`]. For member counts ≤ 19 the quantile
+/// target is the full count, so the radius covers every member distance.
+pub fn calibrate_region_radius(
+    member_sigs: &[[u8; SIG_BYTES]],
+    prototype_sig: &[u8; SIG_BYTES],
+) -> u16 {
+    let mut histogram = vec![0u32; D + 1];
+    for sig in member_sigs {
+        histogram[hamming_sig(sig, prototype_sig) as usize] += 1;
+    }
+    quantile_radius(
+        &histogram,
+        RADIUS_QUANTILE_NUMERATOR,
+        RADIUS_QUANTILE_DENOMINATOR,
+    )
 }
 
 /// Binarize a prototype to a sign-bit signature exactly like the
@@ -686,7 +722,7 @@ impl ReferenceClassifier {
                 continue;
             }
             let d = cosine_distance(vector, &region.prototype);
-            if best.map_or(true, |(_, bd)| d < bd) {
+            if best.is_none_or(|(_, bd)| d < bd) {
                 best = Some((region.id, d));
             }
         }
@@ -773,7 +809,7 @@ pub fn induce_cover(
         observations.len(),
     );
     let n = observations.len();
-    let points: Vec<Vec<f32>> = observations.iter().map(|o| o.vector.clone()).collect();
+    let points: Vec<&[f32]> = observations.iter().map(|o| o.vector.as_slice()).collect();
 
     let mut regions: Vec<CoverRegion> = Vec::new();
     let mut members_of: Vec<Vec<usize>> = Vec::new();
@@ -828,9 +864,9 @@ pub fn induce_cover(
             continue;
         }
         let parent_members = members_of[region_id as usize].clone();
-        let child_points: Vec<Vec<f32>> = parent_members
+        let child_points: Vec<&[f32]> = parent_members
             .iter()
-            .map(|&m| observations[m].vector.clone())
+            .map(|&m| observations[m].vector.as_slice())
             .collect();
         let seed = run_seed(
             artifact_kappa,
@@ -886,17 +922,12 @@ pub fn induce_cover(
     // Radius calibration: the 95th percentile of member masked-Hamming
     // distances (all-ones mask), reusing the PR #38 quantile logic.
     for id in 0..regions.len() {
-        let mut histogram = vec![0u32; D + 1];
         let sig = regions[id].sig;
-        for &m in &members_of[id] {
-            let dist = hamming_sig(&observations[m].sig, &sig);
-            histogram[dist as usize] += 1;
-        }
-        regions[id].radius = quantile_radius(
-            &histogram,
-            RADIUS_QUANTILE_NUMERATOR,
-            RADIUS_QUANTILE_DENOMINATOR,
-        );
+        let member_sigs: Vec<[u8; SIG_BYTES]> = members_of[id]
+            .iter()
+            .map(|&m| observations[m].sig)
+            .collect();
+        regions[id].radius = calibrate_region_radius(&member_sigs, &sig);
     }
 
     let max_depth = regions.iter().map(|r| r.depth as usize).max().unwrap_or(1);
@@ -1042,26 +1073,22 @@ pub fn evaluate_held_out(
     // (region, class cell) → count.
     let mut class_members: BTreeMap<[u8; STAGES], Vec<usize>> = BTreeMap::new();
     let mut train_top1: Vec<Vec<u32>> = Vec::with_capacity(train.len());
-    let mut train_topm: Vec<Vec<u32>> = Vec::with_capacity(train.len());
     let mut region_counts: BTreeMap<(usize, u32), u64> = BTreeMap::new();
     let mut region_class_counts: BTreeMap<(usize, u32, [u8; STAGES]), u64> = BTreeMap::new();
     for (i, observation) in train.iter().enumerate() {
         let code = runtime::assign_plain(art, &observation.sig);
         class_members.entry(code).or_default().push(i);
         let mut top1 = Vec::with_capacity(cover.max_depth);
-        let mut topm = Vec::with_capacity(cover.max_depth);
         for depth in 1..=cover.max_depth {
             let memberships = reference.binary_memberships(depth, &observation.sig);
             let t1 = memberships.first().copied().unwrap_or(u32::MAX);
             top1.push(t1);
-            topm.extend_from_slice(&memberships);
             if t1 != u32::MAX {
                 *region_counts.entry((depth, t1)).or_insert(0) += 1;
                 *region_class_counts.entry((depth, t1, code)).or_insert(0) += 1;
             }
         }
         train_top1.push(top1);
-        train_topm.push(topm);
     }
 
     let mut reports = Vec::new();
@@ -1216,7 +1243,9 @@ pub fn emit_r4g1(
         }
         child_len[edge.src as usize] += 1;
     }
-    let max_child_len = child_len.iter().copied().max().unwrap_or(0);
+    // The root record keeps all ranges empty (converter convention), so
+    // the observed max runs over the wired region records only.
+    let max_child_len = child_len[1..].iter().copied().max().unwrap_or(0);
     let max_frontier_width = DEFAULT_MAX_FRONTIER_WIDTH.max(max_child_len);
     let mut reverse: Vec<u32> = (0..edge_count).collect();
     reverse.sort_by_key(|&id| {
@@ -1345,6 +1374,7 @@ pub fn emit_r4g1(
     view.verify_cids()
         .map_err(|error| format!("cover emitted an artifact with bad CIDs: {error}"))?;
 
+    let artifact_len = bytes.len();
     Ok((
         bytes,
         CoverArtifactInfo {
@@ -1355,7 +1385,7 @@ pub fn emit_r4g1(
             depth_count,
             max_frontier_width,
             root_prior_entries,
-            artifact_bytes: bytes.len(),
+            artifact_bytes: artifact_len,
         },
     ))
 }
@@ -1440,23 +1470,36 @@ pub struct CoverReportArtifact {
     pub edge_count: u32,
 }
 
+/// Data bundle for [`build_report`] (keeps the argument list focused).
+pub struct ReportData<'a> {
+    pub reference: &'a ReferenceClassifier,
+    pub train: &'a [Observation],
+    pub held_out: &'a [Observation],
+    pub edges: &'a [CoverEdge],
+    pub recall: Vec<DepthRecall>,
+    pub artifact: Option<(&'a [u8], CoverArtifactInfo)>,
+}
+
 /// Assemble the report from a finished run.
-pub fn build_report(
-    config: &CoverConfig,
-    induced: &InducedCover,
-    reference: &ReferenceClassifier,
-    train: &[Observation],
-    held_out: &[Observation],
-    edges: &[CoverEdge],
-    recall: Vec<DepthRecall>,
-    artifact: Option<(&[u8], CoverArtifactInfo)>,
-) -> CoverReport {
+pub fn build_report(config: &CoverConfig, induced: &InducedCover, data: ReportData) -> CoverReport {
+    let ReportData {
+        reference,
+        train,
+        held_out,
+        edges,
+        recall,
+        artifact,
+    } = data;
     let cover = &induced.cover;
     let mut per_depth = vec![0u32; cover.max_depth];
     for region in &cover.regions {
         per_depth[region.depth as usize - 1] += 1;
     }
-    let splits = cover.regions.iter().filter(|r| !r.children.is_empty()).count();
+    let splits = cover
+        .regions
+        .iter()
+        .filter(|r| !r.children.is_empty())
+        .count();
     let split_gains: Vec<f64> = cover
         .regions
         .iter()
@@ -1487,9 +1530,7 @@ pub fn build_report(
             entropy_gain_bits: config.entropy_gain_bits,
             split_children: SPLIT_CHILDREN,
             top_m: TOP_M,
-            radius_quantile: format!(
-                "{RADIUS_QUANTILE_NUMERATOR}/{RADIUS_QUANTILE_DENOMINATOR}"
-            ),
+            radius_quantile: format!("{RADIUS_QUANTILE_NUMERATOR}/{RADIUS_QUANTILE_DENOMINATOR}"),
             batch_size: induced.batch_size,
             bytes_per_observation: BYTES_PER_OBSERVATION,
             memory_reserve_bytes: MEMORY_RESERVE_BYTES,

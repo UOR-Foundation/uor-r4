@@ -26,7 +26,7 @@
 //! and qwen/phi-class sources differ only in that adapter.
 
 use super::{
-    certify, compare, compiler, convert_r4g1, observe, runtime, scenarios,
+    certify, compare, compiler, convert_r4g1, cover, observe, runtime, scenarios,
     teacher::{BehaviorSource, HuggingFaceLlamaOracle, LlamaOracle, TeacherOracle},
 };
 use serde::Serialize;
@@ -182,6 +182,216 @@ pub fn observe_command(args: &[String]) -> Result<(), String> {
             options.output.display()
         );
     }
+    Ok(())
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct CoverOptions {
+    corpus_meta: PathBuf,
+    corpus_recs: PathBuf,
+    artifacts: PathBuf,
+    depths: usize,
+    k0: usize,
+    regions_budget: usize,
+    memory_budget_mb: u64,
+    output: PathBuf,
+}
+
+fn parse_cover_options(args: &[String]) -> Result<CoverOptions, String> {
+    let (default_meta, default_recs) = compiler::corpus_paths();
+    let mut options = CoverOptions {
+        corpus_meta: PathBuf::from(default_meta),
+        corpus_recs: PathBuf::from(default_recs),
+        artifacts: PathBuf::from(compiler::ART_PATH),
+        depths: cover::DEFAULT_DEPTHS,
+        k0: cover::DEFAULT_K0,
+        regions_budget: cover::DEFAULT_REGIONS_BUDGET,
+        memory_budget_mb: cover::DEFAULT_MEMORY_BUDGET_MB,
+        output: PathBuf::from("cover"),
+    };
+    let mut index = 0usize;
+    while index < args.len() {
+        let flag = &args[index];
+        let value = args
+            .get(index + 1)
+            .ok_or_else(|| format!("missing value for {flag}"))?;
+        match flag.as_str() {
+            "--corpus-meta" => options.corpus_meta = PathBuf::from(value),
+            "--corpus-recs" => options.corpus_recs = PathBuf::from(value),
+            "--artifacts" => options.artifacts = PathBuf::from(value),
+            "--depths" => {
+                options.depths = value
+                    .parse()
+                    .map_err(|_| format!("invalid --depths value: {value}"))?;
+                if options.depths == 0 {
+                    return Err("--depths must be at least 1".to_owned());
+                }
+            }
+            "--k0" => {
+                options.k0 = value
+                    .parse()
+                    .map_err(|_| format!("invalid --k0 value: {value}"))?;
+                if options.k0 == 0 {
+                    return Err("--k0 must be at least 1".to_owned());
+                }
+            }
+            "--regions-budget" => {
+                options.regions_budget = value
+                    .parse()
+                    .map_err(|_| format!("invalid --regions-budget value: {value}"))?;
+                if options.regions_budget == 0 {
+                    return Err("--regions-budget must be at least 1".to_owned());
+                }
+            }
+            "--memory-budget" => {
+                options.memory_budget_mb = value
+                    .parse()
+                    .map_err(|_| format!("invalid --memory-budget value: {value}"))?;
+            }
+            "--out" => options.output = PathBuf::from(value),
+            _ => return Err(format!("unknown cover option: {flag}")),
+        }
+        index += 2;
+    }
+    Ok(options)
+}
+
+/// Multiresolution cover induction (plan §5 Phase 2, issue #60): induce
+/// the overlapping region cover over the deterministic context-bundle
+/// lane, freeze the reference classifier, measure held-out routing recall
+/// against it and against the incumbent 4×256 class cover, and write the
+/// R4G1 artifact plus the JSON recall/stability report.
+pub fn cover_command(args: &[String]) -> Result<(), String> {
+    #[cfg(debug_assertions)]
+    eprintln!(
+        "warning: debug builds make cover induction much slower; use `cargo run --release -- transformerless cover ...`"
+    );
+    let options = parse_cover_options(args)?;
+    let corpus_meta = options
+        .corpus_meta
+        .to_str()
+        .ok_or_else(|| "corpus metadata path is not UTF-8".to_owned())?;
+    let corpus_recs = options
+        .corpus_recs
+        .to_str()
+        .ok_or_else(|| "corpus records path is not UTF-8".to_owned())?;
+    let corpus = compiler::load_corpus_from(corpus_meta, corpus_recs).ok_or_else(|| {
+        format!(
+            "corpus is incomplete at {}/{}; run compile until it is complete",
+            options.corpus_meta.display(),
+            options.corpus_recs.display()
+        )
+    })?;
+    let artifact_container = std::fs::read(&options.artifacts)
+        .map_err(|error| format!("{}: {error}", options.artifacts.display()))?;
+    let artifacts = compiler::parse_artifacts(&artifact_container).ok_or_else(|| {
+        format!(
+            "{}: not a TLA3/TLA4/TLA5 artifact container",
+            options.artifacts.display()
+        )
+    })?;
+    let artifact_kappa = format!("blake3:{}", blake3::hash(&artifact_container).to_hex());
+    let meta_bytes = std::fs::read(&options.corpus_meta)
+        .map_err(|error| format!("{}: {error}", options.corpus_meta.display()))?;
+    let recs_bytes = std::fs::read(&options.corpus_recs)
+        .map_err(|error| format!("{}: {error}", options.corpus_recs.display()))?;
+    let mut corpus_hasher = blake3::Hasher::new();
+    corpus_hasher.update(&meta_bytes);
+    corpus_hasher.update(&recs_bytes);
+    let corpus_kappa = format!("blake3:{}", corpus_hasher.finalize().to_hex());
+
+    let config = cover::CoverConfig {
+        depths: options.depths,
+        k0: options.k0,
+        regions_budget: options.regions_budget,
+        memory_budget_bytes: options.memory_budget_mb * 1024 * 1024,
+        ..cover::CoverConfig::default()
+    };
+    eprintln!(
+        "cover: inducing (depths {}, k0 {}, regions budget {}, memory budget {} MiB)...",
+        config.depths, config.k0, config.regions_budget, options.memory_budget_mb
+    );
+    let (train_positions, held_out_positions) = cover::split_positions(&corpus);
+    let train = cover::build_observations(&artifacts, &corpus, &train_positions);
+    let held_out = cover::build_observations(&artifacts, &corpus, &held_out_positions);
+    let induced = cover::induce_cover(&train, &config, &artifact_kappa, &corpus_kappa)?;
+    let reference = cover::ReferenceClassifier::freeze(&induced.cover);
+    eprintln!(
+        "cover: {} regions across {} depth(s); evaluating held-out routing recall...",
+        induced.cover.regions.len(),
+        induced.cover.max_depth
+    );
+    let recall =
+        cover::evaluate_held_out(&artifacts, &induced.cover, &reference, &train, &held_out);
+    let edges = cover::build_edges(&induced.cover, &reference, &train);
+    let prior = cover::root_prior(&train);
+    let vocab = u32::try_from(artifacts.token_codes.len() / compiler::STAGES)
+        .map_err(|_| "vocabulary exceeds u32 token ids".to_owned())?;
+    let (artifact_bytes, info) = cover::emit_r4g1(
+        &artifact_container,
+        (&meta_bytes, &recs_bytes),
+        vocab,
+        &induced.cover,
+        &edges,
+        &prior,
+    )?;
+    let report = cover::build_report(
+        &config,
+        &induced,
+        cover::ReportData {
+            reference: &reference,
+            train: &train,
+            held_out: &held_out,
+            edges: &edges,
+            recall: recall.clone(),
+            artifact: Some((&artifact_bytes, info)),
+        },
+    );
+
+    std::fs::create_dir_all(&options.output).map_err(|error| error.to_string())?;
+    let artifact_path = options.output.join("cover.r4g1");
+    std::fs::write(&artifact_path, &artifact_bytes)
+        .map_err(|error| format!("{}: {error}", artifact_path.display()))?;
+    let report_json = serde_json::to_string_pretty(&report).map_err(|error| error.to_string())?;
+    let report_path = options.output.join("cover_report.json");
+    std::fs::write(&report_path, &report_json)
+        .map_err(|error| format!("{}: {error}", report_path.display()))?;
+
+    println!(
+        "cover complete: {} regions ({} splits), {} edges ({} refinement + {} neighbor), depths 1..={}",
+        induced.cover.regions.len(),
+        report.regions.splits,
+        info.edge_count,
+        info.refinement_edges,
+        info.neighbor_edges,
+        induced.cover.max_depth
+    );
+    for depth in &recall {
+        println!(
+            "  depth {}: reference top-1 {:.1}% top-M {:.1}% | class-cover co-assignment recall {:.1}%/{:.1}% precision {:.1}%/{:.1}% | frontier mean {:.2} max {} ({} evaluated)",
+            depth.depth,
+            100.0 * depth.reference_top1_recall,
+            100.0 * depth.reference_topm_recall,
+            100.0 * depth.class_coassignment_recall_top1,
+            100.0 * depth.class_coassignment_recall_topm,
+            100.0 * depth.class_coassignment_precision_top1,
+            100.0 * depth.class_coassignment_precision_topm,
+            depth.frontier_width_mean,
+            depth.frontier_width_max,
+            depth.evaluated
+        );
+    }
+    println!(
+        "  batch size {} (memory budget {} MiB), split gains (bits) {:?}",
+        induced.batch_size, options.memory_budget_mb, report.regions.split_gains_bits
+    );
+    println!(
+        "  artifact: {} ({} bytes, κ blake3:{})",
+        artifact_path.display(),
+        artifact_bytes.len(),
+        blake3::hash(&artifact_bytes).to_hex()
+    );
+    println!("  report: {}", report_path.display());
     Ok(())
 }
 
@@ -891,11 +1101,13 @@ pub fn run(args: &[String]) -> Result<(), String> {
             Err(_) => println!("source checkpoint not found; see `setup`"),
         },
         Some("convert-r4g1") => convert_r4g1::run(&args[1..])?,
+        Some("cover") => cover_command(&args[1..])?,
         _ => {
             println!(
                 "R4 transformerless — cross-compile a transformer into a mul-free table artifact\n\
                  commands: setup | gen [secs] [target] | compile [--model REPO --revision SHA | --source DIR] [--output DIR] [--seconds N] [--target N] [--sequence-length N] | store | certify | compare | compare-report | scenarios | teacher-kappa | convert-r4g1 --artifacts <TLA> --store <TLS1> [--calibration <hamming_calibration.json>] --out <R4G1>\n\
                  observation pipeline: observe [--source DIR | --checkpoint BIN] [--seconds N] [--target N] [--shards N] [--out DIR] [--sequence-length N]\n\
+                 cover induction: cover [--corpus-meta P --corpus-recs P] [--artifacts P] [--depths N] [--k0 N] [--regions-budget N] [--memory-budget MB] [--out DIR]\n\
                  hf evaluation: evaluate-report [--source DIR] [--compiled DIR] [--report PATH] [--sequence-length N]\n\
                  docs: docs/TRANSFORMERLESS.md (extrapolation), docs/PROOF.md (proof + certificate)"
             );
