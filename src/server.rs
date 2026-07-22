@@ -610,6 +610,33 @@ fn clean_attention_response(text: &str, prompt: &str) -> String {
     result
 }
 
+fn usable_generated_text(text: &str) -> bool {
+    let chars: Vec<char> = text.chars().collect();
+    if chars.is_empty() || chars.iter().any(|ch| ch == &'\u{fffd}' || ch.is_control()) {
+        return false;
+    }
+    let non_space = chars.iter().filter(|ch| !ch.is_whitespace()).count();
+    let readable = chars
+        .iter()
+        .filter(|ch| ch.is_alphanumeric() || ch.is_ascii_punctuation())
+        .count();
+    if non_space == 0 || readable * 2 < non_space {
+        return false;
+    }
+    let mut run = 1usize;
+    for pair in chars.windows(2) {
+        if pair[0] == pair[1] {
+            run += 1;
+            if run >= 16 {
+                return false;
+            }
+        } else {
+            run = 1;
+        }
+    }
+    true
+}
+
 /// Persist the manifold cache in the background, at the CLI-configured path.
 fn spawn_cache_save(cli: &Arc<ServerConfig>, state_json: String) {
     let path = cli.manifold_cache.clone();
@@ -1257,11 +1284,24 @@ fn handle_connection(
         } else if engine_mode == "transformerless" || engine_mode == "r4g1" {
             let prompt = payload.text.clone();
             if let Some(text) = generate_r4g1_text(&r4g1, &prompt, max_tokens.max(32)) {
-                final_response_text = text;
-                llm_connected = true;
-                generation_mode = "r4g1".to_string();
-                tokens_generated = final_response_text.split_whitespace().count();
+                if usable_generated_text(&text) {
+                    final_response_text = text;
+                    llm_connected = true;
+                    generation_mode = "r4g1".to_string();
+                    tokens_generated = final_response_text.split_whitespace().count();
+                } else {
+                    generation_mode = "r4g1-rejected".to_string();
+                    println!("[-] R4G1 output rejected as non-readable or pathological");
+                }
             } else if engine_mode == "transformerless" {
+                if let Some(text) = generate_tless_text(&tless, &prompt, max_tokens.max(32)) {
+                    final_response_text = text;
+                    llm_connected = true;
+                    generation_mode = "transformerless-legacy".to_string();
+                    tokens_generated = final_response_text.split_whitespace().count();
+                }
+            }
+            if final_response_text.is_empty() && engine_mode == "transformerless" {
                 if let Some(text) = generate_tless_text(&tless, &prompt, max_tokens.max(32)) {
                     final_response_text = text;
                     llm_connected = true;
