@@ -68,12 +68,7 @@ impl TransitionGraph {
 
     /// Add a canonical edge to the graph.
     pub fn add_edge(&mut self, src: u32, dst: u32, weight: u32, kind: EdgeKind) -> u32 {
-<<<<<<< HEAD
         self.add_edge_with_score(src, dst, weight, ScoreQ::ZERO, kind)
-=======
-        let raw = weight.min(i32::MAX as u32) as i32;
-        self.add_edge_with_score(src, dst, weight, ScoreQ::from_raw(raw), kind)
->>>>>>> origin/main
     }
 
     /// Build and sort the reverse edge index $E_b$, validating Theorem 7 consistency.

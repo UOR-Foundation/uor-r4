@@ -22,7 +22,7 @@
 #[cfg(not(target_arch = "wasm32"))]
 pub mod teacher;
 
-pub use reference_state::{ActiveFrontier, ActiveFrontierEntry, PackedEdgeRanges, ScoreQ};
+pub use reference_state::{ActiveFrontier, ActiveFrontierEntry, PackedEdgeRanges};
 pub use runtime::{derive_popcount_table, hamming, sign_signature, OpKernel};
 pub use score_q::ScoreQ;
 #[cfg(not(target_arch = "wasm32"))]
