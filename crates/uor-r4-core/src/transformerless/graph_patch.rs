@@ -7,25 +7,17 @@ use crate::transformerless::{
 };
 use blake3::Hasher;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum RouteMapping {
-    Retained(u32),
-    Split(Vec<u32>),
-    Merged(u32),
-    Removed,
-}
+use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct RouteTranslationMap {
-    pub mappings: HashMap<u32, RouteMapping>,
+    pub mappings: BTreeMap<u32, RouteMapping>,
 }
 
 impl RouteTranslationMap {
     pub fn new() -> Self {
         RouteTranslationMap {
-            mappings: HashMap::new(),
+            mappings: BTreeMap::new(),
         }
     }
 
