@@ -181,7 +181,11 @@ pub mod runtime;
 pub mod runtime_state;
 // Tokenizer + encode/decode are portable; loaders/exports are fs-gated (see scenarios.rs).
 pub mod scenarios;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod score;
 pub mod score_q;
+// The reference scorer is portable (integer-only core, no fs).
+pub mod score_runtime;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod shortlist_evaluator;
 // Transitions are portable (pure graph math, no fs).

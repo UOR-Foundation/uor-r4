@@ -608,7 +608,7 @@ The table is the source content.
 |---|---|
 | Semantic collapse (geometry kept, prediction lost) | joint objective + held-out residual certification (Phase 2–3); Gate C |
 | Graph explosion from overlaps | support/gain thresholds, bounded memberships, sparse materialization, byte penalty in J(C) |
-| Double counting across memberships | root-plus-residual decomposition; interaction residuals only on canonical overlap nodes (T10) |
+| Double counting across memberships | **CONFIRMED 2026-07-22, not hypothetical**: literal Σ-over-cloud S(v) stacked correlated sibling-subtree residuals (one token won 98% of 2,000 probes at +91.7 nats; Gate C 0.3% vs 31.7% baseline). Root+residual decomposition alone does NOT prevent cross-sibling correlation when M>1 overlapping memberships share a refinement parent. Redesign candidates (M.V.G. checkpoint input): chain-telescoped residual application, cloud-size normalization, bounding/dropping F emissions, D4 EXCT precedence. Tracked as a Phase-4 follow-up issue |
 | Poor long-range behavior | Phase 8 multi-timescale states; long-context suites |
 | Boolean approximation error | shortlist + exact verifier + fallback; recall certification (Gate H) |
 | SIMD unsafety/nondeterminism | safe scalar norm; isolated adapters; equivalence tests; disable flag |

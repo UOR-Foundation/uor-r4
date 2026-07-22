@@ -26,7 +26,7 @@
 //! and qwen/phi-class sources differ only in that adapter.
 
 use super::{
-    certify, compare, compiler, convert_r4g1, cover, observe, runtime, scenarios,
+    certify, compare, compiler, convert_r4g1, cover, observe, runtime, scenarios, score,
     teacher::{BehaviorSource, HuggingFaceLlamaOracle, LlamaOracle, TeacherOracle},
 };
 use serde::Serialize;
@@ -395,6 +395,239 @@ pub fn cover_command(args: &[String]) -> Result<(), String> {
     Ok(())
 }
 
+#[derive(Debug, PartialEq, Eq)]
+struct ScoreOptions {
+    corpus_meta: PathBuf,
+    corpus_recs: PathBuf,
+    artifacts: PathBuf,
+    cover: Option<PathBuf>,
+    output: PathBuf,
+}
+
+fn parse_score_options(args: &[String]) -> Result<ScoreOptions, String> {
+    let (default_meta, default_recs) = compiler::corpus_paths();
+    let mut options = ScoreOptions {
+        corpus_meta: PathBuf::from(default_meta),
+        corpus_recs: PathBuf::from(default_recs),
+        artifacts: PathBuf::from(compiler::ART_PATH),
+        cover: None,
+        output: PathBuf::from("score"),
+    };
+    let mut index = 0usize;
+    while index < args.len() {
+        let flag = &args[index];
+        let value = args
+            .get(index + 1)
+            .ok_or_else(|| format!("missing value for {flag}"))?;
+        match flag.as_str() {
+            "--corpus-meta" => options.corpus_meta = PathBuf::from(value),
+            "--corpus-recs" => options.corpus_recs = PathBuf::from(value),
+            "--artifacts" => options.artifacts = PathBuf::from(value),
+            "--cover" => options.cover = Some(PathBuf::from(value)),
+            "--out" => options.output = PathBuf::from(value),
+            _ => return Err(format!("unknown score option: {flag}")),
+        }
+        index += 2;
+    }
+    Ok(options)
+}
+
+/// Semantic transitions + residual emission scoring (plan §5 Phase 4):
+/// compile E_f and the ScoreQ residual tables onto the induced cover,
+/// emit the scored R4G1 (EDGE/EMIT/EXCT populated), and run the Gate C
+/// measurement — graph scorer without/with EXCT against the TLA3 store
+/// baseline on the held-out partition — writing `score.r4g1` and
+/// `score_report.json`.
+pub fn score_command(args: &[String]) -> Result<(), String> {
+    #[cfg(debug_assertions)]
+    eprintln!(
+        "warning: debug builds make scoring much slower; use `cargo run --release -- transformerless score ...`"
+    );
+    let options = parse_score_options(args)?;
+    let corpus_meta = options
+        .corpus_meta
+        .to_str()
+        .ok_or_else(|| "corpus metadata path is not UTF-8".to_owned())?;
+    let corpus_recs = options
+        .corpus_recs
+        .to_str()
+        .ok_or_else(|| "corpus records path is not UTF-8".to_owned())?;
+    let corpus = compiler::load_corpus_from(corpus_meta, corpus_recs).ok_or_else(|| {
+        format!(
+            "corpus is incomplete at {}/{}; run compile until it is complete",
+            options.corpus_meta.display(),
+            options.corpus_recs.display()
+        )
+    })?;
+    let artifact_container = std::fs::read(&options.artifacts)
+        .map_err(|error| format!("{}: {error}", options.artifacts.display()))?;
+    let artifacts = compiler::parse_artifacts(&artifact_container).ok_or_else(|| {
+        format!(
+            "{}: not a TLA3/TLA4/TLA5 artifact container",
+            options.artifacts.display()
+        )
+    })?;
+    let artifact_kappa = format!("blake3:{}", blake3::hash(&artifact_container).to_hex());
+    let meta_bytes = std::fs::read(&options.corpus_meta)
+        .map_err(|error| format!("{}: {error}", options.corpus_meta.display()))?;
+    let recs_bytes = std::fs::read(&options.corpus_recs)
+        .map_err(|error| format!("{}: {error}", options.corpus_recs.display()))?;
+    let mut corpus_hasher = blake3::Hasher::new();
+    corpus_hasher.update(&meta_bytes);
+    corpus_hasher.update(&recs_bytes);
+    let corpus_kappa = format!("blake3:{}", corpus_hasher.finalize().to_hex());
+
+    let config = score::ScoreConfig::default();
+    let (train_positions, held_out_positions) = cover::split_positions(&corpus);
+    let train = cover::build_observations(&artifacts, &corpus, &train_positions);
+    let held_out = cover::build_observations(&artifacts, &corpus, &held_out_positions);
+
+    // Region parameters + structural edges: recovered from a previously
+    // emitted cover artifact (--cover) or re-induced with the default
+    // cover configuration. Both paths are byte-identical by construction
+    // (deterministic double-run), so the choice is a pure cache.
+    let (regions, structural, cover_source) = match &options.cover {
+        Some(path) => {
+            let bytes =
+                std::fs::read(path).map_err(|error| format!("{}: {error}", path.display()))?;
+            let (regions, structural) = score::recover_from_artifact(&bytes)?;
+            eprintln!(
+                "score: recovered {} regions from {}",
+                regions.len(),
+                path.display()
+            );
+            (
+                regions,
+                structural,
+                format!("cover artifact {}", path.display()),
+            )
+        }
+        None => {
+            eprintln!("score: inducing cover (default config)...");
+            let induced = cover::induce_cover(
+                &train,
+                &cover::CoverConfig::default(),
+                &artifact_kappa,
+                &corpus_kappa,
+            )?;
+            let reference = cover::ReferenceClassifier::freeze(&induced.cover);
+            let edges = cover::build_edges(&induced.cover, &reference, &train);
+            eprintln!("score: {} regions induced", induced.cover.regions.len());
+            (
+                score::regions_from_cover(&induced.cover),
+                score::structural_from_cover(&edges),
+                "re-induced cover (default config)".to_owned(),
+            )
+        }
+    };
+    let max_depth = regions.iter().map(|r| r.depth as usize).max().unwrap_or(1);
+
+    eprintln!("score: building graded store (EXCT carryover + baseline)...");
+    let (store, _) = runtime::build_store(&artifacts, &corpus);
+    let tls1 = runtime::store_bytes(&store);
+
+    eprintln!("score: compiling forward transitions and emission residuals...");
+    let transitions = score::compile_transitions(
+        &corpus,
+        &regions,
+        &train,
+        max_depth,
+        config.transition_out_degree,
+    );
+    let vocab = u32::try_from(artifacts.token_codes.len() / compiler::STAGES)
+        .map_err(|_| "vocabulary exceeds u32 token ids".to_owned())?;
+    let emissions =
+        score::compile_emissions(&corpus, &store, &regions, &train, max_depth, vocab, &config);
+    let (artifact_bytes, info) = score::emit_scored_r4g1(
+        &artifact_container,
+        (&meta_bytes, &recs_bytes),
+        vocab,
+        &score::ScoredGraphSections {
+            regions: &regions,
+            structural: &structural,
+            transitions: &transitions,
+            emissions: &emissions,
+            exct_tls1: &tls1,
+        },
+    )?;
+    let graph_kappa = format!("blake3:{}", blake3::hash(&artifact_bytes).to_hex());
+
+    eprintln!("score: running Gate C evaluation on the held-out partition...");
+    let gate_c = score::evaluate_gate_c(
+        &artifact_bytes,
+        &artifact_container,
+        &artifacts,
+        &store,
+        &corpus,
+        &held_out,
+        &config,
+    )?;
+
+    let report = score::build_score_report(
+        &config,
+        score::ScoreReportInputs {
+            artifact_kappa,
+            corpus_kappa,
+            cover_source,
+            graph_kappa: graph_kappa.clone(),
+        },
+        &info,
+        gate_c.clone(),
+    );
+
+    std::fs::create_dir_all(&options.output).map_err(|error| error.to_string())?;
+    let artifact_path = options.output.join("score.r4g1");
+    std::fs::write(&artifact_path, &artifact_bytes)
+        .map_err(|error| format!("{}: {error}", artifact_path.display()))?;
+    let report_json = serde_json::to_string_pretty(&report).map_err(|error| error.to_string())?;
+    let report_path = options.output.join("score_report.json");
+    std::fs::write(&report_path, &report_json)
+        .map_err(|error| format!("{}: {error}", report_path.display()))?;
+
+    println!(
+        "score complete: {} nodes, {} edges ({} refinement + {} neighbor + {} forward), {} emission entries, EXCT {} bytes",
+        info.node_count,
+        info.edge_count,
+        info.refinement_edges,
+        info.neighbor_edges,
+        info.forward_edges,
+        info.emission_list_entries,
+        info.exct_bytes
+    );
+    println!(
+        "gate C — held-out D3 metrics ({} positions):",
+        gate_c.graph_no_exct.positions
+    );
+    println!(
+        "  {:<24} {:>16} {:>12}",
+        "scorer", "top-1 agree", "bits/token"
+    );
+    let row = |name: &str, m: &score::GateCMetrics| {
+        println!(
+            "  {:<24} {:>15.1}% {:>12.4}",
+            name,
+            100.0 * m.top1_agreement,
+            m.bits_per_token
+        );
+    };
+    row("graph (no EXCT)", &gate_c.graph_no_exct);
+    row("graph (with EXCT)", &gate_c.graph_with_exct);
+    row("TLA3 store baseline", &gate_c.tla3_baseline);
+    println!(
+        "  witness replay: {}/{} ok",
+        gate_c.witness_replays - gate_c.witness_replay_failures,
+        gate_c.witness_replays
+    );
+    println!(
+        "  artifact: {} ({} bytes, κ {})",
+        artifact_path.display(),
+        artifact_bytes.len(),
+        graph_kappa
+    );
+    println!("  report: {}", report_path.display());
+    Ok(())
+}
+
 #[derive(Debug, Serialize)]
 struct EvaluationReport {
     schema: u32,
@@ -632,32 +865,6 @@ fn deepest_argmax(store: &runtime::Store, code: &[u8; compiler::STAGES]) -> Opti
     None
 }
 
-fn witten_bell_probability(
-    store: &runtime::Store,
-    code: &[u8; compiler::STAGES],
-    next: u32,
-) -> f64 {
-    let mut levels: Vec<(f64, &BTreeMap<u32, u32>, u32)> = Vec::new();
-    for (depth, level) in store.iter().enumerate().take(compiler::STAGES + 1) {
-        let key = code[..depth].to_vec();
-        if let Some(distribution) = level.get(&key) {
-            let total: u32 = distribution.values().sum();
-            let lambda = total as f64 / (total as f64 + distribution.len() as f64);
-            levels.push((lambda, distribution, total));
-        }
-    }
-    let mut remaining = 1.0f64;
-    let mut probability = 0.0f64;
-    for index in (0..levels.len()).rev() {
-        let weight = remaining * levels[index].0;
-        remaining *= 1.0 - levels[index].0;
-        if let Some(&count) = levels[index].1.get(&next) {
-            probability += weight * count as f64 / levels[index].2 as f64;
-        }
-    }
-    (probability + remaining / compiler::V as f64).max(1e-30)
-}
-
 fn evaluate_report(args: &[String]) -> Result<(), String> {
     let options = parse_evaluate_report_options(args)?;
     let report_path = options
@@ -758,7 +965,7 @@ fn evaluate_report(args: &[String]) -> Result<(), String> {
         let next_probability =
             ((teacher_logits[next_token] - max_logit) as f64).exp() / denominator.max(1e-30);
         teacher_floor_bits_total += -next_probability.max(1e-30).log2();
-        bits += -witten_bell_probability(&store, &code, corpus.next[index]).log2();
+        bits += -score::witten_bell_probability(&store, &code, corpus.next[index]).log2();
     }
     if held_out_tokens == 0 {
         return Err("held-out split is empty; cannot evaluate".to_owned());
@@ -1102,12 +1309,14 @@ pub fn run(args: &[String]) -> Result<(), String> {
         },
         Some("convert-r4g1") => convert_r4g1::run(&args[1..])?,
         Some("cover") => cover_command(&args[1..])?,
+        Some("score") => score_command(&args[1..])?,
         _ => {
             println!(
                 "R4 transformerless — cross-compile a transformer into a mul-free table artifact\n\
                  commands: setup | gen [secs] [target] | compile [--model REPO --revision SHA | --source DIR] [--output DIR] [--seconds N] [--target N] [--sequence-length N] | store | certify | compare | compare-report | scenarios | teacher-kappa | convert-r4g1 --artifacts <TLA> --store <TLS1> [--calibration <hamming_calibration.json>] --out <R4G1>\n\
                  observation pipeline: observe [--source DIR | --checkpoint BIN] [--seconds N] [--target N] [--shards N] [--out DIR] [--sequence-length N]\n\
                  cover induction: cover [--corpus-meta P --corpus-recs P] [--artifacts P] [--depths N] [--k0 N] [--regions-budget N] [--memory-budget MB] [--out DIR]\n\
+                 score (phase 4): score [--corpus-meta P --corpus-recs P] [--artifacts P] [--cover P] [--out DIR]\n\
                  hf evaluation: evaluate-report [--source DIR] [--compiled DIR] [--report PATH] [--sequence-length N]\n\
                  docs: docs/TRANSFORMERLESS.md (extrapolation), docs/PROOF.md (proof + certificate)"
             );
@@ -1244,5 +1453,39 @@ mod tests {
     fn observe_rejects_excessive_shard_fanout() {
         let args = ["--shards", "9"].map(str::to_owned);
         assert!(parse_observe_options(&args).is_err());
+    }
+
+    #[test]
+    fn score_defaults_and_overrides() {
+        let (default_meta, default_recs) = compiler::corpus_paths();
+        let options = parse_score_options(&[]).expect("defaults");
+        assert_eq!(options.corpus_meta, PathBuf::from(default_meta));
+        assert_eq!(options.corpus_recs, PathBuf::from(default_recs));
+        assert_eq!(options.artifacts, PathBuf::from(compiler::ART_PATH));
+        assert_eq!(options.cover, None);
+        assert_eq!(options.output, PathBuf::from("score"));
+
+        let args = [
+            "--corpus-meta",
+            "/tmp/m.bin",
+            "--corpus-recs",
+            "/tmp/r.bin",
+            "--artifacts",
+            "/tmp/a.bin",
+            "--cover",
+            "/tmp/cover.r4g1",
+            "--out",
+            "/tmp/scored",
+        ]
+        .map(str::to_owned);
+        let options = parse_score_options(&args).expect("valid options");
+        assert_eq!(options.corpus_meta, PathBuf::from("/tmp/m.bin"));
+        assert_eq!(options.corpus_recs, PathBuf::from("/tmp/r.bin"));
+        assert_eq!(options.artifacts, PathBuf::from("/tmp/a.bin"));
+        assert_eq!(options.cover, Some(PathBuf::from("/tmp/cover.r4g1")));
+        assert_eq!(options.output, PathBuf::from("/tmp/scored"));
+
+        let bad = ["--regions-budget", "4"].map(str::to_owned);
+        assert!(parse_score_options(&bad).is_err());
     }
 }
