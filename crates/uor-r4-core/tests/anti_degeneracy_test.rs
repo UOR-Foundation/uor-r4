@@ -17,7 +17,17 @@ fn test_perturbation_suite_transformations() {
     assert_eq!(masked.len(), tokens.len());
     assert!(masked.iter().any(|&t| t == 0));
 
-    // Truncation
+    // Span substitution
+    let substituted = PerturbationSuite::apply_perturbation(
+        &tokens,
+        &PerturbationKind::SpanSubstitution {
+            substitute_rate: 1.0,
+        },
+        seed,
+    );
+    assert_eq!(substituted.len(), tokens.len());
+    assert_eq!(substituted[0], tokens[0] + 100);
+
     let truncated = PerturbationSuite::apply_perturbation(
         &tokens,
         &PerturbationKind::Truncation { keep_fraction: 0.5 },
