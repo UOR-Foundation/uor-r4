@@ -24,6 +24,8 @@ pub mod teacher;
 
 pub use runtime::{derive_popcount_table, hamming, sign_signature, OpKernel};
 pub use score_q::ScoreQ;
+#[cfg(not(target_arch = "wasm32"))]
+pub use certificate::Certificate;
 
 #[cfg(test)]
 mod witnesses {
@@ -139,6 +141,8 @@ mod witnesses {
 
 #[cfg(not(target_arch = "wasm32"))]
 pub mod certify;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod certificate;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod command;
 #[cfg(not(target_arch = "wasm32"))]
