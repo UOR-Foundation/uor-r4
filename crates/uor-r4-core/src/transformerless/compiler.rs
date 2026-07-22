@@ -815,7 +815,14 @@ pub fn compile(oracle: &dyn TeacherOracle, corpus: &Corpus) -> Compiled {
     let mut exps: Vec<i32> = Vec::new();
     for cb in &emb_cb {
         let m = cb.iter().fold(0f32, |a, &x| a.max(x.abs())).max(1e-9);
-        let e = (127.0 / m).log2().floor() as i32;
+        // Platform-stable exponent: floor(log2(r)) for a positive normal r is
+        // exactly its IEEE-754 unbiased exponent (r = 127.0/m ≥ 1 here is a
+        // correctly-rounded division, so to_bits is identical everywhere).
+        // The previous (127.0/m).log2().floor() was the token path's only
+        // libm-sensitive op: a 1-ulp log2 error near a power-of-two boundary
+        // flips the floor and changes the stage book (D2 hardening).
+        let r = 127.0 / m;
+        let e = ((r.to_bits() >> 23) as i32) - 127;
         let scale = (2.0f32).powi(e);
         stage_books.push(
             cb.iter()
