@@ -65,6 +65,16 @@ fn test_predictive_sufficiency_evaluator_depths() {
         pt_residual.kl_divergence < pt_broad.kl_divergence,
         "Residual depth KL divergence must be strictly less than BroadCloud depth"
     );
+    assert_eq!(pt_residual.top5_recall, 1.0);
+
+    let top5_miss = PredictiveSufficiencyEvaluator::evaluate_depth(
+        &[0.9, 0.02, 0.02, 0.02, 0.02, 0.02],
+        &[0.01, 0.2, 0.2, 0.2, 0.2, 0.19],
+        GraphDepth::BroadCloud,
+        1000,
+        OpKernel::default(),
+    );
+    assert_eq!(top5_miss.top5_recall, 0.0);
 }
 
 #[test]

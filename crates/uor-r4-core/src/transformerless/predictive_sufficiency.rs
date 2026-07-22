@@ -18,6 +18,7 @@ pub struct DivergencePoint {
     pub kl_divergence: f64,
     pub cross_entropy: f64,
     pub top1_accuracy: f64,
+    /// Whether the teacher's most likely class is among the graph's five most likely classes.
     pub top5_recall: f64,
     pub bytes_footprint: usize,
     pub op_budget: OpKernel,
@@ -133,13 +134,38 @@ impl PredictiveSufficiencyEvaluator {
         } else {
             0.0
         };
+        let top5_recall = if !teacher_probs.is_empty() && !graph_probs.is_empty() {
+            let teacher_top = teacher_probs
+                .iter()
+                .enumerate()
+                .filter(|(_, v)| v.is_finite())
+                .max_by(|a, b| a.1.total_cmp(b.1))
+                .map(|(i, _)| i);
+            let mut graph_top5 = graph_probs
+                .iter()
+                .enumerate()
+                .filter(|(_, v)| v.is_finite())
+                .collect::<Vec<_>>();
+            graph_top5.sort_by(|a, b| b.1.total_cmp(a.1));
+
+            teacher_top
+                .map(|teacher_top| {
+                    graph_top5
+                        .iter()
+                        .take(5)
+                        .any(|(index, _)| *index == teacher_top) as u8 as f64
+                })
+                .unwrap_or(0.0)
+        } else {
+            0.0
+        };
 
         DivergencePoint {
             depth,
             kl_divergence: kl,
             cross_entropy: ce,
             top1_accuracy: top1_acc,
-            top5_recall: 1.0,
+            top5_recall,
             bytes_footprint: bytes,
             op_budget: ops,
         }
