@@ -155,6 +155,8 @@ pub mod compiler;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod progress;
 #[cfg(not(target_arch = "wasm32"))]
+pub mod performance_certificate;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod predictive_sufficiency;
 pub mod reference_state;
 pub mod resolution_status;
