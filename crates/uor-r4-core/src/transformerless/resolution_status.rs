@@ -26,7 +26,7 @@ impl CalibratedFeatures {
         if self.frontier_density > 100 {
             return ResolutionStatus::Contradictory;
         }
-        if self.hamming_dist > self.calibrated_radius * 2 {
+        if self.hamming_dist > self.calibrated_radius.saturating_mul(2) {
             return ResolutionStatus::Novel;
         }
         if self.is_backed_off {
