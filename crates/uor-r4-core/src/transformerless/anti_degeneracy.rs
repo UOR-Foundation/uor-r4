@@ -33,9 +33,10 @@ impl PerturbationSuite {
                 }
             }
             PerturbationKind::SpanSubstitution { substitute_rate } => {
+                let rate = substitute_rate.clamp(0.0, 1.0);
                 for (i, tok) in out.iter_mut().enumerate() {
-                    let pseudo_rand = (seed.wrapping_add((i * 17) as u64).wrapping_mul(6364136223846793005) >> 33) as f64 / 2147483648.0;
-                    if pseudo_rand < *substitute_rate {
+                    let pseudo_rand = (seed.wrapping_add((i as u64).wrapping_mul(17)).wrapping_mul(6364136223846793005) >> 33) as f64 / 2147483648.0;
+                    if pseudo_rand < rate {
                         *tok = tok.wrapping_add(100);
                     }
                 }
