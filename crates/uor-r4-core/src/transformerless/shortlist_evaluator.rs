@@ -104,15 +104,19 @@ impl ShortlistEvaluator {
         let r20 = top20_matches as f64 / n;
         let fnr = fn_count as f64 / n;
 
-        // Compute worst routing error max |scores_graph - scores_teacher|
-        let mut worst_err: i32 = 0;
-        let len = scores_graph.len().min(scores_teacher.len());
-        for i in 0..len {
-            let diff = (scores_graph[i] - scores_teacher[i]).abs();
-            if diff > worst_err {
-                worst_err = diff;
-            }
-        }
+        // Compute worst routing error max |scores_graph - scores_teacher|.
+        // If the score vectors are different lengths, treat this as an evaluation failure.
+        let worst_err: i32 = if scores_graph.len() != scores_teacher.len() {
+            i32::MAX
+        } else {
+            scores_graph
+                .iter()
+                .zip(scores_teacher.iter())
+                .map(|(&g, &t)| ((g as i64) - (t as i64)).abs())
+                .max()
+                .unwrap_or(0)
+                .min(i32::MAX as i64) as i32
+        };
 
         const MAX_WORST_ROUTING_ERROR: i32 = 1_000;
 
