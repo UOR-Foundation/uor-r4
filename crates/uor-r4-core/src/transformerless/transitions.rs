@@ -5,6 +5,7 @@
 //! edge IDs in $E_f$ sorted by destination region.
 
 use super::compiler::Corpus;
+use super::score_q::ScoreQ;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -21,6 +22,7 @@ pub struct Edge {
     pub src: u32,
     pub dst: u32,
     pub weight: u32,
+    pub score: ScoreQ,
     pub kind: EdgeKind,
 }
 
@@ -41,19 +43,33 @@ impl TransitionGraph {
         TransitionGraph::default()
     }
 
-    /// Add a canonical edge to the graph.
-    pub fn add_edge(&mut self, src: u32, dst: u32, weight: u32, kind: EdgeKind) -> u32 {
+    /// Add a canonical edge to the graph with explicit weight and ScoreQ fixed-point score.
+    pub fn add_edge_with_score(
+        &mut self,
+        src: u32,
+        dst: u32,
+        weight: u32,
+        score: ScoreQ,
+        kind: EdgeKind,
+    ) -> u32 {
         let id = self.edges.len() as u32;
         let edge = Edge {
             id,
             src,
             dst,
             weight,
+            score,
             kind,
         };
         self.edges.push(edge);
         self.forward_map.entry(src).or_default().push(id);
         id
+    }
+
+    /// Add a canonical edge to the graph.
+    pub fn add_edge(&mut self, src: u32, dst: u32, weight: u32, kind: EdgeKind) -> u32 {
+        let raw = weight.min(i32::MAX as u32) as i32;
+        self.add_edge_with_score(src, dst, weight, ScoreQ::from_raw(raw), kind)
     }
 
     /// Build and sort the reverse edge index $E_b$, validating Theorem 7 consistency.

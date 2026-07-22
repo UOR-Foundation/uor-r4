@@ -24,6 +24,9 @@ pub mod teacher;
 
 pub use reference_state::{ActiveFrontier, ActiveFrontierEntry, PackedEdgeRanges, ScoreQ};
 pub use runtime::{derive_popcount_table, hamming, sign_signature, OpKernel};
+pub use score_q::ScoreQ;
+#[cfg(not(target_arch = "wasm32"))]
+pub use certificate::Certificate;
 
 #[cfg(test)]
 mod witnesses {
@@ -140,6 +143,8 @@ mod witnesses {
 #[cfg(not(target_arch = "wasm32"))]
 pub mod certify;
 #[cfg(not(target_arch = "wasm32"))]
+pub mod certificate;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod command;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod compare;
@@ -149,6 +154,7 @@ pub mod compiler;
 pub mod progress;
 pub mod reference_state;
 pub mod runtime;
+pub mod score_q;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod scenarios;
 #[cfg(not(target_arch = "wasm32"))]
