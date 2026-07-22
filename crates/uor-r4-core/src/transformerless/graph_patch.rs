@@ -157,7 +157,7 @@ pub fn compute_cid(&self) -> String {
 pub struct Theorem11Verifier;
 
 impl Theorem11Verifier {
-    /// Formally verify Theorem 11 route translation and score consistency.
+    /// Verify Theorem 11 for retained routes: parent and patched scores must match.
     pub fn verify_theorem_11(
         parent: &TransitionGraph,
         patched: &TransitionGraph,
