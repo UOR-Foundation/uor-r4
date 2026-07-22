@@ -2,11 +2,13 @@
 members = [
     "crates/uor-r4-core",
     "crates/uor-r4-router",
+    "crates/uor-r4-proof-model",
 ]
 default-members = [
     ".",
     "crates/uor-r4-core",
     "crates/uor-r4-router",
+    "crates/uor-r4-proof-model",
 ]
 exclude = ["uor_standards"]
 resolver = "2"

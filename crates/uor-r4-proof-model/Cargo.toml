@@ -1,0 +1,9 @@
+[package]
+name = "uor-r4-proof-model"
+version = "0.1.0"
+edition = "2021"
+description = "Executable proof specification and formal verification harness for the R4 holographic graph compiler"
+
+[dependencies]
+uor-r4-core = { path = "../uor-r4-core" }
+serde = { version = "1.0", features = ["derive"] }
