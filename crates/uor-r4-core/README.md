@@ -27,6 +27,7 @@ This crate hosts two things:
 | `transitions` | Forward semantic transitions + reverse indexes (Theorem 7 consistency) |
 | `convert_r4g1` | Migration converter: TLA/TLS1 artifacts → canonical R4G1 containers |
 | `observe` | Observation pipeline v2: content-addressed sample IDs, deterministic shard spill/resume, `observe` CLI |
+| `cover` | Multiresolution cover induction: spherical k-means, entropy-justified splits, calibrated radii, refinement/neighbor edges, R4G1 emission |
 | `certify` / `compare` | Teacher-fidelity certification and runtime comparison |
 | `certificate` / `performance_certificate` | Certificate schema (CIDs, claims, attestation) and bytes-read/cache/branch performance certificates |
 | `score_q` | `ScoreQ` Q16.16 fixed-point log-domain scores (mul-free add/sub) |
