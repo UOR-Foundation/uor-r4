@@ -83,11 +83,11 @@ impl Certificate {
     pub fn compute_cid(&self) -> String {
         let mut clone = self.clone();
         clone.certificate_cid.clear();
-        let bytes = serde_json::to_vec(&clone).unwrap_or_default();
+        let bytes = serde_json::to_vec(&clone)
+            .expect("Certificate must serialize to JSON for CID computation");
         let mut hasher = Hasher::new();
         hasher.update(&bytes);
         format!("kappa:blake3:{}", hasher.finalize().to_hex())
-    }
 
     /// Verify self-referential BLAKE3 CID.
     pub fn verify_cid(&self) -> bool {
