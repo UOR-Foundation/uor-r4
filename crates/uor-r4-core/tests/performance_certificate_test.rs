@@ -5,10 +5,12 @@ use uor_r4_core::transformerless::{
 
 #[test]
 fn test_performance_profiler_and_threshold_verification() {
-    let mut ops = OpKernel::default();
-    ops.adds = 100;
-    ops.compares = 64;
-    ops.candidate_scans = 32;
+    let ops = OpKernel {
+        adds: 100,
+        compares: 64,
+        candidate_scans: 32,
+        ..Default::default()
+    };
 
     let cert = PerformanceProfiler::profile(2048, 4, ops, 4096);
 

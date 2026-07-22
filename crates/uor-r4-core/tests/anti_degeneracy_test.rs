@@ -18,7 +18,7 @@ fn test_perturbation_suite_transformations() {
         seed,
     );
     assert_eq!(masked.len(), tokens.len());
-    assert!(masked.iter().any(|&t| t == u32::MAX));
+    assert!(masked.contains(&u32::MAX));
 
     // Span substitution
     let substituted = PerturbationSuite::apply_perturbation(

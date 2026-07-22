@@ -6,3 +6,4 @@ dist/
 manifold_cache_rust.json
 .uor-models/
 uor_standards/
+crates/uor-r4-graph-format/fuzz/target/

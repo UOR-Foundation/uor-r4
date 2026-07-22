@@ -1,6 +1,4 @@
-use uor_r4_core::semantic::{
-    encode_event, encode_graph_edge, encode_statement, expand_atom, Hypervector,
-};
+use uor_r4_core::semantic::{encode_event, encode_graph_edge, encode_statement, expand_atom};
 
 #[test]
 fn test_vsa_algebra_identities() {

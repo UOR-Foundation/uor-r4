@@ -103,7 +103,7 @@ impl PerformanceProfiler {
     ) -> PerformanceCertificate {
         let hw = HardwareMetadata::default();
         let line_size = hw.cache_line_size_bytes as u64;
-        let cache_misses = (bytes_read + line_size - 1) / line_size + (section_accesses as u64);
+        let cache_misses = bytes_read.div_ceil(line_size) + (section_accesses as u64);
         let branch_misses = ops.compares / 32 + ops.candidate_scans / 16;
 
         let metrics = PerformanceMetrics {
