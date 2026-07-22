@@ -95,16 +95,22 @@ pub fn compute_cid(&self) -> String {
             graph.edges[edge_idx].score = *score;
         }
 
-        // Add new edges
-        for edge in &self.added_edges {
-            graph.add_edge_with_score(
-                edge.src,
-                edge.dst,
-                edge.weight,
-                edge.score,
-                edge.kind.clone(),
-            );
-        }
+// Add new edges
+for edge in &self.added_edges {
+    let new_id = graph.add_edge_with_score(
+        edge.src,
+        edge.dst,
+        edge.weight,
+        edge.score,
+        edge.kind,
+    );
+    if new_id != edge.id {
+        return Err(format!(
+            "Added edge ID mismatch: patch has {}, graph assigned {}",
+            edge.id, new_id
+        ));
+    }
+}
 
         // Remove tombstones (mark weight = 0)
         for &tombstone_idx in &self.tombstone_edge_ids {
