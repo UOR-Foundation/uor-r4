@@ -1,9 +1,29 @@
 //! Executable proof module: Zero-allocation step contract verification.
 
+use std::alloc::{GlobalAlloc, Layout, System};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 static ALLOC_COUNT: AtomicUsize = AtomicUsize::new(0);
 static ALLOC_BYTES: AtomicUsize = AtomicUsize::new(0);
+
+struct CountingAllocator;
+
+unsafe impl GlobalAlloc for CountingAllocator {
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        ALLOC_COUNT.fetch_add(1, Ordering::SeqCst);
+        ALLOC_BYTES.fetch_add(layout.size(), Ordering::SeqCst);
+        // SAFETY: forwarding to the system allocator with the same layout.
+        unsafe { System.alloc(layout) }
+    }
+
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        // SAFETY: forwarding to the system allocator with the same layout.
+        unsafe { System.dealloc(ptr, layout) }
+    }
+}
+
+#[global_allocator]
+static GLOBAL: CountingAllocator = CountingAllocator;
 
 pub fn reset_alloc_counters() {
     ALLOC_COUNT.store(0, Ordering::SeqCst);
