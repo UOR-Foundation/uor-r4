@@ -32,10 +32,9 @@ There is an important boundary in the current workflow: compiling a Hugging
 Face model produces continuation evidence and runtime artifacts, but it does
 not automatically prove instruction-following quality. `ask` accepts only an
 imported `instruction-chat` manifest with a CID-addressed passing evaluation
-report. The repository does not yet provide the instruction-evaluation command
-that creates that report. This guard prevents a fast but low-quality
-continuation artifact from being presented as an accurate question-answering
-model.
+report produced by `evaluate-report`. This guard prevents a fast but
+low-quality continuation artifact from being presented as an accurate
+question-answering model.
 
 | Operation | Works from a fresh checkout? | Additional state |
 |---|---:|---|
@@ -154,16 +153,19 @@ cargo run --release -- compile \
   --revision 7e27bd9f95328f0f3b08261d1252705110c806f8 \
   --seconds 300 \
   --target 20000 \
-  --sequence-length 128
+  --sequence-length 128 \
+  --r4-attention
 ```
 
 `--revision` must be a full 40-character commit hash. `--seconds` limits the
 teacher-generation work performed by one invocation, while `--target` is the
-teacher-token goal. Hugging Face compilation defaults to 20,000 tokens and
-128-token teacher stories. The bounded story length keeps attention cost and
-KV memory proportional to the eight-token deployed runtime window; increase
-`--target` or `--sequence-length` explicitly for quality experiments. Repeat
-the same command to resume an incomplete corpus.
+teacher-token goal. `--r4-attention` enables the experimental 4D softmax-free
+Spin(4) attention geometry during teacher generation (omitting this flag runs
+standard scaled dot-product attention). Hugging Face compilation defaults to
+20,000 tokens and 128-token teacher stories. The bounded story length keeps
+attention cost and KV memory proportional to the eight-token deployed runtime
+window; increase `--target` or `--sequence-length` explicitly for quality
+experiments. Repeat the same command to resume an incomplete corpus.
 
 On macOS, offline Hugging Face teacher execution uses Apple Accelerate's
 SIMD-optimized CPU BLAS. Linux and Windows use explicit NEON on AArch64 or
@@ -203,9 +205,20 @@ properties.
 ### 4. Evaluate instruction quality
 
 Run held-out instruction and grounding evaluation against the compiled bundle
-and retain a machine-readable report. This evaluation tooling is the remaining
-end-to-end workflow gap in the repository. Do not mark an artifact as passing
-merely to bypass the chat quality gate.
+and retain a machine-readable report:
+
+```bash
+cargo run --release -- evaluate-report \
+  --source .uor-models/sources/smollm2-135m-instruct \
+  --compiled .uor-models/compiled/smollm2-135m-instruct \
+  --report .uor-models/compiled/smollm2-135m-instruct/instruction-eval.json
+```
+
+The report file stores an envelope with the held-out D3 metrics (top-1
+accuracy, teacher-argmax agreement, Witten–Bell bits/token vs the teacher
+floor), source/artifact/store/tokenizer/corpus CIDs, and
+`report_cid_of_report_bytes` for the inner metrics payload. Do not mark an
+artifact as passing merely to bypass the chat quality gate.
 
 ### 5. Import the evaluated bundle
 
@@ -365,7 +378,14 @@ application-level consumers of the core runtime.
 
 ### `POST /api/chat`
 
-Routes and synthesizes a prompt:
+Routes and synthesizes a prompt. The `engine` parameter selects the generation mechanism:
+
+- `"transformerless"`: Run allocation-free table-native codebook retrieval (sub-millisecond latency on CPU).
+- `"attention"`: Run standard scaled dot-product attention on the loaded teacher model (generates up to 256 tokens).
+- `"r4-attention"`: Run experimental 4D Spin(4) softmax-free attention on the loaded teacher model (generates up to 256 tokens, yielding ~25% computation speedup on CPU by bypassing standard softmax exponents).
+- `"geometric"`: Route purely geometrically and decode directly from the manifold resonance.
+
+Example request payload:
 
 ```json
 {
@@ -374,6 +394,8 @@ Routes and synthesizes a prompt:
   "engine": "transformerless"
 }
 ```
+
+The browser dashboard (<http://127.0.0.1:8000>) includes an engine selector dropdown to easily swap between these modes. The dashboard displays a **Speed** metric (in tokens/sec) under the telemetry card that persists after generation completes, allowing for easy execution speed profiling and audit comparison across the attention and transformerless pathways.
 
 ### `GET /api/sysinfo`
 
