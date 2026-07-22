@@ -28,6 +28,10 @@ fn test_induce_hierarchical_codes() {
         t_argmax: vec![0u32; n],
         top_tokens: vec![[0u32; 3]; n],
         top_weights: vec![[0u32; 3]; n],
+        span_start: (0..n).map(|idx| idx as u32).collect(),
+        span_end: (0..n).map(|idx| idx as u32 + 1).collect(),
+        byte_start: vec![u32::MAX; n],
+        byte_end: vec![u32::MAX; n],
     };
 
     let vocab = 100;
@@ -100,5 +104,8 @@ fn hamming_calibration_ignores_invalid_stage_layout() {
     let report = calibrate_hamming_regions_from_signatures(&class_sigs, &signatures);
     assert_eq!(report.regions.len(), STAGES * K);
     assert!(report.regions.iter().all(|region| region.sample_count == 0));
-    assert!(report.regions.iter().all(|region| region.acceptance_radius == 0));
+    assert!(report
+        .regions
+        .iter()
+        .all(|region| region.acceptance_radius == 0));
 }

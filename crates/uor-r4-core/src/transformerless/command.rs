@@ -242,7 +242,20 @@ pub fn compile_hugging_face(args: &[String]) -> Result<(), String> {
     if options.r4_attention {
         oracle.set_r4_attention(true);
     }
-    compiler::generate_to(&mut oracle, options.seconds, options.target, meta, records);
+    eprintln!("exporting tokenizer...");
+    let token_byte_lengths = scenarios::export_hf_bytelevel_tokenizer_with_lengths(
+        source.join("tokenizer.json"),
+        output.join("tokenizer.bin"),
+    )
+    .map_err(|error| error.to_string())?;
+    compiler::generate_to_with_token_byte_lengths(
+        &mut oracle,
+        options.seconds,
+        options.target,
+        meta,
+        records,
+        Some(&token_byte_lengths),
+    );
     let Some(corpus) = compiler::load_corpus_from(meta, records) else {
         println!(
             "corpus is not complete; rerun the same command to resume {}",
@@ -273,13 +286,6 @@ pub fn compile_hugging_face(args: &[String]) -> Result<(), String> {
     let (store, _) = runtime::build_store(&artifacts, &corpus);
     std::fs::write(output.join("tless_store.bin"), runtime::store_bytes(&store))
         .map_err(|error| error.to_string())?;
-    eprintln!("exporting tokenizer...");
-    scenarios::export_hf_bytelevel_tokenizer(
-        source.join("tokenizer.json"),
-        output.join("tokenizer.bin"),
-    )
-    .map_err(|error| error.to_string())?;
-
     // Helper to calculate Blake3 hash CID
     let calculate_file_hash = |path: &Path| -> Result<String, String> {
         let content = std::fs::read(path).map_err(|error| error.to_string())?;

@@ -31,8 +31,16 @@ fn test_deterministic_container_rebuild() {
     let ser2 = compiler::artifact_bytes(&art2);
 
     // 1. Assert byte-identical container output against the pinned fixture (Gate E)
-    assert_eq!(ser1.as_slice(), bytes.as_slice(), "Rebuilt bytes must match fixture bytes");
-    assert_eq!(ser2.as_slice(), bytes.as_slice(), "Rebuilt bytes must match fixture bytes");
+    assert_eq!(
+        ser1.as_slice(),
+        bytes.as_slice(),
+        "Rebuilt bytes must match fixture bytes"
+    );
+    assert_eq!(
+        ser2.as_slice(),
+        bytes.as_slice(),
+        "Rebuilt bytes must match fixture bytes"
+    );
 
     // 2. Assert identical BLAKE3 CIDs
     let cid1 = blake3_kappa(&ser1);
@@ -63,6 +71,10 @@ fn test_deterministic_transition_graph_rebuild() {
         t_argmax: vec![200, 100, 200, 100, 300, 400],
         top_tokens: vec![[200, 0, 0]; 6],
         top_weights: vec![[100, 0, 0]; 6],
+        span_start: vec![0, 1, 2, 3, 4, 5],
+        span_end: vec![1, 2, 3, 4, 5, 6],
+        byte_start: vec![u32::MAX; 6],
+        byte_end: vec![u32::MAX; 6],
     };
     let region_assigner = |tok: u32| tok / 10;
 
@@ -80,8 +92,14 @@ fn test_deterministic_transition_graph_rebuild() {
     .expect("compile g2");
 
     assert_eq!(g1.edges, g2.edges, "Canonical edge vectors must match");
-    assert_eq!(g1.reverse_index, g2.reverse_index, "Reverse index arrays must match");
-    assert_eq!(g1.reverse_offsets, g2.reverse_offsets, "Reverse offset maps must match");
+    assert_eq!(
+        g1.reverse_index, g2.reverse_index,
+        "Reverse index arrays must match"
+    );
+    assert_eq!(
+        g1.reverse_offsets, g2.reverse_offsets,
+        "Reverse offset maps must match"
+    );
     assert!(g1.verify_theorem_7().is_ok());
     assert!(g2.verify_theorem_7().is_ok());
 }
@@ -126,8 +144,15 @@ fn test_deterministic_certificate_rebuild() {
         attestation,
     );
 
-    assert_eq!(cert1, cert2, "Certificates built from identical inputs must be equal");
-    assert_eq!(cert1.compute_cid(), cert2.compute_cid(), "Certificate CIDs must match");
+    assert_eq!(
+        cert1, cert2,
+        "Certificates built from identical inputs must be equal"
+    );
+    assert_eq!(
+        cert1.compute_cid(),
+        cert2.compute_cid(),
+        "Certificate CIDs must match"
+    );
     assert_eq!(
         cert1.to_cbor_bytes().unwrap(),
         cert2.to_cbor_bytes().unwrap(),

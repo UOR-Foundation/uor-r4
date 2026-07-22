@@ -48,7 +48,11 @@ pub fn xorshift(s: &mut u64) -> u64 {
 /// Teacher-labeled corpus record stream (identical wire format to the
 /// research pipeline, so existing state is adoptable):
 /// meta: n u64 | stories u64 | rng u64 | done u8
-/// recs: per token: story u32 | next u32 | top_tokens [u32; 3] | top_weights [u32; 3]
+/// recs (v3): per token:
+///   story u32 | next u32 | top_tokens [u32; 3] | top_weights [u32; 3]
+///   | span_start u32 | span_end u32 | byte_start u32 | byte_end u32
+/// legacy record sizes are still accepted on load:
+///   v1=12 bytes (story,next,argmax,logprob) and v2=32 bytes (no anchors).
 pub struct Corpus {
     pub n: usize,
     pub stories: u64,
@@ -58,6 +62,10 @@ pub struct Corpus {
     pub t_argmax: Vec<u32>,
     pub top_tokens: Vec<[u32; 3]>,
     pub top_weights: Vec<[u32; 3]>,
+    pub span_start: Vec<u32>,
+    pub span_end: Vec<u32>,
+    pub byte_start: Vec<u32>,
+    pub byte_end: Vec<u32>,
 }
 
 pub fn corpus_paths() -> (&'static str, &'static str) {
@@ -78,19 +86,33 @@ pub fn load_corpus_from(mp: &str, rp: &str) -> Option<Corpus> {
     let n = u64::from_le_bytes(meta[0..8].try_into().unwrap()) as usize;
     let stories = u64::from_le_bytes(meta[8..16].try_into().unwrap());
     let rb = std::fs::read(rp).ok()?;
-    let is_legacy = rb.len() == n * 12;
-    if rb.len() != n * 32 && !is_legacy {
+    let record_size = if rb.len() == n * 48 {
+        48usize
+    } else if rb.len() == n * 32 {
+        32usize
+    } else if rb.len() == n * 12 {
+        12usize
+    } else {
         return None;
-    }
+    };
+    let is_legacy = record_size == 12;
+    let has_anchors = record_size == 48;
     let mut story = Vec::with_capacity(n);
     let mut next = Vec::with_capacity(n);
     let mut t_argmax = Vec::with_capacity(n);
     let mut top_tokens = Vec::with_capacity(n);
     let mut top_weights = Vec::with_capacity(n);
+    let mut span_start = Vec::with_capacity(n);
+    let mut span_end = Vec::with_capacity(n);
+    let mut byte_start = Vec::with_capacity(n);
+    let mut byte_end = Vec::with_capacity(n);
+    let mut current_story = None;
+    let mut position_in_story = 0u32;
     for i in 0..n {
         if is_legacy {
             let o = i * 12;
-            story.push(u32::from_le_bytes(rb[o..o + 4].try_into().unwrap()));
+            let story_id = u32::from_le_bytes(rb[o..o + 4].try_into().unwrap());
+            story.push(story_id);
             let nxt = u16::from_le_bytes(rb[o + 4..o + 6].try_into().unwrap()) as u32;
             next.push(nxt);
             let argmax = u16::from_le_bytes(rb[o + 6..o + 8].try_into().unwrap()) as u32;
@@ -111,8 +133,9 @@ pub fn load_corpus_from(mp: &str, rp: &str) -> Option<Corpus> {
             top_tokens.push(tokens_val);
             top_weights.push(weights_val);
         } else {
-            let o = i * 32;
-            story.push(u32::from_le_bytes(rb[o..o + 4].try_into().unwrap()));
+            let o = i * record_size;
+            let story_id = u32::from_le_bytes(rb[o..o + 4].try_into().unwrap());
+            story.push(story_id);
             let nxt = u32::from_le_bytes(rb[o + 4..o + 8].try_into().unwrap());
             next.push(nxt);
             let mut tokens_val = [0u32; 3];
@@ -120,13 +143,32 @@ pub fn load_corpus_from(mp: &str, rp: &str) -> Option<Corpus> {
             for j in 0..3 {
                 let offset_tok = o + 8 + j * 4;
                 let offset_wt = o + 20 + j * 4;
-                tokens_val[j] = u32::from_le_bytes(rb[offset_tok..offset_tok + 4].try_into().unwrap());
-                weights_val[j] = u32::from_le_bytes(rb[offset_wt..offset_wt + 4].try_into().unwrap());
+                tokens_val[j] =
+                    u32::from_le_bytes(rb[offset_tok..offset_tok + 4].try_into().unwrap());
+                weights_val[j] =
+                    u32::from_le_bytes(rb[offset_wt..offset_wt + 4].try_into().unwrap());
             }
             t_argmax.push(tokens_val[0]);
             top_tokens.push(tokens_val);
             top_weights.push(weights_val);
+            if has_anchors {
+                span_start.push(u32::from_le_bytes(rb[o + 32..o + 36].try_into().unwrap()));
+                span_end.push(u32::from_le_bytes(rb[o + 36..o + 40].try_into().unwrap()));
+                byte_start.push(u32::from_le_bytes(rb[o + 40..o + 44].try_into().unwrap()));
+                byte_end.push(u32::from_le_bytes(rb[o + 44..o + 48].try_into().unwrap()));
+                continue;
+            }
         }
+        let story_id = story[i];
+        if current_story != Some(story_id) {
+            current_story = Some(story_id);
+            position_in_story = 0;
+        }
+        span_start.push(position_in_story);
+        span_end.push(position_in_story.saturating_add(1));
+        byte_start.push(u32::MAX);
+        byte_end.push(u32::MAX);
+        position_in_story = position_in_story.saturating_add(1);
     }
     let mut input = Vec::with_capacity(n);
     for i in 0..n {
@@ -145,6 +187,10 @@ pub fn load_corpus_from(mp: &str, rp: &str) -> Option<Corpus> {
         t_argmax,
         top_tokens,
         top_weights,
+        span_start,
+        span_end,
+        byte_start,
+        byte_end,
     })
 }
 
@@ -162,6 +208,19 @@ pub fn generate_to(
     target: usize,
     mp: &str,
     rp: &str,
+) {
+    generate_to_with_token_byte_lengths(oracle, budget_s, target, mp, rp, None);
+}
+
+/// Generate a resumable teacher corpus with optional per-token byte lengths
+/// used to populate tokenizer-neutral byte anchors.
+pub fn generate_to_with_token_byte_lengths(
+    oracle: &mut dyn TeacherOracle,
+    budget_s: u64,
+    target: usize,
+    mp: &str,
+    rp: &str,
+    token_byte_lengths: Option<&[u32]>,
 ) {
     let (mut n, mut stories, mut rng, mut done) = match std::fs::read(mp) {
         Ok(b) if b.len() == 25 => (
@@ -182,6 +241,21 @@ pub fn generate_to(
     let starting_tokens = n;
     let vocab = oracle.vocab();
     let seq_len = oracle.seq_len();
+    let default_record_size = 48usize;
+    let record_size = match std::fs::read(rp) {
+        Ok(records) if records.is_empty() => default_record_size,
+        Ok(records) if n != 0 && records.len() == (n as usize) * 48 => 48usize,
+        Ok(records) if n != 0 && records.len() == (n as usize) * 32 => 32usize,
+        Ok(records) if n != 0 && records.len() == (n as usize) * 12 => 12usize,
+        Ok(records) if n == 0 && records.len() % 48 == 0 => 48usize,
+        Ok(records) if n == 0 && records.len() % 32 == 0 => 32usize,
+        Ok(records) if n == 0 && records.len() % 12 == 0 => 12usize,
+        Ok(records) => panic!(
+            "corpus record file has invalid length {} (expected 12/32/48-byte records)",
+            records.len()
+        ),
+        Err(_) => default_record_size,
+    };
     let mut logits = vec![0f32; vocab];
     let mut progress = super::progress::Progress::new("teacher corpus", target);
     progress.set(n as usize);
@@ -194,6 +268,7 @@ pub fn generate_to(
     while done == 0 && t0.elapsed().as_secs() < budget_s {
         oracle.reset();
         let mut token = oracle.bos_token();
+        let mut story_byte_offset = 0u32;
         for pos in 0..seq_len {
             progress.set(n as usize);
             oracle.step(token, pos, &mut logits);
@@ -211,18 +286,16 @@ pub fn generate_to(
             for p in &mut logits {
                 *p /= sum;
             }
-            
+
             // Find top-3 tokens and their normalized weights
-            let mut top_candidates: Vec<(usize, f32)> = logits
-                .iter()
-                .enumerate()
-                .map(|(i, &p)| (i, p))
-                .collect();
-            top_candidates.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-            
+            let mut top_candidates: Vec<(usize, f32)> =
+                logits.iter().enumerate().map(|(i, &p)| (i, p)).collect();
+            top_candidates
+                .sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
             let mut top_tokens_idx = [0u32; 3];
             let mut top_weights_val = [0u32; 3];
-            
+
             let mut sum_top3 = 0.0f32;
             for i in 0..3 {
                 if i < top_candidates.len() {
@@ -244,7 +317,7 @@ pub fn generate_to(
                     top_weights_val[0] = (top_weights_val[0] as i32 + diff as i32).max(0) as u32;
                 }
             }
-            
+
             // Sample the next token using the full logits cdf
             let u = (xorshift(&mut rng) >> 40) as f32 / (1u64 << 24) as f32;
             let mut cdf = 0.0f32;
@@ -256,18 +329,41 @@ pub fn generate_to(
                     break;
                 }
             }
-            
-            let mut record = [0u8; 32];
+
+            let mut record = [0u8; 48];
             record[0..4].copy_from_slice(&(stories as u32).to_le_bytes());
             record[4..8].copy_from_slice(&(next as u32).to_le_bytes());
             for i in 0..3 {
                 let offset_tok = 8 + i * 4;
                 let offset_wt = 20 + i * 4;
-                record[offset_tok..offset_tok + 4].copy_from_slice(&top_tokens_idx[i].to_le_bytes());
+                record[offset_tok..offset_tok + 4]
+                    .copy_from_slice(&top_tokens_idx[i].to_le_bytes());
                 record[offset_wt..offset_wt + 4].copy_from_slice(&top_weights_val[i].to_le_bytes());
             }
-            
-            recs.write_all(&record).unwrap();
+            let span_start = pos as u32;
+            let span_end = span_start.saturating_add(1);
+            let byte_start = if token_byte_lengths.is_some() {
+                story_byte_offset
+            } else {
+                u32::MAX
+            };
+            let token_bytes = token_byte_lengths
+                .and_then(|lengths| lengths.get(next).copied())
+                .unwrap_or(0);
+            let byte_end = if token_byte_lengths.is_some() {
+                byte_start.saturating_add(token_bytes)
+            } else {
+                u32::MAX
+            };
+            record[32..36].copy_from_slice(&span_start.to_le_bytes());
+            record[36..40].copy_from_slice(&span_end.to_le_bytes());
+            record[40..44].copy_from_slice(&byte_start.to_le_bytes());
+            record[44..48].copy_from_slice(&byte_end.to_le_bytes());
+
+            recs.write_all(&record[..record_size]).unwrap();
+            if token_byte_lengths.is_some() {
+                story_byte_offset = byte_end;
+            }
             n += 1;
             progress.set(n as usize);
             if n as usize >= target {
@@ -506,12 +602,14 @@ pub fn deterministic_project(
     let mut projected_vecs = vec![0f32; vocab * target_dim];
     let chunk_size = 1000;
     let mut raw_chunk = vec![0f32; chunk_size * source_dim];
-    
+
     let mut sum_vec = vec![0f64; source_dim];
     for chunk_start in (0..vocab).step_by(chunk_size) {
         let chunk_end = (chunk_start + chunk_size).min(vocab);
         let count = chunk_end - chunk_start;
-        oracle.read_embedding_rows(chunk_start..chunk_end, &mut raw_chunk[..count * source_dim]).unwrap();
+        oracle
+            .read_embedding_rows(chunk_start..chunk_end, &mut raw_chunk[..count * source_dim])
+            .unwrap();
         for i in 0..count {
             for j in 0..source_dim {
                 sum_vec[j] += raw_chunk[i * source_dim + j] as f64;
@@ -522,30 +620,37 @@ pub fn deterministic_project(
     for j in 0..source_dim {
         mean[j] = (sum_vec[j] / vocab as f64) as f32;
     }
-    
+
     let mut progress = super::progress::Progress::new("projecting embeddings", vocab);
     for chunk_start in (0..vocab).step_by(chunk_size) {
         let chunk_end = (chunk_start + chunk_size).min(vocab);
         let count = chunk_end - chunk_start;
-        oracle.read_embedding_rows(chunk_start..chunk_end, &mut raw_chunk[..count * source_dim]).unwrap();
-        
+        oracle
+            .read_embedding_rows(chunk_start..chunk_end, &mut raw_chunk[..count * source_dim])
+            .unwrap();
+
         for i in 0..count {
             let t = chunk_start + i;
             progress.set(t);
             let mut projected_row = vec![0f32; target_dim];
-            
+
             for h in 0..source_dim {
                 let centered_val = raw_chunk[i * source_dim + h] - mean[h];
                 let target = deterministic_bucket(seed_bytes, h, target_dim);
                 let sign = deterministic_sign(seed_bytes, h);
                 projected_row[target] += sign * centered_val;
             }
-            
-            let n = projected_row.iter().map(|x| x * x).sum::<f32>().sqrt().max(1e-9);
+
+            let n = projected_row
+                .iter()
+                .map(|x| x * x)
+                .sum::<f32>()
+                .sqrt()
+                .max(1e-9);
             for d in 0..target_dim {
                 projected_row[d] /= n;
             }
-            
+
             projected_vecs[t * target_dim..(t + 1) * target_dim].copy_from_slice(&projected_row);
         }
     }
@@ -565,13 +670,13 @@ fn sampled_kmeans_rvq(
     for &b in seed_bytes.iter().take(8) {
         rng_seed = rng_seed.wrapping_add(b as u64).rotate_left(8);
     }
-    
+
     let mut indices: Vec<usize> = (0..nvec).collect();
     for i in (1..nvec).rev() {
         let j = (xorshift(&mut rng_seed) as usize) % (i + 1);
         indices.swap(i, j);
     }
-    
+
     let sample_size = nvec.min(10000);
     let mut sample_vecs = vec![0f32; sample_size * D];
     for i in 0..sample_size {
@@ -583,7 +688,7 @@ fn sampled_kmeans_rvq(
     let mut sample_residual = sample_vecs.to_vec();
     let mut codebooks: Vec<Vec<f32>> = Vec::new();
     let mut codes = vec![0u8; nvec * stages];
-    
+
     for stage in 0..stages {
         eprintln!("sampled RVQ stage {}/{}", stage + 1, stages);
         let mut progress = super::progress::Progress::new("RVQ assignment", iters * sample_size);
@@ -635,7 +740,7 @@ fn sampled_kmeans_rvq(
             }
         }
         progress.finish();
-        
+
         for v in 0..nvec {
             let rv = &residual[v * D..(v + 1) * D];
             let (mut bd, mut bk) = (f32::MAX, 0usize);
@@ -656,14 +761,14 @@ fn sampled_kmeans_rvq(
                 residual[v * D + j] -= cent[bk * D + j];
             }
         }
-        
+
         for v in 0..sample_size {
             let src_idx = indices[v];
             for j in 0..D {
                 sample_residual[v * D + j] = residual[src_idx * D + j];
             }
         }
-        
+
         codebooks.push(cent);
     }
     (codebooks, codes)
@@ -688,14 +793,19 @@ pub fn compile(oracle: &dyn TeacherOracle, corpus: &Corpus) -> Compiled {
         oracle.kappa(),
         oracle.source_bytes()
     );
-    
-    let seed_string = format!("{}{}{}", oracle.kappa(), oracle.tokenizer_address(), "r4-geometric-projection-v1");
+
+    let seed_string = format!(
+        "{}{}{}",
+        oracle.kappa(),
+        oracle.tokenizer_address(),
+        "r4-geometric-projection-v1"
+    );
     let seed_hash = blake3::hash(seed_string.as_bytes());
     let seed_bytes = seed_hash.as_bytes();
-    
+
     let source_dim = oracle.source_dimension();
     let vecs = deterministic_project(seed_bytes, vocab, source_dim, D, oracle);
-    
+
     let (emb_cb, emb_codes) = sampled_kmeans_rvq(&vecs, vocab, STAGES, K, EMB_ITERS, seed_bytes);
     let emb_stage_kappas: Vec<String> = emb_cb.iter().map(|cb| kappa_of_f32s(cb)).collect();
     for (i, k) in emb_stage_kappas.iter().enumerate() {
@@ -967,12 +1077,12 @@ pub fn induce_hierarchical_codes(
     for i in 0..corpus.n {
         let story_id = corpus.story[i];
         let token = corpus.next[i];
-        
+
         if i + 1 < corpus.n && corpus.story[i + 1] == story_id {
             let next_tok = corpus.next[i + 1];
             let pair = vec![token, next_tok];
             *transition_counts.entry(pair).or_insert(0) += 1;
-            
+
             if i + 2 < corpus.n && corpus.story[i + 2] == story_id {
                 let next_next_tok = corpus.next[i + 2];
                 let triplet = vec![token, next_tok, next_next_tok];
