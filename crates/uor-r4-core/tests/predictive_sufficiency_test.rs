@@ -16,6 +16,17 @@ fn test_kl_divergence_and_cross_entropy() {
         "KL divergence of distribution with itself must be ~0"
     );
 
+    // Edge case: zeros in the distribution should not introduce spurious mass.
+    let pz = vec![1.0, 0.0, 0.0];
+    let qz = vec![1.0, 0.0, 0.0];
+    let kl_zeros = PredictiveSufficiencyEvaluator::compute_kl_divergence(&pz, &qz);
+    assert!(
+        kl_zeros.abs() < 1e-12,
+        "KL divergence must be ~0 when P contains zeros and P==Q"
+    );
+    let ce_zeros = PredictiveSufficiencyEvaluator::compute_cross_entropy(&pz, &qz);
+    assert!(ce_zeros.abs() < 1e-12);
+
     let q2 = vec![0.8, 0.1, 0.1];
     let kl_diff = PredictiveSufficiencyEvaluator::compute_kl_divergence(&p, &q2);
     assert!(kl_diff > 0.0, "KL divergence must be positive for distinct distributions");
