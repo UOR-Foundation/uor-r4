@@ -3414,14 +3414,15 @@ function pollSysinfo() {
                 console.warn("Sysinfo poll failed, switching to local WASM fallback mode:", err);
                 localWasmMode = true;
                 updateConnectionStatusUI();
-                setEl("corpusCount", router.get_total_indexed_sentences().toLocaleString());
-                syncActiveStreams(unwrapResult(router.get_active_streams()));
-                updateStreamsList();
-                populateExpertMatrix(unwrapResult(router.get_expert_counts()));
-            } else {
-                tryInitLocalWasm();
-            }
-        });
+                if (window.wasm_module && typeof router !== 'undefined') {
+                    setEl("corpusCount", router.get_total_indexed_sentences().toLocaleString());
+                    syncActiveStreams(unwrapResult(router.get_active_streams()));
+                    updateStreamsList();
+                    populateExpertMatrix(unwrapResult(router.get_expert_counts()));
+                } else {
+                    tryInitLocalWasm();
+                }
+            });
 
     // Check the in-process transformerless artifact status.
     const tlessEl = document.getElementById("tlessStatus");
