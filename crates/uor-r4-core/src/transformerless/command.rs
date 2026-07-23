@@ -701,7 +701,9 @@ pub fn score_command(args: &[String]) -> Result<(), String> {
         "scorer", "top-1 agree", "bits/token"
     );
     let row = |name: &str, m: &score::GateCMetrics| {
-        let bits = m.bits_per_token.unwrap_or_else(|| m.wb_bits_per_token.unwrap_or(0.0));
+        let bits = m
+            .bits_per_token
+            .unwrap_or_else(|| m.wb_bits_per_token.unwrap_or(0.0));
         println!(
             "  {:<26} {:>15.1}% {:>12.4}",
             name,

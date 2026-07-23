@@ -1392,7 +1392,9 @@ fn gate_c_harness_emits_all_four_number_sets() {
             "{name} agreement is a probability: {}",
             metrics.top1_agreement
         );
-        let bits = metrics.bits_per_token.unwrap_or_else(|| metrics.wb_bits_per_token.unwrap_or(0.0));
+        let bits = metrics
+            .bits_per_token
+            .unwrap_or_else(|| metrics.wb_bits_per_token.unwrap_or(0.0));
         assert!(
             bits.is_finite() && bits > 0.0,
             "{name} bits/token is finite and positive: {}",
@@ -1604,7 +1606,9 @@ fn fixture_corpus_end_to_end() {
         &gate_c.tla3_baseline,
     ] {
         assert!((0.0..=1.0).contains(&metrics.top1_agreement));
-        let bits = metrics.bits_per_token.unwrap_or_else(|| metrics.wb_bits_per_token.unwrap_or(0.0));
+        let bits = metrics
+            .bits_per_token
+            .unwrap_or_else(|| metrics.wb_bits_per_token.unwrap_or(0.0));
         assert!(bits.is_finite() && bits > 0.0);
     }
     assert!(info.forward_edges > 0, "fixture produces forward edges");
