@@ -164,6 +164,8 @@ pub mod convert_r4g1;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod cover;
 #[cfg(not(target_arch = "wasm32"))]
+pub mod cover_sweep;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod fairness_provenance;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod graph_patch;

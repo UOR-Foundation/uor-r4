@@ -26,7 +26,8 @@
 //! and qwen/phi-class sources differ only in that adapter.
 
 use super::{
-    certify, compare, compiler, convert_r4g1, cover, observe, runtime, scenarios, score,
+    certify, compare, compiler, convert_r4g1, cover, cover_sweep, observe, runtime, scenarios,
+    score,
     teacher::{BehaviorSource, HuggingFaceLlamaOracle, LlamaOracle, TeacherOracle},
 };
 use serde::Serialize;
@@ -1445,13 +1446,15 @@ pub fn run(args: &[String]) -> Result<(), String> {
         Some("convert-r4g1") => convert_r4g1::run(&args[1..])?,
         Some("cover") => cover_command(&args[1..])?,
         Some("score") => score_command(&args[1..])?,
+        Some("cover-sweep") => cover_sweep::cover_sweep_command(&args[1..])?,
         _ => {
             println!(
                 "R4 transformerless — cross-compile a transformer into a mul-free table artifact\n\
                  commands: setup | gen [secs] [target] | compile [--model REPO --revision SHA | --source DIR] [--output DIR] [--seconds N] [--target N] [--sequence-length N] | store | certify | compare | compare-report | scenarios | teacher-kappa | convert-r4g1 --artifacts <TLA> --store <TLS1> [--calibration <hamming_calibration.json>] --out <R4G1>\n\
                  observation pipeline: observe [--source DIR | --checkpoint BIN] [--seconds N] [--target N] [--shards N] [--out DIR] [--sequence-length N]\n\
                  cover induction: cover [--corpus-meta P --corpus-recs P] [--artifacts P] [--depths N] [--k0 N] [--regions-budget N] [--memory-budget MB] [--min-support N] [--entropy-gain BITS] [--radius-quantile PCT] [--out DIR]\n\
-                 score (phase 4): score [--corpus-meta P --corpus-recs P] [--artifacts P] [--cover P] [--transition-out-degree N] [--emission-entries N] [--root-top-b N] [--exct-top-x N] [--witness-sample N] [--out DIR]\n\
+                 score (phase 4): score [--corpus-meta P --corpus-recs P] [--artifacts P] [--cover P] [--transition-out-degree N] [--emission-entries N] [--root-top-b N] [--exct-top-x N] [--witness-sample N] [--smoothing RULE] [--out DIR]\n\
+                 cover sweep (issue 70): cover-sweep [--corpus-meta P --corpus-recs P] [--artifacts P] [--out DIR]\n\
                  hf evaluation: evaluate-report [--source DIR] [--compiled DIR] [--report PATH] [--sequence-length N]\n\
                  docs: docs/TRANSFORMERLESS.md (extrapolation), docs/PROOF.md (proof + certificate)"
             );
