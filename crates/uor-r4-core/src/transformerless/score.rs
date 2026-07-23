@@ -274,8 +274,6 @@ pub struct ScoreConfig {
     /// Emission smoothing rule (issue #67). The add-one default
     /// preserves the pre-#67 compiler byte-exactly.
     pub smoothing: Smoothing,
-    /// Candidate scoring variant (issue #80).
-    pub scoring_variant: ScoringVariant,
 }
 
 impl Default for ScoreConfig {
@@ -287,7 +285,6 @@ impl Default for ScoreConfig {
             exct_top_x: DEFAULT_EXCT_TOP_X,
             witness_sample: DEFAULT_WITNESS_SAMPLE,
             smoothing: Smoothing::AddOne,
-            scoring_variant: ScoringVariant::ChainTelescoped,
         }
     }
 }
@@ -1097,8 +1094,6 @@ pub struct GateCOutcome {
     pub rule12_cloud_size_normalized: GateCMetrics,
     /// Candidate variant (issue #80): Margin-weighted residual scoring.
     pub rule12_margin_weighted: GateCMetrics,
-    /// Candidate evaluation (issue #69): Explicit overlap nodes with interaction residuals.
-    pub rule12_interaction_residuals: GateCMetrics,
     /// TLA3 store baseline (`runtime::predict_witness_plain`).
     pub tla3_baseline: GateCMetrics,
     pub rule12_status_counts: StatusCounts,
@@ -1265,6 +1260,7 @@ pub fn evaluate_gate_c(
         config.root_top_b,
         config.exct_top_x,
     )?;
+    scorer_normalized.set_f_emissions(true);
     scorer_normalized.set_scoring_variant(ScoringVariant::CloudSizeNormalized);
     let mut scorer_margin = GraphScorer::from_artifact(
         r4g1,
@@ -1272,6 +1268,7 @@ pub fn evaluate_gate_c(
         config.root_top_b,
         config.exct_top_x,
     )?;
+    scorer_margin.set_f_emissions(true);
     scorer_margin.set_scoring_variant(ScoringVariant::MarginWeighted);
 
     let mut outcome = GateCOutcome::default();
@@ -1282,7 +1279,6 @@ pub fn evaluate_gate_c(
     let mut bits_rule12_no_f = 0f64;
     let mut bits_normalized = 0f64;
     let mut bits_margin = 0f64;
-    let mut bits_interaction = 0f64;
     let mut bits_baseline = 0f64;
     let mut hits_legacy = 0u64;
     let mut hits_rule1 = 0u64;
@@ -1291,7 +1287,6 @@ pub fn evaluate_gate_c(
     let mut hits_rule12_no_f = 0u64;
     let mut hits_normalized = 0u64;
     let mut hits_margin = 0u64;
-    let mut hits_interaction = 0u64;
     let mut hits_baseline = 0u64;
     // Per-status Rule 1+2 accumulators: [ExactContext, Graph, Novel].
     let mut status_positions = [0usize; 3];
@@ -1331,7 +1326,6 @@ pub fn evaluate_gate_c(
         hits_rule12_no_f += u64::from(rule12_no_f_hit);
         hits_normalized += u64::from(normalized_hit);
         hits_margin += u64::from(margin_hit);
-        hits_interaction += u64::from(rule12_no_f_hit);
         hits_baseline += u64::from(baseline_hit);
         let legacy_bits = outcome_bits(&scorer_with_exct, &legacy.candidates, next);
         let rule1_bits = outcome_bits(&scorer_no_exct, &rule1.candidates, next);
@@ -1340,7 +1334,6 @@ pub fn evaluate_gate_c(
         let rule12_no_f_bits = outcome_bits(&scorer_with_exct_no_f, &rule12_no_f.candidates, next);
         let normalized_bits = outcome_bits(&scorer_normalized, &normalized.candidates, next);
         let margin_bits = outcome_bits(&scorer_margin, &margin.candidates, next);
-        let interaction_bits = rule12_no_f_bits;
         bits_legacy += legacy_bits;
         bits_rule1 += rule1_bits;
         bits_rule12 += rule12_bits;
@@ -1348,7 +1341,6 @@ pub fn evaluate_gate_c(
         bits_rule12_no_f += rule12_no_f_bits;
         bits_normalized += normalized_bits;
         bits_margin += margin_bits;
-        bits_interaction += interaction_bits;
         bits_baseline += -witten_bell_probability(store, &code, next).log2();
 
         let status_index = match rule12.witness.status {
@@ -1421,7 +1413,6 @@ pub fn evaluate_gate_c(
     outcome.rule12_precedence_no_f = metrics(hits_rule12_no_f, bits_rule12_no_f);
     outcome.rule12_cloud_size_normalized = metrics(hits_normalized, bits_normalized);
     outcome.rule12_margin_weighted = metrics(hits_margin, bits_margin);
-    outcome.rule12_interaction_residuals = metrics(hits_interaction, bits_interaction);
     outcome.tla3_baseline = metrics(hits_baseline, bits_baseline);
     outcome.rule12_status_counts = StatusCounts {
         exact_context: status_positions[0],
@@ -1496,7 +1487,9 @@ pub fn evaluate_gate_c(
 /// 3 = issue-#67 smoothing calibration: `config.smoothing` records the
 /// compiled emission rule and `quantization.smoothing` describes it; 4 =
 /// issue-#79 repetition telemetry in `graph` (graph/baseline repetition
-/// rates from the deterministic greedy probe).
+/// rates from the deterministic greedy probe); 5 = issue-#80 rejected
+/// candidate-variant rows in `gate_c` (`rule12_cloud_size_normalized`,
+/// `rule12_margin_weighted`).
 #[derive(Debug, Clone, Serialize)]
 pub struct ScoreReport {
     pub schema: u32,
@@ -1567,7 +1560,7 @@ pub fn build_score_report(
     gate_c: GateCOutcome,
 ) -> ScoreReport {
     ScoreReport {
-        schema: 4,
+        schema: 5,
         inputs,
         config: ScoreReportConfig {
             transition_out_degree: config.transition_out_degree,
