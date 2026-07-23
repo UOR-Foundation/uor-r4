@@ -194,7 +194,6 @@ pub mod score_q;
 pub mod score_runtime;
 // Rejected experimental scoring variants (issue #80); isolated from the
 // operator-clean integer core so P-4 stays a hard guarantee.
-pub mod score_variant;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod shortlist_evaluator;
 #[cfg(not(target_arch = "wasm32"))]
