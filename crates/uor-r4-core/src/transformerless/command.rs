@@ -705,6 +705,8 @@ pub fn score_command(args: &[String]) -> Result<(), String> {
     row("graph Σ-cloud (old)", &gate_c.legacy_sum);
     row("graph chain (Rule 1)", &gate_c.rule1_chain);
     row("graph chain+EXCT (1+2)", &gate_c.rule12_precedence);
+    row("  Rule 1 no-F (ablation #66)", &gate_c.rule1_chain_no_f);
+    row("  Rule 1+2 no-F (ablation #66)", &gate_c.rule12_precedence_no_f);
     row("TLA3 store baseline", &gate_c.tla3_baseline);
     println!(
         "  rule 1+2 status: ExactContext {}, Graph {}, Novel {}",

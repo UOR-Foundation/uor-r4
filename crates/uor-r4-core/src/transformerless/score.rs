@@ -923,6 +923,12 @@ pub struct GateCOutcome {
     pub rule1_chain: GateCMetrics,
     /// NEW Rule 1+2 (chain-telescoped + D4 EXCT precedence).
     pub rule12_precedence: GateCMetrics,
+    /// Ablation (issue #66): Rule 1 with predicted-cloud (ΔT) emissions
+    /// disabled — the no-EXCT measure of ΔT's contribution.
+    pub rule1_chain_no_f: GateCMetrics,
+    /// Ablation (issue #66): Rule 1+2 with ΔT emissions disabled — the
+    /// precedence path's measure of ΔT's contribution.
+    pub rule12_precedence_no_f: GateCMetrics,
     /// TLA3 store baseline (`runtime::predict_witness_plain`).
     pub tla3_baseline: GateCMetrics,
     pub rule12_status_counts: StatusCounts,
@@ -968,15 +974,30 @@ pub fn evaluate_gate_c(
         config.root_top_b,
         config.exct_top_x,
     )?;
+    // Ablation scorers (issue #66): identical configs with ΔT emissions off.
+    let mut scorer_no_exct_no_f =
+        GraphScorer::from_artifact(r4g1, None, config.root_top_b, config.exct_top_x)?;
+    scorer_no_exct_no_f.set_f_emissions(false);
+    let mut scorer_with_exct_no_f = GraphScorer::from_artifact(
+        r4g1,
+        Some(artifact_container),
+        config.root_top_b,
+        config.exct_top_x,
+    )?;
+    scorer_with_exct_no_f.set_f_emissions(false);
 
     let mut outcome = GateCOutcome::default();
     let mut bits_legacy = 0f64;
     let mut bits_rule1 = 0f64;
     let mut bits_rule12 = 0f64;
+    let mut bits_rule1_no_f = 0f64;
+    let mut bits_rule12_no_f = 0f64;
     let mut bits_baseline = 0f64;
     let mut hits_legacy = 0u64;
     let mut hits_rule1 = 0u64;
     let mut hits_rule12 = 0u64;
+    let mut hits_rule1_no_f = 0u64;
+    let mut hits_rule12_no_f = 0u64;
     let mut hits_baseline = 0u64;
     // Per-status Rule 1+2 accumulators: [ExactContext, Graph, Novel].
     let mut status_positions = [0usize; 3];
@@ -995,22 +1016,33 @@ pub fn evaluate_gate_c(
         let legacy = scorer_with_exct.score_candidates_legacy(&observation.sig)?;
         let rule1 = scorer_no_exct.score_candidates(&observation.sig)?;
         let rule12 = scorer_with_exct.score_candidates(&observation.sig)?;
+        let rule1_no_f = scorer_no_exct_no_f.score_candidates(&observation.sig)?;
+        let rule12_no_f = scorer_with_exct_no_f.score_candidates(&observation.sig)?;
         let baseline = runtime::predict_witness_plain(store, &code);
 
         let legacy_hit = legacy.selected == teacher_argmax;
         let rule1_hit = rule1.selected == teacher_argmax;
         let rule12_hit = rule12.selected == teacher_argmax;
+        let rule1_no_f_hit = rule1_no_f.selected == teacher_argmax;
+        let rule12_no_f_hit = rule12_no_f.selected == teacher_argmax;
         let baseline_hit = baseline.token == teacher_argmax;
         hits_legacy += u64::from(legacy_hit);
         hits_rule1 += u64::from(rule1_hit);
         hits_rule12 += u64::from(rule12_hit);
+        hits_rule1_no_f += u64::from(rule1_no_f_hit);
+        hits_rule12_no_f += u64::from(rule12_no_f_hit);
         hits_baseline += u64::from(baseline_hit);
         let legacy_bits = outcome_bits(&scorer_with_exct, &legacy.candidates, next);
         let rule1_bits = outcome_bits(&scorer_no_exct, &rule1.candidates, next);
         let rule12_bits = outcome_bits(&scorer_with_exct, &rule12.candidates, next);
+        let rule1_no_f_bits = outcome_bits(&scorer_no_exct_no_f, &rule1_no_f.candidates, next);
+        let rule12_no_f_bits =
+            outcome_bits(&scorer_with_exct_no_f, &rule12_no_f.candidates, next);
         bits_legacy += legacy_bits;
         bits_rule1 += rule1_bits;
         bits_rule12 += rule12_bits;
+        bits_rule1_no_f += rule1_no_f_bits;
+        bits_rule12_no_f += rule12_no_f_bits;
         bits_baseline += -witten_bell_probability(store, &code, next).log2();
 
         let status_index = match rule12.witness.status {
@@ -1079,6 +1111,8 @@ pub fn evaluate_gate_c(
     outcome.legacy_sum = metrics(hits_legacy, bits_legacy);
     outcome.rule1_chain = metrics(hits_rule1, bits_rule1);
     outcome.rule12_precedence = metrics(hits_rule12, bits_rule12);
+    outcome.rule1_chain_no_f = metrics(hits_rule1_no_f, bits_rule1_no_f);
+    outcome.rule12_precedence_no_f = metrics(hits_rule12_no_f, bits_rule12_no_f);
     outcome.tla3_baseline = metrics(hits_baseline, bits_baseline);
     outcome.rule12_status_counts = StatusCounts {
         exact_context: status_positions[0],

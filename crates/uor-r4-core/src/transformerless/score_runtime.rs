@@ -623,6 +623,18 @@ pub struct GraphScorer {
     vocab: u32,
     exct_top_x: usize,
     pop: [u8; 256],
+    /// When false, the predicted cloud F is empty and ΔT contributes
+    /// nothing — the measurement variant for the F-emissions ablation
+    /// (issue #66). Default true.
+    f_emissions: bool,
+}
+
+impl GraphScorer {
+    /// Enable or disable predicted-cloud (F / ΔT) emissions. Used only by
+    /// the Gate C ablation measurement; deployed scorers stay enabled.
+    pub fn set_f_emissions(&mut self, enabled: bool) {
+        self.f_emissions = enabled;
+    }
 }
 
 impl GraphScorer {
@@ -771,6 +783,7 @@ impl GraphScorer {
             vocab: head.vocab_size(),
             exct_top_x,
             pop: runtime::derive_popcount_table(),
+            f_emissions: true,
         })
     }
 
@@ -850,33 +863,39 @@ impl GraphScorer {
         // Predicted cloud F: union of E_f targets of the active regions,
         // keeping the single best incoming edge per predicted region
         // (highest score_q, ties to the lowest canonical edge id).
+        // Disabled entirely in the F-ablation measurement variant (#66).
         let active_nodes: BTreeSet<u32> = active.iter().map(|a| a.region + 1).collect();
-        let mut best_edge: BTreeMap<u32, EdgeUse> = BTreeMap::new();
-        for &node in &active_nodes {
-            if let Some(edges) = self.forward_by_src.get(&node) {
-                for edge in edges {
-                    k.table_reads += 1;
-                    let better = match best_edge.get(&edge.dst) {
-                        None => true,
-                        Some(current) => {
-                            k.compares += 1;
-                            (edge.score_q, std::cmp::Reverse(edge.edge_id))
-                                > (current.score_q, std::cmp::Reverse(current.edge_id))
+        let (mut predicted, mut edges_applied, mut transition_offset) = if self.f_emissions {
+            let mut best_edge: BTreeMap<u32, EdgeUse> = BTreeMap::new();
+            for &node in &active_nodes {
+                if let Some(edges) = self.forward_by_src.get(&node) {
+                    for edge in edges {
+                        k.table_reads += 1;
+                        let better = match best_edge.get(&edge.dst) {
+                            None => true,
+                            Some(current) => {
+                                k.compares += 1;
+                                (edge.score_q, std::cmp::Reverse(edge.edge_id))
+                                    > (current.score_q, std::cmp::Reverse(current.edge_id))
+                            }
+                        };
+                        if better {
+                            best_edge.insert(edge.dst, *edge);
                         }
-                    };
-                    if better {
-                        best_edge.insert(edge.dst, *edge);
                     }
                 }
             }
-        }
-        let mut predicted: Vec<u32> = best_edge.keys().copied().collect();
-        let mut edges_applied: Vec<EdgeUse> = best_edge.values().copied().collect();
-        let mut transition_offset = ScoreQ::ZERO;
-        for edge in &edges_applied {
-            transition_offset = transition_offset.saturating_add(edge.score_q);
-            k.adds += 1;
-        }
+            let predicted: Vec<u32> = best_edge.keys().copied().collect();
+            let edges_applied: Vec<EdgeUse> = best_edge.values().copied().collect();
+            let mut transition_offset = ScoreQ::ZERO;
+            for edge in &edges_applied {
+                transition_offset = transition_offset.saturating_add(edge.score_q);
+                k.adds += 1;
+            }
+            (predicted, edges_applied, transition_offset)
+        } else {
+            (Vec::new(), Vec::new(), ScoreQ::ZERO)
+        };
 
         // Candidate accumulation: active and predicted nodes contribute
         // candidate tokens, but only the selected covered chain contributes
