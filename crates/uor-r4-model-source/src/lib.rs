@@ -345,11 +345,13 @@ fn fast_matmul_backend() -> &'static str {
     "Apple Accelerate CPU SIMD"
 }
 
+#[allow(dead_code)]
 #[cfg(all(not(target_os = "macos"), target_arch = "aarch64"))]
 fn fast_matmul_backend() -> &'static str {
     "AArch64 NEON CPU"
 }
 
+#[allow(dead_code)]
 #[cfg(all(not(target_os = "macos"), target_arch = "x86_64"))]
 fn fast_matmul_backend() -> &'static str {
     if std::arch::is_x86_feature_detected!("avx2") && std::arch::is_x86_feature_detected!("fma") {
@@ -359,6 +361,7 @@ fn fast_matmul_backend() -> &'static str {
     }
 }
 
+#[allow(dead_code)]
 #[cfg(all(
     not(target_os = "macos"),
     not(any(target_arch = "aarch64", target_arch = "x86_64"))
