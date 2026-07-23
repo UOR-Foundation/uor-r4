@@ -13,7 +13,9 @@ use std::collections::BTreeMap;
 use uor_r4_core::transformerless::compiler::{self, Corpus, D, K, SIG_BYTES, STAGES};
 use uor_r4_core::transformerless::cover::{self, CoverConfig, Observation};
 use uor_r4_core::transformerless::runtime::{self, Store};
-use uor_r4_core::transformerless::score::{self, EmissionTables, ScoreConfig, TransitionEdge};
+use uor_r4_core::transformerless::score::{
+    self, EmissionTables, ScoreConfig, Smoothing, TransitionEdge,
+};
 use uor_r4_core::transformerless::score_runtime::{
     verify_witness_replay, Contribution, ContributionId, GraphScorer, RegionParams, ReplayError,
     ScoreStatus, StructuralEdge, EDGE_KIND_FORWARD, TOP_M,
@@ -323,6 +325,7 @@ fn hand_artifact_with_store(level0: BTreeMap<u32, u32>) -> (Vec<u8>, Vec<u8>, St
             vec![(10, ScoreQ::from_raw(1000)), (20, ScoreQ::from_raw(-500))],
             vec![(20, ScoreQ::from_raw(2000)), (30, ScoreQ::from_raw(100))],
         ],
+        smoothing: Smoothing::AddOne,
     };
     let artifacts = synthetic_compiled();
     let artifact_container = compiler::artifact_bytes(&artifacts);
@@ -522,6 +525,7 @@ fn chain_artifact(b_sig: [u8; SIG_BYTES], c_sig: [u8; SIG_BYTES]) -> (Vec<u8>, V
             vec![(10, ScoreQ::from_raw(1000))], // B
             vec![(20, ScoreQ::from_raw(5000))], // C
         ],
+        smoothing: Smoothing::AddOne,
     };
     let artifacts = synthetic_compiled();
     let artifact_container = compiler::artifact_bytes(&artifacts);
@@ -840,6 +844,7 @@ fn theorem_10_overlapping_active_and_predicted_counts_emission_once() {
         root_floor: ScoreQ::from_raw(-7000),
         root_total: 100,
         region_lists: vec![vec![(10, ScoreQ::from_raw(5))]],
+        smoothing: Smoothing::AddOne,
     };
     let artifacts = synthetic_compiled();
     let artifact_container = compiler::artifact_bytes(&artifacts);
@@ -1173,6 +1178,175 @@ fn scoring_core_is_integer_only_by_source_scan() {
     assert!(!stripped.contains("unsafe"), "no unsafe in the scorer");
 }
 
+// ---------------------------------------------------------- smoothing --
+
+/// Hand-computed formulas for each smoothing rule (issue #67): the seen
+/// and unseen branches of each rule, absolute discounting's count ≤ δ
+/// floor branch, the fully-observed-vocabulary clamp, and the
+/// empty-distribution uniform fallback.
+#[test]
+fn smoothing_rules_match_hand_computed_formulas() {
+    // Distribution shape: counts {10: 3, 20: 1, 50: 2} — total 6, T = 3
+    // seen types, V = 64.
+    let (total, types, vocab) = (6u64, 3usize, 64u32);
+
+    // Add-one: ln((count + 1) / (total + V)) for seen and unseen alike.
+    let add_one = Smoothing::AddOne;
+    assert_eq!(
+        add_one.ln_prob(2, total, vocab, types),
+        ((2f64 + 1.0) / (6f64 + 64.0)).ln() as f32
+    );
+    assert_eq!(
+        add_one.ln_prob(0, total, vocab, types),
+        (1.0 / 70f64).ln() as f32
+    );
+
+    // Witten-Bell: seen ln(count / (total + T)); unseen ln of the
+    // reserved mass T / (total + T) spread over V − T types. The
+    // λ = total / (total + T) shrinkage is the store baseline's
+    // per-level lambda (witten_bell_probability semantics), and the
+    // single-distribution result is a proper distribution.
+    let wb = Smoothing::WittenBell;
+    assert_eq!(
+        wb.ln_prob(2, total, vocab, types),
+        (2f64 / 9f64).ln() as f32
+    );
+    assert_eq!(
+        wb.ln_prob(0, total, vocab, types),
+        ((3f64 / 9f64) / 61f64).ln() as f32
+    );
+    let lambda = total as f64 / (total as f64 + types as f64);
+    let seen_mass: f64 = [3f64, 1.0, 2.0]
+        .iter()
+        .map(|c| lambda * c / total as f64)
+        .sum();
+    assert!(
+        (seen_mass + (1.0 - lambda) - 1.0).abs() < 1e-12,
+        "Witten-Bell mass sums to one"
+    );
+
+    // Absolute discounting δ = 0.5: every count > δ takes
+    // ln((count − δ) / total); the floor is δ·T / total over V − T.
+    let ad = Smoothing::AbsoluteDiscount(0.5);
+    assert_eq!(
+        ad.ln_prob(2, total, vocab, types),
+        (1.5f64 / 6f64).ln() as f32
+    );
+    assert_eq!(
+        ad.ln_prob(1, total, vocab, types),
+        (0.5f64 / 6f64).ln() as f32
+    );
+    assert_eq!(
+        ad.ln_prob(0, total, vocab, types),
+        ((0.5 * 3f64 / 6f64) / 61f64).ln() as f32
+    );
+
+    // δ = 1.0: a singleton count is NOT > δ, so it takes the floor.
+    let ad1 = Smoothing::AbsoluteDiscount(1.0);
+    assert_eq!(
+        ad1.ln_prob(2, total, vocab, types),
+        (1f64 / 6f64).ln() as f32
+    );
+    assert_eq!(
+        ad1.ln_prob(1, total, vocab, types),
+        ad1.ln_prob(0, total, vocab, types),
+        "count ≤ δ takes the floor"
+    );
+    assert_eq!(
+        ad1.ln_prob(0, total, vocab, types),
+        ((1.0 * 3f64 / 6f64) / 61f64).ln() as f32
+    );
+
+    // Fully-observed vocabulary: the unseen-type count clamps to 1.
+    assert_eq!(
+        wb.ln_prob(0, total, 3, types),
+        ((3f64 / 9f64) / 1f64).ln() as f32
+    );
+
+    // Empty distribution: the uniform floor under every rule.
+    for rule in [add_one, wb, ad, ad1] {
+        assert_eq!(
+            rule.ln_prob(0, 0, vocab, 0),
+            (1.0 / 64f64).ln() as f32,
+            "{rule:?} on an empty distribution is uniform"
+        );
+    }
+}
+
+/// The canonical labels round-trip through the parser (the report and
+/// the CLI spell the same rule).
+#[test]
+fn smoothing_labels_round_trip_through_parse() {
+    for rule in [
+        Smoothing::AddOne,
+        Smoothing::WittenBell,
+        Smoothing::AbsoluteDiscount(0.1),
+        Smoothing::AbsoluteDiscount(0.5),
+        Smoothing::AbsoluteDiscount(1.0),
+    ] {
+        assert_eq!(Smoothing::parse(&rule.label()), Ok(rule));
+    }
+    assert_eq!(Smoothing::parse("add-one"), Ok(Smoothing::AddOne));
+    assert_eq!(Smoothing::parse("witten-bell"), Ok(Smoothing::WittenBell));
+    assert_eq!(
+        Smoothing::parse("abs-disc:0.25"),
+        Ok(Smoothing::AbsoluteDiscount(0.25))
+    );
+    for bad in [
+        "",
+        "laplace",
+        "abs-disc",
+        "abs-disc:",
+        "abs-disc:0",
+        "abs-disc:-0.5",
+        "abs-disc:1.5",
+        "abs-disc:NaN",
+        "abs-disc:inf",
+        "abs-disc:abc",
+    ] {
+        assert!(Smoothing::parse(bad).is_err(), "{bad:?} rejected");
+    }
+}
+
+/// The compiled tables differ across rules but the add-one default
+/// reproduces the pre-#67 hand-computed values exactly.
+#[test]
+fn smoothing_changes_the_compiled_emission_tables() {
+    let (observations, corpus) = synthetic_corpus();
+    let artifacts = synthetic_compiled();
+    let (regions, _structural, train, _held_out) = synthetic_cover(&observations, &corpus);
+    let (store, _) = runtime::build_store(&artifacts, &corpus);
+    let max_depth = regions.iter().map(|r| r.depth as usize).max().unwrap_or(1);
+    let compile = |smoothing| {
+        let config = ScoreConfig {
+            smoothing,
+            ..ScoreConfig::default()
+        };
+        score::compile_emissions(&corpus, &store, &regions, &train, max_depth, 64, &config)
+    };
+    let add_one = compile(Smoothing::AddOne);
+    let witten_bell = compile(Smoothing::WittenBell);
+    assert_eq!(add_one.smoothing, Smoothing::AddOne);
+    assert_ne!(
+        add_one.root_floor, witten_bell.root_floor,
+        "the rule reaches the baked floor"
+    );
+    assert_ne!(
+        add_one.root_prior, witten_bell.root_prior,
+        "the rule reaches the root prior"
+    );
+    // Add-one root values are exactly the pre-#67 formula.
+    let root_total = add_one.root_total;
+    let dist = &store[0][&Vec::new()];
+    for (&token, &value) in &add_one.root_prior {
+        let count = dist[&token];
+        let expected = ScoreQ::from_logprob(
+            ((f64::from(count) + 1.0) / (root_total as f64 + 64.0)).ln() as f32,
+        );
+        assert_eq!(value, expected, "add-one root prior token {token}");
+    }
+}
+
 // ------------------------------------------------------------- Gate C --
 
 #[test]
@@ -1279,7 +1453,8 @@ fn gate_c_harness_emits_all_four_number_sets() {
     let json = serde_json::to_string_pretty(&build(&outcome)).expect("report serializes");
     let json2 = serde_json::to_string_pretty(&build(&outcome2)).expect("report serializes");
     assert_eq!(json, json2, "double-run report byte identity");
-    assert!(json.contains("\"schema\": 2"));
+    assert!(json.contains("\"schema\": 3"));
+    assert!(json.contains("\"smoothing\": \"add-one\""));
     assert!(json.contains("legacy_sum"));
     assert!(json.contains("rule1_chain"));
     assert!(json.contains("rule12_precedence"));
@@ -1491,4 +1666,144 @@ fn rx1_baked_residuals_match_probe_time_quantization() {
     // The probe record matches the store's shape exactly.
     assert_eq!(probe.level, 0);
     assert_eq!(probe.admitted as usize, dist.len());
+}
+
+// ------------------------------------------- smoothing sweep (#67) --
+
+/// Issue #67 emission smoothing calibration sweep (release-only fixture
+/// workload): rebuild the scored artifact under each smoothing rule and
+/// record Gate C top-1 agreement and bits/token for the deployed Rule
+/// 1+2 scorer, with the TLA3 baseline row for reference. The add-one
+/// artifact must equal the pinned pre-#67 fixture bytes (default
+/// preservation — the regression check), and every variant's compile
+/// must be byte-identical under a double run. Run with
+/// `cargo test -p uor-r4-core --release --offline --test score -- --ignored --nocapture fixture_smoothing_sweep`.
+#[test]
+#[ignore = "release-only fixture workload"]
+fn fixture_smoothing_sweep_calibration() {
+    let dir = env!("CARGO_MANIFEST_DIR");
+    let artifact_container =
+        std::fs::read(format!("{dir}/tests/fixtures/tless_artifacts.bin")).expect("fixture TLA5");
+    let artifacts = compiler::parse_artifacts(&artifact_container).expect("fixture parses");
+    let meta_bytes = std::fs::read(format!("{dir}/tests/fixtures/c_meta.bin")).expect("meta");
+    let recs_bytes = std::fs::read(format!("{dir}/tests/fixtures/c_recs.bin")).expect("recs");
+    let corpus = compiler::load_corpus_from(
+        &format!("{dir}/tests/fixtures/c_meta.bin"),
+        &format!("{dir}/tests/fixtures/c_recs.bin"),
+    )
+    .expect("fixture corpus loads");
+    let artifact_kappa = format!("blake3:{}", blake3::hash(&artifact_container).to_hex());
+    let corpus_kappa = {
+        let mut h = blake3::Hasher::new();
+        h.update(&meta_bytes);
+        h.update(&recs_bytes);
+        format!("blake3:{}", h.finalize().to_hex())
+    };
+
+    // The cover, store, and forward transitions are
+    // smoothing-independent: build them once and rebuild only the
+    // emission side per variant.
+    let (train_pos, held_out_pos) = cover::split_positions(&corpus);
+    let train = cover::build_observations(&artifacts, &corpus, &train_pos);
+    let held_out = cover::build_observations(&artifacts, &corpus, &held_out_pos);
+    let induced = cover::induce_cover(
+        &train,
+        &CoverConfig::default(),
+        &artifact_kappa,
+        &corpus_kappa,
+    )
+    .expect("fixture induction");
+    let reference = cover::ReferenceClassifier::freeze(&induced.cover);
+    let cover_edges = cover::build_edges(&induced.cover, &reference, &train);
+    let regions = score::regions_from_cover(&induced.cover);
+    let structural = score::structural_from_cover(&cover_edges);
+    let max_depth = regions.iter().map(|r| r.depth as usize).max().unwrap_or(1);
+    let (store, _) = runtime::build_store(&artifacts, &corpus);
+    let tls1 = runtime::store_bytes(&store);
+    let transitions = score::compile_transitions(
+        &corpus,
+        &regions,
+        &train,
+        max_depth,
+        ScoreConfig::default().transition_out_degree,
+    );
+    let vocab = (artifacts.token_codes.len() / STAGES) as u32;
+
+    let variants = [
+        Smoothing::AddOne,
+        Smoothing::WittenBell,
+        Smoothing::AbsoluteDiscount(0.1),
+        Smoothing::AbsoluteDiscount(0.5),
+        Smoothing::AbsoluteDiscount(1.0),
+    ];
+    println!(
+        "issue #67 smoothing sweep — {} held-out positions:",
+        held_out.len()
+    );
+    println!(
+        "  {:<14} {:>16} {:>16} {:>16} {:>16}",
+        "variant", "r1+2 top-1", "r1+2 bits/tok", "base top-1", "base bits/tok"
+    );
+    for smoothing in variants {
+        let config = ScoreConfig {
+            smoothing,
+            ..ScoreConfig::default()
+        };
+        let compile = || {
+            let emissions = score::compile_emissions(
+                &corpus, &store, &regions, &train, max_depth, vocab, &config,
+            );
+            score::emit_scored_r4g1(
+                &artifact_container,
+                (&meta_bytes, &recs_bytes),
+                vocab,
+                &score::ScoredGraphSections {
+                    regions: &regions,
+                    structural: &structural,
+                    transitions: &transitions,
+                    emissions: &emissions,
+                    exct_tls1: &tls1,
+                    exct_top_x: config.exct_top_x,
+                },
+            )
+            .expect("variant emit")
+            .0
+        };
+        let bytes = compile();
+        let bytes2 = compile();
+        assert_eq!(
+            bytes,
+            bytes2,
+            "{}: double-run byte identity",
+            smoothing.label()
+        );
+        if smoothing == Smoothing::AddOne {
+            // Default preservation: the add-one artifact is byte-exact
+            // with the pre-#67 compiler on the fixture inputs.
+            assert_eq!(
+                format!("blake3:{}", blake3::hash(&bytes).to_hex()),
+                "blake3:de04eec8be0ce001c1493acee1b28f83976a74f85519855e1f23e8676d713704",
+                "add-one default preserves the pre-#67 artifact bytes"
+            );
+        }
+        let gate_c = score::evaluate_gate_c(
+            &bytes,
+            &artifact_container,
+            &artifacts,
+            &store,
+            &corpus,
+            &held_out,
+            &config,
+        )
+        .expect("variant gate C");
+        assert_eq!(gate_c.witness_replay_failures, 0);
+        println!(
+            "  {:<14} {:>15.2}% {:>16.4} {:>15.2}% {:>16.4}",
+            smoothing.label(),
+            100.0 * gate_c.rule12_precedence.top1_agreement,
+            gate_c.rule12_precedence.bits_per_token,
+            100.0 * gate_c.tla3_baseline.top1_agreement,
+            gate_c.tla3_baseline.bits_per_token,
+        );
+    }
 }

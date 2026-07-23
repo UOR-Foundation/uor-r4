@@ -443,6 +443,7 @@ struct ScoreOptions {
     root_top_b: usize,
     exct_top_x: usize,
     witness_sample: usize,
+    smoothing: score::Smoothing,
     output: PathBuf,
 }
 
@@ -458,6 +459,7 @@ fn parse_score_options(args: &[String]) -> Result<ScoreOptions, String> {
         root_top_b: score::DEFAULT_ROOT_TOP_B,
         exct_top_x: score::DEFAULT_EXCT_TOP_X,
         witness_sample: score::DEFAULT_WITNESS_SAMPLE,
+        smoothing: score::Smoothing::AddOne,
         output: PathBuf::from("score"),
     };
     let mut index = 0usize;
@@ -507,6 +509,9 @@ fn parse_score_options(args: &[String]) -> Result<ScoreOptions, String> {
                 options.witness_sample = value
                     .parse()
                     .map_err(|_| format!("invalid --witness-sample value: {value}"))?;
+            }
+            "--smoothing" => {
+                options.smoothing = score::Smoothing::parse(value)?;
             }
             "--out" => options.output = PathBuf::from(value),
             _ => return Err(format!("unknown score option: {flag}")),
@@ -568,6 +573,7 @@ pub fn score_command(args: &[String]) -> Result<(), String> {
         root_top_b: options.root_top_b,
         exct_top_x: options.exct_top_x,
         witness_sample: options.witness_sample,
+        smoothing: options.smoothing,
     };
     let (train_positions, held_out_positions) = cover::split_positions(&corpus);
     let train = cover::build_observations(&artifacts, &corpus, &train_positions);
@@ -1600,6 +1606,7 @@ mod tests {
         assert_eq!(options.root_top_b, score::DEFAULT_ROOT_TOP_B);
         assert_eq!(options.exct_top_x, score::DEFAULT_EXCT_TOP_X);
         assert_eq!(options.witness_sample, score::DEFAULT_WITNESS_SAMPLE);
+        assert_eq!(options.smoothing, score::Smoothing::AddOne);
         assert_eq!(options.output, PathBuf::from("score"));
 
         let args = [
@@ -1621,6 +1628,8 @@ mod tests {
             "128",
             "--witness-sample",
             "32",
+            "--smoothing",
+            "abs-disc:0.5",
             "--out",
             "/tmp/scored",
         ]
@@ -1635,9 +1644,38 @@ mod tests {
         assert_eq!(options.root_top_b, 256);
         assert_eq!(options.exct_top_x, 128);
         assert_eq!(options.witness_sample, 32);
+        assert_eq!(options.smoothing, score::Smoothing::AbsoluteDiscount(0.5));
         assert_eq!(options.output, PathBuf::from("/tmp/scored"));
 
         let bad = ["--regions-budget", "4"].map(str::to_owned);
         assert!(parse_score_options(&bad).is_err());
+    }
+
+    #[test]
+    fn score_smoothing_flag_parses_all_variants() {
+        let parse = |value: &str| {
+            let args = ["--smoothing", value].map(str::to_owned);
+            parse_score_options(&args)
+                .expect("valid smoothing")
+                .smoothing
+        };
+        assert_eq!(parse("add-one"), score::Smoothing::AddOne);
+        assert_eq!(parse("witten-bell"), score::Smoothing::WittenBell);
+        assert_eq!(
+            parse("abs-disc:0.1"),
+            score::Smoothing::AbsoluteDiscount(0.1)
+        );
+        assert_eq!(
+            parse("abs-disc:0.5"),
+            score::Smoothing::AbsoluteDiscount(0.5)
+        );
+        assert_eq!(
+            parse("abs-disc:1.0"),
+            score::Smoothing::AbsoluteDiscount(1.0)
+        );
+        for bad in ["bogus", "abs-disc:0", "abs-disc:2", "abs-disc:NaN"] {
+            let args = ["--smoothing", bad].map(str::to_owned);
+            assert!(parse_score_options(&args).is_err(), "{bad} rejected");
+        }
     }
 }

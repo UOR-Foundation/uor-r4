@@ -32,12 +32,14 @@
 //!   land in some region at every depth and deep regions' distributions
 //!   would collect the whole corpus; see
 //!   [`score_runtime::binary_top1_covered`]). The rule is deterministic
-//!   and identical under re-induction and `--cover` reload. Add-one
-//!   smoothing over the compiled vocabulary:
-//!   `P(v|n) = (count_n(v) + 1) / (total_n + V)`. The root prior B(v)
-//!   is the level-0 store distribution with the same quantization and
-//!   smoothing; the smoothing floor `ln(1/(total + V))` is baked into
-//!   the EMIT root header. Each region's emission list is sparse and
+//!   and identical under re-induction and `--cover` reload. The
+//!   smoothing rule is configurable ([`Smoothing`], issue #67
+//!   calibration); the default is add-one smoothing over the compiled
+//!   vocabulary: `P(v|n) = (count_n(v) + 1) / (total_n + V)`. The root
+//!   prior B(v) is the level-0 store distribution with the same
+//!   quantization and smoothing; the smoothing floor (`ln(1/(total + V))`
+//!   under add-one) is baked into the EMIT root header. Each region's
+//!   emission list is sparse and
 //!   bounded: the top-E tokens by residual score
 //!   ([`ScoreConfig::emission_entries`], default 64; selection order
 //!   score desc then token asc, storage ascending token). The induced
@@ -126,6 +128,136 @@ const MAX_PROGRAM_STEPS: u32 = 64;
 /// blake3 input labeling this compiler as the compiler of record.
 const COMPILER_VERSION_LABEL: &[u8] = b"uor-r4-core score v0";
 
+/// Emission smoothing rule for the compiled next-token distributions
+/// (issue #67 calibration). Compiler-side only — the deployed scorer
+/// reads baked ScoreQ values and never re-derives probabilities, so the
+/// rule is pinned into the artifact at compile time and recorded in the
+/// score report's config.
+///
+/// Every rule shares one shape: `ln P(v | distribution)` for a count
+/// map with `total` evidence over a compiled vocabulary of `vocab`
+/// tokens, `seen_types` (T) of them observed. Unseen tokens take the
+/// rule's floor; the floor mass is spread uniformly over the unseen
+/// types (clamped to at least one type so a fully-observed vocabulary
+/// still has a finite floor).
+#[derive(Debug, Clone, Copy)]
+pub enum Smoothing {
+    /// Add-one (Laplace): `P(v) = (count + 1) / (total + V)` — the
+    /// Phase-4 default; byte-exact with the pre-#67 compiler.
+    AddOne,
+    /// Witten-Bell at the single-distribution level: seen types get
+    /// `count / (total + T)`; the reserved mass `T / (total + T)` is
+    /// the floor, spread uniformly over the `max(V − T, 1)` unseen
+    /// types. This is the per-distribution specialization of the
+    /// store's backoff chain ([`witten_bell_probability`]) at depth 0 —
+    /// the same λ = total / (total + T) shrinkage the Gate C baseline's
+    /// bits/token uses, with the chain's eventual uniform floor applied
+    /// to the unseen types only — so the baseline's metric family is
+    /// comparable.
+    WittenBell,
+    /// Absolute discounting with discount δ: types with `count > δ` get
+    /// `(count − δ) / total`; the discounted mass `δ·T / total` is the
+    /// floor, spread uniformly over the `max(V − T, 1)` unseen types
+    /// (types with `count ≤ δ`, including unseen ones, take the floor).
+    AbsoluteDiscount(f64),
+}
+
+impl Smoothing {
+    /// ln of the smoothed probability of one token (compiler-side f64;
+    /// module docs for the platform pinning). `count` is the token's
+    /// evidence count (0 = unseen), `total` the distribution's evidence
+    /// total, `vocab` the compiled vocabulary size, `seen_types` the
+    /// number of distinct observed types (T).
+    pub fn ln_prob(&self, count: u64, total: u64, vocab: u32, seen_types: usize) -> f32 {
+        match *self {
+            Smoothing::AddOne => smoothed_ln(count, total, vocab),
+            Smoothing::WittenBell => {
+                if total == 0 {
+                    // No evidence: the chain's uniform floor is all that
+                    // remains (T = 0 whenever total = 0).
+                    return (1.0 / f64::from(vocab)).ln() as f32;
+                }
+                let total = total as f64;
+                let types = seen_types as f64;
+                if count > 0 {
+                    (count as f64 / (total + types)).ln() as f32
+                } else {
+                    let floor_mass = types / (total + types);
+                    let unseen = (f64::from(vocab) - types).max(1.0);
+                    (floor_mass / unseen).ln() as f32
+                }
+            }
+            Smoothing::AbsoluteDiscount(delta) => {
+                if total == 0 {
+                    return (1.0 / f64::from(vocab)).ln() as f32;
+                }
+                let total = total as f64;
+                let types = seen_types as f64;
+                if count as f64 > delta {
+                    ((count as f64 - delta) / total).ln() as f32
+                } else {
+                    let floor_mass = delta * types / total;
+                    let unseen = (f64::from(vocab) - types).max(1.0);
+                    (floor_mass / unseen).ln() as f32
+                }
+            }
+        }
+    }
+
+    /// The canonical CLI/report spelling (`add-one`, `witten-bell`,
+    /// `abs-disc:δ`).
+    pub fn label(&self) -> String {
+        match *self {
+            Smoothing::AddOne => "add-one".to_owned(),
+            Smoothing::WittenBell => "witten-bell".to_owned(),
+            Smoothing::AbsoluteDiscount(delta) => format!("abs-disc:{delta}"),
+        }
+    }
+
+    /// Parse a `--smoothing` flag value: `add-one` | `witten-bell` |
+    /// `abs-disc:δ` with δ finite and in (0, 1].
+    pub fn parse(value: &str) -> Result<Smoothing, String> {
+        match value {
+            "add-one" => Ok(Smoothing::AddOne),
+            "witten-bell" => Ok(Smoothing::WittenBell),
+            _ => {
+                let Some(delta) = value.strip_prefix("abs-disc:") else {
+                    return Err(format!(
+                        "invalid --smoothing value: {value} \
+                         (expected add-one | witten-bell | abs-disc:δ)"
+                    ));
+                };
+                let delta: f64 = delta
+                    .parse()
+                    .map_err(|_| format!("invalid --smoothing abs-disc delta: {delta}"))?;
+                if !delta.is_finite() || delta <= 0.0 || delta > 1.0 {
+                    return Err(format!(
+                        "--smoothing abs-disc delta must be finite and in (0, 1]: {delta}"
+                    ));
+                }
+                Ok(Smoothing::AbsoluteDiscount(delta))
+            }
+        }
+    }
+}
+
+/// Bit-exact equality (the discount is validated finite at parse time,
+/// so NaN can never reach a stored config).
+impl PartialEq for Smoothing {
+    fn eq(&self, other: &Self) -> bool {
+        match (*self, *other) {
+            (Smoothing::AddOne, Smoothing::AddOne)
+            | (Smoothing::WittenBell, Smoothing::WittenBell) => true,
+            (Smoothing::AbsoluteDiscount(a), Smoothing::AbsoluteDiscount(b)) => {
+                a.to_bits() == b.to_bits()
+            }
+            _ => false,
+        }
+    }
+}
+
+impl Eq for Smoothing {}
+
 /// Configuration of one scored-graph compilation.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ScoreConfig {
@@ -139,6 +271,9 @@ pub struct ScoreConfig {
     pub exct_top_x: usize,
     /// Held-out positions whose witnesses are replayed in Gate C.
     pub witness_sample: usize,
+    /// Emission smoothing rule (issue #67). The add-one default
+    /// preserves the pre-#67 compiler byte-exactly.
+    pub smoothing: Smoothing,
 }
 
 impl Default for ScoreConfig {
@@ -149,6 +284,7 @@ impl Default for ScoreConfig {
             root_top_b: DEFAULT_ROOT_TOP_B,
             exct_top_x: DEFAULT_EXCT_TOP_X,
             witness_sample: DEFAULT_WITNESS_SAMPLE,
+            smoothing: Smoothing::AddOne,
         }
     }
 }
@@ -245,16 +381,22 @@ pub fn compile_transitions(
 pub struct EmissionTables {
     /// B(v) for every token observed at level 0 (ascending token).
     pub root_prior: BTreeMap<u32, ScoreQ>,
-    /// The add-one smoothing floor `ScoreQ(ln(1/(total + V)))`.
+    /// The smoothing floor for tokens outside the root prior (add-one:
+    /// `ScoreQ(ln(1/(total + V)))`).
     pub root_floor: ScoreQ,
     /// Level-0 evidence total (the smoothing denominator source).
     pub root_total: u64,
     /// Per region id: `(token, ΔE)` ascending token, bounded to top-E.
     pub region_lists: Vec<Vec<(u32, ScoreQ)>>,
+    /// The rule these tables were compiled with; the EXCT residuals are
+    /// quantized under the same rule so the whole artifact speaks one
+    /// smoothing language.
+    pub smoothing: Smoothing,
 }
 
 /// ln of an add-one-smoothed probability (compiler-side f64; module
-/// docs for the platform pinning).
+/// docs for the platform pinning). This is the [`Smoothing::AddOne`]
+/// arm; the other rules live in [`Smoothing::ln_prob`].
 fn smoothed_ln(count: u64, total: u64, vocab: u32) -> f32 {
     ((count as f64 + 1.0) / (total as f64 + f64::from(vocab))).ln() as f32
 }
@@ -262,7 +404,8 @@ fn smoothed_ln(count: u64, total: u64, vocab: u32) -> f32 {
 /// Compile the root prior and per-region emission residuals (module
 /// docs). The evidence model matches the store's exactly (top-3
 /// teacher-weighted counts over train positions); the root distribution
-/// is the level-0 store distribution.
+/// is the level-0 store distribution. Probabilities are smoothed under
+/// `config.smoothing` (issue #67; add-one is the byte-exact default).
 pub fn compile_emissions(
     corpus: &Corpus,
     store: &Store,
@@ -274,6 +417,7 @@ pub fn compile_emissions(
 ) -> EmissionTables {
     let pop = runtime::derive_popcount_table();
     let mut k = runtime::OpKernel::default();
+    let smoothing = config.smoothing;
     // Weighted evidence per region: the covered binary top-1 membership
     // at each depth (within the calibrated radius — the backoff floor is
     // a routing behavior, never region content; see `binary_top1_covered`).
@@ -304,16 +448,23 @@ pub fn compile_emissions(
         .map(|dist| dist.iter().map(|(&t, &c)| (t, u64::from(c))).collect())
         .unwrap_or_default();
     let root_total: u64 = root_dist.values().sum();
-    let root_floor = ScoreQ::from_logprob(smoothed_ln(0, root_total, vocab));
+    let root_types = root_dist.len();
+    let root_floor = ScoreQ::from_logprob(smoothing.ln_prob(0, root_total, vocab, root_types));
     let root_prior: BTreeMap<u32, ScoreQ> = root_dist
         .iter()
-        .map(|(&t, &c)| (t, ScoreQ::from_logprob(smoothed_ln(c, root_total, vocab))))
+        .map(|(&t, &c)| {
+            (
+                t,
+                ScoreQ::from_logprob(smoothing.ln_prob(c, root_total, vocab, root_types)),
+            )
+        })
         .collect();
 
     let mut region_lists = Vec::with_capacity(regions.len());
     for (region_id, region) in regions.iter().enumerate() {
         let dist = &evidence[region_id];
         let total: u64 = dist.values().sum();
+        let types = dist.len();
         // Parent distribution: the parent region's evidence, or the
         // level-0 root distribution at depth 1.
         let (parent_dist, parent_total): (&BTreeMap<u32, u64>, u64) = match region.parent {
@@ -323,14 +474,16 @@ pub fn compile_emissions(
             }
             None => (&root_dist, root_total),
         };
+        let parent_types = parent_dist.len();
         let mut residuals: Vec<(u32, ScoreQ)> = dist
             .iter()
             .map(|(&token, &count)| {
-                let lp_n = smoothed_ln(count, total, vocab);
-                let lp_p = smoothed_ln(
+                let lp_n = smoothing.ln_prob(count, total, vocab, types);
+                let lp_p = smoothing.ln_prob(
                     parent_dist.get(&token).copied().unwrap_or(0),
                     parent_total,
                     vocab,
+                    parent_types,
                 );
                 (token, ScoreQ::from_logprob(lp_n - lp_p))
             })
@@ -348,6 +501,7 @@ pub fn compile_emissions(
         root_floor,
         root_total,
         region_lists,
+        smoothing,
     }
 }
 
@@ -448,13 +602,15 @@ pub struct ScoredGraphSections<'a> {
 
 /// Encode the exact-context store as compile-time ScoreQ residuals. The
 /// runtime only reads the resulting integer values; it never evaluates ln or
-/// performs probe-time quantization.
+/// performs probe-time quantization. `smoothing` is the rule the root
+/// prior was compiled with, so the residuals cancel it consistently.
 fn emit_residual_exct(
     store: &Store,
     root_prior: &BTreeMap<u32, ScoreQ>,
     root_floor: ScoreQ,
     vocab: u32,
     top_x: usize,
+    smoothing: Smoothing,
 ) -> Result<Vec<u8>, String> {
     let mut bytes = Vec::new();
     bytes.extend_from_slice(&RESIDUAL_EXCT_MAGIC);
@@ -482,8 +638,12 @@ fn emit_residual_exct(
             bytes.extend_from_slice(&total.to_le_bytes());
             bytes.extend_from_slice(&entry_count.to_le_bytes());
             for (token, count) in ranked {
-                let exact =
-                    ScoreQ::from_logprob(smoothed_ln(u64::from(count), u64::from(total), vocab));
+                let exact = ScoreQ::from_logprob(smoothing.ln_prob(
+                    u64::from(count),
+                    u64::from(total),
+                    vocab,
+                    distribution.len(),
+                ));
                 let root = root_prior.get(&token).copied().unwrap_or(root_floor);
                 let residual = exact.saturating_sub(root);
                 bytes.extend_from_slice(&token.to_le_bytes());
@@ -680,6 +840,7 @@ pub fn emit_scored_r4g1(
         emissions.root_floor,
         vocab_size,
         exct_top_x,
+        emissions.smoothing,
     )?;
     let mut exct = Vec::with_capacity(4 + exct_body.len());
     exct.extend_from_slice(&[2, 0, 0, 0]);
@@ -1149,7 +1310,9 @@ pub fn evaluate_gate_c(
 /// Gate C table (graph_no_exct/graph_with_exct/tla3_baseline); 2 = the
 /// issue-#64 four-set table (legacy_sum / rule1_chain /
 /// rule12_precedence / tla3_baseline) with status counts, per-status
-/// metrics, win/loss breakdowns, and the EXCT support gate in the config.
+/// metrics, win/loss breakdowns, and the EXCT support gate in the config;
+/// 3 = issue-#67 smoothing calibration: `config.smoothing` records the
+/// compiled emission rule and `quantization.smoothing` describes it.
 #[derive(Debug, Clone, Serialize)]
 pub struct ScoreReport {
     pub schema: u32,
@@ -1179,6 +1342,9 @@ pub struct ScoreReportConfig {
     pub top_m: usize,
     /// The D4 EXCT precedence support gate (`score_runtime::EXCT_SUPPORT_MIN`).
     pub exct_support_min: u32,
+    /// The calibrated emission smoothing rule (issue #67;
+    /// [`Smoothing::label`]).
+    pub smoothing: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1215,7 +1381,7 @@ pub fn build_score_report(
     gate_c: GateCOutcome,
 ) -> ScoreReport {
     ScoreReport {
-        schema: 2,
+        schema: 3,
         inputs,
         config: ScoreReportConfig {
             transition_out_degree: config.transition_out_degree,
@@ -1225,6 +1391,7 @@ pub fn build_score_report(
             witness_sample: config.witness_sample,
             top_m: super::score_runtime::TOP_M,
             exct_support_min: super::score_runtime::EXCT_SUPPORT_MIN,
+            smoothing: config.smoothing.label(),
         },
         graph: ScoreReportGraph {
             node_count: info.node_count,
@@ -1243,12 +1410,7 @@ pub fn build_score_report(
             format: "ScoreQ Q16.16 in i32; EMIT storage descriptor {width: i32, shift: 0, \
                      zero_point: 0}; edge weights and residuals via ScoreQ::from_logprob"
                 .to_owned(),
-            smoothing: "add-one over the compiled vocabulary: P(v|n) = (count_n(v) + 1) / \
-                        (total_n + V); evidence = the store's top-3 teacher-weighted counts \
-                        over covered binary top-1 members (within calibrated radius; no \
-                        backoff-floor assignment); root prior = level-0 store distribution; \
-                        smoothing floor baked into the EMIT root header"
-                .to_owned(),
+            smoothing: smoothing_description(config.smoothing),
             platform: "compiler-side f64 ln quantization is macOS-pinned (libm-sensitive \
                        cross-platform), the same status as the existing κ baseline; the D2 \
                        canonical deterministic compile mode resolves cross-platform byte \
@@ -1263,5 +1425,33 @@ pub fn build_score_report(
                    artifacts and reports"
                 .to_owned(),
         },
+    }
+}
+
+/// The `quantization.smoothing` prose for the compiled rule. The
+/// add-one text is the pre-#67 wording verbatim, so default reports
+/// stay byte-identical.
+fn smoothing_description(smoothing: Smoothing) -> String {
+    let evidence = "evidence = the store's top-3 teacher-weighted counts \
+                    over covered binary top-1 members (within calibrated radius; no \
+                    backoff-floor assignment); root prior = level-0 store distribution; \
+                    smoothing floor baked into the EMIT root header";
+    match smoothing {
+        Smoothing::AddOne => format!(
+            "add-one over the compiled vocabulary: P(v|n) = (count_n(v) + 1) / \
+             (total_n + V); {evidence}"
+        ),
+        Smoothing::WittenBell => format!(
+            "Witten-Bell over the compiled vocabulary: seen P(v|n) = count_n(v) / \
+             (total_n + T_n), floor mass T_n / (total_n + T_n) spread over the \
+             max(V − T_n, 1) unseen types (T_n = seen types) — the depth-0 \
+             specialization of the store's backoff chain; {evidence}"
+        ),
+        Smoothing::AbsoluteDiscount(delta) => format!(
+            "absolute discounting (δ = {delta}) over the compiled vocabulary: seen \
+             P(v|n) = (count_n(v) − δ) / total_n for count_n(v) > δ, floor mass \
+             δ·T_n / total_n spread over the max(V − T_n, 1) unseen types \
+             (T_n = seen types); {evidence}"
+        ),
     }
 }
