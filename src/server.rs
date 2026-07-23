@@ -1219,6 +1219,7 @@ fn handle_connection(
             Some("geometric") => "geometric",
             Some("attention") => "attention",
             Some("r4-attention") => "r4-attention",
+            Some("transformerless-legacy") => "transformerless-legacy",
             Some("auto" | "ollama" | "transformerless") | None => "transformerless",
             Some(_) => "transformerless",
         };
@@ -1363,27 +1364,27 @@ fn handle_connection(
                 }
                 o.set_r4_attention(false);
             }
-        } else if engine_mode == "transformerless" || engine_mode == "r4g1" {
+        } else if engine_mode == "transformerless"
+            || engine_mode == "r4g1"
+            || engine_mode == "transformerless-legacy"
+        {
             let prompt = payload.text.clone();
-            if let Some(text) = generate_r4g1_text(&r4g1, &prompt, max_tokens.max(32)) {
-                if usable_generated_text(&text) {
-                    final_response_text = text;
-                    llm_connected = true;
-                    generation_mode = "r4g1".to_string();
-                    tokens_generated = final_response_text.split_whitespace().count();
-                } else {
-                    generation_mode = "r4g1-rejected".to_string();
-                    println!("[-] R4G1 output rejected as non-readable or pathological");
-                }
-            } else if engine_mode == "transformerless" {
-                if let Some(text) = generate_tless_text(&tless, &prompt, max_tokens.max(32)) {
-                    final_response_text = text;
-                    llm_connected = true;
-                    generation_mode = "transformerless-legacy".to_string();
-                    tokens_generated = final_response_text.split_whitespace().count();
+            if engine_mode != "transformerless-legacy" {
+                if let Some(text) = generate_r4g1_text(&r4g1, &prompt, max_tokens.max(32)) {
+                    if usable_generated_text(&text) {
+                        final_response_text = text;
+                        llm_connected = true;
+                        generation_mode = "r4g1".to_string();
+                        tokens_generated = final_response_text.split_whitespace().count();
+                    } else {
+                        generation_mode = "r4g1-rejected".to_string();
+                        println!("[-] R4G1 output rejected as non-readable or pathological");
+                    }
                 }
             }
-            if final_response_text.is_empty() && engine_mode == "transformerless" {
+            if final_response_text.is_empty()
+                && (engine_mode == "transformerless" || engine_mode == "transformerless-legacy")
+            {
                 if let Some(text) = generate_tless_text(&tless, &prompt, max_tokens.max(32)) {
                     final_response_text = text;
                     llm_connected = true;
