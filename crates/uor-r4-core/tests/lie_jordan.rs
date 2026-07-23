@@ -30,9 +30,12 @@ fn test_universal_product_properties() {
     let g1 = EndomorphismAlgebra::clifford_generator(1);
     let g2 = EndomorphismAlgebra::clifford_generator(2);
 
-    // For anti-Hermitian g1, g2: m(g1, g2) = g1*g2 + g2*g1^T = g1*g2 - g2*g1 = [g1, g2]
-    let m_prod = universal_product(&g1, &g2);
-    let comm = g1.commutator(&g2);
+    let u1 = LieJordanSplit::decompose(&g1).lie;
+    let u2 = LieJordanSplit::decompose(&g2).lie;
+
+    // For strictly anti-Hermitian u1, u2: m(u1, u2) = u1*u2 + u2*u1^\dagger = u1*u2 - u2*u1 = [u1, u2]
+    let m_prod = universal_product(&u1, &u2);
+    let comm = u1.commutator(&u2);
 
     for (a, b) in m_prod.matrix.iter().zip(&comm.matrix) {
         assert!(
