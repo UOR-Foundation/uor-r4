@@ -609,8 +609,6 @@ fn parse_residual_exct(body: &[u8]) -> Option<Vec<BTreeMap<Vec<u8>, ResidualExct
 /// container when EXCT evidence is wired) parsed once into bounded
 /// lookup structures. Construction fails closed — invalid bytes or CIDs
 /// never yield a scorer.
-pub use super::score_variant::ScoringVariant;
-
 pub struct GraphScorer {
     graph_cid: [u8; 32],
     regions: Vec<RegionParams>,
@@ -635,7 +633,6 @@ pub struct GraphScorer {
     /// 71.52 → 17.73 with ΔT off) and the EXCT-precedence path is
     /// F-invariant. Re-enable only with a measured per-token ΔT design.
     f_emissions: bool,
-    scoring_variant: ScoringVariant,
     fallback_policy: crate::transformerless::resolution_status::FallbackPolicy,
 }
 
@@ -645,44 +642,6 @@ impl GraphScorer {
     /// measured per-token ΔT design (the folded offset is argmax-neutral).
     pub fn set_f_emissions(&mut self, enabled: bool) {
         self.f_emissions = enabled;
-    }
-
-    /// Set the candidate scoring variant (issue #80).
-    pub fn set_scoring_variant(&mut self, variant: ScoringVariant) {
-        self.scoring_variant = variant;
-    }
-
-    /// The active candidate scoring variant.
-    pub fn scoring_variant(&self) -> ScoringVariant {
-        self.scoring_variant
-    }
-
-    /// Apply the active scoring variant to one chain emission residual
-    /// (issue #80). `ChainTelescoped` (the deployed default) returns the
-    /// residual unchanged; the rejected experimental variants defer their
-    /// multiply/divide arithmetic to [`ScoringVariant::apply`] in
-    /// `score_variant.rs`, keeping this integer core operator-clean.
-    fn variant_residual(
-        &self,
-        value: ScoreQ,
-        node: u32,
-        chain_len: usize,
-        active: &[ActiveRegion],
-    ) -> ScoreQ {
-        match self.scoring_variant {
-            ScoringVariant::ChainTelescoped => value,
-            ScoringVariant::CloudSizeNormalized => {
-                self.scoring_variant.apply(value, chain_len, 0, 1)
-            }
-            ScoringVariant::MarginWeighted => {
-                let entry = active.iter().find(|a| a.region + 1 == node);
-                let margin = entry.map(|a| i32::from(a.margin)).unwrap_or(1);
-                let radius = entry
-                    .map(|a| u32::from(self.regions[a.region as usize].radius))
-                    .unwrap_or(1);
-                self.scoring_variant.apply(value, chain_len, margin, radius)
-            }
-        }
     }
 
     /// The artifact-declared D4 fallback policy.
@@ -841,7 +800,6 @@ impl GraphScorer {
             exct_top_x,
             pop: runtime::derive_popcount_table(),
             f_emissions: false,
-            scoring_variant: ScoringVariant::ChainTelescoped,
             fallback_policy,
         })
     }
@@ -991,13 +949,11 @@ impl GraphScorer {
                     });
                 }
                 if chain_nodes.contains(&node) {
-                    let effective_val =
-                        self.variant_residual(value, node, selected_chain.len(), &active);
-                    entry.0 = entry.0.saturating_add(effective_val);
+                    entry.0 = entry.0.saturating_add(value);
                     k.adds += 1;
                     entry.1.push(Contribution {
                         id: ContributionId::Emission { node, token },
-                        value: effective_val,
+                        value,
                     });
                 }
             }
@@ -1618,10 +1574,8 @@ impl GraphScorer {
                 state.touched.push(token);
             }
             if in_chain {
-                let effective_val =
-                    self.variant_residual(value, node, state.selected_chain.len(), &state.active);
                 state.residuals[idx] = ScoreQ::from_raw(state.residuals[idx])
-                    .saturating_add(effective_val)
+                    .saturating_add(value)
                     .raw();
                 k.adds += 1;
             }
