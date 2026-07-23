@@ -53,10 +53,20 @@ pub fn evaluate_route<'a>(
                 return Ok(table); // Return the entire table as fallback
             }
             OP_TEST_POPCOUNT_LE => {
+                if pc + 12 > rout_bytes.len() {
+                    return Err(RuntimeError::InvalidNode);
+                }
                 let word = rout_bytes[pc + 1] as usize;
-                let mask = u64::from_le_bytes(rout_bytes[pc + 2..pc + 10].try_into().unwrap());
-                let threshold =
-                    u16::from_le_bytes(rout_bytes[pc + 10..pc + 12].try_into().unwrap());
+                let mask = u64::from_le_bytes(
+                    rout_bytes[pc + 2..pc + 10]
+                        .try_into()
+                        .map_err(|_| RuntimeError::InvalidNode)?,
+                );
+                let threshold = u16::from_le_bytes(
+                    rout_bytes[pc + 10..pc + 12]
+                        .try_into()
+                        .map_err(|_| RuntimeError::InvalidNode)?,
+                );
 
                 let popcount = if word < signature.len() {
                     (signature[word] & mask).count_ones() as u16
@@ -83,7 +93,14 @@ pub fn evaluate_route<'a>(
                 }
             }
             OP_JMP_FWD => {
-                let delta_ops = u16::from_le_bytes(rout_bytes[pc + 1..pc + 3].try_into().unwrap());
+                if pc + 3 > rout_bytes.len() {
+                    return Err(RuntimeError::InvalidNode);
+                }
+                let delta_ops = u16::from_le_bytes(
+                    rout_bytes[pc + 1..pc + 3]
+                        .try_into()
+                        .map_err(|_| RuntimeError::InvalidNode)?,
+                );
                 pc += 3;
                 for _ in 0..delta_ops {
                     if pc >= rout_bytes.len() {
@@ -101,10 +118,19 @@ pub fn evaluate_route<'a>(
                 }
             }
             OP_LEAF => {
-                let shortlist_start =
-                    u32::from_le_bytes(rout_bytes[pc + 1..pc + 5].try_into().unwrap()) as usize;
-                let shortlist_len =
-                    u16::from_le_bytes(rout_bytes[pc + 5..pc + 7].try_into().unwrap()) as usize;
+                if pc + 7 > rout_bytes.len() {
+                    return Err(RuntimeError::InvalidNode);
+                }
+                let shortlist_start = u32::from_le_bytes(
+                    rout_bytes[pc + 1..pc + 5]
+                        .try_into()
+                        .map_err(|_| RuntimeError::InvalidNode)?,
+                ) as usize;
+                let shortlist_len = u16::from_le_bytes(
+                    rout_bytes[pc + 5..pc + 7]
+                        .try_into()
+                        .map_err(|_| RuntimeError::InvalidNode)?,
+                ) as usize;
                 if shortlist_start + shortlist_len > table.len() {
                     return Err(RuntimeError::InvalidNode);
                 }

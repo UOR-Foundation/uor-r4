@@ -189,9 +189,8 @@ fn check_node_emits(
         let len = node.emission_len as usize;
         if len > 0 && start + len <= emit_bytes.len() {
             let sl = &emit_bytes[start..start + len];
-            let entry_size = 8;
-            for i in 0..(sl.len() / entry_size) {
-                let offset = i * entry_size;
+            for i in 0..(sl.len() >> 3) {
+                let offset = i << 3;
                 let cand = u32::from_le_bytes([
                     sl[offset],
                     sl[offset + 1],
@@ -238,9 +237,8 @@ fn check_node_emits(
     }
 
     if let Some(exct_bytes) = exct_remainder {
-        let entry_size = 8;
-        for i in 0..(exct_bytes.len() / entry_size) {
-            let offset = i * entry_size;
+        for i in 0..(exct_bytes.len() >> 3) {
+            let offset = i << 3;
             let cand = u32::from_le_bytes([
                 exct_bytes[offset],
                 exct_bytes[offset + 1],
@@ -275,7 +273,9 @@ fn syntactic_morphism_score(prev_token: u32, cand_token: u32, tokens_since_perio
     let endo_op =
         crate::cayley_dickson::EndomorphismOperator::from_token_transition(prev_token, cand_token);
     let state = crate::cayley_dickson::CayleyDicksonVector::from_u32(cand_token);
-    let cd_score = endo_op.centralizer_score(&state) * 5;
+    // x * 5 == (x << 2) + x (shift/add only, no multiply on the hot path).
+    let cs = endo_op.centralizer_score(&state);
+    let cd_score = (cs << 2).saturating_add(cs);
     score += cd_score;
 
     let is_cand_period = cand_token == 29889 || cand_token == 13 || cand_token == 2;
@@ -541,8 +541,8 @@ impl<'a> R4G1Runtime<'a> {
 
             for n in 1..num_nodes {
                 if let Some(node) = base_graph.node(n) {
-                    let proto_offset = (node.prototype_word_start as usize) * 8;
-                    let mask_offset = (node.mask_word_start as usize) * 8;
+                    let proto_offset = (node.prototype_word_start as usize) << 3;
+                    let mask_offset = (node.mask_word_start as usize) << 3;
 
                     if proto_offset + sig.len() <= rout_bytes.len()
                         && mask_offset + sig.len() <= rout_bytes.len()
@@ -650,9 +650,8 @@ impl<'a> R4G1Runtime<'a> {
                     } else {
                         &[][..]
                     };
-                    let entry_size = 8;
-                    for i in 0..(sl.len() / entry_size) {
-                        let offset = i * entry_size;
+                    for i in 0..(sl.len() >> 3) {
+                        let offset = i << 3;
                         let cand = u32::from_le_bytes([
                             sl[offset],
                             sl[offset + 1],
@@ -677,8 +676,8 @@ impl<'a> R4G1Runtime<'a> {
 
                         let sig_bonus = if let Some(sig) = signature {
                             let rout_bytes = base_graph.section(SectionId::ROUT).unwrap_or(&[]);
-                            let proto_offset = (target_node.prototype_word_start as usize) * 8;
-                            let mask_offset = (target_node.mask_word_start as usize) * 8;
+                            let proto_offset = (target_node.prototype_word_start as usize) << 3;
+                            let mask_offset = (target_node.mask_word_start as usize) << 3;
                             if proto_offset + sig.len() <= rout_bytes.len()
                                 && mask_offset + sig.len() <= rout_bytes.len()
                             {
@@ -689,7 +688,11 @@ impl<'a> R4G1Runtime<'a> {
                                     let s = sig[k];
                                     dist += ((s ^ p) & m).count_ones();
                                 }
-                                (288i32.saturating_sub(dist as i32)) * 10
+                                {
+                                    // x * 10 == (x << 3) + (x << 1) (shift/add only).
+                                    let x = 288i32.saturating_sub(dist as i32);
+                                    (x << 3).saturating_add(x << 1)
+                                }
                             } else {
                                 0
                             }
@@ -703,7 +706,14 @@ impl<'a> R4G1Runtime<'a> {
                         for (idx, &recent_tok) in context_tokens[start_pos..].iter().enumerate() {
                             if cand == recent_tok {
                                 let age = context_tokens.len() - (start_pos + idx);
-                                penalty += (48 - age as i32) * 350;
+                                // x * 350 == (x<<8)+(x<<6)+(x<<4)+(x<<3)+(x<<2)+(x<<1) (shift/add only).
+                                let x = 48 - age as i32;
+                                penalty += (x << 8)
+                                    .saturating_add(x << 6)
+                                    .saturating_add(x << 4)
+                                    .saturating_add(x << 3)
+                                    .saturating_add(x << 2)
+                                    .saturating_add(x << 1);
                             }
                         }
 
@@ -747,12 +757,13 @@ impl<'a> R4G1Runtime<'a> {
         if best_token == 0 {
             // If best_token is still 0, emit the first non-zero token from Node 0's emission list
             if let Some(remainder) = emit_remainder {
-                for i in 0..(remainder.len() / 8) {
+                for i in 0..(remainder.len() >> 3) {
+                    let offset = i << 3;
                     let cand = u32::from_le_bytes([
-                        remainder[i * 8],
-                        remainder[i * 8 + 1],
-                        remainder[i * 8 + 2],
-                        remainder[i * 8 + 3],
+                        remainder[offset],
+                        remainder[offset + 1],
+                        remainder[offset + 2],
+                        remainder[offset + 3],
                     ]);
                     if cand > 2 && cand < 49152 {
                         best_token = cand;
@@ -809,11 +820,11 @@ impl<'a> R4G1Runtime<'a> {
                     let len = target_node.emission_len as usize;
                     if start + len <= remainder.len() {
                         let sl = &remainder[start..start + len];
-                        for i in 0..(sl.len() / 8) {
+                        for i in 0..(sl.len() >> 3) {
                             if count >= 8 {
                                 break;
                             }
-                            let offset = i * 8;
+                            let offset = i << 3;
                             let cand = u32::from_le_bytes([
                                 sl[offset],
                                 sl[offset + 1],

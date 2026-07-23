@@ -275,7 +275,10 @@ impl Tokenizer {
         (self.encode(&sanitized), replaced)
     }
 
-    /// Encode into caller-owned storage without allocating.
+    /// Encode into caller-owned storage.
+    ///
+    /// Note: the BPE path allocates an intermediate `String` for byte-level
+    /// remapping, so this is not fully allocation-free.
     pub fn encode_into(&self, text: &str, out: &mut [u32]) -> io::Result<usize> {
         let capacity_error = || io::Error::new(io::ErrorKind::InvalidInput, "token buffer full");
         let is_llama_bos = self.vocab.get(1).is_some_and(|v| v == b"<s>");
@@ -406,7 +409,10 @@ impl Tokenizer {
             .replace('ĉ', "\t")
     }
 
-    /// Decode into caller-owned byte storage without allocating.
+    /// Decode into caller-owned byte storage.
+    ///
+    /// Note: this delegates to `decode`, which allocates an intermediate
+    /// `Vec`/`String`, so this is not allocation-free.
     pub fn decode_into(&self, toks: &[u32], out: &mut [u8]) -> io::Result<usize> {
         let decoded = self.decode(toks);
         let bytes = decoded.as_bytes();

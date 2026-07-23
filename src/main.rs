@@ -475,6 +475,23 @@ fn run_core(name: &str, arguments: &[String]) -> Result<(), RunError> {
     transformerless_command::run(&values).map_err(RunError::Command)
 }
 
+/// Default location of the reference teacher checkpoint used by `certify`/`compare`.
+const DEFAULT_REFERENCE_CHECKPOINT: &str = "/tmp/ref/out/model.bin";
+
+/// Resolve the reference teacher checkpoint path, honoring the `TLESS_CHECKPOINT`
+/// override, and confirm it exists before handing it to `LlamaOracle::load`
+/// (which otherwise panics on a missing file).
+fn reference_checkpoint_path() -> Result<String, RunError> {
+    let path = std::env::var("TLESS_CHECKPOINT")
+        .unwrap_or_else(|_| DEFAULT_REFERENCE_CHECKPOINT.to_owned());
+    if !std::path::Path::new(&path).exists() {
+        return Err(RunError::Command(format!(
+            "reference checkpoint not found at {path} (set TLESS_CHECKPOINT to override)"
+        )));
+    }
+    Ok(path)
+}
+
 fn run(cli: &Cli) -> Result<(), RunError> {
     cli.configure_tless();
     match cli.command.as_ref() {
@@ -501,12 +518,14 @@ fn run(cli: &Cli) -> Result<(), RunError> {
         }
         Some(Command::Store) => run_core("store", &[]),
         Some(Command::Certify) => {
-            let oracle = uor_r4_model_source::LlamaOracle::load("/tmp/ref/out/model.bin");
+            let checkpoint = reference_checkpoint_path()?;
+            let oracle = uor_r4_model_source::LlamaOracle::load(&checkpoint);
             uor_r4_graph_certify::certify::certify(&oracle);
             Ok(())
         }
         Some(Command::Compare) => {
-            let mut oracle = uor_r4_model_source::LlamaOracle::load("/tmp/ref/out/model.bin");
+            let checkpoint = reference_checkpoint_path()?;
+            let mut oracle = uor_r4_model_source::LlamaOracle::load(&checkpoint);
             uor_r4_graph_certify::compare::compare(&mut oracle);
             Ok(())
         }

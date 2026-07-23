@@ -72,7 +72,7 @@ pub(crate) fn validate(bytes: &[u8], max_steps: u32) -> Result<(), FormatError> 
     }
 
     // In CODE, unlike ROUT, we can just require HALT for now
-    if !halted && cursor < bytes.len() {
+    if !halted {
         // Did not halt cleanly
         return Err(FormatError::CodeProgramUnterminated);
     }

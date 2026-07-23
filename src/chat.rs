@@ -197,10 +197,7 @@ fn build_local_compiled_engine(
     } else {
         directory.join("tokenizer.bin")
     };
-    println!(
-        "[DEBUG CHAT] is_32k_graph: {}, tok_file: {:?}",
-        is_32k_graph, tok_file
-    );
+    tracing::debug!(is_32k_graph, ?tok_file, "resolved chat tokenizer path");
     let tokenizer_bytes = std::fs::read(&tok_file)?;
     let artifacts =
         compiler::parse_artifacts(&artifact_bytes).ok_or(ChatError::InvalidArtifacts)?;

@@ -8,7 +8,7 @@ pub fn pad_to_cache_line(buffer: &mut Vec<u8>) {
     let remainder = buffer.len() % CACHE_LINE_BYTES;
     if remainder != 0 {
         let padding = CACHE_LINE_BYTES - remainder;
-        buffer.extend(vec![0u8; padding]);
+        buffer.resize(buffer.len() + padding, 0u8);
     }
 }
 
