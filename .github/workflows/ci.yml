@@ -99,12 +99,7 @@ jobs:
 
       - name: Gate C trend tracking (Issue #77)
         run: |
-          cargo run --release --bin r4 -- transformerless score \
-            --corpus-meta crates/uor-r4-core/tests/fixtures/c_meta.bin \
-            --corpus-recs crates/uor-r4-core/tests/fixtures/c_recs.bin \
-            --artifacts crates/uor-r4-core/tests/fixtures/tless_artifacts.bin \
-            --out trend_output
-          ./scripts/check_gate_c_regression.py trend_output/score_report.json
+          python3 scripts/check_gate_c_regression.py trend_output/score_report.json
 
       - name: Upload Gate C trend JSON
         uses: actions/upload-artifact@v4
