@@ -26,8 +26,8 @@
 //! and qwen/phi-class sources differ only in that adapter.
 
 use super::{
-    certify, compare, compiler, convert_r4g1, cover, cover_sweep, observe, runtime, scenarios,
-    score,
+    certify, compare, compiler, convert_r4g1, cover, cover_sweep, observe, observe_text, runtime,
+    scenarios, score,
     teacher::{BehaviorSource, HuggingFaceLlamaOracle, LlamaOracle, TeacherOracle},
 };
 use serde::Serialize;
@@ -36,10 +36,12 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 
 const DEFAULT_CHECKPOINT: &str = "/tmp/ref/out/model.bin";
+const DEFAULT_TOKENIZER: &str = "/tmp/ref/tokenizer.bin";
 const STORE_PATH: &str = "/tmp/tless_store.bin";
 const DEFAULT_HF_SOURCE_PATH: &str = ".uor-models/sources/smollm2-135m-instruct";
 const DEFAULT_HF_COMPILED_PATH: &str = ".uor-models/compiled/smollm2-135m-instruct";
 const DEFAULT_HF_EVALUATION_REPORT: &str = "instruction-eval.json";
+const DEFAULT_TEXT_CORPUS: &str = ".uor-models/corpora/simple-wiki-20231101/articles.jsonl";
 
 #[derive(Debug, PartialEq, Eq)]
 struct CompileOptions {
@@ -180,6 +182,166 @@ pub fn observe_command(args: &[String]) -> Result<(), String> {
     } else {
         println!(
             "observation corpus is not complete; rerun the same command to resume {}",
+            options.output.display()
+        );
+    }
+    Ok(())
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct ObserveTextOptions {
+    input: PathBuf,
+    source: PathBuf,
+    checkpoint: Option<PathBuf>,
+    tokenizer: Option<PathBuf>,
+    output: PathBuf,
+    seconds: u64,
+    shards: u8,
+    sequence_length: usize,
+}
+
+fn parse_observe_text_options(args: &[String]) -> Result<ObserveTextOptions, String> {
+    let mut options = ObserveTextOptions {
+        input: PathBuf::from(DEFAULT_TEXT_CORPUS),
+        source: PathBuf::from(DEFAULT_HF_SOURCE_PATH),
+        checkpoint: None,
+        tokenizer: None,
+        output: PathBuf::from("obs-text"),
+        seconds: 300,
+        shards: 4,
+        sequence_length: 128,
+    };
+    let mut index = 0usize;
+    while index < args.len() {
+        let flag = &args[index];
+        let value = args
+            .get(index + 1)
+            .ok_or_else(|| format!("missing value for {flag}"))?;
+        match flag.as_str() {
+            "--input" => options.input = PathBuf::from(value),
+            "--source" => options.source = PathBuf::from(value),
+            "--checkpoint" => options.checkpoint = Some(PathBuf::from(value)),
+            "--tokenizer" => options.tokenizer = Some(PathBuf::from(value)),
+            "--out" => options.output = PathBuf::from(value),
+            "--seconds" => {
+                options.seconds = value
+                    .parse()
+                    .map_err(|_| format!("invalid --seconds value: {value}"))?;
+            }
+            "--shards" => {
+                options.shards = value
+                    .parse()
+                    .map_err(|_| format!("invalid --shards value: {value}"))?;
+                if options.shards > observe::MAX_SHARD_BITS {
+                    return Err(format!(
+                        "--shards must be at most {} (2^N shard files)",
+                        observe::MAX_SHARD_BITS
+                    ));
+                }
+            }
+            "--sequence-length" => {
+                options.sequence_length = value
+                    .parse()
+                    .map_err(|_| format!("invalid --sequence-length value: {value}"))?;
+                if options.sequence_length == 0 {
+                    return Err("--sequence-length must be greater than zero".to_owned());
+                }
+            }
+            _ => return Err(format!("unknown observe-text option: {flag}")),
+        }
+        index += 2;
+    }
+    Ok(options)
+}
+
+/// From-text observation driver (issue #72): feed the sealed natural-text
+/// corpus (D3) through the teacher, recording the same v3 observation
+/// records the autoregressive `observe` path produces, with the corpus
+/// split rule applied at write time and recorded per shard.
+pub fn observe_text_command(args: &[String]) -> Result<(), String> {
+    #[cfg(debug_assertions)]
+    eprintln!(
+        "warning: debug builds make teacher generation much slower; use `cargo run --release -- observe-text ...`"
+    );
+    let options = parse_observe_text_options(args)?;
+    std::fs::create_dir_all(&options.output).map_err(|error| error.to_string())?;
+    let token_byte_lengths: Vec<u32>;
+    let tokenizer: scenarios::Tokenizer;
+    let mut oracle: Box<dyn TeacherOracle> = if let Some(checkpoint) = &options.checkpoint {
+        // Legacy llama2.c checkpoint: the companion tokenizer is the
+        // scoreless tokenizer.bin fetched by `setup` (overridable with
+        // --tokenizer); its piece byte lengths anchor records into the
+        // article text.
+        let tokenizer_path = options
+            .tokenizer
+            .clone()
+            .unwrap_or_else(|| PathBuf::from(DEFAULT_TOKENIZER));
+        tokenizer = scenarios::Tokenizer::try_load(&tokenizer_path)
+            .map_err(|error| format!("{}: {error}", tokenizer_path.display()))?;
+        token_byte_lengths = tokenizer
+            .vocab
+            .iter()
+            .map(|piece| piece.len() as u32)
+            .collect();
+        let path = checkpoint
+            .to_str()
+            .ok_or_else(|| "checkpoint path is not UTF-8".to_owned())?;
+        Box::new(LlamaOracle::load(path))
+    } else {
+        let oracle = HuggingFaceLlamaOracle::load_with_sequence_length(
+            &options.source,
+            options.sequence_length,
+        )
+        .map_err(|error| format!("failed to load Hugging Face model: {error}"))?;
+        eprintln!("exporting tokenizer...");
+        token_byte_lengths = scenarios::export_hf_bytelevel_tokenizer_with_lengths(
+            options.source.join("tokenizer.json"),
+            options.output.join("tokenizer.bin"),
+        )
+        .map_err(|error| error.to_string())?;
+        tokenizer = scenarios::Tokenizer::try_load(options.output.join("tokenizer.bin"))
+            .map_err(|error| error.to_string())?;
+        Box::new(oracle)
+    };
+    let report = observe_text::observe_text_corpus(
+        oracle.as_mut(),
+        options.seconds,
+        &tokenizer,
+        Some(&token_byte_lengths),
+        &options.input,
+        &options.output,
+        options.shards,
+        true,
+    )?;
+    println!(
+        "observe-text: {} records across {}/{} shards ({} written this run)",
+        report.records, report.shards_completed, report.shard_count, report.written
+    );
+    println!(
+        "partition: {} construction / {} held-out records ({} / {} articles of {})",
+        report.construction_records,
+        report.held_out_records,
+        report.construction_articles,
+        report.held_out_articles,
+        report.articles_total
+    );
+    if report.articles_truncated != 0 {
+        println!(
+            "note: {} articles truncated at the teacher sequence length",
+            report.articles_truncated
+        );
+    }
+    if report.done {
+        println!(
+            "observe-text complete: merged κ {} at {}",
+            report.merged_kappa.expect("done reports merged κ"),
+            options.output.display()
+        );
+    } else {
+        println!(
+            "text observation corpus is not complete ({}/{} articles); rerun the same command to resume {}",
+            report.articles_completed,
+            report.articles_total,
             options.output.display()
         );
     }
@@ -1431,6 +1593,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
         Some("compare-report") => compare::report(),
         Some("evaluate-report") => evaluate_report(&args[1..])?,
         Some("observe") => observe_command(&args[1..])?,
+        Some("observe-text") => observe_text_command(&args[1..])?,
         Some("scenarios") => {
             let mut oracle = LlamaOracle::load(DEFAULT_CHECKPOINT);
             scenarios::scenarios(&mut oracle);
@@ -1452,6 +1615,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
                 "R4 transformerless — cross-compile a transformer into a mul-free table artifact\n\
                  commands: setup | gen [secs] [target] | compile [--model REPO --revision SHA | --source DIR] [--output DIR] [--seconds N] [--target N] [--sequence-length N] | store | certify | compare | compare-report | scenarios | teacher-kappa | convert-r4g1 --artifacts <TLA> --store <TLS1> [--calibration <hamming_calibration.json>] --out <R4G1>\n\
                  observation pipeline: observe [--source DIR | --checkpoint BIN] [--seconds N] [--target N] [--shards N] [--out DIR] [--sequence-length N]\n\
+                 text observations (D3): observe-text [--input PATH] [--out DIR] [--shards N] [--seconds N] [--source DIR | --checkpoint BIN] [--tokenizer PATH] [--sequence-length N]\n\
                  cover induction: cover [--corpus-meta P --corpus-recs P] [--artifacts P] [--depths N] [--k0 N] [--regions-budget N] [--memory-budget MB] [--min-support N] [--entropy-gain BITS] [--radius-quantile PCT] [--out DIR]\n\
                  score (phase 4): score [--corpus-meta P --corpus-recs P] [--artifacts P] [--cover P] [--transition-out-degree N] [--emission-entries N] [--root-top-b N] [--exct-top-x N] [--witness-sample N] [--smoothing RULE] [--out DIR]\n\
                  cover sweep (issue 70): cover-sweep [--corpus-meta P --corpus-recs P] [--artifacts P] [--out DIR]\n\
@@ -1591,6 +1755,71 @@ mod tests {
     fn observe_rejects_excessive_shard_fanout() {
         let args = ["--shards", "9"].map(str::to_owned);
         assert!(parse_observe_options(&args).is_err());
+    }
+
+    #[test]
+    fn observe_text_defaults_and_overrides() {
+        let options = parse_observe_text_options(&[]).expect("defaults");
+        assert_eq!(options.input, PathBuf::from(DEFAULT_TEXT_CORPUS));
+        assert_eq!(options.source, PathBuf::from(DEFAULT_HF_SOURCE_PATH));
+        assert_eq!(options.checkpoint, None);
+        assert_eq!(options.tokenizer, None);
+        assert_eq!(options.output, PathBuf::from("obs-text"));
+        assert_eq!(options.seconds, 300);
+        assert_eq!(options.shards, 4);
+        assert_eq!(options.sequence_length, 128);
+
+        let args = [
+            "--input",
+            "/tmp/articles.jsonl",
+            "--checkpoint",
+            "/tmp/ref/out/model.bin",
+            "--tokenizer",
+            "/tmp/ref/tokenizer.bin",
+            "--out",
+            "/tmp/obs-text",
+            "--seconds",
+            "5",
+            "--shards",
+            "3",
+            "--sequence-length",
+            "64",
+        ]
+        .map(str::to_owned);
+        let options = parse_observe_text_options(&args).expect("valid options");
+        assert_eq!(options.input, PathBuf::from("/tmp/articles.jsonl"));
+        assert_eq!(
+            options.checkpoint,
+            Some(PathBuf::from("/tmp/ref/out/model.bin"))
+        );
+        assert_eq!(
+            options.tokenizer,
+            Some(PathBuf::from("/tmp/ref/tokenizer.bin"))
+        );
+        assert_eq!(options.output, PathBuf::from("/tmp/obs-text"));
+        assert_eq!(options.seconds, 5);
+        assert_eq!(options.shards, 3);
+        assert_eq!(options.sequence_length, 64);
+    }
+
+    #[test]
+    fn observe_text_rejects_invalid_options() {
+        for args in [
+            vec!["--shards", "9"],
+            vec!["--shards", "x"],
+            vec!["--seconds", "-1"],
+            vec!["--sequence-length", "0"],
+            vec!["--target", "10"],
+            vec!["--bogus", "1"],
+        ] {
+            let args: Vec<String> = args.iter().map(|arg| (*arg).to_owned()).collect();
+            assert!(
+                parse_observe_text_options(&args).is_err(),
+                "{args:?} rejected"
+            );
+        }
+        let missing = ["--out"].map(str::to_owned);
+        assert!(parse_observe_text_options(&missing).is_err());
     }
 
     #[test]
