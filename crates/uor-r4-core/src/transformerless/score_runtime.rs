@@ -633,6 +633,7 @@ pub struct GraphScorer {
     /// 71.52 → 17.73 with ΔT off) and the EXCT-precedence path is
     /// F-invariant. Re-enable only with a measured per-token ΔT design.
     f_emissions: bool,
+    pub fallback_policy: crate::transformerless::resolution_status::FallbackPolicy,
 }
 
 impl GraphScorer {
@@ -660,6 +661,7 @@ impl GraphScorer {
         let view = GraphView::parse(r4g1).map_err(|e| format!("invalid R4G1: {e}"))?;
         view.verify_cids().map_err(|e| format!("bad CIDs: {e}"))?;
         let head = view.head().ok_or("artifact carries no HEAD section")?;
+        let fallback_policy = crate::transformerless::resolution_status::FallbackPolicy::from_bytes(head.fallback_policies());
         let graph_cid = view.header().artifact_cid.0;
         let regions = regions_from_view(&view)?;
         let max_depth = regions.iter().map(|r| r.depth as usize).max().unwrap_or(0);
@@ -791,6 +793,7 @@ impl GraphScorer {
             exct_top_x,
             pop: runtime::derive_popcount_table(),
             f_emissions: false,
+            fallback_policy,
         })
     }
 
