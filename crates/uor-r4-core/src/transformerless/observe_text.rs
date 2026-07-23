@@ -426,6 +426,10 @@ pub struct ObservationReport {
     /// Articles truncated at the teacher sequence length during this
     /// invocation.
     pub articles_truncated: u64,
+    /// Characters replaced by the lossy tokenizer fallback during this
+    /// invocation (unencodable in the teacher vocab; substituted with a
+    /// space — deterministic, see [`scenarios::Tokenizer::encode_lossy`]).
+    pub characters_replaced: u64,
     /// Records committed so far (all invocations).
     pub records: u64,
     /// Records written during this invocation.
@@ -456,6 +460,7 @@ fn build_report(
     writer: &ObservationShardWriter,
     articles_total: u64,
     articles_truncated: u64,
+    characters_replaced: u64,
     written: u64,
 ) -> Result<ObservationReport, String> {
     let stories_path = out_dir.join(STORIES_FILE);
@@ -483,6 +488,7 @@ fn build_report(
         articles_total,
         articles_completed: checkpoint.stories,
         articles_truncated,
+        characters_replaced,
         records: checkpoint.n,
         written,
         construction_records,
@@ -542,6 +548,11 @@ pub fn observe_text_corpus(
     }
     writer
         .set_partition_rule(PARTITION_RULE)
+        .map_err(|error| error.to_string())?;
+    // The PROV link from produced artifacts back to the sealed corpus
+    // (issue #72): the input κ is the corpus CID of the D3 manifest.
+    writer
+        .set_input_cid(&format!("blake3:{}", blake3::Hash::from(kappa).to_hex()))
         .map_err(|error| error.to_string())?;
 
     let mut checkpoint = match read_checkpoint(out_dir, shard_count)? {
@@ -609,7 +620,7 @@ pub fn observe_text_corpus(
             "text observation corpus already complete: {} records",
             checkpoint.n
         );
-        return build_report(out_dir, &checkpoint, &writer, articles_total, 0, 0);
+        return build_report(out_dir, &checkpoint, &writer, articles_total, 0, 0, 0);
     }
 
     let vocab = oracle.vocab();
@@ -620,6 +631,7 @@ pub fn observe_text_corpus(
     progress.set(checkpoint.stories as usize);
     let mut written = 0u64;
     let mut truncated = 0u64;
+    let mut replaced = 0u64;
     let t0 = std::time::Instant::now();
 
     let file = fs::File::open(articles_path)
@@ -645,7 +657,8 @@ pub fn observe_text_corpus(
         let story = u32::try_from(ordinal)
             .map_err(|_| "article ordinal exceeds the u32 story field".to_owned())?;
         let partition = partition_of(&article.id);
-        let tokens = tokenizer.encode(&article.text);
+        let (tokens, article_replaced) = tokenizer.encode_lossy(&article.text);
+        replaced += article_replaced;
         let positions = tokens.len().saturating_sub(1).min(seq_len);
         if positions < tokens.len().saturating_sub(1) {
             truncated += 1;
@@ -734,6 +747,7 @@ pub fn observe_text_corpus(
         &writer,
         articles_total,
         truncated,
+        replaced,
         written,
     )?;
     println!(
@@ -803,6 +817,21 @@ mod tests {
             bytes.extend_from_slice(line.as_bytes());
         }
         fs::write(path, bytes).expect("write articles fixture");
+    }
+
+    #[test]
+    fn encode_lossy_replaces_unencodable_characters_with_spaces() {
+        let tokenizer = fixture_tokenizer();
+        // 'Ɔ' (U+0186) is neither a whole token nor byte-encodable in the
+        // fixture vocab (a..d and space only): the legacy llama2.c teacher
+        // has exactly this gap for non-ASCII text (issue #72).
+        let (tokens, replaced) = tokenizer.encode_lossy("abƆd");
+        assert_eq!(replaced, 1);
+        assert_eq!(tokens, tokenizer.encode("ab d"));
+        // Fully encodable text is untouched.
+        let (tokens, replaced) = tokenizer.encode_lossy("abcd");
+        assert_eq!(replaced, 0);
+        assert_eq!(tokens, tokenizer.encode("abcd"));
     }
 
     /// Deterministic few-token oracle: logits depend only on (token, pos),

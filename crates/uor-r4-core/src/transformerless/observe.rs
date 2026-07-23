@@ -165,6 +165,11 @@ pub struct ObservationManifest {
     /// producing pipeline has one (from-text driver; absent otherwise).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub partition_rule: Option<String>,
+    /// CID of the exact input the observations were derived from (the
+    /// from-text driver records the articles-file κ, i.e. the corpus CID
+    /// of the D3 manifest; absent for teacher-generated streams).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_cid: Option<String>,
     #[serde(default)]
     pub completed: BTreeMap<u32, ShardEntry>,
     #[serde(default)]
@@ -177,6 +182,7 @@ impl ObservationManifest {
             schema: 1,
             shard_bits,
             partition_rule: None,
+            input_cid: None,
             completed: BTreeMap::new(),
             total_records: 0,
         }
@@ -280,6 +286,15 @@ impl ObservationShardWriter {
     pub fn set_partition_rule(&mut self, rule: &str) -> io::Result<()> {
         if self.manifest.partition_rule.as_deref() != Some(rule) {
             self.manifest.partition_rule = Some(rule.to_owned());
+            self.manifest.store(&self.dir)?;
+        }
+        Ok(())
+    }
+
+    /// Record the input CID in the manifest (idempotent, atomic store).
+    pub fn set_input_cid(&mut self, cid: &str) -> io::Result<()> {
+        if self.manifest.input_cid.as_deref() != Some(cid) {
+            self.manifest.input_cid = Some(cid.to_owned());
             self.manifest.store(&self.dir)?;
         }
         Ok(())
