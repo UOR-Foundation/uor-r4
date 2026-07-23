@@ -8,3 +8,4 @@ manifold_cache_rust.json
 uor_standards/
 crates/uor-r4-graph-format/fuzz/target/
 pkg/
+trend_output/
