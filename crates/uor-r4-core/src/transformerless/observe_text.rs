@@ -549,6 +549,11 @@ pub fn observe_text_corpus(
     writer
         .set_partition_rule(PARTITION_RULE)
         .map_err(|error| error.to_string())?;
+    // The PROV link from produced artifacts back to the sealed corpus
+    // (issue #72): the input κ is the corpus CID of the D3 manifest.
+    writer
+        .set_input_cid(&format!("blake3:{}", blake3::Hash::from(kappa).to_hex()))
+        .map_err(|error| error.to_string())?;
 
     let mut checkpoint = match read_checkpoint(out_dir, shard_count)? {
         Some(checkpoint) => {
