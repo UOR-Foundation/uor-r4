@@ -7,6 +7,21 @@ Feature: R4G1 generated-response quality
     When the server validates the generated response
     Then the response is rejected as unusable
 
+  Scenario: reject replacement-character gibberish
+    Given the R4G1 runtime returned replacement-character gibberish
+    When the server validates the generated response
+    Then the response is rejected as unusable
+
+  Scenario: reject low-readability symbol output
+    Given the R4G1 runtime returned low-readability symbol output
+    When the server validates the generated response
+    Then the response is rejected as unusable
+
+  Scenario: reject a long identical-character run
+    Given the R4G1 runtime returned a long identical-character run
+    When the server validates the generated response
+    Then the response is rejected as unusable
+
   Scenario: accept a concise readable response to hello
     Given the R4G1 runtime returned a concise readable hello response
     When the server validates the generated response

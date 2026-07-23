@@ -18,6 +18,21 @@ fn repetitive_hello(w: &mut R4g1World) {
     w.response = "how this works like im 5 imagine you have a magic box and inside it are all the rules of geometry think of it like routing a message through a maze i use the math of curves and angles to find the most efficient path for information to go from where you want to go that is how i work go from where you start to where you want to go that is how i work go from where you start to where you start to where you want to go that is how i work go from where you want to go that is how i work go from where you want to go that is how i work go from where you start".to_string();
 }
 
+#[given("the R4G1 runtime returned replacement-character gibberish")]
+fn replacement_gibberish(w: &mut R4g1World) {
+    w.response = "��������������������������������".to_string();
+}
+
+#[given("the R4G1 runtime returned low-readability symbol output")]
+fn low_readability_symbols(w: &mut R4g1World) {
+    w.response = "☃☄☂☀▓▒░".to_string();
+}
+
+#[given("the R4G1 runtime returned a long identical-character run")]
+fn identical_character_run(w: &mut R4g1World) {
+    w.response = "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!".to_string();
+}
+
 #[given("the R4G1 runtime returned a concise readable hello response")]
 fn concise_hello(w: &mut R4g1World) {
     w.response = "Hello! I can help you explore the compiled R4G1 graph.".to_string();
