@@ -81,11 +81,14 @@
 //! # Gate C
 //!
 //! [`evaluate_gate_c`] measures top-1 agreement with the corpus's
-//! recorded teacher argmax and bits/token on the held-out partition
-//! for (a) the graph scorer without EXCT, (b) with EXCT, and (c) the
-//! TLA3 store baseline (`runtime::predict_witness_plain` on the same
-//! positions, Witten-Bell bits as in `evaluate-report`). This is the
-//! M.V.G. checkpoint's fidelity input.
+//! recorded teacher argmax and bits/token on the held-out partition for
+//! four scorers side by side: the OLD Σ-over-cloud formula (kept for
+//! comparison — the confirmed double counting lives there), NEW Rule 1
+//! (chain-telescoped, no EXCT), NEW Rule 1+2 (with D4 EXCT precedence),
+//! and the TLA3 store baseline (`runtime::predict_witness_plain` on the
+//! same positions, Witten-Bell bits as in `evaluate-report`), plus
+//! per-status (ExactContext/Graph/Novel) and per-rule win/loss
+//! instrumentation. This is the M.V.G. checkpoint's fidelity input.
 
 use serde::Serialize;
 use std::collections::BTreeMap;
@@ -95,8 +98,8 @@ use super::cover::{self, Observation};
 use super::runtime::{self, Store};
 use super::score_runtime::{
     binary_memberships, binary_top1_covered, regions_from_view, structural_edges_from_view,
-    verify_witness_replay, GraphScorer, RegionParams, StructuralEdge, EDGE_KIND_FORWARD,
-    EDGE_KIND_NEIGHBOR, EDGE_KIND_REFINEMENT, RESIDUAL_EXCT_MAGIC,
+    verify_witness_replay, GraphScorer, RegionParams, ScoreStatus, StructuralEdge,
+    EDGE_KIND_FORWARD, EDGE_KIND_NEIGHBOR, EDGE_KIND_REFINEMENT, RESIDUAL_EXCT_MAGIC,
 };
 use uor_r4_graph_format::ScoreQ;
 
@@ -262,7 +265,7 @@ fn smoothed_ln(count: u64, total: u64, vocab: u32) -> f32 {
 /// is the level-0 store distribution.
 pub fn compile_emissions(
     corpus: &Corpus,
-    _store: &Store,
+    store: &Store,
     regions: &[RegionParams],
     train: &[Observation],
     max_depth: usize,
@@ -275,19 +278,8 @@ pub fn compile_emissions(
     // at each depth (within the calibrated radius — the backoff floor is
     // a routing behavior, never region content; see `binary_top1_covered`).
     let mut evidence: Vec<BTreeMap<u32, u64>> = vec![BTreeMap::new(); regions.len()];
-    // The root prior must use the same teacher top-3 evidence as region
-    // residuals. Using sampled `next` counts here mixes two distributions
-    // and makes every residual compare against the wrong parent model.
-    let mut root_dist: BTreeMap<u32, u64> = BTreeMap::new();
     for observation in train {
         let i = observation.position as usize;
-        for k_idx in 0..3 {
-            let token = corpus.top_tokens[i][k_idx];
-            let weight = corpus.top_weights[i][k_idx];
-            if weight > 0 {
-                *root_dist.entry(token).or_insert(0) += u64::from(weight);
-            }
-        }
         for depth in 1..=max_depth {
             let Some((top1, _)) =
                 binary_top1_covered(&mut k, &pop, regions, depth, &observation.sig)
@@ -305,7 +297,12 @@ pub fn compile_emissions(
         }
     }
 
-    // Root prior B(v) from the same teacher-weighted evidence stream.
+    // Root prior B(v) from the level-0 store distribution.
+    let root_dist: BTreeMap<u32, u64> = store
+        .first()
+        .and_then(|level| level.get(&[][..]))
+        .map(|dist| dist.iter().map(|(&t, &c)| (t, u64::from(c))).collect())
+        .unwrap_or_default();
     let root_total: u64 = root_dist.values().sum();
     let root_floor = ScoreQ::from_logprob(smoothed_ln(0, root_total, vocab));
     let root_prior: BTreeMap<u32, ScoreQ> = root_dist
@@ -865,35 +862,95 @@ pub struct GateCMetrics {
     pub bits_per_token: f64,
 }
 
-/// The Gate C outcome: the three number sets plus the witness-replay
-/// sample result.
+/// Per-status position counts of the Rule 1+2 scorer (D4 precedence).
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct StatusCounts {
+    pub exact_context: usize,
+    pub graph: usize,
+    pub novel: usize,
+}
+
+/// Rule 1+2 metrics split by the status that fired. A bucket with zero
+/// positions reports zeroed rates (no meaningful average exists).
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct Rule12PerStatus {
+    pub exact_context: GateCMetrics,
+    pub graph: GateCMetrics,
+    pub novel: GateCMetrics,
+}
+
+/// Teacher-argmax correctness cross-tab of two scorers over the same
+/// positions: `scorer_only` positions are wins for the scorer named
+/// first in the pairing key, `other_only` are its losses.
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct WinLoss {
+    pub both_correct: usize,
+    pub scorer_only: usize,
+    pub other_only: usize,
+    pub neither: usize,
+}
+
+/// Per-rule win/loss breakdowns (instrumentation honesty: not just
+/// aggregates — where each rule wins and loses).
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct WinLossReport {
+    pub rule12_vs_baseline: WinLoss,
+    pub rule12_vs_legacy: WinLoss,
+    pub rule1_vs_baseline: WinLoss,
+}
+
+/// Candidate-set recall, reported separately from selected-token
+/// agreement: a low value means the scorer cannot recover the teacher
+/// token regardless of how its weights are tuned. Top-3 uses the
+/// corpus's recorded teacher top-3 tokens.
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct CandidateRecall {
+    pub rule1_top1: f64,
+    pub rule1_top3: f64,
+    pub rule12_top1: f64,
+    pub rule12_top3: f64,
+}
+
+/// The Gate C outcome: the four number sets (old formula, Rule 1,
+/// Rule 1+2, baseline), the status and win/loss instrumentation,
+/// candidate recall, and the witness-replay sample result.
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct GateCOutcome {
-    pub graph_no_exct: GateCMetrics,
-    pub graph_with_exct: GateCMetrics,
+    /// OLD Σ-over-cloud formula (with EXCT evidence wired), kept for
+    /// comparison — the confirmed double counting lives there.
+    pub legacy_sum: GateCMetrics,
+    /// NEW Rule 1 (chain-telescoped residuals, no EXCT).
+    pub rule1_chain: GateCMetrics,
+    /// NEW Rule 1+2 (chain-telescoped + D4 EXCT precedence).
+    pub rule12_precedence: GateCMetrics,
+    /// TLA3 store baseline (`runtime::predict_witness_plain`).
     pub tla3_baseline: GateCMetrics,
-    /// Candidate-set recall is reported separately from selected-token
-    /// agreement. A low value means the scorer cannot recover the teacher
-    /// token regardless of how its weights are tuned.
+    pub rule12_status_counts: StatusCounts,
+    pub rule12_per_status: Rule12PerStatus,
+    pub win_loss: WinLossReport,
     pub candidate_recall: CandidateRecall,
     pub witness_replays: usize,
     pub witness_replay_failures: usize,
 }
 
-#[derive(Debug, Clone, Default, Serialize)]
-pub struct CandidateRecall {
-    pub graph_no_exct_top1: f64,
-    pub graph_no_exct_top3: f64,
-    pub graph_with_exct_top1: f64,
-    pub graph_with_exct_top3: f64,
+fn accumulate_win_loss(win_loss: &mut WinLoss, scorer_hit: bool, other_hit: bool) {
+    match (scorer_hit, other_hit) {
+        (true, true) => win_loss.both_correct += 1,
+        (true, false) => win_loss.scorer_only += 1,
+        (false, true) => win_loss.other_only += 1,
+        (false, false) => win_loss.neither += 1,
+    }
 }
 
 /// The Gate C measurement (plan §8 gate C): top-1 teacher-argmax
-/// agreement and bits/token on the held-out partition for the graph
-/// scorer without EXCT, with EXCT, and the TLA3 store baseline on the
-/// same positions. Both graph scorers are rebuilt from the emitted
-/// artifact bytes (the artifact is the scoring authority); a bounded
-/// sample of witnesses is independently replayed (Theorem 6).
+/// agreement and bits/token on the held-out partition for four scorers
+/// side by side — the OLD Σ-over-cloud formula (kept for comparison),
+/// NEW Rule 1 (chain-telescoped, no EXCT), NEW Rule 1+2 (with D4 EXCT
+/// precedence), and the TLA3 store baseline on the same positions
+/// (Witten-Bell bits as in `evaluate-report`). All graph scorers are
+/// rebuilt from the emitted artifact bytes (the artifact is the scoring
+/// authority); a bounded sample of Rule 1+2 witnesses is independently
+/// replayed (Theorem 6).
 pub fn evaluate_gate_c(
     r4g1: &[u8],
     artifact_container: &[u8],
@@ -913,67 +970,93 @@ pub fn evaluate_gate_c(
     )?;
 
     let mut outcome = GateCOutcome::default();
-    let mut bits_no_exct = 0f64;
-    let mut bits_with_exct = 0f64;
+    let mut bits_legacy = 0f64;
+    let mut bits_rule1 = 0f64;
+    let mut bits_rule12 = 0f64;
     let mut bits_baseline = 0f64;
-    let mut hits_no_exct = 0u64;
-    let mut hits_with_exct = 0u64;
+    let mut hits_legacy = 0u64;
+    let mut hits_rule1 = 0u64;
+    let mut hits_rule12 = 0u64;
     let mut hits_baseline = 0u64;
-    let mut candidate_top1_no_exct = 0u64;
-    let mut candidate_top3_no_exct = 0u64;
-    let mut candidate_top1_with_exct = 0u64;
-    let mut candidate_top3_with_exct = 0u64;
+    // Per-status Rule 1+2 accumulators: [ExactContext, Graph, Novel].
+    let mut status_positions = [0usize; 3];
+    let mut status_hits = [0u64; 3];
+    let mut status_bits = [0f64; 3];
+    let mut recall_rule1_top1 = 0u64;
+    let mut recall_rule1_top3 = 0u64;
+    let mut recall_rule12_top1 = 0u64;
+    let mut recall_rule12_top3 = 0u64;
     for (index, observation) in held_out.iter().enumerate() {
         let position = observation.position as usize;
         let teacher_argmax = corpus.t_argmax[position];
         let next = corpus.next[position];
         let code = runtime::assign_plain(artifacts, &observation.sig);
 
-        let no_exct = scorer_no_exct.score_candidates(&observation.sig)?;
-        let with_exct = scorer_with_exct.score_candidates(&observation.sig)?;
+        let legacy = scorer_with_exct.score_candidates_legacy(&observation.sig)?;
+        let rule1 = scorer_no_exct.score_candidates(&observation.sig)?;
+        let rule12 = scorer_with_exct.score_candidates(&observation.sig)?;
         let baseline = runtime::predict_witness_plain(store, &code);
+
+        let legacy_hit = legacy.selected == teacher_argmax;
+        let rule1_hit = rule1.selected == teacher_argmax;
+        let rule12_hit = rule12.selected == teacher_argmax;
+        let baseline_hit = baseline.token == teacher_argmax;
+        hits_legacy += u64::from(legacy_hit);
+        hits_rule1 += u64::from(rule1_hit);
+        hits_rule12 += u64::from(rule12_hit);
+        hits_baseline += u64::from(baseline_hit);
+        let legacy_bits = outcome_bits(&scorer_with_exct, &legacy.candidates, next);
+        let rule1_bits = outcome_bits(&scorer_no_exct, &rule1.candidates, next);
+        let rule12_bits = outcome_bits(&scorer_with_exct, &rule12.candidates, next);
+        bits_legacy += legacy_bits;
+        bits_rule1 += rule1_bits;
+        bits_rule12 += rule12_bits;
+        bits_baseline += -witten_bell_probability(store, &code, next).log2();
+
+        let status_index = match rule12.witness.status {
+            ScoreStatus::ExactContext => 0,
+            ScoreStatus::Graph => 1,
+            ScoreStatus::Novel => 2,
+        };
+        status_positions[status_index] += 1;
+        status_hits[status_index] += u64::from(rule12_hit);
+        status_bits[status_index] += rule12_bits;
 
         let contains = |candidates: &[(u32, ScoreQ)], token: u32| {
             candidates.iter().any(|&(candidate, _)| candidate == token)
         };
-        if contains(&no_exct.candidates, teacher_argmax) {
-            candidate_top1_no_exct += 1;
+        if contains(&rule1.candidates, teacher_argmax) {
+            recall_rule1_top1 += 1;
         }
-        if contains(&with_exct.candidates, teacher_argmax) {
-            candidate_top1_with_exct += 1;
-        }
-        if corpus.top_tokens[position]
-            .iter()
-            .any(|&token| contains(&no_exct.candidates, token))
-        {
-            candidate_top3_no_exct += 1;
+        if contains(&rule12.candidates, teacher_argmax) {
+            recall_rule12_top1 += 1;
         }
         if corpus.top_tokens[position]
             .iter()
-            .any(|&token| contains(&with_exct.candidates, token))
+            .any(|&token| contains(&rule1.candidates, token))
         {
-            candidate_top3_with_exct += 1;
+            recall_rule1_top3 += 1;
+        }
+        if corpus.top_tokens[position]
+            .iter()
+            .any(|&token| contains(&rule12.candidates, token))
+        {
+            recall_rule12_top3 += 1;
         }
 
-        if no_exct.selected == teacher_argmax {
-            hits_no_exct += 1;
+        {
+            let win_loss = &mut outcome.win_loss;
+            accumulate_win_loss(&mut win_loss.rule12_vs_baseline, rule12_hit, baseline_hit);
+            accumulate_win_loss(&mut win_loss.rule12_vs_legacy, rule12_hit, legacy_hit);
+            accumulate_win_loss(&mut win_loss.rule1_vs_baseline, rule1_hit, baseline_hit);
         }
-        if with_exct.selected == teacher_argmax {
-            hits_with_exct += 1;
-        }
-        if baseline.token == teacher_argmax {
-            hits_baseline += 1;
-        }
-        bits_no_exct += outcome_bits(&scorer_no_exct, &no_exct.candidates, next);
-        bits_with_exct += outcome_bits(&scorer_with_exct, &with_exct.candidates, next);
-        bits_baseline += -witten_bell_probability(store, &code, next).log2();
 
         if index < config.witness_sample {
             outcome.witness_replays += 1;
             if verify_witness_replay(
                 r4g1,
                 Some(artifact_container),
-                &with_exct.witness,
+                &rule12.witness,
                 config.root_top_b,
                 config.exct_top_x,
             )
@@ -988,31 +1071,51 @@ pub fn evaluate_gate_c(
         return Err("held-out split is empty; cannot evaluate".to_owned());
     }
     let nf = n as f64;
-    outcome.graph_no_exct = GateCMetrics {
+    let metrics = |hits: u64, bits: f64| GateCMetrics {
         positions: n,
-        top1_agreement: hits_no_exct as f64 / nf,
-        bits_per_token: bits_no_exct / nf,
+        top1_agreement: hits as f64 / nf,
+        bits_per_token: bits / nf,
     };
-    outcome.graph_with_exct = GateCMetrics {
-        positions: n,
-        top1_agreement: hits_with_exct as f64 / nf,
-        bits_per_token: bits_with_exct / nf,
+    outcome.legacy_sum = metrics(hits_legacy, bits_legacy);
+    outcome.rule1_chain = metrics(hits_rule1, bits_rule1);
+    outcome.rule12_precedence = metrics(hits_rule12, bits_rule12);
+    outcome.tla3_baseline = metrics(hits_baseline, bits_baseline);
+    outcome.rule12_status_counts = StatusCounts {
+        exact_context: status_positions[0],
+        graph: status_positions[1],
+        novel: status_positions[2],
     };
-    outcome.tla3_baseline = GateCMetrics {
-        positions: n,
-        top1_agreement: hits_baseline as f64 / nf,
-        bits_per_token: bits_baseline / nf,
+    let per_status = |index: usize| {
+        let positions = status_positions[index];
+        if positions == 0 {
+            return GateCMetrics::default();
+        }
+        let denom = positions as f64;
+        GateCMetrics {
+            positions,
+            top1_agreement: status_hits[index] as f64 / denom,
+            bits_per_token: status_bits[index] / denom,
+        }
+    };
+    outcome.rule12_per_status = Rule12PerStatus {
+        exact_context: per_status(0),
+        graph: per_status(1),
+        novel: per_status(2),
     };
     outcome.candidate_recall = CandidateRecall {
-        graph_no_exct_top1: candidate_top1_no_exct as f64 / nf,
-        graph_no_exct_top3: candidate_top3_no_exct as f64 / nf,
-        graph_with_exct_top1: candidate_top1_with_exct as f64 / nf,
-        graph_with_exct_top3: candidate_top3_with_exct as f64 / nf,
+        rule1_top1: recall_rule1_top1 as f64 / nf,
+        rule1_top3: recall_rule1_top3 as f64 / nf,
+        rule12_top1: recall_rule12_top1 as f64 / nf,
+        rule12_top3: recall_rule12_top3 as f64 / nf,
     };
     Ok(outcome)
 }
 
-/// The `score_report.json` document.
+/// The `score_report.json` document. Schema history: 1 = the three-set
+/// Gate C table (graph_no_exct/graph_with_exct/tla3_baseline); 2 = the
+/// issue-#64 four-set table (legacy_sum / rule1_chain /
+/// rule12_precedence / tla3_baseline) with status counts, per-status
+/// metrics, win/loss breakdowns, and the EXCT support gate in the config.
 #[derive(Debug, Clone, Serialize)]
 pub struct ScoreReport {
     pub schema: u32,
@@ -1040,6 +1143,8 @@ pub struct ScoreReportConfig {
     pub exct_top_x: usize,
     pub witness_sample: usize,
     pub top_m: usize,
+    /// The D4 EXCT precedence support gate (`score_runtime::EXCT_SUPPORT_MIN`).
+    pub exct_support_min: u32,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1076,7 +1181,7 @@ pub fn build_score_report(
     gate_c: GateCOutcome,
 ) -> ScoreReport {
     ScoreReport {
-        schema: 1,
+        schema: 2,
         inputs,
         config: ScoreReportConfig {
             transition_out_degree: config.transition_out_degree,
@@ -1085,6 +1190,7 @@ pub fn build_score_report(
             exct_top_x: config.exct_top_x,
             witness_sample: config.witness_sample,
             top_m: super::score_runtime::TOP_M,
+            exct_support_min: super::score_runtime::EXCT_SUPPORT_MIN,
         },
         graph: ScoreReportGraph {
             node_count: info.node_count,

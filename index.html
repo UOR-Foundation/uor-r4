@@ -2934,7 +2934,7 @@ function renderR4g1CompileStatus(data) {
             "R4G1 graph was compiled but rejected by the quality gate:"
         );
     }
-    const graph = data.report?.gate_c?.graph_no_exct;
+    const graph = data.report?.gate_c?.rule1_chain;
     if (!data.running && graph && typeof graph.top1_agreement === "number") {
         message += ` · Gate C top-1 ${(graph.top1_agreement * 100).toFixed(2)}%`;
     }

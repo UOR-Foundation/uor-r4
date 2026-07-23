@@ -63,8 +63,11 @@ impl R4g1State {
             GraphScorer::from_artifact(&graph_bytes, Some(&teacher_bytes), root_top_b, exct_top_x)
                 .map_err(|error| format!("{}: {error}", graph_path.display()))?;
         if let Some(report) = score_report {
+            // The deployed runtime wires RX1 EXCT, so the gate reads the
+            // Rule 1+2 column (the schema-2 name of the with-EXCT graph
+            // metrics the gate has always consumed).
             let graph_agreement = report
-                .pointer("/gate_c/graph_with_exct/top1_agreement")
+                .pointer("/gate_c/rule12_precedence/top1_agreement")
                 .and_then(serde_json::Value::as_f64);
             let baseline_agreement = report
                 .pointer("/gate_c/tla3_baseline/top1_agreement")

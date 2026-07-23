@@ -269,6 +269,13 @@ fn synthetic_scored_artifact() -> (
 /// The hand-built two-region scored artifact of the module's worked
 /// example: every expected score below is integer arithmetic by hand.
 fn hand_artifact() -> (Vec<u8>, Vec<u8>, Store) {
+    // EXCT: level-0-only store {10: 3, 20: 1, 50: 2} (total 6).
+    hand_artifact_with_store([(10u32, 3u32), (20, 1), (50, 2)].into_iter().collect())
+}
+
+/// The hand-built two-region artifact with a caller-chosen level-0 EXCT
+/// distribution (Rule 2 precedence and support-gate cases).
+fn hand_artifact_with_store(level0: BTreeMap<u32, u32>) -> (Vec<u8>, Vec<u8>, Store) {
     let regions = vec![
         RegionParams {
             node: 1,
@@ -319,12 +326,8 @@ fn hand_artifact() -> (Vec<u8>, Vec<u8>, Store) {
     };
     let artifacts = synthetic_compiled();
     let artifact_container = compiler::artifact_bytes(&artifacts);
-    // EXCT: level-0-only store {10: 3, 20: 1, 50: 2} (total 6).
     let mut store: Store = (0..=STAGES).map(|_| BTreeMap::new()).collect();
-    store[0].insert(
-        Vec::new(),
-        [(10u32, 3u32), (20, 1), (50, 2)].into_iter().collect(),
-    );
+    store[0].insert(Vec::new(), level0);
     let tls1 = runtime::store_bytes(&store);
     let config = ScoreConfig::default();
     let (bytes, _) = score::emit_scored_r4g1(
@@ -453,6 +456,268 @@ fn exct_probe_contributes_exact_context_residuals() {
         verify_witness_replay(&bytes, None, &outcome.witness, 64, 64),
         Err(ReplayError::TeacherMissing)
     );
+}
+
+// ------------------------------------------------- Rule 1 / Rule 2 unit --
+
+/// A three-region two-depth artifact for the chain tests: region A
+/// (node 1, depth 1) is the refinement parent of sibling regions B
+/// (node 2, depth 2) and C (node 3, depth 2). B and C share the parent,
+/// so their emission lists are exactly the correlated siblings the old
+/// formula stacked. `b_sig`/`c_sig` vary per case to steer margins.
+fn chain_artifact(b_sig: [u8; SIG_BYTES], c_sig: [u8; SIG_BYTES]) -> (Vec<u8>, Vec<u8>) {
+    let regions = vec![
+        RegionParams {
+            node: 1,
+            depth: 1,
+            radius: 300,
+            sig: [0x00; SIG_BYTES],
+            parent: None,
+        },
+        RegionParams {
+            node: 2,
+            depth: 2,
+            radius: 300,
+            sig: b_sig,
+            parent: Some(0),
+        },
+        RegionParams {
+            node: 3,
+            depth: 2,
+            radius: 300,
+            sig: c_sig,
+            parent: Some(0),
+        },
+    ];
+    let structural = vec![
+        StructuralEdge {
+            src: 0,
+            kind: 0,
+            dst: 1,
+            score_q: ScoreQ::ZERO,
+        },
+        StructuralEdge {
+            src: 1,
+            kind: 0,
+            dst: 2,
+            score_q: ScoreQ::ZERO,
+        },
+        StructuralEdge {
+            src: 1,
+            kind: 0,
+            dst: 3,
+            score_q: ScoreQ::ZERO,
+        },
+    ];
+    let emissions = EmissionTables {
+        root_prior: [(10u32, 50i32), (20, 60)]
+            .into_iter()
+            .map(|(t, s)| (t, ScoreQ::from_raw(s)))
+            .collect(),
+        root_floor: ScoreQ::from_raw(-7000),
+        root_total: 100,
+        region_lists: vec![
+            vec![(10, ScoreQ::from_raw(100))],  // A
+            vec![(10, ScoreQ::from_raw(1000))], // B
+            vec![(20, ScoreQ::from_raw(5000))], // C
+        ],
+    };
+    let artifacts = synthetic_compiled();
+    let artifact_container = compiler::artifact_bytes(&artifacts);
+    let store: Store = (0..=STAGES).map(|_| BTreeMap::new()).collect();
+    let tls1 = runtime::store_bytes(&store);
+    let config = ScoreConfig::default();
+    let (bytes, _) = score::emit_scored_r4g1(
+        &artifact_container,
+        (b"chain-meta", b"chain-recs"),
+        64,
+        &score::ScoredGraphSections {
+            regions: &regions,
+            structural: &structural,
+            transitions: &[],
+            emissions: &emissions,
+            exct_tls1: &tls1,
+            exct_top_x: config.exct_top_x,
+        },
+    )
+    .expect("chain emit succeeds");
+    (bytes, artifact_container)
+}
+
+#[test]
+fn rule1_chain_telescopes_and_sibling_emissions_do_not_stack() {
+    let mut c_sig = [0x00; SIG_BYTES];
+    c_sig[0] = 0x01; // distance 1 from the all-zeros context
+    let (bytes, _tla) = chain_artifact([0x00; SIG_BYTES], c_sig);
+    let scorer = GraphScorer::from_artifact(&bytes, None, 64, 64).expect("scorer builds");
+    let outcome = scorer.score_candidates(&[0x00; SIG_BYTES]).expect("scores");
+    // Active: A (depth 1, margin 300), B and C (depth 2, margins 300 and
+    // 299). The deepest-chain tie between B and C breaks to the higher
+    // margin — B — so only the [A, B] chain applies:
+    //   S(10) = B(10) + ΔE(A,10) + ΔE(B,10) = 50 + 100 + 1000 = 1150
+    //   S(20) = B(20) = 60   (ΔE(C,20) = +5000 does NOT stack)
+    assert_eq!(outcome.witness.status, ScoreStatus::Graph);
+    assert_eq!(outcome.witness.chain, vec![1, 2]);
+    assert_eq!(outcome.selected, 10);
+    assert_eq!(outcome.selected_score, ScoreQ::from_raw(1150));
+    let score_20 = outcome
+        .candidates
+        .iter()
+        .find(|&&(t, _)| t == 20)
+        .map(|&(_, s)| s);
+    assert_eq!(
+        score_20,
+        Some(ScoreQ::from_raw(60)),
+        "sibling C's emission does not stack onto the selected chain"
+    );
+    // The old Σ-over-cloud formula stacks C's list: 60 + 5000 = 5060,
+    // and the stacked sibling wins — the failure this redesign removes.
+    let legacy = scorer
+        .score_candidates_legacy(&[0x00; SIG_BYTES])
+        .expect("legacy scores");
+    let legacy_20 = legacy
+        .candidates
+        .iter()
+        .find(|&&(t, _)| t == 20)
+        .map(|&(_, s)| s);
+    assert_eq!(
+        legacy_20,
+        Some(ScoreQ::from_raw(5060)),
+        "old formula stacks the sibling subtree"
+    );
+    assert_eq!(
+        legacy.selected, 20,
+        "the stacking wins under the old formula"
+    );
+    // The chain witness replays bit-exactly (Theorem 6).
+    verify_witness_replay(&bytes, None, &outcome.witness, 64, 64).expect("replay");
+}
+
+#[test]
+fn rule1_chain_selection_tie_breaks_by_margin_then_lowest_region_id() {
+    // Identical sibling signatures: equal chain depth AND margin — the
+    // lowest region id wins.
+    let (bytes, _tla) = chain_artifact([0x00; SIG_BYTES], [0x00; SIG_BYTES]);
+    let scorer = GraphScorer::from_artifact(&bytes, None, 64, 64).expect("scorer builds");
+    let outcome = scorer.score_candidates(&[0x00; SIG_BYTES]).expect("scores");
+    assert_eq!(
+        outcome.witness.chain,
+        vec![1, 2],
+        "equal depth and margin: tie breaks to the lower region id"
+    );
+
+    // C strictly nearer than B: the higher margin wins regardless of id.
+    let mut b_sig = [0x00; SIG_BYTES];
+    b_sig[0] = 0x03; // distance 2 from the all-zeros context
+    let (bytes, _tla) = chain_artifact(b_sig, [0x00; SIG_BYTES]);
+    let scorer = GraphScorer::from_artifact(&bytes, None, 64, 64).expect("scorer builds");
+    let outcome = scorer.score_candidates(&[0x00; SIG_BYTES]).expect("scores");
+    assert_eq!(outcome.witness.chain, vec![1, 3], "higher margin wins");
+    // S(20) = B(20) + ΔE(C,20) = 60 + 5000 = 5060: C's chain applies.
+    assert_eq!(outcome.selected, 20);
+    assert_eq!(outcome.selected_score, ScoreQ::from_raw(5060));
+}
+
+#[test]
+fn rule2_exct_precedence_overrides_the_graph_with_sufficient_support() {
+    // EXCT argmax (token 20, count 5) differs from the graph's (token
+    // 10): with total 6 ≥ EXCT_SUPPORT_MIN the exact-context evidence
+    // dominates outright and the graph is never consulted.
+    let (bytes, tla, _store) =
+        hand_artifact_with_store([(20u32, 5u32), (10, 1)].into_iter().collect());
+    let scorer = GraphScorer::from_artifact(&bytes, Some(&tla), 64, 64).expect("EXCT scorer");
+    let outcome = scorer.score_candidates(&[0x00; SIG_BYTES]).expect("scores");
+    assert_eq!(outcome.witness.status, ScoreStatus::ExactContext);
+    assert_eq!(
+        outcome.selected, 20,
+        "the EXCT argmax dominates the graph's token 10"
+    );
+    assert!(
+        outcome.witness.active.is_empty(),
+        "graph candidate generation skipped under Rule 2"
+    );
+    assert!(outcome.witness.chain.is_empty());
+    assert_eq!(outcome.witness.transition_offset, ScoreQ::ZERO);
+    let ids: Vec<ContributionId> = outcome
+        .witness
+        .selected_contributions
+        .iter()
+        .map(|c| c.id)
+        .collect();
+    assert_eq!(
+        ids,
+        vec![
+            ContributionId::RootPrior { token: 20 },
+            ContributionId::ExactContext { token: 20 },
+        ],
+        "only the root prior and the exact-context residual apply"
+    );
+    verify_witness_replay(&bytes, Some(&tla), &outcome.witness, 64, 64).expect("replay");
+}
+
+#[test]
+fn rule1_used_when_exct_support_is_below_min() {
+    // Total 4 < EXCT_SUPPORT_MIN (5): the probe is recorded but exact-
+    // context evidence does not fire; the chain-telescoped graph score
+    // decides (the hand artifact selects token 10 at 1142).
+    let (bytes, tla, _store) = hand_artifact_with_store([(20u32, 4u32)].into_iter().collect());
+    let scorer = GraphScorer::from_artifact(&bytes, Some(&tla), 64, 64).expect("EXCT scorer");
+    let outcome = scorer.score_candidates(&[0x00; SIG_BYTES]).expect("scores");
+    assert_eq!(outcome.witness.status, ScoreStatus::Graph);
+    let probe = outcome.witness.exct.clone().expect("probe recorded");
+    assert_eq!(probe.total, 4);
+    assert_eq!(
+        probe.admitted, 0,
+        "below the support gate nothing is admitted"
+    );
+    assert_eq!(outcome.selected, 10);
+    assert_eq!(outcome.selected_score, ScoreQ::from_raw(1142));
+    assert!(
+        outcome
+            .witness
+            .selected_contributions
+            .iter()
+            .all(|c| !matches!(c.id, ContributionId::ExactContext { .. })),
+        "no exact-context residual applied below the gate"
+    );
+    verify_witness_replay(&bytes, Some(&tla), &outcome.witness, 64, 64).expect("replay");
+}
+
+#[test]
+fn novel_status_when_no_covered_chain_exists() {
+    let (bytes, _tla, _store) = hand_artifact();
+    let scorer = GraphScorer::from_artifact(&bytes, None, 64, 64).expect("scorer builds");
+    // 144 of 288 bits set: distance 144 from both regions — outside
+    // every calibrated radius (4). The membership is the nearest-region
+    // fallback (recorded in the witness with a negative margin); no
+    // covered chain exists, so the prediction is the root prior plus
+    // the folded transition offset and the status is Novel.
+    let mut sig = [0x00; SIG_BYTES];
+    for byte in sig.iter_mut().take(18) {
+        *byte = 0xFF;
+    }
+    let outcome = scorer.score_candidates(&sig).expect("scores");
+    assert_eq!(outcome.witness.status, ScoreStatus::Novel);
+    assert!(outcome.witness.chain.is_empty());
+    assert_eq!(
+        outcome.witness.active.len(),
+        1,
+        "the fallback member is recorded (ReferenceClassifier semantics)"
+    );
+    assert_eq!(outcome.witness.active[0].region, 0);
+    assert_eq!(outcome.witness.active[0].margin, -140);
+    // S(v) = B(v) + offset(42): S(30) = 300 + 42 = 342 is the argmax.
+    assert_eq!(outcome.selected, 30);
+    assert_eq!(outcome.selected_score, ScoreQ::from_raw(342));
+    assert_eq!(
+        outcome.witness.selected_contributions,
+        vec![Contribution {
+            id: ContributionId::RootPrior { token: 30 },
+            value: ScoreQ::from_raw(300),
+        }],
+        "no emission residual on an uncovered context"
+    );
+    verify_witness_replay(&bytes, None, &outcome.witness, 64, 64).expect("replay");
 }
 
 // ------------------------------------------------------------ Theorem 7 --
@@ -906,7 +1171,7 @@ fn scoring_core_is_integer_only_by_source_scan() {
 // ------------------------------------------------------------- Gate C --
 
 #[test]
-fn gate_c_harness_emits_all_three_number_sets() {
+fn gate_c_harness_emits_all_four_number_sets() {
     let (bytes, artifact_container, artifacts, store, corpus, held_out) =
         synthetic_scored_artifact();
     assert!(!held_out.is_empty());
@@ -937,8 +1202,9 @@ fn gate_c_harness_emits_all_three_number_sets() {
     )
     .expect("gate C evaluates");
     for (name, metrics) in [
-        ("graph_no_exct", &outcome.graph_no_exct),
-        ("graph_with_exct", &outcome.graph_with_exct),
+        ("legacy_sum", &outcome.legacy_sum),
+        ("rule1_chain", &outcome.rule1_chain),
+        ("rule12_precedence", &outcome.rule12_precedence),
         ("tla3_baseline", &outcome.tla3_baseline),
     ] {
         assert_eq!(metrics.positions, held_out.len(), "{name} positions");
@@ -951,6 +1217,25 @@ fn gate_c_harness_emits_all_three_number_sets() {
             metrics.bits_per_token.is_finite() && metrics.bits_per_token > 0.0,
             "{name} bits/token is finite and positive: {}",
             metrics.bits_per_token
+        );
+    }
+    // Every position reports exactly one Rule 1+2 status, and each
+    // win/loss cross-tab partitions the position set.
+    let counts = &outcome.rule12_status_counts;
+    assert_eq!(
+        counts.exact_context + counts.graph + counts.novel,
+        held_out.len(),
+        "status counts partition the held-out positions"
+    );
+    for (name, w) in [
+        ("rule12_vs_baseline", &outcome.win_loss.rule12_vs_baseline),
+        ("rule12_vs_legacy", &outcome.win_loss.rule12_vs_legacy),
+        ("rule1_vs_baseline", &outcome.win_loss.rule1_vs_baseline),
+    ] {
+        assert_eq!(
+            w.both_correct + w.scorer_only + w.other_only + w.neither,
+            held_out.len(),
+            "{name} cross-tab partitions the held-out positions"
         );
     }
     assert_eq!(outcome.witness_replays, 8);
@@ -989,9 +1274,13 @@ fn gate_c_harness_emits_all_three_number_sets() {
     let json = serde_json::to_string_pretty(&build(&outcome)).expect("report serializes");
     let json2 = serde_json::to_string_pretty(&build(&outcome2)).expect("report serializes");
     assert_eq!(json, json2, "double-run report byte identity");
-    assert!(json.contains("graph_no_exct"));
-    assert!(json.contains("graph_with_exct"));
+    assert!(json.contains("\"schema\": 2"));
+    assert!(json.contains("legacy_sum"));
+    assert!(json.contains("rule1_chain"));
+    assert!(json.contains("rule12_precedence"));
     assert!(json.contains("tla3_baseline"));
+    assert!(json.contains("rule12_status_counts"));
+    assert!(json.contains("exct_support_min"));
 }
 
 /// The emitted scored artifact passes both validation stages, carries
@@ -1029,8 +1318,8 @@ fn scored_artifact_validates_and_declares_honest_bounds() {
 
 /// Full pipeline on the pinned fixture corpus (150k legacy records):
 /// cover induction, E_f + residual compilation, scored R4G1 emission,
-/// and the Gate C table (graph ± EXCT vs the TLA3 baseline). Release-
-/// only workload — run with
+/// and the Gate C table (old formula vs Rule 1 vs Rule 1+2 vs the TLA3
+/// baseline). Release-only workload — run with
 /// `cargo test -p uor-r4-core --release --offline --test score -- --ignored --nocapture`.
 #[test]
 #[ignore = "release-only fixture workload"]
@@ -1110,21 +1399,27 @@ fn fixture_corpus_end_to_end() {
     )
     .expect("fixture gate C");
     println!(
-        "fixture Gate C ({} held-out positions):\n  graph (no EXCT):   agree {:.2}% bits {:.4}\n  graph (with EXCT): agree {:.2}% bits {:.4}\n  TLA3 baseline:     agree {:.2}% bits {:.4}\n  witness replay: {}/{} ok",
-        gate_c.graph_no_exct.positions,
-        100.0 * gate_c.graph_no_exct.top1_agreement,
-        gate_c.graph_no_exct.bits_per_token,
-        100.0 * gate_c.graph_with_exct.top1_agreement,
-        gate_c.graph_with_exct.bits_per_token,
+        "fixture Gate C ({} held-out positions):\n  graph Σ-cloud (old):    agree {:.2}% bits {:.4}\n  graph chain (Rule 1):   agree {:.2}% bits {:.4}\n  graph chain+EXCT (1+2): agree {:.2}% bits {:.4}\n  TLA3 baseline:          agree {:.2}% bits {:.4}\n  rule 1+2 status: ExactContext {} Graph {} Novel {}\n  witness replay: {}/{} ok",
+        gate_c.rule12_precedence.positions,
+        100.0 * gate_c.legacy_sum.top1_agreement,
+        gate_c.legacy_sum.bits_per_token,
+        100.0 * gate_c.rule1_chain.top1_agreement,
+        gate_c.rule1_chain.bits_per_token,
+        100.0 * gate_c.rule12_precedence.top1_agreement,
+        gate_c.rule12_precedence.bits_per_token,
         100.0 * gate_c.tla3_baseline.top1_agreement,
         gate_c.tla3_baseline.bits_per_token,
+        gate_c.rule12_status_counts.exact_context,
+        gate_c.rule12_status_counts.graph,
+        gate_c.rule12_status_counts.novel,
         gate_c.witness_replays - gate_c.witness_replay_failures,
         gate_c.witness_replays,
     );
     assert_eq!(gate_c.witness_replay_failures, 0);
     for metrics in [
-        &gate_c.graph_no_exct,
-        &gate_c.graph_with_exct,
+        &gate_c.legacy_sum,
+        &gate_c.rule1_chain,
+        &gate_c.rule12_precedence,
         &gate_c.tla3_baseline,
     ] {
         assert!((0.0..=1.0).contains(&metrics.top1_agreement));

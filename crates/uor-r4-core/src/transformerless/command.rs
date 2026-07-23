@@ -519,8 +519,9 @@ fn parse_score_options(args: &[String]) -> Result<ScoreOptions, String> {
 /// Semantic transitions + residual emission scoring (plan §5 Phase 4):
 /// compile E_f and the ScoreQ residual tables onto the induced cover,
 /// emit the scored R4G1 (EDGE/EMIT/EXCT populated), and run the Gate C
-/// measurement — graph scorer without/with EXCT against the TLA3 store
-/// baseline on the held-out partition — writing `score.r4g1` and
+/// measurement — the old Σ-over-cloud formula, Rule 1 (chain-telescoped,
+/// no EXCT), Rule 1+2 (D4 EXCT precedence), and the TLA3 store baseline
+/// side by side on the held-out partition — writing `score.r4g1` and
 /// `score_report.json`.
 pub fn score_command(args: &[String]) -> Result<(), String> {
     #[cfg(debug_assertions)]
@@ -687,34 +688,59 @@ pub fn score_command(args: &[String]) -> Result<(), String> {
     );
     println!(
         "gate C — held-out D3 metrics ({} positions):",
-        gate_c.graph_no_exct.positions
+        gate_c.rule12_precedence.positions
     );
     println!(
-        "  {:<24} {:>16} {:>12}",
+        "  {:<26} {:>16} {:>12}",
         "scorer", "top-1 agree", "bits/token"
     );
     let row = |name: &str, m: &score::GateCMetrics| {
         println!(
-            "  {:<24} {:>15.1}% {:>12.4}",
+            "  {:<26} {:>15.1}% {:>12.4}",
             name,
             100.0 * m.top1_agreement,
             m.bits_per_token
         );
     };
-    row("graph (no EXCT)", &gate_c.graph_no_exct);
-    row("graph (with EXCT)", &gate_c.graph_with_exct);
+    row("graph Σ-cloud (old)", &gate_c.legacy_sum);
+    row("graph chain (Rule 1)", &gate_c.rule1_chain);
+    row("graph chain+EXCT (1+2)", &gate_c.rule12_precedence);
     row("TLA3 store baseline", &gate_c.tla3_baseline);
+    println!(
+        "  rule 1+2 status: ExactContext {}, Graph {}, Novel {}",
+        gate_c.rule12_status_counts.exact_context,
+        gate_c.rule12_status_counts.graph,
+        gate_c.rule12_status_counts.novel
+    );
+    let win_loss_row = |name: &str, w: &score::WinLoss| {
+        println!(
+            "  {name}: both {}, +first {}, +second {}, neither {}",
+            w.both_correct, w.scorer_only, w.other_only, w.neither
+        );
+    };
+    win_loss_row(
+        "win/loss 1+2 vs baseline",
+        &gate_c.win_loss.rule12_vs_baseline,
+    );
+    win_loss_row(
+        "win/loss 1+2 vs old     ",
+        &gate_c.win_loss.rule12_vs_legacy,
+    );
+    win_loss_row(
+        "win/loss R1 vs baseline ",
+        &gate_c.win_loss.rule1_vs_baseline,
+    );
     println!(
         "  witness replay: {}/{} ok",
         gate_c.witness_replays - gate_c.witness_replay_failures,
         gate_c.witness_replays
     );
     println!(
-        "  candidate recall — no EXCT top-1/top-3: {:.1}%/{:.1}% | with EXCT: {:.1}%/{:.1}%",
-        100.0 * gate_c.candidate_recall.graph_no_exct_top1,
-        100.0 * gate_c.candidate_recall.graph_no_exct_top3,
-        100.0 * gate_c.candidate_recall.graph_with_exct_top1,
-        100.0 * gate_c.candidate_recall.graph_with_exct_top3,
+        "  candidate recall — rule 1 top-1/top-3: {:.1}%/{:.1}% | rule 1+2: {:.1}%/{:.1}%",
+        100.0 * gate_c.candidate_recall.rule1_top1,
+        100.0 * gate_c.candidate_recall.rule1_top3,
+        100.0 * gate_c.candidate_recall.rule12_top1,
+        100.0 * gate_c.candidate_recall.rule12_top3,
     );
     println!(
         "  artifact: {} ({} bytes, κ {})",

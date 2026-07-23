@@ -58,10 +58,16 @@ graph term is normative for new work. See the terminology bridge in the plan (§
   shortlist size, `D` decision-program depth. Per-step work is O(D + A·C·W + A·E·K).
 - **ScoreQ** — quantized fixed-point log-domain score. Replaces all floating-point scores in
   deployed paths.
-- **Scoring model** — `S(v) = B(v) + Σ_{n∈A} ΔE(n,v) + Σ_{m∈F} ΔT(m,v) + ΔX(X,v)`: root token
-  prior + emission residuals of the active cloud + transition residuals of the predicted cloud +
-  optional exact-context residual. Each table is sparse; no contribution is counted twice
-  (Theorem 10).
+- **Scoring model** — after the issue-#64 redesign, two per-context rules. Rule 1
+  (chain-telescoped): `S_graph(v) = B(v) + Σ_{n∈chain} ΔE(n,v) + ΔT-offset`, where `chain` is
+  the covered refinement chain (root → deepest covered ancestor) of the active region with the
+  deepest covered chain — emission corrections compose along one ancestry path instead of
+  stacking across sibling subtrees. Rule 2 (D4 EXCT precedence): when the deepest-populated
+  exact-context prefix carries enough evidence (total ≥ `EXCT_SUPPORT_MIN` = 5),
+  `S(v) = B(v) + ΔX(X,v)` and graph residuals are skipped entirely. Each table is sparse; no
+  contribution is counted twice (Theorem 10). Supersedes the literal Σ-over-cloud form
+  (`B + ΣΔE + ΣΔT + ΔX`), which double-counted correlated sibling residuals (Gate C: 0.3%
+  vs 31.7% baseline).
 - **Root prior B(v)** — base token distribution stored at the graph root (successor of store
   level-0 backoff counts).
 - **Emission residual ΔE** — per-region correction to token scores relative to its parent.

@@ -542,6 +542,18 @@ pub struct ScoreOutcome {
     pub witness: ScoreWitness,
 }
 
+/// The outcome of [`GraphScorer::score_candidates_legacy`]: the
+/// selection plus every candidate's final score (ascending token order).
+/// The old formula is comparison-only — it is not the shipping semantics
+/// and emits no replayable witness.
+#[derive(Debug, Clone)]
+pub struct LegacyOutcome {
+    pub selected: u32,
+    pub selected_score: ScoreQ,
+    /// Every candidate `(token, score)` in ascending token order.
+    pub candidates: Vec<(u32, ScoreQ)>,
+}
+
 #[derive(Debug, Clone)]
 struct ResidualExctContext {
     total: u32,
@@ -795,19 +807,15 @@ impl GraphScorer {
     pub fn score_candidates(&self, sig: &[u8; SIG_BYTES]) -> Result<ScoreOutcome, String> {
         let mut k = OpKernel::default();
 
-        // Active cloud A: top-M memberships at each depth.
+        // Active cloud A: top-M memberships at each depth — exactly the
+        // ReferenceClassifier semantics, nearest-region fallback included.
+        // A fallback member is routing evidence, not region content: the
+        // region itself is uncovered, so it never enters a chain, but its
+        // covered ancestors still compose the deepest covered prefix below.
         let mut active: Vec<ActiveRegion> = Vec::new();
         for depth in 1..=self.max_depth {
             for (region, dist) in binary_memberships(&mut k, &self.pop, &self.regions, depth, sig) {
                 let radius = u32::from(self.regions[region as usize].radius);
-                // A nearest-region fallback is routing-only. It must not inject
-                // that region's learned emission residuals into an uncovered
-                // context; doing so turns the backoff path into a confident,
-                // unrelated prediction. The compiler uses the same covered-only
-                // rule when building region evidence.
-                if dist > radius {
-                    continue;
-                }
                 let margin = radius as i64 - dist as i64;
                 active.push(ActiveRegion {
                     region,
@@ -1080,6 +1088,130 @@ impl GraphScorer {
             selected_score,
             candidates: candidates_out,
             witness,
+        })
+    }
+
+    /// The pre-#64 Σ-over-cloud formula `S(v) = B(v) + Σ_{n∈A} ΔE(n,v) +
+    /// Σ_{m∈F} ΔT(m,v) + ΔX(X,v)` — retained ONLY as the Gate C
+    /// comparison column (the correlated-sibling stacking it exhibits is
+    /// what the chain rule fixes; module docs). Not the shipping
+    /// semantics; emits no replayable witness. The active cloud uses the
+    /// same ReferenceClassifier semantics the old formula scored
+    /// (nearest-region fallback included).
+    pub fn score_candidates_legacy(&self, sig: &[u8; SIG_BYTES]) -> Result<LegacyOutcome, String> {
+        let mut k = OpKernel::default();
+
+        // Active cloud A: top-M memberships at each depth.
+        let mut active: Vec<u32> = Vec::new();
+        for depth in 1..=self.max_depth {
+            for (region, _) in binary_memberships(&mut k, &self.pop, &self.regions, depth, sig) {
+                active.push(region);
+            }
+        }
+
+        // Predicted cloud F: union of E_f targets of the active regions,
+        // keeping the single best incoming edge per predicted region
+        // (highest score_q, ties to the lowest canonical edge id).
+        let mut best_edge: BTreeMap<u32, EdgeUse> = BTreeMap::new();
+        for &region in &active {
+            if let Some(edges) = self.forward_by_src.get(&(region + 1)) {
+                for edge in edges {
+                    let better = match best_edge.get(&edge.dst) {
+                        None => true,
+                        Some(current) => {
+                            (edge.score_q, std::cmp::Reverse(edge.edge_id))
+                                > (current.score_q, std::cmp::Reverse(current.edge_id))
+                        }
+                    };
+                    if better {
+                        best_edge.insert(edge.dst, *edge);
+                    }
+                }
+            }
+        }
+        let mut transition_offset = ScoreQ::ZERO;
+        for edge in best_edge.values() {
+            transition_offset = transition_offset.saturating_add(edge.score_q);
+        }
+
+        // Candidate accumulation: every node of A ∪ F applies its
+        // emission list — the correlated sibling stacking the redesign
+        // removes lives HERE (all subtrees of one refinement parent
+        // contribute at once).
+        let mut candidates: BTreeMap<u32, ScoreQ> = BTreeMap::new();
+        let mut contributing: BTreeSet<u32> = active.iter().map(|&r| r + 1).collect();
+        contributing.extend(best_edge.keys().copied());
+        for &node in &contributing {
+            let emissions = &self.emissions[(node - 1) as usize];
+            for (&token, &value) in emissions {
+                let entry = candidates.entry(token).or_insert(ScoreQ::ZERO);
+                *entry = entry.saturating_add(value);
+            }
+        }
+        // Root prior top-B tokens join the candidate set.
+        for &token in &self.root_top {
+            candidates.entry(token).or_insert(ScoreQ::ZERO);
+        }
+
+        // EXCT: the existing prefix probe (deepest populated graded
+        // prefix) over the exact-context evidence, applied additively
+        // with no support gate — the stacking the precedence rule
+        // replaces. ΔX(X,v) = quantized probe log-prob minus the stored
+        // root prior (the RX1 table carries exactly this residual).
+        if let Some(art) = &self.artifacts {
+            let code = runtime::assign_plain(art, sig);
+            if let Some(residual_exct) = &self.residual_exct {
+                for level in (0..=STAGES).rev() {
+                    if let Some(context) = residual_exct[level].get(&code[..level]) {
+                        for (&token, &value) in context.entries.iter().take(self.exct_top_x) {
+                            let entry = candidates.entry(token).or_insert(ScoreQ::ZERO);
+                            *entry = entry.saturating_add(value);
+                        }
+                        break;
+                    }
+                }
+            } else if let Some(store) = &self.store {
+                for level in (0..=STAGES).rev() {
+                    if let Some(dist) = store[level].get(&code[..level]) {
+                        let total: u32 = dist.values().sum();
+                        let mut ranked: Vec<(u32, u32)> =
+                            dist.iter().map(|(&t, &c)| (t, c)).collect();
+                        ranked.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+                        for &(token, count) in ranked.iter().take(self.exct_top_x) {
+                            let value = quantize_exct(count, total, self.vocab)
+                                .saturating_sub(self.root_score(token));
+                            let entry = candidates.entry(token).or_insert(ScoreQ::ZERO);
+                            *entry = entry.saturating_add(value);
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Final per-candidate scores: the baked root prior plus the
+        // folded token-independent transition edge weight; canonical
+        // argmax (highest score, then the lowest token id).
+        let mut ranked_candidates: Vec<(u32, ScoreQ)> = Vec::with_capacity(candidates.len());
+        for (token, residual) in candidates {
+            let with_offset = residual.saturating_add(transition_offset);
+            let score = self.root_score(token).saturating_add(with_offset);
+            ranked_candidates.push((token, score));
+        }
+        if ranked_candidates.is_empty() {
+            return Err("scoring produced an empty candidate set".to_owned());
+        }
+        let mut best_index = 0usize;
+        for (index, &(_, score)) in ranked_candidates.iter().enumerate() {
+            if score > ranked_candidates[best_index].1 {
+                best_index = index;
+            }
+        }
+        let (selected, selected_score) = ranked_candidates[best_index];
+        Ok(LegacyOutcome {
+            selected,
+            selected_score,
+            candidates: ranked_candidates,
         })
     }
 }
