@@ -13,7 +13,7 @@ OUT_DIR="${TREND_DIR:-/tmp/gate_c_trend}"
 TREND_OUT="${TREND_OUT:-/tmp/gate_c_trend.jsonl}"
 
 rm -rf "$OUT_DIR"
-cargo run -q --release --offline --bin r4 -- transformerless score \
+cargo run -q --release --bin r4 -- transformerless score \
   --corpus-meta "$FIXTURE_META" --corpus-recs "$FIXTURE_RECS" \
   --artifacts "$FIXTURE_ART" --out "$OUT_DIR" >/dev/null
 
