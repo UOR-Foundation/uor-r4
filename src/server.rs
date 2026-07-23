@@ -10,7 +10,7 @@ use std::io::{prelude::*, BufReader};
 use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use uor_foundation::pipeline::PrismModel;
 
 use uor_r4_core::transformerless::score_runtime::ScoreStatus;
@@ -74,6 +74,7 @@ struct HuggingFaceDownloadPayload {
 struct R4g1CompileStatus {
     running: bool,
     ready: bool,
+    progress: u8,
     message: String,
     report: Option<serde_json::Value>,
 }
@@ -109,6 +110,7 @@ impl R4g1CompileStatus {
         serde_json::json!({
             "running": self.running,
             "ready": self.ready,
+            "progress": self.progress,
             "message": self.message,
             "report": self.report,
         })
@@ -156,6 +158,7 @@ pub fn run_server(cli: Arc<ServerConfig>) {
     let r4g1_compile = Arc::new(Mutex::new(R4g1CompileStatus {
         running: false,
         ready: false,
+        progress: 0,
         message: "R4G1 graph compiler idle".to_owned(),
         report: None,
     }));
@@ -177,8 +180,10 @@ pub fn run_server(cli: Arc<ServerConfig>) {
                         graph_path.display()
                     );
                     *r4g1.lock().unwrap() = Some(state);
-                    r4g1_compile.lock().unwrap().ready = true;
-                    r4g1_compile.lock().unwrap().message = "R4G1 graph runtime ready".to_owned();
+                    let mut compile_status = r4g1_compile.lock().unwrap();
+                    compile_status.ready = true;
+                    compile_status.progress = 100;
+                    compile_status.message = "R4G1 graph runtime ready".to_owned();
                 }
                 Err(error) => {
                     println!("[-] Failed to load R4G1 graph runtime: {error}");
@@ -780,7 +785,8 @@ pub fn r4g1_unavailable_response() -> (u16, serde_json::Value) {
         503,
         serde_json::json!({
             "error": "R4G1 Graph runtime did not produce a usable response; no fallback engine was invoked",
-            "engine": "r4g1"
+            "engine": "r4g1",
+            "action": "Compile / Refresh the R4G1 graph, or explicitly select another engine"
         }),
     )
 }
@@ -894,7 +900,10 @@ fn r4g1_compile_paths(cli: &ServerConfig) -> Result<(PathBuf, PathBuf, PathBuf, 
     ))
 }
 
-fn compile_bundle_from_source(source: &Path) -> Result<PathBuf, String> {
+fn compile_bundle_from_source(
+    source: &Path,
+    status: &Arc<Mutex<R4g1CompileStatus>>,
+) -> Result<PathBuf, String> {
     let name = source
         .file_name()
         .and_then(|name| name.to_str())
@@ -917,7 +926,35 @@ fn compile_bundle_from_source(source: &Path) -> Result<PathBuf, String> {
         "--sequence-length".to_owned(),
         "128".to_owned(),
     ];
-    uor_r4_core::transformerless::command::compile_hugging_face(&args)?;
+    // The teacher compile can take most of the wall-clock time. Run it in a
+    // child worker so the server can report corpus progress while the native
+    // compiler is generating/resuming records.
+    let meta_path = output.join("corpus.meta");
+    let compiler = std::thread::spawn(move || {
+        uor_r4_core::transformerless::command::compile_hugging_face(&args)
+    });
+    while !compiler.is_finished() {
+        let observed = fs::read(&meta_path).ok().and_then(|bytes| {
+            bytes
+                .get(..8)
+                .and_then(|prefix| prefix.try_into().ok().map(u64::from_le_bytes))
+        });
+        let target = R4G1_CORPUS_TARGET.parse::<u64>().unwrap_or(1).max(1);
+        let progress = observed
+            .map(|current| 5u8.saturating_add((current.saturating_mul(14) / target).min(14) as u8))
+            .unwrap_or(6);
+        let message = observed
+            .map(|current| format!("Generating teacher corpus ({current} / {target} samples)..."))
+            .unwrap_or_else(|| "Loading teacher model and preparing corpus...".to_owned());
+        set_r4g1_compile_progress(status, progress, &message);
+        std::thread::sleep(Duration::from_millis(500));
+    }
+    compiler.join().map_err(|payload| {
+        format!(
+            "teacher compilation panicked: {}",
+            panic_payload_message(&*payload)
+        )
+    })??;
     for file in [
         "tless_artifacts.bin",
         "tless_store.bin",
@@ -962,15 +999,22 @@ fn panic_payload_message(payload: &(dyn Any + Send)) -> String {
 fn compile_r4g1_bundle(
     cli: &ServerConfig,
     r4g1: &Arc<Mutex<Option<R4g1State>>>,
+    status: &Arc<Mutex<R4g1CompileStatus>>,
     downloaded_source: Option<&Path>,
 ) -> Result<serde_json::Value, String> {
+    set_r4g1_compile_progress(
+        status,
+        5,
+        "Preparing teacher corpus and R4G1 compiler inputs...",
+    );
     // A downloaded source is authoritative for the browser workflow. Even
     // when an older corpus bundle already exists, resume the teacher compile
     // first so the requested target (currently 200k tokens) is actually
     // reached instead of silently rebuilding the old ~20k corpus.
     let source_root = downloaded_source
-        .map(compile_bundle_from_source)
+        .map(|source| compile_bundle_from_source(source, status))
         .transpose()?;
+    set_r4g1_compile_progress(status, 20, "Building the R4G1 cover...");
     let (artifacts, corpus_meta, corpus_recs, cover_output, graph_output, graph_path) =
         match source_root {
             Some(root) => {
@@ -1051,6 +1095,7 @@ fn compile_r4g1_bundle(
     ];
     uor_r4_core::transformerless::command::cover_command(&cover_args)?;
 
+    set_r4g1_compile_progress(status, 55, "Scoring graph transitions and emissions...");
     let cover_artifact = cover_output.join("cover.r4g1");
     let score_args = vec![
         "--corpus-meta".to_owned(),
@@ -1074,6 +1119,7 @@ fn compile_r4g1_bundle(
     ];
     uor_r4_core::transformerless::command::score_command(&score_args)?;
 
+    set_r4g1_compile_progress(status, 90, "Validating and loading the compiled graph...");
     let state = R4g1State::load(&graph_path, &artifacts)
         .map_err(|error| format!("compiled graph was written but failed validation: {error}"))?;
     *r4g1.lock().unwrap() = Some(state);
@@ -1096,7 +1142,12 @@ fn spawn_r4g1_compile(
 ) {
     std::thread::spawn(move || {
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            compile_r4g1_bundle(&cli, &r4g1, downloaded_source.as_deref().map(Path::new))
+            compile_r4g1_bundle(
+                &cli,
+                &r4g1,
+                &status,
+                downloaded_source.as_deref().map(Path::new),
+            )
         }))
         .map_err(|payload| {
             format!(
@@ -1111,6 +1162,7 @@ fn spawn_r4g1_compile(
         match result {
             Ok(details) => {
                 current.ready = true;
+                current.progress = 100;
                 current.report = details
                     .get("report")
                     .filter(|report| !report.is_null())
@@ -1125,10 +1177,17 @@ fn spawn_r4g1_compile(
             }
             Err(error) => {
                 current.ready = r4g1.lock().unwrap().is_some();
+                current.progress = 0;
                 current.message = format!("R4G1 compilation failed: {error}");
             }
         }
     });
+}
+
+fn set_r4g1_compile_progress(status: &Arc<Mutex<R4g1CompileStatus>>, progress: u8, message: &str) {
+    let mut current = status.lock().unwrap();
+    current.progress = progress.min(100);
+    current.message = message.to_owned();
 }
 
 fn pinned_huggingface_source() -> Result<SourceDownload, String> {
@@ -2300,6 +2359,8 @@ fn handle_connection(
             return;
         }
         status.running = true;
+        status.ready = r4g1.lock().unwrap().is_some();
+        status.progress = 1;
         status.message = "Compiling R4G1 cover and scored graph...".to_owned();
         status.report = None;
         drop(status);

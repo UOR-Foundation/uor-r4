@@ -212,6 +212,45 @@
             display: none;
         }
 
+        .compile-progress {
+            height: 6px;
+            width: 100%;
+            margin: 0.35rem 0 0.45rem;
+            overflow: hidden;
+            border: 1px solid rgba(0,229,255,0.2);
+            border-radius: 999px;
+            background: rgba(255,255,255,0.05);
+        }
+        .compile-progress-fill {
+            height: 100%;
+            width: 0%;
+            border-radius: inherit;
+            background: linear-gradient(90deg, var(--cyan), var(--purple));
+            box-shadow: 0 0 10px rgba(0,229,255,0.45);
+            transition: width 0.35s ease, background 0.2s ease;
+        }
+        .compile-progress.running .compile-progress-fill {
+            background: linear-gradient(90deg, var(--cyan), var(--emerald), var(--purple));
+            background-size: 200% 100%;
+            animation: compile-progress-shimmer 1.4s linear infinite;
+        }
+        .compile-progress.error .compile-progress-fill {
+            background: var(--red);
+            box-shadow: 0 0 10px rgba(255,82,82,0.35);
+        }
+        @keyframes compile-progress-shimmer {
+            from { background-position: 0% 0; }
+            to { background-position: 200% 0; }
+        }
+        .compile-progress-label {
+            display: flex;
+            justify-content: space-between;
+            gap: 0.5rem;
+            font-size: 0.58rem;
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--muted);
+        }
+
         /* Quick telemetry at bottom of sidebar */
         .telemetry-mini {
             flex-shrink: 0;
@@ -983,6 +1022,12 @@
             <button class="identity-input" id="compileR4g1Btn" style="margin-bottom: 0.35rem; background: rgba(0, 242, 254, 0.12); color: var(--cyan); border-color: var(--cyan); cursor: pointer; font-weight: 600; font-family: 'Outfit', sans-serif;">
                 Compile / Refresh R4G1 Graph
             </button>
+            <div id="r4g1CompileProgress" class="compile-progress" hidden aria-label="R4G1 compilation progress">
+                <div id="r4g1CompileProgressFill" class="compile-progress-fill"></div>
+            </div>
+            <div id="r4g1CompileProgressLabel" class="compile-progress-label" hidden>
+                <span>Compiler progress</span><span id="r4g1CompileProgressValue">0%</span>
+            </div>
             <div id="r4g1CompileStatus" style="font-size: 0.68rem; margin-bottom: 0.75rem; color: var(--text2);">
                 Server compilation is idle
             </div>
@@ -1309,6 +1354,10 @@ const indexBtn    = document.getElementById("indexBtn");
 const indexStatus = document.getElementById("indexStatus");
 const compileR4g1Btn = document.getElementById("compileR4g1Btn");
 const r4g1CompileStatus = document.getElementById("r4g1CompileStatus");
+const r4g1CompileProgress = document.getElementById("r4g1CompileProgress");
+const r4g1CompileProgressFill = document.getElementById("r4g1CompileProgressFill");
+const r4g1CompileProgressLabel = document.getElementById("r4g1CompileProgressLabel");
+const r4g1CompileProgressValue = document.getElementById("r4g1CompileProgressValue");
 const downloadHfBtn = document.getElementById("downloadHfBtn");
 const hfDownloadStatus = document.getElementById("hfDownloadStatus");
 const hfModelInput = document.getElementById("hfModelInput");
@@ -2278,7 +2327,7 @@ function updateTelemetry(data, isSysinfo = false) {
     }
     const m = data.metrics || {};
 
-    if (m.auto_tuned) {
+    if (m.auto_tuned && !isSysinfo) {
         const auto = m.auto_tuned;
         if (tempVal) tempVal.textContent = auto.temperature.toFixed(2);
         if (gammaVal) gammaVal.textContent = auto.gamma.toFixed(2);
@@ -2769,8 +2818,12 @@ async function sendQuery(text) {
             });
 
             if (!response.ok) {
-                const detail = await response.text();
-                throw new Error(detail || `HTTP error: ${response.status}`);
+                const raw = await response.text();
+                let detail = null;
+                try { detail = JSON.parse(raw); } catch (_) { /* plain-text error */ }
+                const message = detail?.error || raw || `HTTP error: ${response.status}`;
+                const action = detail?.action ? ` ${detail.action}.` : "";
+                throw new Error(`${message}${action}`);
             }
 
             data = await response.json();
@@ -2925,6 +2978,19 @@ function renderR4g1CompileStatus(data) {
     serverR4g1Ready = Boolean(data.ready);
     updateConnectionStatusUI();
     if (compileR4g1Btn) compileR4g1Btn.disabled = Boolean(data.running);
+    const progress = Math.max(0, Math.min(100, Number.isFinite(Number(data.progress))
+        ? Number(data.progress)
+        : data.running ? 1 : data.ready ? 100 : 0));
+    const failed = Boolean(data.message?.includes("failed") || data.message?.includes("rejected"));
+    const showProgress = Boolean(data.running || progress > 0);
+    if (r4g1CompileProgress) {
+        r4g1CompileProgress.hidden = !showProgress;
+        r4g1CompileProgress.classList.toggle("running", Boolean(data.running));
+        r4g1CompileProgress.classList.toggle("error", !data.running && failed);
+    }
+    if (r4g1CompileProgressFill) r4g1CompileProgressFill.style.width = `${progress}%`;
+    if (r4g1CompileProgressLabel) r4g1CompileProgressLabel.hidden = !showProgress;
+    if (r4g1CompileProgressValue) r4g1CompileProgressValue.textContent = `${Math.round(progress)}%`;
     if (!r4g1CompileStatus) return;
 
     let message = data.message || (data.running ? "R4G1 compilation is running..." : "Server compilation is idle");
@@ -2941,11 +3007,11 @@ function renderR4g1CompileStatus(data) {
     r4g1CompileStatus.textContent = message;
     r4g1CompileStatus.style.color = data.running
         ? "var(--amber)"
-        : data.ready
+        : failed
+            ? "var(--red)"
+            : data.ready
             ? "var(--emerald)"
-            : data.message?.includes("failed") || data.message?.includes("rejected")
-                ? "var(--red)"
-                : "var(--text2)";
+            : "var(--text2)";
 }
 
 async function fetchR4g1CompileStatus() {
@@ -2979,6 +3045,7 @@ if (compileR4g1Btn) {
         renderR4g1CompileStatus({
             running: true,
             ready: serverR4g1Ready,
+            progress: 1,
             message: "Starting R4G1 cover and scoring compilation..."
         });
         try {
@@ -3011,6 +3078,32 @@ if (compileR4g1Btn) {
             compileR4g1Btn.disabled = false;
             fetchR4g1CompileStatus().catch(() => {});
         }
+    });
+}
+
+function selectedEngineLabel(engine) {
+    return {
+        "r4g1": "R4G1 Graph",
+        "transformerless-legacy": "Legacy TLA/TLS",
+        "attention": "Full Attention Llama",
+        "r4-attention": "Experimental R4 Attention",
+        "geometric": "Pure Geometric"
+    }[engine] || "R4G1 Graph";
+}
+
+function updateSelectedEngineValue() {
+    if (!engineVal) return;
+    engineVal.textContent = selectedEngineLabel(engineSelect?.value || "r4g1");
+    engineVal.style.color = engineSelect?.value === "r4g1"
+        ? (serverR4g1Ready ? "var(--emerald)" : "var(--amber)")
+        : "var(--cyan)";
+}
+
+if (engineSelect) {
+    engineSelect.addEventListener("change", () => {
+        updateSelectedEngineValue();
+        updateConnectionStatusUI();
+        saveSessionToLocalStorage();
     });
 }
 
@@ -3629,17 +3722,25 @@ function updateConnectionStatusUI() {
             route.style.color = "var(--amber)";
         }
     } else {
+        const selected = engineSelect?.value || "r4g1";
+        const isR4g1Unavailable = selected === "r4g1" && !serverR4g1Ready;
         if (dot) {
-            dot.style.background = "var(--emerald)";
-            dot.style.boxShadow = "0 0 8px var(--emerald)";
+            dot.style.background = isR4g1Unavailable ? "var(--amber)" : "var(--emerald)";
+            dot.style.boxShadow = isR4g1Unavailable
+                ? "0 0 8px var(--amber)"
+                : "0 0 8px var(--emerald)";
         }
         if (route) {
-            route.textContent = serverR4g1Ready
-                ? "🟢 Connected (R4G1 Graph Runtime)"
-                : "🟡 Connected (Legacy TLA/TLS Runtime)";
-            route.style.color = "var(--emerald)";
+            if (isR4g1Unavailable) {
+                route.textContent = "🟠 Server online · R4G1 selected (compile required)";
+                route.style.color = "var(--amber)";
+            } else {
+                route.textContent = `🟢 Connected · ${selectedEngineLabel(selected)}`;
+                route.style.color = "var(--emerald)";
+            }
         }
     }
+    updateSelectedEngineValue();
 }
 
 // =====================================================
@@ -3665,6 +3766,7 @@ async function startApp() {
         }
 
         await restoreSessionFromLocalStorage();
+        updateConnectionStatusUI();
         populateExpertMatrix([]);
         
         await loadSemanticMap();

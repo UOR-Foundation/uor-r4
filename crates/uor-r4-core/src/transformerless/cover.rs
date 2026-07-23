@@ -28,10 +28,10 @@
 //!   `--memory-budget` (see [`derive_batch_size`]); the E-step accumulates
 //!   per-centroid f64 partial sums in global observation order across
 //!   batches, so the batch size is a pure resource knob and never changes
-//!   results. **Single-threaded v1**: there is no worker pool yet; the
-//!   `threads` config value is recorded and reported but the reduction
-//!   order is fixed by construction, which is what makes T=1 and T=N
-//!   byte-identical when the pool lands (plan §4.1 ordered reductions).
+//!   results. Observation extraction is sharded across bounded scoped
+//!   workers; the resulting chunks are merged in canonical position order.
+//!   K-means iterations and all reductions remain ordered, which keeps T=1
+//!   and T=N byte-identical (plan §4.1 ordered reductions).
 //!   Centroid state is `k × D × 4` bytes; v1 holds the f32 observation
 //!   matrix resident (1.2 KB/observation, documented below) — the §4.1
 //!   quantized/spilled shard lane is the `observe.rs` pipeline
@@ -170,9 +170,9 @@ pub struct CoverConfig {
     pub regions_budget: usize,
     /// Memory budget in bytes; derives the k-means batch size.
     pub memory_budget_bytes: u64,
-    /// Recorded worker count. v1 is single-threaded (module docs): the
-    /// reduction order is fixed by construction, so this value never
-    /// influences outputs.
+    /// Bounded worker count used for independent observation extraction.
+    /// K-means reductions remain ordered, so this value never changes the
+    /// emitted artifact bytes.
     pub threads: u32,
     /// Minimum train support for a region to be eligible to split.
     pub min_support: usize,
@@ -233,6 +233,60 @@ pub fn context_window(corpus: &Corpus, i: usize) -> Vec<u32> {
 /// Positions are consumed in the given order; that order is the canonical
 /// observation order of every later stage.
 pub fn build_observations(
+    art: &compiler::Compiled,
+    corpus: &Corpus,
+    positions: &[usize],
+) -> Vec<Observation> {
+    build_observations_serial(art, corpus, positions)
+}
+
+/// Build observations with bounded parallel extraction.
+///
+/// Each worker owns a contiguous position shard and returns observations in
+/// that shard's input order. The caller merges shards by their original
+/// index, so the public result is byte-for-byte identical to the serial
+/// implementation. A worker panic is reported to the compiler caller rather
+/// than being hidden behind an `unwrap`.
+pub fn build_observations_with_threads(
+    art: &compiler::Compiled,
+    corpus: &Corpus,
+    positions: &[usize],
+    threads: usize,
+) -> Result<Vec<Observation>, String> {
+    if positions.is_empty() {
+        return Ok(Vec::new());
+    }
+    let worker_count = threads.max(1).min(positions.len());
+    if worker_count == 1 {
+        return Ok(build_observations_serial(art, corpus, positions));
+    }
+    let chunk_size = positions.len().div_ceil(worker_count);
+    let mut chunks = Vec::with_capacity(worker_count);
+    std::thread::scope(|scope| {
+        let mut handles = Vec::with_capacity(worker_count);
+        for (chunk_id, shard) in positions.chunks(chunk_size).enumerate() {
+            handles.push((
+                chunk_id,
+                scope.spawn(move || build_observations_serial(art, corpus, shard)),
+            ));
+        }
+        for (chunk_id, handle) in handles {
+            let observations = handle.join().map_err(|_| {
+                format!("observation worker {chunk_id} panicked during cover compilation")
+            })?;
+            chunks.push((chunk_id, observations));
+        }
+        Ok::<(), String>(())
+    })?;
+    chunks.sort_by_key(|(chunk_id, _)| *chunk_id);
+    let mut observations = Vec::with_capacity(positions.len());
+    for (_, mut chunk) in chunks {
+        observations.append(&mut chunk);
+    }
+    Ok(observations)
+}
+
+fn build_observations_serial(
     art: &compiler::Compiled,
     corpus: &Corpus,
     positions: &[usize],
@@ -1536,9 +1590,9 @@ pub fn build_report(config: &CoverConfig, induced: &InducedCover, data: ReportDa
     let mut determinism_note = String::new();
     let _ = write!(
         determinism_note,
-        "single-threaded v1: threads={} is recorded but never used; reductions are ordered \
-         (batch-id order, f64 accumulators), seeding is content-addressed; identical inputs \
-         produce byte-identical artifacts regardless of thread count",
+        "observation extraction uses up to {} bounded workers; k-means and reductions are \
+         ordered (batch-id order, f64 accumulators), seeding is content-addressed; identical \
+         inputs produce byte-identical artifacts regardless of thread count",
         config.threads
     );
     CoverReport {

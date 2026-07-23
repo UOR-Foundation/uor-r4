@@ -519,19 +519,31 @@ pub fn cover_command(args: &[String]) -> Result<(), String> {
         k0: options.k0,
         regions_budget: options.regions_budget,
         memory_budget_bytes: options.memory_budget_mb * 1024 * 1024,
+        threads: std::thread::available_parallelism()
+            .map(|count| count.get().min(8) as u32)
+            .unwrap_or(1),
         min_support: options.min_support,
         entropy_gain_bits: options.entropy_gain_bits,
         radius_quantile_numerator: options.radius_quantile,
         radius_quantile_denominator: 100,
-        ..cover::CoverConfig::default()
     };
     eprintln!(
         "cover: inducing (depths {}, k0 {}, regions budget {}, memory budget {} MiB)...",
         config.depths, config.k0, config.regions_budget, options.memory_budget_mb
     );
     let (train_positions, held_out_positions) = cover::split_positions(&corpus);
-    let train = cover::build_observations(&artifacts, &corpus, &train_positions);
-    let held_out = cover::build_observations(&artifacts, &corpus, &held_out_positions);
+    let train = cover::build_observations_with_threads(
+        &artifacts,
+        &corpus,
+        &train_positions,
+        config.threads as usize,
+    )?;
+    let held_out = cover::build_observations_with_threads(
+        &artifacts,
+        &corpus,
+        &held_out_positions,
+        config.threads as usize,
+    )?;
     let induced = cover::induce_cover(&train, &config, &artifact_kappa, &corpus_kappa)?;
     let reference = cover::ReferenceClassifier::freeze(&induced.cover);
     eprintln!(
