@@ -422,6 +422,70 @@ fn quantize_exct(count: u32, total: u32, vocab: u32) -> ScoreQ {
 
 // END COMPILER-SIDE FLOAT QUANTIZATION -----------------------------------
 
+/// Integer multiply for the `#80` candidate scoring variants, built only
+/// from shift/add/compare (P-4: the accumulation core may not use a
+/// literal `*` operator). Binary shift-and-add long multiplication,
+/// magnitude-only with the sign folded back in at the end.
+fn shift_mul_i128(a: i128, b: i128) -> i128 {
+    let negative = (a < 0) != (b < 0);
+    let mut multiplicand = a.unsigned_abs();
+    let mut multiplier = b.unsigned_abs();
+    let mut result: u128 = 0;
+    while multiplier > 0 {
+        if multiplier & 1 == 1 {
+            result = result.saturating_add(multiplicand);
+        }
+        multiplicand <<= 1;
+        multiplier >>= 1;
+    }
+    // Saturate before the signed cast: `result` may exceed `i128::MAX`
+    // for extreme inputs, and casting an out-of-range `u128` to `i128`
+    // would otherwise silently wrap.
+    let magnitude = result.min(i128::MAX as u128) as i128;
+    if negative {
+        -magnitude
+    } else {
+        magnitude
+    }
+}
+
+/// Integer divide (truncating toward zero, like `/`) for the `#80`
+/// candidate scoring variants, built only from shift/subtract/compare
+/// (P-4: the accumulation core may not use a literal `/` operator).
+/// Binary shift-and-subtract restoring long division, magnitude-only
+/// with the sign folded back in at the end. Divide-by-zero returns 0
+/// (the call sites already clamp divisors to a minimum of 1).
+fn shift_div_i128(dividend: i128, divisor: i128) -> i128 {
+    if divisor == 0 {
+        return 0;
+    }
+    let negative = (dividend < 0) != (divisor < 0);
+    let mut remainder = dividend.unsigned_abs();
+    let d = divisor.unsigned_abs();
+    if remainder < d {
+        return 0;
+    }
+    let mut quotient: u128 = 0;
+    let mut shift = (128 - remainder.leading_zeros()) - (128 - d.leading_zeros());
+    loop {
+        let shifted = d << shift;
+        if shifted <= remainder {
+            remainder -= shifted;
+            quotient |= 1u128 << shift;
+        }
+        if shift == 0 {
+            break;
+        }
+        shift -= 1;
+    }
+    let magnitude = quotient as i128;
+    if negative {
+        -magnitude
+    } else {
+        magnitude
+    }
+}
+
 /// Canonical identity of one score contribution (Theorem 10): no id may
 /// appear twice in one candidate's contribution list. The transition
 /// edge-weight contributions are folded into the scalar offset and
@@ -978,13 +1042,16 @@ impl GraphScorer {
                     let effective_val = match self.scoring_variant {
                         ScoringVariant::ChainTelescoped => value,
                         ScoringVariant::CloudSizeNormalized => {
-                            // BEGIN EXPERIMENTAL VARIANT (#80 candidate variants)
-                            let n = (selected_chain.len().max(1)) as i32;
-                            ScoreQ::from_raw(value.raw() / n)
-                            // END EXPERIMENTAL VARIANT
+                            // #80 candidate variant: residual sum divided by
+                            // chain length, via the shift/subtract divider.
+                            let n = (selected_chain.len().max(1)) as i128;
+                            ScoreQ::from_raw(shift_div_i128(i128::from(value.raw()), n) as i32)
                         }
                         ScoringVariant::MarginWeighted => {
-                            // BEGIN EXPERIMENTAL VARIANT (#80 candidate variants)
+                            // #80 candidate variant: residual scaled by
+                            // normalized membership margin, via the
+                            // shift/add multiplier and shift/subtract
+                            // divider (saturating the final cast).
                             let margin = active
                                 .iter()
                                 .find(|a| a.region + 1 == node)
@@ -996,9 +1063,13 @@ impl GraphScorer {
                                 .map(|a| u32::from(self.regions[a.region as usize].radius) as i128)
                                 .unwrap_or(1)
                                 .max(1);
-                            let scaled = (value.raw() as i128 * margin) / radius;
-                            ScoreQ::from_raw(scaled as i32)
-                            // END EXPERIMENTAL VARIANT
+                            let scaled = shift_div_i128(
+                                shift_mul_i128(i128::from(value.raw()), margin),
+                                radius,
+                            );
+                            ScoreQ::from_raw(
+                                scaled.clamp(i128::from(i32::MIN), i128::from(i32::MAX)) as i32,
+                            )
                         }
                     };
                     entry.0 = entry.0.saturating_add(effective_val);
@@ -1629,13 +1700,16 @@ impl GraphScorer {
                 let effective_val = match self.scoring_variant {
                     ScoringVariant::ChainTelescoped => value,
                     ScoringVariant::CloudSizeNormalized => {
-                        // BEGIN EXPERIMENTAL VARIANT (#80 candidate variants)
-                        let n = (state.selected_chain.len().max(1)) as i32;
-                        ScoreQ::from_raw(value.raw() / n)
-                        // END EXPERIMENTAL VARIANT
+                        // #80 candidate variant: residual sum divided by
+                        // chain length, via the shift/subtract divider.
+                        let n = (state.selected_chain.len().max(1)) as i128;
+                        ScoreQ::from_raw(shift_div_i128(i128::from(value.raw()), n) as i32)
                     }
                     ScoringVariant::MarginWeighted => {
-                        // BEGIN EXPERIMENTAL VARIANT (#80 candidate variants)
+                        // #80 candidate variant: residual scaled by
+                        // normalized membership margin, via the
+                        // shift/add multiplier and shift/subtract
+                        // divider (saturating the final cast).
                         let margin = state
                             .active
                             .iter()
@@ -1649,9 +1723,11 @@ impl GraphScorer {
                             .map(|a| u32::from(self.regions[a.region as usize].radius) as i128)
                             .unwrap_or(1)
                             .max(1);
-                        let scaled = (value.raw() as i128 * margin) / radius;
-                        ScoreQ::from_raw(scaled as i32)
-                        // END EXPERIMENTAL VARIANT
+                        let scaled =
+                            shift_div_i128(shift_mul_i128(i128::from(value.raw()), margin), radius);
+                        ScoreQ::from_raw(
+                            scaled.clamp(i128::from(i32::MIN), i128::from(i32::MAX)) as i32
+                        )
                     }
                 };
                 state.residuals[idx] = ScoreQ::from_raw(state.residuals[idx])

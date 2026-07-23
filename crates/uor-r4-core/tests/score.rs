@@ -1135,14 +1135,6 @@ fn scoring_core_is_integer_only_by_source_scan() {
             in_float_block = false;
             continue;
         }
-        if line.contains("BEGIN EXPERIMENTAL VARIANT") {
-            in_float_block = true;
-            continue;
-        }
-        if line.contains("END EXPERIMENTAL VARIANT") {
-            in_float_block = false;
-            continue;
-        }
         if !in_float_block {
             stripped.push_str(line);
             stripped.push('\n');
