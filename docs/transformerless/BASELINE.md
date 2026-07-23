@@ -56,8 +56,17 @@ formally committed. Full text: plan §2.
 | bits/token (WB) | 6.54 (teacher floor 1.5960, ceiling 70.4%) | cited | PROOF.md P2 |
 | store keys | 89,200 | cited | PROOF.md P2 |
 | HF-path evaluation tooling | exists | landed | PR #41 (`evaluate-report`); issue #34 closed |
-| **Gate C harness (Phase 4)** | TLA3 store baseline 31.7% / 11.88 bits-token | fresh, 2026-07-22 | `r4 transformerless score`, fixture corpus, 30,036 held-out positions — reproduces the P2 agreement anchor; bits/token is the scorer's own accounting, not the P2 WB metric |
+| **Gate C harness (Phase 4)** | TLA3 store baseline 31.7% / 11.88 bits-token | fresh, 2026-07-22 | `r4 transformerless score`, fixture corpus, 30,036 held-out positions — reproduces the P2 agreement anchor; bits/token is the canonical cross-entropy definition (GLOSSARY.md), scorer+ds named |
 | **Gate C: graph formula v1 (Σ-over-cloud)** | **0.3% / 70.47 bits-token** | fresh, unfavorable | correlated sibling-subtree residual stacking (issue #64, redesign in flight) |
+| **Gate C: Rule 1+2 (chain+precedence)** | **31.7% / 9.86 bits-token** | fresh, 2026-07-22 | argmax-identical to baseline on all 30,036 positions, better bits; redesign landed (#64 closed) |
+
+**Canonical bits/token (issue #76, resolved 2026-07-22):** one definition — mean cross-entropy of
+the true next token under a scorer's predicted distribution, `(1/N) Σ −log2 P_scorer(v_i|c_i)`
+with floor mass included (GLOSSARY.md). Values are comparable only within the same scorer AND
+distribution; the historical "families" are scorer/distribution differences, not metric
+differences: 6.54 = P2 certificate (Witten-Bell store, legacy corpus), 11.88 = same helper on the
+fixture corpus (Gate C baseline row), 9.86 = Rule 1+2 graph scorer on the fixture corpus.
+Every report must name scorer + distribution alongside the value.
 
 Important: the cited certificate belongs to the legacy llama2.c stories15M teacher, **not** to
 the current default SmolLM2-135M-Instruct compile. The Gate C harness reproduces its 31.7%
