@@ -23,6 +23,7 @@
 // fs-dependent functions are cfg-gated per item (see those files).
 pub mod cd_space;
 pub mod endomorphism;
+pub mod lie_jordan;
 pub mod teacher;
 
 #[cfg(not(target_arch = "wasm32"))]
