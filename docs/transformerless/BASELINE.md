@@ -53,10 +53,10 @@ formally committed. Full text: plan §2.
 |---|---|---|---|
 | top-1 accuracy | 28.9% | cited | PROOF.md P2 (legacy stories15M teacher, ~10⁵ store keys) |
 | teacher-argmax agreement | 31.7% | cited | PROOF.md P2 |
-| bits/token (WB) | 6.54 (teacher floor 1.5960, ceiling 70.4%) | cited | PROOF.md P2 |
+| bits/token (WB) | 6.54 (teacher floor 1.5960, ceiling 70.4%) | cited | PROOF.md P2. *Historical family: P2 Witten-Bell (WB)* |
 | store keys | 89,200 | cited | PROOF.md P2 |
 | HF-path evaluation tooling | exists | landed | PR #41 (`evaluate-report`); issue #34 closed |
-| **Gate C harness (Phase 4)** | TLA3 store baseline 31.7% / 11.88 bits-token | fresh, 2026-07-22 | `r4 transformerless score`, fixture corpus, 30,036 held-out positions — reproduces the P2 agreement anchor; bits/token is the scorer's own accounting, not the P2 WB metric |
+| **Gate C harness (Phase 4)** | TLA3 store baseline 31.7% / 11.88 bits-token | fresh, 2026-07-22 | `r4 transformerless score`, fixture corpus, 30,036 held-out positions — reproduces the P2 agreement anchor; bits/token is the scorer's own canonical accounting, not the P2 WB metric. *Historical family: Phase 4 scorer* |
 | **Gate C: graph formula v1 (Σ-over-cloud)** | **0.3% / 70.47 bits-token** | fresh, unfavorable | correlated sibling-subtree residual stacking (issue #64, redesign in flight) |
 
 Important: the cited certificate belongs to the legacy llama2.c stories15M teacher, **not** to

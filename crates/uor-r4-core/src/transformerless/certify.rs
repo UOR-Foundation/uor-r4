@@ -77,7 +77,8 @@ fn deepest_argmax(store: &Store, key: &dyn Fn(usize) -> Vec<u8>, depths: usize) 
 struct Metrics {
     top1: f64,
     agree: f64,
-    wb_bits: f64,
+    wb_bits_per_token: f64,
+    bits_per_token: f64,
     keys: usize,
 }
 
@@ -124,10 +125,12 @@ fn eval(
         bits += -p.log2();
     }
     let n = test.len() as f64;
+    let bits_per_token = bits / n;
     Metrics {
         top1: 100.0 * top1 as f64 / n,
         agree: 100.0 * agree as f64 / n,
-        wb_bits: bits / n,
+        wb_bits_per_token: bits_per_token,
+        bits_per_token,
         keys: store.iter().map(|l| l.len()).sum(),
     }
 }
@@ -210,8 +213,8 @@ pub fn certify(oracle: &dyn TeacherOracle) {
     // ---- A-binary: the shipped runtime
     let m = eval(&c, &store, STAGES, &|i, d| codes[i][..d].to_vec());
     println!(
-        "A-binary (mul-free runtime): top1 {:.1}% | agreement {:.1}% | WB {:.4} bits/token | {} keys",
-        m.top1, m.agree, m.wb_bits, m.keys
+        "A-binary (mul-free runtime): top1 {:.1}% | agreement {:.1}% | WB {:.4} bits/token | Canonical {:.4} bits/token | {} keys",
+        m.top1, m.agree, m.wb_bits_per_token, m.bits_per_token, m.keys
     );
 
     // ---- A-f32 ablation: nearest-centroid assignment (certifier-side)
@@ -254,8 +257,8 @@ pub fn certify(oracle: &dyn TeacherOracle) {
     let store_f32 = build_store_generic(&c, STAGES, &|i, d| codes_f32[i][..d].to_vec());
     let m = eval(&c, &store_f32, STAGES, &|i, d| codes_f32[i][..d].to_vec());
     println!(
-        "A-f32 (ablation, multiplies at assignment): top1 {:.1}% | agreement {:.1}% | WB {:.4} bits/token | {} keys",
-        m.top1, m.agree, m.wb_bits, m.keys
+        "A-f32 (ablation, multiplies at assignment): top1 {:.1}% | agreement {:.1}% | WB {:.4} bits/token | Canonical {:.4} bits/token | {} keys",
+        m.top1, m.agree, m.wb_bits_per_token, m.bits_per_token, m.keys
     );
 
     // ---- B: bit-prefix coordinate — signature bytes, no classes
@@ -267,8 +270,8 @@ pub fn certify(oracle: &dyn TeacherOracle) {
     let store_b = build_store_generic(&c, bdepths, &key_b);
     let m = eval(&c, &store_b, bdepths, &key_b);
     println!(
-        "B bit-prefix (mul-free, no codebook classes; depths 8..48 bits): top1 {:.1}% | agreement {:.1}% | WB {:.4} bits/token | {} keys",
-        m.top1, m.agree, m.wb_bits, m.keys
+        "B bit-prefix (mul-free, no codebook classes; depths 8..48 bits): top1 {:.1}% | agreement {:.1}% | WB {:.4} bits/token | Canonical {:.4} bits/token | {} keys",
+        m.top1, m.agree, m.wb_bits_per_token, m.bits_per_token, m.keys
     );
 
     // ================= COMPRESSION (PROOF.md P5) =================

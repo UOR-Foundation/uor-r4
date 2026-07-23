@@ -1020,7 +1020,10 @@ pub struct GateCMetrics {
     pub positions: usize,
     /// P(selected token == recorded teacher argmax).
     pub top1_agreement: f64,
-    pub bits_per_token: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub wb_bits_per_token: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bits_per_token: Option<f64>,
 }
 
 /// Per-status position counts of the Rule 1+2 scorer (D4 precedence).
@@ -1264,17 +1267,18 @@ pub fn evaluate_gate_c(
         return Err("held-out split is empty; cannot evaluate".to_owned());
     }
     let nf = n as f64;
-    let metrics = |hits: u64, bits: f64| GateCMetrics {
+    let metrics = |hits: u64, bits: f64, is_wb: bool| GateCMetrics {
         positions: n,
         top1_agreement: hits as f64 / nf,
-        bits_per_token: bits / nf,
+        wb_bits_per_token: if is_wb { Some(bits / nf) } else { None },
+        bits_per_token: if is_wb { None } else { Some(bits / nf) },
     };
-    outcome.legacy_sum = metrics(hits_legacy, bits_legacy);
-    outcome.rule1_chain = metrics(hits_rule1, bits_rule1);
-    outcome.rule12_precedence = metrics(hits_rule12, bits_rule12);
-    outcome.rule1_chain_no_f = metrics(hits_rule1_no_f, bits_rule1_no_f);
-    outcome.rule12_precedence_no_f = metrics(hits_rule12_no_f, bits_rule12_no_f);
-    outcome.tla3_baseline = metrics(hits_baseline, bits_baseline);
+    outcome.legacy_sum = metrics(hits_legacy, bits_legacy, false);
+    outcome.rule1_chain = metrics(hits_rule1, bits_rule1, false);
+    outcome.rule12_precedence = metrics(hits_rule12, bits_rule12, false);
+    outcome.rule1_chain_no_f = metrics(hits_rule1_no_f, bits_rule1_no_f, false);
+    outcome.rule12_precedence_no_f = metrics(hits_rule12_no_f, bits_rule12_no_f, false);
+    outcome.tla3_baseline = metrics(hits_baseline, bits_baseline, true);
     outcome.rule12_status_counts = StatusCounts {
         exact_context: status_positions[0],
         graph: status_positions[1],
@@ -1289,7 +1293,8 @@ pub fn evaluate_gate_c(
         GateCMetrics {
             positions,
             top1_agreement: status_hits[index] as f64 / denom,
-            bits_per_token: status_bits[index] / denom,
+            wb_bits_per_token: None,
+            bits_per_token: Some(status_bits[index] / denom),
         }
     };
     outcome.rule12_per_status = Rule12PerStatus {

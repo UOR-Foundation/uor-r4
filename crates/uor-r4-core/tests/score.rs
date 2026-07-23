@@ -1392,10 +1392,11 @@ fn gate_c_harness_emits_all_four_number_sets() {
             "{name} agreement is a probability: {}",
             metrics.top1_agreement
         );
+        let bits = metrics.bits_per_token.unwrap_or_else(|| metrics.wb_bits_per_token.unwrap_or(0.0));
         assert!(
-            metrics.bits_per_token.is_finite() && metrics.bits_per_token > 0.0,
+            bits.is_finite() && bits > 0.0,
             "{name} bits/token is finite and positive: {}",
-            metrics.bits_per_token
+            bits
         );
     }
     // Every position reports exactly one Rule 1+2 status, and each
@@ -1582,13 +1583,13 @@ fn fixture_corpus_end_to_end() {
         "fixture Gate C ({} held-out positions):\n  graph Σ-cloud (old):    agree {:.2}% bits {:.4}\n  graph chain (Rule 1):   agree {:.2}% bits {:.4}\n  graph chain+EXCT (1+2): agree {:.2}% bits {:.4}\n  TLA3 baseline:          agree {:.2}% bits {:.4}\n  rule 1+2 status: ExactContext {} Graph {} Novel {}\n  witness replay: {}/{} ok",
         gate_c.rule12_precedence.positions,
         100.0 * gate_c.legacy_sum.top1_agreement,
-        gate_c.legacy_sum.bits_per_token,
+        gate_c.legacy_sum.bits_per_token.unwrap_or(0.0),
         100.0 * gate_c.rule1_chain.top1_agreement,
-        gate_c.rule1_chain.bits_per_token,
+        gate_c.rule1_chain.bits_per_token.unwrap_or(0.0),
         100.0 * gate_c.rule12_precedence.top1_agreement,
-        gate_c.rule12_precedence.bits_per_token,
+        gate_c.rule12_precedence.bits_per_token.unwrap_or(0.0),
         100.0 * gate_c.tla3_baseline.top1_agreement,
-        gate_c.tla3_baseline.bits_per_token,
+        gate_c.tla3_baseline.wb_bits_per_token.unwrap_or(0.0),
         gate_c.rule12_status_counts.exact_context,
         gate_c.rule12_status_counts.graph,
         gate_c.rule12_status_counts.novel,
@@ -1603,7 +1604,8 @@ fn fixture_corpus_end_to_end() {
         &gate_c.tla3_baseline,
     ] {
         assert!((0.0..=1.0).contains(&metrics.top1_agreement));
-        assert!(metrics.bits_per_token.is_finite() && metrics.bits_per_token > 0.0);
+        let bits = metrics.bits_per_token.unwrap_or_else(|| metrics.wb_bits_per_token.unwrap_or(0.0));
+        assert!(bits.is_finite() && bits > 0.0);
     }
     assert!(info.forward_edges > 0, "fixture produces forward edges");
     assert!(info.emission_list_entries > 0);
@@ -1801,9 +1803,9 @@ fn fixture_smoothing_sweep_calibration() {
             "  {:<14} {:>15.2}% {:>16.4} {:>15.2}% {:>16.4}",
             smoothing.label(),
             100.0 * gate_c.rule12_precedence.top1_agreement,
-            gate_c.rule12_precedence.bits_per_token,
+            gate_c.rule12_precedence.bits_per_token.unwrap_or(0.0),
             100.0 * gate_c.tla3_baseline.top1_agreement,
-            gate_c.tla3_baseline.bits_per_token,
+            gate_c.tla3_baseline.wb_bits_per_token.unwrap_or(0.0),
         );
     }
 }

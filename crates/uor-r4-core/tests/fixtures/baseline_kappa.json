@@ -63,6 +63,7 @@
         "top1_pct": 28.3,
         "agreement_pct": 31.5,
         "wb_bits_per_token": 6.5634,
+        "bits_per_token": 6.5634,
         "store_keys": 92464
       },
       {
@@ -71,6 +72,7 @@
         "top1_pct": 30.7,
         "agreement_pct": 34.4,
         "wb_bits_per_token": 6.3663,
+        "bits_per_token": 6.3663,
         "store_keys": 91442
       },
       {
@@ -79,6 +81,7 @@
         "top1_pct": 24.8,
         "agreement_pct": 27.5,
         "wb_bits_per_token": 7.8262,
+        "bits_per_token": 7.8262,
         "store_keys": 324128
       }
     ],
@@ -149,6 +152,7 @@
       "top1_pct": 28.9,
       "agreement_pct": 31.7,
       "wb_bits_per_token": 6.5427,
+      "bits_per_token": 6.5427,
       "store_keys": 89200
     }
   }

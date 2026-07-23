@@ -701,11 +701,12 @@ pub fn score_command(args: &[String]) -> Result<(), String> {
         "scorer", "top-1 agree", "bits/token"
     );
     let row = |name: &str, m: &score::GateCMetrics| {
+        let bits = m.bits_per_token.unwrap_or_else(|| m.wb_bits_per_token.unwrap_or(0.0));
         println!(
             "  {:<26} {:>15.1}% {:>12.4}",
             name,
             100.0 * m.top1_agreement,
-            m.bits_per_token
+            bits
         );
     };
     row("graph Σ-cloud (old)", &gate_c.legacy_sum);
@@ -806,6 +807,7 @@ struct EvaluationArtifacts {
 struct EvaluationMetrics {
     top1_accuracy_pct: f64,
     teacher_argmax_agreement_pct: f64,
+    wb_bits_per_token: f64,
     bits_per_token: f64,
     teacher_floor_bits_per_token: f64,
     bits_over_teacher_floor: f64,
@@ -1108,6 +1110,7 @@ fn evaluate_report(args: &[String]) -> Result<(), String> {
     let top1_accuracy_pct = 100.0 * top1_hits as f64 / held_out_tokens as f64;
     let teacher_argmax_agreement_pct = 100.0 * argmax_hits as f64 / held_out_tokens as f64;
     let bits_per_token = bits / held_out_tokens as f64;
+    let wb_bits_per_token = bits_per_token;
     let teacher_floor_bits_per_token = teacher_floor_bits_total / held_out_tokens as f64;
     let bits_over_teacher_floor = bits_per_token - teacher_floor_bits_per_token;
 
@@ -1134,6 +1137,7 @@ fn evaluate_report(args: &[String]) -> Result<(), String> {
         metrics: EvaluationMetrics {
             top1_accuracy_pct,
             teacher_argmax_agreement_pct,
+            wb_bits_per_token,
             bits_per_token,
             teacher_floor_bits_per_token,
             bits_over_teacher_floor,
@@ -1158,9 +1162,10 @@ fn evaluate_report(args: &[String]) -> Result<(), String> {
         report_cid
     );
     println!(
-        "held-out D3 metrics: top1 {:.1}% | agreement {:.1}% | WB {:.4} bits/token (teacher floor {:.4}, +{:.4})",
+        "held-out D3 metrics: top1 {:.1}% | agreement {:.1}% | WB {:.4} bits/token | Canonical {:.4} bits/token (teacher floor {:.4}, +{:.4})",
         top1_accuracy_pct,
         teacher_argmax_agreement_pct,
+        wb_bits_per_token,
         bits_per_token,
         teacher_floor_bits_per_token,
         bits_over_teacher_floor

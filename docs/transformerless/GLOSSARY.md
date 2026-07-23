@@ -113,6 +113,7 @@ graph term is normative for new work. See the terminology bridge in the plan (§
   measured at broad/intermediate/full-cloud/residual-augmented depths.
 - **Reference classifier** — the exact compiler-side region-membership procedure; the normative
   semantics every optimized router is measured against (shortlist recall, Gate H).
+- **Canonical bits/token** — the normative evaluation metric for the graph scorer (Gate C). Defined as the normalized negative log-base-2 probability sum over the evaluation sequence: $-\frac{1}{N} \sum_{i=1}^{N} \log_2 P(v_i \mid \text{context}_i)$. Computed as $\frac{\text{sum of nats}}{\ln(2) \cdot N}$. Measured on the declared D3 evaluation distributions.
 - **M.V.G. checkpoint** — the minimum-viable-graph go/no-go review at the end of Phase 5
   (decision D1), comparing the graph against pre-agreed targets recorded in
   `docs/transformerless/BASELINE.md`.
