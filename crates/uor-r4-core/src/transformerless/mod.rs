@@ -21,6 +21,7 @@
 
 // teacher/compiler are portable (math, types, containers); only their
 // fs-dependent functions are cfg-gated per item (see those files).
+pub mod cd_space;
 pub mod teacher;
 
 #[cfg(not(target_arch = "wasm32"))]
