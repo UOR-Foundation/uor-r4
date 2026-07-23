@@ -449,7 +449,10 @@ fn generate_r4g1_text(
     slot: &Arc<Mutex<Option<R4g1State>>>,
     prompt: &str,
     max_tokens: usize,
-) -> Option<(String, uor_r4_core::transformerless::resolution_status::ResolutionStatus)> {
+) -> Option<(
+    String,
+    uor_r4_core::transformerless::resolution_status::ResolutionStatus,
+)> {
     const MAX_SERVER_TOKENS: usize = 256;
     const MAX_SERVER_TEXT_BYTES: usize = 16 * 1024;
     let mut seed = [0u32; 4096];
@@ -1435,11 +1438,12 @@ fn handle_connection(
         {
             let prompt = payload.text.clone();
             if engine_mode != "transformerless-legacy" {
-                if let Some((text, status)) = generate_r4g1_text(&r4g1, &prompt, max_tokens.max(32)) {
+                if let Some((text, status)) = generate_r4g1_text(&r4g1, &prompt, max_tokens.max(32))
+                {
                     if is_usable_generated_text(&text) {
                         final_response_text = text;
                         llm_connected = true;
-                        
+
                         // Surface abstention status if present
                         generation_mode = match status {
                             uor_r4_core::transformerless::resolution_status::ResolutionStatus::Novel => "r4g1-abstained-novel".to_string(),
@@ -1447,7 +1451,7 @@ fn handle_connection(
                             uor_r4_core::transformerless::resolution_status::ResolutionStatus::Contradictory => "r4g1-abstained-contradictory".to_string(),
                             _ => "r4g1".to_string(),
                         };
-                        
+
                         tokens_generated = final_response_text.split_whitespace().count();
                     } else {
                         generation_mode = "r4g1-rejected".to_string();

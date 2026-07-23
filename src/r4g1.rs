@@ -4,8 +4,8 @@
 //! router. It derives the packed input signature with the transformerless
 //! artifact, then selects a token from the validated R4G1 graph.
 
-use uor_r4_core::transformerless::resolution_status::{ResolutionStatus, FallbackAction};
 use std::path::{Path, PathBuf};
+use uor_r4_core::transformerless::resolution_status::{FallbackAction, ResolutionStatus};
 
 use uor_r4_core::transformerless::compiler::{self, Compiled, WINDOW};
 use uor_r4_core::transformerless::runtime;
@@ -90,7 +90,10 @@ impl R4g1State {
         self.tokenizer.as_ref()?.decode_into(tokens, out).ok()
     }
 
-    pub fn assign_window(&self, window: &[u32]) -> [u8; uor_r4_core::transformerless::compiler::SIG_BYTES] {
+    pub fn assign_window(
+        &self,
+        window: &[u32],
+    ) -> [u8; uor_r4_core::transformerless::compiler::SIG_BYTES] {
         let bundle = runtime::bundle_window_plain(&self.artifacts, &self.rotations, window);
         runtime::sig_plain(&self.artifacts, &bundle)
     }
