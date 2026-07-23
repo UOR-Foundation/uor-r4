@@ -188,10 +188,13 @@ impl Tokenizer {
     }
 
     pub fn encode(&self, text: &str) -> Vec<u32> {
-        let mut toks = vec![0u32; text.chars().count().saturating_add(2)];
+        // Worst case is one token per input byte (byte fallback for
+        // multi-byte UTF-8 chars) plus BOS and the synthetic leading space,
+        // so size by byte length, not char count.
+        let mut toks = vec![0u32; text.len().saturating_add(2)];
         let count = self
             .encode_into(text, &mut toks)
-            .expect("token buffer sized from input characters");
+            .expect("token buffer sized from input bytes");
         toks.truncate(count);
         toks
     }
