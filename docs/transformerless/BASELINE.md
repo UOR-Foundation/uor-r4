@@ -58,11 +58,33 @@ formally committed. Full text: plan §2.
 | HF-path evaluation tooling | exists | landed | PR #41 (`evaluate-report`); issue #34 closed |
 | **Gate C harness (Phase 4)** | TLA3 store baseline 31.7% / 11.88 bits-token | fresh, 2026-07-22 | `r4 transformerless score`, fixture corpus, 30,036 held-out positions — reproduces the P2 agreement anchor; bits/token is the scorer's own accounting, not the P2 WB metric |
 | **Gate C: graph formula v1 (Σ-over-cloud)** | **0.3% / 70.47 bits-token** | fresh, unfavorable | correlated sibling-subtree residual stacking (issue #64, redesign in flight) |
+| **Gate C (fixed scorer) F-emissions ablation (#66)** | **Decision: drop ΔT offset** | fresh, 2026-07-23 | `cargo test -p uor-r4-core --release --test score fixture_f_emissions_ablation -- --ignored --nocapture`; enabled vs zeroed are now identical by construction under the dropped-offset policy |
 
 Important: the cited certificate belongs to the legacy llama2.c stories15M teacher, **not** to
 the current default SmolLM2-135M-Instruct compile. The Gate C harness reproduces its 31.7%
 agreement anchor on the fixture corpus; HF-path certificates for the SmolLM2 compile are
 producible via the PR #41 tooling on the D3 distribution (§2).
+
+#### F-emissions ablation decision (issue #66; fixed scorer after #64)
+
+Held-out D3 (n=30,036), same artifact inputs and split; only transition-edge
+weights differ (`enabled` = compiled scores, `zeroed` = all forward-edge
+`score_q = 0`):
+
+| Variant | top-1 agreement | bits/token |
+|---|---:|---:|
+| enabled / no EXCT | 1.22% | 16.7075 |
+| enabled / with EXCT | 11.29% | 11.1683 |
+| zeroed / no EXCT | 1.22% | 16.7075 |
+| zeroed / with EXCT | 11.29% | 11.1683 |
+
+Δ(enabled−zeroed): no EXCT **+0.00 pp** / **+0.0000 bits**; with EXCT
+**+0.00 pp** / **+0.0000 bits**.
+
+Decision: **drop ΔT offset from scoring** (keep transition edges for predicted
+cloud candidate generation only). The scorer policy now sets
+`transition_offset = 0` in Rule 1; witness `transition_offset` is retained as a
+schema field and stays zero.
 
 ### 3.2 Artifact sizes (fresh, 2026-07-21, `.uor-models/compiled/smollm2-135m-instruct/`)
 

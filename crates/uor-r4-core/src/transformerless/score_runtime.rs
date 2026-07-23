@@ -8,7 +8,7 @@
 //!     when the deepest-populated-prefix EXCT probe resolves with total
 //!     evidence ≥ EXCT_SUPPORT_MIN — exact-context evidence dominates and
 //!     graph residuals are skipped entirely (status ExactContext).
-//! Rule 1 (chain-telescoped):   S_graph(v) = T_selected(v) + ΔT-offset
+//! Rule 1 (chain-telescoped):   S_graph(v) = T_selected(v)
 //!     with T_r(v) = B(v) + Σ_{n ∈ chain(r)} ΔE(n,v) over the covered
 //!     refinement chain of the selected active region (status Graph, or
 //!     Novel when no active region has a covered chain at all).
@@ -61,11 +61,11 @@
 //! - **Predicted cloud F**: the union of E_f edge targets of the active
 //!   regions. Each predicted region m keeps its single best incoming
 //!   edge (highest `score_q`, ties to the lowest canonical edge id).
-//!   Under Rule 1 the token-independent edge-weight part is folded into
-//!   the scalar `transition_offset = Σ_m w(n_m→m)` added to every
-//!   candidate once (the witness records the applied edges and the
-//!   offset); F emission lists generate candidates but contribute no
-//!   residuals.
+//!   Under Rule 1, transition-edge scores are not added to token scores
+//!   (issue #66 F-emissions ablation under the fixed scorer: zeroing the
+//!   ΔT offset left top-1 unchanged and improved no-EXCT bits/token on
+//!   the fixture held-out set). F emission lists generate candidates but
+//!   contribute no residuals.
 //! - **Candidates**: the union of the emission lists of A ∪ F ∪ chain,
 //!   the root prior's top-`root_top_b` tokens (precomputed at
 //!   construction), and — under Rule 2 only — the EXCT probe's
@@ -105,7 +105,7 @@
 //! [`GraphScorer::score_candidates`] emits a bounded [`ScoreWitness`]:
 //! graph CID, input code, the status (which rule fired), the selected
 //! covered chain (empty under ExactContext/Novel), active regions +
-//! margins, predicted cloud, applied transition edges + folded offset,
+//! margins, predicted cloud, applied transition edges + zero offset,
 //! the EXCT probe record (when consulted), the selected token with its
 //! full contribution list and score, the candidate count, and the op
 //! census. [`verify_witness_replay`] rebuilds a fresh scorer **from the
@@ -418,9 +418,7 @@ fn quantize_exct(count: u32, total: u32, vocab: u32) -> ScoreQ {
 // END COMPILER-SIDE FLOAT QUANTIZATION -----------------------------------
 
 /// Canonical identity of one score contribution (Theorem 10): no id may
-/// appear twice in one candidate's contribution list. The transition
-/// edge-weight contributions are folded into the scalar offset and
-/// witnessed once per applied edge (see module docs).
+/// appear twice in one candidate's contribution list.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ContributionId {
     /// Root prior B(v) — exactly one per candidate.
@@ -480,12 +478,11 @@ pub enum ScoreStatus {
     /// skipped entirely.
     ExactContext,
     /// Rule 1 fired with a non-empty selected covered chain:
-    /// `S(v) = B(v) + Σ_{chain} ΔE + ΔT-offset`.
+    /// `S(v) = B(v) + Σ_{chain} ΔE`.
     Graph,
     /// Rule 1 fired but no active region has a covered chain (every
-    /// membership is the nearest-region fallback floor): the score is
-    /// the root prior plus the folded transition offset, and the context
-    /// is outside every calibrated radius.
+    /// membership is the nearest-region fallback floor): the score is the
+    /// root prior, and the context is outside every calibrated radius.
     Novel,
 }
 
@@ -511,7 +508,9 @@ pub struct ScoreWitness {
     pub predicted: Vec<u32>,
     /// Applied transition edges (ascending edge id).
     pub edges_applied: Vec<EdgeUse>,
-    /// Σ of the applied edge weights (the folded ΔT edge part).
+    /// Kept for witness schema stability; under issue-#66 policy this is
+    /// always zero (transition-edge scores are not applied to token
+    /// scores).
     pub transition_offset: ScoreQ,
     /// The EXCT probe, when exact-context evidence was consulted.
     pub exct: Option<ExctProbe>,
@@ -794,10 +793,6 @@ impl GraphScorer {
         let mut predicted: Vec<u32> = best_edge.keys().copied().collect();
         let mut edges_applied: Vec<EdgeUse> = best_edge.values().copied().collect();
         let mut transition_offset = ScoreQ::ZERO;
-        for edge in &edges_applied {
-            transition_offset = transition_offset.saturating_add(edge.score_q);
-            k.adds += 1;
-        }
 
         // Candidate accumulation: active and predicted nodes contribute
         // candidate tokens, but only the selected covered chain contributes
@@ -923,16 +918,13 @@ impl GraphScorer {
             }
         }
 
-        // Final per-candidate scores: apply the baked root prior and the
-        // folded token-independent transition edge weight (module docs:
-        // ΔT(m,v) = w_m + ΔE(m,v)); canonicalize contribution order.
+        // Final per-candidate scores: apply the baked root prior to the
+        // chain residual sum; canonicalize contribution order.
         let mut ranked_candidates: Vec<(u32, ScoreQ, Vec<Contribution>)> =
             Vec::with_capacity(candidates.len());
         for (token, (residual, mut contributions)) in candidates {
-            let with_offset = residual.saturating_add(transition_offset);
-            k.adds += 1;
             let base = self.root_score(token);
-            let score = base.saturating_add(with_offset);
+            let score = base.saturating_add(residual);
             k.adds += 1;
             contributions.sort_by_key(|c| c.id);
             ranked_candidates.push((token, score, contributions));

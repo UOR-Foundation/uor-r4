@@ -351,11 +351,11 @@ fn hand_computed_scores_match_the_scorer_exactly() {
     // Only the selected covered refinement chain contributes residuals;
     // predicted-node emissions contribute candidates but do not stack a
     // sibling branch onto the active chain:
-    //   S(10) = 100 + 1000 +    0 + 42 = 1142
-    //   S(20) = 200 + (-500) +    0 + 42 = -258
-    //   S(30) = 300 +    0 +    0 + 42 =  342
-    //   S(40) =  50 +    0 +    0 + 42 =   92
-    let expected: Vec<(u32, i32)> = vec![(10, 1142), (20, -258), (30, 342), (40, 92)];
+    //   S(10) = 100 + 1000 +    0 = 1100
+    //   S(20) = 200 + (-500) +    0 = -300
+    //   S(30) = 300 +    0 +    0 =  300
+    //   S(40) =  50 +    0 +    0 =   50
+    let expected: Vec<(u32, i32)> = vec![(10, 1100), (20, -300), (30, 300), (40, 50)];
     let got: Vec<(u32, i32)> = outcome
         .candidates
         .iter()
@@ -363,7 +363,7 @@ fn hand_computed_scores_match_the_scorer_exactly() {
         .collect();
     assert_eq!(got, expected, "integer S(v) per candidate");
     assert_eq!(outcome.selected, 10);
-    assert_eq!(outcome.selected_score, ScoreQ::from_raw(1142));
+    assert_eq!(outcome.selected_score, ScoreQ::from_raw(1100));
 
     let witness = &outcome.witness;
     assert_eq!(witness.active.len(), 1);
@@ -372,7 +372,7 @@ fn hand_computed_scores_match_the_scorer_exactly() {
     assert_eq!(witness.chain, vec![1]);
     assert_eq!(witness.predicted, vec![2]);
     assert_eq!(witness.edges_applied.len(), 1);
-    assert_eq!(witness.transition_offset, ScoreQ::from_raw(42));
+    assert_eq!(witness.transition_offset, ScoreQ::ZERO);
     assert!(witness.exct.is_none());
     assert_eq!(witness.candidate_count, 4);
     assert_eq!(
@@ -396,8 +396,7 @@ fn canonical_tie_break_prefers_the_lowest_token_id() {
     // Two candidates with equal scores: the lower token id wins.
     let (bytes, _tla, _store) = hand_artifact();
     let scorer = GraphScorer::from_artifact(&bytes, None, 64, 64).expect("scorer builds");
-    // Craft a tie by construction: token 10 and token 20 both score
-    // 1142 vs 1742 above; instead assert the tie rule directly over a
+    // Craft a tie by construction; assert the tie rule directly over a
     // hand-checked scan: with the all-FF signature, region 2 is active
     // (distance 0) and region 1 out of range; F is empty (no forward
     // edges from node 2), so candidates come from region 2's emissions
@@ -590,10 +589,11 @@ fn theorem_10_overlapping_active_and_predicted_counts_emission_once() {
     let outcome = scorer.score_candidates(&[0x00; SIG_BYTES]).expect("scores");
     // Node 1 is both active and predicted.
     assert_eq!(outcome.witness.predicted, vec![1]);
-    // S(10) = B(10) + ΔE(1,10) + w = 100 + 5 + 7 = 112 — the emission
-    // entry is counted exactly once despite the overlap.
+    // S(10) = B(10) + ΔE(1,10) = 100 + 5 = 105 — transition-edge scores
+    // are dropped from token scoring, and the emission entry is counted
+    // exactly once despite the active+predicted overlap.
     assert_eq!(outcome.selected, 10);
-    assert_eq!(outcome.selected_score, ScoreQ::from_raw(112));
+    assert_eq!(outcome.selected_score, ScoreQ::from_raw(105));
     let emission_contributions = outcome
         .witness
         .selected_contributions
@@ -1141,4 +1141,164 @@ fn fixture_corpus_end_to_end() {
     )
     .expect("fixture emit");
     assert_eq!(bytes, bytes2, "canonical serializer reproduces the bytes");
+}
+
+/// Fixture-only F-emissions (ΔT offset) ablation under the fixed
+/// chain-telescoped scorer: compare Gate C with compiled transition
+/// weights vs the same graph with all forward-edge weights zeroed.
+/// Run with
+/// `cargo test -p uor-r4-core --release --test score fixture_f_emissions_ablation -- --ignored --nocapture`.
+#[test]
+#[ignore = "release-only fixture workload"]
+fn fixture_f_emissions_ablation() {
+    let dir = env!("CARGO_MANIFEST_DIR");
+    let artifact_container =
+        std::fs::read(format!("{dir}/tests/fixtures/tless_artifacts.bin")).expect("fixture TLA5");
+    let artifacts = compiler::parse_artifacts(&artifact_container).expect("fixture parses");
+    let meta_bytes = std::fs::read(format!("{dir}/tests/fixtures/c_meta.bin")).expect("meta");
+    let recs_bytes = std::fs::read(format!("{dir}/tests/fixtures/c_recs.bin")).expect("recs");
+    let corpus = compiler::load_corpus_from(
+        &format!("{dir}/tests/fixtures/c_meta.bin"),
+        &format!("{dir}/tests/fixtures/c_recs.bin"),
+    )
+    .expect("fixture corpus loads");
+    let artifact_kappa = format!("blake3:{}", blake3::hash(&artifact_container).to_hex());
+    let corpus_kappa = {
+        let mut h = blake3::Hasher::new();
+        h.update(&meta_bytes);
+        h.update(&recs_bytes);
+        format!("blake3:{}", h.finalize().to_hex())
+    };
+
+    let config = ScoreConfig::default();
+    let (train_pos, held_out_pos) = cover::split_positions(&corpus);
+    let train = cover::build_observations(&artifacts, &corpus, &train_pos);
+    let held_out = cover::build_observations(&artifacts, &corpus, &held_out_pos);
+    let induced = cover::induce_cover(
+        &train,
+        &CoverConfig::default(),
+        &artifact_kappa,
+        &corpus_kappa,
+    )
+    .expect("fixture induction");
+    let reference = cover::ReferenceClassifier::freeze(&induced.cover);
+    let cover_edges = cover::build_edges(&induced.cover, &reference, &train);
+    let regions = score::regions_from_cover(&induced.cover);
+    let structural = score::structural_from_cover(&cover_edges);
+    let max_depth = regions.iter().map(|r| r.depth as usize).max().unwrap_or(1);
+    let (store, _) = runtime::build_store(&artifacts, &corpus);
+    let tls1 = runtime::store_bytes(&store);
+    let transitions = score::compile_transitions(
+        &corpus,
+        &regions,
+        &train,
+        max_depth,
+        config.transition_out_degree,
+    );
+    let vocab = (artifacts.token_codes.len() / STAGES) as u32;
+    let emissions =
+        score::compile_emissions(&corpus, &store, &regions, &train, max_depth, vocab, &config);
+    let (bytes_enabled, _) = score::emit_scored_r4g1(
+        &artifact_container,
+        (&meta_bytes, &recs_bytes),
+        vocab,
+        &score::ScoredGraphSections {
+            regions: &regions,
+            structural: &structural,
+            transitions: &transitions,
+            emissions: &emissions,
+            exct_tls1: &tls1,
+        },
+    )
+    .expect("fixture emit (enabled)");
+    let mut transitions_zeroed = transitions.clone();
+    for edge in &mut transitions_zeroed {
+        edge.score = ScoreQ::ZERO;
+    }
+    let (bytes_zeroed, _) = score::emit_scored_r4g1(
+        &artifact_container,
+        (&meta_bytes, &recs_bytes),
+        vocab,
+        &score::ScoredGraphSections {
+            regions: &regions,
+            structural: &structural,
+            transitions: &transitions_zeroed,
+            emissions: &emissions,
+            exct_tls1: &tls1,
+        },
+    )
+    .expect("fixture emit (zeroed)");
+
+    let enabled = score::evaluate_gate_c(
+        &bytes_enabled,
+        &artifact_container,
+        &artifacts,
+        &store,
+        &corpus,
+        &held_out,
+        &config,
+    )
+    .expect("gate C (enabled)");
+    let zeroed = score::evaluate_gate_c(
+        &bytes_zeroed,
+        &artifact_container,
+        &artifacts,
+        &store,
+        &corpus,
+        &held_out,
+        &config,
+    )
+    .expect("gate C (zeroed)");
+
+    println!(
+        "fixture F-emissions ablation ({} held-out positions):",
+        held_out.len()
+    );
+    println!(
+        "  {:<22} {:>14} {:>12}",
+        "variant/scorer", "top-1 agree", "bits/token"
+    );
+    let row = |name: &str, m: &score::GateCMetrics| {
+        println!(
+            "  {:<22} {:>13.2}% {:>12.4}",
+            name,
+            100.0 * m.top1_agreement,
+            m.bits_per_token
+        );
+    };
+    row("enabled / no EXCT", &enabled.graph_no_exct);
+    row("enabled / with EXCT", &enabled.graph_with_exct);
+    row("zeroed / no EXCT", &zeroed.graph_no_exct);
+    row("zeroed / with EXCT", &zeroed.graph_with_exct);
+    println!(
+        "  Δ(enabled-zeroed) no EXCT:   agree {:+.2} pp | bits {:+.4}",
+        100.0 * (enabled.graph_no_exct.top1_agreement - zeroed.graph_no_exct.top1_agreement),
+        enabled.graph_no_exct.bits_per_token - zeroed.graph_no_exct.bits_per_token
+    );
+    println!(
+        "  Δ(enabled-zeroed) with EXCT: agree {:+.2} pp | bits {:+.4}",
+        100.0 * (enabled.graph_with_exct.top1_agreement - zeroed.graph_with_exct.top1_agreement),
+        enabled.graph_with_exct.bits_per_token - zeroed.graph_with_exct.bits_per_token
+    );
+
+    let mut top = transitions.clone();
+    top.sort_by(|a, b| {
+        b.count
+            .cmp(&a.count)
+            .then_with(|| a.src.cmp(&b.src))
+            .then_with(|| a.dst.cmp(&b.dst))
+    });
+    println!("  top transition edges by corpus count (spot-check sample):");
+    for edge in top.into_iter().take(8) {
+        println!(
+            "    src {:>4} -> dst {:>4} | count {:>6} | score_q {:>8}",
+            edge.src,
+            edge.dst,
+            edge.count,
+            edge.score.raw()
+        );
+    }
+
+    assert_eq!(enabled.witness_replay_failures, 0);
+    assert_eq!(zeroed.witness_replay_failures, 0);
 }
