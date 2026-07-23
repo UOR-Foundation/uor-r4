@@ -192,5 +192,7 @@ pub mod score_q;
 pub mod score_runtime;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod shortlist_evaluator;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod trace_lane;
 // Transitions are portable (pure graph math, no fs).
 pub mod transitions;

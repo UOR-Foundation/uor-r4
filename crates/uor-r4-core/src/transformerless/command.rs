@@ -29,6 +29,7 @@ use super::{
     certify, compare, compiler, convert_r4g1, cover, cover_sweep, observe, observe_text, runtime,
     scenarios, score,
     teacher::{BehaviorSource, HuggingFaceLlamaOracle, LlamaOracle, TeacherOracle},
+    trace_lane,
 };
 use serde::Serialize;
 use std::collections::BTreeMap;
@@ -1610,6 +1611,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
         Some("cover") => cover_command(&args[1..])?,
         Some("score") => score_command(&args[1..])?,
         Some("cover-sweep") => cover_sweep::cover_sweep_command(&args[1..])?,
+        Some("lane-compare") => trace_lane::lane_compare_command(&args[1..])?,
         _ => {
             println!(
                 "R4 transformerless — cross-compile a transformer into a mul-free table artifact\n\
@@ -1619,6 +1621,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
                  cover induction: cover [--corpus-meta P --corpus-recs P] [--artifacts P] [--depths N] [--k0 N] [--regions-budget N] [--memory-budget MB] [--min-support N] [--entropy-gain BITS] [--radius-quantile PCT] [--out DIR]\n\
                  score (phase 4): score [--corpus-meta P --corpus-recs P] [--artifacts P] [--cover P] [--transition-out-degree N] [--emission-entries N] [--root-top-b N] [--exct-top-x N] [--witness-sample N] [--smoothing RULE] [--out DIR]\n\
                  cover sweep (issue 70): cover-sweep [--corpus-meta P --corpus-recs P] [--artifacts P] [--out DIR]\n\
+                 lane compare (issue 71): lane-compare [--corpus-meta P --corpus-recs P] [--artifacts P] [--checkpoint BIN] [--out DIR]\n\
                  hf evaluation: evaluate-report [--source DIR] [--compiled DIR] [--report PATH] [--sequence-length N]\n\
                  docs: docs/TRANSFORMERLESS.md (extrapolation), docs/PROOF.md (proof + certificate)"
             );

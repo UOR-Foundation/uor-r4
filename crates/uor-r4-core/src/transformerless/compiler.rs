@@ -54,6 +54,7 @@ pub fn xorshift(s: &mut u64) -> u64 {
 ///   | span_start u32 | span_end u32 | byte_start u32 | byte_end u32
 /// legacy record sizes are still accepted on load:
 ///   v1=12 bytes (story,next,argmax,logprob) and v2=32 bytes (no anchors).
+#[derive(Clone)]
 pub struct Corpus {
     pub n: usize,
     pub stories: u64,
@@ -613,6 +614,7 @@ pub fn train_cut(c: &Corpus) -> u32 {
 
 pub const ART_PATH: &str = "/tmp/tless_artifacts.bin";
 
+#[derive(Clone)]
 pub struct Compiled {
     /// COMPRESSED token representation: STAGES code bytes per token [V × STAGES]
     /// plus i8 stage books [STAGES × (K × D)]. The runtime decodes rows on
