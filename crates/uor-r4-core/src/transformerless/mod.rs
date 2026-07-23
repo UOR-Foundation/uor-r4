@@ -21,6 +21,7 @@
 
 // teacher/compiler are portable (math, types, containers); only their
 // fs-dependent functions are cfg-gated per item (see those files).
+pub mod bott_fock;
 pub mod cd_space;
 pub mod endomorphism;
 pub mod teacher;
