@@ -1673,6 +1673,8 @@ pub fn run(args: &[String]) -> Result<(), String> {
             Err(_) => println!("source checkpoint not found; see `setup`"),
         },
         Some("convert-r4g1") => convert_r4g1::run(&args[1..])?,
+        Some("cover") => cover_command(&args[1..])?,
+        Some("score") => score_command(&args[1..])?,
         Some("cd-compile") => cd_compile_command(&args[1..])?,
         Some("quantum-eval") => quantum_eval_command(&args[1..])?,
         _ => {
