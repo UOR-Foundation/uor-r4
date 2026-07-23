@@ -57,7 +57,10 @@ jobs:
         uses: taiki-e/install-action@cargo-nextest
 
       - name: cargo nextest run --workspace
-        run: cargo nextest run --workspace
+        run: cargo nextest run --workspace -E 'not binary(bdd)'
+
+      - name: cucumber BDD suite (own runner, not nextest-compatible)
+        run: cargo test --test bdd
 
       - name: cargo test --doc
         run: cargo test --doc --workspace
