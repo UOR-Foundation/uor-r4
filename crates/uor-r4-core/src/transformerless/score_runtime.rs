@@ -435,8 +435,17 @@ fn shift_mul_i128(a: i128, b: i128) -> i128 {
         if multiplier & 1 == 1 {
             result = result.saturating_add(multiplicand);
         }
-        multiplicand <<= 1;
         multiplier >>= 1;
+        if multiplier > 0 {
+            // Doubling `multiplicand` would silently wrap (rather than
+            // panic) if its top bit is already set, so detect that case
+            // up front and saturate instead of shifting into it.
+            if multiplicand > u128::MAX >> 1 {
+                result = u128::MAX;
+                break;
+            }
+            multiplicand <<= 1;
+        }
     }
     // Saturate before the signed cast: `result` may exceed `i128::MAX`
     // for extreme inputs, and casting an out-of-range `u128` to `i128`
@@ -2126,4 +2135,68 @@ pub fn verify_witness_replay(
         return Err(ReplayError::CensusMismatch);
     }
     Ok(())
+}
+
+// `shift_mul_i128`/`shift_div_i128` are exercised below against literal,
+// hand-computed expectations (not the native `*`/`/` operators) so this
+// test module itself stays clear of the P-4 source scan above.
+#[cfg(test)]
+mod shift_arithmetic_tests {
+    use super::{shift_div_i128, shift_mul_i128};
+
+    #[test]
+    fn shift_mul_matches_hand_computed_products() {
+        let cases: &[(i128, i128, i128)] = &[
+            (0, 0, 0),
+            (0, 5, 0),
+            (5, 0, 0),
+            (7, 6, 42),
+            (-7, 6, -42),
+            (7, -6, -42),
+            (-7, -6, 42),
+            (1, i128::from(i32::MAX), i128::from(i32::MAX)),
+            (-1, i128::from(i32::MAX), -i128::from(i32::MAX)),
+            (i128::from(i32::MIN), 3, -6_442_450_944),
+        ];
+        for &(a, b, expected) in cases {
+            assert_eq!(shift_mul_i128(a, b), expected, "a={a} b={b}");
+        }
+    }
+
+    #[test]
+    fn shift_mul_saturates_instead_of_overflowing() {
+        // i128::MAX doubled overflows i128; the helper must saturate
+        // rather than panic or silently wrap.
+        assert_eq!(shift_mul_i128(i128::MAX, 2), i128::MAX);
+        assert_eq!(shift_mul_i128(i128::MIN, 2), -i128::MAX);
+    }
+
+    #[test]
+    fn shift_div_matches_hand_computed_truncating_quotients() {
+        let cases: &[(i128, i128, i128)] = &[
+            (0, 5, 0),
+            (7, 2, 3),
+            (-7, 2, -3),
+            (7, -2, -3),
+            (-7, -2, 3),
+            (1, 5, 0),
+            (-1, 5, 0),
+            (i128::from(i32::MIN), 3, -715_827_882),
+            (i128::from(i32::MAX), 7, 306_783_378),
+        ];
+        for &(dividend, divisor, expected) in cases {
+            assert_eq!(
+                shift_div_i128(dividend, divisor),
+                expected,
+                "dividend={dividend} divisor={divisor}"
+            );
+        }
+    }
+
+    #[test]
+    fn shift_div_by_zero_returns_zero() {
+        assert_eq!(shift_div_i128(42, 0), 0);
+        assert_eq!(shift_div_i128(-42, 0), 0);
+        assert_eq!(shift_div_i128(0, 0), 0);
+    }
 }
