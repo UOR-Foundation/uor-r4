@@ -4,6 +4,7 @@
 //! router. It derives the packed input signature with the transformerless
 //! artifact, then selects a token from the validated R4G1 graph.
 
+use uor_r4_core::transformerless::resolution_status::{ResolutionStatus, FallbackAction};
 use std::path::{Path, PathBuf};
 
 use uor_r4_core::transformerless::compiler::{self, Compiled, WINDOW};
@@ -89,16 +90,28 @@ impl R4g1State {
         self.tokenizer.as_ref()?.decode_into(tokens, out).ok()
     }
 
-    /// Score one token window using the validated graph artifact.
-    pub fn predict_window(&self, window: &[u32]) -> Result<(u32, uor_r4_core::transformerless::resolution_status::FallbackAction, uor_r4_core::transformerless::resolution_status::ResolutionStatus), String> {
-        use uor_r4_core::transformerless::resolution_status::ResolutionStatus;
+    pub fn assign_window(&self, window: &[u32]) -> [u8; uor_r4_core::transformerless::compiler::SIG_BYTES] {
         let bundle = runtime::bundle_window_plain(&self.artifacts, &self.rotations, window);
-        let signature = runtime::sig_plain(&self.artifacts, &bundle);
-        let outcome = self.scorer.score_candidates(&signature)?;
+        runtime::sig_plain(&self.artifacts, &bundle)
+    }
+
+    /// Score one token window using the validated graph artifact.
+    pub fn predict_window(
+        &self,
+        signature: [u8; uor_r4_core::transformerless::compiler::SIG_BYTES],
+        recent_tokens: &[u32],
+    ) -> Result<(u32, FallbackAction, ResolutionStatus), String> {
+        let outcome = self.scorer.score_candidates(&signature, recent_tokens)?;
         let status = match outcome.witness.status {
-            uor_r4_core::transformerless::score_runtime::ScoreStatus::ExactContext => ResolutionStatus::Supported,
-            uor_r4_core::transformerless::score_runtime::ScoreStatus::Graph => ResolutionStatus::Supported,
-            uor_r4_core::transformerless::score_runtime::ScoreStatus::Novel => ResolutionStatus::Novel,
+            uor_r4_core::transformerless::score_runtime::ScoreStatus::ExactContext => {
+                ResolutionStatus::Supported
+            }
+            uor_r4_core::transformerless::score_runtime::ScoreStatus::Graph => {
+                ResolutionStatus::Supported
+            }
+            uor_r4_core::transformerless::score_runtime::ScoreStatus::Novel => {
+                ResolutionStatus::Novel
+            }
         };
         let action = self.scorer.fallback_policy.action_for(status);
         Ok((outcome.selected, action, status))
@@ -107,23 +120,27 @@ impl R4g1State {
     /// Generate a greedy continuation from a token seed. This mirrors the
     /// legacy runtime's fixed-width window behavior while replacing its
     /// graded-store lookup with R4G1 graph scoring.
-    pub fn generate_into(&self, seed: &[u32], out: &mut [u32]) -> Result<(usize, uor_r4_core::transformerless::resolution_status::ResolutionStatus), String> {
+    pub fn generate_into(
+        &self,
+        seed: &[u32],
+        out: &mut [u32],
+    ) -> Result<(usize, ResolutionStatus), String> {
         let mut window = [0u32; WINDOW];
         let seed = &seed[seed.len().saturating_sub(WINDOW)..];
         let mut window_len = seed.len();
         window[..window_len].copy_from_slice(seed);
 
         for (generated, token) in out.iter_mut().enumerate() {
-            let (next, action, status) = self.predict_window(&window[..window_len])?;
-            
-            use uor_r4_core::transformerless::resolution_status::FallbackAction;
+            let signature = self.assign_window(&window[..window_len]);
+            let (next, action, status) = self.predict_window(signature, &window[..window_len])?;
+
             match action {
                 FallbackAction::Abstain | FallbackAction::Widen => {
                     return Ok((generated, status));
                 }
                 _ => {}
             }
-            
+
             *token = next;
             if next == 1 || next == 2 {
                 return Ok((generated, status));
@@ -136,7 +153,10 @@ impl R4g1State {
                 window[WINDOW - 1] = next;
             }
         }
-        Ok((out.len(), uor_r4_core::transformerless::resolution_status::ResolutionStatus::Supported))
+        Ok((
+            out.len(),
+            uor_r4_core::transformerless::resolution_status::ResolutionStatus::Supported,
+        ))
     }
 }
 
