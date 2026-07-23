@@ -107,7 +107,7 @@ jobs:
         run: wasm-pack build --target web
 
   gate-c-trend:
-    name: Gate C trend alarm (issue #77)
+    name: Gate C trend alarm
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
