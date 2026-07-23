@@ -79,7 +79,12 @@ graph term is normative for new work. See the terminology bridge in the plan (§
   **BackedOff** (only a broader region met support), **Novel** (no calibrated region covers the
   input), **Contradictory** (active regions make materially incompatible predictions).
   Deterministic (Theorem 12); the manifest declares per-status behavior (continue, widen, consult
-  EXCT, certified fallback, or abstain — default policy per decision D4).
+  EXCT, certified fallback, or abstain — default policy per decision D4). The deployed R4G1
+  adapter (`src/r4g1.rs`, issue #78) wires the D4 policy over the scorer's
+  `ScoreStatus` (`exact_context` → serve, `graph` → serve, `novel` → widen-once then abstain,
+  `contradictory` → abstain, reserved) with an optional `config.status_policy` override in
+  `score_report.json`; abstention is a typed, server-surfaced outcome, and widening is bounded
+  by a fixed-capacity memory of confirmed-Novel signatures.
 - **Multi-timescale state** — hierarchy of fixed-capacity states: token, local phrase/event,
   segment, document/session; none grows dynamically.
 
