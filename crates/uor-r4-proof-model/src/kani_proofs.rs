@@ -16,7 +16,7 @@ mod kani_proofs {
 
     #[kani::proof]
     fn proof_runtime_state_slot_update_safety() {
-        let mut state = RuntimeState::new();
+        let mut state = RuntimeState::<32, 8, 8, 8>::default();
 
         let token = any::<u32>();
         state.record_token(token);
