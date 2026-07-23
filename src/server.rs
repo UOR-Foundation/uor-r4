@@ -1220,8 +1220,8 @@ fn handle_connection(
             Some("attention") => "attention",
             Some("r4-attention") => "r4-attention",
             Some("transformerless-legacy") => "transformerless-legacy",
-            Some("auto" | "ollama" | "transformerless") | None => "transformerless",
-            Some(_) => "transformerless",
+            Some("auto" | "ollama" | "transformerless") | None => "r4g1",
+            Some(_) => "r4g1",
         };
 
         let mut router_guard = router.lock().unwrap();
@@ -1392,6 +1392,19 @@ fn handle_connection(
                     tokens_generated = final_response_text.split_whitespace().count();
                 }
             }
+        }
+
+        if final_response_text.is_empty() && engine_mode == "r4g1" {
+            send_json_response(
+                stream,
+                503,
+                &serde_json::json!({
+                    "error": "R4G1 Graph runtime did not produce a usable response; no fallback engine was invoked",
+                    "engine": "r4g1"
+                })
+                .to_string(),
+            );
+            return;
         }
 
         if final_response_text.is_empty() {
