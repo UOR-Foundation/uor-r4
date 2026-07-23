@@ -24,6 +24,7 @@
 pub mod bott_fock;
 pub mod cd_space;
 pub mod endomorphism;
+pub mod lie_jordan;
 pub mod teacher;
 
 #[cfg(not(target_arch = "wasm32"))]
