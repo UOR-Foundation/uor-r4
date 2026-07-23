@@ -966,25 +966,26 @@ pub fn evaluate_gate_c(
     held_out: &[Observation],
     config: &ScoreConfig,
 ) -> Result<GateCOutcome, String> {
-    let scorer_no_exct =
+    let mut scorer_no_exct =
         GraphScorer::from_artifact(r4g1, None, config.root_top_b, config.exct_top_x)?;
-    let scorer_with_exct = GraphScorer::from_artifact(
+    scorer_no_exct.set_f_emissions(true);
+    let mut scorer_with_exct = GraphScorer::from_artifact(
         r4g1,
         Some(artifact_container),
         config.root_top_b,
         config.exct_top_x,
     )?;
-    // Ablation scorers (issue #66): identical configs with ΔT emissions off.
-    let mut scorer_no_exct_no_f =
+    scorer_with_exct.set_f_emissions(true);
+    // Ablation scorers (issue #66): identical configs with ΔT emissions off
+    // (the deployed default since the ablation decision).
+    let scorer_no_exct_no_f =
         GraphScorer::from_artifact(r4g1, None, config.root_top_b, config.exct_top_x)?;
-    scorer_no_exct_no_f.set_f_emissions(false);
-    let mut scorer_with_exct_no_f = GraphScorer::from_artifact(
+    let scorer_with_exct_no_f = GraphScorer::from_artifact(
         r4g1,
         Some(artifact_container),
         config.root_top_b,
         config.exct_top_x,
     )?;
-    scorer_with_exct_no_f.set_f_emissions(false);
 
     let mut outcome = GateCOutcome::default();
     let mut bits_legacy = 0f64;
@@ -1036,8 +1037,7 @@ pub fn evaluate_gate_c(
         let rule1_bits = outcome_bits(&scorer_no_exct, &rule1.candidates, next);
         let rule12_bits = outcome_bits(&scorer_with_exct, &rule12.candidates, next);
         let rule1_no_f_bits = outcome_bits(&scorer_no_exct_no_f, &rule1_no_f.candidates, next);
-        let rule12_no_f_bits =
-            outcome_bits(&scorer_with_exct_no_f, &rule12_no_f.candidates, next);
+        let rule12_no_f_bits = outcome_bits(&scorer_with_exct_no_f, &rule12_no_f.candidates, next);
         bits_legacy += legacy_bits;
         bits_rule1 += rule1_bits;
         bits_rule12 += rule12_bits;

@@ -517,6 +517,9 @@ pub struct ScoreWitness {
     pub edges_applied: Vec<EdgeUse>,
     /// Σ of the applied edge weights (the folded ΔT edge part).
     pub transition_offset: ScoreQ,
+    /// Whether predicted-cloud (ΔT) emissions were enabled for this
+    /// witness. Replay must apply the same flag to recompute faithfully.
+    pub f_emissions: bool,
     /// The EXCT probe, when exact-context evidence was consulted.
     pub exct: Option<ExctProbe>,
     /// The selected token and its score (canonical tie-break).
@@ -624,14 +627,18 @@ pub struct GraphScorer {
     exct_top_x: usize,
     pop: [u8; 256],
     /// When false, the predicted cloud F is empty and ΔT contributes
-    /// nothing — the measurement variant for the F-emissions ablation
-    /// (issue #66). Default true.
+    /// nothing. Default FALSE since the #66 ablation: the folded
+    /// transition offset is argmax-neutral by construction (a uniform
+    /// bias can only distort the distribution — Rule 1 bits/token
+    /// 71.52 → 17.73 with ΔT off) and the EXCT-precedence path is
+    /// F-invariant. Re-enable only with a measured per-token ΔT design.
     f_emissions: bool,
 }
 
 impl GraphScorer {
-    /// Enable or disable predicted-cloud (F / ΔT) emissions. Used only by
-    /// the Gate C ablation measurement; deployed scorers stay enabled.
+    /// Enable or disable predicted-cloud (F / ΔT) emissions. Default
+    /// disabled since the #66 ablation decision; re-enabling requires a
+    /// measured per-token ΔT design (the folded offset is argmax-neutral).
     pub fn set_f_emissions(&mut self, enabled: bool) {
         self.f_emissions = enabled;
     }
@@ -783,7 +790,7 @@ impl GraphScorer {
             vocab: head.vocab_size(),
             exct_top_x,
             pop: runtime::derive_popcount_table(),
-            f_emissions: true,
+            f_emissions: false,
         })
     }
 
@@ -1095,6 +1102,7 @@ impl GraphScorer {
             predicted,
             edges_applied,
             transition_offset,
+            f_emissions: self.f_emissions,
             exct: exct_probe,
             selected,
             selected_score,
@@ -1336,6 +1344,10 @@ pub fn verify_witness_replay(
         return Err(ReplayError::TeacherMissing);
     }
     let scorer = GraphScorer::from_artifact(r4g1, teacher_container, root_top_b, exct_top_x)
+        .map(|mut scorer| {
+            scorer.set_f_emissions(witness.f_emissions);
+            scorer
+        })
         .map_err(|e| {
             if e.contains("teacher_cid") {
                 ReplayError::TeacherCidMismatch

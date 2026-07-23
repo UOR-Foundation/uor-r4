@@ -350,7 +350,8 @@ fn hand_artifact_with_store(level0: BTreeMap<u32, u32>) -> (Vec<u8>, Vec<u8>, St
 #[test]
 fn hand_computed_scores_match_the_scorer_exactly() {
     let (bytes, _tla, _store) = hand_artifact();
-    let scorer = GraphScorer::from_artifact(&bytes, None, 64, 64).expect("scorer builds");
+    let mut scorer = GraphScorer::from_artifact(&bytes, None, 64, 64).expect("scorer builds");
+    scorer.set_f_emissions(true);
     // Context signature all zeros: region 1 at distance 0 (within its
     // radius 4), region 2 at distance 288 (out of range) — A = {region 0}.
     let outcome = scorer.score_candidates(&[0x00; SIG_BYTES]).expect("scores");
@@ -661,7 +662,8 @@ fn rule1_used_when_exct_support_is_below_min() {
     // context evidence does not fire; the chain-telescoped graph score
     // decides (the hand artifact selects token 10 at 1142).
     let (bytes, tla, _store) = hand_artifact_with_store([(20u32, 4u32)].into_iter().collect());
-    let scorer = GraphScorer::from_artifact(&bytes, Some(&tla), 64, 64).expect("EXCT scorer");
+    let mut scorer = GraphScorer::from_artifact(&bytes, Some(&tla), 64, 64).expect("EXCT scorer");
+    scorer.set_f_emissions(true);
     let outcome = scorer.score_candidates(&[0x00; SIG_BYTES]).expect("scores");
     assert_eq!(outcome.witness.status, ScoreStatus::Graph);
     let probe = outcome.witness.exct.clone().expect("probe recorded");
@@ -686,7 +688,8 @@ fn rule1_used_when_exct_support_is_below_min() {
 #[test]
 fn novel_status_when_no_covered_chain_exists() {
     let (bytes, _tla, _store) = hand_artifact();
-    let scorer = GraphScorer::from_artifact(&bytes, None, 64, 64).expect("scorer builds");
+    let mut scorer = GraphScorer::from_artifact(&bytes, None, 64, 64).expect("scorer builds");
+    scorer.set_f_emissions(true);
     // 144 of 288 bits set: distance 144 from both regions — outside
     // every calibrated radius (4). The membership is the nearest-region
     // fallback (recorded in the witness with a negative margin); no
@@ -784,7 +787,8 @@ fn theorem_7_reverse_index_resolves_every_forward_edge() {
 #[test]
 fn theorem_10_duplicate_contribution_id_is_rejected() {
     let (bytes, tla, _store) = hand_artifact();
-    let scorer = GraphScorer::from_artifact(&bytes, None, 64, 64).expect("scorer");
+    let mut scorer = GraphScorer::from_artifact(&bytes, None, 64, 64).expect("scorer");
+    scorer.set_f_emissions(true);
     let outcome = scorer.score_candidates(&[0x00; SIG_BYTES]).expect("scores");
 
     // A duplicated contribution id in the witness is rejected.
@@ -855,7 +859,8 @@ fn theorem_10_overlapping_active_and_predicted_counts_emission_once() {
         },
     )
     .expect("emit");
-    let scorer = GraphScorer::from_artifact(&bytes, None, 64, 64).expect("scorer");
+    let mut scorer = GraphScorer::from_artifact(&bytes, None, 64, 64).expect("scorer");
+    scorer.set_f_emissions(true);
     let outcome = scorer.score_candidates(&[0x00; SIG_BYTES]).expect("scores");
     // Node 1 is both active and predicted.
     assert_eq!(outcome.witness.predicted, vec![1]);
