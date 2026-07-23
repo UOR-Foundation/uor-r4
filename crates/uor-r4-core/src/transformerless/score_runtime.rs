@@ -1083,9 +1083,9 @@ impl GraphScorer {
             let mut score = base.saturating_add(with_offset);
             if recent_tokens.contains(&token) {
                 // ~-30 nats suppression penalty for repetition control
+                k.adds += 1;
                 score = score.saturating_add(ScoreQ::from_raw(-2_000_000));
             }
-            k.adds += 1;
             contributions.sort_by_key(|c| c.id);
             ranked_candidates.push((token, score, contributions));
         }
