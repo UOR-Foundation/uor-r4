@@ -6,6 +6,7 @@
 
 use cucumber::{given, then, when, World};
 use std::path::Path;
+use uor_r4_core::transformerless::bott_fock::BottFockContextStore;
 use uor_r4_core::transformerless::compiler::SIG_BYTES;
 use uor_r4_core::transformerless::cover::Observation;
 use uor_r4_core::transformerless::endomorphism::EndomorphismAlgebra;
@@ -13,6 +14,7 @@ use uor_r4_core::transformerless::lie_jordan::{universal_product_u8, LieJordanSp
 use uor_r4_core::transformerless::quantum_cover::{
     quantum_entropy_gain, DensityOperator, QuantumCoverConfig,
 };
+use uor_r4_wasm_router::cd_space_fold;
 use uor_r4_wasm_router::r4g1::validate_quality_report;
 use uor_r4_wasm_router::server::{
     is_usable_generated_text, r4g1_unavailable_response, select_synthesis_engine,
@@ -30,6 +32,13 @@ struct R4g1World {
     compile_error: Option<String>,
     quality_report: Option<serde_json::Value>,
     quality_error: Option<String>,
+    // Façade & Scaling fields
+    facade_input: String,
+    folded_matrix: Vec<i16>,
+    seq_lengths: Vec<usize>,
+    bench_latency_us: f64,
+    bench_matrix_bytes: usize,
+    // Quantum cover fields
     density: Option<DensityOperator>,
     entropy: Option<f32>,
     observations: Vec<Observation>,
@@ -243,6 +252,65 @@ fn quality_gate_rejects_digression(w: &mut R4g1World) {
         .as_deref()
         .unwrap_or_default()
         .contains("digresses"));
+}
+
+#[given("an arbitrary text input string")]
+fn arbitrary_text_input(w: &mut R4g1World) {
+    w.facade_input = "uor-r4 quantum geometric transformerless engine".to_string();
+}
+
+#[when("the Wasm façade folds the text using cd_space_fold")]
+fn fold_text_facade(w: &mut R4g1World) {
+    w.folded_matrix = cd_space_fold(&w.facade_input).to_vec();
+}
+
+#[then("a 256-element integer state matrix is returned")]
+fn state_matrix_256_elements(w: &mut R4g1World) {
+    assert_eq!(w.folded_matrix.len(), 256);
+}
+
+#[then("the state matrix has a non-zero parameter checksum")]
+fn state_matrix_nonzero_checksum(w: &mut R4g1World) {
+    let sum: i64 = w.folded_matrix.iter().map(|&x| x.abs() as i64).sum();
+    assert!(sum > 0, "state matrix sum must be non-zero");
+}
+
+#[given("context sequence lengths of 1000, 10000, and 100000 tokens")]
+fn sequence_lengths_config(w: &mut R4g1World) {
+    w.seq_lengths = vec![1_000, 10_000, 100_000];
+}
+
+#[when("the context scaling benchmark is evaluated")]
+fn eval_context_scaling(w: &mut R4g1World) {
+    use std::time::Instant;
+    let mut total_us = 0.0;
+    let dummy_token = [10i16; 16];
+
+    for &n in &w.seq_lengths {
+        let mut store = BottFockContextStore::new();
+        let start = Instant::now();
+        for _ in 0..n {
+            store.append_token(&dummy_token);
+        }
+        let elapsed = start.elapsed();
+        total_us += elapsed.as_micros() as f64 / (n as f64);
+        w.bench_matrix_bytes = store.state().len() * std::mem::size_of::<i16>();
+    }
+    w.bench_latency_us = total_us / (w.seq_lengths.len() as f64);
+}
+
+#[then("the state matrix memory footprint remains constant at 512 bytes")]
+fn footprint_constant_512(w: &mut R4g1World) {
+    assert_eq!(w.bench_matrix_bytes, 512);
+}
+
+#[then("the per-token update latency remains bounded under 50 microseconds")]
+fn latency_bounded_50us(w: &mut R4g1World) {
+    assert!(
+        w.bench_latency_us < 50.0,
+        "latency {} us exceeds 50 us limit",
+        w.bench_latency_us
+    );
 }
 
 #[given("a maximum-entropy density operator of dimension 8")]
