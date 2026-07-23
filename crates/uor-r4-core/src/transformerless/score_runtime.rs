@@ -1081,10 +1081,11 @@ impl GraphScorer {
             k.adds += 1;
             let base = self.root_score(token);
             let mut score = base.saturating_add(with_offset);
+            k.adds += 1;
             if recent_tokens.contains(&token) {
                 // ~-30 nats suppression penalty for repetition control
-                k.adds += 1;
                 score = score.saturating_add(ScoreQ::from_raw(-2_000_000));
+                k.adds += 1;
             }
             contributions.sort_by_key(|c| c.id);
             ranked_candidates.push((token, score, contributions));
@@ -1598,6 +1599,18 @@ impl GraphScorer {
         top_m: usize,
         state: &mut StepState,
     ) -> Result<StepOutcome, String> {
+        self.score_step_with_recent(sig, top_m, state, &[])
+    }
+
+    /// Deployed scoring step with the bounded repetition penalty applied to
+    /// candidates present in `recent_tokens`.
+    pub fn score_step_with_recent(
+        &self,
+        sig: &[u8; SIG_BYTES],
+        top_m: usize,
+        state: &mut StepState,
+        recent_tokens: &[u32],
+    ) -> Result<StepOutcome, String> {
         if top_m == 0 || top_m > state.max_top_m {
             return Err(format!(
                 "membership width {top_m} outside the step state bound {}",
@@ -1764,13 +1777,21 @@ impl GraphScorer {
             .root_score(best)
             .saturating_add(ScoreQ::from_raw(state.residuals[best as usize]));
         k.adds += 1;
+        if recent_tokens.contains(&best) {
+            best_score = best_score.saturating_add(ScoreQ::from_raw(-2_000_000));
+            k.adds += 1;
+        }
         for &token in state.touched.iter().skip(1) {
             k.candidate_scans += 1;
             k.compares += 1;
-            let score = self
+            let mut score = self
                 .root_score(token)
                 .saturating_add(ScoreQ::from_raw(state.residuals[token as usize]));
             k.adds += 1;
+            if recent_tokens.contains(&token) {
+                score = score.saturating_add(ScoreQ::from_raw(-2_000_000));
+                k.adds += 1;
+            }
             if score > best_score || (score == best_score && token < best) {
                 best = token;
                 best_score = score;

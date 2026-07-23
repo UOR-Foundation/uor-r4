@@ -431,7 +431,7 @@ pub fn compile_emissions(
                 continue;
             };
             let dist = &mut evidence[top1 as usize];
-            for k_idx in 0..3 {
+            for k_idx in 0..corpus.top_tokens[i].len() {
                 let token = corpus.top_tokens[i][k_idx];
                 let weight = corpus.top_weights[i][k_idx];
                 if weight > 0 {
@@ -1416,6 +1416,13 @@ pub fn evaluate_gate_c(
         let pos = obs.position as usize;
         if pos >= 32 && corpus.story[pos] == corpus.story[pos - 32] {
             let seed = &corpus.input[pos - 32..pos];
+            graph_rep_sum += generate_greedy_repetition_rate(
+                &scorer_with_exct,
+                artifacts,
+                &rotations,
+                seed,
+                64,
+            )?;
             graph_rep_sum += generate_greedy_repetition_rate(
                 &scorer_with_exct,
                 artifacts,

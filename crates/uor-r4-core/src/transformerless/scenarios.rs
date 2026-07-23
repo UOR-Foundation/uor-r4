@@ -358,8 +358,8 @@ fn as_corpus(tokens: &[u32], t_argmax: &[u32]) -> Corpus {
             nx
         },
         t_argmax: t_argmax.to_vec(),
-        top_tokens: vec![[0u32; 3]; n],
-        top_weights: vec![[0u32; 3]; n],
+        top_tokens: vec![[0u32; 8]; n],
+        top_weights: vec![[0u32; 8]; n],
         span_start: (0..n).map(|idx| idx as u32).collect(),
         span_end: (0..n).map(|idx| idx as u32 + 1).collect(),
         byte_start: vec![u32::MAX; n],

@@ -719,7 +719,7 @@ pub fn build_store(art: &Compiled, c: &Corpus) -> (Store, Vec<[u8; STAGES]>) {
         if c.story[i] >= cut {
             continue;
         }
-        for k_idx in 0..3 {
+        for k_idx in 0..c.top_tokens[i].len() {
             let tok = c.top_tokens[i][k_idx];
             let weight = c.top_weights[i][k_idx];
             if weight > 0 {
