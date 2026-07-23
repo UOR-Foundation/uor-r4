@@ -274,8 +274,6 @@ pub struct ScoreConfig {
     /// Emission smoothing rule (issue #67). The add-one default
     /// preserves the pre-#67 compiler byte-exactly.
     pub smoothing: Smoothing,
-    /// Candidate scoring variant (issue #80).
-    pub scoring_variant: ScoringVariant,
 }
 
 impl Default for ScoreConfig {
@@ -287,7 +285,6 @@ impl Default for ScoreConfig {
             exct_top_x: DEFAULT_EXCT_TOP_X,
             witness_sample: DEFAULT_WITNESS_SAMPLE,
             smoothing: Smoothing::AddOne,
-            scoring_variant: ScoringVariant::ChainTelescoped,
         }
     }
 }
@@ -1263,6 +1260,7 @@ pub fn evaluate_gate_c(
         config.root_top_b,
         config.exct_top_x,
     )?;
+    scorer_normalized.set_f_emissions(true);
     scorer_normalized.set_scoring_variant(ScoringVariant::CloudSizeNormalized);
     let mut scorer_margin = GraphScorer::from_artifact(
         r4g1,
@@ -1270,6 +1268,7 @@ pub fn evaluate_gate_c(
         config.root_top_b,
         config.exct_top_x,
     )?;
+    scorer_margin.set_f_emissions(true);
     scorer_margin.set_scoring_variant(ScoringVariant::MarginWeighted);
 
     let mut outcome = GateCOutcome::default();
@@ -1488,7 +1487,9 @@ pub fn evaluate_gate_c(
 /// 3 = issue-#67 smoothing calibration: `config.smoothing` records the
 /// compiled emission rule and `quantization.smoothing` describes it; 4 =
 /// issue-#79 repetition telemetry in `graph` (graph/baseline repetition
-/// rates from the deterministic greedy probe).
+/// rates from the deterministic greedy probe); 5 = issue-#80 rejected
+/// candidate-variant rows in `gate_c` (`rule12_cloud_size_normalized`,
+/// `rule12_margin_weighted`).
 #[derive(Debug, Clone, Serialize)]
 pub struct ScoreReport {
     pub schema: u32,
@@ -1559,7 +1560,7 @@ pub fn build_score_report(
     gate_c: GateCOutcome,
 ) -> ScoreReport {
     ScoreReport {
-        schema: 4,
+        schema: 5,
         inputs,
         config: ScoreReportConfig {
             transition_out_degree: config.transition_out_degree,
