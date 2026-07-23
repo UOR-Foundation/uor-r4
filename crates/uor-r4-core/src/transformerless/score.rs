@@ -100,7 +100,7 @@ use super::cover::{self, Observation};
 use super::runtime::{self, Store};
 use super::score_runtime::{
     binary_memberships, binary_top1_covered, regions_from_view, structural_edges_from_view,
-    verify_witness_replay, GraphScorer, RegionParams, ScoreStatus, StructuralEdge,
+    verify_witness_replay, GraphScorer, RegionParams, ScoreStatus, ScoringVariant, StructuralEdge,
     EDGE_KIND_FORWARD, EDGE_KIND_NEIGHBOR, EDGE_KIND_REFINEMENT, RESIDUAL_EXCT_MAGIC,
 };
 use uor_r4_graph_format::ScoreQ;
@@ -109,12 +109,11 @@ use uor_r4_graph_format::ScoreQ;
 pub const DEFAULT_TRANSITION_OUT_DEGREE: usize = 8;
 /// Default per-region emission list bound (top-E by residual score).
 pub const DEFAULT_EMISSION_ENTRIES: usize = 64;
-/// Default number of root-prior tokens admitted to the candidate set.
+/// Default root-prior candidate count.
 pub const DEFAULT_ROOT_TOP_B: usize = 64;
-/// Default number of EXCT probe tokens admitted to the candidate set.
+/// Default EXCT candidate count.
 pub const DEFAULT_EXCT_TOP_X: usize = 64;
-/// Default number of held-out positions whose witnesses are replayed
-/// during the Gate C evaluation.
+/// Default held-out position count whose witnesses are replayed in Gate C.
 pub const DEFAULT_WITNESS_SAMPLE: usize = 64;
 
 /// HEAD defaults reused from `convert_r4g1`/`cover` (RFC §4 starting
@@ -122,6 +121,7 @@ pub const DEFAULT_WITNESS_SAMPLE: usize = 64;
 const DEFAULT_MAX_FRONTIER_WIDTH: u16 = 32;
 const MAX_CANDIDATES: u16 = 16;
 const DEFAULT_MAX_EMISSION_ENTRIES: u32 = 64;
+
 const SHORTLIST_SIZE: u16 = 8;
 const MAX_PROGRAM_STEPS: u32 = 64;
 
@@ -274,6 +274,8 @@ pub struct ScoreConfig {
     /// Emission smoothing rule (issue #67). The add-one default
     /// preserves the pre-#67 compiler byte-exactly.
     pub smoothing: Smoothing,
+    /// Candidate scoring variant (issue #80).
+    pub scoring_variant: ScoringVariant,
 }
 
 impl Default for ScoreConfig {
@@ -285,6 +287,7 @@ impl Default for ScoreConfig {
             exct_top_x: DEFAULT_EXCT_TOP_X,
             witness_sample: DEFAULT_WITNESS_SAMPLE,
             smoothing: Smoothing::AddOne,
+            scoring_variant: ScoringVariant::ChainTelescoped,
         }
     }
 }
@@ -1090,6 +1093,10 @@ pub struct GateCOutcome {
     /// Ablation (issue #66): Rule 1+2 with ΔT emissions disabled — the
     /// precedence path's measure of ΔT's contribution.
     pub rule12_precedence_no_f: GateCMetrics,
+    /// Candidate variant (issue #80): Cloud-size normalized scoring.
+    pub rule12_cloud_size_normalized: GateCMetrics,
+    /// Candidate variant (issue #80): Margin-weighted residual scoring.
+    pub rule12_margin_weighted: GateCMetrics,
     /// TLA3 store baseline (`runtime::predict_witness_plain`).
     pub tla3_baseline: GateCMetrics,
     pub rule12_status_counts: StatusCounts,
@@ -1250,6 +1257,20 @@ pub fn evaluate_gate_c(
         config.root_top_b,
         config.exct_top_x,
     )?;
+    let mut scorer_normalized = GraphScorer::from_artifact(
+        r4g1,
+        Some(artifact_container),
+        config.root_top_b,
+        config.exct_top_x,
+    )?;
+    scorer_normalized.set_scoring_variant(ScoringVariant::CloudSizeNormalized);
+    let mut scorer_margin = GraphScorer::from_artifact(
+        r4g1,
+        Some(artifact_container),
+        config.root_top_b,
+        config.exct_top_x,
+    )?;
+    scorer_margin.set_scoring_variant(ScoringVariant::MarginWeighted);
 
     let mut outcome = GateCOutcome::default();
     let mut bits_legacy = 0f64;
@@ -1257,12 +1278,16 @@ pub fn evaluate_gate_c(
     let mut bits_rule12 = 0f64;
     let mut bits_rule1_no_f = 0f64;
     let mut bits_rule12_no_f = 0f64;
+    let mut bits_normalized = 0f64;
+    let mut bits_margin = 0f64;
     let mut bits_baseline = 0f64;
     let mut hits_legacy = 0u64;
     let mut hits_rule1 = 0u64;
     let mut hits_rule12 = 0u64;
     let mut hits_rule1_no_f = 0u64;
     let mut hits_rule12_no_f = 0u64;
+    let mut hits_normalized = 0u64;
+    let mut hits_margin = 0u64;
     let mut hits_baseline = 0u64;
     // Per-status Rule 1+2 accumulators: [ExactContext, Graph, Novel].
     let mut status_positions = [0usize; 3];
@@ -1283,6 +1308,8 @@ pub fn evaluate_gate_c(
         let rule12 = scorer_with_exct.score_candidates(&observation.sig, &[])?;
         let rule1_no_f = scorer_no_exct_no_f.score_candidates(&observation.sig, &[])?;
         let rule12_no_f = scorer_with_exct_no_f.score_candidates(&observation.sig, &[])?;
+        let normalized = scorer_normalized.score_candidates(&observation.sig, &[])?;
+        let margin = scorer_margin.score_candidates(&observation.sig, &[])?;
         let baseline = runtime::predict_witness_plain(store, &code);
 
         let legacy_hit = legacy.selected == teacher_argmax;
@@ -1290,23 +1317,31 @@ pub fn evaluate_gate_c(
         let rule12_hit = rule12.selected == teacher_argmax;
         let rule1_no_f_hit = rule1_no_f.selected == teacher_argmax;
         let rule12_no_f_hit = rule12_no_f.selected == teacher_argmax;
+        let normalized_hit = normalized.selected == teacher_argmax;
+        let margin_hit = margin.selected == teacher_argmax;
         let baseline_hit = baseline.token == teacher_argmax;
         hits_legacy += u64::from(legacy_hit);
         hits_rule1 += u64::from(rule1_hit);
         hits_rule12 += u64::from(rule12_hit);
         hits_rule1_no_f += u64::from(rule1_no_f_hit);
         hits_rule12_no_f += u64::from(rule12_no_f_hit);
+        hits_normalized += u64::from(normalized_hit);
+        hits_margin += u64::from(margin_hit);
         hits_baseline += u64::from(baseline_hit);
         let legacy_bits = outcome_bits(&scorer_with_exct, &legacy.candidates, next);
         let rule1_bits = outcome_bits(&scorer_no_exct, &rule1.candidates, next);
         let rule12_bits = outcome_bits(&scorer_with_exct, &rule12.candidates, next);
         let rule1_no_f_bits = outcome_bits(&scorer_no_exct_no_f, &rule1_no_f.candidates, next);
         let rule12_no_f_bits = outcome_bits(&scorer_with_exct_no_f, &rule12_no_f.candidates, next);
+        let normalized_bits = outcome_bits(&scorer_normalized, &normalized.candidates, next);
+        let margin_bits = outcome_bits(&scorer_margin, &margin.candidates, next);
         bits_legacy += legacy_bits;
         bits_rule1 += rule1_bits;
         bits_rule12 += rule12_bits;
         bits_rule1_no_f += rule1_no_f_bits;
         bits_rule12_no_f += rule12_no_f_bits;
+        bits_normalized += normalized_bits;
+        bits_margin += margin_bits;
         bits_baseline += -witten_bell_probability(store, &code, next).log2();
 
         let status_index = match rule12.witness.status {
@@ -1377,6 +1412,8 @@ pub fn evaluate_gate_c(
     outcome.rule12_precedence = metrics(hits_rule12, bits_rule12);
     outcome.rule1_chain_no_f = metrics(hits_rule1_no_f, bits_rule1_no_f);
     outcome.rule12_precedence_no_f = metrics(hits_rule12_no_f, bits_rule12_no_f);
+    outcome.rule12_cloud_size_normalized = metrics(hits_normalized, bits_normalized);
+    outcome.rule12_margin_weighted = metrics(hits_margin, bits_margin);
     outcome.tla3_baseline = metrics(hits_baseline, bits_baseline);
     outcome.rule12_status_counts = StatusCounts {
         exact_context: status_positions[0],
