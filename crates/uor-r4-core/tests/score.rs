@@ -604,6 +604,125 @@ fn theorem_10_overlapping_active_and_predicted_counts_emission_once() {
     verify_witness_replay(&bytes, None, &outcome.witness, 64, 64).expect("replay");
 }
 
+/// Two sibling depth-1 regions that are both active for the same context
+/// demonstrate the double-counting flaw in the legacy Σ-over-cloud formula.
+/// The chain-telescoped formula (Rule 1) selects one chain and prevents
+/// the stacking, correcting the selection back to the right token.
+#[test]
+fn legacy_formula_double_counts_sibling_regions_new_formula_does_not() {
+    // Both regions are close to context [0x00; SIG_BYTES].
+    // Region 1 (node 1): distance 0, margin 4.
+    // Region 2 (node 2): distance 1 (bit 0 flipped), margin 3.
+    let mut sig2 = [0x00u8; SIG_BYTES];
+    sig2[0] = 0x80; // one bit set → Hamming distance 1
+
+    let regions = vec![
+        RegionParams {
+            node: 1,
+            depth: 1,
+            radius: 4,
+            sig: [0x00; SIG_BYTES],
+            parent: None,
+        },
+        RegionParams {
+            node: 2,
+            depth: 1,
+            radius: 4,
+            sig: sig2,
+            parent: None,
+        },
+    ];
+    let structural = vec![
+        StructuralEdge {
+            src: 0,
+            kind: 0,
+            dst: 1,
+            score_q: ScoreQ::ZERO,
+        },
+        StructuralEdge {
+            src: 0,
+            kind: 0,
+            dst: 2,
+            score_q: ScoreQ::ZERO,
+        },
+    ];
+    // No forward transitions: the effect is purely from emission residuals.
+    let transitions: Vec<TransitionEdge> = Vec::new();
+    // Token 10: B(10) = 10; ΔE(1,10) = 60; ΔE(2,10) = 60.
+    // Token 20: B(20) = 100 (root-only candidate).
+    // Under the correct chain-telescoped formula token 20 wins (70 < 100);
+    // under the legacy Σ-over-cloud formula token 10 wins (130 > 100).
+    let emissions = EmissionTables {
+        root_prior: [(10u32, 10i32), (20u32, 100i32)]
+            .into_iter()
+            .map(|(t, s)| (t, ScoreQ::from_raw(s)))
+            .collect(),
+        root_floor: ScoreQ::from_raw(-7000),
+        root_total: 110,
+        region_lists: vec![
+            vec![(10, ScoreQ::from_raw(60))], // region 1
+            vec![(10, ScoreQ::from_raw(60))], // region 2 — identical residual
+        ],
+    };
+    let artifacts = synthetic_compiled();
+    let artifact_container = compiler::artifact_bytes(&artifacts);
+    let store: Store = (0..=STAGES).map(|_| BTreeMap::new()).collect();
+    let tls1 = runtime::store_bytes(&store);
+    let (bytes, _) = score::emit_scored_r4g1(
+        &artifact_container,
+        (b"sibling-test-m", b"sibling-test-r"),
+        64,
+        &score::ScoredGraphSections {
+            regions: &regions,
+            structural: &structural,
+            transitions: &transitions,
+            emissions: &emissions,
+            exct_tls1: &tls1,
+        },
+    )
+    .expect("emit");
+
+    let scorer = GraphScorer::from_artifact(&bytes, None, 64, 64).expect("scorer");
+    let context = [0x00u8; SIG_BYTES];
+
+    // Chain-telescoped (new formula): both regions are active but only the
+    // selected chain (region 1, margin 4 > 3) contributes ΔE.
+    // S(10) = B(10) + ΔE(1,10) = 10 + 60 = 70 < 100 = B(20) → token 20 wins.
+    let new_outcome = scorer.score_candidates(&context).expect("new scores");
+    assert_eq!(
+        new_outcome.selected, 20,
+        "chain-telescoped: token 20 wins; no sibling stacking"
+    );
+    // Exactly one emission contribution (from the selected chain only).
+    let emission_count = new_outcome
+        .witness
+        .selected_contributions
+        .iter()
+        .filter(|c| matches!(c.id, ContributionId::Emission { .. }))
+        .count();
+    assert_eq!(emission_count, 0, "token 20 has no emission contributions");
+
+    // Legacy (Σ-over-cloud): both active regions contribute ΔE.
+    // S(10) = B(10) + ΔE(1,10) + ΔE(2,10) = 10 + 60 + 60 = 130 > 100 → token 10 wins.
+    let legacy_outcome = scorer
+        .score_candidates_legacy(&context)
+        .expect("legacy scores");
+    assert_eq!(
+        legacy_outcome.selected, 10,
+        "legacy Σ-over-cloud: token 10 wins due to double-counting"
+    );
+    let legacy_emission_count = legacy_outcome
+        .witness
+        .selected_contributions
+        .iter()
+        .filter(|c| matches!(c.id, ContributionId::Emission { .. }))
+        .count();
+    assert_eq!(
+        legacy_emission_count, 2,
+        "legacy: both sibling emissions stack onto token 10"
+    );
+}
+
 // ------------------------------------------------------------ Theorem 6 --
 
 #[test]

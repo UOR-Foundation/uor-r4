@@ -814,6 +814,10 @@ pub struct GateCOutcome {
     pub graph_no_exct: GateCMetrics,
     pub graph_with_exct: GateCMetrics,
     pub tla3_baseline: GateCMetrics,
+    /// Legacy Σ-over-cloud formula (issue #64, for side-by-side comparison).
+    /// Empty when the scorer does not carry EMIT data (should not happen
+    /// in practice; Gate C always builds from a fully-emitted artifact).
+    pub graph_legacy: GateCMetrics,
     /// Candidate-set recall is reported separately from selected-token
     /// agreement. A low value means the scorer cannot recover the teacher
     /// token regardless of how its weights are tuned.
@@ -858,9 +862,11 @@ pub fn evaluate_gate_c(
     let mut bits_no_exct = 0f64;
     let mut bits_with_exct = 0f64;
     let mut bits_baseline = 0f64;
+    let mut bits_legacy = 0f64;
     let mut hits_no_exct = 0u64;
     let mut hits_with_exct = 0u64;
     let mut hits_baseline = 0u64;
+    let mut hits_legacy = 0u64;
     let mut candidate_top1_no_exct = 0u64;
     let mut candidate_top3_no_exct = 0u64;
     let mut candidate_top1_with_exct = 0u64;
@@ -873,6 +879,7 @@ pub fn evaluate_gate_c(
 
         let no_exct = scorer_no_exct.score_candidates(&observation.sig)?;
         let with_exct = scorer_with_exct.score_candidates(&observation.sig)?;
+        let legacy = scorer_no_exct.score_candidates_legacy(&observation.sig)?;
         let baseline = runtime::predict_witness_plain(store, &code);
 
         let contains = |candidates: &[(u32, ScoreQ)], token: u32| {
@@ -903,11 +910,15 @@ pub fn evaluate_gate_c(
         if with_exct.selected == teacher_argmax {
             hits_with_exct += 1;
         }
+        if legacy.selected == teacher_argmax {
+            hits_legacy += 1;
+        }
         if baseline.token == teacher_argmax {
             hits_baseline += 1;
         }
         bits_no_exct += outcome_bits(&scorer_no_exct, &no_exct.candidates, next);
         bits_with_exct += outcome_bits(&scorer_with_exct, &with_exct.candidates, next);
+        bits_legacy += outcome_bits(&scorer_no_exct, &legacy.candidates, next);
         bits_baseline += -witten_bell_probability(store, &code, next).log2();
 
         if index < config.witness_sample {
@@ -944,6 +955,11 @@ pub fn evaluate_gate_c(
         positions: n,
         top1_agreement: hits_baseline as f64 / nf,
         bits_per_token: bits_baseline / nf,
+    };
+    outcome.graph_legacy = GateCMetrics {
+        positions: n,
+        top1_agreement: hits_legacy as f64 / nf,
+        bits_per_token: bits_legacy / nf,
     };
     outcome.candidate_recall = CandidateRecall {
         graph_no_exct_top1: candidate_top1_no_exct as f64 / nf,

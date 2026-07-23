@@ -690,6 +690,7 @@ pub fn score_command(args: &[String]) -> Result<(), String> {
     };
     row("graph (no EXCT)", &gate_c.graph_no_exct);
     row("graph (with EXCT)", &gate_c.graph_with_exct);
+    row("graph (legacy Σ-cloud)", &gate_c.graph_legacy);
     row("TLA3 store baseline", &gate_c.tla3_baseline);
     println!(
         "  witness replay: {}/{} ok",

@@ -58,6 +58,7 @@ formally committed. Full text: plan §2.
 | HF-path evaluation tooling | exists | landed | PR #41 (`evaluate-report`); issue #34 closed |
 | **Gate C harness (Phase 4)** | TLA3 store baseline 31.7% / 11.88 bits-token | fresh, 2026-07-22 | `r4 transformerless score`, fixture corpus, 30,036 held-out positions — reproduces the P2 agreement anchor; bits/token is the scorer's own accounting, not the P2 WB metric |
 | **Gate C: graph formula v1 (Σ-over-cloud)** | **0.3% / 70.47 bits-token** | fresh, unfavorable | correlated sibling-subtree residual stacking (issue #64, redesign in flight) |
+| **Gate C: graph formula v2 (chain-telescoped + EXCT precedence)** | measured on re-compile | pending | issue #64 redesign implemented; re-run `r4 transformerless score` on the fixture corpus after recompiling the graph artifact |
 
 Important: the cited certificate belongs to the legacy llama2.c stories15M teacher, **not** to
 the current default SmolLM2-135M-Instruct compile. The Gate C harness reproduces its 31.7%
@@ -128,6 +129,20 @@ Pass conditions for the Phase-5 minimum viable graph, all on the declared distri
 6. Novel/Contradictory fallback rate measured and reported; on-distribution rate < 20%.
 
 Missing target 1–2 or 4 ⇒ stop or redesign. Missing 3/5/6 ⇒ redesign discussion.
+
+### 4.1 Canonical bits/token definition (issue #65 Chain 4, item 13)
+
+Two bits/token figures appear in this document; they are distinct metrics and both are reported:
+
+| Metric | Definition | Where reported | Current value |
+|---|---|---|---|
+| **Gate C bits/token** | Scorer's own accounting: for each held-out position the scorer scores all candidates; bits/token = −log₂(P_scorer(next_token)) where P_scorer comes from the scored candidate distribution. The scorer's candidate set may not include the held-out token (→ floor probability). This is the metric used in `evaluate_gate_c` and the `score_report.json`. | Gate C table (§3.1 above), `score_report.json`, `r4 transformerless score` output | 11.88 (TLA3 baseline), 70.47 (graph formula v1) |
+| **Witten-Bell (WB) bits/token** | Full-vocabulary probability under the Witten-Bell smoothed graded store, as in the P2 certificate and `evaluate-report`. Computed over the full vocabulary, not just the candidate set. This is the metric cited in PROOF.md. | `instruction-eval.json`, `evaluate-report` command | 6.54 (P2 WB, legacy llama2.c teacher) |
+
+**Decision**: the Gate C bits/token (scorer accounting) is the normative quality metric for the
+graph path because it measures what the scorer would actually select, not the WB smoothing floor.
+Target M.V.G. §4 item 2 ("bits/token ≤ HF-path baseline − 0.3") uses the **Gate C bits/token**.
+The WB figure is retained in certificates for research continuity but is NOT the gating metric.
 
 ## 5. Threat-model note (backlog #22)
 
