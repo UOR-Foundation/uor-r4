@@ -89,7 +89,7 @@ pub fn hamming_distance_36(a: &[u8; SIG_BYTES], b: &[u8; SIG_BYTES]) -> u32 {
         if std::arch::is_x86_feature_detected!("avx2") {
             return unsafe { hamming_distance_36_avx2(a, b) };
         }
-        return hamming_distance_36_scalar(a, b);
+        hamming_distance_36_scalar(a, b)
     }
 
     #[cfg(target_arch = "aarch64")]
@@ -100,7 +100,7 @@ pub fn hamming_distance_36(a: &[u8; SIG_BYTES], b: &[u8; SIG_BYTES]) -> u32 {
 
     #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
     {
-        return hamming_distance_36_scalar(a, b);
+        hamming_distance_36_scalar(a, b)
     }
 }
 
