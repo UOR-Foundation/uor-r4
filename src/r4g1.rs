@@ -336,17 +336,25 @@ impl R4g1State {
     /// with legacy TLS1 exact-context evidence stay on the reference
     /// scorer (the deployed step requires residualized RX1 evidence);
     /// that path ignores the width — widening is unavailable there.
-    fn score_sig(&self, sig: &[u8; SIG_BYTES], top_m: usize) -> Result<ScoredProbe, String> {
+    fn score_sig(
+        &self,
+        sig: &[u8; SIG_BYTES],
+        top_m: usize,
+        recent_tokens: &[u32],
+    ) -> Result<ScoredProbe, String> {
         if self.step_supported {
-            let outcome = self
-                .scorer
-                .score_step(sig, top_m, &mut self.step.borrow_mut())?;
+            let outcome = self.scorer.score_step_with_recent(
+                sig,
+                top_m,
+                &mut self.step.borrow_mut(),
+                recent_tokens,
+            )?;
             Ok(ScoredProbe {
                 token: outcome.selected,
                 status: outcome.status,
             })
         } else {
-            let outcome = self.scorer.score_candidates(sig)?;
+            let outcome = self.scorer.score_candidates(sig, recent_tokens)?;
             Ok(ScoredProbe {
                 token: outcome.selected,
                 status: outcome.witness.status,
@@ -363,8 +371,16 @@ impl R4g1State {
         &self,
         sig: &[u8; SIG_BYTES],
     ) -> Result<PredictDecision, String> {
+        self.predict_signature_status_with_recent(sig, &[])
+    }
+
+    fn predict_signature_status_with_recent(
+        &self,
+        sig: &[u8; SIG_BYTES],
+        recent_tokens: &[u32],
+    ) -> Result<PredictDecision, String> {
         self.bump(|c| c.predicts += 1);
-        let first = self.score_sig(sig, TOP_M)?;
+        let first = self.score_sig(sig, TOP_M, recent_tokens)?;
         match self.policy.action(first.status.into()) {
             StatusAction::Serve => {
                 self.bump(|c| c.serves += 1);
@@ -402,7 +418,7 @@ impl R4g1State {
                     }));
                 }
                 self.bump(|c| c.widen_attempts += 1);
-                let second = self.score_sig(sig, WIDENED_TOP_M)?;
+                let second = self.score_sig(sig, WIDENED_TOP_M, recent_tokens)?;
                 if second.status == ScoreStatus::Novel {
                     self.novel_seen.borrow_mut().insert(sig);
                 }
@@ -427,7 +443,7 @@ impl R4g1State {
     /// Score one token window through the D4 policy.
     pub fn predict_window_status(&self, window: &[u32]) -> Result<PredictDecision, String> {
         self.check_window(window)?;
-        self.predict_signature_status(&self.derive_sig(window))
+        self.predict_signature_status_with_recent(&self.derive_sig(window), window)
     }
 
     /// Generate a greedy continuation with per-step policy decisions:

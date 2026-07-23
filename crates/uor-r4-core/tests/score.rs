@@ -116,8 +116,8 @@ fn synthetic_corpus() -> (Vec<Observation>, Corpus) {
             });
             next.push(next_token);
             t_argmax.push(next_token);
-            top_tokens.push([next_token, 0, 0]);
-            top_weights.push([100, 0, 0]);
+            top_tokens.push([next_token, 0, 0, 0, 0, 0, 0, 0]);
+            top_weights.push([100, 0, 0, 0, 0, 0, 0, 0]);
             observations.push(Observation {
                 position,
                 sample: blake3::hash(&position.to_le_bytes()).into(),
@@ -357,7 +357,9 @@ fn hand_computed_scores_match_the_scorer_exactly() {
     scorer.set_f_emissions(true);
     // Context signature all zeros: region 1 at distance 0 (within its
     // radius 4), region 2 at distance 288 (out of range) — A = {region 0}.
-    let outcome = scorer.score_candidates(&[0x00; SIG_BYTES]).expect("scores");
+    let outcome = scorer
+        .score_candidates(&[0x00; SIG_BYTES], &[])
+        .expect("scores");
     // Only the selected covered refinement chain contributes residuals;
     // predicted-node emissions contribute candidates but do not stack a
     // sibling branch onto the active chain:
@@ -412,7 +414,9 @@ fn canonical_tie_break_prefers_the_lowest_token_id() {
     // (distance 0) and region 1 out of range; F is empty (no forward
     // edges from node 2), so candidates come from region 2's emissions
     // and the root prior.
-    let outcome = scorer.score_candidates(&[0xFF; SIG_BYTES]).expect("scores");
+    let outcome = scorer
+        .score_candidates(&[0xFF; SIG_BYTES], &[])
+        .expect("scores");
     // S(20) = 200 + 2000 = 2200; S(30) = 300 + 100 = 400;
     // S(10) = 100; S(40) = 50 → selected 20, and the scan kept the
     // first (lowest-token) candidate on every strict `>`.
@@ -428,7 +432,9 @@ fn exct_probe_contributes_exact_context_residuals() {
     let scorer =
         GraphScorer::from_artifact(&bytes, Some(&tla), 64, 64).expect("EXCT scorer builds");
     assert!(scorer.has_exct());
-    let outcome = scorer.score_candidates(&[0x00; SIG_BYTES]).expect("scores");
+    let outcome = scorer
+        .score_candidates(&[0x00; SIG_BYTES], &[])
+        .expect("scores");
     let probe = outcome.witness.exct.clone().expect("EXCT probe recorded");
     assert_eq!(probe.level, 0, "only level 0 is populated in the toy store");
     assert!(probe.key.is_empty());
@@ -555,7 +561,9 @@ fn rule1_chain_telescopes_and_sibling_emissions_do_not_stack() {
     c_sig[0] = 0x01; // distance 1 from the all-zeros context
     let (bytes, _tla) = chain_artifact([0x00; SIG_BYTES], c_sig);
     let scorer = GraphScorer::from_artifact(&bytes, None, 64, 64).expect("scorer builds");
-    let outcome = scorer.score_candidates(&[0x00; SIG_BYTES]).expect("scores");
+    let outcome = scorer
+        .score_candidates(&[0x00; SIG_BYTES], &[])
+        .expect("scores");
     // Active: A (depth 1, margin 300), B and C (depth 2, margins 300 and
     // 299). The deepest-chain tie between B and C breaks to the higher
     // margin — B — so only the [A, B] chain applies:
@@ -604,7 +612,9 @@ fn rule1_chain_selection_tie_breaks_by_margin_then_lowest_region_id() {
     // lowest region id wins.
     let (bytes, _tla) = chain_artifact([0x00; SIG_BYTES], [0x00; SIG_BYTES]);
     let scorer = GraphScorer::from_artifact(&bytes, None, 64, 64).expect("scorer builds");
-    let outcome = scorer.score_candidates(&[0x00; SIG_BYTES]).expect("scores");
+    let outcome = scorer
+        .score_candidates(&[0x00; SIG_BYTES], &[])
+        .expect("scores");
     assert_eq!(
         outcome.witness.chain,
         vec![1, 2],
@@ -616,7 +626,9 @@ fn rule1_chain_selection_tie_breaks_by_margin_then_lowest_region_id() {
     b_sig[0] = 0x03; // distance 2 from the all-zeros context
     let (bytes, _tla) = chain_artifact(b_sig, [0x00; SIG_BYTES]);
     let scorer = GraphScorer::from_artifact(&bytes, None, 64, 64).expect("scorer builds");
-    let outcome = scorer.score_candidates(&[0x00; SIG_BYTES]).expect("scores");
+    let outcome = scorer
+        .score_candidates(&[0x00; SIG_BYTES], &[])
+        .expect("scores");
     assert_eq!(outcome.witness.chain, vec![1, 3], "higher margin wins");
     // S(20) = B(20) + ΔE(C,20) = 60 + 5000 = 5060: C's chain applies.
     assert_eq!(outcome.selected, 20);
@@ -631,7 +643,9 @@ fn rule2_exct_precedence_overrides_the_graph_with_sufficient_support() {
     let (bytes, tla, _store) =
         hand_artifact_with_store([(20u32, 5u32), (10, 1)].into_iter().collect());
     let scorer = GraphScorer::from_artifact(&bytes, Some(&tla), 64, 64).expect("EXCT scorer");
-    let outcome = scorer.score_candidates(&[0x00; SIG_BYTES]).expect("scores");
+    let outcome = scorer
+        .score_candidates(&[0x00; SIG_BYTES], &[])
+        .expect("scores");
     assert_eq!(outcome.witness.status, ScoreStatus::ExactContext);
     assert_eq!(
         outcome.selected, 20,
@@ -668,7 +682,9 @@ fn rule1_used_when_exct_support_is_below_min() {
     let (bytes, tla, _store) = hand_artifact_with_store([(20u32, 4u32)].into_iter().collect());
     let mut scorer = GraphScorer::from_artifact(&bytes, Some(&tla), 64, 64).expect("EXCT scorer");
     scorer.set_f_emissions(true);
-    let outcome = scorer.score_candidates(&[0x00; SIG_BYTES]).expect("scores");
+    let outcome = scorer
+        .score_candidates(&[0x00; SIG_BYTES], &[])
+        .expect("scores");
     assert_eq!(outcome.witness.status, ScoreStatus::Graph);
     let probe = outcome.witness.exct.clone().expect("probe recorded");
     assert_eq!(probe.total, 4);
@@ -703,7 +719,7 @@ fn novel_status_when_no_covered_chain_exists() {
     for byte in sig.iter_mut().take(18) {
         *byte = 0xFF;
     }
-    let outcome = scorer.score_candidates(&sig).expect("scores");
+    let outcome = scorer.score_candidates(&sig, &[]).expect("scores");
     assert_eq!(outcome.witness.status, ScoreStatus::Novel);
     assert!(outcome.witness.chain.is_empty());
     assert_eq!(
@@ -793,7 +809,9 @@ fn theorem_10_duplicate_contribution_id_is_rejected() {
     let (bytes, tla, _store) = hand_artifact();
     let mut scorer = GraphScorer::from_artifact(&bytes, None, 64, 64).expect("scorer");
     scorer.set_f_emissions(true);
-    let outcome = scorer.score_candidates(&[0x00; SIG_BYTES]).expect("scores");
+    let outcome = scorer
+        .score_candidates(&[0x00; SIG_BYTES], &[])
+        .expect("scores");
 
     // A duplicated contribution id in the witness is rejected.
     let mut tampered = outcome.witness.clone();
@@ -866,7 +884,9 @@ fn theorem_10_overlapping_active_and_predicted_counts_emission_once() {
     .expect("emit");
     let mut scorer = GraphScorer::from_artifact(&bytes, None, 64, 64).expect("scorer");
     scorer.set_f_emissions(true);
-    let outcome = scorer.score_candidates(&[0x00; SIG_BYTES]).expect("scores");
+    let outcome = scorer
+        .score_candidates(&[0x00; SIG_BYTES], &[])
+        .expect("scores");
     // Node 1 is both active and predicted.
     assert_eq!(outcome.witness.predicted, vec![1]);
     // S(10) = B(10) + ΔE(1,10) + w = 100 + 5 + 7 = 112 — the emission
@@ -890,7 +910,9 @@ fn theorem_6_witness_replays_bit_exact_and_tampering_is_rejected() {
     let (bytes, _tla, _artifacts, _store, _corpus, held_out) = synthetic_scored_artifact();
     let scorer = GraphScorer::from_artifact(&bytes, None, 64, 64).expect("scorer");
     for observation in held_out.iter().take(8) {
-        let outcome = scorer.score_candidates(&observation.sig).expect("scores");
+        let outcome = scorer
+            .score_candidates(&observation.sig, &[])
+            .expect("scores");
         // Bit-exact independent replay.
         verify_witness_replay(&bytes, None, &outcome.witness, 64, 64).expect("replay");
         // A flipped contribution value is rejected.
@@ -1635,7 +1657,9 @@ fn rx1_baked_residuals_match_probe_time_quantization() {
     let scorer =
         GraphScorer::from_artifact(&bytes, Some(&tla), 64, 64).expect("deployed RX1 scorer");
     assert!(scorer.has_exct());
-    let outcome = scorer.score_candidates(&[0x00; SIG_BYTES]).expect("scores");
+    let outcome = scorer
+        .score_candidates(&[0x00; SIG_BYTES], &[])
+        .expect("scores");
 
     // The hand store {10: 3, 20: 1, 50: 2} (total 6) clears the support
     // gate, so Rule 2 fires and every admitted candidate's score is the

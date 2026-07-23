@@ -11,6 +11,11 @@ name: ci
 # logprobs); on Linux it is expected to skip (checkpoint download is best-effort)
 # or fail on platform drift — the canonical deterministic compile mode (Phase 2)
 # is what makes it a true cross-platform gate.
+#
+# GATE C REGRESSION: The Gate C trend is tracked per commit on a small corpus
+# slice. It fails if top-1 drops > 2 points or bits/token worsens > 0.1 vs the
+# pinned record in `scripts/check_gate_c_regression.py`. The trend JSON is
+# uploaded as a `gate-c-trend` artifact.
 
 on:
   push:
@@ -91,6 +96,22 @@ jobs:
       - name: κ-reproduction (macOS-pinned baseline; informational on Linux)
         run: TLESS_CHECKPOINT=/tmp/ref/out/model.bin cargo test -p uor-r4-core --release --test kappa_reproduction -- --ignored
         continue-on-error: true
+
+      - name: Gate C trend tracking (Issue #77)
+        run: |
+          cargo run --release --bin r4 -- transformerless score \
+            --corpus-meta crates/uor-r4-core/tests/fixtures/c_meta.bin \
+            --corpus-recs crates/uor-r4-core/tests/fixtures/c_recs.bin \
+            --artifacts crates/uor-r4-core/tests/fixtures/tless_artifacts.bin \
+            --out trend_output
+          ./scripts/check_gate_c_regression.py trend_output/score_report.json
+
+      - name: Upload Gate C trend JSON
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gate-c-trend
+          path: trend_output/score_report.json
 
   wasm:
     name: wasm-pack build (dashboard facade, deploy.yml parity)

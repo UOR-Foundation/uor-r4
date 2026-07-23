@@ -32,10 +32,10 @@ use std::fs;
 use std::io::{self, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
 
-/// Observation record width: the v3 corpus record layout (story, next,
-/// top-3 tokens, top-3 weights, span, byte anchors) — see
-/// [`compiler::encode_v3_record`].
-pub const RECORD_SIZE: usize = 48;
+/// Observation record width: the v4 corpus record layout (story, next,
+/// top-8 tokens, top-8 weights, span, byte anchors) — see
+/// [`compiler::encode_v4_record`].
+pub const RECORD_SIZE: usize = 88;
 
 /// Maximum shard fan-out accepted by [`ObservationShardWriter`]: shard
 /// files are held open during a pass, so the writer caps the fan-out at
@@ -543,7 +543,7 @@ pub fn observe_sharded(
             progress.set(n as usize);
             oracle.step(token, pos, &mut logits);
             let (next, top_tokens, top_weights) =
-                compiler::softmax_top3_sample(&mut logits, &mut rng);
+                compiler::softmax_top8_sample(&mut logits, &mut rng);
             window.push(token as u32);
             if window.len() > compiler::WINDOW {
                 window.remove(0);
@@ -554,7 +554,7 @@ pub fn observe_sharded(
             let span_end = span_start.saturating_add(1);
             let (byte_start, byte_end) =
                 compiler::byte_anchors(token_byte_lengths, story_byte_offset, next);
-            let record = compiler::encode_v3_record(
+            let record = compiler::encode_v4_record(
                 stories as u32,
                 next as u32,
                 &top_tokens,
