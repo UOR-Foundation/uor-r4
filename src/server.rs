@@ -930,8 +930,15 @@ fn compile_bundle_from_source(
     // child worker so the server can report corpus progress while the native
     // compiler is generating/resuming records.
     let meta_path = output.join("corpus.meta");
+    let status_for_compiler = Arc::clone(status);
     let compiler = std::thread::spawn(move || {
-        uor_r4_core::transformerless::command::compile_hugging_face(&args)
+        uor_r4_core::transformerless::command::compile_hugging_face_with_progress(
+            &args,
+            move |phase, message| {
+                let mapped = 5u8.saturating_add(phase.saturating_mul(15) / 100);
+                set_r4g1_compile_progress(&status_for_compiler, mapped, message);
+            },
+        )
     });
     while !compiler.is_finished() {
         let observed = fs::read(&meta_path).ok().and_then(|bytes| {
@@ -1186,8 +1193,11 @@ fn spawn_r4g1_compile(
 
 fn set_r4g1_compile_progress(status: &Arc<Mutex<R4g1CompileStatus>>, progress: u8, message: &str) {
     let mut current = status.lock().unwrap();
-    current.progress = progress.min(100);
-    current.message = message.to_owned();
+    let progress = progress.min(100);
+    if progress >= current.progress {
+        current.progress = progress;
+        current.message = message.to_owned();
+    }
 }
 
 fn pinned_huggingface_source() -> Result<SourceDownload, String> {
