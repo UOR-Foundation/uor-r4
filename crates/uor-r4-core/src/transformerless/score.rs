@@ -1423,13 +1423,6 @@ pub fn evaluate_gate_c(
                 seed,
                 64,
             )?;
-            graph_rep_sum += generate_greedy_repetition_rate(
-                &scorer_with_exct,
-                artifacts,
-                &rotations,
-                seed,
-                64,
-            )?;
             baseline_rep_sum +=
                 baseline_greedy_repetition_rate(store, artifacts, &rotations, seed, 64);
             probe_count += 1;
