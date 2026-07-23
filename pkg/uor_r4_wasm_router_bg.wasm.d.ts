@@ -1,6 +1,7 @@
 /* tslint:disable */
 /* eslint-disable */
 export const memory: WebAssembly.Memory;
+export const generate_r4g1_response: (a: number, b: number, c: number) => [number, number];
 export const __wbg_get_uorr4router_geometry_type: (a: number) => number;
 export const __wbg_set_uorr4router_geometry_type: (a: number, b: number) => void;
 export const __wbg_uorr4router_free: (a: number, b: number) => void;

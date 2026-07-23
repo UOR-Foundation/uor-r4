@@ -141,6 +141,8 @@ export class UorR4Router {
     geometry_type: GeometryType;
 }
 
+export function generate_r4g1_response(prompt: string, max_tokens: number): string | undefined;
+
 export function init_wasm(): void;
 
 export function vsa_encode_event(subj: string, act: string, time: string, loc: string, space: string): Uint8Array;
@@ -153,6 +155,7 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
+    readonly generate_r4g1_response: (a: number, b: number, c: number) => [number, number];
     readonly __wbg_get_uorr4router_geometry_type: (a: number) => number;
     readonly __wbg_set_uorr4router_geometry_type: (a: number, b: number) => void;
     readonly __wbg_uorr4router_free: (a: number, b: number) => void;

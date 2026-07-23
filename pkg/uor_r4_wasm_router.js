@@ -449,6 +449,23 @@ export class UorR4Router {
 }
 if (Symbol.dispose) UorR4Router.prototype[Symbol.dispose] = UorR4Router.prototype.free;
 
+/**
+ * @param {string} prompt
+ * @param {number} max_tokens
+ * @returns {string | undefined}
+ */
+export function generate_r4g1_response(prompt, max_tokens) {
+    const ptr0 = passStringToWasm0(prompt, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.generate_r4g1_response(ptr0, len0, max_tokens);
+    let v2;
+    if (ret[0] !== 0) {
+        v2 = getStringFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    }
+    return v2;
+}
+
 export function init_wasm() {
     wasm.init_wasm();
 }
