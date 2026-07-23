@@ -26,3 +26,8 @@ Feature: R4G1 generated-response quality
     Given the R4G1 runtime returned a concise readable hello response
     When the server validates the generated response
     Then the response is accepted as usable
+
+  Scenario: allow ordinary repeated words
+    Given the R4G1 runtime returned a readable response with ordinary repetition
+    When the server validates the generated response
+    Then the response is accepted as usable

@@ -707,6 +707,49 @@ fn has_r4g1_compile_inputs(root: &Path) -> bool {
     root.join("corpus.meta").is_file() && root.join("corpus.records").is_file()
 }
 
+/// Validate the corpus files used by the browser-triggered R4G1 compiler.
+pub fn validate_r4g1_corpus_inputs(meta: &Path, records: &Path) -> Result<(), String> {
+    if !meta.is_file() {
+        return Err(format!(
+            "configured corpus metadata is missing: {}",
+            meta.display()
+        ));
+    }
+    if !records.is_file() {
+        return Err(format!(
+            "configured corpus records are missing: {}",
+            records.display()
+        ));
+    }
+    Ok(())
+}
+
+/// Resolve the synthesis engine. R4G1 is the active default; legacy and
+/// geometric paths are reachable only through explicit engine values.
+pub fn select_synthesis_engine(requested: Option<&str>) -> &'static str {
+    match requested {
+        Some("r4g1") => "r4g1",
+        Some("geometric") => "geometric",
+        Some("attention") => "attention",
+        Some("r4-attention") => "r4-attention",
+        Some("transformerless-legacy") => "transformerless-legacy",
+        Some("auto" | "ollama" | "transformerless") | None => "r4g1",
+        Some(_) => "r4g1",
+    }
+}
+
+/// The explicit failure contract for an unavailable R4G1 runtime. Keeping
+/// this separate makes the no-fallback behavior directly testable.
+pub fn r4g1_unavailable_response() -> (u16, serde_json::Value) {
+    (
+        503,
+        serde_json::json!({
+            "error": "R4G1 Graph runtime did not produce a usable response; no fallback engine was invoked",
+            "engine": "r4g1"
+        }),
+    )
+}
+
 fn same_file_bytes(left: &Path, right: &Path) -> bool {
     if !left.is_file() || !right.is_file() {
         return false;
@@ -789,18 +832,7 @@ fn r4g1_compile_paths(cli: &ServerConfig) -> Result<(PathBuf, PathBuf, PathBuf, 
             .parent()
             .unwrap_or_else(|| Path::new("."))
             .to_path_buf();
-        if !corpus_meta.is_file() {
-            return Err(format!(
-                "configured corpus metadata is missing: {}",
-                corpus_meta.display()
-            ));
-        }
-        if !corpus_recs.is_file() {
-            return Err(format!(
-                "configured corpus records are missing: {}",
-                corpus_recs.display()
-            ));
-        }
+        validate_r4g1_corpus_inputs(&corpus_meta, &corpus_recs)?;
         return Ok((
             corpus_meta,
             corpus_recs,
@@ -1254,15 +1286,7 @@ fn handle_connection(
             .unwrap_or_else(|| "tenant-alpha".to_string());
         // `ollama` remains accepted as a legacy client alias so saved browser
         // sessions keep working, but all local synthesis is transformerless.
-        let engine_mode = match payload.engine.as_deref() {
-            Some("r4g1") => "r4g1",
-            Some("geometric") => "geometric",
-            Some("attention") => "attention",
-            Some("r4-attention") => "r4-attention",
-            Some("transformerless-legacy") => "transformerless-legacy",
-            Some("auto" | "ollama" | "transformerless") | None => "r4g1",
-            Some(_) => "r4g1",
-        };
+        let engine_mode = select_synthesis_engine(payload.engine.as_deref());
 
         let mut router_guard = router.lock().unwrap();
 
@@ -1435,15 +1459,8 @@ fn handle_connection(
         }
 
         if final_response_text.is_empty() && engine_mode == "r4g1" {
-            send_json_response(
-                stream,
-                503,
-                &serde_json::json!({
-                    "error": "R4G1 Graph runtime did not produce a usable response; no fallback engine was invoked",
-                    "engine": "r4g1"
-                })
-                .to_string(),
-            );
+            let (status, body) = r4g1_unavailable_response();
+            send_json_response(stream, status, &body.to_string());
             return;
         }
 

@@ -62,25 +62,8 @@ impl R4g1State {
         let scorer =
             GraphScorer::from_artifact(&graph_bytes, Some(&teacher_bytes), root_top_b, exct_top_x)
                 .map_err(|error| format!("{}: {error}", graph_path.display()))?;
-        if let Some(report) = score_report {
-            // The deployed runtime wires RX1 EXCT, so the gate reads the
-            // Rule 1+2 column (the schema-2 name of the with-EXCT graph
-            // metrics the gate has always consumed).
-            let graph_agreement = report
-                .pointer("/gate_c/rule12_precedence/top1_agreement")
-                .and_then(serde_json::Value::as_f64);
-            let baseline_agreement = report
-                .pointer("/gate_c/tla3_baseline/top1_agreement")
-                .and_then(serde_json::Value::as_f64);
-            if let (Some(graph), Some(baseline)) = (graph_agreement, baseline_agreement) {
-                if graph < baseline {
-                    return Err(format!(
-                        "R4G1 quality gate failed: graph runtime top-1 {:.2}% is below TLA baseline {:.2}%",
-                        graph * 100.0,
-                        baseline * 100.0
-                    ));
-                }
-            }
+        if let Some(report) = score_report.as_ref() {
+            validate_quality_report(report)?;
         }
         let tokenizer = teacher_path
             .parent()
@@ -140,6 +123,28 @@ impl R4g1State {
         }
         Ok(out.len())
     }
+}
+
+/// Validate the graph's Rule 1+2 top-1 agreement against the TLA baseline.
+/// Missing metrics remain compatible with older reports; when both metrics
+/// exist, the deployed graph must not be worse than the baseline.
+pub fn validate_quality_report(report: &serde_json::Value) -> Result<(), String> {
+    let graph_agreement = report
+        .pointer("/gate_c/rule12_precedence/top1_agreement")
+        .and_then(serde_json::Value::as_f64);
+    let baseline_agreement = report
+        .pointer("/gate_c/tla3_baseline/top1_agreement")
+        .and_then(serde_json::Value::as_f64);
+    if let (Some(graph), Some(baseline)) = (graph_agreement, baseline_agreement) {
+        if graph < baseline {
+            return Err(format!(
+                "R4G1 quality gate failed: graph runtime top-1 {:.2}% is below TLA baseline {:.2}%",
+                graph * 100.0,
+                baseline * 100.0
+            ));
+        }
+    }
+    Ok(())
 }
 
 /// Resolve the graph path from an explicit setting or the conventional
