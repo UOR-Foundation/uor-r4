@@ -4,6 +4,10 @@ members = [
     "crates/uor-r4-graph-format",
     "crates/uor-r4-router",
     "crates/uor-r4-proof-model",
+    "crates/uor-r4-graph-compiler",
+    "crates/uor-r4-graph-runtime",
+    "crates/uor-r4-graph-certify",
+    "crates/uor-r4-graph-cli",
 ]
 default-members = [
     ".",
@@ -11,6 +15,7 @@ default-members = [
     "crates/uor-r4-graph-format",
     "crates/uor-r4-router",
     "crates/uor-r4-proof-model",
+    "crates/uor-r4-graph-runtime",
 ]
 exclude = ["uor_standards", "crates/uor-r4-graph-format/fuzz"]
 resolver = "2"
@@ -31,6 +36,8 @@ path = "src/main.rs"
 
 [dependencies]
 uor-r4-core = { path = "crates/uor-r4-core" }
+uor-r4-proof-model = { path = "crates/uor-r4-proof-model" }
+uor-r4-graph-runtime = { path = "crates/uor-r4-graph-runtime" }
 uor-r4-router = { path = "crates/uor-r4-router" }
 uor-addr = { git = "https://github.com/UOR-Foundation/uor-addr.git", rev = "165b51e3e2113ee5d032730cde709335d4fe9b60", default-features = false, features = ["alloc"] }
 uor-foundation-sdk = { git = "https://github.com/UOR-Foundation/UOR-Framework.git", rev = "51c01382200b0179d6640b07e9c8119364ab69a1" }
@@ -40,7 +47,14 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 hex = "0.4.3"
 tracing = { version = "0.1", default-features = false, features = ["std"] }
+wasm-bindgen = "0.2.92"
 blake3 = "=1.5.0"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+uor-r4-model-source = { path = "crates/uor-r4-model-source" }
+uor-r4-graph-compiler = { path = "crates/uor-r4-graph-compiler" }
+uor-r4-graph-certify = { path = "crates/uor-r4-graph-certify" }
+uor-r4-graph-cli = { path = "crates/uor-r4-graph-cli" }
 
 [dev-dependencies]
 uor-foundation-verify = { git = "https://github.com/UOR-Foundation/UOR-Framework.git", rev = "51c01382200b0179d6640b07e9c8119364ab69a1" }

@@ -63,10 +63,11 @@
 #[cfg(feature = "alloc")]
 extern crate alloc;
 
+mod code;
 mod error;
 mod head;
 mod header;
-mod records;
+pub mod records;
 mod rout;
 #[cfg(feature = "alloc")]
 mod ser;
@@ -74,6 +75,7 @@ mod stage2;
 mod types;
 mod view;
 
+pub use code::{OP_CLEAR_SLOT, OP_HALT as CODE_OP_HALT, OP_SHIFT_SLOTS, OP_UPDATE_SLOT};
 pub use error::{BoundKind, FormatError, RangeField};
 pub use head::{Head, FALLBACK_POLICY_COUNT, HEAD_PAYLOAD_LEN};
 pub use header::{

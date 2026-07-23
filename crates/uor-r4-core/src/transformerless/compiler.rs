@@ -20,10 +20,10 @@
 //! architecture-generic (llama / qwen / phi differ only in the teacher
 //! adapter). This crate instantiates the llama-family adapter.
 
-use super::teacher::TeacherOracle;
 use std::collections::HashMap;
 #[cfg(not(target_arch = "wasm32"))]
 use std::io::Write;
+use uor_r4_model_source::TeacherOracle;
 
 pub const STAGES: usize = 4;
 pub const K: usize = 256;
@@ -67,6 +67,7 @@ pub struct Corpus {
     pub span_end: Vec<u32>,
     pub byte_start: Vec<u32>,
     pub byte_end: Vec<u32>,
+    pub hidden: Option<Vec<Vec<f32>>>,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -182,7 +183,7 @@ pub fn load_corpus_from(mp: &str, rp: &str) -> Option<Corpus> {
             input.push(next[i - 1]);
         }
     }
-    Some(Corpus {
+    let mut c = Corpus {
         n,
         stories,
         story,
@@ -195,7 +196,36 @@ pub fn load_corpus_from(mp: &str, rp: &str) -> Option<Corpus> {
         span_end,
         byte_start,
         byte_end,
-    })
+        hidden: None,
+    };
+
+    let mut hidden_path = String::from(rp);
+    if hidden_path.ends_with("_recs.bin") {
+        hidden_path = hidden_path.replace("_recs.bin", "_hidden.bin");
+    } else {
+        hidden_path.push_str(".hidden");
+    }
+
+    if let Ok(hb) = std::fs::read(&hidden_path) {
+        // Teacher hidden state is dimension 288 (D)
+        if hb.len() == n * D * 4 {
+            let mut hidden = Vec::with_capacity(n);
+            let mut offset = 0;
+            for _ in 0..n {
+                let mut v = Vec::with_capacity(D);
+                for _ in 0..D {
+                    let mut b = [0u8; 4];
+                    b.copy_from_slice(&hb[offset..offset + 4]);
+                    v.push(f32::from_le_bytes(b));
+                    offset += 4;
+                }
+                hidden.push(v);
+            }
+            c.hidden = Some(hidden);
+        }
+    }
+
+    Some(c)
 }
 
 /// One teacher decode step of corpus/observation generation: softmax the
@@ -383,13 +413,26 @@ pub fn generate_to_with_token_byte_lengths(
         Err(_) => default_record_size,
     };
     let mut logits = vec![0f32; vocab];
-    let mut progress = super::progress::Progress::new("teacher corpus", target);
+    let mut progress = uor_r4_model_source::progress::Progress::new("teacher corpus", target);
     progress.set(n as usize);
     let mut recs = std::fs::OpenOptions::new()
         .create(true)
         .append(true)
         .open(rp)
         .unwrap();
+
+    let mut hidden_path = String::from(rp);
+    if hidden_path.ends_with("_recs.bin") {
+        hidden_path = hidden_path.replace("_recs.bin", "_hidden.bin");
+    } else {
+        hidden_path.push_str(".hidden");
+    }
+    let mut hidden_file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&hidden_path)
+        .unwrap();
+
     let t0 = std::time::Instant::now();
     while done == 0 && t0.elapsed().as_secs() < budget_s {
         oracle.reset();
@@ -414,6 +457,13 @@ pub fn generate_to_with_token_byte_lengths(
             );
 
             recs.write_all(&record[..record_size]).unwrap();
+
+            if let Some(h) = oracle.hidden_state() {
+                let bytes =
+                    unsafe { std::slice::from_raw_parts(h.as_ptr() as *const u8, h.len() * 4) };
+                hidden_file.write_all(bytes).unwrap();
+            }
+
             if token_byte_lengths.is_some() {
                 story_byte_offset = byte_end;
             }
@@ -524,7 +574,7 @@ pub struct HammingCalibrationReport {
 /// class-signature calibration above and the cover region calibration
 /// (`super::cover`): the smallest distance whose cumulative count reaches
 /// `ceil(total · numerator / denominator)`.
-pub(crate) fn quantile_radius(histogram: &[u32], numerator: u32, denominator: u32) -> u16 {
+pub fn quantile_radius(histogram: &[u32], numerator: u32, denominator: u32) -> u16 {
     let total: u64 = histogram.iter().map(|&count| u64::from(count)).sum();
     if total == 0 {
         return 0;
@@ -678,7 +728,7 @@ pub fn deterministic_project(
         mean[j] = (sum_vec[j] / vocab as f64) as f32;
     }
 
-    let mut progress = super::progress::Progress::new("projecting embeddings", vocab);
+    let mut progress = uor_r4_model_source::progress::Progress::new("projecting embeddings", vocab);
     for chunk_start in (0..vocab).step_by(chunk_size) {
         let chunk_end = (chunk_start + chunk_size).min(vocab);
         let count = chunk_end - chunk_start;
@@ -748,7 +798,8 @@ fn sampled_kmeans_rvq(
 
     for stage in 0..stages {
         eprintln!("sampled RVQ stage {}/{}", stage + 1, stages);
-        let mut progress = super::progress::Progress::new("RVQ assignment", iters * sample_size);
+        let mut progress =
+            uor_r4_model_source::progress::Progress::new("RVQ assignment", iters * sample_size);
         let mut cent = vec![0f32; k * D];
         let mut cent_seed = 0xC0DEB00C ^ stage as u64 ^ rng_seed;
         let mut used = vec![false; sample_size];
@@ -925,7 +976,8 @@ pub fn compile(oracle: &dyn TeacherOracle, corpus: &Corpus) -> Compiled {
     let cut = train_cut(corpus);
     let mut sums = [0i128; D];
     let mut ntrain = 0i128;
-    let mut threshold_progress = super::progress::Progress::new("context thresholds", corpus.n);
+    let mut threshold_progress =
+        uor_r4_model_source::progress::Progress::new("context thresholds", corpus.n);
     for i in 0..corpus.n {
         threshold_progress.set(i);
         if corpus.story[i] >= cut {
@@ -956,7 +1008,8 @@ pub fn compile(oracle: &dyn TeacherOracle, corpus: &Corpus) -> Compiled {
     let train_idx: Vec<usize> = (0..corpus.n).filter(|&i| corpus.story[i] < cut).collect();
     let mut s = 0x5A3B1Eu64;
     let mut samp = vec![0f32; CTX_SAMPLE * D];
-    let mut context_progress = super::progress::Progress::new("context samples", CTX_SAMPLE);
+    let mut context_progress =
+        uor_r4_model_source::progress::Progress::new("context samples", CTX_SAMPLE);
     for v in 0..CTX_SAMPLE {
         context_progress.set(v);
         let i = train_idx[(xorshift(&mut s) as usize) % train_idx.len()];

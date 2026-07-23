@@ -260,11 +260,49 @@ pub enum FormatError {
         /// Index of the offending LEAF op.
         op_index: u32,
     },
+    /// CODE bytecode opcode outside the set.
+    UnknownCodeOp {
+        /// Byte offset of the opcode within the CODE section.
+        offset: u32,
+        /// The unknown opcode byte.
+        opcode: u8,
+    },
+    /// A CODE op's fixed operands run past the section end.
+    TruncatedCodeOp {
+        /// Byte offset of the op within the CODE section.
+        offset: u32,
+        /// The opcode whose operands are truncated.
+        opcode: u8,
+    },
+    /// CODE static op count exceeds maximum steps.
+    CodeProgramTooDeep {
+        /// Ops parsed before the terminator.
+        ops: u32,
+        /// Max decision-program steps.
+        max: u32,
+    },
+    /// CODE program does not end at `HALT`.
+    CodeProgramUnterminated,
+    /// CODE operand out of range (level > 2).
+    CodeOperandOutOfBounds {
+        /// Index of the offending op.
+        op_index: u32,
+    },
     /// EMIT/EXCT storage descriptor invalid (RFC §6 item 8): fewer than
     /// 4 bytes, `width ∉ {0,1,2}`, or `|shift| > 31`.
     InvalidStorageDescriptor {
         /// Section carrying the bad descriptor (EMIT or EXCT).
         section: SectionId,
+    },
+    /// PTCH section size not a multiple of PACKED_TOMBSTONE_LEN
+    PatchSectionMisaligned {
+        /// Actual length
+        actual_len: u64,
+    },
+    /// RTNX section size not a multiple of PACKED_ROUTE_TRANSLATION_LEN
+    RouteTranslationSectionMisaligned {
+        /// Actual length
+        actual_len: u64,
     },
 }
 
@@ -415,10 +453,37 @@ impl fmt::Display for FormatError {
                 f,
                 "ROUT op {op_index}: LEAF shortlist range does not resolve within the trailing table"
             ),
+            FormatError::UnknownCodeOp { offset, opcode } => write!(
+                f,
+                "CODE offset {offset}: unknown code opcode 0x{opcode:02x}"
+            ),
+            FormatError::TruncatedCodeOp { offset, opcode } => write!(
+                f,
+                "CODE offset {offset}: operands of opcode 0x{opcode:02x} run past the section end"
+            ),
+            FormatError::CodeProgramTooDeep { ops, max } => write!(
+                f,
+                "CODE program of {ops} ops exceeds max {max} steps"
+            ),
+            FormatError::CodeProgramUnterminated => {
+                write!(f, "CODE program does not end at a HALT op")
+            }
+            FormatError::CodeOperandOutOfBounds { op_index } => write!(
+                f,
+                "CODE op {op_index}: operand out of range (level > 2)"
+            ),
             FormatError::InvalidStorageDescriptor { section } => write!(
                 f,
                 "section 0x{:08x}: invalid storage descriptor (4 bytes, width in {{0,1,2}}, |shift| <= 31)",
                 section.raw()
+            ),
+            FormatError::PatchSectionMisaligned { actual_len } => write!(
+                f,
+                "PTCH section holds {actual_len} bytes, not a multiple of 8"
+            ),
+            FormatError::RouteTranslationSectionMisaligned { actual_len } => write!(
+                f,
+                "RTNX section holds {actual_len} bytes, not a multiple of 12"
             ),
         }
     }

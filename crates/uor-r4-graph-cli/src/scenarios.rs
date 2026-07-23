@@ -1,0 +1,348 @@
+use std::collections::BTreeMap;
+use uor_r4_core::transformerless::compiler::{self, Corpus};
+use uor_r4_core::transformerless::runtime::{
+    Store, build_store, code_plain, derive_rotations, predict_plain,
+};
+use uor_r4_core::transformerless::scenarios::Tokenizer;
+use uor_r4_model_source::TeacherOracle;
+
+struct Scenario {
+    class: &'static str,
+    name: &'static str,
+    text: String,
+    /// true: score every position of the text against the ACTUAL next
+    /// token (real human-written text); false: treat the text as a prompt
+    /// and measure agreement along the teacher's greedy continuation.
+    real_text: bool,
+}
+
+fn scenario_set() -> Vec<Scenario> {
+    let shakespeare = {
+        let full = std::fs::read_to_string("/tmp/corpus.txt").unwrap_or_default();
+        match full.get(1000..2100) {
+            Some(s) => s.to_string(),
+            None => "To be, or not to be, that is the question.".to_string(),
+        }
+    };
+    let s = |class, name, text: &str, real_text| Scenario {
+        class,
+        name,
+        text: text.to_string(),
+        real_text,
+    };
+    vec![
+        // -- in-domain prompts (teacher-trajectory agreement)
+        s(
+            "in-domain prompt",
+            "dog-named",
+            "Once upon a time, there was a little dog named Rex.",
+            false,
+        ),
+        s(
+            "in-domain prompt",
+            "park-ball",
+            "Lily and Ben went to the park to play with their new ball.",
+            false,
+        ),
+        s(
+            "in-domain prompt",
+            "sad-bird",
+            "The little bird was sad because it could not fly.",
+            false,
+        ),
+        s(
+            "in-domain prompt",
+            "red-truck",
+            "Tom saw a big red truck outside his house.",
+            false,
+        ),
+        s(
+            "in-domain prompt",
+            "shiny-key",
+            "One day, a cat found a shiny key in the garden.",
+            false,
+        ),
+        // -- out-of-domain real-world prompts
+        s(
+            "out-of-domain prompt",
+            "capital-q",
+            "What is the capital of France?",
+            false,
+        ),
+        s(
+            "out-of-domain prompt",
+            "explain",
+            "Explain how photosynthesis works.",
+            false,
+        ),
+        s(
+            "out-of-domain prompt",
+            "code",
+            "Write a Python function to add two numbers.",
+            false,
+        ),
+        s(
+            "out-of-domain prompt",
+            "business",
+            "The quarterly revenue increased by fifteen percent compared to",
+            false,
+        ),
+        // -- real human-written text, scored against actual next tokens
+        s(
+            "real text, in-domain style",
+            "handwritten-story",
+            "One day, a little girl named Mia went to the park with her mom. Mia saw a big dog. The dog was sad because it lost its ball. Mia wanted to help the dog. She looked under the bench and found the ball. The dog was very happy and wagged its tail. Mia and the dog played together all day. When it was time to go home, the dog gave Mia a big lick on her face. Mia laughed and said she would come back tomorrow.",
+            true,
+        ),
+        s(
+            "real text, out-of-domain",
+            "shakespeare",
+            &shakespeare,
+            true,
+        ),
+        // -- structural stress
+        s(
+            "stress",
+            "repetition",
+            "one two three four one two three four one two three four one two three four",
+            false,
+        ),
+        s("stress", "one-word", "The", false),
+        s("stress", "cold-start", "", false),
+    ]
+}
+
+/// Adapter: a token sequence as a single-story Corpus, so the scenario
+/// path runs the IDENTICAL runtime functions certified in PROOF.md.
+fn as_corpus(tokens: &[u32], t_argmax: &[u32]) -> Corpus {
+    let n = tokens.len();
+    Corpus {
+        n,
+        stories: 1,
+        story: vec![0; n],
+        input: tokens.to_vec(),
+        next: {
+            let mut nx = tokens[1..].to_vec();
+            nx.push(0);
+            nx
+        },
+        t_argmax: t_argmax.to_vec(),
+        top_tokens: vec![[0u32; 3]; n],
+        top_weights: vec![[0u32; 3]; n],
+        span_start: (0..n).map(|idx| idx as u32).collect(),
+        span_end: (0..n).map(|idx| idx as u32 + 1).collect(),
+        byte_start: vec![u32::MAX; n],
+        byte_end: vec![u32::MAX; n],
+        hidden: None,
+    }
+}
+
+struct ClassAgg {
+    positions: u64,
+    agree: u64,
+    tless_top1: u64,
+    teacher_top1: u64,
+    real_positions: u64,
+    tless_ns: u128,
+    teacher_ns: u128,
+    teacher_steps: u64,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn scenarios(oracle: &mut dyn TeacherOracle) {
+    let tok = Tokenizer::load("/tmp/ref/tokenizer.bin");
+
+    // Tokenizer witnesses: round-trip, then the fluency gate.
+    let probe = "Once upon a time, there was a little dog.";
+    let ids = tok.encode(probe);
+    assert_eq!(tok.decode(&ids).trim_start(), probe, "tokenizer round-trip");
+    println!(
+        "tokenizer witness: round-trip exact on probe ({} tokens)",
+        ids.len()
+    );
+
+    let cap = oracle.seq_len() - 2;
+    let vocab = oracle.vocab();
+    let mut logits = vec![0f32; vocab];
+    {
+        oracle.reset();
+        let mut seq = ids.clone();
+        for (pos, &t) in ids.iter().enumerate() {
+            oracle.step(t as usize, pos, &mut logits);
+        }
+        for pos in ids.len()..ids.len() + 20 {
+            let mut best = 0usize;
+            for i in 1..vocab {
+                if logits[i] > logits[best] {
+                    best = i;
+                }
+            }
+            seq.push(best as u32);
+            oracle.step(best, pos, &mut logits);
+        }
+        let cont = tok.decode(&seq[ids.len()..]);
+        println!(
+            "tokenizer fluency gate — teacher continues the probe with: \"{}\"",
+            cont.trim()
+        );
+        assert!(
+            cont.split_whitespace().count() >= 3,
+            "teacher continuation not fluent; encoding suspect"
+        );
+    }
+
+    // Artifact + store (train split only; every scenario is unseen).
+    let art = compiler::load_artifacts().expect("run `cargo run --release -- compile` first");
+    let c150 = compiler::load_corpus().expect("run `transformerless gen` first");
+    let (store, _) = build_store(&art, &c150);
+    let rot = derive_rotations();
+    let store_ref: &Store = &store;
+
+    let mut agg: BTreeMap<&'static str, ClassAgg> = BTreeMap::new();
+    println!();
+    println!("| scenario | class | tokens | agree w/ teacher | tless top1 | teacher top1 |");
+    println!("|---|---|---|---|---|---|");
+
+    for sc in scenario_set() {
+        // 1. token stream: prompt (+ teacher greedy greedy continuation if prompt scenario)
+        let prompt: Vec<u32> = if sc.text.is_empty() {
+            vec![1]
+        } else {
+            let mut p = tok.encode(&sc.text);
+            p.truncate(cap.min(p.len()));
+            p
+        };
+        oracle.reset();
+        let mut seq = prompt.clone();
+        let mut t_argmax: Vec<u32> = Vec::new();
+        let t0 = std::time::Instant::now();
+        for (pos, &t) in prompt.iter().enumerate() {
+            oracle.step(t as usize, pos, &mut logits);
+            let mut best = 0usize;
+            for i in 1..vocab {
+                if logits[i] > logits[best] {
+                    best = i;
+                }
+            }
+            t_argmax.push(best as u32);
+        }
+        if !sc.real_text {
+            let cont = 64usize.min(cap.saturating_sub(prompt.len()));
+            for _ in 0..cont {
+                let last = *t_argmax.last().unwrap() as usize;
+                seq.push(last as u32);
+                let pos = seq.len() - 1;
+                oracle.step(last, pos, &mut logits);
+                let mut best = 0usize;
+                for i in 1..vocab {
+                    if logits[i] > logits[best] {
+                        best = i;
+                    }
+                }
+                t_argmax.push(best as u32);
+            }
+        }
+        let teacher_ns = t0.elapsed().as_nanos();
+
+        // 2. artifact predictions over the identical stream
+        let cs = as_corpus(&seq, &t_argmax);
+        let n_eval = cs.n - 1; // positions with a defined next token
+        let t0 = std::time::Instant::now();
+        let preds: Vec<u32> = (0..n_eval)
+            .map(|i| predict_plain(store_ref, &code_plain(&art, &rot, &cs, i)))
+            .collect();
+        let tless_ns = t0.elapsed().as_nanos();
+
+        // 3. metrics
+        let (mut agree, mut tl1, mut th1) = (0u64, 0u64, 0u64);
+        for (i, &prediction) in preds.iter().enumerate() {
+            if prediction == cs.t_argmax[i] {
+                agree += 1;
+            }
+            if sc.real_text {
+                if prediction == cs.next[i] {
+                    tl1 += 1;
+                }
+                if cs.t_argmax[i] == cs.next[i] {
+                    th1 += 1;
+                }
+            }
+        }
+        let pct = |x: u64| 100.0 * x as f64 / n_eval as f64;
+        println!(
+            "| {} | {} | {} | {:.1}% | {} | {} |",
+            sc.name,
+            sc.class,
+            n_eval,
+            pct(agree),
+            if sc.real_text {
+                format!("{:.1}%", pct(tl1))
+            } else {
+                "—".into()
+            },
+            if sc.real_text {
+                format!("{:.1}%", pct(th1))
+            } else {
+                "—".into()
+            },
+        );
+
+        let e = agg.entry(sc.class).or_insert(ClassAgg {
+            positions: 0,
+            agree: 0,
+            tless_top1: 0,
+            teacher_top1: 0,
+            real_positions: 0,
+            tless_ns: 0,
+            teacher_ns: 0,
+            teacher_steps: 0,
+        });
+        e.positions += n_eval as u64;
+        e.agree += agree;
+        if sc.real_text {
+            e.real_positions += n_eval as u64;
+            e.tless_top1 += tl1;
+            e.teacher_top1 += th1;
+        }
+        e.tless_ns += tless_ns;
+        e.teacher_ns += teacher_ns;
+        e.teacher_steps += t_argmax.len() as u64;
+    }
+
+    println!();
+    println!(
+        "| class | positions | agree w/ teacher | tless top1 | teacher top1 | tless tok/s | teacher tok/s |"
+    );
+    println!("|---|---|---|---|---|---|---|");
+    for (class, e) in &agg {
+        let ag = 100.0 * e.agree as f64 / e.positions as f64;
+        let (tl, th) = if e.real_positions > 0 {
+            (
+                format!(
+                    "{:.1}%",
+                    100.0 * e.tless_top1 as f64 / e.real_positions as f64
+                ),
+                format!(
+                    "{:.1}%",
+                    100.0 * e.teacher_top1 as f64 / e.real_positions as f64
+                ),
+            )
+        } else {
+            ("—".into(), "—".into())
+        };
+        println!(
+            "| {} | {} | {:.1}% | {} | {} | {:.0} | {:.0} |",
+            class,
+            e.positions,
+            ag,
+            tl,
+            th,
+            e.positions as f64 / (e.tless_ns as f64 / 1e9),
+            e.teacher_steps as f64 / (e.teacher_ns as f64 / 1e9),
+        );
+    }
+    println!();
+    println!(
+        "notes: prompt scenarios measure agreement along the teacher's own greedy\ntrajectory; real-text rows also score both systems against the actual next\ntoken. The store was built from the training split only — every scenario\nstream is unseen. Classical runtimes execute the source model, so their\nscenario predictions coincide with the teacher columns by definition."
+    );
+}

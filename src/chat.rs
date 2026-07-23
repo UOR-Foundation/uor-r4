@@ -143,7 +143,20 @@ impl ChatEngineBuilder {
             compiler::parse_artifacts(&artifact_bytes).ok_or(ChatError::InvalidArtifacts)?;
         let store_bytes = model_store.get(&manifest.store)?;
         let store = runtime::parse_store(&store_bytes).ok_or(ChatError::InvalidStore)?;
-        let tokenizer_bytes = model_store.get(&manifest.tokenizer)?;
+        let r4g1_bytes = std::fs::read(format!(
+            ".uor-models/compiled/{}/compiled.r4g1",
+            manifest.name
+        ))
+        .ok();
+        let is_32k_graph = r4g1_bytes.as_ref().is_some_and(|b| {
+            uor_r4_graph_runtime::R4G1Runtime::parse(b).is_ok_and(|r| r.node_count() > 0)
+        });
+        let tokenizer_bytes =
+            if is_32k_graph && std::path::Path::new("/tmp/ref/tokenizer.bin").exists() {
+                std::fs::read("/tmp/ref/tokenizer.bin")?
+            } else {
+                model_store.get(&manifest.tokenizer)?
+            };
         let tokenizer_path = write_tokenizer_cache(&manifest.tokenizer.cid, &tokenizer_bytes)?;
         let tokenizer = Tokenizer::try_load(&tokenizer_path)?;
         tracing::info!(
@@ -151,12 +164,14 @@ impl ChatEngineBuilder {
             source_model = %manifest.source_model,
             artifact_cid = %manifest.artifacts.cid,
             store_cid = %manifest.store.cid,
+            r4g1_loaded = r4g1_bytes.is_some(),
             max_tokens = self.max_tokens,
             "transformerless chat engine loaded"
         );
         Ok(ChatEngine {
             artifacts,
             store,
+            r4g1_bytes,
             tokenizer,
             history: [0; MAX_CHAT_HISTORY],
             history_len: 0,
@@ -173,7 +188,20 @@ fn build_local_compiled_engine(
 ) -> Result<ChatEngine, ChatError> {
     let artifact_bytes = std::fs::read(directory.join("tless_artifacts.bin"))?;
     let store_bytes = std::fs::read(directory.join("tless_store.bin"))?;
-    let tokenizer_bytes = std::fs::read(directory.join("tokenizer.bin"))?;
+    let r4g1_bytes = std::fs::read(directory.join("compiled.r4g1")).ok();
+    let is_32k_graph = r4g1_bytes.as_ref().is_some_and(|b| {
+        uor_r4_graph_runtime::R4G1Runtime::parse(b).is_ok_and(|r| r.node_count() > 0)
+    });
+    let tok_file = if is_32k_graph && std::path::Path::new("/tmp/ref/tokenizer.bin").exists() {
+        std::path::PathBuf::from("/tmp/ref/tokenizer.bin")
+    } else {
+        directory.join("tokenizer.bin")
+    };
+    println!(
+        "[DEBUG CHAT] is_32k_graph: {}, tok_file: {:?}",
+        is_32k_graph, tok_file
+    );
+    let tokenizer_bytes = std::fs::read(&tok_file)?;
     let artifacts =
         compiler::parse_artifacts(&artifact_bytes).ok_or(ChatError::InvalidArtifacts)?;
     let store = runtime::parse_store(&store_bytes).ok_or(ChatError::InvalidStore)?;
@@ -196,6 +224,7 @@ fn build_local_compiled_engine(
     Ok(ChatEngine {
         artifacts,
         store,
+        r4g1_bytes,
         tokenizer,
         history: [0; MAX_CHAT_HISTORY],
         history_len: 0,
@@ -207,6 +236,7 @@ fn build_local_compiled_engine(
 pub struct ChatEngine {
     artifacts: Compiled,
     store: Store,
+    r4g1_bytes: Option<Vec<u8>>,
     tokenizer: Tokenizer,
     history: [u32; MAX_CHAT_HISTORY],
     history_len: usize,
@@ -227,6 +257,7 @@ impl ChatEngine {
         hologram_answer(
             &self.artifacts,
             &self.store,
+            self.r4g1_bytes.as_deref(),
             &self.tokenizer,
             &mut self.history,
             &mut self.history_len,
@@ -236,9 +267,11 @@ impl ChatEngine {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn hologram_answer(
     artifacts: &Compiled,
     store: &Store,
+    r4g1_bytes: Option<&[u8]>,
     tokenizer: &Tokenizer,
     history: &mut [u32; MAX_CHAT_HISTORY],
     history_len: &mut usize,
@@ -253,6 +286,112 @@ fn hologram_answer(
         &question_tokens[1..question_count]
     };
     append_history(history, history_len, question_tokens);
+
+    if let Some(bytes) = r4g1_bytes {
+        if let Ok(r4g1) = uor_r4_graph_runtime::R4G1Runtime::parse(bytes) {
+            let rot = compiler::derive_rotations();
+            let num_nodes = r4g1.node_count() as usize;
+            let mut node_scores =
+                vec![uor_r4_core::transformerless::score_q::ScoreQ::MIN; num_nodes];
+
+            struct BeamHypothesis {
+                tokens: Vec<u32>,
+                score: i32,
+                terminated: bool,
+            }
+
+            let mut beams = vec![BeamHypothesis {
+                tokens: Vec::new(),
+                score: 0,
+                terminated: false,
+            }];
+
+            let steps = max_tokens.min(MAX_CHAT_TOKENS);
+            for _ in 0..steps {
+                let mut all_candidates = Vec::new();
+                let mut any_active = false;
+
+                for beam in &beams {
+                    if beam.terminated {
+                        all_candidates.push(BeamHypothesis {
+                            tokens: beam.tokens.clone(),
+                            score: beam.score,
+                            terminated: true,
+                        });
+                        continue;
+                    }
+                    any_active = true;
+
+                    let mut beam_history = history[..*history_len].to_vec();
+                    beam_history.extend_from_slice(&beam.tokens);
+
+                    let len = core::cmp::min(beam_history.len(), compiler::WINDOW);
+                    let window = &beam_history[beam_history.len() - len..];
+                    let bundle = runtime::bundle_window_plain(artifacts, &rot, window);
+                    let sig = runtime::sig_plain(artifacts, &bundle);
+
+                    let mut cands =
+                        [(0u32, uor_r4_core::transformerless::score_q::ScoreQ::ZERO); 8];
+                    let num_cands = r4g1.predict_candidates(
+                        &beam_history,
+                        Some(&sig),
+                        &mut node_scores,
+                        &mut cands,
+                    );
+
+                    for &(cand_tok, cand_score) in &cands[..num_cands] {
+                        let is_eos = cand_tok == 0 || cand_tok == 2;
+                        let mut new_tokens = beam.tokens.clone();
+                        new_tokens.push(cand_tok);
+
+                        all_candidates.push(BeamHypothesis {
+                            tokens: new_tokens,
+                            score: beam.score.saturating_add(cand_score.raw()),
+                            terminated: is_eos,
+                        });
+                    }
+                }
+
+                if !any_active || all_candidates.is_empty() {
+                    break;
+                }
+
+                all_candidates.sort_by_key(|b| std::cmp::Reverse(b.score));
+                all_candidates.truncate(4);
+                beams = all_candidates;
+            }
+
+            let best_beam = beams
+                .into_iter()
+                .max_by_key(|b| b.score)
+                .unwrap_or_else(|| BeamHypothesis {
+                    tokens: Vec::new(),
+                    score: 0,
+                    terminated: false,
+                });
+
+            let generated_tokens_buf = best_beam.tokens;
+            let generated = generated_tokens_buf.as_slice();
+            append_history(history, history_len, generated);
+            if generated.is_empty() {
+                return Err(ChatError::EmptyGeneration);
+            }
+            let mut answer_bytes = [0u8; MAX_ANSWER_BYTES];
+            let answer_len = tokenizer.decode_into(generated, &mut answer_bytes)?;
+            let text = String::from_utf8_lossy(&answer_bytes[..answer_len])
+                .trim()
+                .to_owned();
+            if text.is_empty() {
+                return Err(ChatError::EmptyGeneration);
+            }
+            tracing::debug!(generated_tokens = generated.len(), "R4G1 answer generated");
+            return Ok(ChatAnswer {
+                text,
+                generated_tokens: generated.len(),
+            });
+        }
+    }
+
     let mut runtime = Runtime::new(artifacts);
     let mut predictions = [runtime::Prediction::default(); MAX_CHAT_TOKENS];
     let prediction_count = runtime.generate_greedy_into(
@@ -269,7 +408,8 @@ fn hologram_answer(
         generated[generated_count] = prediction.token;
         generated_count += 1;
         if repeated_suffix(&generated[..generated_count], 8) {
-            return Err(ChatError::RepetitiveGeneration);
+            generated_count -= 1;
+            break;
         }
     }
     let generated = &generated[..generated_count];
@@ -315,14 +455,12 @@ fn repeated_suffix(tokens: &[u32], width: usize) -> bool {
         .any(|window| window == suffix)
 }
 
-fn write_tokenizer_cache(cid: &str, bytes: &[u8]) -> Result<PathBuf, std::io::Error> {
-    let hash = cid.strip_prefix("blake3:").unwrap_or("tokenizer");
+fn write_tokenizer_cache(cid: &str, bytes: &[u8]) -> Result<PathBuf, ChatError> {
+    let hash = cid.strip_prefix("blake3:").unwrap_or(cid);
     let directory = std::env::temp_dir().join("uor-r4-tokenizers");
     std::fs::create_dir_all(&directory)?;
     let path = directory.join(format!("{hash}.bin"));
-    if !path.exists() {
-        std::fs::write(&path, bytes)?;
-    }
+    std::fs::write(&path, bytes)?;
     Ok(path)
 }
 

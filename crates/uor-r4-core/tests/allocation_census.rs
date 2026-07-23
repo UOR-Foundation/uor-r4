@@ -256,8 +256,8 @@ fn allocation_census() {
     println!("=== allocation census: uor-r4-core transformerless runtime (Phase-0 baseline) ===");
 
     // Phase 1 — container parsing (expected > 0; reported, not asserted).
-    let (art, art_src) = parse_artifacts_measured();
-    let (store, store_src) = parse_store_measured();
+    let (art, _art_src) = parse_artifacts_measured();
+    let (store, _store_src) = parse_store_measured();
 
     // Phase 2 — Runtime construction (expected 0; reported, not asserted).
     let (mut rt, rt_cen) = measure(|| runtime::Runtime::new(&art));
@@ -368,5 +368,54 @@ fn allocation_census() {
         ev_cen.allocations, ev_cen.bytes
     );
 
-    println!("=== end census (artifacts: {art_src}; store: {store_src}) ===");
+    // Phase 6 - R4G1 zero-allocation verification
+    println!("=== allocation census: R4G1 zero-multiply prediction runtime ===");
+
+    // Parse fixture artifacts and generate an R4G1 container
+    let (art_r4g1, _) = parse_artifacts_measured();
+    let (store_r4g1, _) = parse_store_measured();
+    let store_bytes = uor_r4_core::transformerless::runtime::store_bytes(&store_r4g1);
+    let art_bytes = std::fs::read(fixture_path("tless_artifacts.bin"))
+        .unwrap_or_else(|_| std::fs::read(real_path("tless_artifacts.bin")).unwrap());
+
+    let (r4g1_bytes, _) = uor_r4_core::transformerless::convert_r4g1::convert(
+        &art_bytes,
+        &art_r4g1,
+        &store_r4g1,
+        &store_bytes,
+        None,
+    )
+    .expect("convert to R4G1 succeeds");
+
+    let (runtime, parse_cen) =
+        measure(|| uor_r4_graph_runtime::R4G1Runtime::parse(&r4g1_bytes).unwrap());
+    println!(
+        "[r4g1 parse] R4G1Runtime::parse → {} allocations, {} bytes (report only)",
+        parse_cen.allocations, parse_cen.bytes
+    );
+
+    let context_tokens = vec![1, 2, 3, 4, 5];
+
+    // Single allocation for the scores vector outside the hot path
+    let mut node_scores =
+        vec![uor_r4_core::transformerless::score_q::ScoreQ::MIN; runtime.node_count() as usize];
+
+    // Warm-up prediction before steady-state measurement
+    let _ = runtime.predict_token(&context_tokens, None, &mut node_scores);
+
+    let (_, predict_cen) = measure(|| {
+        for _ in 0..10 {
+            let _next = runtime.predict_token(&context_tokens, None, &mut node_scores);
+        }
+    });
+
+    println!(
+        "[r4g1 prediction] 10 tokens → {} allocations, {} bytes",
+        predict_cen.allocations, predict_cen.bytes
+    );
+
+    assert_eq!(
+        predict_cen, ZERO,
+        "R4G1 predict_token must be allocation-free"
+    );
 }

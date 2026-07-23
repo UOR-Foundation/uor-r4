@@ -3,7 +3,7 @@ use std::fmt;
 use std::io::{self, BufRead, Write};
 use std::path::PathBuf;
 use std::sync::Arc;
-use uor_r4_core::transformerless::command as transformerless_command;
+use uor_r4_graph_cli as transformerless_command;
 use uor_r4_wasm_router::chat::{ChatAnswer, ChatEngine, ChatError};
 use uor_r4_wasm_router::model::{
     default_model_reference, download_source, ModelCapability, ModelError, ModelManifest,
@@ -111,6 +111,18 @@ enum Command {
     Transformerless {
         /// Subcommand and arguments forwarded verbatim.
         #[arg(required = true, num_args = 1.., trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
+    /// Run the new R4G1 multiresolution graph compiler pipeline.
+    GraphCompile {
+        /// Subcommand and arguments forwarded verbatim.
+        #[arg(required = false, num_args = 0.., trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
+    /// Sample observation records using a teacher oracle.
+    GraphObserve {
+        /// Subcommand and arguments forwarded verbatim.
+        #[arg(required = false, num_args = 0.., trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
 }
@@ -472,13 +484,30 @@ fn run(cli: &Cli) -> Result<(), RunError> {
             run_core("gen", &[seconds.to_string(), target.to_string()])
         }
         Some(Command::Store) => run_core("store", &[]),
-        Some(Command::Certify) => run_core("certify", &[]),
-        Some(Command::Compare) => run_core("compare", &[]),
-        Some(Command::CompareReport) => run_core("compare-report", &[]),
+        Some(Command::Certify) => {
+            let oracle = uor_r4_model_source::LlamaOracle::load("/tmp/ref/out/model.bin");
+            uor_r4_graph_certify::certify::certify(&oracle);
+            Ok(())
+        }
+        Some(Command::Compare) => {
+            let mut oracle = uor_r4_model_source::LlamaOracle::load("/tmp/ref/out/model.bin");
+            uor_r4_graph_certify::compare::compare(&mut oracle);
+            Ok(())
+        }
+        Some(Command::CompareReport) => {
+            uor_r4_graph_certify::compare::report();
+            Ok(())
+        }
         Some(Command::Scenarios) => run_core("scenarios", &[]),
         Some(Command::TeacherKappa) => run_core("teacher-kappa", &[]),
         Some(Command::Transformerless { args }) => {
             transformerless_command::run(args).map_err(RunError::Command)
+        }
+        Some(Command::GraphCompile { args }) => {
+            uor_r4_graph_compiler::compile(args).map_err(RunError::Command)
+        }
+        Some(Command::GraphObserve { args }) => {
+            uor_r4_graph_compiler::observe(args).map_err(RunError::Command)
         }
         Some(Command::Serve) | None => {
             server::run_server(Arc::new(cli.server_config()));
