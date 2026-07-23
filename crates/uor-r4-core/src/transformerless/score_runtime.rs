@@ -128,7 +128,6 @@
 //! candidate accumulation map (the deployed Phase-5 runtime replaces it
 //! with fixed-capacity arrays).
 
-use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
 use uor_r4_graph_format::{GraphView, ScoreQ, SectionId};
@@ -610,18 +609,7 @@ fn parse_residual_exct(body: &[u8]) -> Option<Vec<BTreeMap<Vec<u8>, ResidualExct
 /// container when EXCT evidence is wired) parsed once into bounded
 /// lookup structures. Construction fails closed — invalid bytes or CIDs
 /// never yield a scorer.
-/// Candidate scoring variant (issue #80).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ScoringVariant {
-    /// Chain-telescoped scoring (default HEAD behavior: unweighted sum of chain region residuals).
-    #[default]
-    ChainTelescoped,
-    /// Cloud-size normalized scoring (residual sum divided by chain length).
-    CloudSizeNormalized,
-    /// Margin-weighted residual stacking (residual scaled by normalized membership margin).
-    MarginWeighted,
-}
+pub use super::score_variant::ScoringVariant;
 
 pub struct GraphScorer {
     graph_cid: [u8; 32],
@@ -667,6 +655,34 @@ impl GraphScorer {
     /// The active candidate scoring variant.
     pub fn scoring_variant(&self) -> ScoringVariant {
         self.scoring_variant
+    }
+
+    /// Apply the active scoring variant to one chain emission residual
+    /// (issue #80). `ChainTelescoped` (the deployed default) returns the
+    /// residual unchanged; the rejected experimental variants defer their
+    /// multiply/divide arithmetic to [`ScoringVariant::apply`] in
+    /// `score_variant.rs`, keeping this integer core operator-clean.
+    fn variant_residual(
+        &self,
+        value: ScoreQ,
+        node: u32,
+        chain_len: usize,
+        active: &[ActiveRegion],
+    ) -> ScoreQ {
+        match self.scoring_variant {
+            ScoringVariant::ChainTelescoped => value,
+            ScoringVariant::CloudSizeNormalized => {
+                self.scoring_variant.apply(value, chain_len, 0, 1)
+            }
+            ScoringVariant::MarginWeighted => {
+                let entry = active.iter().find(|a| a.region + 1 == node);
+                let margin = entry.map(|a| i32::from(a.margin)).unwrap_or(1);
+                let radius = entry
+                    .map(|a| u32::from(self.regions[a.region as usize].radius))
+                    .unwrap_or(1);
+                self.scoring_variant.apply(value, chain_len, margin, radius)
+            }
+        }
     }
 
     /// The artifact-declared D4 fallback policy.
@@ -975,32 +991,8 @@ impl GraphScorer {
                     });
                 }
                 if chain_nodes.contains(&node) {
-                    let effective_val = match self.scoring_variant {
-                        ScoringVariant::ChainTelescoped => value,
-                        ScoringVariant::CloudSizeNormalized => {
-                            // BEGIN EXPERIMENTAL VARIANT (#80 candidate variants)
-                            let n = (selected_chain.len().max(1)) as i32;
-                            ScoreQ::from_raw(value.raw() / n)
-                            // END EXPERIMENTAL VARIANT
-                        }
-                        ScoringVariant::MarginWeighted => {
-                            // BEGIN EXPERIMENTAL VARIANT (#80 candidate variants)
-                            let margin = active
-                                .iter()
-                                .find(|a| a.region + 1 == node)
-                                .map(|a| a.margin.max(0) as i128)
-                                .unwrap_or(1);
-                            let radius = active
-                                .iter()
-                                .find(|a| a.region + 1 == node)
-                                .map(|a| u32::from(self.regions[a.region as usize].radius) as i128)
-                                .unwrap_or(1)
-                                .max(1);
-                            let scaled = (value.raw() as i128 * margin) / radius;
-                            ScoreQ::from_raw(scaled as i32)
-                            // END EXPERIMENTAL VARIANT
-                        }
-                    };
+                    let effective_val =
+                        self.variant_residual(value, node, selected_chain.len(), &active);
                     entry.0 = entry.0.saturating_add(effective_val);
                     k.adds += 1;
                     entry.1.push(Contribution {
@@ -1626,34 +1618,8 @@ impl GraphScorer {
                 state.touched.push(token);
             }
             if in_chain {
-                let effective_val = match self.scoring_variant {
-                    ScoringVariant::ChainTelescoped => value,
-                    ScoringVariant::CloudSizeNormalized => {
-                        // BEGIN EXPERIMENTAL VARIANT (#80 candidate variants)
-                        let n = (state.selected_chain.len().max(1)) as i32;
-                        ScoreQ::from_raw(value.raw() / n)
-                        // END EXPERIMENTAL VARIANT
-                    }
-                    ScoringVariant::MarginWeighted => {
-                        // BEGIN EXPERIMENTAL VARIANT (#80 candidate variants)
-                        let margin = state
-                            .active
-                            .iter()
-                            .find(|a| a.region + 1 == node)
-                            .map(|a| a.margin.max(0) as i128)
-                            .unwrap_or(1);
-                        let radius = state
-                            .active
-                            .iter()
-                            .find(|a| a.region + 1 == node)
-                            .map(|a| u32::from(self.regions[a.region as usize].radius) as i128)
-                            .unwrap_or(1)
-                            .max(1);
-                        let scaled = (value.raw() as i128 * margin) / radius;
-                        ScoreQ::from_raw(scaled as i32)
-                        // END EXPERIMENTAL VARIANT
-                    }
-                };
+                let effective_val =
+                    self.variant_residual(value, node, state.selected_chain.len(), &state.active);
                 state.residuals[idx] = ScoreQ::from_raw(state.residuals[idx])
                     .saturating_add(effective_val)
                     .raw();
