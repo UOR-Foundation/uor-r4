@@ -628,7 +628,8 @@ fn clean_attention_response(text: &str, prompt: &str) -> String {
     result
 }
 
-fn usable_generated_text(text: &str) -> bool {
+/// Validate generated text before it is returned by the HTTP chat endpoint.
+pub fn is_usable_generated_text(text: &str) -> bool {
     let chars: Vec<char> = text.chars().collect();
     if chars.is_empty() || chars.iter().any(|ch| ch == &'\u{fffd}' || ch.is_control()) {
         return false;
@@ -652,7 +653,46 @@ fn usable_generated_text(text: &str) -> bool {
             run = 1;
         }
     }
-    true
+    !repeated_word_loop(text)
+}
+
+/// Detect the kind of multi-word loop produced by a broken decoder or a
+/// geometric fallback. Character-level guards cannot catch output such as
+/// "that is how i work" repeated over and over, so inspect word windows too.
+fn repeated_word_loop(text: &str) -> bool {
+    let words: Vec<&str> = text.split_whitespace().collect();
+    if words.len() < 6 {
+        return false;
+    }
+
+    // A repeated suffix is the common autoregressive failure mode. Keep the
+    // minimum at three words so ordinary repeated words are not rejected.
+    let max_suffix_width = (words.len() / 2).min(12);
+    for width in 3..=max_suffix_width {
+        let split = words.len() - width;
+        if words[split..] == words[split - width..split] {
+            return true;
+        }
+    }
+
+    // The fallback observed in the browser can interleave a final fragment
+    // between copies of the same phrase. Three occurrences of a 3–12 word
+    // window are a strong enough signal to reject the response.
+    let max_width = words.len().min(12);
+    for width in 3..=max_width {
+        for start in 0..=words.len() - width {
+            let candidate = &words[start..start + width];
+            let occurrences = words
+                .windows(width)
+                .filter(|window| *window == candidate)
+                .count();
+            if occurrences >= 3 {
+                return true;
+            }
+        }
+    }
+
+    false
 }
 
 /// Persist the manifold cache in the background, at the CLI-configured path.
@@ -1371,7 +1411,7 @@ fn handle_connection(
             let prompt = payload.text.clone();
             if engine_mode != "transformerless-legacy" {
                 if let Some(text) = generate_r4g1_text(&r4g1, &prompt, max_tokens.max(32)) {
-                    if usable_generated_text(&text) {
+                    if is_usable_generated_text(&text) {
                         final_response_text = text;
                         llm_connected = true;
                         generation_mode = "r4g1".to_string();
