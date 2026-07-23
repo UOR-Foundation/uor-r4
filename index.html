@@ -250,6 +250,12 @@
             font-family: 'JetBrains Mono', monospace;
             color: var(--muted);
         }
+        .compile-progress-hint {
+            margin: 0.35rem 0 0.55rem;
+            font-size: 0.6rem;
+            line-height: 1.45;
+            color: var(--muted);
+        }
 
         /* Quick telemetry at bottom of sidebar */
         .telemetry-mini {
@@ -1027,6 +1033,9 @@
             </div>
             <div id="r4g1CompileProgressLabel" class="compile-progress-label" hidden>
                 <span>Compiler progress</span><span id="r4g1CompileProgressValue">0%</span>
+            </div>
+            <div class="compile-progress-hint">
+                Builds the local teacher bundle, graph cover, and scored runtime. This may take several minutes.
             </div>
             <div id="r4g1CompileStatus" style="font-size: 0.68rem; margin-bottom: 0.75rem; color: var(--text2);">
                 Server compilation is idle
