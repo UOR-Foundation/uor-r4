@@ -6,6 +6,8 @@
 
 use cucumber::{given, then, when, World};
 use std::path::Path;
+use uor_r4_core::transformerless::endomorphism::EndomorphismAlgebra;
+use uor_r4_core::transformerless::lie_jordan::{universal_product_u8, LieJordanSplit};
 use uor_r4_wasm_router::r4g1::validate_quality_report;
 use uor_r4_wasm_router::server::{
     is_usable_generated_text, r4g1_unavailable_response, select_synthesis_engine,
@@ -23,6 +25,12 @@ struct R4g1World {
     compile_error: Option<String>,
     quality_report: Option<serde_json::Value>,
     quality_error: Option<String>,
+    // Lie-Jordan fields
+    op_matrix: Option<EndomorphismAlgebra>,
+    split_result: Option<LieJordanSplit>,
+    u8_a: u8,
+    u8_b: u8,
+    u8_res: u8,
 }
 
 #[given("the R4G1 runtime returned the browser's repetitive hello response")]
@@ -225,6 +233,67 @@ fn quality_gate_rejects_digression(w: &mut R4g1World) {
         .as_deref()
         .unwrap_or_default()
         .contains("digresses"));
+}
+
+#[given("a Clifford generator matrix operator in 16D Cayley-Dickson space")]
+fn clifford_generator_op(w: &mut R4g1World) {
+    w.op_matrix = Some(EndomorphismAlgebra::clifford_generator(1));
+}
+
+#[when("Lie-Jordan decomposition is performed on the operator")]
+fn decompose_op(w: &mut R4g1World) {
+    let op = w.op_matrix.as_ref().expect("operator matrix");
+    w.split_result = Some(LieJordanSplit::decompose(op));
+}
+
+#[then("the Lie component is strictly anti-Hermitian")]
+fn lie_anti_hermitian(w: &mut R4g1World) {
+    let split = w.split_result.as_ref().expect("split result");
+    assert!(LieJordanSplit::is_anti_hermitian(&split.lie));
+}
+
+#[then("the Jordan component is strictly Hermitian")]
+fn jordan_hermitian(w: &mut R4g1World) {
+    let split = w.split_result.as_ref().expect("split result");
+    assert!(LieJordanSplit::is_hermitian(&split.jordan));
+}
+
+#[then("the reconstructed operator matches the original matrix")]
+fn reconstructed_matches(w: &mut R4g1World) {
+    let split = w.split_result.as_ref().expect("split result");
+    let orig = w.op_matrix.as_ref().expect("original operator");
+    let rec = split.reconstruct();
+    for (a, b) in orig.matrix.iter().zip(&rec.matrix) {
+        assert!((a - b).abs() < 1e-5);
+    }
+}
+
+#[given("a pair of 8-bit integer operator state bytes")]
+fn integer_operator_bytes(w: &mut R4g1World) {
+    w.u8_a = 0b1100_1010;
+    w.u8_b = 0b1010_1100;
+}
+
+#[when("the hot-path universal product kernel is evaluated for Lie anti-Hermitian symmetry")]
+fn eval_u8_kernel(w: &mut R4g1World) {
+    w.u8_res = universal_product_u8(w.u8_a, w.u8_b, true);
+}
+
+#[then("the result matches the bitwise XOR and rotation transformation")]
+fn u8_kernel_matches(w: &mut R4g1World) {
+    let expected = w.u8_a ^ (w.u8_b.rotate_left(1));
+    assert_eq!(w.u8_res, expected);
+}
+
+#[then("zero floating-point operations or multiplications are executed")]
+fn u8_kernel_zero_floats(_w: &mut R4g1World) {
+    let source = include_str!("../crates/uor-r4-core/src/transformerless/lie_jordan.rs");
+    let kernel_start = source
+        .find("pub fn universal_product_u8")
+        .expect("kernel function");
+    let kernel_code = &source[kernel_start..];
+    assert!(!kernel_code.contains("f32") && !kernel_code.contains("f64"));
+    assert!(!kernel_code.contains(" * ") && !kernel_code.contains(" / "));
 }
 
 #[tokio::main]
