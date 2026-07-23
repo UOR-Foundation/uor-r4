@@ -36,6 +36,7 @@ path = "src/main.rs"
 
 [dependencies]
 uor-r4-core = { path = "crates/uor-r4-core" }
+uor-r4-graph-format = { path = "crates/uor-r4-graph-format" }
 uor-r4-proof-model = { path = "crates/uor-r4-proof-model" }
 uor-r4-graph-runtime = { path = "crates/uor-r4-graph-runtime" }
 uor-r4-router = { path = "crates/uor-r4-router" }
@@ -58,3 +59,9 @@ uor-r4-graph-cli = { path = "crates/uor-r4-graph-cli" }
 
 [dev-dependencies]
 uor-foundation-verify = { git = "https://github.com/UOR-Foundation/UOR-Framework.git", rev = "51c01382200b0179d6640b07e9c8119364ab69a1" }
+cucumber = "0.21"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+
+[[test]]
+name = "bdd"
+harness = false

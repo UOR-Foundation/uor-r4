@@ -67,8 +67,9 @@
 //! Each region carries: a unit f32 prototype (the centroid), binarized to
 //! a sign-bit signature **exactly like the class-sig pipeline** (bit `d`
 //! set iff prototype coordinate `d > 0.0`); an all-ones mask (v1); a
-//! calibrated radius = the 95th percentile of member masked-Hamming
-//! distances ([`compiler::quantile_radius`], the PR #38 logic); parent id;
+//! calibrated radius = a configurable percentile (95% by default) of member
+//! masked-Hamming distances ([`compiler::quantile_radius`], the PR #38 logic);
+//! parent id;
 //! depth. **Overlapping membership** at a depth: the top-[`TOP_M`] regions
 //! by masked-Hamming distance (ties to the lowest region id, the
 //! [`runtime::assign_memberships_plain`] ordering) filtered to those
@@ -192,6 +193,10 @@ pub struct CoverConfig {
     pub min_support: usize,
     /// Entropy-reduction floor for accepting a split, in bits/token.
     pub entropy_gain_bits: f64,
+    /// Percentile numerator used to calibrate region acceptance radii.
+    pub radius_quantile_numerator: u32,
+    /// Percentile denominator used to calibrate region acceptance radii.
+    pub radius_quantile_denominator: u32,
 }
 
 impl Default for CoverConfig {
@@ -204,6 +209,8 @@ impl Default for CoverConfig {
             threads: 1,
             min_support: DEFAULT_MIN_SUPPORT,
             entropy_gain_bits: DEFAULT_SPLIT_ENTROPY_GAIN_BITS,
+            radius_quantile_numerator: RADIUS_QUANTILE_NUMERATOR,
+            radius_quantile_denominator: RADIUS_QUANTILE_DENOMINATOR,
         }
     }
 }
@@ -623,20 +630,31 @@ fn hamming_sig(a: &[u8; SIG_BYTES], b: &[u8; SIG_BYTES]) -> u32 {
     dist
 }
 
-/// Calibrated acceptance radius of one region: the 95th percentile of the
+/// Calibrated acceptance radius of one region: the configured percentile of the
 /// members' masked-Hamming distances to the prototype (all-ones mask),
 /// reusing [`quantile_radius`]. For member counts ≤ 19 the quantile
 /// target is the full count, so the radius covers every member distance.
-pub fn calibrate_region_radius(
+pub fn calibrate_region_radius_with_quantile(
     member_sigs: &[[u8; SIG_BYTES]],
     prototype_sig: &[u8; SIG_BYTES],
+    numerator: u32,
+    denominator: u32,
 ) -> u16 {
     let mut histogram = vec![0u32; D + 1];
     for sig in member_sigs {
         histogram[hamming_sig(sig, prototype_sig) as usize] += 1;
     }
-    quantile_radius(
-        &histogram,
+    quantile_radius(&histogram, numerator, denominator)
+}
+
+/// Calibrate using the historical 95th-percentile default.
+pub fn calibrate_region_radius(
+    member_sigs: &[[u8; SIG_BYTES]],
+    prototype_sig: &[u8; SIG_BYTES],
+) -> u16 {
+    calibrate_region_radius_with_quantile(
+        member_sigs,
+        prototype_sig,
         RADIUS_QUANTILE_NUMERATOR,
         RADIUS_QUANTILE_DENOMINATOR,
     )
@@ -671,7 +689,7 @@ pub struct CoverRegion {
     pub prototype: Vec<f32>,
     /// Binarized prototype — the region's packed sign-bit signature.
     pub sig: [u8; SIG_BYTES],
-    /// Calibrated acceptance radius: the 95th percentile of member
+    /// Calibrated acceptance radius: the configured percentile of member
     /// masked-Hamming distances (all-ones mask in v1).
     pub radius: u16,
     /// Train members assigned to this region (top-1).
@@ -962,7 +980,7 @@ pub fn induce_cover(
         regions[region_id as usize].children = child_ids;
     }
 
-    // Radius calibration: the 95th percentile of member masked-Hamming
+    // Radius calibration: the configured percentile of member masked-Hamming
     // distances (all-ones mask), reusing the PR #38 quantile logic.
     for id in 0..regions.len() {
         let sig = regions[id].sig;
@@ -970,7 +988,12 @@ pub fn induce_cover(
             .iter()
             .map(|&m| observations[m].sig)
             .collect();
-        regions[id].radius = calibrate_region_radius(&member_sigs, &sig);
+        regions[id].radius = calibrate_region_radius_with_quantile(
+            &member_sigs,
+            &sig,
+            config.radius_quantile_numerator,
+            config.radius_quantile_denominator,
+        );
     }
 
     let max_depth = regions.iter().map(|r| r.depth as usize).max().unwrap_or(1);
@@ -1687,7 +1710,10 @@ pub fn build_report(config: &CoverConfig, induced: &InducedCover, data: ReportDa
             entropy_gain_bits: config.entropy_gain_bits,
             split_children: SPLIT_CHILDREN,
             top_m: TOP_M,
-            radius_quantile: format!("{RADIUS_QUANTILE_NUMERATOR}/{RADIUS_QUANTILE_DENOMINATOR}"),
+            radius_quantile: format!(
+                "{}/{}",
+                config.radius_quantile_numerator, config.radius_quantile_denominator
+            ),
             batch_size: induced.batch_size,
             bytes_per_observation: BYTES_PER_OBSERVATION,
             memory_reserve_bytes: MEMORY_RESERVE_BYTES,

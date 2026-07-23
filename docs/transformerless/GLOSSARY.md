@@ -58,10 +58,16 @@ graph term is normative for new work. See the terminology bridge in the plan (§
   shortlist size, `D` decision-program depth. Per-step work is O(D + A·C·W + A·E·K).
 - **ScoreQ** — quantized fixed-point log-domain score. Replaces all floating-point scores in
   deployed paths.
-- **Scoring model** — `S(v) = B(v) + Σ_{n∈A} ΔE(n,v) + Σ_{m∈F} ΔT(m,v) + ΔX(X,v)`: root token
-  prior + emission residuals of the active cloud + transition residuals of the predicted cloud +
-  optional exact-context residual. Each table is sparse; no contribution is counted twice
-  (Theorem 10).
+- **Scoring model** — after the issue-#64 redesign, two per-context rules. Rule 1
+  (chain-telescoped): `S_graph(v) = B(v) + Σ_{n∈chain} ΔE(n,v) + ΔT-offset`, where `chain` is
+  the covered refinement chain (root → deepest covered ancestor) of the active region with the
+  deepest covered chain — emission corrections compose along one ancestry path instead of
+  stacking across sibling subtrees. Rule 2 (D4 EXCT precedence): when the deepest-populated
+  exact-context prefix carries enough evidence (total ≥ `EXCT_SUPPORT_MIN` = 5),
+  `S(v) = B(v) + ΔX(X,v)` and graph residuals are skipped entirely. Each table is sparse; no
+  contribution is counted twice (Theorem 10). Supersedes the literal Σ-over-cloud form
+  (`B + ΣΔE + ΣΔT + ΔX`), which double-counted correlated sibling residuals (Gate C: 0.3%
+  vs 31.7% baseline).
 - **Root prior B(v)** — base token distribution stored at the graph root (successor of store
   level-0 backoff counts).
 - **Emission residual ΔE** — per-region correction to token scores relative to its parent.
@@ -73,7 +79,12 @@ graph term is normative for new work. See the terminology bridge in the plan (§
   **BackedOff** (only a broader region met support), **Novel** (no calibrated region covers the
   input), **Contradictory** (active regions make materially incompatible predictions).
   Deterministic (Theorem 12); the manifest declares per-status behavior (continue, widen, consult
-  EXCT, certified fallback, or abstain — default policy per decision D4).
+  EXCT, certified fallback, or abstain — default policy per decision D4). The deployed R4G1
+  adapter (`src/r4g1.rs`, issue #78) wires the D4 policy over the scorer's
+  `ScoreStatus` (`exact_context` → serve, `graph` → serve, `novel` → widen-once then abstain,
+  `contradictory` → abstain, reserved) with an optional `config.status_policy` override in
+  `score_report.json`; abstention is a typed, server-surfaced outcome, and widening is bounded
+  by a fixed-capacity memory of confirmed-Novel signatures.
 - **Multi-timescale state** — hierarchy of fixed-capacity states: token, local phrase/event,
   segment, document/session; none grows dynamically.
 
@@ -100,6 +111,17 @@ graph term is normative for new work. See the terminology bridge in the plan (§
 - **Teacher-fidelity certificate** — measured agreement of graph and teacher on a pinned
   evaluation set: top-1 agreement, top-k recall, bits/token, divergences, with CIDs, confidence
   intervals, slices, and protocol. Valid only on the declared distribution (decision D3).
+- **Bits/token (canonical definition, issue #76)** — the mean cross-entropy of the true next
+  token under a scorer's predicted distribution: for held-out positions `c_i` with true next
+  token `v_i`, `bits = (1/N) Σ_i −log2 P_scorer(v_i | c_i)`, where `P_scorer` includes the
+  scorer's floor mass for out-of-candidate tokens. One definition, one unit (bits, base-2 log);
+  implemented in `score.rs::outcome_bits` (Gate C harness) and in the certificate path.
+  **Comparability rule**: values are comparable only within the same scorer AND the same
+  evaluation distribution. The historical "families" are scorer/distribution differences, not
+  metric differences: 6.54 = P2 certificate (Witten-Bell store on its legacy corpus), 11.88 =
+  the same Witten-Bell helper on the fixture corpus (Gate C baseline row), 9.86 = the Rule 1+2
+  graph scorer on the fixture corpus. Reports MUST name the scorer and distribution alongside
+  the value.
 - **Semantic-coherence certificate** — separate evidence that regions generalize: cross-context
   reuse, perturbation stability, boundary behavior, rare-context retention, anti-memorization.
   Predictive coherence alone does not make a region "semantic".

@@ -21,6 +21,10 @@
 
 // teacher/compiler are portable (math, types, containers); only their
 // fs-dependent functions are cfg-gated per item (see those files).
+pub mod bott_fock;
+pub mod cd_space;
+pub mod endomorphism;
+pub mod lie_jordan;
 
 pub use reference_state::{ActiveFrontier, ActiveFrontierEntry, PackedEdgeRanges};
 pub use runtime::{derive_popcount_table, hamming, sign_signature, OpKernel};
@@ -150,13 +154,10 @@ pub mod compiler;
 pub mod convert_r4g1;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod graph_patch;
-
 pub mod reference_state;
 pub mod resolution_status;
 pub mod runtime;
-// Tokenizer + encode/decode are portable; loaders/exports are fs-gated (see scenarios.rs).
 pub mod scenarios;
 pub mod score_q;
 pub mod simd;
-// Transitions are portable (pure graph math, no fs).
 pub mod transitions;

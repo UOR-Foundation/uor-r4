@@ -18,8 +18,9 @@ R⁴ currently provides:
 
 - a geometric text router and browser dashboard;
 - a CPU-only transformerless compiler and table-native inference runtime;
-- TLA3 compatibility and vocabulary-sized TLA4 artifacts;
-- TLS1 graded evidence stores;
+- TLA3/TLA4 compatibility and the current TLA5 artifact format (no f32
+  centroids in deployed containers);
+- TLS1 graded evidence stores (plus a legacy u16-era reader);
 - direct BF16 Safetensors loading for compatible, unsharded Llama-family
   Hugging Face models, without Candle;
 - byte-level BPE tokenizer export;
@@ -27,6 +28,18 @@ R⁴ currently provides:
 - content-addressed model objects and manifests using UOR CIDs;
 - witnessed prediction, indexing, and generation APIs;
 - one-shot and interactive chat as application examples of the core runtime.
+
+The **R⁴ holographic graph compiler** program (multiresolution, overlapping
+semantic graphs with an allocation-free integer runtime) is underway on top of
+this engine — see `docs/r4_graph_compiler_implementation_plan.md`. Already
+landed: the R4G1 packed artifact format with two-stage validation
+(`crates/uor-r4-graph-format`), the TLA/TLS1 → R4G1 migration converter, the
+observation pipeline (content-addressed sample IDs, deterministic shard
+spill/resume), multiresolution cover induction (spherical k-means with
+calibrated overlapping memberships), semantic transitions + reverse indexes,
+ScoreQ fixed-point residuals, and the executable proof model
+(`crates/uor-r4-proof-model`). CI runs fmt/clippy/tests/no_std/deterministic-
+rebuild/audit/fuzz/wasm gates on every push (`.github/workflows/ci.yml`).
 
 There is an important boundary in the current workflow: compiling a Hugging
 Face model produces continuation evidence and runtime artifacts, but it does
@@ -38,6 +51,7 @@ question-answering model.
 
 | Operation | Works from a fresh checkout? | Additional state |
 |---|---:|---|
+| Build and test the workspace | Yes (UOR standards are pinned git deps) | None |
 | Geometric router and dashboard | Yes | None |
 | Legacy TinyStories certification/benchmark | After `setup` and corpus generation | Pinned llama2.c checkpoint |
 | Compile a compatible Hugging Face source | After downloading the source | Pinned model revision |
@@ -45,12 +59,15 @@ question-answering model.
 
 ## Documentation
 
+- [AGENTS.md](AGENTS.md) — contributor/agent operating manual: gates, invariants, κ re-pin procedure
 - [ELI5 explainer](docs/explainers/ELI5.md)
 - [Undergraduate explainer](docs/explainers/UNDERGRADUATE.md)
 - [Transformerless design](docs/transformerless/TRANSFORMERLESS.md)
 - [Proof and certificate](docs/transformerless/PROOF.md)
 - [Performance comparison](docs/transformerless/COMPARISON.md)
 - [Local-only runtime contract](docs/transformerless/LOCAL_ONLY.md)
+- [R⁴ graph compiler implementation plan](docs/r4_graph_compiler_implementation_plan.md)
+- [Glossary](docs/transformerless/GLOSSARY.md) · [R4G1 wire format](docs/transformerless/R4G1.md) · [Baseline](docs/transformerless/BASELINE.md) · [Threat model](docs/transformerless/THREAT_MODEL.md)
 - [Roadmap](ROADMAP.md)
 
 ## Requirements
@@ -98,15 +115,24 @@ artifact loading and synthesis run through the native server.
 
 ## Model lifecycle
 
-The local lifecycle is:
+The local lifecycle has two artifact lanes:
 
 ```text
-pinned source -> resumable compile -> CID-addressed local ask/chat
-                                     -> evaluation -> named manifest import
+pinned source -> resumable teacher observation -> TLA5 + TLS1 bundle
+                                             |       |
+                                             |       +-> local ask/evaluate/import
+                                             +-> multiresolution cover
+                                                 -> scored R4G1 graph + Gate C report
 ```
 
 Downloading and compiling are explicit offline operations. Neither `ask` nor
 the HTTP server downloads a model or contacts an inference provider.
+
+The top-level `compile` command builds the deployable transformerless bundle
+and retains its observation corpus. The graph compiler then consumes those
+outputs through `transformerless cover` and `transformerless score`. This
+separation makes expensive stages reusable and keeps the deployed runtime
+independent of the Hugging Face teacher.
 
 ### 1. Download pinned compiler input
 
@@ -178,9 +204,14 @@ comparisons. The pinned legacy proof workflow always uses that exact path.
 When compilation completes, the output directory contains:
 
 ```text
-tless_artifacts.bin
-tless_store.bin
+tless_artifacts.bin       # TLA5 teacher projection and class tables
+tless_store.bin           # TLS1 graded continuation evidence
 tokenizer.bin
+corpus.meta               # observation-corpus metadata
+corpus.records            # deterministic observation records
+hamming_calibration.json
+hierarchical_codes.json
+space_manifest.json
 ```
 
 Interactive terminals show progress bars. Redirected output receives periodic
@@ -188,7 +219,63 @@ Interactive terminals show progress bars. Redirected output receives periodic
 allocate; the allocation-free guarantee applies to the deployed prediction hot
 path, which uses fixed and caller-owned buffers.
 
-### 3. Ask locally
+### 3. Compile the holographic graph
+
+The graph compiler turns the retained observation corpus and TLA5 artifact
+into a multiresolution, overlapping semantic graph. First induce and measure
+the cover:
+
+```bash
+cargo run --release -- transformerless cover \
+  --corpus-meta .uor-models/compiled/smollm2-135m-instruct/corpus.meta \
+  --corpus-recs .uor-models/compiled/smollm2-135m-instruct/corpus.records \
+  --artifacts .uor-models/compiled/smollm2-135m-instruct/tless_artifacts.bin \
+  --out .uor-models/compiled/smollm2-135m-instruct/graph-cover
+```
+
+This writes `cover.r4g1` and `cover_report.json`. Then compile semantic
+transitions, fixed-point emission residuals, and exact-evidence carryover:
+
+```bash
+cargo run --release -- transformerless score \
+  --corpus-meta .uor-models/compiled/smollm2-135m-instruct/corpus.meta \
+  --corpus-recs .uor-models/compiled/smollm2-135m-instruct/corpus.records \
+  --artifacts .uor-models/compiled/smollm2-135m-instruct/tless_artifacts.bin \
+  --cover .uor-models/compiled/smollm2-135m-instruct/graph-cover/cover.r4g1 \
+  --out .uor-models/compiled/smollm2-135m-instruct/graph
+```
+
+The result is `graph/score.r4g1`, a stage-validated packed graph containing
+regions, refinement/neighbor/forward edges, ScoreQ emission tables, and the
+EXCT evidence section. `graph/score_report.json` records artifact and corpus
+kappas plus held-out Gate C top-1 agreement, bits/token, and witness replay.
+
+Passing `--cover` reuses the measured cover. It may be omitted to re-induce
+the default cover deterministically during scoring. For experiments, `cover`
+also accepts `--depths`, `--k0`, `--regions-budget`, and `--memory-budget`.
+
+The public `ask` and `chat` library paths still load the TLA5/TLS1 files from
+step 2. The native HTTP server auto-loads `graph/score.r4g1` beside
+`tless_artifacts.bin` when present (or accepts `--r4g1-artifact`), validates it,
+and uses it for the `transformerless` engine before falling back to TLA5/TLS1.
+When the dashboard is served by that native process, its **Compile / Refresh
+R4G1 Graph** button runs the same cover → score pipeline against the bundle's
+`corpus.meta` and `corpus.records`, validates the new graph, and hot-swaps it
+into the running server. Static WASM deployments cannot run this compiler.
+Static deployments still use the geometric WASM fallback because they have no
+native filesystem-backed graph loader yet.
+
+The native dashboard also exposes **Download Hugging Face Weights**. Its input
+defaults to the pinned `owner/repository@commit` from
+`models/smollm2-135m-instruct.json`, but accepts any repository paired with a
+full 40-character commit. Downloads go into `.uor-models/sources/`; nothing is
+downloaded until the button is pressed. Afterward, run the bundle compiler and
+then the R4G1 graph compiler. If the downloaded source is present and the
+compiled bundle is not, the native **Compile / Refresh R4G1 Graph** action now
+runs the bundle compiler first, then cover and score compilation, as one server
+job.
+
+### 4. Ask locally
 
 Compilation produces a directly loadable local bundle. On first use, R⁴
 content-addresses the artifact, store, and tokenizer in `.uor-models/objects`:
@@ -202,7 +289,7 @@ compiled approximation has passed an instruction-quality evaluation. The CLI
 logs that distinction. Compilation success and answer quality are separate
 properties.
 
-### 4. Evaluate instruction quality
+### 5. Evaluate instruction quality
 
 Run held-out instruction and grounding evaluation against the compiled bundle
 and retain a machine-readable report:
@@ -220,7 +307,7 @@ floor), source/artifact/store/tokenizer/corpus CIDs, and
 `report_cid_of_report_bytes` for the inner metrics payload. Do not mark an
 artifact as passing merely to bypass the chat quality gate.
 
-### 5. Import the evaluated bundle
+### 6. Import the evaluated bundle
 
 ```bash
 cargo run -- import \
@@ -244,7 +331,7 @@ CID.
 Continuation-only bundles may be imported for certification and benchmarking,
 but `ask` refuses to load them.
 
-### 6. Ask or chat with an imported manifest
+### 7. Ask or chat with an imported manifest
 
 One-shot `ask` calls the R⁴ library directly without a server or network hop:
 
@@ -328,6 +415,8 @@ cargo run -- ask --help
 cargo run -- compile --help
 cargo run -- download --help
 cargo run -- import --help
+cargo run -- transformerless cover
+cargo run -- transformerless score
 ```
 
 All subcommands support `-v`, `-vv`, and `-vvv` for info, debug, and trace
@@ -343,15 +432,25 @@ The server defaults are:
 | `--tless-artifacts` | `TLESS_ARTIFACTS` | `/tmp/tless_artifacts.bin` |
 | `--tless-store` | `TLESS_STORE` | `/tmp/tless_store.bin` |
 | `--tless-tokenizer` | `TLESS_TOKENIZER` | `/tmp/ref/tokenizer.bin` |
+| `--r4g1-artifact` | `R4G1_ARTIFACT` | `<compiled>/graph/score.r4g1` when present |
+| `--tless-corpus-meta` | `TLESS_CORPUS_META` | Beside the configured artifact when present |
+| `--tless-corpus-recs` | `TLESS_CORPUS_RECS` | Beside the configured artifact when present |
 
 ## Architecture
 
 ```mermaid
 flowchart LR
     Source["Pinned local model source"] --> Compiler["R⁴ transformerless compiler"]
-    Compiler --> Artifact["TLA3/TLA4 artifact"]
+    Compiler --> Corpus["Deterministic observation corpus"]
+    Compiler --> Artifact["TLA5 artifact"]
     Compiler --> Store["TLS1 graded store"]
     Compiler --> Tokenizer["Tokenizer"]
+    Corpus --> Cover["Multiresolution cover induction"]
+    Artifact --> Cover
+    Cover --> Score["Transitions + ScoreQ residuals"]
+    Store --> Score
+    Score --> Graph["Validated R4G1 graph"]
+    Graph --> GraphRuntime["Integer graph scorer (evaluation path)"]
     Artifact --> Runtime["Allocation-free CPU prediction kernel"]
     Store --> Runtime
     Tokenizer --> Runtime
@@ -361,13 +460,15 @@ flowchart LR
     Runtime --> Apps["r4 ask / r4 chat / HTTP API"]
 ```
 
-The workspace has one public package and two internal implementation crates:
+The workspace has one public package and four internal implementation crates:
 
 | Package | Responsibility |
 |---|---|
 | `uor-r4-wasm-router` | Public facade, UOR witness integration, HTTP server, WASM surface, and the single `r4` executable |
 | [`uor-r4-core`](crates/uor-r4-core) | Core R⁴ mathematics and transformerless compiler/runtime/tokenizer/certifier |
 | [`uor-r4-router`](crates/uor-r4-router) | Manifold state, indexing, geometric routing, and router witnesses |
+| [`uor-r4-graph-format`](crates/uor-r4-graph-format) | Canonical R4G1 serialization, two-stage validation, and borrowed graph views |
+| [`uor-r4-proof-model`](crates/uor-r4-proof-model) | Executable graph-compiler proof obligations and proof-status matrix |
 
 The public [`tless_uor`](src/tless_uor.rs) module provides `TlessAxis`,
 `UorTlessModel`, CID addressing, and per-prediction `Grounded` certificates.
@@ -381,6 +482,7 @@ application-level consumers of the core runtime.
 Routes and synthesizes a prompt. The `engine` parameter selects the generation mechanism:
 
 - `"transformerless"`: Run allocation-free table-native codebook retrieval (sub-millisecond latency on CPU).
+- `"r4g1"`: Run the validated R4G1 graph scorer when a `score.r4g1` artifact is loaded.
 - `"attention"`: Run standard scaled dot-product attention on the loaded teacher model (generates up to 256 tokens).
 - `"r4-attention"`: Run experimental 4D Spin(4) softmax-free attention on the loaded teacher model (generates up to 256 tokens, yielding ~25% computation speedup on CPU by bypassing standard softmax exponents).
 - `"geometric"`: Route purely geometrically and decode directly from the manifold resonance.
@@ -400,6 +502,19 @@ The browser dashboard (<http://127.0.0.1:8000>) includes an engine selector drop
 ### `GET /api/sysinfo`
 
 Returns initialization metrics, uptime, and UOR validation state.
+
+### `POST /api/r4g1/compile` and `GET /api/r4g1/status`
+
+Starts and monitors the native server's cover → score compilation job. The
+resulting graph is loaded only after validation succeeds; the status response
+also includes the generated `score_report.json` when available.
+
+### `POST /api/huggingface/download` and `GET /api/huggingface/status`
+
+Starts and monitors an explicit download. The optional JSON body is
+`{"model":"owner/repository@<40-character-commit>"}`; omitting it uses the
+pinned source defined by `models/smollm2-135m-instruct.json`. The server
+requires the `hf` CLI and rejects unpinned revisions.
 
 ### `POST /api/corpus`
 

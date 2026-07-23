@@ -64,6 +64,19 @@ struct Cli {
     )]
     tless_tokenizer: String,
 
+    /// Validated scored R4G1 graph. Defaults to graph/score.r4g1 beside the
+    /// configured transformerless artifact when present.
+    #[arg(long, env = "R4G1_ARTIFACT", global = true)]
+    r4g1_artifact: Option<String>,
+
+    /// Observation-corpus metadata used by the dashboard R4G1 compiler.
+    #[arg(long, env = "TLESS_CORPUS_META", global = true)]
+    tless_corpus_meta: Option<String>,
+
+    /// Observation-corpus records used by the dashboard R4G1 compiler.
+    #[arg(long, env = "TLESS_CORPUS_RECS", global = true)]
+    tless_corpus_recs: Option<String>,
+
     #[command(subcommand)]
     command: Option<Command>,
 }
@@ -249,6 +262,9 @@ impl Cli {
             tless_artifacts: self.tless_artifacts.clone(),
             tless_store: self.tless_store.clone(),
             tless_tokenizer: self.tless_tokenizer.clone(),
+            r4g1_artifact: self.r4g1_artifact.clone(),
+            tless_corpus_meta: self.tless_corpus_meta.clone(),
+            tless_corpus_recs: self.tless_corpus_recs.clone(),
         }
     }
 

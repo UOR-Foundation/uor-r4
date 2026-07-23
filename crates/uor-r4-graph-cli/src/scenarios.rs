@@ -3,7 +3,7 @@ use uor_r4_core::transformerless::compiler::{self, Corpus};
 use uor_r4_core::transformerless::runtime::{
     Store, build_store, code_plain, derive_rotations, predict_plain,
 };
-use uor_r4_core::transformerless::scenarios::Tokenizer;
+pub use uor_r4_core::transformerless::scenarios::Tokenizer;
 use uor_r4_model_source::TeacherOracle;
 
 struct Scenario {
@@ -127,8 +127,8 @@ fn as_corpus(tokens: &[u32], t_argmax: &[u32]) -> Corpus {
             nx
         },
         t_argmax: t_argmax.to_vec(),
-        top_tokens: vec![[0u32; 3]; n],
-        top_weights: vec![[0u32; 3]; n],
+        top_tokens: vec![[0u32; 8]; n],
+        top_weights: vec![[0u32; 8]; n],
         span_start: (0..n).map(|idx| idx as u32).collect(),
         span_end: (0..n).map(|idx| idx as u32 + 1).collect(),
         byte_start: vec![u32::MAX; n],

@@ -32,10 +32,10 @@ use uor_r4_core::transformerless::compiler;
 use uor_r4_model_source::TeacherOracle;
 use uor_r4_model_source::progress::Progress;
 
-/// Observation record width: the v3 corpus record layout (story, next,
-/// top-3 tokens, top-3 weights, span, byte anchors) — see
-/// [`compiler::encode_v3_record`].
-pub const RECORD_SIZE: usize = 48;
+/// Observation record width: the v4 corpus record layout (story, next,
+/// top-8 tokens, top-8 weights, span, byte anchors) — see
+/// [`compiler::encode_v4_record`].
+pub const RECORD_SIZE: usize = 88;
 
 /// Maximum shard fan-out accepted by [`ObservationShardWriter`]: shard
 /// files are held open during a pass, so the writer caps the fan-out at
@@ -109,6 +109,37 @@ fn file_kappa(path: &Path) -> io::Result<String> {
     Ok(format!("blake3:{}", hasher.finalize().to_hex()))
 }
 
+/// Document-level partition of one observation record, recorded per shard
+/// so downstream consumers can split a merged observation corpus exactly
+/// (the from-text driver of `super::observe_text` tags every record with
+/// its article's partition at write time).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RecordPartition {
+    Construction,
+    HeldOut,
+}
+
+/// Per-partition record counts of one shard.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PartitionCounts {
+    pub construction: u64,
+    pub held_out: u64,
+}
+
+impl PartitionCounts {
+    fn add(&mut self, partition: RecordPartition) {
+        match partition {
+            RecordPartition::Construction => self.construction += 1,
+            RecordPartition::HeldOut => self.held_out += 1,
+        }
+    }
+
+    /// Total records across both partitions.
+    pub fn total(&self) -> u64 {
+        self.construction + self.held_out
+    }
+}
+
 /// One completed shard's entry in the observation manifest.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ShardEntry {
@@ -116,6 +147,11 @@ pub struct ShardEntry {
     pub records: u64,
     /// Content κ of the shard file bytes.
     pub kappa: String,
+    /// Per-partition record counts, when the producing pipeline tags
+    /// records with a document-level partition (absent for the generation
+    /// path, so its manifest bytes are unchanged).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub partitions: Option<PartitionCounts>,
 }
 
 /// Manifest of an observation shard directory: the fan-out, the completed
@@ -125,6 +161,15 @@ pub struct ShardEntry {
 pub struct ObservationManifest {
     pub schema: u32,
     pub shard_bits: u8,
+    /// The document-level partition rule records are tagged with, when the
+    /// producing pipeline has one (from-text driver; absent otherwise).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub partition_rule: Option<String>,
+    /// CID of the exact input the observations were derived from (the
+    /// from-text driver records the articles-file κ, i.e. the corpus CID
+    /// of the D3 manifest; absent for teacher-generated streams).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_cid: Option<String>,
     #[serde(default)]
     pub completed: BTreeMap<u32, ShardEntry>,
     #[serde(default)]
@@ -136,6 +181,8 @@ impl ObservationManifest {
         Self {
             schema: 1,
             shard_bits,
+            partition_rule: None,
+            input_cid: None,
             completed: BTreeMap::new(),
             total_records: 0,
         }
@@ -184,6 +231,8 @@ pub struct ObservationShardWriter {
     dir: PathBuf,
     manifest: ObservationManifest,
     handles: Vec<Option<ShardHandle>>,
+    partition_counts: Vec<PartitionCounts>,
+    partitions_active: bool,
 }
 
 impl ObservationShardWriter {
@@ -211,10 +260,15 @@ impl ObservationShardWriter {
             None => ObservationManifest::new(shard_bits),
         };
         let handles = (0..manifest.shard_count()).map(|_| None).collect();
+        let partition_counts = (0..manifest.shard_count())
+            .map(|_| PartitionCounts::default())
+            .collect();
         Ok(Self {
             dir,
             manifest,
             handles,
+            partition_counts,
+            partitions_active: false,
         })
     }
 
@@ -224,6 +278,49 @@ impl ObservationShardWriter {
 
     pub fn is_complete(&self, shard: u32) -> bool {
         self.manifest.completed.contains_key(&shard)
+    }
+
+    /// Record the document-level partition rule in the manifest (persisted
+    /// atomically). Idempotent: storing the already-recorded rule is a
+    /// no-op and does not rewrite the manifest.
+    pub fn set_partition_rule(&mut self, rule: &str) -> io::Result<()> {
+        if self.manifest.partition_rule.as_deref() != Some(rule) {
+            self.manifest.partition_rule = Some(rule.to_owned());
+            self.manifest.store(&self.dir)?;
+        }
+        Ok(())
+    }
+
+    /// Record the input CID in the manifest (idempotent, atomic store).
+    pub fn set_input_cid(&mut self, cid: &str) -> io::Result<()> {
+        if self.manifest.input_cid.as_deref() != Some(cid) {
+            self.manifest.input_cid = Some(cid.to_owned());
+            self.manifest.store(&self.dir)?;
+        }
+        Ok(())
+    }
+
+    /// Pending per-shard partition counts (records written so far via
+    /// [`ObservationShardWriter::write_record_in_partition`] plus any
+    /// counts restored by [`ObservationShardWriter::restore_partition_counts`]).
+    pub fn partition_counts(&self, shard: u32) -> Option<PartitionCounts> {
+        self.partition_counts.get(shard as usize).copied()
+    }
+
+    /// Restore per-shard partition counts from an earlier pass's
+    /// checkpoint, so counts accumulated across a resume cover the whole
+    /// shard rather than only this invocation's writes.
+    pub fn restore_partition_counts(&mut self, counts: &[PartitionCounts]) -> io::Result<()> {
+        if counts.len() != self.partition_counts.len() {
+            return Err(invalid_input(format!(
+                "partition count table has {} shards, expected {}",
+                counts.len(),
+                self.partition_counts.len()
+            )));
+        }
+        self.partition_counts.copy_from_slice(counts);
+        self.partitions_active = counts.iter().any(|count| count.total() != 0);
+        Ok(())
     }
 
     fn shard_path(&self, shard: u32) -> PathBuf {
@@ -272,6 +369,24 @@ impl ObservationShardWriter {
         Ok(true)
     }
 
+    /// Append one partitioned record to `shard`: identical write semantics
+    /// to [`ObservationShardWriter::write_record`], additionally counting
+    /// the record under its document-level partition so the finalized
+    /// shard entry lists construction vs held-out counts.
+    pub fn write_record_in_partition(
+        &mut self,
+        record: &[u8; RECORD_SIZE],
+        shard: u32,
+        partition: RecordPartition,
+    ) -> io::Result<bool> {
+        let written = self.write_record(record, shard)?;
+        if written {
+            self.partition_counts[shard as usize].add(partition);
+            self.partitions_active = true;
+        }
+        Ok(written)
+    }
+
     /// Flush every open shard handle. Called at whole-story checkpoints so
     /// the on-disk shard bytes always cover exactly the completed stories
     /// of the deterministic stream.
@@ -313,6 +428,9 @@ impl ObservationShardWriter {
         let entry = ShardEntry {
             records: length / RECORD_SIZE as u64,
             kappa: file_kappa(&path)?,
+            partitions: self
+                .partitions_active
+                .then_some(self.partition_counts[shard as usize]),
         };
         self.manifest.total_records = self.manifest.total_records.saturating_add(entry.records);
         self.manifest.completed.insert(shard, entry);
@@ -440,7 +558,7 @@ pub fn observe_sharded(
             progress.set(n as usize);
             oracle.step(token, pos, &mut logits);
             let (next, top_tokens, top_weights) =
-                compiler::softmax_top3_sample(&mut logits, &mut rng);
+                compiler::softmax_top8_sample(&mut logits, &mut rng);
             window.push(token as u32);
             if window.len() > compiler::WINDOW {
                 window.remove(0);
@@ -451,7 +569,7 @@ pub fn observe_sharded(
             let span_end = span_start.saturating_add(1);
             let (byte_start, byte_end) =
                 compiler::byte_anchors(token_byte_lengths, story_byte_offset, next);
-            let record = compiler::encode_v3_record(
+            let record = compiler::encode_v4_record(
                 stories as u32,
                 next as u32,
                 &top_tokens,

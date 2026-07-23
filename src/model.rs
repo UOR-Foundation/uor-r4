@@ -382,9 +382,10 @@ pub struct SourceDownload {
 
 /// Download a pinned model source into the local compiler-input cache.
 ///
-/// This function is intentionally absent from `ask` and the HTTP server. It
-/// invokes the `hf` CLI without a shell, so repository and revision values are
-/// passed as opaque arguments rather than executable text.
+/// This function is intentionally absent from `ask`; the native HTTP server
+/// exposes it only through an explicit user-triggered download job. It invokes
+/// the `hf` CLI without a shell, so repository and revision values are passed
+/// as opaque arguments rather than executable text.
 pub fn download_source(source: &SourceDownload) -> Result<PathBuf, ModelError> {
     let name = portable_source_name(&source.name)?;
     if !valid_repository(&source.repository) {

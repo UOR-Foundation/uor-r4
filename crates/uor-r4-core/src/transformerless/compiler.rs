@@ -54,6 +54,7 @@ pub fn xorshift(s: &mut u64) -> u64 {
 ///   | span_start u32 | span_end u32 | byte_start u32 | byte_end u32
 /// legacy record sizes are still accepted on load:
 ///   v1=12 bytes (story,next,argmax,logprob) and v2=32 bytes (no anchors).
+#[derive(Clone)]
 pub struct Corpus {
     pub n: usize,
     pub stories: u64,
@@ -61,8 +62,8 @@ pub struct Corpus {
     pub input: Vec<u32>,
     pub next: Vec<u32>,
     pub t_argmax: Vec<u32>,
-    pub top_tokens: Vec<[u32; 3]>,
-    pub top_weights: Vec<[u32; 3]>,
+    pub top_tokens: Vec<[u32; 8]>,
+    pub top_weights: Vec<[u32; 8]>,
     pub span_start: Vec<u32>,
     pub span_end: Vec<u32>,
     pub byte_start: Vec<u32>,
@@ -91,7 +92,9 @@ pub fn load_corpus_from(mp: &str, rp: &str) -> Option<Corpus> {
     let n = u64::from_le_bytes(meta[0..8].try_into().unwrap()) as usize;
     let stories = u64::from_le_bytes(meta[8..16].try_into().unwrap());
     let rb = std::fs::read(rp).ok()?;
-    let record_size = if rb.len() == n * 48 {
+    let record_size = if rb.len() == n * 88 {
+        88usize
+    } else if rb.len() == n * 48 {
         48usize
     } else if rb.len() == n * 32 {
         32usize
@@ -101,7 +104,7 @@ pub fn load_corpus_from(mp: &str, rp: &str) -> Option<Corpus> {
         return None;
     };
     let is_legacy = record_size == 12;
-    let has_anchors = record_size == 48;
+    let has_anchors = record_size == 48 || record_size == 88;
     let mut story = Vec::with_capacity(n);
     let mut next = Vec::with_capacity(n);
     let mut t_argmax = Vec::with_capacity(n);
@@ -125,8 +128,8 @@ pub fn load_corpus_from(mp: &str, rp: &str) -> Option<Corpus> {
             let lp = f32::from_le_bytes(rb[o + 8..o + 12].try_into().unwrap());
             let next_prob = (lp.exp() * 100.0).clamp(0.0, 100.0) as u32;
 
-            let mut tokens_val = [0u32; 3];
-            let mut weights_val = [0u32; 3];
+            let mut tokens_val = [0u32; 8];
+            let mut weights_val = [0u32; 8];
             tokens_val[0] = argmax;
             if nxt == argmax {
                 weights_val[0] = next_prob.max(50);
@@ -143,11 +146,13 @@ pub fn load_corpus_from(mp: &str, rp: &str) -> Option<Corpus> {
             story.push(story_id);
             let nxt = u32::from_le_bytes(rb[o + 4..o + 8].try_into().unwrap());
             next.push(nxt);
-            let mut tokens_val = [0u32; 3];
-            let mut weights_val = [0u32; 3];
-            for j in 0..3 {
+            let mut tokens_val = [0u32; 8];
+            let mut weights_val = [0u32; 8];
+            let k_count = if record_size == 88 { 8 } else { 3 };
+            let wt_base_offset = 8 + k_count * 4;
+            for j in 0..k_count {
                 let offset_tok = o + 8 + j * 4;
-                let offset_wt = o + 20 + j * 4;
+                let offset_wt = o + wt_base_offset + j * 4;
                 tokens_val[j] =
                     u32::from_le_bytes(rb[offset_tok..offset_tok + 4].try_into().unwrap());
                 weights_val[j] =
@@ -157,10 +162,23 @@ pub fn load_corpus_from(mp: &str, rp: &str) -> Option<Corpus> {
             top_tokens.push(tokens_val);
             top_weights.push(weights_val);
             if has_anchors {
-                span_start.push(u32::from_le_bytes(rb[o + 32..o + 36].try_into().unwrap()));
-                span_end.push(u32::from_le_bytes(rb[o + 36..o + 40].try_into().unwrap()));
-                byte_start.push(u32::from_le_bytes(rb[o + 40..o + 44].try_into().unwrap()));
-                byte_end.push(u32::from_le_bytes(rb[o + 44..o + 48].try_into().unwrap()));
+                let anchor_offset = o + 8 + k_count * 8;
+                span_start.push(u32::from_le_bytes(
+                    rb[anchor_offset..anchor_offset + 4].try_into().unwrap(),
+                ));
+                span_end.push(u32::from_le_bytes(
+                    rb[anchor_offset + 4..anchor_offset + 8].try_into().unwrap(),
+                ));
+                byte_start.push(u32::from_le_bytes(
+                    rb[anchor_offset + 8..anchor_offset + 12]
+                        .try_into()
+                        .unwrap(),
+                ));
+                byte_end.push(u32::from_le_bytes(
+                    rb[anchor_offset + 12..anchor_offset + 16]
+                        .try_into()
+                        .unwrap(),
+                ));
                 continue;
             }
         }
@@ -300,6 +318,64 @@ pub fn softmax_top3_sample(logits: &mut [f32], rng: &mut u64) -> (usize, [u32; 3
     (next, top_tokens_idx, top_weights_val)
 }
 
+pub fn softmax_top8_sample(logits: &mut [f32], rng: &mut u64) -> (usize, [u32; 8], [u32; 8]) {
+    let mut mx = f32::NEG_INFINITY;
+    for &p in logits.iter() {
+        if p > mx {
+            mx = p;
+        }
+    }
+    let mut sum = 0.0f32;
+    for p in logits.iter_mut() {
+        *p = (*p - mx).exp();
+        sum += *p;
+    }
+    for p in logits.iter_mut() {
+        *p /= sum;
+    }
+
+    let mut top_candidates: Vec<(usize, f32)> =
+        logits.iter().enumerate().map(|(i, &p)| (i, p)).collect();
+    top_candidates.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+    let mut top_tokens_idx = [0u32; 8];
+    let mut top_weights_val = [0u32; 8];
+
+    let mut sum_top8 = 0.0f32;
+    for i in 0..8 {
+        if i < top_candidates.len() {
+            sum_top8 += top_candidates[i].1;
+        }
+    }
+    if sum_top8 > 1e-9 {
+        let mut accumulated = 0;
+        for i in 0..8 {
+            if i < top_candidates.len() {
+                top_tokens_idx[i] = top_candidates[i].0 as u32;
+                let w = ((top_candidates[i].1 / sum_top8) * 100.0).round() as u32;
+                top_weights_val[i] = w;
+                accumulated += w;
+            }
+        }
+        if accumulated != 100 && top_weights_val[0] > 0 {
+            let diff = 100i32 - accumulated as i32;
+            top_weights_val[0] = (top_weights_val[0] as i32 + diff).max(0) as u32;
+        }
+    }
+
+    let u = (xorshift(rng) >> 40) as f32 / (1u64 << 24) as f32;
+    let mut cdf = 0.0f32;
+    let mut next = logits.len() - 1;
+    for (i, &p) in logits.iter().enumerate() {
+        cdf += p;
+        if u < cdf {
+            next = i;
+            break;
+        }
+    }
+    (next, top_tokens_idx, top_weights_val)
+}
+
 /// Tokenizer-neutral byte anchors of one sampled token within its story.
 /// Without per-token byte lengths the anchors are the v3 "unknown" value
 /// (u32::MAX), matching the v2 backfill semantics on load.
@@ -344,6 +420,35 @@ pub fn encode_v3_record(
     record[36..40].copy_from_slice(&span_end.to_le_bytes());
     record[40..44].copy_from_slice(&byte_start.to_le_bytes());
     record[44..48].copy_from_slice(&byte_end.to_le_bytes());
+    record
+}
+
+/// Encode one v4 corpus/observation record (88 bytes):
+///   story u32 | next u32 | top_tokens [u32; 8] | top_weights [u32; 8]
+///   | span_start u32 | span_end u32 | byte_start u32 | byte_end u32
+pub fn encode_v4_record(
+    story: u32,
+    next: u32,
+    top_tokens: &[u32; 8],
+    top_weights: &[u32; 8],
+    span: (u32, u32),
+    bytes: (u32, u32),
+) -> [u8; 88] {
+    let (span_start, span_end) = span;
+    let (byte_start, byte_end) = bytes;
+    let mut record = [0u8; 88];
+    record[0..4].copy_from_slice(&story.to_le_bytes());
+    record[4..8].copy_from_slice(&next.to_le_bytes());
+    for i in 0..8 {
+        let offset_tok = 8 + i * 4;
+        let offset_wt = 40 + i * 4;
+        record[offset_tok..offset_tok + 4].copy_from_slice(&top_tokens[i].to_le_bytes());
+        record[offset_wt..offset_wt + 4].copy_from_slice(&top_weights[i].to_le_bytes());
+    }
+    record[72..76].copy_from_slice(&span_start.to_le_bytes());
+    record[76..80].copy_from_slice(&span_end.to_le_bytes());
+    record[80..84].copy_from_slice(&byte_start.to_le_bytes());
+    record[84..88].copy_from_slice(&byte_end.to_le_bytes());
     record
 }
 
@@ -398,20 +503,51 @@ pub fn generate_to_with_token_byte_lengths(
     let vocab = oracle.vocab();
     let seq_len = oracle.seq_len();
     let default_record_size = 48usize;
-    let record_size = match std::fs::read(rp) {
-        Ok(records) if records.is_empty() => default_record_size,
-        Ok(records) if n != 0 && records.len() == (n as usize) * 48 => 48usize,
-        Ok(records) if n != 0 && records.len() == (n as usize) * 32 => 32usize,
-        Ok(records) if n != 0 && records.len() == (n as usize) * 12 => 12usize,
-        Ok(records) if n == 0 && records.len() % 48 == 0 => 48usize,
-        Ok(records) if n == 0 && records.len() % 32 == 0 => 32usize,
-        Ok(records) if n == 0 && records.len() % 12 == 0 => 12usize,
-        Ok(records) => panic!(
-            "corpus record file has invalid length {} (expected 12/32/48-byte records)",
-            records.len()
-        ),
-        Err(_) => default_record_size,
+    let existing_records = std::fs::read(rp).unwrap_or_default();
+    let existing_len = existing_records.len();
+    let record_size = if existing_len == 0 {
+        default_record_size
+    } else if n != 0 && existing_len == (n as usize) * 48 {
+        48usize
+    } else if n != 0 && existing_len == (n as usize) * 32 {
+        32usize
+    } else if n != 0 && existing_len == (n as usize) * 12 {
+        12usize
+    } else if token_byte_lengths.is_some() || (n != 0 && existing_len >= (n as usize) * 48) {
+        // The current Hugging Face path writes v3 records. Metadata is
+        // committed only at story boundaries, so an interrupted run may
+        // leave extra complete records or a partial record after n.
+        48usize
+    } else if n != 0 && existing_len >= (n as usize) * 32 {
+        32usize
+    } else if n != 0 && existing_len >= (n as usize) * 12 {
+        12usize
+    } else {
+        eprintln!(
+            "corpus records cannot be resumed: file length {existing_len} is shorter than the {n}-record metadata prefix"
+        );
+        return;
     };
+    let committed_len = (n as usize).saturating_mul(record_size);
+    if existing_len < committed_len {
+        eprintln!(
+            "corpus records cannot be resumed: file length {existing_len} is shorter than the committed {committed_len}-byte prefix"
+        );
+        return;
+    }
+    if existing_len > committed_len {
+        eprintln!(
+            "repairing corpus records: truncating {existing_len} bytes to the committed {committed_len}-byte prefix"
+        );
+        let Ok(file) = std::fs::OpenOptions::new().write(true).open(rp) else {
+            eprintln!("cannot repair corpus record file {rp}: open failed");
+            return;
+        };
+        if let Err(error) = file.set_len(committed_len as u64) {
+            eprintln!("cannot truncate corpus record file {rp}: {error}");
+            return;
+        }
+    }
     let mut logits = vec![0f32; vocab];
     let mut progress = uor_r4_model_source::progress::Progress::new("teacher corpus", target);
     progress.set(n as usize);
@@ -528,6 +664,7 @@ pub fn train_cut(c: &Corpus) -> u32 {
 
 pub const ART_PATH: &str = "/tmp/tless_artifacts.bin";
 
+#[derive(Clone)]
 pub struct Compiled {
     /// COMPRESSED token representation: STAGES code bytes per token [V × STAGES]
     /// plus i8 stage books [STAGES × (K × D)]. The runtime decodes rows on

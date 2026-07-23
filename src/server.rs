@@ -1,16 +1,37 @@
 use crate as uor_r4_wasm_router;
+use crate::model::{download_source, SourceDownload};
+use crate::r4g1::{self, R4g1State};
 use crate::tless_uor::{self, TlessAxis};
 use crate::UorR4Router;
 use serde::Deserialize;
+use std::any::Any;
 use std::fs;
 use std::io::{prelude::*, BufReader};
 use std::net::{TcpListener, TcpStream};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use uor_foundation::pipeline::PrismModel;
 
+use uor_r4_graph_certify::ScoreStatus;
 use uor_r4_model_source::{BehaviorSource, TeacherOracle};
+
+// The browser-triggered build must have enough teacher evidence and graph
+// capacity to be a meaningful quality attempt. These are still bounded,
+// resumable compiler inputs; the quality gate remains authoritative.
+const R4G1_CORPUS_SECONDS: &str = "1800";
+const R4G1_CORPUS_TARGET: &str = "200000";
+const R4G1_COVER_DEPTHS: &str = "5";
+const R4G1_COVER_K0: &str = "16";
+const R4G1_COVER_REGIONS: &str = "2048";
+const R4G1_COVER_MEMORY_MB: &str = "2048";
+const R4G1_COVER_MIN_SUPPORT: &str = "32";
+const R4G1_COVER_ENTROPY_GAIN: &str = "0.10";
+const R4G1_COVER_RADIUS_QUANTILE: &str = "80";
+const R4G1_SCORE_TRANSITION_DEGREE: &str = "16";
+const R4G1_SCORE_EMISSION_ENTRIES: &str = "256";
+const R4G1_SCORE_ROOT_TOP_B: &str = "256";
+const R4G1_SCORE_EXCT_TOP_X: &str = "128";
 
 /// Configuration supplied by the executable to the reusable HTTP server.
 #[derive(Debug, Clone)]
@@ -21,6 +42,9 @@ pub struct ServerConfig {
     pub tless_artifacts: String,
     pub tless_store: String,
     pub tless_tokenizer: String,
+    pub r4g1_artifact: Option<String>,
+    pub tless_corpus_meta: Option<String>,
+    pub tless_corpus_recs: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -39,6 +63,56 @@ struct CorpusPayload {
 #[derive(Deserialize)]
 struct ResetPayload {
     identity: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+struct HuggingFaceDownloadPayload {
+    model: Option<String>,
+}
+
+#[derive(Clone, Debug)]
+struct R4g1CompileStatus {
+    running: bool,
+    ready: bool,
+    message: String,
+    report: Option<serde_json::Value>,
+}
+
+#[derive(Clone, Debug)]
+struct HuggingFaceDownloadStatus {
+    running: bool,
+    ready: bool,
+    message: String,
+    source: Option<String>,
+}
+
+impl HuggingFaceDownloadStatus {
+    fn json(&self) -> serde_json::Value {
+        serde_json::json!({
+            "running": self.running,
+            "ready": self.ready,
+            "message": self.message,
+            "source": self.source,
+        })
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct PinnedSourceManifest {
+    repository: String,
+    revision: String,
+    source_directory: Option<String>,
+}
+
+impl R4g1CompileStatus {
+    fn json(&self) -> serde_json::Value {
+        serde_json::json!({
+            "running": self.running,
+            "ready": self.ready,
+            "message": self.message,
+            "report": self.report,
+        })
+    }
 }
 
 fn get_window_theme(win_idx: usize) -> &'static str {
@@ -72,6 +146,7 @@ pub fn run_server(cli: Arc<ServerConfig>) {
         artifacts = %cli.tless_artifacts,
         store = %cli.tless_store,
         tokenizer = %cli.tless_tokenizer,
+        r4g1_artifact = ?cli.r4g1_artifact,
         "initializing R4 Prime Router server"
     );
     let start_time = Instant::now();
@@ -107,6 +182,40 @@ pub fn run_server(cli: Arc<ServerConfig>) {
         }
     }
 
+    let r4g1: Arc<Mutex<Option<R4g1State>>> = Arc::new(Mutex::new(None));
+    let r4g1_compile = Arc::new(Mutex::new(R4g1CompileStatus {
+        running: false,
+        ready: false,
+        message: "R4G1 graph compiler idle".to_owned(),
+        report: None,
+    }));
+    let hf_download = Arc::new(Mutex::new(HuggingFaceDownloadStatus {
+        running: false,
+        ready: Path::new(".uor-models/sources/smollm2-135m-instruct").is_dir(),
+        message: "Hugging Face source download idle".to_owned(),
+        source: None,
+    }));
+    if let Some(graph_path) = r4g1::discover_path(
+        cli.r4g1_artifact.as_deref(),
+        Path::new(&cli.tless_artifacts),
+    ) {
+        if graph_path.is_file() {
+            match R4g1State::load(&graph_path, Path::new(&cli.tless_artifacts)) {
+                Ok(state) => {
+                    println!(
+                        "[+] Loaded validated R4G1 graph runtime from {}",
+                        graph_path.display()
+                    );
+                    *r4g1.lock().unwrap() = Some(state);
+                    r4g1_compile.lock().unwrap().ready = true;
+                    r4g1_compile.lock().unwrap().message = "R4G1 graph runtime ready".to_owned();
+                }
+                Err(error) => {
+                    println!("[-] Failed to load R4G1 graph runtime: {error}");
+                }
+            }
+        }
+    }
     let r4g1_candidates = [
         ".uor-models/compiled/smollm2-1-7b-instruct/compiled.r4g1",
         ".uor-models/compiled/smollm2-360m-instruct/compiled.r4g1",
@@ -230,10 +339,15 @@ pub fn run_server(cli: Arc<ServerConfig>) {
     for stream in listener.incoming().flatten() {
         let r_clone = Arc::clone(&router);
         let t_clone = Arc::clone(&tless);
+        let g_clone = Arc::clone(&r4g1);
+        let gc_clone = Arc::clone(&r4g1_compile);
+        let hf_clone = Arc::clone(&hf_download);
         let o_clone = Arc::clone(&oracle);
         let c_clone = Arc::clone(&cli);
         std::thread::spawn(move || {
-            handle_connection(stream, r_clone, t_clone, o_clone, c_clone, start_time);
+            handle_connection(
+                stream, r_clone, t_clone, g_clone, gc_clone, hf_clone, o_clone, c_clone, start_time,
+            );
         });
     }
 }
@@ -387,6 +501,78 @@ fn generate_tless_text(
     .flatten()
     .map(|text| text.trim().to_string())
     .filter(|text| !text.is_empty())
+}
+
+/// The outcome of one R4G1 chat generation: the decoded text (empty on
+/// an abstention — the partial tokens of an abstained run are not
+/// served), the status of the final scoring step, whether a widened
+/// re-probe ran, and whether generation stopped on a policy abstention.
+/// `None` from [`generate_r4g1_text`] means the runtime or tokenizer is
+/// unavailable — distinct from an abstention, which is a declared D4
+/// outcome.
+struct R4g1Text {
+    text: String,
+    status: Option<ScoreStatus>,
+    widened: bool,
+    abstained: bool,
+}
+
+/// Generate directly from the validated R4G1 graph runtime. Tokenization and
+/// decoding intentionally use the same tokenizer as the compiled teacher
+/// artifact; R4G1 stores token ids, not user-facing text.
+fn generate_r4g1_text(
+    slot: &Arc<Mutex<Option<R4g1State>>>,
+    prompt: &str,
+    max_tokens: usize,
+) -> Option<R4g1Text> {
+    const MAX_SERVER_TOKENS: usize = 256;
+    const MAX_SERVER_TEXT_BYTES: usize = 16 * 1024;
+    let mut seed = [0u32; 4096];
+    let mut generated = [0u32; MAX_SERVER_TOKENS];
+    let mut bytes = [0u8; MAX_SERVER_TEXT_BYTES];
+    let (byte_count, status, widened, abstained) = {
+        let guard = slot.lock().unwrap();
+        let state = guard.as_ref()?;
+        let seed_len = state
+            .encode_into(prompt, &mut seed)
+            .or_else(|| tless_uor::tless_tokenize_into(prompt, &mut seed))?;
+        if seed_len == 0 {
+            return None;
+        }
+        let outcome = state
+            .generate_into_status(
+                &seed[..seed_len],
+                &mut generated[..max_tokens.min(MAX_SERVER_TOKENS)],
+            )
+            .ok()?;
+        // On an abstention no text is produced: the tokens generated before
+        // the abstaining step are dropped rather than served, so an
+        // out-of-distribution prompt never surfaces partial output.
+        let bytes_written = if outcome.abstained || outcome.count == 0 {
+            0
+        } else {
+            state
+                .decode_into(&generated[..outcome.count], &mut bytes)
+                .or_else(|| {
+                    tless_uor::tless_detokenize_into(&generated[..outcome.count], &mut bytes)
+                })?
+        };
+        (
+            bytes_written,
+            outcome.status,
+            outcome.widened,
+            outcome.abstained,
+        )
+    };
+    let text = String::from_utf8_lossy(&bytes[..byte_count])
+        .trim()
+        .to_owned();
+    Some(R4g1Text {
+        text,
+        status,
+        widened,
+        abstained,
+    })
 }
 
 fn generate_attention_text(
@@ -555,6 +741,73 @@ fn clean_sentence_boundary(raw: &str) -> String {
     }
 }
 
+/// Validate generated text before it is returned by the HTTP chat endpoint.
+pub fn is_usable_generated_text(text: &str) -> bool {
+    let chars: Vec<char> = text.chars().collect();
+    if chars.is_empty() || chars.iter().any(|ch| ch == &'\u{fffd}' || ch.is_control()) {
+        return false;
+    }
+    let non_space = chars.iter().filter(|ch| !ch.is_whitespace()).count();
+    let readable = chars
+        .iter()
+        .filter(|ch| ch.is_alphanumeric() || ch.is_ascii_punctuation())
+        .count();
+    if non_space == 0 || readable * 2 < non_space {
+        return false;
+    }
+    let mut run = 1usize;
+    for pair in chars.windows(2) {
+        if pair[0] == pair[1] {
+            run += 1;
+            if run >= 16 {
+                return false;
+            }
+        } else {
+            run = 1;
+        }
+    }
+    !repeated_word_loop(text)
+}
+
+/// Detect the kind of multi-word loop produced by a broken decoder or a
+/// geometric fallback. Character-level guards cannot catch output such as
+/// "that is how i work" repeated over and over, so inspect word windows too.
+fn repeated_word_loop(text: &str) -> bool {
+    let words: Vec<&str> = text.split_whitespace().collect();
+    if words.len() < 6 {
+        return false;
+    }
+
+    // A repeated suffix is the common autoregressive failure mode. Keep the
+    // minimum at three words so ordinary repeated words are not rejected.
+    let max_suffix_width = (words.len() / 2).min(12);
+    for width in 3..=max_suffix_width {
+        let split = words.len() - width;
+        if words[split..] == words[split - width..split] {
+            return true;
+        }
+    }
+
+    // The fallback observed in the browser can interleave a final fragment
+    // between copies of the same phrase. Three occurrences of a 3–12 word
+    // window are a strong enough signal to reject the response.
+    let max_width = words.len().min(12);
+    for width in 3..=max_width {
+        for start in 0..=words.len() - width {
+            let candidate = &words[start..start + width];
+            let occurrences = words
+                .windows(width)
+                .filter(|window| *window == candidate)
+                .count();
+            if occurrences >= 3 {
+                return true;
+            }
+        }
+    }
+
+    false
+}
+
 /// Persist the manifold cache in the background, at the CLI-configured path.
 fn spawn_cache_save(cli: &Arc<ServerConfig>, state_json: String) {
     let path = cli.manifold_cache.clone();
@@ -563,10 +816,506 @@ fn spawn_cache_save(cli: &Arc<ServerConfig>, state_json: String) {
     });
 }
 
+fn has_r4g1_compile_inputs(root: &Path) -> bool {
+    root.join("corpus.meta").is_file() && root.join("corpus.records").is_file()
+}
+
+/// Validate the corpus files used by the browser-triggered R4G1 compiler.
+pub fn validate_r4g1_corpus_inputs(meta: &Path, records: &Path) -> Result<(), String> {
+    if !meta.is_file() {
+        return Err(format!(
+            "configured corpus metadata is missing: {}",
+            meta.display()
+        ));
+    }
+    if !records.is_file() {
+        return Err(format!(
+            "configured corpus records are missing: {}",
+            records.display()
+        ));
+    }
+    Ok(())
+}
+
+/// Resolve the synthesis engine. R4G1 is the active default; legacy and
+/// geometric paths are reachable only through explicit engine values.
+pub fn select_synthesis_engine(requested: Option<&str>) -> &'static str {
+    match requested {
+        Some("r4g1") => "r4g1",
+        Some("geometric") => "geometric",
+        Some("attention") => "attention",
+        Some("r4-attention") => "r4-attention",
+        Some("transformerless-legacy") => "transformerless-legacy",
+        Some("auto" | "ollama" | "transformerless") | None => "r4g1",
+        Some(_) => "r4g1",
+    }
+}
+
+/// The explicit failure contract for an unavailable R4G1 runtime. Keeping
+/// this separate makes the no-fallback behavior directly testable.
+pub fn r4g1_unavailable_response() -> (u16, serde_json::Value) {
+    (
+        503,
+        serde_json::json!({
+            "error": "R4G1 Graph runtime did not produce a usable response; no fallback engine was invoked",
+            "engine": "r4g1"
+        }),
+    )
+}
+
+fn same_file_bytes(left: &Path, right: &Path) -> bool {
+    if !left.is_file() || !right.is_file() {
+        return false;
+    }
+    match (fs::read(left), fs::read(right)) {
+        (Ok(left), Ok(right)) => blake3::hash(&left) == blake3::hash(&right),
+        _ => false,
+    }
+}
+
+fn discover_r4g1_compile_root(cli: &ServerConfig, artifact: &Path) -> Result<PathBuf, String> {
+    let direct_root = artifact
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .to_path_buf();
+    if has_r4g1_compile_inputs(&direct_root) {
+        return Ok(direct_root);
+    }
+
+    if let Some(graph_artifact) = cli.r4g1_artifact.as_deref() {
+        let graph_root = Path::new(graph_artifact)
+            .parent()
+            .and_then(Path::parent)
+            .map(Path::to_path_buf);
+        if let Some(graph_root) = graph_root {
+            let candidate_artifact = graph_root.join(
+                artifact
+                    .file_name()
+                    .unwrap_or_else(|| std::ffi::OsStr::new("tless_artifacts.bin")),
+            );
+            if has_r4g1_compile_inputs(&graph_root)
+                && same_file_bytes(artifact, &candidate_artifact)
+            {
+                return Ok(graph_root);
+            }
+        }
+    }
+
+    let compiled_root = Path::new(".uor-models").join("compiled");
+    let mut matches = Vec::new();
+    if let Ok(entries) = fs::read_dir(&compiled_root) {
+        for entry in entries.flatten() {
+            let root = entry.path();
+            if root.is_dir()
+                && has_r4g1_compile_inputs(&root)
+                && same_file_bytes(artifact, &root.join("tless_artifacts.bin"))
+            {
+                matches.push(root);
+            }
+        }
+    }
+    match matches.len() {
+        1 => Ok(matches.remove(0)),
+        0 => Err(format!(
+            "required compilation input is missing: {}. Point --tless-artifacts at the compiled bundle containing corpus.meta and corpus.records, or copy those corpus files beside the configured artifact",
+            direct_root.join("corpus.meta").display()
+        )),
+        _ => Err(format!(
+            "multiple compiled bundles match {}; pass --tless-artifacts explicitly to select one",
+            artifact.display()
+        )),
+    }
+}
+
+fn r4g1_compile_paths(cli: &ServerConfig) -> Result<(PathBuf, PathBuf, PathBuf, PathBuf), String> {
+    let artifact = PathBuf::from(&cli.tless_artifacts);
+    if let (Some(meta), Some(recs)) = (&cli.tless_corpus_meta, &cli.tless_corpus_recs) {
+        let corpus_meta = PathBuf::from(meta);
+        let corpus_recs = PathBuf::from(recs);
+        let root = corpus_meta
+            .parent()
+            .unwrap_or_else(|| Path::new("."))
+            .to_path_buf();
+        let graph_path = cli
+            .r4g1_artifact
+            .as_ref()
+            .map(PathBuf::from)
+            .unwrap_or_else(|| root.join("graph").join("score.r4g1"));
+        let graph_output = graph_path
+            .parent()
+            .unwrap_or_else(|| Path::new("."))
+            .to_path_buf();
+        validate_r4g1_corpus_inputs(&corpus_meta, &corpus_recs)?;
+        return Ok((
+            corpus_meta,
+            corpus_recs,
+            root.join("graph-cover"),
+            graph_output,
+        ));
+    }
+    let root = discover_r4g1_compile_root(cli, &artifact)?;
+    let cover_output = root.join("graph-cover");
+    let graph_path = cli
+        .r4g1_artifact
+        .as_ref()
+        .map(PathBuf::from)
+        .unwrap_or_else(|| root.join("graph").join("score.r4g1"));
+    let graph_output = graph_path
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .to_path_buf();
+    Ok((
+        root.join("corpus.meta"),
+        root.join("corpus.records"),
+        cover_output,
+        graph_output,
+    ))
+}
+
+fn compile_bundle_from_source(source: &Path) -> Result<PathBuf, String> {
+    let name = source
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| {
+            format!(
+                "source path is not a valid model directory: {}",
+                source.display()
+            )
+        })?;
+    let output = PathBuf::from(".uor-models/compiled").join(name);
+    let args = vec![
+        "--source".to_owned(),
+        source.display().to_string(),
+        "--output".to_owned(),
+        output.display().to_string(),
+        "--seconds".to_owned(),
+        R4G1_CORPUS_SECONDS.to_owned(),
+        "--target".to_owned(),
+        R4G1_CORPUS_TARGET.to_owned(),
+        "--sequence-length".to_owned(),
+        "128".to_owned(),
+    ];
+    uor_r4_graph_cli::compile_hugging_face(&args)?;
+    for file in [
+        "tless_artifacts.bin",
+        "tless_store.bin",
+        "tokenizer.bin",
+        "corpus.meta",
+        "corpus.records",
+    ] {
+        if !output.join(file).is_file() {
+            return Err(format!(
+                "transformerless bundle compilation is incomplete; missing {}. Retry the compile action to resume the corpus",
+                output.join(file).display()
+            ));
+        }
+    }
+    let meta = output.join("corpus.meta");
+    let records = output.join("corpus.records");
+    let meta_str = meta
+        .to_str()
+        .ok_or_else(|| format!("corpus metadata path is not UTF-8: {}", meta.display()))?;
+    let records_str = records
+        .to_str()
+        .ok_or_else(|| format!("corpus records path is not UTF-8: {}", records.display()))?;
+    if uor_r4_core::transformerless::compiler::load_corpus_from(meta_str, records_str).is_none() {
+        return Err(format!(
+            "teacher corpus is incomplete at {}; click Compile / Refresh again to resume generation toward {} samples",
+            output.display(), R4G1_CORPUS_TARGET
+        ));
+    }
+    Ok(output)
+}
+
+fn panic_payload_message(payload: &(dyn Any + Send)) -> String {
+    if let Some(message) = payload.downcast_ref::<&str>() {
+        (*message).to_owned()
+    } else if let Some(message) = payload.downcast_ref::<String>() {
+        message.clone()
+    } else {
+        "panic payload was not a string".to_owned()
+    }
+}
+
+fn compile_r4g1_bundle(
+    cli: &ServerConfig,
+    r4g1: &Arc<Mutex<Option<R4g1State>>>,
+    downloaded_source: Option<&Path>,
+) -> Result<serde_json::Value, String> {
+    // A downloaded source is authoritative for the browser workflow. Even
+    // when an older corpus bundle already exists, resume the teacher compile
+    // first so the requested target (currently 200k tokens) is actually
+    // reached instead of silently rebuilding the old ~20k corpus.
+    let source_root = downloaded_source
+        .map(compile_bundle_from_source)
+        .transpose()?;
+    let (artifacts, corpus_meta, corpus_recs, cover_output, graph_output, graph_path) =
+        match source_root {
+            Some(root) => {
+                let artifacts = root.join("tless_artifacts.bin");
+                let corpus_meta = root.join("corpus.meta");
+                let corpus_recs = root.join("corpus.records");
+                let cover_output = root.join("graph-cover");
+                let graph_path = cli
+                    .r4g1_artifact
+                    .as_ref()
+                    .map(PathBuf::from)
+                    .unwrap_or_else(|| root.join("graph").join("score.r4g1"));
+                let graph_output = graph_path
+                    .parent()
+                    .unwrap_or_else(|| Path::new("."))
+                    .to_path_buf();
+                (
+                    artifacts,
+                    corpus_meta,
+                    corpus_recs,
+                    cover_output,
+                    graph_output,
+                    graph_path,
+                )
+            }
+            None => match r4g1_compile_paths(cli) {
+                Ok((corpus_meta, corpus_recs, cover_output, graph_output)) => {
+                    let artifacts = PathBuf::from(&cli.tless_artifacts);
+                    let graph_path = cli
+                        .r4g1_artifact
+                        .as_ref()
+                        .map(PathBuf::from)
+                        .unwrap_or_else(|| graph_output.join("score.r4g1"));
+                    (
+                        artifacts,
+                        corpus_meta,
+                        corpus_recs,
+                        cover_output,
+                        graph_output,
+                        graph_path,
+                    )
+                }
+                Err(error) => return Err(error),
+            },
+        };
+    for path in [&artifacts, &corpus_meta, &corpus_recs] {
+        if !path.is_file() {
+            return Err(format!(
+                "required compilation input is missing: {}",
+                path.display()
+            ));
+        }
+    }
+
+    let cover_args = vec![
+        "--corpus-meta".to_owned(),
+        corpus_meta.display().to_string(),
+        "--corpus-recs".to_owned(),
+        corpus_recs.display().to_string(),
+        "--artifacts".to_owned(),
+        artifacts.display().to_string(),
+        "--depths".to_owned(),
+        R4G1_COVER_DEPTHS.to_owned(),
+        "--k0".to_owned(),
+        R4G1_COVER_K0.to_owned(),
+        "--regions-budget".to_owned(),
+        R4G1_COVER_REGIONS.to_owned(),
+        "--memory-budget".to_owned(),
+        R4G1_COVER_MEMORY_MB.to_owned(),
+        "--min-support".to_owned(),
+        R4G1_COVER_MIN_SUPPORT.to_owned(),
+        "--entropy-gain".to_owned(),
+        R4G1_COVER_ENTROPY_GAIN.to_owned(),
+        "--radius-quantile".to_owned(),
+        R4G1_COVER_RADIUS_QUANTILE.to_owned(),
+        "--out".to_owned(),
+        cover_output.display().to_string(),
+    ];
+    uor_r4_graph_cli::cover_command(&cover_args)?;
+
+    let cover_artifact = cover_output.join("cover.r4g1");
+    let score_args = vec![
+        "--corpus-meta".to_owned(),
+        corpus_meta.display().to_string(),
+        "--corpus-recs".to_owned(),
+        corpus_recs.display().to_string(),
+        "--artifacts".to_owned(),
+        artifacts.display().to_string(),
+        "--cover".to_owned(),
+        cover_artifact.display().to_string(),
+        "--transition-out-degree".to_owned(),
+        R4G1_SCORE_TRANSITION_DEGREE.to_owned(),
+        "--emission-entries".to_owned(),
+        R4G1_SCORE_EMISSION_ENTRIES.to_owned(),
+        "--root-top-b".to_owned(),
+        R4G1_SCORE_ROOT_TOP_B.to_owned(),
+        "--exct-top-x".to_owned(),
+        R4G1_SCORE_EXCT_TOP_X.to_owned(),
+        "--out".to_owned(),
+        graph_output.display().to_string(),
+    ];
+    uor_r4_graph_cli::score_command(&score_args)?;
+
+    let state = R4g1State::load(&graph_path, &artifacts)
+        .map_err(|error| format!("compiled graph was written but failed validation: {error}"))?;
+    *r4g1.lock().unwrap() = Some(state);
+
+    let report_path = graph_output.join("score_report.json");
+    let report = fs::read_to_string(&report_path)
+        .ok()
+        .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok());
+    Ok(serde_json::json!({
+        "artifact": graph_path.display().to_string(),
+        "report": report,
+    }))
+}
+
+fn spawn_r4g1_compile(
+    cli: Arc<ServerConfig>,
+    r4g1: Arc<Mutex<Option<R4g1State>>>,
+    status: Arc<Mutex<R4g1CompileStatus>>,
+    downloaded_source: Option<String>,
+) {
+    std::thread::spawn(move || {
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            compile_r4g1_bundle(&cli, &r4g1, downloaded_source.as_deref().map(Path::new))
+        }))
+        .map_err(|payload| {
+            format!(
+                "R4G1 compilation panicked: {}",
+                panic_payload_message(&*payload)
+            )
+        })
+        .and_then(|result| result);
+
+        let mut current = status.lock().unwrap();
+        current.running = false;
+        match result {
+            Ok(details) => {
+                current.ready = true;
+                current.report = details
+                    .get("report")
+                    .filter(|report| !report.is_null())
+                    .cloned();
+                current.message = format!(
+                    "R4G1 graph compiled and loaded from {}",
+                    details
+                        .get("artifact")
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or("the configured artifact")
+                );
+            }
+            Err(error) => {
+                current.ready = r4g1.lock().unwrap().is_some();
+                current.message = format!("R4G1 compilation failed: {error}");
+            }
+        }
+    });
+}
+
+fn pinned_huggingface_source() -> Result<SourceDownload, String> {
+    let manifest_path = Path::new("models/smollm2-135m-instruct.json");
+    let manifest = fs::read_to_string(manifest_path).map_err(|error| {
+        format!(
+            "pinned Hugging Face manifest is unavailable at {}: {error}",
+            manifest_path.display()
+        )
+    })?;
+    let manifest: PinnedSourceManifest = serde_json::from_str(&manifest)
+        .map_err(|error| format!("invalid pinned Hugging Face manifest: {error}"))?;
+    let name = manifest
+        .source_directory
+        .as_deref()
+        .map(Path::new)
+        .and_then(Path::file_name)
+        .and_then(|name| name.to_str())
+        .unwrap_or("smollm2-135m-instruct")
+        .to_owned();
+    Ok(SourceDownload {
+        repository: manifest.repository,
+        revision: manifest.revision,
+        name,
+        output: manifest.source_directory.map(PathBuf::from),
+    })
+}
+
+fn source_from_model_spec(model: &str) -> Result<SourceDownload, String> {
+    let (repository, revision) = model
+        .trim()
+        .split_once('@')
+        .ok_or_else(|| "custom model must use owner/repository@<40-character-commit>".to_owned())?;
+    if repository.is_empty()
+        || revision.len() != 40
+        || !revision.bytes().all(|byte| byte.is_ascii_hexdigit())
+    {
+        return Err("custom model must use owner/repository@<40-character-commit>".to_owned());
+    }
+    let name = repository
+        .rsplit('/')
+        .next()
+        .filter(|name| !name.is_empty())
+        .ok_or_else(|| "custom model repository must use owner/repository".to_owned())?;
+    Ok(SourceDownload {
+        repository: repository.to_owned(),
+        revision: revision.to_owned(),
+        name: format!("{}-{}", name, &revision[..12]),
+        output: None,
+    })
+}
+
+fn huggingface_source(model: Option<&str>) -> Result<SourceDownload, String> {
+    match model.map(str::trim).filter(|model| !model.is_empty()) {
+        Some(model) => source_from_model_spec(model),
+        None => pinned_huggingface_source(),
+    }
+}
+
+fn downloaded_source_path(source: &SourceDownload) -> PathBuf {
+    source.output.clone().unwrap_or_else(|| {
+        PathBuf::from(".uor-models")
+            .join("sources")
+            .join(&source.name)
+    })
+}
+
+fn spawn_huggingface_download(
+    status: Arc<Mutex<HuggingFaceDownloadStatus>>,
+    source: SourceDownload,
+) {
+    std::thread::spawn(move || {
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let name = source.name.clone();
+            let repository = source.repository.clone();
+            let destination = download_source(&source).map_err(|error| error.to_string())?;
+            Ok::<_, String>((repository, name, destination))
+        }))
+        .map_err(|payload| {
+            format!(
+                "Hugging Face download panicked: {}",
+                panic_payload_message(&*payload)
+            )
+        })
+        .and_then(|result| result);
+
+        let mut current = status.lock().unwrap();
+        current.running = false;
+        match result {
+            Ok((repository, name, destination)) => {
+                current.ready = true;
+                current.source = Some(destination.display().to_string());
+                current.message = format!("Downloaded Hugging Face source {repository} ({name})");
+            }
+            Err(error) => {
+                current.message = format!("Hugging Face download failed: {error}");
+            }
+        }
+    });
+}
+
+#[allow(clippy::too_many_arguments)]
 fn handle_connection(
     mut stream: TcpStream,
     router: Arc<Mutex<UorR4Router>>,
     tless: Arc<Mutex<Option<tless_uor::TlessState>>>,
+    r4g1: Arc<Mutex<Option<R4g1State>>>,
+    r4g1_compile: Arc<Mutex<R4g1CompileStatus>>,
+    hf_download: Arc<Mutex<HuggingFaceDownloadStatus>>,
     oracle: Arc<Mutex<Option<uor_r4_model_source::HuggingFaceLlamaOracle>>>,
     cli: Arc<ServerConfig>,
     start_time: Instant,
@@ -650,14 +1399,7 @@ fn handle_connection(
             .unwrap_or_else(|| "tenant-alpha".to_string());
         // `ollama` remains accepted as a legacy client alias so saved browser
         // sessions keep working, but all local synthesis is transformerless.
-        let engine_mode = match payload.engine.as_deref() {
-            Some("r4g1") => "r4g1",
-            Some("geometric") => "geometric",
-            Some("attention") => "attention",
-            Some("r4-attention") => "r4-attention",
-            Some("auto" | "ollama" | "transformerless") | None => "r4g1",
-            Some(_) => "r4g1",
-        };
+        let engine_mode = select_synthesis_engine(payload.engine.as_deref());
 
         let mut router_guard = router.lock().unwrap();
 
@@ -732,15 +1474,21 @@ fn handle_connection(
 
         // 5. Decode response
         let t_gen = Instant::now();
-        let geom_result = router_guard.generate_geometric_response_native(
-            &payload.text,
-            &identity,
-            max_tokens,
-            temperature,
-            10.0,
-            4.0,
-            gamma,
-        );
+        let mut geom_result = uor_r4_router::GeometricResponse {
+            text: String::new(),
+            trajectory: Vec::new(),
+        };
+        if engine_mode == "geometric" {
+            geom_result = router_guard.generate_geometric_response_native(
+                &payload.text,
+                &identity,
+                max_tokens,
+                temperature,
+                10.0,
+                4.0,
+                gamma,
+            );
+        }
 
         let top_resonances = router_guard.get_top_resonances_native(&payload.text, &identity, 1);
         let ctx_block = if !top_resonances.is_empty() {
@@ -754,6 +1502,13 @@ fn handle_connection(
         let mut final_response_text = String::new();
         let mut llm_connected = false;
         let mut generation_mode = "geometric-decoded".to_string();
+        // R4G1 status surfacing (D4): the resolution status of the last
+        // scoring step, whether a widened re-probe ran, and whether the
+        // policy abstained. Declared in the response whenever the R4G1
+        // path ran — including when another engine then served.
+        let mut r4g1_status: Option<&'static str> = None;
+        let mut r4g1_widened = false;
+        let mut r4g1_abstained = false;
 
         let mut oracle_guard = oracle.lock().unwrap();
         if engine_mode == "attention" || engine_mode == "r4-attention" {
@@ -773,7 +1528,10 @@ fn handle_connection(
                 }
                 o.set_r4_attention(false);
             }
-        } else if engine_mode == "transformerless" || engine_mode == "r4g1" {
+        } else if engine_mode == "transformerless"
+            || engine_mode == "r4g1"
+            || engine_mode == "transformerless-legacy"
+        {
             let prompt = payload.text.clone();
             if !geom_result.text.is_empty() && geom_result.text.len() > 10 {
                 let cleaned = clean_sentence_boundary(&geom_result.text);
@@ -787,19 +1545,73 @@ fn handle_connection(
                 llm_connected = true;
                 generation_mode = "r4g1-zero-multiply-resonance".to_string();
                 tokens_generated = final_response_text.split_whitespace().count();
-            } else if let Some(text) = generate_tless_text(&tless, &prompt, max_tokens.max(32)) {
-                final_response_text = text;
-                llm_connected = true;
-                generation_mode = if engine_mode == "r4g1" {
-                    "r4g1-zero-multiply".to_string()
-                } else {
-                    "transformerless".to_string()
-                };
-                tokens_generated = final_response_text.split_whitespace().count();
+            } else if engine_mode != "transformerless-legacy" {
+                match generate_r4g1_text(&r4g1, &prompt, max_tokens.max(32)) {
+                    Some(gen) if gen.abstained => {
+                        generation_mode = "r4g1-abstained".to_string();
+                        r4g1_status = gen.status.map(r4g1::PolicyStatus::from).map(|s| s.label());
+                        r4g1_widened = gen.widened;
+                        r4g1_abstained = true;
+                    }
+                    Some(gen) if is_usable_generated_text(&gen.text) => {
+                        final_response_text = gen.text;
+                        llm_connected = true;
+                        generation_mode = "r4g1".to_string();
+                        r4g1_status = gen.status.map(r4g1::PolicyStatus::from).map(|s| s.label());
+                        r4g1_widened = gen.widened;
+                        tokens_generated = final_response_text.split_whitespace().count();
+                    }
+                    Some(_) => {
+                        generation_mode = "r4g1-rejected".to_string();
+                    }
+                    None => {}
+                }
+            }
+            if final_response_text.is_empty()
+                && (engine_mode == "transformerless" || engine_mode == "transformerless-legacy")
+            {
+                if let Some(text) = generate_tless_text(&tless, &prompt, max_tokens.max(32)) {
+                    final_response_text = text;
+                    llm_connected = true;
+                    generation_mode = "transformerless-legacy".to_string();
+                    tokens_generated = final_response_text.split_whitespace().count();
+                }
             }
         }
 
+        if final_response_text.is_empty() && engine_mode == "r4g1" {
+            if r4g1_abstained {
+                // D4 abstention is a declared outcome, not a fault: HTTP
+                // 200 with the status, no guessed text, no fallback engine.
+                let body = serde_json::json!({
+                    "engine": "r4g1",
+                    "abstained": true,
+                    "status": r4g1_status,
+                    "widened": r4g1_widened,
+                    "text": "",
+                    "llm_connected": false,
+                    "generation_mode": generation_mode,
+                });
+                send_json_response(stream, 200, &body.to_string());
+            } else {
+                let (status, body) = r4g1_unavailable_response();
+                send_json_response(stream, status, &body.to_string());
+            }
+            return;
+        }
+
         if final_response_text.is_empty() {
+            if geom_result.text.is_empty() {
+                geom_result = router_guard.generate_geometric_response_native(
+                    &payload.text,
+                    &identity,
+                    max_tokens,
+                    temperature,
+                    10.0,
+                    4.0,
+                    gamma,
+                );
+            }
             final_response_text = if !geom_result.text.is_empty() {
                 geom_result.text.clone()
             } else if ctx_block != "[no corpus context available]" {
@@ -885,6 +1697,11 @@ fn handle_connection(
                 routing_data.routed.window_index, theme, routing_data.routed.scale_x, kappa, theta_d, generation_mode),
             "llm_connected": llm_connected,
             "generation_mode": generation_mode,
+            "r4g1": {
+                "status": r4g1_status,
+                "widened": r4g1_widened,
+                "abstained": r4g1_abstained,
+            },
             "active_projection": {
                 "u": u,
                 "v": v,
@@ -1273,19 +2090,319 @@ fn handle_connection(
         return;
     }
 
+    if clean_path == "/api/r4g1/status" && method == "GET" {
+        let status = r4g1_compile.lock().unwrap().clone();
+        send_json_response(stream, 200, &status.json().to_string());
+        return;
+    }
+
+    // R4G1 status-aware prediction (issue #78, D4): the response always
+    // carries the resolution status and the widened flag; an abstention
+    // is HTTP 200 with `abstained: true` — never a guessed token, never
+    // a 5xx for a declared policy outcome.
+    if clean_path == "/api/r4g1/predict" && method == "POST" {
+        let payload: serde_json::Value = match serde_json::from_slice(&body) {
+            Ok(p) => p,
+            Err(e) => {
+                send_json_response(
+                    stream,
+                    400,
+                    &format!("{{\"error\":\"Invalid JSON: {}\"}}", e),
+                );
+                return;
+            }
+        };
+        let mut window_tokens: Vec<u32> = payload
+            .get("window")
+            .and_then(|w| w.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_u64().map(|x| x as u32))
+                    .collect()
+            })
+            .unwrap_or_default();
+        if window_tokens.is_empty() {
+            send_json_response(
+                stream,
+                400,
+                "{\"error\":\"`window` must be a non-empty array of token ids\"}",
+            );
+            return;
+        }
+        // keep the WINDOW most recent tokens, oldest first
+        if window_tokens.len() > 8 {
+            window_tokens = window_tokens.split_off(window_tokens.len() - 8);
+        }
+        let guard = r4g1.lock().unwrap();
+        let Some(state) = guard.as_ref() else {
+            let (status, body) = r4g1_unavailable_response();
+            send_json_response(stream, status, &body.to_string());
+            return;
+        };
+        let (code, body) = match state.predict_window_status(&window_tokens) {
+            Ok(r4g1::PredictDecision::Serve(outcome)) => (
+                200,
+                serde_json::json!({
+                    "window": window_tokens,
+                    "abstained": false,
+                    "prediction": {
+                        "token": outcome.token,
+                        "status": r4g1::PolicyStatus::from(outcome.status).label(),
+                        "widened": outcome.widened,
+                    },
+                })
+                .to_string(),
+            ),
+            Ok(r4g1::PredictDecision::Abstain(outcome)) => (
+                200,
+                serde_json::json!({
+                    "window": window_tokens,
+                    "abstained": true,
+                    "status": r4g1::PolicyStatus::from(outcome.status).label(),
+                    "widened": outcome.widened,
+                })
+                .to_string(),
+            ),
+            Err(error) => (500, serde_json::json!({ "error": error }).to_string()),
+        };
+        send_json_response(stream, code, &body);
+        return;
+    }
+
+    // R4G1 status-aware generation: stops at the first abstention and
+    // reports the tokens so far, the final status, and the abstain flag.
+    if clean_path == "/api/r4g1/generate" && method == "POST" {
+        let payload: serde_json::Value = match serde_json::from_slice(&body) {
+            Ok(p) => p,
+            Err(e) => {
+                send_json_response(
+                    stream,
+                    400,
+                    &format!("{{\"error\":\"Invalid JSON: {}\"}}", e),
+                );
+                return;
+            }
+        };
+        let max_tokens = payload
+            .get("max_tokens")
+            .and_then(|m| m.as_u64())
+            .unwrap_or(24)
+            .clamp(1, 256) as usize;
+        let guard = r4g1.lock().unwrap();
+        let Some(state) = guard.as_ref() else {
+            let (status, body) = r4g1_unavailable_response();
+            send_json_response(stream, status, &body.to_string());
+            return;
+        };
+        let mut seed_buf = [0u32; 4096];
+        let seed: Vec<u32> = if let Some(arr) = payload.get("window").and_then(|w| w.as_array()) {
+            arr.iter()
+                .filter_map(|v| v.as_u64().map(|x| x as u32))
+                .collect()
+        } else if let Some(text) = payload.get("text").and_then(|t| t.as_str()) {
+            match state
+                .encode_into(text, &mut seed_buf)
+                .or_else(|| tless_uor::tless_tokenize_into(text, &mut seed_buf))
+            {
+                Some(len) if len > 0 => seed_buf[..len].to_vec(),
+                _ => {
+                    send_json_response(
+                        stream,
+                        503,
+                        "{\"error\":\"tokenizer unavailable — set TLESS_TOKENIZER\"}",
+                    );
+                    return;
+                }
+            }
+        } else {
+            vec![1]
+        };
+        if seed.is_empty() {
+            send_json_response(stream, 400, "{\"error\":\"empty seed\"}");
+            return;
+        }
+        let mut out = [0u32; 256];
+        match state.generate_into_status(&seed, &mut out[..max_tokens]) {
+            Ok(gen) => {
+                let tokens = &out[..gen.count];
+                let mut text_bytes = [0u8; 16 * 1024];
+                let text_len = if gen.abstained || gen.count == 0 {
+                    0
+                } else {
+                    state
+                        .decode_into(tokens, &mut text_bytes)
+                        .or_else(|| tless_uor::tless_detokenize_into(tokens, &mut text_bytes))
+                        .unwrap_or(0)
+                };
+                let text = String::from_utf8_lossy(&text_bytes[..text_len]).into_owned();
+                let body = serde_json::json!({
+                    "seed": seed,
+                    "tokens": tokens,
+                    "count": gen.count,
+                    "text": text,
+                    "abstained": gen.abstained,
+                    "status": gen
+                        .status
+                        .map(r4g1::PolicyStatus::from)
+                        .map(|s| s.label()),
+                    "widened": gen.widened,
+                });
+                send_json_response(stream, 200, &body.to_string());
+            }
+            Err(error) => send_json_response(
+                stream,
+                500,
+                &serde_json::json!({ "error": error }).to_string(),
+            ),
+        }
+        return;
+    }
+
+    if clean_path == "/api/huggingface/status" && method == "GET" {
+        let status = hf_download.lock().unwrap().clone();
+        send_json_response(stream, 200, &status.json().to_string());
+        return;
+    }
+
+    if clean_path == "/api/huggingface/download" && method == "POST" {
+        let payload: HuggingFaceDownloadPayload = if body.is_empty() {
+            HuggingFaceDownloadPayload::default()
+        } else {
+            match serde_json::from_slice(&body) {
+                Ok(payload) => payload,
+                Err(error) => {
+                    send_json_response(
+                        stream,
+                        400,
+                        &format!("{{\"error\":\"Invalid JSON: {error}\"}}"),
+                    );
+                    return;
+                }
+            }
+        };
+        let source = match huggingface_source(payload.model.as_deref()) {
+            Ok(source) => source,
+            Err(error) => {
+                send_json_response(
+                    stream,
+                    400,
+                    &serde_json::json!({ "error": error }).to_string(),
+                );
+                return;
+            }
+        };
+        let mut status = hf_download.lock().unwrap();
+        if status.running {
+            send_json_response(
+                stream,
+                409,
+                &serde_json::json!({
+                    "running": true,
+                    "ready": status.ready,
+                    "message": "Hugging Face download is already running"
+                })
+                .to_string(),
+            );
+            return;
+        }
+        status.running = true;
+        status.ready = false;
+        let revision_preview: String = source.revision.chars().take(12).collect();
+        status.message = format!(
+            "Downloading {}@{}; this may take a few minutes...",
+            source.repository, revision_preview
+        );
+        drop(status);
+        spawn_huggingface_download(Arc::clone(&hf_download), source);
+        send_json_response(
+            stream,
+            202,
+            &serde_json::json!({
+                "running": true,
+                "message": "Hugging Face download started"
+            })
+            .to_string(),
+        );
+        return;
+    }
+
+    if clean_path == "/api/r4g1/compile" && method == "POST" {
+        let payload: HuggingFaceDownloadPayload = if body.is_empty() {
+            HuggingFaceDownloadPayload::default()
+        } else {
+            match serde_json::from_slice(&body) {
+                Ok(payload) => payload,
+                Err(error) => {
+                    send_json_response(
+                        stream,
+                        400,
+                        &format!("{{\"error\":\"Invalid JSON: {error}\"}}"),
+                    );
+                    return;
+                }
+            }
+        };
+        let mut status = r4g1_compile.lock().unwrap();
+        if status.running {
+            send_json_response(
+                stream,
+                409,
+                &serde_json::json!({
+                    "running": true,
+                    "ready": status.ready,
+                    "message": "R4G1 compilation is already running"
+                })
+                .to_string(),
+            );
+            return;
+        }
+        status.running = true;
+        status.message = "Compiling R4G1 cover and scored graph...".to_owned();
+        status.report = None;
+        drop(status);
+
+        let downloaded_source = hf_download.lock().unwrap().source.clone().or_else(|| {
+            let source = huggingface_source(payload.model.as_deref()).ok()?;
+            let path = downloaded_source_path(&source);
+            path.is_dir().then(|| path.display().to_string())
+        });
+
+        spawn_r4g1_compile(
+            Arc::clone(&cli),
+            Arc::clone(&r4g1),
+            Arc::clone(&r4g1_compile),
+            downloaded_source,
+        );
+        send_json_response(
+            stream,
+            202,
+            &serde_json::json!({
+                "running": true,
+                "message": "R4G1 compilation started"
+            })
+            .to_string(),
+        );
+        return;
+    }
+
     if clean_path == "/api/tags" && method == "GET" {
         // Compatibility endpoint for clients that previously used Ollama's
         // model discovery API. No external process or network call is made.
         let ready = Path::new(&cli.tless_artifacts).is_file()
             && Path::new(&cli.tless_store).is_file()
             && Path::new(&cli.tless_tokenizer).is_file();
+        let r4g1_ready = r4g1.lock().unwrap().is_some();
         let body = serde_json::json!({
             "models": if ready { vec![serde_json::json!({
                 "name": "uor-transformerless",
                 "model": "uor-transformerless",
-                "details": { "family": "r4-transformerless", "format": "TLA5/TLS1" }
+                "details": {
+                    "family": "r4-transformerless",
+                    "format": if r4g1_ready { "R4G1" } else { "TLA5/TLS1" }
+                }
             })] } else { Vec::<serde_json::Value>::new() },
-            "ready": ready
+            "ready": ready,
+            "r4g1_ready": r4g1_ready
         });
         send_json_response(stream, 200, &body.to_string());
         return;
@@ -1385,6 +2502,7 @@ fn handle_connection(
         });
 
         let max_tokens = router_guard.get_suggested_token_limit("Welcome", identity);
+        let r4g1_ready = r4g1.lock().unwrap().is_some();
 
         let info = serde_json::json!({
             "uptime_seconds": start_time.elapsed().as_secs_f64().round(),
@@ -1398,6 +2516,8 @@ fn handle_connection(
             "gen_latency_p95_ms": 0.0,
             "glove_loaded": false,
             "otel_available": false,
+            "r4g1_ready": r4g1_ready,
+            "model_format": if r4g1_ready { "R4G1" } else { "TLA5/TLS1 or geometric fallback" },
             "active_streams": active_streams,
             "expert_counts": expert_counts,
             "active_projection": {
@@ -1421,7 +2541,7 @@ fn handle_connection(
                     "gamma": gamma,
                     "temperature": temperature,
                     "max_tokens": max_tokens,
-                    "engine": "geometric",
+                    "engine": if r4g1_ready { "r4g1" } else { "geometric" },
                     "uor_entropy_bias": uor_bias
                 }
             },
@@ -1488,8 +2608,10 @@ fn handle_connection(
 fn send_json_response(mut stream: TcpStream, status_code: u16, body: &str) {
     let status_text = match status_code {
         200 => "OK",
+        202 => "ACCEPTED",
         400 => "BAD REQUEST",
         404 => "NOT FOUND",
+        409 => "CONFLICT",
         500 => "INTERNAL SERVER ERROR",
         502 => "BAD GATEWAY",
         _ => "OK",

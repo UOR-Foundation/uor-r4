@@ -55,11 +55,112 @@ formally committed. Full text: plan §2.
 | teacher-argmax agreement | 31.7% | cited | PROOF.md P2 |
 | bits/token (WB) | 6.54 (teacher floor 1.5960, ceiling 70.4%) | cited | PROOF.md P2 |
 | store keys | 89,200 | cited | PROOF.md P2 |
-| **SmolLM2-135M HF path fidelity** | **none exists** | **missing** | evaluation-report tooling gap (README.md:203-208); issue #34, Phase 0/2 |
+| HF-path evaluation tooling | exists | landed | PR #41 (`evaluate-report`); issue #34 closed |
+| **Gate C harness (Phase 4)** | TLA3 store baseline 31.7% / 11.88 bits-token | fresh, 2026-07-22 | `r4 transformerless score`, fixture corpus, 30,036 held-out positions — reproduces the P2 agreement anchor; bits/token is the canonical cross-entropy definition (GLOSSARY.md), scorer+ds named |
+| **Gate C: graph formula v1 (Σ-over-cloud)** | **0.3% / 70.47 bits-token** | fresh, unfavorable | correlated sibling-subtree residual stacking (issue #64, redesign in flight) |
+| **Gate C: Rule 1+2 (chain+precedence)** | **31.7% / 9.86 bits-token** | fresh, 2026-07-22 | argmax-identical to baseline on all 30,036 positions, better bits; redesign landed (#64 closed) |
+
+**Canonical bits/token (issue #76, resolved 2026-07-22):** one definition — mean cross-entropy of
+the true next token under a scorer's predicted distribution, `(1/N) Σ −log2 P_scorer(v_i|c_i)`
+with floor mass included (GLOSSARY.md). Values are comparable only within the same scorer AND
+distribution; the historical "families" are scorer/distribution differences, not metric
+differences: 6.54 = P2 certificate (Witten-Bell store, legacy corpus), 11.88 = same helper on the
+fixture corpus (Gate C baseline row), 9.86 = Rule 1+2 graph scorer on the fixture corpus.
+Every report must name scorer + distribution alongside the value.
 
 Important: the cited certificate belongs to the legacy llama2.c stories15M teacher, **not** to
-the current default SmolLM2-135M-Instruct compile. The Gate C "baseline" for the graph must be
-re-measured on the HF path once issue #34 lands.
+the current default SmolLM2-135M-Instruct compile. The Gate C harness reproduces its 31.7%
+agreement anchor on the fixture corpus; HF-path certificates for the SmolLM2 compile are
+producible via the PR #41 tooling on the D3 distribution (§2).
+
+**D3 first pass (declared n), issue #75 — fresh, 2026-07-23.** First Gate C evaluation on the
+declared D3 distribution (§2), both partitions scored with the same SmolLM2 TLA5 artifacts
+(`.uor-models/compiled/smollm2-135m-instruct/tless_artifacts.bin`, κ
+blake3:d4623b3a7db8888200a9210decd9b363b42b7fb6f32823ec9810b5223708aa3f) and the default
+cover/score configuration (add-one smoothing). Reports:
+`.uor-models/observed/simple-wiki-slice400/score_report.json` and
+`.uor-models/observed/smollm2-continuity/score_report.json`.
+
+Corpora:
+
+- **Natural partition** — 400-article prefix slice of the sealed Simple English Wikipedia corpus
+  (sealed `articles.jsonl` CID blake3:194db0eebf2d49823ece01ee935447a0cc9edeaf018454ceea480ce7590132cf;
+  slice CID blake3:33d6bded0dd477b891b0c80bd27da13818d5aacc38457b6d3174cba043fa4c17; CC BY-SA 4.0).
+  n = 400 articles → 320 construction / 80 held-out (the §2 blake3(id)%5 rule lands exactly
+  80/20 on this slice); 90,019 teacher-forced observation records (72,562 construction /
+  17,457 held-out; 285/400 articles truncated at the 256 teacher sequence length), 8 shards,
+  observation merged κ blake3:43d961d73798579567692f680c55da78020c32054ce72ae892327e85afee12d6.
+  The cover/score consumption layout (story-major, construction ordinals first; only record
+  order and the story-ordinal field derived from the merged shards) is κ
+  blake3:ff7ee846c598e5e2ee31ae74a22cfe2fe600e9efbf55b4832c46759af057c893.
+- **Continuity partition** — the existing SmolLM2 teacher-generated corpus
+  (`.uor-models/compiled/SmolLM2-135M-Instruct-7e27bd9f9532/corpus.{meta,records}`, complete),
+  n = 2,002 stories → `train_cut` 1,601; 200,000 records (159,658 construction /
+  40,342 held-out); corpus κ blake3:74491d1d80f426f675a35f22a98e6ca0a7de83bbfd1f87bcb9ad763ebe96f12a.
+
+Natural partition — 17,457 held-out positions:
+
+| scorer | top-1 agree | bits/token |
+|---|---|---|
+| graph Σ-cloud (old) | 0.03% | 60.41 |
+| graph chain (Rule 1) | 0.19% | 56.69 |
+| graph chain+EXCT (1+2) | **15.04%** | **13.30** |
+| TLA3 store baseline | 15.04% | 18.76 |
+
+Status: ExactContext 17,457 / Graph 0 / Novel 0. Win/loss 1+2 vs baseline: 2,626 both, +0/−0,
+14,831 neither — argmax-identical on every position. Candidate recall (Rule 1 / 1+2):
+64.9%/85.0% and 44.5%/62.6% top-1/top-3. Witness replay 64/64. Graph: 41 nodes, 458 edges,
+10.53 MB scored artifact.
+
+Continuity partition — 40,342 held-out positions:
+
+| scorer | top-1 agree | bits/token |
+|---|---|---|
+| graph Σ-cloud (old) | 0.005% | 50.32 |
+| graph chain (Rule 1) | 3.23% | 46.97 |
+| graph chain+EXCT (1+2) | **14.76%** | **14.62** |
+| TLA3 store baseline | 14.76% | 20.63 |
+
+Status: ExactContext 40,342 / Graph 0 / Novel 0. Win/loss 1+2 vs baseline: 5,955 both, +0/−0,
+34,387 neither — argmax-identical. Candidate recall (Rule 1 / 1+2): 60.5%/79.1% and
+42.7%/59.6%. Witness replay 64/64. Graph: 45 nodes, 532 edges, 21.56 MB scored artifact.
+
+§4 rows 1–2 verdicts (baseline = each run's own HF-path TLA3 store row):
+
+| row | natural | continuity |
+|---|---|---|
+| 1: agreement ≥ baseline + 5pp (stretch) / ≥ baseline (floor) | 15.04% vs 20.04% — **stretch FAIL; floor PASS** (equal) | 14.76% vs 19.76% — **stretch FAIL; floor PASS** (equal) |
+| 2: bits/token ≤ baseline − 0.3 | 13.30 ≤ 18.46 — **PASS** | 14.62 ≤ 20.33 — **PASS** |
+
+Deployed quality gate (`src/r4g1.rs::validate_quality_report`: Rule 1+2 agreement must not be
+worse than baseline): **PASS on both partitions** (agreement equal, never worse).
+
+Read of the gap vs the fixture row above (Rule 1+2 = 31.71%/9.86, TLA3 31.7%/11.88, n=30,036):
+the fixture is the legacy stories15M-teacher distribution, so its 31.7% anchor is not comparable
+to these first SmolLM2-teacher measurements beyond harness shape. Within the D3 distribution
+(same teacher, same artifacts, same harness), natural text is mildly easier for the store than
+the teacher's own generations (+0.28pp agreement; baseline bits 18.76 vs 20.63, −1.88), and the
+pure graph lane (Rule 1, no EXCT) is far weaker on natural text (0.19% vs 3.23%): natural
+8-token contexts repeat across articles far less than teacher-generated ones, so region-level
+residuals transfer poorly while exact-context store coverage stays total (ExactContext 100% on
+both partitions — the Rule 1+2 rows are entirely EXCT-driven, hence argmax-identical to the
+baseline).
+
+**Full-corpus confirmation (issue #75, 2026-07-23).** The first pass above scored a 400-article
+prefix slice of the natural partition; the declared natural partition is the full sealed corpus
+(3000 articles, #72). Re-run at n=3000 (361,232 records, 72,131 held-out by the same §2 rule;
+observation merged κ `blake3:a646421d…`, teacher-forced at sequence length 128 with 2545/3000
+articles truncated): Rule 1+2 **28.1% / 11.3565** vs TLA3 baseline **28.1% / 11.2481**
+(argmax-identical, ExactContext 100%; scored artifact κ `blake3:3c99b707…`). The larger corpus
+shifts the target-2 natural verdict: the baseline's bits/token improves from 18.76 (n=400) to
+11.25 (n=3000) as exact-context coverage grows, while the graph's bits stay ~flat — so on the
+full declared corpus the natural row reads **target 1: stretch FAIL / floor PASS (equal)**,
+**target 2: FAIL** (11.3565 > 11.2481 − 0.3 threshold would need ≤ 10.95). The slice verdicts
+above are retained as the n=400 record; the n=3000 rows are the declared-corpus measurement.
+Continuity corroboration: an independently regenerated 150,000-record SmolLM2 continuity corpus
+(same recipe as the declared 200k one) scored Rule 1+2 4.7% / 15.37 vs baseline 4.7% / 18.11 —
+same shape as the declared-corpus row (floor PASS, target-2 PASS), lower absolute agreement,
+i.e. generation-stream sensitive. §4.1 carries the consolidated target table.
 
 ### 3.2 Artifact sizes (fresh, 2026-07-21, `.uor-models/compiled/smollm2-135m-instruct/`)
 
@@ -125,6 +226,26 @@ Pass conditions for the Phase-5 minimum viable graph, all on the declared distri
 6. Novel/Contradictory fallback rate measured and reported; on-distribution rate < 20%.
 
 Missing target 1–2 or 4 ⇒ stop or redesign. Missing 3/5/6 ⇒ redesign discussion.
+
+### 4.1 Measured values (2026-07-23, issue #75)
+
+Cover + score + Gate C for the SmolLM2-135M compile on both D3 partitions; per-partition
+4-way tables and run details in §3.1 (declared corpora; natural at the full sealed n=3000)
+and issue #75.
+
+| target | continuity (declared 200k corpus) | natural (full sealed corpus, n=3000) | verdict |
+|---|---|---|---|
+| 1. agreement ≥ baseline + 5pts | 14.76% vs 14.76% (+0.0) | 28.1% vs 28.1% (+0.0) | stretch **FAIL** both; floor ("not worse") **PASS** both (argmax-identical prediction sets) |
+| 2. bits/token ≤ baseline − 0.3 | 14.62 ≤ 20.33 (−6.01) | 11.3565 > 10.9481 (+0.11 over baseline) | **PASS** continuity, **FAIL** natural |
+
+Structural caveat, material to the verdict: on both partitions every held-out prediction
+resolved via exact context (ExactContext 100%, Graph 0, Novel 0), so rows 1–2 currently
+compare EXCT-table scoring against the store baseline, not graph generalization. The
+natural target-2 verdict is corpus-size sensitive (PASS at the n=400 slice, FAIL at the
+declared n=3000) because exact-context coverage improves the baseline faster than the
+graph with more data. Until an EXCT-free evaluation exists, the stop-or-redesign signal
+from missing targets 1–2 should be read as "the current judge measures exact-context
+memory" — the Phase-5 review decision input is here and in issue #75.
 
 ## 5. Threat-model note (backlog #22)
 
