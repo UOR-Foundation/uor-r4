@@ -1108,7 +1108,7 @@ fn generate_greedy_repetition_rate(
     rotations: &[usize; compiler::WINDOW + 1],
     seed: &[u32],
     tokens_to_generate: usize,
-) -> f64 {
+) -> Result<f64, String> {
     let mut window = [0u32; compiler::WINDOW];
     let mut recent_tokens = std::collections::VecDeque::with_capacity(32);
     let seed_len = seed.len();
@@ -1132,9 +1132,7 @@ fn generate_greedy_repetition_rate(
         for (i, &t) in recent_tokens.iter().enumerate() {
             recent_array[i] = t;
         }
-        let outcome = scorer
-            .score_candidates(&sig, &recent_array[..recent_len])
-            .unwrap();
+        let outcome = scorer.score_candidates(&sig, &recent_array[..recent_len])?;
         let token = outcome.selected;
 
         if recent_tokens.contains(&token) {
@@ -1154,7 +1152,7 @@ fn generate_greedy_repetition_rate(
         recent_tokens.push_back(token);
     }
 
-    duplicate_count as f64 / tokens_to_generate as f64
+    Ok(duplicate_count as f64 / tokens_to_generate as f64)
 }
 
 fn baseline_greedy_repetition_rate(
@@ -1418,8 +1416,13 @@ pub fn evaluate_gate_c(
         let pos = obs.position as usize;
         if pos >= 32 && corpus.story[pos] == corpus.story[pos - 32] {
             let seed = &corpus.input[pos - 32..pos];
-            graph_rep_sum +=
-                generate_greedy_repetition_rate(&scorer_with_exct, artifacts, &rotations, seed, 64);
+            graph_rep_sum += generate_greedy_repetition_rate(
+                &scorer_with_exct,
+                artifacts,
+                &rotations,
+                seed,
+                64,
+            )?;
             baseline_rep_sum +=
                 baseline_greedy_repetition_rate(store, artifacts, &rotations, seed, 64);
             probe_count += 1;
@@ -1446,7 +1449,9 @@ pub fn evaluate_gate_c(
 /// rule12_precedence / tla3_baseline) with status counts, per-status
 /// metrics, win/loss breakdowns, and the EXCT support gate in the config;
 /// 3 = issue-#67 smoothing calibration: `config.smoothing` records the
-/// compiled emission rule and `quantization.smoothing` describes it.
+/// compiled emission rule and `quantization.smoothing` describes it; 4 =
+/// issue-#79 repetition telemetry in `graph` (graph/baseline repetition
+/// rates from the deterministic greedy probe).
 #[derive(Debug, Clone, Serialize)]
 pub struct ScoreReport {
     pub schema: u32,
@@ -1517,7 +1522,7 @@ pub fn build_score_report(
     gate_c: GateCOutcome,
 ) -> ScoreReport {
     ScoreReport {
-        schema: 3,
+        schema: 4,
         inputs,
         config: ScoreReportConfig {
             transition_out_degree: config.transition_out_degree,

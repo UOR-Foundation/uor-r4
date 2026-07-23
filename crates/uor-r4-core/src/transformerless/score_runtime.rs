@@ -633,7 +633,7 @@ pub struct GraphScorer {
     /// 71.52 → 17.73 with ΔT off) and the EXCT-precedence path is
     /// F-invariant. Re-enable only with a measured per-token ΔT design.
     f_emissions: bool,
-    pub fallback_policy: crate::transformerless::resolution_status::FallbackPolicy,
+    fallback_policy: crate::transformerless::resolution_status::FallbackPolicy,
 }
 
 impl GraphScorer {
@@ -642,6 +642,11 @@ impl GraphScorer {
     /// measured per-token ΔT design (the folded offset is argmax-neutral).
     pub fn set_f_emissions(&mut self, enabled: bool) {
         self.f_emissions = enabled;
+    }
+
+    /// The artifact-declared D4 fallback policy.
+    pub fn fallback_policy(&self) -> &crate::transformerless::resolution_status::FallbackPolicy {
+        &self.fallback_policy
     }
 }
 
@@ -834,6 +839,11 @@ impl GraphScorer {
         sig: &[u8; SIG_BYTES],
         recent_tokens: &[u32],
     ) -> Result<ScoreOutcome, String> {
+        let recent_tokens = if recent_tokens.len() > 32 {
+            &recent_tokens[recent_tokens.len() - 32..]
+        } else {
+            recent_tokens
+        };
         let mut k = OpKernel::default();
 
         // Active cloud A: top-M memberships at each depth — exactly the
