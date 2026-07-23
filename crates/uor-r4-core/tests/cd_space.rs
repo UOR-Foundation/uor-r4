@@ -58,13 +58,15 @@ fn test_cayley_dickson_nested_embeddings() {
     let quat = Quaternion::new([9.0, 10.0, 11.0, 12.0]);
     let comp = ComplexNumber::new([13.0, 14.0]);
     let real = 15.0;
+    let scalar = 16.0;
 
-    let vec = CayleyDicksonVector::embed(&oct, &quat, &comp, real);
+    let vec = CayleyDicksonVector::embed(&oct, &quat, &comp, real, scalar);
 
     assert_eq!(vec.project_octonion(), oct);
     assert_eq!(vec.project_quaternion(), quat);
     assert_eq!(vec.project_complex(), comp);
     assert_eq!(vec.project_real(), real);
+    assert_eq!(vec.project_scalar(), scalar);
 }
 
 #[test]
