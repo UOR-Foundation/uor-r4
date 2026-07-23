@@ -346,6 +346,11 @@ impl R4g1State {
                 status: outcome.status,
             })
         } else {
+            // No recency window is threaded through the status-policy path:
+            // the #79 repetition penalty is a candidate-generation concern
+            // (exercised directly in `tests/score.rs` and the Gate C
+            // repetition simulation), so the reference scorer here passes an
+            // empty `recent_tokens` and status resolution stays deterministic.
             let outcome = self.scorer.score_candidates(sig, &[])?;
             Ok(ScoredProbe {
                 token: outcome.selected,
