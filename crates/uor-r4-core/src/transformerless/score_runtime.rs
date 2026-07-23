@@ -1071,12 +1071,12 @@ impl GraphScorer {
             k.adds += 1;
             let base = self.root_score(token);
             let mut score = base.saturating_add(with_offset);
+            k.adds += 1;
             if recent_tokens.contains(&token) {
                 // ~-30 nats suppression penalty for repetition control
                 score = score.saturating_add(ScoreQ::from_raw(-2_000_000));
                 k.adds += 1;
             }
-            k.adds += 1;
             contributions.sort_by_key(|c| c.id);
             ranked_candidates.push((token, score, contributions));
         }
@@ -1766,22 +1766,22 @@ impl GraphScorer {
         let mut best_score = self
             .root_score(best)
             .saturating_add(ScoreQ::from_raw(state.residuals[best as usize]));
+        k.adds += 1;
         if recent_tokens.contains(&best) {
             best_score = best_score.saturating_add(ScoreQ::from_raw(-2_000_000));
             k.adds += 1;
         }
-        k.adds += 1;
         for &token in state.touched.iter().skip(1) {
             k.candidate_scans += 1;
             k.compares += 1;
             let mut score = self
                 .root_score(token)
                 .saturating_add(ScoreQ::from_raw(state.residuals[token as usize]));
+            k.adds += 1;
             if recent_tokens.contains(&token) {
                 score = score.saturating_add(ScoreQ::from_raw(-2_000_000));
                 k.adds += 1;
             }
-            k.adds += 1;
             if score > best_score || (score == best_score && token < best) {
                 best = token;
                 best_score = score;
