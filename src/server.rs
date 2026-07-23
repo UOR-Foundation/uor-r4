@@ -13,6 +13,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use uor_foundation::pipeline::PrismModel;
 
+use uor_r4_core::transformerless::score_runtime::ScoreStatus;
 use uor_r4_core::transformerless::teacher::{BehaviorSource, TeacherOracle};
 
 // The browser-triggered build must have enough teacher evidence and graph
@@ -442,6 +443,20 @@ fn generate_tless_text(
     .filter(|text| !text.is_empty())
 }
 
+/// The outcome of one R4G1 chat generation: the decoded text (empty on
+/// an abstention — the partial tokens of an abstained run are not
+/// served), the status of the final scoring step, whether a widened
+/// re-probe ran, and whether generation stopped on a policy abstention.
+/// `None` from [`generate_r4g1_text`] means the runtime or tokenizer is
+/// unavailable — distinct from an abstention, which is a declared D4
+/// outcome.
+struct R4g1Text {
+    text: String,
+    status: Option<ScoreStatus>,
+    widened: bool,
+    abstained: bool,
+}
+
 /// Generate directly from the validated R4G1 graph runtime. Tokenization and
 /// decoding intentionally use the same tokenizer as the compiled teacher
 /// artifact; R4G1 stores token ids, not user-facing text.
@@ -449,16 +464,13 @@ fn generate_r4g1_text(
     slot: &Arc<Mutex<Option<R4g1State>>>,
     prompt: &str,
     max_tokens: usize,
-) -> Option<(
-    String,
-    uor_r4_core::transformerless::resolution_status::ResolutionStatus,
-)> {
+) -> Option<R4g1Text> {
     const MAX_SERVER_TOKENS: usize = 256;
     const MAX_SERVER_TEXT_BYTES: usize = 16 * 1024;
     let mut seed = [0u32; 4096];
     let mut generated = [0u32; MAX_SERVER_TOKENS];
     let mut bytes = [0u8; MAX_SERVER_TEXT_BYTES];
-    let byte_count = {
+    let (byte_count, status, widened, abstained) = {
         let guard = slot.lock().unwrap();
         let state = guard.as_ref()?;
         let seed_len = state
@@ -467,21 +479,40 @@ fn generate_r4g1_text(
         if seed_len == 0 {
             return None;
         }
-        let (count, status) = state
-            .generate_into(
+        let outcome = state
+            .generate_into_status(
                 &seed[..seed_len],
                 &mut generated[..max_tokens.min(MAX_SERVER_TOKENS)],
             )
             .ok()?;
-        let bytes_written = state
-            .decode_into(&generated[..count], &mut bytes)
-            .or_else(|| tless_uor::tless_detokenize_into(&generated[..count], &mut bytes))?;
-        (bytes_written, status)
+        // On an abstention no text is produced: the tokens generated before
+        // the abstaining step are dropped rather than served, so an
+        // out-of-distribution prompt never surfaces partial output.
+        let byte_count = if outcome.abstained || outcome.count == 0 {
+            0
+        } else {
+            state
+                .decode_into(&generated[..outcome.count], &mut bytes)
+                .or_else(|| {
+                    tless_uor::tless_detokenize_into(&generated[..outcome.count], &mut bytes)
+                })?
+        };
+        (
+            byte_count,
+            outcome.status,
+            outcome.widened,
+            outcome.abstained,
+        )
     };
-    let text = String::from_utf8_lossy(&bytes[..byte_count.0])
+    let text = String::from_utf8_lossy(&bytes[..byte_count])
         .trim()
         .to_owned();
-    (!text.is_empty()).then_some((text, byte_count.1))
+    Some(R4g1Text {
+        text,
+        status,
+        widened,
+        abstained,
+    })
 }
 
 fn generate_attention_text(
@@ -1393,6 +1424,13 @@ fn handle_connection(
         let mut final_response_text = String::new();
         let mut llm_connected = false;
         let mut generation_mode = "geometric-decoded".to_string();
+        // R4G1 status surfacing (D4): the resolution status of the last
+        // scoring step, whether a widened re-probe ran, and whether the
+        // policy abstained. Declared in the response whenever the R4G1
+        // path ran — including when another engine then served.
+        let mut r4g1_status: Option<&'static str> = None;
+        let mut r4g1_widened = false;
+        let mut r4g1_abstained = false;
 
         if engine_mode == "attention" || engine_mode == "r4-attention" {
             let mut oracle_guard = oracle.lock().unwrap();
@@ -1438,25 +1476,39 @@ fn handle_connection(
         {
             let prompt = payload.text.clone();
             if engine_mode != "transformerless-legacy" {
-                if let Some((text, status)) = generate_r4g1_text(&r4g1, &prompt, max_tokens.max(32))
-                {
-                    if is_usable_generated_text(&text) {
-                        final_response_text = text;
+                match generate_r4g1_text(&r4g1, &prompt, max_tokens.max(32)) {
+                    Some(gen) if gen.abstained => {
+                        // D4: the policy abstained (Novel input after the
+                        // widen-once bound, or a reserved status). This is a
+                        // declared outcome, not an engine failure — surface
+                        // the status, never guess a token, and never fall
+                        // through to another engine without declaring it.
+                        generation_mode = "r4g1-abstained".to_string();
+                        r4g1_status = gen.status.map(r4g1::PolicyStatus::from).map(|s| s.label());
+                        r4g1_widened = gen.widened;
+                        r4g1_abstained = true;
+                        println!(
+                            "[*] R4G1 abstained (status: {:?}, widened: {})",
+                            gen.status, gen.widened
+                        );
+                    }
+                    Some(gen) if is_usable_generated_text(&gen.text) => {
+                        // The pathological-output reject guard stays the
+                        // last line of defense for SERVED (non-abstained)
+                        // output; abstentions are resolved by the policy
+                        // above before text exists.
+                        final_response_text = gen.text;
                         llm_connected = true;
-
-                        // Surface abstention status if present
-                        generation_mode = match status {
-                            uor_r4_core::transformerless::resolution_status::ResolutionStatus::Novel => "r4g1-abstained-novel".to_string(),
-                            uor_r4_core::transformerless::resolution_status::ResolutionStatus::BackedOff => "r4g1-abstained-backedoff".to_string(),
-                            uor_r4_core::transformerless::resolution_status::ResolutionStatus::Contradictory => "r4g1-abstained-contradictory".to_string(),
-                            _ => "r4g1".to_string(),
-                        };
-
+                        generation_mode = "r4g1".to_string();
+                        r4g1_status = gen.status.map(r4g1::PolicyStatus::from).map(|s| s.label());
+                        r4g1_widened = gen.widened;
                         tokens_generated = final_response_text.split_whitespace().count();
-                    } else {
+                    }
+                    Some(_) => {
                         generation_mode = "r4g1-rejected".to_string();
                         println!("[-] R4G1 output rejected as non-readable or pathological");
                     }
+                    None => {}
                 }
             }
             if final_response_text.is_empty()
@@ -1472,8 +1524,23 @@ fn handle_connection(
         }
 
         if final_response_text.is_empty() && engine_mode == "r4g1" {
-            let (status, body) = r4g1_unavailable_response();
-            send_json_response(stream, status, &body.to_string());
+            if r4g1_abstained {
+                // D4 abstention is a declared outcome, not a fault: HTTP
+                // 200 with the status, no guessed text, no fallback engine.
+                let body = serde_json::json!({
+                    "engine": "r4g1",
+                    "abstained": true,
+                    "status": r4g1_status,
+                    "widened": r4g1_widened,
+                    "text": "",
+                    "llm_connected": false,
+                    "generation_mode": generation_mode,
+                });
+                send_json_response(stream, 200, &body.to_string());
+            } else {
+                let (status, body) = r4g1_unavailable_response();
+                send_json_response(stream, status, &body.to_string());
+            }
             return;
         }
 
@@ -1573,6 +1640,11 @@ fn handle_connection(
                 routing_data.routed.window_index, theme, routing_data.routed.scale_x, kappa, theta_d, generation_mode),
             "llm_connected": llm_connected,
             "generation_mode": generation_mode,
+            "r4g1": {
+                "status": r4g1_status,
+                "widened": r4g1_widened,
+                "abstained": r4g1_abstained,
+            },
             "active_projection": {
                 "u": u,
                 "v": v,
@@ -1964,6 +2036,168 @@ fn handle_connection(
     if clean_path == "/api/r4g1/status" && method == "GET" {
         let status = r4g1_compile.lock().unwrap().clone();
         send_json_response(stream, 200, &status.json().to_string());
+        return;
+    }
+
+    // R4G1 status-aware prediction (issue #78, D4): the response always
+    // carries the resolution status and the widened flag; an abstention
+    // is HTTP 200 with `abstained: true` — never a guessed token, never
+    // a 5xx for a declared policy outcome.
+    if clean_path == "/api/r4g1/predict" && method == "POST" {
+        let payload: serde_json::Value = match serde_json::from_slice(&body) {
+            Ok(p) => p,
+            Err(e) => {
+                send_json_response(
+                    stream,
+                    400,
+                    &format!("{{\"error\":\"Invalid JSON: {}\"}}", e),
+                );
+                return;
+            }
+        };
+        let mut window_tokens: Vec<u32> = payload
+            .get("window")
+            .and_then(|w| w.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_u64().map(|x| x as u32))
+                    .collect()
+            })
+            .unwrap_or_default();
+        if window_tokens.is_empty() {
+            send_json_response(
+                stream,
+                400,
+                "{\"error\":\"`window` must be a non-empty array of token ids\"}",
+            );
+            return;
+        }
+        // keep the WINDOW most recent tokens, oldest first
+        if window_tokens.len() > 8 {
+            window_tokens = window_tokens.split_off(window_tokens.len() - 8);
+        }
+        let guard = r4g1.lock().unwrap();
+        let Some(state) = guard.as_ref() else {
+            let (status, body) = r4g1_unavailable_response();
+            send_json_response(stream, status, &body.to_string());
+            return;
+        };
+        let (code, body) = match state.predict_window_status(&window_tokens) {
+            Ok(r4g1::PredictDecision::Serve(outcome)) => (
+                200,
+                serde_json::json!({
+                    "window": window_tokens,
+                    "abstained": false,
+                    "prediction": {
+                        "token": outcome.token,
+                        "status": r4g1::PolicyStatus::from(outcome.status).label(),
+                        "widened": outcome.widened,
+                    },
+                })
+                .to_string(),
+            ),
+            Ok(r4g1::PredictDecision::Abstain(outcome)) => (
+                200,
+                serde_json::json!({
+                    "window": window_tokens,
+                    "abstained": true,
+                    "status": r4g1::PolicyStatus::from(outcome.status).label(),
+                    "widened": outcome.widened,
+                })
+                .to_string(),
+            ),
+            Err(error) => (500, serde_json::json!({ "error": error }).to_string()),
+        };
+        send_json_response(stream, code, &body);
+        return;
+    }
+
+    // R4G1 status-aware generation: stops at the first abstention and
+    // reports the tokens so far, the final status, and the abstain flag.
+    if clean_path == "/api/r4g1/generate" && method == "POST" {
+        let payload: serde_json::Value = match serde_json::from_slice(&body) {
+            Ok(p) => p,
+            Err(e) => {
+                send_json_response(
+                    stream,
+                    400,
+                    &format!("{{\"error\":\"Invalid JSON: {}\"}}", e),
+                );
+                return;
+            }
+        };
+        let max_tokens = payload
+            .get("max_tokens")
+            .and_then(|m| m.as_u64())
+            .unwrap_or(24)
+            .clamp(1, 256) as usize;
+        let guard = r4g1.lock().unwrap();
+        let Some(state) = guard.as_ref() else {
+            let (status, body) = r4g1_unavailable_response();
+            send_json_response(stream, status, &body.to_string());
+            return;
+        };
+        let mut seed_buf = [0u32; 4096];
+        let seed: Vec<u32> = if let Some(arr) = payload.get("window").and_then(|w| w.as_array()) {
+            arr.iter()
+                .filter_map(|v| v.as_u64().map(|x| x as u32))
+                .collect()
+        } else if let Some(text) = payload.get("text").and_then(|t| t.as_str()) {
+            match state
+                .encode_into(text, &mut seed_buf)
+                .or_else(|| tless_uor::tless_tokenize_into(text, &mut seed_buf))
+            {
+                Some(len) if len > 0 => seed_buf[..len].to_vec(),
+                _ => {
+                    send_json_response(
+                        stream,
+                        503,
+                        "{\"error\":\"tokenizer unavailable — set TLESS_TOKENIZER\"}",
+                    );
+                    return;
+                }
+            }
+        } else {
+            vec![1]
+        };
+        if seed.is_empty() {
+            send_json_response(stream, 400, "{\"error\":\"empty seed\"}");
+            return;
+        }
+        let mut out = [0u32; 256];
+        match state.generate_into_status(&seed, &mut out[..max_tokens]) {
+            Ok(gen) => {
+                let tokens = &out[..gen.count];
+                let mut text_bytes = [0u8; 16 * 1024];
+                let text_len = if gen.abstained || gen.count == 0 {
+                    0
+                } else {
+                    state
+                        .decode_into(tokens, &mut text_bytes)
+                        .or_else(|| tless_uor::tless_detokenize_into(tokens, &mut text_bytes))
+                        .unwrap_or(0)
+                };
+                let text = String::from_utf8_lossy(&text_bytes[..text_len]).into_owned();
+                let body = serde_json::json!({
+                    "seed": seed,
+                    "tokens": tokens,
+                    "count": gen.count,
+                    "text": text,
+                    "abstained": gen.abstained,
+                    "status": gen
+                        .status
+                        .map(r4g1::PolicyStatus::from)
+                        .map(|s| s.label()),
+                    "widened": gen.widened,
+                });
+                send_json_response(stream, 200, &body.to_string());
+            }
+            Err(error) => send_json_response(
+                stream,
+                500,
+                &serde_json::json!({ "error": error }).to_string(),
+            ),
+        }
         return;
     }
 
