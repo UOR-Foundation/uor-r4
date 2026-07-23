@@ -29,6 +29,7 @@ use super::{
     certify, compare, compiler, convert_r4g1, cover, cover_sweep, observe, observe_text, runtime,
     scenarios, score,
     teacher::{BehaviorSource, HuggingFaceLlamaOracle, LlamaOracle, TeacherOracle},
+    trace_lane,
 };
 use serde::Serialize;
 use std::collections::BTreeMap;
@@ -331,11 +332,22 @@ pub fn observe_text_command(args: &[String]) -> Result<(), String> {
             report.articles_truncated
         );
     }
+    if report.characters_replaced != 0 {
+        println!(
+            "note: {} characters unencodable in the teacher vocab replaced with spaces",
+            report.characters_replaced
+        );
+    }
     if report.done {
+        // Persist the merged record stream: Gate C consumes it as
+        // --corpus-recs with state.bin as --corpus-meta (issue #72).
+        let merged = observe::merge_shards(&options.output).map_err(|error| error.to_string())?;
+        let merged_path = options.output.join("merged.bin");
+        std::fs::write(&merged_path, &merged).map_err(|error| error.to_string())?;
         println!(
             "observe-text complete: merged κ {} at {}",
             report.merged_kappa.expect("done reports merged κ"),
-            options.output.display()
+            merged_path.display()
         );
     } else {
         println!(
@@ -601,6 +613,7 @@ struct ScoreOptions {
     corpus_recs: PathBuf,
     artifacts: PathBuf,
     cover: Option<PathBuf>,
+    stories: Option<PathBuf>,
     transition_out_degree: usize,
     emission_entries: usize,
     root_top_b: usize,
@@ -617,6 +630,7 @@ fn parse_score_options(args: &[String]) -> Result<ScoreOptions, String> {
         corpus_recs: PathBuf::from(default_recs),
         artifacts: PathBuf::from(compiler::ART_PATH),
         cover: None,
+        stories: None,
         transition_out_degree: score::DEFAULT_TRANSITION_OUT_DEGREE,
         emission_entries: score::DEFAULT_EMISSION_ENTRIES,
         root_top_b: score::DEFAULT_ROOT_TOP_B,
@@ -636,6 +650,7 @@ fn parse_score_options(args: &[String]) -> Result<ScoreOptions, String> {
             "--corpus-recs" => options.corpus_recs = PathBuf::from(value),
             "--artifacts" => options.artifacts = PathBuf::from(value),
             "--cover" => options.cover = Some(PathBuf::from(value)),
+            "--stories" => options.stories = Some(PathBuf::from(value)),
             "--transition-out-degree" => {
                 options.transition_out_degree = value
                     .parse()
@@ -738,7 +753,38 @@ pub fn score_command(args: &[String]) -> Result<(), String> {
         witness_sample: options.witness_sample,
         smoothing: options.smoothing,
     };
-    let (train_positions, held_out_positions) = cover::split_positions(&corpus);
+    let (train_positions, held_out_positions) = match &options.stories {
+        // D3 natural partition (issue #72): the observation pass records
+        // the construction/held-out decision per story (article) in the
+        // stories index; honor it instead of the ordinal train cut.
+        Some(path) => {
+            let index = observe_text::StoryIndex::load(path)?
+                .ok_or_else(|| format!("stories index not found at {}", path.display()))?;
+            let mut train = Vec::new();
+            let mut held_out = Vec::new();
+            for i in 0..corpus.n {
+                let story = corpus.story[i];
+                match index.partition_of(story) {
+                    Some(observe::RecordPartition::Construction) => train.push(i),
+                    Some(observe::RecordPartition::HeldOut) => held_out.push(i),
+                    None => {
+                        return Err(format!(
+                            "story {story} missing from stories index {}",
+                            path.display()
+                        ))
+                    }
+                }
+            }
+            eprintln!(
+                "score: D3 partition split from {} ({} construction / {} held-out positions)",
+                path.display(),
+                train.len(),
+                held_out.len()
+            );
+            (train, held_out)
+        }
+        None => cover::split_positions(&corpus),
+    };
     let train = cover::build_observations(&artifacts, &corpus, &train_positions);
     let held_out = cover::build_observations(&artifacts, &corpus, &held_out_positions);
 
@@ -1610,6 +1656,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
         Some("cover") => cover_command(&args[1..])?,
         Some("score") => score_command(&args[1..])?,
         Some("cover-sweep") => cover_sweep::cover_sweep_command(&args[1..])?,
+        Some("lane-compare") => trace_lane::lane_compare_command(&args[1..])?,
         _ => {
             println!(
                 "R4 transformerless — cross-compile a transformer into a mul-free table artifact\n\
@@ -1619,6 +1666,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
                  cover induction: cover [--corpus-meta P --corpus-recs P] [--artifacts P] [--depths N] [--k0 N] [--regions-budget N] [--memory-budget MB] [--min-support N] [--entropy-gain BITS] [--radius-quantile PCT] [--out DIR]\n\
                  score (phase 4): score [--corpus-meta P --corpus-recs P] [--artifacts P] [--cover P] [--transition-out-degree N] [--emission-entries N] [--root-top-b N] [--exct-top-x N] [--witness-sample N] [--smoothing RULE] [--out DIR]\n\
                  cover sweep (issue 70): cover-sweep [--corpus-meta P --corpus-recs P] [--artifacts P] [--out DIR]\n\
+                 lane compare (issue 71): lane-compare [--corpus-meta P --corpus-recs P] [--artifacts P] [--checkpoint BIN] [--out DIR]\n\
                  hf evaluation: evaluate-report [--source DIR] [--compiled DIR] [--report PATH] [--sequence-length N]\n\
                  docs: docs/TRANSFORMERLESS.md (extrapolation), docs/PROOF.md (proof + certificate)"
             );

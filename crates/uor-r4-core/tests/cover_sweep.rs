@@ -104,8 +104,8 @@ fn synthetic_corpus() -> (Vec<Observation>, Corpus) {
             });
             next.push(next_token);
             t_argmax.push(next_token);
-            top_tokens.push([next_token, 0, 0]);
-            top_weights.push([100, 0, 0]);
+            top_tokens.push([next_token, 0, 0, 0, 0, 0, 0, 0]);
+            top_weights.push([100, 0, 0, 0, 0, 0, 0, 0]);
             observations.push(Observation {
                 position,
                 sample: blake3::hash(&position.to_le_bytes()).into(),

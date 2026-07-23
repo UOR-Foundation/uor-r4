@@ -488,7 +488,7 @@ fn generate_r4g1_text(
         // On an abstention no text is produced: the tokens generated before
         // the abstaining step are dropped rather than served, so an
         // out-of-distribution prompt never surfaces partial output.
-        let byte_count = if outcome.abstained || outcome.count == 0 {
+        let bytes_written = if outcome.abstained || outcome.count == 0 {
             0
         } else {
             state
@@ -498,7 +498,7 @@ fn generate_r4g1_text(
                 })?
         };
         (
-            byte_count,
+            bytes_written,
             outcome.status,
             outcome.widened,
             outcome.abstained,

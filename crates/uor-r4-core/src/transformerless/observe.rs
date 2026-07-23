@@ -32,10 +32,10 @@ use std::fs;
 use std::io::{self, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
 
-/// Observation record width: the v3 corpus record layout (story, next,
-/// top-3 tokens, top-3 weights, span, byte anchors) — see
-/// [`compiler::encode_v3_record`].
-pub const RECORD_SIZE: usize = 48;
+/// Observation record width: the v4 corpus record layout (story, next,
+/// top-8 tokens, top-8 weights, span, byte anchors) — see
+/// [`compiler::encode_v4_record`].
+pub const RECORD_SIZE: usize = 88;
 
 /// Maximum shard fan-out accepted by [`ObservationShardWriter`]: shard
 /// files are held open during a pass, so the writer caps the fan-out at
@@ -165,6 +165,11 @@ pub struct ObservationManifest {
     /// producing pipeline has one (from-text driver; absent otherwise).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub partition_rule: Option<String>,
+    /// CID of the exact input the observations were derived from (the
+    /// from-text driver records the articles-file κ, i.e. the corpus CID
+    /// of the D3 manifest; absent for teacher-generated streams).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_cid: Option<String>,
     #[serde(default)]
     pub completed: BTreeMap<u32, ShardEntry>,
     #[serde(default)]
@@ -177,6 +182,7 @@ impl ObservationManifest {
             schema: 1,
             shard_bits,
             partition_rule: None,
+            input_cid: None,
             completed: BTreeMap::new(),
             total_records: 0,
         }
@@ -280,6 +286,15 @@ impl ObservationShardWriter {
     pub fn set_partition_rule(&mut self, rule: &str) -> io::Result<()> {
         if self.manifest.partition_rule.as_deref() != Some(rule) {
             self.manifest.partition_rule = Some(rule.to_owned());
+            self.manifest.store(&self.dir)?;
+        }
+        Ok(())
+    }
+
+    /// Record the input CID in the manifest (idempotent, atomic store).
+    pub fn set_input_cid(&mut self, cid: &str) -> io::Result<()> {
+        if self.manifest.input_cid.as_deref() != Some(cid) {
+            self.manifest.input_cid = Some(cid.to_owned());
             self.manifest.store(&self.dir)?;
         }
         Ok(())
@@ -543,7 +558,7 @@ pub fn observe_sharded(
             progress.set(n as usize);
             oracle.step(token, pos, &mut logits);
             let (next, top_tokens, top_weights) =
-                compiler::softmax_top3_sample(&mut logits, &mut rng);
+                compiler::softmax_top8_sample(&mut logits, &mut rng);
             window.push(token as u32);
             if window.len() > compiler::WINDOW {
                 window.remove(0);
@@ -554,7 +569,7 @@ pub fn observe_sharded(
             let span_end = span_start.saturating_add(1);
             let (byte_start, byte_end) =
                 compiler::byte_anchors(token_byte_lengths, story_byte_offset, next);
-            let record = compiler::encode_v3_record(
+            let record = compiler::encode_v4_record(
                 stories as u32,
                 next as u32,
                 &top_tokens,

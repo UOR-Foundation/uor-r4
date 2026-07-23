@@ -426,6 +426,10 @@ pub struct ObservationReport {
     /// Articles truncated at the teacher sequence length during this
     /// invocation.
     pub articles_truncated: u64,
+    /// Characters replaced by the lossy tokenizer fallback during this
+    /// invocation (unencodable in the teacher vocab; substituted with a
+    /// space — deterministic, see [`scenarios::Tokenizer::encode_lossy`]).
+    pub characters_replaced: u64,
     /// Records committed so far (all invocations).
     pub records: u64,
     /// Records written during this invocation.
@@ -456,6 +460,7 @@ fn build_report(
     writer: &ObservationShardWriter,
     articles_total: u64,
     articles_truncated: u64,
+    characters_replaced: u64,
     written: u64,
 ) -> Result<ObservationReport, String> {
     let stories_path = out_dir.join(STORIES_FILE);
@@ -483,6 +488,7 @@ fn build_report(
         articles_total,
         articles_completed: checkpoint.stories,
         articles_truncated,
+        characters_replaced,
         records: checkpoint.n,
         written,
         construction_records,
@@ -542,6 +548,11 @@ pub fn observe_text_corpus(
     }
     writer
         .set_partition_rule(PARTITION_RULE)
+        .map_err(|error| error.to_string())?;
+    // The PROV link from produced artifacts back to the sealed corpus
+    // (issue #72): the input κ is the corpus CID of the D3 manifest.
+    writer
+        .set_input_cid(&format!("blake3:{}", blake3::Hash::from(kappa).to_hex()))
         .map_err(|error| error.to_string())?;
 
     let mut checkpoint = match read_checkpoint(out_dir, shard_count)? {
@@ -609,7 +620,7 @@ pub fn observe_text_corpus(
             "text observation corpus already complete: {} records",
             checkpoint.n
         );
-        return build_report(out_dir, &checkpoint, &writer, articles_total, 0, 0);
+        return build_report(out_dir, &checkpoint, &writer, articles_total, 0, 0, 0);
     }
 
     let vocab = oracle.vocab();
@@ -620,6 +631,7 @@ pub fn observe_text_corpus(
     progress.set(checkpoint.stories as usize);
     let mut written = 0u64;
     let mut truncated = 0u64;
+    let mut replaced = 0u64;
     let t0 = std::time::Instant::now();
 
     let file = fs::File::open(articles_path)
@@ -645,7 +657,8 @@ pub fn observe_text_corpus(
         let story = u32::try_from(ordinal)
             .map_err(|_| "article ordinal exceeds the u32 story field".to_owned())?;
         let partition = partition_of(&article.id);
-        let tokens = tokenizer.encode(&article.text);
+        let (tokens, article_replaced) = tokenizer.encode_lossy(&article.text);
+        replaced += article_replaced;
         let positions = tokens.len().saturating_sub(1).min(seq_len);
         if positions < tokens.len().saturating_sub(1) {
             truncated += 1;
@@ -661,7 +674,7 @@ pub fn observe_text_corpus(
             let token = tokens[pos];
             oracle.step(token as usize, pos, &mut logits);
             let (_sampled, top_tokens, top_weights) =
-                compiler::softmax_top3_sample(&mut logits, &mut checkpoint.rng);
+                compiler::softmax_top8_sample(&mut logits, &mut checkpoint.rng);
             let next = tokens[pos + 1];
             window.push(token);
             if window.len() > compiler::WINDOW {
@@ -673,7 +686,7 @@ pub fn observe_text_corpus(
             let span_end = span_start.saturating_add(1);
             let (byte_start, byte_end) =
                 compiler::byte_anchors(token_byte_lengths, story_byte_offset, next as usize);
-            let record = compiler::encode_v3_record(
+            let record = compiler::encode_v4_record(
                 story,
                 next,
                 &top_tokens,
@@ -734,6 +747,7 @@ pub fn observe_text_corpus(
         &writer,
         articles_total,
         truncated,
+        replaced,
         written,
     )?;
     println!(
@@ -803,6 +817,21 @@ mod tests {
             bytes.extend_from_slice(line.as_bytes());
         }
         fs::write(path, bytes).expect("write articles fixture");
+    }
+
+    #[test]
+    fn encode_lossy_replaces_unencodable_characters_with_spaces() {
+        let tokenizer = fixture_tokenizer();
+        // 'Ɔ' (U+0186) is neither a whole token nor byte-encodable in the
+        // fixture vocab (a..d and space only): the legacy llama2.c teacher
+        // has exactly this gap for non-ASCII text (issue #72).
+        let (tokens, replaced) = tokenizer.encode_lossy("abƆd");
+        assert_eq!(replaced, 1);
+        assert_eq!(tokens, tokenizer.encode("ab d"));
+        // Fully encodable text is untouched.
+        let (tokens, replaced) = tokenizer.encode_lossy("abcd");
+        assert_eq!(replaced, 0);
+        assert_eq!(tokens, tokenizer.encode("abcd"));
     }
 
     /// Deterministic few-token oracle: logits depend only on (token, pos),
@@ -886,7 +915,7 @@ mod tests {
                 let token = tokens[pos];
                 oracle.step(token as usize, pos, &mut logits);
                 let (_sampled, top_tokens, top_weights) =
-                    compiler::softmax_top3_sample(&mut logits, &mut rng);
+                    compiler::softmax_top8_sample(&mut logits, &mut rng);
                 let next = tokens[pos + 1];
                 window.push(token);
                 if window.len() > compiler::WINDOW {
@@ -895,7 +924,7 @@ mod tests {
                 let shard = shard_of(&sample_id(&window), SHARD_BITS);
                 let (byte_start, byte_end) =
                     compiler::byte_anchors(token_byte_lengths, offset, next as usize);
-                let record = compiler::encode_v3_record(
+                let record = compiler::encode_v4_record(
                     ordinal as u32,
                     next,
                     &top_tokens,
@@ -1400,8 +1429,8 @@ mod tests {
             .count();
         assert_eq!(long_records, FAKE_SEQ_LEN);
         for record in merged.chunks_exact(RECORD_SIZE) {
-            assert_eq!(&record[40..44], &u32::MAX.to_le_bytes());
-            assert_eq!(&record[44..48], &u32::MAX.to_le_bytes());
+            assert_eq!(&record[80..84], &u32::MAX.to_le_bytes());
+            assert_eq!(&record[84..88], &u32::MAX.to_le_bytes());
         }
         // The same replication check holds on the unknown-anchor path.
         let expected = expected_merged(&[("9", LONG_TEXT), ("10", "ab")], &tokenizer, None);
@@ -1459,7 +1488,7 @@ mod tests {
         for (index, record) in expected.concat().chunks_exact(RECORD_SIZE).enumerate() {
             let story = u32::from_le_bytes(record[0..4].try_into().unwrap());
             let next = u32::from_le_bytes(record[4..8].try_into().unwrap());
-            let byte_start = u32::from_le_bytes(record[40..44].try_into().unwrap());
+            let byte_start = u32::from_le_bytes(record[80..84].try_into().unwrap());
             assert_eq!(corpus.story[index], story);
             assert_eq!(corpus.next[index], next);
             assert_eq!(corpus.byte_start[index], byte_start);

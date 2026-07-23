@@ -293,7 +293,7 @@ pub fn find_window_by_status(fixture: &ProbeFixture, want: ScoreStatus) -> Vec<u
     for t in 0..64u32 {
         let window = vec![t];
         let sig = window_sig(fixture, &window);
-        let outcome = scorer.score_candidates(&sig).expect("scores");
+        let outcome = scorer.score_candidates(&sig, &[]).expect("scores");
         if outcome.witness.status == want {
             return window;
         }
@@ -302,7 +302,7 @@ pub fn find_window_by_status(fixture: &ProbeFixture, want: ScoreStatus) -> Vec<u
         for t2 in 0..64u32 {
             let window = vec![t1, t2];
             let sig = window_sig(fixture, &window);
-            let outcome = scorer.score_candidates(&sig).expect("scores");
+            let outcome = scorer.score_candidates(&sig, &[]).expect("scores");
             if outcome.witness.status == want {
                 return window;
             }

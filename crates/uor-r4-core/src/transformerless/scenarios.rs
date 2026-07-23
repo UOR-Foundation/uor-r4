@@ -199,6 +199,41 @@ impl Tokenizer {
         toks
     }
 
+    /// Whether `ch` encodes — as a whole token or via byte fallback.
+    fn char_encodable(&self, ch: char) -> bool {
+        let mut utf8 = [0u8; 4];
+        let bytes = ch.encode_utf8(&mut utf8).as_bytes();
+        self.map.contains_key(bytes) || bytes.iter().all(|byte| self.map.contains_key(&[*byte][..]))
+    }
+
+    /// Lossy variant of [`encode`] for natural corpora (issue #72): a
+    /// character the tokenizer cannot represent at all (neither a whole
+    /// token nor byte fallback — the legacy llama2.c vocab covers ASCII
+    /// bytes only) is replaced with a space, or dropped when even space is
+    /// unencodable. Returns the token stream and the number of replaced
+    /// characters. The substitution is deterministic, so a resumed
+    /// observation pass reproduces identical records.
+    pub fn encode_lossy(&self, text: &str) -> (Vec<u32>, u64) {
+        let substitute = if self.char_encodable(' ') {
+            Some(' ')
+        } else {
+            None
+        };
+        let mut sanitized = String::with_capacity(text.len());
+        let mut replaced = 0u64;
+        for ch in text.chars() {
+            if self.char_encodable(ch) {
+                sanitized.push(ch);
+            } else {
+                if let Some(substitute) = substitute {
+                    sanitized.push(substitute);
+                }
+                replaced += 1;
+            }
+        }
+        (self.encode(&sanitized), replaced)
+    }
+
     /// Encode into caller-owned storage without allocating.
     pub fn encode_into(&self, text: &str, out: &mut [u32]) -> io::Result<usize> {
         let capacity_error = || io::Error::new(io::ErrorKind::InvalidInput, "token buffer full");
@@ -361,8 +396,8 @@ fn as_corpus(tokens: &[u32], t_argmax: &[u32]) -> Corpus {
             nx
         },
         t_argmax: t_argmax.to_vec(),
-        top_tokens: vec![[0u32; 3]; n],
-        top_weights: vec![[0u32; 3]; n],
+        top_tokens: vec![[0u32; 8]; n],
+        top_weights: vec![[0u32; 8]; n],
         span_start: (0..n).map(|idx| idx as u32).collect(),
         span_end: (0..n).map(|idx| idx as u32 + 1).collect(),
         byte_start: vec![u32::MAX; n],

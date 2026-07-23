@@ -633,6 +633,7 @@ pub struct GraphScorer {
     /// 71.52 → 17.73 with ΔT off) and the EXCT-precedence path is
     /// F-invariant. Re-enable only with a measured per-token ΔT design.
     f_emissions: bool,
+    fallback_policy: crate::transformerless::resolution_status::FallbackPolicy,
 }
 
 impl GraphScorer {
@@ -641,6 +642,11 @@ impl GraphScorer {
     /// measured per-token ΔT design (the folded offset is argmax-neutral).
     pub fn set_f_emissions(&mut self, enabled: bool) {
         self.f_emissions = enabled;
+    }
+
+    /// The artifact-declared D4 fallback policy.
+    pub fn fallback_policy(&self) -> &crate::transformerless::resolution_status::FallbackPolicy {
+        &self.fallback_policy
     }
 }
 
@@ -660,6 +666,9 @@ impl GraphScorer {
         let view = GraphView::parse(r4g1).map_err(|e| format!("invalid R4G1: {e}"))?;
         view.verify_cids().map_err(|e| format!("bad CIDs: {e}"))?;
         let head = view.head().ok_or("artifact carries no HEAD section")?;
+        let fallback_policy = crate::transformerless::resolution_status::FallbackPolicy::from_bytes(
+            head.fallback_policies(),
+        );
         let graph_cid = view.header().artifact_cid.0;
         let regions = regions_from_view(&view)?;
         let max_depth = regions.iter().map(|r| r.depth as usize).max().unwrap_or(0);
@@ -791,6 +800,7 @@ impl GraphScorer {
             exct_top_x,
             pop: runtime::derive_popcount_table(),
             f_emissions: false,
+            fallback_policy,
         })
     }
 
@@ -824,7 +834,16 @@ impl GraphScorer {
     /// tie-break; emit the bounded witness. The arithmetic of this
     /// function is integer-only. Legacy raw TLS1 EXCT has a delimited
     /// certifier-side float fallback; deployed RX1 EXCT is already quantized.
-    pub fn score_candidates(&self, sig: &[u8; SIG_BYTES]) -> Result<ScoreOutcome, String> {
+    pub fn score_candidates(
+        &self,
+        sig: &[u8; SIG_BYTES],
+        recent_tokens: &[u32],
+    ) -> Result<ScoreOutcome, String> {
+        let recent_tokens = if recent_tokens.len() > 32 {
+            &recent_tokens[recent_tokens.len() - 32..]
+        } else {
+            recent_tokens
+        };
         let mut k = OpKernel::default();
 
         // Active cloud A: top-M memberships at each depth — exactly the
@@ -1054,14 +1073,20 @@ impl GraphScorer {
         // Final per-candidate scores: apply the baked root prior and the
         // folded token-independent transition edge weight (module docs:
         // ΔT(m,v) = w_m + ΔE(m,v)); canonicalize contribution order.
+        // Also apply bounded integer repetition control via recent_tokens.
         let mut ranked_candidates: Vec<(u32, ScoreQ, Vec<Contribution>)> =
             Vec::with_capacity(candidates.len());
         for (token, (residual, mut contributions)) in candidates {
             let with_offset = residual.saturating_add(transition_offset);
             k.adds += 1;
             let base = self.root_score(token);
-            let score = base.saturating_add(with_offset);
+            let mut score = base.saturating_add(with_offset);
             k.adds += 1;
+            if recent_tokens.contains(&token) {
+                // ~-30 nats suppression penalty for repetition control
+                score = score.saturating_add(ScoreQ::from_raw(-2_000_000));
+                k.adds += 1;
+            }
             contributions.sort_by_key(|c| c.id);
             ranked_candidates.push((token, score, contributions));
         }
@@ -1574,6 +1599,18 @@ impl GraphScorer {
         top_m: usize,
         state: &mut StepState,
     ) -> Result<StepOutcome, String> {
+        self.score_step_with_recent(sig, top_m, state, &[])
+    }
+
+    /// Deployed scoring step with the bounded repetition penalty applied to
+    /// candidates present in `recent_tokens`.
+    pub fn score_step_with_recent(
+        &self,
+        sig: &[u8; SIG_BYTES],
+        top_m: usize,
+        state: &mut StepState,
+        recent_tokens: &[u32],
+    ) -> Result<StepOutcome, String> {
         if top_m == 0 || top_m > state.max_top_m {
             return Err(format!(
                 "membership width {top_m} outside the step state bound {}",
@@ -1740,13 +1777,21 @@ impl GraphScorer {
             .root_score(best)
             .saturating_add(ScoreQ::from_raw(state.residuals[best as usize]));
         k.adds += 1;
+        if recent_tokens.contains(&best) {
+            best_score = best_score.saturating_add(ScoreQ::from_raw(-2_000_000));
+            k.adds += 1;
+        }
         for &token in state.touched.iter().skip(1) {
             k.candidate_scans += 1;
             k.compares += 1;
-            let score = self
+            let mut score = self
                 .root_score(token)
                 .saturating_add(ScoreQ::from_raw(state.residuals[token as usize]));
             k.adds += 1;
+            if recent_tokens.contains(&token) {
+                score = score.saturating_add(ScoreQ::from_raw(-2_000_000));
+                k.adds += 1;
+            }
             if score > best_score || (score == best_score && token < best) {
                 best = token;
                 best_score = score;
@@ -1886,7 +1931,7 @@ pub fn verify_witness_replay(
         return Err(ReplayError::GraphCidMismatch);
     }
     let outcome = scorer
-        .score_candidates(&witness.input_sig)
+        .score_candidates(&witness.input_sig, &[])
         .map_err(ReplayError::Artifact)?;
     let recomputed = &outcome.witness;
 

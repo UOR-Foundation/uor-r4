@@ -103,7 +103,11 @@ fn deployed_step_matches_the_reference_scorer_exactly() {
     let scorer = fixture.reference_scorer();
     let mut step_state = scorer.step_state(WIDENED_TOP_M).expect("step state");
     for sig in [fixture.covered_sig, fixture.graph_sig, fixture.ood_sig] {
-        let reference = scorer.score_candidates(&sig).expect("reference");
+        let reference = scorer.score_candidates(&sig, &[]).expect("reference");
+        let recent = [reference.selected];
+        let penalized_reference = scorer
+            .score_candidates(&sig, &recent)
+            .expect("penalized reference");
         for top_m in [TOP_M, WIDENED_TOP_M] {
             let step = scorer
                 .score_step(&sig, top_m, &mut step_state)
@@ -117,6 +121,17 @@ fn deployed_step_matches_the_reference_scorer_exactly() {
             assert_eq!(
                 step.candidate_count, reference.witness.candidate_count,
                 "top_m {top_m}"
+            );
+            let penalized_step = scorer
+                .score_step_with_recent(&sig, top_m, &mut step_state, &recent)
+                .expect("penalized step");
+            assert_eq!(
+                penalized_step.selected, penalized_reference.selected,
+                "penalized top_m {top_m}"
+            );
+            assert_eq!(
+                penalized_step.selected_score, penalized_reference.selected_score,
+                "penalized top_m {top_m}"
             );
         }
     }
