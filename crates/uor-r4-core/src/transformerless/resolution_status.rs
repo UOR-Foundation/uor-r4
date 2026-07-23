@@ -59,6 +59,21 @@ pub struct FallbackPolicy {
     pub contradictory_action: FallbackAction,
 }
 
+impl FallbackAction {
+    pub fn from_u8(val: u8) -> Self {
+        match val {
+            0 => FallbackAction::Continue,
+            1 => FallbackAction::Widen,
+            2 => FallbackAction::ConsultExact,
+            3 => FallbackAction::CertifiedFallback,
+            4 => FallbackAction::Abstain,
+            5 => FallbackAction::BasePrior,
+            _ => FallbackAction::Abstain,
+        }
+    }
+}
+
+
 impl Default for FallbackPolicy {
     /// Default policy per Decision D4: consult EXCT for Supported/Boundary, and abstain on BackedOff/Novel/Contradictory.
     fn default() -> Self {
@@ -80,6 +95,16 @@ impl FallbackPolicy {
             ResolutionStatus::BackedOff => self.backed_off_action.clone(),
             ResolutionStatus::Novel => self.novel_action.clone(),
             ResolutionStatus::Contradictory => self.contradictory_action.clone(),
+        }
+    }
+
+    pub fn from_bytes(bytes: [u8; 5]) -> Self {
+        FallbackPolicy {
+            supported_action: FallbackAction::from_u8(bytes[0]),
+            boundary_action: FallbackAction::from_u8(bytes[1]),
+            backed_off_action: FallbackAction::from_u8(bytes[2]),
+            novel_action: FallbackAction::from_u8(bytes[3]),
+            contradictory_action: FallbackAction::from_u8(bytes[4]),
         }
     }
 }

@@ -90,28 +90,43 @@ impl R4g1State {
     }
 
     /// Score one token window using the validated graph artifact.
-    pub fn predict_window(&self, window: &[u32]) -> Result<u32, String> {
+    pub fn predict_window(&self, window: &[u32]) -> Result<(u32, uor_r4_core::transformerless::resolution_status::FallbackAction, uor_r4_core::transformerless::resolution_status::ResolutionStatus), String> {
+        use uor_r4_core::transformerless::resolution_status::ResolutionStatus;
         let bundle = runtime::bundle_window_plain(&self.artifacts, &self.rotations, window);
         let signature = runtime::sig_plain(&self.artifacts, &bundle);
-        self.scorer
-            .score_candidates(&signature)
-            .map(|outcome| outcome.selected)
+        let outcome = self.scorer.score_candidates(&signature)?;
+        let status = match outcome.witness.status {
+            uor_r4_core::transformerless::score_runtime::ScoreStatus::ExactContext => ResolutionStatus::Supported,
+            uor_r4_core::transformerless::score_runtime::ScoreStatus::Graph => ResolutionStatus::Supported,
+            uor_r4_core::transformerless::score_runtime::ScoreStatus::Novel => ResolutionStatus::Novel,
+        };
+        let action = self.scorer.fallback_policy.action_for(status);
+        Ok((outcome.selected, action, status))
     }
 
     /// Generate a greedy continuation from a token seed. This mirrors the
     /// legacy runtime's fixed-width window behavior while replacing its
     /// graded-store lookup with R4G1 graph scoring.
-    pub fn generate_into(&self, seed: &[u32], out: &mut [u32]) -> Result<usize, String> {
+    pub fn generate_into(&self, seed: &[u32], out: &mut [u32]) -> Result<(usize, uor_r4_core::transformerless::resolution_status::ResolutionStatus), String> {
         let mut window = [0u32; WINDOW];
         let seed = &seed[seed.len().saturating_sub(WINDOW)..];
         let mut window_len = seed.len();
         window[..window_len].copy_from_slice(seed);
 
         for (generated, token) in out.iter_mut().enumerate() {
-            let next = self.predict_window(&window[..window_len])?;
+            let (next, action, status) = self.predict_window(&window[..window_len])?;
+            
+            use uor_r4_core::transformerless::resolution_status::FallbackAction;
+            match action {
+                FallbackAction::Abstain | FallbackAction::Widen => {
+                    return Ok((generated, status));
+                }
+                _ => {}
+            }
+            
             *token = next;
             if next == 1 || next == 2 {
-                return Ok(generated);
+                return Ok((generated, status));
             }
             if window_len < WINDOW {
                 window[window_len] = next;
@@ -121,7 +136,7 @@ impl R4g1State {
                 window[WINDOW - 1] = next;
             }
         }
-        Ok(out.len())
+        Ok((out.len(), uor_r4_core::transformerless::resolution_status::ResolutionStatus::Supported))
     }
 }
 
