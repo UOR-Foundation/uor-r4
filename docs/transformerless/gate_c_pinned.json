@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "purpose": "Pinned Gate C quality record for the CI trend alarm (issue #77). The alarm fails when a run regresses beyond the thresholds below vs THIS record. Bump deliberately, maintainer-only, like the kappa baseline.",
+  "pinned_at": "2026-07-22",
+  "pinned_from": "Rule 1+2 chain-telescoped + EXCT precedence, add-one smoothing, fixture corpus",
+  "rule12_top1_agreement": 0.317086,
+  "rule12_bits_per_token": 9.8612,
+  "baseline_top1_agreement": 0.317086,
+  "baseline_bits_per_token": 11.8781,
+  "alarm": {
+    "top1_drop_abs": 0.02,
+    "bits_regress_abs": 0.1
+  }
+}

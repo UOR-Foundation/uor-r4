@@ -102,6 +102,32 @@ jobs:
       - name: wasm-pack build --target web
         run: wasm-pack build --target web
 
+  gate-c-trend:
+    name: Gate C trend alarm (issue #77)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: cargo-${{ runner.os }}-
+      - name: Gate C trend check vs pinned record
+        run: bash scripts/gate_c_trend.sh
+      - name: Upload trend artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gate-c-trend-${{ github.sha }}
+          path: /tmp/gate_c_trend.jsonl
+          retention-days: 90
+
   audit:
     name: cargo audit
     runs-on: ubuntu-latest
