@@ -661,7 +661,7 @@ pub fn observe_text_corpus(
             let token = tokens[pos];
             oracle.step(token as usize, pos, &mut logits);
             let (_sampled, top_tokens, top_weights) =
-                compiler::softmax_top3_sample(&mut logits, &mut checkpoint.rng);
+                compiler::softmax_top8_sample(&mut logits, &mut checkpoint.rng);
             let next = tokens[pos + 1];
             window.push(token);
             if window.len() > compiler::WINDOW {
@@ -673,7 +673,7 @@ pub fn observe_text_corpus(
             let span_end = span_start.saturating_add(1);
             let (byte_start, byte_end) =
                 compiler::byte_anchors(token_byte_lengths, story_byte_offset, next as usize);
-            let record = compiler::encode_v3_record(
+            let record = compiler::encode_v4_record(
                 story,
                 next,
                 &top_tokens,
@@ -886,7 +886,7 @@ mod tests {
                 let token = tokens[pos];
                 oracle.step(token as usize, pos, &mut logits);
                 let (_sampled, top_tokens, top_weights) =
-                    compiler::softmax_top3_sample(&mut logits, &mut rng);
+                    compiler::softmax_top8_sample(&mut logits, &mut rng);
                 let next = tokens[pos + 1];
                 window.push(token);
                 if window.len() > compiler::WINDOW {
@@ -895,7 +895,7 @@ mod tests {
                 let shard = shard_of(&sample_id(&window), SHARD_BITS);
                 let (byte_start, byte_end) =
                     compiler::byte_anchors(token_byte_lengths, offset, next as usize);
-                let record = compiler::encode_v3_record(
+                let record = compiler::encode_v4_record(
                     ordinal as u32,
                     next,
                     &top_tokens,
@@ -1400,8 +1400,8 @@ mod tests {
             .count();
         assert_eq!(long_records, FAKE_SEQ_LEN);
         for record in merged.chunks_exact(RECORD_SIZE) {
-            assert_eq!(&record[40..44], &u32::MAX.to_le_bytes());
-            assert_eq!(&record[44..48], &u32::MAX.to_le_bytes());
+            assert_eq!(&record[80..84], &u32::MAX.to_le_bytes());
+            assert_eq!(&record[84..88], &u32::MAX.to_le_bytes());
         }
         // The same replication check holds on the unknown-anchor path.
         let expected = expected_merged(&[("9", LONG_TEXT), ("10", "ab")], &tokenizer, None);
@@ -1459,7 +1459,7 @@ mod tests {
         for (index, record) in expected.concat().chunks_exact(RECORD_SIZE).enumerate() {
             let story = u32::from_le_bytes(record[0..4].try_into().unwrap());
             let next = u32::from_le_bytes(record[4..8].try_into().unwrap());
-            let byte_start = u32::from_le_bytes(record[40..44].try_into().unwrap());
+            let byte_start = u32::from_le_bytes(record[80..84].try_into().unwrap());
             assert_eq!(corpus.story[index], story);
             assert_eq!(corpus.next[index], next);
             assert_eq!(corpus.byte_start[index], byte_start);

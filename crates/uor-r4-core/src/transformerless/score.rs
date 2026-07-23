@@ -431,7 +431,7 @@ pub fn compile_emissions(
                 continue;
             };
             let dist = &mut evidence[top1 as usize];
-            for k_idx in 0..3 {
+            for k_idx in 0..corpus.top_tokens[i].len() {
                 let token = corpus.top_tokens[i][k_idx];
                 let weight = corpus.top_weights[i][k_idx];
                 if weight > 0 {
