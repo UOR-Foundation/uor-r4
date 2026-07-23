@@ -368,20 +368,51 @@ pub fn generate_to_with_token_byte_lengths(
     let vocab = oracle.vocab();
     let seq_len = oracle.seq_len();
     let default_record_size = 48usize;
-    let record_size = match std::fs::read(rp) {
-        Ok(records) if records.is_empty() => default_record_size,
-        Ok(records) if n != 0 && records.len() == (n as usize) * 48 => 48usize,
-        Ok(records) if n != 0 && records.len() == (n as usize) * 32 => 32usize,
-        Ok(records) if n != 0 && records.len() == (n as usize) * 12 => 12usize,
-        Ok(records) if n == 0 && records.len() % 48 == 0 => 48usize,
-        Ok(records) if n == 0 && records.len() % 32 == 0 => 32usize,
-        Ok(records) if n == 0 && records.len() % 12 == 0 => 12usize,
-        Ok(records) => panic!(
-            "corpus record file has invalid length {} (expected 12/32/48-byte records)",
-            records.len()
-        ),
-        Err(_) => default_record_size,
+    let existing_records = std::fs::read(rp).unwrap_or_default();
+    let existing_len = existing_records.len();
+    let record_size = if existing_len == 0 {
+        default_record_size
+    } else if n != 0 && existing_len == (n as usize) * 48 {
+        48usize
+    } else if n != 0 && existing_len == (n as usize) * 32 {
+        32usize
+    } else if n != 0 && existing_len == (n as usize) * 12 {
+        12usize
+    } else if token_byte_lengths.is_some() || (n != 0 && existing_len >= (n as usize) * 48) {
+        // The current Hugging Face path writes v3 records. Metadata is
+        // committed only at story boundaries, so an interrupted run may
+        // leave extra complete records or a partial record after n.
+        48usize
+    } else if n != 0 && existing_len >= (n as usize) * 32 {
+        32usize
+    } else if n != 0 && existing_len >= (n as usize) * 12 {
+        12usize
+    } else {
+        eprintln!(
+            "corpus records cannot be resumed: file length {existing_len} is shorter than the {n}-record metadata prefix"
+        );
+        return;
     };
+    let committed_len = (n as usize).saturating_mul(record_size);
+    if existing_len < committed_len {
+        eprintln!(
+            "corpus records cannot be resumed: file length {existing_len} is shorter than the committed {committed_len}-byte prefix"
+        );
+        return;
+    }
+    if existing_len > committed_len {
+        eprintln!(
+            "repairing corpus records: truncating {existing_len} bytes to the committed {committed_len}-byte prefix"
+        );
+        let Ok(file) = std::fs::OpenOptions::new().write(true).open(rp) else {
+            eprintln!("cannot repair corpus record file {rp}: open failed");
+            return;
+        };
+        if let Err(error) = file.set_len(committed_len as u64) {
+            eprintln!("cannot truncate corpus record file {rp}: {error}");
+            return;
+        }
+    }
     let mut logits = vec![0f32; vocab];
     let mut progress = super::progress::Progress::new("teacher corpus", target);
     progress.set(n as usize);
