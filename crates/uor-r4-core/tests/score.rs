@@ -1450,3 +1450,45 @@ fn fixture_corpus_end_to_end() {
     .expect("fixture emit");
     assert_eq!(bytes, bytes2, "canonical serializer reproduces the bytes");
 }
+
+#[test]
+fn rx1_baked_residuals_match_probe_time_quantization() {
+    // Issue #68: deployed-mode (baked RX1 residuals) must equal the
+    // probe-quantized reference — same scores as the certifier-side
+    // quantization formula produces from the raw store, per admitted entry.
+    let (bytes, tla, store) = hand_artifact();
+    let scorer =
+        GraphScorer::from_artifact(&bytes, Some(&tla), 64, 64).expect("deployed RX1 scorer");
+    assert!(scorer.has_exct());
+    let outcome = scorer.score_candidates(&[0x00; SIG_BYTES]).expect("scores");
+
+    // The hand store {10: 3, 20: 1, 50: 2} (total 6) clears the support
+    // gate, so Rule 2 fires and every admitted candidate's score is the
+    // exact-context value with the root prior cancelled: S(v) = B + ΔX
+    // where ΔX = exact − B ⟹ S(v) = exact.
+    assert_eq!(outcome.witness.status, ScoreStatus::ExactContext);
+    let probe = outcome.witness.exct.clone().expect("probe recorded");
+    assert_eq!(probe.total, 6);
+
+    let view = uor_r4_graph_format::GraphView::parse(&bytes).expect("valid R4G1");
+    let vocab = view.head().expect("HEAD").vocab_size() as f64;
+    let dist = &store[0][&Vec::new()];
+    let admitted: BTreeMap<u32, ScoreQ> = outcome.candidates.iter().copied().collect();
+    assert_eq!(
+        admitted.len(),
+        dist.len(),
+        "every store entry is admitted under the default top-X"
+    );
+    for (&token, &count) in dist {
+        let exact = ScoreQ::from_logprob(
+            ((f64::from(count) + 1.0) / (f64::from(probe.total) + vocab)).ln() as f32,
+        );
+        assert_eq!(
+            admitted[&token], exact,
+            "baked RX1 score for token {token} must equal the probe-time quantized reference"
+        );
+    }
+    // The probe record matches the store's shape exactly.
+    assert_eq!(probe.level, 0);
+    assert_eq!(probe.admitted as usize, dist.len());
+}
