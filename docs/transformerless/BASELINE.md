@@ -146,6 +146,22 @@ residuals transfer poorly while exact-context store coverage stays total (ExactC
 both partitions — the Rule 1+2 rows are entirely EXCT-driven, hence argmax-identical to the
 baseline).
 
+**Full-corpus confirmation (issue #75, 2026-07-23).** The first pass above scored a 400-article
+prefix slice of the natural partition; the declared natural partition is the full sealed corpus
+(3000 articles, #72). Re-run at n=3000 (361,232 records, 72,131 held-out by the same §2 rule;
+observation merged κ `blake3:a646421d…`, teacher-forced at sequence length 128 with 2545/3000
+articles truncated): Rule 1+2 **28.1% / 11.3565** vs TLA3 baseline **28.1% / 11.2481**
+(argmax-identical, ExactContext 100%; scored artifact κ `blake3:3c99b707…`). The larger corpus
+shifts the target-2 natural verdict: the baseline's bits/token improves from 18.76 (n=400) to
+11.25 (n=3000) as exact-context coverage grows, while the graph's bits stay ~flat — so on the
+full declared corpus the natural row reads **target 1: stretch FAIL / floor PASS (equal)**,
+**target 2: FAIL** (11.3565 > 11.2481 − 0.3 threshold would need ≤ 10.95). The slice verdicts
+above are retained as the n=400 record; the n=3000 rows are the declared-corpus measurement.
+Continuity corroboration: an independently regenerated 150,000-record SmolLM2 continuity corpus
+(same recipe as the declared 200k one) scored Rule 1+2 4.7% / 15.37 vs baseline 4.7% / 18.11 —
+same shape as the declared-corpus row (floor PASS, target-2 PASS), lower absolute agreement,
+i.e. generation-stream sensitive. §4.1 carries the consolidated target table.
+
 ### 3.2 Artifact sizes (fresh, 2026-07-21, `.uor-models/compiled/smollm2-135m-instruct/`)
 
 | File | Bytes | Note |
@@ -210,6 +226,26 @@ Pass conditions for the Phase-5 minimum viable graph, all on the declared distri
 6. Novel/Contradictory fallback rate measured and reported; on-distribution rate < 20%.
 
 Missing target 1–2 or 4 ⇒ stop or redesign. Missing 3/5/6 ⇒ redesign discussion.
+
+### 4.1 Measured values (2026-07-23, issue #75)
+
+Cover + score + Gate C for the SmolLM2-135M compile on both D3 partitions; per-partition
+4-way tables and run details in §3.1 (declared corpora; natural at the full sealed n=3000)
+and issue #75.
+
+| target | continuity (declared 200k corpus) | natural (full sealed corpus, n=3000) | verdict |
+|---|---|---|---|
+| 1. agreement ≥ baseline + 5pts | 14.76% vs 14.76% (+0.0) | 28.1% vs 28.1% (+0.0) | stretch **FAIL** both; floor ("not worse") **PASS** both (argmax-identical prediction sets) |
+| 2. bits/token ≤ baseline − 0.3 | 14.62 ≤ 20.33 (−6.01) | 11.3565 > 10.9481 (+0.11 over baseline) | **PASS** continuity, **FAIL** natural |
+
+Structural caveat, material to the verdict: on both partitions every held-out prediction
+resolved via exact context (ExactContext 100%, Graph 0, Novel 0), so rows 1–2 currently
+compare EXCT-table scoring against the store baseline, not graph generalization. The
+natural target-2 verdict is corpus-size sensitive (PASS at the n=400 slice, FAIL at the
+declared n=3000) because exact-context coverage improves the baseline faster than the
+graph with more data. Until an EXCT-free evaluation exists, the stop-or-redesign signal
+from missing targets 1–2 should be read as "the current judge measures exact-context
+memory" — the Phase-5 review decision input is here and in issue #75.
 
 ## 5. Threat-model note (backlog #22)
 

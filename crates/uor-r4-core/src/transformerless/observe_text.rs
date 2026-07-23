@@ -834,6 +834,28 @@ mod tests {
         assert_eq!(tokens, tokenizer.encode("abcd"));
     }
 
+    #[test]
+    fn encode_byte_fallback_cannot_overflow_char_sized_buffer() {
+        // Byte-level tokenizer (the HF path): a multi-byte character
+        // decomposes into one token per byte, so a char-sized buffer
+        // overflows — BOS + space + 4 byte tokens = 6 > 2 chars + 2
+        // (issue #75). The buffer is sized by bytes.
+        let pieces: [&[u8]; 6] = [b"<unk>", b"<s>", b"</s>", b" ", &[0xC6], &[0x86]];
+        let path = unique_path("tokenizer-bytes.bin");
+        let mut bytes = Vec::new();
+        for piece in pieces {
+            bytes.extend_from_slice(&(piece.len() as i32).to_le_bytes());
+            bytes.extend_from_slice(piece);
+        }
+        fs::write(&path, bytes).expect("write tokenizer fixture");
+        let tokenizer = Tokenizer::try_load(&path).expect("load tokenizer fixture");
+        let _ = fs::remove_file(&path);
+        // 'Ɔ' = U+0186 = bytes 0xC6 0x86; two of them decompose to four
+        // byte tokens (no merge pieces here to recombine them).
+        let tokens = tokenizer.encode("ƆƆ");
+        assert_eq!(tokens.len(), 6);
+    }
+
     /// Deterministic few-token oracle: logits depend only on (token, pos),
     /// so teacher-forced records are content-stable across restarts.
     struct FakeOracle;

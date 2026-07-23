@@ -175,10 +175,16 @@ pub fn observe_command(args: &[String]) -> Result<(), String> {
         token_byte_lengths.as_deref(),
     )?;
     if summary.done {
+        // Persist the merged record stream so Gate C can consume it as
+        // --corpus-recs with state.bin as --corpus-meta (same convention
+        // as the from-text driver, issue #75).
+        let merged = observe::merge_shards(&options.output).map_err(|error| error.to_string())?;
+        let merged_path = options.output.join("merged.bin");
+        std::fs::write(&merged_path, &merged).map_err(|error| error.to_string())?;
         println!(
             "observe complete: {} records at {}",
             summary.records,
-            options.output.display()
+            merged_path.display()
         );
     } else {
         println!(
