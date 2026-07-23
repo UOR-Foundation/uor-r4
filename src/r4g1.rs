@@ -612,12 +612,26 @@ impl R4g1State {
     }
 }
 
-/// Validate the graph's Rule 1+2 top-1 agreement against the TLA baseline.
-/// Missing metrics remain compatible with older reports; when both metrics
-/// exist, the deployed graph must not be worse than the baseline.
+/// Pinned quality floor (issue #110, era: #65-chain anchors). The deployed
+/// graph must not digress from the Rule 1+2 anchors the quality chain
+/// measured (31.7086% top-1, 9.8612 bits/token) beyond the margins the CI
+/// trend alarm allows. Keep these constants in sync with
+/// `scripts/check_gate_c_regression.py`; when a compiler redesign
+/// legitimately moves the anchors, update both sites in the same commit with
+/// an era note.
+const QUALITY_FLOOR_TOP1_AGREEMENT: f64 = 0.317 - 0.02;
+const QUALITY_FLOOR_BITS_PER_TOKEN: f64 = 9.86 + 0.10;
+
+/// Validate the graph's Rule 1+2 quality against the TLA baseline and the
+/// pinned absolute floor. Missing metrics remain compatible with older
+/// reports; when present, the deployed graph must not be worse than the
+/// baseline and must not digress below the #65-chain anchors.
 pub fn validate_quality_report(report: &serde_json::Value) -> Result<(), String> {
     let graph_agreement = report
         .pointer("/gate_c/rule12_precedence/top1_agreement")
+        .and_then(serde_json::Value::as_f64);
+    let graph_bits = report
+        .pointer("/gate_c/rule12_precedence/bits_per_token")
         .and_then(serde_json::Value::as_f64);
     let baseline_agreement = report
         .pointer("/gate_c/tla3_baseline/top1_agreement")
@@ -628,6 +642,23 @@ pub fn validate_quality_report(report: &serde_json::Value) -> Result<(), String>
                 "R4G1 quality gate failed: graph runtime top-1 {:.2}% is below TLA baseline {:.2}%",
                 graph * 100.0,
                 baseline * 100.0
+            ));
+        }
+    }
+    if let Some(graph) = graph_agreement {
+        if graph < QUALITY_FLOOR_TOP1_AGREEMENT {
+            return Err(format!(
+                "R4G1 quality gate failed: graph runtime top-1 {:.2}% digresses below the pinned floor {:.2}%",
+                graph * 100.0,
+                QUALITY_FLOOR_TOP1_AGREEMENT * 100.0
+            ));
+        }
+    }
+    if let Some(bits) = graph_bits {
+        if bits > QUALITY_FLOOR_BITS_PER_TOKEN {
+            return Err(format!(
+                "R4G1 quality gate failed: graph runtime {:.4} bits/token digresses above the pinned ceiling {:.4}",
+                bits, QUALITY_FLOOR_BITS_PER_TOKEN
             ));
         }
     }
