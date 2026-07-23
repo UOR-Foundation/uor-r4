@@ -12,7 +12,22 @@ Feature: R4G1 compilation quality gates
     When the R4G1 quality gate validates the report
     Then the quality gate rejects the graph below baseline
 
-  Scenario: accept a graph at the TLA baseline
+  Scenario: reject a graph at the TLA baseline but below the pinned floor
     Given a graph quality report at or above the TLA baseline
     When the R4G1 quality gate validates the report
+    Then the quality gate rejects the graph for digression
+
+  Scenario: accept a graph at the pinned quality anchors
+    Given a graph quality report at the pinned quality anchors
+    When the R4G1 quality gate validates the report
     Then the quality gate accepts the graph
+
+  Scenario: reject a graph that digresses in bits per token
+    Given a graph quality report with digressed bits per token
+    When the R4G1 quality gate validates the report
+    Then the quality gate rejects the graph for digression
+
+  Scenario: reject a graph that digresses in top-1 agreement
+    Given a graph quality report with digressed top-1 agreement
+    When the R4G1 quality gate validates the report
+    Then the quality gate rejects the graph for digression

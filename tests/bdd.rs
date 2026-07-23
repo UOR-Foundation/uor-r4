@@ -184,6 +184,49 @@ fn quality_gate_accepts(w: &mut R4g1World) {
     assert!(w.quality_error.is_none());
 }
 
+#[given("a graph quality report at the pinned quality anchors")]
+fn pinned_anchors_report(w: &mut R4g1World) {
+    // #65-chain anchors: 31.7086% top-1, 9.8612 bits/token (era note in
+    // src/r4g1.rs QUALITY_FLOOR_*).
+    w.quality_report = Some(serde_json::json!({
+        "gate_c": {
+            "rule12_precedence": {"top1_agreement": 0.3171, "bits_per_token": 9.8612},
+            "tla3_baseline": {"top1_agreement": 0.1811, "bits_per_token": 11.8781}
+        }
+    }));
+}
+
+#[given("a graph quality report with digressed bits per token")]
+fn digressed_bits_report(w: &mut R4g1World) {
+    // Agreement still clears the baseline, so only the absolute floor can fire.
+    w.quality_report = Some(serde_json::json!({
+        "gate_c": {
+            "rule12_precedence": {"top1_agreement": 0.3171, "bits_per_token": 10.5},
+            "tla3_baseline": {"top1_agreement": 0.1811, "bits_per_token": 11.8781}
+        }
+    }));
+}
+
+#[given("a graph quality report with digressed top-1 agreement")]
+fn digressed_agreement_report(w: &mut R4g1World) {
+    // Agreement still clears the baseline, so only the absolute floor can fire.
+    w.quality_report = Some(serde_json::json!({
+        "gate_c": {
+            "rule12_precedence": {"top1_agreement": 0.25, "bits_per_token": 9.8612},
+            "tla3_baseline": {"top1_agreement": 0.1811, "bits_per_token": 11.8781}
+        }
+    }));
+}
+
+#[then("the quality gate rejects the graph for digression")]
+fn quality_gate_rejects_digression(w: &mut R4g1World) {
+    assert!(w
+        .quality_error
+        .as_deref()
+        .unwrap_or_default()
+        .contains("digresses"));
+}
+
 #[tokio::main]
 async fn main() {
     R4g1World::cucumber()

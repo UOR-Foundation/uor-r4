@@ -82,7 +82,7 @@ fn test_endomorphism_application_on_vector() {
     let comp = ComplexNumber::default();
 
     let op = EndomorphismAlgebra::left_octonion(&e1);
-    let vec = CayleyDicksonVector::embed(&e2, &quat, &comp, 0.0);
+    let vec = CayleyDicksonVector::embed(&e2, &quat, &comp, 0.0, 0.0);
 
     let res = op.apply(&vec);
     let res_oct = res.project_octonion();

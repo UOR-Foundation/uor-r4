@@ -1492,7 +1492,11 @@ pub fn evaluate_gate_c(
 /// 3 = issue-#67 smoothing calibration: `config.smoothing` records the
 /// compiled emission rule and `quantization.smoothing` describes it; 4 =
 /// issue-#79 repetition telemetry in `graph` (graph/baseline repetition
-/// rates from the deterministic greedy probe).
+/// rates from the deterministic greedy probe); 5 = issue-#80 rejected
+/// candidate-variant rows in `gate_c` (`rule12_cloud_size_normalized`,
+/// `rule12_margin_weighted`); 6 = issue-#102 removes those rows: the
+/// variants were zero-information (bit-identical to `rule12_precedence`
+/// on every measured corpus, where ExactContext precedence dominates).
 #[derive(Debug, Clone, Serialize)]
 pub struct ScoreReport {
     pub schema: u32,
@@ -1563,7 +1567,7 @@ pub fn build_score_report(
     gate_c: GateCOutcome,
 ) -> ScoreReport {
     ScoreReport {
-        schema: 4,
+        schema: 6,
         inputs,
         config: ScoreReportConfig {
             transition_out_degree: config.transition_out_degree,

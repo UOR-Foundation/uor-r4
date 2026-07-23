@@ -202,8 +202,14 @@ impl CayleyDicksonVector {
         Self { components }
     }
 
-    /// Linear embedding \iota_V(o, h, c, r) into 16R-dimensional V.
-    pub fn embed(oct: &Octonion, quat: &Quaternion, comp: &ComplexNumber, real: f32) -> Self {
+    /// Linear embedding \iota_V(o, h, c, r, s) into 16R-dimensional V.
+    pub fn embed(
+        oct: &Octonion,
+        quat: &Quaternion,
+        comp: &ComplexNumber,
+        real: f32,
+        scalar: f32,
+    ) -> Self {
         let mut v = [0.0; 16];
         // e_i O (8 components: 0..8)
         v[0..8].copy_from_slice(&oct.r);
@@ -214,7 +220,7 @@ impl CayleyDicksonVector {
         // e_7 R (1 component: 14)
         v[14] = real;
         // R (1 component: 15)
-        v[15] = 0.0;
+        v[15] = scalar;
         Self { components: v }
     }
 
@@ -242,6 +248,12 @@ impl CayleyDicksonVector {
     /// Extract real scalar projection r ∈ R.
     pub fn project_real(&self) -> f32 {
         self.components[14]
+    }
+
+    /// Extract the trailing scalar projection s ∈ R (the final `⊕ ℝ`
+    /// term of V = e_i O ⊕ e_5 H ⊕ e_6 C ⊕ e_7 R ⊕ R).
+    pub fn project_scalar(&self) -> f32 {
+        self.components[15]
     }
 
     /// Squared norm of the 16D vector.
