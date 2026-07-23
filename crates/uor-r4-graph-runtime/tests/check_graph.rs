@@ -3,12 +3,16 @@ use std::fs;
 use uor_r4_graph_format::{GraphView, SectionId};
 
 #[test]
+#[ignore]
 fn test_dump() {
     let paths = [
         ".uor-models/compiled/smollm2-135m-instruct/compiled.r4g1",
         "../../.uor-models/compiled/smollm2-135m-instruct/compiled.r4g1",
     ];
-    let bytes = paths.iter().find_map(|p| fs::read(p).ok()).unwrap();
+    let Some(bytes) = paths.iter().find_map(|p| fs::read(p).ok()) else {
+        eprintln!("skipping: compiled artifact not found (run `r4 compile` first)");
+        return;
+    };
     let base_graph = GraphView::parse(&bytes).unwrap();
     let num_nodes = base_graph.node_count().unwrap();
     println!("Graph has {} nodes", num_nodes);
