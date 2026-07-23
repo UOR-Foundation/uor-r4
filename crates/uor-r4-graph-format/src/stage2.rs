@@ -87,6 +87,11 @@ pub(crate) fn validate(view: &GraphView) -> Result<Option<Head>, FormatError> {
         rout::validate(bytes, &head)?;
     }
 
+    // CODE section-internal bytecode validation
+    if let Some(bytes) = view.section(SectionId::CODE) {
+        crate::code::validate(bytes, head.max_program_steps())?;
+    }
+
     // NODE is present iff node_count > 0, and its record count must
     // equal the declaration (RFC §6 item 4).
     let node_bytes = match view.section(SectionId::NODE) {
@@ -255,6 +260,24 @@ pub(crate) fn validate(view: &GraphView) -> Result<Option<Head>, FormatError> {
             if !found {
                 return Err(FormatError::ReverseIndexMissing { edge: i });
             }
+        }
+    }
+
+    // PTCH (Phase 9) section: 32-byte parent CID + array of PACKED_TOMBSTONE_LEN.
+    if let Some(bytes) = view.section(SectionId::PTCH) {
+        if bytes.len() < 32 || (bytes.len() - 32) % records::PACKED_TOMBSTONE_LEN != 0 {
+            return Err(FormatError::PatchSectionMisaligned {
+                actual_len: bytes.len() as u64,
+            });
+        }
+    }
+
+    // RTNX (Phase 9) section length must be a multiple of PACKED_ROUTE_TRANSLATION_LEN.
+    if let Some(bytes) = view.section(SectionId::RTNX) {
+        if bytes.len() % records::PACKED_ROUTE_TRANSLATION_LEN != 0 {
+            return Err(FormatError::RouteTranslationSectionMisaligned {
+                actual_len: bytes.len() as u64,
+            });
         }
     }
 

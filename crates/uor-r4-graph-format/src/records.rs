@@ -16,6 +16,10 @@ pub const PACKED_EDGE_LEN: usize = 16;
 pub(crate) const REVERSE_INDEX_ENTRY_LEN: usize = 4;
 /// EMIT/EXCT storage descriptor size in bytes.
 pub const STORAGE_DESCRIPTOR_LEN: usize = 4;
+/// Packed tombstone record size in bytes.
+pub const PACKED_TOMBSTONE_LEN: usize = 8;
+/// Packed route translation record size in bytes.
+pub const PACKED_ROUTE_TRANSLATION_LEN: usize = 12;
 
 /// One packed region record (PDF §21), 30 bytes little-endian:
 ///
@@ -132,6 +136,42 @@ impl StorageDescriptor {
     }
 }
 
+/// One packed tombstone (8 bytes little-endian):
+///
+/// ```text
+/// offset  size  field
+/// 0       u32   id
+/// 4       u8    kind (0=node, 1=edge)
+/// 5       u8    flags
+/// 6       u16   reserved (0)
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PackedTombstone {
+    pub id: u32,
+    pub kind: u8,
+    pub flags: u8,
+    pub reserved: u16,
+}
+
+/// One packed route translation (12 bytes little-endian):
+///
+/// ```text
+/// offset  size  field
+/// 0       u32   src_region
+/// 4       u32   dst_region
+/// 8       u8    map_kind
+/// 9       u8    flags
+/// 10      u16   reserved (0)
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PackedRouteTranslation {
+    pub src_region: NodeId,
+    pub dst_region: NodeId,
+    pub map_kind: u8,
+    pub flags: u8,
+    pub reserved: u16,
+}
+
 /// Decode one 30-byte packed node. Callers must have established that
 /// `bytes.len() >= PACKED_NODE_LEN` (stage 2 validates the section size
 /// before decoding, and the view iterators slice exact records), so the
@@ -162,5 +202,26 @@ pub(crate) fn decode_edge(bytes: &[u8]) -> PackedEdge {
         kind: bytes[12],
         flags: bytes[13],
         reserved: read_u16_le(bytes, 14),
+    }
+}
+
+/// Decode one 8-byte packed tombstone.
+pub(crate) fn decode_tombstone(bytes: &[u8]) -> PackedTombstone {
+    PackedTombstone {
+        id: read_u32_le(bytes, 0),
+        kind: bytes[4],
+        flags: bytes[5],
+        reserved: read_u16_le(bytes, 6),
+    }
+}
+
+/// Decode one 12-byte packed route translation.
+pub(crate) fn decode_route_translation(bytes: &[u8]) -> PackedRouteTranslation {
+    PackedRouteTranslation {
+        src_region: NodeId(read_u32_le(bytes, 0)),
+        dst_region: NodeId(read_u32_le(bytes, 4)),
+        map_kind: bytes[8],
+        flags: bytes[9],
+        reserved: read_u16_le(bytes, 10),
     }
 }

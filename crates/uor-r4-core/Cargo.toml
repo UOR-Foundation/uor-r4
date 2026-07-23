@@ -6,13 +6,15 @@ description = "Core R4 engine: geometric routing mathematics and integrated tran
 
 [dependencies]
 uor-r4-graph-format = { path = "../uor-r4-graph-format" }
+uor-r4-model-source = { path = "../uor-r4-model-source" }
 sha2 = "0.10.8"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 hex = "0.4.3"
 blake3 = "=1.5.0"
 ciborium = "0.2"
-safetensors = { version = "0.6", default-features = false, features = ["std"] }
+uor-r4-graph-runtime = { path = "../uor-r4-graph-runtime" }
 
 [dev-dependencies]
 serde_json = "1.0"
+proptest = "1.4.0"

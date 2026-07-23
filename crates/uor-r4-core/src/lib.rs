@@ -7,6 +7,7 @@ use serde_json::Value;
 use std::collections::{BTreeMap, HashMap};
 use std::f64::consts::PI;
 
+pub mod cayley_dickson;
 pub mod semantic;
 pub mod transformerless;
 pub mod zeta_zeros;

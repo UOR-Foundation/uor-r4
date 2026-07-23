@@ -10,9 +10,12 @@
 use crate::error::FormatError;
 use crate::head::Head;
 use crate::header::{self, Header, HEADER_LEN, SECTION_ENTRY_LEN};
-use crate::records::{self, PackedEdge, PackedNode, PACKED_EDGE_LEN, PACKED_NODE_LEN};
+use crate::records::{
+    self, PackedEdge, PackedNode, PackedRouteTranslation, PackedTombstone, PACKED_EDGE_LEN,
+    PACKED_NODE_LEN, PACKED_ROUTE_TRANSLATION_LEN, PACKED_TOMBSTONE_LEN,
+};
 use crate::stage2;
-use crate::types::SectionId;
+use crate::types::{ArtifactCid, SectionId};
 
 /// One decoded section-table entry.
 #[derive(Debug, Clone, Copy)]
@@ -288,6 +291,41 @@ impl<'a> GraphView<'a> {
         Some(header::read_u32_le(entry, 0))
     }
 
+    /// Read the parent CID from the PTCH section, if present.
+    pub fn patch_parent_cid(&self) -> Option<ArtifactCid> {
+        let bytes = self.section(SectionId::PTCH)?;
+        let record = bytes.get(0..32)?;
+        Some(header::read_cid(record, 0))
+    }
+
+    /// Iterate over tombstones in the PTCH section.
+    pub fn patch_tombstones(&self) -> Tombstones<'a> {
+        let bytes = self.section(SectionId::PTCH).unwrap_or(&[]);
+        let (bytes, remaining) = if bytes.len() >= 32 {
+            let tombstones = &bytes[32..];
+            let remaining = (tombstones.len() / PACKED_TOMBSTONE_LEN) as u32;
+            (tombstones, remaining)
+        } else {
+            (&[][..], 0)
+        };
+        Tombstones {
+            bytes,
+            next: 0,
+            remaining,
+        }
+    }
+
+    /// Iterate over route translations in the RTNX section.
+    pub fn route_translations(&self) -> RouteTranslations<'a> {
+        let bytes = self.section(SectionId::RTNX).unwrap_or(&[]);
+        let remaining = (bytes.len() / PACKED_ROUTE_TRANSLATION_LEN) as u32;
+        RouteTranslations {
+            bytes,
+            next: 0,
+            remaining,
+        }
+    }
+
     /// Recompute both integrity CIDs against the bytes and compare with
     /// the header fields (RFC §6 invariant 9).
     ///
@@ -427,3 +465,63 @@ pub struct SectionRef<'a> {
     /// Borrowed payload bytes.
     pub payload: &'a [u8],
 }
+
+/// Iterator over the packed tombstones in a [`GraphView`], decoding on demand.
+#[derive(Debug, Clone)]
+pub struct Tombstones<'a> {
+    bytes: &'a [u8],
+    next: u32,
+    remaining: u32,
+}
+
+impl Iterator for Tombstones<'_> {
+    type Item = PackedTombstone;
+
+    fn next(&mut self) -> Option<PackedTombstone> {
+        if self.remaining == 0 {
+            return None;
+        }
+        let start = self.next as usize * PACKED_TOMBSTONE_LEN;
+        let record = self.bytes.get(start..start + PACKED_TOMBSTONE_LEN)?;
+        self.next += 1;
+        self.remaining -= 1;
+        Some(records::decode_tombstone(record))
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.remaining as usize, Some(self.remaining as usize))
+    }
+}
+
+impl ExactSizeIterator for Tombstones<'_> {}
+
+/// Iterator over the packed route translations in a [`GraphView`], decoding on demand.
+#[derive(Debug, Clone)]
+pub struct RouteTranslations<'a> {
+    bytes: &'a [u8],
+    next: u32,
+    remaining: u32,
+}
+
+impl Iterator for RouteTranslations<'_> {
+    type Item = PackedRouteTranslation;
+
+    fn next(&mut self) -> Option<PackedRouteTranslation> {
+        if self.remaining == 0 {
+            return None;
+        }
+        let start = self.next as usize * PACKED_ROUTE_TRANSLATION_LEN;
+        let record = self
+            .bytes
+            .get(start..start + PACKED_ROUTE_TRANSLATION_LEN)?;
+        self.next += 1;
+        self.remaining -= 1;
+        Some(records::decode_route_translation(record))
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.remaining as usize, Some(self.remaining as usize))
+    }
+}
+
+impl ExactSizeIterator for RouteTranslations<'_> {}

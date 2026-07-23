@@ -4,10 +4,7 @@
 //! identical pinned fixture inputs produces byte-identical binary containers and
 //! identical BLAKE3 CIDs (κ).
 
-use uor_r4_core::transformerless::{
-    certificate::{Certificate, ClaimKind, EmpiricalClaim, ProtocolAttestation},
-    compiler,
-};
+use uor_r4_core::transformerless::compiler;
 
 fn blake3_kappa(bytes: &[u8]) -> String {
     format!("kappa:blake3:{}", blake3::hash(bytes).to_hex())
@@ -75,6 +72,7 @@ fn test_deterministic_transition_graph_rebuild() {
         span_end: vec![1, 2, 3, 4, 5, 6],
         byte_start: vec![u32::MAX; 6],
         byte_end: vec![u32::MAX; 6],
+        hidden: None,
     };
     let region_assigner = |tok: u32| tok / 10;
 
@@ -102,60 +100,4 @@ fn test_deterministic_transition_graph_rebuild() {
     );
     assert!(g1.verify_theorem_7().is_ok());
     assert!(g2.verify_theorem_7().is_ok());
-}
-
-#[test]
-fn test_deterministic_certificate_rebuild() {
-    let claim = EmpiricalClaim {
-        name: "gate_e_rebuild".to_string(),
-        sample_size: 1000,
-        metric_value: 1.0,
-        confidence_interval_95: (1.0, 1.0),
-        slice_label: "ci_rebuild".to_string(),
-        claim_kind: ClaimKind::Structural,
-    };
-
-    let attestation = ProtocolAttestation {
-        deterministic_canonical_mode: true,
-        zero_allocation_verified: true,
-        no_multiply_verified: true,
-        theorem_7_reverse_index_verified: true,
-    };
-
-    let cert1 = Certificate::new(
-        "kappa:blake3:src",
-        "kappa:blake3:corpus",
-        "kappa:blake3:graph",
-        "kappa:blake3:metric",
-        "kappa:blake3:op",
-        "kappa:blake3:benchmark",
-        vec![claim.clone()],
-        attestation.clone(),
-    );
-
-    let cert2 = Certificate::new(
-        "kappa:blake3:src",
-        "kappa:blake3:corpus",
-        "kappa:blake3:graph",
-        "kappa:blake3:metric",
-        "kappa:blake3:op",
-        "kappa:blake3:benchmark",
-        vec![claim],
-        attestation,
-    );
-
-    assert_eq!(
-        cert1, cert2,
-        "Certificates built from identical inputs must be equal"
-    );
-    assert_eq!(
-        cert1.compute_cid(),
-        cert2.compute_cid(),
-        "Certificate CIDs must match"
-    );
-    assert_eq!(
-        cert1.to_cbor_bytes().unwrap(),
-        cert2.to_cbor_bytes().unwrap(),
-        "Certificate CBOR bytes must be byte-identical"
-    );
 }

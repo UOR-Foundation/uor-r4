@@ -11,10 +11,8 @@
 //!
 //! Checkpoint path override: TLESS_CHECKPOINT=/path/to/model.bin
 
-use uor_r4_core::transformerless::{
-    compiler,
-    teacher::{LlamaOracle, TeacherOracle},
-};
+use uor_r4_core::transformerless::compiler;
+use uor_r4_model_source::{LlamaOracle, TeacherOracle};
 
 fn kappa_of(bytes: &[u8]) -> String {
     format!("blake3:{}", blake3::hash(bytes).to_hex())

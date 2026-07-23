@@ -20,10 +20,10 @@ mod status_policy_common;
 
 use status_policy_common as fixture;
 
+use uor_r4_graph_certify::{ScoreStatus, TOP_M, WIDENED_TOP_M};
 use uor_r4_wasm_router::r4g1::{
     AbstainOutcome, PolicyStatus, PredictDecision, PredictOutcome, StatusAction, StatusPolicy,
 };
-use uor_r4_wasm_router::transformerless::score_runtime::{ScoreStatus, TOP_M, WIDENED_TOP_M};
 
 // ------------------------------------------------------- (a) OOD probe --
 

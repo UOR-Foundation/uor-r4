@@ -46,6 +46,7 @@ fn test_compile_transitions_from_synthetic_corpus() {
         span_end: vec![1, 2, 3, 4, 5, 6],
         byte_start: vec![u32::MAX; 6],
         byte_end: vec![u32::MAX; 6],
+        hidden: None,
     };
 
     // Simple region assigner mapping token_id -> region_id
@@ -86,6 +87,7 @@ fn test_bounded_transitions_per_node() {
         span_end: vec![1, 2, 3, 4],
         byte_start: vec![u32::MAX; 4],
         byte_end: vec![u32::MAX; 4],
+        hidden: None,
     };
 
     let region_assigner = |tok: u32| tok;

@@ -3,7 +3,7 @@ use std::fmt;
 use std::io::{self, BufRead, Write};
 use std::path::PathBuf;
 use std::sync::Arc;
-use uor_r4_core::transformerless::command as transformerless_command;
+use uor_r4_graph_cli as transformerless_command;
 use uor_r4_wasm_router::chat::{ChatAnswer, ChatEngine, ChatError};
 use uor_r4_wasm_router::model::{
     default_model_reference, download_source, ModelCapability, ModelError, ModelManifest,
@@ -124,6 +124,18 @@ enum Command {
     Transformerless {
         /// Subcommand and arguments forwarded verbatim.
         #[arg(required = true, num_args = 1.., trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
+    /// Run the new R4G1 multiresolution graph compiler pipeline.
+    GraphCompile {
+        /// Subcommand and arguments forwarded verbatim.
+        #[arg(required = false, num_args = 0.., trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
+    /// Sample observation records using a teacher oracle.
+    GraphObserve {
+        /// Subcommand and arguments forwarded verbatim.
+        #[arg(required = false, num_args = 0.., trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
 }
@@ -463,6 +475,23 @@ fn run_core(name: &str, arguments: &[String]) -> Result<(), RunError> {
     transformerless_command::run(&values).map_err(RunError::Command)
 }
 
+/// Default location of the reference teacher checkpoint used by `certify`/`compare`.
+const DEFAULT_REFERENCE_CHECKPOINT: &str = "/tmp/ref/out/model.bin";
+
+/// Resolve the reference teacher checkpoint path, honoring the `TLESS_CHECKPOINT`
+/// override, and confirm it exists before handing it to `LlamaOracle::load`
+/// (which otherwise panics on a missing file).
+fn reference_checkpoint_path() -> Result<String, RunError> {
+    let path = std::env::var("TLESS_CHECKPOINT")
+        .unwrap_or_else(|_| DEFAULT_REFERENCE_CHECKPOINT.to_owned());
+    if !std::path::Path::new(&path).exists() {
+        return Err(RunError::Command(format!(
+            "reference checkpoint not found at {path} (set TLESS_CHECKPOINT to override)"
+        )));
+    }
+    Ok(path)
+}
+
 fn run(cli: &Cli) -> Result<(), RunError> {
     cli.configure_tless();
     match cli.command.as_ref() {
@@ -488,13 +517,32 @@ fn run(cli: &Cli) -> Result<(), RunError> {
             run_core("gen", &[seconds.to_string(), target.to_string()])
         }
         Some(Command::Store) => run_core("store", &[]),
-        Some(Command::Certify) => run_core("certify", &[]),
-        Some(Command::Compare) => run_core("compare", &[]),
-        Some(Command::CompareReport) => run_core("compare-report", &[]),
+        Some(Command::Certify) => {
+            let checkpoint = reference_checkpoint_path()?;
+            let oracle = uor_r4_model_source::LlamaOracle::load(&checkpoint);
+            uor_r4_graph_certify::certify::certify(&oracle);
+            Ok(())
+        }
+        Some(Command::Compare) => {
+            let checkpoint = reference_checkpoint_path()?;
+            let mut oracle = uor_r4_model_source::LlamaOracle::load(&checkpoint);
+            uor_r4_graph_certify::compare::compare(&mut oracle);
+            Ok(())
+        }
+        Some(Command::CompareReport) => {
+            uor_r4_graph_certify::compare::report();
+            Ok(())
+        }
         Some(Command::Scenarios) => run_core("scenarios", &[]),
         Some(Command::TeacherKappa) => run_core("teacher-kappa", &[]),
         Some(Command::Transformerless { args }) => {
             transformerless_command::run(args).map_err(RunError::Command)
+        }
+        Some(Command::GraphCompile { args }) => {
+            uor_r4_graph_compiler::compile(args).map_err(RunError::Command)
+        }
+        Some(Command::GraphObserve { args }) => {
+            uor_r4_graph_compiler::observe(args).map_err(RunError::Command)
         }
         Some(Command::Serve) | None => {
             server::run_server(Arc::new(cli.server_config()));

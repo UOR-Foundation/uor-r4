@@ -421,10 +421,12 @@ fn newtype_smoke() {
     assert!(!SectionId::CERT.mandatory());
     assert!(!SectionId::PTCH.mandatory());
     assert!(!SectionId::SECT.mandatory());
+    assert!(!SectionId::RTNX.mandatory());
     assert!(SectionId(0x40).mandatory());
     assert!(!SectionId(0x8000_0040).mandatory());
     assert!(SectionId::SECT.is_known());
-    assert!(!SectionId(0x0C).is_known());
+    assert!(SectionId::RTNX.is_known());
+    assert!(!SectionId(0x0D).is_known());
 
     assert!(!FormatError::BadMagic.to_string().is_empty());
 }

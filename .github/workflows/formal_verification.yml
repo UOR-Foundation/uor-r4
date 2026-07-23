@@ -1,0 +1,29 @@
+name: Formal Verification (Kani)
+
+on:
+  push:
+    branches: [ main, staging ]
+  pull_request:
+    branches: [ main, staging ]
+
+jobs:
+  kani:
+    name: Run Kani Proofs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Kani
+        run: |
+          cargo install --locked kani-verifier
+          cargo kani setup
+
+      - name: Verify Proof Status Matrix
+        run: cargo test -p uor-r4-proof-model
+
+      - name: Run Kani proofs
+        run: cargo kani -p uor-r4-proof-model

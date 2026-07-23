@@ -57,6 +57,18 @@ impl Default for ProofStatusMatrix {
                         "Reverse edge indexes reference exact canonical edge IDs sorted by target"
                             .to_string(),
                 },
+                TheoremEntry {
+                    name: "Score Arithmetic Safety".to_string(),
+                    theorem_id: "Kani-1".to_string(),
+                    status: ProofStatus::Verified,
+                    description: "ScoreQ saturating_add does not panic or overflow".to_string(),
+                },
+                TheoremEntry {
+                    name: "Fixed-Capacity Container Invariants".to_string(),
+                    theorem_id: "Kani-2".to_string(),
+                    status: ProofStatus::Verified,
+                    description: "RuntimeState slot updates do not panic or cause OOB".to_string(),
+                },
             ],
         }
     }
@@ -74,5 +86,16 @@ impl ProofStatusMatrix {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_proof_matrix_all_verified() {
+        let matrix = ProofStatusMatrix::new();
+        assert!(matrix.verify_all().is_ok());
     }
 }

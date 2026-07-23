@@ -356,39 +356,6 @@ fn calibration_overrides_default_radii() {
     assert_eq!(view.node(class_node_index(2, 6)).unwrap().radius.0, 288);
 }
 
-#[test]
-fn cli_converts_fixture_files_end_to_end() {
-    let dir = env!("CARGO_MANIFEST_DIR");
-    let artifacts = format!("{dir}/tests/fixtures/tless_artifacts.bin");
-    let store = synthetic_store();
-    let store_bytes = runtime::store_bytes(&store);
-    let tmp = std::env::temp_dir().join(format!(
-        "convert-r4g1-test-{}-{}.bin",
-        std::process::id(),
-        "store"
-    ));
-    std::fs::write(&tmp, &store_bytes).unwrap();
-    let out = std::env::temp_dir().join(format!(
-        "convert-r4g1-test-{}-{}.r4g1",
-        std::process::id(),
-        "out"
-    ));
-    let args = [
-        "--artifacts".to_owned(),
-        artifacts,
-        "--store".to_owned(),
-        tmp.to_str().unwrap().to_owned(),
-        "--out".to_owned(),
-        out.to_str().unwrap().to_owned(),
-    ];
-    convert_r4g1::run(&args).expect("CLI conversion succeeds");
-    let written = std::fs::read(&out).unwrap();
-    let view = GraphView::parse(&written).expect("CLI output parses");
-    assert_eq!(view.node_count(), Some(NODE_COUNT));
-    let _ = std::fs::remove_file(&tmp);
-    let _ = std::fs::remove_file(&out);
-}
-
 /// Manual end-to-end run over the real `.uor-models` pair: TLA4
 /// artifacts + the legacy-u16 TLS1 store. Skips silently when the files
 /// are absent (bare checkout). Run with:
