@@ -27,7 +27,7 @@
 
 use super::{
     certify, compare, compiler, convert_r4g1, cover, cover_sweep, observe, observe_text, runtime,
-    scenarios, score,
+    scenarios, score, score_runtime,
     teacher::{BehaviorSource, HuggingFaceLlamaOracle, LlamaOracle, TeacherOracle},
     trace_lane,
 };
@@ -626,6 +626,7 @@ struct ScoreOptions {
     exct_top_x: usize,
     witness_sample: usize,
     smoothing: score::Smoothing,
+    scoring_variant: score_runtime::ScoringVariant,
     output: PathBuf,
 }
 
@@ -643,6 +644,7 @@ fn parse_score_options(args: &[String]) -> Result<ScoreOptions, String> {
         exct_top_x: score::DEFAULT_EXCT_TOP_X,
         witness_sample: score::DEFAULT_WITNESS_SAMPLE,
         smoothing: score::Smoothing::AddOne,
+        scoring_variant: score_runtime::ScoringVariant::ChainTelescoped,
         output: PathBuf::from("score"),
     };
     let mut index = 0usize;
@@ -696,6 +698,20 @@ fn parse_score_options(args: &[String]) -> Result<ScoreOptions, String> {
             }
             "--smoothing" => {
                 options.smoothing = score::Smoothing::parse(value)?;
+            }
+            "--scoring-variant" => {
+                options.scoring_variant = match value.as_str() {
+                    "chain" | "chain-telescoped" => score_runtime::ScoringVariant::ChainTelescoped,
+                    "normalized" | "cloud-size-normalized" => {
+                        score_runtime::ScoringVariant::CloudSizeNormalized
+                    }
+                    "margin" | "margin-weighted" => score_runtime::ScoringVariant::MarginWeighted,
+                    _ => {
+                        return Err(format!(
+                            "invalid --scoring-variant value: {value} (expected chain | normalized | margin)"
+                        ))
+                    }
+                };
             }
             "--out" => options.output = PathBuf::from(value),
             _ => return Err(format!("unknown score option: {flag}")),
@@ -758,6 +774,7 @@ pub fn score_command(args: &[String]) -> Result<(), String> {
         exct_top_x: options.exct_top_x,
         witness_sample: options.witness_sample,
         smoothing: options.smoothing,
+        scoring_variant: options.scoring_variant,
     };
     let (train_positions, held_out_positions) = match &options.stories {
         // D3 natural partition (issue #72): the observation pass records

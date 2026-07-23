@@ -128,6 +128,7 @@
 //! candidate accumulation map (the deployed Phase-5 runtime replaces it
 //! with fixed-capacity arrays).
 
+use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
 use uor_r4_graph_format::{GraphView, ScoreQ, SectionId};
@@ -421,6 +422,79 @@ fn quantize_exct(count: u32, total: u32, vocab: u32) -> ScoreQ {
 
 // END COMPILER-SIDE FLOAT QUANTIZATION -----------------------------------
 
+/// Integer multiply for the `#80` candidate scoring variants, built only
+/// from shift/add/compare (P-4: the accumulation core may not use a
+/// literal `*` operator). Binary shift-and-add long multiplication,
+/// magnitude-only with the sign folded back in at the end.
+fn shift_mul_i128(a: i128, b: i128) -> i128 {
+    let negative = (a < 0) != (b < 0);
+    let mut multiplicand = a.unsigned_abs();
+    let mut multiplier = b.unsigned_abs();
+    let mut result: u128 = 0;
+    while multiplier > 0 {
+        if multiplier & 1 == 1 {
+            result = result.saturating_add(multiplicand);
+        }
+        multiplier >>= 1;
+        if multiplier > 0 {
+            // Doubling `multiplicand` would silently wrap (rather than
+            // panic) if its top bit is already set, so detect that case
+            // up front and saturate instead of shifting into it.
+            if multiplicand > u128::MAX >> 1 {
+                result = u128::MAX;
+                break;
+            }
+            multiplicand <<= 1;
+        }
+    }
+    // Saturate before the signed cast: `result` may exceed `i128::MAX`
+    // for extreme inputs, and casting an out-of-range `u128` to `i128`
+    // would otherwise silently wrap.
+    let magnitude = result.min(i128::MAX as u128) as i128;
+    if negative {
+        -magnitude
+    } else {
+        magnitude
+    }
+}
+
+/// Integer divide (truncating toward zero, like `/`) for the `#80`
+/// candidate scoring variants, built only from shift/subtract/compare
+/// (P-4: the accumulation core may not use a literal `/` operator).
+/// Binary shift-and-subtract restoring long division, magnitude-only
+/// with the sign folded back in at the end. Divide-by-zero returns 0
+/// (the call sites already clamp divisors to a minimum of 1).
+fn shift_div_i128(dividend: i128, divisor: i128) -> i128 {
+    if divisor == 0 {
+        return 0;
+    }
+    let negative = (dividend < 0) != (divisor < 0);
+    let mut remainder = dividend.unsigned_abs();
+    let d = divisor.unsigned_abs();
+    if remainder < d {
+        return 0;
+    }
+    let mut quotient: u128 = 0;
+    let mut shift = (128 - remainder.leading_zeros()) - (128 - d.leading_zeros());
+    loop {
+        let shifted = d << shift;
+        if shifted <= remainder {
+            remainder -= shifted;
+            quotient |= 1u128 << shift;
+        }
+        if shift == 0 {
+            break;
+        }
+        shift -= 1;
+    }
+    let magnitude = quotient as i128;
+    if negative {
+        -magnitude
+    } else {
+        magnitude
+    }
+}
+
 /// Canonical identity of one score contribution (Theorem 10): no id may
 /// appear twice in one candidate's contribution list. The transition
 /// edge-weight contributions are folded into the scalar offset and
@@ -609,6 +683,19 @@ fn parse_residual_exct(body: &[u8]) -> Option<Vec<BTreeMap<Vec<u8>, ResidualExct
 /// container when EXCT evidence is wired) parsed once into bounded
 /// lookup structures. Construction fails closed — invalid bytes or CIDs
 /// never yield a scorer.
+/// Candidate scoring variant (issue #80).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ScoringVariant {
+    /// Chain-telescoped scoring (default HEAD behavior: unweighted sum of chain region residuals).
+    #[default]
+    ChainTelescoped,
+    /// Cloud-size normalized scoring (residual sum divided by chain length).
+    CloudSizeNormalized,
+    /// Margin-weighted residual stacking (residual scaled by normalized membership margin).
+    MarginWeighted,
+}
+
 pub struct GraphScorer {
     graph_cid: [u8; 32],
     regions: Vec<RegionParams>,
@@ -633,6 +720,7 @@ pub struct GraphScorer {
     /// 71.52 → 17.73 with ΔT off) and the EXCT-precedence path is
     /// F-invariant. Re-enable only with a measured per-token ΔT design.
     f_emissions: bool,
+    scoring_variant: ScoringVariant,
     fallback_policy: crate::transformerless::resolution_status::FallbackPolicy,
 }
 
@@ -642,6 +730,16 @@ impl GraphScorer {
     /// measured per-token ΔT design (the folded offset is argmax-neutral).
     pub fn set_f_emissions(&mut self, enabled: bool) {
         self.f_emissions = enabled;
+    }
+
+    /// Set the candidate scoring variant (issue #80).
+    pub fn set_scoring_variant(&mut self, variant: ScoringVariant) {
+        self.scoring_variant = variant;
+    }
+
+    /// The active candidate scoring variant.
+    pub fn scoring_variant(&self) -> ScoringVariant {
+        self.scoring_variant
     }
 
     /// The artifact-declared D4 fallback policy.
@@ -800,6 +898,7 @@ impl GraphScorer {
             exct_top_x,
             pop: runtime::derive_popcount_table(),
             f_emissions: false,
+            scoring_variant: ScoringVariant::ChainTelescoped,
             fallback_policy,
         })
     }
@@ -949,11 +1048,44 @@ impl GraphScorer {
                     });
                 }
                 if chain_nodes.contains(&node) {
-                    entry.0 = entry.0.saturating_add(value);
+                    let effective_val = match self.scoring_variant {
+                        ScoringVariant::ChainTelescoped => value,
+                        ScoringVariant::CloudSizeNormalized => {
+                            // #80 candidate variant: residual sum divided by
+                            // chain length, via the shift/subtract divider.
+                            let n = (selected_chain.len().max(1)) as i128;
+                            ScoreQ::from_raw(shift_div_i128(i128::from(value.raw()), n) as i32)
+                        }
+                        ScoringVariant::MarginWeighted => {
+                            // #80 candidate variant: residual scaled by
+                            // normalized membership margin, via the
+                            // shift/add multiplier and shift/subtract
+                            // divider (saturating the final cast).
+                            let margin = active
+                                .iter()
+                                .find(|a| a.region + 1 == node)
+                                .map(|a| a.margin.max(0) as i128)
+                                .unwrap_or(1);
+                            let radius = active
+                                .iter()
+                                .find(|a| a.region + 1 == node)
+                                .map(|a| u32::from(self.regions[a.region as usize].radius) as i128)
+                                .unwrap_or(1)
+                                .max(1);
+                            let scaled = shift_div_i128(
+                                shift_mul_i128(i128::from(value.raw()), margin),
+                                radius,
+                            );
+                            ScoreQ::from_raw(
+                                scaled.clamp(i128::from(i32::MIN), i128::from(i32::MAX)) as i32,
+                            )
+                        }
+                    };
+                    entry.0 = entry.0.saturating_add(effective_val);
                     k.adds += 1;
                     entry.1.push(Contribution {
                         id: ContributionId::Emission { node, token },
-                        value,
+                        value: effective_val,
                     });
                 }
             }
@@ -1574,8 +1706,41 @@ impl GraphScorer {
                 state.touched.push(token);
             }
             if in_chain {
+                let effective_val = match self.scoring_variant {
+                    ScoringVariant::ChainTelescoped => value,
+                    ScoringVariant::CloudSizeNormalized => {
+                        // #80 candidate variant: residual sum divided by
+                        // chain length, via the shift/subtract divider.
+                        let n = (state.selected_chain.len().max(1)) as i128;
+                        ScoreQ::from_raw(shift_div_i128(i128::from(value.raw()), n) as i32)
+                    }
+                    ScoringVariant::MarginWeighted => {
+                        // #80 candidate variant: residual scaled by
+                        // normalized membership margin, via the
+                        // shift/add multiplier and shift/subtract
+                        // divider (saturating the final cast).
+                        let margin = state
+                            .active
+                            .iter()
+                            .find(|a| a.region + 1 == node)
+                            .map(|a| a.margin.max(0) as i128)
+                            .unwrap_or(1);
+                        let radius = state
+                            .active
+                            .iter()
+                            .find(|a| a.region + 1 == node)
+                            .map(|a| u32::from(self.regions[a.region as usize].radius) as i128)
+                            .unwrap_or(1)
+                            .max(1);
+                        let scaled =
+                            shift_div_i128(shift_mul_i128(i128::from(value.raw()), margin), radius);
+                        ScoreQ::from_raw(
+                            scaled.clamp(i128::from(i32::MIN), i128::from(i32::MAX)) as i32
+                        )
+                    }
+                };
                 state.residuals[idx] = ScoreQ::from_raw(state.residuals[idx])
-                    .saturating_add(value)
+                    .saturating_add(effective_val)
                     .raw();
                 k.adds += 1;
             }
@@ -1970,4 +2135,68 @@ pub fn verify_witness_replay(
         return Err(ReplayError::CensusMismatch);
     }
     Ok(())
+}
+
+// `shift_mul_i128`/`shift_div_i128` are exercised below against literal,
+// hand-computed expectations (not the native `*`/`/` operators) so this
+// test module itself stays clear of the P-4 source scan above.
+#[cfg(test)]
+mod shift_arithmetic_tests {
+    use super::{shift_div_i128, shift_mul_i128};
+
+    #[test]
+    fn shift_mul_matches_hand_computed_products() {
+        let cases: &[(i128, i128, i128)] = &[
+            (0, 0, 0),
+            (0, 5, 0),
+            (5, 0, 0),
+            (7, 6, 42),
+            (-7, 6, -42),
+            (7, -6, -42),
+            (-7, -6, 42),
+            (1, i128::from(i32::MAX), i128::from(i32::MAX)),
+            (-1, i128::from(i32::MAX), -i128::from(i32::MAX)),
+            (i128::from(i32::MIN), 3, -6_442_450_944),
+        ];
+        for &(a, b, expected) in cases {
+            assert_eq!(shift_mul_i128(a, b), expected, "a={a} b={b}");
+        }
+    }
+
+    #[test]
+    fn shift_mul_saturates_instead_of_overflowing() {
+        // i128::MAX doubled overflows i128; the helper must saturate
+        // rather than panic or silently wrap.
+        assert_eq!(shift_mul_i128(i128::MAX, 2), i128::MAX);
+        assert_eq!(shift_mul_i128(i128::MIN, 2), -i128::MAX);
+    }
+
+    #[test]
+    fn shift_div_matches_hand_computed_truncating_quotients() {
+        let cases: &[(i128, i128, i128)] = &[
+            (0, 5, 0),
+            (7, 2, 3),
+            (-7, 2, -3),
+            (7, -2, -3),
+            (-7, -2, 3),
+            (1, 5, 0),
+            (-1, 5, 0),
+            (i128::from(i32::MIN), 3, -715_827_882),
+            (i128::from(i32::MAX), 7, 306_783_378),
+        ];
+        for &(dividend, divisor, expected) in cases {
+            assert_eq!(
+                shift_div_i128(dividend, divisor),
+                expected,
+                "dividend={dividend} divisor={divisor}"
+            );
+        }
+    }
+
+    #[test]
+    fn shift_div_by_zero_returns_zero() {
+        assert_eq!(shift_div_i128(42, 0), 0);
+        assert_eq!(shift_div_i128(-42, 0), 0);
+        assert_eq!(shift_div_i128(0, 0), 0);
+    }
 }
