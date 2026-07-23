@@ -24,6 +24,7 @@
 pub mod bott_fock;
 pub mod cd_space;
 pub mod endomorphism;
+pub mod lie_jordan;
 pub mod teacher;
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -182,6 +183,8 @@ pub mod performance_certificate;
 pub mod predictive_sufficiency;
 // Progress is portable (stderr); only read_file is fs-gated (see progress.rs).
 pub mod progress;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod quantum_cover;
 pub mod reference_state;
 pub mod resolution_status;
 pub mod runtime;
