@@ -64,6 +64,9 @@ jobs:
       - name: cargo nextest run --workspace
         run: cargo nextest run --workspace
 
+      - name: cargo test --test bdd (cucumber; harness=false, not nextest-compatible)
+        run: cargo test --test bdd
+
       - name: cargo test --doc
         run: cargo test --doc --workspace
 

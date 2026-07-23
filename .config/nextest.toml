@@ -1,0 +1,14 @@
+# nextest configuration for uor-r4.
+#
+# The `bdd` integration test uses the cucumber custom harness (harness = false
+# in Cargo.toml), which does not implement the --list interface that nextest
+# requires to enumerate tests.  Exclude it here so nextest does not attempt to
+# list its tests; the CI workflow runs `cargo test --test bdd` as a separate
+# step to keep the BDD scenarios exercised.
+#
+# `binary_id` is a nextest filter-expression predicate that matches a specific
+# test binary by "<package-name>::<test-name>" (see nextest.rs/docs/filter-expressions).
+# Binary-level predicates are evaluated before nextest tries to list tests, so
+# the excluded binary is never invoked with --list.
+[profile.default]
+default-filter = "not binary_id(uor-r4-wasm-router::bdd)"
