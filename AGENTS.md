@@ -78,9 +78,18 @@ audit, and nightly fuzz smoke — keep it green.
 
 ## Process conventions
 
-- **Issues**: assignment = work-in-progress signal (convention documented in
-  `uor_standards/prism/AGENTS.md` §5.4). Assign yourself when starting; close
-  with the commit reference. Milestones mirror plan phases.
+- **Merge workflow (since 2026-07-22): NO direct pushes to `main`.** A ruleset
+  ("main: required checks", id 19597522) protects `main`: all changes land via
+  PR, and the five CI checks (`fmt / clippy / tests / no_std / κ`,
+  `cargo audit`, `fuzz smoke`, `wasm-pack build`, `Gate C trend alarm`) must
+  pass with the branch up to date (strict policy). GitHub's merge-queue rule
+  type was unavailable via the API when this was set up — if the Settings UI
+  toggle gets enabled later, PRs go through the merge queue instead of plain
+  merge; the workflow below is identical either way.
+- **Per issue**: assign yourself (WIP signal) → branch `issue-<n>-<slug>` →
+  work + verify the four gates locally → open PR → merge when checks are
+  green → close the issue with the DoD evidence and the merge commit
+  reference. Milestones mirror plan phases.
 - **PR review** (incl. Copilot-generated): never merge unverified. Run the
   four gates + κ-reproduction on a merge preview first; resolve conflicts
   hunk-by-hunk — whole-file `checkout --theirs/--ours` has silently dropped
