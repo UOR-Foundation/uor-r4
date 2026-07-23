@@ -988,6 +988,222 @@ impl GraphScorer {
             witness,
         })
     }
+
+    /// The pre-redesign Σ-over-cloud scoring formula retained for Gate C
+    /// side-by-side comparison (issue #64). Unlike [`score_candidates`],
+    /// this applies emission residuals from **all** active regions and all
+    /// predicted regions regardless of their refinement relationship; EXCT
+    /// evidence is added on top of the graph score without precedence. This
+    /// is the formula that produced 0.3% top-1 agreement in the measured
+    /// M.V.G. checkpoint (graph scorer without EXCT: 70.47 bits/token; one
+    /// token received +91.7 nats from 13 stacked sibling-subtree lists).
+    /// Not the shipping semantics — [`score_candidates`] is.
+    pub fn score_candidates_legacy(&self, sig: &[u8; SIG_BYTES]) -> Result<ScoreOutcome, String> {
+        let mut k = OpKernel::default();
+
+        // Active cloud A: top-M memberships at each depth (same selection
+        // as Rule 1 — the difference is only in how the evidence is applied).
+        let mut active: Vec<ActiveRegion> = Vec::new();
+        for depth in 1..=self.max_depth {
+            for (region, dist) in binary_memberships(&mut k, &self.pop, &self.regions, depth, sig) {
+                let radius = u32::from(self.regions[region as usize].radius);
+                if dist > radius {
+                    continue;
+                }
+                let margin = radius as i64 - dist as i64;
+                active.push(ActiveRegion {
+                    region,
+                    depth: depth as u8,
+                    distance: dist as u16,
+                    margin: margin.clamp(i16::MIN as i64, i16::MAX as i64) as i16,
+                });
+            }
+        }
+        active.sort_by_key(|a| a.region);
+
+        // Predicted cloud F: same construction as Rule 1.
+        let active_nodes: BTreeSet<u32> = active.iter().map(|a| a.region + 1).collect();
+        let mut best_edge: BTreeMap<u32, EdgeUse> = BTreeMap::new();
+        for &node in &active_nodes {
+            if let Some(edges) = self.forward_by_src.get(&node) {
+                for edge in edges {
+                    k.table_reads += 1;
+                    let better = match best_edge.get(&edge.dst) {
+                        None => true,
+                        Some(current) => {
+                            k.compares += 1;
+                            (edge.score_q, std::cmp::Reverse(edge.edge_id))
+                                > (current.score_q, std::cmp::Reverse(current.edge_id))
+                        }
+                    };
+                    if better {
+                        best_edge.insert(edge.dst, *edge);
+                    }
+                }
+            }
+        }
+        let predicted: Vec<u32> = best_edge.keys().copied().collect();
+        let edges_applied: Vec<EdgeUse> = best_edge.values().copied().collect();
+        let mut transition_offset = ScoreQ::ZERO;
+        for edge in &edges_applied {
+            transition_offset = transition_offset.saturating_add(edge.score_q);
+            k.adds += 1;
+        }
+
+        // OLD FORMULA (the bug): ALL active AND predicted nodes contribute
+        // emission residuals — no chain selection, no sibling-stacking
+        // prevention. Correlated sibling distributions stack here.
+        let mut candidates: BTreeMap<u32, (ScoreQ, Vec<Contribution>)> = BTreeMap::new();
+        let mut contributing: BTreeSet<u32> = active_nodes.clone();
+        for &node in &predicted {
+            contributing.insert(node);
+        }
+        for &node in &contributing {
+            let emissions = &self.emissions[(node - 1) as usize];
+            for (&token, &value) in emissions {
+                k.candidate_scans += 1;
+                k.table_reads += 1;
+                let entry = candidates
+                    .entry(token)
+                    .or_insert_with(|| (ScoreQ::ZERO, Vec::new()));
+                if entry.1.is_empty() {
+                    entry.1.push(Contribution {
+                        id: ContributionId::RootPrior { token },
+                        value: self.root_score(token),
+                    });
+                }
+                // No chain-node filter: every contributing node applies its
+                // emission residual, stacking sibling evidence.
+                entry.0 = entry.0.saturating_add(value);
+                k.adds += 1;
+                entry.1.push(Contribution {
+                    id: ContributionId::Emission { node, token },
+                    value,
+                });
+            }
+        }
+        // Root prior top-B tokens join the candidate set.
+        for &token in &self.root_top {
+            k.table_reads += 1;
+            let entry = candidates
+                .entry(token)
+                .or_insert_with(|| (ScoreQ::ZERO, Vec::new()));
+            if entry.1.is_empty() {
+                entry.1.push(Contribution {
+                    id: ContributionId::RootPrior { token },
+                    value: self.root_score(token),
+                });
+            }
+        }
+
+        // EXCT: added on top of the graph score without D4 precedence —
+        // the exact-context signal is simply another addend, so an
+        // unrelated stacked graph branch can still dominate.
+        let mut exct_probe: Option<ExctProbe> = None;
+        if let (Some(store), Some(art)) = (&self.store, &self.artifacts) {
+            let code = runtime::assign_plain(art, sig);
+            for level in (0..=STAGES).rev() {
+                if let Some(dist) = store[level].get(&code[..level]) {
+                    let total: u32 = dist.values().sum();
+                    let mut ranked: Vec<(u32, u32)> = dist.iter().map(|(&t, &c)| (t, c)).collect();
+                    ranked.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+                    let supported = total >= EXCT_SUPPORT_MIN;
+                    let mut admitted = 0u32;
+                    if supported {
+                        for &(token, count) in ranked.iter().take(self.exct_top_x) {
+                            k.table_reads += 1;
+                            let value = quantize_exct(count, total, self.vocab)
+                                .saturating_sub(self.root_score(token));
+                            let entry = candidates
+                                .entry(token)
+                                .or_insert_with(|| (ScoreQ::ZERO, Vec::new()));
+                            if entry.1.is_empty() {
+                                entry.1.push(Contribution {
+                                    id: ContributionId::RootPrior { token },
+                                    value: self.root_score(token),
+                                });
+                            }
+                            entry.0 = entry.0.saturating_add(value);
+                            k.adds += 1;
+                            entry.1.push(Contribution {
+                                id: ContributionId::ExactContext { token },
+                                value,
+                            });
+                            admitted += 1;
+                        }
+                    }
+                    exct_probe = Some(ExctProbe {
+                        level: level as u8,
+                        key: code[..level].to_vec(),
+                        total,
+                        admitted,
+                    });
+                    break;
+                }
+            }
+        }
+
+        // Final per-candidate scores: apply the baked root prior and the
+        // folded token-independent transition edge weight.
+        let mut ranked_candidates: Vec<(u32, ScoreQ, Vec<Contribution>)> =
+            Vec::with_capacity(candidates.len());
+        for (token, (residual, mut contributions)) in candidates {
+            let with_offset = residual.saturating_add(transition_offset);
+            k.adds += 1;
+            let base = self.root_score(token);
+            let score = base.saturating_add(with_offset);
+            k.adds += 1;
+            contributions.sort_by_key(|c| c.id);
+            ranked_candidates.push((token, score, contributions));
+        }
+        if ranked_candidates.is_empty() {
+            return Err("legacy scoring produced an empty candidate set".to_owned());
+        }
+
+        // Canonical argmax: highest score, then the lowest token id.
+        let mut best_index = 0usize;
+        for (index, &(_, score, _)) in ranked_candidates.iter().enumerate() {
+            k.candidate_scans += 1;
+            k.compares += 1;
+            if score > ranked_candidates[best_index].1 {
+                best_index = index;
+            }
+        }
+        let (selected, selected_score, _) = ranked_candidates[best_index];
+        let selected_contributions = ranked_candidates[best_index].2.clone();
+        let candidate_count = ranked_candidates.len() as u32;
+        let candidates_out: Vec<(u32, ScoreQ)> = ranked_candidates
+            .into_iter()
+            .map(|(token, score, _)| (token, score))
+            .collect();
+
+        let witness = ScoreWitness {
+            graph_cid: self.graph_cid,
+            input_sig: *sig,
+            status: if active.is_empty() {
+                ScoreStatus::Novel
+            } else {
+                ScoreStatus::Graph
+            },
+            active,
+            chain: Vec::new(), // no chain selection in the legacy formula
+            predicted,
+            edges_applied,
+            transition_offset,
+            exct: exct_probe,
+            selected,
+            selected_score,
+            selected_contributions,
+            candidate_count,
+            census: k,
+        };
+        Ok(ScoreOutcome {
+            selected,
+            selected_score,
+            candidates: candidates_out,
+            witness,
+        })
+    }
 }
 
 /// Rejection reasons of the independent witness-replay verifier

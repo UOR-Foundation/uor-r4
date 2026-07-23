@@ -604,6 +604,188 @@ fn theorem_10_overlapping_active_and_predicted_counts_emission_once() {
     verify_witness_replay(&bytes, None, &outcome.witness, 64, 64).expect("replay");
 }
 
+// ------------------------------------------------ sibling stacking fix --
+
+/// The chain-telescoped redesign (issue #64): when two sibling regions at
+/// the same depth share a refinement parent and BOTH are within range
+/// (both are active), only ONE region's covered chain applies emission
+/// residuals. The legacy Σ-over-cloud formula stacks both, producing an
+/// inflated score; the new formula applies exactly one chain.
+#[test]
+fn sibling_stacking_is_prevented_by_chain_selection() {
+    // Three-region artifact: one depth-1 parent region and two sibling
+    // depth-2 children (same parent — same refinement subtree).
+    //
+    //   root (node 0)
+    //     └─ parent (node 1): depth 1, sig ≈ 0x00…
+    //          ├─ sibling A (node 2): depth 2, sig = 0x00… (very close)
+    //          └─ sibling B (node 3): depth 2, sig = 0x0f… (also in range)
+    //
+    // Context = 0x00…: sibling A is the nearest (distance 0), sibling B is
+    // further but still within its radius. Both are active. The old formula
+    // would apply A's AND B's emissions; the new formula picks A's chain
+    // (depth 2 > depth 1; A is closer so higher margin) and applies only it.
+    let regions = vec![
+        RegionParams {
+            // parent region: depth 1
+            node: 1,
+            depth: 1,
+            radius: 100, // very wide: always covered
+            sig: [0x00; SIG_BYTES],
+            parent: None,
+        },
+        RegionParams {
+            // sibling A: depth 2, very close to all-zeros context
+            node: 2,
+            depth: 2,
+            radius: 4,
+            sig: [0x00; SIG_BYTES],
+            parent: Some(0), // parent = region 0 (node 1)
+        },
+        RegionParams {
+            // sibling B: depth 2, also in range (distance 4 ≤ radius 8)
+            node: 3,
+            depth: 2,
+            radius: 8,
+            sig: {
+                let mut s = [0x00u8; SIG_BYTES];
+                s[0] = 0x0F; // flip 4 bits → distance 4, within radius 8
+                s
+            },
+            parent: Some(0), // same parent = region 0 (node 1)
+        },
+    ];
+    let structural = vec![
+        StructuralEdge {
+            src: 0,
+            kind: 0,
+            dst: 1,
+            score_q: ScoreQ::ZERO,
+        }, // root→parent
+        StructuralEdge {
+            src: 1,
+            kind: 0,
+            dst: 2,
+            score_q: ScoreQ::ZERO,
+        }, // parent→A
+        StructuralEdge {
+            src: 1,
+            kind: 0,
+            dst: 3,
+            score_q: ScoreQ::ZERO,
+        }, // parent→B
+    ];
+    let transitions: Vec<score::TransitionEdge> = Vec::new();
+    // Token 99 appears in BOTH sibling lists with positive residuals.
+    // Under the old formula, both stack and inflate the score.
+    // Under the new formula, only sibling A's chain applies.
+    let emissions = EmissionTables {
+        root_prior: [(99u32, 10i32)]
+            .into_iter()
+            .map(|(t, s)| (t, ScoreQ::from_raw(s)))
+            .collect(),
+        root_floor: ScoreQ::from_raw(-7000),
+        root_total: 1000,
+        region_lists: vec![
+            // parent (region 0 / node 1): token 99 not in list
+            vec![],
+            // sibling A (region 1 / node 2): ΔE(A, 99) = +1000
+            vec![(99, ScoreQ::from_raw(1000))],
+            // sibling B (region 2 / node 3): ΔE(B, 99) = +2000
+            vec![(99, ScoreQ::from_raw(2000))],
+        ],
+    };
+    let artifacts = synthetic_compiled();
+    let artifact_container = compiler::artifact_bytes(&artifacts);
+    let store: Store = (0..=STAGES).map(|_| BTreeMap::new()).collect();
+    let tls1 = runtime::store_bytes(&store);
+    let (bytes, _) = score::emit_scored_r4g1(
+        &artifact_container,
+        (b"sib-meta", b"sib-recs"),
+        128,
+        &score::ScoredGraphSections {
+            regions: &regions,
+            structural: &structural,
+            transitions: &transitions,
+            emissions: &emissions,
+            exct_tls1: &tls1,
+        },
+    )
+    .expect("sibling artifact emits");
+
+    let scorer = GraphScorer::from_artifact(&bytes, None, 64, 64).expect("scorer builds");
+    let sig = [0x00u8; SIG_BYTES];
+    let outcome = scorer.score_candidates(&sig).expect("scores");
+
+    // Both siblings should be active (both within range).
+    assert!(
+        outcome.witness.active.len() >= 2,
+        "both sibling regions are active (distances 0 and 4 are both within-radius): {:?}",
+        outcome.witness.active
+    );
+
+    // The redesigned scorer selects exactly ONE chain. The parent (node 1)
+    // and sibling A (node 2) form the deepest chain (depth 2). Sibling B is
+    // also active but its chain (parent + B) is the same depth — A has
+    // higher margin (radius 4 − distance 0 = 4) over B (radius 8 − 4 = 4);
+    // ties break by lower region id, so A wins.
+    let chain = &outcome.witness.chain;
+    assert!(
+        chain.contains(&2),
+        "chain includes sibling A (node 2): {chain:?}"
+    );
+    assert!(
+        !chain.contains(&3),
+        "chain must NOT include sibling B (node 3): {chain:?}"
+    );
+
+    // The emission contribution list for token 99 must contain exactly ONE
+    // emission entry (from sibling A) — no stacking from sibling B.
+    let token_99 = outcome
+        .candidates
+        .iter()
+        .find(|&&(t, _)| t == 99)
+        .expect("token 99 in candidates");
+    let _ = token_99; // score value is checked next
+    let emission_count = outcome
+        .witness
+        .selected_contributions
+        .iter()
+        .filter(|c| matches!(c.id, ContributionId::Emission { .. }))
+        .count();
+    // selected is 99 (highest residual chain A gives it B(99)+ΔE(A,99)=1010)
+    assert_eq!(outcome.selected, 99, "sibling A's token 99 is selected");
+    // S(99) = B(99) + ΔE(parent,99) + ΔE(A,99) = 10 + 0 + 1000 = 1010
+    // (parent's list is empty so only A contributes)
+    assert_eq!(
+        outcome.selected_score,
+        ScoreQ::from_raw(1010),
+        "only the selected chain's residuals apply (no B stacking)"
+    );
+    assert_eq!(
+        emission_count, 1,
+        "exactly one emission contribution for the selected token (no sibling stacking)"
+    );
+
+    // The legacy formula DOES stack both siblings — token 99 should score
+    // B(99) + ΔE(A,99) + ΔE(B,99) = 10 + 1000 + 2000 = 3010.
+    let legacy = scorer.score_candidates_legacy(&sig).expect("legacy scores");
+    let legacy_99 = legacy
+        .candidates
+        .iter()
+        .find(|&&(t, _)| t == 99)
+        .expect("token 99 in legacy candidates");
+    assert_eq!(
+        legacy_99.1,
+        ScoreQ::from_raw(3010),
+        "legacy formula stacks both sibling residuals"
+    );
+    assert!(
+        legacy_99.1 > token_99.1,
+        "legacy inflates token 99 vs the chain-telescoped score"
+    );
+}
+
 // ------------------------------------------------------------ Theorem 6 --
 
 #[test]
