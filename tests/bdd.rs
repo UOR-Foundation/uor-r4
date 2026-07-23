@@ -6,8 +6,13 @@
 
 use cucumber::{given, then, when, World};
 use std::path::Path;
+use uor_r4_core::transformerless::compiler::SIG_BYTES;
+use uor_r4_core::transformerless::cover::Observation;
 use uor_r4_core::transformerless::endomorphism::EndomorphismAlgebra;
 use uor_r4_core::transformerless::lie_jordan::{universal_product_u8, LieJordanSplit};
+use uor_r4_core::transformerless::quantum_cover::{
+    quantum_entropy_gain, DensityOperator, QuantumCoverConfig,
+};
 use uor_r4_wasm_router::r4g1::validate_quality_report;
 use uor_r4_wasm_router::server::{
     is_usable_generated_text, r4g1_unavailable_response, select_synthesis_engine,
@@ -25,6 +30,11 @@ struct R4g1World {
     compile_error: Option<String>,
     quality_report: Option<serde_json::Value>,
     quality_error: Option<String>,
+    density: Option<DensityOperator>,
+    entropy: Option<f32>,
+    observations: Vec<Observation>,
+    entropy_gain: Option<f64>,
+    partition_accepted: Option<bool>,
     // Lie-Jordan fields
     op_matrix: Option<EndomorphismAlgebra>,
     split_result: Option<LieJordanSplit>,
@@ -233,6 +243,92 @@ fn quality_gate_rejects_digression(w: &mut R4g1World) {
         .as_deref()
         .unwrap_or_default()
         .contains("digresses"));
+}
+
+#[given("a maximum-entropy density operator of dimension 8")]
+fn max_entropy_density(w: &mut R4g1World) {
+    w.density = Some(DensityOperator::max_entropy(8).expect("dimension non-zero"));
+}
+
+#[given("a density operator with a pure distribution")]
+fn pure_density(w: &mut R4g1World) {
+    w.density = Some(DensityOperator::from_weights(&[1.0, 0.0, 0.0]).expect("valid weights"));
+}
+
+#[when("its von Neumann entropy is computed")]
+fn compute_entropy(w: &mut R4g1World) {
+    w.entropy = Some(
+        w.density
+            .as_ref()
+            .expect("density operator")
+            .von_neumann_entropy(),
+    );
+}
+
+#[then("the entropy equals the natural logarithm of 8")]
+fn entropy_is_ln_8(w: &mut R4g1World) {
+    let entropy = w.entropy.expect("entropy computed");
+    let expected = 8f32.ln();
+    assert!(
+        (entropy - expected).abs() < 1e-6,
+        "S((1/n)I) = ln n: got {entropy}, want {expected}"
+    );
+}
+
+#[then("the entropy is zero")]
+fn entropy_is_zero(w: &mut R4g1World) {
+    assert_eq!(w.entropy, Some(0.0));
+}
+
+#[given("observations whose halves predict disjoint tokens")]
+fn disjoint_halves_observations(w: &mut R4g1World) {
+    w.observations = (0..100u32)
+        .map(|i| Observation {
+            position: i,
+            sample: [0u8; 32],
+            vector: Vec::new(),
+            sig: [0u8; SIG_BYTES],
+            next: if i < 50 { 1 } else { 2 },
+        })
+        .collect();
+}
+
+#[when("the quantum entropy gain of the aligned split is evaluated")]
+fn aligned_split_gain(w: &mut R4g1World) {
+    let members: Vec<usize> = (0..100).collect();
+    let children = vec![(0..50).collect::<Vec<_>>(), (50..100).collect::<Vec<_>>()];
+    let gain = quantum_entropy_gain(&w.observations, &members, &children);
+    w.entropy_gain = Some(gain);
+    w.partition_accepted = Some(QuantumCoverConfig::default().accept_partition(gain));
+}
+
+#[when("the quantum entropy gain of the interleaved split is evaluated")]
+fn interleaved_split_gain(w: &mut R4g1World) {
+    let members: Vec<usize> = (0..100).collect();
+    let children = vec![
+        (0..100).step_by(2).collect::<Vec<_>>(),
+        (1..100).step_by(2).collect::<Vec<_>>(),
+    ];
+    let gain = quantum_entropy_gain(&w.observations, &members, &children);
+    w.entropy_gain = Some(gain);
+    w.partition_accepted = Some(QuantumCoverConfig::default().accept_partition(gain));
+}
+
+#[then("the gain equals ln 2 and the partition is accepted")]
+fn gain_ln2_accepted(w: &mut R4g1World) {
+    let gain = w.entropy_gain.expect("gain evaluated");
+    assert!(
+        (gain - std::f64::consts::LN_2).abs() < 1e-4,
+        "gain {gain}, want ln 2"
+    );
+    assert_eq!(w.partition_accepted, Some(true));
+}
+
+#[then("the gain is zero and the partition is rejected")]
+fn gain_zero_rejected(w: &mut R4g1World) {
+    let gain = w.entropy_gain.expect("gain evaluated");
+    assert!(gain.abs() < 1e-4, "gain {gain}, want 0");
+    assert_eq!(w.partition_accepted, Some(false));
 }
 
 #[given("a Clifford generator matrix operator in 16D Cayley-Dickson space")]
