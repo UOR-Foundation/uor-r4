@@ -168,10 +168,14 @@ pub fn load_corpus_from(mp: &str, rp: &str) -> Option<Corpus> {
                     rb[anchor_offset + 4..anchor_offset + 8].try_into().unwrap(),
                 ));
                 byte_start.push(u32::from_le_bytes(
-                    rb[anchor_offset + 8..anchor_offset + 12].try_into().unwrap(),
+                    rb[anchor_offset + 8..anchor_offset + 12]
+                        .try_into()
+                        .unwrap(),
                 ));
                 byte_end.push(u32::from_le_bytes(
-                    rb[anchor_offset + 12..anchor_offset + 16].try_into().unwrap(),
+                    rb[anchor_offset + 12..anchor_offset + 16]
+                        .try_into()
+                        .unwrap(),
                 ));
                 continue;
             }

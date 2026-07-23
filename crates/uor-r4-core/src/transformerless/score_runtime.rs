@@ -1074,6 +1074,7 @@ impl GraphScorer {
             if recent_tokens.contains(&token) {
                 // ~-30 nats suppression penalty for repetition control
                 score = score.saturating_add(ScoreQ::from_raw(-2_000_000));
+                k.adds += 1;
             }
             k.adds += 1;
             contributions.sort_by_key(|c| c.id);
@@ -1253,6 +1254,553 @@ impl GraphScorer {
             selected,
             selected_score,
             candidates: ranked_candidates,
+        })
+    }
+}
+
+// ---------------------------------------------------------------------
+// Deployed allocation-free scoring step (Phase 5 deployed path, issue
+// #78). `score_candidates` is the witness-emitting reference: bounded
+// but heap-based. The deployed HTTP adapter needs the same Rule 1 /
+// Rule 2 semantics on fixed-capacity buffers — zero allocation per
+// prediction in steady state (the status-policy allocation census
+// asserts it). `score_step` recomputes a prediction into a caller-owned
+// [`StepState`] and reports the selection, the [`ScoreStatus`], the
+// candidate count, and the op census — no witness, no per-call heap.
+// Parity with `score_candidates` (selected token, score, status,
+// candidate count) is asserted per probe signature by the status-policy
+// probe suite whenever the reference runs the deployed configuration
+// (predicted-cloud emissions off, residualized RX1 exact-context
+// evidence).
+//
+// Two deliberate fail-closed restrictions:
+// - predicted-cloud (F / delta-T) emissions must be off — the deployed
+//   default since the #66 ablation;
+// - exact-context evidence must be the residualized RX1 table. The
+//   legacy raw-TLS1 fallback quantizes at probe time (the one delimited
+//   float site above), which the deployed integer contract forbids;
+//   [`GraphScorer::has_legacy_exct`] lets the adapter detect that case
+//   and keep those artifacts on the reference path.
+// ---------------------------------------------------------------------
+
+/// The membership widening bound of the D4 fallback policy: the deployed
+/// adapter retries a Novel prediction once with the per-depth membership
+/// set widened from [`TOP_M`] to twice that many entries, never more
+/// (threat model: fallback denial-of-service is bounded by manifest
+/// constants).
+pub const WIDENED_TOP_M: usize = TOP_M + TOP_M;
+
+/// Vocabulary bound for the fixed-capacity step buffers. HEAD declares
+/// the vocabulary as u32 and the step state indexes accumulators by
+/// token, so an artifact declaring an outlandish vocabulary would
+/// otherwise force an outsized one-time allocation when the state is
+/// built. Compiler-produced vocabularies are orders of magnitude below
+/// this bound.
+pub const STEP_MAX_VOCAB: u32 = 1 << 22;
+
+/// The fixed-capacity scratch of one deployed scoring step: every
+/// buffer sized once (see [`GraphScorer::step_state`]), epoch-stamped
+/// so per-prediction reuse never re-zeroes a vocabulary-sized buffer.
+/// Construction allocates; [`GraphScorer::score_step`] itself performs
+/// no allocation.
+pub struct StepState {
+    /// Residual accumulators indexed by token; valid where
+    /// `cand_epoch[token] == epoch`.
+    residuals: Vec<i32>,
+    /// Per-token touch stamps (candidate dedup without re-zeroing).
+    cand_epoch: Vec<u64>,
+    /// Candidate tokens in first-touch order.
+    touched: Vec<u32>,
+    /// The active cloud (region, depth, distance, margin).
+    active: Vec<ActiveRegion>,
+    /// Membership scratch: the per-depth top insertion list (one extra
+    /// slot for the insertion transient).
+    member_top: Vec<(u32, u32)>,
+    /// Membership scratch: the within-radius filter output.
+    member_within: Vec<(u32, u32)>,
+    /// Ancestor-path scratch of the covered-chain walk.
+    path: Vec<u32>,
+    /// Current member's covered chain (node ids, root-to-leaf).
+    chain: Vec<u32>,
+    /// The selected covered chain.
+    selected_chain: Vec<u32>,
+    /// Node-in-selected-chain stamps (indexed by node id).
+    chain_epoch: Vec<u64>,
+    /// Contributing-node dedup stamps (indexed by node id).
+    node_epoch: Vec<u64>,
+    /// Current epoch counter.
+    epoch: u64,
+    /// Largest membership width this state supports.
+    max_top_m: usize,
+}
+
+/// The outcome of one deployed scoring step: the selection and status
+/// of [`GraphScorer::score_candidates`] without the witness.
+#[derive(Debug, Clone)]
+pub struct StepOutcome {
+    /// Selected token (canonical tie-break: highest score, lowest id).
+    pub selected: u32,
+    /// Its final score.
+    pub selected_score: ScoreQ,
+    /// Which rule produced the selection.
+    pub status: ScoreStatus,
+    /// Size of the scored candidate set.
+    pub candidate_count: u32,
+    /// The op census of this step.
+    pub census: OpKernel,
+}
+
+/// Advance the step state's epoch, re-zeroing the stamp buffers on the
+/// (practically unreachable) u64 wrap so a stale stamp can never alias
+/// the fresh epoch.
+fn step_next_epoch(state: &mut StepState) -> u64 {
+    state.epoch = state.epoch.wrapping_add(1);
+    if state.epoch == 0 {
+        state.cand_epoch.fill(0);
+        state.chain_epoch.fill(0);
+        state.node_epoch.fill(0);
+        state.epoch = 1;
+    }
+    state.epoch
+}
+
+/// Allocation-free class-code assignment for the deployed step's
+/// exact-context probe: the nearest class per stage (ties to the lowest
+/// class id, by strict-`<` replacement over ascending class ids) —
+/// exactly the `code` half of `runtime::assign_memberships_plain`,
+/// without its heap-built membership lists.
+fn assign_code_plain(art: &Compiled, sig: &[u8; SIG_BYTES]) -> [u8; STAGES] {
+    let mut code = [0u8; STAGES];
+    for (st_code, sigs) in code.iter_mut().zip(art.class_sigs.iter()) {
+        let mut best = u32::MAX;
+        let mut best_class = 0u8;
+        for (kk, cs) in sigs.chunks_exact(SIG_BYTES).enumerate() {
+            let mut dist = 0u32;
+            for (&x, &y) in sig.iter().zip(cs.iter()) {
+                dist += (x ^ y).count_ones();
+            }
+            if dist < best {
+                best = dist;
+                best_class = kk as u8;
+            }
+        }
+        *st_code = best_class;
+    }
+    code
+}
+
+impl GraphScorer {
+    /// Allocation-free form of [`binary_memberships`] with a
+    /// caller-chosen membership width: identical insertion order, tie
+    /// rule, within-radius filter, and nearest-region fallback, writing
+    /// the result into caller-owned scratch. `member_top` needs room
+    /// for `top_m + 1` entries (the insertion transient); `out`
+    /// receives at most `top_m`.
+    fn memberships_into(
+        &self,
+        k: &mut OpKernel,
+        depth: usize,
+        sig: &[u8; SIG_BYTES],
+        top_m: usize,
+        member_top: &mut Vec<(u32, u32)>,
+        out: &mut Vec<(u32, u32)>,
+    ) {
+        member_top.clear();
+        out.clear();
+        for region in &self.regions {
+            if region.depth as usize != depth {
+                continue;
+            }
+            let dist = hamming_counted(k, &self.pop, sig, &region.sig);
+            let mut inserted = false;
+            for (idx, &(_, d0)) in member_top.iter().enumerate() {
+                k.compares += 1;
+                if dist < d0 {
+                    member_top.insert(idx, (region.region_id(), dist));
+                    inserted = true;
+                    break;
+                }
+            }
+            if !inserted && member_top.len() < top_m {
+                member_top.push((region.region_id(), dist));
+            }
+            if inserted && member_top.len() > top_m {
+                member_top.pop();
+            }
+        }
+        for &(id, dist) in member_top.iter() {
+            k.compares += 1;
+            if dist <= u32::from(self.regions[id as usize].radius) {
+                out.push((id, dist));
+            }
+        }
+        if out.is_empty() {
+            if let Some(&nearest) = member_top.first() {
+                // Nearest-region fallback (the backoff floor).
+                out.push(nearest);
+            }
+        }
+    }
+
+    /// Allocation-free form of [`covered_chain`]: the contiguous covered
+    /// refinement prefix of `region` (node ids, root-to-leaf), written
+    /// into caller-owned scratch. `path` and `out` are bounded by the
+    /// region count (the malformed-cycle guard of the reference); a
+    /// parent index outside the region table terminates the walk, which
+    /// only malformed artifacts can trigger.
+    fn covered_chain_into(
+        &self,
+        k: &mut OpKernel,
+        region: u32,
+        sig: &[u8; SIG_BYTES],
+        path: &mut Vec<u32>,
+        out: &mut Vec<u32>,
+    ) {
+        path.clear();
+        out.clear();
+        let mut current = Some(region);
+        while let Some(id) = current {
+            if path.len() >= self.regions.len() {
+                break;
+            }
+            let Some(params) = self.regions.get(id as usize) else {
+                break;
+            };
+            path.push(id);
+            current = params.parent;
+        }
+        for &id in path.iter().rev() {
+            let Some(params) = self.regions.get(id as usize) else {
+                break;
+            };
+            let dist = hamming_counted(k, &self.pop, sig, &params.sig);
+            k.compares += 1;
+            if dist <= u32::from(params.radius) {
+                out.push(id + 1); // region id -> node id
+            } else {
+                break;
+            }
+        }
+    }
+
+    /// True when exact-context evidence is wired through the legacy raw
+    /// TLS1 store (probe-time quantization) rather than the residualized
+    /// RX1 table. The deployed step rejects such scorers (fail closed);
+    /// the adapter keeps those artifacts on the reference path.
+    pub fn has_legacy_exct(&self) -> bool {
+        self.store.is_some()
+    }
+
+    /// Allocate the fixed-capacity step state for this scorer.
+    /// Construction is the one allocating step; every later
+    /// [`GraphScorer::score_step`] call with the state is
+    /// allocation-free.
+    pub fn step_state(&self, max_top_m: usize) -> Result<StepState, String> {
+        if self.vocab == 0 || self.vocab > STEP_MAX_VOCAB {
+            return Err(format!(
+                "HEAD vocabulary {} outside the deployed step bound {}",
+                self.vocab, STEP_MAX_VOCAB
+            ));
+        }
+        if max_top_m == 0 {
+            return Err("step state requires a nonzero membership bound".to_owned());
+        }
+        let vocab = self.vocab as usize;
+        let depth_slots = self.max_depth.max(1);
+        let mut active_cap = 0usize;
+        let mut i = 0usize;
+        while i < max_top_m {
+            active_cap = active_cap.saturating_add(depth_slots);
+            i += 1;
+        }
+        let region_count = self.regions.len();
+        Ok(StepState {
+            residuals: vec![0i32; vocab],
+            cand_epoch: vec![0u64; vocab],
+            touched: Vec::with_capacity(vocab),
+            active: Vec::with_capacity(active_cap),
+            member_top: Vec::with_capacity(max_top_m + 1),
+            member_within: Vec::with_capacity(max_top_m),
+            path: Vec::with_capacity(region_count),
+            chain: Vec::with_capacity(region_count),
+            selected_chain: Vec::with_capacity(region_count),
+            chain_epoch: vec![0u64; region_count + 1],
+            node_epoch: vec![0u64; region_count + 1],
+            epoch: 0,
+            max_top_m,
+        })
+    }
+
+    /// Accumulate one contributing node's emission list into the
+    /// candidate buffers (Rule 1): the node contributes candidate tokens
+    /// exactly once per epoch; its residual scores apply only when the
+    /// node sits on the selected covered chain. Fails closed on an
+    /// emission token outside the HEAD vocabulary (artifact integrity).
+    fn step_accumulate_node(
+        &self,
+        node: u32,
+        epoch: u64,
+        state: &mut StepState,
+        k: &mut OpKernel,
+    ) -> Result<(), String> {
+        if state.node_epoch[node as usize] == epoch {
+            return Ok(());
+        }
+        state.node_epoch[node as usize] = epoch;
+        let in_chain = state.chain_epoch[node as usize] == epoch;
+        let Some(emissions) = self.emissions.get((node - 1) as usize) else {
+            return Err("active node outside the emission tables".to_owned());
+        };
+        for (&token, &value) in emissions {
+            k.candidate_scans += 1;
+            k.table_reads += 1;
+            let idx = token as usize;
+            if idx >= state.residuals.len() {
+                return Err("emission token outside the HEAD vocabulary".to_owned());
+            }
+            if state.cand_epoch[idx] != epoch {
+                state.cand_epoch[idx] = epoch;
+                state.residuals[idx] = 0;
+                state.touched.push(token);
+            }
+            if in_chain {
+                state.residuals[idx] = ScoreQ::from_raw(state.residuals[idx])
+                    .saturating_add(value)
+                    .raw();
+                k.adds += 1;
+            }
+        }
+        Ok(())
+    }
+
+    /// One deployed scoring step over `sig` with per-depth membership
+    /// width `top_m` (bounded by the state's limit; the adapter uses
+    /// [`TOP_M`] and, on a Novel first pass, [`WIDENED_TOP_M`]): the
+    /// Rule 1 / Rule 2 semantics of [`GraphScorer::score_candidates`]
+    /// recomputed on fixed-capacity buffers — integer-only, no per-call
+    /// allocation. Selection, score, status, and candidate count match
+    /// the reference exactly in the deployed configuration
+    /// (predicted-cloud emissions off, residualized RX1 exact-context
+    /// evidence or none); the status-policy probe suite asserts that
+    /// parity per probe signature.
+    pub fn score_step(
+        &self,
+        sig: &[u8; SIG_BYTES],
+        top_m: usize,
+        state: &mut StepState,
+    ) -> Result<StepOutcome, String> {
+        self.score_step_with_recent(sig, top_m, state, &[])
+    }
+
+    /// Deployed scoring step with the bounded repetition penalty applied to
+    /// candidates present in `recent_tokens`.
+    pub fn score_step_with_recent(
+        &self,
+        sig: &[u8; SIG_BYTES],
+        top_m: usize,
+        state: &mut StepState,
+        recent_tokens: &[u32],
+    ) -> Result<StepOutcome, String> {
+        if top_m == 0 || top_m > state.max_top_m {
+            return Err(format!(
+                "membership width {top_m} outside the step state bound {}",
+                state.max_top_m
+            ));
+        }
+        if self.f_emissions {
+            return Err(
+                "deployed step requires predicted-cloud emissions disabled (#66 ablation)"
+                    .to_owned(),
+            );
+        }
+        if self.store.is_some() {
+            return Err(
+                "deployed step requires residualized RX1 exact-context evidence; legacy TLS1 store present"
+                    .to_owned(),
+            );
+        }
+        if state.residuals.len() != self.vocab as usize {
+            return Err("step state does not match this scorer".to_owned());
+        }
+        let mut k = OpKernel::default();
+        // Fresh epoch: stale stamps compare older and are overwritten on
+        // first touch, so no vocabulary-sized buffer is re-zeroed.
+        let epoch = step_next_epoch(state);
+        state.touched.clear();
+        state.active.clear();
+        state.selected_chain.clear();
+
+        // Active cloud A (module docs): the per-depth membership lists,
+        // nearest-region fallback included.
+        for depth in 1..=self.max_depth {
+            self.memberships_into(
+                &mut k,
+                depth,
+                sig,
+                top_m,
+                &mut state.member_top,
+                &mut state.member_within,
+            );
+            for &(region, dist) in state.member_within.iter() {
+                let radius = u32::from(self.regions[region as usize].radius);
+                let margin = radius as i64 - dist as i64;
+                state.active.push(ActiveRegion {
+                    region,
+                    depth: depth as u8,
+                    distance: dist as u16,
+                    margin: margin.clamp(i16::MIN as i64, i16::MAX as i64) as i16,
+                });
+            }
+        }
+        state.active.sort_unstable_by_key(|a| a.region);
+
+        // Deepest covered refinement chain (ties: higher margin, then
+        // the lowest region id) — the reference selection loop exactly.
+        let mut selected_chain_region = u32::MAX;
+        let mut selected_chain_margin = i16::MIN;
+        for idx in 0..state.active.len() {
+            let member = state.active[idx];
+            self.covered_chain_into(
+                &mut k,
+                member.region,
+                sig,
+                &mut state.path,
+                &mut state.chain,
+            );
+            let better = state.chain.len() > state.selected_chain.len()
+                || (state.chain.len() == state.selected_chain.len()
+                    && (member.margin > selected_chain_margin
+                        || (member.margin == selected_chain_margin
+                            && member.region < selected_chain_region)));
+            if better {
+                state.selected_chain.clear();
+                state.selected_chain.extend_from_slice(&state.chain);
+                selected_chain_region = member.region;
+                selected_chain_margin = member.margin;
+            }
+        }
+
+        // Candidate accumulation: active and chain nodes contribute
+        // tokens; only the selected chain's nodes apply their emission
+        // residuals (Rule 1 chain telescoping). Predicted-cloud
+        // emissions are off in the deployed configuration, so the
+        // folded transition offset is zero (reference parity).
+        for &node in state.selected_chain.iter() {
+            state.chain_epoch[node as usize] = epoch;
+        }
+        for idx in 0..state.active.len() {
+            let node = state.active[idx].region + 1;
+            self.step_accumulate_node(node, epoch, state, &mut k)?;
+        }
+        for idx in 0..state.selected_chain.len() {
+            let node = state.selected_chain[idx];
+            self.step_accumulate_node(node, epoch, state, &mut k)?;
+        }
+        // Root prior top-B tokens join the candidate set.
+        for &token in &self.root_top {
+            k.table_reads += 1;
+            let idx = token as usize;
+            if idx >= state.residuals.len() {
+                return Err("root-prior token outside the HEAD vocabulary".to_owned());
+            }
+            if state.cand_epoch[idx] != epoch {
+                state.cand_epoch[idx] = epoch;
+                state.residuals[idx] = 0;
+                state.touched.push(token);
+            }
+        }
+
+        // Rule 2 (D4 EXCT precedence): the deepest-populated-prefix
+        // probe over the residualized table; total evidence >=
+        // EXCT_SUPPORT_MIN discards the graph candidate sets and ranks
+        // only the admitted local entries.
+        let mut exact_context = false;
+        if let (Some(art), Some(residual_exct)) = (&self.artifacts, &self.residual_exct) {
+            let code = assign_code_plain(art, sig);
+            for level in (0..=STAGES).rev() {
+                if let Some(context) = residual_exct[level].get(&code[..level]) {
+                    let supported = context.total >= EXCT_SUPPORT_MIN;
+                    let admitted = if supported {
+                        context.entries.len().min(self.exct_top_x)
+                    } else {
+                        0
+                    };
+                    if admitted > 0 {
+                        // Reset the candidate set to the admitted local
+                        // entries under a fresh epoch.
+                        let epoch = step_next_epoch(state);
+                        state.touched.clear();
+                        for (&token, &value) in context.entries.iter().take(self.exct_top_x) {
+                            k.table_reads += 1;
+                            let idx = token as usize;
+                            if idx >= state.residuals.len() {
+                                return Err(
+                                    "exact-context token outside the HEAD vocabulary".to_owned()
+                                );
+                            }
+                            if state.cand_epoch[idx] != epoch {
+                                state.cand_epoch[idx] = epoch;
+                                state.residuals[idx] = 0;
+                                state.touched.push(token);
+                            }
+                            state.residuals[idx] = ScoreQ::from_raw(state.residuals[idx])
+                                .saturating_add(value)
+                                .raw();
+                            k.adds += 1;
+                        }
+                        exact_context = true;
+                    }
+                    break;
+                }
+            }
+        }
+
+        if state.touched.is_empty() {
+            return Err("scoring produced an empty candidate set".to_owned());
+        }
+        // Final per-candidate scores: the baked root prior plus the
+        // accumulated residual; canonical argmax (highest score, then
+        // the lowest token id) — the ascending-strict-`>` reference
+        // scan computed order-free.
+        let mut best = state.touched[0];
+        let mut best_score = self
+            .root_score(best)
+            .saturating_add(ScoreQ::from_raw(state.residuals[best as usize]));
+        if recent_tokens.contains(&best) {
+            best_score = best_score.saturating_add(ScoreQ::from_raw(-2_000_000));
+            k.adds += 1;
+        }
+        k.adds += 1;
+        for &token in state.touched.iter().skip(1) {
+            k.candidate_scans += 1;
+            k.compares += 1;
+            let mut score = self
+                .root_score(token)
+                .saturating_add(ScoreQ::from_raw(state.residuals[token as usize]));
+            if recent_tokens.contains(&token) {
+                score = score.saturating_add(ScoreQ::from_raw(-2_000_000));
+                k.adds += 1;
+            }
+            k.adds += 1;
+            if score > best_score || (score == best_score && token < best) {
+                best = token;
+                best_score = score;
+            }
+        }
+
+        let status = if exact_context {
+            ScoreStatus::ExactContext
+        } else if state.selected_chain.is_empty() {
+            ScoreStatus::Novel
+        } else {
+            ScoreStatus::Graph
+        };
+        Ok(StepOutcome {
+            selected: best,
+            selected_score: best_score,
+            status,
+            candidate_count: state.touched.len() as u32,
+            census: k,
         })
     }
 }

@@ -73,7 +73,6 @@ impl FallbackAction {
     }
 }
 
-
 impl Default for FallbackPolicy {
     /// Default policy per Decision D4: consult EXCT for Supported/Boundary, and abstain on BackedOff/Novel/Contradictory.
     fn default() -> Self {
