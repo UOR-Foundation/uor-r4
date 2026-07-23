@@ -47,7 +47,7 @@ impl ScoringVariant {
         match self {
             ScoringVariant::ChainTelescoped => value,
             ScoringVariant::CloudSizeNormalized => {
-                let n = i128::from(chain_len.max(1) as u64);
+                let n = chain_len.max(1) as i128;
                 let scaled = i128::from(value.raw()) / n;
                 ScoreQ::from_raw(saturate_i32(scaled))
             }
