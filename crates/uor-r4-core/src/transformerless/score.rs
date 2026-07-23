@@ -1096,8 +1096,113 @@ pub struct GateCOutcome {
     pub rule12_per_status: Rule12PerStatus,
     pub win_loss: WinLossReport,
     pub candidate_recall: CandidateRecall,
+    pub repetition_rate_rule12: f64,
+    pub repetition_rate_baseline: f64,
     pub witness_replays: usize,
     pub witness_replay_failures: usize,
+}
+
+fn generate_greedy_repetition_rate(
+    scorer: &GraphScorer,
+    artifacts: &compiler::Compiled,
+    rotations: &[usize; compiler::WINDOW + 1],
+    seed: &[u32],
+    tokens_to_generate: usize,
+) -> f64 {
+    let mut window = [0u32; compiler::WINDOW];
+    let mut recent_tokens = std::collections::VecDeque::with_capacity(32);
+    let seed_len = seed.len();
+
+    let w_len = seed_len.min(compiler::WINDOW);
+    window[..w_len].copy_from_slice(&seed[seed_len - w_len..]);
+
+    let r_len = seed_len.min(32);
+    for &t in &seed[seed_len - r_len..] {
+        recent_tokens.push_back(t);
+    }
+
+    let mut recent_array = [0u32; 32];
+    let mut duplicate_count = 0;
+
+    for _ in 0..tokens_to_generate {
+        let bundle = runtime::bundle_window_plain(artifacts, rotations, &window[..w_len]);
+        let sig = runtime::sig_plain(artifacts, &bundle);
+
+        let recent_len = recent_tokens.len();
+        for (i, &t) in recent_tokens.iter().enumerate() {
+            recent_array[i] = t;
+        }
+        let outcome = scorer
+            .score_candidates(&sig, &recent_array[..recent_len])
+            .unwrap();
+        let token = outcome.selected;
+
+        if recent_tokens.contains(&token) {
+            duplicate_count += 1;
+        }
+
+        if w_len < compiler::WINDOW {
+            window[w_len] = token;
+        } else {
+            window.copy_within(1.., 0);
+            window[compiler::WINDOW - 1] = token;
+        }
+
+        if recent_tokens.len() == 32 {
+            recent_tokens.pop_front();
+        }
+        recent_tokens.push_back(token);
+    }
+
+    duplicate_count as f64 / tokens_to_generate as f64
+}
+
+fn baseline_greedy_repetition_rate(
+    store: &Store,
+    artifacts: &compiler::Compiled,
+    rotations: &[usize; compiler::WINDOW + 1],
+    seed: &[u32],
+    tokens_to_generate: usize,
+) -> f64 {
+    let mut window = [0u32; compiler::WINDOW];
+    let mut recent_tokens = std::collections::VecDeque::with_capacity(32);
+    let seed_len = seed.len();
+
+    let w_len = seed_len.min(compiler::WINDOW);
+    window[..w_len].copy_from_slice(&seed[seed_len - w_len..]);
+
+    let r_len = seed_len.min(32);
+    for &t in &seed[seed_len - r_len..] {
+        recent_tokens.push_back(t);
+    }
+
+    let mut duplicate_count = 0;
+
+    for _ in 0..tokens_to_generate {
+        let bundle = runtime::bundle_window_plain(artifacts, rotations, &window[..w_len]);
+        let sig = runtime::sig_plain(artifacts, &bundle);
+        let code = runtime::assign_plain(artifacts, &sig);
+        let p = runtime::predict_witness_plain(store, &code);
+        let token = p.token;
+
+        if recent_tokens.contains(&token) {
+            duplicate_count += 1;
+        }
+
+        if w_len < compiler::WINDOW {
+            window[w_len] = token;
+        } else {
+            window.copy_within(1.., 0);
+            window[compiler::WINDOW - 1] = token;
+        }
+
+        if recent_tokens.len() == 32 {
+            recent_tokens.pop_front();
+        }
+        recent_tokens.push_back(token);
+    }
+
+    duplicate_count as f64 / tokens_to_generate as f64
 }
 
 fn accumulate_win_loss(win_loss: &mut WinLoss, scorer_hit: bool, other_hit: bool) {
@@ -1176,10 +1281,10 @@ pub fn evaluate_gate_c(
         let code = runtime::assign_plain(artifacts, &observation.sig);
 
         let legacy = scorer_with_exct.score_candidates_legacy(&observation.sig)?;
-        let rule1 = scorer_no_exct.score_candidates(&observation.sig)?;
-        let rule12 = scorer_with_exct.score_candidates(&observation.sig)?;
-        let rule1_no_f = scorer_no_exct_no_f.score_candidates(&observation.sig)?;
-        let rule12_no_f = scorer_with_exct_no_f.score_candidates(&observation.sig)?;
+        let rule1 = scorer_no_exct.score_candidates(&observation.sig, &[])?;
+        let rule12 = scorer_with_exct.score_candidates(&observation.sig, &[])?;
+        let rule1_no_f = scorer_no_exct_no_f.score_candidates(&observation.sig, &[])?;
+        let rule12_no_f = scorer_with_exct_no_f.score_candidates(&observation.sig, &[])?;
         let baseline = runtime::predict_witness_plain(store, &code);
 
         let legacy_hit = legacy.selected == teacher_argmax;
@@ -1303,6 +1408,35 @@ pub fn evaluate_gate_c(
         rule12_top1: recall_rule12_top1 as f64 / nf,
         rule12_top3: recall_rule12_top3 as f64 / nf,
     };
+
+    let rotations = runtime::derive_rotations();
+    let mut graph_rep_sum = 0.0;
+    let mut baseline_rep_sum = 0.0;
+    let mut probe_count = 0;
+
+    for obs in held_out.iter() {
+        let pos = obs.position as usize;
+        if pos >= 32 && corpus.story[pos] == corpus.story[pos - 32] {
+            let seed = &corpus.input[pos - 32..pos];
+            graph_rep_sum +=
+                generate_greedy_repetition_rate(&scorer_with_exct, artifacts, &rotations, seed, 64);
+            baseline_rep_sum +=
+                baseline_greedy_repetition_rate(store, artifacts, &rotations, seed, 64);
+            probe_count += 1;
+            if probe_count == 5 {
+                break;
+            }
+        }
+    }
+
+    if probe_count > 0 {
+        outcome.repetition_rate_rule12 = graph_rep_sum / probe_count as f64;
+        outcome.repetition_rate_baseline = baseline_rep_sum / probe_count as f64;
+    } else {
+        outcome.repetition_rate_rule12 = 0.0;
+        outcome.repetition_rate_baseline = 0.0;
+    }
+
     Ok(outcome)
 }
 
@@ -1359,6 +1493,8 @@ pub struct ScoreReportGraph {
     pub emission_list_entries: u32,
     pub exct_bytes: u32,
     pub artifact_bytes: usize,
+    pub graph_repetition_rate: f64,
+    pub baseline_repetition_rate: f64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1404,6 +1540,8 @@ pub fn build_score_report(
             emission_list_entries: info.emission_list_entries,
             exct_bytes: info.exct_bytes,
             artifact_bytes: info.artifact_bytes,
+            graph_repetition_rate: gate_c.repetition_rate_rule12,
+            baseline_repetition_rate: gate_c.repetition_rate_baseline,
         },
         gate_c,
         quantization: ScoreReportQuantization {

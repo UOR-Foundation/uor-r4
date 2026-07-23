@@ -661,7 +661,9 @@ impl GraphScorer {
         let view = GraphView::parse(r4g1).map_err(|e| format!("invalid R4G1: {e}"))?;
         view.verify_cids().map_err(|e| format!("bad CIDs: {e}"))?;
         let head = view.head().ok_or("artifact carries no HEAD section")?;
-        let fallback_policy = crate::transformerless::resolution_status::FallbackPolicy::from_bytes(head.fallback_policies());
+        let fallback_policy = crate::transformerless::resolution_status::FallbackPolicy::from_bytes(
+            head.fallback_policies(),
+        );
         let graph_cid = view.header().artifact_cid.0;
         let regions = regions_from_view(&view)?;
         let max_depth = regions.iter().map(|r| r.depth as usize).max().unwrap_or(0);
@@ -827,7 +829,11 @@ impl GraphScorer {
     /// tie-break; emit the bounded witness. The arithmetic of this
     /// function is integer-only. Legacy raw TLS1 EXCT has a delimited
     /// certifier-side float fallback; deployed RX1 EXCT is already quantized.
-    pub fn score_candidates(&self, sig: &[u8; SIG_BYTES]) -> Result<ScoreOutcome, String> {
+    pub fn score_candidates(
+        &self,
+        sig: &[u8; SIG_BYTES],
+        recent_tokens: &[u32],
+    ) -> Result<ScoreOutcome, String> {
         let mut k = OpKernel::default();
 
         // Active cloud A: top-M memberships at each depth — exactly the
@@ -1057,13 +1063,18 @@ impl GraphScorer {
         // Final per-candidate scores: apply the baked root prior and the
         // folded token-independent transition edge weight (module docs:
         // ΔT(m,v) = w_m + ΔE(m,v)); canonicalize contribution order.
+        // Also apply bounded integer repetition control via recent_tokens.
         let mut ranked_candidates: Vec<(u32, ScoreQ, Vec<Contribution>)> =
             Vec::with_capacity(candidates.len());
         for (token, (residual, mut contributions)) in candidates {
             let with_offset = residual.saturating_add(transition_offset);
             k.adds += 1;
             let base = self.root_score(token);
-            let score = base.saturating_add(with_offset);
+            let mut score = base.saturating_add(with_offset);
+            if recent_tokens.contains(&token) {
+                // ~-30 nats suppression penalty for repetition control
+                score = score.saturating_add(ScoreQ::from_raw(-2_000_000));
+            }
             k.adds += 1;
             contributions.sort_by_key(|c| c.id);
             ranked_candidates.push((token, score, contributions));
@@ -1362,7 +1373,7 @@ pub fn verify_witness_replay(
         return Err(ReplayError::GraphCidMismatch);
     }
     let outcome = scorer
-        .score_candidates(&witness.input_sig)
+        .score_candidates(&witness.input_sig, &[])
         .map_err(ReplayError::Artifact)?;
     let recomputed = &outcome.witness;
 
