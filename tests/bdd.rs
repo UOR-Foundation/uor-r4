@@ -50,6 +50,35 @@ struct R4g1World {
     u8_a: u8,
     u8_b: u8,
     u8_res: u8,
+    // Rate-Distortion Compression fields (#136)
+    rd_corpus_id: String,
+    rd_tiers: Vec<usize>,
+    rd_report: Option<uor_r4_graph_compiler::rate_distortion_compression::RateDistortionReport>,
+    rd_error: Option<uor_r4_graph_compiler::rate_distortion_compression::CompressionAnalysisError>,
+    // Graph Invariant Ownership fields (#135)
+    inv_matrix: Vec<uor_r4_graph_format::invariant_ownership::InvariantOwnershipEntry>,
+    inv_nodes: usize,
+    inv_max_degree: usize,
+    inv_degree_limit: usize,
+    inv_edges: Vec<(u32, u32)>,
+    inv_evidence: Vec<u32>,
+    inv_res:
+        Option<Result<usize, uor_r4_graph_format::invariant_ownership::InvariantValidationError>>,
+    // Separate Semantic Emission fields (#134)
+    decouple_transitions: Vec<(
+        &'static str,
+        &'static str,
+        &'static str,
+        f32,
+        uor_r4_graph_compiler::semantic_emission_decoupling::SemanticStatus,
+    )>,
+    decouple_trace: Option<uor_r4_graph_compiler::semantic_emission_decoupling::SemanticStateTrace>,
+    decouple_emission:
+        Option<uor_r4_graph_compiler::semantic_emission_decoupling::LanguageEmissionResult>,
+    decouple_cert:
+        Option<uor_r4_graph_compiler::semantic_emission_decoupling::DecoupledCertificationReport>,
+    decouple_error:
+        Option<uor_r4_graph_compiler::semantic_emission_decoupling::SemanticEmissionError>,
     // Formal Monograph fields (#133)
     monograph_text: String,
     monograph_report: Option<uor_r4_graph_compiler::monograph::MonographValidationReport>,
@@ -523,6 +552,263 @@ fn u8_kernel_zero_floats(_w: &mut R4g1World) {
     let kernel_code = &source[kernel_start..];
     assert!(!kernel_code.contains("f32") && !kernel_code.contains("f64"));
     assert!(!kernel_code.contains(" * ") && !kernel_code.contains(" / "));
+}
+
+// =========================================================================
+// Rate-Distortion Compression BDD Steps (#136)
+// =========================================================================
+use uor_r4_graph_compiler::rate_distortion_compression::{
+    CompressionAnalysisError, SemanticCompressionAnalyzer,
+};
+
+#[given("a pinned mini-corpus \"pinned_mini_corpus_01\" and depth tiers [1, 2, 4, 8]")]
+fn bdd_rd_mini_corpus_given(w: &mut R4g1World) {
+    w.rd_corpus_id = "pinned_mini_corpus_01".to_string();
+    w.rd_tiers = vec![1, 2, 4, 8];
+}
+
+#[when("rate-distortion analysis is executed by the semantic compression analyzer")]
+fn bdd_rd_execute_analysis(w: &mut R4g1World) {
+    let res = SemanticCompressionAnalyzer::analyze_rate_distortion(&w.rd_corpus_id, &w.rd_tiers);
+    match res {
+        Ok(rep) => w.rd_report = Some(rep),
+        Err(err) => w.rd_error = Some(err),
+    }
+}
+
+#[then("a deterministic RateDistortionReport is produced containing 4 depth evaluation points")]
+fn bdd_rd_report_check(w: &mut R4g1World) {
+    let rep = w.rd_report.as_ref().expect("rd report");
+    assert_eq!(rep.points.len(), 4);
+    assert_eq!(rep.corpus_id, "pinned_mini_corpus_01");
+}
+
+#[then("teacher KL divergence reduces monotonically as projection depth increases")]
+fn bdd_rd_kl_monotonic_check(w: &mut R4g1World) {
+    let rep = w.rd_report.as_ref().expect("rd report");
+    for i in 0..(rep.points.len() - 1) {
+        assert!(
+            rep.points[i].distortion.teacher_kl_divergence
+                > rep.points[i + 1].distortion.teacher_kl_divergence,
+            "KL divergence at index {i} must be greater than index {}",
+            i + 1
+        );
+    }
+}
+
+#[given("a rate-distortion evaluation report for depth tiers [1, 2, 4, 8]")]
+fn bdd_rd_report_given(w: &mut R4g1World) {
+    w.rd_corpus_id = "pinned_mini_corpus_01".to_string();
+    w.rd_tiers = vec![1, 2, 4, 8];
+    w.rd_report = Some(
+        SemanticCompressionAnalyzer::analyze_rate_distortion(&w.rd_corpus_id, &w.rd_tiers).unwrap(),
+    );
+}
+
+#[when("analyzed for optimal rate-distortion tradeoff")]
+fn bdd_rd_analyze_tradeoff(_w: &mut R4g1World) {}
+
+#[then("depth tier 4 is identified as the optimal tradeoff depth")]
+fn bdd_rd_optimal_depth_check(w: &mut R4g1World) {
+    let rep = w.rd_report.as_ref().expect("rd report");
+    assert_eq!(rep.optimal_tradeoff_depth, 4);
+}
+
+#[then("the report certification status is verified")]
+fn bdd_rd_cert_status_check(w: &mut R4g1World) {
+    let rep = w.rd_report.as_ref().expect("rd report");
+    assert!(rep.is_certified);
+}
+
+#[given("an invalid depth tier array containing 0")]
+fn bdd_rd_invalid_tier_given(w: &mut R4g1World) {
+    w.rd_corpus_id = "pinned_mini_corpus_01".to_string();
+    w.rd_tiers = vec![0, 1, 2];
+}
+
+#[then("analysis fails with an invalid depth tier error")]
+fn bdd_rd_invalid_tier_error_check(w: &mut R4g1World) {
+    let err = w.rd_error.as_ref().expect("rd error");
+    assert!(matches!(
+        err,
+        CompressionAnalysisError::InvalidDepthTier { .. }
+    ));
+}
+
+// =========================================================================
+// Graph Invariant Ownership BDD Steps (#135)
+// =========================================================================
+use uor_r4_graph_format::invariant_ownership::{
+    GraphInvariantOwnershipMatrix, InvariantValidationError,
+};
+
+#[given("the normative graph invariant inventory")]
+fn bdd_inv_inventory_given(_w: &mut R4g1World) {}
+
+#[when("mapped to the ownership matrix")]
+fn bdd_inv_map_matrix(w: &mut R4g1World) {
+    w.inv_matrix = GraphInvariantOwnershipMatrix::get_matrix().to_vec();
+}
+
+#[then("all 8 graph invariants have declared primary owners and validation stages")]
+fn bdd_inv_matrix_check(w: &mut R4g1World) {
+    assert_eq!(w.inv_matrix.len(), 8);
+    for entry in &w.inv_matrix {
+        assert!(!entry.validation_stage.is_empty());
+        assert!(!entry.description.is_empty());
+    }
+}
+
+#[given("a graph artifact with maximum node degree 12 against limit 10")]
+fn bdd_inv_degree_limit_given(w: &mut R4g1World) {
+    w.inv_nodes = 13;
+    w.inv_max_degree = 12;
+    w.inv_degree_limit = 10;
+    w.inv_edges = (1..=12).map(|dst| (0, dst)).collect();
+    w.inv_evidence = vec![101, 102];
+}
+
+#[when("validated by the loader invariant verifier")]
+fn bdd_inv_validate_loader(w: &mut R4g1World) {
+    w.inv_res = Some(GraphInvariantOwnershipMatrix::validate_graph_structure(
+        w.inv_nodes,
+        w.inv_max_degree,
+        w.inv_degree_limit,
+        &w.inv_edges,
+        &w.inv_evidence,
+    ));
+}
+
+#[then("validation fails with a degree limit exceeded error")]
+fn bdd_inv_degree_error_check(w: &mut R4g1World) {
+    let err = w.inv_res.as_ref().expect("inv_res").as_ref().unwrap_err();
+    assert!(matches!(
+        err,
+        InvariantValidationError::DegreeLimitExceeded { .. }
+    ));
+}
+
+#[given("a graph artifact with 5 nodes and an edge referencing target node 99")]
+fn bdd_inv_dangling_given(w: &mut R4g1World) {
+    w.inv_nodes = 5;
+    w.inv_max_degree = 4;
+    w.inv_degree_limit = 10;
+    w.inv_edges = vec![(0, 99)];
+    w.inv_evidence = vec![101, 102];
+}
+
+#[then("validation fails with a dangling reference error")]
+fn bdd_inv_dangling_error_check(w: &mut R4g1World) {
+    let err = w.inv_res.as_ref().expect("inv_res").as_ref().unwrap_err();
+    assert!(matches!(
+        err,
+        InvariantValidationError::DanglingReference { .. }
+    ));
+}
+
+#[given("a graph node containing duplicate evidence ID 101")]
+fn bdd_inv_duplicate_evidence_given(w: &mut R4g1World) {
+    w.inv_nodes = 5;
+    w.inv_max_degree = 4;
+    w.inv_degree_limit = 10;
+    w.inv_edges = vec![(0, 1)];
+    w.inv_evidence = vec![101, 101];
+}
+
+#[then("validation fails with a duplicate evidence error")]
+fn bdd_inv_duplicate_evidence_error_check(w: &mut R4g1World) {
+    let err = w.inv_res.as_ref().expect("inv_res").as_ref().unwrap_err();
+    assert!(matches!(
+        err,
+        InvariantValidationError::DuplicateEvidence { .. }
+    ));
+}
+// Separate Semantic Emission BDD Steps (#134)
+// =========================================================================
+use uor_r4_graph_compiler::semantic_emission_decoupling::{
+    LanguageEmissionAdapter, SemanticEmissionError, SemanticReasoningEngine, SemanticStatus,
+};
+
+#[given("an initial state \"s0\" and a valid 2-step transition sequence to \"s2\"")]
+fn bdd_decouple_valid_sequence(w: &mut R4g1World) {
+    w.decouple_transitions = vec![
+        ("s0", "act1", "s1", 0.9, SemanticStatus::Coherent),
+        ("s1", "act2", "s2", 0.95, SemanticStatus::Coherent),
+    ];
+}
+
+#[when("pure semantic reasoning is executed by the reasoning engine")]
+fn bdd_decouple_execute_reasoning(w: &mut R4g1World) {
+    let res = SemanticReasoningEngine::execute_pure_reasoning("s0", &w.decouple_transitions);
+    match res {
+        Ok(tr) => w.decouple_trace = Some(tr),
+        Err(err) => w.decouple_error = Some(err),
+    }
+}
+
+#[then("a valid SemanticStateTrace is produced without generating tokens")]
+fn bdd_decouple_trace_check(w: &mut R4g1World) {
+    let tr = w.decouple_trace.as_ref().expect("trace");
+    assert_eq!(tr.initial_state_id, "s0");
+    assert_eq!(tr.final_state_id, "s2");
+    assert_eq!(tr.steps.len(), 2);
+}
+
+#[then("the trace overall status is Coherent")]
+fn bdd_decouple_status_coherent_check(w: &mut R4g1World) {
+    let tr = w.decouple_trace.as_ref().expect("trace");
+    assert_eq!(tr.overall_status, SemanticStatus::Coherent);
+}
+
+#[given("a verified coherent SemanticStateTrace from \"s0\" to \"s2\"")]
+fn bdd_decouple_verified_trace_given(w: &mut R4g1World) {
+    let transitions = vec![
+        ("s0", "act1", "s1", 0.9, SemanticStatus::Coherent),
+        ("s1", "act2", "s2", 0.95, SemanticStatus::Coherent),
+    ];
+    w.decouple_trace =
+        Some(SemanticReasoningEngine::execute_pure_reasoning("s0", &transitions).unwrap());
+}
+
+#[when("passed to the language emission adapter")]
+fn bdd_decouple_pass_to_adapter(w: &mut R4g1World) {
+    let tr = w.decouple_trace.as_ref().expect("trace");
+    let em = LanguageEmissionAdapter::emit_language(tr).unwrap();
+    let cert = LanguageEmissionAdapter::certify_decoupled(tr, &em);
+    w.decouple_emission = Some(em);
+    w.decouple_cert = Some(cert);
+}
+
+#[then("a LanguageEmissionResult is produced containing text and token probabilities")]
+fn bdd_decouple_emission_result_check(w: &mut R4g1World) {
+    let em = w.decouple_emission.as_ref().expect("emission");
+    assert!(em.emitted_text.contains("s0 to s2"));
+    assert!(!em.token_probabilities.is_empty());
+}
+
+#[then("a multi-dimensional certification report evaluates state coherence and language fidelity separately")]
+fn bdd_decouple_cert_report_check(w: &mut R4g1World) {
+    let cert = w.decouple_cert.as_ref().expect("cert");
+    assert!(cert.is_certified);
+    assert!(cert.state_coherence_score > 0.8);
+    assert!(cert.language_fidelity_score > 0.8);
+}
+
+#[given("a transition sequence leading to a Contradictory state")]
+fn bdd_decouple_contradictory_given(w: &mut R4g1World) {
+    w.decouple_transitions = vec![
+        ("s0", "act1", "s1", 0.9, SemanticStatus::Coherent),
+        ("s1", "act2", "s_err", 0.1, SemanticStatus::Contradictory),
+    ];
+}
+
+#[then("execution fails with a contradictory state error before token emission")]
+fn bdd_decouple_contradictory_error_check(w: &mut R4g1World) {
+    let err = w.decouple_error.as_ref().expect("error");
+    assert!(matches!(
+        err,
+        SemanticEmissionError::ContradictoryState { .. }
+    ));
 }
 
 // =========================================================================
@@ -1486,7 +1772,6 @@ fn bdd_max_steps_error_check(w: &mut R4g1World) {
     let err = w.trajectory_error.as_ref().expect("trajectory error");
     assert!(matches!(err, SemError::MaxStepsExceeded { limit: 2 }));
 }
-
 #[tokio::main]
 async fn main() {
     R4g1World::cucumber()
