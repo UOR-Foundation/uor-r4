@@ -12,9 +12,9 @@ impl CayleyDicksonVector {
 
     pub fn from_u32(token: u32) -> Self {
         let mut coords = [0i32; 16];
-        let hash = token.wrapping_mul(2654435761);
+        let hash = wrapping_mul_u32(token, 0x9E37_79B1);
         for (i, coord) in coords.iter_mut().enumerate() {
-            let bit = (hash >> (i * 2)) & 0x03;
+            let bit = (hash >> (i << 1)) & 0x03;
             *coord = (bit as i32) - 1;
         }
         Self { coords }
@@ -24,9 +24,32 @@ impl CayleyDicksonVector {
     pub fn endomorphism_scalar_product(&self, other: &Self) -> i32 {
         let mut sum = 0i32;
         for (a, b) in self.coords.iter().zip(other.coords.iter()) {
-            sum = sum.saturating_add(a.saturating_mul(*b));
+            sum = sum.saturating_add(saturating_mul_small(*a, *b));
         }
         sum
+    }
+}
+
+fn wrapping_mul_u32(mut lhs: u32, mut rhs: u32) -> u32 {
+    let mut acc = 0u32;
+    while rhs != 0 {
+        if (rhs & 1) != 0 {
+            acc = acc.wrapping_add(lhs);
+        }
+        lhs = lhs.wrapping_shl(1);
+        rhs >>= 1;
+    }
+    acc
+}
+
+fn saturating_mul_small(lhs: i32, rhs: i32) -> i32 {
+    match rhs {
+        0 => 0,
+        1 => lhs,
+        2 => lhs.saturating_add(lhs),
+        -1 => lhs.saturating_neg(),
+        -2 => lhs.saturating_add(lhs).saturating_neg(),
+        _ => 0,
     }
 }
 
