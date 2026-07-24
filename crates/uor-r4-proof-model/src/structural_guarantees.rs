@@ -398,7 +398,6 @@ impl StructuralGuaranteeVerifier {
         })
     }
 
-<<<<<<< HEAD
     /// Verify inference contract compliance obligation.
     pub fn verify_inference_contract_compliance(
         obligation_id: &str,
@@ -413,21 +412,11 @@ impl StructuralGuaranteeVerifier {
                     limit: 0,
                 }
             })?;
-=======
-    /// Verify performance certificate compliance obligation (#161).
-    pub fn verify_performance_certificate_compliance(
-        obligation_id: &str,
-    ) -> Result<ProofVerificationReport, ProofValidationError> {
-        use uor_r4_graph_certify::performance_certificate::RuntimePerformanceCertificate;
-        let cert = RuntimePerformanceCertificate::new();
-        let valid = cert.verify_evidence_links();
 
->>>>>>> 08ddb68 (feat(certify): add runtime operation, allocation, and CPU portability certificates (#161))
         Ok(ProofVerificationReport {
             obligation_id: obligation_id.to_string(),
             kind: StructuralObligationKind::BoundedResource,
             status: ProofStatus::Verified,
-<<<<<<< HEAD
             verified: contract_report.is_certified,
             details: format!(
                 "Inference contract v{} verified (zero_alloc: {}, cpu_only: {})",
@@ -437,6 +426,7 @@ impl StructuralGuaranteeVerifier {
             ),
         })
     }
+
     /// Verify scoring semantics compliance obligation.
     pub fn verify_scoring_semantics_compliance(
         obligation_id: &str,

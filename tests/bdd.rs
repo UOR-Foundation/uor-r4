@@ -1882,7 +1882,6 @@ fn bdd_max_steps_error_check(w: &mut R4g1World) {
 }
 
 // =========================================================================
-<<<<<<< HEAD
 // Inference Contract BDD Steps (#157)
 // =========================================================================
 use uor_r4_graph_format::inference_contract::{
@@ -2097,7 +2096,6 @@ fn bdd_scoring_check_cand_a_wins(w: &mut R4g1World) {
     let res = w.candidate_cmp_result.expect("candidate cmp result");
     assert_eq!(res, core::cmp::Ordering::Less);
 }
-=======
 // Performance Certificate BDD Steps (#161)
 // =========================================================================
 use uor_r4_graph_certify::performance_certificate::RuntimePerformanceCertificate;
@@ -2133,8 +2131,6 @@ fn bdd_perf_cert_portability_check(w: &mut R4g1World) {
     assert!(cert.cpu_portability.scalar_fallback_confirmed);
     assert_eq!(cert.cpu_portability.target_tier, expected_tier);
 }
-
->>>>>>> 08ddb68 (feat(certify): add runtime operation, allocation, and CPU portability certificates (#161))
 #[tokio::main]
 async fn main() {
     R4g1World::cucumber()
