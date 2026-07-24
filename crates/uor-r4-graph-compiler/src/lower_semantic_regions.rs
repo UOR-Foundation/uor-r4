@@ -246,4 +246,27 @@ mod tests {
 
         assert!(matches!(err, LoweringError::UnrepresentableRegion { .. }));
     }
+
+    #[test]
+    fn test_radius_exceeding_signature_width_rejected() {
+        let sig = vec![true, false, true, true]; // 4-bit signature
+        let err =
+            BooleanLoweringCompiler::lower_region("reg_wide_radius", &sig, 5.0, "cid_err", 101, 0)
+                .unwrap_err();
+
+        assert!(matches!(err, LoweringError::UnrepresentableRegion { .. }));
+    }
+
+    #[test]
+    fn test_saturation_boundary_not_flagged_when_exactly_representable() {
+        // i16::MAX / 256.0 is exactly representable and should not be marked saturated.
+        let q_exact_max = LoweredFixedPointScore::quantize_q88(i16::MAX as f32 / 256.0).unwrap();
+        assert_eq!(q_exact_max.q88_value, i16::MAX);
+        assert!(!q_exact_max.saturated);
+
+        // i16::MIN / 256.0 is exactly representable and should not be marked saturated.
+        let q_exact_min = LoweredFixedPointScore::quantize_q88(i16::MIN as f32 / 256.0).unwrap();
+        assert_eq!(q_exact_min.q88_value, i16::MIN);
+        assert!(!q_exact_min.saturated);
+    }
 }
