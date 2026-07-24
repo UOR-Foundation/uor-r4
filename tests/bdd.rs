@@ -50,6 +50,20 @@ struct R4g1World {
     u8_a: u8,
     u8_b: u8,
     u8_res: u8,
+    // Information Bottleneck fields (#127)
+    ib_probs_uniform: Vec<f32>,
+    ib_probs_deterministic: Vec<f32>,
+    ib_entropy_val: Option<f32>,
+    ib_entropy_zero: Option<f32>,
+    ib_joint_matrix: Vec<Vec<f32>>,
+    ib_mi_val: Option<f32>,
+    ib_mi_independent: Option<f32>,
+    ib_config: Option<uor_r4_graph_compiler::information_bottleneck::InformationBottleneckConfig>,
+    ib_train_before: Option<uor_r4_graph_compiler::information_bottleneck::ObjectiveComponents>,
+    ib_train_after: Option<uor_r4_graph_compiler::information_bottleneck::ObjectiveComponents>,
+    ib_heldout_before: Option<uor_r4_graph_compiler::information_bottleneck::ObjectiveComponents>,
+    ib_heldout_after: Option<uor_r4_graph_compiler::information_bottleneck::ObjectiveComponents>,
+    ib_audit_report: Option<uor_r4_graph_compiler::information_bottleneck::RegionDecisionReport>,
 }
 
 #[given("the R4G1 runtime returned the browser's repetitive hello response")]
@@ -470,6 +484,124 @@ fn u8_kernel_zero_floats(_w: &mut R4g1World) {
     let kernel_code = &source[kernel_start..];
     assert!(!kernel_code.contains("f32") && !kernel_code.contains("f64"));
     assert!(!kernel_code.contains(" * ") && !kernel_code.contains(" / "));
+}
+
+// =========================================================================
+// Information Bottleneck BDD Steps (#127)
+// =========================================================================
+use uor_r4_graph_compiler::information_bottleneck::{
+    InformationBottleneckConfig, InformationBottleneckEstimator, RegionDecisionKind,
+};
+
+#[given("a uniform 4-state probability distribution [0.25, 0.25, 0.25, 0.25]")]
+fn bdd_uniform_4_dist(w: &mut R4g1World) {
+    w.ib_probs_uniform = vec![0.25, 0.25, 0.25, 0.25];
+    w.ib_probs_deterministic = vec![1.0, 0.0, 0.0, 0.0];
+}
+
+#[when("its Shannon entropy is evaluated")]
+fn bdd_evaluate_shannon_entropy(w: &mut R4g1World) {
+    w.ib_entropy_val = Some(InformationBottleneckEstimator::entropy(&w.ib_probs_uniform).unwrap());
+    w.ib_entropy_zero =
+        Some(InformationBottleneckEstimator::entropy(&w.ib_probs_deterministic).unwrap());
+}
+
+#[then("the entropy equals the natural logarithm of 4")]
+fn bdd_entropy_equals_ln_4(w: &mut R4g1World) {
+    let h = w.ib_entropy_val.expect("entropy val");
+    assert!((h - (4.0f32).ln()).abs() < 1e-4);
+}
+
+#[then("a deterministic 1-state distribution has zero entropy")]
+fn bdd_entropy_zero_check(w: &mut R4g1World) {
+    let h_zero = w.ib_entropy_zero.expect("entropy zero");
+    assert_eq!(h_zero, 0.0);
+}
+
+#[given("a diagonal joint probability matrix representing dependent variables Z and X")]
+fn bdd_diagonal_joint_matrix(w: &mut R4g1World) {
+    w.ib_joint_matrix = vec![vec![0.5, 0.0], vec![0.0, 0.5]];
+}
+
+#[when("mutual information I(Z;X) is estimated")]
+fn bdd_estimate_mutual_information(w: &mut R4g1World) {
+    w.ib_mi_val =
+        Some(InformationBottleneckEstimator::mutual_information(&w.ib_joint_matrix).unwrap());
+    let independent = vec![vec![0.25, 0.25], vec![0.25, 0.25]];
+    w.ib_mi_independent =
+        Some(InformationBottleneckEstimator::mutual_information(&independent).unwrap());
+}
+
+#[then("the mutual information equals natural logarithm of 2")]
+fn bdd_mi_equals_ln_2(w: &mut R4g1World) {
+    let mi = w.ib_mi_val.expect("mi val");
+    assert!((mi - (2.0f32).ln()).abs() < 1e-4);
+}
+
+#[then("independent variables yield zero mutual information")]
+fn bdd_mi_independent_zero_check(w: &mut R4g1World) {
+    let mi_ind = w.ib_mi_independent.expect("mi independent");
+    assert!(mi_ind < 1e-4);
+}
+
+#[given("an Information-Bottleneck configuration with beta 1.5")]
+fn bdd_ib_config_beta_1_5(w: &mut R4g1World) {
+    let mut config = InformationBottleneckConfig::default_v1();
+    config.beta = 1.5;
+    w.ib_config = Some(config);
+}
+
+#[given("baseline composite objective scores on training and held-out evaluation sets")]
+fn bdd_ib_baseline_scores(w: &mut R4g1World) {
+    let config = w.ib_config.as_ref().expect("ib config");
+    let j_zx = vec![vec![0.5, 0.0], vec![0.0, 0.5]];
+    let j_zy = vec![vec![0.4, 0.1], vec![0.1, 0.4]];
+
+    w.ib_train_before = Some(
+        InformationBottleneckEstimator::evaluate_objective(config, &j_zx, &j_zy, 0.50, 1.5, 4096)
+            .unwrap(),
+    );
+    w.ib_train_after = Some(
+        InformationBottleneckEstimator::evaluate_objective(config, &j_zx, &j_zy, 0.30, 1.2, 4096)
+            .unwrap(),
+    );
+
+    w.ib_heldout_before = w.ib_train_before.clone();
+    let mut heldout_after = w.ib_train_after.as_ref().unwrap().clone();
+    heldout_after.composite_score_j =
+        w.ib_heldout_before.as_ref().unwrap().composite_score_j - 0.05;
+    w.ib_heldout_after = Some(heldout_after);
+}
+
+#[when("a region split candidate reduces held-out composite score J")]
+fn bdd_audit_region_split(w: &mut R4g1World) {
+    let config = w.ib_config.as_ref().expect("config");
+    let tb = w.ib_train_before.as_ref().expect("tb");
+    let ta = w.ib_train_after.as_ref().expect("ta");
+    let hb = w.ib_heldout_before.as_ref().expect("hb");
+    let ha = w.ib_heldout_after.as_ref().expect("ha");
+
+    w.ib_audit_report = Some(InformationBottleneckEstimator::audit_region_decision(
+        config,
+        "region_split_test",
+        tb,
+        ta,
+        hb,
+        ha,
+    ));
+}
+
+#[then("the region decision auditor selects the Split action")]
+fn bdd_auditor_selects_split(w: &mut R4g1World) {
+    let report = w.ib_audit_report.as_ref().expect("report");
+    assert_eq!(report.decision, RegionDecisionKind::Split);
+}
+
+#[then("the decision report includes training and held-out objective component breakdowns")]
+fn bdd_report_components_breakdown_check(w: &mut R4g1World) {
+    let report = w.ib_audit_report.as_ref().expect("report");
+    assert_eq!(report.region_id, "region_split_test");
+    assert!(report.justification.contains("Decision Split"));
 }
 
 #[tokio::main]
