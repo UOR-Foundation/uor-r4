@@ -6,4 +6,5 @@ pub mod kani_proofs;
 pub mod pdf_traceability;
 pub mod proof_matrix;
 pub mod range_bounds_proof;
+pub mod structural_guarantees;
 pub mod theorem7_proof;

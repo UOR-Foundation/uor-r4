@@ -72,7 +72,7 @@ runtime path for them lands in the issues noted.
 |---|---|---|---|
 | `S` | **Definition** | Semantic state space; every observation projects into a state `s ∈ S`. Regions are subsets `R_i ⊆ S`; beliefs are predicates over `S`; goals are desired subsets of `S`. | *Compiler/reference-only abstraction* (issue #124). The deployed runtime carries a fixed-capacity approximation: the runtime state (frontier, rolling context code, token shortlist) in `crates/uor-r4-core`. |
 | `G = (V, E)` | **Definition** | Compiled semantic graph: `V` packed semantic states, `E` typed transitions. | `crates/uor-r4-graph-format` `GraphView` over the R4G1 NODE/EDGE sections (`docs/transformerless/R4G1.md`). |
-| `H(x)` | **Definition** | Holographic encoding of observation `x`: a family of overlapping projections `{h_0, …, h_k}` with partial recoverability, distributed evidence, progressive fidelity. Today the single compiled Boolean semantic code. | The sign-bit signature path in `crates/uor-r4-core` (see "Semantic code H(x)" in the glossary). Overlapping projection families are compiler/reference-only (issue #126). |
+| `H(x)` | **Definition** | Holographic encoding of observation `x`: a family of overlapping projections `{h_0, …, h_k}` with partial recoverability, distributed evidence, progressive fidelity. The deployed path today is still the single compiled Boolean semantic code; the certifier additionally defines and measures overlapping projection families for issue #126. | Runtime binding: sign-bit signature path in `crates/uor-r4-core` (see "Semantic code H(x)" in the glossary). Measurement contract binding: `crates/uor-r4-graph-certify/src/holographic_encoding.rs` and its deterministic fixture tests. |
 | `T : S × A → S` | **Definition** | Typed graph dynamics: transition function over states and actions/semantic operators `A`. | *Compiler/reference-only* (issue #124). Deployed precursor: forward transition edges `E_f` / R4G1 ROUT section. |
 | `R` | **Definition** | Reconstruction / behavioral-recovery operator; `R(H(x)) ≈ x` read behaviorally as the divergence condition below. | *Compiler/certifier-only*; exercised through the fidelity-certification harness (`score.rs`, Gate C). |
 | `C : Θ → G` | **Definition** | The compiler as a map from teacher parameter space `Θ` to the space of compiled artifacts. Compilation is lossy semantic compression: parameters → behavioral probing → latent graph induction → Boolean synthesis → packed immutable artifact. | `crates/uor-r4-core` compiler pipeline; graph generalization in `crates/uor-r4-graph-compiler`. |
@@ -136,6 +136,9 @@ by wholesale rewrite.
 
 ## Changelog
 
+- **0.1.1** (2026-07-24) — Added the issue-#126 measurement-contract binding for
+  `H(x)` (projection family schema, ablation semantics, and deterministic partial
+  recovery/progressive-fidelity fixture in `uor-r4-graph-certify`).
 - **0.1.0** (2026-07-24) — Initial version. Claim classes, claim statuses, core
   notation (`S`, `G=(V,E)`, `H(x)`, `T`, `R`, `C`, `P_θ`, `P_G`), objectives vs.
   runtime invariants, term discipline, and the CI wording rule. (Issue #123.)

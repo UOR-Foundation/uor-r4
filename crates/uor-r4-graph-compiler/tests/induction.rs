@@ -708,6 +708,89 @@ fn entropy_reduction_matches_hand_computation() {
 }
 
 #[test]
+fn objective_decomposition_and_tie_breaking_are_deterministic() {
+    let obs = |position: u32, next: u32, bit: usize| {
+        let mut vector = vec![0.0f32; D];
+        vector[bit] = 1.0;
+        let mut sig = [0u8; SIG_BYTES];
+        sig[bit / 8] = 1 << (bit % 8);
+        Observation {
+            position,
+            sample: [position as u8; 32],
+            vector,
+            sig,
+            prev: position.saturating_sub(1),
+            next,
+        }
+    };
+    let observations = vec![obs(0, 10, 0), obs(1, 10, 0), obs(2, 20, 1), obs(3, 20, 1)];
+    let mut config = CoverConfig {
+        depths: 2,
+        k0: 1,
+        min_support: 2,
+        regions_budget: 8,
+        entropy_gain_bits: -1.0,
+        ..CoverConfig::default()
+    };
+    config.objective.weights.predictive_entropy = 0.0;
+    config.objective.weights.future_state_entropy = 0.0;
+    config.objective.weights.teacher_loss = 0.0;
+    config.objective.weights.runtime_cost = 0.0;
+    config.objective.weights.artifact_size = 0.0;
+    config.objective.weights.bytes_read = 0.0;
+    config.objective.weights.structural_complexity = 0.0;
+    config.objective.weights.ib_term = 0.0;
+
+    let induced =
+        cover::induce_cover(&observations, &config, ART_KAPPA, CORPUS_KAPPA).expect("induce");
+    assert_eq!(
+        induced.cover.regions.len(),
+        1,
+        "objective ties resolve to keep"
+    );
+    assert_eq!(
+        induced.decision_trace.len(),
+        1,
+        "one eligible split was audited"
+    );
+    let decision = &induced.decision_trace[0];
+    assert_eq!(decision.decision, "keep:objective_tie");
+    assert!(
+        decision.entropy_gain_bits > 0.0,
+        "entropy would have permitted the split without the objective tie"
+    );
+    assert!(
+        (decision.keep.weighted_score - decision.split.weighted_score).abs() < 1e-12,
+        "weights forced an exact objective tie"
+    );
+
+    let reference = cover::ReferenceClassifier::freeze(&induced.cover);
+    let story = vec![0u32; observations.len()];
+    let edges = cover::build_edges(&induced.cover, &reference, &observations, &story);
+    let report = cover::build_report(
+        &config,
+        &induced,
+        cover::ReportData {
+            reference: &reference,
+            train: &observations,
+            held_out: &observations,
+            edges: &edges,
+            recall: Vec::new(),
+            artifact: None,
+        },
+    );
+    assert_eq!(
+        report.objective.config.schema,
+        cover::OBJECTIVE_CONFIG_SCHEMA
+    );
+    assert_eq!(report.objective.region_decisions.len(), 1);
+    assert!(
+        report.objective.train.predictive_entropy_bits >= 0.0
+            && report.objective.held_out.predictive_entropy_bits >= 0.0
+    );
+}
+
+#[test]
 fn kmeans_recovers_tight_clusters_at_any_batch_size() {
     let (observations, _) = synthetic_observations();
     let points: Vec<&[f32]> = observations.iter().map(|o| o.vector.as_slice()).collect();
