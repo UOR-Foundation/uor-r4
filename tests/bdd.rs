@@ -54,6 +54,10 @@ struct R4g1World {
     // Scoring Semantics fields (#158)
     score_accumulator: uor_r4_graph_format::scoring_semantics::ScoreAccumulator<16>,
     candidate_cmp_result: Option<core::cmp::Ordering>,
+    // Packed Kernels fields (#159)
+    packed_frontier: uor_r4_graph_runtime::packed_kernels::PackedFrontier<4>,
+    packed_shortlist: uor_r4_graph_runtime::packed_kernels::PackedShortlist<4>,
+    packed_output: uor_r4_graph_runtime::packed_kernels::StepOutput<3>,
     // Inference Contract fields (#157)
     contract_report: Option<uor_r4_graph_format::inference_contract::InferenceContractAuditReport>,
     _contract_audit_res:
@@ -1876,6 +1880,7 @@ fn bdd_max_steps_error_check(w: &mut R4g1World) {
 }
 
 // =========================================================================
+<<<<<<< HEAD
 // Inference Contract BDD Steps (#157)
 // =========================================================================
 use uor_r4_graph_format::inference_contract::{
@@ -1940,6 +1945,71 @@ fn bdd_contract_forbidden_rejected(_w: &mut R4g1World) {
         ),
         Err(ContractValidationError::ForbiddenMultiplicationDetected)
     );
+=======
+// Packed Kernels BDD Steps (#159)
+// =========================================================================
+use uor_r4_graph_format::ScoreQ;
+use uor_r4_graph_runtime::packed_kernels::{
+    accumulate_candidate_shortlist, advance_frontier, decode_canonical_topk, PackedFrontier,
+    PackedShortlist, StepOutput,
+};
+
+#[given("a zeroed packed active frontier of capacity 4")]
+fn bdd_packed_zeroed_frontier(w: &mut R4g1World) {
+    w.packed_frontier = PackedFrontier::new();
+}
+
+#[when("node 1 with score 100 and node 2 with score 200 are advanced into the frontier")]
+fn bdd_packed_advance_nodes(w: &mut R4g1World) {
+    advance_frontier(&mut w.packed_frontier, 1, ScoreQ::from_raw(100));
+    advance_frontier(&mut w.packed_frontier, 2, ScoreQ::from_raw(200));
+}
+
+#[then("the active frontier count is 2 and contains both nodes")]
+fn bdd_packed_check_frontier(w: &mut R4g1World) {
+    assert_eq!(w.packed_frontier.count, 2);
+    assert!(w.packed_frontier.nodes.contains(&1));
+    assert!(w.packed_frontier.nodes.contains(&2));
+}
+
+#[given("an empty packed candidate shortlist of capacity 4")]
+fn bdd_packed_empty_shortlist(w: &mut R4g1World) {
+    w.packed_shortlist = PackedShortlist::new();
+}
+
+#[when("node 10 is accumulated into the shortlist twice")]
+fn bdd_packed_accumulate_shortlist_twice(w: &mut R4g1World) {
+    accumulate_candidate_shortlist(None, &mut w.packed_shortlist, 10);
+    accumulate_candidate_shortlist(None, &mut w.packed_shortlist, 10);
+}
+
+#[then("the shortlist count is 1 and contains node 10")]
+fn bdd_packed_check_shortlist(w: &mut R4g1World) {
+    assert_eq!(w.packed_shortlist.count, 1);
+    assert_eq!(w.packed_shortlist.candidates[0], 10);
+}
+
+#[given("a candidate set with duplicate scores and distinct IDs")]
+fn bdd_packed_candidates_init(_w: &mut R4g1World) {}
+
+#[when("decoded by the packed top-K kernel")]
+fn bdd_packed_decode_topk(w: &mut R4g1World) {
+    let mut candidates = [
+        (20u32, ScoreQ::from_raw(500)),
+        (10u32, ScoreQ::from_raw(500)),
+        (5u32, ScoreQ::from_raw(1000)),
+    ];
+    w.packed_output = StepOutput::new();
+    decode_canonical_topk(&mut candidates, &mut w.packed_output);
+}
+
+#[then("the top predictions are sorted by score descending and ID ascending")]
+fn bdd_packed_check_topk(w: &mut R4g1World) {
+    assert_eq!(w.packed_output.count, 3);
+    assert_eq!(w.packed_output.predictions[0], (5, ScoreQ::from_raw(1000)));
+    assert_eq!(w.packed_output.predictions[1], (10, ScoreQ::from_raw(500)));
+    assert_eq!(w.packed_output.predictions[2], (20, ScoreQ::from_raw(500)));
+>>>>>>> 88b6411 (feat(runtime): implement packed no-alloc CPU inference kernels over immutable graph arrays (#159))
 }
 
 // =========================================================================
