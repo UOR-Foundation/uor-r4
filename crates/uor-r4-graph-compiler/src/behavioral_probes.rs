@@ -12,6 +12,7 @@
 //!   `Sensitive` (causal interventions must alter output).
 //! - Probe harness evaluating sensitivity and invariance scores with anti-memorization guards.
 
+use serde::{Deserialize, Serialize};
 use std::fmt;
 
 /// Errors arising during behavioral probe creation or evaluation.
@@ -73,7 +74,7 @@ impl fmt::Display for BehavioralProbeError {
 impl std::error::Error for BehavioralProbeError {}
 
 /// Controlled intervention kind applied to observation context $x$.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum InterventionKind {
     /// Ablating specific context text spans.
     ContextAblation,
@@ -88,7 +89,7 @@ pub enum InterventionKind {
 }
 
 /// Declared expectation relation under intervention.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ExpectedRelation {
     /// Output MUST remain invariant ($\Delta \le \epsilon$).
     Invariant,
@@ -99,7 +100,7 @@ pub enum ExpectedRelation {
 }
 
 /// A content-addressed intervention record describing a counterfactual probe.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct InterventionRecord {
     /// Content-addressed ID derived from observation and intervention payload.
     pub id: String,
@@ -143,15 +144,22 @@ impl InterventionRecord {
             });
         }
 
-        // Content-addressed ID simulation
-        let id_raw = format!(
-            "{}:{}:{:?}:{}",
-            obs,
-            kind as u8,
-            affected_span,
-            baseline_output.len()
-        );
-        let id = format!("probe_{:08x}", simple_hash(&id_raw));
+        // Content-addressed ID: blake3 over the observation, intervention
+        // kind/span, expected relation, and both output vectors, so any
+        // difference in inputs or outputs yields a distinct id.
+        let mut hasher = blake3::Hasher::new();
+        hasher.update(obs.as_bytes());
+        hasher.update(&[kind as u8]);
+        hasher.update(&(start as u64).to_le_bytes());
+        hasher.update(&(end as u64).to_le_bytes());
+        hasher.update(&[expected_relation as u8]);
+        for value in &baseline_output {
+            hasher.update(&value.to_le_bytes());
+        }
+        for value in &intervention_output {
+            hasher.update(&value.to_le_bytes());
+        }
+        let id = format!("probe_blake3:{}", hasher.finalize().to_hex());
 
         Ok(Self {
             id,
@@ -175,7 +183,7 @@ impl InterventionRecord {
 }
 
 /// Evaluation result metrics for a probe suite.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BehavioralProbeReport {
     pub total_probes: usize,
     pub invariant_passed: usize,
@@ -242,13 +250,28 @@ impl BehavioralProbeHarness {
             1.0
         };
 
-        // Anti-memorization guard check: if sensitivity under GoalChange or ContextAblation is 0,
-        // the model is memorizing surface form without understanding state dynamics.
-        let memorization_passed = sensitivity_score > 0.0 || sens_count == 0;
+        // Anti-memorization guard check: any Sensitive GoalChange/ContextAblation probe
+        // whose divergence falls below the sensitivity threshold indicates the model is
+        // memorizing surface form without understanding state dynamics.
+        let mut memorization_passed = true;
+        let mut failing_probe_id = None;
+        for probe in probes {
+            if probe.expected_relation == ExpectedRelation::Sensitive
+                && matches!(
+                    probe.kind,
+                    InterventionKind::GoalChange | InterventionKind::ContextAblation
+                )
+                && probe.output_divergence() < sensitivity_threshold
+            {
+                memorization_passed = false;
+                failing_probe_id = Some(probe.id.clone());
+                break;
+            }
+        }
 
         if !memorization_passed {
             return Err(BehavioralProbeError::MemorizationDetected {
-                probe_id: "suite_guard".to_string(),
+                probe_id: failing_probe_id.unwrap_or_else(|| "suite_guard".to_string()),
             });
         }
 
@@ -261,16 +284,6 @@ impl BehavioralProbeHarness {
             memorization_check_passed: memorization_passed,
         })
     }
-}
-
-/// Simple non-cryptographic hash helper for content-addressed IDs.
-fn simple_hash(input: &str) -> u32 {
-    let mut h = 0x811c9dc5u32;
-    for b in input.bytes() {
-        h ^= b as u32;
-        h = h.wrapping_mul(0x01000193);
-    }
-    h
 }
 
 #[cfg(test)]
