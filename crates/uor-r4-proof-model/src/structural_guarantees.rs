@@ -126,7 +126,8 @@ impl StructuralGuaranteeVerifier {
         })
     }
 
-    /// Verify resource bound obligation (memory, frontier, latency).
+    /// Verify resource bound obligation for any generic metric (e.g., memory,
+    /// frontier size, latency, degree).
     pub fn verify_resource_bound(
         obligation_id: impl Into<String>,
         metric: &str,
