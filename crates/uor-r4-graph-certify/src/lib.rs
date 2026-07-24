@@ -3,6 +3,7 @@ pub mod certificate;
 pub mod certify;
 pub mod compare;
 pub mod fairness_provenance;
+pub mod holographic_encoding;
 pub mod long_context;
 pub mod patch_lifecycle;
 pub mod performance_certificate;
