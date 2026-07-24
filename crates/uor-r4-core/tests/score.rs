@@ -1475,7 +1475,7 @@ fn gate_c_harness_emits_all_four_number_sets() {
     let json = serde_json::to_string_pretty(&build(&outcome)).expect("report serializes");
     let json2 = serde_json::to_string_pretty(&build(&outcome2)).expect("report serializes");
     assert_eq!(json, json2, "double-run report byte identity");
-    assert!(json.contains("\"schema\": 6"));
+    assert!(json.contains("\"schema\": 7"));
     assert!(json.contains("\"smoothing\": \"add-one\""));
     assert!(json.contains("legacy_sum"));
     assert!(json.contains("rule1_chain"));

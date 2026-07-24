@@ -1496,7 +1496,8 @@ pub fn evaluate_gate_c(
 /// candidate-variant rows in `gate_c` (`rule12_cloud_size_normalized`,
 /// `rule12_margin_weighted`); 6 = issue-#102 removes those rows: the
 /// variants were zero-information (bit-identical to `rule12_precedence`
-/// on every measured corpus, where ExactContext precedence dominates).
+/// on every measured corpus, where ExactContext precedence dominates); 7 =
+/// explicit quality-gate profile for distribution-aware validation.
 #[derive(Debug, Clone, Serialize)]
 pub struct ScoreReport {
     pub schema: u32,
@@ -1529,6 +1530,10 @@ pub struct ScoreReportConfig {
     /// The calibrated emission smoothing rule (issue #67;
     /// [`Smoothing::label`]).
     pub smoothing: String,
+    /// Quality-gate basis for this distribution. `pinned` applies the
+    /// historical Gate C absolute floor; `relative_tla` only compares the
+    /// graph with the TLA baseline measured on the same corpus.
+    pub quality_profile: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1566,8 +1571,22 @@ pub fn build_score_report(
     info: &ScoredGraphInfo,
     gate_c: GateCOutcome,
 ) -> ScoreReport {
+    build_score_report_with_quality_profile(config, inputs, info, gate_c, "pinned")
+}
+
+/// Assemble a report while declaring which quality baseline applies to its
+/// distribution. The legacy builder above keeps fixture and library callers
+/// on the pinned profile; dynamic teacher builds can opt into a same-corpus
+/// TLA comparison explicitly.
+pub fn build_score_report_with_quality_profile(
+    config: &ScoreConfig,
+    inputs: ScoreReportInputs,
+    info: &ScoredGraphInfo,
+    gate_c: GateCOutcome,
+    quality_profile: &str,
+) -> ScoreReport {
     ScoreReport {
-        schema: 6,
+        schema: 7,
         inputs,
         config: ScoreReportConfig {
             transition_out_degree: config.transition_out_degree,
@@ -1578,6 +1597,7 @@ pub fn build_score_report(
             top_m: super::score_runtime::TOP_M,
             exct_support_min: super::score_runtime::EXCT_SUPPORT_MIN,
             smoothing: config.smoothing.label(),
+            quality_profile: quality_profile.to_owned(),
         },
         graph: ScoreReportGraph {
             node_count: info.node_count,

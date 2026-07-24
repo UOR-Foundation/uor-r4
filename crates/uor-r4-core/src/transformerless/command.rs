@@ -639,6 +639,7 @@ struct ScoreOptions {
     witness_sample: usize,
     smoothing: score::Smoothing,
     scoring_variant: score_runtime::ScoringVariant,
+    quality_profile: String,
     output: PathBuf,
 }
 
@@ -657,6 +658,7 @@ fn parse_score_options(args: &[String]) -> Result<ScoreOptions, String> {
         witness_sample: score::DEFAULT_WITNESS_SAMPLE,
         smoothing: score::Smoothing::AddOne,
         scoring_variant: score_runtime::ScoringVariant::ChainTelescoped,
+        quality_profile: "pinned".to_owned(),
         output: PathBuf::from("score"),
     };
     let mut index = 0usize;
@@ -724,6 +726,14 @@ fn parse_score_options(args: &[String]) -> Result<ScoreOptions, String> {
                         ))
                     }
                 };
+            }
+            "--quality-profile" => {
+                if !matches!(value.as_str(), "pinned" | "relative_tla") {
+                    return Err(format!(
+                        "invalid --quality-profile value: {value} (expected pinned | relative_tla)"
+                    ));
+                }
+                options.quality_profile = value.clone();
             }
             "--out" => options.output = PathBuf::from(value),
             _ => return Err(format!("unknown score option: {flag}")),
@@ -905,7 +915,7 @@ pub fn score_command(args: &[String]) -> Result<(), String> {
         &config,
     )?;
 
-    let report = score::build_score_report(
+    let report = score::build_score_report_with_quality_profile(
         &config,
         score::ScoreReportInputs {
             artifact_kappa,
@@ -915,6 +925,7 @@ pub fn score_command(args: &[String]) -> Result<(), String> {
         },
         &info,
         gate_c.clone(),
+        &options.quality_profile,
     );
 
     std::fs::create_dir_all(&options.output).map_err(|error| error.to_string())?;

@@ -32,6 +32,10 @@ const R4G1_SCORE_TRANSITION_DEGREE: &str = "16";
 const R4G1_SCORE_EMISSION_ENTRIES: &str = "256";
 const R4G1_SCORE_ROOT_TOP_B: &str = "256";
 const R4G1_SCORE_EXCT_TOP_X: &str = "128";
+// The browser can compile arbitrary pinned HF teachers. Their generated
+// distributions do not share the historical fixture-corpus Gate C floor, so
+// the report must explicitly use the same-corpus TLA comparison.
+const R4G1_SCORE_QUALITY_PROFILE: &str = "relative_tla";
 
 /// Configuration supplied by the executable to the reusable HTTP server.
 #[derive(Debug, Clone)]
@@ -1121,6 +1125,8 @@ fn compile_r4g1_bundle(
         R4G1_SCORE_ROOT_TOP_B.to_owned(),
         "--exct-top-x".to_owned(),
         R4G1_SCORE_EXCT_TOP_X.to_owned(),
+        "--quality-profile".to_owned(),
+        R4G1_SCORE_QUALITY_PROFILE.to_owned(),
         "--out".to_owned(),
         graph_output.display().to_string(),
     ];
