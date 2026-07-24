@@ -763,18 +763,19 @@ fn conditional_entropy_for_key<F>(observations: &[Observation], assignments: &[u
 where
     F: Fn(&Observation) -> u64,
 {
-    if observations.is_empty() {
+    let count = observations.len().min(assignments.len());
+    if count == 0 {
         return 0.0;
     }
     let mut region_key_counts: BTreeMap<u32, BTreeMap<u64, u64>> = BTreeMap::new();
-    for (observation, &region) in observations.iter().zip(assignments.iter()) {
+    for (observation, &region) in observations.iter().zip(assignments.iter()).take(count) {
         *region_key_counts
             .entry(region)
             .or_default()
             .entry(key(observation))
             .or_insert(0) += 1;
     }
-    let total = observations.len() as f64;
+    let total = count as f64;
     let mut value = 0.0;
     for counts in region_key_counts.values() {
         let region_total: u64 = counts.values().sum();
@@ -887,6 +888,25 @@ fn objective_for_partition(
     bytes_read: f64,
     structural_complexity: f64,
 ) -> ObjectiveComponents {
+    let count = observations.len().min(assignments.len());
+    if count == 0 {
+        return ObjectiveComponents::weighted(
+            config,
+            ObjectiveRawValues {
+                predictive_entropy_bits: 0.0,
+                future_state_entropy_bits: 0.0,
+                teacher_loss_bits: 0.0,
+                runtime_cost_units,
+                artifact_size_bytes,
+                bytes_read,
+                structural_complexity,
+                ib_i_zx_bits: 0.0,
+                ib_i_zy_future_bits: 0.0,
+            },
+        );
+    }
+    let observations = &observations[..count];
+    let assignments = &assignments[..count];
     let predictive_entropy_bits =
         conditional_entropy_for_key(observations, assignments, |o| o.next as u64);
     let future_state_entropy_bits =
@@ -894,6 +914,84 @@ fn objective_for_partition(
     let teacher_loss_bits = predictive_entropy_bits;
     let ib_i_zx_bits = assignment_entropy(assignments);
     let ib_i_zy_future_bits = (next_entropy(observations) - predictive_entropy_bits).max(0.0);
+    ObjectiveComponents::weighted(
+        config,
+        ObjectiveRawValues {
+            predictive_entropy_bits,
+            future_state_entropy_bits,
+            teacher_loss_bits,
+            runtime_cost_units,
+            artifact_size_bytes,
+            bytes_read,
+            structural_complexity,
+            ib_i_zx_bits,
+            ib_i_zy_future_bits,
+        },
+    )
+}
+
+fn objective_for_member_partition(
+    config: &ObjectiveConfig,
+    observations: &[Observation],
+    members: &[usize],
+    assignments: &[u32],
+    runtime_cost_units: f64,
+    artifact_size_bytes: f64,
+    bytes_read: f64,
+    structural_complexity: f64,
+) -> ObjectiveComponents {
+    let count = members.len().min(assignments.len());
+    if count == 0 {
+        return ObjectiveComponents::weighted(
+            config,
+            ObjectiveRawValues {
+                predictive_entropy_bits: 0.0,
+                future_state_entropy_bits: 0.0,
+                teacher_loss_bits: 0.0,
+                runtime_cost_units,
+                artifact_size_bytes,
+                bytes_read,
+                structural_complexity,
+                ib_i_zx_bits: 0.0,
+                ib_i_zy_future_bits: 0.0,
+            },
+        );
+    }
+
+    let mut region_next_counts: BTreeMap<u32, BTreeMap<u64, u64>> = BTreeMap::new();
+    let mut region_state_counts: BTreeMap<u32, BTreeMap<u64, u64>> = BTreeMap::new();
+    let mut next_counts: BTreeMap<u32, u64> = BTreeMap::new();
+    for (&member, &region) in members.iter().zip(assignments.iter()).take(count) {
+        let observation = &observations[member];
+        *region_next_counts
+            .entry(region)
+            .or_default()
+            .entry(observation.next as u64)
+            .or_insert(0) += 1;
+        *region_state_counts
+            .entry(region)
+            .or_default()
+            .entry(future_state_key(observation))
+            .or_insert(0) += 1;
+        *next_counts.entry(observation.next).or_insert(0) += 1;
+    }
+
+    let conditional = |region_counts: &BTreeMap<u32, BTreeMap<u64, u64>>| -> f64 {
+        let mut value = 0.0;
+        for counts in region_counts.values() {
+            let region_total: u64 = counts.values().sum();
+            if region_total == 0 {
+                continue;
+            }
+            value += (region_total as f64 / count as f64) * entropy_bits(counts);
+        }
+        value
+    };
+    let predictive_entropy_bits = conditional(&region_next_counts);
+    let future_state_entropy_bits = conditional(&region_state_counts);
+    let teacher_loss_bits = predictive_entropy_bits;
+    let ib_i_zx_bits = assignment_entropy(&assignments[..count]);
+    let ib_i_zy_future_bits = (entropy_bits(&next_counts) - predictive_entropy_bits).max(0.0);
     ObjectiveComponents::weighted(
         config,
         ObjectiveRawValues {
@@ -1242,28 +1340,22 @@ pub fn induce_cover(
             })
             .collect();
         let gain = entropy_reduction(observations, &parent_members, &children_members);
-        let parent_observations: Vec<Observation> = parent_members
-            .iter()
-            .map(|&member| observations[member].clone())
-            .collect();
-        let keep_assignments = vec![0u32; parent_observations.len()];
-        let split_assignments: Vec<u32> = clustering
-            .assignment
-            .iter()
-            .map(|&cluster| cluster as u32)
-            .collect();
-        let keep_components = objective_for_partition(
+        let keep_assignments = vec![0u32; parent_members.len()];
+        let split_assignments = clustering.assignment.clone();
+        let keep_components = objective_for_member_partition(
             &config.objective,
-            &parent_observations,
+            observations,
+            &parent_members,
             &keep_assignments,
-            1.0,
             0.0,
-            APPROX_BYTES_READ_PER_REGION,
-            1.0,
+            0.0,
+            0.0,
+            0.0,
         );
-        let split_components = objective_for_partition(
+        let split_components = objective_for_member_partition(
             &config.objective,
-            &parent_observations,
+            observations,
+            &parent_members,
             &split_assignments,
             SPLIT_CHILDREN as f64,
             (SPLIT_CHILDREN.saturating_sub(1)) as f64 * APPROX_BYTES_PER_ADDED_REGION,
