@@ -6,7 +6,8 @@
 //! This module provides executable proof specifications for structural graph properties
 //! currently implemented here:
 //! - Determinism (repeated-invocation output equality)
-//! - Bounded Memory, Latency, Frontier Size, and Degree Bounds (`verify_resource_bound`)
+//! - Bounded Memory, Latency, Frontier Size, and Degree Bounds — any generic
+//!   metric bound (`verify_resource_bound`)
 //! - Constraint Preservation ($s_i \notin C$) (`verify_constraint_safety`)
 //! - Proof matrix status auditing (`audit_proof_matrix_entry`)
 //!
@@ -30,9 +31,11 @@ pub enum ProofValidationError {
         actual: usize,
         limit: usize,
     },
-    /// State sequence violates forbidden constraint. `region_id` identifies the
-    /// forbidden region that was entered; in the current flat forbidden-state model
-    /// this coincides with `state_id`, since each forbidden state defines its own region.
+    /// State sequence violates forbidden constraint. `state_id` is the violating state
+    /// and `region_id` is the forbidden region it entered; both fields are kept distinct
+    /// for forward compatibility with region groupings, though the current flat
+    /// forbidden-state model treats each forbidden state as its own singleton region,
+    /// so today `region_id` equals `state_id`.
     ConstraintSafetyViolated { state_id: String, region_id: String },
     /// Proof matrix status drift detected.
     StatusDrift {
