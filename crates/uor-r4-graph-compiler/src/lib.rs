@@ -10,6 +10,7 @@ pub mod pack;
 pub mod patch_induction;
 pub mod perturbation;
 pub mod quantum_cover;
+pub mod rate_distortion_compression;
 pub mod reference_compiler_ir;
 pub mod residual;
 pub mod routing;
