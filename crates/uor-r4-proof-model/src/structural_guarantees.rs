@@ -388,6 +388,35 @@ impl StructuralGuaranteeVerifier {
             ),
         })
     }
+
+    /// Verify inference contract compliance obligation.
+    pub fn verify_inference_contract_compliance(
+        obligation_id: &str,
+    ) -> Result<ProofVerificationReport, ProofValidationError> {
+        use uor_r4_graph_format::inference_contract::InferenceContractVerifier;
+        let contract_report =
+            InferenceContractVerifier::audit_contract_compliance().map_err(|_| {
+                ProofValidationError::ResourceBoundExceeded {
+                    obligation_id: obligation_id.to_string(),
+                    metric: "contract_audit".to_string(),
+                    actual: 1,
+                    limit: 0,
+                }
+            })?;
+
+        Ok(ProofVerificationReport {
+            obligation_id: obligation_id.to_string(),
+            kind: StructuralObligationKind::BoundedResource,
+            status: ProofStatus::Verified,
+            verified: contract_report.is_certified,
+            details: format!(
+                "Inference contract v{} verified (zero_alloc: {}, cpu_only: {})",
+                contract_report.contract_version,
+                contract_report.is_zero_allocation_guaranteed,
+                contract_report.is_cpu_only_target
+            ),
+        })
+    }
 }
 
 #[cfg(test)]
