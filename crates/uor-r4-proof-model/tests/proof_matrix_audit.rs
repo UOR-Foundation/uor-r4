@@ -27,19 +27,19 @@ fn test_ci_audit_proof_matrix_entries() {
     .expect("Bounded Ranges audit failed");
     assert!(report_bounded.verified);
 
-    let report_det = StructuralGuaranteeVerifier::audit_proof_matrix_entry(
-        &matrix,
-        "Deterministic Serialization",
-        ProofStatus::Verified,
-    )
-    .expect("Deterministic Serialization audit failed");
-    assert!(report_det.verified);
-
     let report_topk = StructuralGuaranteeVerifier::audit_proof_matrix_entry(
         &matrix,
-        "Deterministic Top-K Selection",
+        "Deterministic Top-K",
         ProofStatus::Verified,
     )
-    .expect("Deterministic Top-K Selection audit failed");
+    .expect("Deterministic Top-K audit failed");
     assert!(report_topk.verified);
+
+    let report_rev = StructuralGuaranteeVerifier::audit_proof_matrix_entry(
+        &matrix,
+        "Reverse Index Consistency",
+        ProofStatus::Verified,
+    )
+    .expect("Reverse Index Consistency audit failed");
+    assert!(report_rev.verified);
 }
