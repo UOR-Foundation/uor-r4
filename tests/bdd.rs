@@ -52,6 +52,11 @@ struct R4g1World {
     u8_res: u8,
     // Expand Proof Model fields (#132)
     proof_report: Option<uor_r4_proof_model::structural_guarantees::ProofVerificationReport>,
+    // Future State Planner fields (#131)
+    plan_nodes: Vec<uor_r4_graph_compiler::future_state_planner::PlannerStateNode>,
+    plan_edges: Vec<uor_r4_graph_compiler::future_state_planner::PlannerEdgeTransition>,
+    plan_result: Option<uor_r4_graph_compiler::future_state_planner::PlanTrajectory>,
+    plan_error: Option<uor_r4_graph_compiler::future_state_planner::PlannerError>,
     // Lower Semantic Regions fields (#130)
     lower_bool_region: Option<uor_r4_graph_compiler::lower_semantic_regions::LoweredBooleanRegion>,
     lower_witness: Option<uor_r4_graph_compiler::lower_semantic_regions::LoweringWitnessEntry>,
@@ -621,6 +626,154 @@ fn bdd_audit_status_matches(w: &mut R4g1World) {
     let report = w.proof_report.as_ref().expect("proof report");
     assert!(report.verified);
     assert_eq!(report.status, ProofStatus::Verified);
+}
+
+// =========================================================================
+// Future State Planner BDD Steps (#131)
+// =========================================================================
+use uor_r4_graph_compiler::future_state_planner::{
+    BoundedGraphPlanner, PlannerConfig, PlannerEdgeTransition, PlannerError, PlannerStateNode,
+};
+
+#[given("a start state \"s0\", intermediate state \"s1\", and goal state \"s2\"")]
+fn bdd_planner_setup_valid_graph(w: &mut R4g1World) {
+    w.plan_nodes = vec![
+        PlannerStateNode {
+            id: "s0".to_string(),
+            is_goal: false,
+            is_forbidden: false,
+            forbidden_region_id: None,
+        },
+        PlannerStateNode {
+            id: "s1".to_string(),
+            is_goal: false,
+            is_forbidden: false,
+            forbidden_region_id: None,
+        },
+        PlannerStateNode {
+            id: "s2".to_string(),
+            is_goal: true,
+            is_forbidden: false,
+            forbidden_region_id: None,
+        },
+    ];
+    w.plan_edges = vec![
+        PlannerEdgeTransition {
+            src_id: "s0".to_string(),
+            action: "step1".to_string(),
+            dst_id: "s1".to_string(),
+            cost: 1.0,
+            confidence: 0.9,
+        },
+        PlannerEdgeTransition {
+            src_id: "s1".to_string(),
+            action: "step2".to_string(),
+            dst_id: "s2".to_string(),
+            cost: 1.0,
+            confidence: 0.95,
+        },
+    ];
+}
+
+#[when("the bounded graph planner computes a trajectory")]
+fn bdd_planner_compute_trajectory(w: &mut R4g1World) {
+    let config = PlannerConfig::default_v1();
+    let res = BoundedGraphPlanner::plan("s0", &w.plan_nodes, &w.plan_edges, &config);
+    match res {
+        Ok(t) => w.plan_result = Some(t),
+        Err(e) => w.plan_error = Some(e),
+    }
+}
+
+#[then("the action sequence [\"step1\", \"step2\"] reaches \"s2\" in 2 steps")]
+fn bdd_planner_trajectory_check(w: &mut R4g1World) {
+    let plan = w.plan_result.as_ref().expect("plan");
+    assert_eq!(plan.action_sequence, vec!["step1", "step2"]);
+    assert_eq!(plan.state_sequence, vec!["s0", "s1", "s2"]);
+    assert_eq!(plan.horizon_steps, 2);
+}
+
+#[then("a PlanWitness recording accepted transitions and plan CID is emitted")]
+fn bdd_planner_witness_check(w: &mut R4g1World) {
+    let plan = w.plan_result.as_ref().expect("plan");
+    assert!(plan.witness.plan_cid.starts_with("blake3:plan_"));
+    assert_eq!(plan.witness.accepted_edges.len(), 2);
+}
+
+#[given("an intermediate state \"s1\" marked as forbidden")]
+fn bdd_planner_setup_forbidden_intermediate(w: &mut R4g1World) {
+    w.plan_nodes = vec![
+        PlannerStateNode {
+            id: "s0".to_string(),
+            is_goal: false,
+            is_forbidden: false,
+            forbidden_region_id: None,
+        },
+        PlannerStateNode {
+            id: "s1".to_string(),
+            is_goal: false,
+            is_forbidden: true,
+            forbidden_region_id: Some("hazard_0".to_string()),
+        },
+        PlannerStateNode {
+            id: "s2".to_string(),
+            is_goal: true,
+            is_forbidden: false,
+            forbidden_region_id: None,
+        },
+    ];
+    w.plan_edges = vec![PlannerEdgeTransition {
+        src_id: "s0".to_string(),
+        action: "step1".to_string(),
+        dst_id: "s1".to_string(),
+        cost: 1.0,
+        confidence: 0.9,
+    }];
+}
+
+#[when("the bounded graph planner attempts to plan a trajectory through \"s1\"")]
+fn bdd_planner_attempt_forbidden_plan(w: &mut R4g1World) {
+    let config = PlannerConfig::default_v1();
+    if let Err(e) = BoundedGraphPlanner::plan("s0", &w.plan_nodes, &w.plan_edges, &config) {
+        w.plan_error = Some(e);
+    }
+}
+
+#[then("planning fails with a frontier exhausted error and zero forbidden states entered")]
+fn bdd_planner_frontier_exhausted_check(w: &mut R4g1World) {
+    let err = w.plan_error.as_ref().expect("plan error");
+    match err {
+        PlannerError::FrontierExhausted {
+            forbidden_states_entered,
+            ..
+        } => assert_eq!(*forbidden_states_entered, 0),
+        other => panic!("expected FrontierExhausted, got {other:?}"),
+    }
+}
+
+#[given("a start state \"s0\" marked as forbidden")]
+fn bdd_planner_setup_forbidden_start(w: &mut R4g1World) {
+    w.plan_nodes = vec![PlannerStateNode {
+        id: "s0".to_string(),
+        is_goal: false,
+        is_forbidden: true,
+        forbidden_region_id: Some("start_hazard".to_string()),
+    }];
+    w.plan_edges = Vec::new();
+}
+
+#[when("planning is initiated from \"s0\"")]
+fn bdd_planner_initiate_forbidden_start(w: &mut R4g1World) {
+    let config = PlannerConfig::default_v1();
+    if let Err(e) = BoundedGraphPlanner::plan("s0", &w.plan_nodes, &w.plan_edges, &config) {
+        w.plan_error = Some(e);
+    }
+}
+
+#[then("planning fails immediately with an initial state forbidden error")]
+fn bdd_planner_initial_forbidden_check(w: &mut R4g1World) {
+    let err = w.plan_error.as_ref().expect("plan error");
+    assert!(matches!(err, PlannerError::InitialStateForbidden { .. }));
 }
 
 // =========================================================================
