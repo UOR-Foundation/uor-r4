@@ -531,6 +531,7 @@ pub fn cover_command(args: &[String]) -> Result<(), String> {
         entropy_gain_bits: options.entropy_gain_bits,
         radius_quantile_numerator: options.radius_quantile,
         radius_quantile_denominator: 100,
+        objective: cover::ObjectiveConfig::default(),
     };
     eprintln!(
         "cover: inducing (depths {}, k0 {}, regions budget {}, memory budget {} MiB)...",

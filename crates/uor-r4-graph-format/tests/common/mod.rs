@@ -130,7 +130,8 @@ pub fn node_section(nodes: &[NodeFields]) -> Vec<u8> {
     out
 }
 
-/// One packed canonical edge's fields (16-byte PackedEdge).
+/// One packed canonical edge's fields (16-byte PackedEdge). `reserved` is 0
+/// in v0 and carries contribution ids under edge-algebra-v1.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct EdgeFields {
     pub src: u32,
