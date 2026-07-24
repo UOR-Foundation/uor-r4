@@ -8,6 +8,7 @@ pub mod perturbation;
 pub mod quantum_cover;
 pub mod residual;
 pub mod routing;
+pub mod semantic_emission_decoupling;
 
 use std::path::PathBuf;
 use uor_r4_core::transformerless::compiler;
