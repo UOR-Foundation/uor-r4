@@ -53,12 +53,10 @@ struct R4g1World {
     // Graph Invariant Ownership fields (#135)
     inv_matrix: Vec<uor_r4_graph_format::invariant_ownership::InvariantOwnershipEntry>,
     inv_nodes: usize,
-    inv_max_degree: usize,
     inv_degree_limit: usize,
     inv_edges: Vec<(u32, u32)>,
     inv_evidence: Vec<u32>,
-    inv_res:
-        Option<Result<usize, uor_r4_graph_format::invariant_ownership::InvariantValidationError>>,
+    inv_res: Option<Result<usize, uor_r4_graph_format::FormatError>>,
 }
 
 #[given("the R4G1 runtime returned the browser's repetitive hello response")]
@@ -484,9 +482,8 @@ fn u8_kernel_zero_floats(_w: &mut R4g1World) {
 // =========================================================================
 // Graph Invariant Ownership BDD Steps (#135)
 // =========================================================================
-use uor_r4_graph_format::invariant_ownership::{
-    GraphInvariantOwnershipMatrix, InvariantValidationError,
-};
+use uor_r4_graph_format::invariant_ownership::GraphInvariantOwnershipMatrix;
+use uor_r4_graph_format::FormatError;
 
 #[given("the normative graph invariant inventory")]
 fn bdd_inv_inventory_given(_w: &mut R4g1World) {}
@@ -507,10 +504,10 @@ fn bdd_inv_matrix_check(w: &mut R4g1World) {
 
 #[given("a graph artifact with maximum node degree 12 against limit 10")]
 fn bdd_inv_degree_limit_given(w: &mut R4g1World) {
-    w.inv_nodes = 10;
-    w.inv_max_degree = 12;
+    w.inv_nodes = 13;
     w.inv_degree_limit = 10;
-    w.inv_edges = vec![(0, 1)];
+    // Node 0 has degree 12: one edge to each of nodes 1..=12.
+    w.inv_edges = (1..=12).map(|dst| (0, dst)).collect();
     w.inv_evidence = vec![101, 102];
 }
 
@@ -518,7 +515,6 @@ fn bdd_inv_degree_limit_given(w: &mut R4g1World) {
 fn bdd_inv_validate_loader(w: &mut R4g1World) {
     w.inv_res = Some(GraphInvariantOwnershipMatrix::validate_graph_structure(
         w.inv_nodes,
-        w.inv_max_degree,
         w.inv_degree_limit,
         &w.inv_edges,
         &w.inv_evidence,
@@ -528,16 +524,12 @@ fn bdd_inv_validate_loader(w: &mut R4g1World) {
 #[then("validation fails with a degree limit exceeded error")]
 fn bdd_inv_degree_error_check(w: &mut R4g1World) {
     let err = w.inv_res.as_ref().expect("inv_res").as_ref().unwrap_err();
-    assert!(matches!(
-        err,
-        InvariantValidationError::DegreeLimitExceeded { .. }
-    ));
+    assert!(matches!(err, FormatError::NodeDegreeExceeded { .. }));
 }
 
 #[given("a graph artifact with 5 nodes and an edge referencing target node 99")]
 fn bdd_inv_dangling_given(w: &mut R4g1World) {
     w.inv_nodes = 5;
-    w.inv_max_degree = 4;
     w.inv_degree_limit = 10;
     w.inv_edges = vec![(0, 99)];
     w.inv_evidence = vec![101, 102];
@@ -546,16 +538,12 @@ fn bdd_inv_dangling_given(w: &mut R4g1World) {
 #[then("validation fails with a dangling reference error")]
 fn bdd_inv_dangling_error_check(w: &mut R4g1World) {
     let err = w.inv_res.as_ref().expect("inv_res").as_ref().unwrap_err();
-    assert!(matches!(
-        err,
-        InvariantValidationError::DanglingReference { .. }
-    ));
+    assert!(matches!(err, FormatError::EdgeEndpointOutOfBounds { .. }));
 }
 
 #[given("a graph node containing duplicate evidence ID 101")]
 fn bdd_inv_duplicate_evidence_given(w: &mut R4g1World) {
     w.inv_nodes = 5;
-    w.inv_max_degree = 4;
     w.inv_degree_limit = 10;
     w.inv_edges = vec![(0, 1)];
     w.inv_evidence = vec![101, 101];
@@ -564,10 +552,7 @@ fn bdd_inv_duplicate_evidence_given(w: &mut R4g1World) {
 #[then("validation fails with a duplicate evidence error")]
 fn bdd_inv_duplicate_evidence_error_check(w: &mut R4g1World) {
     let err = w.inv_res.as_ref().expect("inv_res").as_ref().unwrap_err();
-    assert!(matches!(
-        err,
-        InvariantValidationError::DuplicateEvidence { .. }
-    ));
+    assert!(matches!(err, FormatError::DuplicateEvidence { .. }));
 }
 
 #[tokio::main]

@@ -3,7 +3,7 @@
 //! Specification & Source: `docs/hologram_formal_analysis_direction.md` PDF §9;
 //! `docs/transformerless/R4G1.md` §6; GitHub Issue #135.
 //!
-//! This module formalizes the ownership and validation matrix for all 8 normative graph invariants:
+//! This module formalizes the ownership matrix for all 8 normative graph invariants:
 //! 1. Bounded Node Degree & Active Frontier Width
 //! 2. Valid Aligned Ranges & No Dangling References
 //! 3. Deterministic Node/Edge Canonical Ordering
@@ -12,80 +12,18 @@
 //! 6. Fixed-Width Q8.8 Arithmetic & Overflow Safety
 //! 7. Refinement Acyclicity
 //! 8. Bounded Candidate Work & Declared Fallback Limits
+//!
+//! [`GraphInvariantOwnershipMatrix::validate_graph_structure`] is a
+//! reference implementation covering invariants 1, 2, and 4 only; it
+//! shares [`FormatError`] with the authoritative R4G1 loader path. The
+//! production stage-1 (`crate::view::validate`) and stage-2
+//! (`crate::stage2::validate`) validators enforce the LoaderValidation-owned
+//! invariants directly against packed artifact bytes and are the actual
+//! code path exercised when parsing an artifact via
+//! [`crate::GraphView::parse`]; this module's function does not replace or
+//! get called from that path.
 
-use core::fmt;
-
-/// Non-panicking error enum for graph invariant validation.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum InvariantValidationError {
-    /// Node degree exceeds maximum allowed structural bound.
-    DegreeLimitExceeded {
-        node_id: u32,
-        degree: usize,
-        limit: usize,
-    },
-    /// Edge references non-existent node endpoint.
-    DanglingReference {
-        edge_index: usize,
-        target_node_id: u32,
-    },
-    /// Unsorted or non-canonical node/edge sequence.
-    CanonicalOrderingViolated { index: usize },
-    /// Duplicate evidence entry detected in contribution list.
-    DuplicateEvidence { evidence_id: u32 },
-    /// Malformed or incomplete reverse-index mapping.
-    MalformedReverseIndex { node_id: u32 },
-    /// Score arithmetic overflow in fixed Q8.8 representation.
-    FixedArithmeticOverflow { raw_score: i32 },
-    /// Refinement edge cycle detected.
-    RefinementCycleDetected { cycle_node_id: u32 },
-    /// Candidate work budget exceeded.
-    WorkBudgetExceeded { evaluated: usize, limit: usize },
-}
-
-impl fmt::Display for InvariantValidationError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::DegreeLimitExceeded {
-                node_id,
-                degree,
-                limit,
-            } => write!(
-                f,
-                "Node {node_id} degree ({degree}) exceeds limit ({limit})"
-            ),
-            Self::DanglingReference {
-                edge_index,
-                target_node_id,
-            } => write!(
-                f,
-                "Edge {edge_index} contains dangling reference to node {target_node_id}"
-            ),
-            Self::CanonicalOrderingViolated { index } => {
-                write!(f, "Canonical ordering violated at index {index}")
-            }
-            Self::DuplicateEvidence { evidence_id } => {
-                write!(f, "Duplicate evidence ID {evidence_id} detected")
-            }
-            Self::MalformedReverseIndex { node_id } => {
-                write!(f, "Malformed reverse index entry for node {node_id}")
-            }
-            Self::FixedArithmeticOverflow { raw_score } => {
-                write!(f, "Fixed Q8.8 arithmetic overflow for score {raw_score}")
-            }
-            Self::RefinementCycleDetected { cycle_node_id } => {
-                write!(f, "Refinement edge cycle detected at node {cycle_node_id}")
-            }
-            Self::WorkBudgetExceeded { evaluated, limit } => write!(
-                f,
-                "Work budget exceeded: evaluated {evaluated} > limit {limit}"
-            ),
-        }
-    }
-}
-
-#[cfg(feature = "std")]
-impl std::error::Error for InvariantValidationError {}
+use crate::error::FormatError;
 
 /// Declared owner component for an invariant.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -96,6 +34,7 @@ pub enum InvariantOwner {
     RuntimeKernel,
     Certifier,
     PropertyTest,
+    FuzzTarget,
     FormalProof,
 }
 
@@ -179,35 +118,45 @@ impl GraphInvariantOwnershipMatrix {
         ]
     }
 
-    /// Validate a graph representation against all 8 invariants (no_std compatible).
+    /// Validate a graph representation against a subset of the 8 normative
+    /// invariants — invariant 1 (bounded node degree), invariant 2 (no
+    /// dangling edge references), and invariant 4 (evidence
+    /// non-duplication) — using the shared [`FormatError`] taxonomy also
+    /// used by stage-1/stage-2 loader validation (no_std compatible).
+    ///
+    /// Node degree is derived entirely from `edges`; no caller-supplied
+    /// degree value is trusted, so a malformed artifact cannot bypass the
+    /// check by misreporting it. Invariants 3, 5, 6, 7, and 8 are owned
+    /// and enforced elsewhere per [`Self::get_matrix`] and are not checked
+    /// here.
     pub fn validate_graph_structure(
         node_count: usize,
-        max_node_degree: usize,
         degree_limit: usize,
         edges: &[(u32, u32)], // (src, dst)
         evidence_ids: &[u32],
-    ) -> Result<usize, InvariantValidationError> {
-        // 1. Check degree limit
-        if max_node_degree > degree_limit {
-            return Err(InvariantValidationError::DegreeLimitExceeded {
-                node_id: 0,
-                degree: max_node_degree,
-                limit: degree_limit,
-            });
+    ) -> Result<usize, FormatError> {
+        // 1. Check degree limit, derived from the edge list itself.
+        for node in 0..node_count as u32 {
+            let degree = edges
+                .iter()
+                .filter(|&&(src, dst)| src == node || dst == node)
+                .count();
+            if degree > degree_limit {
+                return Err(FormatError::NodeDegreeExceeded {
+                    node,
+                    degree: degree as u32,
+                    limit: degree_limit as u32,
+                });
+            }
         }
 
         // 2. Check dangling references
         for (i, &(src, dst)) in edges.iter().enumerate() {
-            if src as usize >= node_count {
-                return Err(InvariantValidationError::DanglingReference {
-                    edge_index: i,
-                    target_node_id: src,
-                });
-            }
-            if dst as usize >= node_count {
-                return Err(InvariantValidationError::DanglingReference {
-                    edge_index: i,
-                    target_node_id: dst,
+            if src as usize >= node_count || dst as usize >= node_count {
+                return Err(FormatError::EdgeEndpointOutOfBounds {
+                    edge: i as u32,
+                    src,
+                    dst,
                 });
             }
         }
@@ -216,7 +165,7 @@ impl GraphInvariantOwnershipMatrix {
         for i in 0..evidence_ids.len() {
             for j in (i + 1)..evidence_ids.len() {
                 if evidence_ids[i] == evidence_ids[j] {
-                    return Err(InvariantValidationError::DuplicateEvidence {
+                    return Err(FormatError::DuplicateEvidence {
                         evidence_id: evidence_ids[i],
                     });
                 }
@@ -239,53 +188,43 @@ mod tests {
 
     #[test]
     fn test_loader_validation_rejections() {
-        // 1. Degree limit failure
+        // 1. Degree limit failure: node 0 has degree 12 (one edge to each
+        // of nodes 1..=12), which exceeds the limit of 10.
+        let degree_12_edges: Vec<(u32, u32)> = (1..=12).map(|dst| (0, dst)).collect();
         let res1 = GraphInvariantOwnershipMatrix::validate_graph_structure(
+            13,
             10,
-            12,
-            10,
-            &[(0, 1)],
+            &degree_12_edges,
             &[101, 102],
         );
         assert!(matches!(
             res1.unwrap_err(),
-            InvariantValidationError::DegreeLimitExceeded { .. }
+            FormatError::NodeDegreeExceeded {
+                node: 0,
+                degree: 12,
+                limit: 10
+            }
         ));
 
         // 2. Dangling reference failure
-        let res2 = GraphInvariantOwnershipMatrix::validate_graph_structure(
-            5,
-            4,
-            10,
-            &[(0, 99)],
-            &[101, 102],
-        );
+        let res2 =
+            GraphInvariantOwnershipMatrix::validate_graph_structure(5, 10, &[(0, 99)], &[101, 102]);
         assert!(matches!(
             res2.unwrap_err(),
-            InvariantValidationError::DanglingReference { .. }
+            FormatError::EdgeEndpointOutOfBounds { .. }
         ));
 
         // 3. Duplicate evidence failure
-        let res3 = GraphInvariantOwnershipMatrix::validate_graph_structure(
-            5,
-            4,
-            10,
-            &[(0, 1)],
-            &[101, 101],
-        );
+        let res3 =
+            GraphInvariantOwnershipMatrix::validate_graph_structure(5, 10, &[(0, 1)], &[101, 101]);
         assert!(matches!(
             res3.unwrap_err(),
-            InvariantValidationError::DuplicateEvidence { .. }
+            FormatError::DuplicateEvidence { .. }
         ));
 
         // 4. Clean validation
-        let res4 = GraphInvariantOwnershipMatrix::validate_graph_structure(
-            5,
-            4,
-            10,
-            &[(0, 1)],
-            &[101, 102],
-        );
+        let res4 =
+            GraphInvariantOwnershipMatrix::validate_graph_structure(5, 10, &[(0, 1)], &[101, 102]);
         assert_eq!(res4.unwrap(), 5);
     }
 }
