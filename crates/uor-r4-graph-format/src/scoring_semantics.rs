@@ -211,7 +211,7 @@ impl ScoringSemanticsVerifier {
         })?;
         if added {
             return Err(ScoringError::AuditInvariantFailed(
-                "duplicate contribution IDs must be ignored",
+                "duplicate contribution ID was not ignored as required",
             ));
         }
 
@@ -253,7 +253,7 @@ impl ScoringSemanticsVerifier {
         let ord = ScoreAccumulator::<16>::compare_candidates(500, 10, 500, 20);
         if ord != Ordering::Less {
             return Err(ScoringError::AuditInvariantFailed(
-                "equal scores must prefer the lower candidate ID",
+                "equal scores did not prefer the lower candidate ID",
             ));
         }
 
