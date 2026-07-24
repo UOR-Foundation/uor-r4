@@ -48,8 +48,8 @@ fn saturating_mul_small(lhs: i32, rhs: i32) -> i32 {
     }
 
     let negative = (lhs < 0) ^ (rhs < 0);
-    let mut a = if lhs < 0 { -(lhs as i64) } else { lhs as i64 };
-    let mut b = if rhs < 0 { -(rhs as i64) } else { rhs as i64 };
+    let mut a = lhs.unsigned_abs() as i64;
+    let mut b = rhs.unsigned_abs() as i64;
     let limit = if negative {
         (i32::MAX as i64).saturating_add(1)
     } else {
