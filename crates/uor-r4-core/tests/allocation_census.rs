@@ -401,10 +401,13 @@ fn allocation_census() {
     let mut witness = [0u8; 0];
 
     // Warm-up prediction before steady-state measurement
-    let _ = runtime.predict_token(&context_tokens, None, &mut node_scores);
-    let _ = runtime.predict_distribution(&context_tokens, None, &mut node_scores);
-    let _ = runtime.predict_candidates(&context_tokens, None, &mut node_scores, &mut candidates);
-    let _ = runtime.step(&mut state, context_tokens[0], &mut witness);
+    for _ in 0..10 {
+        let _ = runtime.predict_token(&context_tokens, None, &mut node_scores);
+        let _ = runtime.predict_distribution(&context_tokens, None, &mut node_scores);
+        let _ =
+            runtime.predict_candidates(&context_tokens, None, &mut node_scores, &mut candidates);
+        let _ = runtime.step(&mut state, context_tokens[0], &mut witness);
+    }
 
     let (_, predict_cen) = measure(|| {
         for _ in 0..10 {

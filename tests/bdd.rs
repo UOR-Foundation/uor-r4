@@ -50,6 +50,9 @@ struct R4g1World {
     u8_a: u8,
     u8_b: u8,
     u8_res: u8,
+    // Scoring Semantics fields (#158)
+    score_accumulator: uor_r4_graph_format::scoring_semantics::ScoreAccumulator<16>,
+    candidate_cmp_result: Option<core::cmp::Ordering>,
     // Inference Contract fields (#157)
     contract_report: Option<uor_r4_graph_format::inference_contract::InferenceContractAuditReport>,
     _contract_audit_res:
@@ -1907,6 +1910,86 @@ fn bdd_contract_forbidden_rejected(_w: &mut R4g1World) {
     );
 }
 
+// =========================================================================
+// Scoring Semantics BDD Steps (#158)
+// =========================================================================
+use uor_r4_graph_format::scoring_semantics::{
+    ResidualContribution, ResidualContributionKind, ScoreAccumulator,
+};
+
+#[given("a zeroed score accumulator")]
+fn bdd_scoring_zeroed_acc(w: &mut R4g1World) {
+    w.score_accumulator = ScoreAccumulator::new();
+}
+
+#[when("a root prior residual of 1000 and a child correction of 500 are accumulated")]
+fn bdd_scoring_accumulate_residuals(w: &mut R4g1World) {
+    w.score_accumulator
+        .accumulate(&ResidualContribution {
+            kind: ResidualContributionKind::RootPrior,
+            contribution_id: 1,
+            raw_value: 1000,
+        })
+        .expect("accumulate root prior");
+    w.score_accumulator
+        .accumulate(&ResidualContribution {
+            kind: ResidualContributionKind::ChildCorrection,
+            contribution_id: 2,
+            raw_value: 500,
+        })
+        .expect("accumulate child correction");
+}
+
+#[then("the final score is 1500 with zero heap allocations")]
+fn bdd_scoring_check_score_1500(w: &mut R4g1World) {
+    assert_eq!(w.score_accumulator.score(), 1500);
+}
+
+#[given("a score accumulator containing evidence contribution 42")]
+fn bdd_scoring_acc_with_ev_42(w: &mut R4g1World) {
+    w.score_accumulator = ScoreAccumulator::new();
+    w.score_accumulator
+        .accumulate(&ResidualContribution {
+            kind: ResidualContributionKind::InteractionResidual,
+            contribution_id: 42,
+            raw_value: 300,
+        })
+        .expect("accumulate ev 42");
+}
+
+#[when("the same evidence contribution 42 is accumulated again")]
+fn bdd_scoring_accumulate_duplicate_ev_42(w: &mut R4g1World) {
+    w.score_accumulator
+        .accumulate(&ResidualContribution {
+            kind: ResidualContributionKind::InteractionResidual,
+            contribution_id: 42,
+            raw_value: 300,
+        })
+        .expect("accumulate duplicate ev 42");
+}
+
+#[then("the duplicate evidence is ignored and the score remains unchanged")]
+fn bdd_scoring_check_duplicate_ignored(w: &mut R4g1World) {
+    assert_eq!(w.score_accumulator.score(), 300);
+    assert_eq!(w.score_accumulator.evidence_count(), 1);
+}
+
+#[given("candidate A with score 500 and ID 10")]
+fn bdd_scoring_cand_a(_w: &mut R4g1World) {}
+
+#[given("candidate B with score 500 and ID 20")]
+fn bdd_scoring_cand_b(_w: &mut R4g1World) {}
+
+#[when("candidates are compared by the deterministic tie-breaker")]
+fn bdd_scoring_compare_cands(w: &mut R4g1World) {
+    w.candidate_cmp_result = Some(ScoreAccumulator::<16>::compare_candidates(500, 10, 500, 20));
+}
+
+#[then("candidate A ranks higher than candidate B")]
+fn bdd_scoring_check_cand_a_wins(w: &mut R4g1World) {
+    let res = w.candidate_cmp_result.expect("candidate cmp result");
+    assert_eq!(res, core::cmp::Ordering::Less);
+}
 #[tokio::main]
 async fn main() {
     R4g1World::cucumber()

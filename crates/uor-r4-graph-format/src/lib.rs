@@ -71,6 +71,7 @@ pub mod inference_contract;
 pub mod invariant_ownership;
 pub mod records;
 mod rout;
+pub mod scoring_semantics;
 #[cfg(feature = "alloc")]
 mod ser;
 mod stage2;

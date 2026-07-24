@@ -60,6 +60,11 @@ pub enum ProofValidationError {
         obligation_id: String,
         raw_score: i64,
     },
+    /// Machine-readable scoring semantics audit failed.
+    ScoringSemanticsViolation {
+        obligation_id: String,
+        detail: String,
+    },
     /// Proof matrix status drift detected.
     StatusDrift {
         obligation_id: String,
@@ -110,6 +115,10 @@ impl fmt::Display for ProofValidationError {
             Self::FixedArithmeticOverflow { obligation_id, raw_score } => write!(
                 f,
                 "Fixed-point arithmetic obligation '{obligation_id}' failed: score {raw_score} out of Q8.8 i16 range"
+            ),
+            Self::ScoringSemanticsViolation { obligation_id, detail } => write!(
+                f,
+                "Scoring semantics obligation '{obligation_id}' failed: {detail}"
             ),
             Self::StatusDrift { obligation_id, expected, actual } => write!(
                 f,
@@ -417,6 +426,29 @@ impl StructuralGuaranteeVerifier {
             ),
         })
     }
+    /// Verify scoring semantics compliance obligation.
+    pub fn verify_scoring_semantics_compliance(
+        obligation_id: &str,
+    ) -> Result<ProofVerificationReport, ProofValidationError> {
+        use uor_r4_graph_format::scoring_semantics::ScoringSemanticsVerifier;
+        ScoringSemanticsVerifier::audit_scoring_compliance().map_err(|err| {
+            ProofValidationError::ScoringSemanticsViolation {
+                obligation_id: obligation_id.to_string(),
+                detail: err.to_string(),
+            }
+        })?;
+
+        Ok(ProofVerificationReport {
+            obligation_id: obligation_id.to_string(),
+            kind: StructuralObligationKind::SafeArithmetic,
+            status: ProofStatus::Verified,
+            verified: true,
+            details: format!(
+                "Scoring semantics v{} verified (signed saturating accumulation, saturation bounds, no-double-counting, tie-breaking)",
+                ScoringSemanticsVerifier::version()
+            ),
+        })
+    }
 }
 
 #[cfg(test)]
@@ -582,5 +614,14 @@ mod tests {
             err,
             ProofValidationError::FixedArithmeticOverflow { .. }
         ));
+    }
+
+    #[test]
+    fn test_verify_scoring_semantics_compliance() {
+        let report =
+            StructuralGuaranteeVerifier::verify_scoring_semantics_compliance("OBL-SCORE-01")
+                .unwrap();
+        assert!(report.verified);
+        assert!(report.details.contains("signed saturating accumulation"));
     }
 }
