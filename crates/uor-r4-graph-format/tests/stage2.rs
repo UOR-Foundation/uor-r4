@@ -11,8 +11,8 @@ use common::{
     storage_section, EdgeFields, HeadFields, NodeFields,
 };
 use uor_r4_graph_format::{
-    ArtifactBuilder, BoundKind, Depth, FormatError, GraphView, NodeId, Radius, RangeField, ScoreQ,
-    SectionId, HEADER_LEN,
+    ArtifactBuilder, BoundKind, Depth, EdgeKind, EdgePayloadField, FormatError, GraphView, NodeId,
+    Radius, RangeField, ScoreQ, SectionId, FEATURE_EDGE_ALGEBRA_V1, HEADER_LEN,
 };
 
 /// The happy-path packed node records: two nodes whose ranges resolve
@@ -25,7 +25,7 @@ fn valid_nodes() -> [NodeFields; 2] {
             child_start: 0,
             child_len: 1,
             forward_start: 0,
-            forward_len: 1,
+            forward_len: 0,
             emission_start: 0,
             emission_len: 4,
             prototype_word_start: 0,
@@ -35,10 +35,10 @@ fn valid_nodes() -> [NodeFields; 2] {
             flags: 0,
         },
         NodeFields {
-            child_start: 1,
-            child_len: 1,
-            forward_start: 1,
-            forward_len: 1,
+            child_start: 0,
+            child_len: 0,
+            forward_start: 0,
+            forward_len: 2,
             emission_start: 4,
             emission_len: 4,
             prototype_word_start: 0,
@@ -50,20 +50,21 @@ fn valid_nodes() -> [NodeFields; 2] {
     ]
 }
 
-/// The happy-path canonical edges: 0→1 and 1→0.
+/// The happy-path canonical edges: refinement and predictive-forward over
+/// the same `(src, dst)` pair.
 fn valid_edges() -> [EdgeFields; 2] {
     [
         EdgeFields {
             src: 0,
             dst: 1,
             score_q: 100,
-            kind: 1,
+            kind: 0,
             flags: 0,
             reserved: 0,
         },
         EdgeFields {
-            src: 1,
-            dst: 0,
+            src: 0,
+            dst: 1,
             score_q: -50,
             kind: 2,
             flags: 0,
@@ -233,7 +234,7 @@ fn typed_accessors_decode_on_demand() {
     assert_eq!(nodes[0].child_start, 0);
     assert_eq!(nodes[0].child_len, 1);
     assert_eq!(nodes[0].forward_start, 0);
-    assert_eq!(nodes[0].forward_len, 1);
+    assert_eq!(nodes[0].forward_len, 0);
     assert_eq!(nodes[0].emission_start, 0);
     assert_eq!(nodes[0].emission_len, 4);
     assert_eq!(nodes[0].prototype_word_start, 0);
@@ -242,6 +243,7 @@ fn typed_accessors_decode_on_demand() {
     assert_eq!(nodes[0].depth, Depth(1));
     assert_eq!(nodes[0].flags, 0);
     assert_eq!(nodes[1].emission_start, 4);
+    assert_eq!(nodes[1].forward_len, 2);
     assert_eq!(nodes[1].depth, Depth(2));
     assert_eq!(view.node(0), Some(nodes[0]));
     assert_eq!(view.node(1), Some(nodes[1]));
@@ -252,8 +254,8 @@ fn typed_accessors_decode_on_demand() {
     assert_eq!(edges[0].src, NodeId(0));
     assert_eq!(edges[0].dst, NodeId(1));
     assert_eq!(edges[0].score_q, ScoreQ::from_raw(100));
-    assert_eq!(edges[0].kind, 1);
-    assert_eq!(edges[1].src, NodeId(1));
+    assert_eq!(edges[0].kind, 0);
+    assert_eq!(edges[1].src, NodeId(0));
     assert_eq!(edges[1].score_q, ScoreQ::from_raw(-50));
     assert_eq!(view.edge(0), Some(edges[0]));
     assert_eq!(view.edge(2), None);
@@ -261,6 +263,115 @@ fn typed_accessors_decode_on_demand() {
     assert_eq!(view.reverse_edge_id(0), Some(0));
     assert_eq!(view.reverse_edge_id(1), Some(1));
     assert_eq!(view.reverse_edge_id(2), None);
+}
+
+#[test]
+fn shared_node_multikind_round_trip() {
+    let mut b = ArtifactBuilder::new(3);
+    let head = HeadFields {
+        node_count: 3,
+        edge_count: 4,
+        depth_count: 4,
+        feature_bits_required: FEATURE_EDGE_ALGEBRA_V1,
+        ..HeadFields::default()
+    };
+    let nodes = [
+        NodeFields {
+            child_start: 0,
+            child_len: 1,
+            forward_start: 0,
+            forward_len: 0,
+            emission_start: 0,
+            emission_len: 0,
+            prototype_word_start: 0,
+            mask_word_start: 0,
+            radius: 1,
+            depth: 0,
+            flags: 0,
+        },
+        NodeFields {
+            child_start: 0,
+            child_len: 0,
+            forward_start: 0,
+            forward_len: 1,
+            emission_start: 0,
+            emission_len: 0,
+            prototype_word_start: 0,
+            mask_word_start: 0,
+            radius: 1,
+            depth: 1,
+            flags: 0,
+        },
+        NodeFields {
+            child_start: 0,
+            child_len: 0,
+            forward_start: 1,
+            forward_len: 3,
+            emission_start: 0,
+            emission_len: 0,
+            prototype_word_start: 0,
+            mask_word_start: 0,
+            radius: 1,
+            depth: 1,
+            flags: 0,
+        },
+    ];
+    let edges = [
+        EdgeFields {
+            src: 0,
+            dst: 1,
+            score_q: 0,
+            kind: EdgeKind::RefinementAbstraction as u8,
+            flags: 0,
+            reserved: 0,
+        },
+        EdgeFields {
+            src: 0,
+            dst: 2,
+            score_q: 7,
+            kind: EdgeKind::Similarity as u8,
+            flags: 0,
+            reserved: 0,
+        },
+        EdgeFields {
+            src: 0,
+            dst: 2,
+            score_q: 3,
+            kind: EdgeKind::EvidenceProvenance as u8,
+            flags: 0,
+            reserved: 101,
+        },
+        EdgeFields {
+            src: 1,
+            dst: 2,
+            score_q: 5,
+            kind: EdgeKind::PredictiveForward as u8,
+            flags: 0,
+            reserved: 102,
+        },
+    ];
+    let reverse = [0, 1, 2, 3];
+    b.add_section(SectionId::HEAD, 0, &head_payload(&head));
+    b.add_section(SectionId::NODE, 0, &node_section(&nodes));
+    b.add_section(SectionId::EDGE, 0, &edge_section(&edges, &reverse));
+    b.add_section(SectionId::ROUT, 0, &valid_rout());
+    b.add_section(SectionId::EMIT, 0, &storage_section(1, 0, 0, &[]));
+    let bytes = b.build().expect("build shared-node fixture");
+    let view = GraphView::parse(&bytes).expect("parse shared-node fixture");
+    let kinds: Vec<u8> = view.edges().map(|e| e.kind).collect();
+    assert_eq!(
+        kinds,
+        vec![
+            EdgeKind::RefinementAbstraction as u8,
+            EdgeKind::Similarity as u8,
+            EdgeKind::EvidenceProvenance as u8,
+            EdgeKind::PredictiveForward as u8,
+        ]
+    );
+    assert_eq!(view.reverse_edge_id(0), Some(0));
+    assert_eq!(view.reverse_edge_id(1), Some(1));
+    assert_eq!(view.reverse_edge_id(2), Some(2));
+    assert_eq!(view.reverse_edge_id(3), Some(3));
 }
 
 #[test]
@@ -346,6 +457,21 @@ fn reject_missing_edge_section() {
     assert_eq!(err_of(&f.build()), FormatError::MissingEdgeSection);
 }
 
+#[test]
+fn reject_nonzero_reserved_without_edge_algebra_v1() {
+    let mut f = Fixture::valid();
+    let mut edges = valid_edges();
+    edges[1].reserved = 9;
+    f.edges = Some(edge_section(&edges, &[0, 1]));
+    assert_eq!(
+        err_of(&f.build()),
+        FormatError::InvalidEdgePayload {
+            edge: 1,
+            field: EdgePayloadField::Reserved,
+        }
+    );
+}
+
 // ── Packed-node ranges (RFC §6 item 4) ────────────────────────────────
 
 #[test]
@@ -368,12 +494,13 @@ fn reject_child_range_out_of_bounds() {
 fn reject_forward_range_out_of_bounds() {
     let mut f = Fixture::valid();
     let mut nodes = valid_nodes();
-    nodes[0].forward_start = 2; // 2 + 1 = 3 > edge_count 2
+    nodes[1].forward_start = 1;
+    nodes[1].forward_len = 2; // 1 + 2 = 3 > edge_count 2
     f.nodes = Some(node_section(&nodes));
     assert_eq!(
         err_of(&f.build()),
         FormatError::RangeOutOfBounds {
-            node: 0,
+            node: 1,
             field: RangeField::Forward,
         }
     );
@@ -449,7 +576,7 @@ fn reject_edge_endpoint_out_of_bounds() {
         err_of(&f.build()),
         FormatError::EdgeEndpointOutOfBounds {
             edge: 1,
-            src: 1,
+            src: 0,
             dst: 2,
         }
     );
@@ -477,6 +604,154 @@ fn reject_reverse_index_missing_edge() {
     assert_eq!(
         err_of(&f.build()),
         FormatError::ReverseIndexMissing { edge: 0 }
+    );
+}
+
+#[test]
+fn reject_child_range_non_refinement_edge() {
+    let mut f = Fixture::valid();
+    let mut edges = valid_edges();
+    edges[0].kind = 1; // similarity in child range
+    f.edges = Some(edge_section(&edges, &[0, 1]));
+    assert_eq!(
+        err_of(&f.build()),
+        FormatError::ChildRangeEdgeMismatch {
+            node: 0,
+            edge: 0,
+            edge_src: 0,
+            edge_kind: 1,
+        }
+    );
+}
+
+#[test]
+fn reject_forward_range_target_mismatch() {
+    let mut f = Fixture::valid();
+    // Node 1 forward range starts at 0 and spans both entries. Make the first
+    // reverse slot point to edge 1 whose dst=1 is valid, and second point to a
+    // synthetic edge targeting node 0.
+    let mut edges = valid_edges();
+    edges[1].dst = 0;
+    f.edges = Some(edge_section(&edges, &[0, 1]));
+    assert_eq!(
+        err_of(&f.build()),
+        FormatError::ReverseRangeTargetMismatch {
+            node: 1,
+            index: 1,
+            edge_id: 1,
+            edge_dst: 0,
+        }
+    );
+}
+
+#[test]
+fn reject_unknown_mandatory_edge_kind() {
+    let mut f = Fixture::valid();
+    let mut edges = valid_edges();
+    edges[1].kind = 0x40;
+    f.edges = Some(edge_section(&edges, &[0, 1]));
+    assert_eq!(
+        err_of(&f.build()),
+        FormatError::UnknownMandatoryEdgeKind {
+            edge: 1,
+            kind: 0x40,
+        }
+    );
+}
+
+#[test]
+fn reject_invalid_edge_flags_payload() {
+    let mut f = Fixture::valid();
+    let mut edges = valid_edges();
+    edges[0].flags = 1;
+    f.edges = Some(edge_section(&edges, &[0, 1]));
+    assert_eq!(
+        err_of(&f.build()),
+        FormatError::InvalidEdgePayload {
+            edge: 0,
+            field: EdgePayloadField::Flags,
+        }
+    );
+}
+
+#[test]
+fn reject_missing_contribution_id_for_v1_evidence_edge() {
+    let mut f = Fixture::valid();
+    f.head.feature_bits_required = FEATURE_EDGE_ALGEBRA_V1;
+    let mut edges = valid_edges();
+    edges[1].kind = EdgeKind::EvidenceProvenance as u8;
+    edges[1].reserved = 0; // required in v1 for evidence-bearing kinds
+    f.edges = Some(edge_section(&edges, &[0, 1]));
+    assert_eq!(
+        err_of(&f.build()),
+        FormatError::InvalidEdgePayload {
+            edge: 1,
+            field: EdgePayloadField::ContributionId,
+        }
+    );
+}
+
+#[test]
+fn reject_contribution_id_collision_across_kinds() {
+    let mut f = Fixture::valid();
+    f.head.feature_bits_required = FEATURE_EDGE_ALGEBRA_V1;
+    let edges = [
+        EdgeFields {
+            src: 0,
+            dst: 1,
+            score_q: 1,
+            kind: EdgeKind::PredictiveForward as u8,
+            flags: 0,
+            reserved: 42,
+        },
+        EdgeFields {
+            src: 0,
+            dst: 1,
+            score_q: 2,
+            kind: EdgeKind::EvidenceProvenance as u8,
+            flags: 0,
+            reserved: 42,
+        },
+    ];
+    f.edges = Some(edge_section(&edges, &[0, 1]));
+    let mut nodes = valid_nodes();
+    nodes[0].child_len = 0;
+    nodes[1].forward_len = 2;
+    f.nodes = Some(node_section(&nodes));
+    assert_eq!(
+        err_of(&f.build()),
+        FormatError::ContributionIdCollision {
+            first: 0,
+            second: 1,
+            src: 0,
+            dst: 1,
+            contribution_id: 42,
+        }
+    );
+}
+
+#[test]
+fn reject_undeclared_cycle_for_acyclic_kind() {
+    let mut f = Fixture::valid();
+    f.head.feature_bits_required = FEATURE_EDGE_ALGEBRA_V1;
+    let mut edges = valid_edges();
+    edges[1].kind = EdgeKind::Causal as u8;
+    edges[1].src = 1;
+    edges[1].dst = 0; // causal kind is declared acyclic and must follow src<dst
+    edges[1].reserved = 7;
+    f.edges = Some(edge_section(&edges, &[1, 0]));
+    let mut nodes = valid_nodes();
+    nodes[0].forward_start = 1;
+    nodes[0].forward_len = 1;
+    nodes[1].forward_start = 0;
+    nodes[1].forward_len = 1;
+    f.nodes = Some(node_section(&nodes));
+    assert_eq!(
+        err_of(&f.build()),
+        FormatError::InvalidEdgePayload {
+            edge: 1,
+            field: EdgePayloadField::AcyclicOrder,
+        }
     );
 }
 

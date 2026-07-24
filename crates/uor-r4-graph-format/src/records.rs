@@ -8,6 +8,90 @@ use crate::error::FormatError;
 use crate::header::{read_i16_le, read_i32_le, read_u16_le, read_u32_le};
 use crate::types::{Depth, NodeId, Radius, ScoreQ, SectionId};
 
+/// Unknown edge-kind values with this bit set are treated as optional and may
+/// be ignored by readers that do not understand them.
+pub const EDGE_KIND_OPTIONAL_BIT: u8 = 0x80;
+
+/// Stable edge-kind discriminants for the shared-node edge algebra.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum EdgeKind {
+    /// Refinement/abstraction hierarchy edge.
+    RefinementAbstraction = 0,
+    /// Similarity / overlap relation over the same node space.
+    Similarity = 1,
+    /// Predictive forward transition.
+    PredictiveForward = 2,
+    /// Causal influence.
+    Causal = 3,
+    /// Temporal ordering.
+    Temporal = 4,
+    /// Constraint relation.
+    Constraint = 5,
+    /// Goal-progress relation.
+    GoalProgress = 6,
+    /// Evidence / provenance support.
+    EvidenceProvenance = 7,
+    /// Evidential predecessor relation.
+    EvidentialPredecessor = 8,
+}
+
+impl EdgeKind {
+    /// Decode a known mandatory edge kind.
+    pub const fn from_raw(kind: u8) -> Option<Self> {
+        match kind {
+            0 => Some(Self::RefinementAbstraction),
+            1 => Some(Self::Similarity),
+            2 => Some(Self::PredictiveForward),
+            3 => Some(Self::Causal),
+            4 => Some(Self::Temporal),
+            5 => Some(Self::Constraint),
+            6 => Some(Self::GoalProgress),
+            7 => Some(Self::EvidenceProvenance),
+            8 => Some(Self::EvidentialPredecessor),
+            _ => None,
+        }
+    }
+
+    /// Whether this edge algebra is directed.
+    pub const fn directed(self) -> bool {
+        !matches!(self, Self::Similarity)
+    }
+
+    /// Whether this edge algebra may form cycles.
+    pub const fn may_cycle(self) -> bool {
+        matches!(
+            self,
+            Self::Similarity | Self::PredictiveForward | Self::Constraint
+        )
+    }
+
+    /// Whether this edge algebra requires reverse-index coverage checks.
+    pub const fn requires_reverse_index(self) -> bool {
+        !matches!(self, Self::Similarity)
+    }
+
+    /// Whether this edge algebra requires a contribution id in
+    /// `PackedEdge.reserved` under the edge-algebra-v1 feature bit.
+    pub const fn requires_contribution_id(self) -> bool {
+        matches!(
+            self,
+            Self::PredictiveForward
+                | Self::Causal
+                | Self::Temporal
+                | Self::Constraint
+                | Self::GoalProgress
+                | Self::EvidenceProvenance
+                | Self::EvidentialPredecessor
+        )
+    }
+}
+
+/// True when an unknown edge kind is explicitly optional.
+pub const fn is_optional_edge_kind(kind: u8) -> bool {
+    kind & EDGE_KIND_OPTIONAL_BIT != 0
+}
+
 /// Packed node record size in bytes.
 pub const PACKED_NODE_LEN: usize = 30;
 /// Packed canonical edge record size in bytes.
@@ -77,7 +161,7 @@ pub struct PackedNode {
 /// 8       i32   score_q (Q16.16, RFC §9.3)
 /// 12      u8    kind
 /// 13      u8    flags
-/// 14      u16   reserved (0)
+/// 14      u16   reserved (0 in v0; contribution id under edge-algebra-v1)
 /// ```
 ///
 /// Stable edge ID = index in the canonical array (RFC §5 EDGE).
@@ -89,12 +173,13 @@ pub struct PackedEdge {
     pub dst: NodeId,
     /// Quantized log-domain score (semantic Q16.16).
     pub score_q: ScoreQ,
-    /// Edge kind (refinement / overlap / forward per RFC §3; the value
-    /// set is a later freeze item).
+    /// Edge kind discriminant (see [`EdgeKind`]); unknown kinds in the
+    /// mandatory space are rejected, unknown kinds with
+    /// [`EDGE_KIND_OPTIONAL_BIT`] set are optional.
     pub kind: u8,
     /// Per-edge flags (no bits defined in v0).
     pub flags: u8,
-    /// Reserved (0).
+    /// Reserved (0 in v0; contribution id under edge-algebra-v1).
     pub reserved: u16,
 }
 
