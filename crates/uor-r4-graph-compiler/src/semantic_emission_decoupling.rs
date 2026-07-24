@@ -38,6 +38,8 @@ pub enum SemanticEmissionError {
     NovelState { state_id: String },
     /// Search space or state graph trajectory exhausted.
     ExhaustedState { state_id: String },
+    /// A transition's source state does not match the current state in the sequence.
+    NonSequentialTransition { expected: String, found: String },
     /// Language emission adapter failure.
     EmissionAdapterFailed { reason: String },
 }
@@ -63,6 +65,12 @@ impl fmt::Display for SemanticEmissionError {
             }
             Self::ExhaustedState { state_id } => {
                 write!(f, "Semantic transition path from '{state_id}' is exhausted")
+            }
+            Self::NonSequentialTransition { expected, found } => {
+                write!(
+                    f,
+                    "Non-sequential transition: expected src '{expected}', found '{found}'"
+                )
             }
             Self::EmissionAdapterFailed { reason } => {
                 write!(f, "Language emission adapter failed: {reason}")
@@ -140,6 +148,12 @@ impl SemanticReasoningEngine {
         let mut evidence_supported_steps = 0;
 
         for &(src, action, dst, conf, status) in transitions {
+            if src != curr_state {
+                return Err(SemanticEmissionError::NonSequentialTransition {
+                    expected: curr_state,
+                    found: src.to_string(),
+                });
+            }
             if status == SemanticStatus::Contradictory {
                 return Err(SemanticEmissionError::ContradictoryState {
                     state_id: dst.to_string(),
