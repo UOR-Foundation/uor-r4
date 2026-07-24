@@ -160,7 +160,10 @@ impl core::fmt::Display for ContractValidationError {
                 "Forbidden multiplication or division detected in inference hot-path"
             ),
             Self::IllegalOperationForActivity => {
-                write!(f, "Operation class is illegal for the declared boundary activity")
+                write!(
+                    f,
+                    "Operation class is illegal for the declared boundary activity"
+                )
             }
         }
     }
@@ -227,8 +230,8 @@ impl InferenceContractVerifier {
         }
     }
 
-    pub fn audit_contract_compliance() -> Result<InferenceContractAuditReport, ContractValidationError>
-    {
+    pub fn audit_contract_compliance(
+    ) -> Result<InferenceContractAuditReport, ContractValidationError> {
         Ok(InferenceContractAuditReport {
             contract_version: Self::version(),
             permitted_op_classes_count: 6,
