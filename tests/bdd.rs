@@ -50,6 +50,19 @@ struct R4g1World {
     u8_a: u8,
     u8_b: u8,
     u8_res: u8,
+    // Expand Proof Model fields (#132)
+    proof_report: Option<uor_r4_proof_model::structural_guarantees::ProofVerificationReport>,
+    proof_nodes: Vec<u32>,
+    proof_actual_mem: usize,
+    proof_limit_mem: usize,
+    proof_trajectory: Vec<String>,
+    proof_forbidden: Vec<String>,
+    proof_path_len: usize,
+    proof_max_horizon: usize,
+    proof_evidence_ids: Vec<String>,
+    proof_witness_actual: String,
+    proof_witness_expected: String,
+    proof_raw_score: i64,
     // Future State Planner fields (#131)
     plan_nodes: Vec<uor_r4_graph_compiler::future_state_planner::PlannerStateNode>,
     plan_edges: Vec<uor_r4_graph_compiler::future_state_planner::PlannerEdgeTransition>,
@@ -506,6 +519,323 @@ fn u8_kernel_zero_floats(_w: &mut R4g1World) {
     let kernel_code = &source[kernel_start..];
     assert!(!kernel_code.contains("f32") && !kernel_code.contains("f64"));
     assert!(!kernel_code.contains(" * ") && !kernel_code.contains(" / "));
+}
+
+// =========================================================================
+// Expand Proof Model BDD Steps (#132)
+// =========================================================================
+use uor_r4_proof_model::proof_matrix::{ProofStatus, ProofStatusMatrix};
+use uor_r4_proof_model::structural_guarantees::{
+    ProofValidationError, StructuralGuaranteeVerifier,
+};
+
+#[given("a graph planner calculation closure")]
+fn bdd_deterministic_closure(_w: &mut R4g1World) {}
+
+#[when("verified by the structural guarantee verifier for determinism")]
+fn bdd_verify_determinism_step(w: &mut R4g1World) {
+    use uor_r4_graph_compiler::future_state_planner::{
+        BoundedGraphPlanner, PlannerConfig, PlannerEdgeTransition, PlannerStateNode,
+    };
+    // Differential test executing real BoundedGraphPlanner over graph nodes
+    let report = StructuralGuaranteeVerifier::verify_determinism("OBL-DET-PLANNER", || {
+        let nodes = vec![
+            PlannerStateNode {
+                id: "s0".to_string(),
+                is_goal: false,
+                is_forbidden: false,
+                forbidden_region_id: None,
+            },
+            PlannerStateNode {
+                id: "s1".to_string(),
+                is_goal: true,
+                is_forbidden: false,
+                forbidden_region_id: None,
+            },
+        ];
+        let edges = vec![PlannerEdgeTransition {
+            src_id: "s0".to_string(),
+            dst_id: "s1".to_string(),
+            action: "act".to_string(),
+            cost: 1.0,
+            confidence: 0.95,
+        }];
+        let config = PlannerConfig::default_v1();
+        BoundedGraphPlanner::plan("s0", &nodes, &edges, &config)
+    })
+    .unwrap();
+
+    w.proof_report = Some(report);
+}
+
+#[then("the obligation status is Verified and determinism is verified")]
+fn bdd_determinism_status_check(w: &mut R4g1World) {
+    let report = w.proof_report.as_ref().expect("proof report");
+    assert!(report.verified);
+    assert_eq!(report.status, ProofStatus::Verified);
+}
+
+#[given("a list of node IDs [10, 20, 30]")]
+fn bdd_canonical_nodes_given(w: &mut R4g1World) {
+    w.proof_nodes = vec![10, 20, 30];
+}
+
+#[when("verified against canonical serialization obligations")]
+fn bdd_verify_canonical_step(w: &mut R4g1World) {
+    let report =
+        StructuralGuaranteeVerifier::verify_canonical_serialization("OBL-CAN-01", &w.proof_nodes)
+            .unwrap();
+    w.proof_report = Some(report);
+}
+
+#[then("canonical ordering passes cleanly")]
+fn bdd_canonical_ordering_passes(w: &mut R4g1World) {
+    let report = w.proof_report.as_ref().expect("proof report");
+    assert!(report.verified);
+}
+
+#[then("unsorted node IDs [30, 20, 10] fail with a canonical ordering violation error")]
+fn bdd_canonical_ordering_fails(_w: &mut R4g1World) {
+    let err =
+        StructuralGuaranteeVerifier::verify_canonical_serialization("OBL-CAN-01", &[30, 20, 10])
+            .unwrap_err();
+    assert!(matches!(
+        err,
+        ProofValidationError::CanonicalOrderingViolated { .. }
+    ));
+}
+
+#[given("actual memory usage 512 bytes and limit 1024 bytes")]
+fn bdd_resource_memory_given(w: &mut R4g1World) {
+    w.proof_actual_mem = 512;
+    w.proof_limit_mem = 1024;
+}
+
+#[when("verified against bounded resource obligations")]
+fn bdd_verify_resource_step(w: &mut R4g1World) {
+    let report = StructuralGuaranteeVerifier::verify_resource_bound(
+        "OBL-MEM-BDD",
+        "memory_bytes",
+        w.proof_actual_mem,
+        w.proof_limit_mem,
+    )
+    .unwrap();
+    w.proof_report = Some(report);
+}
+
+#[then("the resource bound obligation passes cleanly")]
+fn bdd_resource_bound_passes(w: &mut R4g1World) {
+    let report = w.proof_report.as_ref().expect("proof report");
+    assert!(report.verified);
+}
+
+#[then("actual memory usage 2048 bytes against limit 1024 bytes fails with a resource bound error")]
+fn bdd_resource_bound_fails(_w: &mut R4g1World) {
+    let err = StructuralGuaranteeVerifier::verify_resource_bound(
+        "OBL-MEM-BDD",
+        "memory_bytes",
+        2048,
+        1024,
+    )
+    .unwrap_err();
+    assert!(matches!(
+        err,
+        ProofValidationError::ResourceBoundExceeded { .. }
+    ));
+}
+
+#[given("a state trajectory [\"s0\", \"s1\", \"s2\"] and forbidden region [\"hazard_0\"]")]
+fn bdd_trajectory_hazard_given(w: &mut R4g1World) {
+    w.proof_trajectory = vec!["s0".to_string(), "s1".to_string(), "s2".to_string()];
+    w.proof_forbidden = vec!["hazard_0".to_string()];
+}
+
+#[when("verified against constraint safety obligations")]
+fn bdd_verify_constraint_safety_step(w: &mut R4g1World) {
+    let traj_refs: Vec<&str> = w.proof_trajectory.iter().map(|s| s.as_str()).collect();
+    let forb_refs: Vec<&str> = w.proof_forbidden.iter().map(|s| s.as_str()).collect();
+    let report = StructuralGuaranteeVerifier::verify_constraint_safety(
+        "OBL-SAFE-BDD",
+        &traj_refs,
+        &forb_refs,
+    )
+    .unwrap();
+    w.proof_report = Some(report);
+}
+
+#[then("constraint preservation passes with zero forbidden states entered")]
+fn bdd_constraint_safety_passes(w: &mut R4g1World) {
+    let report = w.proof_report.as_ref().expect("proof report");
+    assert!(report.verified);
+}
+
+#[then("entering \"hazard_0\" fails with a constraint safety violation error")]
+fn bdd_constraint_safety_fails(_w: &mut R4g1World) {
+    let err = StructuralGuaranteeVerifier::verify_constraint_safety(
+        "OBL-SAFE-BDD",
+        &["s0", "hazard_0", "s2"],
+        &["hazard_0"],
+    )
+    .unwrap_err();
+    assert!(matches!(
+        err,
+        ProofValidationError::ConstraintSafetyViolated { .. }
+    ));
+}
+
+#[given("a planner path length 5 and horizon limit 10")]
+fn bdd_planner_horizon_given(w: &mut R4g1World) {
+    w.proof_path_len = 5;
+    w.proof_max_horizon = 10;
+}
+
+#[when("verified against planner termination obligations")]
+fn bdd_verify_planner_termination_step(w: &mut R4g1World) {
+    let report = StructuralGuaranteeVerifier::verify_planner_termination(
+        "OBL-TERM-BDD",
+        w.proof_path_len,
+        w.proof_max_horizon,
+    )
+    .unwrap();
+    w.proof_report = Some(report);
+}
+
+#[then("planner horizon termination passes cleanly")]
+fn bdd_planner_termination_passes(w: &mut R4g1World) {
+    let report = w.proof_report.as_ref().expect("proof report");
+    assert!(report.verified);
+}
+
+#[then("path length 15 against horizon limit 10 fails with a planner termination error")]
+fn bdd_planner_termination_fails(_w: &mut R4g1World) {
+    let err = StructuralGuaranteeVerifier::verify_planner_termination("OBL-TERM-BDD", 15, 10)
+        .unwrap_err();
+    assert!(matches!(
+        err,
+        ProofValidationError::PlannerTerminationFailed { .. }
+    ));
+}
+
+#[given("a list of evidence IDs [\"ev_1\", \"ev_2\", \"ev_3\"]")]
+fn bdd_evidence_ids_given(w: &mut R4g1World) {
+    w.proof_evidence_ids = vec!["ev_1".to_string(), "ev_2".to_string(), "ev_3".to_string()];
+}
+
+#[when("verified against evidence traceability obligations")]
+fn bdd_verify_evidence_traceability_step(w: &mut R4g1World) {
+    let refs: Vec<&str> = w.proof_evidence_ids.iter().map(|s| s.as_str()).collect();
+    let report =
+        StructuralGuaranteeVerifier::verify_evidence_traceability("OBL-EVID-BDD", &refs).unwrap();
+    w.proof_report = Some(report);
+}
+
+#[then("evidence traceability passes cleanly")]
+fn bdd_evidence_traceability_passes(w: &mut R4g1World) {
+    let report = w.proof_report.as_ref().expect("proof report");
+    assert!(report.verified);
+}
+
+#[then("duplicate evidence IDs [\"ev_1\", \"ev_1\", \"ev_3\"] fail with an evidence traceability error")]
+fn bdd_evidence_traceability_fails(_w: &mut R4g1World) {
+    let err = StructuralGuaranteeVerifier::verify_evidence_traceability(
+        "OBL-EVID-BDD",
+        &["ev_1", "ev_1", "ev_3"],
+    )
+    .unwrap_err();
+    assert!(matches!(
+        err,
+        ProofValidationError::EvidenceTraceabilityFailed { .. }
+    ));
+}
+
+#[given("actual witness hash \"hash_abc123\" and expected witness hash \"hash_abc123\"")]
+fn bdd_replay_witness_given(w: &mut R4g1World) {
+    w.proof_witness_actual = "hash_abc123".to_string();
+    w.proof_witness_expected = "hash_abc123".to_string();
+}
+
+#[when("verified against replay witness obligations")]
+fn bdd_verify_replay_witness_step(w: &mut R4g1World) {
+    let report = StructuralGuaranteeVerifier::verify_replay_witness_integrity(
+        "OBL-WIT-BDD",
+        &w.proof_witness_actual,
+        &w.proof_witness_expected,
+    )
+    .unwrap();
+    w.proof_report = Some(report);
+}
+
+#[then("replay witness integrity passes cleanly")]
+fn bdd_replay_witness_passes(w: &mut R4g1World) {
+    let report = w.proof_report.as_ref().expect("proof report");
+    assert!(report.verified);
+}
+
+#[then("actual witness hash \"hash_abc123\" against expected hash \"hash_xyz999\" fails with a witness mismatch error")]
+fn bdd_replay_witness_fails(_w: &mut R4g1World) {
+    let err = StructuralGuaranteeVerifier::verify_replay_witness_integrity(
+        "OBL-WIT-BDD",
+        "hash_abc123",
+        "hash_xyz999",
+    )
+    .unwrap_err();
+    assert!(matches!(
+        err,
+        ProofValidationError::ReplayWitnessMismatch { .. }
+    ));
+}
+
+#[given("a raw score 2048")]
+fn bdd_fixed_score_given(w: &mut R4g1World) {
+    w.proof_raw_score = 2048;
+}
+
+#[when("verified against fixed-point arithmetic obligations")]
+fn bdd_verify_fixed_arithmetic_step(w: &mut R4g1World) {
+    let report = StructuralGuaranteeVerifier::verify_fixed_arithmetic_safety(
+        "OBL-MATH-BDD",
+        w.proof_raw_score,
+    )
+    .unwrap();
+    w.proof_report = Some(report);
+}
+
+#[then("fixed arithmetic score safety passes cleanly")]
+fn bdd_fixed_arithmetic_passes(w: &mut R4g1World) {
+    let report = w.proof_report.as_ref().expect("proof report");
+    assert!(report.verified);
+}
+
+#[then("raw score 70000 fails with a fixed arithmetic overflow error")]
+fn bdd_fixed_arithmetic_fails(_w: &mut R4g1World) {
+    let err = StructuralGuaranteeVerifier::verify_fixed_arithmetic_safety("OBL-MATH-BDD", 70000)
+        .unwrap_err();
+    assert!(matches!(
+        err,
+        ProofValidationError::FixedArithmeticOverflow { .. }
+    ));
+}
+
+#[given("the default proof matrix")]
+fn bdd_default_proof_matrix(_w: &mut R4g1World) {}
+
+#[when("theorem \"Allocation Freedom\" is audited against expected status Verified")]
+fn bdd_audit_p1_step(w: &mut R4g1World) {
+    let matrix = ProofStatusMatrix::default();
+    let report = StructuralGuaranteeVerifier::audit_proof_matrix_entry(
+        &matrix,
+        "Allocation Freedom",
+        ProofStatus::Verified,
+    )
+    .unwrap();
+    w.proof_report = Some(report);
+}
+
+#[then("the audit succeeds and status matches")]
+fn bdd_audit_status_matches(w: &mut R4g1World) {
+    let report = w.proof_report.as_ref().expect("proof report");
+    assert!(report.verified);
+    assert_eq!(report.status, ProofStatus::Verified);
 }
 
 // =========================================================================
