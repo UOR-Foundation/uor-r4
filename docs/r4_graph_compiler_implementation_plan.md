@@ -506,6 +506,9 @@ Objective: AVX2/AVX-512/NEON kernels behind validated runtime dispatch (PDF §17
 
 ## 6. Runtime contract and R4G1 summary (normative targets the phases implement)
 
+Normative contract definition: `docs/transformerless/INFERENCE_OPERATION_CONTRACT.md` (v0.1.0),
+with machine-readable binding in `uor-r4-graph-format::inference_contract`.
+
 Adopted from PDF §16–§18, §21 without dilution:
 
 - `step()` is synchronous, deterministic, allocation-free, recursion-free, lock-free; parallelism

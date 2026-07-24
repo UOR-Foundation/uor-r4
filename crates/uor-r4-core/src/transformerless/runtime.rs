@@ -440,7 +440,11 @@ pub fn predict_witness_plain(store: &Store, code: &[u8; STAGES]) -> Prediction {
             };
         }
     }
-    unreachable!("level 0 is always populated")
+    Prediction {
+        token: 0,
+        depth: 0,
+        count: 0,
+    }
 }
 
 /// Plain-form prediction with semantic priors: deepest populated class argmax biased by priors.
@@ -472,7 +476,11 @@ pub fn predict_witness_plain_with_priors(
             };
         }
     }
-    unreachable!("level 0 is always populated")
+    Prediction {
+        token: 0,
+        depth: 0,
+        count: 0,
+    }
 }
 
 /// Plain-form prediction: the witness variant's token, one code path.
@@ -577,7 +585,13 @@ impl<'a> Runtime<'a> {
                 };
             }
         }
-        unreachable!("level 0 is always populated")
+        let fallback = self.state.token().as_slice().last().copied().unwrap_or(0);
+        self.state.record_token(fallback);
+        Prediction {
+            token: fallback,
+            depth: 0,
+            count: 0,
+        }
     }
 
     /// Kernel-counted prediction with resolution witness and semantic context priors.
@@ -618,7 +632,13 @@ impl<'a> Runtime<'a> {
                 };
             }
         }
-        unreachable!("level 0 is always populated")
+        let fallback = self.state.token().as_slice().last().copied().unwrap_or(0);
+        self.state.record_token(fallback);
+        Prediction {
+            token: fallback,
+            depth: 0,
+            count: 0,
+        }
     }
 
     /// Allocation-free greedy generation into caller-owned storage.

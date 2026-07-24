@@ -67,6 +67,8 @@ mod code;
 mod error;
 mod head;
 mod header;
+mod inference_contract;
+mod invariant_ownership;
 pub mod records;
 mod rout;
 #[cfg(feature = "alloc")]
@@ -84,6 +86,15 @@ pub use head::{
 pub use header::{
     Header, ARTIFACT_CID_OFFSET, ARTIFACT_HASH_START, ENDIANNESS_LITTLE, FORMAT_VERSION_MAJOR,
     FORMAT_VERSION_MINOR, HEADER_LEN, HEAD_CID_OFFSET, MAGIC, SECTION_ENTRY_LEN,
+};
+pub use inference_contract::{
+    owner_for_activity, ActivityOwner, AllowedOperationClass, BoundaryActivity, ContractVersion,
+    ExplicitExclusion, ForbiddenOperationClass, InferenceContractError, ACTIVITY_OWNERS,
+    ALLOWED_OPERATION_CLASSES, BOUNDARY_ACTIVITIES, EXPLICIT_EXCLUSIONS,
+    FORBIDDEN_OPERATION_CLASSES, INFERENCE_OPERATION_CONTRACT_VERSION,
+};
+pub use invariant_ownership::{
+    InvariantOwner, InvariantOwnershipRow, INVARIANT_OWNERSHIP_ROWS, OPERATION_SET_CONFORMANCE_ROW,
 };
 pub use records::{
     EdgeKind, PackedEdge, PackedNode, StorageDescriptor, EDGE_KIND_OPTIONAL_BIT, PACKED_EDGE_LEN,

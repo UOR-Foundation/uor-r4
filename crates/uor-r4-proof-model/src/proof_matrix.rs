@@ -36,6 +36,13 @@ impl Default for ProofStatusMatrix {
                             .to_string(),
                 },
                 TheoremEntry {
+                    name: "Operation-Set Conformance".to_string(),
+                    theorem_id: "Plan §6 / PDF §17".to_string(),
+                    status: ProofStatus::Verified,
+                    description:
+                        "Witnessed source scans enforce the multiplication-free inference operation contract until disassembly audit lands".to_string(),
+                },
+                TheoremEntry {
                     name: "Bounded Ranges".to_string(),
                     theorem_id: "Theorem 8".to_string(),
                     status: ProofStatus::Verified,

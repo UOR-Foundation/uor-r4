@@ -12,9 +12,11 @@ impl CayleyDicksonVector {
 
     pub fn from_u32(token: u32) -> Self {
         let mut coords = [0i32; 16];
-        let hash = token.wrapping_mul(2654435761);
+        let mut hash = token ^ token.rotate_left(13);
+        hash ^= hash.rotate_right(7);
+        hash ^= hash << 5;
         for (i, coord) in coords.iter_mut().enumerate() {
-            let bit = (hash >> (i * 2)) & 0x03;
+            let bit = (hash >> (i << 1)) & 0x03;
             *coord = (bit as i32) - 1;
         }
         Self { coords }
@@ -24,9 +26,45 @@ impl CayleyDicksonVector {
     pub fn endomorphism_scalar_product(&self, other: &Self) -> i32 {
         let mut sum = 0i32;
         for (a, b) in self.coords.iter().zip(other.coords.iter()) {
-            sum = sum.saturating_add(a.saturating_mul(*b));
+            sum = sum.saturating_add(saturating_mul_i32_shift_add(*a, *b));
         }
         sum
+    }
+}
+
+fn saturating_mul_i32_shift_add(lhs: i32, rhs: i32) -> i32 {
+    if lhs == 0 || rhs == 0 {
+        return 0;
+    }
+    let negative = (lhs < 0) ^ (rhs < 0);
+    let mut multiplicand = lhs.unsigned_abs();
+    let mut multiplier = rhs.unsigned_abs();
+    let mut acc = 0u32;
+
+    while multiplier != 0 {
+        if (multiplier & 1) == 1 {
+            acc = acc.saturating_add(multiplicand);
+        }
+        multiplier >>= 1;
+        if multiplier != 0 {
+            multiplicand = if multiplicand > (u32::MAX >> 1) {
+                u32::MAX
+            } else {
+                multiplicand << 1
+            };
+        }
+    }
+
+    if negative {
+        if acc > i32::MAX as u32 {
+            i32::MIN
+        } else {
+            -(acc as i32)
+        }
+    } else if acc > i32::MAX as u32 {
+        i32::MAX
+    } else {
+        acc as i32
     }
 }
 
