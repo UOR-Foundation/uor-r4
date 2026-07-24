@@ -8,10 +8,10 @@ use cucumber::{given, then, when, World};
 use std::path::Path;
 use uor_r4_core::transformerless::bott_fock::BottFockContextStore;
 use uor_r4_core::transformerless::compiler::SIG_BYTES;
-use uor_r4_core::transformerless::cover::Observation;
 use uor_r4_core::transformerless::endomorphism::EndomorphismAlgebra;
 use uor_r4_core::transformerless::lie_jordan::{universal_product_u8, LieJordanSplit};
-use uor_r4_core::transformerless::quantum_cover::{
+use uor_r4_graph_compiler::induction::Observation;
+use uor_r4_graph_compiler::quantum_cover::{
     quantum_entropy_gain, DensityOperator, QuantumCoverConfig,
 };
 use uor_r4_wasm_router::cd_space_fold;
@@ -125,7 +125,7 @@ fn selected_engine_is_legacy(w: &mut R4g1World) {
 #[then("the browser UI selects R4G1 and does not offer automatic fallback")]
 fn browser_selects_r4g1(_w: &mut R4g1World) {
     let source = include_str!("../index.html");
-    assert!(source.contains(r#"<option value="r4g1" selected>R4G1 Graph (Server)</option>"#));
+    assert!(source.contains(r#"<option value="r4g1" selected>"#));
     assert!(!source.contains("Auto: R4G1 → Legacy TLA/TLS"));
 }
 
@@ -367,6 +367,7 @@ fn disjoint_halves_observations(w: &mut R4g1World) {
             sample: [0u8; 32],
             vector: Vec::new(),
             sig: [0u8; SIG_BYTES],
+            prev: 0u32,
             next: if i < 50 { 1 } else { 2 },
         })
         .collect();

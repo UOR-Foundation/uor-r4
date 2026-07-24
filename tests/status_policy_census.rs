@@ -13,38 +13,8 @@
 
 mod status_policy_common;
 
-use std::alloc::{GlobalAlloc, Layout, System};
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-
+use uor_r4_graph_certify::ScoreStatus;
 use uor_r4_wasm_router::r4g1::PredictDecision;
-use uor_r4_wasm_router::transformerless::score_runtime::ScoreStatus;
-
-// --------------------------------------------------- counting allocator --
-
-/// Global allocator that counts allocation events and gross bytes requested
-/// while the gate is open (the `allocation_census.rs` pattern).
-struct CountingAlloc;
-
-static GATE: AtomicBool = AtomicBool::new(false);
-static ALLOCATIONS: AtomicUsize = AtomicUsize::new(0);
-static BYTES: AtomicUsize = AtomicUsize::new(0);
-
-unsafe impl GlobalAlloc for CountingAlloc {
-    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        let ptr = unsafe { System.alloc(layout) };
-        if !ptr.is_null() && GATE.load(Ordering::SeqCst) {
-            ALLOCATIONS.fetch_add(1, Ordering::Relaxed);
-            BYTES.fetch_add(layout.size(), Ordering::Relaxed);
-        }
-        ptr
-    }
-    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        unsafe { System.dealloc(ptr, layout) }
-    }
-}
-
-#[global_allocator]
-static GLOBAL: CountingAlloc = CountingAlloc;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Census {
@@ -57,22 +27,21 @@ const ZERO: Census = Census {
     bytes: 0,
 };
 
-fn census() -> Census {
-    Census {
-        allocations: ALLOCATIONS.load(Ordering::Relaxed),
-        bytes: BYTES.load(Ordering::Relaxed),
-    }
-}
-
 /// Run `f` with the counting gate open; return its output and the census of
 /// what it allocated. Reporting happens with the gate closed.
 fn measure<T>(f: impl FnOnce() -> T) -> (T, Census) {
-    ALLOCATIONS.store(0, Ordering::Relaxed);
-    BYTES.store(0, Ordering::Relaxed);
-    GATE.store(true, Ordering::SeqCst);
+    let c_before = uor_r4_proof_model::allocation_proof::current_alloc_count();
+    let b_before = uor_r4_proof_model::allocation_proof::current_alloc_bytes();
     let out = f();
-    GATE.store(false, Ordering::SeqCst);
-    (out, census())
+    let c_after = uor_r4_proof_model::allocation_proof::current_alloc_count();
+    let b_after = uor_r4_proof_model::allocation_proof::current_alloc_bytes();
+    (
+        out,
+        Census {
+            allocations: c_after.saturating_sub(c_before),
+            bytes: b_after.saturating_sub(b_before),
+        },
+    )
 }
 
 // ---------------------------------------------------------------- census --

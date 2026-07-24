@@ -13,8 +13,8 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use uor_foundation::pipeline::PrismModel;
 
-use uor_r4_core::transformerless::score_runtime::ScoreStatus;
-use uor_r4_core::transformerless::teacher::{BehaviorSource, TeacherOracle};
+use uor_r4_graph_certify::ScoreStatus;
+use uor_r4_model_source::{BehaviorSource, TeacherOracle};
 
 // The browser-triggered build must have enough teacher evidence and graph
 // capacity to be a meaningful quality attempt. These are still bounded,
@@ -158,6 +158,36 @@ pub fn run_server(cli: Arc<ServerConfig>) {
     let start_time = Instant::now();
     let router = Arc::new(Mutex::new(UorR4Router::new(0.85)));
     let tless: Arc<Mutex<Option<tless_uor::TlessState>>> = Arc::new(Mutex::new(None));
+    let oracle: Arc<Mutex<Option<uor_r4_model_source::HuggingFaceLlamaOracle>>> =
+        Arc::new(Mutex::new(None));
+
+    let candidates = [
+        ".uor-models/sources/smollm2-1-7b-instruct",
+        ".uor-models/sources/smollm2-360m-instruct",
+        ".uor-models/sources/smollm2-135m-instruct",
+    ];
+    let source_dir = candidates
+        .iter()
+        .find(|p| std::path::Path::new(p).join("model.safetensors").exists());
+    if let Some(path) = source_dir {
+        println!(
+            "[*] Loading full Llama teacher oracle from {} for attention-based generation...",
+            path
+        );
+        match uor_r4_model_source::HuggingFaceLlamaOracle::load(path) {
+            Ok(o) => {
+                println!(
+                    "[+] Successfully loaded full Llama teacher model ({})!",
+                    path
+                );
+                *oracle.lock().unwrap() = Some(o);
+            }
+            Err(e) => {
+                println!("[-] Failed to load full Llama teacher model: {:?}", e);
+            }
+        }
+    }
+
     let r4g1: Arc<Mutex<Option<R4g1State>>> = Arc::new(Mutex::new(None));
     let r4g1_compile = Arc::new(Mutex::new(R4g1CompileStatus {
         running: false,
@@ -211,13 +241,51 @@ pub fn run_server(cli: Arc<ServerConfig>) {
     if !loaded_r4g1 {
         tracing::info!("no validated R4G1 graph found; compile it from the dashboard");
     }
-    let oracle: Arc<Mutex<Option<uor_r4_core::transformerless::teacher::HuggingFaceLlamaOracle>>> =
-        Arc::new(Mutex::new(None));
+    let r4g1_candidates = [
+        ".uor-models/compiled/smollm2-1-7b-instruct/compiled.r4g1",
+        ".uor-models/compiled/smollm2-360m-instruct/compiled.r4g1",
+        ".uor-models/compiled/smollm2-135m-instruct/compiled.r4g1",
+        ".uor-models/compiled/smollm2-1-7b-instruct/score.r4g1",
+        ".uor-models/compiled/smollm2-360m-instruct/score.r4g1",
+        ".uor-models/compiled/smollm2-135m-instruct/score.r4g1",
+        "/tmp/score.r4g1",
+    ];
+    if let Some(r4g1_path) = r4g1_candidates
+        .iter()
+        .find(|p| std::path::Path::new(p).exists())
+    {
+        if let Ok(r4g1_bytes) = std::fs::read(r4g1_path) {
+            match uor_r4_graph_runtime::R4G1Runtime::parse(&r4g1_bytes) {
+                Ok(_) => {
+                    println!(
+                        "[+] Successfully loaded R4G1 zero-multiply prediction runtime ({})!",
+                        r4g1_path
+                    );
+                    tless_uor::set_r4g1_bytes(r4g1_bytes);
+
+                    let parent_dir = std::path::Path::new(r4g1_path)
+                        .parent()
+                        .unwrap_or(std::path::Path::new("."));
+                    let art_path = parent_dir.join("tless_artifacts.bin").display().to_string();
+                    let store_path = parent_dir.join("tless_store.bin").display().to_string();
+                    let tok_path = parent_dir.join("tokenizer.bin").display().to_string();
+
+                    tless_uor::configure_tless_paths(tless_uor::TlessPaths {
+                        artifacts: art_path,
+                        store: store_path,
+                        tokenizer: tok_path,
+                    });
+                }
+                Err(e) => {
+                    println!("[-] Failed to parse R4G1 bundle: {:?}", e);
+                }
+            }
+        }
+    }
 
     // Load cache on startup
     {
         let mut r = router.lock().unwrap();
-        let mut cache_loaded = false;
         if let Ok(cache_data) = std::fs::read_to_string(&cli.manifold_cache) {
             if let Err(e) = r.import_state_native(&cache_data) {
                 tracing::warn!(error = %e, path = %cli.manifold_cache, "failed to load manifold cache");
@@ -227,20 +295,13 @@ pub fn run_server(cli: Arc<ServerConfig>) {
                     "[+] Successfully loaded manifold cache from {}. Sentences indexed: {}",
                     cli.manifold_cache, total
                 );
-                if total >= 500 {
-                    cache_loaded = true;
-                }
             }
         } else {
             tracing::info!(path = %cli.manifold_cache, "no manifold cache found; initializing a new manifold");
         }
 
-        if !cache_loaded {
-            println!("[*] Indexing wiki corpus skipped by system override.");
-            // index_wiki_corpus(&mut r);
-        }
-
-        // Scan and index extra reading documents
+        // Always ingest wiki corpus and extra reading files into manifold cache
+        index_wiki_corpus(&mut r);
         index_extra_reading_files(&mut r);
 
         // Save cache
@@ -317,11 +378,10 @@ pub fn run_server(cli: Arc<ServerConfig>) {
 }
 
 // Personal-path wiki indexer; retained for local experiments.
-#[allow(dead_code)]
 fn index_wiki_corpus(router: &mut UorR4Router) {
     let paths = vec![
-        std::path::PathBuf::from("/Users/adminamn/gemini-dev/wiki_corpus.txt"),
-        std::path::PathBuf::from("../../wiki_corpus.txt"),
+        std::path::PathBuf::from(".uor-models/sources/wiki_corpus.txt"),
+        std::path::PathBuf::from(".uor-models/wiki_corpus.txt"),
         std::path::PathBuf::from("wiki_corpus.txt"),
     ];
     let mut wiki_file = None;
@@ -350,8 +410,7 @@ fn index_wiki_corpus(router: &mut UorR4Router) {
 
 fn index_extra_reading_files(router: &mut UorR4Router) {
     let paths = vec![
-        std::path::PathBuf::from("/Users/adminamn/gemini-dev/extra_reading"),
-        std::path::PathBuf::from("../../extra_reading"),
+        std::path::PathBuf::from(".uor-models/extra_reading"),
         std::path::PathBuf::from("extra_reading"),
     ];
     let mut extra_dir = None;
@@ -439,6 +498,9 @@ fn generate_tless_text(
     prompt: &str,
     max_tokens: usize,
 ) -> Option<String> {
+    if let Some(r4g1_text) = tless_uor::generate_r4g1_response(prompt, max_tokens) {
+        return Some(r4g1_text);
+    }
     const MAX_SERVER_TOKENS: usize = 256;
     const MAX_SERVER_TEXT_BYTES: usize = 16 * 1024;
     let mut seed = [0u32; 4096];
@@ -565,52 +627,38 @@ fn generate_r4g1_text(
 }
 
 fn generate_attention_text(
-    oracle: &mut uor_r4_core::transformerless::teacher::HuggingFaceLlamaOracle,
+    oracle: &mut uor_r4_model_source::HuggingFaceLlamaOracle,
     prompt: &str,
     max_tokens: usize,
 ) -> Option<(String, usize)> {
-    // 1. Manually construct token seed matching SmolLM2-Instruct chat template (BOS=1, EOS=2)
+    // 1. Construct exact token seed for SmolLM2 Instruct chat template
     let mut seed = Vec::new();
-
-    // Add <|im_start|> (ID: 1)
-    seed.push(1u32);
-
-    // Add "user\n" tokens
-    let mut user_toks = [0u32; 64];
-    if let Some(len) = tless_uor::tless_tokenize_into("user\n", &mut user_toks) {
-        if len > 1 {
-            seed.extend_from_slice(&user_toks[1..len]);
+    seed.push(1u32); // <|im_start|>
+    if let Some(mut u_toks) = tless_uor::tless_tokenize("user\n") {
+        if u_toks.first() == Some(&1) {
+            u_toks.remove(0);
         }
+        seed.extend(u_toks);
     }
-
-    // Add prompt tokens
-    let mut prompt_toks = [0u32; 4096];
-    if let Some(len) = tless_uor::tless_tokenize_into(prompt, &mut prompt_toks) {
-        if len > 1 {
-            seed.extend_from_slice(&prompt_toks[1..len]);
+    if let Some(mut p_toks) = tless_uor::tless_tokenize(prompt.trim()) {
+        if p_toks.first() == Some(&1) {
+            p_toks.remove(0);
         }
+        seed.extend(p_toks);
     }
-
-    // Add <|im_end|> (ID: 2)
-    seed.push(2u32);
-
-    // Add "\n" token
-    let mut nl_toks = [0u32; 16];
-    if let Some(len) = tless_uor::tless_tokenize_into("\n", &mut nl_toks) {
-        if len > 1 {
-            seed.extend_from_slice(&nl_toks[1..len]);
+    seed.push(2u32); // <|im_end|>
+    if let Some(mut nl_toks) = tless_uor::tless_tokenize("\n") {
+        if nl_toks.first() == Some(&1) {
+            nl_toks.remove(0);
         }
+        seed.extend(nl_toks);
     }
-
-    // Add <|im_start|> (ID: 1)
-    seed.push(1u32);
-
-    // Add "assistant\n" tokens
-    let mut assistant_toks = [0u32; 64];
-    if let Some(len) = tless_uor::tless_tokenize_into("assistant\n", &mut assistant_toks) {
-        if len > 1 {
-            seed.extend_from_slice(&assistant_toks[1..len]);
+    seed.push(1u32); // <|im_start|>
+    if let Some(mut a_toks) = tless_uor::tless_tokenize("assistant\n") {
+        if a_toks.first() == Some(&1) {
+            a_toks.remove(0);
         }
+        seed.extend(a_toks);
     }
 
     let seed_len = seed.len();
@@ -621,30 +669,23 @@ fn generate_attention_text(
     // 2. Reset the oracle state for a new generation session
     oracle.reset();
 
-    // 3. Feed the prompt tokens into the transformer model to populate the key-value cache
-    let mut last_token = oracle.bos_token();
+    // 3. Feed the prompt tokens into the transformer model to populate key-value cache
+    let mut logits = vec![0.0f32; oracle.vocab()];
     for (pos, &tok) in seed.iter().enumerate() {
-        let mut logits = vec![0.0f32; oracle.vocab()];
         oracle.step(tok as usize, pos, &mut logits);
-        last_token = tok as usize;
     }
 
-    // 4. Autoregressively generate next tokens using greedy decoding
+    // 4. Autoregressively generate next tokens using greedy decoding with repetition penalty
     let mut generated = Vec::new();
-    let mut logits = vec![0.0f32; oracle.vocab()];
     for pos in seed_len..seed_len + max_tokens {
-        oracle.step(last_token, pos, &mut logits);
-
-        // Apply a standard logit-level repetition penalty for the last 32 tokens
-        let start_idx = generated.len().saturating_sub(32);
-        let mut unique_recent = std::collections::HashSet::new();
+        // Apply repetition penalty to logits before selecting token
+        let start_idx = generated.len().saturating_sub(48);
         for &t in &generated[start_idx..] {
-            if unique_recent.insert(t) {
-                logits[t as usize] -= 1.5;
-            }
+            let count = generated[start_idx..].iter().filter(|&&x| x == t).count();
+            logits[t as usize] -= (count as f32) * 8.0;
         }
 
-        // Find the argmax (greedy token)
+        // Find argmax token
         let mut best_t = 0usize;
         let mut best_v = logits[0];
         for (i, &v) in logits.iter().enumerate() {
@@ -654,13 +695,15 @@ fn generate_attention_text(
             }
         }
 
-        // Break if the model generates EOS (2) or any other official stop token
+        // Stop on EOS (2) or BOS/NULL
         if best_t == oracle.eos_token() || best_t == 2 || best_t == 0 {
             break;
         }
 
         generated.push(best_t as u32);
-        last_token = best_t;
+
+        // Advance transformer state with generated token
+        oracle.step(best_t, pos, &mut logits);
     }
 
     // 5. Detokenize back to String
@@ -691,13 +734,16 @@ fn clean_attention_response(text: &str, prompt: &str) -> String {
         .replace("user\n", "")
         .replace("assistant\n", "");
 
-    // 3. Strip prompt echoes if the model repeated the user prompt at the beginning
+    // 3. Strip prompt echoes if the model repeated the user prompt at the beginning only when non-empty content remains
     let trimmed_prompt = prompt.trim();
     if cleaned.trim().starts_with(trimmed_prompt) {
-        cleaned = cleaned.trim()[trimmed_prompt.len()..].to_string();
+        let remainder = cleaned.trim()[trimmed_prompt.len()..].trim();
+        if !remainder.is_empty() {
+            cleaned = remainder.to_string();
+        }
     }
 
-    // Remove any leading punctuation leftovers from echoes (e.g. "?", "-", ",", ".")
+    // 4. Remove any leading punctuation leftovers from echoes (e.g. "?", "-", ",", ".")
     let mut result = cleaned.trim().to_string();
     while result.starts_with('?')
         || result.starts_with('-')
@@ -709,7 +755,11 @@ fn clean_attention_response(text: &str, prompt: &str) -> String {
         result = result[1..].trim().to_string();
     }
 
-    result
+    if result.is_empty() {
+        text.trim().to_string()
+    } else {
+        result
+    }
 }
 
 /// Validate generated text before it is returned by the HTTP chat endpoint.
@@ -989,13 +1039,12 @@ fn compile_bundle_from_source(
     let meta_path = output.join("corpus.meta");
     let status_for_compiler = Arc::clone(status);
     let compiler = std::thread::spawn(move || {
-        uor_r4_core::transformerless::command::compile_hugging_face_with_progress(
-            &args,
-            move |phase, message| {
-                let mapped = 5u8.saturating_add(phase.saturating_mul(15) / 100);
-                set_r4g1_compile_progress(&status_for_compiler, mapped, message);
-            },
-        )
+        set_r4g1_compile_progress(
+            &status_for_compiler,
+            6,
+            "Loading teacher model and preparing corpus...",
+        );
+        uor_r4_graph_cli::compile_hugging_face(&args)
     });
     while !compiler.is_finished() {
         let observed = fs::read(&meta_path).ok().and_then(|bytes| {
@@ -1157,7 +1206,7 @@ fn compile_r4g1_bundle(
         "--out".to_owned(),
         cover_output.display().to_string(),
     ];
-    uor_r4_core::transformerless::command::cover_command(&cover_args)?;
+    uor_r4_graph_cli::cover_command(&cover_args)?;
 
     set_r4g1_compile_progress(status, 55, "Scoring graph transitions and emissions...");
     let cover_artifact = cover_output.join("cover.r4g1");
@@ -1183,7 +1232,7 @@ fn compile_r4g1_bundle(
         "--out".to_owned(),
         graph_output.display().to_string(),
     ];
-    uor_r4_core::transformerless::command::score_command(&score_args)?;
+    uor_r4_graph_cli::score_command(&score_args)?;
 
     set_r4g1_compile_progress(status, 90, "Validating and loading the compiled graph...");
     let state = R4g1State::load(&graph_path, &artifacts)
@@ -1366,7 +1415,7 @@ fn handle_connection(
     r4g1: Arc<Mutex<Option<R4g1State>>>,
     r4g1_compile: Arc<Mutex<R4g1CompileStatus>>,
     hf_download: Arc<Mutex<HuggingFaceDownloadStatus>>,
-    oracle: Arc<Mutex<Option<uor_r4_core::transformerless::teacher::HuggingFaceLlamaOracle>>>,
+    oracle: Arc<Mutex<Option<uor_r4_model_source::HuggingFaceLlamaOracle>>>,
     cli: Arc<ServerConfig>,
     start_time: Instant,
 ) {
@@ -1561,28 +1610,8 @@ fn handle_connection(
         let mut r4g1_abstained = false;
         let mut r4g1_error: Option<String> = None;
 
+        let mut oracle_guard = oracle.lock().unwrap();
         if engine_mode == "attention" || engine_mode == "r4-attention" {
-            let mut oracle_guard = oracle.lock().unwrap();
-            if oracle_guard.is_none() {
-                let source_dir = ".uor-models/sources/smollm2-135m-instruct";
-                if std::path::Path::new(source_dir).exists() {
-                    println!(
-                        "[*] Loading full Llama teacher oracle from {} for attention-based generation...",
-                        source_dir
-                    );
-                    match uor_r4_core::transformerless::teacher::HuggingFaceLlamaOracle::load(
-                        source_dir,
-                    ) {
-                        Ok(o) => {
-                            println!("[+] Successfully loaded full Llama teacher model!");
-                            *oracle_guard = Some(o);
-                        }
-                        Err(e) => {
-                            println!("[-] Failed to load full Llama teacher model: {:?}", e);
-                        }
-                    }
-                }
-            }
             if let Some(ref mut o) = *oracle_guard {
                 o.set_r4_attention(engine_mode == "r4-attention");
                 if let Some((text, count)) =
@@ -1616,10 +1645,6 @@ fn handle_connection(
                         r4g1_status = gen.status.map(r4g1::PolicyStatus::from).map(|s| s.label());
                         r4g1_widened = gen.widened;
                         r4g1_abstained = true;
-                        println!(
-                            "[*] R4G1 abstained (status: {:?}, widened: {})",
-                            gen.status, gen.widened
-                        );
                     }
                     Ok(Some(gen)) if is_usable_generated_text(&gen.text) => {
                         // The pathological-output reject guard stays the
@@ -1773,7 +1798,8 @@ fn handle_connection(
         });
 
         let response_payload = serde_json::json!({
-            "text": payload.text,
+            "text": final_response_text,
+            "prompt": payload.text,
             "archetype": archetype,
             "description": final_response_text,
             "summary": format!("W{} ({}) | Scale {:.0} | kappa={:.4} theta_d={:.4} | {}",

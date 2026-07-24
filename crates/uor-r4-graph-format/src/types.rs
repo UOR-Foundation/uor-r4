@@ -177,6 +177,8 @@ impl SectionId {
     pub const PTCH: SectionId = SectionId(0x0A);
     /// SECT — per-section hash table (optional, reserved; RFC §9.2).
     pub const SECT: SectionId = SectionId(0x0B);
+    /// RTNX — route translation index (optional, Phase 9).
+    pub const RTNX: SectionId = SectionId(0x0C);
 
     /// Ancillary bit classifying *unknown* section IDs.
     ///
@@ -196,7 +198,7 @@ impl SectionId {
 
     /// True when the ID is in the RFC §3 inventory (`0x01..=0x0B`).
     pub const fn is_known(self) -> bool {
-        matches!(self.0, 0x01..=0x0B)
+        matches!(self.0, 0x01..=0x0C)
     }
 
     /// Mandatory-ness per the RFC §3 column for known IDs.
@@ -206,7 +208,7 @@ impl SectionId {
     pub const fn mandatory(self) -> bool {
         match self.0 {
             0x01..=0x06 | 0x08 => true,
-            0x07 | 0x09..=0x0B => false,
+            0x07 | 0x09..=0x0C => false,
             _ => self.0 & Self::OPTIONAL_BIT == 0,
         }
     }

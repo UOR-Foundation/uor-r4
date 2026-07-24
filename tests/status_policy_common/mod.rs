@@ -15,14 +15,14 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+use uor_r4_graph_certify::{
+    self as score, EmissionTables, GraphScorer, RegionParams, ScoreStatus, Smoothing,
+    StructuralEdge, EXCT_SUPPORT_MIN,
+};
+use uor_r4_graph_format::ScoreQ;
 use uor_r4_wasm_router::r4g1::R4g1State;
 use uor_r4_wasm_router::transformerless::compiler::{self, D, K, SIG_BYTES, STAGES};
 use uor_r4_wasm_router::transformerless::runtime::{self, Store};
-use uor_r4_wasm_router::transformerless::score::{self, EmissionTables, Smoothing};
-use uor_r4_wasm_router::transformerless::score_runtime::{
-    GraphScorer, RegionParams, ScoreStatus, StructuralEdge, EXCT_SUPPORT_MIN,
-};
-use uor_r4_wasm_router::transformerless::ScoreQ;
 
 fn xorshift(s: &mut u64) -> u64 {
     let mut x = *s;

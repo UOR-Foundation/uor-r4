@@ -1,0 +1,10 @@
+[package]
+name = "uor-r4-graph-runtime"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+uor-r4-graph-format = { path = "../uor-r4-graph-format", default-features = false }
+
+[dev-dependencies]
+uor-r4-core = { path = "../uor-r4-core" }

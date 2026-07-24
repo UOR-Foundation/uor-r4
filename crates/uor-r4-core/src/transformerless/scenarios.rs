@@ -29,12 +29,15 @@
 //! so their scenario-level predictions coincide with the teacher rows by
 //! definition; their throughput is in docs/COMPARISON.md.
 
-use super::compiler::{self, Corpus};
-use super::runtime::{build_store, code_plain, derive_rotations, predict_plain, Store};
-use super::teacher::TeacherOracle;
+use super::compiler::Corpus;
+use crate::transformerless::compiler;
+use crate::transformerless::runtime::{
+    build_store, code_plain, derive_rotations, predict_plain, Store,
+};
 use std::collections::BTreeMap;
 use std::io;
 use std::path::Path;
+use uor_r4_model_source::TeacherOracle;
 
 const MAX_TOKEN_BYTES: usize = 1024;
 
@@ -148,7 +151,45 @@ impl Tokenizer {
     /// Load and validate a tokenizer without panicking on malformed input.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn try_load(path: impl AsRef<Path>) -> io::Result<Self> {
-        let bytes = std::fs::read(path)?;
+        let path_ref = path.as_ref();
+
+        // 1. Try loading vocab.json if present in the target or parent directories
+        let json_candidates = [
+            path_ref.to_path_buf(),
+            path_ref.with_file_name("vocab.json"),
+            path_ref
+                .parent()
+                .unwrap_or_else(|| Path::new("."))
+                .join("vocab.json"),
+            std::path::PathBuf::from(".uor-models/sources/smollm2-1-7b-instruct/vocab.json"),
+            std::path::PathBuf::from(".uor-models/compiled/smollm2-135m-instruct/vocab.json"),
+        ];
+
+        for jpath in &json_candidates {
+            if jpath.extension().and_then(|s| s.to_str()) == Some("json") && jpath.exists() {
+                if let Ok(bytes) = std::fs::read(jpath) {
+                    if let Ok(raw_map) = serde_json::from_slice::<BTreeMap<String, u32>>(&bytes) {
+                        let mut max_id = 0u32;
+                        for &id in raw_map.values() {
+                            if id > max_id {
+                                max_id = id;
+                            }
+                        }
+                        let mut vocab = vec![Vec::new(); (max_id + 1) as usize];
+                        let mut map = BTreeMap::new();
+                        for (k, &id) in &raw_map {
+                            let k_bytes = k.as_bytes().to_vec();
+                            vocab[id as usize] = k_bytes.clone();
+                            map.insert(k_bytes, id);
+                        }
+                        return Ok(Tokenizer { vocab, map });
+                    }
+                }
+            }
+        }
+
+        // 2. Fall back to binary tokenizer.bin format
+        let bytes = std::fs::read(path_ref)?;
         let mut vocab = Vec::new();
         let mut offset = 0usize;
         while offset < bytes.len() {
@@ -234,11 +275,69 @@ impl Tokenizer {
         (self.encode(&sanitized), replaced)
     }
 
-    /// Encode into caller-owned storage without allocating.
+    /// Encode into caller-owned storage.
+    ///
+    /// Note: the BPE path allocates an intermediate `String` for byte-level
+    /// remapping, so this is not fully allocation-free.
     pub fn encode_into(&self, text: &str, out: &mut [u32]) -> io::Result<usize> {
         let capacity_error = || io::Error::new(io::ErrorKind::InvalidInput, "token buffer full");
-        let mut len = 1usize;
-        *out.first_mut().ok_or_else(capacity_error)? = 1;
+        let is_llama_bos = self.vocab.get(1).is_some_and(|v| v == b"<s>");
+        let mut len = 0usize;
+        if is_llama_bos {
+            *out.get_mut(len).ok_or_else(capacity_error)? = 1;
+            len += 1;
+        }
+
+        let is_bpe = self.vocab.len() > 32000
+            || self
+                .vocab
+                .get(1)
+                .is_some_and(|v| v == b"<|im_start|>" || v == b"\xC4\xA0");
+
+        if is_bpe {
+            let mut encoded_str = String::with_capacity(text.len() * 2);
+            for ch in text.chars() {
+                match ch {
+                    ' ' => encoded_str.push('Ġ'),
+                    '\n' => encoded_str.push('Ċ'),
+                    '\r' => encoded_str.push('Ĉ'),
+                    '\t' => encoded_str.push('ĉ'),
+                    c => encoded_str.push(c),
+                }
+            }
+
+            let bytes = encoded_str.as_bytes();
+            let mut i = 0usize;
+            while i < bytes.len() {
+                let mut matched_len = 0usize;
+                let mut matched_id = None;
+
+                let max_k = (bytes.len() - i).min(64);
+                for k in (1..=max_k).rev() {
+                    let sub = &bytes[i..i + k];
+                    if let Some(&id) = self.map.get(sub) {
+                        matched_len = k;
+                        matched_id = Some(id);
+                        break;
+                    }
+                }
+
+                if let Some(id) = matched_id {
+                    *out.get_mut(len).ok_or_else(capacity_error)? = id;
+                    len += 1;
+                    i += matched_len;
+                } else {
+                    let b = bytes[i];
+                    if let Some(&id) = self.map.get(&[b][..]) {
+                        *out.get_mut(len).ok_or_else(capacity_error)? = id;
+                        len += 1;
+                    }
+                    i += 1;
+                }
+            }
+            return Ok(len);
+        }
+
         for ch in std::iter::once(' ').chain(text.chars()) {
             let mut utf8 = [0u8; 4];
             let bytes = ch.encode_utf8(&mut utf8).as_bytes();
@@ -263,7 +362,8 @@ impl Tokenizer {
         }
         loop {
             let mut best: Option<(u32, usize)> = None;
-            for i in 1..len.saturating_sub(1) {
+            let start = if is_llama_bos { 1 } else { 0 };
+            for i in start..len.saturating_sub(1) {
                 let left = &self.vocab[out[i] as usize];
                 let right = &self.vocab[out[i + 1] as usize];
                 let pair_len = left.len().saturating_add(right.len());
@@ -292,39 +392,38 @@ impl Tokenizer {
     }
 
     pub fn decode(&self, toks: &[u32]) -> String {
-        let mut bytes = Vec::new();
+        let is_llama_bos = self.vocab.get(1).is_some_and(|v| v == b"<s>");
+        let mut raw = Vec::new();
         for &t in toks {
-            if t == 1 || t == 2 {
+            if is_llama_bos && (t == 1 || t == 2) {
                 continue;
             }
-            bytes.extend_from_slice(&self.vocab[t as usize]);
+            if (t as usize) < self.vocab.len() {
+                raw.extend_from_slice(&self.vocab[t as usize]);
+            }
         }
-        String::from_utf8_lossy(&bytes).into_owned()
+        let text = String::from_utf8_lossy(&raw);
+        text.replace('Ġ', " ")
+            .replace('Ċ', "\n")
+            .replace('Ĉ', "\r")
+            .replace('ĉ', "\t")
     }
 
-    /// Decode into caller-owned byte storage without allocating.
+    /// Decode into caller-owned byte storage.
+    ///
+    /// Note: this delegates to `decode`, which allocates an intermediate
+    /// `Vec`/`String`, so this is not allocation-free.
     pub fn decode_into(&self, toks: &[u32], out: &mut [u8]) -> io::Result<usize> {
-        let mut len = 0usize;
-        for &token in toks {
-            if token == 1 || token == 2 {
-                continue;
-            }
-            let bytes = self.vocab.get(token as usize).ok_or_else(|| {
-                io::Error::new(io::ErrorKind::InvalidInput, "token id outside vocabulary")
-            })?;
-            let end = len.checked_add(bytes.len()).ok_or_else(|| {
-                io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "decoded output length overflow",
-                )
-            })?;
-            let target = out.get_mut(len..end).ok_or_else(|| {
-                io::Error::new(io::ErrorKind::InvalidInput, "decoded output buffer full")
-            })?;
-            target.copy_from_slice(bytes);
-            len = end;
+        let decoded = self.decode(toks);
+        let bytes = decoded.as_bytes();
+        if bytes.len() > out.len() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "decoded output buffer full",
+            ));
         }
-        Ok(len)
+        out[..bytes.len()].copy_from_slice(bytes);
+        Ok(bytes.len())
     }
 }
 
@@ -402,6 +501,7 @@ fn as_corpus(tokens: &[u32], t_argmax: &[u32]) -> Corpus {
         span_end: (0..n).map(|idx| idx as u32 + 1).collect(),
         byte_start: vec![u32::MAX; n],
         byte_end: vec![u32::MAX; n],
+        hidden: None,
     }
 }
 

@@ -25,18 +25,15 @@ pub mod bott_fock;
 pub mod cd_space;
 pub mod endomorphism;
 pub mod lie_jordan;
-pub mod teacher;
 
-#[cfg(not(target_arch = "wasm32"))]
-pub use certificate::Certificate;
 pub use reference_state::{ActiveFrontier, ActiveFrontierEntry, PackedEdgeRanges};
 pub use runtime::{derive_popcount_table, hamming, sign_signature, OpKernel};
-pub use runtime_state::{
+pub use score_q::ScoreQ;
+pub use uor_r4_graph_runtime::runtime_state::{
     ReservedState, ReservedStateUpdate, RuntimeState, RuntimeStateLevel, SemanticStateSlot,
     TokenState, LOCAL_STATE_CAPACITY, SEGMENT_STATE_CAPACITY, SESSION_STATE_CAPACITY,
     TOKEN_STATE_CAPACITY,
 };
-pub use score_q::ScoreQ;
 
 #[cfg(test)]
 mod witnesses {
@@ -150,57 +147,17 @@ mod witnesses {
     }
 }
 
-#[cfg(not(target_arch = "wasm32"))]
-pub mod anti_degeneracy;
-#[cfg(not(target_arch = "wasm32"))]
-pub mod certificate;
-#[cfg(not(target_arch = "wasm32"))]
-pub mod certify;
-#[cfg(not(target_arch = "wasm32"))]
-pub mod command;
-#[cfg(not(target_arch = "wasm32"))]
-pub mod compare;
 // Portable items are available on all targets; fs-dependent functions
 // (corpus load/generate, artifact save/load) are cfg-gated per item.
 pub mod compiler;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod convert_r4g1;
 #[cfg(not(target_arch = "wasm32"))]
-pub mod cover;
-#[cfg(not(target_arch = "wasm32"))]
-pub mod cover_sweep;
-#[cfg(not(target_arch = "wasm32"))]
-pub mod fairness_provenance;
-#[cfg(not(target_arch = "wasm32"))]
 pub mod graph_patch;
-#[cfg(not(target_arch = "wasm32"))]
-pub mod observe;
-#[cfg(not(target_arch = "wasm32"))]
-pub mod observe_text;
-#[cfg(not(target_arch = "wasm32"))]
-pub mod performance_certificate;
-#[cfg(not(target_arch = "wasm32"))]
-pub mod predictive_sufficiency;
-// Progress is portable (stderr); only read_file is fs-gated (see progress.rs).
-pub mod progress;
-#[cfg(not(target_arch = "wasm32"))]
-pub mod quantum_cover;
 pub mod reference_state;
 pub mod resolution_status;
 pub mod runtime;
-pub mod runtime_state;
-// Tokenizer + encode/decode are portable; loaders/exports are fs-gated (see scenarios.rs).
 pub mod scenarios;
-#[cfg(not(target_arch = "wasm32"))]
-pub mod score;
 pub mod score_q;
-// The reference scorer is portable (integer-only core, no fs).
-pub mod score_runtime;
-// Rejected experimental scoring variants (issue #80); isolated from the
-// operator-clean integer core so P-4 stays a hard guarantee.
-#[cfg(not(target_arch = "wasm32"))]
-pub mod shortlist_evaluator;
-#[cfg(not(target_arch = "wasm32"))]
-pub mod trace_lane;
-// Transitions are portable (pure graph math, no fs).
+pub mod simd;
 pub mod transitions;

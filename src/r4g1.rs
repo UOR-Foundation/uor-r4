@@ -32,10 +32,9 @@ use std::path::{Path, PathBuf};
 use uor_r4_core::transformerless::compiler::{self, Compiled, SIG_BYTES, STAGES, WINDOW};
 use uor_r4_core::transformerless::runtime;
 use uor_r4_core::transformerless::scenarios::Tokenizer;
-use uor_r4_core::transformerless::score::DEFAULT_EXCT_TOP_X;
-use uor_r4_core::transformerless::score::DEFAULT_ROOT_TOP_B;
-use uor_r4_core::transformerless::score_runtime::{
-    GraphScorer, ScoreStatus, StepState, TOP_M, WIDENED_TOP_M,
+use uor_r4_graph_certify::{
+    GraphScorer, ScoreStatus, StepState, DEFAULT_EXCT_TOP_X, DEFAULT_ROOT_TOP_B, TOP_M,
+    WIDENED_TOP_M,
 };
 
 // BEGIN DEPLOYED STATUS POLICY (INTEGER-ONLY) -------------------------

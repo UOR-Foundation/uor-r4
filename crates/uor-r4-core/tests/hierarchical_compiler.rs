@@ -32,6 +32,7 @@ fn test_induce_hierarchical_codes() {
         span_end: (0..n).map(|idx| idx as u32 + 1).collect(),
         byte_start: vec![u32::MAX; n],
         byte_end: vec![u32::MAX; n],
+        hidden: None,
     };
 
     let vocab = 100;

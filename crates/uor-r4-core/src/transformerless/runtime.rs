@@ -20,7 +20,7 @@
 
 pub use super::compiler::{derive_rotations, train_cut, SIG_BYTES, SIG_WORDS};
 use super::compiler::{Compiled, Corpus, D, STAGES, WINDOW};
-use super::runtime_state::RuntimeState;
+use uor_r4_graph_runtime::runtime_state::RuntimeState;
 
 const TOP_M_MEMBERSHIPS: usize = 3;
 
@@ -141,15 +141,13 @@ pub type Store = Vec<BTreeMap<Vec<u8>, BTreeMap<u32, u32>>>;
 /// .nth(..)` — O(1) slicing on slices, no index products in this source.
 pub fn decode_row_plain(art: &Compiled, t: u32, out: &mut [i32; D]) {
     out.fill(0);
-    let codes = art
-        .token_codes
-        .chunks_exact(STAGES)
-        .nth(t as usize)
-        .unwrap();
-    for ((book, &code), &sh) in art.stage_books.iter().zip(codes).zip(&art.stage_shifts) {
-        let row = book.chunks_exact(D).nth(code as usize).unwrap();
-        for (o, &b) in out.iter_mut().zip(row) {
-            *o += (b as i32) << sh;
+    if let Some(codes) = art.token_codes.chunks_exact(STAGES).nth(t as usize) {
+        for ((book, &code), &sh) in art.stage_books.iter().zip(codes).zip(&art.stage_shifts) {
+            if let Some(row) = book.chunks_exact(D).nth(code as usize) {
+                for (o, &b) in out.iter_mut().zip(row) {
+                    *o += (b as i32) << sh;
+                }
+            }
         }
     }
 }
@@ -158,21 +156,19 @@ pub fn decode_row_plain(art: &Compiled, t: u32, out: &mut [i32; D]) {
 /// the exact bytes and shifts the runtime reads, truncated at `depth`.
 pub fn decode_row_prefix_plain(art: &Compiled, t: u32, depth: usize, out: &mut [i32; D]) {
     out.fill(0);
-    let codes = art
-        .token_codes
-        .chunks_exact(STAGES)
-        .nth(t as usize)
-        .unwrap();
-    for ((book, &code), &sh) in art
-        .stage_books
-        .iter()
-        .zip(codes)
-        .zip(&art.stage_shifts)
-        .take(depth)
-    {
-        let row = book.chunks_exact(D).nth(code as usize).unwrap();
-        for (o, &b) in out.iter_mut().zip(row) {
-            *o += (b as i32) << sh;
+    if let Some(codes) = art.token_codes.chunks_exact(STAGES).nth(t as usize) {
+        for ((book, &code), &sh) in art
+            .stage_books
+            .iter()
+            .zip(codes)
+            .zip(&art.stage_shifts)
+            .take(depth)
+        {
+            if let Some(row) = book.chunks_exact(D).nth(code as usize) {
+                for (o, &b) in out.iter_mut().zip(row) {
+                    *o += (b as i32) << sh;
+                }
+            }
         }
     }
 }
@@ -181,11 +177,10 @@ pub fn decode_row_prefix_plain(art: &Compiled, t: u32, depth: usize, out: &mut [
 /// as a table read and every accumulation as an add.
 pub fn decode_row_kernel(k: &mut OpKernel, art: &Compiled, t: u32, out: &mut [i32; D]) {
     out.fill(0);
-    let codes = art
-        .token_codes
-        .chunks_exact(STAGES)
-        .nth(t as usize)
-        .unwrap();
+    let Some(codes) = art.token_codes.chunks_exact(STAGES).nth(t as usize) else {
+        // Just leave out filled with 0 if token is out of bounds
+        return;
+    };
     for ((book, &code), &sh) in art.stage_books.iter().zip(codes).zip(&art.stage_shifts) {
         let code = k.table_fetch(code as i64) as usize;
         let row = book.chunks_exact(D).nth(code).unwrap();
@@ -345,23 +340,13 @@ pub fn assign_memberships_plain(
     art: &Compiled,
     sig: &[u8; SIG_BYTES],
 ) -> ([u8; STAGES], Vec<Vec<Vec<u8>>>) {
-    let mut words = [0u64; SIG_WORDS];
-    for (w, chunk) in words.iter_mut().zip(sig.chunks(8)) {
-        let mut b = [0u8; 8];
-        b[..chunk.len()].copy_from_slice(chunk);
-        *w = u64::from_le_bytes(b);
-    }
     let mut code = [0u8; STAGES];
     let mut stage_top: Vec<Vec<(u8, u32)>> = Vec::with_capacity(STAGES);
     for (st_code, sigs) in code.iter_mut().zip(art.class_sigs.iter()) {
         let mut top: Vec<(u8, u32)> = Vec::with_capacity(TOP_M_MEMBERSHIPS);
         for (kk, cs) in sigs.chunks_exact(SIG_BYTES).enumerate() {
-            let mut dist = 0u32;
-            for (&w, chunk) in words.iter().zip(cs.chunks(8)) {
-                let mut b = [0u8; 8];
-                b[..chunk.len()].copy_from_slice(chunk);
-                dist += (w ^ u64::from_le_bytes(b)).count_ones();
-            }
+            let dist =
+                crate::transformerless::simd::hamming_distance_36(sig, cs.try_into().unwrap());
             let mut inserted = false;
             for (idx, &(_, d0)) in top.iter().enumerate() {
                 if dist < d0 {

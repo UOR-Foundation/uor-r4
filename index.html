@@ -1001,11 +1001,10 @@
 
             <div class="section-label">Synthesis Engine Selection</div>
             <select class="identity-input" id="engineSelect" style="margin-bottom:0.75rem; background: var(--bg); color: var(--cyan); border-color: var(--border2); font-family: 'Outfit', sans-serif;">
-                <option value="r4g1" selected>R4G1 Graph (Server)</option>
-                <option value="transformerless-legacy">Legacy TLA/TLS (Server)</option>
-                <option value="attention">Full Attention Llama (CPU)</option>
-                <option value="r4-attention">Experimental R4 Attention (CPU)</option>
-                <option value="geometric">Pure Geometric (WASM Decoded)</option>
+                <option value="r4g1" selected>R⁴G1 Zero-Multiply Engine (Mul-Free Graph)</option>
+                <option value="transformerless">Transformerless (Local TLA5/TLS1)</option>
+                <option value="attention">Full Attention Llama Teacher (CPU)</option>
+                <option value="geometric">Pure Geometric Router (WASM Vector)</option>
             </select>
 
             <div class="section-label">Manifold Database & Indexing</div>
@@ -1152,7 +1151,9 @@
         <div class="chat-header-dot"></div>
         <div class="chat-header-title">R4 Prime Router — World Model</div>
         <div class="chat-header-sub">GCD Prime Steering · Hopf S³ Geometry</div>
-        <div class="chat-header-route" id="chatHeaderRoute">Manifold Ready</div>
+        <div class="chat-header-route" id="chatHeaderRoute" style="font-weight:bold;">🟢 Connected (Transformerless CPU)</div>
+        <div class="chat-header-scale" id="chatHeaderScale" style="font-family:'JetBrains Mono',monospace; font-size:0.68rem; color:var(--muted); margin-left:0.5rem;">—</div>
+        <button id="clearSessionBtn" onclick="localStorage.removeItem('r4_prime_router_session_v4'); location.reload();" style="margin-left:auto; background:rgba(255,82,82,0.15); border:1px solid var(--red); color:var(--red); padding:0.2rem 0.5rem; font-size:0.65rem; font-family:'JetBrains Mono',monospace; border-radius:4px; cursor:pointer;">Clear Session</button>
     </header>
 
     <section class="chat-log" id="chatLog">
@@ -2367,9 +2368,9 @@ function updateTelemetry(data, isSysinfo = false) {
 
     window.currentTrajectory = data.trajectory || [];
     
-    const chatRoute = document.getElementById("chatHeaderRoute");
-    if (chatRoute && m.window_index) {
-        chatRoute.textContent = `W${m.window_index} · Scale ${(m.scale_x||0).toLocaleString(undefined,{maximumFractionDigits:0})}`;
+    const chatScale = document.getElementById("chatHeaderScale");
+    if (chatScale && m.window_index) {
+        chatScale.textContent = `W${m.window_index} · Scale ${(m.scale_x||0).toLocaleString(undefined,{maximumFractionDigits:0})}`;
     }
 
     safeSetTextContent("telemetryRoute", m.window_index ? `Window ${m.window_index}` : "—");
@@ -2704,23 +2705,36 @@ async function runLocalChat(text, identity) {
     const theme = WINDOW_THEMES[routed.window_index] || "Unknown";
     
     const max_tokens = router.get_suggested_token_limit(text, identity);
-
-    const geomResult = router.generate_geometric_response(
-        text,
-        identity,
-        max_tokens,
-        temperature,
-        10.0,
-        4.0,
-        gamma
-    );
+    const selectedEngine = engineSelect?.value || "transformerless";
 
     let responseText = "";
     let generation_mode = "geometric-local";
     let llm_connected = false;
 
+    if ((selectedEngine === "transformerless" || selectedEngine === "r4g1") && window.wasm_module?.generate_r4g1_response) {
+        try {
+            const r4g1Res = window.wasm_module.generate_r4g1_response(text, max_tokens);
+            if (r4g1Res) {
+                responseText = r4g1Res;
+                generation_mode = selectedEngine === "r4g1" ? "r4g1-zero-multiply-wasm" : "transformerless-r4g1-wasm";
+            }
+        } catch (err) {
+            console.warn("R4G1 WASM evaluation failed, falling back to geometric:", err);
+        }
+    }
+
     if (!responseText) {
+        const geomResult = router.generate_geometric_response(
+            text,
+            identity,
+            max_tokens,
+            temperature,
+            10.0,
+            4.0,
+            gamma
+        );
         responseText = geomResult.text || "Manifold resonance too sparse for synthesis.";
+        generation_mode = (selectedEngine === "transformerless" || selectedEngine === "r4g1") ? "geometric-fallback-wasm" : "geometric-local";
     }
     
     router.index_sentence(responseText, identity);
@@ -2817,14 +2831,11 @@ async function sendQuery(text) {
         };
 
         let data;
-        if (localWasmMode) {
-            data = await runLocalChat(text, identity);
-        } else {
-            const response = await fetch("/api/chat", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(payload)
-            });
+        const response = await fetch("/api/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        });
 
             if (!response.ok) {
                 const raw = await response.text();
@@ -2834,10 +2845,7 @@ async function sendQuery(text) {
                 const action = detail?.action ? ` ${detail.action}.` : "";
                 throw new Error(`${message}${action}`);
             }
-
             data = await response.json();
-
-        }
 
         chatLogInner.removeChild(loadMsg);
 
@@ -3498,7 +3506,14 @@ function pollSysinfo() {
                 console.warn("Sysinfo poll failed, switching to local WASM fallback mode:", err);
                 localWasmMode = true;
                 updateConnectionStatusUI();
-                tryInitLocalWasm();
+                if (window.wasm_module && typeof router !== 'undefined') {
+                    setEl("corpusCount", router.get_total_indexed_sentences().toLocaleString());
+                    syncActiveStreams(unwrapResult(router.get_active_streams()));
+                    updateStreamsList();
+                    populateExpertMatrix(unwrapResult(router.get_expert_counts()));
+                } else {
+                    tryInitLocalWasm();
+                }
             });
     }
 
@@ -3701,7 +3716,11 @@ async function restoreSessionFromLocalStorage() {
                 updateSaveButtonState();
             }
             
-            chatHistory = session.chatHistory || [];
+            chatHistory = (session.chatHistory || []).filter(msg => 
+                !msg.content.includes("attributeslight") &&
+                !msg.content.includes("jupyter_code") &&
+                !msg.content.includes("easternds7")
+            );
             if (chatHistory.length > 0) {
                 chatLogInner.innerHTML = "";
                 chatHistory.forEach(msg => {

@@ -44,6 +44,15 @@ pub mod telemetry;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod server;
 
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen::prelude::*;
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen]
+pub fn generate_r4g1_response(prompt: &str, max_tokens: usize) -> Option<String> {
+    tless_uor::generate_r4g1_response(prompt, max_tokens)
+}
+
 /// The one-import surface for library users.
 pub mod prelude {
     pub use crate::tless_uor;

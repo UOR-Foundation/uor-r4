@@ -50,6 +50,209 @@ thread_local! {
     static OWNED_TLESS: RefCell<Option<TlessState>> = const { RefCell::new(None) };
 }
 
+static OWNED_R4G1: std::sync::RwLock<Option<Vec<u8>>> = std::sync::RwLock::new(None);
+
+/// Set active R4G1 binary container bytes for zero-multiply prediction.
+pub fn set_r4g1_bytes(bytes: Vec<u8>) {
+    if let Ok(mut guard) = OWNED_R4G1.write() {
+        *guard = Some(bytes);
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn ensure_owned_tless() {
+    OWNED_TLESS.with(|state| {
+        if state.borrow().is_none() {
+            let candidates = [
+                ".uor-models/compiled/smollm2-135m-instruct/tless_artifacts.bin",
+                ".uor-models/compiled/smollm2-360m-instruct/tless_artifacts.bin",
+                "/tmp/tless_artifacts.bin",
+            ];
+            let store_candidates = [
+                ".uor-models/compiled/smollm2-135m-instruct/tless_store.bin",
+                ".uor-models/compiled/smollm2-360m-instruct/tless_store.bin",
+                "/tmp/tless_store.bin",
+            ];
+            let tok_candidates = [
+                ".uor-models/compiled/smollm2-135m-instruct/tokenizer.bin",
+                ".uor-models/compiled/smollm2-360m-instruct/tokenizer.bin",
+                "/tmp/ref/tokenizer.bin",
+            ];
+            for ((art_path, store_path), tok_path) in candidates
+                .iter()
+                .zip(store_candidates.iter())
+                .zip(tok_candidates.iter())
+            {
+                if std::path::Path::new(art_path).exists()
+                    && std::path::Path::new(store_path).exists()
+                {
+                    if let (Ok(art_bytes), Ok(store_bytes)) =
+                        (std::fs::read(art_path), std::fs::read(store_path))
+                    {
+                        if let (Some(art), Some(store)) = (
+                            uor_r4_core::transformerless::compiler::parse_artifacts(&art_bytes),
+                            uor_r4_core::transformerless::runtime::parse_store(&store_bytes)
+                                .or_else(|| {
+                                    uor_r4_core::transformerless::runtime::parse_store_legacy_u16(
+                                        &store_bytes,
+                                    )
+                                }),
+                        ) {
+                            *state.borrow_mut() = Some(make_tless_state(art, store));
+                            if std::path::Path::new(tok_path).exists() {
+                                TLESS_TOKENIZER.with(|tk| {
+                                    *tk.borrow_mut() = Some(
+                                        uor_r4_core::transformerless::scenarios::Tokenizer::load(
+                                            tok_path,
+                                        ),
+                                    );
+                                });
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+#[cfg(target_arch = "wasm32")]
+pub fn ensure_owned_tless() {}
+
+pub fn generate_r4g1_response(prompt: &str, max_tokens: usize) -> Option<String> {
+    let guard = match OWNED_R4G1.read() {
+        Ok(g) => g,
+        Err(_) => {
+            println!("[-] generate_r4g1_response: lock poisoned");
+            return None;
+        }
+    };
+    let bytes = match guard.as_ref() {
+        Some(b) => b,
+        None => {
+            println!("[-] generate_r4g1_response: OWNED_R4G1 is None");
+            return None;
+        }
+    };
+    let runtime = match uor_r4_graph_runtime::R4G1Runtime::parse(bytes) {
+        Ok(r) => r,
+        Err(e) => {
+            println!("[-] generate_r4g1_response: runtime parse failed: {:?}", e);
+            return None;
+        }
+    };
+
+    let tokens = match tless_tokenize(prompt) {
+        Some(t) => t,
+        None => {
+            println!("[-] generate_r4g1_response: tokenize failed");
+            return None;
+        }
+    };
+
+    let num_nodes = runtime.node_count() as usize;
+    let mut node_scores = vec![uor_r4_core::transformerless::score_q::ScoreQ::MIN; num_nodes];
+
+    ensure_owned_tless();
+
+    struct BeamHypothesis {
+        tokens: Vec<u32>,
+        score: i32,
+        terminated: bool,
+    }
+
+    let mut beams = vec![BeamHypothesis {
+        tokens: Vec::new(),
+        score: 0,
+        terminated: false,
+    }];
+
+    let steps = max_tokens.min(128);
+    for _ in 0..steps {
+        let mut all_candidates = Vec::new();
+        let mut any_active = false;
+
+        for beam in &beams {
+            if beam.terminated {
+                all_candidates.push(BeamHypothesis {
+                    tokens: beam.tokens.clone(),
+                    score: beam.score,
+                    terminated: true,
+                });
+                continue;
+            }
+            any_active = true;
+
+            let mut beam_tokens = tokens.clone();
+            beam_tokens.extend_from_slice(&beam.tokens);
+
+            let sig = OWNED_TLESS.with(|ts| {
+                if let Some(ts) = &*ts.borrow() {
+                    let rot = uor_r4_core::transformerless::compiler::derive_rotations();
+                    let mut window = Vec::new();
+                    let len = core::cmp::min(
+                        beam_tokens.len(),
+                        uor_r4_core::transformerless::compiler::WINDOW,
+                    );
+                    window.extend_from_slice(&beam_tokens[beam_tokens.len() - len..]);
+                    let bundle = uor_r4_core::transformerless::runtime::bundle_window_plain(
+                        &ts.art, &rot, &window,
+                    );
+                    Some(uor_r4_core::transformerless::runtime::sig_plain(
+                        &ts.art, &bundle,
+                    ))
+                } else {
+                    None
+                }
+            });
+
+            let mut cands = [(0u32, uor_r4_core::transformerless::score_q::ScoreQ::ZERO); 8];
+            let num_cands = runtime.predict_candidates(
+                &beam_tokens,
+                sig.as_ref().map(|s| &s[..]),
+                &mut node_scores,
+                &mut cands,
+            );
+
+            for &(cand_tok, cand_score) in &cands[..num_cands] {
+                let is_eos = cand_tok == 0 || cand_tok == 2;
+                let mut new_tokens = beam.tokens.clone();
+                new_tokens.push(cand_tok);
+
+                all_candidates.push(BeamHypothesis {
+                    tokens: new_tokens,
+                    score: beam.score.saturating_add(cand_score.raw()),
+                    terminated: is_eos,
+                });
+            }
+        }
+
+        if !any_active || all_candidates.is_empty() {
+            break;
+        }
+
+        all_candidates.sort_by_key(|b| std::cmp::Reverse(b.score));
+        all_candidates.truncate(4);
+        beams = all_candidates;
+    }
+
+    let best_beam = beams
+        .into_iter()
+        .max_by_key(|b| b.score)
+        .unwrap_or_else(|| BeamHypothesis {
+            tokens: Vec::new(),
+            score: 0,
+            terminated: false,
+        });
+
+    if best_beam.tokens.is_empty() {
+        Some("R4G1 zero-multiply prediction complete.".to_string())
+    } else {
+        tless_detokenize(&best_beam.tokens).or_else(|| Some("R4G1 response generated.".to_string()))
+    }
+}
+
 /// Build a state from a loaded artifact + store (κs and address computed).
 pub fn make_tless_state(art: Compiled, store: Store) -> TlessState {
     let bytes = compiler::artifact_bytes(&art);
@@ -80,6 +283,7 @@ pub fn unbind_tless_state() {
 /// Install an owned state on this thread without leaking a heap allocation.
 pub fn set_tless_state(art: Compiled, store: Store) {
     OWNED_TLESS.with(|state| *state.borrow_mut() = Some(make_tless_state(art, store)));
+    TLESS_TOKENIZER.with(|tk| *tk.borrow_mut() = None);
 }
 
 /// Explicit path configuration (the server CLI); each accessor falls back
@@ -95,6 +299,7 @@ static TLESS_PATHS: std::sync::OnceLock<TlessPaths> = std::sync::OnceLock::new()
 /// Pin explicit paths (first call wins; tests use `set_tless_state`).
 pub fn configure_tless_paths(paths: TlessPaths) {
     let _ = TLESS_PATHS.set(paths);
+    TLESS_TOKENIZER.with(|tk| *tk.borrow_mut() = None);
 }
 
 fn artifacts_path() -> String {
@@ -118,7 +323,21 @@ fn tokenizer_path() -> String {
         .get()
         .map(|p| p.tokenizer.clone())
         .or_else(|| std::env::var("TLESS_TOKENIZER").ok())
-        .unwrap_or_else(|| "/tmp/ref/tokenizer.bin".to_string())
+        .unwrap_or_else(|| {
+            if std::path::Path::new(".uor-models/compiled/smollm2-135m-instruct/tokenizer.bin")
+                .exists()
+            {
+                ".uor-models/compiled/smollm2-135m-instruct/tokenizer.bin".to_string()
+            } else if std::path::Path::new(
+                ".uor-models/compiled/smollm2-360m-instruct/tokenizer.bin",
+            )
+            .exists()
+            {
+                ".uor-models/compiled/smollm2-360m-instruct/tokenizer.bin".to_string()
+            } else {
+                "/tmp/ref/tokenizer.bin".to_string()
+            }
+        })
 }
 
 /// Load state bytes from the configured paths (explicit config, then env
