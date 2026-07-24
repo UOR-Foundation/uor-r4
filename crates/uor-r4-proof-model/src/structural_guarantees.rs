@@ -426,7 +426,6 @@ impl StructuralGuaranteeVerifier {
             ),
         })
     }
-
     /// Verify scoring semantics compliance obligation.
     pub fn verify_scoring_semantics_compliance(
         obligation_id: &str,

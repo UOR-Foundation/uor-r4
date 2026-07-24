@@ -1990,7 +1990,6 @@ fn bdd_scoring_check_cand_a_wins(w: &mut R4g1World) {
     let res = w.candidate_cmp_result.expect("candidate cmp result");
     assert_eq!(res, core::cmp::Ordering::Less);
 }
-
 #[tokio::main]
 async fn main() {
     R4g1World::cucumber()
