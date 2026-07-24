@@ -1880,7 +1880,6 @@ fn bdd_max_steps_error_check(w: &mut R4g1World) {
 }
 
 // =========================================================================
-<<<<<<< HEAD
 // Inference Contract BDD Steps (#157)
 // =========================================================================
 use uor_r4_graph_format::inference_contract::{
@@ -1945,7 +1944,9 @@ fn bdd_contract_forbidden_rejected(_w: &mut R4g1World) {
         ),
         Err(ContractValidationError::ForbiddenMultiplicationDetected)
     );
-=======
+}
+
+// =========================================================================
 // Packed Kernels BDD Steps (#159)
 // =========================================================================
 use uor_r4_graph_format::ScoreQ;
@@ -2011,7 +2012,6 @@ fn bdd_packed_check_topk(w: &mut R4g1World) {
     assert_eq!(w.packed_output.predictions[0], (5, ScoreQ::from_raw(1000)));
     assert_eq!(w.packed_output.predictions[1], (10, ScoreQ::from_raw(500)));
     assert_eq!(w.packed_output.predictions[2], (20, ScoreQ::from_raw(500)));
->>>>>>> 88b6411 (feat(runtime): implement packed no-alloc CPU inference kernels over immutable graph arrays (#159))
 }
 
 // =========================================================================

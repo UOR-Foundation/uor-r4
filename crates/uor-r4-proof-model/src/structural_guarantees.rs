@@ -398,7 +398,6 @@ impl StructuralGuaranteeVerifier {
         })
     }
 
-<<<<<<< HEAD
     /// Verify inference contract compliance obligation.
     pub fn verify_inference_contract_compliance(
         obligation_id: &str,
@@ -413,13 +412,6 @@ impl StructuralGuaranteeVerifier {
                     limit: 0,
                 }
             })?;
-
-=======
-    /// Verify packed CPU inference kernels compliance obligation (#159).
-    pub fn verify_packed_kernels_compliance(
-        obligation_id: &str,
-    ) -> Result<ProofVerificationReport, ProofValidationError> {
->>>>>>> 88b6411 (feat(runtime): implement packed no-alloc CPU inference kernels over immutable graph arrays (#159))
         Ok(ProofVerificationReport {
             obligation_id: obligation_id.to_string(),
             kind: StructuralObligationKind::BoundedResource,
