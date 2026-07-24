@@ -613,7 +613,8 @@ fn allow_unknown_optional_kind_without_reverse_coverage() {
     let mut edges = valid_edges();
     edges[1].kind = 0x80;
     f.edges = Some(edge_section(&edges, &[0, 0]));
-    GraphView::parse(&f.build()).expect("unknown optional kinds may be skipped by reverse coverage");
+    GraphView::parse(&f.build())
+        .expect("unknown optional kinds may be skipped by reverse coverage");
 }
 
 #[test]
