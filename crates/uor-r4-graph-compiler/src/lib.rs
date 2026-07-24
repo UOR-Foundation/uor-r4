@@ -13,6 +13,7 @@ pub mod quantum_cover;
 pub mod reference_compiler_ir;
 pub mod residual;
 pub mod routing;
+pub mod semantic_emission_decoupling;
 pub mod semantic_state;
 
 use std::path::PathBuf;

@@ -59,6 +59,21 @@ struct R4g1World {
     inv_evidence: Vec<u32>,
     inv_res:
         Option<Result<usize, uor_r4_graph_format::invariant_ownership::InvariantValidationError>>,
+    // Separate Semantic Emission fields (#134)
+    decouple_transitions: Vec<(
+        &'static str,
+        &'static str,
+        &'static str,
+        f32,
+        uor_r4_graph_compiler::semantic_emission_decoupling::SemanticStatus,
+    )>,
+    decouple_trace: Option<uor_r4_graph_compiler::semantic_emission_decoupling::SemanticStateTrace>,
+    decouple_emission:
+        Option<uor_r4_graph_compiler::semantic_emission_decoupling::LanguageEmissionResult>,
+    decouple_cert:
+        Option<uor_r4_graph_compiler::semantic_emission_decoupling::DecoupledCertificationReport>,
+    decouple_error:
+        Option<uor_r4_graph_compiler::semantic_emission_decoupling::SemanticEmissionError>,
     // Formal Monograph fields (#133)
     monograph_text: String,
     monograph_report: Option<uor_r4_graph_compiler::monograph::MonographValidationReport>,
@@ -619,6 +634,94 @@ fn bdd_inv_duplicate_evidence_error_check(w: &mut R4g1World) {
     assert!(matches!(
         err,
         InvariantValidationError::DuplicateEvidence { .. }
+    ));
+}
+
+// Separate Semantic Emission BDD Steps (#134)
+// =========================================================================
+use uor_r4_graph_compiler::semantic_emission_decoupling::{
+    LanguageEmissionAdapter, SemanticEmissionError, SemanticReasoningEngine, SemanticStatus,
+};
+
+#[given("an initial state \"s0\" and a valid 2-step transition sequence to \"s2\"")]
+fn bdd_decouple_valid_sequence(w: &mut R4g1World) {
+    w.decouple_transitions = vec![
+        ("s0", "act1", "s1", 0.9, SemanticStatus::Coherent),
+        ("s1", "act2", "s2", 0.95, SemanticStatus::Coherent),
+    ];
+}
+
+#[when("pure semantic reasoning is executed by the reasoning engine")]
+fn bdd_decouple_execute_reasoning(w: &mut R4g1World) {
+    let res = SemanticReasoningEngine::execute_pure_reasoning("s0", &w.decouple_transitions);
+    match res {
+        Ok(tr) => w.decouple_trace = Some(tr),
+        Err(err) => w.decouple_error = Some(err),
+    }
+}
+
+#[then("a valid SemanticStateTrace is produced without generating tokens")]
+fn bdd_decouple_trace_check(w: &mut R4g1World) {
+    let tr = w.decouple_trace.as_ref().expect("trace");
+    assert_eq!(tr.initial_state_id, "s0");
+    assert_eq!(tr.final_state_id, "s2");
+    assert_eq!(tr.steps.len(), 2);
+}
+
+#[then("the trace overall status is Coherent")]
+fn bdd_decouple_status_coherent_check(w: &mut R4g1World) {
+    let tr = w.decouple_trace.as_ref().expect("trace");
+    assert_eq!(tr.overall_status, SemanticStatus::Coherent);
+}
+
+#[given("a verified coherent SemanticStateTrace from \"s0\" to \"s2\"")]
+fn bdd_decouple_verified_trace_given(w: &mut R4g1World) {
+    let transitions = vec![
+        ("s0", "act1", "s1", 0.9, SemanticStatus::Coherent),
+        ("s1", "act2", "s2", 0.95, SemanticStatus::Coherent),
+    ];
+    w.decouple_trace =
+        Some(SemanticReasoningEngine::execute_pure_reasoning("s0", &transitions).unwrap());
+}
+
+#[when("passed to the language emission adapter")]
+fn bdd_decouple_pass_to_adapter(w: &mut R4g1World) {
+    let tr = w.decouple_trace.as_ref().expect("trace");
+    let em = LanguageEmissionAdapter::emit_language(tr).unwrap();
+    let cert = LanguageEmissionAdapter::certify_decoupled(tr, &em);
+    w.decouple_emission = Some(em);
+    w.decouple_cert = Some(cert);
+}
+
+#[then("a LanguageEmissionResult is produced containing text and token probabilities")]
+fn bdd_decouple_emission_result_check(w: &mut R4g1World) {
+    let em = w.decouple_emission.as_ref().expect("emission");
+    assert!(em.emitted_text.contains("s0 to s2"));
+    assert!(!em.token_probabilities.is_empty());
+}
+
+#[then("a multi-dimensional certification report evaluates state coherence and language fidelity separately")]
+fn bdd_decouple_cert_report_check(w: &mut R4g1World) {
+    let cert = w.decouple_cert.as_ref().expect("cert");
+    assert!(cert.is_certified);
+    assert!(cert.state_coherence_score > 0.8);
+    assert!(cert.language_fidelity_score > 0.8);
+}
+
+#[given("a transition sequence leading to a Contradictory state")]
+fn bdd_decouple_contradictory_given(w: &mut R4g1World) {
+    w.decouple_transitions = vec![
+        ("s0", "act1", "s1", 0.9, SemanticStatus::Coherent),
+        ("s1", "act2", "s_err", 0.1, SemanticStatus::Contradictory),
+    ];
+}
+
+#[then("execution fails with a contradictory state error before token emission")]
+fn bdd_decouple_contradictory_error_check(w: &mut R4g1World) {
+    let err = w.decouple_error.as_ref().expect("error");
+    assert!(matches!(
+        err,
+        SemanticEmissionError::ContradictoryState { .. }
     ));
 }
 
