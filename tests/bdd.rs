@@ -50,6 +50,10 @@ struct R4g1World {
     u8_a: u8,
     u8_b: u8,
     u8_res: u8,
+    // Inference Contract fields (#157)
+    contract_report: Option<uor_r4_graph_format::inference_contract::InferenceContractAuditReport>,
+    _contract_audit_res:
+        Option<Result<(), uor_r4_graph_format::inference_contract::ContractValidationError>>,
     // PDF Traceability Matrix fields (#137)
     pdf_matrix: Vec<uor_r4_proof_model::pdf_traceability::PdfTraceabilityRow>,
     pdf_audit_report: Option<uor_r4_proof_model::pdf_traceability::TraceabilityAuditReport>,
@@ -1835,6 +1839,74 @@ fn bdd_max_steps_error_check(w: &mut R4g1World) {
     let err = w.trajectory_error.as_ref().expect("trajectory error");
     assert!(matches!(err, SemError::MaxStepsExceeded { limit: 2 }));
 }
+
+// =========================================================================
+// Inference Contract BDD Steps (#157)
+// =========================================================================
+use uor_r4_graph_format::inference_contract::{
+    BoundaryActivity, ContractValidationError, InferenceContractVerifier, OperationClass,
+};
+
+#[given("the normative inference contract specification")]
+fn bdd_contract_spec_given(_w: &mut R4g1World) {}
+
+#[when("audited by the inference contract verifier")]
+fn bdd_contract_audit_when(w: &mut R4g1World) {
+    let rep = InferenceContractVerifier::audit_contract_compliance().expect("contract audit");
+    w.contract_report = Some(rep);
+}
+
+#[then("contract version \"1.0.0\" is verified with 0 steady-state allocations")]
+fn bdd_contract_ver_check(w: &mut R4g1World) {
+    let rep = w.contract_report.as_ref().expect("contract report");
+    assert_eq!(rep.contract_version.to_string(), "1.0.0");
+    assert!(rep.is_zero_allocation_guaranteed);
+}
+
+#[then("the contract audit certification status is verified")]
+fn bdd_contract_cert_check(w: &mut R4g1World) {
+    let rep = w.contract_report.as_ref().expect("contract report");
+    assert!(rep.is_certified);
+}
+
+#[given("a hot-path inference activity")]
+fn bdd_contract_hotpath_given(_w: &mut R4g1World) {}
+
+#[when("an operation class is audited")]
+fn bdd_contract_op_audit_when(_w: &mut R4g1World) {}
+
+#[then("permitted bitwise and integer operations are accepted")]
+fn bdd_contract_permitted_accepted(_w: &mut R4g1World) {
+    assert!(InferenceContractVerifier::audit_operation(
+        BoundaryActivity::HotPathInference,
+        OperationClass::PermittedBitwise
+    )
+    .is_ok());
+    assert!(InferenceContractVerifier::audit_operation(
+        BoundaryActivity::HotPathInference,
+        OperationClass::PermittedIntArithmetic
+    )
+    .is_ok());
+}
+
+#[then("forbidden float and multiplication operations are rejected")]
+fn bdd_contract_forbidden_rejected(_w: &mut R4g1World) {
+    assert_eq!(
+        InferenceContractVerifier::audit_operation(
+            BoundaryActivity::HotPathInference,
+            OperationClass::ForbiddenFloat
+        ),
+        Err(ContractValidationError::ForbiddenFloatOperationDetected)
+    );
+    assert_eq!(
+        InferenceContractVerifier::audit_operation(
+            BoundaryActivity::HotPathInference,
+            OperationClass::ForbiddenMultiplyDivide
+        ),
+        Err(ContractValidationError::ForbiddenMultiplicationDetected)
+    );
+}
+
 #[tokio::main]
 async fn main() {
     R4g1World::cucumber()
