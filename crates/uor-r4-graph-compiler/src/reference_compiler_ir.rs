@@ -155,7 +155,7 @@ impl ReferenceGraphIr {
             .transitions
             .iter()
             .filter(|t| t.src_state_id == src_state_id && t.action == action)
-            .max_by(|a, b| a.score.partial_cmp(&b.score).unwrap())
+            .max_by(|a, b| a.score.total_cmp(&b.score))
             .map(|t| &t.dst_state_id)?;
 
         self.states.iter().find(|s| s.id == *best_dst_id)
@@ -251,10 +251,10 @@ impl ReferenceCompilerPipeline {
         };
 
         // Stage 5: Artifact Lowering Preparation & Content-Addressed Provenance
-        let content_hash = simple_cid(&corpus.join("\n"));
+        let content_cid = format!("blake3:{}", corpus_content_hash(corpus).to_hex());
         let provenance = ReferenceProvenance {
-            compiler_version: "v1.0.0-ref".to_string(),
-            content_cid: format!("cid_{content_hash:08x}"),
+            compiler_version: config.version.clone(),
+            content_cid,
             total_samples: corpus.len(),
             compilation_timestamp_epoch: 1774350000,
         };
@@ -291,13 +291,18 @@ impl DifferentialCompilerHarness {
     }
 }
 
-fn simple_cid(input: &str) -> u32 {
-    let mut h = 0x811c9dc5u32;
-    for b in input.bytes() {
-        h ^= b as u32;
-        h = h.wrapping_mul(0x01000193);
+/// Content address of a corpus: blake3 over a structured, length-prefixed
+/// encoding of `(count, entry_len, entry_bytes)*` to avoid ambiguous
+/// concatenation of adjacent entries (e.g. `["a", "b"]` vs `["a\nb"]`).
+fn corpus_content_hash(corpus: &[&str]) -> blake3::Hash {
+    let mut hasher = blake3::Hasher::new();
+    hasher.update(&(corpus.len() as u64).to_le_bytes());
+    for entry in corpus {
+        let bytes = entry.as_bytes();
+        hasher.update(&(bytes.len() as u64).to_le_bytes());
+        hasher.update(bytes);
     }
-    h
+    hasher.finalize()
 }
 
 #[cfg(test)]
@@ -314,7 +319,7 @@ mod tests {
         assert_eq!(ir.observations.len(), 2);
         assert_eq!(ir.states.len(), 2);
         assert_eq!(ir.regions.len(), 1);
-        assert!(ir.provenance.content_cid.starts_with("cid_"));
+        assert!(ir.provenance.content_cid.starts_with("blake3:"));
     }
 
     #[test]

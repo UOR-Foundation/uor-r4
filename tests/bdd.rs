@@ -504,7 +504,7 @@ fn bdd_execute_compiler_pipeline(w: &mut R4g1World) {
 #[then("a valid ReferenceGraphIr is produced with content CID")]
 fn bdd_ir_produced_check(w: &mut R4g1World) {
     let ir = w.ref_ir.as_ref().expect("ref ir");
-    assert!(ir.provenance.content_cid.starts_with("cid_"));
+    assert!(ir.provenance.content_cid.starts_with("blake3:"));
 }
 
 #[then("the IR contains observations, states, regions, and objective reports")]
