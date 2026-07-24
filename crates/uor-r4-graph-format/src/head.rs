@@ -44,6 +44,12 @@ use crate::types::ArtifactCid;
 /// Fixed HEAD payload prefix length in bytes (v0 draft line).
 pub const HEAD_PAYLOAD_LEN: usize = 224;
 
+/// HEAD feature bit: shared-node multi-edge algebra v1 is required.
+pub const FEATURE_EDGE_ALGEBRA_V1: u16 = 0x0001;
+
+/// Mandatory HEAD feature bits known by this format version.
+pub const KNOWN_FEATURE_BITS_REQUIRED: u16 = FEATURE_EDGE_ALGEBRA_V1;
+
 /// Number of fallback policy codes: one per `ResolutionStatus` in
 /// declaration order — Supported, Boundary, BackedOff, Novel,
 /// Contradictory (RFC §4, decision D4).

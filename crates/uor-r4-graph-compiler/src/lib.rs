@@ -1,12 +1,14 @@
 pub mod behavioral_probes;
 pub mod graph;
 pub mod induction;
+pub mod lower_semantic_regions;
 pub mod observation;
 pub mod observation_text;
 pub mod pack;
 pub mod patch_induction;
 pub mod perturbation;
 pub mod quantum_cover;
+pub mod reference_compiler_ir;
 pub mod residual;
 pub mod routing;
 pub mod semantic_state;

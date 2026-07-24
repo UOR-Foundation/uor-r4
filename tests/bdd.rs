@@ -52,6 +52,19 @@ struct R4g1World {
     u8_res: u8,
     // Expand Proof Model fields (#132)
     proof_report: Option<uor_r4_proof_model::structural_guarantees::ProofVerificationReport>,
+    // Lower Semantic Regions fields (#130)
+    lower_bool_region: Option<uor_r4_graph_compiler::lower_semantic_regions::LoweredBooleanRegion>,
+    lower_witness: Option<uor_r4_graph_compiler::lower_semantic_regions::LoweringWitnessEntry>,
+    lower_q_normal: Option<uor_r4_graph_compiler::lower_semantic_regions::LoweredFixedPointScore>,
+    lower_q_max: Option<uor_r4_graph_compiler::lower_semantic_regions::LoweredFixedPointScore>,
+    lower_q_min: Option<uor_r4_graph_compiler::lower_semantic_regions::LoweredFixedPointScore>,
+    lower_error: Option<uor_r4_graph_compiler::lower_semantic_regions::LoweringError>,
+    // Reference Compiler IR fields (#129)
+    ref_corpus: Vec<String>,
+    ref_ir: Option<uor_r4_graph_compiler::reference_compiler_ir::ReferenceGraphIr>,
+    ref_transition_state:
+        Option<uor_r4_graph_compiler::reference_compiler_ir::ReferenceSemanticState>,
+    ref_diff_delta: Option<f32>,
     // Behavioral Probe fields (#128)
     probe_baseline_obs: String,
     probe_suite_report: Option<uor_r4_graph_compiler::behavioral_probes::BehavioralProbeReport>,
@@ -608,6 +621,185 @@ fn bdd_audit_status_matches(w: &mut R4g1World) {
     let report = w.proof_report.as_ref().expect("proof report");
     assert!(report.verified);
     assert_eq!(report.status, ProofStatus::Verified);
+}
+
+// =========================================================================
+// Lower Semantic Regions BDD Steps (#130)
+// =========================================================================
+use uor_r4_graph_compiler::lower_semantic_regions::{
+    BooleanLoweringCompiler, LoweredFixedPointScore, LoweringError,
+};
+
+#[given(
+    "a reference semantic region with signature [true, false, true, true] and Hamming radius 1.0"
+)]
+fn bdd_given_ref_region(_w: &mut R4g1World) {}
+
+#[when("the region is lowered into a LoweredBooleanRegion")]
+fn bdd_lower_region_step(w: &mut R4g1World) {
+    let (region, witness) = BooleanLoweringCompiler::lower_region(
+        "reg_bdd_1",
+        &[true, false, true, true],
+        1.0,
+        "cid_bdd_ref_101",
+        101,
+        0,
+    )
+    .unwrap();
+    w.lower_bool_region = Some(region);
+    w.lower_witness = Some(witness);
+}
+
+#[then("the integer predicate evaluates to true for signatures within Hamming distance 1")]
+fn bdd_integer_predicate_within_distance(w: &mut R4g1World) {
+    let region = w.lower_bool_region.as_ref().expect("region");
+    // Exact 0b1101 = 13 (distance 0)
+    assert!(region.evaluate_runtime_integer(0b1101));
+    // Distance 1 (0b1100)
+    assert!(region.evaluate_runtime_integer(0b1100));
+}
+
+#[then("evaluates to false for signatures outside Hamming distance 1")]
+fn bdd_integer_predicate_outside_distance(w: &mut R4g1World) {
+    let region = w.lower_bool_region.as_ref().expect("region");
+    // Distance 2 (0b0000)
+    assert!(!region.evaluate_runtime_integer(0b0000));
+}
+
+#[then("a LoweringWitnessEntry is recorded")]
+fn bdd_witness_recorded_check(w: &mut R4g1World) {
+    let witness = w.lower_witness.as_ref().expect("witness");
+    assert_eq!(witness.reference_cid, "cid_bdd_ref_101");
+}
+
+#[given("floating-point scores 1.5, 500.0, and -500.0")]
+fn bdd_given_float_scores(_w: &mut R4g1World) {}
+
+#[when("scores are quantized into Q8.8 fixed-point representation")]
+fn bdd_quantize_scores_step(w: &mut R4g1World) {
+    w.lower_q_normal = Some(LoweredFixedPointScore::quantize_q88(1.5).unwrap());
+    w.lower_q_max = Some(LoweredFixedPointScore::quantize_q88(500.0).unwrap());
+    w.lower_q_min = Some(LoweredFixedPointScore::quantize_q88(-500.0).unwrap());
+}
+
+#[then("1.5 quantizes to 384 without saturation")]
+fn bdd_quantize_1_5_check(w: &mut R4g1World) {
+    let q = w.lower_q_normal.as_ref().expect("normal q");
+    assert_eq!(q.q88_value, 384);
+    assert!(!q.saturated);
+}
+
+#[then("extreme scores saturate at i16 MAX and i16 MIN")]
+fn bdd_quantize_extreme_check(w: &mut R4g1World) {
+    let q_max = w.lower_q_max.as_ref().expect("max q");
+    assert_eq!(q_max.q88_value, i16::MAX);
+    assert!(q_max.saturated);
+
+    let q_min = w.lower_q_min.as_ref().expect("min q");
+    assert_eq!(q_min.q88_value, i16::MIN);
+    assert!(q_min.saturated);
+}
+
+#[given("a reference region with a 100-bit signature")]
+fn bdd_given_100bit_sig(_w: &mut R4g1World) {}
+
+#[when("region lowering is attempted")]
+fn bdd_attempt_100bit_lowering(w: &mut R4g1World) {
+    let long_sig = vec![true; 100];
+    if let Err(e) =
+        BooleanLoweringCompiler::lower_region("reg_overflow", &long_sig, 1.0, "cid_err", 101, 0)
+    {
+        w.lower_error = Some(e);
+    }
+}
+
+#[then("lowering fails with an unrepresentable region error")]
+fn bdd_unrepresentable_error_check(w: &mut R4g1World) {
+    let err = w.lower_error.as_ref().expect("lower error");
+    assert!(matches!(err, LoweringError::UnrepresentableRegion { .. }));
+}
+
+// =========================================================================
+// Reference Compiler IR BDD Steps (#129)
+// =========================================================================
+use uor_r4_graph_compiler::reference_compiler_ir::{
+    DifferentialCompilerHarness, ReferenceCompilerConfig, ReferenceCompilerPipeline,
+};
+
+#[given("a pinned mini-corpus of 2 text observations")]
+fn bdd_pinned_mini_corpus(w: &mut R4g1World) {
+    w.ref_corpus = vec![
+        "First sentence observation".to_string(),
+        "Second sentence observation".to_string(),
+    ];
+}
+
+#[when("the reference compiler pipeline executes all 5 stages")]
+fn bdd_execute_compiler_pipeline(w: &mut R4g1World) {
+    let config = ReferenceCompilerConfig::default_v1();
+    let corpus_refs: Vec<&str> = w.ref_corpus.iter().map(|s| s.as_str()).collect();
+    let ir = ReferenceCompilerPipeline::compile(&corpus_refs, &config).unwrap();
+    w.ref_ir = Some(ir);
+}
+
+#[then("a valid ReferenceGraphIr is produced with content CID")]
+fn bdd_ir_produced_check(w: &mut R4g1World) {
+    let ir = w.ref_ir.as_ref().expect("ref ir");
+    assert!(ir.provenance.content_cid.starts_with("blake3:"));
+}
+
+#[then("the IR contains observations, states, regions, and objective reports")]
+fn bdd_ir_contents_check(w: &mut R4g1World) {
+    let ir = w.ref_ir.as_ref().expect("ref ir");
+    assert_eq!(ir.observations.len(), 2);
+    assert_eq!(ir.states.len(), 2);
+    assert_eq!(ir.regions.len(), 1);
+}
+
+#[given("a compiled ReferenceGraphIr containing states \"state_0\" and \"state_1\"")]
+fn bdd_compiled_ref_ir_given(w: &mut R4g1World) {
+    let config = ReferenceCompilerConfig::default_v1();
+    let corpus = vec!["First sentence observation", "Second sentence observation"];
+    w.ref_ir = Some(ReferenceCompilerPipeline::compile(&corpus, &config).unwrap());
+}
+
+#[when("a state transition query is executed for \"state_0\" under action \"next\"")]
+fn bdd_query_state_transition(w: &mut R4g1World) {
+    let ir = w.ref_ir.as_ref().expect("ir");
+    w.ref_transition_state = ir.transition("state_0", "next").cloned();
+}
+
+#[then("the transition returns state \"state_1\"")]
+fn bdd_transition_returns_state_1(w: &mut R4g1World) {
+    let st = w.ref_transition_state.as_ref().expect("state");
+    assert_eq!(st.id, "state_1");
+}
+
+#[then("the emission prediction for \"state_0\" returns token probabilities")]
+fn bdd_emission_prediction_check(w: &mut R4g1World) {
+    let ir = w.ref_ir.as_ref().expect("ir");
+    let em = ir.predict_emission("state_0").expect("emission");
+    assert_eq!(*em.get(&42).unwrap(), 0.8);
+}
+
+#[given("a compiled ReferenceGraphIr with teacher loss 0.25")]
+fn bdd_ref_ir_loss_given(w: &mut R4g1World) {
+    let config = ReferenceCompilerConfig::default_v1();
+    let corpus = vec!["First sentence observation"];
+    w.ref_ir = Some(ReferenceCompilerPipeline::compile(&corpus, &config).unwrap());
+}
+
+#[when("compared against baseline teacher loss 0.26 with tolerance 0.05")]
+fn bdd_run_differential_comparison(w: &mut R4g1World) {
+    let ir = w.ref_ir.as_ref().expect("ir");
+    let delta = DifferentialCompilerHarness::compare(ir, 0.26, 0.05).unwrap();
+    w.ref_diff_delta = Some(delta);
+}
+
+#[then("the differential comparison passes cleanly")]
+fn bdd_diff_comparison_passes(w: &mut R4g1World) {
+    let delta = w.ref_diff_delta.expect("delta");
+    assert!(delta < 0.05);
 }
 
 // =========================================================================
