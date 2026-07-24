@@ -2124,11 +2124,14 @@ fn bdd_perf_cert_portability_given(w: &mut R4g1World) {
 #[when("checked for execution portability")]
 fn bdd_perf_cert_portability_when(_w: &mut R4g1World) {}
 
-#[then("scalar fallback is confirmed and target tier matches x86_64-scalar-portable")]
+#[then(
+    "scalar fallback is confirmed and target tier matches the current architecture scalar-portable tier"
+)]
 fn bdd_perf_cert_portability_check(w: &mut R4g1World) {
     let cert = w.perf_cert.as_ref().expect("perf cert");
+    let expected_tier = format!("{}-scalar-portable", std::env::consts::ARCH);
     assert!(cert.cpu_portability.scalar_fallback_confirmed);
-    assert_eq!(cert.cpu_portability.target_tier, "x86_64-scalar-portable");
+    assert_eq!(cert.cpu_portability.target_tier, expected_tier);
 }
 
 >>>>>>> 08ddb68 (feat(certify): add runtime operation, allocation, and CPU portability certificates (#161))

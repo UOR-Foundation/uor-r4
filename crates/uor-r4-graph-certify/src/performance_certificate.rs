@@ -143,9 +143,14 @@ pub struct CpuPortabilityRecord {
 
 impl Default for CpuPortabilityRecord {
     fn default() -> Self {
+        let (target_arch, minimum_isa_requirements) = match std::env::consts::ARCH {
+            "x86_64" => ("x86_64", "x86-64-v1"),
+            "aarch64" => ("aarch64", "armv8-a"),
+            arch => (arch, "baseline-scalar"),
+        };
         Self {
-            target_tier: "x86_64-scalar-portable".to_string(),
-            minimum_isa_requirements: "x86-64-v1".to_string(),
+            target_tier: format!("{target_arch}-scalar-portable"),
+            minimum_isa_requirements: minimum_isa_requirements.to_string(),
             scalar_fallback_confirmed: true,
             cross_target_byte_equality: true,
         }
@@ -172,28 +177,53 @@ impl Default for RuntimePerformanceCertificate {
 
 impl RuntimePerformanceCertificate {
     pub fn new() -> Self {
-        Self {
+        let mut cert = Self {
             certificate_version: "1.0.0".to_string(),
-            certificate_cid: "kappa:blake3:perf_cert_100".to_string(),
+            certificate_cid: String::new(),
             declared_zero_fields: DeclaredZeroFields::default(),
             cpu_portability: CpuPortabilityRecord::default(),
             steady_state_allocations: 0,
             steady_state_deallocations: 0,
             is_certified: true,
-        }
+        };
+        cert.certificate_cid = cert.compute_cid();
+        cert
+    }
+
+    /// Compute self-referential BLAKE3 CID over runtime performance certificate payload.
+    pub fn compute_cid(&self) -> String {
+        let mut clone = self.clone();
+        clone.certificate_cid.clear();
+
+        let mut bytes = Vec::new();
+        ciborium::into_writer(&clone, &mut bytes)
+            .expect("runtime performance certificate CBOR serialization must succeed");
+
+        let mut hasher = Hasher::new();
+        hasher.update(&bytes);
+        format!("kappa:blake3:{}", hasher.finalize().to_hex())
+    }
+
+    pub fn verify_cid(&self) -> bool {
+        self.certificate_cid == self.compute_cid()
     }
 
     pub fn verify_evidence_links(&self) -> bool {
-        !self.declared_zero_fields.zero_multiply_link.is_empty()
-            && !self.declared_zero_fields.zero_divide_link.is_empty()
-            && !self
-                .declared_zero_fields
-                .zero_floating_point_link
-                .is_empty()
-            && !self
-                .declared_zero_fields
+        let declared_zero_links = [
+            self.declared_zero_fields.zero_multiply_link.as_str(),
+            self.declared_zero_fields.zero_divide_link.as_str(),
+            self.declared_zero_fields.zero_floating_point_link.as_str(),
+            self.declared_zero_fields.zero_fma_link.as_str(),
+            self.declared_zero_fields.zero_dot_product_link.as_str(),
+            self.declared_zero_fields.zero_matrix_tensor_link.as_str(),
+            self.declared_zero_fields.zero_gpu_dispatch_link.as_str(),
+            self.declared_zero_fields.zero_gpu_transfer_link.as_str(),
+            self.declared_zero_fields
                 .zero_dynamic_allocation_link
-                .is_empty()
+                .as_str(),
+        ];
+
+        declared_zero_links.iter().all(|link| !link.is_empty())
             && self.steady_state_allocations == 0
             && self.steady_state_deallocations == 0
     }

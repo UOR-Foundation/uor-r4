@@ -10,4 +10,4 @@ Feature: Runtime operation, allocation, and CPU portability certificates
   Scenario: Record CPU portability tier and scalar fallback confirmation
     Given a performance certificate with CPU portability record
     When checked for execution portability
-    Then scalar fallback is confirmed and target tier matches x86_64-scalar-portable
+    Then scalar fallback is confirmed and target tier matches the current architecture scalar-portable tier
