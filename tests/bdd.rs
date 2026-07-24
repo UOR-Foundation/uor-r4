@@ -559,10 +559,10 @@ fn bdd_inv_matrix_check(w: &mut R4g1World) {
 
 #[given("a graph artifact with maximum node degree 12 against limit 10")]
 fn bdd_inv_degree_limit_given(w: &mut R4g1World) {
-    w.inv_nodes = 10;
+    w.inv_nodes = 13;
     w.inv_max_degree = 12;
     w.inv_degree_limit = 10;
-    w.inv_edges = vec![(0, 1)];
+    w.inv_edges = (1..=12).map(|dst| (0, dst)).collect();
     w.inv_evidence = vec![101, 102];
 }
 

@@ -391,6 +391,23 @@ pub enum FormatError {
     },
     /// Loader invariant validation failure
     InvariantViolation(crate::invariant_ownership::InvariantValidationError),
+    /// A node's actual degree — derived from the edge list, never from a
+    /// caller-supplied value — exceeds the declared structural bound
+    /// (`invariant_ownership` invariant 1: bounded node degree).
+    NodeDegreeExceeded {
+        /// Node whose degree exceeds the limit.
+        node: u32,
+        /// Actual degree observed from the edge list.
+        degree: u32,
+        /// Declared maximum degree.
+        limit: u32,
+    },
+    /// Duplicate evidence entry detected in a contribution list
+    /// (`invariant_ownership` invariant 4: evidence non-duplication).
+    DuplicateEvidence {
+        /// The evidence ID that appears more than once.
+        evidence_id: u32,
+    },
 }
 
 impl fmt::Display for FormatError {
@@ -613,6 +630,13 @@ impl fmt::Display for FormatError {
                 "RTNX section holds {actual_len} bytes, not a multiple of 12"
             ),
             FormatError::InvariantViolation(err) => write!(f, "graph invariant violation: {err}"),
+            FormatError::NodeDegreeExceeded { node, degree, limit } => write!(
+                f,
+                "node {node}: degree {degree} exceeds limit {limit}"
+            ),
+            FormatError::DuplicateEvidence { evidence_id } => {
+                write!(f, "duplicate evidence ID {evidence_id} detected")
+            },
         }
     }
 }
