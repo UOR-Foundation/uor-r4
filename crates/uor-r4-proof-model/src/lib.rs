@@ -2,6 +2,7 @@
 
 pub mod allocation_proof;
 pub mod deterministic_topk_proof;
+pub mod inference_audit;
 pub mod kani_proofs;
 pub mod pdf_traceability;
 pub mod proof_matrix;

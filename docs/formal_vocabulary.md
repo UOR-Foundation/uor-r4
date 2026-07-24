@@ -137,6 +137,7 @@ by wholesale rewrite.
 
 ## Changelog
 
+- **0.1.4** (2026-07-24) — Added issue-#160 machine-code, allocator, and dependency CI audit definitions (`Machine-Code Disassembly Audit`, `Counting Allocator Witness`, `Dependency Denylist Gate` in `uor-r4-proof-model::inference_audit`).
 - **0.1.3** (2026-07-24) — Added the issue-#158 normative scoring semantics definitions (`Fixed-Point Scoring Semantics`, `Residual Taxonomy`, `Overlap Residualization`, `Deterministic Tie-Breaking` in `docs/scoring_semantics.md` and `uor-r4-graph-format::scoring_semantics`).
 - **0.1.2** (2026-07-24) — Added the issue-#157 normative inference contract definitions (`Normative Inference Contract`, `Permitted Operation Class`, `Zero-Allocation Steady State`, `CPU-Only Target Contract` in `docs/inference_contract.md` and `uor-r4-graph-format::inference_contract`).
 - **0.1.1** (2026-07-24) — Added the issue-#126 measurement-contract binding for

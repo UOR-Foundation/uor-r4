@@ -466,6 +466,37 @@ impl StructuralGuaranteeVerifier {
                     .to_string(),
         })
     }
+    /// Verify machine-code, allocator, and dependency CI audit compliance (#160).
+    pub fn verify_inference_audit_compliance(
+        obligation_id: &str,
+    ) -> Result<ProofVerificationReport, ProofValidationError> {
+        use crate::inference_audit::InferenceAuditVerifier;
+        let report = InferenceAuditVerifier::audit_all().map_err(|_| {
+            ProofValidationError::ResourceBoundExceeded {
+                obligation_id: obligation_id.to_string(),
+                metric: "inference_audit".to_string(),
+                actual: 1,
+                limit: 0,
+            }
+        })?;
+
+        let status = if report.is_certified {
+            ProofStatus::Verified
+        } else {
+            ProofStatus::Unverified
+        };
+
+        Ok(ProofVerificationReport {
+            obligation_id: obligation_id.to_string(),
+            kind: StructuralObligationKind::BoundedResource,
+            status,
+            verified: report.is_certified,
+            details: format!(
+                "Inference audit verified (verdict: {}, scanned_inst: {}, scanned_deps: {})",
+                report.verdict, report.instructions_scanned, report.dependencies_scanned
+            ),
+        })
+    }
 }
 
 #[cfg(test)]
