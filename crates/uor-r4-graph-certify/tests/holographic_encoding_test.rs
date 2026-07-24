@@ -53,7 +53,8 @@ fn test_holographic_fixture_partial_recovery_and_progressive_fidelity() {
         &projections,
         &teacher,
         DivergenceMetric::KLDivergence,
-    );
+    )
+    .expect("progressive fidelity");
     assert_eq!(progressive.len(), 3);
     assert!(
         progressive[2].divergence_to_teacher < progressive[0].divergence_to_teacher,
@@ -204,5 +205,105 @@ fn test_holographic_degenerate_encodings_rejected() {
     assert!(matches!(
         HolographicEncodingEvaluator::validate_projection_family(&duplicate),
         Err(DegeneracyError::DuplicateProjection { .. })
+    ));
+
+    let duplicate_ids = vec![
+        Projection {
+            metadata: ProjectionMetadata {
+                projection_id: "same-id".to_string(),
+                depth: 1,
+                membership_ids: vec![1, 2],
+            },
+            recovered_distribution: vec![0.8, 0.2],
+        },
+        Projection {
+            metadata: ProjectionMetadata {
+                projection_id: "same-id".to_string(),
+                depth: 2,
+                membership_ids: vec![2, 3],
+            },
+            recovered_distribution: vec![0.7, 0.3],
+        },
+    ];
+    assert!(matches!(
+        HolographicEncodingEvaluator::validate_projection_family(&duplicate_ids),
+        Err(DegeneracyError::DuplicateProjectionId { .. })
+    ));
+
+    let inconsistent = vec![
+        Projection {
+            metadata: ProjectionMetadata {
+                projection_id: "len-a".to_string(),
+                depth: 1,
+                membership_ids: vec![1, 2],
+            },
+            recovered_distribution: vec![0.8, 0.2],
+        },
+        Projection {
+            metadata: ProjectionMetadata {
+                projection_id: "len-b".to_string(),
+                depth: 2,
+                membership_ids: vec![2, 3],
+            },
+            recovered_distribution: vec![0.6, 0.3, 0.1],
+        },
+    ];
+    assert!(matches!(
+        HolographicEncodingEvaluator::validate_projection_family(&inconsistent),
+        Err(DegeneracyError::InconsistentDistributionLength { .. })
+    ));
+}
+
+#[test]
+fn test_ablation_curve_rejects_unknown_ablation_id() {
+    let teacher = vec![0.70, 0.20, 0.10];
+    let projections = deterministic_fixture_projections();
+    let protocol = AblationProtocol {
+        baseline_projection_ids: vec!["h0".to_string(), "h1".to_string()],
+        ablation_order: vec!["h2".to_string()],
+        semantics: "invalid ablation id".to_string(),
+    };
+
+    let err = HolographicEncodingEvaluator::ablation_curve(
+        &projections,
+        &teacher,
+        DivergenceMetric::KLDivergence,
+        &protocol,
+    )
+    .expect_err("unknown ablation id must fail");
+    assert!(matches!(err, DegeneracyError::UnknownProjectionId { .. }));
+}
+
+#[test]
+fn test_progressive_fidelity_propagates_recovery_errors() {
+    let teacher = vec![0.70, 0.20, 0.10];
+    let projections = vec![
+        Projection {
+            metadata: ProjectionMetadata {
+                projection_id: "h0".to_string(),
+                depth: 1,
+                membership_ids: vec![10, 11],
+            },
+            recovered_distribution: vec![0.60, 0.40],
+        },
+        Projection {
+            metadata: ProjectionMetadata {
+                projection_id: "h1".to_string(),
+                depth: 2,
+                membership_ids: vec![11, 12],
+            },
+            recovered_distribution: vec![0.50, 0.30, 0.20],
+        },
+    ];
+
+    let err = HolographicEncodingEvaluator::progressive_fidelity(
+        &projections,
+        &teacher,
+        DivergenceMetric::KLDivergence,
+    )
+    .expect_err("length mismatch should propagate");
+    assert!(matches!(
+        err,
+        DegeneracyError::InconsistentDistributionLength { .. }
     ));
 }

@@ -73,11 +73,29 @@ pub struct HolographicEncodingCertificate {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DegeneracyError {
     EmptyProjectionSet,
-    EmptyProjection { projection_id: String },
-    DuplicateProjection { projection_id: String },
-    SingleNodeMemorization { projection_id: String },
-    InvalidRecoveryDistribution { projection_id: String },
-    UnknownProjectionId { projection_id: String },
+    EmptyProjection {
+        projection_id: String,
+    },
+    DuplicateProjection {
+        projection_id: String,
+    },
+    DuplicateProjectionId {
+        projection_id: String,
+    },
+    SingleNodeMemorization {
+        projection_id: String,
+    },
+    InvalidRecoveryDistribution {
+        projection_id: String,
+    },
+    InconsistentDistributionLength {
+        projection_id: String,
+        expected_len: usize,
+        actual_len: usize,
+    },
+    UnknownProjectionId {
+        projection_id: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -146,7 +164,14 @@ impl HolographicEncodingEvaluator {
         }
 
         let mut seen = HashSet::new();
+        let mut seen_ids = HashSet::new();
+        let mut expected_len = None::<usize>;
         for projection in projections {
+            if !seen_ids.insert(projection.metadata.projection_id.clone()) {
+                return Err(DegeneracyError::DuplicateProjectionId {
+                    projection_id: projection.metadata.projection_id.clone(),
+                });
+            }
             if projection.metadata.membership_ids.is_empty() {
                 return Err(DegeneracyError::EmptyProjection {
                     projection_id: projection.metadata.projection_id.clone(),
@@ -156,6 +181,17 @@ impl HolographicEncodingEvaluator {
                 return Err(DegeneracyError::InvalidRecoveryDistribution {
                     projection_id: projection.metadata.projection_id.clone(),
                 });
+            }
+            match expected_len {
+                Some(exp) if exp != projection.recovered_distribution.len() => {
+                    return Err(DegeneracyError::InconsistentDistributionLength {
+                        projection_id: projection.metadata.projection_id.clone(),
+                        expected_len: exp,
+                        actual_len: projection.recovered_distribution.len(),
+                    });
+                }
+                None => expected_len = Some(projection.recovered_distribution.len()),
+                _ => {}
             }
             let key = format!(
                 "{:?}|{:?}",
@@ -180,14 +216,29 @@ impl HolographicEncodingEvaluator {
         let mut acc = Vec::new();
         let mut used = 0usize;
         for projection_id in active_projection_ids {
-            let projection = projections
+            let mut matches = projections
                 .iter()
-                .find(|p| p.metadata.projection_id == *projection_id)
-                .ok_or_else(|| DegeneracyError::UnknownProjectionId {
+                .filter(|p| p.metadata.projection_id == *projection_id);
+            let projection =
+                matches
+                    .next()
+                    .ok_or_else(|| DegeneracyError::UnknownProjectionId {
+                        projection_id: projection_id.clone(),
+                    })?;
+            if matches.next().is_some() {
+                return Err(DegeneracyError::DuplicateProjectionId {
                     projection_id: projection_id.clone(),
-                })?;
+                });
+            }
             if acc.is_empty() {
                 acc = vec![0.0; projection.recovered_distribution.len()];
+            }
+            if acc.len() != projection.recovered_distribution.len() {
+                return Err(DegeneracyError::InconsistentDistributionLength {
+                    projection_id: projection.metadata.projection_id.clone(),
+                    expected_len: acc.len(),
+                    actual_len: projection.recovered_distribution.len(),
+                });
             }
             for (idx, value) in projection.recovered_distribution.iter().enumerate() {
                 acc[idx] += *value;
@@ -247,7 +298,10 @@ impl HolographicEncodingEvaluator {
             let support = projections
                 .iter()
                 .filter(|projection| {
-                    projection.recovered_distribution[token_idx] >= support_threshold
+                    projection
+                        .recovered_distribution
+                        .get(token_idx)
+                        .is_some_and(|v| *v >= support_threshold)
                 })
                 .count();
             total_support += support;
@@ -259,7 +313,7 @@ impl HolographicEncodingEvaluator {
         projections: &[Projection],
         teacher_distribution: &[f64],
         metric: DivergenceMetric,
-    ) -> Vec<ProgressiveFidelityPoint> {
+    ) -> Result<Vec<ProgressiveFidelityPoint>, DegeneracyError> {
         let mut ids = Vec::new();
         let mut points = Vec::new();
         let mut membership_sum = 0usize;
@@ -267,15 +321,14 @@ impl HolographicEncodingEvaluator {
         for projection in projections {
             ids.push(projection.metadata.projection_id.clone());
             membership_sum += projection.metadata.membership_ids.len();
-            let recovered =
-                Self::recover_behavior_distribution(projections, &ids).unwrap_or_default();
+            let recovered = Self::recover_behavior_distribution(projections, &ids)?;
             points.push(ProgressiveFidelityPoint {
                 active_projection_count: ids.len(),
                 mean_membership_count: membership_sum as f64 / ids.len() as f64,
                 divergence_to_teacher: Self::divergence(metric, teacher_distribution, &recovered),
             });
         }
-        points
+        Ok(points)
     }
 
     pub fn ablation_curve(
@@ -288,7 +341,11 @@ impl HolographicEncodingEvaluator {
             protocol.baseline_projection_ids.iter().cloned().collect();
         let mut curve = Vec::new();
         for removed_id in &protocol.ablation_order {
-            active.remove(removed_id);
+            if !active.remove(removed_id) {
+                return Err(DegeneracyError::UnknownProjectionId {
+                    projection_id: removed_id.clone(),
+                });
+            }
             let active_ids = active.iter().cloned().collect::<Vec<_>>();
             let recovered = Self::recover_behavior_distribution(projections, &active_ids)?;
             curve.push(AblationPoint {
