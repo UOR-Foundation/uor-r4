@@ -50,6 +50,11 @@ struct R4g1World {
     u8_a: u8,
     u8_b: u8,
     u8_res: u8,
+    // Multi-Edge Algebra fields (#125)
+    shared_graph: Option<uor_r4_graph_format::edge_algebras::SharedNodeGraph>,
+    packed_edge: Option<uor_r4_graph_format::edge_algebras::PackedMultiEdge>,
+    deserialized_edge: Option<uor_r4_graph_format::edge_algebras::PackedMultiEdge>,
+    edge_val_error: Option<uor_r4_graph_format::edge_algebras::FormatValidationError>,
 }
 
 #[given("the R4G1 runtime returned the browser's repetitive hello response")]
@@ -470,6 +475,108 @@ fn u8_kernel_zero_floats(_w: &mut R4g1World) {
     let kernel_code = &source[kernel_start..];
     assert!(!kernel_code.contains("f32") && !kernel_code.contains("f64"));
     assert!(!kernel_code.contains(" * ") && !kernel_code.contains(" / "));
+}
+
+// =========================================================================
+// Multi-Edge Algebra BDD Steps (#125)
+// =========================================================================
+use uor_r4_graph_format::edge_algebras::{
+    EdgeKind, FormatValidationError, PackedMultiEdge, SharedNodeGraph,
+};
+
+#[given("a shared node graph with 5 canonical node identities")]
+fn bdd_shared_node_graph_5(w: &mut R4g1World) {
+    w.shared_graph = Some(SharedNodeGraph::new(5));
+}
+
+#[when("edges of kind Semantic, Causal, and Evidence are added between node 0 and node 1")]
+fn bdd_add_3_edge_kinds(w: &mut R4g1World) {
+    let graph = w.shared_graph.as_mut().expect("graph");
+    graph.add_edge(0, 1, EdgeKind::Semantic, 100, 1).unwrap();
+    graph.add_edge(0, 1, EdgeKind::Causal, 200, 2).unwrap();
+    graph.add_edge(0, 1, EdgeKind::Evidence, 300, 3).unwrap();
+}
+
+#[then("node 0 has 3 outgoing edges")]
+fn bdd_outgoing_edges_count(w: &mut R4g1World) {
+    let graph = w.shared_graph.as_ref().expect("graph");
+    assert_eq!(graph.outgoing_edges(0).len(), 3);
+}
+
+#[then("the graph contains 1 edge for each of the 3 edge kinds")]
+fn bdd_edge_kinds_count(w: &mut R4g1World) {
+    let graph = w.shared_graph.as_ref().expect("graph");
+    assert_eq!(graph.edges_by_kind(EdgeKind::Semantic).len(), 1);
+    assert_eq!(graph.edges_by_kind(EdgeKind::Causal).len(), 1);
+    assert_eq!(graph.edges_by_kind(EdgeKind::Evidence).len(), 1);
+}
+
+#[given("a packed multi-edge between node 12 and node 34 with kind Causal and weight 256")]
+fn bdd_packed_multi_edge_setup(w: &mut R4g1World) {
+    w.packed_edge = Some(PackedMultiEdge::new(12, 34, EdgeKind::Causal, 256, 9999));
+}
+
+#[when("the multi-edge is serialized to 16 bytes and deserialized")]
+fn bdd_serialize_deserialize_edge(w: &mut R4g1World) {
+    let edge = w.packed_edge.as_ref().expect("edge");
+    let bytes = edge.to_bytes();
+    w.deserialized_edge = Some(PackedMultiEdge::from_bytes(&bytes));
+}
+
+#[then("the deserialized multi-edge preserves source node 12, destination node 34, kind Causal, and weight 256")]
+fn bdd_deserialized_edge_check(w: &mut R4g1World) {
+    let edge = w.deserialized_edge.as_ref().expect("deserialized edge");
+    assert_eq!(edge.src_node, 12);
+    assert_eq!(edge.dst_node, 34);
+    assert_eq!(edge.kind, EdgeKind::Causal as u8);
+    assert_eq!(edge.weight_q88, 256);
+}
+
+#[given("a shared node graph with 3 nodes")]
+fn bdd_shared_node_graph_3(w: &mut R4g1World) {
+    w.shared_graph = Some(SharedNodeGraph::new(3));
+}
+
+#[when("a causal cycle 0 -> 1 -> 2 -> 0 is added")]
+fn bdd_add_causal_cycle(w: &mut R4g1World) {
+    let graph = w.shared_graph.as_mut().expect("graph");
+    graph.add_edge(0, 1, EdgeKind::Causal, 1, 1).unwrap();
+    graph.add_edge(1, 2, EdgeKind::Causal, 1, 2).unwrap();
+    graph.add_edge(2, 0, EdgeKind::Causal, 1, 3).unwrap();
+    if let Err(e) = graph.validate() {
+        w.edge_val_error = Some(e);
+    }
+}
+
+#[then("graph validation fails with a causal cycle error")]
+fn bdd_causal_cycle_error_check(w: &mut R4g1World) {
+    let err = w.edge_val_error.as_ref().expect("validation error");
+    assert!(matches!(
+        err,
+        FormatValidationError::CausalCycleDetected { .. }
+    ));
+}
+
+#[given("a packed multi-edge referencing destination node 99 in a graph of size 10")]
+fn bdd_dangling_edge_setup(w: &mut R4g1World) {
+    w.packed_edge = Some(PackedMultiEdge::new(0, 99, EdgeKind::Semantic, 1, 1));
+}
+
+#[when("the multi-edge is validated against the node capacity")]
+fn bdd_validate_dangling_edge(w: &mut R4g1World) {
+    let edge = w.packed_edge.as_ref().expect("edge");
+    if let Err(e) = edge.validate(10) {
+        w.edge_val_error = Some(e);
+    }
+}
+
+#[then("validation fails with a dangling node reference error")]
+fn bdd_dangling_node_error_check(w: &mut R4g1World) {
+    let err = w.edge_val_error.as_ref().expect("validation error");
+    assert!(matches!(
+        err,
+        FormatValidationError::DanglingNodeReference { .. }
+    ));
 }
 
 #[tokio::main]

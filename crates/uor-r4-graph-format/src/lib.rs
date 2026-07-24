@@ -64,6 +64,7 @@
 extern crate alloc;
 
 mod code;
+pub mod edge_algebras;
 mod error;
 mod head;
 mod header;
