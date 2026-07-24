@@ -417,6 +417,22 @@ pub struct Prediction {
     pub count: u32,
 }
 
+#[inline]
+fn fallback_prediction_with_store_invariant_assert(store: &Store) -> Prediction {
+    debug_assert!(
+        store
+            .first()
+            .and_then(|level_zero| level_zero.get(&[][..]))
+            .is_some(),
+        "store invariant violated: level-0 distribution must be populated",
+    );
+    Prediction {
+        token: 0,
+        depth: 0,
+        count: 0,
+    }
+}
+
 /// Plain-form prediction with witness: deepest populated class argmax with
 /// backoff; canonical rule — highest count, ties to smallest token id
 /// (first in B-tree order) — identical to the kernel path.
@@ -440,11 +456,7 @@ pub fn predict_witness_plain(store: &Store, code: &[u8; STAGES]) -> Prediction {
             };
         }
     }
-    Prediction {
-        token: 0,
-        depth: 0,
-        count: 0,
-    }
+    fallback_prediction_with_store_invariant_assert(store)
 }
 
 /// Plain-form prediction with semantic priors: deepest populated class argmax biased by priors.
@@ -476,11 +488,7 @@ pub fn predict_witness_plain_with_priors(
             };
         }
     }
-    Prediction {
-        token: 0,
-        depth: 0,
-        count: 0,
-    }
+    fallback_prediction_with_store_invariant_assert(store)
 }
 
 /// Plain-form prediction: the witness variant's token, one code path.

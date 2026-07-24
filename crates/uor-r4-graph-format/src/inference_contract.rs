@@ -12,12 +12,28 @@ pub struct ContractVersion {
 }
 
 impl ContractVersion {
+    const MAJOR_MAX: u16 = 0x0fff;
+    const MINOR_MAX: u16 = 0x03ff;
+    const PATCH_MAX: u16 = 0x03ff;
+
     pub const fn as_tuple(self) -> (u16, u16, u16) {
         (self.major, self.minor, self.patch)
     }
 
     /// Stable packed u32 form: `major<<20 | minor<<10 | patch`.
     pub const fn encode_packed(self) -> u32 {
+        assert!(
+            self.major <= Self::MAJOR_MAX,
+            "major exceeds packed version bit-width"
+        );
+        assert!(
+            self.minor <= Self::MINOR_MAX,
+            "minor exceeds packed version bit-width"
+        );
+        assert!(
+            self.patch <= Self::PATCH_MAX,
+            "patch exceeds packed version bit-width"
+        );
         ((self.major as u32) << 20) | ((self.minor as u32) << 10) | self.patch as u32
     }
 
@@ -267,5 +283,16 @@ mod tests {
         let packed = version.encode_packed();
         let decoded = ContractVersion::decode_packed(packed).expect("packed decode");
         assert_eq!(decoded, version);
+    }
+
+    #[test]
+    #[should_panic(expected = "major exceeds packed version bit-width")]
+    fn contract_version_packed_rejects_overflow() {
+        let _ = ContractVersion {
+            major: 0x1000,
+            minor: 0,
+            patch: 1,
+        }
+        .encode_packed();
     }
 }

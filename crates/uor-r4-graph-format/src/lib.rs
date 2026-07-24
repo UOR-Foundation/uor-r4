@@ -67,7 +67,7 @@ mod code;
 mod error;
 mod head;
 mod header;
-mod inference_contract;
+pub mod inference_contract;
 mod invariant_ownership;
 pub mod records;
 mod rout;

@@ -40,6 +40,43 @@ mod witnesses {
     use super::runtime::{derive_popcount_table, hamming, sign_signature, OpKernel};
 
     fn scan_for_forbidden_arith(src: &str) -> Vec<String> {
+        fn strip_line_comment(line: &str) -> &str {
+            let bytes = line.as_bytes();
+            let mut i = 0usize;
+            let mut in_string = false;
+            let mut in_char = false;
+            let mut escaped = false;
+
+            while i + 1 < bytes.len() {
+                let ch = bytes[i];
+                if escaped {
+                    escaped = false;
+                    i += 1;
+                    continue;
+                }
+                if (in_string || in_char) && ch == b'\\' {
+                    escaped = true;
+                    i += 1;
+                    continue;
+                }
+                if !in_char && ch == b'"' {
+                    in_string = !in_string;
+                    i += 1;
+                    continue;
+                }
+                if !in_string && ch == b'\'' {
+                    in_char = !in_char;
+                    i += 1;
+                    continue;
+                }
+                if !in_string && !in_char && ch == b'/' && bytes[i + 1] == b'/' {
+                    return &line[..i];
+                }
+                i += 1;
+            }
+            line
+        }
+
         fn prev_ident(code: &str, idx: usize) -> Option<&str> {
             let bytes = code.as_bytes();
             if idx == 0 {
@@ -62,8 +99,8 @@ mod witnesses {
 
         let mut offenders = Vec::new();
         for (ln, line) in src.lines().enumerate() {
-            let code = line.trim_start();
-            if code.starts_with("//") {
+            let code = strip_line_comment(line).trim_start();
+            if code.is_empty() {
                 continue;
             }
             let b = code.as_bytes();
