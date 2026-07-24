@@ -5,8 +5,9 @@
 //!
 //! This module enforces the architectural boundary between the semantic operating system
 //! and language generation:
-//! - `SemanticReasoningEngine`: Replays a caller-supplied, validated sequence of state
-//!   transitions ($s_0 \to s_1$) without producing token streams.
+//! - `SemanticReasoningEngine`: Replays a caller-supplied sequence of state transitions
+//!   ($s_0 \to s_1$), validating sequential consistency and state coherence, without
+//!   producing token streams.
 //! - `LanguageEmissionAdapter`: Typed interface translating semantic states into token emission distributions.
 //! - `SemanticStatus`: Explicit status (`Coherent`, `Uncertain`, `Contradictory`, `Exhausted`)
 //!   returned before token emission to prevent fabricated text from masking internal failures.
