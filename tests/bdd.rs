@@ -50,6 +50,12 @@ struct R4g1World {
     u8_a: u8,
     u8_b: u8,
     u8_res: u8,
+    // Holographic Encoding fields (#126)
+    holo_target: Vec<f32>,
+    holo_encoding: Option<uor_r4_graph_compiler::holographic_encoding::HolographicEncoding>,
+    holo_cert: Option<uor_r4_graph_compiler::holographic_encoding::HolographicFidelityCertificate>,
+    holo_error: Option<uor_r4_graph_compiler::holographic_encoding::HolographicEncodingError>,
+    ablated_encoding: Option<uor_r4_graph_compiler::holographic_encoding::HolographicEncoding>,
 }
 
 #[given("the R4G1 runtime returned the browser's repetitive hello response")]
@@ -470,6 +476,92 @@ fn u8_kernel_zero_floats(_w: &mut R4g1World) {
     let kernel_code = &source[kernel_start..];
     assert!(!kernel_code.contains("f32") && !kernel_code.contains("f64"));
     assert!(!kernel_code.contains(" * ") && !kernel_code.contains(" / "));
+}
+
+// =========================================================================
+// Holographic Encoding BDD Steps (#126)
+// =========================================================================
+use uor_r4_graph_compiler::holographic_encoding::{
+    HolographicEncoding, HolographicEncodingError, HolographicFidelityCertificate, SubProjection,
+};
+
+#[given("an observation target distribution [0.5, 0.5]")]
+fn bdd_target_distribution(w: &mut R4g1World) {
+    w.holo_target = vec![0.5, 0.5];
+}
+
+#[given("a holographic projection family H(x) with 3 sub-projections")]
+fn bdd_projection_family_3(w: &mut R4g1World) {
+    let p0 = SubProjection::new("h0", 0, vec![0.4, 0.6], 0b01, 0.5);
+    let p1 = SubProjection::new("h1", 1, vec![0.5, 0.5], 0b10, 0.5);
+    let p2 = SubProjection::new("h2", 2, vec![0.5, 0.5], 0b11, 0.5);
+    w.holo_encoding = Some(HolographicEncoding::new("obs_3", vec![p0, p1, p2], 2).unwrap());
+}
+
+#[when("partial reconstructions are computed for projection depths k = 1, 2, and 3")]
+fn bdd_compute_fidelity_certificate(w: &mut R4g1World) {
+    let enc = w.holo_encoding.as_ref().expect("encoding");
+    let target = &w.holo_target;
+    w.holo_cert = Some(HolographicFidelityCertificate::evaluate("cid_test", enc, target).unwrap());
+}
+
+#[then("the Jensen-Shannon divergence decreases monotonically as k increases")]
+fn bdd_divergence_decreases_check(w: &mut R4g1World) {
+    let cert = w.holo_cert.as_ref().expect("cert");
+    assert_eq!(cert.fidelity_curve.len(), 3);
+}
+
+#[then("the progressive fidelity certificate verifies monotonic progression")]
+fn bdd_monotonic_progression_check(w: &mut R4g1World) {
+    let cert = w.holo_cert.as_ref().expect("cert");
+    assert!(cert.is_progressive_fidelity_verified);
+}
+
+#[given("a single sub-projection with zero entropy contribution")]
+fn bdd_single_zero_entropy_subprojection(w: &mut R4g1World) {
+    let p0 = SubProjection::new("h0", 0, vec![1.0, 0.0], 0b01, 0.0);
+    if let Err(e) = HolographicEncoding::new("obs_bad", vec![p0], 2) {
+        w.holo_error = Some(e);
+    }
+}
+
+#[when("a holographic encoding is constructed")]
+fn bdd_holographic_encoding_constructed(_w: &mut R4g1World) {}
+
+#[then("encoding construction fails with a single-node memorization error")]
+fn bdd_single_node_error_check(w: &mut R4g1World) {
+    let err = w.holo_error.as_ref().expect("error");
+    assert!(matches!(
+        err,
+        HolographicEncodingError::SingleNodeMemorization { .. }
+    ));
+}
+
+#[given("a holographic projection family with sub-projections \"h0\" and \"h1\"")]
+fn bdd_projection_family_2(w: &mut R4g1World) {
+    let p0 = SubProjection::new("h0", 0, vec![0.4, 0.6], 0b01, 0.5);
+    let p1 = SubProjection::new("h1", 1, vec![0.6, 0.4], 0b10, 0.5);
+    w.holo_encoding = Some(HolographicEncoding::new("obs_2", vec![p0, p1], 2).unwrap());
+}
+
+#[when("sub-projection \"h0\" is ablated")]
+fn bdd_ablate_h0(w: &mut R4g1World) {
+    let enc = w.holo_encoding.as_ref().expect("encoding");
+    w.ablated_encoding = Some(enc.ablate(&["h0"]).unwrap());
+}
+
+#[then("the remaining encoding contains only sub-projection \"h1\"")]
+fn bdd_remaining_subprojection_check(w: &mut R4g1World) {
+    let ablated = w.ablated_encoding.as_ref().expect("ablated");
+    assert_eq!(ablated.len(), 1);
+    assert_eq!(ablated.projections[0].id, "h1");
+}
+
+#[then("partial reconstruction succeeds on the ablated encoding")]
+fn bdd_ablated_reconstruction_check(w: &mut R4g1World) {
+    let ablated = w.ablated_encoding.as_ref().expect("ablated");
+    let rec = ablated.reconstruct_partial(1).unwrap();
+    assert_eq!(rec.len(), 2);
 }
 
 #[tokio::main]

@@ -1,4 +1,5 @@
 pub mod graph;
+pub mod holographic_encoding;
 pub mod induction;
 pub mod observation;
 pub mod observation_text;
