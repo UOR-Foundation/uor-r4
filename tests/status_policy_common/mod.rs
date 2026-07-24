@@ -124,6 +124,7 @@ fn emit_and_persist(
                 },
             ],
             transitions: &[],
+            transition_quantization: score::QuantizationErrorStats::default(),
             emissions,
             exct_tls1: &tls1,
             exct_top_x: score::ScoreConfig::default().exct_top_x,
@@ -160,6 +161,8 @@ fn hand_emissions() -> EmissionTables {
             vec![(20, ScoreQ::from_raw(2000)), (30, ScoreQ::from_raw(100))],
         ],
         smoothing: Smoothing::AddOne,
+        root_prior_quantization: score::QuantizationErrorStats::default(),
+        emission_quantization: score::QuantizationErrorStats::default(),
     }
 }
 
