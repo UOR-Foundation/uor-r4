@@ -57,6 +57,19 @@ struct R4g1World {
     lower_q_max: Option<uor_r4_graph_compiler::lower_semantic_regions::LoweredFixedPointScore>,
     lower_q_min: Option<uor_r4_graph_compiler::lower_semantic_regions::LoweredFixedPointScore>,
     lower_error: Option<uor_r4_graph_compiler::lower_semantic_regions::LoweringError>,
+    // Semantic State Space fields (#124)
+    state_s0: Option<uor_r4_graph_compiler::semantic_state::SemanticState>,
+    state_eval_res: Option<
+        Result<
+            uor_r4_graph_compiler::semantic_state::SemanticState,
+            uor_r4_graph_compiler::semantic_state::SemanticStateError,
+        >,
+    >,
+    hazard_evaluator: Option<uor_r4_graph_compiler::semantic_state::TransitionEvaluator>,
+    goal_satisfied: Option<bool>,
+    belief_in: Option<f32>,
+    belief_out: Option<f32>,
+    trajectory_error: Option<uor_r4_graph_compiler::semantic_state::SemanticStateError>,
 }
 
 #[given("the R4G1 runtime returned the browser's repetitive hello response")]
@@ -573,6 +586,148 @@ fn bdd_attempt_100bit_lowering(w: &mut R4g1World) {
 fn bdd_unrepresentable_error_check(w: &mut R4g1World) {
     let err = w.lower_error.as_ref().expect("lower error");
     assert!(matches!(err, LoweringError::UnrepresentableRegion { .. }));
+}
+
+// =========================================================================
+// Semantic State Space BDD Steps (#124)
+// =========================================================================
+use uor_r4_graph_compiler::semantic_state::{
+    Action as SemAction, Belief as SemBelief, Constraint as SemConstraint, Goal as SemGoal,
+    Region as SemRegion, SemanticState as SemState, SemanticStateError as SemError,
+    Trajectory as SemTrajectory, TransitionEvaluator as SemEvaluator,
+};
+
+#[given("an initial semantic state \"s0\" with vector [0.0, 0.0] and signature [0]")]
+fn bdd_initial_state_s0(w: &mut R4g1World) {
+    w.state_s0 = Some(SemState::new("s0", vec![0.0, 0.0], vec![0], 1.0));
+}
+
+#[when(
+    "a semantic action \"move_right\" with delta vector [1.0, 0.0] and mask flip [1] is applied"
+)]
+fn bdd_apply_move_right(w: &mut R4g1World) {
+    let s0 = w.state_s0.as_ref().expect("initial state s0");
+    let action = SemAction::new("move_right", vec![1.0, 0.0], vec![1]);
+    let evaluator = SemEvaluator::new();
+    w.state_eval_res = Some(evaluator.apply(s0, &action));
+}
+
+#[then("the transition succeeds with target state \"s0_move_right\"")]
+fn bdd_transition_succeeds(w: &mut R4g1World) {
+    let res = w.state_eval_res.as_ref().expect("transition result");
+    assert!(res.is_ok());
+    assert_eq!(res.as_ref().unwrap().id, "s0_move_right");
+}
+
+#[then("the target state has vector [1.0, 0.0] and signature [1]")]
+fn bdd_target_state_values(w: &mut R4g1World) {
+    let state = w.state_eval_res.as_ref().unwrap().as_ref().unwrap();
+    assert_eq!(state.vector, vec![1.0, 0.0]);
+    assert_eq!(state.boolean_signature, vec![1]);
+}
+
+#[given("an initial semantic state \"s_invalid\" with negative vector [-1.0, 0.0]")]
+fn bdd_initial_negative_state(w: &mut R4g1World) {
+    w.state_s0 = Some(SemState::new("s_invalid", vec![-1.0, 0.0], vec![0], 1.0));
+}
+
+#[when("an action requiring non-negative coordinates is applied")]
+fn bdd_apply_action_with_precondition(w: &mut R4g1World) {
+    let s0 = w.state_s0.as_ref().expect("state");
+    let action = SemAction::new("check_pos", vec![1.0, 0.0], vec![0])
+        .with_precondition(|s| s.vector[0] >= 0.0);
+    let evaluator = SemEvaluator::new();
+    w.state_eval_res = Some(evaluator.apply(s0, &action));
+}
+
+#[then("the transition fails with a precondition error")]
+fn bdd_transition_fails_precondition(w: &mut R4g1World) {
+    let res = w.state_eval_res.as_ref().expect("res");
+    assert!(matches!(res, Err(SemError::PreconditionFailed { .. })));
+}
+
+#[given("a hazard constraint centered at [5.0, 5.0] with radius 1.0")]
+fn bdd_hazard_constraint(w: &mut R4g1World) {
+    let danger_region = SemRegion::new("danger", vec![5.0, 5.0], 1.0, "Hazard Zone");
+    let constraint = SemConstraint::new("no_hazard", danger_region);
+    let mut eval = SemEvaluator::new();
+    eval.add_constraint(constraint);
+    w.hazard_evaluator = Some(eval);
+}
+
+#[given("an initial state at [0.0, 0.0]")]
+fn bdd_initial_zero_state(w: &mut R4g1World) {
+    w.state_s0 = Some(SemState::new("s_zero", vec![0.0, 0.0], vec![0], 1.0));
+}
+
+#[when("an action attempts to step to [5.0, 5.0]")]
+fn bdd_step_into_hazard(w: &mut R4g1World) {
+    let s0 = w.state_s0.as_ref().expect("state");
+    let action = SemAction::new("step_hazard", vec![5.0, 5.0], vec![0]);
+    let evaluator = w.hazard_evaluator.as_ref().expect("evaluator");
+    w.state_eval_res = Some(evaluator.apply(s0, &action));
+}
+
+#[then("the transition fails with a forbidden state error")]
+fn bdd_transition_fails_forbidden(w: &mut R4g1World) {
+    let res = w.state_eval_res.as_ref().expect("res");
+    assert!(matches!(res, Err(SemError::ForbiddenState { .. })));
+}
+
+#[given("a goal target region centered at [10.0, 10.0] with radius 2.0 and minimum confidence 0.8")]
+fn bdd_goal_target_region(_w: &mut R4g1World) {}
+
+#[when("a state \"s_target\" at [10.0, 11.0] with confidence 0.9 is evaluated")]
+fn bdd_evaluate_goal_and_belief(w: &mut R4g1World) {
+    let target_region = SemRegion::new("target", vec![10.0, 10.0], 2.0, "Goal Zone");
+    let goal = SemGoal::new("reach_target", target_region.clone(), 0.8);
+    let belief = SemBelief::new("target_belief", target_region, 0.5);
+
+    let s_target = SemState::new("s_target", vec![10.0, 11.0], vec![1], 0.9);
+    let s_far = SemState::new("s_far", vec![0.0, 0.0], vec![0], 0.9);
+
+    w.goal_satisfied = Some(goal.is_satisfied_by(&s_target));
+    w.belief_in = Some(belief.evaluate(&s_target));
+    w.belief_out = Some(belief.evaluate(&s_far));
+}
+
+#[then("the goal is satisfied by the state")]
+fn bdd_goal_satisfied_check(w: &mut R4g1World) {
+    assert_eq!(w.goal_satisfied, Some(true));
+}
+
+#[then("the belief likelihood is higher than a state at [0.0, 0.0]")]
+fn bdd_belief_higher_check(w: &mut R4g1World) {
+    let b_in = w.belief_in.expect("belief in");
+    let b_out = w.belief_out.expect("belief out");
+    assert!(b_in > b_out);
+}
+
+#[given("a trajectory with maximum 2 steps")]
+fn bdd_max_2_steps_trajectory(w: &mut R4g1World) {
+    w.state_s0 = Some(SemState::new("s_init", vec![0.0], vec![0], 1.0));
+}
+
+#[when("3 step actions are applied sequentially")]
+fn bdd_apply_3_steps(w: &mut R4g1World) {
+    let s0 = w.state_s0.take().expect("init state");
+    let evaluator = SemEvaluator::new();
+    let action = SemAction::new("step", vec![1.0], vec![0]);
+    let mut traj = SemTrajectory::new(s0, 2);
+
+    let _ = traj.step(&action, &evaluator);
+    let _ = traj.step(&action, &evaluator);
+    let res = traj.step(&action, &evaluator);
+
+    if let Err(e) = res {
+        w.trajectory_error = Some(e);
+    }
+}
+
+#[then("the 3rd step fails with a maximum steps exceeded error")]
+fn bdd_max_steps_error_check(w: &mut R4g1World) {
+    let err = w.trajectory_error.as_ref().expect("trajectory error");
+    assert!(matches!(err, SemError::MaxStepsExceeded { limit: 2 }));
 }
 
 #[tokio::main]
