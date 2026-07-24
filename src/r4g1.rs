@@ -621,10 +621,11 @@ impl R4g1State {
 const QUALITY_FLOOR_TOP1_AGREEMENT: f64 = 0.317 - 0.02;
 const QUALITY_FLOOR_BITS_PER_TOKEN: f64 = 9.86 + 0.10;
 
-/// Validate the graph's Rule 1+2 quality against the TLA baseline and the
-/// pinned absolute floor. Missing metrics remain compatible with older
-/// reports; when present, the deployed graph must not be worse than the
-/// baseline and must not digress below the #65-chain anchors.
+/// Validate the graph's Rule 1+2 quality against the declared quality basis.
+/// Reports without a profile retain the historical pinned-floor behavior.
+/// Dynamic Hugging Face builds use `config.quality_profile = "relative_tla"`
+/// because their teacher-generated distributions are not comparable to the
+/// legacy fixture corpus that established the absolute floor.
 pub fn validate_quality_report(report: &serde_json::Value) -> Result<(), String> {
     let graph_agreement = report
         .pointer("/gate_c/rule12_precedence/top1_agreement")
@@ -643,6 +644,13 @@ pub fn validate_quality_report(report: &serde_json::Value) -> Result<(), String>
                 baseline * 100.0
             ));
         }
+    }
+    let quality_profile = report
+        .pointer("/config/quality_profile")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("pinned");
+    if quality_profile == "relative_tla" {
+        return Ok(());
     }
     if let Some(graph) = graph_agreement {
         if graph < QUALITY_FLOOR_TOP1_AGREEMENT {

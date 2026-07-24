@@ -10,7 +10,7 @@ use std::io::{prelude::*, BufReader};
 use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use uor_foundation::pipeline::PrismModel;
 
 use uor_r4_graph_certify::ScoreStatus;
@@ -32,6 +32,10 @@ const R4G1_SCORE_TRANSITION_DEGREE: &str = "16";
 const R4G1_SCORE_EMISSION_ENTRIES: &str = "256";
 const R4G1_SCORE_ROOT_TOP_B: &str = "256";
 const R4G1_SCORE_EXCT_TOP_X: &str = "128";
+// The browser can compile arbitrary pinned HF teachers. Their generated
+// distributions do not share the historical fixture-corpus Gate C floor, so
+// the report must explicitly use the same-corpus TLA comparison.
+const R4G1_SCORE_QUALITY_PROFILE: &str = "relative_tla";
 
 /// Configuration supplied by the executable to the reusable HTTP server.
 #[derive(Debug, Clone)]
@@ -74,6 +78,7 @@ struct HuggingFaceDownloadPayload {
 struct R4g1CompileStatus {
     running: bool,
     ready: bool,
+    progress: u8,
     message: String,
     report: Option<serde_json::Value>,
 }
@@ -109,6 +114,7 @@ impl R4g1CompileStatus {
         serde_json::json!({
             "running": self.running,
             "ready": self.ready,
+            "progress": self.progress,
             "message": self.message,
             "report": self.report,
         })
@@ -186,6 +192,7 @@ pub fn run_server(cli: Arc<ServerConfig>) {
     let r4g1_compile = Arc::new(Mutex::new(R4g1CompileStatus {
         running: false,
         ready: false,
+        progress: 0,
         message: "R4G1 graph compiler idle".to_owned(),
         report: None,
     }));
@@ -195,26 +202,44 @@ pub fn run_server(cli: Arc<ServerConfig>) {
         message: "Hugging Face source download idle".to_owned(),
         source: None,
     }));
-    if let Some(graph_path) = r4g1::discover_path(
+    let mut r4g1_candidates = r4g1::discover_path(
         cli.r4g1_artifact.as_deref(),
         Path::new(&cli.tless_artifacts),
-    ) {
-        if graph_path.is_file() {
-            match R4g1State::load(&graph_path, Path::new(&cli.tless_artifacts)) {
-                Ok(state) => {
-                    println!(
-                        "[+] Loaded validated R4G1 graph runtime from {}",
-                        graph_path.display()
-                    );
-                    *r4g1.lock().unwrap() = Some(state);
-                    r4g1_compile.lock().unwrap().ready = true;
-                    r4g1_compile.lock().unwrap().message = "R4G1 graph runtime ready".to_owned();
-                }
-                Err(error) => {
-                    println!("[-] Failed to load R4G1 graph runtime: {error}");
-                }
+    )
+    .map(|graph| vec![(graph, PathBuf::from(&cli.tless_artifacts))])
+    .unwrap_or_default();
+    if cli.r4g1_artifact.is_none() {
+        r4g1_candidates.extend(discover_compiled_r4g1_candidates());
+    }
+    let mut loaded_r4g1 = false;
+    for (graph_path, teacher_path) in r4g1_candidates {
+        if !graph_path.is_file() || !teacher_path.is_file() {
+            continue;
+        }
+        match R4g1State::load(&graph_path, &teacher_path) {
+            Ok(state) => {
+                println!(
+                    "[+] Loaded validated R4G1 graph runtime from {}",
+                    graph_path.display()
+                );
+                *r4g1.lock().unwrap() = Some(state);
+                let mut compile_status = r4g1_compile.lock().unwrap();
+                compile_status.ready = true;
+                compile_status.progress = 100;
+                compile_status.message = "R4G1 graph runtime ready".to_owned();
+                loaded_r4g1 = true;
+                break;
+            }
+            Err(error) => {
+                println!(
+                    "[-] Failed to load R4G1 graph runtime from {}: {error}",
+                    graph_path.display()
+                );
             }
         }
+    }
+    if !loaded_r4g1 {
+        tracing::info!("no validated R4G1 graph found; compile it from the dashboard");
     }
     let r4g1_candidates = [
         ".uor-models/compiled/smollm2-1-7b-instruct/compiled.r4g1",
@@ -443,6 +468,28 @@ fn with_tless_server_state<R>(
     Some(r)
 }
 
+/// Find compiled dashboard bundles when the server was restarted without an
+/// explicit `--r4g1-artifact`. The compile endpoint loads its result into the
+/// live process, but a restart must pair each graph with the teacher artifact
+/// that produced it instead of looking beside the unrelated legacy defaults.
+fn discover_compiled_r4g1_candidates() -> Vec<(PathBuf, PathBuf)> {
+    let root = Path::new(".uor-models/compiled");
+    let mut bundles: Vec<PathBuf> = fs::read_dir(root)
+        .into_iter()
+        .flat_map(|entries| entries.flatten().map(|entry| entry.path()))
+        .filter(|path| path.is_dir())
+        .collect();
+    bundles.sort();
+    bundles
+        .into_iter()
+        .filter_map(|bundle| {
+            let graph = bundle.join("graph/score.r4g1");
+            let teacher = bundle.join("tless_artifacts.bin");
+            (graph.is_file() && teacher.is_file()).then_some((graph, teacher))
+        })
+        .collect()
+}
+
 /// Generate a text continuation with the transformerless runtime. The shared
 /// state keeps chat turns on one graded store and serializes its thread-local
 /// UOR binding. `None` means the configured artifacts/tokenizer are not ready.
@@ -524,7 +571,7 @@ fn generate_r4g1_text(
     slot: &Arc<Mutex<Option<R4g1State>>>,
     prompt: &str,
     max_tokens: usize,
-) -> Option<R4g1Text> {
+) -> Result<Option<R4g1Text>, String> {
     const MAX_SERVER_TOKENS: usize = 256;
     const MAX_SERVER_TEXT_BYTES: usize = 16 * 1024;
     let mut seed = [0u32; 4096];
@@ -532,19 +579,22 @@ fn generate_r4g1_text(
     let mut bytes = [0u8; MAX_SERVER_TEXT_BYTES];
     let (byte_count, status, widened, abstained) = {
         let guard = slot.lock().unwrap();
-        let state = guard.as_ref()?;
+        let Some(state) = guard.as_ref() else {
+            return Ok(None);
+        };
         let seed_len = state
             .encode_into(prompt, &mut seed)
-            .or_else(|| tless_uor::tless_tokenize_into(prompt, &mut seed))?;
+            .or_else(|| tless_uor::tless_tokenize_into(prompt, &mut seed))
+            .ok_or_else(|| "R4G1 tokenizer could not encode the prompt".to_owned())?;
         if seed_len == 0 {
-            return None;
+            return Err("R4G1 tokenizer produced an empty prompt".to_owned());
         }
         let outcome = state
             .generate_into_status(
                 &seed[..seed_len],
                 &mut generated[..max_tokens.min(MAX_SERVER_TOKENS)],
             )
-            .ok()?;
+            .map_err(|error| format!("R4G1 graph scoring failed: {error}"))?;
         // On an abstention no text is produced: the tokens generated before
         // the abstaining step are dropped rather than served, so an
         // out-of-distribution prompt never surfaces partial output.
@@ -555,7 +605,8 @@ fn generate_r4g1_text(
                 .decode_into(&generated[..outcome.count], &mut bytes)
                 .or_else(|| {
                     tless_uor::tless_detokenize_into(&generated[..outcome.count], &mut bytes)
-                })?
+                })
+                .ok_or_else(|| "R4G1 tokenizer could not decode generated tokens".to_owned())?
         };
         (
             bytes_written,
@@ -567,12 +618,12 @@ fn generate_r4g1_text(
     let text = String::from_utf8_lossy(&bytes[..byte_count])
         .trim()
         .to_owned();
-    Some(R4g1Text {
+    Ok(Some(R4g1Text {
         text,
         status,
         widened,
         abstained,
-    })
+    }))
 }
 
 fn generate_attention_text(
@@ -711,36 +762,6 @@ fn clean_attention_response(text: &str, prompt: &str) -> String {
     }
 }
 
-fn clean_sentence_boundary(raw: &str) -> String {
-    let text = raw.trim();
-    let end_p = text.find('.').unwrap_or(usize::MAX);
-    let end_q = text.find('?').unwrap_or(usize::MAX);
-    let end_e = text.find('!').unwrap_or(usize::MAX);
-    let min_end = end_p.min(end_q).min(end_e);
-    let cleaned = if min_end < text.len() {
-        text[..=min_end].trim().to_string()
-    } else {
-        text.to_string()
-    };
-    let words: Vec<&str> = cleaned.split_whitespace().collect();
-    let mut unique_words = Vec::new();
-    for w in words {
-        if unique_words.last() == Some(&w) {
-            continue;
-        }
-        unique_words.push(w);
-    }
-    if unique_words.len() > 25 && min_end >= text.len() {
-        unique_words.truncate(25);
-    }
-    let res = unique_words.join(" ");
-    if !res.ends_with('.') && !res.ends_with('?') && !res.ends_with('!') {
-        format!("{}.", res)
-    } else {
-        res
-    }
-}
-
 /// Validate generated text before it is returned by the HTTP chat endpoint.
 pub fn is_usable_generated_text(text: &str) -> bool {
     let chars: Vec<char> = text.chars().collect();
@@ -854,11 +875,25 @@ pub fn select_synthesis_engine(requested: Option<&str>) -> &'static str {
 /// The explicit failure contract for an unavailable R4G1 runtime. Keeping
 /// this separate makes the no-fallback behavior directly testable.
 pub fn r4g1_unavailable_response() -> (u16, serde_json::Value) {
+    r4g1_unavailable_response_with_reason(None)
+}
+
+fn r4g1_unavailable_response_with_reason(reason: Option<&str>) -> (u16, serde_json::Value) {
+    let error = match reason {
+        Some(reason) => {
+            format!("R4G1 Graph runtime failed: {reason}; no fallback engine was invoked")
+        }
+        None => {
+            "R4G1 Graph runtime did not produce a usable response; no fallback engine was invoked"
+                .to_owned()
+        }
+    };
     (
         503,
         serde_json::json!({
-            "error": "R4G1 Graph runtime did not produce a usable response; no fallback engine was invoked",
-            "engine": "r4g1"
+            "error": error,
+            "engine": "r4g1",
+            "action": "Compile / Refresh the R4G1 graph, or explicitly select another engine"
         }),
     )
 }
@@ -972,7 +1007,10 @@ fn r4g1_compile_paths(cli: &ServerConfig) -> Result<(PathBuf, PathBuf, PathBuf, 
     ))
 }
 
-fn compile_bundle_from_source(source: &Path) -> Result<PathBuf, String> {
+fn compile_bundle_from_source(
+    source: &Path,
+    status: &Arc<Mutex<R4g1CompileStatus>>,
+) -> Result<PathBuf, String> {
     let name = source
         .file_name()
         .and_then(|name| name.to_str())
@@ -995,7 +1033,41 @@ fn compile_bundle_from_source(source: &Path) -> Result<PathBuf, String> {
         "--sequence-length".to_owned(),
         "128".to_owned(),
     ];
-    uor_r4_graph_cli::compile_hugging_face(&args)?;
+    // The teacher compile can take most of the wall-clock time. Run it in a
+    // child worker so the server can report corpus progress while the native
+    // compiler is generating/resuming records.
+    let meta_path = output.join("corpus.meta");
+    let status_for_compiler = Arc::clone(status);
+    let compiler = std::thread::spawn(move || {
+        set_r4g1_compile_progress(
+            &status_for_compiler,
+            6,
+            "Loading teacher model and preparing corpus...",
+        );
+        uor_r4_graph_cli::compile_hugging_face(&args)
+    });
+    while !compiler.is_finished() {
+        let observed = fs::read(&meta_path).ok().and_then(|bytes| {
+            bytes
+                .get(..8)
+                .and_then(|prefix| prefix.try_into().ok().map(u64::from_le_bytes))
+        });
+        let target = R4G1_CORPUS_TARGET.parse::<u64>().unwrap_or(1).max(1);
+        let progress = observed
+            .map(|current| 5u8.saturating_add((current.saturating_mul(14) / target).min(14) as u8))
+            .unwrap_or(6);
+        let message = observed
+            .map(|current| format!("Generating teacher corpus ({current} / {target} samples)..."))
+            .unwrap_or_else(|| "Loading teacher model and preparing corpus...".to_owned());
+        set_r4g1_compile_progress(status, progress, &message);
+        std::thread::sleep(Duration::from_millis(500));
+    }
+    compiler.join().map_err(|payload| {
+        format!(
+            "teacher compilation panicked: {}",
+            panic_payload_message(&*payload)
+        )
+    })??;
     for file in [
         "tless_artifacts.bin",
         "tless_store.bin",
@@ -1040,15 +1112,22 @@ fn panic_payload_message(payload: &(dyn Any + Send)) -> String {
 fn compile_r4g1_bundle(
     cli: &ServerConfig,
     r4g1: &Arc<Mutex<Option<R4g1State>>>,
+    status: &Arc<Mutex<R4g1CompileStatus>>,
     downloaded_source: Option<&Path>,
 ) -> Result<serde_json::Value, String> {
+    set_r4g1_compile_progress(
+        status,
+        5,
+        "Preparing teacher corpus and R4G1 compiler inputs...",
+    );
     // A downloaded source is authoritative for the browser workflow. Even
     // when an older corpus bundle already exists, resume the teacher compile
     // first so the requested target (currently 200k tokens) is actually
     // reached instead of silently rebuilding the old ~20k corpus.
     let source_root = downloaded_source
-        .map(compile_bundle_from_source)
+        .map(|source| compile_bundle_from_source(source, status))
         .transpose()?;
+    set_r4g1_compile_progress(status, 20, "Building the R4G1 cover...");
     let (artifacts, corpus_meta, corpus_recs, cover_output, graph_output, graph_path) =
         match source_root {
             Some(root) => {
@@ -1129,6 +1208,7 @@ fn compile_r4g1_bundle(
     ];
     uor_r4_graph_cli::cover_command(&cover_args)?;
 
+    set_r4g1_compile_progress(status, 55, "Scoring graph transitions and emissions...");
     let cover_artifact = cover_output.join("cover.r4g1");
     let score_args = vec![
         "--corpus-meta".to_owned(),
@@ -1147,11 +1227,14 @@ fn compile_r4g1_bundle(
         R4G1_SCORE_ROOT_TOP_B.to_owned(),
         "--exct-top-x".to_owned(),
         R4G1_SCORE_EXCT_TOP_X.to_owned(),
+        "--quality-profile".to_owned(),
+        R4G1_SCORE_QUALITY_PROFILE.to_owned(),
         "--out".to_owned(),
         graph_output.display().to_string(),
     ];
     uor_r4_graph_cli::score_command(&score_args)?;
 
+    set_r4g1_compile_progress(status, 90, "Validating and loading the compiled graph...");
     let state = R4g1State::load(&graph_path, &artifacts)
         .map_err(|error| format!("compiled graph was written but failed validation: {error}"))?;
     *r4g1.lock().unwrap() = Some(state);
@@ -1174,7 +1257,12 @@ fn spawn_r4g1_compile(
 ) {
     std::thread::spawn(move || {
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            compile_r4g1_bundle(&cli, &r4g1, downloaded_source.as_deref().map(Path::new))
+            compile_r4g1_bundle(
+                &cli,
+                &r4g1,
+                &status,
+                downloaded_source.as_deref().map(Path::new),
+            )
         }))
         .map_err(|payload| {
             format!(
@@ -1189,6 +1277,7 @@ fn spawn_r4g1_compile(
         match result {
             Ok(details) => {
                 current.ready = true;
+                current.progress = 100;
                 current.report = details
                     .get("report")
                     .filter(|report| !report.is_null())
@@ -1203,10 +1292,20 @@ fn spawn_r4g1_compile(
             }
             Err(error) => {
                 current.ready = r4g1.lock().unwrap().is_some();
+                current.progress = 0;
                 current.message = format!("R4G1 compilation failed: {error}");
             }
         }
     });
+}
+
+fn set_r4g1_compile_progress(status: &Arc<Mutex<R4g1CompileStatus>>, progress: u8, message: &str) {
+    let mut current = status.lock().unwrap();
+    let progress = progress.min(100);
+    if progress >= current.progress {
+        current.progress = progress;
+        current.message = message.to_owned();
+    }
 }
 
 fn pinned_huggingface_source() -> Result<SourceDownload, String> {
@@ -1509,6 +1608,7 @@ fn handle_connection(
         let mut r4g1_status: Option<&'static str> = None;
         let mut r4g1_widened = false;
         let mut r4g1_abstained = false;
+        let mut r4g1_error: Option<String> = None;
 
         let mut oracle_guard = oracle.lock().unwrap();
         if engine_mode == "attention" || engine_mode == "r4-attention" {
@@ -1533,27 +1633,24 @@ fn handle_connection(
             || engine_mode == "transformerless-legacy"
         {
             let prompt = payload.text.clone();
-            if !geom_result.text.is_empty() && geom_result.text.len() > 10 {
-                let cleaned = clean_sentence_boundary(&geom_result.text);
-                final_response_text = cleaned;
-                llm_connected = true;
-                generation_mode = "r4g1-zero-multiply-geometric".to_string();
-                tokens_generated = final_response_text.split_whitespace().count();
-            } else if ctx_block != "[no corpus context available]" {
-                let cleaned = clean_sentence_boundary(ctx_block);
-                final_response_text = cleaned;
-                llm_connected = true;
-                generation_mode = "r4g1-zero-multiply-resonance".to_string();
-                tokens_generated = final_response_text.split_whitespace().count();
-            } else if engine_mode != "transformerless-legacy" {
+            if engine_mode != "transformerless-legacy" {
                 match generate_r4g1_text(&r4g1, &prompt, max_tokens.max(32)) {
-                    Some(gen) if gen.abstained => {
+                    Ok(Some(gen)) if gen.abstained => {
+                        // D4: the policy abstained (Novel input after the
+                        // widen-once bound, or a reserved status). This is a
+                        // declared outcome, not an engine failure — surface
+                        // the status, never guess a token, and never fall
+                        // through to another engine without declaring it.
                         generation_mode = "r4g1-abstained".to_string();
                         r4g1_status = gen.status.map(r4g1::PolicyStatus::from).map(|s| s.label());
                         r4g1_widened = gen.widened;
                         r4g1_abstained = true;
                     }
-                    Some(gen) if is_usable_generated_text(&gen.text) => {
+                    Ok(Some(gen)) if is_usable_generated_text(&gen.text) => {
+                        // The pathological-output reject guard stays the
+                        // last line of defense for SERVED (non-abstained)
+                        // output; abstentions are resolved by the policy
+                        // above before text exists.
                         final_response_text = gen.text;
                         llm_connected = true;
                         generation_mode = "r4g1".to_string();
@@ -1561,10 +1658,22 @@ fn handle_connection(
                         r4g1_widened = gen.widened;
                         tokens_generated = final_response_text.split_whitespace().count();
                     }
-                    Some(_) => {
+                    Ok(Some(_)) => {
                         generation_mode = "r4g1-rejected".to_string();
+                        r4g1_error = Some(
+                            "R4G1 generated text was rejected as non-readable or pathological"
+                                .to_owned(),
+                        );
+                        println!("[-] R4G1 output rejected as non-readable or pathological");
                     }
-                    None => {}
+                    Ok(None) => {
+                        r4g1_error = Some("R4G1 graph runtime is not loaded".to_owned());
+                    }
+                    Err(error) => {
+                        generation_mode = "r4g1-error".to_string();
+                        r4g1_error = Some(error.clone());
+                        println!("[-] R4G1 generation failed: {error}");
+                    }
                 }
             }
             if final_response_text.is_empty()
@@ -1594,7 +1703,7 @@ fn handle_connection(
                 });
                 send_json_response(stream, 200, &body.to_string());
             } else {
-                let (status, body) = r4g1_unavailable_response();
+                let (status, body) = r4g1_unavailable_response_with_reason(r4g1_error.as_deref());
                 send_json_response(stream, status, &body.to_string());
             }
             return;
@@ -2357,6 +2466,8 @@ fn handle_connection(
             return;
         }
         status.running = true;
+        status.ready = r4g1.lock().unwrap().is_some();
+        status.progress = 1;
         status.message = "Compiling R4G1 cover and scored graph...".to_owned();
         status.report = None;
         drop(status);

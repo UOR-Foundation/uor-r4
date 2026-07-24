@@ -22,6 +22,11 @@ Feature: R4G1 compilation quality gates
     When the R4G1 quality gate validates the report
     Then the quality gate accepts the graph
 
+  Scenario: accept a dynamic teacher graph at its same-corpus TLA baseline
+    Given a graph quality report using a same-corpus TLA quality profile
+    When the R4G1 quality gate validates the report
+    Then the quality gate accepts the graph
+
   Scenario: reject a graph that digresses in bits per token
     Given a graph quality report with digressed bits per token
     When the R4G1 quality gate validates the report

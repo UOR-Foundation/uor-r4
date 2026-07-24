@@ -223,6 +223,17 @@ fn pinned_anchors_report(w: &mut R4g1World) {
     }));
 }
 
+#[given("a graph quality report using a same-corpus TLA quality profile")]
+fn same_corpus_tla_report(w: &mut R4g1World) {
+    w.quality_report = Some(serde_json::json!({
+        "config": {"quality_profile": "relative_tla"},
+        "gate_c": {
+            "rule12_precedence": {"top1_agreement": 0.1596, "bits_per_token": 14.2959},
+            "tla3_baseline": {"top1_agreement": 0.1596, "bits_per_token": 20.7655}
+        }
+    }));
+}
+
 #[given("a graph quality report with digressed bits per token")]
 fn digressed_bits_report(w: &mut R4g1World) {
     // Agreement still clears the baseline, so only the absolute floor can fire.

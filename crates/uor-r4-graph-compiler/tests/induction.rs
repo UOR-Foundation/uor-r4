@@ -307,10 +307,9 @@ fn memory_budget_derives_batch_size_without_changing_results() {
 // --------------------------------------------------------- determinism --
 
 /// T-invariance (plan §4.1 / Gate E): identical inputs produce
-/// byte-identical outputs regardless of the recorded thread count. v1 is
-/// single-threaded — `threads` is a recorded knob that never reaches the
-/// reduction order — so T=1 and T=4 agree by construction, and a double
-/// run reproduces the artifact bytes exactly.
+/// byte-identical outputs regardless of the recorded thread count. Worker
+/// extraction is sharded, while k-means reductions remain ordered, so T=1
+/// and T=4 agree and a double run reproduces the artifact bytes exactly.
 #[test]
 fn t_invariance_and_double_run_identity() {
     let (observations, _) = synthetic_observations();
@@ -322,7 +321,7 @@ fn t_invariance_and_double_run_identity() {
     assert_eq!(
         one.cover.kappa(),
         four.cover.kappa(),
-        "T=1 and T=4 induce the identical cover (single-threaded v1)"
+        "T=1 and T=4 induce the identical cover"
     );
 
     let emit = |induced: &cover::InducedCover| -> Vec<u8> {
