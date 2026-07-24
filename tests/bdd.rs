@@ -498,6 +498,8 @@ fn bdd_lower_region_step(w: &mut R4g1World) {
         &[true, false, true, true],
         1.0,
         "cid_bdd_ref_101",
+        101,
+        0,
     )
     .unwrap();
     w.lower_bool_region = Some(region);
@@ -560,7 +562,8 @@ fn bdd_given_100bit_sig(_w: &mut R4g1World) {}
 #[when("region lowering is attempted")]
 fn bdd_attempt_100bit_lowering(w: &mut R4g1World) {
     let long_sig = vec![true; 100];
-    if let Err(e) = BooleanLoweringCompiler::lower_region("reg_overflow", &long_sig, 1.0, "cid_err")
+    if let Err(e) =
+        BooleanLoweringCompiler::lower_region("reg_overflow", &long_sig, 1.0, "cid_err", 101, 0)
     {
         w.lower_error = Some(e);
     }

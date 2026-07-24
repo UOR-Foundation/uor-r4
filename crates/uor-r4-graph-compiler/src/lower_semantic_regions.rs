@@ -81,12 +81,12 @@ impl LoweredFixedPointScore {
             return Err(LoweringError::QuantizationOverflow { score: val });
         }
         let scaled = (val * 256.0).round();
-        if scaled >= i16::MAX as f32 {
+        if scaled > i16::MAX as f32 {
             Ok(Self {
                 q88_value: i16::MAX,
                 saturated: true,
             })
-        } else if scaled <= i16::MIN as f32 {
+        } else if scaled < i16::MIN as f32 {
             Ok(Self {
                 q88_value: i16::MIN,
                 saturated: true,
@@ -133,6 +133,8 @@ impl BooleanLoweringCompiler {
         signature_bits: &[bool],
         radius_float: f32,
         ref_cid: &str,
+        reference_contribution_id: u32,
+        runtime_table_index: u32,
     ) -> Result<(LoweredBooleanRegion, LoweringWitnessEntry), LoweringError> {
         let r_id = region_id.into();
         if signature_bits.len() > 64 {
@@ -144,10 +146,14 @@ impl BooleanLoweringCompiler {
                 ),
             });
         }
-        if !(0.0..=64.0).contains(&radius_float) {
+        let max_radius = signature_bits.len() as f32;
+        if !(0.0..=max_radius).contains(&radius_float) {
             return Err(LoweringError::UnrepresentableRegion {
                 region_id: r_id,
-                reason: format!("Radius {radius_float:.2} outside valid Hamming bound [0..64]"),
+                reason: format!(
+                    "Radius {radius_float:.2} outside valid Hamming bound [0..{max_radius}] for signature length {}",
+                    signature_bits.len()
+                ),
             });
         }
 
@@ -168,11 +174,11 @@ impl BooleanLoweringCompiler {
             bitmask: mask_u64,
             expected_signature: sig_u64,
             max_hamming_distance: max_dist,
-            reference_contribution_id: 101,
+            reference_contribution_id,
         };
 
         let witness = LoweringWitnessEntry {
-            runtime_table_index: 0,
+            runtime_table_index,
             reference_cid: ref_cid.to_string(),
             lowered_type: "LoweredBooleanRegion".to_string(),
             quantization_delta: (radius_float - max_dist as f32).abs(),
@@ -193,6 +199,8 @@ mod tests {
             &[true, false, true, true], // sig = 0b1101 = 13
             1.0,
             "cid_test_123",
+            101,
+            0,
         )
         .unwrap();
 
@@ -226,8 +234,15 @@ mod tests {
     #[test]
     fn test_unrepresentable_region_rejection() {
         let long_sig = vec![true; 100];
-        let err = BooleanLoweringCompiler::lower_region("reg_overflow", &long_sig, 1.0, "cid_err")
-            .unwrap_err();
+        let err = BooleanLoweringCompiler::lower_region(
+            "reg_overflow",
+            &long_sig,
+            1.0,
+            "cid_err",
+            101,
+            0,
+        )
+        .unwrap_err();
 
         assert!(matches!(err, LoweringError::UnrepresentableRegion { .. }));
     }
