@@ -65,6 +65,10 @@ struct R4g1World {
         Option<uor_r4_graph_compiler::semantic_emission_decoupling::DecoupledCertificationReport>,
     decouple_error:
         Option<uor_r4_graph_compiler::semantic_emission_decoupling::SemanticEmissionError>,
+    // Formal Monograph fields (#133)
+    monograph_text: String,
+    monograph_report: Option<uor_r4_graph_compiler::monograph::MonographValidationReport>,
+    monograph_error: Option<uor_r4_graph_compiler::monograph::MonographValidationError>,
     // Expand Proof Model fields (#132)
     proof_report: Option<uor_r4_proof_model::structural_guarantees::ProofVerificationReport>,
     proof_nodes: Vec<u32>,
@@ -536,7 +540,6 @@ fn u8_kernel_zero_floats(_w: &mut R4g1World) {
     assert!(!kernel_code.contains(" * ") && !kernel_code.contains(" / "));
 }
 
-// =========================================================================
 // Separate Semantic Emission BDD Steps (#134)
 // =========================================================================
 use uor_r4_graph_compiler::semantic_emission_decoupling::{
@@ -622,6 +625,77 @@ fn bdd_decouple_contradictory_error_check(w: &mut R4g1World) {
     assert!(matches!(
         err,
         SemanticEmissionError::ContradictoryState { .. }
+    ));
+}
+
+// =========================================================================
+// Formal Monograph BDD Steps (#133)
+// =========================================================================
+use uor_r4_graph_compiler::monograph::{MonographTraceabilityVerifier, MonographValidationError};
+
+#[given("the living formal monograph document")]
+fn bdd_given_monograph_doc(w: &mut R4g1World) {
+    w.monograph_text = include_str!("../docs/hologram_r4_formal_monograph.md").to_string();
+}
+
+#[when("audited by the monograph traceability verifier")]
+fn bdd_validate_monograph_step(w: &mut R4g1World) {
+    let res = MonographTraceabilityVerifier::validate_monograph_text(&w.monograph_text);
+    match res {
+        Ok(rep) => w.monograph_report = Some(rep),
+        Err(err) => w.monograph_error = Some(err),
+    }
+}
+
+#[then("all 19 monograph sections are verified present")]
+fn bdd_monograph_sections_check(w: &mut R4g1World) {
+    let rep = w.monograph_report.as_ref().expect("monograph report");
+    assert_eq!(rep.total_sections_verified, 19);
+    assert!(rep.verified);
+}
+
+#[then("12 implementation module links are verified")]
+fn bdd_monograph_modules_check(w: &mut R4g1World) {
+    let rep = w.monograph_report.as_ref().expect("monograph report");
+    assert_eq!(rep.total_modules_linked, 12);
+}
+
+#[then("3 non-goal disavowals are verified present")]
+fn bdd_monograph_non_goals_check(w: &mut R4g1World) {
+    let rep = w.monograph_report.as_ref().expect("monograph report");
+    assert_eq!(rep.non_goals_disavowed, 3);
+}
+
+#[given("a monograph draft missing section \"Section 1: Problem Statement and Non-Goals\"")]
+fn bdd_given_missing_section(w: &mut R4g1World) {
+    let full_doc = include_str!("../docs/hologram_r4_formal_monograph.md");
+    w.monograph_text = full_doc.replace(
+        "Section 1: Problem Statement and Non-Goals",
+        "Missing Sec 1",
+    );
+}
+
+#[then("validation fails with a missing section error")]
+fn bdd_missing_section_error_check(w: &mut R4g1World) {
+    let err = w.monograph_error.as_ref().expect("monograph error");
+    assert!(matches!(
+        err,
+        MonographValidationError::MissingSection { .. }
+    ));
+}
+
+#[given("a monograph draft missing non-goal \"No Human-Level Reasoning Claim\"")]
+fn bdd_given_missing_non_goal(w: &mut R4g1World) {
+    let full_doc = include_str!("../docs/hologram_r4_formal_monograph.md");
+    w.monograph_text = full_doc.replace("No Human-Level Reasoning Claim", "Altered");
+}
+
+#[then("validation fails with a missing non-goal error")]
+fn bdd_missing_non_goal_error_check(w: &mut R4g1World) {
+    let err = w.monograph_error.as_ref().expect("monograph error");
+    assert!(matches!(
+        err,
+        MonographValidationError::MissingNonGoalDisavowal { .. }
     ));
 }
 
