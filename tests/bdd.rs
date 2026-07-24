@@ -50,6 +50,30 @@ struct R4g1World {
     u8_a: u8,
     u8_b: u8,
     u8_res: u8,
+    // Reference Compiler IR fields (#129)
+    ref_corpus: Vec<String>,
+    ref_ir: Option<uor_r4_graph_compiler::reference_compiler_ir::ReferenceGraphIr>,
+    ref_transition_state:
+        Option<uor_r4_graph_compiler::reference_compiler_ir::ReferenceSemanticState>,
+    ref_diff_delta: Option<f32>,
+    // Behavioral Probe fields (#128)
+    probe_baseline_obs: String,
+    probe_suite_report: Option<uor_r4_graph_compiler::behavioral_probes::BehavioralProbeReport>,
+    probe_suite_error: Option<uor_r4_graph_compiler::behavioral_probes::BehavioralProbeError>,
+    probe_record_error: Option<uor_r4_graph_compiler::behavioral_probes::BehavioralProbeError>,
+    // Semantic State Space fields (#124)
+    state_s0: Option<uor_r4_graph_compiler::semantic_state::SemanticState>,
+    state_eval_res: Option<
+        Result<
+            uor_r4_graph_compiler::semantic_state::SemanticState,
+            uor_r4_graph_compiler::semantic_state::SemanticStateError,
+        >,
+    >,
+    hazard_evaluator: Option<uor_r4_graph_compiler::semantic_state::TransitionEvaluator>,
+    goal_satisfied: Option<bool>,
+    belief_in: Option<f32>,
+    belief_out: Option<f32>,
+    trajectory_error: Option<uor_r4_graph_compiler::semantic_state::SemanticStateError>,
 }
 
 #[given("the R4G1 runtime returned the browser's repetitive hello response")]
@@ -470,6 +494,336 @@ fn u8_kernel_zero_floats(_w: &mut R4g1World) {
     let kernel_code = &source[kernel_start..];
     assert!(!kernel_code.contains("f32") && !kernel_code.contains("f64"));
     assert!(!kernel_code.contains(" * ") && !kernel_code.contains(" / "));
+}
+
+// =========================================================================
+// Reference Compiler IR BDD Steps (#129)
+// =========================================================================
+use uor_r4_graph_compiler::reference_compiler_ir::{
+    DifferentialCompilerHarness, ReferenceCompilerConfig, ReferenceCompilerPipeline,
+};
+
+#[given("a pinned mini-corpus of 2 text observations")]
+fn bdd_pinned_mini_corpus(w: &mut R4g1World) {
+    w.ref_corpus = vec![
+        "First sentence observation".to_string(),
+        "Second sentence observation".to_string(),
+    ];
+}
+
+#[when("the reference compiler pipeline executes all 5 stages")]
+fn bdd_execute_compiler_pipeline(w: &mut R4g1World) {
+    let config = ReferenceCompilerConfig::default_v1();
+    let corpus_refs: Vec<&str> = w.ref_corpus.iter().map(|s| s.as_str()).collect();
+    let ir = ReferenceCompilerPipeline::compile(&corpus_refs, &config).unwrap();
+    w.ref_ir = Some(ir);
+}
+
+#[then("a valid ReferenceGraphIr is produced with content CID")]
+fn bdd_ir_produced_check(w: &mut R4g1World) {
+    let ir = w.ref_ir.as_ref().expect("ref ir");
+    assert!(ir.provenance.content_cid.starts_with("blake3:"));
+}
+
+#[then("the IR contains observations, states, regions, and objective reports")]
+fn bdd_ir_contents_check(w: &mut R4g1World) {
+    let ir = w.ref_ir.as_ref().expect("ref ir");
+    assert_eq!(ir.observations.len(), 2);
+    assert_eq!(ir.states.len(), 2);
+    assert_eq!(ir.regions.len(), 1);
+}
+
+#[given("a compiled ReferenceGraphIr containing states \"state_0\" and \"state_1\"")]
+fn bdd_compiled_ref_ir_given(w: &mut R4g1World) {
+    let config = ReferenceCompilerConfig::default_v1();
+    let corpus = vec!["First sentence observation", "Second sentence observation"];
+    w.ref_ir = Some(ReferenceCompilerPipeline::compile(&corpus, &config).unwrap());
+}
+
+#[when("a state transition query is executed for \"state_0\" under action \"next\"")]
+fn bdd_query_state_transition(w: &mut R4g1World) {
+    let ir = w.ref_ir.as_ref().expect("ir");
+    w.ref_transition_state = ir.transition("state_0", "next").cloned();
+}
+
+#[then("the transition returns state \"state_1\"")]
+fn bdd_transition_returns_state_1(w: &mut R4g1World) {
+    let st = w.ref_transition_state.as_ref().expect("state");
+    assert_eq!(st.id, "state_1");
+}
+
+#[then("the emission prediction for \"state_0\" returns token probabilities")]
+fn bdd_emission_prediction_check(w: &mut R4g1World) {
+    let ir = w.ref_ir.as_ref().expect("ir");
+    let em = ir.predict_emission("state_0").expect("emission");
+    assert_eq!(*em.get(&42).unwrap(), 0.8);
+}
+
+#[given("a compiled ReferenceGraphIr with teacher loss 0.25")]
+fn bdd_ref_ir_loss_given(w: &mut R4g1World) {
+    let config = ReferenceCompilerConfig::default_v1();
+    let corpus = vec!["First sentence observation"];
+    w.ref_ir = Some(ReferenceCompilerPipeline::compile(&corpus, &config).unwrap());
+}
+
+#[when("compared against baseline teacher loss 0.26 with tolerance 0.05")]
+fn bdd_run_differential_comparison(w: &mut R4g1World) {
+    let ir = w.ref_ir.as_ref().expect("ir");
+    let delta = DifferentialCompilerHarness::compare(ir, 0.26, 0.05).unwrap();
+    w.ref_diff_delta = Some(delta);
+}
+
+#[then("the differential comparison passes cleanly")]
+fn bdd_diff_comparison_passes(w: &mut R4g1World) {
+    let delta = w.ref_diff_delta.expect("delta");
+    assert!(delta < 0.05);
+}
+
+// =========================================================================
+// Behavioral Probes BDD Steps (#128)
+// =========================================================================
+use uor_r4_graph_compiler::behavioral_probes::{
+    BehavioralProbeError, BehavioralProbeHarness, ExpectedRelation, InterventionKind,
+    InterventionRecord,
+};
+
+#[given("a baseline observation \"Context text sample\"")]
+fn bdd_baseline_observation(w: &mut R4g1World) {
+    w.probe_baseline_obs = "Context text sample".to_string();
+}
+
+#[when("an invariant surface variation probe and a sensitive goal change probe are evaluated")]
+fn bdd_evaluate_probes(w: &mut R4g1World) {
+    let obs = &w.probe_baseline_obs;
+    let p_inv = InterventionRecord::new(
+        obs,
+        InterventionKind::SurfaceVariation,
+        (0, 7),
+        ExpectedRelation::Invariant,
+        vec![0.9, 0.1],
+        vec![0.905, 0.095],
+    )
+    .unwrap();
+
+    let p_sens = InterventionRecord::new(
+        obs,
+        InterventionKind::GoalChange,
+        (0, 7),
+        ExpectedRelation::Sensitive,
+        vec![0.9, 0.1],
+        vec![0.1, 0.9],
+    )
+    .unwrap();
+
+    let report = BehavioralProbeHarness::evaluate_suite(&[p_inv, p_sens], 0.05, 0.5).unwrap();
+    w.probe_suite_report = Some(report);
+}
+
+#[then("both invariance and sensitivity expectations pass cleanly")]
+fn bdd_invariance_sensitivity_pass(w: &mut R4g1World) {
+    let report = w.probe_suite_report.as_ref().expect("report");
+    assert_eq!(report.invariance_score, 1.0);
+    assert_eq!(report.sensitivity_score, 1.0);
+}
+
+#[then("the anti-memorization guard succeeds")]
+fn bdd_memorization_guard_succeeds(w: &mut R4g1World) {
+    let report = w.probe_suite_report.as_ref().expect("report");
+    assert!(report.memorization_check_passed);
+}
+
+#[given("a sensitive goal change probe that produces zero output divergence")]
+fn bdd_zero_divergence_sensitive_probe(w: &mut R4g1World) {
+    let p_mem = InterventionRecord::new(
+        "Context text sample",
+        InterventionKind::GoalChange,
+        (0, 7),
+        ExpectedRelation::Sensitive,
+        vec![0.9, 0.1],
+        vec![0.9, 0.1], // div = 0.0 -> memorization!
+    )
+    .unwrap();
+
+    if let Err(e) = BehavioralProbeHarness::evaluate_suite(&[p_mem], 0.05, 0.5) {
+        w.probe_suite_error = Some(e);
+    }
+}
+
+#[when("the probe suite is evaluated by the behavioral harness")]
+fn bdd_harness_eval_step(_w: &mut R4g1World) {}
+
+#[then("evaluation fails with a memorization detected error")]
+fn bdd_memorization_error_check(w: &mut R4g1World) {
+    let err = w.probe_suite_error.as_ref().expect("suite error");
+    assert!(matches!(
+        err,
+        BehavioralProbeError::MemorizationDetected { .. }
+    ));
+}
+
+#[given("an observation of length 15")]
+fn bdd_observation_len_15(_w: &mut R4g1World) {}
+
+#[when("an intervention record is created with span [0..20]")]
+fn bdd_create_out_of_bounds_span(w: &mut R4g1World) {
+    if let Err(e) = InterventionRecord::new(
+        "Short 15 char!!",
+        InterventionKind::ContextAblation,
+        (0, 20),
+        ExpectedRelation::Invariant,
+        vec![1.0],
+        vec![1.0],
+    ) {
+        w.probe_record_error = Some(e);
+    }
+}
+
+#[then("record creation fails with a span out of bounds error")]
+fn bdd_span_out_of_bounds_check(w: &mut R4g1World) {
+    let err = w.probe_record_error.as_ref().expect("record error");
+    assert!(matches!(err, BehavioralProbeError::SpanOutOfBounds { .. }));
+}
+
+// =========================================================================
+// Semantic State Space BDD Steps (#124)
+// =========================================================================
+use uor_r4_graph_compiler::semantic_state::{
+    Action as SemAction, Belief as SemBelief, Constraint as SemConstraint, Goal as SemGoal,
+    Region as SemRegion, SemanticState as SemState, SemanticStateError as SemError,
+    Trajectory as SemTrajectory, TransitionEvaluator as SemEvaluator,
+};
+
+#[given("an initial semantic state \"s0\" with vector [0.0, 0.0] and signature [0]")]
+fn bdd_initial_state_s0(w: &mut R4g1World) {
+    w.state_s0 = Some(SemState::new("s0", vec![0.0, 0.0], vec![0], 1.0));
+}
+
+#[when(
+    "a semantic action \"move_right\" with delta vector [1.0, 0.0] and mask flip [1] is applied"
+)]
+fn bdd_apply_move_right(w: &mut R4g1World) {
+    let s0 = w.state_s0.as_ref().expect("initial state s0");
+    let action = SemAction::new("move_right", vec![1.0, 0.0], vec![1]);
+    let evaluator = SemEvaluator::new();
+    w.state_eval_res = Some(evaluator.apply(s0, &action));
+}
+
+#[then("the transition succeeds with target state \"s0_move_right\"")]
+fn bdd_transition_succeeds(w: &mut R4g1World) {
+    let res = w.state_eval_res.as_ref().expect("transition result");
+    assert!(res.is_ok());
+    assert_eq!(res.as_ref().unwrap().id, "s0_move_right");
+}
+
+#[then("the target state has vector [1.0, 0.0] and signature [1]")]
+fn bdd_target_state_values(w: &mut R4g1World) {
+    let state = w.state_eval_res.as_ref().unwrap().as_ref().unwrap();
+    assert_eq!(state.vector, vec![1.0, 0.0]);
+    assert_eq!(state.boolean_signature, vec![1]);
+}
+
+#[given("an initial semantic state \"s_invalid\" with negative vector [-1.0, 0.0]")]
+fn bdd_initial_negative_state(w: &mut R4g1World) {
+    w.state_s0 = Some(SemState::new("s_invalid", vec![-1.0, 0.0], vec![0], 1.0));
+}
+
+#[when("an action requiring non-negative coordinates is applied")]
+fn bdd_apply_action_with_precondition(w: &mut R4g1World) {
+    let s0 = w.state_s0.as_ref().expect("state");
+    let action = SemAction::new("check_pos", vec![1.0, 0.0], vec![0])
+        .with_precondition(|s| s.vector[0] >= 0.0);
+    let evaluator = SemEvaluator::new();
+    w.state_eval_res = Some(evaluator.apply(s0, &action));
+}
+
+#[then("the transition fails with a precondition error")]
+fn bdd_transition_fails_precondition(w: &mut R4g1World) {
+    let res = w.state_eval_res.as_ref().expect("res");
+    assert!(matches!(res, Err(SemError::PreconditionFailed { .. })));
+}
+
+#[given("a hazard constraint centered at [5.0, 5.0] with radius 1.0")]
+fn bdd_hazard_constraint(w: &mut R4g1World) {
+    let danger_region = SemRegion::new("danger", vec![5.0, 5.0], 1.0, "Hazard Zone");
+    let constraint = SemConstraint::new("no_hazard", danger_region);
+    let mut eval = SemEvaluator::new();
+    eval.add_constraint(constraint);
+    w.hazard_evaluator = Some(eval);
+}
+
+#[given("an initial state at [0.0, 0.0]")]
+fn bdd_initial_zero_state(w: &mut R4g1World) {
+    w.state_s0 = Some(SemState::new("s_zero", vec![0.0, 0.0], vec![0], 1.0));
+}
+
+#[when("an action attempts to step to [5.0, 5.0]")]
+fn bdd_step_into_hazard(w: &mut R4g1World) {
+    let s0 = w.state_s0.as_ref().expect("state");
+    let action = SemAction::new("step_hazard", vec![5.0, 5.0], vec![0]);
+    let evaluator = w.hazard_evaluator.as_ref().expect("evaluator");
+    w.state_eval_res = Some(evaluator.apply(s0, &action));
+}
+
+#[then("the transition fails with a forbidden state error")]
+fn bdd_transition_fails_forbidden(w: &mut R4g1World) {
+    let res = w.state_eval_res.as_ref().expect("res");
+    assert!(matches!(res, Err(SemError::ForbiddenState { .. })));
+}
+
+#[given("a goal target region centered at [10.0, 10.0] with radius 2.0 and minimum confidence 0.8")]
+fn bdd_goal_target_region(_w: &mut R4g1World) {}
+
+#[when("a state \"s_target\" at [10.0, 11.0] with confidence 0.9 is evaluated")]
+fn bdd_evaluate_goal_and_belief(w: &mut R4g1World) {
+    let target_region = SemRegion::new("target", vec![10.0, 10.0], 2.0, "Goal Zone");
+    let goal = SemGoal::new("reach_target", target_region.clone(), 0.8);
+    let belief = SemBelief::new("target_belief", target_region, 0.5);
+
+    let s_target = SemState::new("s_target", vec![10.0, 11.0], vec![1], 0.9);
+    let s_far = SemState::new("s_far", vec![0.0, 0.0], vec![0], 0.9);
+
+    w.goal_satisfied = Some(goal.is_satisfied_by(&s_target));
+    w.belief_in = Some(belief.evaluate(&s_target));
+    w.belief_out = Some(belief.evaluate(&s_far));
+}
+
+#[then("the goal is satisfied by the state")]
+fn bdd_goal_satisfied_check(w: &mut R4g1World) {
+    assert_eq!(w.goal_satisfied, Some(true));
+}
+
+#[then("the belief likelihood is higher than a state at [0.0, 0.0]")]
+fn bdd_belief_higher_check(w: &mut R4g1World) {
+    let b_in = w.belief_in.expect("belief in");
+    let b_out = w.belief_out.expect("belief out");
+    assert!(b_in > b_out);
+}
+
+#[given("a trajectory with maximum 2 steps")]
+fn bdd_max_2_steps_trajectory(w: &mut R4g1World) {
+    w.state_s0 = Some(SemState::new("s_init", vec![0.0], vec![0], 1.0));
+}
+
+#[when("3 step actions are applied sequentially")]
+fn bdd_apply_3_steps(w: &mut R4g1World) {
+    let s0 = w.state_s0.take().expect("init state");
+    let evaluator = SemEvaluator::new();
+    let action = SemAction::new("step", vec![1.0], vec![0]);
+    let mut traj = SemTrajectory::new(s0, 2);
+
+    let _ = traj.step(&action, &evaluator);
+    let _ = traj.step(&action, &evaluator);
+    let res = traj.step(&action, &evaluator);
+
+    if let Err(e) = res {
+        w.trajectory_error = Some(e);
+    }
+}
+
+#[then("the 3rd step fails with a maximum steps exceeded error")]
+fn bdd_max_steps_error_check(w: &mut R4g1World) {
+    let err = w.trajectory_error.as_ref().expect("trajectory error");
+    assert!(matches!(err, SemError::MaxStepsExceeded { limit: 2 }));
 }
 
 #[tokio::main]
