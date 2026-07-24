@@ -50,6 +50,8 @@ struct R4g1World {
     u8_a: u8,
     u8_b: u8,
     u8_res: u8,
+    // Expand Proof Model fields (#132)
+    proof_report: Option<uor_r4_proof_model::structural_guarantees::ProofVerificationReport>,
 }
 
 #[given("the R4G1 runtime returned the browser's repetitive hello response")]
@@ -470,6 +472,124 @@ fn u8_kernel_zero_floats(_w: &mut R4g1World) {
     let kernel_code = &source[kernel_start..];
     assert!(!kernel_code.contains("f32") && !kernel_code.contains("f64"));
     assert!(!kernel_code.contains(" * ") && !kernel_code.contains(" / "));
+}
+
+// =========================================================================
+// Expand Proof Model BDD Steps (#132)
+// =========================================================================
+use uor_r4_proof_model::proof_matrix::{ProofStatus, ProofStatusMatrix};
+use uor_r4_proof_model::structural_guarantees::{
+    ProofValidationError, StructuralGuaranteeVerifier,
+};
+
+#[given("a deterministic graph calculation closure")]
+fn bdd_deterministic_closure(_w: &mut R4g1World) {}
+
+#[when("verified by the structural guarantee verifier")]
+fn bdd_verify_determinism_step(w: &mut R4g1World) {
+    let report =
+        StructuralGuaranteeVerifier::verify_determinism("OBL-DET-BDD", || vec![10, 20, 30])
+            .unwrap();
+    w.proof_report = Some(report);
+}
+
+#[then("the obligation status is Verified and determinism is verified")]
+fn bdd_determinism_status_check(w: &mut R4g1World) {
+    let report = w.proof_report.as_ref().expect("proof report");
+    assert!(report.verified);
+    assert_eq!(report.status, ProofStatus::Verified);
+}
+
+#[given("actual memory usage 512 bytes and limit 1024 bytes")]
+fn bdd_resource_memory_given(_w: &mut R4g1World) {}
+
+#[when("verified against bounded resource obligations")]
+fn bdd_verify_resource_step(w: &mut R4g1World) {
+    let report = StructuralGuaranteeVerifier::verify_resource_bound(
+        "OBL-MEM-BDD",
+        "memory_bytes",
+        512,
+        1024,
+    )
+    .unwrap();
+    w.proof_report = Some(report);
+}
+
+#[then("the resource bound obligation passes cleanly")]
+fn bdd_resource_bound_passes(w: &mut R4g1World) {
+    let report = w.proof_report.as_ref().expect("proof report");
+    assert!(report.verified);
+}
+
+#[then("actual memory usage 2048 bytes against limit 1024 bytes fails with a resource bound error")]
+fn bdd_resource_bound_fails(_w: &mut R4g1World) {
+    let err = StructuralGuaranteeVerifier::verify_resource_bound(
+        "OBL-MEM-BDD",
+        "memory_bytes",
+        2048,
+        1024,
+    )
+    .unwrap_err();
+    assert!(matches!(
+        err,
+        ProofValidationError::ResourceBoundExceeded { .. }
+    ));
+}
+
+#[given("a state trajectory [\"s0\", \"s1\", \"s2\"] and forbidden region [\"hazard_0\"]")]
+fn bdd_trajectory_hazard_given(_w: &mut R4g1World) {}
+
+#[when("verified against constraint safety obligations")]
+fn bdd_verify_constraint_safety_step(w: &mut R4g1World) {
+    let report = StructuralGuaranteeVerifier::verify_constraint_safety(
+        "OBL-SAFE-BDD",
+        &["s0", "s1", "s2"],
+        &["hazard_0"],
+    )
+    .unwrap();
+    w.proof_report = Some(report);
+}
+
+#[then("constraint preservation passes with zero forbidden states entered")]
+fn bdd_constraint_safety_passes(w: &mut R4g1World) {
+    let report = w.proof_report.as_ref().expect("proof report");
+    assert!(report.verified);
+}
+
+#[then("entering \"hazard_0\" fails with a constraint safety violation error")]
+fn bdd_constraint_safety_fails(_w: &mut R4g1World) {
+    let err = StructuralGuaranteeVerifier::verify_constraint_safety(
+        "OBL-SAFE-BDD",
+        &["s0", "hazard_0", "s2"],
+        &["hazard_0"],
+    )
+    .unwrap_err();
+    assert!(matches!(
+        err,
+        ProofValidationError::ConstraintSafetyViolated { .. }
+    ));
+}
+
+#[given("the default proof matrix")]
+fn bdd_default_proof_matrix(_w: &mut R4g1World) {}
+
+#[when("theorem \"Allocation Freedom\" is audited against expected status Verified")]
+fn bdd_audit_p1_step(w: &mut R4g1World) {
+    let matrix = ProofStatusMatrix::default();
+    let report = StructuralGuaranteeVerifier::audit_proof_matrix_entry(
+        &matrix,
+        "Allocation Freedom",
+        ProofStatus::Verified,
+    )
+    .unwrap();
+    w.proof_report = Some(report);
+}
+
+#[then("the audit succeeds and status matches")]
+fn bdd_audit_status_matches(w: &mut R4g1World) {
+    let report = w.proof_report.as_ref().expect("proof report");
+    assert!(report.verified);
+    assert_eq!(report.status, ProofStatus::Verified);
 }
 
 #[tokio::main]
