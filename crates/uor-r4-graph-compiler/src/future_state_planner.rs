@@ -159,7 +159,7 @@ struct SearchNode {
 
 impl PartialEq for SearchNode {
     fn eq(&self, other: &Self) -> bool {
-        self.state_id == other.state_id && self.f_cost.total_cmp(&other.f_cost) == Ordering::Equal
+        self.cmp(other) == Ordering::Equal
     }
 }
 
@@ -227,7 +227,10 @@ impl BoundedGraphPlanner {
         while let Some(current) = open_set.pop() {
             nodes_expanded += 1;
 
-            let curr_node = node_map.get(current.state_id.as_str()).unwrap();
+            let curr_node = match node_map.get(current.state_id.as_str()) {
+                Some(n) => n,
+                None => continue,
+            };
             if curr_node.is_forbidden {
                 forbidden_states_entered += 1;
                 continue;
