@@ -417,6 +417,30 @@ impl StructuralGuaranteeVerifier {
             ),
         })
     }
+
+    /// Verify scoring semantics compliance obligation.
+    pub fn verify_scoring_semantics_compliance(
+        obligation_id: &str,
+    ) -> Result<ProofVerificationReport, ProofValidationError> {
+        use uor_r4_graph_format::scoring_semantics::ScoringSemanticsVerifier;
+        ScoringSemanticsVerifier::audit_scoring_compliance().map_err(|_| {
+            ProofValidationError::FixedArithmeticOverflow {
+                obligation_id: obligation_id.to_string(),
+                raw_score: i64::MAX,
+            }
+        })?;
+
+        Ok(ProofVerificationReport {
+            obligation_id: obligation_id.to_string(),
+            kind: StructuralObligationKind::SafeArithmetic,
+            status: ProofStatus::Verified,
+            verified: true,
+            details: format!(
+                "Scoring semantics v{} verified (saturating_add/sub, no-double-counting, tie-breaking)",
+                ScoringSemanticsVerifier::version()
+            ),
+        })
+    }
 }
 
 #[cfg(test)]
