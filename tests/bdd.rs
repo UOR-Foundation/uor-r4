@@ -50,6 +50,11 @@ struct R4g1World {
     u8_a: u8,
     u8_b: u8,
     u8_res: u8,
+    // Behavioral Probe fields (#128)
+    probe_baseline_obs: String,
+    probe_suite_report: Option<uor_r4_graph_compiler::behavioral_probes::BehavioralProbeReport>,
+    probe_suite_error: Option<uor_r4_graph_compiler::behavioral_probes::BehavioralProbeError>,
+    probe_record_error: Option<uor_r4_graph_compiler::behavioral_probes::BehavioralProbeError>,
     // Semantic State Space fields (#124)
     state_s0: Option<uor_r4_graph_compiler::semantic_state::SemanticState>,
     state_eval_res: Option<
@@ -486,6 +491,110 @@ fn u8_kernel_zero_floats(_w: &mut R4g1World) {
 }
 
 // =========================================================================
+// Behavioral Probes BDD Steps (#128)
+// =========================================================================
+use uor_r4_graph_compiler::behavioral_probes::{
+    BehavioralProbeError, BehavioralProbeHarness, ExpectedRelation, InterventionKind,
+    InterventionRecord,
+};
+
+#[given("a baseline observation \"Context text sample\"")]
+fn bdd_baseline_observation(w: &mut R4g1World) {
+    w.probe_baseline_obs = "Context text sample".to_string();
+}
+
+#[when("an invariant surface variation probe and a sensitive goal change probe are evaluated")]
+fn bdd_evaluate_probes(w: &mut R4g1World) {
+    let obs = &w.probe_baseline_obs;
+    let p_inv = InterventionRecord::new(
+        obs,
+        InterventionKind::SurfaceVariation,
+        (0, 7),
+        ExpectedRelation::Invariant,
+        vec![0.9, 0.1],
+        vec![0.905, 0.095],
+    )
+    .unwrap();
+
+    let p_sens = InterventionRecord::new(
+        obs,
+        InterventionKind::GoalChange,
+        (0, 7),
+        ExpectedRelation::Sensitive,
+        vec![0.9, 0.1],
+        vec![0.1, 0.9],
+    )
+    .unwrap();
+
+    let report = BehavioralProbeHarness::evaluate_suite(&[p_inv, p_sens], 0.05, 0.5).unwrap();
+    w.probe_suite_report = Some(report);
+}
+
+#[then("both invariance and sensitivity expectations pass cleanly")]
+fn bdd_invariance_sensitivity_pass(w: &mut R4g1World) {
+    let report = w.probe_suite_report.as_ref().expect("report");
+    assert_eq!(report.invariance_score, 1.0);
+    assert_eq!(report.sensitivity_score, 1.0);
+}
+
+#[then("the anti-memorization guard succeeds")]
+fn bdd_memorization_guard_succeeds(w: &mut R4g1World) {
+    let report = w.probe_suite_report.as_ref().expect("report");
+    assert!(report.memorization_check_passed);
+}
+
+#[given("a sensitive goal change probe that produces zero output divergence")]
+fn bdd_zero_divergence_sensitive_probe(w: &mut R4g1World) {
+    let p_mem = InterventionRecord::new(
+        "Context text sample",
+        InterventionKind::GoalChange,
+        (0, 7),
+        ExpectedRelation::Sensitive,
+        vec![0.9, 0.1],
+        vec![0.9, 0.1], // div = 0.0 -> memorization!
+    )
+    .unwrap();
+
+    if let Err(e) = BehavioralProbeHarness::evaluate_suite(&[p_mem], 0.05, 0.5) {
+        w.probe_suite_error = Some(e);
+    }
+}
+
+#[when("the probe suite is evaluated by the behavioral harness")]
+fn bdd_harness_eval_step(_w: &mut R4g1World) {}
+
+#[then("evaluation fails with a memorization detected error")]
+fn bdd_memorization_error_check(w: &mut R4g1World) {
+    let err = w.probe_suite_error.as_ref().expect("suite error");
+    assert!(matches!(
+        err,
+        BehavioralProbeError::MemorizationDetected { .. }
+    ));
+}
+
+#[given("an observation of length 15")]
+fn bdd_observation_len_15(_w: &mut R4g1World) {}
+
+#[when("an intervention record is created with span [0..20]")]
+fn bdd_create_out_of_bounds_span(w: &mut R4g1World) {
+    if let Err(e) = InterventionRecord::new(
+        "Short 15 char!!",
+        InterventionKind::ContextAblation,
+        (0, 20),
+        ExpectedRelation::Invariant,
+        vec![1.0],
+        vec![1.0],
+    ) {
+        w.probe_record_error = Some(e);
+    }
+}
+
+#[then("record creation fails with a span out of bounds error")]
+fn bdd_span_out_of_bounds_check(w: &mut R4g1World) {
+    let err = w.probe_record_error.as_ref().expect("record error");
+    assert!(matches!(err, BehavioralProbeError::SpanOutOfBounds { .. }));
+}
+
 // Semantic State Space BDD Steps (#124)
 // =========================================================================
 use uor_r4_graph_compiler::semantic_state::{
