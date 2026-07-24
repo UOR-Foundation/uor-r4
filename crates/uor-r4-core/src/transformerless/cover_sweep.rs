@@ -396,7 +396,7 @@ pub fn run_point(
     let regions = score::regions_from_cover(&induced.cover);
     let structural = score::structural_from_cover(&edges);
     let max_depth = induced.cover.max_depth;
-    let transitions = score::compile_transitions(
+    let (transitions, transition_quantization) = score::compile_transitions_with_quantization(
         &inputs.corpus,
         &regions,
         &inputs.train,
@@ -422,6 +422,7 @@ pub fn run_point(
             regions: &regions,
             structural: &structural,
             transitions: &transitions,
+            transition_quantization,
             emissions: &emissions,
             exct_tls1: &inputs.tls1,
             exct_top_x: score_config.exct_top_x,

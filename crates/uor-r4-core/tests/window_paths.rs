@@ -118,6 +118,21 @@ fn predict_witness_depth_and_count() {
 }
 
 #[test]
+fn predict_witness_handles_empty_store_without_panic() {
+    use std::collections::HashMap;
+
+    let store: Store = (0..=STAGES).map(|_| Default::default()).collect();
+    let code = [0u8; STAGES];
+    let priors: HashMap<u32, u32> = HashMap::new();
+
+    let pred_plain = runtime::predict_witness_plain(&store, &code);
+    assert_eq!(pred_plain, runtime::Prediction::default());
+
+    let pred_plain_with_priors = runtime::predict_witness_plain_with_priors(&store, &code, &priors);
+    assert_eq!(pred_plain_with_priors, runtime::Prediction::default());
+}
+
+#[test]
 fn test_generative_priors() {
     use std::collections::HashMap;
 

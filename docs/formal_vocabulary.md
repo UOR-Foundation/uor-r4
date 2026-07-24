@@ -137,6 +137,7 @@ by wholesale rewrite.
 
 ## Changelog
 
+- **0.1.2** (2026-07-24) — Added the issue-#157 normative inference contract definitions (`Normative Inference Contract`, `Permitted Operation Class`, `Zero-Allocation Steady State`, `CPU-Only Target Contract` in `docs/inference_contract.md` and `uor-r4-graph-format::inference_contract`).
 - **0.1.1** (2026-07-24) — Added the issue-#126 measurement-contract binding for
   `H(x)` (projection family schema, ablation semantics, and deterministic partial
   recovery/progressive-fidelity fixture in `uor-r4-graph-certify`).

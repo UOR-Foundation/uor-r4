@@ -417,20 +417,26 @@ pub struct Prediction {
     pub count: u32,
 }
 
-#[inline]
-fn fallback_prediction_with_store_invariant_assert(store: &Store) -> Prediction {
-    debug_assert!(
-        store
-            .first()
-            .and_then(|level_zero| level_zero.get(&[][..]))
-            .is_some(),
-        "store invariant violated: level-0 distribution must be populated",
-    );
-    Prediction {
-        token: 0,
-        depth: 0,
-        count: 0,
+fn fallback_prediction(store: &Store) -> Prediction {
+    if let Some(root) = store.first().and_then(|level| level.get(&[][..])) {
+        let mut best_t = 0u32;
+        let mut best_c = -1i64;
+        let mut best_n = 0u32;
+        for (&t, &cnt) in root {
+            let count = cnt as i64;
+            if count > best_c {
+                best_c = count;
+                best_t = t;
+                best_n = cnt;
+            }
+        }
+        return Prediction {
+            token: best_t,
+            depth: 0,
+            count: best_n,
+        };
     }
+    Prediction::default()
 }
 
 /// Plain-form prediction with witness: deepest populated class argmax with
@@ -456,7 +462,7 @@ pub fn predict_witness_plain(store: &Store, code: &[u8; STAGES]) -> Prediction {
             };
         }
     }
-    fallback_prediction_with_store_invariant_assert(store)
+    fallback_prediction(store)
 }
 
 /// Plain-form prediction with semantic priors: deepest populated class argmax biased by priors.
@@ -488,7 +494,7 @@ pub fn predict_witness_plain_with_priors(
             };
         }
     }
-    fallback_prediction_with_store_invariant_assert(store)
+    fallback_prediction(store)
 }
 
 /// Plain-form prediction: the witness variant's token, one code path.
@@ -593,13 +599,9 @@ impl<'a> Runtime<'a> {
                 };
             }
         }
-        let fallback = self.state.token().as_slice().last().copied().unwrap_or(0);
-        self.state.record_token(fallback);
-        Prediction {
-            token: fallback,
-            depth: 0,
-            count: 0,
-        }
+        let fallback = fallback_prediction(store);
+        self.state.record_token(fallback.token);
+        fallback
     }
 
     /// Kernel-counted prediction with resolution witness and semantic context priors.
@@ -640,13 +642,9 @@ impl<'a> Runtime<'a> {
                 };
             }
         }
-        let fallback = self.state.token().as_slice().last().copied().unwrap_or(0);
-        self.state.record_token(fallback);
-        Prediction {
-            token: fallback,
-            depth: 0,
-            count: 0,
-        }
+        let fallback = fallback_prediction(store);
+        self.state.record_token(fallback.token);
+        fallback
     }
 
     /// Allocation-free greedy generation into caller-owned storage.
