@@ -885,7 +885,7 @@ pub fn score_command(args: &[String]) -> Result<(), String> {
     let tls1 = runtime::store_bytes(&store);
 
     eprintln!("score: compiling forward transitions and emission residuals...");
-    let transitions = score::compile_transitions(
+    let (transitions, transition_quantization) = score::compile_transitions_with_quantization(
         &corpus,
         &regions,
         &train,
@@ -904,6 +904,7 @@ pub fn score_command(args: &[String]) -> Result<(), String> {
             regions: &regions,
             structural: &structural,
             transitions: &transitions,
+            transition_quantization,
             emissions: &emissions,
             exct_tls1: &tls1,
             exct_top_x: config.exct_top_x,
