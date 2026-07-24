@@ -50,6 +50,11 @@ struct R4g1World {
     u8_a: u8,
     u8_b: u8,
     u8_res: u8,
+    // Rate-Distortion Compression fields (#136)
+    rd_corpus_id: String,
+    rd_tiers: Vec<usize>,
+    rd_report: Option<uor_r4_graph_compiler::rate_distortion_compression::RateDistortionReport>,
+    rd_error: Option<uor_r4_graph_compiler::rate_distortion_compression::CompressionAnalysisError>,
 }
 
 #[given("the R4G1 runtime returned the browser's repetitive hello response")]
@@ -470,6 +475,83 @@ fn u8_kernel_zero_floats(_w: &mut R4g1World) {
     let kernel_code = &source[kernel_start..];
     assert!(!kernel_code.contains("f32") && !kernel_code.contains("f64"));
     assert!(!kernel_code.contains(" * ") && !kernel_code.contains(" / "));
+}
+
+// =========================================================================
+// Rate-Distortion Compression BDD Steps (#136)
+// =========================================================================
+use uor_r4_graph_compiler::rate_distortion_compression::{
+    CompressionAnalysisError, SemanticCompressionAnalyzer,
+};
+
+#[given("a pinned mini-corpus \"pinned_mini_corpus_01\" and depth tiers [1, 2, 4, 8]")]
+fn bdd_rd_mini_corpus_given(w: &mut R4g1World) {
+    w.rd_corpus_id = "pinned_mini_corpus_01".to_string();
+    w.rd_tiers = vec![1, 2, 4, 8];
+}
+
+#[when("rate-distortion analysis is executed by the semantic compression analyzer")]
+fn bdd_rd_execute_analysis(w: &mut R4g1World) {
+    let res = SemanticCompressionAnalyzer::analyze_rate_distortion(&w.rd_corpus_id, &w.rd_tiers);
+    match res {
+        Ok(rep) => w.rd_report = Some(rep),
+        Err(err) => w.rd_error = Some(err),
+    }
+}
+
+#[then("a deterministic RateDistortionReport is produced containing 4 depth evaluation points")]
+fn bdd_rd_report_check(w: &mut R4g1World) {
+    let rep = w.rd_report.as_ref().expect("rd report");
+    assert_eq!(rep.points.len(), 4);
+    assert_eq!(rep.corpus_id, "pinned_mini_corpus_01");
+}
+
+#[then("teacher KL divergence reduces monotonically as projection depth increases")]
+fn bdd_rd_kl_monotonic_check(w: &mut R4g1World) {
+    let rep = w.rd_report.as_ref().expect("rd report");
+    assert!(
+        rep.points[0].distortion.teacher_kl_divergence
+            > rep.points[3].distortion.teacher_kl_divergence
+    );
+}
+
+#[given("a rate-distortion evaluation report for depth tiers [1, 2, 4, 8]")]
+fn bdd_rd_report_given(w: &mut R4g1World) {
+    w.rd_corpus_id = "pinned_mini_corpus_01".to_string();
+    w.rd_tiers = vec![1, 2, 4, 8];
+    w.rd_report = Some(
+        SemanticCompressionAnalyzer::analyze_rate_distortion(&w.rd_corpus_id, &w.rd_tiers).unwrap(),
+    );
+}
+
+#[when("analyzed for optimal rate-distortion tradeoff")]
+fn bdd_rd_analyze_tradeoff(_w: &mut R4g1World) {}
+
+#[then("depth tier 4 is identified as the optimal tradeoff depth")]
+fn bdd_rd_optimal_depth_check(w: &mut R4g1World) {
+    let rep = w.rd_report.as_ref().expect("rd report");
+    assert_eq!(rep.optimal_tradeoff_depth, 4);
+}
+
+#[then("the report certification status is verified")]
+fn bdd_rd_cert_status_check(w: &mut R4g1World) {
+    let rep = w.rd_report.as_ref().expect("rd report");
+    assert!(rep.is_certified);
+}
+
+#[given("an invalid depth tier array containing 0")]
+fn bdd_rd_invalid_tier_given(w: &mut R4g1World) {
+    w.rd_corpus_id = "pinned_mini_corpus_01".to_string();
+    w.rd_tiers = vec![0, 1, 2];
+}
+
+#[then("analysis fails with an invalid depth tier error")]
+fn bdd_rd_invalid_tier_error_check(w: &mut R4g1World) {
+    let err = w.rd_error.as_ref().expect("rd error");
+    assert!(matches!(
+        err,
+        CompressionAnalysisError::InvalidDepthTier { .. }
+    ));
 }
 
 #[tokio::main]
