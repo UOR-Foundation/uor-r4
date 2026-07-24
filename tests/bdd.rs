@@ -545,7 +545,7 @@ fn bdd_planner_trajectory_check(w: &mut R4g1World) {
 #[then("a PlanWitness recording accepted transitions and plan CID is emitted")]
 fn bdd_planner_witness_check(w: &mut R4g1World) {
     let plan = w.plan_result.as_ref().expect("plan");
-    assert!(plan.witness.plan_cid.starts_with("plan_"));
+    assert!(plan.witness.plan_cid.starts_with("blake3:plan_"));
     assert_eq!(plan.witness.accepted_edges.len(), 2);
 }
 
@@ -591,7 +591,13 @@ fn bdd_planner_attempt_forbidden_plan(w: &mut R4g1World) {
 #[then("planning fails with a frontier exhausted error and zero forbidden states entered")]
 fn bdd_planner_frontier_exhausted_check(w: &mut R4g1World) {
     let err = w.plan_error.as_ref().expect("plan error");
-    assert!(matches!(err, PlannerError::FrontierExhausted { .. }));
+    match err {
+        PlannerError::FrontierExhausted {
+            forbidden_states_entered,
+            ..
+        } => assert_eq!(*forbidden_states_entered, 0),
+        other => panic!("expected FrontierExhausted, got {other:?}"),
+    }
 }
 
 #[given("a start state \"s0\" marked as forbidden")]

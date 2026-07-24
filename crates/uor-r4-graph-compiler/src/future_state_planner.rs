@@ -18,10 +18,15 @@ use std::fmt;
 pub enum PlannerError {
     /// Initial state violates forbidden region constraint.
     InitialStateForbidden { state_id: String },
+    /// The requested state does not exist in the state graph.
+    UnknownState { state_id: String },
     /// No valid plan reaches the goal region within the horizon bound.
     HorizonExceeded { max_horizon: usize },
     /// Search frontier exhausted without finding goal region.
-    FrontierExhausted { nodes_expanded: usize },
+    FrontierExhausted {
+        nodes_expanded: usize,
+        forbidden_states_entered: usize,
+    },
     /// Transition confidence below uncertainty threshold.
     UncertainTransition {
         src_id: String,
@@ -41,16 +46,22 @@ impl fmt::Display for PlannerError {
                     "Initial state '{state_id}' is inside a forbidden constraint region"
                 )
             }
+            Self::UnknownState { state_id } => {
+                write!(f, "State '{state_id}' does not exist in the state graph")
+            }
             Self::HorizonExceeded { max_horizon } => {
                 write!(
                     f,
                     "Goal not reached within maximum planning horizon of {max_horizon} steps"
                 )
             }
-            Self::FrontierExhausted { nodes_expanded } => {
+            Self::FrontierExhausted {
+                nodes_expanded,
+                forbidden_states_entered,
+            } => {
                 write!(
                     f,
-                    "Search frontier exhausted after expanding {nodes_expanded} nodes"
+                    "Search frontier exhausted after expanding {nodes_expanded} nodes ({forbidden_states_entered} forbidden states entered)"
                 )
             }
             Self::UncertainTransition {
@@ -136,15 +147,20 @@ pub struct PlanWitness {
     pub rejected_alternatives_count: usize,
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone)]
 struct SearchNode {
     state_id: String,
     g_cost: f32,
-    h_cost: f32,
     f_cost: f32,
     depth: usize,
     state_path: Vec<String>,
     action_path: Vec<String>,
+}
+
+impl PartialEq for SearchNode {
+    fn eq(&self, other: &Self) -> bool {
+        self.state_id == other.state_id && self.f_cost.total_cmp(&other.f_cost) == Ordering::Equal
+    }
 }
 
 impl Eq for SearchNode {}
@@ -154,8 +170,7 @@ impl Ord for SearchNode {
         // Min-heap based on f_cost with deterministic tie-breaking on state_id
         other
             .f_cost
-            .partial_cmp(&self.f_cost)
-            .unwrap_or(Ordering::Equal)
+            .total_cmp(&self.f_cost)
             .then_with(|| self.state_id.cmp(&other.state_id))
     }
 }
@@ -183,7 +198,7 @@ impl BoundedGraphPlanner {
         let start_node =
             node_map
                 .get(start_state_id)
-                .ok_or_else(|| PlannerError::InitialStateForbidden {
+                .ok_or_else(|| PlannerError::UnknownState {
                     state_id: start_state_id.to_string(),
                 })?;
 
@@ -197,11 +212,12 @@ impl BoundedGraphPlanner {
         let mut visited = HashSet::new();
         let mut rejected_count = 0;
         let mut nodes_expanded = 0;
+        let mut forbidden_states_entered = 0;
+        let mut horizon_capped = false;
 
         open_set.push(SearchNode {
             state_id: start_state_id.to_string(),
             g_cost: 0.0,
-            h_cost: 0.0,
             f_cost: 0.0,
             depth: 0,
             state_path: vec![start_state_id.to_string()],
@@ -212,6 +228,10 @@ impl BoundedGraphPlanner {
             nodes_expanded += 1;
 
             let curr_node = node_map.get(current.state_id.as_str()).unwrap();
+            if curr_node.is_forbidden {
+                forbidden_states_entered += 1;
+                continue;
+            }
             if curr_node.is_goal {
                 let mut accepted_edges = Vec::new();
                 for i in 0..current.action_path.len() {
@@ -222,7 +242,10 @@ impl BoundedGraphPlanner {
                     ));
                 }
 
-                let plan_cid = format!("plan_{:08x}", simple_cid(&current.state_path.join("->")));
+                let plan_cid = format!(
+                    "blake3:plan_{}",
+                    blake3::hash(current.state_path.join("->").as_bytes()).to_hex()
+                );
                 return Ok(PlanTrajectory {
                     state_sequence: current.state_path,
                     action_sequence: current.action_path,
@@ -238,6 +261,7 @@ impl BoundedGraphPlanner {
             }
 
             if current.depth >= config.max_horizon {
+                horizon_capped = true;
                 continue;
             }
 
@@ -283,7 +307,6 @@ impl BoundedGraphPlanner {
                 open_set.push(SearchNode {
                     state_id: edge.dst_id.clone(),
                     g_cost: new_g,
-                    h_cost: new_h,
                     f_cost: new_f,
                     depth: current.depth + 1,
                     state_path: new_state_path,
@@ -292,21 +315,24 @@ impl BoundedGraphPlanner {
             }
 
             if open_set.len() > config.max_frontier_size {
-                return Err(PlannerError::FrontierExhausted { nodes_expanded });
+                return Err(PlannerError::FrontierExhausted {
+                    nodes_expanded,
+                    forbidden_states_entered,
+                });
             }
         }
 
-        Err(PlannerError::FrontierExhausted { nodes_expanded })
-    }
-}
+        if horizon_capped {
+            return Err(PlannerError::HorizonExceeded {
+                max_horizon: config.max_horizon,
+            });
+        }
 
-fn simple_cid(input: &str) -> u32 {
-    let mut h = 0x811c9dc5u32;
-    for b in input.bytes() {
-        h ^= b as u32;
-        h = h.wrapping_mul(0x01000193);
+        Err(PlannerError::FrontierExhausted {
+            nodes_expanded,
+            forbidden_states_entered,
+        })
     }
-    h
 }
 
 #[cfg(test)]
@@ -358,7 +384,7 @@ mod tests {
         assert_eq!(plan.state_sequence, vec!["s0", "s1", "s2"]);
         assert_eq!(plan.action_sequence, vec!["step1", "step2"]);
         assert_eq!(plan.horizon_steps, 2);
-        assert!(plan.witness.plan_cid.starts_with("plan_"));
+        assert!(plan.witness.plan_cid.starts_with("blake3:plan_"));
     }
 
     #[test]
@@ -393,6 +419,12 @@ mod tests {
 
         let config = PlannerConfig::default_v1();
         let err = BoundedGraphPlanner::plan("s0", &nodes, &edges, &config).unwrap_err();
-        assert!(matches!(err, PlannerError::FrontierExhausted { .. }));
+        match err {
+            PlannerError::FrontierExhausted {
+                forbidden_states_entered,
+                ..
+            } => assert_eq!(forbidden_states_entered, 0),
+            other => panic!("expected FrontierExhausted, got {other:?}"),
+        }
     }
 }
