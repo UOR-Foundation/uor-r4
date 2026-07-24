@@ -1,5 +1,6 @@
 pub mod graph;
 pub mod induction;
+pub mod monograph;
 pub mod observation;
 pub mod observation_text;
 pub mod pack;
