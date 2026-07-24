@@ -2320,3 +2320,25 @@ pub fn build_report(config: &CoverConfig, induced: &InducedCover, data: ReportDa
         }),
     }
 }
+
+#[cfg(test)]
+mod compiler_invariant_tests {
+    use uor_r4_graph_format::invariant_ownership::{
+        GraphInvariantId, GraphInvariantOwnershipMatrix, InvariantOwner,
+    };
+
+    #[test]
+    fn test_compiler_stage4_evidence_non_duplication_invariant() {
+        let matrix = GraphInvariantOwnershipMatrix::get_matrix();
+        let stage4_entry = matrix
+            .iter()
+            .find(|e| e.invariant_id == GraphInvariantId::EvidenceNonDuplication)
+            .expect("EvidenceNonDuplication entry");
+
+        assert_eq!(
+            stage4_entry.primary_owner,
+            InvariantOwner::CompilerConstruction
+        );
+        assert_eq!(stage4_entry.validation_stage, "Compiler Stage 4");
+    }
+}

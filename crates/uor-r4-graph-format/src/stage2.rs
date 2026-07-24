@@ -413,5 +413,21 @@ pub(crate) fn validate(view: &GraphView) -> Result<Option<Head>, FormatError> {
         }
     }
 
+    // Invariant Ownership Matrix loader validation (Issue #135)
+    let node_count = head.node_count() as usize;
+    let max_node_degree = head.max_frontier_width() as usize;
+    let degree_limit = head.max_frontier_width() as usize;
+    if let Err(inv_err) =
+        crate::invariant_ownership::GraphInvariantOwnershipMatrix::validate_graph_structure(
+            node_count,
+            max_node_degree,
+            degree_limit,
+            &[],
+            &[],
+        )
+    {
+        return Err(FormatError::InvariantViolation(inv_err));
+    }
+
     Ok(Some(head))
 }

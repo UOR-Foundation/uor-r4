@@ -68,7 +68,7 @@ mod error;
 mod head;
 mod header;
 pub mod inference_contract;
-mod invariant_ownership;
+pub mod invariant_ownership;
 pub mod records;
 mod rout;
 #[cfg(feature = "alloc")]
@@ -94,7 +94,9 @@ pub use inference_contract::{
     FORBIDDEN_OPERATION_CLASSES, INFERENCE_OPERATION_CONTRACT_VERSION,
 };
 pub use invariant_ownership::{
-    InvariantOwner, InvariantOwnershipRow, INVARIANT_OWNERSHIP_ROWS, OPERATION_SET_CONFORMANCE_ROW,
+    GraphInvariantId, GraphInvariantOwnershipMatrix, InvariantOwner, InvariantOwnershipEntry,
+    InvariantOwnershipRow, InvariantValidationError, INVARIANT_OWNERSHIP_ROWS, MATRIX_VERSION,
+    OPERATION_SET_CONFORMANCE_ROW,
 };
 pub use records::{
     EdgeKind, PackedEdge, PackedNode, StorageDescriptor, EDGE_KIND_OPTIONAL_BIT, PACKED_EDGE_LEN,
