@@ -225,12 +225,19 @@ pub fn evaluate_no_alloc_predict_step<const N: usize, const C: usize, const K: u
     let mut frontier = PackedFrontier::<N>::new();
     advance_frontier(&mut frontier, 0, ScoreQ::from_raw(100));
 
-    let mut candidates = [(0u32, ScoreQ::ZERO); 4];
-    candidates[0] = (token, ScoreQ::from_raw(500));
-    candidates[1] = (token.saturating_add(1), ScoreQ::from_raw(200));
-    candidates[2] = (token.saturating_add(2), ScoreQ::from_raw(200));
+    let mut candidate_buf = [(0u32, ScoreQ::ZERO); C];
+    let candidate_count = 3.min(C);
+    if candidate_count > 0 {
+        candidate_buf[0] = (token, ScoreQ::from_raw(500));
+    }
+    if candidate_count > 1 {
+        candidate_buf[1] = (token.saturating_add(1), ScoreQ::from_raw(200));
+    }
+    if candidate_count > 2 {
+        candidate_buf[2] = (token.saturating_add(2), ScoreQ::from_raw(200));
+    }
 
-    decode_canonical_topk(&mut candidates, output);
+    decode_canonical_topk(&mut candidate_buf[..candidate_count], output);
 
     Ok(output.predictions[0].0)
 }
@@ -251,8 +258,8 @@ mod tests {
         // Evict lowest (node 1 with score 10) when adding node 4 with score 40
         advance_frontier(&mut frontier, 4, ScoreQ::from_raw(40));
         assert_eq!(frontier.count, 3);
-        assert!(!frontier.nodes.contains(&1));
-        assert!(frontier.nodes.contains(&4));
+        assert!(!frontier.nodes[..frontier.count].contains(&1));
+        assert!(frontier.nodes[..frontier.count].contains(&4));
     }
 
     #[test]

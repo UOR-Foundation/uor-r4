@@ -1968,8 +1968,8 @@ fn bdd_packed_advance_nodes(w: &mut R4g1World) {
 #[then("the active frontier count is 2 and contains both nodes")]
 fn bdd_packed_check_frontier(w: &mut R4g1World) {
     assert_eq!(w.packed_frontier.count, 2);
-    assert!(w.packed_frontier.nodes.contains(&1));
-    assert!(w.packed_frontier.nodes.contains(&2));
+    assert!(w.packed_frontier.nodes[..w.packed_frontier.count].contains(&1));
+    assert!(w.packed_frontier.nodes[..w.packed_frontier.count].contains(&2));
 }
 
 #[given("an empty packed candidate shortlist of capacity 4")]
