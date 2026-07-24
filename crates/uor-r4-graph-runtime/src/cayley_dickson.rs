@@ -12,9 +12,9 @@ impl CayleyDicksonVector {
 
     pub fn from_u32(token: u32) -> Self {
         let mut coords = [0i32; 16];
-        let hash = token.wrapping_mul(2654435761);
+        let hash = wrapping_mul_u32(token, 0x9E37_79B1);
         for (i, coord) in coords.iter_mut().enumerate() {
-            let bit = (hash >> (i * 2)) & 0x03;
+            let bit = (hash >> (i << 1)) & 0x03;
             *coord = (bit as i32) - 1;
         }
         Self { coords }
@@ -24,9 +24,68 @@ impl CayleyDicksonVector {
     pub fn endomorphism_scalar_product(&self, other: &Self) -> i32 {
         let mut sum = 0i32;
         for (a, b) in self.coords.iter().zip(other.coords.iter()) {
-            sum = sum.saturating_add(a.saturating_mul(*b));
+            sum = sum.saturating_add(saturating_mul_small(*a, *b));
         }
         sum
+    }
+}
+
+fn wrapping_mul_u32(mut lhs: u32, mut rhs: u32) -> u32 {
+    let mut acc = 0u32;
+    while rhs != 0 {
+        if (rhs & 1) != 0 {
+            acc = acc.wrapping_add(lhs);
+        }
+        lhs = lhs.wrapping_shl(1);
+        rhs >>= 1;
+    }
+    acc
+}
+
+fn saturating_mul_small(lhs: i32, rhs: i32) -> i32 {
+    if lhs == 0 || rhs == 0 {
+        return 0;
+    }
+
+    let negative = (lhs < 0) ^ (rhs < 0);
+    let mut a = if lhs < 0 { -(lhs as i64) } else { lhs as i64 };
+    let mut b = if rhs < 0 { -(rhs as i64) } else { rhs as i64 };
+    let limit = if negative {
+        (i32::MAX as i64).saturating_add(1)
+    } else {
+        i32::MAX as i64
+    };
+    let mut acc = 0i64;
+
+    while b != 0 {
+        if (b & 1) != 0 {
+            acc = acc.saturating_add(a);
+            if acc > limit {
+                return if negative { i32::MIN } else { i32::MAX };
+            }
+        }
+
+        b >>= 1;
+        if b != 0 {
+            a = a.saturating_add(a);
+            if a > limit {
+                a = limit.saturating_add(1);
+            }
+        }
+    }
+
+    if negative {
+        if acc >= limit {
+            i32::MIN
+        } else {
+            -(acc as i32)
+        }
+    } else {
+        if acc > i32::MAX as i64 {
+            i32::MAX
+        } else {
+            acc as i32
+        }
     }
 }
 

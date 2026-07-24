@@ -302,17 +302,43 @@ pub struct TransitionEdge {
     pub score: ScoreQ,
 }
 
+/// Compile-time quantization error summary in nano-nats.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct QuantizationErrorStats {
+    pub sample_count: u64,
+    pub sum_abs_error_nano: u128,
+    pub max_abs_error_nano: u64,
+}
+
+impl QuantizationErrorStats {
+    fn record_ln_quantization(&mut self, source_ln: f32, quantized: ScoreQ) {
+        let restored = quantized.to_logprob();
+        let abs_error = f64::from((restored - source_ln).abs());
+        let nanos = (abs_error * 1_000_000_000.0).round() as u64;
+        self.sample_count = self.sample_count.saturating_add(1);
+        self.sum_abs_error_nano = self.sum_abs_error_nano.saturating_add(u128::from(nanos));
+        self.max_abs_error_nano = self.max_abs_error_nano.max(nanos);
+    }
+
+    fn mean_abs_error_nano(self) -> u64 {
+        if self.sample_count == 0 {
+            return 0;
+        }
+        (self.sum_abs_error_nano / u128::from(self.sample_count)) as u64
+    }
+}
+
 /// Compile forward transitions E_f from consecutive train positions
 /// (module docs). `regions` are the scoring region parameters; the
 /// active clouds come from [`binary_memberships`] — one code path with
 /// the scorer. Edges come out sorted by `(src, dst)`.
-pub fn compile_transitions(
+pub fn compile_transitions_with_quantization(
     corpus: &Corpus,
     regions: &[RegionParams],
     train: &[Observation],
     max_depth: usize,
     out_degree: usize,
-) -> Vec<TransitionEdge> {
+) -> (Vec<TransitionEdge>, QuantizationErrorStats) {
     let pop = runtime::derive_popcount_table();
     let mut k = runtime::OpKernel::default();
     // Canonical observation order (content-addressed positions, §4.1):
@@ -358,14 +384,16 @@ pub fn compile_transitions(
     for (&(src, dst), &count) in &counts {
         by_src.entry(src).or_default().push((dst, count));
     }
+    let mut quantization = QuantizationErrorStats::default();
     let mut edges = Vec::new();
     for (src, mut dsts) in by_src {
         dsts.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
         let total = src_totals[&src];
         for &(dst, count) in dsts.iter().take(out_degree) {
             // Compiler-side f64 ln quantization (macOS-pinned; module docs).
-            let p = count as f64 / total as f64;
-            let score = ScoreQ::from_logprob(p.ln() as f32);
+            let ln_prob = (count as f64 / total as f64).ln() as f32;
+            let score = ScoreQ::from_logprob(ln_prob);
+            quantization.record_ln_quantization(ln_prob, score);
             edges.push(TransitionEdge {
                 src,
                 dst,
@@ -375,7 +403,21 @@ pub fn compile_transitions(
         }
     }
     edges.sort_by_key(|e| (e.src, e.dst));
-    edges
+    (edges, quantization)
+}
+
+/// Compile forward transitions E_f from consecutive train positions
+/// (module docs). `regions` are the scoring region parameters; the
+/// active clouds come from [`binary_memberships`] — one code path with
+/// the scorer. Edges come out sorted by `(src, dst)`.
+pub fn compile_transitions(
+    corpus: &Corpus,
+    regions: &[RegionParams],
+    train: &[Observation],
+    max_depth: usize,
+    out_degree: usize,
+) -> Vec<TransitionEdge> {
+    compile_transitions_with_quantization(corpus, regions, train, max_depth, out_degree).0
 }
 
 /// The compiled residual tables: the ScoreQ root prior (full block) and
@@ -395,6 +437,10 @@ pub struct EmissionTables {
     /// quantized under the same rule so the whole artifact speaks one
     /// smoothing language.
     pub smoothing: Smoothing,
+    /// Root-prior quantization errors (includes the root floor).
+    pub root_prior_quantization: QuantizationErrorStats,
+    /// Emission-residual quantization errors.
+    pub emission_quantization: QuantizationErrorStats,
 }
 
 /// ln of an add-one-smoothed probability (compiler-side f64; module
@@ -452,18 +498,22 @@ pub fn compile_emissions(
         .unwrap_or_default();
     let root_total: u64 = root_dist.values().sum();
     let root_types = root_dist.len();
-    let root_floor = ScoreQ::from_logprob(smoothing.ln_prob(0, root_total, vocab, root_types));
+    let mut root_prior_quantization = QuantizationErrorStats::default();
+    let root_floor_ln = smoothing.ln_prob(0, root_total, vocab, root_types);
+    let root_floor = ScoreQ::from_logprob(root_floor_ln);
+    root_prior_quantization.record_ln_quantization(root_floor_ln, root_floor);
     let root_prior: BTreeMap<u32, ScoreQ> = root_dist
         .iter()
         .map(|(&t, &c)| {
-            (
-                t,
-                ScoreQ::from_logprob(smoothing.ln_prob(c, root_total, vocab, root_types)),
-            )
+            let ln = smoothing.ln_prob(c, root_total, vocab, root_types);
+            let score = ScoreQ::from_logprob(ln);
+            root_prior_quantization.record_ln_quantization(ln, score);
+            (t, score)
         })
         .collect();
 
     let mut region_lists = Vec::with_capacity(regions.len());
+    let mut emission_quantization = QuantizationErrorStats::default();
     for (region_id, region) in regions.iter().enumerate() {
         let dist = &evidence[region_id];
         let total: u64 = dist.values().sum();
@@ -488,7 +538,10 @@ pub fn compile_emissions(
                     vocab,
                     parent_types,
                 );
-                (token, ScoreQ::from_logprob(lp_n - lp_p))
+                let ln = lp_n - lp_p;
+                let score = ScoreQ::from_logprob(ln);
+                emission_quantization.record_ln_quantization(ln, score);
+                (token, score)
             })
             .collect();
         // Top-E by residual score (score desc, token asc), stored
@@ -505,6 +558,8 @@ pub fn compile_emissions(
         root_total,
         region_lists,
         smoothing,
+        root_prior_quantization,
+        emission_quantization,
     }
 }
 
@@ -583,6 +638,10 @@ pub struct ScoredGraphInfo {
     pub emission_list_entries: u32,
     pub exct_bytes: u32,
     pub artifact_bytes: usize,
+    pub transition_quantization: QuantizationErrorStats,
+    pub root_prior_quantization: QuantizationErrorStats,
+    pub emission_quantization: QuantizationErrorStats,
+    pub exact_context_quantization: QuantizationErrorStats,
 }
 
 /// Data bundle for [`emit_scored_r4g1`] (keeps the argument list
@@ -595,6 +654,8 @@ pub struct ScoredGraphSections<'a> {
     pub structural: &'a [StructuralEdge],
     /// Compiled forward transition edges (E_f).
     pub transitions: &'a [TransitionEdge],
+    /// Transition-edge quantization error summary.
+    pub transition_quantization: QuantizationErrorStats,
     /// Root prior + per-region residual lists.
     pub emissions: &'a EmissionTables,
     /// TLS1 container bytes used as compiler input for residualized EXCT.
@@ -614,8 +675,9 @@ fn emit_residual_exct(
     vocab: u32,
     top_x: usize,
     smoothing: Smoothing,
-) -> Result<Vec<u8>, String> {
+) -> Result<(Vec<u8>, QuantizationErrorStats), String> {
     let mut bytes = Vec::new();
+    let mut quantization = QuantizationErrorStats::default();
     bytes.extend_from_slice(&RESIDUAL_EXCT_MAGIC);
     bytes.push(u8::try_from(store.len()).map_err(|_| "EXCT level count exceeds u8".to_owned())?);
     bytes.extend_from_slice(&[0u8; 3]);
@@ -641,12 +703,14 @@ fn emit_residual_exct(
             bytes.extend_from_slice(&total.to_le_bytes());
             bytes.extend_from_slice(&entry_count.to_le_bytes());
             for (token, count) in ranked {
-                let exact = ScoreQ::from_logprob(smoothing.ln_prob(
+                let ln = smoothing.ln_prob(
                     u64::from(count),
                     u64::from(total),
                     vocab,
                     distribution.len(),
-                ));
+                );
+                let exact = ScoreQ::from_logprob(ln);
+                quantization.record_ln_quantization(ln, exact);
                 let root = root_prior.get(&token).copied().unwrap_or(root_floor);
                 let residual = exact.saturating_sub(root);
                 bytes.extend_from_slice(&token.to_le_bytes());
@@ -654,7 +718,7 @@ fn emit_residual_exct(
             }
         }
     }
-    Ok(bytes)
+    Ok((bytes, quantization))
 }
 
 /// Emit the scored graph as an R4G1 container: the cover's HEAD/NODE/
@@ -673,6 +737,7 @@ pub fn emit_scored_r4g1(
         regions,
         structural,
         transitions,
+        transition_quantization,
         emissions,
         exct_tls1,
         exct_top_x,
@@ -837,7 +902,7 @@ pub fn emit_scored_r4g1(
     let store = runtime::parse_store(exct_tls1)
         .or_else(|| runtime::parse_store_legacy_u16(exct_tls1))
         .ok_or("EXCT input is not a TLS1 store")?;
-    let exct_body = emit_residual_exct(
+    let (exct_body, exact_context_quantization) = emit_residual_exct(
         &store,
         &emissions.root_prior,
         emissions.root_floor,
@@ -913,6 +978,10 @@ pub fn emit_scored_r4g1(
             emission_list_entries,
             exct_bytes: exct.len() as u32,
             artifact_bytes,
+            transition_quantization,
+            root_prior_quantization: emissions.root_prior_quantization,
+            emission_quantization: emissions.emission_quantization,
+            exact_context_quantization,
         },
     ))
 }
@@ -1497,7 +1566,8 @@ pub fn evaluate_gate_c(
 /// `rule12_margin_weighted`); 6 = issue-#102 removes those rows: the
 /// variants were zero-information (bit-identical to `rule12_precedence`
 /// on every measured corpus, where ExactContext precedence dominates); 7 =
-/// explicit quality-gate profile for distribution-aware validation.
+/// explicit quality-gate profile for distribution-aware validation; 8 =
+/// per-residual-kind compile-time quantization error rows.
 #[derive(Debug, Clone, Serialize)]
 pub struct ScoreReport {
     pub schema: u32,
@@ -1557,6 +1627,16 @@ pub struct ScoreReportQuantization {
     pub format: String,
     pub smoothing: String,
     pub platform: String,
+    pub residual_kind_errors: Vec<ScoreReportResidualQuantization>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ScoreReportResidualQuantization {
+    pub kind: String,
+    pub cid: String,
+    pub sample_count: u64,
+    pub max_abs_error_nats: f64,
+    pub mean_abs_error_nats: f64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1585,8 +1665,9 @@ pub fn build_score_report_with_quality_profile(
     gate_c: GateCOutcome,
     quality_profile: &str,
 ) -> ScoreReport {
+    let graph_kappa = inputs.graph_kappa.clone();
     ScoreReport {
-        schema: 7,
+        schema: 8,
         inputs,
         config: ScoreReportConfig {
             transition_out_degree: config.transition_out_degree,
@@ -1625,6 +1706,50 @@ pub fn build_score_report_with_quality_profile(
                        equality later. RX1 EXCT residuals are quantized at compile time, so \
                        the deployed scoring path is integer-only; raw TLS1 is legacy-only"
                 .to_owned(),
+            residual_kind_errors: vec![
+                ScoreReportResidualQuantization {
+                    kind: "transition".to_owned(),
+                    cid: graph_kappa.clone(),
+                    sample_count: info.transition_quantization.sample_count,
+                    max_abs_error_nats: nano_to_nats(
+                        info.transition_quantization.max_abs_error_nano,
+                    ),
+                    mean_abs_error_nats: nano_to_nats(
+                        info.transition_quantization.mean_abs_error_nano(),
+                    ),
+                },
+                ScoreReportResidualQuantization {
+                    kind: "root_prior".to_owned(),
+                    cid: graph_kappa.clone(),
+                    sample_count: info.root_prior_quantization.sample_count,
+                    max_abs_error_nats: nano_to_nats(
+                        info.root_prior_quantization.max_abs_error_nano,
+                    ),
+                    mean_abs_error_nats: nano_to_nats(
+                        info.root_prior_quantization.mean_abs_error_nano(),
+                    ),
+                },
+                ScoreReportResidualQuantization {
+                    kind: "emission".to_owned(),
+                    cid: graph_kappa.clone(),
+                    sample_count: info.emission_quantization.sample_count,
+                    max_abs_error_nats: nano_to_nats(info.emission_quantization.max_abs_error_nano),
+                    mean_abs_error_nats: nano_to_nats(
+                        info.emission_quantization.mean_abs_error_nano(),
+                    ),
+                },
+                ScoreReportResidualQuantization {
+                    kind: "exact_context".to_owned(),
+                    cid: graph_kappa,
+                    sample_count: info.exact_context_quantization.sample_count,
+                    max_abs_error_nats: nano_to_nats(
+                        info.exact_context_quantization.max_abs_error_nano,
+                    ),
+                    mean_abs_error_nats: nano_to_nats(
+                        info.exact_context_quantization.mean_abs_error_nano(),
+                    ),
+                },
+            ],
         },
         determinism: ScoreReportDeterminism {
             note: "content-addressed observation order; all reductions are B-tree (ordered) \
@@ -1634,6 +1759,10 @@ pub fn build_score_report_with_quality_profile(
                 .to_owned(),
         },
     }
+}
+
+fn nano_to_nats(nano: u64) -> f64 {
+    nano as f64 / 1_000_000_000.0
 }
 
 /// The `quantization.smoothing` prose for the compiled rule. The

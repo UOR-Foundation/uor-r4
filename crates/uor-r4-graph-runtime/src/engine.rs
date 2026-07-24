@@ -179,58 +179,69 @@ fn check_node_emits(
     emit_remainder: Option<&[u8]>,
     exct_remainder: Option<&[u8]>,
 ) -> (bool, ScoreQ) {
-    let node = match base_graph.node(node_id) {
-        Some(n) => n,
-        None => return (false, ScoreQ::ZERO),
-    };
+    let mut stack = [0u32; 128];
+    let mut visited = [0u32; 128];
+    let mut stack_len = 1usize;
+    let mut visited_len = 1usize;
+    stack[0] = node_id;
+    visited[0] = node_id;
 
-    if let Some(emit_bytes) = emit_remainder {
-        let start = node.emission_start as usize;
-        let len = node.emission_len as usize;
-        if len > 0 && start + len <= emit_bytes.len() {
-            let sl = &emit_bytes[start..start + len];
-            for i in 0..(sl.len() >> 3) {
-                let offset = i << 3;
-                let cand = u32::from_le_bytes([
-                    sl[offset],
-                    sl[offset + 1],
-                    sl[offset + 2],
-                    sl[offset + 3],
-                ]);
-                if cand == target_token {
-                    let raw = i32::from_le_bytes([
-                        sl[offset + 4],
-                        sl[offset + 5],
-                        sl[offset + 6],
-                        sl[offset + 7],
+    while stack_len > 0 {
+        stack_len -= 1;
+        let current_id = stack[stack_len];
+        let node = match base_graph.node(current_id) {
+            Some(n) => n,
+            None => continue,
+        };
+
+        if let Some(emit_bytes) = emit_remainder {
+            let start = node.emission_start as usize;
+            let len = node.emission_len as usize;
+            if len > 0 && start + len <= emit_bytes.len() {
+                let sl = &emit_bytes[start..start + len];
+                for i in 0..(sl.len() >> 3) {
+                    let offset = i << 3;
+                    let cand = u32::from_le_bytes([
+                        sl[offset],
+                        sl[offset + 1],
+                        sl[offset + 2],
+                        sl[offset + 3],
                     ]);
-                    return (
-                        true,
-                        if raw > 0 {
-                            ScoreQ::from_raw(raw)
-                        } else {
-                            ScoreQ::from_raw(1)
-                        },
-                    );
+                    if cand == target_token {
+                        let raw = i32::from_le_bytes([
+                            sl[offset + 4],
+                            sl[offset + 5],
+                            sl[offset + 6],
+                            sl[offset + 7],
+                        ]);
+                        return (
+                            true,
+                            if raw > 0 {
+                                ScoreQ::from_raw(raw)
+                            } else {
+                                ScoreQ::from_raw(1)
+                            },
+                        );
+                    }
                 }
             }
         }
-    }
 
-    if node.child_len > 0 {
-        let start = node.child_start as usize;
-        let count = (node.child_len as usize).min(16);
-        for i in 0..count {
-            if let Some(edge) = base_graph.edge((start + i) as u32) {
-                let (child_match, score) = check_node_emits(
-                    base_graph,
-                    edge.dst.0,
-                    target_token,
-                    emit_remainder,
-                    exct_remainder,
-                );
-                if child_match {
-                    return (true, score);
+        if node.child_len > 0 {
+            let start = node.child_start as usize;
+            let count = (node.child_len as usize).min(16);
+            for i in (0..count).rev() {
+                if let Some(edge) = base_graph.edge((start + i) as u32) {
+                    let dst = edge.dst.0;
+                    if stack_len < stack.len()
+                        && visited_len < visited.len()
+                        && !visited[..visited_len].contains(&dst)
+                    {
+                        stack[stack_len] = dst;
+                        stack_len += 1;
+                        visited[visited_len] = dst;
+                        visited_len += 1;
+                    }
                 }
             }
         }
@@ -399,19 +410,45 @@ fn collect_target_leaf_nodes<'a>(
     if *out_len >= out.len() {
         return;
     }
-    let Some(node) = base_graph.node(start_id) else {
-        return;
-    };
-    if (node.emission_len > 0 || start_id == 0) && !out[..*out_len].contains(&start_id) {
-        out[*out_len] = start_id;
-        *out_len += 1;
-    }
-    if node.child_len > 0 {
-        let start = node.child_start as usize;
-        let count = node.child_len as usize;
-        for i in 0..count {
-            if let Some(edge) = base_graph.edge((start + i) as u32) {
-                collect_target_leaf_nodes(base_graph, edge.dst.0, out, out_len);
+
+    let mut stack = [0u32; 256];
+    let mut visited = [0u32; 256];
+    let mut stack_len = 1usize;
+    let mut visited_len = 1usize;
+    stack[0] = start_id;
+    visited[0] = start_id;
+
+    while stack_len > 0 && *out_len < out.len() {
+        stack_len -= 1;
+        let node_id = stack[stack_len];
+        let Some(node) = base_graph.node(node_id) else {
+            continue;
+        };
+
+        if (node.emission_len > 0 || node_id == 0) && !out[..*out_len].contains(&node_id) {
+            out[*out_len] = node_id;
+            *out_len += 1;
+            if *out_len >= out.len() {
+                break;
+            }
+        }
+
+        if node.child_len > 0 {
+            let start = node.child_start as usize;
+            let count = node.child_len as usize;
+            for i in (0..count).rev() {
+                if let Some(edge) = base_graph.edge((start + i) as u32) {
+                    let dst = edge.dst.0;
+                    if stack_len < stack.len()
+                        && visited_len < visited.len()
+                        && !visited[..visited_len].contains(&dst)
+                    {
+                        stack[stack_len] = dst;
+                        stack_len += 1;
+                        visited[visited_len] = dst;
+                        visited_len += 1;
+                    }
+                }
             }
         }
     }
@@ -806,8 +843,9 @@ impl<'a> R4G1Runtime<'a> {
         let emit_remainder = self.view().section(SectionId::EMIT);
         if let Some(remainder) = emit_remainder {
             let view = self.view();
+            let max_nodes = core::cmp::min(self.node_count() as usize, node_scores.len());
             #[allow(clippy::needless_range_loop)]
-            for node_idx in 0..self.node_count() as usize {
+            for node_idx in 0..max_nodes {
                 if count >= 8 {
                     break;
                 }

@@ -394,28 +394,42 @@ fn allocation_census() {
         parse_cen.allocations, parse_cen.bytes
     );
 
-    let context_tokens = vec![1, 2, 3, 4, 5];
-
-    // Single allocation for the scores vector outside the hot path
-    let mut node_scores =
-        vec![uor_r4_core::transformerless::score_q::ScoreQ::MIN; runtime.node_count() as usize];
+    let context_tokens = [1u32, 2, 3, 4, 5];
+    let mut node_scores = [uor_r4_core::transformerless::score_q::ScoreQ::MIN; 64];
+    let mut candidates = [(0u32, uor_r4_core::transformerless::score_q::ScoreQ::MIN); 8];
+    let mut state = uor_r4_graph_runtime::runtime_state::RuntimeState::default();
+    let mut witness = [0u8; 0];
 
     // Warm-up prediction before steady-state measurement
-    let _ = runtime.predict_token(&context_tokens, None, &mut node_scores);
+    for _ in 0..10 {
+        let _ = runtime.predict_token(&context_tokens, None, &mut node_scores);
+        let _ = runtime.predict_distribution(&context_tokens, None, &mut node_scores);
+        let _ =
+            runtime.predict_candidates(&context_tokens, None, &mut node_scores, &mut candidates);
+        let _ = runtime.step(&mut state, context_tokens[0], &mut witness);
+    }
 
     let (_, predict_cen) = measure(|| {
         for _ in 0..10 {
-            let _next = runtime.predict_token(&context_tokens, None, &mut node_scores);
+            let _ = runtime.predict_token(&context_tokens, None, &mut node_scores);
+            let _ = runtime.predict_distribution(&context_tokens, None, &mut node_scores);
+            let _ = runtime.predict_candidates(
+                &context_tokens,
+                None,
+                &mut node_scores,
+                &mut candidates,
+            );
+            let _ = runtime.step(&mut state, context_tokens[0], &mut witness);
         }
     });
 
     println!(
-        "[r4g1 prediction] 10 tokens → {} allocations, {} bytes",
+        "[r4g1 kernels] predict_token + predict_distribution + predict_candidates + step × 10 → {} allocations, {} bytes",
         predict_cen.allocations, predict_cen.bytes
     );
 
     assert_eq!(
         predict_cen, ZERO,
-        "R4G1 predict_token must be allocation-free"
+        "R4G1 runtime kernels must be allocation-free in steady state"
     );
 }
