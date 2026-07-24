@@ -5,15 +5,15 @@
 //!
 //! This module enforces the architectural boundary between the semantic operating system
 //! and language generation:
-//! - `SemanticReasoningEngine`: Executes pure state transitions ($s_0 \to s_1$), belief updates,
-//!   and trajectory planning without producing token streams.
+//! - `SemanticReasoningEngine`: Replays a caller-supplied, validated sequence of state
+//!   transitions ($s_0 \to s_1$) without producing token streams.
 //! - `LanguageEmissionAdapter`: Typed interface translating semantic states into token emission distributions.
 //! - `SemanticStatus`: Explicit status (`Coherent`, `Uncertain`, `Contradictory`, `Exhausted`)
 //!   returned before token emission to prevent fabricated text from masking internal failures.
 //! - Multi-dimensional certification metrics reporting state coherence, evidence support,
 //!   planning validity, and language fidelity separately.
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::fmt;
 
 /// Errors arising during semantic reasoning or language emission adaptation.
@@ -25,6 +25,8 @@ pub enum SemanticEmissionError {
     UncertainState { state_id: String, confidence: f32 },
     /// Search space or state graph exhausted.
     ExhaustedState { state_id: String },
+    /// A transition's source state does not match the current state in the sequence.
+    NonSequentialTransition { expected: String, found: String },
     /// Language emission adapter failure.
     EmissionAdapterFailed { reason: String },
 }
@@ -47,6 +49,12 @@ impl fmt::Display for SemanticEmissionError {
             ),
             Self::ExhaustedState { state_id } => {
                 write!(f, "Semantic transition path from '{state_id}' is exhausted")
+            }
+            Self::NonSequentialTransition { expected, found } => {
+                write!(
+                    f,
+                    "Transition source state '{found}' does not match expected state '{expected}'"
+                )
             }
             Self::EmissionAdapterFailed { reason } => {
                 write!(f, "Language emission adapter failed: {reason}")
@@ -93,7 +101,7 @@ pub struct SemanticStateTrace {
 #[derive(Debug, Clone, PartialEq)]
 pub struct LanguageEmissionResult {
     pub emitted_text: String,
-    pub token_probabilities: HashMap<u32, f32>,
+    pub token_probabilities: BTreeMap<u32, f32>,
     pub language_fidelity_score: f32,
     pub emission_residual: f32,
 }
@@ -113,6 +121,10 @@ pub struct SemanticReasoningEngine;
 
 impl SemanticReasoningEngine {
     /// Execute pure semantic state transitions without invoking language generation.
+    ///
+    /// Each transition's `src` must equal the current state (starting from
+    /// `initial_state_id`), otherwise a [`SemanticEmissionError::NonSequentialTransition`]
+    /// is returned before any further steps are processed.
     pub fn execute_pure_reasoning(
         initial_state_id: &str,
         transitions: &[(&str, &str, &str, f32, SemanticStatus)], // (src, action, dst, confidence, status)
@@ -120,8 +132,16 @@ impl SemanticReasoningEngine {
         let mut steps = Vec::new();
         let mut curr_state = initial_state_id.to_string();
         let mut total_confidence = 0.0f32;
+        let mut min_confidence = 1.0f32;
+        let mut overall_status = SemanticStatus::Coherent;
 
         for &(src, action, dst, conf, status) in transitions {
+            if src != curr_state {
+                return Err(SemanticEmissionError::NonSequentialTransition {
+                    expected: curr_state,
+                    found: src.to_string(),
+                });
+            }
             if status == SemanticStatus::Contradictory {
                 return Err(SemanticEmissionError::ContradictoryState {
                     state_id: dst.to_string(),
@@ -138,6 +158,9 @@ impl SemanticReasoningEngine {
                     confidence: conf,
                 });
             }
+            if status == SemanticStatus::Uncertain {
+                overall_status = SemanticStatus::Uncertain;
+            }
 
             steps.push(SemanticStateStep {
                 src_state_id: src.to_string(),
@@ -149,19 +172,25 @@ impl SemanticReasoningEngine {
             });
             curr_state = dst.to_string();
             total_confidence += conf;
+            min_confidence = min_confidence.min(conf);
         }
 
         let step_count = steps.len().max(1) as f32;
         let avg_coherence = total_confidence / step_count;
+        let evidence_support_score = if steps.is_empty() {
+            1.0
+        } else {
+            min_confidence
+        };
 
         Ok(SemanticStateTrace {
             trace_id: format!("trace_{initial_state_id}_{curr_state}"),
             initial_state_id: initial_state_id.to_string(),
             final_state_id: curr_state,
             steps,
-            overall_status: SemanticStatus::Coherent,
+            overall_status,
             state_coherence_score: avg_coherence,
-            evidence_support_score: 0.92,
+            evidence_support_score,
         })
     }
 }
@@ -183,7 +212,7 @@ impl LanguageEmissionAdapter {
             });
         }
 
-        let mut token_probs = HashMap::new();
+        let mut token_probs = BTreeMap::new();
         token_probs.insert(101, 0.85);
         token_probs.insert(102, 0.15);
 
@@ -209,10 +238,15 @@ impl LanguageEmissionAdapter {
             && trace.evidence_support_score >= 0.8
             && emission.language_fidelity_score >= 0.8;
 
+        // Planning validity reflects both how coherently the trace progressed and
+        // how faithfully the emission adapter preserved that trace (low residual).
+        let planning_validity_score =
+            (trace.state_coherence_score + (1.0 - emission.emission_residual)) / 2.0;
+
         DecoupledCertificationReport {
             state_coherence_score: trace.state_coherence_score,
             evidence_support_score: trace.evidence_support_score,
-            planning_validity_score: 0.95,
+            planning_validity_score,
             language_fidelity_score: emission.language_fidelity_score,
             is_certified,
         }
@@ -257,6 +291,37 @@ mod tests {
         assert!(matches!(
             err,
             SemanticEmissionError::ContradictoryState { .. }
+        ));
+    }
+
+    #[test]
+    fn test_uncertain_step_yields_uncertain_overall_status_and_blocks_emission() {
+        let transitions = vec![
+            ("s0", "act1", "s1", 0.9, SemanticStatus::Coherent),
+            ("s1", "act2", "s2", 0.6, SemanticStatus::Uncertain),
+        ];
+
+        let trace = SemanticReasoningEngine::execute_pure_reasoning("s0", &transitions).unwrap();
+        assert_eq!(trace.overall_status, SemanticStatus::Uncertain);
+
+        let err = LanguageEmissionAdapter::emit_language(&trace).unwrap_err();
+        assert!(matches!(
+            err,
+            SemanticEmissionError::EmissionAdapterFailed { .. }
+        ));
+    }
+
+    #[test]
+    fn test_non_sequential_transition_is_rejected() {
+        let transitions = vec![
+            ("s0", "act1", "s1", 0.9, SemanticStatus::Coherent),
+            ("s_other", "act2", "s2", 0.95, SemanticStatus::Coherent),
+        ];
+
+        let err = SemanticReasoningEngine::execute_pure_reasoning("s0", &transitions).unwrap_err();
+        assert!(matches!(
+            err,
+            SemanticEmissionError::NonSequentialTransition { .. }
         ));
     }
 }
