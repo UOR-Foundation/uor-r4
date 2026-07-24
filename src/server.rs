@@ -172,30 +172,44 @@ pub fn run_server(cli: Arc<ServerConfig>) {
         message: "Hugging Face source download idle".to_owned(),
         source: None,
     }));
-    if let Some(graph_path) = r4g1::discover_path(
+    let mut r4g1_candidates = r4g1::discover_path(
         cli.r4g1_artifact.as_deref(),
         Path::new(&cli.tless_artifacts),
-    ) {
-        if graph_path.is_file() {
-            match R4g1State::load(&graph_path, Path::new(&cli.tless_artifacts)) {
-                Ok(state) => {
-                    println!(
-                        "[+] Loaded validated R4G1 graph runtime from {}",
-                        graph_path.display()
-                    );
-                    *r4g1.lock().unwrap() = Some(state);
-                    let mut compile_status = r4g1_compile.lock().unwrap();
-                    compile_status.ready = true;
-                    compile_status.progress = 100;
-                    compile_status.message = "R4G1 graph runtime ready".to_owned();
-                }
-                Err(error) => {
-                    println!("[-] Failed to load R4G1 graph runtime: {error}");
-                }
-            }
-        } else {
-            tracing::info!(path = %graph_path.display(), "no R4G1 graph found; legacy runtime remains available");
+    )
+    .map(|graph| vec![(graph, PathBuf::from(&cli.tless_artifacts))])
+    .unwrap_or_default();
+    if cli.r4g1_artifact.is_none() {
+        r4g1_candidates.extend(discover_compiled_r4g1_candidates());
+    }
+    let mut loaded_r4g1 = false;
+    for (graph_path, teacher_path) in r4g1_candidates {
+        if !graph_path.is_file() || !teacher_path.is_file() {
+            continue;
         }
+        match R4g1State::load(&graph_path, &teacher_path) {
+            Ok(state) => {
+                println!(
+                    "[+] Loaded validated R4G1 graph runtime from {}",
+                    graph_path.display()
+                );
+                *r4g1.lock().unwrap() = Some(state);
+                let mut compile_status = r4g1_compile.lock().unwrap();
+                compile_status.ready = true;
+                compile_status.progress = 100;
+                compile_status.message = "R4G1 graph runtime ready".to_owned();
+                loaded_r4g1 = true;
+                break;
+            }
+            Err(error) => {
+                println!(
+                    "[-] Failed to load R4G1 graph runtime from {}: {error}",
+                    graph_path.display()
+                );
+            }
+        }
+    }
+    if !loaded_r4g1 {
+        tracing::info!("no validated R4G1 graph found; compile it from the dashboard");
     }
     let oracle: Arc<Mutex<Option<uor_r4_core::transformerless::teacher::HuggingFaceLlamaOracle>>> =
         Arc::new(Mutex::new(None));
@@ -395,6 +409,28 @@ fn with_tless_server_state<R>(
     Some(r)
 }
 
+/// Find compiled dashboard bundles when the server was restarted without an
+/// explicit `--r4g1-artifact`. The compile endpoint loads its result into the
+/// live process, but a restart must pair each graph with the teacher artifact
+/// that produced it instead of looking beside the unrelated legacy defaults.
+fn discover_compiled_r4g1_candidates() -> Vec<(PathBuf, PathBuf)> {
+    let root = Path::new(".uor-models/compiled");
+    let mut bundles: Vec<PathBuf> = fs::read_dir(root)
+        .into_iter()
+        .flat_map(|entries| entries.flatten().map(|entry| entry.path()))
+        .filter(|path| path.is_dir())
+        .collect();
+    bundles.sort();
+    bundles
+        .into_iter()
+        .filter_map(|bundle| {
+            let graph = bundle.join("graph/score.r4g1");
+            let teacher = bundle.join("tless_artifacts.bin");
+            (graph.is_file() && teacher.is_file()).then_some((graph, teacher))
+        })
+        .collect()
+}
+
 /// Generate a text continuation with the transformerless runtime. The shared
 /// state keeps chat turns on one graded store and serializes its thread-local
 /// UOR binding. `None` means the configured artifacts/tokenizer are not ready.
@@ -473,7 +509,7 @@ fn generate_r4g1_text(
     slot: &Arc<Mutex<Option<R4g1State>>>,
     prompt: &str,
     max_tokens: usize,
-) -> Option<R4g1Text> {
+) -> Result<Option<R4g1Text>, String> {
     const MAX_SERVER_TOKENS: usize = 256;
     const MAX_SERVER_TEXT_BYTES: usize = 16 * 1024;
     let mut seed = [0u32; 4096];
@@ -481,19 +517,22 @@ fn generate_r4g1_text(
     let mut bytes = [0u8; MAX_SERVER_TEXT_BYTES];
     let (byte_count, status, widened, abstained) = {
         let guard = slot.lock().unwrap();
-        let state = guard.as_ref()?;
+        let Some(state) = guard.as_ref() else {
+            return Ok(None);
+        };
         let seed_len = state
             .encode_into(prompt, &mut seed)
-            .or_else(|| tless_uor::tless_tokenize_into(prompt, &mut seed))?;
+            .or_else(|| tless_uor::tless_tokenize_into(prompt, &mut seed))
+            .ok_or_else(|| "R4G1 tokenizer could not encode the prompt".to_owned())?;
         if seed_len == 0 {
-            return None;
+            return Err("R4G1 tokenizer produced an empty prompt".to_owned());
         }
         let outcome = state
             .generate_into_status(
                 &seed[..seed_len],
                 &mut generated[..max_tokens.min(MAX_SERVER_TOKENS)],
             )
-            .ok()?;
+            .map_err(|error| format!("R4G1 graph scoring failed: {error}"))?;
         // On an abstention no text is produced: the tokens generated before
         // the abstaining step are dropped rather than served, so an
         // out-of-distribution prompt never surfaces partial output.
@@ -504,7 +543,8 @@ fn generate_r4g1_text(
                 .decode_into(&generated[..outcome.count], &mut bytes)
                 .or_else(|| {
                     tless_uor::tless_detokenize_into(&generated[..outcome.count], &mut bytes)
-                })?
+                })
+                .ok_or_else(|| "R4G1 tokenizer could not decode generated tokens".to_owned())?
         };
         (
             bytes_written,
@@ -516,12 +556,12 @@ fn generate_r4g1_text(
     let text = String::from_utf8_lossy(&bytes[..byte_count])
         .trim()
         .to_owned();
-    Some(R4g1Text {
+    Ok(Some(R4g1Text {
         text,
         status,
         widened,
         abstained,
-    })
+    }))
 }
 
 fn generate_attention_text(
@@ -785,10 +825,23 @@ pub fn select_synthesis_engine(requested: Option<&str>) -> &'static str {
 /// The explicit failure contract for an unavailable R4G1 runtime. Keeping
 /// this separate makes the no-fallback behavior directly testable.
 pub fn r4g1_unavailable_response() -> (u16, serde_json::Value) {
+    r4g1_unavailable_response_with_reason(None)
+}
+
+fn r4g1_unavailable_response_with_reason(reason: Option<&str>) -> (u16, serde_json::Value) {
+    let error = match reason {
+        Some(reason) => {
+            format!("R4G1 Graph runtime failed: {reason}; no fallback engine was invoked")
+        }
+        None => {
+            "R4G1 Graph runtime did not produce a usable response; no fallback engine was invoked"
+                .to_owned()
+        }
+    };
     (
         503,
         serde_json::json!({
-            "error": "R4G1 Graph runtime did not produce a usable response; no fallback engine was invoked",
+            "error": error,
             "engine": "r4g1",
             "action": "Compile / Refresh the R4G1 graph, or explicitly select another engine"
         }),
@@ -1506,6 +1559,7 @@ fn handle_connection(
         let mut r4g1_status: Option<&'static str> = None;
         let mut r4g1_widened = false;
         let mut r4g1_abstained = false;
+        let mut r4g1_error: Option<String> = None;
 
         if engine_mode == "attention" || engine_mode == "r4-attention" {
             let mut oracle_guard = oracle.lock().unwrap();
@@ -1552,7 +1606,7 @@ fn handle_connection(
             let prompt = payload.text.clone();
             if engine_mode != "transformerless-legacy" {
                 match generate_r4g1_text(&r4g1, &prompt, max_tokens.max(32)) {
-                    Some(gen) if gen.abstained => {
+                    Ok(Some(gen)) if gen.abstained => {
                         // D4: the policy abstained (Novel input after the
                         // widen-once bound, or a reserved status). This is a
                         // declared outcome, not an engine failure — surface
@@ -1567,7 +1621,7 @@ fn handle_connection(
                             gen.status, gen.widened
                         );
                     }
-                    Some(gen) if is_usable_generated_text(&gen.text) => {
+                    Ok(Some(gen)) if is_usable_generated_text(&gen.text) => {
                         // The pathological-output reject guard stays the
                         // last line of defense for SERVED (non-abstained)
                         // output; abstentions are resolved by the policy
@@ -1579,11 +1633,22 @@ fn handle_connection(
                         r4g1_widened = gen.widened;
                         tokens_generated = final_response_text.split_whitespace().count();
                     }
-                    Some(_) => {
+                    Ok(Some(_)) => {
                         generation_mode = "r4g1-rejected".to_string();
+                        r4g1_error = Some(
+                            "R4G1 generated text was rejected as non-readable or pathological"
+                                .to_owned(),
+                        );
                         println!("[-] R4G1 output rejected as non-readable or pathological");
                     }
-                    None => {}
+                    Ok(None) => {
+                        r4g1_error = Some("R4G1 graph runtime is not loaded".to_owned());
+                    }
+                    Err(error) => {
+                        generation_mode = "r4g1-error".to_string();
+                        r4g1_error = Some(error.clone());
+                        println!("[-] R4G1 generation failed: {error}");
+                    }
                 }
             }
             if final_response_text.is_empty()
@@ -1613,7 +1678,7 @@ fn handle_connection(
                 });
                 send_json_response(stream, 200, &body.to_string());
             } else {
-                let (status, body) = r4g1_unavailable_response();
+                let (status, body) = r4g1_unavailable_response_with_reason(r4g1_error.as_deref());
                 send_json_response(stream, status, &body.to_string());
             }
             return;
