@@ -608,6 +608,15 @@ fn reject_reverse_index_missing_edge() {
 }
 
 #[test]
+fn allow_unknown_optional_kind_without_reverse_coverage() {
+    let mut f = Fixture::valid();
+    let mut edges = valid_edges();
+    edges[1].kind = 0x80;
+    f.edges = Some(edge_section(&edges, &[0, 0]));
+    GraphView::parse(&f.build()).expect("unknown optional kinds may be skipped by reverse coverage");
+}
+
+#[test]
 fn reject_child_range_non_refinement_edge() {
     let mut f = Fixture::valid();
     let mut edges = valid_edges();
@@ -627,8 +636,8 @@ fn reject_child_range_non_refinement_edge() {
 #[test]
 fn reject_forward_range_target_mismatch() {
     let mut f = Fixture::valid();
-    // Node 1 forward range starts at 0 and spans both entries. Make the first
-    // reverse slot point to edge 1 whose dst=1 is valid, and second point to a
+    // Node 1 forward range starts at 0 and spans both entries. Keep the first
+    // reverse slot pointing to edge 0 whose dst=1 is valid, and make the second point to a
     // synthetic edge targeting node 0.
     let mut edges = valid_edges();
     edges[1].dst = 0;

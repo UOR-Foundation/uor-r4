@@ -335,10 +335,13 @@ pub(crate) fn validate(view: &GraphView) -> Result<Option<Head>, FormatError> {
         // coverage must appear at least once in the reverse block.
         for i in 0..edge_count {
             let edge = records::decode_edge(&bytes[i as usize * PACKED_EDGE_LEN..]);
-            if let Some(kind) = EdgeKind::from_raw(edge.kind) {
-                if !kind.requires_reverse_index() {
-                    continue;
-                }
+            let Some(kind) = EdgeKind::from_raw(edge.kind) else {
+                // Unknown optional kinds are forward-compatible and may be
+                // omitted from reverse-coverage requirements.
+                continue;
+            };
+            if !kind.requires_reverse_index() {
+                continue;
             }
             let found = reverse
                 .chunks_exact(REVERSE_INDEX_ENTRY_LEN)
