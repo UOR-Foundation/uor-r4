@@ -481,12 +481,12 @@ fn u8_kernel_zero_floats(_w: &mut R4g1World) {
 // =========================================================================
 use uor_r4_graph_compiler::monograph::{MonographTraceabilityVerifier, MonographValidationError};
 
-#[given("the formal monograph document \"docs/hologram_r4_formal_monograph.md\"")]
+#[given("the living formal monograph document")]
 fn bdd_given_monograph_doc(w: &mut R4g1World) {
     w.monograph_text = include_str!("../docs/hologram_r4_formal_monograph.md").to_string();
 }
 
-#[when("validated by the monograph traceability verifier")]
+#[when("audited by the monograph traceability verifier")]
 fn bdd_validate_monograph_step(w: &mut R4g1World) {
     let res = MonographTraceabilityVerifier::validate_monograph_text(&w.monograph_text);
     match res {
@@ -495,24 +495,32 @@ fn bdd_validate_monograph_step(w: &mut R4g1World) {
     }
 }
 
-#[then("all 12 sections and 9 implementation modules are verified")]
-fn bdd_monograph_sections_and_modules_check(w: &mut R4g1World) {
+#[then("all 19 monograph sections are verified present")]
+fn bdd_monograph_sections_check(w: &mut R4g1World) {
     let rep = w.monograph_report.as_ref().expect("monograph report");
-    assert_eq!(rep.total_sections_verified, 12);
-    assert_eq!(rep.total_modules_linked, 9);
+    assert_eq!(rep.total_sections_verified, 19);
     assert!(rep.verified);
 }
 
-#[then("all 2 non-goal disavowals are present")]
-fn bdd_monograph_non_goals_check(w: &mut R4g1World) {
+#[then("12 implementation module links are verified")]
+fn bdd_monograph_modules_check(w: &mut R4g1World) {
     let rep = w.monograph_report.as_ref().expect("monograph report");
-    assert_eq!(rep.non_goals_disavowed, 2);
+    assert_eq!(rep.total_modules_linked, 12);
 }
 
-#[given("a monograph text missing \"Section 10: Traceability Matrix\"")]
+#[then("3 non-goal disavowals are verified present")]
+fn bdd_monograph_non_goals_check(w: &mut R4g1World) {
+    let rep = w.monograph_report.as_ref().expect("monograph report");
+    assert_eq!(rep.non_goals_disavowed, 3);
+}
+
+#[given("a monograph draft missing section \"Section 1: Problem Statement and Non-Goals\"")]
 fn bdd_given_missing_section(w: &mut R4g1World) {
     let full_doc = include_str!("../docs/hologram_r4_formal_monograph.md");
-    w.monograph_text = full_doc.replace("Section 10: Traceability Matrix", "Missing Sec");
+    w.monograph_text = full_doc.replace(
+        "Section 1: Problem Statement and Non-Goals",
+        "Missing Sec 1",
+    );
 }
 
 #[then("validation fails with a missing section error")]
@@ -524,7 +532,7 @@ fn bdd_missing_section_error_check(w: &mut R4g1World) {
     ));
 }
 
-#[given("a monograph text missing the \"No Human-Level Reasoning Claim\" disavowal")]
+#[given("a monograph draft missing non-goal \"No Human-Level Reasoning Claim\"")]
 fn bdd_given_missing_non_goal(w: &mut R4g1World) {
     let full_doc = include_str!("../docs/hologram_r4_formal_monograph.md");
     w.monograph_text = full_doc.replace("No Human-Level Reasoning Claim", "Altered");

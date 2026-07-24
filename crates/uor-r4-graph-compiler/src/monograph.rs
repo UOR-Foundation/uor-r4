@@ -1,17 +1,17 @@
 //! Hologram/R4 Formal Monograph Validator & Traceability Harness
 //!
-//! Specification & Source: `docs/hologram_formal_analysis_direction.md` PDF §§14-17;
+//! Specification & Source: `docs/hologram_formal_analysis_direction.md` PDF §§14–17;
 //! `docs/formal_vocabulary.md`; GitHub Issue #133.
 //!
 //! This module provides programmatic validation for the formal monograph:
-//! - Section completeness verification across all 12 monograph sections.
+//! - Section completeness verification across all 19 monograph sections.
 //! - Traceability link validation connecting implementation modules to proof matrix entries.
 //! - Verification of explicit non-goals and claim-wording boundaries.
 
 use std::fmt;
 
 /// Errors arising during monograph validation.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MonographValidationError {
     /// Required section missing from formal monograph.
     MissingSection { section_title: String },
@@ -45,7 +45,7 @@ impl fmt::Display for MonographValidationError {
 impl std::error::Error for MonographValidationError {}
 
 /// Monograph validation report metrics.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MonographValidationReport {
     pub total_sections_verified: usize,
     pub total_modules_linked: usize,
@@ -71,26 +71,37 @@ impl MonographTraceabilityVerifier {
             "Section 7: Reference Intermediate Representation (IR)",
             "Section 8: Boolean / Integer Lowering & R4G1 Format",
             "Section 9: Structural Proofs & Proof Matrix",
-            "Section 10: Traceability Matrix",
-            "Section 11: Empirical Certification & Quality Gates",
-            "Section 12: Rust Module Map & Migration",
+            "Section 10: Decoupled Semantic Reasoning & Language Emission",
+            "Section 11: Graph Invariant Ownership & Validation",
+            "Section 12: Rate-Distortion Semantic Compression",
+            "Section 13: PDF-to-Implementation Traceability",
+            "Section 14: Complete Traceability & Proof Status Matrix",
+            "Section 15: Issue Dependency Graph",
+            "Section 16: Review Checklist vs Repos & Specifications",
+            "Section 17: Known Negative Results & Disavowals",
+            "Section 18: Legacy-Preserving Migration Path",
+            "Section 19: Empirical Certification & Quality Gates",
         ];
 
         let required_modules = [
-            "semantic_state",
-            "edge_algebras",
-            "holographic_encoding",
-            "information_bottleneck",
-            "behavioral_probes",
-            "reference_compiler_ir",
-            "lower_semantic_regions",
-            "future_state_planner",
-            "structural_guarantees",
+            "semantic_state.rs",
+            "records.rs",
+            "holographic_encoding.rs",
+            "behavioral_probes.rs",
+            "reference_compiler_ir.rs",
+            "lower_semantic_regions.rs",
+            "future_state_planner.rs",
+            "structural_guarantees.rs",
+            "semantic_emission_decoupling.rs",
+            "invariant_ownership.rs",
+            "rate_distortion_compression.rs",
+            "pdf_traceability.rs",
         ];
 
         let required_non_goals = [
             "No Human-Level Reasoning Claim",
             "No Exact Teacher Equivalence",
+            "No Floating-Point Runtime Hot Path",
         ];
 
         let mut sections_count = 0;
@@ -141,9 +152,9 @@ mod tests {
         let content = include_str!("../../../docs/hologram_r4_formal_monograph.md");
         let report = MonographTraceabilityVerifier::validate_monograph_text(content).unwrap();
 
-        assert_eq!(report.total_sections_verified, 12);
-        assert_eq!(report.total_modules_linked, 9);
-        assert_eq!(report.non_goals_disavowed, 2);
+        assert_eq!(report.total_sections_verified, 19);
+        assert_eq!(report.total_modules_linked, 12);
+        assert_eq!(report.non_goals_disavowed, 3);
         assert!(report.verified);
     }
 }

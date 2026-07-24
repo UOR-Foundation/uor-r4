@@ -1,19 +1,20 @@
 @status:enforced
-Feature: Hologram/R4 formal monograph and implementation specification
-  The formal monograph must consolidate all 12 formal analysis sections, maintain a traceability matrix mapping modules to proof obligations, and enforce explicit non-goal disavowals.
+Feature: Hologram/R4 Formal Monograph and Specification Completeness
+  The formal monograph must consolidate all 19 formal analysis sections, reference valid implementation module paths, explicitly disavow non-goals, and pass programmatic audit verification.
 
-  Scenario: Validate full formal monograph section coverage and module links
-    Given the formal monograph document "docs/hologram_r4_formal_monograph.md"
-    When validated by the monograph traceability verifier
-    Then all 12 sections and 9 implementation modules are verified
-    And all 2 non-goal disavowals are present
+  Scenario: Audit complete formal monograph for section and module link coverage
+    Given the living formal monograph document
+    When audited by the monograph traceability verifier
+    Then all 19 monograph sections are verified present
+    And 12 implementation module links are verified
+    And 3 non-goal disavowals are verified present
 
   Scenario: Reject formal monograph missing a required section
-    Given a monograph text missing "Section 10: Traceability Matrix"
-    When validated by the monograph traceability verifier
+    Given a monograph draft missing section "Section 1: Problem Statement and Non-Goals"
+    When audited by the monograph traceability verifier
     Then validation fails with a missing section error
 
-  Scenario: Reject formal monograph missing explicit non-goal disavowals
-    Given a monograph text missing the "No Human-Level Reasoning Claim" disavowal
-    When validated by the monograph traceability verifier
+  Scenario: Reject formal monograph missing non-goal disavowal
+    Given a monograph draft missing non-goal "No Human-Level Reasoning Claim"
+    When audited by the monograph traceability verifier
     Then validation fails with a missing non-goal error
