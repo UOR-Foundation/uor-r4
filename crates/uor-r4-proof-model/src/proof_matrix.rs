@@ -69,6 +69,12 @@ impl Default for ProofStatusMatrix {
                     status: ProofStatus::Verified,
                     description: "RuntimeState slot updates do not panic or cause OOB".to_string(),
                 },
+                TheoremEntry {
+                    name: "Graph Invariant Ownership Matrix".to_string(),
+                    theorem_id: "PDF §9".to_string(),
+                    status: ProofStatus::Verified,
+                    description: "All 8 normative graph invariants have verified primary owners and loader checks".to_string(),
+                },
             ],
         }
     }

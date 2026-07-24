@@ -22,10 +22,11 @@ version gate).
 - **Stage-2 semantic validation** (`stage2.rs`, `head.rs`, `records.rs`,
   `rout.rs`): the 224-byte HEAD payload (identities + bounded-work constants
   A/C/W/E/K/D), `PackedNode` range resolution with checked arithmetic, edge
-  endpoint bounds, reverse-index existence (documented v0 approximation of
-  Theorem 7), HEAD-bound honesty, ROUT v0 bytecode validation (opcodes,
-  operands, forward-only jumps, depth ≤ D), EMIT/EXCT storage descriptors,
-  signature word-aligned extents + zero-padding checks.
+  endpoint bounds, stable edge-kind discriminants (with optional-kind space),
+  child/forward index wiring checks, reverse-index coverage, HEAD-bound
+  honesty, ROUT v0 bytecode validation (opcodes, operands, forward-only jumps,
+  depth ≤ D), EMIT/EXCT storage descriptors, signature word-aligned extents +
+  zero-padding checks.
 - **`GraphView<'a>`** (`view.rs`): constructed only after both stages pass;
   borrowed zero-copy access to sections, HEAD, nodes, edges, and the reverse
   index. Never deserializes into heap object graphs.

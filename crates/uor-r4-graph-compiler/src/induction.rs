@@ -61,6 +61,12 @@
 //!   same-machine determinism is pinned by the T-invariance tests, and
 //!   cross-platform byte equality awaits the D2 canonical deterministic
 //!   compile mode, exactly as for `compile()`'s macOS-pinned κ baseline.)
+//! - **Objective scoring (schema 1)**: each eligible split records
+//!   `H(A|R)` and `H(S_future|R)` proxies, an information-bottleneck term
+//!   `I(Z;X) - beta·I(Z;Y_future)`, and runtime/artifact/bytes/structure
+//!   cost proxies; weighted objective ties deterministically resolve to
+//!   "keep". Fitting uses train observations only; reports emit both train
+//!   and held-out decompositions so regressions are visible per component.
 //!
 //! # Regions, membership, reference classifier
 //!
@@ -124,6 +130,8 @@ pub fn sample_id(tokens: &[u32]) -> [u8; 32] {
 pub const DEFAULT_MIN_SUPPORT: usize = 64;
 /// Default entropy-reduction floor for accepting a split, in bits/token.
 pub const DEFAULT_SPLIT_ENTROPY_GAIN_BITS: f64 = 0.25;
+/// Objective configuration schema version carried in compile reports.
+pub const OBJECTIVE_CONFIG_SCHEMA: u32 = 1;
 /// Bounded multi-membership per depth (matches the runtime's top-M).
 pub const TOP_M: usize = 3;
 /// Radius calibration quantile: the 95th percentile of member distances.
@@ -160,6 +168,8 @@ pub const EDGE_KIND_REFINEMENT: u8 = 0;
 pub const EDGE_KIND_NEIGHBOR: u8 = 1;
 /// Edge kind of sequence transition edges.
 pub const EDGE_KIND_TRANSITION: u8 = 2;
+const APPROX_BYTES_PER_ADDED_REGION: f64 = 96.0;
+const APPROX_BYTES_READ_PER_REGION: f64 = SIG_BYTES as f64;
 
 /// blake3 input labeling this compiler as the compiler of record.
 const COMPILER_VERSION_LABEL: &[u8] = b"uor-r4-core cover v0";
@@ -197,6 +207,79 @@ pub struct CoverConfig {
     pub radius_quantile_numerator: u32,
     /// Percentile denominator used to calibrate region acceptance radii.
     pub radius_quantile_denominator: u32,
+    /// Versioned objective configuration (compiler-side only).
+    pub objective: ObjectiveConfig,
+}
+
+/// Weights of objective components (all compiler-side).
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct ObjectiveWeights {
+    pub predictive_entropy: f64,
+    pub future_state_entropy: f64,
+    pub teacher_loss: f64,
+    pub runtime_cost: f64,
+    pub artifact_size: f64,
+    pub bytes_read: f64,
+    pub structural_complexity: f64,
+    pub ib_term: f64,
+}
+
+/// Metadata describing approximations used by objective estimators.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct ObjectiveEstimatorMetadata {
+    pub predictive_entropy: String,
+    pub future_state_entropy: String,
+    pub teacher_loss: String,
+    pub runtime_cost: String,
+    pub artifact_size: String,
+    pub bytes_read: String,
+    pub structural_complexity: String,
+    pub ib_term: String,
+    pub fit_partition: String,
+    pub report_partitions: String,
+}
+
+/// Versioned objective configuration.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct ObjectiveConfig {
+    pub schema: u32,
+    pub ib_beta: f64,
+    pub weights: ObjectiveWeights,
+    pub estimators: ObjectiveEstimatorMetadata,
+}
+
+impl Default for ObjectiveConfig {
+    fn default() -> Self {
+        Self {
+            schema: OBJECTIVE_CONFIG_SCHEMA,
+            ib_beta: 1.0,
+            weights: ObjectiveWeights {
+                predictive_entropy: 1.0,
+                future_state_entropy: 0.5,
+                teacher_loss: 1.0,
+                runtime_cost: 0.0,
+                artifact_size: 0.0,
+                bytes_read: 0.0,
+                structural_complexity: 0.0,
+                ib_term: 0.25,
+            },
+            estimators: ObjectiveEstimatorMetadata {
+                predictive_entropy: "H(A|R) from empirical next-token frequencies".to_owned(),
+                future_state_entropy: "H(S_future|R) with S_future=(prev,next) one-step proxy"
+                    .to_owned(),
+                teacher_loss: "cross-entropy proxy uses H(A|R) (teacher unavailable online)"
+                    .to_owned(),
+                runtime_cost: "region-count proxy for routing work".to_owned(),
+                artifact_size: "serialized-byte estimate from split deltas".to_owned(),
+                bytes_read: "signature-byte estimate per active region".to_owned(),
+                structural_complexity: "regions+edges proxy".to_owned(),
+                ib_term: "I(Z;X)-beta*I(Z;Y_future), X via deterministic assignment proxy"
+                    .to_owned(),
+                fit_partition: "train".to_owned(),
+                report_partitions: "train,held_out".to_owned(),
+            },
+        }
+    }
 }
 
 impl Default for CoverConfig {
@@ -211,6 +294,7 @@ impl Default for CoverConfig {
             entropy_gain_bits: DEFAULT_SPLIT_ENTROPY_GAIN_BITS,
             radius_quantile_numerator: RADIUS_QUANTILE_NUMERATOR,
             radius_quantile_denominator: RADIUS_QUANTILE_DENOMINATOR,
+            objective: ObjectiveConfig::default(),
         }
     }
 }
@@ -638,7 +722,7 @@ fn next_token_counts(observations: &[Observation], members: &[usize]) -> BTreeMa
 
 /// Shannon entropy of a token distribution in bits (f64, tokens in
 /// ascending order; libm-sensitive cross-platform — see module docs).
-fn entropy_bits(counts: &BTreeMap<u32, u64>) -> f64 {
+fn entropy_bits<K: Ord>(counts: &BTreeMap<K, u64>) -> f64 {
     let total: u64 = counts.values().sum();
     if total == 0 {
         return 0.0;
@@ -673,6 +757,257 @@ pub fn entropy_reduction(
         expected_child += weight * entropy_bits(&next_token_counts(observations, child));
     }
     parent - expected_child
+}
+
+fn conditional_entropy_for_key<F>(observations: &[Observation], assignments: &[u32], key: F) -> f64
+where
+    F: Fn(&Observation) -> u64,
+{
+    let count = observations.len().min(assignments.len());
+    if count == 0 {
+        return 0.0;
+    }
+    let mut region_key_counts: BTreeMap<u32, BTreeMap<u64, u64>> = BTreeMap::new();
+    for (observation, &region) in observations.iter().zip(assignments.iter()).take(count) {
+        *region_key_counts
+            .entry(region)
+            .or_default()
+            .entry(key(observation))
+            .or_insert(0) += 1;
+    }
+    let total = count as f64;
+    let mut value = 0.0;
+    for counts in region_key_counts.values() {
+        let region_total: u64 = counts.values().sum();
+        if region_total == 0 {
+            continue;
+        }
+        value += (region_total as f64 / total) * entropy_bits(counts);
+    }
+    value
+}
+
+fn assignment_entropy(assignments: &[u32]) -> f64 {
+    let mut counts: BTreeMap<u32, u64> = BTreeMap::new();
+    for &region in assignments {
+        *counts.entry(region).or_insert(0) += 1;
+    }
+    entropy_bits(&counts)
+}
+
+fn next_entropy(observations: &[Observation]) -> f64 {
+    let mut counts: BTreeMap<u32, u64> = BTreeMap::new();
+    for observation in observations {
+        *counts.entry(observation.next).or_insert(0) += 1;
+    }
+    entropy_bits(&counts)
+}
+
+fn future_state_key(observation: &Observation) -> u64 {
+    ((observation.prev as u64) << 32) | observation.next as u64
+}
+
+/// Objective component values emitted as separate report columns.
+#[derive(Debug, Clone, Copy, Serialize)]
+pub struct ObjectiveComponents {
+    pub predictive_entropy_bits: f64,
+    pub future_state_entropy_bits: f64,
+    pub teacher_loss_bits: f64,
+    pub runtime_cost_units: f64,
+    pub artifact_size_bytes: f64,
+    pub bytes_read: f64,
+    pub structural_complexity: f64,
+    pub ib_i_zx_bits: f64,
+    pub ib_i_zy_future_bits: f64,
+    pub ib_objective_bits: f64,
+    pub weighted_score: f64,
+}
+
+impl ObjectiveComponents {
+    fn weighted(config: &ObjectiveConfig, values: ObjectiveRawValues) -> Self {
+        let ib_objective = values.ib_i_zx_bits - config.ib_beta * values.ib_i_zy_future_bits;
+        let w = &config.weights;
+        let weighted_score = w.predictive_entropy * values.predictive_entropy_bits
+            + w.future_state_entropy * values.future_state_entropy_bits
+            + w.teacher_loss * values.teacher_loss_bits
+            + w.runtime_cost * values.runtime_cost_units
+            + w.artifact_size * values.artifact_size_bytes
+            + w.bytes_read * values.bytes_read
+            + w.structural_complexity * values.structural_complexity
+            + w.ib_term * ib_objective;
+        Self {
+            predictive_entropy_bits: values.predictive_entropy_bits,
+            future_state_entropy_bits: values.future_state_entropy_bits,
+            teacher_loss_bits: values.teacher_loss_bits,
+            runtime_cost_units: values.runtime_cost_units,
+            artifact_size_bytes: values.artifact_size_bytes,
+            bytes_read: values.bytes_read,
+            structural_complexity: values.structural_complexity,
+            ib_i_zx_bits: values.ib_i_zx_bits,
+            ib_i_zy_future_bits: values.ib_i_zy_future_bits,
+            ib_objective_bits: ib_objective,
+            weighted_score,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct ObjectiveRawValues {
+    predictive_entropy_bits: f64,
+    future_state_entropy_bits: f64,
+    teacher_loss_bits: f64,
+    runtime_cost_units: f64,
+    artifact_size_bytes: f64,
+    bytes_read: f64,
+    structural_complexity: f64,
+    ib_i_zx_bits: f64,
+    ib_i_zy_future_bits: f64,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct ObjectiveCostTerms {
+    runtime_cost_units: f64,
+    artifact_size_bytes: f64,
+    bytes_read: f64,
+    structural_complexity: f64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct RegionDecisionAudit {
+    pub region_id: u32,
+    pub depth: u8,
+    pub support: u32,
+    pub entropy_gain_bits: f64,
+    pub keep: ObjectiveComponents,
+    pub split: ObjectiveComponents,
+    pub decision: String,
+}
+
+fn compare_region_decision(keep: &ObjectiveComponents, split: &ObjectiveComponents) -> bool {
+    split.weighted_score.total_cmp(&keep.weighted_score).is_lt()
+}
+
+fn objective_for_partition(
+    config: &ObjectiveConfig,
+    observations: &[Observation],
+    assignments: &[u32],
+    costs: ObjectiveCostTerms,
+) -> ObjectiveComponents {
+    let count = observations.len().min(assignments.len());
+    if count == 0 {
+        return ObjectiveComponents::weighted(
+            config,
+            ObjectiveRawValues {
+                predictive_entropy_bits: 0.0,
+                future_state_entropy_bits: 0.0,
+                teacher_loss_bits: 0.0,
+                runtime_cost_units: costs.runtime_cost_units,
+                artifact_size_bytes: costs.artifact_size_bytes,
+                bytes_read: costs.bytes_read,
+                structural_complexity: costs.structural_complexity,
+                ib_i_zx_bits: 0.0,
+                ib_i_zy_future_bits: 0.0,
+            },
+        );
+    }
+    let observations = &observations[..count];
+    let assignments = &assignments[..count];
+    let predictive_entropy_bits =
+        conditional_entropy_for_key(observations, assignments, |o| o.next as u64);
+    let future_state_entropy_bits =
+        conditional_entropy_for_key(observations, assignments, future_state_key);
+    let teacher_loss_bits = predictive_entropy_bits;
+    let ib_i_zx_bits = assignment_entropy(assignments);
+    let ib_i_zy_future_bits = (next_entropy(observations) - predictive_entropy_bits).max(0.0);
+    ObjectiveComponents::weighted(
+        config,
+        ObjectiveRawValues {
+            predictive_entropy_bits,
+            future_state_entropy_bits,
+            teacher_loss_bits,
+            runtime_cost_units: costs.runtime_cost_units,
+            artifact_size_bytes: costs.artifact_size_bytes,
+            bytes_read: costs.bytes_read,
+            structural_complexity: costs.structural_complexity,
+            ib_i_zx_bits,
+            ib_i_zy_future_bits,
+        },
+    )
+}
+
+fn objective_for_member_partition(
+    config: &ObjectiveConfig,
+    observations: &[Observation],
+    members: &[usize],
+    assignments: &[u32],
+    costs: ObjectiveCostTerms,
+) -> ObjectiveComponents {
+    let count = members.len().min(assignments.len());
+    if count == 0 {
+        return ObjectiveComponents::weighted(
+            config,
+            ObjectiveRawValues {
+                predictive_entropy_bits: 0.0,
+                future_state_entropy_bits: 0.0,
+                teacher_loss_bits: 0.0,
+                runtime_cost_units: costs.runtime_cost_units,
+                artifact_size_bytes: costs.artifact_size_bytes,
+                bytes_read: costs.bytes_read,
+                structural_complexity: costs.structural_complexity,
+                ib_i_zx_bits: 0.0,
+                ib_i_zy_future_bits: 0.0,
+            },
+        );
+    }
+
+    let mut region_next_counts: BTreeMap<u32, BTreeMap<u64, u64>> = BTreeMap::new();
+    let mut region_state_counts: BTreeMap<u32, BTreeMap<u64, u64>> = BTreeMap::new();
+    let mut next_counts: BTreeMap<u32, u64> = BTreeMap::new();
+    for (&member, &region) in members.iter().zip(assignments.iter()).take(count) {
+        let observation = &observations[member];
+        *region_next_counts
+            .entry(region)
+            .or_default()
+            .entry(observation.next as u64)
+            .or_insert(0) += 1;
+        *region_state_counts
+            .entry(region)
+            .or_default()
+            .entry(future_state_key(observation))
+            .or_insert(0) += 1;
+        *next_counts.entry(observation.next).or_insert(0) += 1;
+    }
+
+    let conditional = |region_counts: &BTreeMap<u32, BTreeMap<u64, u64>>| -> f64 {
+        let mut value = 0.0;
+        for counts in region_counts.values() {
+            let region_total: u64 = counts.values().sum();
+            if region_total == 0 {
+                continue;
+            }
+            value += (region_total as f64 / count as f64) * entropy_bits(counts);
+        }
+        value
+    };
+    let predictive_entropy_bits = conditional(&region_next_counts);
+    let future_state_entropy_bits = conditional(&region_state_counts);
+    let teacher_loss_bits = predictive_entropy_bits;
+    let ib_i_zx_bits = assignment_entropy(&assignments[..count]);
+    let ib_i_zy_future_bits = (entropy_bits(&next_counts) - predictive_entropy_bits).max(0.0);
+    ObjectiveComponents::weighted(
+        config,
+        ObjectiveRawValues {
+            predictive_entropy_bits,
+            future_state_entropy_bits,
+            teacher_loss_bits,
+            runtime_cost_units: costs.runtime_cost_units,
+            artifact_size_bytes: costs.artifact_size_bytes,
+            bytes_read: costs.bytes_read,
+            structural_complexity: costs.structural_complexity,
+            ib_i_zx_bits,
+            ib_i_zy_future_bits,
+        },
+    )
 }
 
 /// Hamming distance between two equal-length signatures.
@@ -901,6 +1236,8 @@ pub struct InducedCover {
     pub corpus_kappa: String,
     /// Mini-batch size the memory budget derived.
     pub batch_size: usize,
+    /// Auditable split/keep decisions scored by the objective.
+    pub decision_trace: Vec<RegionDecisionAudit>,
 }
 
 /// Induce the multiresolution cover over the train observations.
@@ -929,6 +1266,7 @@ pub fn induce_cover(
     let mut regions: Vec<CoverRegion> = Vec::new();
     let mut members_of: Vec<Vec<usize>> = Vec::new();
     let mut paths: Vec<Vec<u32>> = vec![Vec::new(); n];
+    let mut decision_trace = Vec::new();
 
     // Depth 1: the broad cover.
     let k0 = config.k0.min(n).max(1);
@@ -1004,7 +1342,58 @@ pub fn induce_cover(
             })
             .collect();
         let gain = entropy_reduction(observations, &parent_members, &children_members);
-        if gain <= config.entropy_gain_bits {
+        let keep_assignments = vec![0u32; parent_members.len()];
+        let split_assignments = clustering.assignment.clone();
+        let keep_components = objective_for_member_partition(
+            &config.objective,
+            observations,
+            &parent_members,
+            &keep_assignments,
+            ObjectiveCostTerms {
+                runtime_cost_units: 0.0,
+                artifact_size_bytes: 0.0,
+                bytes_read: 0.0,
+                structural_complexity: 0.0,
+            },
+        );
+        let split_components = objective_for_member_partition(
+            &config.objective,
+            observations,
+            &parent_members,
+            &split_assignments,
+            ObjectiveCostTerms {
+                runtime_cost_units: SPLIT_CHILDREN as f64,
+                artifact_size_bytes: (SPLIT_CHILDREN.saturating_sub(1)) as f64
+                    * APPROX_BYTES_PER_ADDED_REGION,
+                bytes_read: SPLIT_CHILDREN as f64 * APPROX_BYTES_READ_PER_REGION,
+                structural_complexity: SPLIT_CHILDREN as f64,
+            },
+        );
+        let entropy_allows_split = gain > config.entropy_gain_bits;
+        let objective_allows_split = compare_region_decision(&keep_components, &split_components);
+        let decision = if !entropy_allows_split {
+            "keep:entropy_floor"
+        } else if objective_allows_split {
+            "split"
+        } else if split_components
+            .weighted_score
+            .total_cmp(&keep_components.weighted_score)
+            .is_eq()
+        {
+            "keep:objective_tie"
+        } else {
+            "keep:objective_cost"
+        };
+        decision_trace.push(RegionDecisionAudit {
+            region_id,
+            depth: depth as u8,
+            support: support as u32,
+            entropy_gain_bits: gain,
+            keep: keep_components,
+            split: split_components,
+            decision: decision.to_owned(),
+        });
+        if !entropy_allows_split || !objective_allows_split {
             continue;
         }
         regions[region_id as usize].split_gain_bits = gain;
@@ -1061,6 +1450,7 @@ pub fn induce_cover(
         artifact_kappa: artifact_kappa.to_owned(),
         corpus_kappa: corpus_kappa.to_owned(),
         batch_size,
+        decision_trace,
     })
 }
 
@@ -1630,6 +2020,7 @@ pub struct CoverReport {
     pub schema: u32,
     pub config: CoverReportConfig,
     pub inputs: CoverReportInputs,
+    pub objective: CoverReportObjective,
     pub regions: CoverReportRegions,
     pub edges: CoverReportEdges,
     pub reference_classifier: CoverReportReference,
@@ -1661,6 +2052,29 @@ pub struct CoverReportInputs {
     pub corpus_kappa: String,
     pub train_observations: usize,
     pub held_out_observations: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct CoverReportObjective {
+    pub config: ObjectiveConfig,
+    pub train: ObjectiveComponents,
+    pub held_out: ObjectiveComponents,
+    pub tradeoff_held_out_minus_train: ObjectiveTradeoffDelta,
+    pub region_decisions: Vec<RegionDecisionAudit>,
+    pub migration: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ObjectiveTradeoffDelta {
+    pub predictive_entropy_bits: f64,
+    pub teacher_loss_bits: f64,
+    pub future_state_entropy_bits: f64,
+    pub runtime_cost_units: f64,
+    pub artifact_size_bytes: f64,
+    pub bytes_read: f64,
+    pub structural_complexity: f64,
+    pub ib_objective_bits: f64,
+    pub weighted_score: f64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1744,6 +2158,69 @@ pub fn build_report(config: &CoverConfig, induced: &InducedCover, data: ReportDa
         .iter()
         .filter(|e| e.kind == EDGE_KIND_REFINEMENT)
         .count() as u32;
+    let structural_complexity = (cover.regions.len() + edges.len()) as f64;
+    let artifact_size_bytes = artifact
+        .as_ref()
+        .map(|(bytes, _)| bytes.len() as f64)
+        .unwrap_or(cover.regions.len() as f64 * APPROX_BYTES_PER_ADDED_REGION);
+    let train_runtime_cost = if train.is_empty() {
+        0.0
+    } else {
+        cover
+            .paths
+            .iter()
+            .map(|path| path.len() as f64)
+            .sum::<f64>()
+            / train.len() as f64
+    };
+    let held_out_runtime_cost = if recall.is_empty() {
+        0.0
+    } else {
+        recall
+            .iter()
+            .map(|depth| depth.frontier_width_mean)
+            .sum::<f64>()
+            / recall.len() as f64
+    };
+    let train_assignments: Vec<u32> = cover
+        .paths
+        .iter()
+        .map(|path| path.last().copied().unwrap_or(0))
+        .collect();
+    let held_out_assignments: Vec<u32> = held_out
+        .iter()
+        .map(|observation| {
+            let mut assignment = 0u32;
+            for depth in 1..=cover.max_depth {
+                if let Some(region) = reference.exact_top1(depth, &observation.vector) {
+                    assignment = region;
+                }
+            }
+            assignment
+        })
+        .collect();
+    let objective_train = objective_for_partition(
+        &config.objective,
+        train,
+        &train_assignments,
+        ObjectiveCostTerms {
+            runtime_cost_units: train_runtime_cost,
+            artifact_size_bytes,
+            bytes_read: train_runtime_cost * APPROX_BYTES_READ_PER_REGION,
+            structural_complexity,
+        },
+    );
+    let objective_held_out = objective_for_partition(
+        &config.objective,
+        held_out,
+        &held_out_assignments,
+        ObjectiveCostTerms {
+            runtime_cost_units: held_out_runtime_cost,
+            artifact_size_bytes,
+            bytes_read: held_out_runtime_cost * APPROX_BYTES_READ_PER_REGION,
+            structural_complexity,
+        },
+    );
     let mut determinism_note = String::new();
     let _ = write!(
         determinism_note,
@@ -1777,6 +2254,34 @@ pub fn build_report(config: &CoverConfig, induced: &InducedCover, data: ReportDa
             corpus_kappa: induced.corpus_kappa.clone(),
             train_observations: train.len(),
             held_out_observations: held_out.len(),
+        },
+        objective: CoverReportObjective {
+            config: config.objective.clone(),
+            train: objective_train,
+            held_out: objective_held_out,
+            tradeoff_held_out_minus_train: ObjectiveTradeoffDelta {
+                predictive_entropy_bits: objective_held_out.predictive_entropy_bits
+                    - objective_train.predictive_entropy_bits,
+                teacher_loss_bits: objective_held_out.teacher_loss_bits
+                    - objective_train.teacher_loss_bits,
+                future_state_entropy_bits: objective_held_out.future_state_entropy_bits
+                    - objective_train.future_state_entropy_bits,
+                runtime_cost_units: objective_held_out.runtime_cost_units
+                    - objective_train.runtime_cost_units,
+                artifact_size_bytes: objective_held_out.artifact_size_bytes
+                    - objective_train.artifact_size_bytes,
+                bytes_read: objective_held_out.bytes_read - objective_train.bytes_read,
+                structural_complexity: objective_held_out.structural_complexity
+                    - objective_train.structural_complexity,
+                ib_objective_bits: objective_held_out.ib_objective_bits
+                    - objective_train.ib_objective_bits,
+                weighted_score: objective_held_out.weighted_score - objective_train.weighted_score,
+            },
+            region_decisions: induced.decision_trace.clone(),
+            migration: "Objective configuration is versioned via objective.config.schema. Future \
+                        objective versions append fields under objective while preserving Gate C \
+                        and predictive-sufficiency reports as separate, reproducible artifacts."
+                .to_owned(),
         },
         regions: CoverReportRegions {
             total: cover.regions.len(),
@@ -1813,5 +2318,27 @@ pub fn build_report(config: &CoverConfig, induced: &InducedCover, data: ReportDa
             node_count: info.node_count,
             edge_count: info.edge_count,
         }),
+    }
+}
+
+#[cfg(test)]
+mod compiler_invariant_tests {
+    use uor_r4_graph_format::invariant_ownership::{
+        GraphInvariantId, GraphInvariantOwnershipMatrix, InvariantOwner,
+    };
+
+    #[test]
+    fn test_compiler_stage4_evidence_non_duplication_invariant() {
+        let matrix = GraphInvariantOwnershipMatrix::get_matrix();
+        let stage4_entry = matrix
+            .iter()
+            .find(|e| e.invariant_id == GraphInvariantId::EvidenceNonDuplication)
+            .expect("EvidenceNonDuplication entry");
+
+        assert_eq!(
+            stage4_entry.primary_owner,
+            InvariantOwner::CompilerConstruction
+        );
+        assert_eq!(stage4_entry.validation_stage, "Compiler Stage 4");
     }
 }

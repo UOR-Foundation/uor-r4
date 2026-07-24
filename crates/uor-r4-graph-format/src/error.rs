@@ -65,6 +65,32 @@ impl fmt::Display for BoundKind {
     }
 }
 
+/// Which packed-edge payload field violated the v0/v1 edge-algebra rules.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EdgePayloadField {
+    /// `flags` (no bits defined in v0/v1).
+    Flags,
+    /// `reserved` (must be zero unless the edge-algebra-v1 contribution-id
+    /// rules apply).
+    Reserved,
+    /// `reserved` contribution id is required but missing.
+    ContributionId,
+    /// Directed acyclic edge carries a non-increasing node order.
+    AcyclicOrder,
+}
+
+impl fmt::Display for EdgePayloadField {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let name = match self {
+            EdgePayloadField::Flags => "flags",
+            EdgePayloadField::Reserved => "reserved",
+            EdgePayloadField::ContributionId => "contribution_id",
+            EdgePayloadField::AcyclicOrder => "acyclic_order",
+        };
+        write!(f, "{name}")
+    }
+}
+
 /// Every fallible operation in this crate returns this error.
 ///
 /// Variants map one-to-one onto the stage-1 structural invariants of
@@ -188,6 +214,41 @@ pub enum FormatError {
         /// Decoded `dst` field.
         dst: u32,
     },
+    /// Edge kind is unknown and in the mandatory kind space.
+    UnknownMandatoryEdgeKind {
+        /// Edge (canonical array) index.
+        edge: u32,
+        /// Unknown kind value.
+        kind: u8,
+    },
+    /// Edge payload violates the kind/profile validation rules.
+    InvalidEdgePayload {
+        /// Edge (canonical array) index.
+        edge: u32,
+        /// Which payload field violated the rule.
+        field: EdgePayloadField,
+    },
+    /// Canonical edge array is not strictly sorted in canonical order.
+    EdgeCanonicalOrderViolation {
+        /// Previous edge index.
+        previous: u32,
+        /// Current edge index.
+        edge: u32,
+    },
+    /// Two evidence-carrying edges share the same contribution id on the same
+    /// `(src, dst)` pair.
+    ContributionIdCollision {
+        /// Earlier edge index.
+        first: u32,
+        /// Later edge index.
+        second: u32,
+        /// Shared source node.
+        src: u32,
+        /// Shared destination node.
+        dst: u32,
+        /// Colliding contribution id (`PackedEdge.reserved`).
+        contribution_id: u16,
+    },
     /// A reverse-index entry is ≥ `edge_count` (RFC §6 item 5).
     ReverseIndexOutOfBounds {
         /// Reverse-index position.
@@ -201,6 +262,30 @@ pub enum FormatError {
     ReverseIndexMissing {
         /// Canonical edge index with no reverse entry.
         edge: u32,
+    },
+    /// A reverse-index entry appears in a node's declared forward range, but
+    /// the referenced canonical edge targets a different node.
+    ReverseRangeTargetMismatch {
+        /// Node whose forward range is being checked.
+        node: u32,
+        /// Reverse-index position.
+        index: u32,
+        /// Canonical edge id read from the reverse index.
+        edge_id: u32,
+        /// Target node (`dst`) of that canonical edge.
+        edge_dst: u32,
+    },
+    /// A canonical edge in a node's declared child range is not a refinement
+    /// edge from that node.
+    ChildRangeEdgeMismatch {
+        /// Node whose child range is being checked.
+        node: u32,
+        /// Canonical edge id in the child range.
+        edge: u32,
+        /// Source node (`src`) of that canonical edge.
+        edge_src: u32,
+        /// Kind of that canonical edge.
+        edge_kind: u8,
     },
     /// A HEAD-declared bound is smaller than the maximum observed in
     /// the sections (RFC §6 item 7: bounds must be honest).
@@ -304,6 +389,8 @@ pub enum FormatError {
         /// Actual length
         actual_len: u64,
     },
+    /// Loader invariant validation failure
+    InvariantViolation(crate::invariant_ownership::InvariantValidationError),
 }
 
 impl fmt::Display for FormatError {
@@ -411,6 +498,28 @@ impl fmt::Display for FormatError {
                 f,
                 "edge {edge}: endpoint (src {src}, dst {dst}) is not below node_count"
             ),
+            FormatError::UnknownMandatoryEdgeKind { edge, kind } => write!(
+                f,
+                "edge {edge}: unknown mandatory edge kind 0x{kind:02x}"
+            ),
+            FormatError::InvalidEdgePayload { edge, field } => write!(
+                f,
+                "edge {edge}: invalid edge payload field {field}"
+            ),
+            FormatError::EdgeCanonicalOrderViolation { previous, edge } => write!(
+                f,
+                "canonical edges out of order at edge {edge} (previous edge {previous})"
+            ),
+            FormatError::ContributionIdCollision {
+                first,
+                second,
+                src,
+                dst,
+                contribution_id,
+            } => write!(
+                f,
+                "edges {first} and {second} collide on contribution_id {contribution_id} for ({src}->{dst})"
+            ),
             FormatError::ReverseIndexOutOfBounds { index, edge_id } => write!(
                 f,
                 "reverse index entry {index} references edge {edge_id}, not below edge_count"
@@ -418,6 +527,24 @@ impl fmt::Display for FormatError {
             FormatError::ReverseIndexMissing { edge } => {
                 write!(f, "canonical edge {edge} has no reverse-index entry")
             }
+            FormatError::ReverseRangeTargetMismatch {
+                node,
+                index,
+                edge_id,
+                edge_dst,
+            } => write!(
+                f,
+                "node {node}: reverse index entry {index} points to edge {edge_id} targeting node {edge_dst}"
+            ),
+            FormatError::ChildRangeEdgeMismatch {
+                node,
+                edge,
+                edge_src,
+                edge_kind,
+            } => write!(
+                f,
+                "node {node}: child-range edge {edge} has src {edge_src} and kind 0x{edge_kind:02x}"
+            ),
             FormatError::DishonestBounds {
                 bound,
                 declared,
@@ -485,6 +612,7 @@ impl fmt::Display for FormatError {
                 f,
                 "RTNX section holds {actual_len} bytes, not a multiple of 12"
             ),
+            FormatError::InvariantViolation(err) => write!(f, "graph invariant violation: {err}"),
         }
     }
 }

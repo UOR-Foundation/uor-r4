@@ -22,9 +22,9 @@
 //! - the stage-2 semantic validator (RFC §6 items 4–9): the fixed
 //!   224-byte HEAD payload ([`Head`]), packed-range resolution for the
 //!   v0 draft-line [`PackedNode`]/[`PackedEdge`] layouts, edge endpoints
-//!   and the reverse-index existence approximation of Theorem 7,
-//!   HEAD-bound honesty, the ROUT v0 bytecode set, and EMIT/EXCT
-//!   [`StorageDescriptor`]s;
+//!   plus child/forward/reverse index consistency, edge-kind/profile
+//!   validation, HEAD-bound honesty, the ROUT v0 bytecode set, and
+//!   EMIT/EXCT [`StorageDescriptor`]s;
 //! - the canonical serializer ([`ArtifactBuilder`], behind `alloc`):
 //!   deterministic bytes for identical inputs (Gate E, RFC §1 rule 7);
 //! - [`GraphView`], a zero-copy borrowed view over caller-owned (or
@@ -77,15 +77,18 @@ mod types;
 mod view;
 
 pub use code::{OP_CLEAR_SLOT, OP_HALT as CODE_OP_HALT, OP_SHIFT_SLOTS, OP_UPDATE_SLOT};
-pub use error::{BoundKind, FormatError, RangeField};
-pub use head::{Head, FALLBACK_POLICY_COUNT, HEAD_PAYLOAD_LEN};
+pub use error::{BoundKind, EdgePayloadField, FormatError, RangeField};
+pub use head::{
+    Head, FALLBACK_POLICY_COUNT, FEATURE_EDGE_ALGEBRA_V1, HEAD_PAYLOAD_LEN,
+    KNOWN_FEATURE_BITS_REQUIRED,
+};
 pub use header::{
     Header, ARTIFACT_CID_OFFSET, ARTIFACT_HASH_START, ENDIANNESS_LITTLE, FORMAT_VERSION_MAJOR,
     FORMAT_VERSION_MINOR, HEADER_LEN, HEAD_CID_OFFSET, MAGIC, SECTION_ENTRY_LEN,
 };
 pub use records::{
-    PackedEdge, PackedNode, StorageDescriptor, PACKED_EDGE_LEN, PACKED_NODE_LEN,
-    STORAGE_DESCRIPTOR_LEN,
+    EdgeKind, PackedEdge, PackedNode, StorageDescriptor, EDGE_KIND_OPTIONAL_BIT, PACKED_EDGE_LEN,
+    PACKED_NODE_LEN, STORAGE_DESCRIPTOR_LEN,
 };
 pub use rout::{OP_HALT, OP_JMP_FWD, OP_LEAF, OP_TEST_POPCOUNT_LE};
 #[cfg(feature = "alloc")]

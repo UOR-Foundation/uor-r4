@@ -233,7 +233,14 @@ cargo run --release -- transformerless cover \
   --out .uor-models/compiled/smollm2-135m-instruct/graph-cover
 ```
 
-This writes `cover.r4g1` and `cover_report.json`. Then compile semantic
+This writes `cover.r4g1` and `cover_report.json`. The cover report now emits a
+versioned objective block (`objective.config.schema`) with separate train and
+held-out components for predictive entropy (`H(A|R)`), future-state entropy
+proxies (`H(S_future|R)`), teacher-loss proxy, runtime/artifact/bytes/structure
+costs, and information-bottleneck proxy terms (`I(Z;X) - βI(Z;Y_future)`),
+plus auditable split decisions. Objective versions migrate by appending new
+fields under `objective` while keeping Gate C and predictive-sufficiency
+reports as separate reproducible artifacts. Then compile semantic
 transitions, fixed-point emission residuals, and exact-evidence carryover:
 
 ```bash
