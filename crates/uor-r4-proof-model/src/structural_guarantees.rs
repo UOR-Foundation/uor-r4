@@ -412,7 +412,6 @@ impl StructuralGuaranteeVerifier {
                     limit: 0,
                 }
             })?;
-
         Ok(ProofVerificationReport {
             obligation_id: obligation_id.to_string(),
             kind: StructuralObligationKind::BoundedResource,
@@ -447,6 +446,24 @@ impl StructuralGuaranteeVerifier {
                 "Scoring semantics v{} verified (signed saturating accumulation, saturation bounds, no-double-counting, tie-breaking)",
                 ScoringSemanticsVerifier::version()
             ),
+        })
+    }
+
+    /// Verify packed CPU inference kernels compliance obligation (#159).
+    ///
+    /// Returns a report with `Unverified` status until executable checking logic is wired in
+    /// (Phase 2).
+    pub fn verify_packed_kernels_compliance(
+        obligation_id: &str,
+    ) -> Result<ProofVerificationReport, ProofValidationError> {
+        Ok(ProofVerificationReport {
+            obligation_id: obligation_id.to_string(),
+            kind: StructuralObligationKind::BoundedResource,
+            status: ProofStatus::Unverified,
+            verified: false,
+            details:
+                "Packed CPU inference kernels scaffolding present (9 kernels, 0-alloc, stack-resident); executable compliance check not yet implemented (#159 Phase 2)"
+                    .to_string(),
         })
     }
 }
