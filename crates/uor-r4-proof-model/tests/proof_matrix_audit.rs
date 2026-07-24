@@ -42,4 +42,12 @@ fn test_ci_audit_proof_matrix_entries() {
     )
     .expect("Reverse Index Consistency audit failed");
     assert!(report_rev.verified);
+
+    let report_ops = StructuralGuaranteeVerifier::audit_proof_matrix_entry(
+        &matrix,
+        "Operation-Set Conformance",
+        ProofStatus::Verified,
+    )
+    .expect("Operation-Set Conformance audit failed");
+    assert!(report_ops.verified);
 }

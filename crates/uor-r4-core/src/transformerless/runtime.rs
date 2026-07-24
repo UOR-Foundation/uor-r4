@@ -599,7 +599,9 @@ impl<'a> Runtime<'a> {
                 };
             }
         }
-        fallback_prediction(store)
+        let fallback = fallback_prediction(store);
+        self.state.record_token(fallback.token);
+        fallback
     }
 
     /// Kernel-counted prediction with resolution witness and semantic context priors.
@@ -640,7 +642,9 @@ impl<'a> Runtime<'a> {
                 };
             }
         }
-        fallback_prediction(store)
+        let fallback = fallback_prediction(store);
+        self.state.record_token(fallback.token);
+        fallback
     }
 
     /// Allocation-free greedy generation into caller-owned storage.

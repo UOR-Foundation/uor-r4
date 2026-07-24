@@ -88,6 +88,17 @@ pub use header::{
     Header, ARTIFACT_CID_OFFSET, ARTIFACT_HASH_START, ENDIANNESS_LITTLE, FORMAT_VERSION_MAJOR,
     FORMAT_VERSION_MINOR, HEADER_LEN, HEAD_CID_OFFSET, MAGIC, SECTION_ENTRY_LEN,
 };
+pub use inference_contract::{
+    owner_for_activity, ActivityOwner, AllowedOperationClass, BoundaryActivity, ContractVersion,
+    ExplicitExclusion, ForbiddenOperationClass, InferenceContractError, ACTIVITY_OWNERS,
+    ALLOWED_OPERATION_CLASSES, BOUNDARY_ACTIVITIES, EXPLICIT_EXCLUSIONS,
+    FORBIDDEN_OPERATION_CLASSES, INFERENCE_OPERATION_CONTRACT_VERSION,
+};
+pub use invariant_ownership::{
+    GraphInvariantId, GraphInvariantOwnershipMatrix, InvariantOwner, InvariantOwnershipEntry,
+    InvariantOwnershipRow, InvariantValidationError, INVARIANT_OWNERSHIP_ROWS, MATRIX_VERSION,
+    OPERATION_SET_CONFORMANCE_ROW,
+};
 pub use records::{
     EdgeKind, PackedEdge, PackedNode, StorageDescriptor, EDGE_KIND_OPTIONAL_BIT, PACKED_EDGE_LEN,
     PACKED_NODE_LEN, STORAGE_DESCRIPTOR_LEN,

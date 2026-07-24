@@ -14,6 +14,7 @@ use uor_r4_graph_compiler::induction::Observation;
 use uor_r4_graph_compiler::quantum_cover::{
     quantum_entropy_gain, DensityOperator, QuantumCoverConfig,
 };
+use uor_r4_graph_format::INFERENCE_OPERATION_CONTRACT_VERSION;
 use uor_r4_wasm_router::cd_space_fold;
 use uor_r4_wasm_router::r4g1::validate_quality_report;
 use uor_r4_wasm_router::server::{
@@ -143,6 +144,9 @@ struct R4g1World {
     belief_in: Option<f32>,
     belief_out: Option<f32>,
     trajectory_error: Option<uor_r4_graph_compiler::semantic_state::SemanticStateError>,
+    contract_doc_text: String,
+    contract_doc_version: Option<String>,
+    contract_module_version: Option<String>,
 }
 
 #[given("the R4G1 runtime returned the browser's repetitive hello response")]
@@ -563,6 +567,34 @@ fn u8_kernel_zero_floats(_w: &mut R4g1World) {
     let kernel_code = &source[kernel_start..];
     assert!(!kernel_code.contains("f32") && !kernel_code.contains("f64"));
     assert!(!kernel_code.contains(" * ") && !kernel_code.contains(" / "));
+}
+
+#[given("the normative inference operation contract document")]
+fn contract_document_loaded(w: &mut R4g1World) {
+    let text = include_str!("../docs/transformerless/INFERENCE_OPERATION_CONTRACT.md");
+    w.contract_doc_text = text.to_string();
+    let version = text
+        .lines()
+        .find_map(|line| {
+            line.strip_prefix("- **Version:** ")
+                .map(|value| value.trim().to_string())
+        })
+        .expect("contract version line");
+    w.contract_doc_version = Some(version);
+}
+
+#[when("the machine-readable inference operation contract version is loaded")]
+fn contract_module_version_loaded(w: &mut R4g1World) {
+    let version = INFERENCE_OPERATION_CONTRACT_VERSION;
+    w.contract_module_version = Some(format!(
+        "{}.{}.{}",
+        version.major, version.minor, version.patch
+    ));
+}
+
+#[then("the document and module contract versions agree")]
+fn contract_versions_agree(w: &mut R4g1World) {
+    assert_eq!(w.contract_doc_version, w.contract_module_version);
 }
 
 // =========================================================================

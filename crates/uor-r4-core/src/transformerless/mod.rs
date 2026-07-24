@@ -39,6 +39,140 @@ pub use uor_r4_graph_runtime::runtime_state::{
 mod witnesses {
     use super::runtime::{derive_popcount_table, hamming, sign_signature, OpKernel};
 
+    fn scan_for_forbidden_arith(src: &str) -> Vec<String> {
+        fn strip_line_comment(line: &str) -> &str {
+            let bytes = line.as_bytes();
+            let mut i = 0usize;
+            let mut in_string = false;
+            let mut in_char = false;
+            let mut escaped = false;
+
+            while i + 1 < bytes.len() {
+                let ch = bytes[i];
+                if escaped {
+                    escaped = false;
+                    i += 1;
+                    continue;
+                }
+                if (in_string || in_char) && ch == b'\\' {
+                    escaped = true;
+                    i += 1;
+                    continue;
+                }
+                if !in_char && ch == b'"' {
+                    in_string = !in_string;
+                    i += 1;
+                    continue;
+                }
+                if !in_string && ch == b'\'' {
+                    in_char = !in_char;
+                    i += 1;
+                    continue;
+                }
+                if !in_string && !in_char && ch == b'/' && bytes[i + 1] == b'/' {
+                    return &line[..i];
+                }
+                i += 1;
+            }
+            line
+        }
+
+        fn prev_ident(code: &str, idx: usize) -> Option<&str> {
+            let bytes = code.as_bytes();
+            if idx == 0 {
+                return None;
+            }
+            let mut j = idx;
+            while j > 0 && bytes[j - 1] == b' ' {
+                j -= 1;
+            }
+            let end = j;
+            while j > 0 && (bytes[j - 1].is_ascii_alphanumeric() || bytes[j - 1] == b'_') {
+                j -= 1;
+            }
+            if j == end {
+                None
+            } else {
+                code.get(j..end)
+            }
+        }
+
+        let mut offenders = Vec::new();
+        for (ln, line) in src.lines().enumerate() {
+            let code = strip_line_comment(line).trim_start();
+            if code.is_empty() {
+                continue;
+            }
+            let b = code.as_bytes();
+            for (i, &ch) in b.iter().enumerate() {
+                if ch != b'*' && ch != b'/' && ch != b'%' {
+                    continue;
+                }
+                if ch == b'/'
+                    && ((i + 1 < b.len() && b[i + 1] == b'/') || (i >= 1 && b[i - 1] == b'/'))
+                {
+                    continue; // comment slashes
+                }
+                let prev = if i >= 2 && b[i - 1] == b' ' {
+                    b[i - 2]
+                } else if i >= 1 {
+                    b[i - 1]
+                } else {
+                    b' '
+                };
+                let next = if i + 2 < b.len() && b[i + 1] == b' ' {
+                    b[i + 2]
+                } else if i + 1 < b.len() {
+                    b[i + 1]
+                } else {
+                    b' '
+                };
+                let operand_l =
+                    |c: u8| c.is_ascii_alphanumeric() || c == b'_' || c == b')' || c == b']';
+                let operand_r = |c: u8| c.is_ascii_alphanumeric() || c == b'_' || c == b'(';
+                if ch == b'*'
+                    && operand_r(next)
+                    && matches!(
+                        prev_ident(code, i),
+                        None | Some("if")
+                            | Some("while")
+                            | Some("for")
+                            | Some("loop")
+                            | Some("match")
+                            | Some("return")
+                            | Some("let")
+                    )
+                {
+                    continue; // pointer deref
+                }
+                if operand_l(prev) && operand_r(next) {
+                    offenders.push(format!("line {}: {}", ln + 1, code));
+                    break;
+                }
+            }
+            for needle in [
+                "wrapping_mul(",
+                "saturating_mul(",
+                "checked_mul(",
+                ".mul(",
+                "wrapping_div(",
+                "saturating_div(",
+                "checked_div(",
+                ".div(",
+                "wrapping_rem(",
+                "saturating_rem(",
+                "checked_rem(",
+                ".rem(",
+            ] {
+                if code.contains(needle) {
+                    offenders.push(format!("line {}: {}", ln + 1, code));
+                    break;
+                }
+            }
+        }
+        offenders
+    }
+
     /// P-1: the popcount table matches its definition on all 256 bytes and
     /// carries the stratum partition sizes C(8,k).
     #[test]
@@ -85,49 +219,51 @@ mod witnesses {
     #[test]
     fn p4_runtime_source_scan() {
         let src = include_str!("runtime.rs");
-        let mut offenders = Vec::new();
-        for (ln, line) in src.lines().enumerate() {
-            let code = line.trim_start();
-            if code.starts_with("//") {
-                continue;
-            }
-            let b = code.as_bytes();
-            for (i, &ch) in b.iter().enumerate() {
-                if ch != b'*' && ch != b'/' && ch != b'%' {
-                    continue;
-                }
-                if ch == b'/'
-                    && ((i + 1 < b.len() && b[i + 1] == b'/') || (i >= 1 && b[i - 1] == b'/'))
-                {
-                    continue; // comment slashes
-                }
-                let prev = if i >= 2 && b[i - 1] == b' ' {
-                    b[i - 2]
-                } else if i >= 1 {
-                    b[i - 1]
-                } else {
-                    b' '
-                };
-                let next = if i + 2 < b.len() && b[i + 1] == b' ' {
-                    b[i + 2]
-                } else if i + 1 < b.len() {
-                    b[i + 1]
-                } else {
-                    b' '
-                };
-                let operand_l =
-                    |c: u8| c.is_ascii_alphanumeric() || c == b'_' || c == b')' || c == b']';
-                let operand_r = |c: u8| c.is_ascii_alphanumeric() || c == b'_' || c == b'(';
-                if operand_l(prev) && operand_r(next) {
-                    offenders.push(format!("line {}: {}", ln + 1, code));
-                    break;
-                }
-            }
-        }
+        let offenders = scan_for_forbidden_arith(src);
         assert!(
             offenders.is_empty(),
             "value arithmetic in runtime.rs:\n{}",
             offenders.join("\n")
+        );
+    }
+
+    /// P-4 extension: all contract-owned graph-runtime modules are scanned
+    /// with the same arithmetic restrictions until machine-code audit (issue
+    /// #160) supersedes source-level witnessing.
+    #[test]
+    fn p4_contract_owned_graph_runtime_source_scan() {
+        let modules = [
+            (
+                "engine.rs",
+                include_str!("../../../uor-r4-graph-runtime/src/engine.rs"),
+            ),
+            (
+                "routing.rs",
+                include_str!("../../../uor-r4-graph-runtime/src/routing.rs"),
+            ),
+            (
+                "runtime_state.rs",
+                include_str!("../../../uor-r4-graph-runtime/src/runtime_state.rs"),
+            ),
+            (
+                "status.rs",
+                include_str!("../../../uor-r4-graph-runtime/src/status.rs"),
+            ),
+            (
+                "cayley_dickson.rs",
+                include_str!("../../../uor-r4-graph-runtime/src/cayley_dickson.rs"),
+            ),
+        ];
+        let mut all = Vec::new();
+        for (name, src) in modules {
+            for offender in scan_for_forbidden_arith(src) {
+                all.push(format!("{name}: {offender}"));
+            }
+        }
+        assert!(
+            all.is_empty(),
+            "value arithmetic in contract modules:\n{}",
+            all.join("\n")
         );
     }
 

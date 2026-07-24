@@ -52,7 +52,8 @@ graph term is normative for new work. See the terminology bridge in the plan (§
 - **Normative kernel** — the only arithmetic the runtime may use: word XOR/AND/OR, shifts,
   rotates, popcount, integer add/sub, compares, declared saturating arithmetic, table reads
   (today: `OpKernel` + census). Scalar safe Rust defines normative semantics; accelerated kernels
-  are replaceable and equivalence-tested.
+  are replaceable and equivalence-tested. The boundary and positive/negative operation lists are
+  normatively frozen in `docs/transformerless/INFERENCE_OPERATION_CONTRACT.md`.
 - **Bounded-work constants** — manifest-declared limits: `A` frontier width, `C` candidate regions
   per active node, `W` signature words per region, `E` emission entries per region, `K` token
   shortlist size, `D` decision-program depth. Per-step work is O(D + A·C·W + A·E·K).

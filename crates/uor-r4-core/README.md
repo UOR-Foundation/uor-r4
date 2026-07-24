@@ -50,6 +50,8 @@ table reads. No multiplication or division exists in the runtime kernel
 The prediction hot path is allocation-free in steady state (asserted by
 `tests/allocation_census.rs`). Compiler and certifier are offline and may use
 floats, matmul, and allocation; the runtime may not.
+The boundary and allowed/forbidden operation classes are normatively versioned
+in `docs/transformerless/INFERENCE_OPERATION_CONTRACT.md`.
 
 ## Testing
 

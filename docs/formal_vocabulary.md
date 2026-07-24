@@ -110,6 +110,7 @@ citing one MUST cite the same status:
 | Forward/reverse index consistency | **Structural** | `theorem7_proof` (Theorem 7) |
 | Score arithmetic safety (no overflow/panic) | **Structural** | Kani-1 harness (`kani_proofs.rs`) |
 | Fixed-capacity container invariants | **Structural** | Kani-2 harness (`kani_proofs.rs`) |
+| Inference operation-set conformance | **Witnessed** (Structural after machine-code audit) | `INFERENCE_OPERATION_CONTRACT.md` + P-4 source scans (`transformerless/mod.rs`) |
 | Termination, bounded frontier width, valid references, canonical serialization, provenance completeness | per proof matrix | R4G1 two-stage validation + proof-model entries; anything lacking a CI artifact is **Unproven** |
 
 ## 5. Term discipline (overloaded words)

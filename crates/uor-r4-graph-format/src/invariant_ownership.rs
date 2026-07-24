@@ -13,6 +13,7 @@
 //! 7. Refinement Acyclicity
 //! 8. Bounded Candidate Work & Declared Fallback Limits
 
+use crate::inference_contract::INFERENCE_OPERATION_CONTRACT_VERSION;
 use core::fmt;
 
 /// Current matrix schema version string.
@@ -126,6 +127,24 @@ pub struct InvariantOwnershipEntry {
     pub evidence_path: &'static str,
     pub proof_status: &'static str,
 }
+
+/// Machine-readable row for the inference operation-set conformance guarantee.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct InvariantOwnershipRow {
+    pub name: &'static str,
+    pub owner: InvariantOwner,
+    pub evidence: &'static str,
+    pub contract_version: (u16, u16, u16),
+}
+
+pub const OPERATION_SET_CONFORMANCE_ROW: InvariantOwnershipRow = InvariantOwnershipRow {
+    name: "Operation-Set Conformance",
+    owner: InvariantOwner::RuntimeKernel,
+    evidence: "P-4 source scan witnesses; disassembly audit target (#160)",
+    contract_version: INFERENCE_OPERATION_CONTRACT_VERSION.as_tuple(),
+};
+
+pub const INVARIANT_OWNERSHIP_ROWS: [InvariantOwnershipRow; 1] = [OPERATION_SET_CONFORMANCE_ROW];
 
 /// Ownership Matrix and Validation Engine.
 pub struct GraphInvariantOwnershipMatrix;
@@ -357,5 +376,17 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    #[test]
+    fn operation_set_conformance_is_owned_by_runtime_kernel() {
+        assert_eq!(
+            OPERATION_SET_CONFORMANCE_ROW.owner,
+            InvariantOwner::RuntimeKernel
+        );
+        assert_eq!(
+            OPERATION_SET_CONFORMANCE_ROW.contract_version,
+            INFERENCE_OPERATION_CONTRACT_VERSION.as_tuple()
+        );
     }
 }
