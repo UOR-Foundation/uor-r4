@@ -43,13 +43,49 @@ fn wrapping_mul_u32(mut lhs: u32, mut rhs: u32) -> u32 {
 }
 
 fn saturating_mul_small(lhs: i32, rhs: i32) -> i32 {
-    match rhs {
-        0 => 0,
-        1 => lhs,
-        2 => lhs.saturating_add(lhs),
-        -1 => lhs.saturating_neg(),
-        -2 => lhs.saturating_add(lhs).saturating_neg(),
-        _ => 0,
+    if lhs == 0 || rhs == 0 {
+        return 0;
+    }
+
+    let negative = (lhs < 0) ^ (rhs < 0);
+    let mut a = if lhs < 0 { -(lhs as i64) } else { lhs as i64 };
+    let mut b = if rhs < 0 { -(rhs as i64) } else { rhs as i64 };
+    let limit = if negative {
+        (i32::MAX as i64).saturating_add(1)
+    } else {
+        i32::MAX as i64
+    };
+    let mut acc = 0i64;
+
+    while b != 0 {
+        if (b & 1) != 0 {
+            acc = acc.saturating_add(a);
+            if acc > limit {
+                return if negative { i32::MIN } else { i32::MAX };
+            }
+        }
+
+        b >>= 1;
+        if b != 0 {
+            a = a.saturating_add(a);
+            if a > limit {
+                a = limit.saturating_add(1);
+            }
+        }
+    }
+
+    if negative {
+        if acc >= limit {
+            i32::MIN
+        } else {
+            -(acc as i32)
+        }
+    } else {
+        if acc > i32::MAX as i64 {
+            i32::MAX
+        } else {
+            acc as i32
+        }
     }
 }
 

@@ -180,8 +180,11 @@ fn check_node_emits(
     exct_remainder: Option<&[u8]>,
 ) -> (bool, ScoreQ) {
     let mut stack = [0u32; 128];
+    let mut visited = [0u32; 128];
     let mut stack_len = 1usize;
+    let mut visited_len = 1usize;
     stack[0] = node_id;
+    visited[0] = node_id;
 
     while stack_len > 0 {
         stack_len -= 1;
@@ -230,9 +233,14 @@ fn check_node_emits(
             for i in (0..count).rev() {
                 if let Some(edge) = base_graph.edge((start + i) as u32) {
                     let dst = edge.dst.0;
-                    if stack_len < stack.len() && !stack[..stack_len].contains(&dst) {
+                    if stack_len < stack.len()
+                        && visited_len < visited.len()
+                        && !visited[..visited_len].contains(&dst)
+                    {
                         stack[stack_len] = dst;
                         stack_len += 1;
+                        visited[visited_len] = dst;
+                        visited_len += 1;
                     }
                 }
             }
@@ -404,8 +412,11 @@ fn collect_target_leaf_nodes<'a>(
     }
 
     let mut stack = [0u32; 256];
+    let mut visited = [0u32; 256];
     let mut stack_len = 1usize;
+    let mut visited_len = 1usize;
     stack[0] = start_id;
+    visited[0] = start_id;
 
     while stack_len > 0 && *out_len < out.len() {
         stack_len -= 1;
@@ -428,9 +439,14 @@ fn collect_target_leaf_nodes<'a>(
             for i in (0..count).rev() {
                 if let Some(edge) = base_graph.edge((start + i) as u32) {
                     let dst = edge.dst.0;
-                    if stack_len < stack.len() && !stack[..stack_len].contains(&dst) {
+                    if stack_len < stack.len()
+                        && visited_len < visited.len()
+                        && !visited[..visited_len].contains(&dst)
+                    {
                         stack[stack_len] = dst;
                         stack_len += 1;
+                        visited[visited_len] = dst;
+                        visited_len += 1;
                     }
                 }
             }
