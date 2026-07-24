@@ -864,6 +864,14 @@ struct ObjectiveRawValues {
     ib_i_zy_future_bits: f64,
 }
 
+#[derive(Debug, Clone, Copy)]
+struct ObjectiveCostTerms {
+    runtime_cost_units: f64,
+    artifact_size_bytes: f64,
+    bytes_read: f64,
+    structural_complexity: f64,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct RegionDecisionAudit {
     pub region_id: u32,
@@ -883,10 +891,7 @@ fn objective_for_partition(
     config: &ObjectiveConfig,
     observations: &[Observation],
     assignments: &[u32],
-    runtime_cost_units: f64,
-    artifact_size_bytes: f64,
-    bytes_read: f64,
-    structural_complexity: f64,
+    costs: ObjectiveCostTerms,
 ) -> ObjectiveComponents {
     let count = observations.len().min(assignments.len());
     if count == 0 {
@@ -896,10 +901,10 @@ fn objective_for_partition(
                 predictive_entropy_bits: 0.0,
                 future_state_entropy_bits: 0.0,
                 teacher_loss_bits: 0.0,
-                runtime_cost_units,
-                artifact_size_bytes,
-                bytes_read,
-                structural_complexity,
+                runtime_cost_units: costs.runtime_cost_units,
+                artifact_size_bytes: costs.artifact_size_bytes,
+                bytes_read: costs.bytes_read,
+                structural_complexity: costs.structural_complexity,
                 ib_i_zx_bits: 0.0,
                 ib_i_zy_future_bits: 0.0,
             },
@@ -920,10 +925,10 @@ fn objective_for_partition(
             predictive_entropy_bits,
             future_state_entropy_bits,
             teacher_loss_bits,
-            runtime_cost_units,
-            artifact_size_bytes,
-            bytes_read,
-            structural_complexity,
+            runtime_cost_units: costs.runtime_cost_units,
+            artifact_size_bytes: costs.artifact_size_bytes,
+            bytes_read: costs.bytes_read,
+            structural_complexity: costs.structural_complexity,
             ib_i_zx_bits,
             ib_i_zy_future_bits,
         },
@@ -935,10 +940,7 @@ fn objective_for_member_partition(
     observations: &[Observation],
     members: &[usize],
     assignments: &[u32],
-    runtime_cost_units: f64,
-    artifact_size_bytes: f64,
-    bytes_read: f64,
-    structural_complexity: f64,
+    costs: ObjectiveCostTerms,
 ) -> ObjectiveComponents {
     let count = members.len().min(assignments.len());
     if count == 0 {
@@ -948,10 +950,10 @@ fn objective_for_member_partition(
                 predictive_entropy_bits: 0.0,
                 future_state_entropy_bits: 0.0,
                 teacher_loss_bits: 0.0,
-                runtime_cost_units,
-                artifact_size_bytes,
-                bytes_read,
-                structural_complexity,
+                runtime_cost_units: costs.runtime_cost_units,
+                artifact_size_bytes: costs.artifact_size_bytes,
+                bytes_read: costs.bytes_read,
+                structural_complexity: costs.structural_complexity,
                 ib_i_zx_bits: 0.0,
                 ib_i_zy_future_bits: 0.0,
             },
@@ -998,10 +1000,10 @@ fn objective_for_member_partition(
             predictive_entropy_bits,
             future_state_entropy_bits,
             teacher_loss_bits,
-            runtime_cost_units,
-            artifact_size_bytes,
-            bytes_read,
-            structural_complexity,
+            runtime_cost_units: costs.runtime_cost_units,
+            artifact_size_bytes: costs.artifact_size_bytes,
+            bytes_read: costs.bytes_read,
+            structural_complexity: costs.structural_complexity,
             ib_i_zx_bits,
             ib_i_zy_future_bits,
         },
@@ -1347,20 +1349,25 @@ pub fn induce_cover(
             observations,
             &parent_members,
             &keep_assignments,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
+            ObjectiveCostTerms {
+                runtime_cost_units: 0.0,
+                artifact_size_bytes: 0.0,
+                bytes_read: 0.0,
+                structural_complexity: 0.0,
+            },
         );
         let split_components = objective_for_member_partition(
             &config.objective,
             observations,
             &parent_members,
             &split_assignments,
-            SPLIT_CHILDREN as f64,
-            (SPLIT_CHILDREN.saturating_sub(1)) as f64 * APPROX_BYTES_PER_ADDED_REGION,
-            SPLIT_CHILDREN as f64 * APPROX_BYTES_READ_PER_REGION,
-            SPLIT_CHILDREN as f64,
+            ObjectiveCostTerms {
+                runtime_cost_units: SPLIT_CHILDREN as f64,
+                artifact_size_bytes: (SPLIT_CHILDREN.saturating_sub(1)) as f64
+                    * APPROX_BYTES_PER_ADDED_REGION,
+                bytes_read: SPLIT_CHILDREN as f64 * APPROX_BYTES_READ_PER_REGION,
+                structural_complexity: SPLIT_CHILDREN as f64,
+            },
         );
         let entropy_allows_split = gain > config.entropy_gain_bits;
         let objective_allows_split = compare_region_decision(&keep_components, &split_components);
@@ -2196,19 +2203,23 @@ pub fn build_report(config: &CoverConfig, induced: &InducedCover, data: ReportDa
         &config.objective,
         train,
         &train_assignments,
-        train_runtime_cost,
-        artifact_size_bytes,
-        train_runtime_cost * APPROX_BYTES_READ_PER_REGION,
-        structural_complexity,
+        ObjectiveCostTerms {
+            runtime_cost_units: train_runtime_cost,
+            artifact_size_bytes,
+            bytes_read: train_runtime_cost * APPROX_BYTES_READ_PER_REGION,
+            structural_complexity,
+        },
     );
     let objective_held_out = objective_for_partition(
         &config.objective,
         held_out,
         &held_out_assignments,
-        held_out_runtime_cost,
-        artifact_size_bytes,
-        held_out_runtime_cost * APPROX_BYTES_READ_PER_REGION,
-        structural_complexity,
+        ObjectiveCostTerms {
+            runtime_cost_units: held_out_runtime_cost,
+            artifact_size_bytes,
+            bytes_read: held_out_runtime_cost * APPROX_BYTES_READ_PER_REGION,
+            structural_complexity,
+        },
     );
     let mut determinism_note = String::new();
     let _ = write!(
