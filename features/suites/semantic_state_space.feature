@@ -1,6 +1,6 @@
 @status:enforced
 Feature: Semantic state space and typed transition dynamics
-  Semantic state space S and typed transition dynamics T: S x A -> S must evaluate preconditions, constraints, belief updates, and trajectory step bounds deterministically.
+  Semantic state space S and typed transition dynamics T: S x A -> S must evaluate preconditions, constraints, belief likelihoods, and trajectory step bounds deterministically.
 
   Scenario: Evaluate valid action transition T(s, a)
     Given an initial semantic state "s0" with vector [0.0, 0.0] and signature [0]

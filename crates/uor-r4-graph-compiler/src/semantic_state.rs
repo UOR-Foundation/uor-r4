@@ -374,6 +374,12 @@ impl TransitionEvaluator {
                 actual: action.delta_vector.len(),
             });
         }
+        if state.boolean_signature.len() != action.mask_flip.len() {
+            return Err(SemanticStateError::DimensionMismatch {
+                expected: state.boolean_signature.len(),
+                actual: action.mask_flip.len(),
+            });
+        }
         let new_vector: Vec<f32> = state
             .vector
             .iter()
