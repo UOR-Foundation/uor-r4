@@ -1,3 +1,4 @@
+pub mod behavioral_probes;
 pub mod graph;
 pub mod induction;
 pub mod lower_semantic_regions;
