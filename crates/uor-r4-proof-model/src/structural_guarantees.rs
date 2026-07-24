@@ -3,12 +3,17 @@
 //! Specification & Source: `docs/hologram_formal_analysis_direction.md` PDF §13;
 //! `docs/formal_vocabulary.md` §7; GitHub Issue #132.
 //!
-//! This module provides executable proof specifications for structural graph properties:
-//! - Determinism & Canonical Serialization
-//! - Bounded Memory, Latency, Frontier Size, and Degree Bounds
-//! - Constraint Preservation ($s_i \notin C$)
-//! - Replay Determinism & Witness Content Integrity
-//! - Evidence Non-Duplication & Safe Arithmetic
+//! This module provides executable proof specifications for structural graph properties
+//! currently implemented here:
+//! - Determinism (repeated-invocation output equality)
+//! - Bounded Memory, Latency, Frontier Size, and Degree Bounds (`verify_resource_bound`)
+//! - Constraint Preservation ($s_i \notin C$) (`verify_constraint_safety`)
+//! - Proof matrix status auditing (`audit_proof_matrix_entry`)
+//!
+//! Canonical serialization, replay determinism/witness content integrity, evidence
+//! non-duplication, and safe-arithmetic obligations are tracked in
+//! `docs/hologram_formal_analysis_direction.md` PDF §13 and `docs/formal_vocabulary.md` §7
+//! but are not yet covered by executable verifiers in this module.
 
 use crate::proof_matrix::{ProofStatus, ProofStatusMatrix};
 use std::fmt;
@@ -20,11 +25,14 @@ pub enum ProofValidationError {
     NondeterministicOutput { obligation_id: String },
     /// Resource usage exceeds declared bound limit.
     ResourceBoundExceeded {
+        obligation_id: String,
         metric: String,
         actual: usize,
         limit: usize,
     },
-    /// State sequence violates forbidden constraint.
+    /// State sequence violates forbidden constraint. `region_id` identifies the
+    /// forbidden region that was entered; in the current flat forbidden-state model
+    /// this coincides with `state_id`, since each forbidden state defines its own region.
     ConstraintSafetyViolated { state_id: String, region_id: String },
     /// Proof matrix status drift detected.
     StatusDrift {
@@ -40,9 +48,14 @@ impl fmt::Display for ProofValidationError {
             Self::NondeterministicOutput { obligation_id } => {
                 write!(f, "Determinism obligation '{obligation_id}' failed: outputs differ")
             }
-            Self::ResourceBoundExceeded { metric, actual, limit } => write!(
+            Self::ResourceBoundExceeded {
+                obligation_id,
+                metric,
+                actual,
+                limit,
+            } => write!(
                 f,
-                "Resource bound exceeded for '{metric}': actual {actual} > limit {limit}"
+                "Resource bound obligation '{obligation_id}' exceeded for '{metric}': actual {actual} > limit {limit}"
             ),
             Self::ConstraintSafetyViolated { state_id, region_id } => write!(
                 f,
@@ -120,6 +133,7 @@ impl StructuralGuaranteeVerifier {
         let obl_id = obligation_id.into();
         if actual_val > limit_val {
             return Err(ProofValidationError::ResourceBoundExceeded {
+                obligation_id: obl_id,
                 metric: metric.to_string(),
                 actual: actual_val,
                 limit: limit_val,
@@ -146,7 +160,7 @@ impl StructuralGuaranteeVerifier {
             if forbidden_states.contains(&s) {
                 return Err(ProofValidationError::ConstraintSafetyViolated {
                     state_id: s.to_string(),
-                    region_id: "forbidden_zone".to_string(),
+                    region_id: s.to_string(),
                 });
             }
         }
