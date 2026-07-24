@@ -213,6 +213,9 @@ impl BoundedGraphPlanner {
         let mut rejected_count = 0;
         let mut nodes_expanded = 0;
         let mut forbidden_states_entered = 0;
+        // Set when any node's expansion is dropped for hitting `max_horizon`; used to
+        // report `HorizonExceeded` rather than a misleading `FrontierExhausted` when the
+        // search would otherwise have continued past the bound.
         let mut horizon_capped = false;
 
         open_set.push(SearchNode {
