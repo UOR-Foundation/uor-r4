@@ -55,6 +55,13 @@ struct R4g1World {
     plan_edges: Vec<uor_r4_graph_compiler::future_state_planner::PlannerEdgeTransition>,
     plan_result: Option<uor_r4_graph_compiler::future_state_planner::PlanTrajectory>,
     plan_error: Option<uor_r4_graph_compiler::future_state_planner::PlannerError>,
+    // Lower Semantic Regions fields (#130)
+    lower_bool_region: Option<uor_r4_graph_compiler::lower_semantic_regions::LoweredBooleanRegion>,
+    lower_witness: Option<uor_r4_graph_compiler::lower_semantic_regions::LoweringWitnessEntry>,
+    lower_q_normal: Option<uor_r4_graph_compiler::lower_semantic_regions::LoweredFixedPointScore>,
+    lower_q_max: Option<uor_r4_graph_compiler::lower_semantic_regions::LoweredFixedPointScore>,
+    lower_q_min: Option<uor_r4_graph_compiler::lower_semantic_regions::LoweredFixedPointScore>,
+    lower_error: Option<uor_r4_graph_compiler::lower_semantic_regions::LoweringError>,
     // Reference Compiler IR fields (#129)
     ref_corpus: Vec<String>,
     ref_ir: Option<uor_r4_graph_compiler::reference_compiler_ir::ReferenceGraphIr>,
@@ -647,6 +654,102 @@ fn bdd_planner_initiate_forbidden_start(w: &mut R4g1World) {
 fn bdd_planner_initial_forbidden_check(w: &mut R4g1World) {
     let err = w.plan_error.as_ref().expect("plan error");
     assert!(matches!(err, PlannerError::InitialStateForbidden { .. }));
+}
+
+// =========================================================================
+// Lower Semantic Regions BDD Steps (#130)
+// =========================================================================
+use uor_r4_graph_compiler::lower_semantic_regions::{
+    BooleanLoweringCompiler, LoweredFixedPointScore, LoweringError,
+};
+
+#[given(
+    "a reference semantic region with signature [true, false, true, true] and Hamming radius 1.0"
+)]
+fn bdd_given_ref_region(_w: &mut R4g1World) {}
+
+#[when("the region is lowered into a LoweredBooleanRegion")]
+fn bdd_lower_region_step(w: &mut R4g1World) {
+    let (region, witness) = BooleanLoweringCompiler::lower_region(
+        "reg_bdd_1",
+        &[true, false, true, true],
+        1.0,
+        "cid_bdd_ref_101",
+        101,
+        0,
+    )
+    .unwrap();
+    w.lower_bool_region = Some(region);
+    w.lower_witness = Some(witness);
+}
+
+#[then("the integer predicate evaluates to true for signatures within Hamming distance 1")]
+fn bdd_integer_predicate_within_distance(w: &mut R4g1World) {
+    let region = w.lower_bool_region.as_ref().expect("region");
+    // Exact 0b1101 = 13 (distance 0)
+    assert!(region.evaluate_runtime_integer(0b1101));
+    // Distance 1 (0b1100)
+    assert!(region.evaluate_runtime_integer(0b1100));
+}
+
+#[then("evaluates to false for signatures outside Hamming distance 1")]
+fn bdd_integer_predicate_outside_distance(w: &mut R4g1World) {
+    let region = w.lower_bool_region.as_ref().expect("region");
+    // Distance 2 (0b0000)
+    assert!(!region.evaluate_runtime_integer(0b0000));
+}
+
+#[then("a LoweringWitnessEntry is recorded")]
+fn bdd_witness_recorded_check(w: &mut R4g1World) {
+    let witness = w.lower_witness.as_ref().expect("witness");
+    assert_eq!(witness.reference_cid, "cid_bdd_ref_101");
+}
+
+#[given("floating-point scores 1.5, 500.0, and -500.0")]
+fn bdd_given_float_scores(_w: &mut R4g1World) {}
+
+#[when("scores are quantized into Q8.8 fixed-point representation")]
+fn bdd_quantize_scores_step(w: &mut R4g1World) {
+    w.lower_q_normal = Some(LoweredFixedPointScore::quantize_q88(1.5).unwrap());
+    w.lower_q_max = Some(LoweredFixedPointScore::quantize_q88(500.0).unwrap());
+    w.lower_q_min = Some(LoweredFixedPointScore::quantize_q88(-500.0).unwrap());
+}
+
+#[then("1.5 quantizes to 384 without saturation")]
+fn bdd_quantize_1_5_check(w: &mut R4g1World) {
+    let q = w.lower_q_normal.as_ref().expect("normal q");
+    assert_eq!(q.q88_value, 384);
+    assert!(!q.saturated);
+}
+
+#[then("extreme scores saturate at i16 MAX and i16 MIN")]
+fn bdd_quantize_extreme_check(w: &mut R4g1World) {
+    let q_max = w.lower_q_max.as_ref().expect("max q");
+    assert_eq!(q_max.q88_value, i16::MAX);
+    assert!(q_max.saturated);
+
+    let q_min = w.lower_q_min.as_ref().expect("min q");
+    assert_eq!(q_min.q88_value, i16::MIN);
+    assert!(q_min.saturated);
+}
+
+#[given("a reference region with a 100-bit signature")]
+fn bdd_given_100bit_sig(_w: &mut R4g1World) {}
+
+#[when("region lowering is attempted")]
+fn bdd_attempt_100bit_lowering(w: &mut R4g1World) {
+    let long_sig = vec![true; 100];
+    if let Err(e) =
+        BooleanLoweringCompiler::lower_region("reg_overflow", &long_sig, 1.0, "cid_err", 101, 0)
+    {
+        w.lower_error = Some(e);
+    }
+}
+
+#[then("lowering fails with an unrepresentable region error")]
+fn bdd_unrepresentable_error_check(w: &mut R4g1World) {
+    let err = w.lower_error.as_ref().expect("lower error");
+    assert!(matches!(err, LoweringError::UnrepresentableRegion { .. }));
 }
 
 // =========================================================================

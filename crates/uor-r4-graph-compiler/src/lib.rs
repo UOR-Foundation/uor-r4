@@ -2,6 +2,7 @@ pub mod behavioral_probes;
 pub mod future_state_planner;
 pub mod graph;
 pub mod induction;
+pub mod lower_semantic_regions;
 pub mod observation;
 pub mod observation_text;
 pub mod pack;
