@@ -253,25 +253,16 @@ impl BehavioralProbeHarness {
         // Anti-memorization guard check: any Sensitive GoalChange/ContextAblation probe
         // whose divergence falls below the sensitivity threshold indicates the model is
         // memorizing surface form without understanding state dynamics.
-        let mut memorization_passed = true;
-        let mut failing_probe_id = None;
-        for probe in probes {
-            if probe.expected_relation == ExpectedRelation::Sensitive
+        if let Some(probe) = probes.iter().find(|probe| {
+            probe.expected_relation == ExpectedRelation::Sensitive
                 && matches!(
                     probe.kind,
                     InterventionKind::GoalChange | InterventionKind::ContextAblation
                 )
                 && probe.output_divergence() < sensitivity_threshold
-            {
-                memorization_passed = false;
-                failing_probe_id = Some(probe.id.clone());
-                break;
-            }
-        }
-
-        if !memorization_passed {
+        }) {
             return Err(BehavioralProbeError::MemorizationDetected {
-                probe_id: failing_probe_id.unwrap_or_else(|| "suite_guard".to_string()),
+                probe_id: probe.id.clone(),
             });
         }
 
@@ -281,7 +272,7 @@ impl BehavioralProbeHarness {
             sensitive_passed: sens_passed,
             invariance_score,
             sensitivity_score,
-            memorization_check_passed: memorization_passed,
+            memorization_check_passed: true,
         })
     }
 }
