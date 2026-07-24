@@ -50,6 +50,10 @@ struct R4g1World {
     u8_a: u8,
     u8_b: u8,
     u8_res: u8,
+    // PDF Traceability Matrix fields (#137)
+    pdf_matrix: Vec<uor_r4_proof_model::pdf_traceability::PdfTraceabilityRow>,
+    pdf_audit_report: Option<uor_r4_proof_model::pdf_traceability::TraceabilityAuditReport>,
+    pdf_audit_error: Option<uor_r4_proof_model::pdf_traceability::TraceabilityValidationError>,
 }
 
 #[given("the R4G1 runtime returned the browser's repetitive hello response")]
@@ -470,6 +474,64 @@ fn u8_kernel_zero_floats(_w: &mut R4g1World) {
     let kernel_code = &source[kernel_start..];
     assert!(!kernel_code.contains("f32") && !kernel_code.contains("f64"));
     assert!(!kernel_code.contains(" * ") && !kernel_code.contains(" / "));
+}
+
+// =========================================================================
+// PDF Traceability Matrix BDD Steps (#137)
+// =========================================================================
+use uor_r4_proof_model::pdf_traceability::{
+    PdfTraceabilityRow, PdfTraceabilityVerifier, TraceabilityValidationError,
+};
+use uor_r4_proof_model::proof_matrix::ProofStatus;
+
+#[given("the living PDF traceability matrix")]
+fn bdd_pdf_matrix_given(w: &mut R4g1World) {
+    w.pdf_matrix = PdfTraceabilityVerifier::get_matrix().to_vec();
+}
+
+#[when("audited by the PDF traceability verifier")]
+fn bdd_pdf_audit_matrix(w: &mut R4g1World) {
+    let res = PdfTraceabilityVerifier::audit_traceability_matrix(&w.pdf_matrix);
+    match res {
+        Ok(rep) => w.pdf_audit_report = Some(rep),
+        Err(err) => w.pdf_audit_error = Some(err),
+    }
+}
+
+#[then("all 15 sections are mapped to valid code locations and evidence artifacts")]
+fn bdd_pdf_sections_check(w: &mut R4g1World) {
+    let rep = w.pdf_audit_report.as_ref().expect("pdf audit report");
+    assert_eq!(rep.total_sections_verified, 15);
+    assert_eq!(rep.verified_rows_with_evidence, 15);
+}
+
+#[then("the audit report certification status is verified")]
+fn bdd_pdf_cert_check(w: &mut R4g1World) {
+    let rep = w.pdf_audit_report.as_ref().expect("pdf audit report");
+    assert!(rep.is_certified);
+}
+
+#[given("a traceability row with invalid claim class \"HypotheticalSpec\"")]
+fn bdd_pdf_invalid_claim_given(w: &mut R4g1World) {
+    w.pdf_matrix = vec![PdfTraceabilityRow {
+        pdf_section: "§1",
+        concept_name: "Test",
+        issue_id: "#199",
+        code_location: "dummy",
+        evidence_artifact: "dummy",
+        claim_class: "HypotheticalSpec",
+        status: ProofStatus::Verified,
+        owner: "Casey Allard",
+    }];
+}
+
+#[then("validation fails with an invalid claim class error")]
+fn bdd_pdf_invalid_claim_error_check(w: &mut R4g1World) {
+    let err = w.pdf_audit_error.as_ref().expect("pdf audit error");
+    assert!(matches!(
+        err,
+        TraceabilityValidationError::InvalidClaimClass { .. }
+    ));
 }
 
 #[tokio::main]
