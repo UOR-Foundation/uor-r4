@@ -2,7 +2,7 @@
 Feature: Packed zero-allocation CPU inference kernels over immutable graph arrays
   Inference step calculation over immutable R4G1 GraphView artifacts must use zero-allocation, bounded, stack-resident packed kernels.
 
-  Scenario: Execute ROUT bytecode program and active frontier expansion
+  Scenario: Bounded active-frontier expansion and eviction
     Given a zeroed packed active frontier of capacity 4
     When node 1 with score 100 and node 2 with score 200 are advanced into the frontier
     Then the active frontier count is 2 and contains both nodes

@@ -1,7 +1,7 @@
 //! Packed No-Alloc CPU Inference Kernels over Immutable Graph Arrays
 //!
-//! Specification & Source: `docs/hologram_formal_analysis_direction.md` PDF §§1, 9, 13;
-//! `docs/inference_contract.md`; `docs/scoring_semantics.md`; GitHub Issue #159.
+//! Specification & Source: `docs/hologram_formal_analysis_direction.md` §§1, 9, 13;
+//! `crates/uor-r4-graph-format/src/inference_contract.rs`; GitHub Issue #159.
 //!
 //! This module provides a complete suite of `#![no_std]`, zero-allocation, multiplication-free
 //! CPU inference kernels operating over immutable R4G1 `GraphView` containers:
@@ -89,6 +89,11 @@ impl<const TOP_K: usize> StepOutput<TOP_K> {
 }
 
 /// Kernel 1: Evaluate ROUT bytecode program over borrowed `GraphView`.
+///
+/// # TODO
+/// Stub — ROUT bytecode interpretation over the graph's routing section is not yet
+/// implemented (tracked by Issue #159 Phase 2).  Currently validates `max_steps` and
+/// returns 0 as the route-target placeholder.
 pub fn evaluate_routing_program(
     _view: &GraphView<'_>,
     _start_pc: usize,
@@ -97,7 +102,7 @@ pub fn evaluate_routing_program(
     if max_steps == 0 {
         return Err(RuntimeError::InvalidNode);
     }
-    // Return base route node target
+    // TODO(#159-phase2): walk view.routing_section() / ROUT opcodes up to max_steps.
     Ok(0)
 }
 
@@ -139,6 +144,9 @@ pub fn advance_frontier<const N: usize>(
 }
 
 /// Kernel 3: Candidate shortlist accumulator.
+///
+/// `view` is reserved for future graph-guided deduplication (Issue #159 Phase 2);
+/// pass `None` until that logic is wired in.
 pub fn accumulate_candidate_shortlist<const C: usize>(
     _view: Option<&GraphView<'_>>,
     shortlist: &mut PackedShortlist<C>,
@@ -156,12 +164,17 @@ pub fn accumulate_candidate_shortlist<const C: usize>(
 }
 
 /// Kernel 4: Typed semantic transition evaluator.
+///
+/// # TODO
+/// Stub — graph-edge traversal using the `action_mask` is not yet implemented
+/// (tracked by Issue #159 Phase 2).  Currently returns `src_node + 1` as a
+/// placeholder successor.
 pub fn evaluate_typed_transition(
     _view: &GraphView<'_>,
     src_node: u32,
     _action_mask: u64,
 ) -> Result<u32, RuntimeError> {
-    // Returns target node ID
+    // TODO(#159-phase2): look up outgoing edges from src_node filtered by action_mask.
     Ok(src_node.saturating_add(1))
 }
 
@@ -188,6 +201,10 @@ pub fn resolve_goal_satisfaction(
 }
 
 /// Kernel 7: Canonical top-K candidate decoder with tie-breaking (ScoreQ descending, ID ascending).
+///
+/// **Side effect**: sorts the `candidates` slice in place to establish canonical order before
+/// copying the leading K entries into `output`.  Callers that need the original ordering should
+/// pass a copy of their buffer.
 pub fn decode_canonical_topk<const K: usize>(
     candidates: &mut [(u32, ScoreQ)],
     output: &mut StepOutput<K>,
@@ -239,6 +256,11 @@ pub fn evaluate_no_alloc_predict_step<const N: usize, const C: usize, const K: u
 
     decode_canonical_topk(&mut candidate_buf[..candidate_count], output);
 
+    // decode_canonical_topk sets output.count = candidates.len().min(K), so
+    // output.count == 0 whenever candidate_count == 0 or K == 0.
+    if output.count == 0 {
+        return Ok(0);
+    }
     Ok(output.predictions[0].0)
 }
 

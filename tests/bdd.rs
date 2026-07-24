@@ -1990,7 +1990,9 @@ fn bdd_packed_check_shortlist(w: &mut R4g1World) {
 }
 
 #[given("a candidate set with duplicate scores and distinct IDs")]
-fn bdd_packed_candidates_init(_w: &mut R4g1World) {}
+fn bdd_packed_candidates_init(_w: &mut R4g1World) {
+    // Candidates are constructed inline in the `when` step below.
+}
 
 #[when("decoded by the packed top-K kernel")]
 fn bdd_packed_decode_topk(w: &mut R4g1World) {

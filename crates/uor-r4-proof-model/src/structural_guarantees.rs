@@ -458,16 +458,19 @@ impl StructuralGuaranteeVerifier {
     }
 
     /// Verify packed CPU inference kernels compliance obligation (#159).
+    ///
+    /// Returns a report with `Unverified` status until executable checking logic is wired in
+    /// (Phase 2).
     pub fn verify_packed_kernels_compliance(
         obligation_id: &str,
     ) -> Result<ProofVerificationReport, ProofValidationError> {
         Ok(ProofVerificationReport {
             obligation_id: obligation_id.to_string(),
             kind: StructuralObligationKind::BoundedResource,
-            status: ProofStatus::Verified,
-            verified: true,
+            status: ProofStatus::Unverified,
+            verified: false,
             details:
-                "Packed CPU inference kernels v1.0.0 verified (9 kernels, 0-alloc, stack-resident)"
+                "Packed CPU inference kernels scaffolding present (9 kernels, 0-alloc, stack-resident); executable compliance check not yet implemented (#159 Phase 2)"
                     .to_string(),
         })
     }
