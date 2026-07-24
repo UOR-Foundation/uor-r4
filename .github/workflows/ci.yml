@@ -53,6 +53,9 @@ jobs:
           key: cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
           restore-keys: cargo-${{ runner.os }}-
 
+      - name: Claim-wording gate (docs/formal_vocabulary.md §2.1, issue #123)
+        run: python3 scripts/check_claim_wording.py
+
       - name: cargo fmt --check
         run: cargo fmt --check
 

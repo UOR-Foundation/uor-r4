@@ -58,6 +58,11 @@ audit, and nightly fuzz smoke — keep it green.
 - **Errors**: library boundaries return `Result` with focused error enums;
   no `unwrap`/`expect`/panic on recoverable paths. No unsafe in the portable
   runtime or the format crate (`#![forbid(unsafe_code)]` there).
+- **Claim language**: `docs/formal_vocabulary.md` (v0.1.0+) is normative —
+  equations are labeled Definition/Objective/Guarantee/Assumption/Empirical
+  Criterion, guarantees carry a proof-matrix status, and
+  `python3 scripts/check_claim_wording.py` (CI-enforced) blocks
+  "machine-verified"/exact-equivalence wording without a linked proof artifact.
 
 ## κ-reproduction (Gate E) — how to run and re-pin
 

@@ -271,6 +271,10 @@ Objective: freeze terminology, pin the baseline the graph must beat, stand up me
 - Write `docs/transformerless/GLOSSARY.md`: teacher, observation, region, membership, graph,
   runtime, certificate, novelty, fallback — aligned with PDF §5/§9 and existing doc vocabulary
   (signature, graded code, backoff, κ). **Done.**
+- Claim language and mathematical notation are governed by `docs/formal_vocabulary.md`
+  (issue #123): every equation is labeled Definition / Objective / Guarantee / Assumption /
+  Empirical Criterion, guarantees carry a proof-matrix status, and
+  `scripts/check_claim_wording.py` enforces the wording rule in CI. **Done (v0.1.0).**
 - Baseline report `docs/transformerless/BASELINE.md`: current certified numbers (top-1 28.9%,
   agreement 31.7%, 6.54 bits/token, 89,200 keys — PROOF.md P2, legacy path), op census per token
   (144,498 avg ops/token fresh on the SmolLM2 path via `tests/allocation_census.rs`; ~1.8×10⁵
