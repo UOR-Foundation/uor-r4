@@ -12,7 +12,7 @@ This specification defines the normative fixed-point scoring semantics for the p
 
 ### Core Scoring Invariants
 - **Fully Quantized Residual Emits Only:** All scores entering the runtime are pre-quantized residuals emitted by the compiler.
-- **Integer Operations Only:** Runtime score calculation consists strictly of integer `add`, `subtract`, and `compare` operations (`+`, `-`, `<`, `>`, `==`). No floating-point operations, no multiplication, no division, no runtime rescaling, no runtime cosine or dot-product similarity, and no softmax are executed on the deployed hot path.
+- **Integer Operations Only:** Runtime score calculation consists strictly of integer saturating accumulation and compare operations over pre-signed residuals. No floating-point operations, no multiplication, no division, no runtime rescaling, no runtime cosine or dot-product similarity, and no softmax are executed on the deployed hot path.
 - **Fixed-Capacity & Zero-Allocation:** All scoring operations are `no_std`, `alloc`-free, and operate over fixed-capacity stack/inline storage.
 
 ---
@@ -54,9 +54,9 @@ When evaluating overlapping memberships across multiresolution semantic regions:
 ## 5. Deterministic Accumulation Order & Saturation
 
 Scores are accumulated in the strict canonical order:
-$$\text{ScoreQ}_{\text{final}} = \text{RootPrior} \oplus \text{ChildCorrection} \oplus \text{InteractionResidual} \oplus \text{GoalReward} \ominus \text{ConstraintPenalty} \ominus \text{UncertaintyPenalty} \oplus \text{TokenEmission}$$
+$$\text{ScoreQ}_{\text{final}} = \text{RootPrior} \oplus \text{ChildCorrection} \oplus \text{InteractionResidual} \oplus \text{GoalReward} \oplus \text{ConstraintPenalty} \oplus \text{UncertaintyPenalty} \oplus \text{TokenEmission}$$
 
-Where $\oplus$ and $\ominus$ denote **saturating integer addition and subtraction** (`i32::saturating_add`, `i32::saturating_sub`). Overflow and underflow clamp to `i32::MAX` and `i32::MIN` respectively without panicking.
+Every emitted residual is already signed in canonical `ScoreQ`; `ConstraintPenalty` and `UncertaintyPenalty` **MUST** therefore be emitted as non-positive values. The deployed runtime applies every contribution with **saturating integer addition** (`i32::saturating_add`), and overflow/underflow clamp to `i32::MAX` and `i32::MIN` respectively without panicking.
 
 ---
 

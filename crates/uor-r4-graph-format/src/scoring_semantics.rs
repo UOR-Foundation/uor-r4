@@ -68,6 +68,8 @@ pub enum ScoringError {
     EvidenceCapacityExceeded,
     /// Invalid storage descriptor shift or zero point.
     InvalidStorageDescriptor,
+    /// Audit-only invariant failure within the machine-readable verifier.
+    AuditInvariantFailed(&'static str),
 }
 
 impl fmt::Display for ScoringError {
@@ -81,6 +83,9 @@ impl fmt::Display for ScoringError {
                     f,
                     "Invalid storage descriptor shift or zero point parameters"
                 )
+            }
+            Self::AuditInvariantFailed(detail) => {
+                write!(f, "Scoring semantics audit invariant failed: {detail}")
             }
         }
     }
@@ -146,14 +151,8 @@ impl<const MAX_EVIDENCE: usize> ScoreAccumulator<MAX_EVIDENCE> {
             return Err(ScoringError::EvidenceCapacityExceeded);
         }
 
-        // Apply saturating addition or subtraction based on contribution kind
-        self.current_score = match contribution.kind {
-            ResidualContributionKind::ConstraintPenalty
-            | ResidualContributionKind::UncertaintyPenalty => {
-                self.current_score.saturating_sub(contribution.raw_value)
-            }
-            _ => self.current_score.saturating_add(contribution.raw_value),
-        };
+        // Apply every pre-quantized residual as an already-signed ScoreQ contribution.
+        self.current_score = self.current_score.saturating_add(contribution.raw_value);
 
         self.tracked_evidence[self.evidence_count] = contribution.contribution_id;
         self.evidence_count += 1;
@@ -188,6 +187,21 @@ impl ScoringSemanticsVerifier {
             contribution_id: 1,
             raw_value: 100,
         })?;
+        acc.accumulate(&ResidualContribution {
+            kind: ResidualContributionKind::ConstraintPenalty,
+            contribution_id: 2,
+            raw_value: -25,
+        })?;
+        acc.accumulate(&ResidualContribution {
+            kind: ResidualContributionKind::UncertaintyPenalty,
+            contribution_id: 3,
+            raw_value: -10,
+        })?;
+        if acc.score() != 65 {
+            return Err(ScoringError::AuditInvariantFailed(
+                "signed penalty residuals must lower the accumulated score",
+            ));
+        }
 
         // Test overlap residualization (duplicate ignored)
         let added = acc.accumulate(&ResidualContribution {
@@ -196,13 +210,51 @@ impl ScoringSemanticsVerifier {
             raw_value: 100,
         })?;
         if added {
-            return Err(ScoringError::InvalidStorageDescriptor);
+            return Err(ScoringError::AuditInvariantFailed(
+                "duplicate contribution ID was not ignored as required",
+            ));
+        }
+
+        let mut saturating_high = ScoreAccumulator::<4>::new();
+        saturating_high.accumulate(&ResidualContribution {
+            kind: ResidualContributionKind::GoalReward,
+            contribution_id: 11,
+            raw_value: i32::MAX - 5,
+        })?;
+        saturating_high.accumulate(&ResidualContribution {
+            kind: ResidualContributionKind::TokenEmission,
+            contribution_id: 12,
+            raw_value: 10,
+        })?;
+        if saturating_high.score() != i32::MAX {
+            return Err(ScoringError::AuditInvariantFailed(
+                "positive overflow must clamp to i32::MAX",
+            ));
+        }
+
+        let mut saturating_low = ScoreAccumulator::<4>::new();
+        saturating_low.accumulate(&ResidualContribution {
+            kind: ResidualContributionKind::InteractionResidual,
+            contribution_id: 21,
+            raw_value: i32::MIN + 5,
+        })?;
+        saturating_low.accumulate(&ResidualContribution {
+            kind: ResidualContributionKind::ConstraintPenalty,
+            contribution_id: 22,
+            raw_value: -10,
+        })?;
+        if saturating_low.score() != i32::MIN {
+            return Err(ScoringError::AuditInvariantFailed(
+                "negative overflow must clamp to i32::MIN",
+            ));
         }
 
         // Test deterministic tie-breaking (equal scores => lower ID wins)
         let ord = ScoreAccumulator::<16>::compare_candidates(500, 10, 500, 20);
         if ord != Ordering::Less {
-            return Err(ScoringError::InvalidStorageDescriptor);
+            return Err(ScoringError::AuditInvariantFailed(
+                "equal scores did not prefer the lower candidate ID",
+            ));
         }
 
         Ok(())
@@ -249,6 +301,51 @@ mod tests {
         assert!(!acc.accumulate(&item).unwrap());
         assert_eq!(acc.score(), 250);
         assert_eq!(acc.evidence_count(), 1);
+    }
+
+    #[test]
+    fn test_signed_penalty_residuals_reduce_score() {
+        let mut acc = ScoreAccumulator::<8>::new();
+        acc.accumulate(&ResidualContribution {
+            kind: ResidualContributionKind::GoalReward,
+            contribution_id: 1,
+            raw_value: 120,
+        })
+        .unwrap();
+        acc.accumulate(&ResidualContribution {
+            kind: ResidualContributionKind::ConstraintPenalty,
+            contribution_id: 2,
+            raw_value: -20,
+        })
+        .unwrap();
+        acc.accumulate(&ResidualContribution {
+            kind: ResidualContributionKind::UncertaintyPenalty,
+            contribution_id: 3,
+            raw_value: -15,
+        })
+        .unwrap();
+
+        assert_eq!(acc.score(), 85);
+    }
+
+    #[test]
+    fn test_score_accumulator_saturating_low_arithmetic() {
+        let mut acc = ScoreAccumulator::<8>::new();
+        acc.accumulate(&ResidualContribution {
+            kind: ResidualContributionKind::RootPrior,
+            contribution_id: 100,
+            raw_value: i32::MIN + 10,
+        })
+        .unwrap();
+
+        acc.accumulate(&ResidualContribution {
+            kind: ResidualContributionKind::ConstraintPenalty,
+            contribution_id: 101,
+            raw_value: -50,
+        })
+        .unwrap();
+
+        assert_eq!(acc.score(), i32::MIN); // Saturation clamp
     }
 
     #[test]
