@@ -85,7 +85,9 @@ pub fn accumulate_reference(
             .iter()
             .any(|prior| prior.evidence_id == contribution.evidence_id)
         {
-            return Err(AccumulatorError::DuplicateEvidenceId(contribution.evidence_id));
+            return Err(AccumulatorError::DuplicateEvidenceId(
+                contribution.evidence_id,
+            ));
         }
         total = total.saturating_add(contribution.value);
     }
