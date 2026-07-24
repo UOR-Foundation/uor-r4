@@ -26,7 +26,7 @@ Typed contribution kinds are:
 4. constraint penalties
 5. uncertainty penalties
 
-`/home/runner/work/uor-r4/uor-r4/crates/uor-r4-graph-runtime/src/scoring.rs` is the canonical no_std type surface for this taxonomy.
+`crates/uor-r4-graph-runtime/src/scoring.rs` is the canonical no_std type surface for this taxonomy.
 
 ### G2 — Canonical accumulation order and saturation
 
@@ -63,4 +63,3 @@ Each evidence contribution must be represented by exactly one canonical `evidenc
 ## Empirical criterion
 
 Quantization error is measured at compile time and recorded in score reports by residual kind. Runtime scoring never computes quantization error.
-

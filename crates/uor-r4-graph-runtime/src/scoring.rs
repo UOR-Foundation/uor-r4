@@ -80,14 +80,13 @@ pub fn accumulate_reference(
     contributions: &[TypedContribution],
 ) -> Result<ScoreQ, AccumulatorError> {
     let mut total = base;
-    let mut last = None;
-    for contribution in contributions {
-        if Some(contribution.evidence_id) == last {
-            return Err(AccumulatorError::DuplicateEvidenceId(
-                contribution.evidence_id,
-            ));
+    for (index, contribution) in contributions.iter().enumerate() {
+        if contributions[..index]
+            .iter()
+            .any(|prior| prior.evidence_id == contribution.evidence_id)
+        {
+            return Err(AccumulatorError::DuplicateEvidenceId(contribution.evidence_id));
         }
-        last = Some(contribution.evidence_id);
         total = total.saturating_add(contribution.value);
     }
     Ok(total)
@@ -174,6 +173,30 @@ mod tests {
                 value: ScoreQ::from_raw(5),
             },
         ];
+        let err = accumulate_reference(ScoreQ::ZERO, &contributions).expect_err("duplicate");
+        assert_eq!(err, AccumulatorError::DuplicateEvidenceId(3));
+    }
+
+    #[test]
+    fn non_adjacent_duplicate_evidence_is_rejected_after_canonical_sort() {
+        let mut contributions = [
+            TypedContribution {
+                evidence_id: 3,
+                kind: ResidualKind::Uncertainty,
+                value: ScoreQ::from_raw(4),
+            },
+            TypedContribution {
+                evidence_id: 2,
+                kind: ResidualKind::Emission,
+                value: ScoreQ::from_raw(2),
+            },
+            TypedContribution {
+                evidence_id: 3,
+                kind: ResidualKind::Transition,
+                value: ScoreQ::from_raw(5),
+            },
+        ];
+        sort_contributions_canonical(&mut contributions);
         let err = accumulate_reference(ScoreQ::ZERO, &contributions).expect_err("duplicate");
         assert_eq!(err, AccumulatorError::DuplicateEvidenceId(3));
     }
