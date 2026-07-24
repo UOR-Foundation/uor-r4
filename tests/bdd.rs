@@ -55,6 +55,12 @@ struct R4g1World {
     plan_edges: Vec<uor_r4_graph_compiler::future_state_planner::PlannerEdgeTransition>,
     plan_result: Option<uor_r4_graph_compiler::future_state_planner::PlanTrajectory>,
     plan_error: Option<uor_r4_graph_compiler::future_state_planner::PlannerError>,
+    // Reference Compiler IR fields (#129)
+    ref_corpus: Vec<String>,
+    ref_ir: Option<uor_r4_graph_compiler::reference_compiler_ir::ReferenceGraphIr>,
+    ref_transition_state:
+        Option<uor_r4_graph_compiler::reference_compiler_ir::ReferenceSemanticState>,
+    ref_diff_delta: Option<f32>,
     // Behavioral Probe fields (#128)
     probe_baseline_obs: String,
     probe_suite_report: Option<uor_r4_graph_compiler::behavioral_probes::BehavioralProbeReport>,
@@ -644,6 +650,89 @@ fn bdd_planner_initial_forbidden_check(w: &mut R4g1World) {
 }
 
 // =========================================================================
+// Reference Compiler IR BDD Steps (#129)
+// =========================================================================
+use uor_r4_graph_compiler::reference_compiler_ir::{
+    DifferentialCompilerHarness, ReferenceCompilerConfig, ReferenceCompilerPipeline,
+};
+
+#[given("a pinned mini-corpus of 2 text observations")]
+fn bdd_pinned_mini_corpus(w: &mut R4g1World) {
+    w.ref_corpus = vec![
+        "First sentence observation".to_string(),
+        "Second sentence observation".to_string(),
+    ];
+}
+
+#[when("the reference compiler pipeline executes all 5 stages")]
+fn bdd_execute_compiler_pipeline(w: &mut R4g1World) {
+    let config = ReferenceCompilerConfig::default_v1();
+    let corpus_refs: Vec<&str> = w.ref_corpus.iter().map(|s| s.as_str()).collect();
+    let ir = ReferenceCompilerPipeline::compile(&corpus_refs, &config).unwrap();
+    w.ref_ir = Some(ir);
+}
+
+#[then("a valid ReferenceGraphIr is produced with content CID")]
+fn bdd_ir_produced_check(w: &mut R4g1World) {
+    let ir = w.ref_ir.as_ref().expect("ref ir");
+    assert!(ir.provenance.content_cid.starts_with("blake3:"));
+}
+
+#[then("the IR contains observations, states, regions, and objective reports")]
+fn bdd_ir_contents_check(w: &mut R4g1World) {
+    let ir = w.ref_ir.as_ref().expect("ref ir");
+    assert_eq!(ir.observations.len(), 2);
+    assert_eq!(ir.states.len(), 2);
+    assert_eq!(ir.regions.len(), 1);
+}
+
+#[given("a compiled ReferenceGraphIr containing states \"state_0\" and \"state_1\"")]
+fn bdd_compiled_ref_ir_given(w: &mut R4g1World) {
+    let config = ReferenceCompilerConfig::default_v1();
+    let corpus = vec!["First sentence observation", "Second sentence observation"];
+    w.ref_ir = Some(ReferenceCompilerPipeline::compile(&corpus, &config).unwrap());
+}
+
+#[when("a state transition query is executed for \"state_0\" under action \"next\"")]
+fn bdd_query_state_transition(w: &mut R4g1World) {
+    let ir = w.ref_ir.as_ref().expect("ir");
+    w.ref_transition_state = ir.transition("state_0", "next").cloned();
+}
+
+#[then("the transition returns state \"state_1\"")]
+fn bdd_transition_returns_state_1(w: &mut R4g1World) {
+    let st = w.ref_transition_state.as_ref().expect("state");
+    assert_eq!(st.id, "state_1");
+}
+
+#[then("the emission prediction for \"state_0\" returns token probabilities")]
+fn bdd_emission_prediction_check(w: &mut R4g1World) {
+    let ir = w.ref_ir.as_ref().expect("ir");
+    let em = ir.predict_emission("state_0").expect("emission");
+    assert_eq!(*em.get(&42).unwrap(), 0.8);
+}
+
+#[given("a compiled ReferenceGraphIr with teacher loss 0.25")]
+fn bdd_ref_ir_loss_given(w: &mut R4g1World) {
+    let config = ReferenceCompilerConfig::default_v1();
+    let corpus = vec!["First sentence observation"];
+    w.ref_ir = Some(ReferenceCompilerPipeline::compile(&corpus, &config).unwrap());
+}
+
+#[when("compared against baseline teacher loss 0.26 with tolerance 0.05")]
+fn bdd_run_differential_comparison(w: &mut R4g1World) {
+    let ir = w.ref_ir.as_ref().expect("ir");
+    let delta = DifferentialCompilerHarness::compare(ir, 0.26, 0.05).unwrap();
+    w.ref_diff_delta = Some(delta);
+}
+
+#[then("the differential comparison passes cleanly")]
+fn bdd_diff_comparison_passes(w: &mut R4g1World) {
+    let delta = w.ref_diff_delta.expect("delta");
+    assert!(delta < 0.05);
+}
+
+// =========================================================================
 // Behavioral Probes BDD Steps (#128)
 // =========================================================================
 use uor_r4_graph_compiler::behavioral_probes::{
@@ -748,6 +837,7 @@ fn bdd_span_out_of_bounds_check(w: &mut R4g1World) {
     assert!(matches!(err, BehavioralProbeError::SpanOutOfBounds { .. }));
 }
 
+// =========================================================================
 // Semantic State Space BDD Steps (#124)
 // =========================================================================
 use uor_r4_graph_compiler::semantic_state::{
