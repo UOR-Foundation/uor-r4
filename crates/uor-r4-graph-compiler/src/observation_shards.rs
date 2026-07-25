@@ -32,7 +32,9 @@ impl ObservationShard {
     pub fn new(items: Vec<String>) -> Self {
         let mut combined = Vec::new();
         for item in &items {
-            combined.extend_from_slice(item.as_bytes());
+            let bytes = item.as_bytes();
+            combined.extend_from_slice(&(bytes.len() as u64).to_le_bytes());
+            combined.extend_from_slice(bytes);
         }
         let shard_id = fnv1a_64(&combined);
         let mut content_hash = [0u8; 32];
@@ -133,5 +135,13 @@ mod tests {
         let reduced = ParallelShardEngine::ordered_shard_reduce(par_results);
         assert_eq!(reduced.len(), 10);
         assert!(reduced.iter().all(|&len| len == 10));
+    }
+
+    #[test]
+    fn test_shard_content_addressing_distinguishes_item_boundaries() {
+        let shard1 = ObservationShard::new(vec!["ab".to_string(), "c".to_string()]);
+        let shard2 = ObservationShard::new(vec!["a".to_string(), "bc".to_string()]);
+        assert_ne!(shard1.shard_id, shard2.shard_id);
+        assert_ne!(shard1.content_hash, shard2.content_hash);
     }
 }
