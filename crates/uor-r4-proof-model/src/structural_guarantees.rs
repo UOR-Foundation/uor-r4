@@ -745,45 +745,38 @@ impl StructuralGuaranteeVerifier {
             status: ProofStatus::Verified,
             verified: true,
             details:
-                "Compiler Memory Budget v0.1.0 verified (concurrency-aware derivation, typed error rejection below minimum, and bounded in-flight backpressure capping)."
+                "Compiler Scaling Certificate v0.1.0 verified (empirical speedup/efficiency math, 5-way bottleneck classification, and CPU-only certification)."
                     .to_string(),
         })
     }
 
-    /// Verify compiler scaling certificate compliance obligation (#175).
+    /// Verify parallel observation shards compliance obligation (#170).
     ///
-    /// Confirms metric calculations, 5-way bottleneck classification, and report certification.
-    #[cfg(not(target_arch = "wasm32"))]
-    pub fn verify_compiler_scaling_certificate_compliance(
+    /// Confirms content-addressed shard partitioning, Rayon-parallel shard processing,
+    /// and ordered deterministic shard reduction.
+    pub fn verify_parallel_observation_shards_compliance(
         obligation_id: impl Into<String>,
     ) -> Result<ProofVerificationReport, ProofValidationError> {
-        use uor_r4_graph_certify::compiler_scaling::{
-            CompilerScalingEngine, HardwareMetadata, StageScalingClassification,
+        use uor_r4_graph_compiler::observation_shards::{
+            ObservationShard, ParallelShardEngine, ShardProcessingConfig,
         };
         let obl_id = obligation_id.into();
 
-        // 1. Speedup and efficiency check
-        let speedup = CompilerScalingEngine::compute_speedup(1000, 250);
-        let efficiency = CompilerScalingEngine::compute_efficiency(speedup, 4);
-        let math_ok = (speedup - 4.0).abs() < 1e-6 && (efficiency - 1.0).abs() < 1e-6;
+        // 1. Shard content addressing determinism check
+        let item = vec!["doc_01".to_string(), "doc_02".to_string()];
+        let shard1 = ObservationShard::new(item.clone());
+        let shard2 = ObservationShard::new(item);
+        let id_ok = shard1.shard_id == shard2.shard_id;
 
-        // 2. Bottleneck classification check
-        let class_ok = CompilerScalingEngine::classify_stage(3.2, 4, 8, false)
-            == StageScalingClassification::Scaling
-            && CompilerScalingEngine::classify_stage(1.0, 4, 8, true)
-                == StageScalingClassification::SequentialFinalization;
+        // 2. Parallel processing and ordered reduction check
+        let items: Vec<String> = (0..50).map(|i| format!("item_{i}")).collect();
+        let config = ShardProcessingConfig { chunk_size: 5 };
+        let shards = ParallelShardEngine::partition_items(&items, &config);
+        let par_res = ParallelShardEngine::process_shards_parallel(&shards, |s| s.items.len());
+        let reduced = ParallelShardEngine::ordered_shard_reduce(par_res);
+        let reduce_ok = reduced.len() == 10 && reduced.iter().all(|&l| l == 5);
 
-        // 3. Hardware GPU-free certification check
-        let hardware = HardwareMetadata {
-            cpu_model: "Apple M2 Pro".to_string(),
-            physical_cores: 10,
-            logical_threads: 10,
-            total_memory_bytes: 32 * 1024 * 1024 * 1024,
-            is_gpu_free: true,
-        };
-        let cert_ok = hardware.is_gpu_free;
-
-        if !math_ok || !class_ok || !cert_ok {
+        if !id_ok || !reduce_ok {
             return Err(ProofValidationError::NondeterministicOutput {
                 obligation_id: obl_id,
             });
@@ -795,7 +788,7 @@ impl StructuralGuaranteeVerifier {
             status: ProofStatus::Verified,
             verified: true,
             details:
-                "Compiler Scaling Certificate v0.1.0 verified (empirical speedup/efficiency math, 5-way bottleneck classification, and CPU-only certification)."
+                "Parallel Observation Shards v0.1.0 verified (content-addressed shard IDs, parallel shard processing, and ordered deterministic reductions)."
                     .to_string(),
         })
     }
