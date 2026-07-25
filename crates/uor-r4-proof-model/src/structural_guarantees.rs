@@ -753,6 +753,7 @@ impl StructuralGuaranteeVerifier {
     /// Verify compiler scaling certificate compliance obligation (#175).
     ///
     /// Confirms metric calculations, 5-way bottleneck classification, and report certification.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn verify_compiler_scaling_certificate_compliance(
         obligation_id: impl Into<String>,
     ) -> Result<ProofVerificationReport, ProofValidationError> {
@@ -975,6 +976,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(target_arch = "wasm32"))]
     fn test_verify_compiler_scaling_certificate_compliance() {
         let report = StructuralGuaranteeVerifier::verify_compiler_scaling_certificate_compliance(
             "OBL-SCALE-01",
