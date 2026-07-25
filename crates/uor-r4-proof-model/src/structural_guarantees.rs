@@ -611,11 +611,11 @@ impl StructuralGuaranteeVerifier {
         })
     }
 
-    /// Verify parallel reproducibility compliance obligation (#167).
+    /// Verify executable-spec reproducibility compliance obligation (#167).
     ///
     /// Runs `ParallelReproducibilityHarness` over sample input data and confirms
-    /// that sequential reference and multicore parallel outputs produce 100%
-    /// bit-identical output bytes across thread counts [1, 2, 4].
+    /// deterministic byte-equality behavior for the harness path across thread
+    /// counts [1, 2, 4].
     pub fn verify_parallel_reproducibility_compliance(
         obligation_id: impl Into<String>,
     ) -> Result<ProofVerificationReport, ProofValidationError> {
@@ -639,10 +639,10 @@ impl StructuralGuaranteeVerifier {
         Ok(ProofVerificationReport {
             obligation_id: obl_id,
             kind: StructuralObligationKind::Determinism,
-            status: ProofStatus::Verified,
+            status: ProofStatus::ExecutableSpec,
             verified: true,
             details:
-                "Parallel reproducibility verified: sequential vs multicore parallel thread sweep produces 100% bit-identical artifact bytes and digests."
+                "Parallel reproducibility executable-spec check passed for harness sample bytes across thread counts [1, 2, 4]; compiler-path tests validate artifact-byte parity."
                     .to_string(),
         })
     }

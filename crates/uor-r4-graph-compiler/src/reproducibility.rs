@@ -1,8 +1,7 @@
-//! Normative Reproducibility & Canonical Byte Equality Harness (#167).
+//! Normative reproducibility byte-equality harness (#167).
 //!
-//! Enforces that parallel execution across any thread count produces 100%
-//! bit-identical canonical graph artifacts, CIDs, and certificates compared to
-//! sequential reference execution.
+//! Verifies that sequential and parallel execution produce identical output bytes
+//! for the configured thread-count sweep.
 
 #[cfg(not(target_arch = "wasm32"))]
 use crate::executor::RayonExecutor;
@@ -18,7 +17,7 @@ pub struct ReproducibilityReport {
     pub is_byte_identical: bool,
     /// Thread count sweep tested (e.g. [1, 2, 4]).
     pub thread_counts_tested: Vec<usize>,
-    /// SHA256 / hex digest of sequential output bytes.
+    /// BLAKE3 / hex digest of sequential output bytes.
     pub sequential_hash: String,
     /// Hashes produced at each tested thread count.
     pub parallel_hashes: Vec<(usize, String)>,

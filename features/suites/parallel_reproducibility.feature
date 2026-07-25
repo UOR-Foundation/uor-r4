@@ -7,4 +7,4 @@ Feature: Normative reproducibility and canonical artifact byte equality under co
   Scenario: Verify sequential vs multicore parallel thread sweep byte equality
     Given a dataset of integer observation items
     When evaluated by the parallel reproducibility harness across thread counts 1, 2, and 4
-    Then all thread count outputs produce 100% bit-identical byte digests and certificates
+    Then all thread count outputs produce 100% bit-identical byte digests

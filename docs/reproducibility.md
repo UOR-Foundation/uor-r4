@@ -69,10 +69,9 @@ $$\text{Harness}(\text{inputs}) \implies \text{Artifact}_{\text{seq}} \equiv \te
 
 The harness asserts:
 1. `ArtifactBytes(seq) == ArtifactBytes(par, N)` (100% byte equality)
-2. `ContentCID(seq) == ContentCID(par, N)`
-3. `CertificateBytes(seq) == CertificateBytes(par, N)`
+2. `Digest(ArtifactBytes(seq)) == Digest(ArtifactBytes(par, N))` (BLAKE3 digest parity)
 
-The proof model (`uor-r4-proof-model::structural_guarantees`) verifies this guarantee via `verify_parallel_reproducibility_compliance`.
+The proof model (`uor-r4-proof-model::structural_guarantees`) currently provides an executable-spec check via `verify_parallel_reproducibility_compliance`; end-to-end compiler artifact-byte parity remains validated by compiler-path tests.
 
 ---
 

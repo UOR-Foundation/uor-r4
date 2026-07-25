@@ -2333,7 +2333,7 @@ fn bdd_reproducibility_dataset_given(w: &mut R4g1World) {
 )]
 fn bdd_reproducibility_eval_when(_w: &mut R4g1World, _t1: usize, _t2: usize, _t3: usize) {}
 
-#[then("all thread count outputs produce 100% bit-identical byte digests and certificates")]
+#[then("all thread count outputs produce 100% bit-identical byte digests")]
 fn bdd_reproducibility_eval_then(w: &mut R4g1World) {
     let report = ParallelReproducibilityHarness::verify_reproducibility(&w.exec_inputs, |&x| {
         Ok(x.to_le_bytes().to_vec())
