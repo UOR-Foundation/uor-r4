@@ -2343,7 +2343,6 @@ fn bdd_reproducibility_eval_then(w: &mut R4g1World) {
     assert!(report.is_byte_identical);
 }
 
->>>>>>> 2048ad4 (feat(compiler): add normative reproducibility and canonical artifact byte equality under parallelism (#167))
 #[tokio::main]
 async fn main() {
     R4g1World::cucumber()
