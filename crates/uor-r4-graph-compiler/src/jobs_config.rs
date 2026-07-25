@@ -24,6 +24,8 @@ pub enum JobsConfigError {
     ZeroJobsForbidden,
     /// Thread count string failed decimal integer parsing.
     InvalidJobCount { value: String },
+    /// Custom thread pool construction failed.
+    ThreadPoolBuildFailed { reason: String },
 }
 
 impl fmt::Display for JobsConfigError {
@@ -35,6 +37,10 @@ impl fmt::Display for JobsConfigError {
             JobsConfigError::InvalidJobCount { value } => write!(
                 f,
                 "Jobs configuration error: invalid thread count '{value}'"
+            ),
+            JobsConfigError::ThreadPoolBuildFailed { reason } => write!(
+                f,
+                "Jobs configuration error: failed to build dedicated thread pool: {reason}"
             ),
         }
     }
@@ -117,13 +123,15 @@ impl CompilerJobsConfig {
 
     /// Build a dedicated named Rayon thread pool owned by the compiler context.
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn build_dedicated_thread_pool(&self) -> Result<rayon::ThreadPool, String> {
+    pub fn build_dedicated_thread_pool(&self) -> Result<rayon::ThreadPool, JobsConfigError> {
         let prefix = self.thread_name_prefix.clone();
         rayon::ThreadPoolBuilder::new()
             .num_threads(self.jobs)
             .thread_name(move |idx| format!("{prefix}-{idx}"))
             .build()
-            .map_err(|e| format!("Failed to build dedicated thread pool: {e:?}"))
+            .map_err(|e| JobsConfigError::ThreadPoolBuildFailed {
+                reason: format!("{e:?}"),
+            })
     }
 }
 

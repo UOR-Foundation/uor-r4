@@ -18,3 +18,8 @@ Feature: Compiler thread-pool, jobs configuration, and oversubscription policy
     Given a compiler jobs configuration request with CLI argument 0
     When jobs precedence resolution is evaluated
     Then resolution fails with a zero jobs forbidden error
+
+  Scenario: Reject invalid non-numeric thread count string with typed error
+    Given a compiler jobs configuration request with no CLI argument and environment variable "invalid_num"
+    When jobs precedence resolution is evaluated
+    Then resolution fails with an invalid job count error for "invalid_num"

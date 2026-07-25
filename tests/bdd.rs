@@ -2411,7 +2411,16 @@ fn bdd_jobs_zero_error_then(w: &mut R4g1World) {
     );
 }
 
->>>>>>> f31d6f9 (feat(compiler): add compiler thread-pool, jobs config, and oversubscription policy (#168))
+#[then(expr = "resolution fails with an invalid job count error for {string}")]
+fn bdd_jobs_invalid_error_then(w: &mut R4g1World, expected_val: String) {
+    let res = w.jobs_config_res.as_ref().expect("jobs_config_res present");
+    assert_eq!(
+        res.as_ref().err(),
+        Some(&JobsConfigError::InvalidJobCount {
+            value: expected_val
+        })
+    );
+}
 #[tokio::main]
 async fn main() {
     R4g1World::cucumber()
