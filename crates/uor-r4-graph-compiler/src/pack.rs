@@ -94,7 +94,7 @@ where
     O: Send,
     F: Fn(&I) -> Result<O, String> + Sync,
 {
-    if threads <= 1 {
+    if threads == 1 {
         return SequentialExecutor::new()
             .map(inputs, map_fn)
             .map_err(|e| e.to_string());
@@ -152,5 +152,13 @@ mod tests {
         let par4 = pack_emission_tables_with_threads(&tables, 4).unwrap();
         assert_eq!(seq, par2);
         assert_eq!(seq, par4);
+    }
+
+    #[test]
+    fn test_pack_emission_tables_threads_zero_matches_sequential() {
+        let tables = vec![vec![1, 2, 3], vec![4, 5], vec![1, 2, 3], vec![]];
+        let seq = pack_emission_tables_with_threads(&tables, 1).unwrap();
+        let auto = pack_emission_tables_with_threads(&tables, 0).unwrap();
+        assert_eq!(seq, auto);
     }
 }

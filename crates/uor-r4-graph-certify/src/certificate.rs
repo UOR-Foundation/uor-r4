@@ -137,7 +137,7 @@ impl Certificate {
         threads: usize,
     ) -> Result<Vec<EmpiricalClaim>, String> {
         let indices: Vec<usize> = (0..claim_fragments.len()).collect();
-        if threads <= 1 {
+        if threads == 1 {
             return SequentialExecutor::new()
                 .map(&indices, |&idx| Ok(claim_fragments[idx].clone()))
                 .map_err(|e| e.to_string());

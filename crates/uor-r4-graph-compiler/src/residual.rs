@@ -15,8 +15,15 @@ pub struct QuantizedResidual {
 
 /// Quantize a list of f32 log-probabilities into `ScoreQ` fixed-point entries.
 pub fn quantize_logprobs(tokens: &[u32], logprobs: &[f32]) -> Vec<QuantizedResidual> {
-    quantize_logprobs_with_threads(tokens, logprobs, 1)
-        .expect("quantize_logprobs with a sequential executor must not fail")
+    tokens
+        .iter()
+        .copied()
+        .zip(logprobs.iter().copied())
+        .map(|(token, logprob)| QuantizedResidual {
+            token,
+            score: ScoreQ::from_logprob(logprob),
+        })
+        .collect()
 }
 
 /// Quantize log-probabilities with bounded parallel workers while preserving
@@ -94,7 +101,7 @@ where
     O: Send,
     F: Fn(&I) -> Result<O, String> + Sync,
 {
-    if threads <= 1 {
+    if threads == 1 {
         return SequentialExecutor::new()
             .map(inputs, map_fn)
             .map_err(|e| e.to_string());
@@ -144,6 +151,27 @@ mod tests {
 
         assert_eq!(seq, par2);
         assert_eq!(seq, par4);
+    }
+
+    #[test]
+    fn quantize_logprobs_truncates_on_length_mismatch() {
+        let tokens = vec![1, 2, 3];
+        let logprobs = vec![-0.5, -1.2];
+
+        let quantized = quantize_logprobs(&tokens, &logprobs);
+        assert_eq!(quantized.len(), 2);
+        assert_eq!(quantized[0].token, 1);
+        assert_eq!(quantized[1].token, 2);
+    }
+
+    #[test]
+    fn quantization_threads_zero_matches_sequential() {
+        let tokens = vec![10, 11, 12, 13, 14, 15];
+        let logprobs = vec![-0.1, -0.7, -1.3, -2.2, -0.4, -9.9];
+
+        let seq = quantize_logprobs_with_threads(&tokens, &logprobs, 1).unwrap();
+        let auto = quantize_logprobs_with_threads(&tokens, &logprobs, 0).unwrap();
+        assert_eq!(seq, auto);
     }
 
     #[test]
