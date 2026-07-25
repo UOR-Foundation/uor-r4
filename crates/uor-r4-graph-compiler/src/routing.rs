@@ -77,6 +77,10 @@ pub struct CandidateScalingRow {
     pub candidates_per_second: u64,
 }
 
+/// Fixed-size collision bitmap used to avoid per-candidate heap allocation in
+/// the hot candidate-evaluation loop.
+const COLLISION_BITMAP_WORDS: usize = 256; // 16,384 hashed slots
+
 fn signature_word(sig: &[u8], word: u8) -> u64 {
     let mut bytes = [0u8; 8];
     let start = word as usize * 8;
@@ -156,14 +160,19 @@ fn evaluate_candidate(
             mask_bits,
             threshold,
         } => {
-            let mut accepted_prev_tokens = std::collections::BTreeSet::new();
+            let mut seen_prev = [0u64; COLLISION_BITMAP_WORDS];
             for observation in observations {
                 let pop =
                     (signature_word(&observation.sig, mask_word) & mask_bits).count_ones() as u16;
                 if pop <= threshold {
                     accepted += 1;
-                    if !accepted_prev_tokens.insert(observation.prev) {
+                    let slot = (observation.prev as usize) & ((COLLISION_BITMAP_WORDS * 64) - 1);
+                    let word = slot / 64;
+                    let bit = 1u64 << (slot % 64);
+                    if (seen_prev[word] & bit) != 0 {
                         collisions += 1;
+                    } else {
+                        seen_prev[word] |= bit;
                     }
                     if (observation.next ^ u32::from(candidate.key.polynomial_id)) & 1 == 0 {
                         semantic_hits += 1;
@@ -325,13 +334,14 @@ fn choose_best_for_threads(
     reduce_best(evaluations.into_iter()).ok_or_else(|| "routing candidate set was empty".to_owned())
 }
 
-pub fn synthesize_routing_program(cover: &Cover, observations: &[Observation]) -> Vec<u8> {
+pub fn synthesize_routing_program(
+    cover: &Cover,
+    observations: &[Observation],
+) -> Result<Vec<u8>, String> {
     let threads = std::thread::available_parallelism()
         .map(|n| n.get().min(4))
         .unwrap_or(1);
-    choose_best_for_threads(cover, observations, threads)
-        .map(|best| best.bytecode)
-        .unwrap_or_else(|_| vec![OP_HALT])
+    choose_best_for_threads(cover, observations, threads).map(|best| best.bytecode)
 }
 
 pub fn benchmark_candidate_scaling(
@@ -347,8 +357,13 @@ pub fn benchmark_candidate_scaling(
             let start = std::time::Instant::now();
             let evaluated = derive_candidates(cover, observations).len();
             let _ = choose_best_for_threads(cover, observations, threads);
-            let elapsed = start.elapsed().as_secs_f64().max(1e-9);
-            let cps = (evaluated as f64 / elapsed) as u64;
+            let elapsed_nanos = start.elapsed().as_nanos().max(1);
+            let cps = if evaluated == 0 {
+                0
+            } else {
+                let raw = ((evaluated as u128) * 1_000_000_000u128) / elapsed_nanos;
+                raw.max(1).min(u64::MAX as u128) as u64
+            };
             CandidateScalingRow {
                 threads,
                 candidates_evaluated: evaluated,
@@ -408,8 +423,8 @@ mod tests {
                     sample: [i as u8; 32],
                     vector: vec![0.0; D],
                     sig,
-                    prev: (i % 7) as u32,
-                    next: ((i * 3) % 11) as u32,
+                    prev: i % 7,
+                    next: (i * 3) % 11,
                 }
             })
             .collect()
