@@ -180,8 +180,6 @@ impl CompilerExecutor for RayonExecutor {
 fn extract_panic_message(err: &(dyn Any + Send)) -> String {
     if let Some(s) = err.downcast_ref::<&'static str>() {
         s.to_string()
-    } else if let Some(s) = err.downcast_ref::<&str>() {
-        s.to_string()
     } else if let Some(s) = err.downcast_ref::<String>() {
         s.clone()
     } else {

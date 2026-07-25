@@ -526,31 +526,51 @@ impl StructuralGuaranteeVerifier {
     }
 
     /// Verify compiler executor compliance obligation (#165).
+    ///
+    /// Confirms that `SequentialExecutor` produces correctly ordered outputs and,
+    /// on non-wasm32 targets, that `RayonExecutor` produces bit-identical results
+    /// (positional equivalence guarantee).
     pub fn verify_compiler_executor_compliance(
         obligation_id: &str,
     ) -> Result<ProofVerificationReport, ProofValidationError> {
         use uor_r4_graph_compiler::executor::{CompilerExecutor, SequentialExecutor};
-        let exec = SequentialExecutor::new();
-        let inputs = vec![1u32, 2u32, 3u32];
-        let res = exec.map(&inputs, |&x| Ok(x * 2)).map_err(|_err| {
-            ProofValidationError::ResourceBoundExceeded {
-                obligation_id: obligation_id.to_string(),
-                metric: "executor_error".to_string(),
-                actual: 1,
-                limit: 0,
-            }
-        })?;
 
-        let valid = res == vec![2, 4, 6];
+        let make_err = |metric: &str| ProofValidationError::ResourceBoundExceeded {
+            obligation_id: obligation_id.to_string(),
+            metric: metric.to_string(),
+            actual: 1,
+            limit: 0,
+        };
+
+        let inputs = vec![1u32, 2u32, 3u32];
+        let seq_res = SequentialExecutor::new()
+            .map(&inputs, |&x| Ok(x * 2))
+            .map_err(|_| make_err("sequential_executor_error"))?;
+        if seq_res != vec![2, 4, 6] {
+            return Err(make_err("sequential_positional_order"));
+        }
+
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            use uor_r4_graph_compiler::executor::RayonExecutor;
+            let par_res = RayonExecutor::new(2)
+                .map_err(|_| make_err("rayon_executor_init"))?
+                .map(&inputs, |&x| Ok(x * 2))
+                .map_err(|_| make_err("rayon_executor_error"))?;
+            if par_res != seq_res {
+                return Err(make_err("sequential_rayon_equivalence"));
+            }
+        }
 
         Ok(ProofVerificationReport {
             obligation_id: obligation_id.to_string(),
-            kind: StructuralObligationKind::BoundedResource,
+            kind: StructuralObligationKind::Determinism,
             status: ProofStatus::Verified,
-            verified: valid,
-            details:
-                "Compiler executor abstraction verified (SequentialReference ≡ RayonParallel, deterministic positional order, panic containment)"
-                    .to_string(),
+            verified: true,
+            details: "Compiler executor verified: SequentialExecutor positional order correct; \
+                      RayonExecutor output is bit-identical to SequentialExecutor (non-wasm32); \
+                      panic containment and deterministic error aggregation covered by unit + BDD suites."
+                .to_string(),
         })
     }
 }
