@@ -102,7 +102,7 @@
 //! per the slice scope and is omitted in v1.
 
 use serde::Serialize;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 
 use uor_r4_core::transformerless::compiler::{
@@ -1544,9 +1544,13 @@ pub fn build_edges(
         list.truncate(MAX_NEIGHBOR_EDGES);
     }
     let mut overlap_fragment = Vec::new();
+    let mut emitted_neighbor_pairs = BTreeSet::new();
     for (&a, list) in &peers {
         for &(b, _) in list {
             let (src, dst) = if a < b { (a, b) } else { (b, a) };
+            if !emitted_neighbor_pairs.insert((src, dst)) {
+                continue;
+            }
             overlap_fragment.push(CoverEdge {
                 src: region_node_id(src),
                 kind: EDGE_KIND_NEIGHBOR,
