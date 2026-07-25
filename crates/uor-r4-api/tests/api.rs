@@ -52,7 +52,7 @@ fn tokenizer_from_bytes_rejects_truncated() {
     let bytes = 4i32
         .to_le_bytes()
         .into_iter()
-        .chain([b'a'])
+        .chain(*b"a")
         .collect::<Vec<_>>();
     let error = match Tokenizer::from_bytes(&bytes) {
         Err(error) => error,
