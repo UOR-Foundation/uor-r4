@@ -525,7 +525,6 @@ impl StructuralGuaranteeVerifier {
         })
     }
 
-<<<<<<< HEAD
     /// Verify compiler executor compliance obligation (#165).
     ///
     /// Confirms that `SequentialExecutor` produces correctly ordered outputs and,

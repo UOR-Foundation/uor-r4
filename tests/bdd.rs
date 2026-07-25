@@ -2137,7 +2137,6 @@ fn bdd_perf_cert_portability_check(w: &mut R4g1World) {
 }
 
 // =========================================================================
-<<<<<<< HEAD
 // Feature: Deterministic compiler executor abstraction (#165)
 // =========================================================================
 #[cfg(not(target_arch = "wasm32"))]
