@@ -227,7 +227,7 @@ only; it must never become a dependency of format/runtime/proof-model. Per-stage
 | Boolean synthesis (Phase 6) | per-candidate search | deterministic candidate ordering |
 | Residuals / packing / certification | per-region streaming; per-eval-point | ordered aggregation for certificate statistics |
 
-**Determinism rules (Gate E / D2).**
+**Determinism rules (Gate E / D2).** See [compiler_concurrency_config.md](file:///Users/casey.allard/uor-r4/docs/compiler_concurrency_config.md) (Issue #168) for normative concurrency controls (`--jobs N`, `R4_COMPILER_THREADS`, `CLI > env > default` precedence) and [reproducibility.md](file:///Users/casey.allard/uor-r4/docs/reproducibility.md) (Issue #167) for normative parallel byte equality.
 
 1. Thread count is a pure performance knob: a compile at T=1 and at T=N must produce byte-identical
    κ. CI asserts this on a pinned mini-corpus (T=1 vs T=4 → identical artifact bytes).
@@ -238,7 +238,7 @@ only; it must never become a dependency of format/runtime/proof-model. Per-stage
    mode is for local iteration, validated by behavioral equivalence (PDF §15).
 4. Seeds pinned; any shuffling derives from a seeded PRNG over sample IDs, never iteration order.
 
-**Memory budget.** A `--memory-budget` flag derives shard sizes from
+**Memory budget.** See [compiler_memory_budget.md](file:///Users/casey.allard/uor-r4/docs/compiler_memory_budget.md) (Issue #169) for the normative concurrency-aware memory budget and backpressure model. A `--memory-budget` flag derives shard sizes from
 `peak ≈ M_weights + T × (S_shard + M_state) + M_cluster ≤ budget`:
 
 - Weights: safetensors mmap'd. Default mode converts to f32 resident (~540 MB at 135M) for speed;
@@ -371,6 +371,8 @@ Objective: regions must earn the name "semantic" (PDF §7).
   reuse/stability thresholds are pruned or demoted to exact-context evidence.
 
 ### Phase 4 — Semantic transition and residual emission (3–5 weeks) → Gates A, C
+
+*Normative Compiler Stage DAG & Concurrency Matrix: see [compiler_stage_dag.md](file:///Users/casey.allard/uor-r4/docs/compiler_stage_dag.md).*
 
 Objective: the scoring model S(v) = B(v) + ΣΔE(n,v) + ΣΔT(m,v) + ΔX(X,v) (PDF §23).
 

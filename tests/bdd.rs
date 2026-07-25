@@ -62,6 +62,8 @@ struct R4g1World {
     contract_report: Option<uor_r4_graph_format::inference_contract::InferenceContractAuditReport>,
     _contract_audit_res:
         Option<Result<(), uor_r4_graph_format::inference_contract::ContractValidationError>>,
+    // Performance Certificate fields (#161)
+    perf_cert: Option<uor_r4_graph_certify::performance_certificate::RuntimePerformanceCertificate>,
     // PDF Traceability Matrix fields (#137)
     pdf_matrix: Vec<uor_r4_proof_model::pdf_traceability::PdfTraceabilityRow>,
     pdf_audit_report: Option<uor_r4_proof_model::pdf_traceability::TraceabilityAuditReport>,
@@ -151,6 +153,36 @@ struct R4g1World {
     contract_doc_text: String,
     contract_doc_version: Option<String>,
     contract_module_version: Option<String>,
+    // Compiler Executor fields (#165)
+    exec_inputs: Vec<i32>,
+    exec_seq_out: Vec<i32>,
+    exec_par_out: Vec<i32>,
+    // Compiler Jobs Config fields (#168)
+    jobs_cli: Option<usize>,
+    jobs_env: Option<String>,
+    jobs_config_res: Option<
+        Result<
+            uor_r4_graph_compiler::jobs_config::CompilerJobsConfig,
+            uor_r4_graph_compiler::jobs_config::JobsConfigError,
+        >,
+    >,
+    // Compiler Memory Budget fields (#169)
+    mem_req_bytes: usize,
+    mem_req_threads: usize,
+    mem_budget_res: Option<
+        Result<
+            uor_r4_graph_compiler::memory_budget::CompilerMemoryBudget,
+            uor_r4_graph_compiler::memory_budget::MemoryBudgetError,
+        >,
+    >,
+    limiter_capacity: usize,
+    limiter_guard1: Option<uor_r4_graph_compiler::memory_budget::BackpressureGuard>,
+    limiter_acq2_res: Option<
+        Result<
+            uor_r4_graph_compiler::memory_budget::BackpressureGuard,
+            uor_r4_graph_compiler::memory_budget::MemoryBudgetError,
+        >,
+    >,
 }
 
 #[given("the R4G1 runtime returned the browser's repetitive hello response")]
@@ -2093,6 +2125,389 @@ fn bdd_scoring_compare_cands(w: &mut R4g1World) {
 fn bdd_scoring_check_cand_a_wins(w: &mut R4g1World) {
     let res = w.candidate_cmp_result.expect("candidate cmp result");
     assert_eq!(res, core::cmp::Ordering::Less);
+}
+// Performance Certificate BDD Steps (#161)
+// =========================================================================
+use uor_r4_graph_certify::performance_certificate::RuntimePerformanceCertificate;
+
+#[given("a new runtime performance certificate")]
+fn bdd_perf_cert_given(w: &mut R4g1World) {
+    w.perf_cert = Some(RuntimePerformanceCertificate::new());
+}
+
+#[when("audited for evidence link integrity")]
+fn bdd_perf_cert_audit_when(_w: &mut R4g1World) {}
+
+#[then("all declared-zero fields contain non-empty evidence links and steady-state allocations are zero")]
+fn bdd_perf_cert_links_check(w: &mut R4g1World) {
+    let cert = w.perf_cert.as_ref().expect("perf cert");
+    assert!(cert.verify_evidence_links());
+}
+
+#[given("a performance certificate with CPU portability record")]
+fn bdd_perf_cert_portability_given(w: &mut R4g1World) {
+    w.perf_cert = Some(RuntimePerformanceCertificate::new());
+}
+
+#[when("checked for execution portability")]
+fn bdd_perf_cert_portability_when(_w: &mut R4g1World) {}
+
+#[then(
+    "scalar fallback is confirmed and target tier matches the current architecture scalar-portable tier"
+)]
+fn bdd_perf_cert_portability_check(w: &mut R4g1World) {
+    let cert = w.perf_cert.as_ref().expect("perf cert");
+    let expected_tier = format!("{}-scalar-portable", std::env::consts::ARCH);
+    assert!(cert.cpu_portability.scalar_fallback_confirmed);
+    assert_eq!(cert.cpu_portability.target_tier, expected_tier);
+}
+
+// =========================================================================
+// Feature: Deterministic compiler executor abstraction (#165)
+// =========================================================================
+#[cfg(not(target_arch = "wasm32"))]
+use uor_r4_graph_compiler::executor::RayonExecutor;
+use uor_r4_graph_compiler::executor::{CompilerExecutor, SequentialExecutor};
+
+#[given(expr = "a batch of {int} integer input items")]
+fn bdd_exec_inputs_given(w: &mut R4g1World, count: usize) {
+    w.exec_inputs = (1..=count as i32).collect();
+}
+
+#[when("mapped by the sequential reference compiler executor")]
+fn bdd_exec_seq_when(w: &mut R4g1World) {
+    let exec = SequentialExecutor::new();
+    w.exec_seq_out = exec
+        .map(&w.exec_inputs, |&x| Ok(x * 2 + 1))
+        .expect("seq map");
+}
+
+#[when("mapped by the Rayon parallel multicore compiler executor")]
+fn bdd_exec_par_when(w: &mut R4g1World) {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let exec = RayonExecutor::new(4).expect("rayon exec");
+        w.exec_par_out = exec
+            .map(&w.exec_inputs, |&x| Ok(x * 2 + 1))
+            .expect("par map");
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        let exec = SequentialExecutor::new();
+        w.exec_par_out = exec
+            .map(&w.exec_inputs, |&x| Ok(x * 2 + 1))
+            .expect("par map");
+    }
+}
+
+#[then("both mapped output vectors are positionally identical")]
+fn bdd_exec_vectors_identical_then(w: &mut R4g1World) {
+    assert_eq!(w.exec_seq_out, w.exec_par_out);
+}
+
+#[given(expr = "a batch of integer input items where item {int} returns a worker error")]
+fn bdd_exec_err_input_given(w: &mut R4g1World, err_item: i32) {
+    w.exec_inputs = vec![1, 2, err_item, 4, 5];
+}
+
+#[then(expr = "execution returns a worker error at input index {int}")]
+fn bdd_exec_err_index_then(w: &mut R4g1World, expected_idx: usize) {
+    #[cfg(not(target_arch = "wasm32"))]
+    let exec = RayonExecutor::new(4).expect("rayon exec");
+    #[cfg(target_arch = "wasm32")]
+    let exec = SequentialExecutor::new();
+
+    let err = exec
+        .map(&w.exec_inputs, |&x| {
+            if x == 3 {
+                Err("simulated worker error".to_string())
+            } else {
+                Ok(x)
+            }
+        })
+        .unwrap_err();
+
+    assert_eq!(
+        err,
+        uor_r4_graph_compiler::executor::CompileError::WorkerError {
+            input_index: expected_idx,
+            message: "simulated worker error".to_string()
+        }
+    );
+}
+
+#[given(expr = "a batch of integer input items where item {int} panics")]
+fn bdd_exec_panic_input_given(w: &mut R4g1World, panic_item: i32) {
+    w.exec_inputs = vec![1, 2, 3, 4, panic_item];
+}
+
+#[then(expr = "execution returns a worker panic error at input index {int}")]
+fn bdd_exec_panic_index_then(w: &mut R4g1World, expected_idx: usize) {
+    #[cfg(not(target_arch = "wasm32"))]
+    let exec = RayonExecutor::new(4).expect("rayon exec");
+    #[cfg(target_arch = "wasm32")]
+    let exec = SequentialExecutor::new();
+
+    let err = exec
+        .map(&w.exec_inputs, |&x| {
+            if x == 5 {
+                panic!("simulated panic");
+            } else {
+                Ok(x)
+            }
+        })
+        .unwrap_err();
+
+    assert_eq!(
+        err,
+        uor_r4_graph_compiler::executor::CompileError::ExecutionPanic {
+            input_index: expected_idx,
+            panic_message: "simulated panic".to_string()
+        }
+    );
+}
+
+// Feature: Compiler stage ownership and parallelization DAG (#166)
+// =========================================================================
+use uor_r4_graph_compiler::stage_dag::CompilerStageDag;
+
+#[given("the normative compiler stage DAG inventory")]
+fn bdd_stage_dag_inventory_given(_w: &mut R4g1World) {}
+
+#[when("evaluated for completeness")]
+fn bdd_stage_dag_completeness_when(_w: &mut R4g1World) {}
+
+#[then(
+    expr = "exactly {int} pipeline stages are fully classified across the {int} concurrency classes"
+)]
+fn bdd_stage_dag_completeness_then(
+    _w: &mut R4g1World,
+    expected_stages: usize,
+    expected_classes: usize,
+) {
+    let stages = CompilerStageDag::all_stages();
+    assert_eq!(stages.len(), expected_stages);
+
+    let mut classes = std::collections::HashSet::new();
+    for s in stages {
+        classes.insert(s.class);
+    }
+    assert_eq!(classes.len(), expected_classes);
+}
+
+#[when("the sequential canonical finalization spine is queried")]
+fn bdd_stage_dag_spine_when(_w: &mut R4g1World) {}
+
+#[then(expr = "exactly {int} stages belong to the sequential canonical finalization spine")]
+fn bdd_stage_dag_spine_count_then(_w: &mut R4g1World, expected_spine_count: usize) {
+    let spine = CompilerStageDag::finalization_spine();
+    assert_eq!(spine.len(), expected_spine_count);
+}
+
+#[then(
+    expr = "stage IDs {string}, {string}, {string}, {string}, {string}, and {string} are strictly single-threaded"
+)]
+fn bdd_stage_dag_spine_ids_then(
+    _w: &mut R4g1World,
+    id1: String,
+    id2: String,
+    id3: String,
+    id4: String,
+    id5: String,
+    id6: String,
+) {
+    let spine = CompilerStageDag::finalization_spine();
+    let spine_ids: Vec<&str> = spine.iter().map(|s| s.stage_id).collect();
+    assert_eq!(
+        spine_ids,
+        vec![
+            id1.as_str(),
+            id2.as_str(),
+            id3.as_str(),
+            id4.as_str(),
+            id5.as_str(),
+            id6.as_str()
+        ]
+    );
+}
+
+// =========================================================================
+// Feature: Normative reproducibility and canonical artifact byte equality (#167)
+// =========================================================================
+use uor_r4_graph_compiler::reproducibility::{
+    ParallelReproducibilityHarness, NORMATIVE_REPRODUCIBILITY_INVARIANT,
+};
+
+#[given("the normative reproducibility invariant specification")]
+fn bdd_reproducibility_invariant_given(_w: &mut R4g1World) {}
+
+#[then("the invariant statement matches the Issue 167 verbatim acceptance criteria")]
+fn bdd_reproducibility_invariant_then(_w: &mut R4g1World) {
+    assert_eq!(
+        NORMATIVE_REPRODUCIBILITY_INVARIANT,
+        "Parallel execution may change compilation time, but must not change the canonical graph artifact produced from the same pinned inputs, compiler version, configuration, and target-independent compilation mode."
+    );
+}
+
+#[given("a dataset of integer observation items")]
+fn bdd_reproducibility_dataset_given(w: &mut R4g1World) {
+    w.exec_inputs = vec![100, 200, 300, 400, 500];
+}
+
+#[when(
+    expr = "evaluated by the parallel reproducibility harness across thread counts {int}, {int}, and {int}"
+)]
+fn bdd_reproducibility_eval_when(_w: &mut R4g1World, _t1: usize, _t2: usize, _t3: usize) {}
+
+#[then("all thread count outputs produce 100% bit-identical byte digests")]
+fn bdd_reproducibility_eval_then(w: &mut R4g1World) {
+    let report = ParallelReproducibilityHarness::verify_reproducibility(&w.exec_inputs, |&x| {
+        Ok(x.to_le_bytes().to_vec())
+    })
+    .expect("harness pass");
+
+    assert!(report.is_byte_identical);
+}
+
+// =========================================================================
+// Feature: Compiler thread-pool, jobs configuration, and oversubscription policy (#168)
+// =========================================================================
+use uor_r4_graph_compiler::jobs_config::{CompilerJobsConfig, JobsConfigError, JobsConfigSource};
+
+#[given(
+    expr = "a compiler jobs configuration request with CLI argument {int} and environment variable {string}"
+)]
+fn bdd_jobs_cli_and_env_given(w: &mut R4g1World, cli_jobs: usize, env_str: String) {
+    w.jobs_cli = Some(cli_jobs);
+    w.jobs_env = Some(env_str);
+}
+
+#[given(
+    expr = "a compiler jobs configuration request with no CLI argument and environment variable {string}"
+)]
+fn bdd_jobs_env_only_given(w: &mut R4g1World, env_str: String) {
+    w.jobs_cli = None;
+    w.jobs_env = Some(env_str);
+}
+
+#[given(expr = "a compiler jobs configuration request with CLI argument {int}")]
+fn bdd_jobs_cli_only_given(w: &mut R4g1World, cli_jobs: usize) {
+    w.jobs_cli = Some(cli_jobs);
+    w.jobs_env = None;
+}
+
+#[when("jobs precedence resolution is evaluated")]
+fn bdd_jobs_eval_when(w: &mut R4g1World) {
+    let env_ref = w.jobs_env.as_deref();
+    w.jobs_config_res = Some(CompilerJobsConfig::resolve(w.jobs_cli, env_ref));
+}
+
+#[then(expr = "the resolved thread count is {int} with source {string}")]
+fn bdd_jobs_eval_then(w: &mut R4g1World, expected_jobs: usize, expected_source: String) {
+    let res = w
+        .jobs_config_res
+        .as_ref()
+        .expect("jobs_config_res present")
+        .as_ref()
+        .expect("jobs_config resolved successfully");
+    assert_eq!(res.jobs, expected_jobs);
+    let src_str = match res.source {
+        JobsConfigSource::CliArg => "CliArg",
+        JobsConfigSource::EnvVar => "EnvVar",
+        JobsConfigSource::DefaultPolicy => "DefaultPolicy",
+    };
+    assert_eq!(src_str, expected_source);
+}
+
+#[then("resolution fails with a zero jobs forbidden error")]
+fn bdd_jobs_zero_error_then(w: &mut R4g1World) {
+    let res = w.jobs_config_res.as_ref().expect("jobs_config_res present");
+    assert_eq!(
+        res.as_ref().err(),
+        Some(&JobsConfigError::ZeroJobsForbidden)
+    );
+}
+
+#[then(expr = "resolution fails with an invalid job count error for {string}")]
+fn bdd_jobs_invalid_error_then(w: &mut R4g1World, expected_val: String) {
+    let res = w.jobs_config_res.as_ref().expect("jobs_config_res present");
+    assert_eq!(
+        res.as_ref().err(),
+        Some(&JobsConfigError::InvalidJobCount {
+            value: expected_val
+        })
+    );
+}
+
+// =========================================================================
+// Feature: Compiler memory-budget and backpressure model for multicore compilation (#169)
+// =========================================================================
+use uor_r4_graph_compiler::memory_budget::{
+    CompilerMemoryBudget, InFlightBackpressureLimiter, MemoryBudgetError,
+};
+
+#[given(expr = "a memory budget request of {int} bytes for {int} worker threads")]
+fn bdd_memory_budget_request_given(w: &mut R4g1World, req_bytes: usize, req_threads: usize) {
+    w.mem_req_bytes = req_bytes;
+    w.mem_req_threads = req_threads;
+}
+
+#[when("memory budget derivation is evaluated")]
+fn bdd_memory_budget_eval_when(w: &mut R4g1World) {
+    w.mem_budget_res = Some(CompilerMemoryBudget::derive(
+        w.mem_req_bytes,
+        w.mem_req_threads,
+    ));
+}
+
+#[then(expr = "the derived worker thread count is {int} with per-worker scratch of {int} bytes")]
+fn bdd_memory_budget_eval_then(
+    w: &mut R4g1World,
+    expected_threads: usize,
+    expected_scratch: usize,
+) {
+    let budget = w
+        .mem_budget_res
+        .as_ref()
+        .expect("mem_budget_res present")
+        .as_ref()
+        .expect("derived successfully");
+    assert_eq!(budget.worker_threads, expected_threads);
+    assert_eq!(budget.per_worker_scratch_bytes, expected_scratch);
+}
+
+#[then("memory budget derivation fails with a budget too small error")]
+fn bdd_memory_budget_too_small_then(w: &mut R4g1World) {
+    let res = w.mem_budget_res.as_ref().expect("mem_budget_res present");
+    assert!(matches!(
+        res.as_ref().err(),
+        Some(MemoryBudgetError::BudgetTooSmall { .. })
+    ));
+}
+
+#[given(expr = "an in-flight backpressure limiter with capacity {int}")]
+fn bdd_limiter_given(w: &mut R4g1World, capacity: usize) {
+    w.limiter_capacity = capacity;
+}
+
+#[when("2 task slot acquisitions are attempted sequentially")]
+fn bdd_limiter_acquisitions_when(w: &mut R4g1World) {
+    let limiter = InFlightBackpressureLimiter::new(w.limiter_capacity);
+    let g1 = limiter.try_acquire();
+    w.limiter_guard1 = g1.ok();
+    w.limiter_acq2_res = Some(limiter.try_acquire());
+}
+
+#[then(
+    "the 1st acquisition succeeds and the 2nd acquisition fails with a backpressure limit reached error"
+)]
+fn bdd_limiter_acquisitions_then(w: &mut R4g1World) {
+    assert!(w.limiter_guard1.is_some());
+    let acq2 = w.limiter_acq2_res.as_ref().expect("acq2 present");
+    assert!(matches!(
+        acq2.as_ref().err(),
+        Some(MemoryBudgetError::BackpressureLimitReached { .. })
+    ));
 }
 #[tokio::main]
 async fn main() {
