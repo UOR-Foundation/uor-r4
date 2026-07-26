@@ -780,12 +780,13 @@ fn clean_attention_response(text: &str, prompt: &str) -> String {
         cleaned = cleaned[pos + "assistant\n".len()..].to_string();
     }
 
-    // 2. Remove template boundary markers
+    // 2. Remove template boundary markers and replacement characters
     cleaned = cleaned
         .replace("<|im_start|>", "")
         .replace("<|im_end|>", "")
         .replace("user\n", "")
-        .replace("assistant\n", "");
+        .replace("assistant\n", "")
+        .replace('\u{fffd}', "");
 
     // 3. Strip prompt echoes if the model repeated the user prompt at the beginning only when non-empty content remains
     let trimmed_prompt = prompt.trim();
@@ -809,19 +810,52 @@ fn clean_attention_response(text: &str, prompt: &str) -> String {
     }
 
     if result.is_empty() {
-        text.trim().to_string()
+        truncate_repetitive_loops(text.trim())
     } else {
-        result
+        truncate_repetitive_loops(&result)
+    }
+}
+
+fn truncate_repetitive_loops(text: &str) -> String {
+    let mut sentences = Vec::new();
+    let mut last_end = 0;
+    for (i, c) in text.char_indices() {
+        if c == '.' || c == '!' || c == '?' || c == '\n' {
+            let sentence = &text[last_end..=i];
+            sentences.push(sentence);
+            last_end = i + c.len_utf8();
+        }
+    }
+    if last_end < text.len() {
+        sentences.push(&text[last_end..]);
+    }
+
+    let mut seen = std::collections::HashSet::new();
+    let mut result = String::new();
+    for sentence in sentences {
+        let norm = sentence.trim().to_lowercase();
+        if norm.len() > 15 && !seen.insert(norm) {
+            break;
+        }
+        result.push_str(sentence);
+    }
+    if result.trim().is_empty() {
+        text.to_string()
+    } else {
+        result.trim().to_string()
     }
 }
 
 /// Validate generated text before it is returned by the HTTP chat endpoint.
 pub fn is_usable_generated_text(text: &str) -> bool {
+    if text.contains("Manifold resonance too sparse for synthesis.") {
+        return false;
+    }
     let chars: Vec<char> = text.chars().collect();
     if chars.is_empty()
-        || chars.iter().any(|ch| {
-            ch == &'\u{fffd}' || (ch.is_control() && *ch != '\n' && *ch != '\r' && *ch != '\t')
-        })
+        || chars
+            .iter()
+            .any(|ch| ch.is_control() && *ch != '\n' && *ch != '\r' && *ch != '\t')
     {
         return false;
     }
@@ -851,12 +885,13 @@ pub fn is_usable_generated_text(text: &str) -> bool {
 /// geometric fallback. Character-level guards cannot catch output such as
 /// "that is how i work" repeated over and over, so inspect word windows too.
 fn repeated_word_loop(text: &str) -> bool {
-    let words: Vec<&str> = text.split_whitespace().collect();
+    let normalized = text.replace(['\n', '\r', '\t'], " ");
+    let words: Vec<&str> = normalized.split_whitespace().collect();
     if words.len() < 4 {
         return false;
     }
 
-    // A repeated suffix is the common autoregressive failure mode. Check widths starting at 1.
+    // A repeated suffix or adjacent loop is the common autoregressive failure mode. Check widths starting at 1.
     let max_suffix_width = (words.len() / 2).min(12);
     for width in 1..=max_suffix_width {
         let split = words.len() - width;
@@ -865,14 +900,14 @@ fn repeated_word_loop(text: &str) -> bool {
         }
     }
 
-    // The fallback observed in the browser can interleave a final fragment
-    // between copies of the same phrase. Three occurrences of a 3–12 word
-    // window are a strong enough signal to reject the response.
+    // Tightly-packed loops (3 occurrences of a 3-12 word phrase within a 5x window span).
+    // Distant phrase reuse across separate paragraphs in long text is valid prose.
     let max_width = words.len().min(12);
     for width in 3..=max_width {
-        for start in 0..=words.len() - width {
+        for start in 0..=words.len().saturating_sub(width * 4) {
             let candidate = &words[start..start + width];
-            let occurrences = words
+            let sub_slice = &words[start..(start + width * 5).min(words.len())];
+            let occurrences = sub_slice
                 .windows(width)
                 .filter(|window| *window == candidate)
                 .count();
