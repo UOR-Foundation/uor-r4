@@ -1717,14 +1717,49 @@ fn handle_connection(
                 let file_path = dir_path.join(filename);
                 std::fs::write(&file_path, content).ok();
 
+                let mut router_guard = router.lock().unwrap();
+                let identity = "tenant-alpha";
+                let mut line_count = 0usize;
+                for sentence in content.lines() {
+                    let s = sentence.trim();
+                    if !s.is_empty() {
+                        router_guard.index_sentence(s, identity);
+                        router_guard.inject_thought_stream_native(s);
+                        line_count += 1;
+                    }
+                }
+                let state_json = router_guard.export_state();
+                spawn_cache_save(&cli, state_json);
+
                 let resp = serde_json::json!({
                     "status": "success",
                     "filename": filename,
-                    "message": format!("Added corpus file '{}' and triggered dynamic index update.", filename)
+                    "lines_indexed": line_count,
+                    "message": format!("Added corpus file '{}' and indexed {} lines into geometric manifold hashes.", filename, line_count)
                 });
                 send_json_response(stream, 200, &resp.to_string());
                 return;
             }
+        }
+
+        if action == "export" {
+            let export_dir = std::path::Path::new(".uor-models/exported");
+            std::fs::create_dir_all(export_dir).ok();
+            let export_file = export_dir.join("exported_manifold.json");
+
+            let router_guard = router.lock().unwrap();
+            let state_json = router_guard.export_state();
+            std::fs::write(&export_file, &state_json).ok();
+            std::fs::write(".uor-models/exported_manifold.json", &state_json).ok();
+
+            let resp = serde_json::json!({
+                "status": "success",
+                "path": export_file.display().to_string(),
+                "bytes": state_json.len(),
+                "message": format!("Successfully exported manifold state to {}", export_file.display())
+            });
+            send_json_response(stream, 200, &resp.to_string());
+            return;
         }
 
         let extra_dir = std::path::Path::new(".uor-models/extra_reading");
@@ -2727,10 +2762,25 @@ fn handle_connection(
         return;
     }
 
-    if clean_path == "/api/export" && method == "GET" {
+    if clean_path == "/api/export" && (method == "GET" || method == "POST") {
+        let export_dir = std::path::Path::new(".uor-models/exported");
+        std::fs::create_dir_all(export_dir).ok();
+        let export_file = export_dir.join("exported_manifold.json");
+
         let router_guard = router.lock().unwrap();
         let state_json = router_guard.export_state();
-        send_json_response(stream, 200, &state_json);
+        std::fs::write(&export_file, &state_json).ok();
+        std::fs::write(".uor-models/exported_manifold.json", &state_json).ok();
+
+        let resp = serde_json::json!({
+            "success": true,
+            "status": "success",
+            "path": export_file.display().to_string(),
+            "bytes": state_json.len(),
+            "message": format!("Exported manifold state saved to {}", export_file.display())
+        })
+        .to_string();
+        send_json_response(stream, 200, &resp);
         return;
     }
 
