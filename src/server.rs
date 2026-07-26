@@ -824,7 +824,11 @@ fn clean_attention_response(text: &str, prompt: &str) -> String {
 /// Validate generated text before it is returned by the HTTP chat endpoint.
 pub fn is_usable_generated_text(text: &str) -> bool {
     let chars: Vec<char> = text.chars().collect();
-    if chars.is_empty() || chars.iter().any(|ch| ch == &'\u{fffd}' || ch.is_control()) {
+    if chars.is_empty()
+        || chars.iter().any(|ch| {
+            ch == &'\u{fffd}' || (ch.is_control() && *ch != '\n' && *ch != '\r' && *ch != '\t')
+        })
+    {
         return false;
     }
     let non_space = chars.iter().filter(|ch| !ch.is_whitespace()).count();
