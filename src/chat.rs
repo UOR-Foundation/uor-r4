@@ -521,7 +521,11 @@ const COMMAND_DEFS: &[SlashCommandDef] = &[
     },
     SlashCommandDef {
         cmd: "/clear",
-        desc: "Clear terminal screen",
+        desc: "Clear terminal screen & session history",
+    },
+    SlashCommandDef {
+        cmd: "/reset",
+        desc: "Reset history, corpus & geometric manifold state back to base",
     },
     SlashCommandDef {
         cmd: "/quit",
@@ -1175,7 +1179,7 @@ pub fn remote_interactive_chat(
     writeln!(output, "\x1b[1mCommands & Shortcuts:\x1b[0m")?;
     writeln!(
         output,
-        "  • Type \x1b[33m/help\x1b[0m to view available slash commands (/status, /models, /engine, /clear, /quit)"
+        "  • Type \x1b[33m/help\x1b[0m to view available slash commands (/status, /models, /engine, /reset, /clear, /quit)"
     )?;
     writeln!(
         output,
@@ -1237,7 +1241,11 @@ pub fn remote_interactive_chat(
                         "/audit",
                         "Audit Q&A token trace, UOR coordinates & R4 geometry",
                     ),
-                    ("/clear", "Clear terminal screen"),
+                    (
+                        "/reset",
+                        "Reset chat history, corpus & geometric state back to base",
+                    ),
+                    ("/clear", "Clear terminal screen & session history"),
                     ("/quit", "Exit client session"),
                 ];
 
@@ -1478,7 +1486,21 @@ pub fn remote_interactive_chat(
                     continue;
                 }
                 "/clear" => {
+                    history.clear();
+                    audit_history.clear();
                     write!(output, "\x1b[2J\x1b[1H")?;
+                    output.flush()?;
+                    continue;
+                }
+                "/reset" => {
+                    history.clear();
+                    audit_history.clear();
+                    let _ = send_vendor_reset(&host, port);
+                    write!(output, "\x1b[2J\x1b[1H")?;
+                    writeln!(
+                        output,
+                        "\x1b[32m[✓] Chat history, extra corpus index & geometric manifold state reset back to base defaults.\x1b[0m\n"
+                    )?;
                     output.flush()?;
                     continue;
                 }
@@ -1889,6 +1911,42 @@ fn fetch_server_status(host: &str, port: u16) -> Result<serde_json::Value, Strin
     let json_body = &resp_text[body_start..];
 
     serde_json::from_str(json_body).map_err(|e| format!("Invalid status response JSON: {}", e))
+}
+
+pub fn send_vendor_reset(host: &str, port: u16) -> Result<(), String> {
+    let payload = serde_json::json!({});
+    let body_bytes =
+        serde_json::to_vec(&payload).map_err(|e| format!("Serialization error: {}", e))?;
+    let req_str = format!(
+        "POST /api/reset HTTP/1.1\r\n\
+         Host: {}:{}\r\n\
+         Content-Type: application/json\r\n\
+         Content-Length: {}\r\n\
+         Connection: close\r\n\r\n",
+        host,
+        port,
+        body_bytes.len()
+    );
+
+    let sockaddr: std::net::SocketAddr = format!("{}:{}", host, port)
+        .parse()
+        .map_err(|e| format!("Invalid socket address {}:{}: {}", host, port, e))?;
+
+    let mut stream =
+        std::net::TcpStream::connect_timeout(&sockaddr, std::time::Duration::from_secs(5))
+            .map_err(|e| format!("Failed to connect to {}:{}: {}", host, port, e))?;
+
+    stream
+        .write_all(req_str.as_bytes())
+        .map_err(|e| format!("Failed to send request: {}", e))?;
+    stream
+        .write_all(&body_bytes)
+        .map_err(|e| format!("Failed to send body: {}", e))?;
+    stream.flush().ok();
+
+    let mut resp = Vec::new();
+    stream.read_to_end(&mut resp).ok();
+    Ok(())
 }
 
 fn send_server_post_request(
