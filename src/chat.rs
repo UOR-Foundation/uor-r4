@@ -1776,7 +1776,7 @@ fn send_vendor_chat_completion(
                 "content": user_message
             }
         ],
-        "max_tokens": 128,
+        "max_tokens": 384,
         "temperature": 0.7
     });
     let body_bytes =

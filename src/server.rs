@@ -1744,7 +1744,7 @@ fn handle_connection(
             String::new()
         };
 
-        let max_tokens = req.max_tokens.unwrap_or(128);
+        let max_tokens = req.max_tokens.unwrap_or(256);
         let identity = "tenant-alpha".to_string();
 
         let mut router_guard = router.lock().unwrap();
@@ -1831,9 +1831,7 @@ fn handle_connection(
         if final_response_text.is_empty() {
             let mut oracle_guard = oracle.lock().unwrap();
             if let Some(ref mut o) = *oracle_guard {
-                if let Some((text, _)) =
-                    generate_attention_text(o, &prompt_text, max_tokens.min(64))
-                {
+                if let Some((text, _)) = generate_attention_text(o, &prompt_text, max_tokens) {
                     if is_usable_generated_text(&text) {
                         final_response_text = text;
                         generation_mode = "teacher-oracle-fallback".to_string();
