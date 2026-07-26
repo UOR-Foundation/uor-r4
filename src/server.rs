@@ -1819,7 +1819,7 @@ fn handle_connection(
             _ => {}
         }
 
-        if final_response_text.is_empty() {
+        if final_response_text.is_empty() && tless.lock().unwrap().is_some() {
             if let Some(text) = generate_tless_text(&tless, &prompt_text, max_tokens.max(32)) {
                 if is_usable_generated_text(&text) {
                     final_response_text = text;

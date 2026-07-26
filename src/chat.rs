@@ -1188,7 +1188,7 @@ pub fn remote_interactive_chat(
 
     loop {
         let prompt_lbl = format!(
-            "uor-r4 [model: {} | engine: {}] > ",
+            "\x1b[1;36muor-r4\x1b[0m \x1b[33m[model: {} | engine: {}]\x1b[0m \x1b[1;32m>\x1b[0m ",
             current_active_model, current_active_engine
         );
         let line_opt = match read_line_with_history(&prompt_lbl, &mut history, input, output) {
@@ -1668,6 +1668,7 @@ pub fn remote_interactive_chat(
             send_vendor_chat_completion(&host_c, port_c, &path_c, &model_c, &engine_c, &q_c)
         });
 
+        writeln!(output)?;
         let frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
         let mut frame_idx = 0;
 
@@ -1676,7 +1677,7 @@ pub fn remote_interactive_chat(
             let frame = frames[frame_idx % frames.len()];
             write!(
                 output,
-                "\rr4 > {} lifting... ({}s)\x1b[K",
+                "\r\x1b[1;32mr4\x1b[0m \x1b[1;36m>\x1b[0m {} lifting... ({}s)\x1b[K",
                 frame, elapsed_secs
             )?;
             output.flush()?;
@@ -1698,10 +1699,14 @@ pub fn remote_interactive_chat(
                 } else {
                     0.0
                 };
-                write!(output, "\rr4 > {}\x1b[K\n", answer_text)?;
+                write!(
+                    output,
+                    "\r\x1b[1;32mr4\x1b[0m \x1b[1;36m>\x1b[0m {}\x1b[K\n",
+                    answer_text
+                )?;
                 writeln!(
                     output,
-                    "[stats: {} tokens | {:.2} ms | {:.1} tok/s | mode: {} | model: {}]\n",
+                    "\x1b[90m[stats: {} tokens | {:.2} ms | {:.1} tok/s | mode: {} | model: {}]\x1b[0m\n",
                     completion_tokens, latency_ms, tok_per_sec, engine_mode, current_active_model
                 )?;
                 output.flush()?;
@@ -1709,7 +1714,7 @@ pub fn remote_interactive_chat(
             Err(err) => {
                 write!(
                     output,
-                    "\rr4 > [!] Error communicating with local server: {}\x1b[K\n\n",
+                    "\r\x1b[1;32mr4\x1b[0m \x1b[1;36m>\x1b[0m [!] Error communicating with local server: {}\x1b[K\n\n",
                     err
                 )?;
                 output.flush()?;
