@@ -1633,17 +1633,29 @@ pub fn remote_interactive_chat(
                                     }
                                 }
                                 2 => {
-                                    write!(
+                                    writeln!(
                                         output,
-                                        "\x1b[1mEnter or paste text content to index into R⁴ geometric manifold:\x1b[0m\n\x1b[1;36mcorpus-text > \x1b[0m"
+                                        "\x1b[1mPaste plain text content to index into R⁴ geometric manifold:\x1b[0m"
                                     )?;
+                                    writeln!(output, "(Type 'END' or press Enter on an empty line when finished)\n")?;
                                     output.flush()?;
 
-                                    let mut input_buf = String::new();
-                                    std::io::stdin().read_line(&mut input_buf).ok();
-                                    let content = input_buf.trim().to_string();
-
-                                    if !content.is_empty() {
+                                    let mut lines = Vec::new();
+                                    let stdin = std::io::stdin();
+                                    let handle = stdin.lock();
+                                    use std::io::BufRead;
+                                    for line_res in handle.lines() {
+                                        let line = match line_res {
+                                            Ok(l) => l,
+                                            Err(_) => break,
+                                        };
+                                        if line.trim() == "END" || line.trim().is_empty() {
+                                            break;
+                                        }
+                                        lines.push(line);
+                                    }
+                                    let content = lines.join("\n");
+                                    if !content.trim().is_empty() {
                                         let ts = std::time::SystemTime::now()
                                             .duration_since(std::time::UNIX_EPOCH)
                                             .unwrap_or_default()
