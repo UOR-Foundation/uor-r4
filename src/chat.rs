@@ -1649,13 +1649,14 @@ pub fn remote_interactive_chat(
                                             Ok(l) => l,
                                             Err(_) => break,
                                         };
-                                        if line.trim() == "END" || line.trim().is_empty() {
+                                        let trimmed = line.trim();
+                                        if trimmed == "END" || trimmed.is_empty() {
                                             break;
                                         }
                                         lines.push(line);
                                     }
-                                    let content = lines.join("\n");
-                                    if !content.trim().is_empty() {
+                                    if !lines.is_empty() {
+                                        let content = lines.join("\n");
                                         let ts = std::time::SystemTime::now()
                                             .duration_since(std::time::UNIX_EPOCH)
                                             .unwrap_or_default()
