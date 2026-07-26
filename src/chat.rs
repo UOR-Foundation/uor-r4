@@ -1107,17 +1107,17 @@ pub fn remote_interactive_chat(
     writeln!(output, "\x1b[1;36m")?;
     writeln!(
         output,
-        "██████╗ ██╗  ██╗     ██████╗██╗     ██╗\n\
-         ██╔══██╗██║  ██║    ██╔════╝██║     ██║\n\
-         ██████╔╝███████║    ██║     ██║     ██║\n\
-         ██╔══██╗╚════██║    ██║     ██║     ██║\n\
-         ██║  ██║     ██║    ╚██████╗███████╗██║\n\
-         ╚═╝  ╚═╝     ╚═╝     ╚═════╝╚══════╝╚═╝"
+        "██╗   ██╗██████╗ ██████╗        ██████╗ ██╗  ██╗        ██████╗██╗     ██╗\n\
+         ██║   ██║██╔══██╗██╔══██╗       ██╔══██╗██║  ██║       ██╔════╝██║     ██║\n\
+         ██║   ██║██║  ██║██████╔╝ ████╗ ██████╔╝███████║ ████╗ ██║     ██║     ██║\n\
+         ██║   ██║██║  ██║██╔══██╗ ╚═══╝ ██╔══██╗╚════██║ ╚═══╝ ██║     ██║     ██║\n\
+         ╚██████╔╝██████╔╝██║  ██║       ██║  ██║     ██║       ╚██████╗███████╗██║\n\
+          ╚═════╝ ╚═════╝ ╚═╝  ╚═╝       ╚═╝  ╚═╝     ╚═╝        ╚═════╝╚══════╝╚═╝"
     )?;
     writeln!(output, "\x1b[0m")?;
     writeln!(
         output,
-        "\x1b[1mR⁴ Holographic Graph & Transformerless Engine v0.1.0\x1b[0m"
+        "\x1b[1mUOR-R4 Holographic Graph & Transformerless Engine v0.1.0\x1b[0m"
     )?;
     writeln!(
         output,
@@ -1158,7 +1158,7 @@ pub fn remote_interactive_chat(
 
     loop {
         let prompt_lbl = format!(
-            "you [model: {} | engine: {}] > ",
+            "uor-r4 [model: {} | engine: {}] > ",
             current_active_model, current_active_engine
         );
         let line_opt = match read_line_with_history(&prompt_lbl, &mut history, input, output) {
