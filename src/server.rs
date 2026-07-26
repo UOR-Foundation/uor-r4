@@ -232,13 +232,18 @@ pub fn run_server(cli: Arc<ServerConfig>) {
     let oracle: Arc<Mutex<Option<uor_r4_model_source::HuggingFaceLlamaOracle>>> =
         Arc::new(Mutex::new(None));
 
+    let last_model = std::fs::read_to_string(".uor-models/last_model_name.txt").unwrap_or_default();
+    let last_model_name = last_model.trim();
+
     let candidates = [
-        ".uor-models/sources/smollm2-1-7b-instruct",
-        ".uor-models/sources/smollm2-360m-instruct",
-        ".uor-models/sources/smollm2-135m-instruct",
+        format!(".uor-models/sources/{}", last_model_name),
+        ".uor-models/sources/smollm2-135m-instruct".to_string(),
+        ".uor-models/sources/smollm2-360m-instruct".to_string(),
+        ".uor-models/sources/smollm2-1-7b-instruct".to_string(),
     ];
     let source_dir = candidates
         .iter()
+        .filter(|p| !p.ends_with("/.uor-models/sources/"))
         .find(|p| std::path::Path::new(p).join("model.safetensors").exists());
     if let Some(path) = source_dir {
         println!(
@@ -1630,6 +1635,28 @@ fn handle_connection(
         } else {
             std::path::PathBuf::from(fallback_path)
         };
+
+        let oracle_source = format!(".uor-models/sources/{}", target_model);
+        if std::path::Path::new(&oracle_source)
+            .join("model.safetensors")
+            .exists()
+        {
+            match uor_r4_model_source::HuggingFaceLlamaOracle::load(&oracle_source) {
+                Ok(o) => {
+                    println!(
+                        "[+] Successfully reloaded teacher oracle model for '{}'",
+                        target_model
+                    );
+                    *oracle.lock().unwrap() = Some(o);
+                }
+                Err(e) => {
+                    println!(
+                        "[-] Note: Teacher oracle reload skipped for '{}': {:?}",
+                        target_model, e
+                    );
+                }
+            }
+        }
 
         if path_to_load.is_file() {
             match r4g1::R4g1State::load(&path_to_load, std::path::Path::new(&teacher_path)) {
