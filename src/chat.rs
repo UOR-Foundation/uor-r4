@@ -790,6 +790,13 @@ fn trigger_in_client_compilation<W: Write>(
     std::fs::create_dir_all(&compiled_dir).ok();
     std::fs::create_dir_all(&graph_dir).ok();
 
+    let (target_tokens, compile_seconds) = match target_model {
+        "smollm2-135m-instruct" => ("176800", "300"),
+        "smollm2-360m-instruct" => ("500000", "600"),
+        "smollm2-1-7b-instruct" => ("1768000", "1200"),
+        _ => ("176800", "300"),
+    };
+
     let status = std::process::Command::new(&r4_exe)
         .args([
             "compile",
@@ -798,9 +805,9 @@ fn trigger_in_client_compilation<W: Write>(
             "--output",
             &compiled_dir,
             "--seconds",
-            "300",
+            compile_seconds,
             "--target",
-            "50000",
+            target_tokens,
             "--sequence-length",
             "128",
         ])
@@ -868,9 +875,9 @@ fn trigger_in_client_compilation<W: Write>(
                 "--output",
                 &compiled_dir,
                 "--seconds",
-                "600",
+                compile_seconds,
                 "--target",
-                "50000",
+                target_tokens,
                 "--sequence-length",
                 "128",
             ])
