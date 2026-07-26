@@ -707,17 +707,11 @@ fn generate_attention_text(
     prompt: &str,
     max_tokens: usize,
 ) -> Option<(String, usize)> {
-    // 1. Construct exact token seed using proper tokenizer formatting
-    let formatted_prompt = format!(
-        "<|im_start|>user\n{}<|im_end|>\n<|im_start|>assistant\n",
-        prompt.trim()
-    );
+    // 1. Construct token seed for prompt
+    let formatted_prompt = format!("User: {}\nAssistant:", prompt.trim());
     let seed = match tless_uor::tless_tokenize(&formatted_prompt) {
         Some(s) if !s.is_empty() => s,
-        _ => {
-            let fallback_prompt = format!("User: {}\nAssistant:", prompt.trim());
-            tless_uor::tless_tokenize(&fallback_prompt)?
-        }
+        _ => return None,
     };
 
     let seed_len = seed.len();
