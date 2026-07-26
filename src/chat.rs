@@ -1423,6 +1423,7 @@ pub fn remote_interactive_chat(
                     };
 
                     current_active_engine = target_engine.clone();
+                    let _ = std::fs::write(".uor-models/last_engine.txt", &current_active_engine);
                     writeln!(
                         output,
                         "\x1b[32m[+] Active synthesis engine set to '{}'\x1b[0m\n",
