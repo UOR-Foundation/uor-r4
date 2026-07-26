@@ -797,14 +797,14 @@ fn trigger_in_client_compilation<W: Write>(
         ),
     ];
 
-    let use_exact_scalar = match select_menu_interactive(
-        "Select Teacher Matrix Acceleration Mode for Compilation:",
-        &accel_options,
-        output,
-    ) {
-        Ok(Some(1)) => true,
-        _ => false,
-    };
+    let use_exact_scalar = matches!(
+        select_menu_interactive(
+            "Select Teacher Matrix Acceleration Mode for Compilation:",
+            &accel_options,
+            output,
+        ),
+        Ok(Some(1))
+    );
 
     writeln!(
         output,
