@@ -707,35 +707,18 @@ fn generate_attention_text(
     prompt: &str,
     max_tokens: usize,
 ) -> Option<(String, usize)> {
-    // 1. Construct exact token seed for SmolLM2 Instruct chat template
-    let mut seed = Vec::new();
-    seed.push(1u32); // <|im_start|>
-    if let Some(mut u_toks) = tless_uor::tless_tokenize("user\n") {
-        if u_toks.first() == Some(&1) {
-            u_toks.remove(0);
+    // 1. Construct exact token seed using proper tokenizer formatting
+    let formatted_prompt = format!(
+        "<|im_start|>user\n{}<|im_end|>\n<|im_start|>assistant\n",
+        prompt.trim()
+    );
+    let seed = match tless_uor::tless_tokenize(&formatted_prompt) {
+        Some(s) if !s.is_empty() => s,
+        _ => {
+            let fallback_prompt = format!("User: {}\nAssistant:", prompt.trim());
+            tless_uor::tless_tokenize(&fallback_prompt)?
         }
-        seed.extend(u_toks);
-    }
-    if let Some(mut p_toks) = tless_uor::tless_tokenize(prompt.trim()) {
-        if p_toks.first() == Some(&1) {
-            p_toks.remove(0);
-        }
-        seed.extend(p_toks);
-    }
-    seed.push(2u32); // <|im_end|>
-    if let Some(mut nl_toks) = tless_uor::tless_tokenize("\n") {
-        if nl_toks.first() == Some(&1) {
-            nl_toks.remove(0);
-        }
-        seed.extend(nl_toks);
-    }
-    seed.push(1u32); // <|im_start|>
-    if let Some(mut a_toks) = tless_uor::tless_tokenize("assistant\n") {
-        if a_toks.first() == Some(&1) {
-            a_toks.remove(0);
-        }
-        seed.extend(a_toks);
-    }
+    };
 
     let seed_len = seed.len();
     if seed_len == 0 {
@@ -771,8 +754,8 @@ fn generate_attention_text(
             }
         }
 
-        // Stop on EOS (2) or BOS/NULL
-        if best_t == oracle.eos_token() || best_t == 2 || best_t == 0 {
+        // Stop on EOS token or NULL (0)
+        if best_t == oracle.eos_token() || (oracle.eos_token() == 0 && best_t == 2) {
             break;
         }
 
