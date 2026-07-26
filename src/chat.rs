@@ -592,7 +592,7 @@ fn read_line_with_history<W: Write>(
                 .completion_type(rustyline::CompletionType::List)
                 .build();
             let mut rl = rustyline::Editor::<SlashCommandHelper, _>::with_config(config)
-                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+                .map_err(std::io::Error::other)?;
             rl.set_helper(Some(SlashCommandHelper));
             for entry in history.iter() {
                 let _ = rl.add_history_entry(entry);
@@ -608,7 +608,7 @@ fn read_line_with_history<W: Write>(
                 }
                 Err(rustyline::error::ReadlineError::Interrupted) => return Ok(None),
                 Err(rustyline::error::ReadlineError::Eof) => return Ok(None),
-                Err(e) => return Err(std::io::Error::new(std::io::ErrorKind::Other, e)),
+                Err(e) => return Err(std::io::Error::other(e)),
             }
         }
     }
@@ -759,7 +759,7 @@ fn trigger_in_client_compilation<W: Write>(
         )?;
         output.flush()?;
         let status = std::process::Command::new(&r4_exe)
-            .args(&[
+            .args([
                 "download",
                 "--repository",
                 repo,
@@ -791,7 +791,7 @@ fn trigger_in_client_compilation<W: Write>(
     std::fs::create_dir_all(&graph_dir).ok();
 
     let status = std::process::Command::new(&r4_exe)
-        .args(&[
+        .args([
             "compile",
             "--source",
             &source_dir,
@@ -837,7 +837,7 @@ fn trigger_in_client_compilation<W: Write>(
     let tless_artifacts = format!("{}/tless_artifacts.bin", compiled_dir);
 
     let mut status = std::process::Command::new(&r4_exe)
-        .args(&[
+        .args([
             "transformerless",
             "score",
             "--corpus-meta",
@@ -859,7 +859,7 @@ fn trigger_in_client_compilation<W: Write>(
         )?;
         output.flush()?;
         let _ = std::process::Command::new(&r4_exe)
-            .args(&[
+            .args([
                 "compile",
                 "--source",
                 &source_dir,
@@ -874,7 +874,7 @@ fn trigger_in_client_compilation<W: Write>(
             ])
             .status()?;
         status = std::process::Command::new(&r4_exe)
-            .args(&[
+            .args([
                 "transformerless",
                 "score",
                 "--corpus-meta",
