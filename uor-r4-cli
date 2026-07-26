@@ -1,6 +1,16 @@
 #!/usr/bin/env bash
 set -e
 
+# Resolve repository root directory (supports invocation via symlinks & PATH calls from anywhere)
+SCRIPT_PATH="${BASH_SOURCE[0]}"
+while [ -L "$SCRIPT_PATH" ]; do
+    SCRIPT_DIR="$(cd -P "$(dirname "$SCRIPT_PATH")" && pwd)"
+    SCRIPT_PATH="$(readlink "$SCRIPT_PATH")"
+    [[ $SCRIPT_PATH != /* ]] && SCRIPT_PATH="$SCRIPT_DIR/$SCRIPT_PATH"
+done
+WORKSPACE_DIR="$(cd -P "$(dirname "$SCRIPT_PATH")" && pwd)"
+cd "$WORKSPACE_DIR"
+
 # Clear terminal screen immediately so loading output starts at the top
 clear 2>/dev/null || true
 
