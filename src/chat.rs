@@ -354,7 +354,10 @@ fn hologram_answer(
                             0
                         };
 
-                        let adjusted_score = beam.score.saturating_add(cand_score.raw()).saturating_sub(repeat_penalty);
+                        let adjusted_score = beam
+                            .score
+                            .saturating_add(cand_score.raw())
+                            .saturating_sub(repeat_penalty);
                         new_tokens.push(cand_tok);
 
                         all_candidates.push(BeamHypothesis {
