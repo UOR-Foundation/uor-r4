@@ -154,6 +154,7 @@ if [ ! -f "${COMPILED_DIR}/tless_artifacts.bin" ] || [ ! -f "$SCORE_FILE" ]; the
         --corpus-meta "$META_PATH" \
         --corpus-recs "$RECS_PATH" \
         --artifacts "${COMPILED_DIR}/tless_artifacts.bin" \
+        --quality-profile relative_tla \
         --out "$GRAPH_DIR" > /tmp/r4_score.log 2>&1 &
     SC_PID=$!
 

@@ -846,6 +846,8 @@ fn trigger_in_client_compilation<W: Write>(
             &c_recs,
             "--artifacts",
             &tless_artifacts,
+            "--quality-profile",
+            "relative_tla",
             "--out",
             &graph_dir,
         ])
@@ -883,6 +885,8 @@ fn trigger_in_client_compilation<W: Write>(
                 &c_recs,
                 "--artifacts",
                 &tless_artifacts,
+                "--quality-profile",
+                "relative_tla",
                 "--out",
                 &graph_dir,
             ])
