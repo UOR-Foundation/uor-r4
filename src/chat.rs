@@ -1174,7 +1174,7 @@ pub fn remote_interactive_chat(
         }
 
         if question.starts_with('/') {
-            let input_cmd = question.trim();
+            let mut input_cmd = question.trim();
             if input_cmd == "/" {
                 let menu_options = [
                     ("/models", "Manage & switch active teacher model in-session"),
@@ -1203,77 +1203,11 @@ pub fn remote_interactive_chat(
                     &menu_options,
                     output,
                 ) {
-                    let chosen_cmd = menu_options[idx].0;
-                    match chosen_cmd {
-                        "/models" => {
-                            let model_options = [
-                                ("smollm2-135m-instruct", "Fast & Ultra-Light (~270MB)"),
-                                ("smollm2-360m-instruct", "Balanced Quality (~720MB)"),
-                                ("smollm2-1-7b-instruct", "High-Fidelity Teacher (~3.4GB)"),
-                            ];
-                            if let Ok(Some(m_idx)) = select_menu_interactive(
-                                "R⁴ Interactive Model Selector:",
-                                &model_options,
-                                output,
-                            ) {
-                                let target_model = model_options[m_idx].0;
-                                handle_model_switch_with_remediation(
-                                    target_model,
-                                    &host,
-                                    port,
-                                    &mut current_active_model,
-                                    &mut current_active_engine,
-                                    output,
-                                )?;
-                            }
-                        }
-                        "/engine" => {
-                            let engine_options = [
-                                ("r4g1", "Sub-ms Zero-Multiply Residual Graph Engine"),
-                                ("attention", "Full Attention Teacher Oracle Fallback"),
-                                ("r4-attention", "Manifold-Constrained Geometric Attention"),
-                                ("geometric", "f64 Geometric Router Engine"),
-                                ("transformerless-legacy", "Legacy Table Store Kernel"),
-                            ];
-                            if let Ok(Some(e_idx)) = select_menu_interactive(
-                                "R⁴ Interactive Synthesis Engine Manager:",
-                                &engine_options,
-                                output,
-                            ) {
-                                current_active_engine = engine_options[e_idx].0.to_string();
-                                let _ = std::fs::write(
-                                    ".uor-models/last_engine.txt",
-                                    &current_active_engine,
-                                );
-                                writeln!(
-                                    output,
-                                    "\x1b[32m[+] Active synthesis engine set to '{}'\x1b[0m",
-                                    current_active_engine
-                                )?;
-
-                                let (_downloaded, compiled) =
-                                    check_model_artifact_status(&current_active_model);
-                                if current_active_engine == "r4g1" && !compiled {
-                                    writeln!(output, "\x1b[33m[!] ALERT: Engine 'r4g1' selected, but model '{}' is not compiled yet!\x1b[0m", current_active_model)?;
-                                    writeln!(output, "\x1b[33m    The server will fall back to oracle mode until '/compile' is run.\x1b[0m\n")?;
-                                } else {
-                                    writeln!(output)?;
-                                }
-                            }
-                        }
-                        "/clear" => {
-                            write!(output, "\x1b[2J\x1b[1H")?;
-                        }
-                        "/quit" => {
-                            break;
-                        }
-                        _ => {
-                            writeln!(output, "Selected command: {}\n", chosen_cmd)?;
-                        }
-                    }
+                    input_cmd = menu_options[idx].0;
+                } else {
+                    output.flush()?;
+                    continue;
                 }
-                output.flush()?;
-                continue;
             }
 
             let parts: Vec<&str> = input_cmd.split_whitespace().collect();
