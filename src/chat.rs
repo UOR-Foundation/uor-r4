@@ -516,6 +516,10 @@ const COMMAND_DEFS: &[SlashCommandDef] = &[
         desc: "Trigger full automated 4-stage graph compilation",
     },
     SlashCommandDef {
+        cmd: "/audit",
+        desc: "Audit Q&A token trace, UOR coordinates & R4 geometry",
+    },
+    SlashCommandDef {
         cmd: "/clear",
         desc: "Clear terminal screen",
     },
@@ -1150,6 +1154,7 @@ pub fn remote_interactive_chat(
     output.flush()?;
 
     let mut history: Vec<String> = Vec::new();
+    let mut audit_history: Vec<(String, String, Option<crate::server::UorAuditTrace>)> = Vec::new();
 
     loop {
         let prompt_lbl = format!(
@@ -1193,6 +1198,10 @@ pub fn remote_interactive_chat(
                     (
                         "/compile",
                         "Trigger full automated 4-stage graph compilation",
+                    ),
+                    (
+                        "/audit",
+                        "Audit Q&A token trace, UOR coordinates & R4 geometry",
                     ),
                     ("/clear", "Clear terminal screen"),
                     ("/quit", "Exit client session"),
@@ -1514,6 +1523,103 @@ pub fn remote_interactive_chat(
                     output.flush()?;
                     continue;
                 }
+                "/audit" => {
+                    if audit_history.is_empty() {
+                        writeln!(
+                            output,
+                            "\n\x1b[33m[!] No Q&A turns audited in this session yet.\x1b[0m"
+                        )?;
+                        writeln!(
+                            output,
+                            "    Ask a question first, then run '/audit' to inspect UOR coordinates.\n"
+                        )?;
+                    } else {
+                        let audit_options = [
+                            (
+                                "1) View Last Q&A Audit Trace",
+                                "Inspect UOR coordinates, kappa pass status, and token provenance for last turn",
+                            ),
+                            (
+                                "2) List Audit History",
+                                "Browse and select from recent session Q&A turns",
+                            ),
+                            (
+                                "3) Export Audit Log",
+                                "Export full session audit trace to .uor-models/audit_log.json",
+                            ),
+                        ];
+
+                        if let Ok(Some(a_idx)) = select_menu_interactive(
+                            "R⁴ UOR Auditability & Tracing Inspector:",
+                            &audit_options,
+                            output,
+                        ) {
+                            match a_idx {
+                                0 => {
+                                    let last_rec = audit_history.last().unwrap();
+                                    render_audit_trace_record(last_rec, output)?;
+                                }
+                                1 => {
+                                    let history_options: Vec<(String, String)> = audit_history
+                                        .iter()
+                                        .enumerate()
+                                        .map(|(i, (q, _, audit))| {
+                                            let kappa_str = audit
+                                                .as_ref()
+                                                .map(|a| format!("κ={:.4}", a.kappa))
+                                                .unwrap_or_else(|| "N/A".to_string());
+                                            let short_q = if q.len() > 35 {
+                                                format!("{}...", &q[..35])
+                                            } else {
+                                                q.clone()
+                                            };
+                                            (
+                                                format!("Turn #{}", i + 1),
+                                                format!("{} [{}]", short_q, kappa_str),
+                                            )
+                                        })
+                                        .collect();
+
+                                    let view_refs: Vec<(&str, &str)> = history_options
+                                        .iter()
+                                        .map(|(label, desc)| (label.as_str(), desc.as_str()))
+                                        .collect();
+
+                                    if let Ok(Some(h_idx)) = select_menu_interactive(
+                                        "Select Q&A Turn to Audit:",
+                                        &view_refs,
+                                        output,
+                                    ) {
+                                        render_audit_trace_record(&audit_history[h_idx], output)?;
+                                    }
+                                }
+                                2 => {
+                                    let export_path = ".uor-models/audit_log.json";
+                                    if let Ok(json_str) =
+                                        serde_json::to_string_pretty(&audit_history)
+                                    {
+                                        if std::fs::write(export_path, json_str).is_ok() {
+                                            writeln!(
+                                                output,
+                                                "\x1b[32m[+] Successfully exported session audit trace ({} turns) to {}\x1b[0m\n",
+                                                audit_history.len(),
+                                                export_path
+                                            )?;
+                                        } else {
+                                            writeln!(
+                                                output,
+                                                "[!] Failed to write audit log file.\n"
+                                            )?;
+                                        }
+                                    }
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                    output.flush()?;
+                    continue;
+                }
                 _ => {}
             }
         }
@@ -1553,7 +1659,8 @@ pub fn remote_interactive_chat(
             .unwrap_or_else(|_| Err("Worker thread panicked".to_string()));
 
         match res {
-            Ok((answer_text, completion_tokens, engine_mode)) => {
+            Ok((answer_text, completion_tokens, engine_mode, uor_audit)) => {
+                audit_history.push((question.to_string(), answer_text.clone(), uor_audit));
                 let elapsed_secs = start_time.elapsed().as_secs_f64();
                 let latency_ms = elapsed_secs * 1000.0;
                 let tok_per_sec = if elapsed_secs > 0.0001 {
@@ -1620,7 +1727,7 @@ fn send_vendor_chat_completion(
     model: &str,
     engine: &str,
     user_message: &str,
-) -> Result<(String, usize, String), String> {
+) -> Result<(String, usize, String, Option<crate::server::UorAuditTrace>), String> {
     let payload = serde_json::json!({
         "model": model,
         "engine": engine,
@@ -1703,7 +1810,11 @@ fn send_vendor_chat_completion(
         .unwrap_or_else(|| parsed["system_fingerprint"].as_str().unwrap_or("uor-r4"))
         .to_string();
 
-    Ok((content, completion_tokens, mode))
+    let uor_audit: Option<crate::server::UorAuditTrace> = parsed
+        .get("uor_audit")
+        .and_then(|val| serde_json::from_value(val.clone()).ok());
+
+    Ok((content, completion_tokens, mode, uor_audit))
 }
 
 fn fetch_server_status(host: &str, port: u16) -> Result<serde_json::Value, String> {
@@ -1797,6 +1908,115 @@ fn send_server_post_request(
 
     serde_json::from_str(json_body)
         .map_err(|e| format!("Invalid response JSON: {} (body: {:?})", e, json_body))
+}
+
+fn render_audit_trace_record(
+    record: &(String, String, Option<crate::server::UorAuditTrace>),
+    output: &mut impl Write,
+) -> Result<(), std::io::Error> {
+    let (question, answer, audit_opt) = record;
+    writeln!(
+        output,
+        "\n\x1b[1;36m┌─────────────────────────────────────────────────────────────────────────────┐\x1b[0m"
+    )?;
+    writeln!(
+        output,
+        "\x1b[1;36m│  R⁴ UOR Auditability & Tracing Inspector                                    │\x1b[0m"
+    )?;
+    writeln!(
+        output,
+        "\x1b[1;36m├─────────────────────────────────────────────────────────────────────────────┤\x1b[0m"
+    )?;
+    let short_q = if question.len() > 65 {
+        format!("{}...", &question[..65])
+    } else {
+        question.clone()
+    };
+    let short_a = if answer.len() > 65 {
+        format!("{}...", &answer[..65])
+    } else {
+        answer.clone()
+    };
+    writeln!(output, "  \x1b[1mQuery Prompt \x1b[0m : {}", short_q)?;
+    writeln!(output, "  \x1b[1mGenerated Ans\x1b[0m : {}", short_a)?;
+    writeln!(
+        output,
+        "\x1b[1;36m├─────────────────────────────────────────────────────────────────────────────┤\x1b[0m"
+    )?;
+
+    if let Some(audit) = audit_opt {
+        let pass_badge = if audit.kappa_pass {
+            "\x1b[32m[✓ PASS]\x1b[0m"
+        } else {
+            "\x1b[33m[! DRIFT]\x1b[0m"
+        };
+        writeln!(
+            output,
+            "  \x1b[1mUOR Address     \x1b[0m : \x1b[36m{}\x1b[0m",
+            audit.uor_address
+        )?;
+        writeln!(
+            output,
+            "  \x1b[1mCurvature κ     \x1b[0m : {} {}",
+            audit.kappa, pass_badge
+        )?;
+        writeln!(
+            output,
+            "  \x1b[1mDeficit Angle θd\x1b[0m : {} rad",
+            audit.deficit_angle
+        )?;
+        writeln!(
+            output,
+            "  \x1b[1mQIMC Bias uor_b \x1b[0m : {}",
+            audit.entropy_bias
+        )?;
+        writeln!(output, "  \x1b[1mDampening γ     \x1b[0m : {}", audit.gamma)?;
+        writeln!(
+            output,
+            "  \x1b[1mTemperature T   \x1b[0m : {}",
+            audit.temperature
+        )?;
+        writeln!(
+            output,
+            "  \x1b[1mEngine Mode     \x1b[0m : \x1b[32m{}\x1b[0m",
+            audit.generation_mode
+        )?;
+        writeln!(
+            output,
+            "  \x1b[1mTotal Latency   \x1b[0m : {:.2} ms",
+            audit.total_latency_ms
+        )?;
+        writeln!(
+            output,
+            "\x1b[1;36m├─────────────────────────────────────────────────────────────────────────────┤\x1b[0m"
+        )?;
+        writeln!(
+            output,
+            "  \x1b[1mToken Provenance Trace ({} tokens):\x1b[0m",
+            audit.tokens_detail.len()
+        )?;
+        for t in audit.tokens_detail.iter().take(20) {
+            writeln!(
+                output,
+                "   [{:>2}] '{:<15}' -> {:<38} ({:.2} ms)",
+                t.token_id, t.text, t.origin_rule, t.latency_ms
+            )?;
+        }
+        if audit.tokens_detail.len() > 20 {
+            writeln!(
+                output,
+                "   ... ({} remaining tokens omitted for display)",
+                audit.tokens_detail.len() - 20
+            )?;
+        }
+    } else {
+        writeln!(output, "  (No UOR audit trace payload returned by backend)")?;
+    }
+    writeln!(
+        output,
+        "\x1b[1;36m└─────────────────────────────────────────────────────────────────────────────┘\x1b[0m\n"
+    )?;
+    Ok(())
 }
 
 #[cfg(test)]
