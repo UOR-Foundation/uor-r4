@@ -527,6 +527,10 @@ const COMMAND_DEFS: &[SlashCommandDef] = &[
         cmd: "/quit",
         desc: "Exit client session",
     },
+    SlashCommandDef {
+        cmd: "/exit",
+        desc: "Exit client session",
+    },
 ];
 #[cfg(not(target_arch = "wasm32"))]
 #[cfg(not(target_arch = "wasm32"))]
@@ -1478,7 +1482,7 @@ pub fn remote_interactive_chat(
                     output.flush()?;
                     continue;
                 }
-                "/quit" => {
+                "/quit" | "/exit" => {
                     break;
                 }
                 "/compile" => {
