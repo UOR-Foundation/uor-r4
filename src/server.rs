@@ -1692,6 +1692,19 @@ fn handle_connection(
                 }
             }
             if final_response_text.is_empty() && !r4g1_abstained {
+                if let Some(ref mut o) = *oracle_guard {
+                    if let Some((text, count)) = generate_attention_text(o, &prompt, max_tokens.max(128)) {
+                        if is_usable_generated_text(&text) {
+                            final_response_text = text;
+                            llm_connected = true;
+                            generation_mode = "teacher-oracle-fallback".to_string();
+                            tokens_generated = count;
+                            println!("[+] Fallback engine successfully generated response via teacher oracle");
+                        }
+                    }
+                }
+            }
+            if final_response_text.is_empty() && !r4g1_abstained {
                 let geom_result = router_guard.generate_geometric_response_native(
                     &payload.text,
                     &identity,
