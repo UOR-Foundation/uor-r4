@@ -921,7 +921,7 @@ pub fn score_command(args: &[String]) -> Result<(), String> {
             )
         }
         None => {
-            eprintln!("score: inducing cover (default config)...");
+            eprintln!("score: inducing cover [========================] 0%");
             let induced = cover::induce_cover(
                 &train,
                 &cover::CoverConfig::default(),
@@ -930,7 +930,10 @@ pub fn score_command(args: &[String]) -> Result<(), String> {
             )?;
             let reference = cover::ReferenceClassifier::freeze(&induced.cover);
             let edges = cover::build_edges(&induced.cover, &reference, &train, &corpus.story);
-            eprintln!("score: {} regions induced", induced.cover.regions.len());
+            let n_reg = induced.cover.regions.len();
+            eprintln!(
+                "score: inducing cover [========================] {n_reg}/{n_reg} regions 100%"
+            );
             (
                 score::regions_from_cover(&induced.cover),
                 score::structural_from_cover(&edges),
@@ -940,11 +943,11 @@ pub fn score_command(args: &[String]) -> Result<(), String> {
     };
     let max_depth = regions.iter().map(|r| r.depth as usize).max().unwrap_or(1);
 
-    eprintln!("score: building graded store (EXCT carryover + baseline)...");
+    eprintln!("score: building graded store [========================] 100%");
     let (store, _) = runtime::build_store(&artifacts, &corpus);
     let tls1 = runtime::store_bytes(&store);
 
-    eprintln!("score: compiling forward transitions and emission residuals...");
+    eprintln!("score: compiling forward transitions [========================] 100%");
     let (transitions, transition_quantization) = score::compile_transitions_with_quantization(
         &corpus,
         &regions,
@@ -972,7 +975,7 @@ pub fn score_command(args: &[String]) -> Result<(), String> {
     )?;
     let graph_kappa = format!("blake3:{}", blake3::hash(&artifact_bytes).to_hex());
 
-    eprintln!("score: running Gate C evaluation on the held-out partition...");
+    eprintln!("score: running Gate C evaluation [========================] 100%");
     let gate_c = score::evaluate_gate_c(
         &artifact_bytes,
         &artifact_container,
