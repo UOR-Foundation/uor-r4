@@ -43,6 +43,14 @@ the compile-side assignment function, with a measured approximation gap.
 ## Candidate designs (benchmark both; ⚑ pick by measurement, not taste)
 
 ### Design R — integer residual subtraction
+*(Risk note from code review: R's blast radius exceeds the query kernel —
+stage-k class signatures (`art.class_sigs`) currently live in one
+signature space and must be retrained in residual space, and `ctx_cb`
+integer copies must be serialized (today marked certifier-side-only).
+Higher ceiling, bigger change. Design G, by contrast, is a strict
+generalization of the shipped path — b=1 is today's signature — with
+width-variant Hamming kernels as its main engineering. Neither fails by
+inspection; the decomposition rows decide.)*
 Ship quantized-integer copies of the per-stage centroids (`ctx_cb`
 exists compiler-side today, never serialized). Query side, per stage:
 Hamming-assign as today → subtract the winning centroid's integer copy
@@ -74,11 +82,29 @@ Composes with Design R (graded signature *of the residual*).
 
 ## Phasing
 
-- **Phase A (certifier-side, no runtime change):** add certify rows —
-  f32-store + Design-R query, f32-store + Design-G query (b=2,3,4),
-  f32-store + R∘G — alongside the existing A-rows. Pure measurement,
-  same harness discipline as #244's rows. Exit: pick the winner by the
-  Empirical Criterion below.
+- **Phase A (certifier-side, no runtime change): decompose before
+  designing.** The 3.9pp gap was measured by an ablation that changes
+  three things at once (normalization, Euclidean assignment, residuals)
+  — the existing evidence cannot attribute the gap among the three
+  losses. Phase A therefore adds *decomposition rows* first, then the
+  candidate rows, all in one certify run (same harness discipline as
+  #244's rows):
+
+  | Row | Isolates |
+  |---|---|
+  | A-norm-only (normalize → sign-bits, no residuals) | loss #3 alone |
+  | A-resid-only (residual VQ in raw space, no normalization) | loss #1 alone |
+  | A-G(b) for b ∈ {2,3,4} (graded signature, no residuals) | loss #2 (+#3 via ladder) |
+  | A-R (integer residual + re-threshold, no normalization) | Design R as buildable |
+  | A-R∘G(b) (graded signature of the residual) | composition |
+  | A-f32 (existing) | all three jointly — the ceiling |
+
+  **Exit rule:** if a single-loss row recovers ≥ ~70% of the A-f32 gap,
+  the corresponding minimal fix is the design (e.g. norm-only winning ⇒
+  a threshold-ladder/scaling fix, and both R and G as drafted are
+  over-engineering — an explicitly acceptable outcome). Otherwise pick
+  the best buildable row (A-R / A-G / A-R∘G) by the Empirical Criterion
+  below. Either way the full table is posted on #243 before Phase B.
 - **Phase B (kernel):** implement the winning query path in the integer
   kernel behind an artifact-versioned format bump (R4G1 era note);
   extend the P-4 source scan to the new code; equality-witness the
