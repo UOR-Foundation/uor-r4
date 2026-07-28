@@ -217,25 +217,25 @@ jobs:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
-      - run: echo "Deferred to the merge queue (issue #240) — the real wasm-pack build runs on the speculative merge."
+      - run: "echo 'Deferred to the merge queue (issue #240) - the real wasm-pack build runs on the speculative merge.'"
 
   gate-c-trend-pr-stub:
     name: Gate C trend alarm
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
-      - run: echo "Deferred to the merge queue (issue #240) — the real Gate C trend check runs on the speculative merge."
+      - run: "echo 'Deferred to the merge queue (issue #240) - the real Gate C trend check runs on the speculative merge.'"
 
   fuzz-smoke-pr-stub:
     name: fuzz smoke (nightly libfuzzer)
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
-      - run: echo "Deferred to the merge queue (issue #240) — the real fuzz smoke runs on the speculative merge."
+      - run: "echo 'Deferred to the merge queue (issue #240) - the real fuzz smoke runs on the speculative merge.'"
 
   audit-mq-stub:
     name: cargo audit
     if: github.event_name == 'merge_group'
     runs-on: ubuntu-latest
     steps:
-      - run: echo "cargo audit already ran in pull_request context (issue #240) — the advisory-DB lookup is merge-content-independent."
+      - run: "echo 'cargo audit already ran in pull_request context (issue #240) - the advisory-DB lookup is merge-content-independent.'"
