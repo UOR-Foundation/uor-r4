@@ -5,6 +5,7 @@
 use std::collections::BTreeMap;
 use uor_r4_graph_certify::certify::merged_beam_distribution;
 
+#[allow(clippy::type_complexity)] // test-fixture literal shape
 fn level(entries: &[(&[u8], &[(u32, u32)])]) -> BTreeMap<Vec<u8>, BTreeMap<u32, u32>> {
     let mut level = BTreeMap::new();
     for (key, dist) in entries {
