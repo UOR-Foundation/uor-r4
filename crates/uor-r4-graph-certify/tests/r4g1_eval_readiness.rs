@@ -63,11 +63,8 @@ fn varied_contexts_on_populated_store_are_ready_or_explicitly_degenerate() {
         vec![11, 5, 8],
         vec![2, 3, 4],
     ];
-    let readiness = r4g1_eval_readiness(
-        &rt,
-        contexts.iter().map(|c| c.as_slice()),
-        &mut node_scores,
-    );
+    let readiness =
+        r4g1_eval_readiness(&rt, contexts.iter().map(|c| c.as_slice()), &mut node_scores);
 
     // The fixture-backed graph must not silently classify as Ready while
     // actually emitting nothing: either it is Ready with a nonzero scored
@@ -91,11 +88,8 @@ fn out_of_vocabulary_contexts_classify_as_degenerate() {
     // no emitting node, so predictions collapse to the constant root
     // fallback (or stay unscored). Either way the probe must NOT say Ready.
     let contexts: Vec<Vec<u32>> = (0..8).map(|k| vec![40_000 + k, 41_000 + k]).collect();
-    let readiness = r4g1_eval_readiness(
-        &rt,
-        contexts.iter().map(|c| c.as_slice()),
-        &mut node_scores,
-    );
+    let readiness =
+        r4g1_eval_readiness(&rt, contexts.iter().map(|c| c.as_slice()), &mut node_scores);
 
     assert!(
         !readiness.is_ready(),
