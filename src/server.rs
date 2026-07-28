@@ -1115,20 +1115,26 @@ fn persisted_engine_preference() -> Option<String> {
 
 /// Resolve issue-#248 engine pinning. An engine named by the request — or,
 /// when the request is silent, by the persisted `/engine` selection — pins
-/// the cascade to that single tier; "auto"/empty/unknown values (and the
-/// legacy "ollama" alias) run the full cascade. `select_synthesis_engine`
-/// remains the legacy single-value resolver for existing consumers.
+/// the cascade to that single tier, with one deliberate exception:
+/// **"r4g1" never pins.** The CLI persists "r4g1" as its default
+/// (`last_engine.txt`), so treating it as a pin would silently disable
+/// every fallback tier for default installs; and r4g1-first is already the
+/// full cascade's order, so the choice loses nothing by cascading.
+/// Explicit non-default selections (attention, geometric, transformerless,
+/// r4-attention) pin. "auto"/empty/unknown and the legacy "ollama" alias
+/// run the full cascade. `select_synthesis_engine` remains the legacy
+/// single-value resolver for existing consumers.
 fn resolve_pinned_tier(requested: Option<&str>) -> Option<&'static str> {
     let requested = match requested.map(str::trim) {
         Some(value) if !value.is_empty() => Some(value.to_owned()),
         _ => persisted_engine_preference(),
     };
     match requested.as_deref() {
-        Some("r4g1") => Some(TIER_R4G1),
         Some("transformerless" | "transformerless-legacy") => Some(TIER_TRANSFORMERLESS),
         Some("attention") => Some(TIER_ATTENTION),
         Some("r4-attention") => Some(TIER_R4_ATTENTION),
         Some("geometric") => Some(TIER_GEOMETRIC),
+        // "r4g1" (the persisted CLI default) and "auto"/unknown: full cascade.
         _ => None,
     }
 }
@@ -3995,6 +4001,30 @@ mod tests {
         assert_eq!(generation_mode, "transformerless-fallback");
         assert!(!final_response_text.is_empty());
         assert!(super::is_usable_generated_text(&final_response_text));
+    }
+
+    #[test]
+    fn r4g1_default_selection_never_pins_but_explicit_engines_do() {
+        // Issue #248 amendment: the CLI persists "r4g1" as its default
+        // engine, so treating it as a pin would silently disable every
+        // fallback tier on default installs. r4g1-first is already the
+        // cascade order — "r4g1" runs the full cascade.
+        assert_eq!(super::resolve_pinned_tier(Some("r4g1")), None);
+        assert_eq!(super::resolve_pinned_tier(Some("auto")), None);
+        assert_eq!(super::resolve_pinned_tier(Some("")), None);
+        assert_eq!(super::resolve_pinned_tier(Some("ollama")), None);
+        assert_eq!(
+            super::resolve_pinned_tier(Some("geometric")),
+            Some(super::TIER_GEOMETRIC)
+        );
+        assert_eq!(
+            super::resolve_pinned_tier(Some("attention")),
+            Some(super::TIER_ATTENTION)
+        );
+        assert_eq!(
+            super::resolve_pinned_tier(Some("transformerless")),
+            Some(super::TIER_TRANSFORMERLESS)
+        );
     }
 
     #[test]
