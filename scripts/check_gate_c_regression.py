@@ -2,22 +2,21 @@
 import sys
 import json
 
-# Pinned previous record (Gate C Rule 1+2 on the small corpus test fixture)
-# Determined from trend_output/score_report.json on main.
-#
-# Era note (issue #281, 2026-07-29): re-pinned for the single-key store +
-# read-time query-beam semantics (the #244 decision). Fixture-scale price
-# vs the pre-#281 pins (0.317 / 9.86): top-1 -1.7pp, +0.3757 bits/token.
-# D3-scale price (the decision scale, #244 matrix): top-1 +-0.0pp,
-# +0.087 bits/token, at 2.56x fewer store keys. The fixture's 150-story
-# miniature dilutes sparse beam evidence harder than D3; both deltas are
-# disclosed on PR #283. The regression thresholds are unchanged.
-PINNED_TOP1_AGREEMENT = 0.300  # ~30.0% (post-#281)
-PINNED_BITS_PER_TOKEN = 10.24  # bits/token (post-#281)
-
-# Regression Thresholds
-MAX_TOP1_DROP = 0.02           # fail if top-1 drops > 2 points (0.02)
-MAX_BPT_WORSEN = 0.1           # fail if bits/token worsens (increases) > 0.1
+# Single source of truth for the pinned record and thresholds:
+# docs/transformerless/gate_c_pinned.json — shared with the trend-alarm
+# job (scripts/gate_c_trend.sh). Re-pins happen in that one file, with an
+# era note (#281 established the discipline after a dual-pin miss).
+import os
+_PIN_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "docs", "transformerless", "gate_c_pinned.json",
+)
+with open(_PIN_PATH) as _f:
+    _PIN = json.load(_f)
+PINNED_TOP1_AGREEMENT = _PIN["rule12_top1_agreement"]
+PINNED_BITS_PER_TOKEN = _PIN["rule12_bits_per_token"]
+MAX_TOP1_DROP = _PIN["alarm"]["top1_drop_abs"]
+MAX_BPT_WORSEN = _PIN["alarm"]["bits_regress_abs"]
 
 def main():
     if len(sys.argv) < 2:
