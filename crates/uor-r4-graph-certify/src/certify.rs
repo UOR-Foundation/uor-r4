@@ -709,6 +709,72 @@ pub fn certify(oracle: &dyn TeacherOracle) {
         m.top1, m.agree, m.wb_bits, m.keys
     );
 
+    // ---- A-dot-po2 / A-dot-po2x2 (#243 buildability rows): the round-2
+    // result (A-dot-only 30.4/34.2 with NO subtraction; A-resid-sign
+    // collapsing to A-single) pins the dominant loss on the assignment
+    // metric itself. A dot product against centroids whose entries are
+    // (sums of) signed powers of two is realizable in the kernel as
+    // shifts and adds only — contract §4 legal, no multiply op. These
+    // rows measure how much of the dot row survives that value-set
+    // restriction: po2 = one term (c ≈ ±2^s), po2x2 = greedy two-term
+    // expansion. Emulated in f32 over the same raw-scale work vectors;
+    // the value set, not the arithmetic type, is what the kernel form
+    // depends on.
+    let po2 = |x: f32| -> f32 {
+        if x == 0.0 || !x.is_finite() {
+            return 0.0;
+        }
+        let s = x.abs().log2().round();
+        x.signum() * s.exp2()
+    };
+    for (label, terms) in [("A-dot-po2", 1usize), ("A-dot-po2x2", 2usize)] {
+        let quantized: Vec<Vec<f32>> = art
+            .ctx_cb
+            .iter()
+            .map(|cb| {
+                cb.iter()
+                    .map(|&c| {
+                        let mut acc = 0.0f32;
+                        let mut rem = c;
+                        for _ in 0..terms {
+                            let q = po2(rem);
+                            acc += q;
+                            rem -= q;
+                        }
+                        acc
+                    })
+                    .collect()
+            })
+            .collect();
+        let codes_q: Vec<[u8; STAGES]> = (0..c.n)
+            .map(|i| {
+                let mut code = [0u8; STAGES];
+                for (st, cb) in quantized.iter().enumerate() {
+                    let (mut best, mut bk) = (f32::NEG_INFINITY, 0usize);
+                    for kk in 0..K {
+                        let cent = &cb[kk * D..(kk + 1) * D];
+                        let mut dp = 0f32;
+                        for j in 0..D {
+                            dp += centered[i][j] * cent[j];
+                        }
+                        if dp > best {
+                            best = dp;
+                            bk = kk;
+                        }
+                    }
+                    code[st] = bk as u8;
+                }
+                code
+            })
+            .collect();
+        let st_row = build_store_generic(&c, STAGES, &|i, d| codes_q[i][..d].to_vec());
+        let m = eval(&c, &st_row, STAGES, &|i, d| codes_q[i][..d].to_vec());
+        println!(
+            "{label} (#243 buildability: shift-add dot, {terms}-term power-of-two centroids): top1 {:.1}% | agreement {:.1}% | WB {:.4} bits/token | {} keys",
+            m.top1, m.agree, m.wb_bits, m.keys
+        );
+    }
+
     // ---- A-R∘G(b): graded signature OF the residual. Per-stage ladders
     // from the R-loop's residual distributions (deterministic stride-8
     // sample); prototypes are the integer centroid copies graded through
