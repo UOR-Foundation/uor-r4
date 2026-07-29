@@ -131,6 +131,12 @@ or invertible digests (see #258 and the #230 roadmap addendum).
 
 ## Sign-off
 
-- Casey: ____   - Ari: ____   - Alex: ____   (date: ____)
-⚑ decisions resolved: R-vs-G-vs-R∘G ___ · b ___ · centroid int width ___
-· op-budget ___
+- Casey: **approved 2026-07-29** (Phase A authorized as exploratory
+  measurement; ⚑ design decisions deliberately deferred to Phase A
+  results)   - Ari: ____   - Alex: ____
+⚑ decisions resolved: R-vs-G-vs-R∘G *(deferred to Phase A)* · b
+*(deferred)* · centroid int width *(deferred)* · op-budget *(deferred)*
+
+Phase A baseline is fixed: the #244 matrix (A-binary 28.2/31.9 ·
+A-f32 ceiling 32.1/36.4 · A-single+query-beam 28.2/31.9 at 134,733
+keys), reproduced bit-for-bit across three runs on 2026-07-28/29.
