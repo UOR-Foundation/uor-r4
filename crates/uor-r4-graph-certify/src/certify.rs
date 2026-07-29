@@ -621,6 +621,68 @@ pub fn certify(oracle: &dyn TeacherOracle) {
         m.top1, m.agree, m.wb_bits, m.keys
     );
 
+    // ---- A-R-retrained: Design R with per-stage prototypes retrained
+    // in residual space — the #243 Phase A decision row. The Phase A
+    // table confirmed the doc's risk note empirically: original-space
+    // class_sigs re-thresholded against residuals recover exactly 0% of
+    // the gap, while the residual signal itself is dominant (A-resid-only
+    // 65%). Retraining here is the canonical mul-free projection of the
+    // true prototypes: the residual-space class signature of
+    // (stage, class) is the sign-signature of that stage's RVQ centroid
+    // — the object the residual actually clusters around. Query loop is
+    // unchanged from A-R (add/sub + sign re-threshold + Hamming): the
+    // runtime cost model is identical, only the compiled prototype
+    // table differs (contract §4: compile-side retraining is free).
+    // Sign packing matches sig_plain's layout (bit d%8 of byte d/8,
+    // strictly-positive test), and sign(ctx_cb) == sign(cent_int) since
+    // the corpus-mean-norm scale is a positive constant.
+    let resid_sigs: Vec<Vec<[u8; runtime::SIG_BYTES]>> = (0..STAGES)
+        .map(|st| {
+            (0..K)
+                .map(|kk| {
+                    let mut sig = [0u8; runtime::SIG_BYTES];
+                    for d in 0..D {
+                        if art.ctx_cb[st][kk * D + d] > 0.0 {
+                            sig[d / 8] |= 1 << (d % 8);
+                        }
+                    }
+                    sig
+                })
+                .collect()
+        })
+        .collect();
+    let assign_rr = |i: usize| -> [u8; STAGES] {
+        let mut r: [i64; D] = std::array::from_fn(|d| bundles[i][d] - art.thresholds[d]);
+        let mut code = [0u8; STAGES];
+        for st in 0..STAGES {
+            let mut fake = [0i64; D];
+            for d in 0..D {
+                fake[d] = r[d] + art.thresholds[d];
+            }
+            let sig = runtime::sig_plain(&art, &fake);
+            let (mut bd, mut bk) = (u32::MAX, 0usize);
+            for (kk, cs) in resid_sigs[st].iter().enumerate() {
+                let h = hamming(&sig, cs);
+                if h < bd {
+                    bd = h;
+                    bk = kk;
+                }
+            }
+            code[st] = bk as u8;
+            for d in 0..D {
+                r[d] -= cent_int[st][bk * D + d];
+            }
+        }
+        code
+    };
+    let codes_rr: Vec<[u8; STAGES]> = (0..c.n).map(assign_rr).collect();
+    let st_row = build_store_generic(&c, STAGES, &|i, d| codes_rr[i][..d].to_vec());
+    let m = eval(&c, &st_row, STAGES, &|i, d| codes_rr[i][..d].to_vec());
+    println!(
+        "A-R-retrained (#243 Phase B decision row: residual-space centroid-sign prototypes, integer query loop unchanged): top1 {:.1}% | agreement {:.1}% | WB {:.4} bits/token | {} keys",
+        m.top1, m.agree, m.wb_bits, m.keys
+    );
+
     // ---- A-R∘G(b): graded signature OF the residual. Per-stage ladders
     // from the R-loop's residual distributions (deterministic stride-8
     // sample); prototypes are the integer centroid copies graded through
