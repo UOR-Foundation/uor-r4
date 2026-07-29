@@ -435,9 +435,16 @@ pub fn dot_score_plain(row: &[u16], work: &[i64; D]) -> i64 {
 }
 
 /// Per-stage top-M candidates under the dot metric, expressed as the
-/// same ascending-cost shape the membership beam consumes: cost =
-/// (stage-best dot − class dot), saturated to u32. Ties keep the
-/// lowest class index (ascending scan, strict improvement) — the same
+/// same ascending-cost shape the membership beam consumes. Candidate
+/// selection ranks by (stage-best dot − class dot); the EMITTED costs
+/// are the candidates' ranks (0, 1, 2, …), not the raw dot gaps —
+/// dot gaps live on the raw work-vector scale (~1e6), and feeding
+/// them to the beam's cross-stage sum and evidence merge (both tuned
+/// to Hamming-scale costs) mis-weights everything downstream: the
+/// first integer-semantics run measured the shipped beam row at
+/// 18.3/20.6 against 30.6/34.2 for the primary key alone. Rank costs
+/// are scale-free and metric-agnostic. Ties keep the lowest class
+/// index (ascending scan, strict improvement) — the same
 /// deterministic rule as the Hamming path.
 fn dot_stage_top(table: &[u16], work: &[i64; D]) -> Vec<(u8, u32)> {
     let mut dots = [0i64; K];
@@ -465,6 +472,9 @@ fn dot_stage_top(table: &[u16], work: &[i64; D]) -> Vec<(u8, u32)> {
         if inserted && top.len() > TOP_M_MEMBERSHIPS {
             top.pop();
         }
+    }
+    for (rank, slot) in top.iter_mut().enumerate() {
+        slot.1 = rank as u32;
     }
     top
 }
