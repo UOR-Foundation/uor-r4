@@ -621,65 +621,91 @@ pub fn certify(oracle: &dyn TeacherOracle) {
         m.top1, m.agree, m.wb_bits, m.keys
     );
 
-    // ---- A-R-retrained: Design R with per-stage prototypes retrained
-    // in residual space — the #243 Phase A decision row. The Phase A
-    // table confirmed the doc's risk note empirically: original-space
-    // class_sigs re-thresholded against residuals recover exactly 0% of
-    // the gap, while the residual signal itself is dominant (A-resid-only
-    // 65%). Retraining here is the canonical mul-free projection of the
-    // true prototypes: the residual-space class signature of
-    // (stage, class) is the sign-signature of that stage's RVQ centroid
-    // — the object the residual actually clusters around. Query loop is
-    // unchanged from A-R (add/sub + sign re-threshold + Hamming): the
-    // runtime cost model is identical, only the compiled prototype
-    // table differs (contract §4: compile-side retraining is free).
-    // Sign packing matches sig_plain's layout (bit d%8 of byte d/8,
-    // strictly-positive test), and sign(ctx_cb) == sign(cent_int) since
-    // the corpus-mean-norm scale is a positive constant.
-    let resid_sigs: Vec<Vec<[u8; runtime::SIG_BYTES]>> = (0..STAGES)
-        .map(|st| {
-            (0..K)
-                .map(|kk| {
-                    let mut sig = [0u8; runtime::SIG_BYTES];
-                    for d in 0..D {
-                        if art.ctx_cb[st][kk * D + d] > 0.0 {
-                            sig[d / 8] |= 1 << (d % 8);
-                        }
+    // ---- A-dot-only / A-resid-sign (#243 decision rows, round 2).
+    // Round 1 finding (recorded): an "A-R-retrained" row using centroid
+    // sign-signatures as prototypes measured BIT-IDENTICAL to A-R,
+    // because class_sigs already are exactly that (compiler.rs derives
+    // them from ctx_cb > 0). Prototype retraining at the sign level is
+    // definitionally a no-op; the doc's Design-R risk note pointed at a
+    // difference that does not exist at this layer.
+    //
+    // What actually separates A-resid-only (30.3/33.9) from A-R
+    // (27.0/30.5) must then be assignment geometry and scale: centered
+    // bundles are RAW-scale while ctx_cb centroids are unit-scale, so
+    // A-resid-only's per-stage Euclidean argmin over ||work - cent||^2
+    // is dominated by the cross term — it degenerates toward
+    // argmax dot(work, cent) — and its centroid subtraction is nearly
+    // negligible at that scale. These two rows split the hypothesis:
+    //
+    // - A-dot-only: per-stage argmax dot(centered, cent), NO residual
+    //   subtraction at all. If this reproduces A-resid-only, the "65%
+    //   residual recovery" was really dot-product assignment against
+    //   per-stage codebooks, and the mul-free Phase B target becomes a
+    //   shift-add dot approximation (power-of-two-quantized centroids
+    //   are contract-legal: shifts and adds only), not residual wiring.
+    // - A-resid-sign: sign-Hamming assignment (the kernel metric) with
+    //   A-resid-only's own unscaled f32 subtraction. If this collapses
+    //   to A-R, the sign projection is where the information dies.
+    let codes_dot: Vec<[u8; STAGES]> = (0..c.n)
+        .map(|i| {
+            let mut code = [0u8; STAGES];
+            for (st, cb) in art.ctx_cb.iter().enumerate() {
+                let (mut best, mut bk) = (f32::NEG_INFINITY, 0usize);
+                for kk in 0..K {
+                    let cent = &cb[kk * D..(kk + 1) * D];
+                    let mut dp = 0f32;
+                    for j in 0..D {
+                        dp += centered[i][j] * cent[j];
                     }
-                    sig
-                })
-                .collect()
+                    if dp > best {
+                        best = dp;
+                        bk = kk;
+                    }
+                }
+                code[st] = bk as u8;
+            }
+            code
         })
         .collect();
-    let assign_rr = |i: usize| -> [u8; STAGES] {
-        let mut r: [i64; D] = std::array::from_fn(|d| bundles[i][d] - art.thresholds[d]);
-        let mut code = [0u8; STAGES];
-        for st in 0..STAGES {
-            let mut fake = [0i64; D];
-            for d in 0..D {
-                fake[d] = r[d] + art.thresholds[d];
-            }
-            let sig = runtime::sig_plain(&art, &fake);
-            let (mut bd, mut bk) = (u32::MAX, 0usize);
-            for (kk, cs) in resid_sigs[st].iter().enumerate() {
-                let h = hamming(&sig, cs);
-                if h < bd {
-                    bd = h;
-                    bk = kk;
+    let st_row = build_store_generic(&c, STAGES, &|i, d| codes_dot[i][..d].to_vec());
+    let m = eval(&c, &st_row, STAGES, &|i, d| codes_dot[i][..d].to_vec());
+    println!(
+        "A-dot-only (#243 instrumentation, f32: per-stage dot-product assignment, no residual subtraction): top1 {:.1}% | agreement {:.1}% | WB {:.4} bits/token | {} keys",
+        m.top1, m.agree, m.wb_bits, m.keys
+    );
+    let codes_rsg: Vec<[u8; STAGES]> = (0..c.n)
+        .map(|i| {
+            let mut work = centered[i];
+            let mut code = [0u8; STAGES];
+            for (st, code_slot) in code.iter_mut().enumerate() {
+                let mut sig = [0u8; runtime::SIG_BYTES];
+                for d in 0..D {
+                    if work[d] > 0.0 {
+                        sig[d / 8] |= 1 << (d % 8);
+                    }
+                }
+                let sigs_st = &art.class_sigs[st];
+                let (mut bd, mut bk) = (u32::MAX, 0usize);
+                for kk in 0..K {
+                    let cs = &sigs_st[kk * runtime::SIG_BYTES..(kk + 1) * runtime::SIG_BYTES];
+                    let h = hamming(&sig, cs);
+                    if h < bd {
+                        bd = h;
+                        bk = kk;
+                    }
+                }
+                *code_slot = bk as u8;
+                for (j, w) in work.iter_mut().enumerate() {
+                    *w -= art.ctx_cb[st][bk * D + j];
                 }
             }
-            code[st] = bk as u8;
-            for d in 0..D {
-                r[d] -= cent_int[st][bk * D + d];
-            }
-        }
-        code
-    };
-    let codes_rr: Vec<[u8; STAGES]> = (0..c.n).map(assign_rr).collect();
-    let st_row = build_store_generic(&c, STAGES, &|i, d| codes_rr[i][..d].to_vec());
-    let m = eval(&c, &st_row, STAGES, &|i, d| codes_rr[i][..d].to_vec());
+            code
+        })
+        .collect();
+    let st_row = build_store_generic(&c, STAGES, &|i, d| codes_rsg[i][..d].to_vec());
+    let m = eval(&c, &st_row, STAGES, &|i, d| codes_rsg[i][..d].to_vec());
     println!(
-        "A-R-retrained (#243 Phase B decision row: residual-space centroid-sign prototypes, integer query loop unchanged): top1 {:.1}% | agreement {:.1}% | WB {:.4} bits/token | {} keys",
+        "A-resid-sign (#243 instrumentation: sign-Hamming assignment, unscaled f32 residual subtraction): top1 {:.1}% | agreement {:.1}% | WB {:.4} bits/token | {} keys",
         m.top1, m.agree, m.wb_bits, m.keys
     );
 
