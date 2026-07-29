@@ -1019,6 +1019,17 @@ pub fn score_command(args: &[String]) -> Result<(), String> {
         &options.quality_profile,
     );
 
+    println!(
+        "distribution declaration (#234): EXCT-miss rate {:.1}% ({}/{} held-out positions escape exact-context) — {}",
+        100.0 * report.distribution.exct_miss_rate,
+        report.distribution.held_out_positions - report.distribution.exct_resolved_positions,
+        report.distribution.held_out_positions,
+        if report.distribution.can_measure_generalization {
+            "Gate C measures generalization here"
+        } else {
+            "Gate C CANNOT measure generalization on this distribution (issue #234): the row restates exact-context recall"
+        }
+    );
     std::fs::create_dir_all(&options.output).map_err(|error| error.to_string())?;
     let artifact_path = options.output.join("score.r4g1");
     std::fs::write(&artifact_path, &artifact_bytes)
