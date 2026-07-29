@@ -17,11 +17,13 @@ choice in this repo, it is address-space design
 collision geometry, what "near" means for #263's region objects, and
 what a distributed serving tier could shard on.
 
-## Where P sits after the Phase A table (2026-07-29, #243)
+## Where P sits after the Phase A/B decision rows (2026-07-29, #243)
 
-Phase A attributed the assignment gap: residuals dominate (A-resid-only
-recovers ~65% of the f32 gap), magnitude grading is partial (A-G(4)
-~35-37%), normalization ~49%. P does not compete with the residual fix —
+The round-2 metric-isolation rows revised Phase A's attribution: the
+dominant loss is the **assignment metric** (A-dot-only 30.4/34.2 with
+no residual updates; sign-Hamming + residuals collapses to the floor),
+and Phase B pivots to a shift-add dot approximation. P does not compete
+with that fix —
 it contributes a channel the sign signature **discards entirely** (the
 imaginary half of every zeta clock), which no R/G row can recover.
 Objective, not assumption: whether that channel carries context-
