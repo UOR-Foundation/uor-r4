@@ -310,6 +310,14 @@ pub fn certify(oracle: &dyn TeacherOracle) {
 
     // ---- store, by the runtime's own path (key identity by construction)
     let (store, codes) = build_store(&art, &c);
+    println!(
+        "assignment metric: {}",
+        if art.dot_cb.is_empty() {
+            "sign-Hamming (no dot tables in artifact)"
+        } else {
+            "shift-add dot (#243 Phase B: power-of-two centroid tables active)"
+        }
+    );
 
     // ---- equality witnesses: kernel path == plain path, three stages deep
     let mut rt = Runtime::new(&art);
@@ -326,10 +334,8 @@ pub fn certify(oracle: &dyn TeacherOracle) {
         assert_eq!(ck, cp, "code kernel/plain divergence at {}", i);
 
         rt.state.clear_token_state();
-        let (_, by_depth_k) =
-            runtime::assign_memberships_plain(&art, &runtime::sig_plain(&art, &bk));
-        let (_, by_depth_p) =
-            runtime::assign_memberships_plain(&art, &runtime::sig_plain(&art, &bp));
+        let (_, by_depth_k) = runtime::assign_memberships_for_bundle(&art, &bk);
+        let (_, by_depth_p) = runtime::assign_memberships_for_bundle(&art, &bp);
         assert_eq!(
             rt.predict_witness_beam(&store, &by_depth_k).token,
             runtime::predict_witness_plain_beam(&store, &by_depth_p).token,
