@@ -1483,13 +1483,24 @@ fn evaluate_report(args: &[String]) -> Result<(), String> {
         class
     };
     let start_eval_time = std::time::Instant::now();
-    for index in 0..corpus.n {
-        if index % 1000 == 0 || index + 1 == corpus.n {
-            let pct = (index as f64 / corpus.n as f64) * 100.0;
+    // #268 fix: story-contiguous replay. The record stream interleaves
+    // stories in short runs (measured mean run length 9.2 tokens on the
+    // D3 bundle), so replaying in stream order cold-started the oracle
+    // every few tokens — ~4.6-token mean effective context, which is
+    // what the 13.4-bit "teacher floor" was actually measuring. Group
+    // positions by story (stable sort keeps in-story stream order) and
+    // reset only at true story boundaries. The position-in-story
+    // decomposition slices double as verification: bands beyond 8-15
+    // populate iff grouping reconstructed real contexts.
+    let mut replay_order: Vec<usize> = (0..corpus.n).collect();
+    replay_order.sort_by_key(|&position| corpus.story[position]);
+    for (done, &index) in replay_order.iter().enumerate() {
+        if done % 1000 == 0 || done + 1 == corpus.n {
+            let pct = (done as f64 / corpus.n as f64) * 100.0;
             let elapsed = start_eval_time.elapsed().as_secs();
             println!(
                 "progress: evaluated {}/{} positions ({:.1}%, {}s)",
-                index, corpus.n, pct, elapsed
+                done, corpus.n, pct, elapsed
             );
         }
         if current_story != Some(corpus.story[index]) {
