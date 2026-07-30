@@ -166,8 +166,12 @@ fn eval_query_beam(
     let (mut top1, mut agree, mut bits) = (0u64, 0u64, 0f64);
     for &i in &test {
         let bundle = bundle_plain(art, rot, c, i);
-        let sig = runtime::sig_plain(art, &bundle);
-        let (_code, by_depth) = runtime::assign_memberships_plain(art, &sig);
+        // Metric-consistent beam: memberships must come from the same
+        // metric that keyed the store. Runs 1-2 of the #243 kernel work
+        // measured 18.3/20.6 here because this call derived SIGN-metric
+        // prefixes and probed them against a DOT-keyed store — a pure
+        // key mismatch, initially misread as "the beam hurts under dot".
+        let (_code, by_depth) = runtime::assign_memberships_for_bundle(art, &bundle);
 
         let mut lams: Vec<(f64, BTreeMap<u32, u32>, u32)> = Vec::new();
         for (d, level) in store.iter().enumerate().take(STAGES + 1) {
