@@ -815,7 +815,7 @@ impl<'a> Runtime<'a> {
     /// dimension entry, at most two shifts + two adds per term pair, one
     /// compare per candidate. Equality with `assign_for_bundle` (plain
     /// form) is witnessed per certification run.
-    fn code_from_bundle_dot(&mut self, bundle: &[i64; D]) -> [u8; STAGES] {
+    pub(crate) fn code_from_bundle_dot(&mut self, bundle: &[i64; D]) -> [u8; STAGES] {
         let mut work = [0i64; D];
         for ((w, &b), &t) in work
             .iter_mut()
@@ -1394,73 +1394,4 @@ pub fn store_kappa(store: &Store) -> String {
 /// remove a contribution is to remove its κ.
 pub fn remove_entry(store: &mut Store, depth: usize, key: &[u8]) -> Option<BTreeMap<u32, u32>> {
     store.get_mut(depth)?.remove(key)
-}
-
-#[cfg(test)]
-mod dot_assignment_tests {
-    use super::*;
-    use crate::transformerless::compiler::{pack_dot_entry, Compiled};
-
-    /// Deterministic synthetic artifact: zeroed books/thresholds, dot
-    /// tables packed from a simple varying pattern. No RNG, no clock.
-    fn synthetic_art() -> Compiled {
-        let mut art = Compiled {
-            token_codes: vec![0u8; STAGES],
-            stage_books: (0..STAGES).map(|_| vec![0i8; K * D]).collect(),
-            stage_shifts: vec![0u8; STAGES],
-            thresholds: (0..D as i64).map(|d| (d % 7) - 3).collect(),
-            class_sigs: (0..STAGES).map(|_| vec![0u8; K * D / 8]).collect(),
-            ctx_cb: Vec::new(),
-            token_stage_kappas: Vec::new(),
-            dot_cb: Vec::new(),
-        };
-        art.dot_cb = (0..STAGES)
-            .map(|st| {
-                (0..K * D)
-                    .map(|i| {
-                        let v = ((i + st) % 13) as f32 - 6.0;
-                        pack_dot_entry(v / 8.0)
-                    })
-                    .collect()
-            })
-            .collect();
-        art
-    }
-
-    #[test]
-    fn pack_dot_entry_round_trips_powers_of_two() {
-        // 1.0 = +2^0 exactly: one term, second term zero.
-        let one = pack_dot_entry(1.0).to_le_bytes();
-        assert_eq!(one[1] & 0x40, 0x40, "nonzero flag");
-        assert_eq!(one[1] & 0x80, 0, "positive");
-        assert_eq!((one[1] & 0x3F) as i32 - 32, 0, "exponent 0");
-        assert_eq!(one[0], 0, "no residual term");
-        // -0.375 = -0.5 + 0.125: two terms, exponents -1 and -3.
-        let v = pack_dot_entry(-0.375).to_le_bytes();
-        assert_eq!((v[1] & 0x3F) as i32 - 32, -1);
-        assert_eq!(v[1] & 0x80, 0x80, "first term negative");
-        assert_eq!((v[0] & 0x3F) as i32 - 32, -3);
-        assert_eq!(v[0] & 0x80, 0, "residual term positive");
-        // Zero packs to all-zero (both terms flagged absent).
-        assert_eq!(pack_dot_entry(0.0), 0);
-    }
-
-    #[test]
-    fn dot_kernel_equals_plain_on_synthetic_artifact() {
-        let art = synthetic_art();
-        let mut bundle = [0i64; D];
-        for (d, slot) in bundle.iter_mut().enumerate() {
-            *slot = ((d as i64) % 97) - 48;
-        }
-        // Plain form.
-        let plain = assign_for_bundle(&art, &bundle);
-        // Kernel form (private path exercised through Runtime): build a
-        // runtime and call the public window path shape by scoring the
-        // bundle directly through the counted ops.
-        let mut rt = Runtime::new(&art);
-        let kernel = rt.code_from_bundle_dot(&bundle);
-        assert_eq!(plain, kernel, "kernel/plain dot assignment divergence");
-        assert!(rt.kernel.shifts > 0, "dot path must count shifts");
-        assert!(rt.kernel.adds > 0, "dot path must count adds");
-    }
 }
