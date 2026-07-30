@@ -494,7 +494,18 @@ pub fn assign_memberships_for_bundle(
     let mut code = [0u8; STAGES];
     let mut stage_top: Vec<Vec<(u8, u32)>> = Vec::with_capacity(STAGES);
     for (st_code, table) in code.iter_mut().zip(art.dot_cb.iter()) {
-        let top = dot_stage_top(table, &work);
+        let mut top = dot_stage_top(table, &work);
+        // Beam OFF under the dot metric (Casey, 2026-07-29, on the run-2
+        // evidence): the #244 query-beam was tuned to Hamming ambiguity —
+        // near-tie runner-up classes that share store evidence. Under dot
+        // the #1→#2 gap is wide and runner-up keys are simply wrong, so
+        // the beam's evidence merge diluted 30.6/34.2 to 18.3/20.6
+        // (cost-scale fix measured no change; the keys themselves were
+        // the problem). Membership prefixes degenerate to the nearest
+        // chain: single-key reads, criterion-passing, and the beam's
+        // extra scan ops disappear. #244's beam decision stays recorded
+        // as a sign-metric result; a dot-tuned beam is future work.
+        top.truncate(1);
         *st_code = top.first().map(|(k, _)| *k).unwrap_or(0);
         stage_top.push(top);
     }
