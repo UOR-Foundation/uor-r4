@@ -505,7 +505,11 @@ impl R4Engine {
     fn derive_sig_code(&self, window: &[u32]) -> ([u8; SIG_BYTES], [u8; compiler::STAGES]) {
         let bundle = runtime::bundle_window_plain(&self.artifacts, &self.rotations, window);
         let sig = runtime::sig_plain(&self.artifacts, &bundle);
-        let code = runtime::assign_for_bundle(&self.artifacts, &bundle);
+        // Allocation-free variant: steady-state serving is censused
+        // (tests/status_policy_census.rs) — the membership-beam
+        // materializing assign_for_bundle allocates and must not be
+        // called per prediction.
+        let code = runtime::assign_code_for_bundle(&self.artifacts, &bundle);
         (sig, code)
     }
 
