@@ -1043,7 +1043,11 @@ pub fn score_command(args: &[String]) -> Result<(), String> {
             .collect();
         println!(
             "EXCT probe resolution levels (0=root … {}=full code): {}",
-            report.distribution.exct_probe_level_histogram.len().saturating_sub(1),
+            report
+                .distribution
+                .exct_probe_level_histogram
+                .len()
+                .saturating_sub(1),
             histogram.join(" ")
         );
     }
