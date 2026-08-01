@@ -445,6 +445,55 @@ mod dot_assignment_tests {
         assert_eq!(rt.assign_window(&window), plain);
     }
 
+    /// #318 Phase B routing consistency: EVERY bundle-holding entry
+    /// point takes the residual path for TLA7 artifacts — plain beam
+    /// form, plain allocation-free serving form, membership primary,
+    /// and kernel form must all agree. Regression test for the first
+    /// quality run's divergence: `assign_for_bundle` kept the
+    /// non-residual dot path while the kernel took the residual path,
+    /// and the resid-vs-resid synthetic witness could not see it.
+    #[test]
+    fn resid_routing_consistent_across_all_entry_points() {
+        let art = synthetic_resid_art();
+        let mut art6 = synthetic_resid_art();
+        art6.resid_cb = Vec::new(); // non-residual reference (TLA6 shape)
+        let mut rt = runtime::Runtime::new(&art);
+        let mut saw_residual_effect = false;
+        for seed in 0..8usize {
+            let bundle: [i64; compiler::D] =
+                std::array::from_fn(|d| (((d * 31 + seed * 17) % 211) as i64) - 105);
+            let resid = runtime::assign_code_for_bundle_resid(&art, &bundle);
+            assert_eq!(
+                runtime::assign_for_bundle(&art, &bundle),
+                resid,
+                "beam form must route to the residual path"
+            );
+            assert_eq!(
+                runtime::assign_code_for_bundle(&art, &bundle),
+                resid,
+                "serving form must route to the residual path"
+            );
+            assert_eq!(
+                runtime::assign_memberships_for_bundle(&art, &bundle).0,
+                resid,
+                "membership primary must route to the residual path"
+            );
+            assert_eq!(
+                rt.code_from_bundle_resid(&bundle),
+                resid,
+                "kernel form agrees with all plain forms"
+            );
+            if runtime::assign_for_bundle(&art6, &bundle) != resid {
+                saw_residual_effect = true;
+            }
+        }
+        assert!(
+            saw_residual_effect,
+            "the synthetic fixture must make the residual update change at least one code, \
+             or this consistency check passes vacuously"
+        );
+    }
+
     /// #318 Phase B container eras: TLA7 round-trips the residual
     /// sections byte-identically; a dot-only artifact still emits TLA6
     /// with no residual sections (pre-TLA7 loads unchanged).

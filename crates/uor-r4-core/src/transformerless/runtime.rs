@@ -483,9 +483,10 @@ fn dot_stage_top(table: &[u16], work: &[i64; D]) -> Vec<(u8, u32)> {
     top
 }
 
-/// Membership assignment for a bundle: dot path when the artifact
-/// carries dot tables, sign-Hamming otherwise. The by-depth beam shape
-/// and fallback-floor rule are identical between the two metrics.
+/// Membership assignment for a bundle: residual-wired dot path when the
+/// artifact carries residual copies (TLA7), dot path when it carries dot
+/// tables (TLA6), sign-Hamming otherwise. The by-depth beam shape and
+/// fallback-floor rule are identical between the metrics.
 #[allow(clippy::type_complexity)]
 pub fn assign_memberships_for_bundle(
     art: &Compiled,
@@ -493,6 +494,28 @@ pub fn assign_memberships_for_bundle(
 ) -> ([u8; STAGES], Vec<Vec<Vec<u8>>>) {
     if art.dot_cb.is_empty() {
         return assign_memberships_plain(art, &sig_plain(art, bundle));
+    }
+    if !art.resid_cb.is_empty() {
+        // #318 Phase B: the beam's per-stage candidate lists come from
+        // the SAME residual-evolving work vector the kernel form and the
+        // allocation-free serving form use — candidate selection per
+        // stage is `dot_stage_top` on the folded work, then the winning
+        // centroid's integer copy is subtracted before the next stage.
+        let mut work = centered_work(art, bundle);
+        norm_fold_plain(&mut work, art.norm_fold_const);
+        let mut code = [0u8; STAGES];
+        let mut stage_top: Vec<Vec<(u8, u32)>> = Vec::with_capacity(STAGES);
+        for ((st_code, table), (copies, &shift)) in code
+            .iter_mut()
+            .zip(art.dot_cb.iter())
+            .zip(art.resid_cb.iter().zip(art.resid_scale_shifts.iter()))
+        {
+            let top = dot_stage_top(table, &work);
+            *st_code = top.first().map(|(k, _)| *k).unwrap_or(0);
+            resid_subtract_plain(&mut work, copies, shift, *st_code);
+            stage_top.push(top);
+        }
+        return memberships_from_stage_top(code, stage_top);
     }
     let work = centered_work(art, bundle);
     let mut code = [0u8; STAGES];
@@ -606,6 +629,17 @@ fn norm_fold_plain(work: &mut [i64; D], norm_const: i32) {
     }
 }
 
+/// Subtract one stage's winning integer centroid copy from the work
+/// vector (plain form): per dimension, one shift and one subtract.
+/// Plain form of the kernel's table-fetch + shl + add sequence.
+fn resid_subtract_plain(work: &mut [i64; D], copies: &[i8], shift: u8, class: u8) {
+    if let Some(copy_row) = copies.chunks_exact(D).nth(usize::from(class)) {
+        for (w, &c) in work.iter_mut().zip(copy_row.iter()) {
+            *w -= i64::from(c) << shift;
+        }
+    }
+}
+
 /// Residual-wired shift-add dot assignment (#318 Phase B), allocation-
 /// free plain form: center the bundle, apply the po2 norm fold, then
 /// per stage argmax `dot_score_plain` over the stage's po2 table and
@@ -637,11 +671,7 @@ pub fn assign_code_for_bundle_resid(art: &Compiled, bundle: &[i64; D]) -> [u8; S
             }
         }
         *st_code = best_class;
-        if let Some(copy_row) = copies.chunks_exact(D).nth(usize::from(best_class)) {
-            for (w, &c) in work.iter_mut().zip(copy_row.iter()) {
-                *w -= i64::from(c) << shift;
-            }
-        }
+        resid_subtract_plain(&mut work, copies, shift, best_class);
     }
     code
 }
@@ -940,10 +970,10 @@ impl<'a> Runtime<'a> {
         let rot = self.rot;
         let b = bundle_window_kernel(&mut self.kernel, self.art, &rot, window);
         if !self.art.resid_cb.is_empty() {
-            // #318 Phase B: the primary code is residual-wired; the
-            // membership beam itself remains the #281 non-residual rule
-            // pending the Phase C store-shape decision
-            // (docs/dot_residual_phase_b_design.md).
+            // #318 Phase B: primary code and membership beam are both
+            // residual-wired (`assign_memberships_for_bundle` derives
+            // its candidate lists from the same folded, residual-
+            // evolving work vector), so the pair stays consistent.
             let code = self.code_from_bundle_resid(&b);
             let (_, by_depth) = assign_memberships_for_bundle(self.art, &b);
             return (code, by_depth);
