@@ -1794,11 +1794,13 @@ dependencies = [
  "blake3",
  "ciborium",
  "hex",
+ "libm",
  "proptest",
  "serde",
  "serde_json",
  "sha2",
  "tracing",
+ "uor-addr",
  "uor-r4-graph-format",
  "uor-r4-graph-runtime",
  "uor-r4-model-source",
@@ -1840,6 +1842,7 @@ version = "0.1.0"
 dependencies = [
  "blake3",
  "env_logger",
+ "libm",
  "log",
  "rayon",
  "serde",
@@ -1855,6 +1858,7 @@ version = "0.1.0"
 dependencies = [
  "blake3",
  "serde",
+ "uor-addr",
 ]
 
 [[package]]
@@ -1871,6 +1875,7 @@ version = "0.1.0"
 dependencies = [
  "blake3",
  "hex",
+ "libm",
  "safetensors",
  "serde",
  "serde_json",

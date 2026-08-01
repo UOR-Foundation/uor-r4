@@ -737,7 +737,11 @@ pub fn certify(oracle: &dyn TeacherOracle) {
         let s = x.abs().log2().round();
         x.signum() * s.exp2()
     };
-    for (label, terms) in [("A-dot-po2", 1usize), ("A-dot-po2x2", 2usize)] {
+    for (label, terms) in [
+        ("A-dot-po2", 1usize),
+        ("A-dot-po2x2", 2usize),
+        ("A-dot-po2x3", 3usize),
+    ] {
         let quantized: Vec<Vec<f32>> = art
             .ctx_cb
             .iter()
@@ -781,6 +785,218 @@ pub fn certify(oracle: &dyn TeacherOracle) {
         let m = eval(&c, &st_row, STAGES, &|i, d| codes_q[i][..d].to_vec());
         println!(
             "{label} (#243 buildability: shift-add dot, {terms}-term power-of-two centroids): top1 {:.1}% | agreement {:.1}% | WB {:.4} bits/token | {} keys",
+            m.top1, m.agree, m.wb_bits, m.keys
+        );
+    }
+
+    // ---- A-dot-resid / A-dot-po2-resid(1/2) (#318 rows, #243 follow-up):
+    // the missing composition cell — dot assignment WITH residual updates
+    // at unit scale. The f32 ceiling normalizes, assigns norm-aware, and
+    // subtracts; the po2 dot rows above measured quantization WITHOUT
+    // subtraction, and the round-2 note records raw-scale subtraction as
+    // negligible — at unit scale it is not. A-dot-resid isolates the
+    // residual effect under the dot metric (f32 centroid values); the
+    // po2-resid rows run assignment AND subtraction from the same
+    // quantized tables — the form a kernel Phase B could actually build
+    // (per-stage integer centroid copies, add/sub only, contract §2).
+    let codes_dr: Vec<[u8; STAGES]> = (0..c.n)
+        .map(|i| {
+            let mut work: Vec<f32> = (0..D).map(|d| centered[i][d] / norms[i]).collect();
+            let mut code = [0u8; STAGES];
+            for (st, cb) in art.ctx_cb.iter().enumerate() {
+                let (mut best, mut bk) = (f32::NEG_INFINITY, 0usize);
+                for kk in 0..K {
+                    let cent = &cb[kk * D..(kk + 1) * D];
+                    let mut dp = 0f32;
+                    for j in 0..D {
+                        dp += work[j] * cent[j];
+                    }
+                    if dp > best {
+                        best = dp;
+                        bk = kk;
+                    }
+                }
+                code[st] = bk as u8;
+                for j in 0..D {
+                    work[j] -= cb[bk * D + j];
+                }
+            }
+            code
+        })
+        .collect();
+    let st_row = build_store_generic(&c, STAGES, &|i, d| codes_dr[i][..d].to_vec());
+    let m = eval(&c, &st_row, STAGES, &|i, d| codes_dr[i][..d].to_vec());
+    println!(
+        "A-dot-resid (#318 instrumentation, f32: dot assignment on normalized work + per-stage centroid subtraction): top1 {:.1}% | agreement {:.1}% | WB {:.4} bits/token | {} keys",
+        m.top1, m.agree, m.wb_bits, m.keys
+    );
+    let quantize = |terms: usize| -> Vec<Vec<f32>> {
+        art.ctx_cb
+            .iter()
+            .map(|cb| {
+                cb.iter()
+                    .map(|&cv| {
+                        let mut acc = 0.0f32;
+                        let mut rem = cv;
+                        for _ in 0..terms {
+                            let q = po2(rem);
+                            acc += q;
+                            rem -= q;
+                        }
+                        acc
+                    })
+                    .collect()
+            })
+            .collect()
+    };
+    for (label, terms) in [("A-dot-po2-resid", 1usize), ("A-dot-po2x2-resid", 2usize)] {
+        let quantized = quantize(terms);
+        let codes_qr: Vec<[u8; STAGES]> = (0..c.n)
+            .map(|i| {
+                let mut work: Vec<f32> = (0..D).map(|d| centered[i][d] / norms[i]).collect();
+                let mut code = [0u8; STAGES];
+                for (st, cb) in quantized.iter().enumerate() {
+                    let (mut best, mut bk) = (f32::NEG_INFINITY, 0usize);
+                    for kk in 0..K {
+                        let cent = &cb[kk * D..(kk + 1) * D];
+                        let mut dp = 0f32;
+                        for j in 0..D {
+                            dp += work[j] * cent[j];
+                        }
+                        if dp > best {
+                            best = dp;
+                            bk = kk;
+                        }
+                    }
+                    code[st] = bk as u8;
+                    for j in 0..D {
+                        work[j] -= cb[bk * D + j];
+                    }
+                }
+                code
+            })
+            .collect();
+        let st_row = build_store_generic(&c, STAGES, &|i, d| codes_qr[i][..d].to_vec());
+        let m = eval(&c, &st_row, STAGES, &|i, d| codes_qr[i][..d].to_vec());
+        println!(
+            "{label} (#318 buildability: shift-add dot, {terms}-term po2 tables, normalized work + quantized residual subtraction): top1 {:.1}% | agreement {:.1}% | WB {:.4} bits/token | {} keys",
+            m.top1, m.agree, m.wb_bits, m.keys
+        );
+    }
+
+    // ---- Phase A.5 rows (#318, docs/dot_residual_phase_b_design.md):
+    // validate the two kernel-form candidates before any runtime work.
+    //
+    // (a) po2 norm fold — the measurement rows above normalize by true
+    // division, which the kernel cannot do. The candidate kernel form
+    // folds a power of two: work' = work >> s with s = bit_length(L1) -
+    // CONST (L1 norm: abs+add only; CONST a compile-time constant).
+    // CONST here: the train-split median of round(log2(L1/L2)) over the
+    // deterministic stride-8 subsample (no held-out leakage). f32
+    // emulation scales by the exact power of two; the kernel's i64
+    // arithmetic shift additionally truncates toward -inf — a ≤1-LSB
+    // difference at i64 scale, covered by the Phase B equality witness.
+    let mut ratios: Vec<f32> = (0..c.n)
+        .step_by(8)
+        .filter(|&i| c.story[i] < cut)
+        .map(|i| {
+            let l1: f32 = centered[i].iter().map(|x| x.abs()).sum();
+            (l1 / norms[i]).log2()
+        })
+        .collect();
+    ratios.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    let norm_const = ratios[ratios.len() / 2].round();
+    let norm_fold = |i: usize| -> Vec<f32> {
+        let l1: f32 = centered[i].iter().map(|x| x.abs()).sum();
+        // bit_length(x) = floor(log2(x)) + 1
+        let s = l1.log2().floor() + 1.0 - norm_const;
+        let scale = (-s).exp2();
+        (0..D).map(|d| centered[i][d] * scale).collect()
+    };
+    {
+        let quantized = quantize(1);
+        let codes_nf: Vec<[u8; STAGES]> = (0..c.n)
+            .map(|i| {
+                let mut work = norm_fold(i);
+                let mut code = [0u8; STAGES];
+                for (st, cb) in quantized.iter().enumerate() {
+                    let (mut best, mut bk) = (f32::NEG_INFINITY, 0usize);
+                    for kk in 0..K {
+                        let cent = &cb[kk * D..(kk + 1) * D];
+                        let mut dp = 0f32;
+                        for j in 0..D {
+                            dp += work[j] * cent[j];
+                        }
+                        if dp > best {
+                            best = dp;
+                            bk = kk;
+                        }
+                    }
+                    code[st] = bk as u8;
+                    for j in 0..D {
+                        work[j] -= cb[bk * D + j];
+                    }
+                }
+                code
+            })
+            .collect();
+        let st_row = build_store_generic(&c, STAGES, &|i, d| codes_nf[i][..d].to_vec());
+        let m = eval(&c, &st_row, STAGES, &|i, d| codes_nf[i][..d].to_vec());
+        println!(
+            "A-dot-po2-nf-resid (#318 Phase A.5: po2 norm fold [L1 bit-length, CONST {norm_const}], 1-term tables): top1 {:.1}% | agreement {:.1}% | WB {:.4} bits/token | {} keys",
+            m.top1, m.agree, m.wb_bits, m.keys
+        );
+    }
+    // (b) integer centroid-copy widths — assignment against 1-term po2
+    // tables (shipped), residual subtraction with DEQUANTIZED per-stage
+    // integer copies at a power-of-two stage scale (token stage-book
+    // precedent: max-abs → IEEE-exponent scale, libm-free). i8 vs i16
+    // settles the artifact-width decision point.
+    let quantized = quantize(1);
+    for (label, max_q) in [("cpy8", 127.0f32), ("cpy16", 32767.0f32)] {
+        let copies: Vec<Vec<f32>> = art
+            .ctx_cb
+            .iter()
+            .map(|cb| {
+                let m_abs = cb.iter().fold(0f32, |a, &x| a.max(x.abs())).max(1e-9);
+                let r = max_q / m_abs;
+                let e = ((r.to_bits() >> 23) as i32) - 127;
+                let scale = (2.0f32).powi(e);
+                cb.iter()
+                    .map(|&x| (x * scale).round().clamp(-max_q, max_q) / scale)
+                    .collect()
+            })
+            .collect();
+        let codes_cp: Vec<[u8; STAGES]> = (0..c.n)
+            .map(|i| {
+                let mut work: Vec<f32> = (0..D).map(|d| centered[i][d] / norms[i]).collect();
+                let mut code = [0u8; STAGES];
+                for (st, cb) in quantized.iter().enumerate() {
+                    let (mut best, mut bk) = (f32::NEG_INFINITY, 0usize);
+                    for kk in 0..K {
+                        let cent = &cb[kk * D..(kk + 1) * D];
+                        let mut dp = 0f32;
+                        for j in 0..D {
+                            dp += work[j] * cent[j];
+                        }
+                        if dp > best {
+                            best = dp;
+                            bk = kk;
+                        }
+                    }
+                    code[st] = bk as u8;
+                    let cpy = &copies[st];
+                    for j in 0..D {
+                        work[j] -= cpy[bk * D + j];
+                    }
+                }
+                code
+            })
+            .collect();
+        let st_row = build_store_generic(&c, STAGES, &|i, d| codes_cp[i][..d].to_vec());
+        let m = eval(&c, &st_row, STAGES, &|i, d| codes_cp[i][..d].to_vec());
+        println!(
+            "A-dot-po2-resid-{label} (#318 Phase A.5: 1-term po2 assignment + {label} integer-copy residuals [true-norm]): top1 {:.1}% | agreement {:.1}% | WB {:.4} bits/token | {} keys",
             m.top1, m.agree, m.wb_bits, m.keys
         );
     }
@@ -865,7 +1081,85 @@ pub fn certify(oracle: &dyn TeacherOracle) {
             m.top1, m.agree, m.wb_bits, m.keys
         );
     }
-    // ============ end Phase A decomposition rows (issue #243) ============
+    // ---- A-W(b): learned per-dimension importance weighting on the
+    // shipped sign-Hamming assignment (issue #310;
+    // docs/learned_signature_weighting_design.md). Signal: threshold-margin
+    // reliability — per dimension, the median of |bundle − threshold| over
+    // a deterministic stride-8 TRAIN-split subsample (no held-out leakage).
+    // Dimensions are ranked by median margin and bucketed into b quantile
+    // classes carrying power-of-two weights 2^e (e = class index; the
+    // noisiest class keeps weight 1 — downweighting is relative, b = 1
+    // reproduces A-binary's metric exactly). Distance is
+    // Σ_j popcount((s XOR p) AND m_j) << e_j — xor/and/popcount/shift/add
+    // only. Certifier-side instrumentation: the f32 margin ranking never
+    // leaves this function; prototypes are NOT retrained (same lower-bound
+    // caveat as A-G/A-R∘G).
+    let margin_rank: Vec<usize> = {
+        let mut med = [0f32; D];
+        for (d, slot) in med.iter_mut().enumerate() {
+            let mut vals: Vec<f32> = (0..c.n)
+                .step_by(8)
+                .filter(|&i| c.story[i] < cut)
+                .map(|i| centered[i][d].abs())
+                .collect();
+            vals.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            *slot = vals[vals.len() / 2];
+        }
+        // Stable sort: margin ties keep ascending dimension order.
+        let mut order: Vec<usize> = (0..D).collect();
+        order.sort_by(|&x, &y| med[x].partial_cmp(&med[y]).unwrap());
+        order
+    };
+    for bq in [2usize, 4] {
+        // Ascending-margin rank -> class (noisiest = class 0, weight 2^0).
+        let mut masks = vec![[0u8; runtime::SIG_BYTES]; bq];
+        for (rank, &d) in margin_rank.iter().enumerate() {
+            let class = rank * bq / D;
+            masks[class][d / 8] |= 1 << (d % 8);
+        }
+        let weighted_hamming = |a: &[u8], p: &[u8]| -> u32 {
+            let mut acc = 0u32;
+            for (e, m) in masks.iter().enumerate() {
+                let pc: u32 = a
+                    .iter()
+                    .zip(p)
+                    .zip(m)
+                    .map(|((x, y), mm)| ((x ^ y) & mm).count_ones())
+                    .sum();
+                acc += pc << e;
+            }
+            acc
+        };
+        // Same single-signature, no-residual shape as the shipped path —
+        // the row isolates the weighting, nothing else.
+        let codes_w: Vec<[u8; STAGES]> = (0..c.n)
+            .map(|i| {
+                let sig = runtime::sig_plain(&art, &bundles[i]);
+                let mut code = [0u8; STAGES];
+                for (st, code_st) in code.iter_mut().enumerate() {
+                    let sigs_st = &art.class_sigs[st];
+                    let (mut bd, mut bk) = (u32::MAX, 0usize);
+                    for kk in 0..K {
+                        let cs = &sigs_st[kk * runtime::SIG_BYTES..(kk + 1) * runtime::SIG_BYTES];
+                        let h = weighted_hamming(&sig, cs);
+                        if h < bd {
+                            bd = h;
+                            bk = kk;
+                        }
+                    }
+                    *code_st = bk as u8;
+                }
+                code
+            })
+            .collect();
+        let st_row = build_store_generic(&c, STAGES, &|i, d| codes_w[i][..d].to_vec());
+        let m = eval(&c, &st_row, STAGES, &|i, d| codes_w[i][..d].to_vec());
+        println!(
+            "A-W({bq}) (#310 instrumentation: margin-reliability weighted Hamming [{bq} quantile classes, power-of-two weights], no residuals, prototypes unretrained): top1 {:.1}% | agreement {:.1}% | WB {:.4} bits/token | {} keys",
+            m.top1, m.agree, m.wb_bits, m.keys
+        );
+    }
+    // ============ end Phase A decomposition rows (issues #243, #310) ============
 
     // ---- B: bit-prefix coordinate — signature bytes, no classes
     let sigs: Vec<[u8; runtime::SIG_BYTES]> = (0..c.n)

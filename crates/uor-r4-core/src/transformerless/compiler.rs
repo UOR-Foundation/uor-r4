@@ -25,6 +25,50 @@ use std::collections::HashMap;
 use std::io::Write;
 use uor_r4_model_source::TeacherOracle;
 
+#[inline]
+fn canonical_math_enabled() -> bool {
+    static ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ENABLED.get_or_init(|| {
+        std::env::var("TLESS_CANONICAL_DETERMINISTIC").is_ok_and(|value| value != "0")
+    })
+}
+
+#[inline]
+fn canonical_expf(value: f32) -> f32 {
+    if canonical_math_enabled() {
+        libm::expf(value)
+    } else {
+        value.exp()
+    }
+}
+
+#[inline]
+fn canonical_log2f(value: f32) -> f32 {
+    if canonical_math_enabled() {
+        libm::log2f(value)
+    } else {
+        value.log2()
+    }
+}
+
+#[inline]
+fn canonical_exp2f(value: f32) -> f32 {
+    if canonical_math_enabled() {
+        libm::exp2f(value)
+    } else {
+        value.exp2()
+    }
+}
+
+#[inline]
+fn canonical_sqrtf(value: f32) -> f32 {
+    if canonical_math_enabled() {
+        libm::sqrtf(value)
+    } else {
+        value.sqrt()
+    }
+}
+
 pub const STAGES: usize = 4;
 pub const K: usize = 256;
 pub const D: usize = 288;
@@ -130,7 +174,7 @@ pub fn load_corpus_from(mp: &str, rp: &str) -> Option<Corpus> {
             let argmax = u16::from_le_bytes(rb[o + 6..o + 8].try_into().unwrap()) as u32;
             t_argmax.push(argmax);
             let lp = f32::from_le_bytes(rb[o + 8..o + 12].try_into().unwrap());
-            let next_prob = (lp.exp() * 100.0).clamp(0.0, 100.0) as u32;
+            let next_prob = (canonical_expf(lp) * 100.0).clamp(0.0, 100.0) as u32;
 
             let mut tokens_val = [0u32; 8];
             let mut weights_val = [0u32; 8];
@@ -257,6 +301,25 @@ pub fn load_corpus_from(mp: &str, rp: &str) -> Option<Corpus> {
 /// observation pipeline (`super::observe`) so both emit byte-identical v3
 /// records for the same teacher stream; the arithmetic below is the
 /// κ-pinned record semantics and must not change.
+/// Top-N indices by descending probability, ties to the lowest index —
+/// identical output to a stable descending full sort (the previous
+/// implementation) at O(vocab·N) with no allocation. Strict `>` keeps an
+/// earlier equal-probability token ahead, matching stable-sort order.
+fn top_n_desc_stable<const N: usize>(probs: &[f32]) -> [(u32, f32); N] {
+    let mut top = [(0u32, f32::NEG_INFINITY); N];
+    for (i, &p) in probs.iter().enumerate() {
+        if p > top[N - 1].1 {
+            let mut pos = N - 1;
+            while pos > 0 && p > top[pos - 1].1 {
+                top[pos] = top[pos - 1];
+                pos -= 1;
+            }
+            top[pos] = (i as u32, p);
+        }
+    }
+    top
+}
+
 pub fn softmax_top3_sample(logits: &mut [f32], rng: &mut u64) -> (usize, [u32; 3], [u32; 3]) {
     let mut mx = logits[0];
     for &v in &logits[1..] {
@@ -266,7 +329,7 @@ pub fn softmax_top3_sample(logits: &mut [f32], rng: &mut u64) -> (usize, [u32; 3
     }
     let mut sum = 0.0f32;
     for p in logits.iter_mut() {
-        *p = (*p - mx).exp();
+        *p = canonical_expf(*p - mx);
         sum += *p;
     }
     for p in logits.iter_mut() {
@@ -274,9 +337,7 @@ pub fn softmax_top3_sample(logits: &mut [f32], rng: &mut u64) -> (usize, [u32; 3
     }
 
     // Find top-3 tokens and their normalized weights
-    let mut top_candidates: Vec<(usize, f32)> =
-        logits.iter().enumerate().map(|(i, &p)| (i, p)).collect();
-    top_candidates.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    let top_candidates = top_n_desc_stable::<3>(logits);
 
     let mut top_tokens_idx = [0u32; 3];
     let mut top_weights_val = [0u32; 3];
@@ -291,7 +352,7 @@ pub fn softmax_top3_sample(logits: &mut [f32], rng: &mut u64) -> (usize, [u32; 3
         let mut accumulated = 0;
         for i in 0..3 {
             if i < top_candidates.len() {
-                top_tokens_idx[i] = top_candidates[i].0 as u32;
+                top_tokens_idx[i] = top_candidates[i].0;
                 let w = ((top_candidates[i].1 / sum_top3) * 100.0).round() as u32;
                 top_weights_val[i] = w;
                 accumulated += w;
@@ -331,16 +392,14 @@ pub fn softmax_top8_sample(logits: &mut [f32], rng: &mut u64) -> (usize, [u32; 8
     }
     let mut sum = 0.0f32;
     for p in logits.iter_mut() {
-        *p = (*p - mx).exp();
+        *p = canonical_expf(*p - mx);
         sum += *p;
     }
     for p in logits.iter_mut() {
         *p /= sum;
     }
 
-    let mut top_candidates: Vec<(usize, f32)> =
-        logits.iter().enumerate().map(|(i, &p)| (i, p)).collect();
-    top_candidates.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    let top_candidates = top_n_desc_stable::<8>(logits);
 
     let mut top_tokens_idx = [0u32; 8];
     let mut top_weights_val = [0u32; 8];
@@ -355,7 +414,7 @@ pub fn softmax_top8_sample(logits: &mut [f32], rng: &mut u64) -> (usize, [u32; 8
         let mut accumulated = 0;
         for i in 0..8 {
             if i < top_candidates.len() {
-                top_tokens_idx[i] = top_candidates[i].0 as u32;
+                top_tokens_idx[i] = top_candidates[i].0;
                 let w = ((top_candidates[i].1 / sum_top8) * 100.0).round() as u32;
                 top_weights_val[i] = w;
                 accumulated += w;
@@ -700,7 +759,41 @@ pub struct Compiled {
     /// container (see `artifact_bytes`); empty on TLA3/4/5 loads, which
     /// keeps loaded legacy artifacts on the sign-Hamming path.
     pub dot_cb: Vec<Vec<u16>>,
+    /// Integer residual centroid copies (issue #318 Phase B): per stage,
+    /// K × D i8 values — the unit-scale f32 context centroids quantized
+    /// with a per-stage power-of-two scale (the token stage-book
+    /// precedent: max-abs → IEEE-exponent scale, libm-free). After each
+    /// stage's dot argmax the runtime subtracts the winning centroid's
+    /// copy, decoded as `copy << resid_scale_shifts[st]`, from the
+    /// norm-folded work vector — add/sub and shifts only (contract §2).
+    /// Filled at compile time from `ctx_cb`; serialized only by the TLA7
+    /// container (see `artifact_bytes`); empty on pre-TLA7 loads, which
+    /// keeps those artifacts on the non-residual dot path.
+    pub resid_cb: Vec<Vec<i8>>,
+    /// Per-stage decode shift for `resid_cb` (STAGES entries when
+    /// `resid_cb` is populated): `RESID_WORK_FRACTION − e_st`, where e_st
+    /// is the stage's IEEE-exponent quantization scale, so the shifted
+    /// copy lands at the norm-folded work scale.
+    pub resid_scale_shifts: Vec<u8>,
+    /// Norm-fold CONST (issue #318 Phase B): the train-split median of
+    /// round(log2(L1/L2)) over the deterministic stride-8 subsample — the
+    /// certifier's Phase A.5 derivation — PLUS `RESID_WORK_FRACTION`, the
+    /// fixed-point fraction the integer kernel folds to (the f32
+    /// emulation folds to unit scale; the integer kernel must fold to a
+    /// large-magnitude scale or every value truncates to zero). The
+    /// kernel computes s = bit_length(Σ|w_d|) − norm_fold_const and
+    /// shifts work right by s (left when s < 0). 0 when unset
+    /// (pre-TLA7 loads), which keeps the residual path inactive.
+    pub norm_fold_const: i32,
 }
+
+/// Fixed-point fraction of the norm-folded work vector (issue #318 Phase
+/// B): after the po2 norm fold, unit scale (the f32 emulation's
+/// normalized work) sits at 2^RESID_WORK_FRACTION. 20 bits keeps a
+/// unit-magnitude dimension at ~1e6 — the raw work-vector scale the
+/// shift-add dot tables already operate at — with i64 headroom for the
+/// 288-dim dot reduction.
+pub const RESID_WORK_FRACTION: i32 = 20;
 
 /// Number of power-of-two terms emitted per dot-table entry.
 ///
@@ -728,8 +821,8 @@ pub fn pack_dot_entry(value: f32) -> u16 {
         if rem == 0.0 || !rem.is_finite() {
             break;
         }
-        let e = rem.abs().log2().round().clamp(-32.0, 31.0);
-        let term = rem.signum() * e.exp2();
+        let e = canonical_log2f(rem.abs()).round().clamp(-32.0, 31.0);
+        let term = rem.signum() * canonical_exp2f(e);
         *slot = 0x40 | ((e as i32 + 32) as u8 & 0x3F) | if rem < 0.0 { 0x80 } else { 0 };
         rem -= term;
     }
@@ -742,6 +835,63 @@ pub fn quantize_dot_tables(ctx_cb: &[Vec<f32>]) -> Vec<Vec<u16>> {
         .iter()
         .map(|cb| cb.iter().map(|&c| pack_dot_entry(c)).collect())
         .collect()
+}
+
+/// Quantize the per-stage context codebooks into i8 residual centroid
+/// copies (issue #318 Phase B; the Phase A.5 cpy8 row's kernel form):
+/// per stage, max-abs → power-of-two scale from the IEEE-754 exponent of
+/// the ratio (the token stage-book precedent, libm-free), values
+/// round(x·2^e) clamped to i8. The returned per-stage decode shift is
+/// `RESID_WORK_FRACTION − e` (clamped at 0 — e beyond the fraction is a
+/// pathologically flat codebook, |x| < 2^-13, and the copies carry no
+/// representable signal anyway), so `copy << shift` lands at the
+/// norm-folded work scale. Deterministic: pure functions of `ctx_cb`.
+pub fn quantize_resid_copies(ctx_cb: &[Vec<f32>]) -> (Vec<Vec<i8>>, Vec<u8>) {
+    let mut copies = Vec::with_capacity(ctx_cb.len());
+    let mut shifts = Vec::with_capacity(ctx_cb.len());
+    for cb in ctx_cb {
+        let m = cb.iter().fold(0f32, |a, &x| a.max(x.abs())).max(1e-9);
+        let r = 127.0 / m;
+        let e = ((r.to_bits() >> 23) as i32) - 127;
+        let scale = (2.0f32).powi(e);
+        copies.push(
+            cb.iter()
+                .map(|&x| (x * scale).round().clamp(-127.0, 127.0) as i8)
+                .collect(),
+        );
+        shifts.push((RESID_WORK_FRACTION - e).clamp(0, 63) as u8);
+    }
+    (copies, shifts)
+}
+
+/// The norm-fold CONST (issue #318 Phase B): mirror of the certifier's
+/// Phase A.5 `ratios`/`norm_const` derivation — the train-split median of
+/// log2(L1/L2) over the deterministic stride-8 subsample, rounded — plus
+/// `RESID_WORK_FRACTION` (the integer kernel's fixed-point fold target;
+/// see the field doc). Deterministic: ordered corpus scan, no RNG.
+fn norm_fold_const(art: &Compiled, rot: &[usize; WINDOW + 1], corpus: &Corpus, cut: u32) -> i32 {
+    let mut ratios: Vec<f32> = (0..corpus.n)
+        .step_by(8)
+        .filter(|&i| corpus.story[i] < cut)
+        .map(|i| {
+            let b = super::runtime::bundle_plain(art, rot, corpus, i);
+            let mut l1 = 0f32;
+            let mut l2sq = 0f32;
+            for (&bv, &t) in b.iter().zip(art.thresholds.iter()) {
+                let w = (bv - t) as f32;
+                l1 += w.abs();
+                l2sq += w * w;
+            }
+            canonical_log2f(l1 / canonical_sqrtf(l2sq).max(1e-9))
+        })
+        .collect();
+    ratios.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let Some(&median) = ratios.get(ratios.len() / 2) else {
+        // Degenerate corpus (no train positions in the stride-8
+        // subsample): fold to the fixed-point scale only.
+        return RESID_WORK_FRACTION;
+    };
+    median.round() as i32 + RESID_WORK_FRACTION
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -940,12 +1090,7 @@ pub fn deterministic_project(
                 projected_row[target] += sign * centered_val;
             }
 
-            let n = projected_row
-                .iter()
-                .map(|x| x * x)
-                .sum::<f32>()
-                .sqrt()
-                .max(1e-9);
+            let n = canonical_sqrtf(projected_row.iter().map(|x| x * x).sum::<f32>()).max(1e-9);
             for x in projected_row.iter_mut() {
                 *x /= n;
             }
@@ -1162,6 +1307,9 @@ pub fn compile(oracle: &dyn TeacherOracle, corpus: &Corpus) -> Compiled {
         ctx_cb: Vec::new(),
         token_stage_kappas: emb_stage_kappas,
         dot_cb: Vec::new(),
+        resid_cb: Vec::new(),
+        resid_scale_shifts: Vec::new(),
+        norm_fold_const: 0,
     };
     let rot = derive_rotations();
 
@@ -1214,7 +1362,7 @@ pub fn compile(oracle: &dyn TeacherOracle, corpus: &Corpus) -> Compiled {
             row[d] = x;
             nn += x * x;
         }
-        let nn = nn.sqrt().max(1e-9);
+        let nn = canonical_sqrtf(nn).max(1e-9);
         for d in 0..D {
             samp[v * D + d] = row[d] / nn;
         }
@@ -1243,6 +1391,19 @@ pub fn compile(oracle: &dyn TeacherOracle, corpus: &Corpus) -> Compiled {
     // centroids, deterministically, at compile time. In-memory always;
     // on disk only under TLA6 (era note in `artifact_bytes`).
     art.dot_cb = quantize_dot_tables(&art.ctx_cb);
+    // #318 Phase B: the integer residual wiring — per-stage i8 centroid
+    // copies and the norm-fold CONST, derived from the same centroids and
+    // the train-split corpus, deterministically (ordered stride-8 scan,
+    // no RNG). In-memory always; on disk only under TLA7 (era note in
+    // `artifact_bytes`).
+    let (resid_cb, resid_scale_shifts) = quantize_resid_copies(&art.ctx_cb);
+    art.resid_cb = resid_cb;
+    art.resid_scale_shifts = resid_scale_shifts;
+    art.norm_fold_const = norm_fold_const(&art, &rot, corpus, cut);
+    println!(
+        "norm-fold CONST (incl. fixed-point fraction): {}",
+        art.norm_fold_const
+    );
     art
 }
 
@@ -1256,6 +1417,11 @@ pub fn compile(oracle: &dyn TeacherOracle, corpus: &Corpus) -> Compiled {
 /// Format TLA6 (issue #243 Phase B) = the TLA5 payload + the packed
 /// shift-add dot tables (STAGES × K × D u16, little-endian).
 ///
+/// Format TLA7 (issue #318 Phase B) = the TLA6 payload + the integer
+/// residual sections: the norm-fold CONST (i32, little-endian), the
+/// per-stage copy decode shifts (STAGES × u8), and the per-stage i8
+/// centroid copies (STAGES × K × D i8).
+///
 /// TLA6 is the DEFAULT emission since the Phase C adoption decision
 /// (issue #243, maintainer decision 2026-07-29): fresh compiles emit
 /// TLA6 with 1-term dot tables (`DOT_TERMS`), and the κ re-pin that
@@ -1266,13 +1432,29 @@ pub fn compile(oracle: &dyn TeacherOracle, corpus: &Corpus) -> Compiled {
 /// era-comparison runs. Loaded TLA5 artifacts keep the sign-Hamming
 /// query path; loaded TLA6 artifacts (and fresh in-memory compiles)
 /// take the shift-add dot path.
+///
+/// TLA7 is the DEFAULT emission for artifacts that carry residual
+/// copies (fresh compiles since issue #318 Phase B); `R4_TLESS_TLA7=0`
+/// opts a compile back out to TLA6 emission for era-comparison runs.
+/// Loaded pre-TLA7 artifacts keep the non-residual dot path; loaded TLA7
+/// artifacts (and fresh in-memory compiles) take the residual-wired dot
+/// path. The κ re-pin this implies is a Phase C maintainer decision
+/// (docs/dot_residual_phase_b_design.md) — the pinned baseline is
+/// TLA5-era and remains a valid address for TLA5-era bytes.
 pub fn artifact_bytes(a: &Compiled) -> Vec<u8> {
     let emit_tla6 = !a.dot_cb.is_empty()
         && std::env::var("R4_TLESS_TLA6")
             .map(|v| v != "0")
             .unwrap_or(true);
+    let emit_tla7 = emit_tla6
+        && !a.resid_cb.is_empty()
+        && std::env::var("R4_TLESS_TLA7")
+            .map(|v| v != "0")
+            .unwrap_or(true);
     let vocab = a.token_codes.len() / STAGES;
-    let mut b: Vec<u8> = if emit_tla6 {
+    let mut b: Vec<u8> = if emit_tla7 {
+        b"TLA7".to_vec()
+    } else if emit_tla6 {
         b"TLA6".to_vec()
     } else {
         b"TLA5".to_vec()
@@ -1294,6 +1476,13 @@ pub fn artifact_bytes(a: &Compiled) -> Vec<u8> {
             for entry in table {
                 b.extend_from_slice(&entry.to_le_bytes());
             }
+        }
+    }
+    if emit_tla7 {
+        b.extend_from_slice(&a.norm_fold_const.to_le_bytes());
+        b.extend_from_slice(&a.resid_scale_shifts);
+        for copies in &a.resid_cb {
+            b.extend(copies.iter().map(|&x| x as u8));
         }
     }
     b
@@ -1330,19 +1519,22 @@ pub fn load_artifacts_from(path: &str) -> Option<Compiled> {
     Some(art)
 }
 
-/// Parse a TLA3, TLA4, TLA5, or TLA6 container from bytes.
+/// Parse a TLA3, TLA4, TLA5, TLA6, or TLA7 container from bytes.
 ///
 /// TLA3/TLA4 are legacy formats that include f32 ctx_cb bytes; these are
 /// silently discarded on load (ctx_cb is not part of the deployed artifact).
 /// TLA5 is the current default format: u32 vocab prefix, no ctx_cb.
 /// TLA6 appends the packed shift-add dot tables (issue #243 Phase B).
+/// TLA7 appends the integer residual sections — norm-fold CONST, per-stage
+/// copy decode shifts, i8 centroid copies (issue #318 Phase B).
 pub fn parse_artifacts(b: &[u8]) -> Option<Compiled> {
-    let (vocab, mut o, has_ctx_cb, has_dot_cb) = match b.get(..4)? {
-        b"TLA3" => (V, 4usize, true, false),
+    let (vocab, mut o, has_ctx_cb, has_dot_cb, has_resid_cb) = match b.get(..4)? {
+        b"TLA3" => (V, 4usize, true, false, false),
         b"TLA4" => (
             u32::from_le_bytes(b.get(4..8)?.try_into().ok()?) as usize,
             8usize,
             true,
+            false,
             false,
         ),
         b"TLA5" => (
@@ -1350,11 +1542,20 @@ pub fn parse_artifacts(b: &[u8]) -> Option<Compiled> {
             8usize,
             false,
             false,
+            false,
         ),
         b"TLA6" => (
             u32::from_le_bytes(b.get(4..8)?.try_into().ok()?) as usize,
             8usize,
             false,
+            true,
+            false,
+        ),
+        b"TLA7" => (
+            u32::from_le_bytes(b.get(4..8)?.try_into().ok()?) as usize,
+            8usize,
+            false,
+            true,
             true,
         ),
         _ => return None,
@@ -1365,7 +1566,12 @@ pub fn parse_artifacts(b: &[u8]) -> Option<Compiled> {
     let cs = STAGES * K * D / 8;
     let cc = if has_ctx_cb { STAGES * K * D * 4 } else { 0 };
     let dc = if has_dot_cb { STAGES * K * D * 2 } else { 0 };
-    if b.len() != o + STAGES + tc + bk + th + cs + cc + dc {
+    let rc = if has_resid_cb {
+        4 + STAGES + STAGES * K * D
+    } else {
+        0
+    };
+    if b.len() != o + STAGES + tc + bk + th + cs + cc + dc + rc {
         return None;
     }
     let stage_shifts = b[o..o + STAGES].to_vec();
@@ -1408,6 +1614,24 @@ pub fn parse_artifacts(b: &[u8]) -> Option<Compiled> {
             dot_cb.push(table);
         }
     }
+    let mut norm_fold_const = 0i32;
+    let mut resid_scale_shifts = Vec::new();
+    let mut resid_cb = Vec::new();
+    if has_resid_cb {
+        norm_fold_const = i32::from_le_bytes(b[o..o + 4].try_into().unwrap());
+        o += 4;
+        resid_scale_shifts = b[o..o + STAGES].iter().map(|&x| x.min(63)).collect();
+        o += STAGES;
+        for _ in 0..STAGES {
+            resid_cb.push(
+                b[o..o + K * D]
+                    .iter()
+                    .map(|&x| x as i8)
+                    .collect::<Vec<i8>>(),
+            );
+            o += K * D;
+        }
+    }
     let _ = o; // all bytes consumed
     Some(Compiled {
         token_codes,
@@ -1418,6 +1642,9 @@ pub fn parse_artifacts(b: &[u8]) -> Option<Compiled> {
         ctx_cb: Vec::new(),
         token_stage_kappas: Vec::new(),
         dot_cb,
+        resid_cb,
+        resid_scale_shifts,
+        norm_fold_const,
     })
 }
 

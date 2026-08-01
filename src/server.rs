@@ -54,7 +54,7 @@ pub struct ServerConfig {
     pub tless_corpus_recs: Option<String>,
 }
 
-pub use uor_r4_api::{InferenceRequest, InferenceResponse};
+pub use uor_r4_api::{InferenceRequest, InferenceResponse, InferenceWitness};
 
 type ChatPayload = InferenceRequest;
 
@@ -576,8 +576,13 @@ fn generate_tless_text(
     slot: &Arc<Mutex<Option<tless_uor::TlessState>>>,
     prompt: &str,
     max_tokens: usize,
+    session_signature: Option<&[u8]>,
 ) -> Option<String> {
-    if let Some(r4g1_text) = tless_uor::generate_r4g1_response(prompt, max_tokens) {
+    if let Some(r4g1_text) = tless_uor::generate_r4g1_response_with_session_signature(
+        prompt,
+        max_tokens,
+        session_signature,
+    ) {
         return Some(r4g1_text);
     }
     const MAX_SERVER_TOKENS: usize = 256;
@@ -940,8 +945,10 @@ fn validate_uor_address_syntax(address: &str) -> Result<(), &'static str> {
     Ok(())
 }
 
-/// blake3 CID of the artifact the serving cascade would load, mtime-cached
-/// (issue #256: a real content address or nothing — never a placeholder).
+/// Representation-level UOR κ-label of the artifact the serving cascade
+/// would load, mtime-cached. The R4G1 wire CIDs remain internal integrity
+/// checks; external attestations use the canonical section-addressable
+/// realization from issue #264.
 fn active_artifact_cid() -> Option<String> {
     use std::sync::{Mutex, OnceLock};
     static CACHE: OnceLock<Mutex<Option<(std::path::PathBuf, std::time::SystemTime, String)>>> =
@@ -959,7 +966,7 @@ fn active_artifact_cid() -> Option<String> {
         }
     }
     let bytes = std::fs::read(path).ok()?;
-    let cid = format!("blake3:{}", blake3::hash(&bytes).to_hex());
+    let cid = uor_r4_graph_format::r4g1::artifact_kappa(&bytes).ok()?;
     *guard = Some((path.to_path_buf(), mtime, cid.clone()));
     Some(cid)
 }
@@ -1234,8 +1241,9 @@ fn transformerless_tier(
     slot: &Arc<Mutex<Option<tless_uor::TlessState>>>,
     prompt: &str,
     max_tokens: usize,
+    session_signature: Option<&[u8]>,
 ) -> TierResult {
-    match generate_tless_text(slot, prompt, max_tokens.max(32)) {
+    match generate_tless_text(slot, prompt, max_tokens.max(32), session_signature) {
         Some(text) if is_usable_generated_text(&text) => TierResult::success(text),
         Some(_) => {
             println!("[-] Transformerless output rejected as non-readable or pathological");
@@ -1322,6 +1330,7 @@ fn run_serving_cascade(
     max_tokens: usize,
     temperature: f64,
     gamma: f64,
+    session_signature: Option<&[u8]>,
     pinned: Option<&'static str>,
 ) -> ServingCascade {
     let mut signal = R4g1Signal::default();
@@ -1340,7 +1349,9 @@ fn run_serving_cascade(
         if include(TIER_TRANSFORMERLESS) {
             tiers.push((
                 TIER_TRANSFORMERLESS,
-                Box::new(move || transformerless_tier(tless, prompt, max_tokens)),
+                Box::new(move || {
+                    transformerless_tier(tless, prompt, max_tokens, session_signature)
+                }),
             ));
         }
         if pinned.is_none() {
@@ -2374,6 +2385,9 @@ fn handle_connection(
         };
 
         router_guard.evolve_state(&identity, routing_prompt, gamma);
+        let session_signature = uor_r4_router::session_signature_from_state(
+            &router_guard.get_brain_state_native(&identity),
+        );
 
         uor_r4_wasm_router::ACTIVE_ROUTER.with(|r| {
             *r.borrow_mut() = Some(router_ptr);
@@ -2401,6 +2415,7 @@ fn handle_connection(
                 max_tokens,
                 temperature,
                 gamma,
+                Some(&session_signature),
                 pinned,
             )
         };
@@ -2576,6 +2591,9 @@ fn handle_connection(
 
         // 3. Evolve the brain state
         router_guard.evolve_state(&identity, &payload.text, gamma);
+        let session_signature = uor_r4_router::session_signature_from_state(
+            &router_guard.get_brain_state_native(&identity),
+        );
 
         // 4. Run final routing on evolved state via UOR pipeline
         let t_route = Instant::now();
@@ -2616,6 +2634,7 @@ fn handle_connection(
                 max_tokens,
                 temperature,
                 gamma,
+                Some(&session_signature),
                 pinned,
             )
         };
@@ -3264,6 +3283,11 @@ fn handle_connection(
             .and_then(|m| m.as_u64())
             .unwrap_or(24)
             .clamp(1, 256) as usize;
+        let include_witness = payload
+            .get("include_witness")
+            .or_else(|| payload.get("witness"))
+            .and_then(|value| value.as_bool())
+            .unwrap_or(false);
         let guard = r4g1.lock().unwrap();
         let Some(state) = guard.as_ref() else {
             let (status, body) = r4g1_unavailable_response();
@@ -3298,7 +3322,13 @@ fn handle_connection(
             return;
         }
         let mut out = [0u32; 256];
-        match state.generate_into_status(&seed, &mut out[..max_tokens]) {
+        let mut witnesses = Vec::new();
+        let generation = if include_witness {
+            state.generate_into_status_with_witness(&seed, &mut out[..max_tokens], &mut witnesses)
+        } else {
+            state.generate_into_status(&seed, &mut out[..max_tokens])
+        };
+        match generation {
             Ok(gen) => {
                 let tokens = &out[..gen.count];
                 let mut text_bytes = [0u8; 16 * 1024];
@@ -3311,7 +3341,7 @@ fn handle_connection(
                         .unwrap_or(0)
                 };
                 let text = String::from_utf8_lossy(&text_bytes[..text_len]).into_owned();
-                let body = serde_json::json!({
+                let mut body = serde_json::json!({
                     "seed": seed,
                     "tokens": tokens,
                     "count": gen.count,
@@ -3323,6 +3353,9 @@ fn handle_connection(
                         .map(|s| s.label()),
                     "widened": gen.widened,
                 });
+                if include_witness {
+                    body["witness"] = serde_json::to_value(&witnesses).unwrap_or_default();
+                }
                 send_json_response(stream, 200, &body.to_string());
             }
             Err(error) => send_json_response(
@@ -3346,6 +3379,72 @@ fn handle_connection(
                 return;
             }
         };
+
+        // Issue #266: compact proof-carrying inference witnesses are
+        // verified against the loaded R4G1 artifact, independently of the
+        // legacy JSON-address attestation below.
+        if payload.get("witness").is_some() {
+            let seed = payload
+                .get("seed")
+                .and_then(|value| value.as_array())
+                .map(|values| {
+                    values
+                        .iter()
+                        .filter_map(|value| value.as_u64().map(|token| token as u32))
+                        .collect::<Vec<_>>()
+                });
+            let tokens = payload
+                .get("tokens")
+                .and_then(|value| value.as_array())
+                .map(|values| {
+                    values
+                        .iter()
+                        .filter_map(|value| value.as_u64().map(|token| token as u32))
+                        .collect::<Vec<_>>()
+                });
+            let witnesses = payload
+                .get("witness")
+                .cloned()
+                .and_then(|value| serde_json::from_value::<Vec<InferenceWitness>>(value).ok());
+            let (Some(seed), Some(tokens), Some(witnesses)) = (seed, tokens, witnesses) else {
+                send_json_response(
+                    stream,
+                    400,
+                    &serde_json::json!({
+                        "verified": false,
+                        "reason": "witness_payload_invalid"
+                    })
+                    .to_string(),
+                );
+                return;
+            };
+            let guard = r4g1.lock().unwrap();
+            let Some(state) = guard.as_ref() else {
+                send_json_response(
+                    stream,
+                    503,
+                    &serde_json::json!({
+                        "verified": false,
+                        "reason": "r4g1_artifact_unavailable"
+                    })
+                    .to_string(),
+                );
+                return;
+            };
+            let response = match state.verify_witnesses(&seed, &tokens, &witnesses) {
+                Ok(()) => serde_json::json!({
+                    "verified": true,
+                    "engine": "r4g1",
+                    "witness_count": witnesses.len(),
+                }),
+                Err(reason) => serde_json::json!({
+                    "verified": false,
+                    "reason": reason.to_string(),
+                }),
+            };
+            send_json_response(stream, 200, &response.to_string());
+            return;
+        }
 
         let provided_address = payload
             .get("uor_address")
@@ -3889,6 +3988,8 @@ fn answer_question(
     let (gamma, temperature) = autotune(kappa, theta_d, uor_bias);
 
     router.evolve_state(identity, text, gamma);
+    let session_signature =
+        uor_r4_router::session_signature_from_state(&router.get_brain_state_native(identity));
 
     uor_r4_wasm_router::ACTIVE_ROUTER.with(|r| *r.borrow_mut() = Some(router_ptr));
     let grounded = uor_r4_wasm_router::UorR4RouterModel::forward(input).expect("final route");
@@ -3911,10 +4012,11 @@ fn answer_question(
     } else {
         text.to_string()
     };
-    let (mut answer_text, mode) = match generate_tless_text(tless, &prompt, max_tokens.max(24)) {
-        Some(generated) => (generated, "transformerless".to_string()),
-        None => (geom.text.clone(), "geometric-decoded".to_string()),
-    };
+    let (mut answer_text, mode) =
+        match generate_tless_text(tless, &prompt, max_tokens.max(24), Some(&session_signature)) {
+            Some(generated) => (generated, "transformerless".to_string()),
+            None => (geom.text.clone(), "geometric-decoded".to_string()),
+        };
     if answer_text.is_empty() {
         answer_text = "Manifold resonance too sparse for synthesis.".to_string();
     }
