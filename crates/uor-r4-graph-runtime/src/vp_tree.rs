@@ -275,6 +275,7 @@ impl VpTree {
 }
 
 #[cfg(test)]
+#[allow(dead_code, unused_imports)]
 mod tests {
     use super::{Point, VpTree};
     use alloc::vec;
