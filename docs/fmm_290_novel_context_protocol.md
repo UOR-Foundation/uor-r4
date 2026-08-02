@@ -67,6 +67,13 @@ Pinned fixture run:
 | legacy TLS store | 96 | 0 | 0.0104 | 0.1771 | 9.2121 |
 | R4G1 graph | 96 | 3 | 0.0104 | 0.0521 | 11.4626 |
 
+The same replay also records teacher cross-entropy for the selected token:
+
+| implementation | teacher bits/token |
+|---|---:|
+| legacy TLS store | 11.7423 |
+| R4G1 graph | 13.9549 |
+
 The last column is the existing parity harness's regret-style diagnostic: the
 teacher-logit gap between its argmax and the selected token, clipped at zero.
 It is not the requested bits/token metric and must not be presented as one.
@@ -74,6 +81,34 @@ The BDD scenario remains the source of truth for the incumbent pass/fail
 floors; this table is the §5.2 baseline snapshot.
 
 ## Candidate comparison and decision rule
+
+The first certifier-side candidate is implemented in
+`uor-r4-graph-certify::fmm`. It forms the prototype/emission interaction map
+from the validated graph, diagonalizes the deterministic symmetric Gram matrix
+`PᵀP`, retains a bounded basis, and scores the same artifact-derived query
+signature through that basis. It uses floating point and is explicitly not a
+serving or integer-kernel implementation.
+
+Run it through the S7 parity scenario with:
+
+```bash
+R4_FMM_POSITIONS=256 \
+  cargo test --test bdd --offline -- --name 'S7' --concurrency 1 -v
+```
+
+The eight prompts contain 96 positions in total, so the 256-position budget
+does not increase this fixed snapshot. With rank 20 and relative singular
+tolerance `1e-2`, the pinned run produced:
+
+| candidate | positions | abstains | rank | retained energy | top-1 | top-8 | teacher bits/token |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| certifier FMM | 96 | 0 | 20 | 0.6967 | 0.0104 | 0.2604 | 10.5879 |
+
+Against the incumbent R4G1 graph, top-1 is unchanged, top-8 improves by
+20.83 percentage points, and teacher cross-entropy improves by 3.3670
+bits/token. This is an exploratory result, not a deployment claim: the
+candidate currently has no integer translation table, allocation-free serving
+path, or §5.4 cost certificate.
 
 The candidate must expose the same teacher-forced prediction contract as the
 incumbent. First compare it at the same 96-position snapshot, then rerun at
@@ -94,11 +129,11 @@ passes accuracy must still clear the §5.4 constant-factor check: measured
 operator work, stored translation data, and routing overhead must beat the
 incumbent on the same fixture.
 
-## Current blocker
+## Remaining work
 
-The repository currently contains the rank-analysis material for §5.1 but no
-FMM operator, M2L translation table, or runtime adapter that can replace the
-R4G1 scorer. Therefore the next implementation task is to define and test a
-candidate operator against the existing graph score interface; extending the
-parity harness before that point would only remeasure the incumbent and could
-not close issue #290.
+The certifier candidate now exists and is measured, but issue #290 is not yet
+closed. The remaining decision is whether the accuracy gain justifies a
+bounded implementation for the deployed contract. That requires a fixed-point
+translation representation, an allocation-free adapter, and the §5.4 cost
+comparison against R4G1. Until those are implemented and certified, the FMM
+candidate remains a research measurement path only.
