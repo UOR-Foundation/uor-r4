@@ -42,6 +42,7 @@ fn canonical_expf(value: f32) -> f32 {
     }
 }
 
+#[cfg(target_os = "macos")]
 #[inline]
 fn teacher_vector_exp_enabled() -> bool {
     static ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
