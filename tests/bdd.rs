@@ -204,6 +204,7 @@ struct R4g1World {
     parity_corpus_legacy: Option<ParityMetrics>,
     parity_corpus_graph: Option<ParityMetrics>,
     parity_fmm_metrics: Option<ParityMetrics>,
+    parity_fmm_fixed_metrics: Option<ParityMetrics>,
 }
 
 #[given("the R4G1 runtime returned the browser's repetitive hello response")]
@@ -2746,6 +2747,7 @@ struct ParityFixtures {
     r4g1: Option<R4g1State>,
     corpus: Option<Corpus>,
     fmm: Option<FmmCandidateScorer>,
+    fmm_fixed: Option<uor_r4_graph_certify::FmmFixedCandidateScorer>,
 }
 
 thread_local! {
@@ -2804,6 +2806,9 @@ fn load_parity_fixtures() -> Option<ParityFixtures> {
     let r4g1 = load_r4g1(&bundle, &artifact_bytes);
     let corpus = load_parity_corpus(&bundle);
     let fmm = load_fmm_candidate(&bundle, &artifact_bytes);
+    let fmm_fixed = fmm
+        .as_ref()
+        .and_then(|candidate| candidate.fixed_point().ok());
     Some(ParityFixtures {
         teacher,
         artifacts,
@@ -2812,6 +2817,7 @@ fn load_parity_fixtures() -> Option<ParityFixtures> {
         r4g1,
         corpus,
         fmm,
+        fmm_fixed,
     })
 }
 
@@ -2990,6 +2996,60 @@ fn teacher_bits_for_token(logits: &[f32], token: u32) -> f64 {
 /// the incumbent, but it does not participate in serving status policy.
 fn fmm_teacher_forced_eval(fx: &mut ParityFixtures, budget: usize) -> Option<ParityMetrics> {
     let fmm = fx.fmm.as_ref()?.clone();
+    let r4g1 = fx.r4g1.as_ref()?;
+    let mut positions = 0usize;
+    let mut top1_hits = 0usize;
+    let mut top8_hits = 0usize;
+    let mut teacher_bits_sum = 0.0f64;
+    let mut remaining = budget;
+    let mut logits = vec![0.0f32; fx.teacher.vocab()];
+    let mut top8 = [(0u32, 0.0f32); 8];
+    'prompts: for prompt in PARITY_PROMPTS {
+        let tokens = fx.tokenizer.encode(prompt);
+        if tokens.len() < 2 {
+            continue;
+        }
+        fx.teacher.reset();
+        for i in 0..tokens.len() - 1 {
+            if remaining == 0 {
+                break 'prompts;
+            }
+            remaining -= 1;
+            fx.teacher.step(tokens[i] as usize, i, &mut logits);
+            let k = fx.teacher.top_k(8, &mut top8);
+            let teacher_argmax = top8[0].0;
+            let window = &tokens[(i + 1).saturating_sub(WINDOW)..=i];
+            let sig = r4g1.signature_for_window(window).ok()?;
+            let outcome = fmm.score(&sig, &[]).ok()?;
+            positions += 1;
+            if outcome.selected == teacher_argmax {
+                top1_hits += 1;
+            }
+            if top8[..k]
+                .iter()
+                .any(|&(token, _)| token == outcome.selected)
+            {
+                top8_hits += 1;
+            }
+            teacher_bits_sum += teacher_bits_for_token(&logits, outcome.selected);
+        }
+    }
+    let denom = positions.max(1) as f64;
+    Some(ParityMetrics {
+        positions,
+        abstains: 0,
+        top1_agreement: top1_hits as f64 / denom,
+        top8_recall: top8_hits as f64 / denom,
+        mean_delta_bits: 0.0,
+        teacher_bits_per_token: teacher_bits_sum / denom,
+    })
+}
+
+/// The same teacher-forced replay through the quantized translation-table
+/// candidate. This measures fixed-point selection drift separately from the
+/// float candidate so quantization loss is visible.
+fn fmm_fixed_teacher_forced_eval(fx: &mut ParityFixtures, budget: usize) -> Option<ParityMetrics> {
+    let fmm = fx.fmm_fixed.as_ref()?.clone();
     let r4g1 = fx.r4g1.as_ref()?;
     let mut positions = 0usize;
     let mut top1_hits = 0usize;
@@ -3297,21 +3357,36 @@ fn parity_replay_fmm(w: &mut R4g1World) {
     if parity_skip(w, "S7") {
         return;
     }
-    let has_fmm = with_parity_fixtures(|fx| fx.fmm.is_some() && fx.r4g1.is_some()).unwrap_or(false);
+    let has_fmm =
+        with_parity_fixtures(|fx| fx.fmm.is_some() && fx.fmm_fixed.is_some() && fx.r4g1.is_some())
+            .unwrap_or(false);
     if !has_fmm {
         eprintln!("[parity] S7: FMM candidate unavailable — vacuous pass");
         return;
     }
     let budget = parity_budget("R4_FMM_POSITIONS", 256);
     w.parity_fmm_metrics = with_parity_fixtures(|fx| fmm_teacher_forced_eval(fx, budget)).flatten();
+    w.parity_fmm_fixed_metrics =
+        with_parity_fixtures(|fx| fmm_fixed_teacher_forced_eval(fx, budget)).flatten();
     if let Some(metrics) = w.parity_fmm_metrics {
-        let (rank, retained_energy) = with_parity_fixtures(|fx| {
-            fx.fmm
-                .as_ref()
-                .map(|fmm| (fmm.rank(), fmm.retained_energy()))
-        })
-        .flatten()
-        .unwrap_or((0, 0.0));
+        let (rank, retained_energy, float_storage, fixed_storage, factor_bits) =
+            with_parity_fixtures(|fx| {
+                fx.fmm
+                    .as_ref()
+                    .zip(fx.fmm_fixed.as_ref())
+                    .map(|(fmm, fixed)| {
+                        (
+                            fmm.rank(),
+                            fmm.retained_energy(),
+                            fmm.storage_bytes(),
+                            fixed.storage_bytes(),
+                            fixed.factor_fraction_bits(),
+                        )
+                    })
+            })
+            .flatten()
+            .unwrap_or((0, 0.0, 0, 0, 0));
+        let fixed = w.parity_fmm_fixed_metrics.expect("fixed FMM measured");
         println!(
             "{}",
             serde_json::to_string_pretty(&serde_json::json!({
@@ -3322,8 +3397,16 @@ fn parity_replay_fmm(w: &mut R4g1World) {
                 "top1_agreement": metrics.top1_agreement,
                 "top8_recall": metrics.top8_recall,
                 "teacher_bits_per_token": metrics.teacher_bits_per_token,
+                "fixed_point": {
+                    "top1_agreement": fixed.top1_agreement,
+                    "top8_recall": fixed.top8_recall,
+                    "teacher_bits_per_token": fixed.teacher_bits_per_token,
+                    "storage_bytes": fixed_storage,
+                },
                 "rank": rank,
                 "retained_energy": retained_energy,
+                "float_storage_bytes": float_storage,
+                "factor_fraction_bits": factor_bits,
                 "max_rank": with_parity_fixtures(|fx| fx.fmm.as_ref().map(|fmm| fmm.config().max_rank)).flatten(),
                 "relative_singular_tolerance": with_parity_fixtures(|fx| fx.fmm.as_ref().map(|fmm| fmm.config().relative_singular_tolerance)).flatten(),
                 "budget": budget,
@@ -3348,6 +3431,11 @@ fn parity_fmm_checked(w: &mut R4g1World) {
         "FMM replay covered at least one position"
     );
     assert!(metrics.teacher_bits_per_token.is_finite());
+    let fixed = w
+        .parity_fmm_fixed_metrics
+        .expect("fixed FMM replay measured");
+    assert!(fixed.positions > 0);
+    assert!(fixed.teacher_bits_per_token.is_finite());
 }
 
 #[when("free-running generation is timed for the teacher and both compiled runtimes")]

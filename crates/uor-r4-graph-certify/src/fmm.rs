@@ -88,6 +88,33 @@ pub struct FmmCandidateScorer {
     retained_energy: f64,
 }
 
+/// One prediction from the fixed-point translation-table candidate.
+#[derive(Debug, Clone)]
+pub struct FmmFixedScoreOutcome {
+    pub selected: u32,
+    /// Candidate scores in ascending token order, represented as Q16.16 raw
+    /// integers widened to i64 for overflow-safe comparison.
+    pub candidates: Vec<(u32, i64)>,
+    pub rank: usize,
+}
+
+/// Quantized form of [`FmmCandidateScorer`]. The basis uses signed Q1.15
+/// values; token factors use a common power-of-two fractional scale, so the
+/// score accumulation and final Q16.16 conversion are integer operations.
+/// This is a feasibility prototype for a future packed runtime table, not yet
+/// the deployed allocation-free kernel.
+#[derive(Debug, Clone)]
+pub struct FmmFixedCandidateScorer {
+    dimension: usize,
+    rank: usize,
+    basis_q15: Vec<i16>,
+    token_factors_q: Vec<i32>,
+    factor_fraction_bits: u8,
+    root_prior: BTreeMap<u32, ScoreQ>,
+    root_floor: ScoreQ,
+    candidate_tokens: Vec<u32>,
+}
+
 impl FmmCandidateScorer {
     /// Build a scorer from the graph's region prototypes and sparse emission
     /// residuals. This constructor allocates once and performs all floating
@@ -213,6 +240,55 @@ impl FmmCandidateScorer {
         self.retained_energy
     }
 
+    /// Quantize the float candidate into a deterministic fixed-point table.
+    pub fn fixed_point(&self) -> Result<FmmFixedCandidateScorer, String> {
+        let basis_q15 = self
+            .basis
+            .iter()
+            .map(|&value| (value * 32_768.0).round().clamp(-32_767.0, 32_767.0) as i16)
+            .collect();
+        let max_factor = self
+            .token_factors
+            .iter()
+            .map(|value| value.abs())
+            .fold(0.0, f64::max);
+        let factor_fraction_bits = choose_fraction_bits(max_factor);
+        let factor_scale = (1u64 << factor_fraction_bits) as f64;
+        let token_factors_q = self
+            .token_factors
+            .iter()
+            .map(|&value| {
+                (value * factor_scale)
+                    .round()
+                    .clamp(i32::MIN as f64, i32::MAX as f64) as i32
+            })
+            .collect();
+        Ok(FmmFixedCandidateScorer {
+            dimension: self.dimension,
+            rank: self.rank,
+            basis_q15,
+            token_factors_q,
+            factor_fraction_bits,
+            root_prior: self
+                .root_prior
+                .iter()
+                .map(|(&token, &score)| {
+                    (token, ScoreQ::from_raw((score * 65_536.0).round() as i32))
+                })
+                .collect(),
+            root_floor: ScoreQ::from_raw((self.root_floor * 65_536.0).round() as i32),
+            candidate_tokens: self.candidate_tokens.clone(),
+        })
+    }
+
+    /// Approximate storage occupied by the float factors and token metadata.
+    pub fn storage_bytes(&self) -> usize {
+        self.basis.len() * std::mem::size_of::<f64>()
+            + self.token_factors.len() * std::mem::size_of::<f64>()
+            + self.candidate_tokens.len() * std::mem::size_of::<u32>()
+            + self.root_prior.len() * (std::mem::size_of::<u32>() + std::mem::size_of::<f64>())
+    }
+
     /// Score one sign signature with the low-rank far-field approximation.
     pub fn score(&self, sig: &[u8], recent_tokens: &[u32]) -> Result<FmmScoreOutcome, String> {
         if sig.len() * 8 != self.dimension {
@@ -257,6 +333,158 @@ impl FmmCandidateScorer {
             retained_energy: self.retained_energy,
         })
     }
+}
+
+impl FmmFixedCandidateScorer {
+    pub fn rank(&self) -> usize {
+        self.rank
+    }
+
+    pub fn factor_fraction_bits(&self) -> u8 {
+        self.factor_fraction_bits
+    }
+
+    /// Approximate storage occupied by the quantized translation table and
+    /// token metadata.
+    pub fn storage_bytes(&self) -> usize {
+        self.basis_q15.len() * std::mem::size_of::<i16>()
+            + self.token_factors_q.len() * std::mem::size_of::<i32>()
+            + self.candidate_tokens.len() * std::mem::size_of::<u32>()
+            + self.root_prior.len() * (std::mem::size_of::<u32>() + std::mem::size_of::<i32>())
+    }
+
+    /// Select the best token without allocating. The caller owns the
+    /// rank-sized projection scratch; this is the adapter shape a future
+    /// fixed-capacity runtime can embed in its step state.
+    pub fn select_into(
+        &self,
+        sig: &[u8],
+        recent_tokens: &[u32],
+        projected: &mut [i64],
+    ) -> Result<(u32, i64), String> {
+        if sig.len() * 8 != self.dimension {
+            return Err("fixed FMM query signature width does not match the graph".to_owned());
+        }
+        if projected.len() < self.rank {
+            return Err("fixed FMM projection scratch is too small".to_owned());
+        }
+        projected[..self.rank].fill(0);
+        for (component, projected_value) in projected[..self.rank].iter_mut().enumerate() {
+            for coordinate in 0..self.dimension {
+                let sign = if sig[coordinate / 8] & (1 << (coordinate % 8)) != 0 {
+                    1i64
+                } else {
+                    -1i64
+                };
+                *projected_value +=
+                    sign * i64::from(self.basis_q15[coordinate * self.rank + component]);
+            }
+        }
+        let token_count = self.candidate_tokens.len();
+        let mut best: Option<(u32, i64)> = None;
+        for (index, &token) in self.candidate_tokens.iter().enumerate() {
+            let mut interaction = 0i128;
+            for (component, &projection) in projected[..self.rank].iter().enumerate() {
+                interaction += projection as i128
+                    * i128::from(self.token_factors_q[component * token_count + index]);
+            }
+            let mut score =
+                i64::from(
+                    self.root_prior
+                        .get(&token)
+                        .copied()
+                        .unwrap_or(self.root_floor)
+                        .raw(),
+                ) + round_shift_signed(interaction, self.factor_fraction_bits.saturating_sub(1));
+            if recent_tokens.contains(&token) {
+                score = score.saturating_sub(2_000_000);
+            }
+            let replace = best.is_none_or(|(best_token, best_score)| {
+                score > best_score || (score == best_score && token < best_token)
+            });
+            if replace {
+                best = Some((token, score));
+            }
+        }
+        best.ok_or("fixed FMM produced no candidates".to_owned())
+    }
+
+    /// Score one signature using only integer table values after the
+    /// compiler-selected quantization scales have been fixed.
+    pub fn score(&self, sig: &[u8], recent_tokens: &[u32]) -> Result<FmmFixedScoreOutcome, String> {
+        if sig.len() * 8 != self.dimension {
+            return Err("fixed FMM query signature width does not match the graph".to_owned());
+        }
+        let mut projected = vec![0i64; self.rank];
+        for (component, projected_value) in projected.iter_mut().enumerate() {
+            for coordinate in 0..self.dimension {
+                let sign = if sig[coordinate / 8] & (1 << (coordinate % 8)) != 0 {
+                    1i64
+                } else {
+                    -1i64
+                };
+                *projected_value +=
+                    sign * i64::from(self.basis_q15[coordinate * self.rank + component]);
+            }
+        }
+        let token_count = self.candidate_tokens.len();
+        let mut candidates = Vec::with_capacity(token_count);
+        for (index, &token) in self.candidate_tokens.iter().enumerate() {
+            let mut interaction = 0i128;
+            for (component, &projection) in projected.iter().enumerate() {
+                interaction += projection as i128
+                    * i128::from(self.token_factors_q[component * token_count + index]);
+            }
+            let mut score =
+                i64::from(
+                    self.root_prior
+                        .get(&token)
+                        .copied()
+                        .unwrap_or(self.root_floor)
+                        .raw(),
+                ) + round_shift_signed(interaction, self.factor_fraction_bits.saturating_sub(1));
+            if recent_tokens.contains(&token) {
+                score = score.saturating_sub(2_000_000);
+            }
+            candidates.push((token, score));
+        }
+        let selected = candidates
+            .iter()
+            .max_by(|(left_token, left_score), (right_token, right_score)| {
+                left_score
+                    .cmp(right_score)
+                    .then_with(|| right_token.cmp(left_token))
+            })
+            .map(|&(token, _)| token)
+            .ok_or("fixed FMM produced no candidates")?;
+        Ok(FmmFixedScoreOutcome {
+            selected,
+            candidates,
+            rank: self.rank,
+        })
+    }
+}
+
+fn choose_fraction_bits(max_abs: f64) -> u8 {
+    for bits in (0..=30).rev() {
+        if max_abs * (1u64 << bits) as f64 <= i32::MAX as f64 {
+            return bits.max(1);
+        }
+    }
+    0
+}
+
+fn round_shift_signed(value: i128, shift: u8) -> i64 {
+    if shift == 0 {
+        return value.clamp(i128::from(i64::MIN), i128::from(i64::MAX)) as i64;
+    }
+    let divisor = 1i128 << shift;
+    let adjusted = if value >= 0 {
+        value.saturating_add(divisor / 2)
+    } else {
+        value.saturating_sub(divisor / 2)
+    };
+    (adjusted / divisor).clamp(i128::from(i64::MIN), i128::from(i64::MAX)) as i64
 }
 
 fn sign_row(sig: &[u8], dimension: usize) -> Vec<f64> {
@@ -404,6 +632,14 @@ mod tests {
             scorer.score(&left_sig, &[]).unwrap().candidates
         );
         assert!(scorer.retained_energy() > 0.0);
+        let fixed = scorer.fixed_point().expect("fixed candidate builds");
+        assert_eq!(fixed.score(&left_sig, &[]).unwrap().selected, left.selected);
+        let mut projected = [0i64; 1];
+        assert_eq!(
+            fixed.select_into(&left_sig, &[], &mut projected).unwrap().0,
+            left.selected
+        );
+        assert!(fixed.storage_bytes() < scorer.storage_bytes());
     }
 
     #[test]

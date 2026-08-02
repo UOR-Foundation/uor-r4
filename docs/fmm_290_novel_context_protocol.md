@@ -104,6 +104,20 @@ tolerance `1e-2`, the pinned run produced:
 |---|---:|---:|---:|---:|---:|---:|---:|
 | certifier FMM | 96 | 0 | 20 | 0.6967 | 0.0104 | 0.2604 | 10.5879 |
 
+The fixed-point translation-table form uses Q1.15 basis entries and a common
+power-of-two factor scale. On the same replay (`factor_fraction_bits = 29`),
+it selected the same token at every position and produced identical metrics:
+
+| representation | storage estimate | top-1 | top-8 | teacher bits/token |
+|---|---:|---:|---:|---:|
+| float factors | 337,888 B | 0.0104 | 0.2604 | 10.5879 |
+| fixed-point factors | 164,056 B | 0.0104 | 0.2604 | 10.5879 |
+
+The fixed-point scorer also exposes a caller-buffered selection method with no
+per-call allocation. Its current certifier implementation still uses widened
+integer arithmetic, including products, for feasibility measurement; it is not
+yet the deployed multiplication-free kernel.
+
 Against the incumbent R4G1 graph, top-1 is unchanged, top-8 improves by
 20.83 percentage points, and teacher cross-entropy improves by 3.3670
 bits/token. This is an exploratory result, not a deployment claim: the
