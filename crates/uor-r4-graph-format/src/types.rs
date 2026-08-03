@@ -179,6 +179,8 @@ impl SectionId {
     pub const SECT: SectionId = SectionId(0x0B);
     /// RTNX — route translation index (optional, Phase 9).
     pub const RTNX: SectionId = SectionId(0x0C);
+    /// NGRAM — packed bigram/trigram context rows (optional).
+    pub const NGRAM: SectionId = SectionId(Self::OPTIONAL_BIT | 0x0E);
 
     /// Ancillary bit classifying *unknown* section IDs.
     ///
@@ -196,9 +198,10 @@ impl SectionId {
         self.0
     }
 
-    /// True when the ID is in the RFC §3 inventory (`0x01..=0x0B`).
+    /// True when the ID is in the RFC §3 inventory or a known optional
+    /// extension implemented by this reader.
     pub const fn is_known(self) -> bool {
-        matches!(self.0, 0x01..=0x0C)
+        matches!(self.0, 0x01..=0x0C) || self.0 == Self::NGRAM.0
     }
 
     /// Mandatory-ness per the RFC §3 column for known IDs.
@@ -209,6 +212,7 @@ impl SectionId {
         match self.0 {
             0x01..=0x06 | 0x08 => true,
             0x07 | 0x09..=0x0C => false,
+            value if value == Self::NGRAM.0 => false,
             _ => self.0 & Self::OPTIONAL_BIT == 0,
         }
     }

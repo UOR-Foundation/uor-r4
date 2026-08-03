@@ -114,6 +114,8 @@ pub const DEFAULT_EMISSION_ENTRIES: usize = 64;
 pub const DEFAULT_ROOT_TOP_B: usize = 64;
 /// Default EXCT candidate count.
 pub const DEFAULT_EXCT_TOP_X: usize = 64;
+/// Default per-context candidate bound for packed bigram/trigram rows.
+pub const DEFAULT_CONTEXT_ENTRIES: usize = 64;
 /// Default held-out position count whose witnesses are replayed in Gate C.
 pub const DEFAULT_WITNESS_SAMPLE: usize = 64;
 
@@ -450,6 +452,75 @@ pub struct EmissionTables {
     pub emission_quantization: QuantizationErrorStats,
 }
 
+/// One canonical context-conditioned lexical row. The root prior in
+/// [`EmissionTables`] is the unigram row; `context_len` 1 and 2 are bigram
+/// and trigram rows respectively.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ContextRow {
+    pub context_len: u8,
+    pub key0: u32,
+    pub key1: u32,
+    /// Absolute smoothed log scores, stored in ascending token order.
+    pub entries: Vec<(u32, ScoreQ)>,
+}
+
+/// Compile explicit bigram and trigram rows from the teacher-forced corpus.
+/// Story boundaries never form a trigram key. Rows are retained when the
+/// context was observed; the runtime's exact row-presence rule then defines
+/// the deterministic most-specific backoff.
+pub fn compile_context_rows(
+    corpus: &Corpus,
+    train: &[Observation],
+    vocab: u32,
+    smoothing: Smoothing,
+) -> Vec<ContextRow> {
+    let mut counts: BTreeMap<(u8, u32, u32), BTreeMap<u32, u64>> = BTreeMap::new();
+    for observation in train {
+        let i = observation.position as usize;
+        if i >= corpus.n || corpus.next[i] != observation.next {
+            continue;
+        }
+        let bigram = (1, corpus.input[i], 0);
+        *counts
+            .entry(bigram)
+            .or_default()
+            .entry(corpus.next[i])
+            .or_insert(0) += 1;
+        if i > 0 && corpus.story[i - 1] == corpus.story[i] {
+            let trigram = (2, corpus.input[i - 1], corpus.input[i]);
+            *counts
+                .entry(trigram)
+                .or_default()
+                .entry(corpus.next[i])
+                .or_insert(0) += 1;
+        }
+    }
+
+    counts
+        .into_iter()
+        .map(|((context_len, key0, key1), distribution)| {
+            let total: u64 = distribution.values().sum();
+            let types = distribution.len();
+            let mut ranked: Vec<(u32, ScoreQ)> = distribution
+                .iter()
+                .map(|(&token, &count)| {
+                    let ln = smoothing.ln_prob(count, total, vocab, types);
+                    (token, ScoreQ::from_logprob(ln))
+                })
+                .collect();
+            ranked.sort_by(|a, b| b.1.raw().cmp(&a.1.raw()).then_with(|| a.0.cmp(&b.0)));
+            ranked.truncate(DEFAULT_CONTEXT_ENTRIES);
+            ranked.sort_by_key(|&(token, _)| token);
+            ContextRow {
+                context_len,
+                key0,
+                key1,
+                entries: ranked,
+            }
+        })
+        .collect()
+}
+
 /// ln of an add-one-smoothed probability (compiler-side f64; module
 /// docs for the platform pinning). This is the [`Smoothing::AddOne`]
 /// arm; the other rules live in [`Smoothing::ln_prob`].
@@ -699,10 +770,72 @@ pub struct ScoredGraphSections<'a> {
     pub transition_quantization: QuantizationErrorStats,
     /// Root prior + per-region residual lists.
     pub emissions: &'a EmissionTables,
+    /// Explicit bigram/trigram context rows; the root unigram remains EMIT.
+    pub context_rows: &'a [ContextRow],
     /// TLS1 container bytes used as compiler input for residualized EXCT.
     pub exct_tls1: &'a [u8],
     /// Number of exact-context residual entries retained per prefix.
     pub exct_top_x: usize,
+}
+
+fn encode_context_rows(rows: &[ContextRow]) -> Result<Vec<u8>, String> {
+    let row_count =
+        u32::try_from(rows.len()).map_err(|_| "NGRAM row count exceeds u32".to_owned())?;
+    let header_len = uor_r4_graph_format::NGRAM_HEADER_LEN;
+    let row_len = uor_r4_graph_format::NGRAM_ROW_LEN;
+    let entries_start = header_len
+        .checked_add(
+            row_len
+                .checked_mul(rows.len())
+                .ok_or("NGRAM row bytes overflow")?,
+        )
+        .ok_or("NGRAM header bytes overflow")?;
+    let mut bytes = Vec::with_capacity(entries_start);
+    bytes.extend_from_slice(&uor_r4_graph_format::NGRAM_MAGIC);
+    bytes.extend_from_slice(&uor_r4_graph_format::NGRAM_VERSION.to_le_bytes());
+    bytes.extend_from_slice(&[0u8; 2]);
+    bytes.extend_from_slice(&row_count.to_le_bytes());
+    let max_entries = rows.iter().map(|row| row.entries.len()).max().unwrap_or(0);
+    bytes.extend_from_slice(
+        &u16::try_from(max_entries)
+            .map_err(|_| "NGRAM row entry count exceeds u16".to_owned())?
+            .to_le_bytes(),
+    );
+    bytes.extend_from_slice(&[0u8; 2]);
+    bytes.resize(entries_start, 0);
+    let mut entry_offset = entries_start;
+    let mut previous = None;
+    for (index, row) in rows.iter().enumerate() {
+        if !(1..=2).contains(&row.context_len) || (row.context_len == 1 && row.key1 != 0) {
+            return Err("NGRAM row has an invalid context key".to_owned());
+        }
+        let key = (row.context_len, row.key0, row.key1);
+        if previous.is_some_and(|last| last >= key) {
+            return Err("NGRAM rows are not canonically sorted".to_owned());
+        }
+        previous = Some(key);
+        let entry_count = u16::try_from(row.entries.len())
+            .map_err(|_| "NGRAM row entry count exceeds u16".to_owned())?;
+        let header = header_len + index * row_len;
+        bytes[header] = row.context_len;
+        bytes[header + 2..header + 4].copy_from_slice(&entry_count.to_le_bytes());
+        bytes[header + 4..header + 8].copy_from_slice(&row.key0.to_le_bytes());
+        bytes[header + 8..header + 12].copy_from_slice(&row.key1.to_le_bytes());
+        let entry_offset_u32 =
+            u32::try_from(entry_offset).map_err(|_| "NGRAM entry offset exceeds u32".to_owned())?;
+        bytes[header + 12..header + 16].copy_from_slice(&entry_offset_u32.to_le_bytes());
+        let mut previous_token = None;
+        for &(token, score) in &row.entries {
+            if previous_token.is_some_and(|last| last >= token) {
+                return Err("NGRAM entries are not canonically sorted".to_owned());
+            }
+            previous_token = Some(token);
+            bytes.extend_from_slice(&token.to_le_bytes());
+            bytes.extend_from_slice(&score.raw().to_le_bytes());
+        }
+        entry_offset = bytes.len();
+    }
+    Ok(bytes)
 }
 
 /// Encode the exact-context store as compile-time ScoreQ residuals. The
@@ -780,6 +913,7 @@ pub fn emit_scored_r4g1(
         transitions,
         transition_quantization,
         emissions,
+        context_rows,
         exct_tls1,
         exct_top_x,
     } = *sections;
@@ -955,6 +1089,7 @@ pub fn emit_scored_r4g1(
     let mut exct = Vec::with_capacity(4 + exct_body.len());
     exct.extend_from_slice(&[2, 0, 0, 0]);
     exct.extend_from_slice(&exct_body);
+    let ngram = encode_context_rows(context_rows)?;
 
     // HEAD: the fixed 224-byte v0 prefix (convert_r4g1 conventions).
     let (meta, recs) = corpus_cid_material;
@@ -993,6 +1128,7 @@ pub fn emit_scored_r4g1(
     builder.add_section(uor_r4_graph_format::SectionId::ROUT, 0, &rout);
     builder.add_section(uor_r4_graph_format::SectionId::EMIT, 0, &emit);
     builder.add_section(uor_r4_graph_format::SectionId::EXCT, 0, &exct);
+    builder.add_section(uor_r4_graph_format::SectionId::NGRAM, 0, &ngram);
     let bytes = builder
         .build()
         .map_err(|error| format!("R4G1 serialization failed: {error}"))?;

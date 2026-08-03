@@ -69,6 +69,7 @@ mod head;
 mod header;
 pub mod inference_contract;
 pub mod invariant_ownership;
+mod ngram;
 #[cfg(feature = "alloc")]
 pub mod r4g1;
 pub mod records;
@@ -100,6 +101,10 @@ pub use invariant_ownership::{
     GraphInvariantId, GraphInvariantOwnershipMatrix, InvariantOwner, InvariantOwnershipEntry,
     InvariantOwnershipRow, InvariantValidationError, INVARIANT_OWNERSHIP_ROWS, MATRIX_VERSION,
     OPERATION_SET_CONFORMANCE_ROW,
+};
+pub use ngram::{
+    NgramEntries, NgramEntry, NgramRow, NgramTable, NGRAM_ENTRY_LEN, NGRAM_HEADER_LEN, NGRAM_MAGIC,
+    NGRAM_ROW_LEN, NGRAM_VERSION,
 };
 pub use records::{
     EdgeKind, PackedEdge, PackedNode, StorageDescriptor, EDGE_KIND_OPTIONAL_BIT, PACKED_EDGE_LEN,

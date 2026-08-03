@@ -10,6 +10,7 @@
 use crate::error::FormatError;
 use crate::head::Head;
 use crate::header::{self, Header, HEADER_LEN, SECTION_ENTRY_LEN};
+use crate::ngram::NgramTable;
 use crate::records::{
     self, PackedEdge, PackedNode, PackedRouteTranslation, PackedTombstone, PACKED_EDGE_LEN,
     PACKED_NODE_LEN, PACKED_ROUTE_TRANSLATION_LEN, PACKED_TOMBSTONE_LEN,
@@ -324,6 +325,13 @@ impl<'a> GraphView<'a> {
             next: 0,
             remaining,
         }
+    }
+
+    /// Parse the optional packed lexical context table.
+    pub fn ngram_table(&self) -> Result<Option<NgramTable<'a>>, FormatError> {
+        self.section(SectionId::NGRAM)
+            .map(NgramTable::parse)
+            .transpose()
     }
 
     /// Recompute both integrity CIDs against the bytes and compare with

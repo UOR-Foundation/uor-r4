@@ -1035,6 +1035,7 @@ pub fn score_command(args: &[String]) -> Result<(), String> {
     );
     let vocab = u32::try_from(artifacts.token_codes.len() / compiler::STAGES)
         .map_err(|_| "vocabulary exceeds u32 token ids".to_owned())?;
+    let context_rows = score::compile_context_rows(&corpus, &train, vocab, config.smoothing);
     let emissions =
         score::compile_emissions(&corpus, &store, &regions, &train, max_depth, vocab, &config);
     let (artifact_bytes, info) = score::emit_scored_r4g1(
@@ -1047,6 +1048,7 @@ pub fn score_command(args: &[String]) -> Result<(), String> {
             transitions: &transitions,
             transition_quantization,
             emissions: &emissions,
+            context_rows: &context_rows,
             exct_tls1: &tls1,
             exct_top_x: config.exct_top_x,
         },
