@@ -1258,6 +1258,14 @@ pub struct ResidualInfluence {
     /// Mean selected-chain depth, and mean depth of the best teacher emitter.
     pub mean_chain_depth: f64,
     pub mean_teacher_emitter_depth: f64,
+    /// Which source supplies the teacher token, as a share of positions.
+    /// These overlap: a token can come from more than one source.
+    pub teacher_from_active: f64,
+    pub teacher_from_predicted: f64,
+    pub teacher_from_root_top: f64,
+    /// Teacher retrieved, but ONLY by the context-free root prior — no graph
+    /// region and no predicted transition supplied it.
+    pub teacher_only_root_top: f64,
 }
 
 /// Residual-influence measurement split by resolution status.
@@ -1597,6 +1605,10 @@ pub fn evaluate_gate_c(
     let mut status_chain_depth = [0u64; 3];
     let mut status_emitter_depth = [0u64; 3];
     let mut status_emitter_rows = [0u64; 3];
+    let mut status_src_active = [0u64; 3];
+    let mut status_src_predicted = [0u64; 3];
+    let mut status_src_root_top = [0u64; 3];
+    let mut status_src_only_root = [0u64; 3];
     let mut status_ranks: [Vec<u32>; 3] = [Vec::new(), Vec::new(), Vec::new()];
     let gate_rotations = compiler::derive_rotations();
     let context = GateCContext {
@@ -1650,6 +1662,10 @@ pub fn evaluate_gate_c(
         status_teacher_better_margin[row.status_index] +=
             u64::from(row.teacher_emitter_better_margin);
         status_chain_depth[row.status_index] += u64::from(row.chain_depth);
+        status_src_active[row.status_index] += u64::from(row.teacher_from_active);
+        status_src_predicted[row.status_index] += u64::from(row.teacher_from_predicted);
+        status_src_root_top[row.status_index] += u64::from(row.teacher_from_root_top);
+        status_src_only_root[row.status_index] += u64::from(row.teacher_only_root_top);
         if row.teacher_emitted_off_chain {
             status_emitter_depth[row.status_index] += u64::from(row.teacher_emitter_depth);
             status_emitter_rows[row.status_index] += 1;
@@ -1828,6 +1844,10 @@ pub fn evaluate_gate_c(
             } else {
                 status_emitter_depth[index] as f64 / status_emitter_rows[index] as f64
             },
+            teacher_from_active: status_src_active[index] as f64 / denom,
+            teacher_from_predicted: status_src_predicted[index] as f64 / denom,
+            teacher_from_root_top: status_src_root_top[index] as f64 / denom,
+            teacher_only_root_top: status_src_only_root[index] as f64 / denom,
         };
         match index {
             0 => influence.exact_context = value,
@@ -1940,6 +1960,12 @@ struct GateCRow {
     /// Depth of the selected chain, and of the best teacher-emitting region.
     chain_depth: u32,
     teacher_emitter_depth: u32,
+    /// Which source supplied the teacher token to the candidate set.
+    teacher_from_active: bool,
+    teacher_from_predicted: bool,
+    teacher_from_root_top: bool,
+    /// Teacher present, but ONLY from the context-free root prior.
+    teacher_only_root_top: bool,
     witness_replayed: bool,
     witness_replay_failed: bool,
 }
@@ -2116,6 +2142,28 @@ fn evaluate_gate_c_row(
         }
     }
 
+    // Candidate recall was 63% on the graph slice while active regions emit the
+    // teacher only ~4.3% of the time. Attribute the rest: the candidate set is
+    // active + predicted + root_top, and which source supplies the teacher
+    // decides whether the graph contributes anything to finding the answer.
+    let teacher_present = rule12
+        .candidate_components
+        .iter()
+        .any(|&(token, _, _, _)| token == teacher_argmax);
+    let teacher_from_active = rule12.witness.active.iter().any(|a| {
+        context
+            .scorer_with_exct
+            .node_emits(a.region + 1, teacher_argmax)
+    });
+    let teacher_from_predicted = rule12
+        .witness
+        .predicted
+        .iter()
+        .any(|&node| context.scorer_with_exct.node_emits(node, teacher_argmax));
+    let teacher_from_root_top = context.scorer_with_exct.root_top_contains(teacher_argmax);
+    let teacher_only_root_top =
+        teacher_present && teacher_from_root_top && !teacher_from_active && !teacher_from_predicted;
+
     let total_candidates = rule12.candidate_components.len().max(1) as f64;
     let zeros = rule12
         .candidate_components
@@ -2217,6 +2265,10 @@ fn evaluate_gate_c_row(
         teacher_emitter_better_margin,
         chain_depth,
         teacher_emitter_depth,
+        teacher_from_active,
+        teacher_from_predicted,
+        teacher_from_root_top,
+        teacher_only_root_top,
         witness_replayed: index < context.config.witness_sample,
         witness_replay_failed,
     })
