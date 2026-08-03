@@ -196,6 +196,14 @@ pub struct EmissionSelectionStats {
     /// Witten-Bell lambda = n / (n + T) per region; near 1 means the estimator
     /// barely shrinks and cannot test the sparsity hypothesis.
     pub mean_lambda_witten_bell: f64,
+    /// Distribution of per-region contrast against the global prior. Spread
+    /// says whether region construction has headroom: uniformly mid-range
+    /// contrast means the cover is generic everywhere, while high variance
+    /// means some regions are genuinely distinctive and granularity is the
+    /// lever.
+    pub mean_contrast: f64,
+    pub min_contrast: f64,
+    pub max_contrast: f64,
     pub mean_region_count: f64,
     pub mean_region_types: f64,
     pub overlap_with_top_count: f64,
@@ -859,6 +867,9 @@ pub fn compile_emissions(
             let selection = EmissionSelectionStats {
                 regions: 1,
                 mean_lambda_witten_bell: lambda_wb,
+                mean_contrast: contrast,
+                min_contrast: contrast,
+                max_contrast: contrast,
                 mean_region_count: total as f64,
                 mean_region_types: types as f64,
                 overlap_with_top_count: overlap as f64 / by_count.len().max(1) as f64,
@@ -879,6 +890,14 @@ pub fn compile_emissions(
         selection_stats.overlap_with_top_count += selection.overlap_with_top_count;
         selection_stats.probability_mass_kept += selection.probability_mass_kept;
         selection_stats.mean_lambda_witten_bell += selection.mean_lambda_witten_bell;
+        selection_stats.mean_contrast += selection.mean_contrast;
+        if selection_stats.regions == 1 {
+            selection_stats.min_contrast = selection.min_contrast;
+            selection_stats.max_contrast = selection.max_contrast;
+        } else {
+            selection_stats.min_contrast = selection_stats.min_contrast.min(selection.min_contrast);
+            selection_stats.max_contrast = selection_stats.max_contrast.max(selection.max_contrast);
+        }
         selection_stats.mean_region_count += selection.mean_region_count;
         selection_stats.mean_region_types += selection.mean_region_types;
         emission_quantization.sample_count += stats.sample_count;
@@ -895,13 +914,16 @@ pub fn compile_emissions(
         eprintln!(
             "[emission-selection] regions={} mean_overlap_with_top_count={:.4} \
              mean_probability_mass_kept={:.4} mean_lambda_wb={:.4} \
-             mean_n={:.0} mean_types={:.0} (E={})",
+             mean_n={:.0} mean_types={:.0} contrast mean={:.4} min={:.4} max={:.4} (E={})",
             selection_stats.regions,
             selection_stats.overlap_with_top_count / n,
             selection_stats.probability_mass_kept / n,
             selection_stats.mean_lambda_witten_bell / n,
             selection_stats.mean_region_count / n,
             selection_stats.mean_region_types / n,
+            selection_stats.mean_contrast / n,
+            selection_stats.min_contrast,
+            selection_stats.max_contrast,
             config.emission_entries,
         );
     }
