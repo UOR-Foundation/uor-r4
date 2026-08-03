@@ -112,12 +112,22 @@ pub struct StatusBreakdown {
     pub graph: u64,
     pub novel: u64,
     pub contradictory: u64,
+    /// Of `exact_context`, how many resolved via an explicit NGRAM
+    /// context row rather than the EXCT probe (#362 attribution — the
+    /// two mechanisms share the `ExactContext` status since e77b1d4,
+    /// so era comparisons need the split).
+    pub exact_context_ngram: u64,
 }
 
 impl StatusBreakdown {
-    fn record(&mut self, status: PolicyStatus) {
+    fn record(&mut self, status: PolicyStatus, ngram_hit: bool) {
         match status {
-            PolicyStatus::ExactContext => self.exact_context += 1,
+            PolicyStatus::ExactContext => {
+                self.exact_context += 1;
+                if ngram_hit {
+                    self.exact_context_ngram += 1;
+                }
+            }
             PolicyStatus::Graph => self.graph += 1,
             PolicyStatus::Novel => self.novel += 1,
             PolicyStatus::Contradictory => self.contradictory += 1,
@@ -370,7 +380,8 @@ pub fn evaluate_serving_bundle(
         })? {
             PredictDecision::Serve(outcome) => {
                 row.served += 1;
-                row.served_by.record(outcome.status.into());
+                row.served_by
+                    .record(outcome.status.into(), outcome.ngram_hit);
                 if outcome.widened {
                     row.served_widened += 1;
                 }
@@ -382,7 +393,8 @@ pub fn evaluate_serving_bundle(
                 }
             }
             PredictDecision::Abstain(outcome) => {
-                row.abstained.record(outcome.status.into());
+                row.abstained
+                    .record(outcome.status.into(), outcome.ngram_hit);
             }
         }
         if (done + 1).is_multiple_of(256) {
