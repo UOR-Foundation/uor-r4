@@ -1186,6 +1186,29 @@ pub struct CandidateRecall {
     pub rule12_top3: f64,
 }
 
+/// Candidate recall for one resolution status.
+///
+/// `CandidateRecall` above is divided by ALL scored positions, so it cannot
+/// attribute retrieval success to a status. That matters for the graph path
+/// specifically: its top-1 agreement is ~0.6-1.2% while blended recall is
+/// ~72%, and without this split there is no way to tell whether the graph
+/// path fails to RETRIEVE the teacher token or retrieves it and fails to RANK
+/// it first. Those have disjoint fixes.
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct StatusCandidateRecall {
+    pub positions: usize,
+    pub top1: f64,
+    pub top3: f64,
+}
+
+/// Rule 1+2 candidate recall, split by resolution status.
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct Rule12PerStatusRecall {
+    pub exact_context: StatusCandidateRecall,
+    pub graph: StatusCandidateRecall,
+    pub novel: StatusCandidateRecall,
+}
+
 /// The Gate C outcome: the four number sets (old formula, Rule 1,
 /// Rule 1+2, baseline), the status and win/loss instrumentation,
 /// candidate recall, and the witness-replay sample result.
@@ -1212,6 +1235,8 @@ pub struct GateCOutcome {
     pub tla3_baseline: GateCMetrics,
     pub rule12_status_counts: StatusCounts,
     pub rule12_per_status: Rule12PerStatus,
+    /// Candidate recall split by status (retrieval vs ranking).
+    pub rule12_candidate_recall_per_status: Rule12PerStatusRecall,
     /// #234 item 2 instrumentation: histogram of the Rule 2 probe's
     /// RESOLUTION level per held-out position (index = graded-prefix
     /// length, 0 = root … STAGES = full code). The probe stops at the
@@ -1440,6 +1465,8 @@ pub fn evaluate_gate_c(
     let mut recall_rule1_top3 = 0u64;
     let mut recall_rule12_top1 = 0u64;
     let mut recall_rule12_top3 = 0u64;
+    let mut status_recall_top1 = [0u64; 3];
+    let mut status_recall_top3 = [0u64; 3];
     let gate_rotations = compiler::derive_rotations();
     let context = GateCContext {
         artifacts,
@@ -1494,6 +1521,8 @@ pub fn evaluate_gate_c(
         recall_rule1_top3 += u64::from(row.candidate_recall[1]);
         recall_rule12_top1 += u64::from(row.candidate_recall[2]);
         recall_rule12_top3 += u64::from(row.candidate_recall[3]);
+        status_recall_top1[row.status_index] += u64::from(row.candidate_recall[2]);
+        status_recall_top3[row.status_index] += u64::from(row.candidate_recall[3]);
         accumulate_win_loss(
             &mut outcome.win_loss.rule12_vs_baseline,
             row.hits[2],
@@ -1554,6 +1583,23 @@ pub fn evaluate_gate_c(
         exact_context: per_status(0),
         graph: per_status(1),
         novel: per_status(2),
+    };
+    let per_status_recall = |index: usize| {
+        let positions = status_positions[index];
+        if positions == 0 {
+            return StatusCandidateRecall::default();
+        }
+        let denom = positions as f64;
+        StatusCandidateRecall {
+            positions,
+            top1: status_recall_top1[index] as f64 / denom,
+            top3: status_recall_top3[index] as f64 / denom,
+        }
+    };
+    outcome.rule12_candidate_recall_per_status = Rule12PerStatusRecall {
+        exact_context: per_status_recall(0),
+        graph: per_status_recall(1),
+        novel: per_status_recall(2),
     };
     outcome.candidate_recall = CandidateRecall {
         rule1_top1: recall_rule1_top1 as f64 / nf,
@@ -1930,7 +1976,7 @@ pub fn build_score_report_with_quality_profile(
         can_measure_generalization: strict_exct_miss_rate >= MIN_EXCT_MISS_RATE_FOR_GATE_C,
     };
     ScoreReport {
-        schema: 10,
+        schema: 11,
         inputs,
         config: ScoreReportConfig {
             transition_out_degree: config.transition_out_degree,
