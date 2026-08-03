@@ -1186,6 +1186,37 @@ pub struct CandidateRecall {
     pub rule12_top3: f64,
 }
 
+/// Top-1 agreement under `root + alpha * residual`, swept over alpha.
+///
+/// The residual measured net-destructive on the graph slice. Sweeping alpha
+/// separates the two explanations that finding leaves open: an optimum at
+/// alpha < 0 implicates the accumulation DIRECTION (a sign error in how
+/// chain-telescoped residuals combine), while an optimum at 0 < alpha < 1
+/// implicates SCALE (the evidence points the right way but is weighted far too
+/// heavily). An optimum at alpha = 0 means the graph evidence carries no usable
+/// signal on this path at all, which is a compiler-side question rather than a
+/// scorer one.
+///
+/// alpha = 1 is the shipped behavior; alpha = 0 is the root prior alone.
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct ResidualAlphaSweep {
+    pub positions: usize,
+    /// `(alpha, top1_agreement)` in the order swept.
+    pub points: Vec<(f64, f64)>,
+}
+
+/// Alpha sweep split by resolution status.
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct Rule12PerStatusAlphaSweep {
+    pub exact_context: ResidualAlphaSweep,
+    pub graph: ResidualAlphaSweep,
+    pub novel: ResidualAlphaSweep,
+}
+
+/// Rational alpha multipliers, kept exact in i64 so the sweep introduces no
+/// float rounding of its own.
+const ALPHA_SWEEP: [(i64, i64); 7] = [(-1, 1), (-1, 2), (-1, 4), (0, 1), (1, 4), (1, 2), (1, 1)];
+
 /// Does the graph residual change any decision, or is ranking carried by the
 /// root prior alone?
 ///
@@ -1302,6 +1333,8 @@ pub struct GateCOutcome {
     pub rule12_teacher_rank_per_status: Rule12PerStatusTeacherRank,
     /// Whether the graph residual changes decisions, per status.
     pub rule12_residual_influence_per_status: Rule12PerStatusResidualInfluence,
+    /// Top-1 under root + alpha*residual, swept, per status.
+    pub rule12_residual_alpha_sweep: Rule12PerStatusAlphaSweep,
     /// #234 item 2 instrumentation: histogram of the Rule 2 probe's
     /// RESOLUTION level per held-out position (index = graded-prefix
     /// length, 0 = root … STAGES = full code). The probe stops at the
@@ -1537,6 +1570,7 @@ pub fn evaluate_gate_c(
     let mut status_root_hits = [0u64; 3];
     let mut status_root_spreads: [Vec<i64>; 3] = [Vec::new(), Vec::new(), Vec::new()];
     let mut status_resid_spreads: [Vec<i64>; 3] = [Vec::new(), Vec::new(), Vec::new()];
+    let mut status_alpha_hits = [[0u64; ALPHA_SWEEP.len()]; 3];
     let mut status_ranks: [Vec<u32>; 3] = [Vec::new(), Vec::new(), Vec::new()];
     let gate_rotations = compiler::derive_rotations();
     let context = GateCContext {
@@ -1598,6 +1632,12 @@ pub fn evaluate_gate_c(
         status_root_hits[row.status_index] += u64::from(row.root_only_hit);
         status_root_spreads[row.status_index].push(row.root_spread);
         status_resid_spreads[row.status_index].push(row.residual_spread);
+        for (slot, hit) in status_alpha_hits[row.status_index]
+            .iter_mut()
+            .zip(row.alpha_hits.iter())
+        {
+            *slot += u64::from(*hit);
+        }
         if let Some(rank) = row.teacher_rank {
             let bucket = match rank {
                 1 => 0,
@@ -1703,6 +1743,28 @@ pub fn evaluate_gate_c(
             v[mid] as f64
         }
     };
+    let mut sweep = Rule12PerStatusAlphaSweep::default();
+    for index in 0..3 {
+        let positions = status_positions[index];
+        if positions == 0 {
+            continue;
+        }
+        let denom = positions as f64;
+        let value = ResidualAlphaSweep {
+            positions,
+            points: ALPHA_SWEEP
+                .iter()
+                .zip(status_alpha_hits[index].iter())
+                .map(|(&(num, den), &hits)| (num as f64 / den as f64, hits as f64 / denom))
+                .collect(),
+        };
+        match index {
+            0 => sweep.exact_context = value,
+            1 => sweep.graph = value,
+            _ => sweep.novel = value,
+        }
+    }
+    outcome.rule12_residual_alpha_sweep = sweep;
     let mut influence = Rule12PerStatusResidualInfluence::default();
     for index in 0..3 {
         let positions = status_positions[index];
@@ -1811,6 +1873,8 @@ struct GateCRow {
     /// Spread (max - min) of the root and residual terms across candidates.
     root_spread: i64,
     residual_spread: i64,
+    /// Per-alpha: argmax(root + alpha*residual + penalty) == teacher.
+    alpha_hits: [bool; ALPHA_SWEEP.len()],
     witness_replayed: bool,
     witness_replay_failed: bool,
 }
@@ -1930,6 +1994,20 @@ fn evaluate_gate_c_row(
         resid_lo = resid_lo.min(i64::from(resid_raw));
         resid_hi = resid_hi.max(i64::from(resid_raw));
     }
+    let mut alpha_hits = [false; ALPHA_SWEEP.len()];
+    for (slot, &(num, den)) in alpha_hits.iter_mut().zip(ALPHA_SWEEP.iter()) {
+        let mut best_token = u32::MAX;
+        let mut best_score = i64::MIN;
+        for &(token, root_raw, resid_raw, penalized) in &rule12.candidate_components {
+            let scaled = i64::from(resid_raw) * num / den;
+            let score = i64::from(root_raw) + scaled + if penalized { -2_000_000 } else { 0 };
+            if score > best_score {
+                best_score = score;
+                best_token = token;
+            }
+        }
+        *slot = best_token == teacher_argmax;
+    }
     let root_only_agrees = root_best == rule12.selected;
     let root_only_hit = root_best == teacher_argmax;
     let root_spread = if root_hi >= root_lo {
@@ -1991,6 +2069,7 @@ fn evaluate_gate_c_row(
         root_only_hit,
         root_spread,
         residual_spread,
+        alpha_hits,
         witness_replayed: index < context.config.witness_sample,
         witness_replay_failed,
     })
