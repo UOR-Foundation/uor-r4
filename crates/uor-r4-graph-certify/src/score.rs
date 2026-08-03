@@ -1251,6 +1251,13 @@ pub struct ResidualInfluence {
     pub teacher_on_chain: f64,
     /// Fraction of positions where an off-chain (zero-residual) token won.
     pub selected_off_chain: f64,
+    /// An active region OUTSIDE the selected chain emits the teacher token.
+    pub teacher_emitted_off_chain: f64,
+    /// That region also fits the context better than the selected chain.
+    pub teacher_emitter_better_margin: f64,
+    /// Mean selected-chain depth, and mean depth of the best teacher emitter.
+    pub mean_chain_depth: f64,
+    pub mean_teacher_emitter_depth: f64,
 }
 
 /// Residual-influence measurement split by resolution status.
@@ -1585,6 +1592,11 @@ pub fn evaluate_gate_c(
     let mut status_zero_share = [0f64; 3];
     let mut status_teacher_on_chain = [0u64; 3];
     let mut status_selected_off_chain = [0u64; 3];
+    let mut status_teacher_off_chain = [0u64; 3];
+    let mut status_teacher_better_margin = [0u64; 3];
+    let mut status_chain_depth = [0u64; 3];
+    let mut status_emitter_depth = [0u64; 3];
+    let mut status_emitter_rows = [0u64; 3];
     let mut status_ranks: [Vec<u32>; 3] = [Vec::new(), Vec::new(), Vec::new()];
     let gate_rotations = compiler::derive_rotations();
     let context = GateCContext {
@@ -1634,6 +1646,14 @@ pub fn evaluate_gate_c(
         status_zero_share[row.status_index] += row.zero_resid_share;
         status_teacher_on_chain[row.status_index] += u64::from(row.teacher_on_chain);
         status_selected_off_chain[row.status_index] += u64::from(row.selected_off_chain);
+        status_teacher_off_chain[row.status_index] += u64::from(row.teacher_emitted_off_chain);
+        status_teacher_better_margin[row.status_index] +=
+            u64::from(row.teacher_emitter_better_margin);
+        status_chain_depth[row.status_index] += u64::from(row.chain_depth);
+        if row.teacher_emitted_off_chain {
+            status_emitter_depth[row.status_index] += u64::from(row.teacher_emitter_depth);
+            status_emitter_rows[row.status_index] += 1;
+        }
         if let Some(level) = row.exct_level {
             exct_level_positions[level] += 1;
         } else {
@@ -1800,6 +1820,14 @@ pub fn evaluate_gate_c(
             mean_zero_residual_share: status_zero_share[index] / denom,
             teacher_on_chain: status_teacher_on_chain[index] as f64 / denom,
             selected_off_chain: status_selected_off_chain[index] as f64 / denom,
+            teacher_emitted_off_chain: status_teacher_off_chain[index] as f64 / denom,
+            teacher_emitter_better_margin: status_teacher_better_margin[index] as f64 / denom,
+            mean_chain_depth: status_chain_depth[index] as f64 / denom,
+            mean_teacher_emitter_depth: if status_emitter_rows[index] == 0 {
+                0.0
+            } else {
+                status_emitter_depth[index] as f64 / status_emitter_rows[index] as f64
+            },
         };
         match index {
             0 => influence.exact_context = value,
@@ -1905,6 +1933,13 @@ struct GateCRow {
     teacher_on_chain: bool,
     /// The selected token carries a zero residual (an off-chain token won).
     selected_off_chain: bool,
+    /// An active region outside the selected chain emits the teacher token.
+    teacher_emitted_off_chain: bool,
+    /// That region's membership margin beats the selected chain's.
+    teacher_emitter_better_margin: bool,
+    /// Depth of the selected chain, and of the best teacher-emitting region.
+    chain_depth: u32,
+    teacher_emitter_depth: u32,
     witness_replayed: bool,
     witness_replay_failed: bool,
 }
@@ -2044,6 +2079,43 @@ fn evaluate_gate_c_row(
     // log-prob-like and negative, chain tokens carry a summed penalty while
     // off-chain tokens sit at zero, and both are ranked by root + residual.
     // Measure whether that is what decides graph-slice selections.
+    // Chain selection ranks by chain LENGTH first, with membership margin only
+    // breaking ties among equal-length chains. So a deep chain the context
+    // barely belongs to beats a shallow one it fits well. Candidate generation
+    // meanwhile draws on every active/predicted node. Measure whether a
+    // better-fitting region outside the chain could have supplied the teacher.
+    let chain_nodes: std::collections::BTreeSet<u32> =
+        rule12.witness.chain.iter().copied().collect();
+    let chain_margin = rule12
+        .witness
+        .active
+        .iter()
+        .filter(|a| chain_nodes.contains(&(a.region + 1)))
+        .map(|a| a.margin)
+        .max()
+        .unwrap_or(i16::MIN);
+    let chain_depth = rule12.witness.chain.len() as u32;
+    let mut teacher_emitted_off_chain = false;
+    let mut teacher_emitter_better_margin = false;
+    let mut teacher_emitter_depth = 0u32;
+    let mut best_emitter_margin = i16::MIN;
+    for a in &rule12.witness.active {
+        let node = a.region + 1;
+        if chain_nodes.contains(&node) {
+            continue;
+        }
+        if context.scorer_with_exct.node_emits(node, teacher_argmax) {
+            teacher_emitted_off_chain = true;
+            if a.margin > best_emitter_margin {
+                best_emitter_margin = a.margin;
+                teacher_emitter_depth = u32::from(a.depth);
+            }
+            if a.margin > chain_margin {
+                teacher_emitter_better_margin = true;
+            }
+        }
+    }
+
     let total_candidates = rule12.candidate_components.len().max(1) as f64;
     let zeros = rule12
         .candidate_components
@@ -2141,6 +2213,10 @@ fn evaluate_gate_c_row(
         zero_resid_share,
         teacher_on_chain,
         selected_off_chain,
+        teacher_emitted_off_chain,
+        teacher_emitter_better_margin,
+        chain_depth,
+        teacher_emitter_depth,
         witness_replayed: index < context.config.witness_sample,
         witness_replay_failed,
     })

@@ -959,6 +959,15 @@ impl GraphScorer {
 
     /// The stored root prior B(v), or the smoothing floor for tokens
     /// absent from the root block.
+    /// Does `node` (1-based) emit `token`? Measurement-only accessor for
+    /// asking which regions could have supplied a token, independent of which
+    /// chain was selected.
+    pub fn node_emits(&self, node: u32, token: u32) -> bool {
+        self.emissions
+            .get((node - 1) as usize)
+            .is_some_and(|emissions| emissions.contains_key(&token))
+    }
+
     fn root_score(&self, token: u32) -> ScoreQ {
         self.root_prior
             .get(&token)
