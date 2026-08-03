@@ -1077,13 +1077,6 @@ impl GraphScorer {
         best
     }
 
-    /// Pre-#380 shim: the row argmax alone, for callers that only need the
-    /// selection.
-    fn context_prediction(&self, recent_tokens: &[u32]) -> Option<(u32, ScoreQ)> {
-        self.context_row(recent_tokens)
-            .map(Self::context_row_argmax)
-    }
-
     /// Score one context signature: compute the active cloud A, the
     /// predicted cloud F, the bounded candidate set, and S(v) for every
     /// candidate by integer ScoreQ accumulation; select by the canonical
@@ -2552,16 +2545,21 @@ mod ngram_tests {
             vec![(4, ScoreQ::from_raw(10)), (5, ScoreQ::from_raw(20))],
         );
         let mut scorer = scorer(rows);
+        let row_argmax = |scorer: &GraphScorer, tokens: &[u32]| {
+            scorer
+                .context_row(tokens)
+                .map(GraphScorer::context_row_argmax)
+        };
         assert_eq!(
-            scorer.context_prediction(&[10, 20]),
+            row_argmax(&scorer, &[10, 20]),
             Some((5, ScoreQ::from_raw(20)))
         );
         scorer.context_rows.remove(&(2, 10, 20));
         assert_eq!(
-            scorer.context_prediction(&[10, 20]),
+            row_argmax(&scorer, &[10, 20]),
             Some((6, ScoreQ::from_raw(100)))
         );
-        assert_eq!(scorer.context_prediction(&[30]), None);
+        assert_eq!(row_argmax(&scorer, &[30]), None);
     }
 
     /// #362 attribution: an NGRAM-row selection reports `NgramRow`
