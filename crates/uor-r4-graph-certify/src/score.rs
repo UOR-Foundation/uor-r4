@@ -658,6 +658,20 @@ fn smoothed_ln(count: u64, total: u64, vocab: u32) -> f32 {
     ((count as f64 + 1.0) / (total as f64 + f64::from(vocab))).ln() as f32
 }
 
+/// Witten-Bell's evidence weight for a region-conditioned estimate.
+///
+/// A region with many observations per distinct type gets a weight near one;
+/// a sparse region is pulled toward its parent. The zero-evidence case is
+/// defined as zero so the compiler never emits a non-finite weight.
+fn witten_bell_lambda(total: u64, types: usize) -> f64 {
+    let denominator = total as f64 + types as f64;
+    if denominator > 0.0 {
+        total as f64 / denominator
+    } else {
+        0.0
+    }
+}
+
 /// Compile the root prior and per-region emission residuals (module
 /// docs). The evidence model matches the store's exactly (top-3
 /// teacher-weighted counts over train positions); the root distribution
@@ -802,9 +816,7 @@ pub fn compile_emissions(
                     let ln = match config.emission_shrinkage {
                         EmissionShrinkage::None => ln,
                         EmissionShrinkage::WittenBell => {
-                            let n = total as f64;
-                            let t = types as f64;
-                            let lambda = if n + t > 0.0 { n / (n + t) } else { 0.0 };
+                            let lambda = witten_bell_lambda(total, types);
                             (f64::from(ln) * lambda) as f32
                         }
                         EmissionShrinkage::Contrast => (f64::from(ln) * contrast) as f32,
@@ -855,15 +867,7 @@ pub fn compile_emissions(
                 .filter(|(t, _)| kept.contains(t))
                 .map(|(_, &c)| c)
                 .sum();
-            let lambda_wb = {
-                let n = total as f64;
-                let t = types as f64;
-                if n + t > 0.0 {
-                    n / (n + t)
-                } else {
-                    0.0
-                }
-            };
+            let lambda_wb = witten_bell_lambda(total, types);
             let selection = EmissionSelectionStats {
                 regions: 1,
                 mean_lambda_witten_bell: lambda_wb,
@@ -2645,7 +2649,6 @@ fn evaluate_gate_c_row(
         let node = (mixed % node_count as u64) as u32 + 1;
         context.scorer_with_exct.node_emits(node, teacher_argmax)
     };
-
     // Telescoping integrity: how much of the selected chain actually carries a
     // term for the teacher token.
     let chain_levels = rule12.witness.chain.len() as u32;
@@ -3170,5 +3173,18 @@ mod context_rows_tests {
         assert!(!rows
             .iter()
             .any(|row| { row.context_len == 2 && row.key0 == 20 && row.key1 == 30 }));
+    }
+}
+
+#[cfg(test)]
+mod emission_shrinkage_tests {
+    use super::witten_bell_lambda;
+
+    #[test]
+    fn witten_bell_weight_is_bounded_and_evidence_sensitive() {
+        assert_eq!(witten_bell_lambda(0, 0), 0.0);
+        assert!((witten_bell_lambda(100, 10) - 100.0 / 110.0).abs() < 1e-12);
+        assert!(witten_bell_lambda(100, 10) > witten_bell_lambda(10, 100));
+        assert!(witten_bell_lambda(100, 10) < 1.0);
     }
 }
