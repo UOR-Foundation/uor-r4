@@ -521,6 +521,31 @@ pub fn compile_context_rows(
         .collect()
 }
 
+/// Compile the optional FMM section from the same regions and emission tables
+/// that feed the normal scored-artifact path. All floating-point work remains
+/// in the certifier; the returned bytes contain only the folded integer table
+/// consumed by the runtime kernel.
+pub fn compile_fmm_section(
+    regions: &[RegionParams],
+    emissions: &EmissionTables,
+    vocab: u32,
+) -> Result<Vec<u8>, String> {
+    let emission_maps: Vec<BTreeMap<u32, ScoreQ>> = emissions
+        .region_lists
+        .iter()
+        .map(|entries| entries.iter().copied().collect())
+        .collect();
+    let scorer = crate::fmm::FmmCandidateScorer::from_graph_parts(
+        regions,
+        &emission_maps,
+        &emissions.root_prior,
+        emissions.root_floor,
+        vocab,
+        crate::fmm::FmmConfig::default(),
+    )?;
+    scorer.fixed_point()?.to_packed_section()
+}
+
 /// ln of an add-one-smoothed probability (compiler-side f64; module
 /// docs for the platform pinning). This is the [`Smoothing::AddOne`]
 /// arm; the other rules live in [`Smoothing::ln_prob`].
@@ -752,6 +777,9 @@ pub struct ScoredGraphInfo {
     pub context_row_count: u32,
     pub context_entry_count: u32,
     pub context_bytes: u32,
+    pub fmm_bytes: u32,
+    pub fmm_rank: u16,
+    pub fmm_candidate_count: u32,
     pub artifact_bytes: usize,
     pub transition_quantization: QuantizationErrorStats,
     pub root_prior_quantization: QuantizationErrorStats,
@@ -779,6 +807,8 @@ pub struct ScoredGraphSections<'a> {
     pub exct_tls1: &'a [u8],
     /// Number of exact-context residual entries retained per prefix.
     pub exct_top_x: usize,
+    /// Optional compiler-folded FMM translation table.
+    pub fmm_section: Option<&'a [u8]>,
 }
 
 fn encode_context_rows(rows: &[ContextRow]) -> Result<Vec<u8>, String> {
@@ -919,6 +949,7 @@ pub fn emit_scored_r4g1(
         context_rows,
         exct_tls1,
         exct_top_x,
+        fmm_section,
     } = *sections;
     if regions.len() != emissions.region_lists.len() {
         return Err("emission lists do not match the region count".to_owned());
@@ -1094,6 +1125,11 @@ pub fn emit_scored_r4g1(
     exct.extend_from_slice(&exct_body);
     let ngram = encode_context_rows(context_rows)?;
 
+    let fmm_table = fmm_section
+        .map(uor_r4_graph_format::FmmTranslationTable::parse)
+        .transpose()
+        .map_err(|error| format!("invalid FMM section: {error}"))?;
+
     // HEAD: the fixed 224-byte v0 prefix (convert_r4g1 conventions).
     let (meta, recs) = corpus_cid_material;
     let mut corpus_hasher = blake3::Hasher::new();
@@ -1132,6 +1168,9 @@ pub fn emit_scored_r4g1(
     builder.add_section(uor_r4_graph_format::SectionId::EMIT, 0, &emit);
     builder.add_section(uor_r4_graph_format::SectionId::EXCT, 0, &exct);
     builder.add_section(uor_r4_graph_format::SectionId::NGRAM, 0, &ngram);
+    if let Some(fmm_section) = fmm_section {
+        builder.add_section(uor_r4_graph_format::SectionId::FMM, 0, fmm_section);
+    }
     let bytes = builder
         .build()
         .map_err(|error| format!("R4G1 serialization failed: {error}"))?;
@@ -1169,6 +1208,9 @@ pub fn emit_scored_r4g1(
             .map_err(|_| "NGRAM entry count exceeds u32".to_owned())?,
             context_bytes: u32::try_from(ngram.len())
                 .map_err(|_| "NGRAM section exceeds u32".to_owned())?,
+            fmm_bytes: fmm_section.map_or(0, |bytes| bytes.len() as u32),
+            fmm_rank: fmm_table.map_or(0, |table| table.rank()),
+            fmm_candidate_count: fmm_table.map_or(0, |table| table.token_count()),
             artifact_bytes,
             transition_quantization,
             root_prior_quantization: emissions.root_prior_quantization,
@@ -1395,6 +1437,27 @@ pub struct ResidualInfluence {
     /// `bits_per_token`: a lower top-1 with unchanged bits means the argmax
     /// moved without the distribution improving.
     pub bits_per_token_root_only: f64,
+    /// Mean share of candidates whose residual is exactly zero (off-chain).
+    pub mean_zero_residual_share: f64,
+    /// Fraction of positions where the teacher token is a chain token.
+    pub teacher_on_chain: f64,
+    /// Fraction of positions where an off-chain (zero-residual) token won.
+    pub selected_off_chain: f64,
+    /// An active region OUTSIDE the selected chain emits the teacher token.
+    pub teacher_emitted_off_chain: f64,
+    /// That region also fits the context better than the selected chain.
+    pub teacher_emitter_better_margin: f64,
+    /// Mean selected-chain depth, and mean depth of the best teacher emitter.
+    pub mean_chain_depth: f64,
+    pub mean_teacher_emitter_depth: f64,
+    /// Which source supplies the teacher token, as a share of positions.
+    /// These overlap: a token can come from more than one source.
+    pub teacher_from_active: f64,
+    pub teacher_from_predicted: f64,
+    pub teacher_from_root_top: f64,
+    /// Teacher retrieved, but ONLY by the context-free root prior — no graph
+    /// region and no predicted transition supplied it.
+    pub teacher_only_root_top: f64,
 }
 
 /// Residual-influence measurement split by resolution status.
@@ -1726,6 +1789,18 @@ pub fn evaluate_gate_c(
     let mut status_resid_spreads: [Vec<i64>; 3] = [Vec::new(), Vec::new(), Vec::new()];
     let mut status_alpha_hits = [[0u64; ALPHA_SWEEP.len()]; 3];
     let mut status_bits_root_only = [0f64; 3];
+    let mut status_zero_share = [0f64; 3];
+    let mut status_teacher_on_chain = [0u64; 3];
+    let mut status_selected_off_chain = [0u64; 3];
+    let mut status_teacher_off_chain = [0u64; 3];
+    let mut status_teacher_better_margin = [0u64; 3];
+    let mut status_chain_depth = [0u64; 3];
+    let mut status_emitter_depth = [0u64; 3];
+    let mut status_emitter_rows = [0u64; 3];
+    let mut status_src_active = [0u64; 3];
+    let mut status_src_predicted = [0u64; 3];
+    let mut status_src_root_top = [0u64; 3];
+    let mut status_src_only_root = [0u64; 3];
     let mut status_ranks: [Vec<u32>; 3] = [Vec::new(), Vec::new(), Vec::new()];
     let gate_rotations = compiler::derive_rotations();
     let context = GateCContext {
@@ -1772,6 +1847,21 @@ pub fn evaluate_gate_c(
         status_hits[row.status_index] += u64::from(row.status_hit);
         status_bits[row.status_index] += row.status_bits;
         status_bits_root_only[row.status_index] += row.bits_root_only;
+        status_zero_share[row.status_index] += row.zero_resid_share;
+        status_teacher_on_chain[row.status_index] += u64::from(row.teacher_on_chain);
+        status_selected_off_chain[row.status_index] += u64::from(row.selected_off_chain);
+        status_teacher_off_chain[row.status_index] += u64::from(row.teacher_emitted_off_chain);
+        status_teacher_better_margin[row.status_index] +=
+            u64::from(row.teacher_emitter_better_margin);
+        status_chain_depth[row.status_index] += u64::from(row.chain_depth);
+        status_src_active[row.status_index] += u64::from(row.teacher_from_active);
+        status_src_predicted[row.status_index] += u64::from(row.teacher_from_predicted);
+        status_src_root_top[row.status_index] += u64::from(row.teacher_from_root_top);
+        status_src_only_root[row.status_index] += u64::from(row.teacher_only_root_top);
+        if row.teacher_emitted_off_chain {
+            status_emitter_depth[row.status_index] += u64::from(row.teacher_emitter_depth);
+            status_emitter_rows[row.status_index] += 1;
+        }
         if let Some(level) = row.exct_level {
             exct_level_positions[level] += 1;
         } else {
@@ -1935,6 +2025,21 @@ pub fn evaluate_gate_c(
             median_root_spread: median_of(&mut status_root_spreads[index]),
             median_residual_spread: median_of(&mut status_resid_spreads[index]),
             bits_per_token_root_only: status_bits_root_only[index] / denom,
+            mean_zero_residual_share: status_zero_share[index] / denom,
+            teacher_on_chain: status_teacher_on_chain[index] as f64 / denom,
+            selected_off_chain: status_selected_off_chain[index] as f64 / denom,
+            teacher_emitted_off_chain: status_teacher_off_chain[index] as f64 / denom,
+            teacher_emitter_better_margin: status_teacher_better_margin[index] as f64 / denom,
+            mean_chain_depth: status_chain_depth[index] as f64 / denom,
+            mean_teacher_emitter_depth: if status_emitter_rows[index] == 0 {
+                0.0
+            } else {
+                status_emitter_depth[index] as f64 / status_emitter_rows[index] as f64
+            },
+            teacher_from_active: status_src_active[index] as f64 / denom,
+            teacher_from_predicted: status_src_predicted[index] as f64 / denom,
+            teacher_from_root_top: status_src_root_top[index] as f64 / denom,
+            teacher_only_root_top: status_src_only_root[index] as f64 / denom,
         };
         match index {
             0 => influence.exact_context = value,
@@ -2034,6 +2139,25 @@ struct GateCRow {
     alpha_hits: [bool; ALPHA_SWEEP.len()],
     /// bits/token under root + penalty only (alpha = 0).
     bits_root_only: f64,
+    /// Share of candidates whose residual is exactly zero (off-chain tokens).
+    zero_resid_share: f64,
+    /// The teacher token carries a non-zero residual (it is a chain token).
+    teacher_on_chain: bool,
+    /// The selected token carries a zero residual (an off-chain token won).
+    selected_off_chain: bool,
+    /// An active region outside the selected chain emits the teacher token.
+    teacher_emitted_off_chain: bool,
+    /// That region's membership margin beats the selected chain's.
+    teacher_emitter_better_margin: bool,
+    /// Depth of the selected chain, and of the best teacher-emitting region.
+    chain_depth: u32,
+    teacher_emitter_depth: u32,
+    /// Which source supplied the teacher token to the candidate set.
+    teacher_from_active: bool,
+    teacher_from_predicted: bool,
+    teacher_from_root_top: bool,
+    /// Teacher present, but ONLY from the context-free root prior.
+    teacher_only_root_top: bool,
     witness_replayed: bool,
     witness_replay_failed: bool,
 }
@@ -2168,6 +2292,87 @@ fn evaluate_gate_c_row(
         .collect();
     let bits_root_only = outcome_bits(context.scorer_with_exct, &root_only_candidates, next);
 
+    // Residual accrues only on selected-chain nodes; tokens emitted by active
+    // or predicted nodes keep residual exactly ZERO. Since residuals are
+    // log-prob-like and negative, chain tokens carry a summed penalty while
+    // off-chain tokens sit at zero, and both are ranked by root + residual.
+    // Measure whether that is what decides graph-slice selections.
+    // Chain selection ranks by chain LENGTH first, with membership margin only
+    // breaking ties among equal-length chains. So a deep chain the context
+    // barely belongs to beats a shallow one it fits well. Candidate generation
+    // meanwhile draws on every active/predicted node. Measure whether a
+    // better-fitting region outside the chain could have supplied the teacher.
+    let chain_nodes: std::collections::BTreeSet<u32> =
+        rule12.witness.chain.iter().copied().collect();
+    let chain_margin = rule12
+        .witness
+        .active
+        .iter()
+        .filter(|a| chain_nodes.contains(&(a.region + 1)))
+        .map(|a| a.margin)
+        .max()
+        .unwrap_or(i16::MIN);
+    let chain_depth = rule12.witness.chain.len() as u32;
+    let mut teacher_emitted_off_chain = false;
+    let mut teacher_emitter_better_margin = false;
+    let mut teacher_emitter_depth = 0u32;
+    let mut best_emitter_margin = i16::MIN;
+    for a in &rule12.witness.active {
+        let node = a.region + 1;
+        if chain_nodes.contains(&node) {
+            continue;
+        }
+        if context.scorer_with_exct.node_emits(node, teacher_argmax) {
+            teacher_emitted_off_chain = true;
+            if a.margin > best_emitter_margin {
+                best_emitter_margin = a.margin;
+                teacher_emitter_depth = u32::from(a.depth);
+            }
+            if a.margin > chain_margin {
+                teacher_emitter_better_margin = true;
+            }
+        }
+    }
+
+    // Candidate recall was 63% on the graph slice while active regions emit the
+    // teacher only ~4.3% of the time. Attribute the rest: the candidate set is
+    // active + predicted + root_top, and which source supplies the teacher
+    // decides whether the graph contributes anything to finding the answer.
+    let teacher_present = rule12
+        .candidate_components
+        .iter()
+        .any(|&(token, _, _, _)| token == teacher_argmax);
+    let teacher_from_active = rule12.witness.active.iter().any(|a| {
+        context
+            .scorer_with_exct
+            .node_emits(a.region + 1, teacher_argmax)
+    });
+    let teacher_from_predicted = rule12
+        .witness
+        .predicted
+        .iter()
+        .any(|&node| context.scorer_with_exct.node_emits(node, teacher_argmax));
+    let teacher_from_root_top = context.scorer_with_exct.root_top_contains(teacher_argmax);
+    let teacher_only_root_top =
+        teacher_present && teacher_from_root_top && !teacher_from_active && !teacher_from_predicted;
+
+    let total_candidates = rule12.candidate_components.len().max(1) as f64;
+    let zeros = rule12
+        .candidate_components
+        .iter()
+        .filter(|&&(_, _, resid, _)| resid == 0)
+        .count();
+    let zero_resid_share = zeros as f64 / total_candidates;
+    let resid_of = |want: u32| {
+        rule12
+            .candidate_components
+            .iter()
+            .find(|&&(token, _, _, _)| token == want)
+            .map(|&(_, _, resid, _)| resid)
+    };
+    let teacher_on_chain = resid_of(teacher_argmax).is_some_and(|r| r != 0);
+    let selected_off_chain = resid_of(rule12.selected) == Some(0);
+
     let mut alpha_hits = [false; ALPHA_SWEEP.len()];
     for (slot, &(num, den)) in alpha_hits.iter_mut().zip(ALPHA_SWEEP.iter()) {
         let mut best_token = u32::MAX;
@@ -2245,6 +2450,17 @@ fn evaluate_gate_c_row(
         residual_spread,
         alpha_hits,
         bits_root_only,
+        zero_resid_share,
+        teacher_on_chain,
+        selected_off_chain,
+        teacher_emitted_off_chain,
+        teacher_emitter_better_margin,
+        chain_depth,
+        teacher_emitter_depth,
+        teacher_from_active,
+        teacher_from_predicted,
+        teacher_from_root_top,
+        teacher_only_root_top,
         witness_replayed: index < context.config.witness_sample,
         witness_replay_failed,
     })
@@ -2271,6 +2487,8 @@ fn evaluate_gate_c_row(
 /// included), so the declaration adds the probe-level histogram and
 /// the STRICT full-code miss rate, and the Gate C validity verdict is
 /// judged on the strict basis.
+/// 11 = graph footprint and quality-profile fields; 12 = packed FMM
+/// footprint, rank, and candidate-count fields.
 #[derive(Debug, Clone, Serialize)]
 pub struct ScoreReport {
     pub schema: u32,
@@ -2369,6 +2587,9 @@ pub struct ScoreReportGraph {
     pub context_row_count: u32,
     pub context_entry_count: u32,
     pub context_bytes: u32,
+    pub fmm_bytes: u32,
+    pub fmm_rank: u16,
+    pub fmm_candidate_count: u32,
     pub artifact_bytes: usize,
     pub graph_repetition_rate: f64,
     pub baseline_repetition_rate: f64,
@@ -2468,6 +2689,9 @@ pub fn build_score_report_with_quality_profile(
             context_row_count: info.context_row_count,
             context_entry_count: info.context_entry_count,
             context_bytes: info.context_bytes,
+            fmm_bytes: info.fmm_bytes,
+            fmm_rank: info.fmm_rank,
+            fmm_candidate_count: info.fmm_candidate_count,
             artifact_bytes: info.artifact_bytes,
             graph_repetition_rate: gate_c.repetition_rate_rule12,
             baseline_repetition_rate: gate_c.repetition_rate_baseline,

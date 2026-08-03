@@ -8,6 +8,7 @@
 //! when a HEAD section is present (see [`GraphView::parse`]).
 
 use crate::error::FormatError;
+use crate::fmm::FmmTranslationTable;
 use crate::head::Head;
 use crate::header::{self, Header, HEADER_LEN, SECTION_ENTRY_LEN};
 use crate::ngram::NgramTable;
@@ -331,6 +332,13 @@ impl<'a> GraphView<'a> {
     pub fn ngram_table(&self) -> Result<Option<NgramTable<'a>>, FormatError> {
         self.section(SectionId::NGRAM)
             .map(NgramTable::parse)
+            .transpose()
+    }
+
+    /// Borrow the optional compiler-folded FMM translation table.
+    pub fn fmm_translation_table(&self) -> Result<Option<FmmTranslationTable<'a>>, FormatError> {
+        self.section(SectionId::FMM)
+            .map(FmmTranslationTable::parse)
             .transpose()
     }
 

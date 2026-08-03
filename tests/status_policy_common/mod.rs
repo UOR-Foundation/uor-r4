@@ -107,6 +107,8 @@ fn emit_and_persist(
     let artifacts = synthetic_compiled();
     let teacher = compiler::artifact_bytes(&artifacts);
     let tls1 = runtime::store_bytes(store);
+    let fmm_section =
+        score::compile_fmm_section(regions, emissions, 64).expect("fixture FMM section compiles");
     let (bytes, _) = score::emit_scored_r4g1(
         &teacher,
         (b"status-meta", b"status-recs"),
@@ -133,6 +135,7 @@ fn emit_and_persist(
             context_rows: &[],
             exct_tls1: &tls1,
             exct_top_x: score::ScoreConfig::default().exct_top_x,
+            fmm_section: Some(&fmm_section),
         },
     )
     .expect("fixture emit succeeds");

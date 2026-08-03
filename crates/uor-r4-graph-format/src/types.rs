@@ -181,6 +181,11 @@ impl SectionId {
     pub const RTNX: SectionId = SectionId(0x0C);
     /// NGRAM — packed bigram/trigram context rows (optional).
     pub const NGRAM: SectionId = SectionId(Self::OPTIONAL_BIT | 0x0E);
+    /// FMM — compiler-precomputed far-field translation table (optional).
+    ///
+    /// The optional bit is part of the wire ID so older readers can skip the
+    /// section while preserving the R4G1 unknown-optional-section rule.
+    pub const FMM: SectionId = SectionId(Self::OPTIONAL_BIT | 0x0D);
 
     /// Ancillary bit classifying *unknown* section IDs.
     ///
@@ -201,7 +206,7 @@ impl SectionId {
     /// True when the ID is in the RFC §3 inventory or a known optional
     /// extension implemented by this reader.
     pub const fn is_known(self) -> bool {
-        matches!(self.0, 0x01..=0x0C) || self.0 == Self::NGRAM.0
+        matches!(self.0, 0x01..=0x0C) || self.0 == Self::FMM.0 || self.0 == Self::NGRAM.0
     }
 
     /// Mandatory-ness per the RFC §3 column for known IDs.
@@ -213,6 +218,7 @@ impl SectionId {
             0x01..=0x06 | 0x08 => true,
             0x07 | 0x09..=0x0C => false,
             value if value == Self::NGRAM.0 => false,
+            value if value == Self::FMM.0 => false,
             _ => self.0 & Self::OPTIONAL_BIT == 0,
         }
     }
