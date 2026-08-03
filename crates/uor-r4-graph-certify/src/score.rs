@@ -1186,6 +1186,33 @@ pub struct CandidateRecall {
     pub rule12_top3: f64,
 }
 
+/// Where the teacher's argmax lands in the Rule 1+2 candidate list, for
+/// positions whose candidate set actually contains it.
+///
+/// Recall tells us the token was retrieved; agreement tells us it was not
+/// selected. This says HOW BADLY it was ranked, which separates two diagnoses
+/// with different fixes: a teacher token sitting at rank 2-3 is a calibration
+/// or tie-breaking problem, while one scattered deep in the list means the
+/// scoring signal carries little information on that path.
+///
+/// Buckets are 1-based rank: [1, 2, 3, 4-8, 9-16, 17-32, 33-64, 65-128, 129+].
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct TeacherRankHistogram {
+    /// Positions where the teacher argmax was present in the candidate list.
+    pub retrieved_positions: usize,
+    pub buckets: [usize; 9],
+    /// Median 1-based rank over `retrieved_positions`.
+    pub median_rank: f64,
+}
+
+/// Teacher-rank histograms split by resolution status.
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct Rule12PerStatusTeacherRank {
+    pub exact_context: TeacherRankHistogram,
+    pub graph: TeacherRankHistogram,
+    pub novel: TeacherRankHistogram,
+}
+
 /// Candidate recall for one resolution status.
 ///
 /// `CandidateRecall` above is divided by ALL scored positions, so it cannot
@@ -1237,6 +1264,8 @@ pub struct GateCOutcome {
     pub rule12_per_status: Rule12PerStatus,
     /// Candidate recall split by status (retrieval vs ranking).
     pub rule12_candidate_recall_per_status: Rule12PerStatusRecall,
+    /// Teacher-argmax rank within the candidate list, per status.
+    pub rule12_teacher_rank_per_status: Rule12PerStatusTeacherRank,
     /// #234 item 2 instrumentation: histogram of the Rule 2 probe's
     /// RESOLUTION level per held-out position (index = graded-prefix
     /// length, 0 = root … STAGES = full code). The probe stops at the
@@ -1467,6 +1496,8 @@ pub fn evaluate_gate_c(
     let mut recall_rule12_top3 = 0u64;
     let mut status_recall_top1 = [0u64; 3];
     let mut status_recall_top3 = [0u64; 3];
+    let mut status_rank_buckets = [[0usize; 9]; 3];
+    let mut status_ranks: [Vec<u32>; 3] = [Vec::new(), Vec::new(), Vec::new()];
     let gate_rotations = compiler::derive_rotations();
     let context = GateCContext {
         artifacts,
@@ -1523,6 +1554,21 @@ pub fn evaluate_gate_c(
         recall_rule12_top3 += u64::from(row.candidate_recall[3]);
         status_recall_top1[row.status_index] += u64::from(row.candidate_recall[2]);
         status_recall_top3[row.status_index] += u64::from(row.candidate_recall[3]);
+        if let Some(rank) = row.teacher_rank {
+            let bucket = match rank {
+                1 => 0,
+                2 => 1,
+                3 => 2,
+                4..=8 => 3,
+                9..=16 => 4,
+                17..=32 => 5,
+                33..=64 => 6,
+                65..=128 => 7,
+                _ => 8,
+            };
+            status_rank_buckets[row.status_index][bucket] += 1;
+            status_ranks[row.status_index].push(rank);
+        }
         accumulate_win_loss(
             &mut outcome.win_loss.rule12_vs_baseline,
             row.hits[2],
@@ -1601,6 +1647,30 @@ pub fn evaluate_gate_c(
         graph: per_status_recall(1),
         novel: per_status_recall(2),
     };
+    let per_status_rank = |index: usize| {
+        let ranks = &status_ranks[index];
+        if ranks.is_empty() {
+            return TeacherRankHistogram::default();
+        }
+        let mut sorted = ranks.clone();
+        sorted.sort_unstable();
+        let mid = sorted.len() / 2;
+        let median = if sorted.len().is_multiple_of(2) {
+            (f64::from(sorted[mid - 1]) + f64::from(sorted[mid])) / 2.0
+        } else {
+            f64::from(sorted[mid])
+        };
+        TeacherRankHistogram {
+            retrieved_positions: sorted.len(),
+            buckets: status_rank_buckets[index],
+            median_rank: median,
+        }
+    };
+    outcome.rule12_teacher_rank_per_status = Rule12PerStatusTeacherRank {
+        exact_context: per_status_rank(0),
+        graph: per_status_rank(1),
+        novel: per_status_rank(2),
+    };
     outcome.candidate_recall = CandidateRecall {
         rule1_top1: recall_rule1_top1 as f64 / nf,
         rule1_top3: recall_rule1_top3 as f64 / nf,
@@ -1655,6 +1725,8 @@ struct GateCRow {
     exct_level: Option<usize>,
     exct_full_depth_supported: bool,
     candidate_recall: [bool; 4],
+    /// 1-based rank of the teacher argmax in rule12 candidates, if present.
+    teacher_rank: Option<u32>,
     witness_replayed: bool,
     witness_replay_failed: bool,
 }
@@ -1757,6 +1829,24 @@ fn evaluate_gate_c_row(
             .iter()
             .any(|&token| contains(&rule12.candidates, token)),
     ];
+    // Rank the teacher argmax exactly as selection does: score descending,
+    // ties to the lower token id. `rule12.candidates` already carries the
+    // final scores (root + transition offset + residual + repetition
+    // penalty), so this ordering reproduces the argmax.
+    let teacher_rank = rule12
+        .candidates
+        .iter()
+        .find(|&&(token, _)| token == teacher_argmax)
+        .map(|&(_, teacher_score)| {
+            let ahead = rule12
+                .candidates
+                .iter()
+                .filter(|&&(token, score)| {
+                    score > teacher_score || (score == teacher_score && token < teacher_argmax)
+                })
+                .count();
+            (ahead + 1) as u32
+        });
     let exct_level = rule12
         .witness
         .exct
@@ -1782,6 +1872,7 @@ fn evaluate_gate_c_row(
         exct_full_depth_supported: exct_level == Some(STAGES)
             && rule12.witness.status == ScoreStatus::ExactContext,
         candidate_recall,
+        teacher_rank,
         witness_replayed: index < context.config.witness_sample,
         witness_replay_failed,
     })
