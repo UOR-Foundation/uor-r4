@@ -1186,6 +1186,40 @@ pub struct CandidateRecall {
     pub rule12_top3: f64,
 }
 
+/// Does the graph residual change any decision, or is ranking carried by the
+/// root prior alone?
+///
+/// Scores are assembled as `root_score(token) + residual + transition_offset`,
+/// minus a repetition penalty. `transition_offset` is added to every candidate,
+/// so it cannot affect ordering; only the residual varies per token. This
+/// compares the real argmax against the argmax of `root + penalty` alone, using
+/// the identical ascending-token / strict-`>` tie-break, so a difference means
+/// the residual genuinely moved the selection.
+///
+/// `root_only_agrees` near 1.0 on the graph slice would mean the residual is
+/// inert: the traversal picks a region and the scorer then ranks by global token
+/// frequency regardless.
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct ResidualInfluence {
+    pub positions: usize,
+    /// Fraction where argmax(root + penalty) == argmax(full score).
+    pub root_only_agrees: f64,
+    /// Fraction where argmax(root + penalty) is the teacher token.
+    pub root_only_top1_agreement: f64,
+    /// Median spread (max - min) of the root term across candidates, Q16.16.
+    pub median_root_spread: f64,
+    /// Median spread (max - min) of the residual term across candidates, Q16.16.
+    pub median_residual_spread: f64,
+}
+
+/// Residual-influence measurement split by resolution status.
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct Rule12PerStatusResidualInfluence {
+    pub exact_context: ResidualInfluence,
+    pub graph: ResidualInfluence,
+    pub novel: ResidualInfluence,
+}
+
 /// Where the teacher's argmax lands in the Rule 1+2 candidate list, for
 /// positions whose candidate set actually contains it.
 ///
@@ -1266,6 +1300,8 @@ pub struct GateCOutcome {
     pub rule12_candidate_recall_per_status: Rule12PerStatusRecall,
     /// Teacher-argmax rank within the candidate list, per status.
     pub rule12_teacher_rank_per_status: Rule12PerStatusTeacherRank,
+    /// Whether the graph residual changes decisions, per status.
+    pub rule12_residual_influence_per_status: Rule12PerStatusResidualInfluence,
     /// #234 item 2 instrumentation: histogram of the Rule 2 probe's
     /// RESOLUTION level per held-out position (index = graded-prefix
     /// length, 0 = root … STAGES = full code). The probe stops at the
@@ -1497,6 +1533,10 @@ pub fn evaluate_gate_c(
     let mut status_recall_top1 = [0u64; 3];
     let mut status_recall_top3 = [0u64; 3];
     let mut status_rank_buckets = [[0usize; 9]; 3];
+    let mut status_root_agrees = [0u64; 3];
+    let mut status_root_hits = [0u64; 3];
+    let mut status_root_spreads: [Vec<i64>; 3] = [Vec::new(), Vec::new(), Vec::new()];
+    let mut status_resid_spreads: [Vec<i64>; 3] = [Vec::new(), Vec::new(), Vec::new()];
     let mut status_ranks: [Vec<u32>; 3] = [Vec::new(), Vec::new(), Vec::new()];
     let gate_rotations = compiler::derive_rotations();
     let context = GateCContext {
@@ -1554,6 +1594,10 @@ pub fn evaluate_gate_c(
         recall_rule12_top3 += u64::from(row.candidate_recall[3]);
         status_recall_top1[row.status_index] += u64::from(row.candidate_recall[2]);
         status_recall_top3[row.status_index] += u64::from(row.candidate_recall[3]);
+        status_root_agrees[row.status_index] += u64::from(row.root_only_agrees);
+        status_root_hits[row.status_index] += u64::from(row.root_only_hit);
+        status_root_spreads[row.status_index].push(row.root_spread);
+        status_resid_spreads[row.status_index].push(row.residual_spread);
         if let Some(rank) = row.teacher_rank {
             let bucket = match rank {
                 1 => 0,
@@ -1647,6 +1691,39 @@ pub fn evaluate_gate_c(
         graph: per_status_recall(1),
         novel: per_status_recall(2),
     };
+    let median_of = |v: &mut Vec<i64>| -> f64 {
+        if v.is_empty() {
+            return 0.0;
+        }
+        v.sort_unstable();
+        let mid = v.len() / 2;
+        if v.len().is_multiple_of(2) {
+            (v[mid - 1] as f64 + v[mid] as f64) / 2.0
+        } else {
+            v[mid] as f64
+        }
+    };
+    let mut influence = Rule12PerStatusResidualInfluence::default();
+    for index in 0..3 {
+        let positions = status_positions[index];
+        if positions == 0 {
+            continue;
+        }
+        let denom = positions as f64;
+        let value = ResidualInfluence {
+            positions,
+            root_only_agrees: status_root_agrees[index] as f64 / denom,
+            root_only_top1_agreement: status_root_hits[index] as f64 / denom,
+            median_root_spread: median_of(&mut status_root_spreads[index]),
+            median_residual_spread: median_of(&mut status_resid_spreads[index]),
+        };
+        match index {
+            0 => influence.exact_context = value,
+            1 => influence.graph = value,
+            _ => influence.novel = value,
+        }
+    }
+    outcome.rule12_residual_influence_per_status = influence;
     let per_status_rank = |index: usize| {
         let ranks = &status_ranks[index];
         if ranks.is_empty() {
@@ -1727,6 +1804,13 @@ struct GateCRow {
     candidate_recall: [bool; 4],
     /// 1-based rank of the teacher argmax in rule12 candidates, if present.
     teacher_rank: Option<u32>,
+    /// argmax(root + penalty) agrees with the full-score argmax.
+    root_only_agrees: bool,
+    /// argmax(root + penalty) is the teacher token.
+    root_only_hit: bool,
+    /// Spread (max - min) of the root and residual terms across candidates.
+    root_spread: i64,
+    residual_spread: i64,
     witness_replayed: bool,
     witness_replay_failed: bool,
 }
@@ -1829,6 +1913,36 @@ fn evaluate_gate_c_row(
             .iter()
             .any(|&token| contains(&rule12.candidates, token)),
     ];
+    // Decompose the score. `transition_offset` is common to all candidates and
+    // cannot affect ordering, so the question is whether the per-token residual
+    // moves the argmax away from what the root prior alone would choose.
+    let (mut root_best, mut root_best_score) = (u32::MAX, i64::MIN);
+    let (mut root_lo, mut root_hi) = (i64::MAX, i64::MIN);
+    let (mut resid_lo, mut resid_hi) = (i64::MAX, i64::MIN);
+    for &(token, root_raw, resid_raw, penalized) in &rule12.candidate_components {
+        let root_term = i64::from(root_raw) + if penalized { -2_000_000 } else { 0 };
+        if root_term > root_best_score {
+            root_best_score = root_term;
+            root_best = token;
+        }
+        root_lo = root_lo.min(i64::from(root_raw));
+        root_hi = root_hi.max(i64::from(root_raw));
+        resid_lo = resid_lo.min(i64::from(resid_raw));
+        resid_hi = resid_hi.max(i64::from(resid_raw));
+    }
+    let root_only_agrees = root_best == rule12.selected;
+    let root_only_hit = root_best == teacher_argmax;
+    let root_spread = if root_hi >= root_lo {
+        root_hi - root_lo
+    } else {
+        0
+    };
+    let residual_spread = if resid_hi >= resid_lo {
+        resid_hi - resid_lo
+    } else {
+        0
+    };
+
     // Rank the teacher argmax exactly as selection does: score descending,
     // ties to the lower token id. `rule12.candidates` already carries the
     // final scores (root + transition offset + residual + repetition
@@ -1873,6 +1987,10 @@ fn evaluate_gate_c_row(
             && rule12.witness.status == ScoreStatus::ExactContext,
         candidate_recall,
         teacher_rank,
+        root_only_agrees,
+        root_only_hit,
+        root_spread,
+        residual_spread,
         witness_replayed: index < context.config.witness_sample,
         witness_replay_failed,
     })
