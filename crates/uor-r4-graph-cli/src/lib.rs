@@ -2627,6 +2627,8 @@ mod tests {
             score::DEFAULT_TRANSITION_OUT_DEGREE
         );
         assert_eq!(options.emission_entries, score::DEFAULT_EMISSION_ENTRIES);
+        assert_eq!(options.emission_selection, score::EmissionSelection::Ratio);
+        assert_eq!(options.emission_shrinkage, score::EmissionShrinkage::None);
         assert_eq!(options.root_top_b, score::DEFAULT_ROOT_TOP_B);
         assert_eq!(options.exct_top_x, score::DEFAULT_EXCT_TOP_X);
         assert_eq!(options.witness_sample, score::DEFAULT_WITNESS_SAMPLE);
@@ -2646,6 +2648,10 @@ mod tests {
             "16",
             "--emission-entries",
             "256",
+            "--emission-selection",
+            "probability",
+            "--emission-shrinkage",
+            "witten-bell",
             "--root-top-b",
             "256",
             "--exct-top-x",
@@ -2665,6 +2671,14 @@ mod tests {
         assert_eq!(options.cover, Some(PathBuf::from("/tmp/cover.r4g1")));
         assert_eq!(options.transition_out_degree, 16);
         assert_eq!(options.emission_entries, 256);
+        assert_eq!(
+            options.emission_selection,
+            score::EmissionSelection::Probability
+        );
+        assert_eq!(
+            options.emission_shrinkage,
+            score::EmissionShrinkage::WittenBell
+        );
         assert_eq!(options.root_top_b, 256);
         assert_eq!(options.exct_top_x, 128);
         assert_eq!(options.witness_sample, 32);
@@ -2697,5 +2711,18 @@ mod tests {
             parse("abs-disc:1.0"),
             score::Smoothing::AbsoluteDiscount(1.0)
         );
+    }
+
+    #[test]
+    fn score_emission_shrinkage_flag_parses_all_variants() {
+        let parse = |value: &str| {
+            let args = ["--emission-shrinkage", value].map(str::to_owned);
+            parse_score_options(&args)
+                .expect("valid emission shrinkage")
+                .emission_shrinkage
+        };
+        assert_eq!(parse("none"), score::EmissionShrinkage::None);
+        assert_eq!(parse("witten-bell"), score::EmissionShrinkage::WittenBell);
+        assert!(parse_score_options(&["--emission-shrinkage", "bad"].map(str::to_owned)).is_err());
     }
 }
