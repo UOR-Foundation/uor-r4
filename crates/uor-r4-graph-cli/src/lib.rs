@@ -745,6 +745,7 @@ struct ScoreOptions {
     transition_out_degree: usize,
     emission_entries: usize,
     emission_selection: score::EmissionSelection,
+    emission_shrinkage: score::EmissionShrinkage,
     root_top_b: usize,
     exct_top_x: usize,
     witness_sample: usize,
@@ -765,6 +766,7 @@ fn parse_score_options(args: &[String]) -> Result<ScoreOptions, String> {
         transition_out_degree: score::DEFAULT_TRANSITION_OUT_DEGREE,
         emission_entries: score::DEFAULT_EMISSION_ENTRIES,
         emission_selection: score::EmissionSelection::default(),
+        emission_shrinkage: score::EmissionShrinkage::default(),
         root_top_b: score::DEFAULT_ROOT_TOP_B,
         exct_top_x: score::DEFAULT_EXCT_TOP_X,
         witness_sample: score::DEFAULT_WITNESS_SAMPLE,
@@ -792,6 +794,18 @@ fn parse_score_options(args: &[String]) -> Result<ScoreOptions, String> {
                 if options.transition_out_degree == 0 {
                     return Err("--transition-out-degree must be at least 1".to_owned());
                 }
+            }
+            "--emission-shrinkage" => {
+                options.emission_shrinkage = match value.as_str() {
+                    "none" => score::EmissionShrinkage::None,
+                    "witten-bell" => score::EmissionShrinkage::WittenBell,
+                    other => {
+                        return Err(format!(
+                            "invalid --emission-shrinkage value: {other} \
+                             (expected none|witten-bell)"
+                        ));
+                    }
+                };
             }
             "--emission-selection" => {
                 options.emission_selection = match value.as_str() {
@@ -952,6 +966,7 @@ pub fn score_command(args: &[String]) -> Result<(), String> {
         smoothing: options.smoothing,
         scoring_variant: options.scoring_variant,
         emission_selection: options.emission_selection,
+        emission_shrinkage: options.emission_shrinkage,
     };
     let (train_positions, held_out_positions) = match &options.stories {
         // D3 natural partition (issue #72): the observation pass records
