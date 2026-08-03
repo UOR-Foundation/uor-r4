@@ -1241,6 +1241,10 @@ pub struct ResidualInfluence {
     pub median_root_spread: f64,
     /// Median spread (max - min) of the residual term across candidates, Q16.16.
     pub median_residual_spread: f64,
+    /// bits/token with the residual suppressed. Compare against the slice's
+    /// `bits_per_token`: a lower top-1 with unchanged bits means the argmax
+    /// moved without the distribution improving.
+    pub bits_per_token_root_only: f64,
 }
 
 /// Residual-influence measurement split by resolution status.
@@ -1571,6 +1575,7 @@ pub fn evaluate_gate_c(
     let mut status_root_spreads: [Vec<i64>; 3] = [Vec::new(), Vec::new(), Vec::new()];
     let mut status_resid_spreads: [Vec<i64>; 3] = [Vec::new(), Vec::new(), Vec::new()];
     let mut status_alpha_hits = [[0u64; ALPHA_SWEEP.len()]; 3];
+    let mut status_bits_root_only = [0f64; 3];
     let mut status_ranks: [Vec<u32>; 3] = [Vec::new(), Vec::new(), Vec::new()];
     let gate_rotations = compiler::derive_rotations();
     let context = GateCContext {
@@ -1616,6 +1621,7 @@ pub fn evaluate_gate_c(
         status_positions[row.status_index] += 1;
         status_hits[row.status_index] += u64::from(row.status_hit);
         status_bits[row.status_index] += row.status_bits;
+        status_bits_root_only[row.status_index] += row.bits_root_only;
         if let Some(level) = row.exct_level {
             exct_level_positions[level] += 1;
         } else {
@@ -1778,6 +1784,7 @@ pub fn evaluate_gate_c(
             root_only_top1_agreement: status_root_hits[index] as f64 / denom,
             median_root_spread: median_of(&mut status_root_spreads[index]),
             median_residual_spread: median_of(&mut status_resid_spreads[index]),
+            bits_per_token_root_only: status_bits_root_only[index] / denom,
         };
         match index {
             0 => influence.exact_context = value,
@@ -1875,6 +1882,8 @@ struct GateCRow {
     residual_spread: i64,
     /// Per-alpha: argmax(root + alpha*residual + penalty) == teacher.
     alpha_hits: [bool; ALPHA_SWEEP.len()],
+    /// bits/token under root + penalty only (alpha = 0).
+    bits_root_only: f64,
     witness_replayed: bool,
     witness_replay_failed: bool,
 }
@@ -1994,6 +2003,21 @@ fn evaluate_gate_c_row(
         resid_lo = resid_lo.min(i64::from(resid_raw));
         resid_hi = resid_hi.max(i64::from(resid_raw));
     }
+    // bits/token with the residual suppressed. Top-1 and bits are different
+    // questions: a change can correct the argmax and leave the distribution as
+    // wrong as before, and coherence against the teacher is distributional.
+    // Same softmax and same uncovered-vocab floor as the shipped path, only the
+    // scores differ.
+    let root_only_candidates: Vec<(u32, ScoreQ)> = rule12
+        .candidate_components
+        .iter()
+        .map(|&(token, root_raw, _, penalized)| {
+            let raw = root_raw + if penalized { -2_000_000 } else { 0 };
+            (token, ScoreQ::from_raw(raw))
+        })
+        .collect();
+    let bits_root_only = outcome_bits(context.scorer_with_exct, &root_only_candidates, next);
+
     let mut alpha_hits = [false; ALPHA_SWEEP.len()];
     for (slot, &(num, den)) in alpha_hits.iter_mut().zip(ALPHA_SWEEP.iter()) {
         let mut best_token = u32::MAX;
@@ -2070,6 +2094,7 @@ fn evaluate_gate_c_row(
         root_spread,
         residual_spread,
         alpha_hits,
+        bits_root_only,
         witness_replayed: index < context.config.witness_sample,
         witness_replay_failed,
     })
