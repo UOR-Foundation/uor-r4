@@ -749,6 +749,9 @@ pub struct ScoredGraphInfo {
     pub root_prior_entries: u32,
     pub emission_list_entries: u32,
     pub exct_bytes: u32,
+    pub context_row_count: u32,
+    pub context_entry_count: u32,
+    pub context_bytes: u32,
     pub artifact_bytes: usize,
     pub transition_quantization: QuantizationErrorStats,
     pub root_prior_quantization: QuantizationErrorStats,
@@ -1155,6 +1158,17 @@ pub fn emit_scored_r4g1(
             root_prior_entries: root_entry_count,
             emission_list_entries,
             exct_bytes: exct.len() as u32,
+            context_row_count: u32::try_from(context_rows.len())
+                .map_err(|_| "NGRAM row count exceeds u32".to_owned())?,
+            context_entry_count: u32::try_from(
+                context_rows
+                    .iter()
+                    .map(|row| row.entries.len())
+                    .sum::<usize>(),
+            )
+            .map_err(|_| "NGRAM entry count exceeds u32".to_owned())?,
+            context_bytes: u32::try_from(ngram.len())
+                .map_err(|_| "NGRAM section exceeds u32".to_owned())?,
             artifact_bytes,
             transition_quantization,
             root_prior_quantization: emissions.root_prior_quantization,
@@ -2352,6 +2366,9 @@ pub struct ScoreReportGraph {
     pub root_prior_entries: u32,
     pub emission_list_entries: u32,
     pub exct_bytes: u32,
+    pub context_row_count: u32,
+    pub context_entry_count: u32,
+    pub context_bytes: u32,
     pub artifact_bytes: usize,
     pub graph_repetition_rate: f64,
     pub baseline_repetition_rate: f64,
@@ -2425,7 +2442,7 @@ pub fn build_score_report_with_quality_profile(
         can_measure_generalization: strict_exct_miss_rate >= MIN_EXCT_MISS_RATE_FOR_GATE_C,
     };
     ScoreReport {
-        schema: 11,
+        schema: 12,
         inputs,
         config: ScoreReportConfig {
             transition_out_degree: config.transition_out_degree,
@@ -2448,6 +2465,9 @@ pub fn build_score_report_with_quality_profile(
             root_prior_entries: info.root_prior_entries,
             emission_list_entries: info.emission_list_entries,
             exct_bytes: info.exct_bytes,
+            context_row_count: info.context_row_count,
+            context_entry_count: info.context_entry_count,
+            context_bytes: info.context_bytes,
             artifact_bytes: info.artifact_bytes,
             graph_repetition_rate: gate_c.repetition_rate_rule12,
             baseline_repetition_rate: gate_c.repetition_rate_baseline,
@@ -2549,5 +2569,55 @@ fn smoothing_description(smoothing: Smoothing) -> String {
              δ·T_n / total_n spread over the max(V − T_n, 1) unseen types \
              (T_n = seen types); {evidence}"
         ),
+    }
+}
+
+#[cfg(test)]
+mod context_rows_tests {
+    use super::{compile_context_rows, Smoothing};
+    use uor_r4_core::transformerless::compiler::{Corpus, SIG_BYTES};
+    use uor_r4_graph_compiler::induction::Observation;
+
+    fn corpus() -> Corpus {
+        Corpus {
+            n: 5,
+            stories: 2,
+            story: vec![0, 0, 1, 1, 1],
+            input: vec![10, 20, 30, 40, 50],
+            next: vec![20, 30, 40, 50, 60],
+            t_argmax: vec![0; 5],
+            top_tokens: vec![[0; 8]; 5],
+            top_weights: vec![[0; 8]; 5],
+            span_start: vec![0; 5],
+            span_end: vec![0; 5],
+            byte_start: vec![0; 5],
+            byte_end: vec![0; 5],
+            hidden: None,
+        }
+    }
+
+    #[test]
+    fn context_rows_do_not_cross_story_boundaries() {
+        let corpus = corpus();
+        let observations: Vec<Observation> = (0..corpus.n)
+            .map(|position| Observation {
+                position: position as u32,
+                sample: [0; 32],
+                vector: Vec::new(),
+                sig: [0; SIG_BYTES],
+                prev: corpus.input[position],
+                next: corpus.next[position],
+            })
+            .collect();
+        let rows = compile_context_rows(&corpus, &observations, 100, Smoothing::AddOne);
+        assert!(rows
+            .iter()
+            .any(|row| { row.context_len == 2 && row.key0 == 10 && row.key1 == 20 }));
+        assert!(rows
+            .iter()
+            .any(|row| { row.context_len == 2 && row.key0 == 40 && row.key1 == 50 }));
+        assert!(!rows
+            .iter()
+            .any(|row| { row.context_len == 2 && row.key0 == 20 && row.key1 == 30 }));
     }
 }

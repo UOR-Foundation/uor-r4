@@ -1122,14 +1122,17 @@ pub fn score_command(args: &[String]) -> Result<(), String> {
         .map_err(|error| format!("{}: {error}", report_path.display()))?;
 
     println!(
-        "score complete: {} nodes, {} edges ({} refinement + {} neighbor + {} forward), {} emission entries, EXCT {} bytes",
+        "score complete: {} nodes, {} edges ({} refinement + {} neighbor + {} forward), {} emission entries, EXCT {} bytes, NGRAM {} rows/{} entries ({} bytes)",
         info.node_count,
         info.edge_count,
         info.refinement_edges,
         info.neighbor_edges,
         info.forward_edges,
         info.emission_list_entries,
-        info.exct_bytes
+        info.exct_bytes,
+        info.context_row_count,
+        info.context_entry_count,
+        info.context_bytes
     );
     println!(
         "gate C — held-out D3 metrics ({} positions):",
