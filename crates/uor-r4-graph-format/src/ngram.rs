@@ -71,6 +71,11 @@ pub struct NgramTable<'a> {
     row_count: u32,
 }
 
+pub struct NgramRows<'a> {
+    table: NgramTable<'a>,
+    next: usize,
+}
+
 impl<'a> NgramTable<'a> {
     pub fn parse(bytes: &'a [u8]) -> Result<Self, FormatError> {
         if bytes.len() < NGRAM_HEADER_LEN {
@@ -146,6 +151,13 @@ impl<'a> NgramTable<'a> {
         self.row_count
     }
 
+    pub fn rows(&self) -> NgramRows<'a> {
+        NgramRows {
+            table: *self,
+            next: 0,
+        }
+    }
+
     pub fn find(&self, context_len: u8, key0: u32, key1: u32) -> Option<NgramRow<'a>> {
         let target = (context_len, key0, key1);
         let mut low = 0usize;
@@ -177,6 +189,16 @@ impl<'a> NgramTable<'a> {
             bytes,
             entries: self.bytes.get(entry_start..entry_end)?,
         })
+    }
+}
+
+impl<'a> Iterator for NgramRows<'a> {
+    type Item = NgramRow<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let row = self.table.row(self.next)?;
+        self.next += 1;
+        Some(row)
     }
 }
 
