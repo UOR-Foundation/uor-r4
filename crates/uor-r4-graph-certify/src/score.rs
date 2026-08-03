@@ -143,6 +143,21 @@ pub enum EmissionShrinkage {
     None,
     /// Scale by n / (n + T) per region.
     WittenBell,
+    /// Scale by the region's measured CONTRAST against the global prior.
+    ///
+    /// The cover's regions are densely estimated (3.1M observations each) and
+    /// genuinely predictive (own region emits the teacher 1.41x more often than
+    /// an unrelated one), but their emission lists are largely the same
+    /// globally-common tokens -- an unrelated region's top-E contains the
+    /// teacher 42.7% of the time. Specialization is thin, and the scorer applies
+    /// that thin margin as though it were a full correction.
+    ///
+    /// This weights each region's residual by how far its own top-E departs from
+    /// the global prior's top-E: a region indistinguishable from the prior
+    /// contributes nothing, a genuinely distinctive one contributes fully.
+    /// Evidence count is not the binding constraint (WittenBell measured
+    /// lambda = 0.9992 and changed nothing); contrast is.
+    Contrast,
 }
 
 /// How the per-region emission list is chosen before truncation (#364).
@@ -716,6 +731,16 @@ pub fn compile_emissions(
         })
         .collect();
 
+    // The global prior's own top-E, used as the contrast reference: a region
+    // whose most-likely tokens are the prior's most-likely tokens is not
+    // conditioning on anything.
+    let root_top_set: std::collections::BTreeSet<u32> = {
+        let mut top: Vec<(u32, u64)> = root_dist.iter().map(|(&t, &c)| (t, c)).collect();
+        top.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+        top.truncate(config.emission_entries);
+        top.into_iter().map(|(t, _)| t).collect()
+    };
+
     let region_results: Vec<RegionEmissionResult> = regions
         .par_iter()
         .enumerate()
@@ -734,6 +759,22 @@ pub fn compile_emissions(
                 None => (&root_dist, root_total),
             };
             let parent_types = parent_dist.len();
+            // Contrast: how far this region's own most-likely tokens depart from
+            // the global prior's. Overlap 1.0 means the region looks exactly
+            // like the prior and its "correction" is noise; overlap 0 means it
+            // is fully distinctive. Computed on counts, independent of which
+            // selection rule is in force.
+            let contrast = {
+                let mut region_top: Vec<(u32, u64)> = dist.iter().map(|(&t, &c)| (t, c)).collect();
+                region_top.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+                region_top.truncate(config.emission_entries);
+                let shared = region_top
+                    .iter()
+                    .filter(|(token, _)| root_top_set.contains(token))
+                    .count();
+                let denom = region_top.len().max(1) as f64;
+                1.0 - (shared as f64 / denom)
+            };
             let mut residuals: Vec<(u32, ScoreQ)> = dist
                 .iter()
                 .map(|(&token, &count)| {
@@ -758,6 +799,7 @@ pub fn compile_emissions(
                             let lambda = if n + t > 0.0 { n / (n + t) } else { 0.0 };
                             (f64::from(ln) * lambda) as f32
                         }
+                        EmissionShrinkage::Contrast => (f64::from(ln) * contrast) as f32,
                     };
                     let score = ScoreQ::from_logprob(ln);
                     emission_quantization.record_ln_quantization(ln, score);
