@@ -10,6 +10,7 @@ fn fixture() -> Vec<u8> {
     bytes[..4].copy_from_slice(&NGRAM_MAGIC);
     bytes[4..6].copy_from_slice(&NGRAM_VERSION.to_le_bytes());
     bytes[8..12].copy_from_slice(&(rows as u32).to_le_bytes());
+    bytes[12..14].copy_from_slice(&2u16.to_le_bytes());
     bytes[NGRAM_HEADER_LEN] = 1;
     bytes[NGRAM_HEADER_LEN + 2..NGRAM_HEADER_LEN + 4].copy_from_slice(&1u16.to_le_bytes());
     bytes[NGRAM_HEADER_LEN + 4..NGRAM_HEADER_LEN + 8].copy_from_slice(&7u32.to_le_bytes());
@@ -51,4 +52,29 @@ fn rejects_noncanonical_rows() {
     bytes[NGRAM_HEADER_LEN] = 2;
     bytes[NGRAM_HEADER_LEN + 8..NGRAM_HEADER_LEN + 12].copy_from_slice(&9u32.to_le_bytes());
     assert!(NgramTable::parse(&bytes).is_err());
+}
+
+#[test]
+fn rejects_malformed_header_and_entry_ranges() {
+    let mut bad_magic = fixture();
+    bad_magic[..4].copy_from_slice(b"BAD!");
+    assert!(NgramTable::parse(&bad_magic).is_err());
+
+    let mut bad_reserved = fixture();
+    bad_reserved[6] = 1;
+    assert!(NgramTable::parse(&bad_reserved).is_err());
+
+    let mut bad_entry_count = fixture();
+    bad_entry_count[12..14].copy_from_slice(&1u16.to_le_bytes());
+    assert!(NgramTable::parse(&bad_entry_count).is_err());
+
+    let mut overlapping = fixture();
+    let first_offset = (NGRAM_HEADER_LEN + NGRAM_ROW_LEN * 2) as u32;
+    overlapping[NGRAM_HEADER_LEN + NGRAM_ROW_LEN + 12..NGRAM_HEADER_LEN + NGRAM_ROW_LEN + 16]
+        .copy_from_slice(&first_offset.to_le_bytes());
+    assert!(NgramTable::parse(&overlapping).is_err());
+
+    let mut trailing = fixture();
+    trailing.extend_from_slice(&[0; NGRAM_ENTRY_LEN]);
+    assert!(NgramTable::parse(&trailing).is_err());
 }

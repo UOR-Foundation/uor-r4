@@ -92,6 +92,7 @@ impl<'a> NgramTable<'a> {
             return Err(FormatError::NgramNonZeroReserved);
         }
         let row_count = read_u32(&bytes[8..12]);
+        let max_entries = read_u16(&bytes[12..14]) as usize;
         let rows_len = (row_count as usize)
             .checked_mul(NGRAM_ROW_LEN)
             .ok_or(FormatError::NgramBounds)?;
@@ -103,6 +104,7 @@ impl<'a> NgramTable<'a> {
         }
 
         let mut previous = None;
+        let mut expected_entry_start = entries_start;
         for index in 0..row_count as usize {
             let start = NGRAM_HEADER_LEN + index * NGRAM_ROW_LEN;
             let row = &bytes[start..start + NGRAM_ROW_LEN];
@@ -111,12 +113,15 @@ impl<'a> NgramTable<'a> {
                 return Err(FormatError::NgramInvalidRow);
             }
             let entry_count = read_u16(&row[2..4]);
+            if usize::from(entry_count) > max_entries {
+                return Err(FormatError::NgramInvalidRow);
+            }
             let key = (read_u32(&row[4..8]), read_u32(&row[8..12]));
             if context_len == 1 && key.1 != 0 {
                 return Err(FormatError::NgramInvalidRow);
             }
             let entry_start = read_u32(&row[12..16]) as usize;
-            if row[16..20].iter().any(|&byte| byte != 0) || entry_start < entries_start {
+            if row[16..20].iter().any(|&byte| byte != 0) || entry_start != expected_entry_start {
                 return Err(FormatError::NgramBounds);
             }
             let entry_bytes = (entry_count as usize)
@@ -128,6 +133,7 @@ impl<'a> NgramTable<'a> {
             if entry_end > bytes.len() {
                 return Err(FormatError::NgramBounds);
             }
+            expected_entry_start = entry_end;
             let sort_key = (context_len, key.0, key.1);
             if previous.is_some_and(|last| last >= sort_key) {
                 return Err(FormatError::NgramRowsNotSorted);
@@ -142,6 +148,10 @@ impl<'a> NgramTable<'a> {
                 }
                 previous_token = Some(token);
             }
+        }
+
+        if expected_entry_start != bytes.len() {
+            return Err(FormatError::NgramBounds);
         }
 
         Ok(Self { bytes, row_count })
