@@ -431,11 +431,25 @@ mod tests {
     #[test]
     fn abstain_breakdown_records_by_status() {
         let mut b = StatusBreakdown::default();
-        b.record(PolicyStatus::Novel);
-        b.record(PolicyStatus::Novel);
-        b.record(PolicyStatus::Graph);
+        b.record(PolicyStatus::Novel, false);
+        b.record(PolicyStatus::Novel, false);
+        b.record(PolicyStatus::Graph, false);
         assert_eq!(b.novel, 2);
         assert_eq!(b.graph, 1);
         assert_eq!(b.total(), 3);
+    }
+
+    /// #362 attribution: the NGRAM subcount tracks only exact-context
+    /// records, and the flag is ignored on other statuses.
+    #[test]
+    fn breakdown_splits_exact_context_by_ngram() {
+        let mut b = StatusBreakdown::default();
+        b.record(PolicyStatus::ExactContext, true);
+        b.record(PolicyStatus::ExactContext, false);
+        b.record(PolicyStatus::Graph, true);
+        assert_eq!(b.exact_context, 2);
+        assert_eq!(b.exact_context_ngram, 1);
+        assert_eq!(b.graph, 1);
+        assert_eq!(b.total(), 3, "the ngram split is not a fourth bucket");
     }
 }
