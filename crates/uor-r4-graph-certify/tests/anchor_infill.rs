@@ -149,6 +149,14 @@ fn fuse_product(
     }
 }
 
+/// The compiled graded code of a token — its geometric address in the
+/// artifact's token codebook ([V × STAGES] bytes).
+fn token_code(art: &compiler::Compiled, t: u32) -> Option<&[u8]> {
+    art.token_codes
+        .chunks_exact(compiler::STAGES)
+        .nth(t as usize)
+}
+
 #[test]
 #[ignore = "Day-0 measurement harness; run explicitly with --ignored"]
 fn anchor_infill_day0() {
@@ -171,6 +179,12 @@ fn anchor_infill_day0() {
     // distance d in 1..ANCHOR_STRIDE: the target sits d positions before the
     // next pinned token in the reference stream.
     let mut fwd_anchor: BTreeMap<(usize, u32), BTreeMap<u32, u64>> = BTreeMap::new();
+    // #399 step 2: E_b-style REGION conditioning — key the forward table by
+    // the anchor token's graded-code prefix (its compiled geometric address)
+    // instead of its raw identity, at every depth. Statistics are shared
+    // across geometrically similar anchors; the held-out comparison against
+    // the token-identity table is the "does geometry carry syntax" test.
+    let mut fwd_region: BTreeMap<(usize, usize, Vec<u8>), BTreeMap<u32, u64>> = BTreeMap::new();
     #[allow(clippy::needless_range_loop)] // index i addresses four parallel corpus arrays
     for i in 0..c.n {
         if c.story[i] >= cut {
@@ -195,6 +209,15 @@ fn anchor_infill_day0() {
                     .or_default()
                     .entry(c.next[i])
                     .or_default() += 1;
+                if let Some(code) = token_code(&art, c.next[j]) {
+                    for depth in 1..=compiler::STAGES {
+                        *fwd_region
+                            .entry((lookahead, depth, code[..depth].to_vec()))
+                            .or_default()
+                            .entry(c.next[i])
+                            .or_default() += 1;
+                    }
+                }
             }
         }
     }
@@ -214,6 +237,16 @@ fn anchor_infill_day0() {
     let mut route_arm = Arm::new("fuse:offset-route");
     let mut conf_arm = Arm::new("fuse:count-confidence");
     let mut product_arm = Arm::new("fuse:product");
+    // #399 step 2 arms: region-conditioned forward tables.
+    let mut region_arms: Vec<Arm> = vec![
+        Arm::new("null:fwd-region-d1"),
+        Arm::new("null:fwd-region-d2"),
+        Arm::new("null:fwd-region-d3"),
+        Arm::new("null:fwd-region-d4"),
+    ];
+    let mut product_region_arm = Arm::new("fuse:product-region");
+    let mut token_key_missing = 0u64;
+    let mut region3_key_missing = 0u64;
 
     for i in 0..c.n {
         if c.story[i] < cut {
@@ -297,6 +330,43 @@ fn anchor_infill_day0() {
         // (c) product-of-experts over the union support.
         let product_pred = fuse_product(store_dist(&store, &codes[i]), fwd_dist).or(store_pred);
         product_arm.score(offset, product_pred, truth);
+
+        // ---- #399 step 2: region-conditioned forward tables ----
+        let anchor_code = if j < c.n && c.story[j] == c.story[i] {
+            token_code(&art, c.next[j])
+        } else {
+            None
+        };
+        let mut region_dists: [Option<&BTreeMap<u32, u64>>; 4] = [None; 4];
+        if let Some(code) = anchor_code {
+            for depth in 1..=compiler::STAGES {
+                region_dists[depth - 1] =
+                    fwd_region.get(&(lookahead, depth, code[..depth].to_vec()));
+            }
+        }
+        for depth in 1..=compiler::STAGES {
+            region_arms[depth - 1].score(
+                offset,
+                region_dists[depth - 1].and_then(argmax).or(unigram_pred),
+                truth,
+            );
+        }
+        if fwd_dist.is_none() {
+            token_key_missing += 1;
+        }
+        if region_dists[2].is_none() {
+            region3_key_missing += 1;
+        }
+        // token table when populated, else deepest populated region prefix:
+        // the E_b-style backoff chain, product-fused with the causal store.
+        let eb_dist = fwd_dist
+            .or(region_dists[3])
+            .or(region_dists[2])
+            .or(region_dists[1])
+            .or(region_dists[0]);
+        let product_region_pred =
+            fuse_product(store_dist(&store, &codes[i]), eb_dist).or(store_pred);
+        product_region_arm.score(offset, product_region_pred, truth);
     }
 
     for arm in [
@@ -311,4 +381,11 @@ fn anchor_infill_day0() {
     ] {
         arm.report();
     }
+    for arm in &region_arms {
+        arm.report();
+    }
+    product_region_arm.report();
+    println!(
+        "backoff diagnostics: token-table key missing {token_key_missing} | region-d3 key missing {region3_key_missing}"
+    );
 }
