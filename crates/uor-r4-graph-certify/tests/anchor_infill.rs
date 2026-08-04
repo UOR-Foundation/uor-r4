@@ -100,6 +100,7 @@ impl Arm {
 /// token-exact scoring cannot see.
 struct RegionScore {
     name: &'static str,
+    hit1: u64,
     hit2: u64,
     hit3: u64,
     total: u64,
@@ -109,6 +110,7 @@ impl RegionScore {
     fn new(name: &'static str) -> Self {
         RegionScore {
             name,
+            hit1: 0,
             hit2: 0,
             hit3: 0,
             total: 0,
@@ -124,6 +126,9 @@ impl RegionScore {
             return;
         };
         let _ = p;
+        if pt[0] == tt[0] {
+            self.hit1 += 1;
+        }
         if pt[..2] == tt[..2] {
             self.hit2 += 1;
         }
@@ -133,8 +138,9 @@ impl RegionScore {
     }
     fn report(&self) {
         println!(
-            "region-match {:<20} d2 {:>5.1}% | d3 {:>5.1}% (n={})",
+            "region-match {:<20} d1 {:>5.1}% | d2 {:>5.1}% | d3 {:>5.1}% (n={})",
             self.name,
+            100.0 * self.hit1 as f64 / self.total.max(1) as f64,
             100.0 * self.hit2 as f64 / self.total.max(1) as f64,
             100.0 * self.hit3 as f64 / self.total.max(1) as f64,
             self.total
