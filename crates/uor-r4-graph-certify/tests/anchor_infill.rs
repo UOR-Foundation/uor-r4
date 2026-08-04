@@ -24,8 +24,6 @@ use std::collections::BTreeMap;
 use uor_r4_core::transformerless::compiler;
 use uor_r4_core::transformerless::runtime;
 
-const ANCHOR_STRIDE: usize = 4;
-
 fn fixture(name: &str) -> String {
     format!(
         "{}/../uor-r4-core/tests/fixtures/{name}",
@@ -53,16 +51,16 @@ fn story_positions(c: &compiler::Corpus) -> Vec<usize> {
 
 struct Arm {
     name: &'static str,
-    hits: [u64; ANCHOR_STRIDE],
-    totals: [u64; ANCHOR_STRIDE],
+    hits: Vec<u64>,
+    totals: Vec<u64>,
 }
 
 impl Arm {
-    fn new(name: &'static str) -> Self {
+    fn new(name: &'static str, stride: usize) -> Self {
         Arm {
             name,
-            hits: [0; ANCHOR_STRIDE],
-            totals: [0; ANCHOR_STRIDE],
+            hits: vec![0; stride],
+            totals: vec![0; stride],
         }
     }
     fn score(&mut self, offset: usize, pred: Option<u32>, truth: u32) {
@@ -86,7 +84,7 @@ impl Arm {
             pct(hits, totals),
             totals
         );
-        for offset in 1..ANCHOR_STRIDE {
+        for offset in 1..self.hits.len() {
             print!(
                 " off{offset} {:>5.1}%",
                 pct(self.hits[offset], self.totals[offset])
@@ -166,17 +164,21 @@ fn anchor_infill_day0() {
         .expect("checked-in fixture artifacts");
     let cut = (c.stories as f64 * 0.8) as u32;
     let positions = story_positions(&c);
+    let stride: usize = std::env::var("R4_INFILL_STRIDE")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(4);
 
     println!(
         "anchor-infill Day-0 (#394): {} records, {} stories, anchor stride {}",
-        c.n, c.stories, ANCHOR_STRIDE
+        c.n, c.stories, stride
     );
 
     // ---- construction-partition tables (story < cut ONLY) ----
     let mut unigram: BTreeMap<u32, u64> = BTreeMap::new();
     let mut bigram: BTreeMap<u32, BTreeMap<u32, u64>> = BTreeMap::new();
     // forward-anchor table: (distance to next anchor, anchor token) -> dist.
-    // distance d in 1..ANCHOR_STRIDE: the target sits d positions before the
+    // distance d in 1..stride: the target sits d positions before the
     // next pinned token in the reference stream.
     let mut fwd_anchor: BTreeMap<(usize, u32), BTreeMap<u32, u64>> = BTreeMap::new();
     // #399 step 2: E_b-style REGION conditioning — key the forward table by
@@ -198,9 +200,9 @@ fn anchor_infill_day0() {
             .or_default() += 1;
         // target stream index of this record's prediction:
         let target_pos = positions[i] + 1;
-        if !target_pos.is_multiple_of(ANCHOR_STRIDE) {
+        if !target_pos.is_multiple_of(stride) {
             // next anchor stream index and its token value, if inside story
-            let next_anchor_pos = target_pos.next_multiple_of(ANCHOR_STRIDE);
+            let next_anchor_pos = target_pos.next_multiple_of(stride);
             let lookahead = next_anchor_pos - target_pos; // 1..=3
             let j = i + lookahead; // record whose *next* is the anchor token
             if j < c.n && c.story[j] == c.story[i] {
@@ -227,24 +229,24 @@ fn anchor_infill_day0() {
     let (store, codes) = runtime::build_store(&art, &c);
 
     // ---- grade all arms on held-out free targets ----
-    let mut store_arm = Arm::new("shipped-store");
-    let mut unigram_arm = Arm::new("null:unigram");
-    let mut bigram_arm = Arm::new("null:bigram");
-    let mut prev_anchor_arm = Arm::new("null:prev-anchor-copy");
-    let mut fwd_anchor_arm = Arm::new("null:fwd-anchor-table");
+    let mut store_arm = Arm::new("shipped-store", stride);
+    let mut unigram_arm = Arm::new("null:unigram", stride);
+    let mut bigram_arm = Arm::new("null:bigram", stride);
+    let mut prev_anchor_arm = Arm::new("null:prev-anchor-copy", stride);
+    let mut fwd_anchor_arm = Arm::new("null:fwd-anchor-table", stride);
     // #399 headroom probes: cheapest possible consumers of forward context,
     // fused with the causal store. Instrumentation upper bounds only.
-    let mut route_arm = Arm::new("fuse:offset-route");
-    let mut conf_arm = Arm::new("fuse:count-confidence");
-    let mut product_arm = Arm::new("fuse:product");
+    let mut route_arm = Arm::new("fuse:offset-route", stride);
+    let mut conf_arm = Arm::new("fuse:count-confidence", stride);
+    let mut product_arm = Arm::new("fuse:product", stride);
     // #399 step 2 arms: region-conditioned forward tables.
     let mut region_arms: Vec<Arm> = vec![
-        Arm::new("null:fwd-region-d1"),
-        Arm::new("null:fwd-region-d2"),
-        Arm::new("null:fwd-region-d3"),
-        Arm::new("null:fwd-region-d4"),
+        Arm::new("null:fwd-region-d1", stride),
+        Arm::new("null:fwd-region-d2", stride),
+        Arm::new("null:fwd-region-d3", stride),
+        Arm::new("null:fwd-region-d4", stride),
     ];
-    let mut product_region_arm = Arm::new("fuse:product-region");
+    let mut product_region_arm = Arm::new("fuse:product-region", stride);
     let mut token_key_missing = 0u64;
     let mut region3_key_missing = 0u64;
 
@@ -253,7 +255,7 @@ fn anchor_infill_day0() {
             continue;
         }
         let target_pos = positions[i] + 1;
-        let offset = target_pos % ANCHOR_STRIDE;
+        let offset = target_pos % stride;
         if offset == 0 {
             continue; // target is a pinned anchor: given, not graded
         }
@@ -272,7 +274,7 @@ fn anchor_infill_day0() {
         );
         // previous anchor token: the reference token at the last pinned
         // stream index at or before target_pos.
-        let prev_anchor_pos = (target_pos / ANCHOR_STRIDE) * ANCHOR_STRIDE;
+        let prev_anchor_pos = (target_pos / stride) * stride;
         let back = target_pos - prev_anchor_pos; // 1..=3
         let prev_anchor_tok = if back <= positions[i] + 1 {
             // token at stream index prev_anchor_pos is this record's input
@@ -283,7 +285,7 @@ fn anchor_infill_day0() {
         };
         prev_anchor_arm.score(offset, prev_anchor_tok, truth);
 
-        let next_anchor_pos = target_pos.next_multiple_of(ANCHOR_STRIDE);
+        let next_anchor_pos = target_pos.next_multiple_of(stride);
         let lookahead = next_anchor_pos - target_pos;
         let j = i + lookahead;
         let fwd_dist = if j < c.n && c.story[j] == c.story[i] {
@@ -299,7 +301,7 @@ fn anchor_infill_day0() {
         let store_pred = Some(store_witness.token);
 
         // (a) route by offset: forward table owns the pre-anchor position.
-        let route_pred = if offset == ANCHOR_STRIDE - 1 {
+        let route_pred = if offset == stride - 1 {
             fwd_pred_raw.or(store_pred)
         } else {
             store_pred
