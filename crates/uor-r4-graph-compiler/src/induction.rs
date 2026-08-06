@@ -2329,9 +2329,14 @@ pub fn emit_r4g1(
 
     for (index, _) in cover.regions.iter().enumerate() {
         let i = 1 + index;
-        let mut freq: std::collections::HashMap<u32, u32> = std::collections::HashMap::new();
-        let mut bigram_freq: std::collections::HashMap<(u32, u32), u32> =
-            std::collections::HashMap::new();
+        // #451: the emission tables are ordered maps and the selection
+        // carries an explicit tie-break, matching the transition-list
+        // convention above (`transition_lists`: BTreeMap keyed by token,
+        // sorted by descending count then ascending id). A HashMap here
+        // let randomized iteration order decide which equal-weight tokens
+        // survive `truncate(64)` and in what order they were written.
+        let mut freq: BTreeMap<u32, u32> = BTreeMap::new();
+        let mut bigram_freq: BTreeMap<(u32, u32), u32> = BTreeMap::new();
         for &obs_idx in &cover.members[index] {
             if let Some(obs) = observations.get(obs_idx) {
                 let prev_token = obs.prev;
@@ -2340,8 +2345,7 @@ pub fn emit_r4g1(
                 *bigram_freq.entry((prev_token, next_token)).or_insert(0) += 1;
             }
         }
-        let mut candidate_weights: std::collections::HashMap<u32, u32> =
-            std::collections::HashMap::new();
+        let mut candidate_weights: BTreeMap<u32, u32> = BTreeMap::new();
         for (&next_token, &count) in &freq {
             let mut weight = count * 10;
             for (&(prev, next), &bcount) in &bigram_freq {
@@ -2352,7 +2356,8 @@ pub fn emit_r4g1(
             candidate_weights.insert(next_token, weight);
         }
         let mut sorted: Vec<_> = candidate_weights.into_iter().collect();
-        sorted.sort_by_key(|&(_, weight)| std::cmp::Reverse(weight));
+        // Canonical order: descending weight, ties to the lowest token id.
+        sorted.sort_by_key(|&(token, weight)| (std::cmp::Reverse(weight), token));
         sorted.truncate(64); // max E = 64
 
         let start_in_remainder = (emit.len() - 4) as u32;
