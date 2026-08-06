@@ -161,6 +161,44 @@
 //! `latent_headroom_fraction` reports where the mixture sits between the
 //! baseline and the oracle as a fraction of the available top-1
 //! headroom.
+//!
+//! # Hard-select and top-k right-class arms (#446 M3)
+//!
+//! M2 measured NEGATIVE on top-1: the mixture lost half a point to the
+//! left-only baseline while the oracle, using the SAME class-conditional
+//! tables at the same class depth, gained more than five. The
+//! class-conditional distributions are therefore sharp and correct and
+//! it is the AVERAGING that destroys the argmax — a mixture of sharp
+//! disagreeing modes has a flat mode. M3 tests the obvious repair:
+//! SELECT a class instead of averaging over all of them.
+//!
+//! `rule12_latent_hard` picks the single most probable class from the
+//! left key alone, `c* = argmax over c of P(c | left)` with the
+//! canonical tie-break to the lowest class id, and predicts from
+//! `P(next | left, c*)` under the same backoff, support gate and
+//! Witten-Bell mixing as M2. `rule12_latent_topk` mixes only the `k`
+//! highest-posterior classes renormalized (`R4_LATENT_TOPK`, default
+//! three), interpolating between hard-select at `k = 1` and the full M2
+//! marginalization at large `k`. Both read the LEFT key only, so both
+//! are causally legitimate generation numbers.
+//!
+//! The quantity that decides whether the whole latent-class direction
+//! can work is CLASS PREDICTABILITY: how often the left key's most
+//! probable class IS the true right class. `latent_class_top1_accuracy`
+//! reports it over the held-out positions carrying a right window, split
+//! by whether the left key resolved at FULL graded depth or at a
+//! backed-off prefix, and `latent_class_mean_entropy` reports the mean
+//! entropy of the posterior in bits against
+//! `latent_class_mean_support`. Near-chance accuracy means the direction
+//! is dead and must be recorded plainly; high accuracy means hard-select
+//! should approach the oracle.
+//!
+//! EXIT RULE, pre-declared. `rule12_latent_hard` is a POSITIVE result if
+//! and only if it beats the left-only Rule 1+2 baseline by at least
+//! [`LATENT_EXIT_MARGIN`] of top-1 agreement on the same population AND
+//! beats the shuffled-class falsifier. Every arm's top-1 and bits per
+//! token are reported regardless of the verdict, and every pre-existing
+//! Gate C row is kept intact and reproducing.
 
 use rayon::prelude::*;
 use serde::Serialize;
@@ -2353,6 +2391,43 @@ pub struct GateCOutcome {
     /// [`LATENT_EXIT_MARGIN`] of top-1 agreement on the same population
     /// AND beat the shuffled-class falsifier.
     pub latent_exit_rule_met: bool,
+    /// #446 M3, CAUSALLY LEGITIMATE. HARD-SELECT: predict from the
+    /// single most probable class given the left key alone, preserving
+    /// that class's mode instead of averaging it away. Quotable as a
+    /// generation number.
+    pub rule12_latent_hard: GateCMetrics,
+    /// #446 M3, CAUSALLY LEGITIMATE. TOP-K-SELECT: mix only the
+    /// `latent_topk` highest-posterior classes, renormalized. With
+    /// hard-select and the M2 mixture this maps the sharpness/coverage
+    /// trade-off.
+    pub rule12_latent_topk: GateCMetrics,
+    pub latent_hard_live_positions: usize,
+    pub latent_topk_live_positions: usize,
+    /// The `k` the top-k arm used.
+    pub latent_topk: usize,
+    /// #446 M3 DIAGNOSTIC — class predictability, the quantity that
+    /// decides whether the latent-class direction can work at all: how
+    /// often the left key's most probable class IS the true right class,
+    /// over the held-out positions carrying both a resolved left key and
+    /// a right window, split by whether the left key resolved at FULL
+    /// graded depth or at a backed-off prefix. Accuracy near chance
+    /// (roughly the reciprocal of the class support) means the direction
+    /// is dead; high accuracy means hard-select should approach the
+    /// oracle.
+    pub latent_class_scored_positions: usize,
+    pub latent_class_top1_accuracy: f64,
+    pub latent_class_full_depth_positions: usize,
+    pub latent_class_top1_accuracy_full_depth: f64,
+    pub latent_class_backoff_positions: usize,
+    pub latent_class_top1_accuracy_backoff: f64,
+    /// Mean entropy of the class posterior in bits, against the mean
+    /// class support it is spread over.
+    pub latent_class_mean_entropy: f64,
+    pub latent_class_mean_support: f64,
+    /// The pre-declared #446 M3 exit rule, applied to the HARD-SELECT
+    /// arm: at least [`LATENT_EXIT_MARGIN`] of top-1 over the left-only
+    /// Rule 1+2 baseline AND above the shuffled-class falsifier.
+    pub latent_hard_exit_rule_met: bool,
     /// #399 B′: predicted-anchor accuracy on the anchor-reachable
     /// population (numerator/denominator + rate).
     pub anchor_hat_population: usize,
@@ -2819,6 +2894,13 @@ const LATENT_CLASS_ALPHA: f64 = 0.5;
 /// population. Declared here, before any number was measured.
 pub const LATENT_EXIT_MARGIN: f64 = 0.02;
 
+/// #446 M3: how many highest-posterior classes the top-k arm mixes
+/// unless `R4_LATENT_TOPK` overrides it. Three sits between the
+/// mode-preserving hard-select and the mode-flattening full
+/// marginalization, which is where the trade-off the M2 negative
+/// exposed has to be probed.
+const LATENT_TOPK_DEFAULT: usize = 3;
+
 /// #446 M2: the construction-time tables of the latent right-context
 /// mixture, one level per left graded-prefix depth one through
 /// [`STAGES`].
@@ -2928,6 +3010,49 @@ fn latent_class_weights(cell: &TwoSidedCell<'_>) -> Vec<(u32, f64)> {
         .iter()
         .map(|&(class, count)| (class, (f64::from(count) + LATENT_CLASS_ALPHA) / denominator))
         .collect()
+}
+
+/// #446 M3: the `k` highest-posterior classes, RENORMALIZED to sum to
+/// one. Ordering is by posterior weight descending with the canonical
+/// tie-break to the LOWEST class id — the Jeffreys rule is monotone in
+/// the raw count, so this is exactly "the k most probable classes given
+/// the left key" and `k = 1` is the hard-select argmax.
+///
+/// This interpolates between hard-select (`k = 1`, mode preserved, no
+/// coverage) and the full M2 marginalization (`k` at or above the class
+/// support, full coverage, mode flattened), so the arms together map the
+/// sharpness/coverage trade-off. Only the left key is read, so every
+/// value of `k` is causally legitimate.
+fn latent_top_classes(weights: &[(u32, f64)], k: usize) -> Vec<(u32, f64)> {
+    if k == 0 || weights.is_empty() {
+        return Vec::new();
+    }
+    let mut ordered = weights.to_vec();
+    ordered.sort_by(|a, b| {
+        b.1.partial_cmp(&a.1)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| a.0.cmp(&b.0))
+    });
+    ordered.truncate(k);
+    let mass: f64 = ordered.iter().map(|&(_, weight)| weight).sum();
+    if mass <= 0.0 {
+        return Vec::new();
+    }
+    for entry in &mut ordered {
+        entry.1 /= mass;
+    }
+    ordered
+}
+
+/// #446 M3 diagnostic: the Shannon entropy of the class posterior in
+/// bits. Zero means the left key pins the right class exactly; log2 of
+/// the class support means the left key says nothing about it.
+fn latent_class_entropy(weights: &[(u32, f64)]) -> f64 {
+    -weights
+        .iter()
+        .filter(|&&(_, weight)| weight > 0.0)
+        .map(|&(_, weight)| weight * weight.log2())
+        .sum::<f64>()
 }
 
 /// #446 M2: evaluate one latent arm — mix the class-conditional
@@ -3143,6 +3268,23 @@ pub fn evaluate_gate_c(
     let mut hits_latent_shuffled = 0u64;
     let mut bits_latent_shuffled_total = 0f64;
     let mut latent_shuffled_live_positions = 0usize;
+    // #446 M3 hard-select / top-k accumulators and the class
+    // predictability diagnostic.
+    let mut hits_latent_hard = 0u64;
+    let mut bits_latent_hard_total = 0f64;
+    let mut latent_hard_live_positions = 0usize;
+    let mut hits_latent_topk = 0u64;
+    let mut bits_latent_topk_total = 0f64;
+    let mut latent_topk_live_positions = 0usize;
+    let mut class_scored = 0usize;
+    let mut class_correct = 0u64;
+    let mut class_scored_full = 0usize;
+    let mut class_correct_full = 0u64;
+    let mut class_scored_backoff = 0usize;
+    let mut class_correct_backoff = 0u64;
+    let mut class_entropy_sum = 0f64;
+    let mut class_entropy_positions = 0usize;
+    let mut class_support_sum = 0u64;
     // Per-status Rule 1+2 accumulators: [ExactContext, Graph, Novel].
     let mut status_positions = [0usize; 3];
     let mut status_hits = [0u64; 3];
@@ -3267,6 +3409,12 @@ pub fn evaluate_gate_c(
         .and_then(|value| value.trim().parse::<usize>().ok())
         .filter(|depth| (1..=STAGES).contains(depth))
         .unwrap_or(LATENT_CLASS_DEPTH_DEFAULT);
+    // #446 M3: how many highest-posterior classes the top-k arm mixes.
+    let latent_topk = std::env::var("R4_LATENT_TOPK")
+        .ok()
+        .and_then(|value| value.trim().parse::<usize>().ok())
+        .filter(|k| *k >= 1)
+        .unwrap_or(LATENT_TOPK_DEFAULT);
     let latent = LatentRightTable::build(
         corpus,
         &is_held_out,
@@ -3298,6 +3446,7 @@ pub fn evaluate_gate_c(
         story_pos: &story_pos,
         two_sided: &two_sided,
         latent: &latent,
+        latent_topk,
         left_codes: &left_codes,
         right_codes: &right_codes,
         held_positions: &held_positions,
@@ -3586,6 +3735,28 @@ pub fn evaluate_gate_c(
         hits_latent_shuffled += u64::from(row.hit_latent_shuffled);
         bits_latent_shuffled_total += row.bits_latent_shuffled;
         latent_shuffled_live_positions += usize::from(row.latent_shuffled_live);
+        hits_latent_hard += u64::from(row.hit_latent_hard);
+        bits_latent_hard_total += row.bits_latent_hard;
+        latent_hard_live_positions += usize::from(row.latent_hard_live);
+        hits_latent_topk += u64::from(row.hit_latent_topk);
+        bits_latent_topk_total += row.bits_latent_topk;
+        latent_topk_live_positions += usize::from(row.latent_topk_live);
+        if let Some(correct) = row.latent_class_correct {
+            class_scored += 1;
+            class_correct += u64::from(correct);
+            if row.latent_class_full_depth {
+                class_scored_full += 1;
+                class_correct_full += u64::from(correct);
+            } else {
+                class_scored_backoff += 1;
+                class_correct_backoff += u64::from(correct);
+            }
+        }
+        if let Some(entropy) = row.latent_class_entropy_bits {
+            class_entropy_sum += entropy;
+            class_entropy_positions += 1;
+            class_support_sum += row.latent_class_support as u64;
+        }
         if let Some(correct) = row.anchor_hat_correct {
             anchor_hat_population += 1;
             anchor_hat_correct_count += u64::from(correct);
@@ -3723,6 +3894,43 @@ pub fn evaluate_gate_c(
         };
         outcome.latent_exit_rule_met = mix - baseline >= LATENT_EXIT_MARGIN
             && mix > outcome.rule12_latent_shuffled.top1_agreement;
+    }
+    // #446 M3: the select-instead-of-average arms and the class
+    // predictability diagnostic that decides whether the latent-class
+    // direction can work at all.
+    outcome.rule12_latent_hard = metrics(hits_latent_hard, bits_latent_hard_total);
+    outcome.rule12_latent_topk = metrics(hits_latent_topk, bits_latent_topk_total);
+    outcome.latent_hard_live_positions = latent_hard_live_positions;
+    outcome.latent_topk_live_positions = latent_topk_live_positions;
+    outcome.latent_topk = latent_topk;
+    let rate = |correct: u64, scored: usize| {
+        if scored == 0 {
+            0.0
+        } else {
+            correct as f64 / scored as f64
+        }
+    };
+    outcome.latent_class_scored_positions = class_scored;
+    outcome.latent_class_top1_accuracy = rate(class_correct, class_scored);
+    outcome.latent_class_top1_accuracy_full_depth = rate(class_correct_full, class_scored_full);
+    outcome.latent_class_full_depth_positions = class_scored_full;
+    outcome.latent_class_top1_accuracy_backoff = rate(class_correct_backoff, class_scored_backoff);
+    outcome.latent_class_backoff_positions = class_scored_backoff;
+    outcome.latent_class_mean_entropy = if class_entropy_positions == 0 {
+        0.0
+    } else {
+        class_entropy_sum / class_entropy_positions as f64
+    };
+    outcome.latent_class_mean_support = if class_entropy_positions == 0 {
+        0.0
+    } else {
+        class_support_sum as f64 / class_entropy_positions as f64
+    };
+    {
+        let baseline = outcome.rule12_precedence.top1_agreement;
+        let hard = outcome.rule12_latent_hard.top1_agreement;
+        outcome.latent_hard_exit_rule_met = hard - baseline >= LATENT_EXIT_MARGIN
+            && hard > outcome.rule12_latent_shuffled.top1_agreement;
     }
     let (full_left_cells, full_pair_keys) = two_sided.full_depth_subdivision();
     outcome.twosided_full_left_cells = full_left_cells;
@@ -4108,6 +4316,23 @@ struct GateCRow {
     hit_latent_shuffled: bool,
     bits_latent_shuffled: f64,
     latent_shuffled_live: bool,
+    /// #446 M3: the HARD-SELECT arm's triplet — predict from the single
+    /// most probable class given the left key. CAUSAL.
+    hit_latent_hard: bool,
+    bits_latent_hard: f64,
+    latent_hard_live: bool,
+    /// #446 M3: the TOP-K-SELECT arm's triplet. CAUSAL.
+    hit_latent_topk: bool,
+    bits_latent_topk: f64,
+    latent_topk_live: bool,
+    /// #446 M3 diagnostic: whether the hard-select class equalled the
+    /// TRUE right class (`None` where no right window or no resolved
+    /// left key existed), whether the left key resolved at FULL graded
+    /// depth, the class posterior's entropy in bits, and its support.
+    latent_class_correct: Option<bool>,
+    latent_class_full_depth: bool,
+    latent_class_entropy_bits: Option<f64>,
+    latent_class_support: usize,
 }
 
 struct GateCContext<'a> {
@@ -4137,6 +4362,8 @@ struct GateCContext<'a> {
     /// class posterior), built from the construction split. Read with
     /// the LEFT key only at serving — causally legitimate.
     latent: &'a LatentRightTable,
+    /// #446 M3: how many highest-posterior classes the top-k arm mixes.
+    latent_topk: usize,
     /// Left graded code of every corpus position. Needed by the #446 M2
     /// falsifier, which lifts a class posterior from a FOREIGN left key.
     left_codes: &'a [[u8; STAGES]],
@@ -4786,6 +5013,16 @@ fn evaluate_gate_c_row(
     let mut latent_shuffled_selected = rule12.selected;
     let mut bits_latent_shuffled = bits[2];
     let mut latent_shuffled_live = false;
+    let mut latent_hard_selected = rule12.selected;
+    let mut bits_latent_hard = bits[2];
+    let mut latent_hard_live = false;
+    let mut latent_topk_selected = rule12.selected;
+    let mut bits_latent_topk = bits[2];
+    let mut latent_topk_live = false;
+    let mut latent_class_correct: Option<bool> = None;
+    let mut latent_class_full_depth = false;
+    let mut latent_class_entropy_bits: Option<f64> = None;
+    let mut latent_class_support = 0usize;
     if let Some((latent_depth, latent_prefix, posterior)) = context.latent.resolve_left(&code) {
         let weights = latent_class_weights(&posterior);
         (latent_selected, bits_latent, latent_live) = apply_latent_arm(
@@ -4797,9 +5034,44 @@ fn evaluate_gate_c_row(
             bits[2],
             next,
         );
+        // #446 M3: SELECT instead of averaging. Hard-select takes the
+        // single most probable class; top-k mixes the k most probable,
+        // renormalized. Both read the left key only.
+        let hard = latent_top_classes(&weights, 1);
+        if !hard.is_empty() {
+            (latent_hard_selected, bits_latent_hard, latent_hard_live) = apply_latent_arm(
+                context.latent,
+                latent_depth,
+                latent_prefix,
+                &hard,
+                rule12.selected,
+                bits[2],
+                next,
+            );
+        }
+        let topk = latent_top_classes(&weights, context.latent_topk);
+        if !topk.is_empty() {
+            (latent_topk_selected, bits_latent_topk, latent_topk_live) = apply_latent_arm(
+                context.latent,
+                latent_depth,
+                latent_prefix,
+                &topk,
+                rule12.selected,
+                bits[2],
+                next,
+            );
+        }
+        // #446 M3 diagnostic: class predictability and posterior
+        // entropy. The predicted class is the hard-select class; the
+        // true class is read here for MEASUREMENT ONLY and never feeds
+        // the causal arms.
+        latent_class_full_depth = latent_depth == STAGES;
+        latent_class_entropy_bits = Some(latent_class_entropy(&weights));
+        latent_class_support = weights.len();
         let right = &context.right_codes[position];
         if right.1 {
             let true_class = pack_prefix(&right.0, context.latent.class_depth);
+            latent_class_correct = hard.first().map(|&(class, _)| class == true_class);
             (
                 latent_oracle_selected,
                 bits_latent_oracle,
@@ -4925,6 +5197,16 @@ fn evaluate_gate_c_row(
         hit_latent_shuffled: latent_shuffled_selected == teacher_argmax,
         bits_latent_shuffled,
         latent_shuffled_live,
+        hit_latent_hard: latent_hard_selected == teacher_argmax,
+        bits_latent_hard,
+        latent_hard_live,
+        hit_latent_topk: latent_topk_selected == teacher_argmax,
+        bits_latent_topk,
+        latent_topk_live,
+        latent_class_correct,
+        latent_class_full_depth,
+        latent_class_entropy_bits,
+        latent_class_support,
     })
 }
 
@@ -5012,6 +5294,18 @@ fn evaluate_gate_c_row(
 /// generation number; the oracle row is an upper bound and remains not
 /// causal. Nothing here changes the artifact format, the serving
 /// scorer's default path, the witness or the replay contract.
+/// Schema twenty-five is the #446 M3 SELECT-instead-of-average arms and
+/// the class-predictability diagnostic: `rule12_latent_hard` predicts
+/// from the single most probable class given the left key,
+/// `rule12_latent_topk` mixes only the `latent_topk` highest-posterior
+/// classes renormalized, and both read the left key alone and so are
+/// causally legitimate generation numbers. The diagnostic fields
+/// (`latent_class_top1_accuracy` overall and split full-depth versus
+/// backed-off, `latent_class_mean_entropy` against
+/// `latent_class_mean_support`) measure whether the left key can predict
+/// the right class at all, and `latent_hard_exit_rule_met` records the
+/// pre-declared verdict for the hard-select arm. Every schema
+/// twenty-four row is retained unchanged.
 #[derive(Debug, Clone, Serialize)]
 pub struct ScoreReport {
     pub schema: u32,
@@ -5204,7 +5498,7 @@ pub fn build_score_report_with_quality_profile(
         can_measure_generalization: strict_exct_miss_rate >= MIN_EXCT_MISS_RATE_FOR_GATE_C,
     };
     ScoreReport {
-        schema: 24,
+        schema: 25,
         inputs,
         config: ScoreReportConfig {
             transition_out_degree: config.transition_out_degree,
