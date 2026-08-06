@@ -1366,3 +1366,123 @@ fn relative_criterion_admits_splits_the_absolute_floor_rejects() {
     let repeat = induce_synthetic(&observations, &relative);
     assert_eq!(relative_cover.cover.kappa(), repeat.cover.kappa());
 }
+
+// ------------------------------- #451 canonical emission tie-break --
+
+/// A one-region cover whose members plant a deliberate weight tie that
+/// spans the 64-entry emission truncation cut.
+///
+/// Token 200 occurs five times (weight 50, the unique maximum); tokens
+/// `1..=100` occur once each (weight 10 apiece, a 100-way tie). All
+/// observations carry `prev == 0`, so the bigram bonus never applies and
+/// the weights are exactly `count * 10`. Selecting 64 of the 65 slots
+/// from a 100-way tie is precisely the decision the old randomized
+/// `HashMap` iteration order was making.
+fn tie_at_cut_cover_and_observations() -> (Cover, Vec<Observation>) {
+    let mut observations = Vec::new();
+    let mut push = |position: u32, next: u32| {
+        observations.push(Observation {
+            position,
+            sample: blake3::hash(&position.to_le_bytes()).into(),
+            vector: vec![0.0; D],
+            sig: [0u8; SIG_BYTES],
+            prev: 0,
+            next,
+        });
+    };
+    let mut position = 0u32;
+    for _ in 0..5 {
+        push(position, 200);
+        position += 1;
+    }
+    for token in 1..=100u32 {
+        push(position, token);
+        position += 1;
+    }
+    let members: Vec<usize> = (0..observations.len()).collect();
+    let cover = Cover {
+        regions: vec![CoverRegion {
+            id: 0,
+            depth: 1,
+            parent: None,
+            children: Vec::new(),
+            prototype: vec![0.0; D],
+            sig: [0u8; SIG_BYTES],
+            radius: 1,
+            support: members.len() as u32,
+            entropy_bits: 0.0,
+            split_gain_bits: 0.0,
+        }],
+        max_depth: 1,
+        paths: vec![vec![0]; observations.len()],
+        members: vec![members],
+    };
+    (cover, observations)
+}
+
+/// #451: the emission selection is canonical under a weight tie that
+/// spans the truncation cut — repeated emissions are byte-identical, and
+/// the tie resolves to the documented order (descending weight, then
+/// ascending token id).
+#[test]
+fn emission_tie_at_truncation_cut_is_canonical() {
+    let (cover, observations) = tie_at_cut_cover_and_observations();
+    let prior = cover::root_prior(&observations);
+    let emit = || {
+        cover::emit_r4g1(
+            b"tie-fixture-container",
+            (b"tie-fixture-meta", b"tie-fixture-recs"),
+            256,
+            &cover,
+            &[],
+            &prior,
+            &observations,
+        )
+        .expect("emit succeeds")
+        .0
+    };
+
+    // Repeated runs agree. Under the old HashMap this failed: the 100-way
+    // tie made both the surviving 64 tokens and their written order vary
+    // from emission to emission.
+    let first = emit();
+    for round in 1..8 {
+        assert_eq!(
+            first,
+            emit(),
+            "emission {round} differs: the tie at the truncation cut is not canonical"
+        );
+    }
+
+    // The tie resolves to the lowest token ids, in ascending order, after
+    // the unique weight-50 maximum. The emission block writes each entry
+    // as (i32 token, i32 count) little-endian, so the canonical selection
+    // is a contiguous byte run of the artifact.
+    let mut expected = Vec::new();
+    let mut entry = |token: i32, weight: i32| {
+        expected.extend_from_slice(&token.to_le_bytes());
+        expected.extend_from_slice(&weight.to_le_bytes());
+    };
+    // The weight-50 maximum takes the first of the 64 slots, so exactly 63
+    // of the 100 tied tokens are admitted: ids 1..=63.
+    entry(200, 50);
+    for token in 1..=63i32 {
+        entry(token, 10);
+    }
+    assert!(
+        first
+            .windows(expected.len())
+            .any(|window| window == expected.as_slice()),
+        "canonical emission selection (token 200 then tokens 1..=63) is not present"
+    );
+    // Token 64 is the first loser of the tie and never follows token 63.
+    let mut with_64 = expected.clone();
+    with_64.extend_from_slice(&64i32.to_le_bytes());
+    with_64.extend_from_slice(&10i32.to_le_bytes());
+    assert!(
+        !first
+            .windows(with_64.len())
+            .any(|w| w == with_64.as_slice()),
+        "token 64 must lose the tie at the cut"
+    );
+}
