@@ -129,7 +129,8 @@
 //! SERVING time. M2 keeps the right context as a LATENT variable that is
 //! observed only during CONSTRUCTION and marginalized away at serving:
 //!
-//!     P(next | left) = SUM over classes c of P(c | left) P(next | left, c)
+//! In prose, the mixture is `P(next | left) = SUM over classes c of
+//! P(c | left) P(next | left, c)`.
 //!
 //! where c is a coarse class of the right graded code. Construction (the
 //! non-held-out positions, which may legitimately look both ways because
