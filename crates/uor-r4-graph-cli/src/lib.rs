@@ -1261,6 +1261,8 @@ pub fn score_command(args: &[String]) -> Result<(), String> {
     row("1+2 + LATENT-MIX (#446 M2)", &gate_c.rule12_latent_mix);
     row("1+2 + latent ORACLE-RIGHT", &gate_c.rule12_latent_oracle);
     row("1+2 + latent SHUF-CLASS", &gate_c.rule12_latent_shuffled);
+    row("1+2 + HARD-SELECT (#446 M3)", &gate_c.rule12_latent_hard);
+    row("1+2 + TOP-K-SELECT (#446 M3)", &gate_c.rule12_latent_topk);
     let live_line = |name: &str, fused: &score::GateCMetrics, base: &score::GateCMetrics| {
         println!(
             "  {name} live slice ({} positions): fused {:.1}% vs rule 1+2 {:.1}% | bits {:.4} vs {:.4}",
@@ -1363,6 +1365,47 @@ pub fn score_command(args: &[String]) -> Result<(), String> {
         100.0 * gate_c.rule12_latent_oracle.top1_agreement,
         100.0 * gate_c.latent_headroom_fraction,
         if gate_c.latent_exit_rule_met {
+            "MET (positive)"
+        } else {
+            "NOT MET (negative)"
+        },
+    );
+    println!(
+        "  latent SHARPNESS curve (k classes mixed, all causal): k=1 hard-select {:.2}% / {:.4} bits (live {}) | k={} top-k {:.2}% / {:.4} bits (live {}) | k=all marginalize {:.2}% / {:.4} bits (live {}) | baseline {:.2}% / {:.4} bits | oracle {:.2}% / {:.4} bits",
+        100.0 * gate_c.rule12_latent_hard.top1_agreement,
+        gate_c.rule12_latent_hard.bits_per_token,
+        gate_c.latent_hard_live_positions,
+        gate_c.latent_topk,
+        100.0 * gate_c.rule12_latent_topk.top1_agreement,
+        gate_c.rule12_latent_topk.bits_per_token,
+        gate_c.latent_topk_live_positions,
+        100.0 * gate_c.rule12_latent_mix.top1_agreement,
+        gate_c.rule12_latent_mix.bits_per_token,
+        gate_c.rule12_latent_mix_live.positions,
+        100.0 * gate_c.rule12_precedence.top1_agreement,
+        gate_c.rule12_precedence.bits_per_token,
+        100.0 * gate_c.rule12_latent_oracle.top1_agreement,
+        gate_c.rule12_latent_oracle.bits_per_token,
+    );
+    println!(
+        "  latent CLASS PREDICTABILITY: argmax P(c|left) = true class {:.2}% ({} positions) | full-depth left key {:.2}% ({}) | backed-off left key {:.2}% ({}) | mean posterior entropy {:.4} bits over mean support {:.2} classes (uniform-chance {:.2}%)",
+        100.0 * gate_c.latent_class_top1_accuracy,
+        gate_c.latent_class_scored_positions,
+        100.0 * gate_c.latent_class_top1_accuracy_full_depth,
+        gate_c.latent_class_full_depth_positions,
+        100.0 * gate_c.latent_class_top1_accuracy_backoff,
+        gate_c.latent_class_backoff_positions,
+        gate_c.latent_class_mean_entropy,
+        gate_c.latent_class_mean_support,
+        if gate_c.latent_class_mean_support > 0.0 {
+            100.0 / gate_c.latent_class_mean_support
+        } else {
+            0.0
+        },
+    );
+    println!(
+        "  EXIT RULE (#446 M3, hard-select >= 2.0pp over baseline AND beats shuffled-class): {}",
+        if gate_c.latent_hard_exit_rule_met {
             "MET (positive)"
         } else {
             "NOT MET (negative)"
