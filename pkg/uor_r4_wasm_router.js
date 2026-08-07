@@ -442,6 +442,15 @@ export class UorR4Router {
         wasm.uorr4router_set_banded_storage(this.__wbg_ptr, banded);
     }
     /**
+     * Build the query projection full-width rather than band-only
+     * (issue #480). Default off — see `docs/query_projection_480.md` for
+     * why the symmetric shape was measured and NOT adopted.
+     * @param {boolean} full_width
+     */
+    set_full_width_query(full_width) {
+        wasm.uorr4router_set_full_width_query(this.__wbg_ptr, full_width);
+    }
+    /**
      * @param {string} geom
      */
     set_geometry_type(geom) {

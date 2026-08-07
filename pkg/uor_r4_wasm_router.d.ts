@@ -144,6 +144,12 @@ export class UorR4Router {
      * indexed items are not rewritten, so flip this before ingestion.
      */
     set_banded_storage(banded: boolean): void;
+    /**
+     * Build the query projection full-width rather than band-only
+     * (issue #480). Default off — see `docs/query_projection_480.md` for
+     * why the symmetric shape was measured and NOT adopted.
+     */
+    set_full_width_query(full_width: boolean): void;
     set_geometry_type(geom: string): void;
     /**
      * Progresses the connection drift state using delta-time ($dt$) increments.
@@ -210,6 +216,7 @@ export interface InitOutput {
     readonly uorr4router_set_angle_x: (a: number, b: number) => void;
     readonly uorr4router_set_angle_y: (a: number, b: number) => void;
     readonly uorr4router_set_banded_storage: (a: number, b: number) => void;
+    readonly uorr4router_set_full_width_query: (a: number, b: number) => void;
     readonly uorr4router_set_geometry_type: (a: number, b: number, c: number) => void;
     readonly uorr4router_update_drift_physics: (a: number, b: number, c: number) => [number, number];
     readonly vsa_encode_event: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => [number, number];
