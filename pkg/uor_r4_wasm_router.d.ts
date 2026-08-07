@@ -13,6 +13,11 @@ export class UorR4Router {
     free(): void;
     [Symbol.dispose](): void;
     /**
+     * Whether the content-bearing store bands its stored vectors
+     * (issue #434). False — full-width storage — is the default.
+     */
+    banded_storage(): boolean;
+    /**
      * Computes live UOR resonance metrics for a given input text
      */
     calculate_resonance(text: string): any;
@@ -132,6 +137,13 @@ export class UorR4Router {
     route_query_to_manifold_uor(text: string, identity: string): any;
     set_angle_x(val: number): void;
     set_angle_y(val: number): void;
+    /**
+     * Selects the storage shape for subsequently indexed sentences
+     * (issue #434). `true` restores the pre-#434 banded storage; the
+     * default `false` keeps the full-width content vector. Already
+     * indexed items are not rewritten, so flip this before ingestion.
+     */
+    set_banded_storage(banded: boolean): void;
     set_geometry_type(geom: string): void;
     /**
      * Progresses the connection drift state using delta-time ($dt$) increments.
@@ -160,6 +172,7 @@ export interface InitOutput {
     readonly __wbg_set_uorr4router_geometry_type: (a: number, b: number) => void;
     readonly __wbg_uorr4router_free: (a: number, b: number) => void;
     readonly init_wasm: () => void;
+    readonly uorr4router_banded_storage: (a: number) => number;
     readonly uorr4router_calculate_resonance: (a: number, b: number, c: number) => any;
     readonly uorr4router_clear_corpus: (a: number) => void;
     readonly uorr4router_compile_thought: (a: number, b: number, c: number) => any;
@@ -196,6 +209,7 @@ export interface InitOutput {
     readonly uorr4router_route_query_to_manifold_uor: (a: number, b: number, c: number, d: number, e: number) => any;
     readonly uorr4router_set_angle_x: (a: number, b: number) => void;
     readonly uorr4router_set_angle_y: (a: number, b: number) => void;
+    readonly uorr4router_set_banded_storage: (a: number, b: number) => void;
     readonly uorr4router_set_geometry_type: (a: number, b: number, c: number) => void;
     readonly uorr4router_update_drift_physics: (a: number, b: number, c: number) => [number, number];
     readonly vsa_encode_event: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => [number, number];

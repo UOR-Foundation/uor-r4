@@ -36,6 +36,15 @@ export class UorR4Router {
         wasm.__wbg_set_uorr4router_geometry_type(this.__wbg_ptr, arg0);
     }
     /**
+     * Whether the content-bearing store bands its stored vectors
+     * (issue #434). False — full-width storage — is the default.
+     * @returns {boolean}
+     */
+    banded_storage() {
+        const ret = wasm.uorr4router_banded_storage(this.__wbg_ptr);
+        return ret !== 0;
+    }
+    /**
      * Computes live UOR resonance metrics for a given input text
      * @param {string} text
      * @returns {any}
@@ -421,6 +430,16 @@ export class UorR4Router {
      */
     set_angle_y(val) {
         wasm.uorr4router_set_angle_y(this.__wbg_ptr, val);
+    }
+    /**
+     * Selects the storage shape for subsequently indexed sentences
+     * (issue #434). `true` restores the pre-#434 banded storage; the
+     * default `false` keeps the full-width content vector. Already
+     * indexed items are not rewritten, so flip this before ingestion.
+     * @param {boolean} banded
+     */
+    set_banded_storage(banded) {
+        wasm.uorr4router_set_banded_storage(this.__wbg_ptr, banded);
     }
     /**
      * @param {string} geom
