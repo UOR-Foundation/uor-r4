@@ -36,6 +36,7 @@ export const uorr4router_index_sentence: (a: number, b: number, c: number, d: nu
 export const uorr4router_inject_thought_stream: (a: number, b: number, c: number) => any;
 export const uorr4router_is_aligned: (a: number) => number;
 export const uorr4router_kill_switch_threshold: (a: number) => number;
+export const uorr4router_lexical_weight: (a: number) => number;
 export const uorr4router_new: (a: number) => number;
 export const uorr4router_reset_brain: (a: number, b: number, c: number) => void;
 export const uorr4router_reset_to_defaults: (a: number) => void;
@@ -46,6 +47,8 @@ export const uorr4router_set_angle_y: (a: number, b: number) => void;
 export const uorr4router_set_banded_storage: (a: number, b: number) => void;
 export const uorr4router_set_full_width_query: (a: number, b: number) => void;
 export const uorr4router_set_geometry_type: (a: number, b: number, c: number) => void;
+export const uorr4router_set_lexical_weight: (a: number, b: number) => void;
+export const uorr4router_set_unscaled_geometric_term: (a: number, b: number) => void;
 export const uorr4router_update_drift_physics: (a: number, b: number, c: number) => [number, number];
 export const vsa_encode_event: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => [number, number];
 export const vsa_encode_graph_edge: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number];

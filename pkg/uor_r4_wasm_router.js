@@ -367,6 +367,15 @@ export class UorR4Router {
         return ret;
     }
     /**
+     * The weight one shared query prime carries in retrieval relevance
+     * (issue #484). [`DEFAULT_LEXICAL_WEIGHT`] unless overridden.
+     * @returns {number}
+     */
+    lexical_weight() {
+        const ret = wasm.uorr4router_lexical_weight(this.__wbg_ptr);
+        return ret;
+    }
+    /**
      * Instantiates the R4 Router with perfect, error-free default states
      * @param {number} threshold
      */
@@ -457,6 +466,39 @@ export class UorR4Router {
         const ptr0 = passStringToWasm0(geom, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
         wasm.uorr4router_set_geometry_type(this.__wbg_ptr, ptr0, len0);
+    }
+    /**
+     * Override the lexical weight for measurement (issue #484).
+     *
+     * The parameter is a continuum, not a flag: at `0.0` the ranking is
+     * pure cosine, at [`DEFAULT_LEXICAL_WEIGHT`] it is the shipped form,
+     * and as it grows it approaches strict lexicographic order with the
+     * cosine as a tie-break. The shipped value is one point on that
+     * continuum and the others had never been looked at.
+     *
+     * Deployed behaviour is unchanged while this is unset. A negative or
+     * non-finite weight is REJECTED rather than clamped — silently
+     * substituting a different weight than the caller asked for would make
+     * a sweep report the wrong arm's number under the right arm's label,
+     * which is worse than a panic in a measurement harness.
+     * @param {number} weight
+     */
+    set_lexical_weight(weight) {
+        wasm.uorr4router_set_lexical_weight(this.__wbg_ptr, weight);
+    }
+    /**
+     * Rank by the bare cosine instead of `sim * slice_norm` (issue #484).
+     * Default off; deployed behaviour is the scaled form.
+     *
+     * Pair this with `set_lexical_weight(0.0)` to get an actually
+     * cosine-ranked arm. Setting the weight to zero on its own does not:
+     * `slice_norm` is a per-window-bucket scalar, so the scaled term is not
+     * comparable across buckets and the resulting order is driven by bucket
+     * scale rather than by similarity.
+     * @param {boolean} unscaled
+     */
+    set_unscaled_geometric_term(unscaled) {
+        wasm.uorr4router_set_unscaled_geometric_term(this.__wbg_ptr, unscaled);
     }
     /**
      * Progresses the connection drift state using delta-time ($dt$) increments.
