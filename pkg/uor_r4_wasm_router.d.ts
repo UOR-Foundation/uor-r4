@@ -150,6 +150,16 @@ export class UorR4Router {
      */
     set_banded_storage(banded: boolean): void;
     /**
+     * Build the retrieval query vector from the query text's own content
+     * state rather than from the routing state (issue #486). Default off.
+     *
+     * This is the arm that makes the query and the stored vector the same
+     * KIND of object. Falls back to the deployed projection for any text
+     * with no vocabulary word, so the knob can never leave a query without a
+     * vector.
+     */
+    set_content_query_vector(content: boolean): void;
+    /**
      * Build the query projection full-width rather than band-only
      * (issue #480). Default off — see `docs/query_projection_480.md` for
      * why the symmetric shape was measured and NOT adopted.
@@ -249,6 +259,7 @@ export interface InitOutput {
     readonly uorr4router_set_angle_x: (a: number, b: number) => void;
     readonly uorr4router_set_angle_y: (a: number, b: number) => void;
     readonly uorr4router_set_banded_storage: (a: number, b: number) => void;
+    readonly uorr4router_set_content_query_vector: (a: number, b: number) => void;
     readonly uorr4router_set_full_width_query: (a: number, b: number) => void;
     readonly uorr4router_set_geometry_type: (a: number, b: number, c: number) => void;
     readonly uorr4router_set_lexical_weight: (a: number, b: number) => void;

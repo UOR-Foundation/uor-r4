@@ -451,6 +451,19 @@ export class UorR4Router {
         wasm.uorr4router_set_banded_storage(this.__wbg_ptr, banded);
     }
     /**
+     * Build the retrieval query vector from the query text's own content
+     * state rather than from the routing state (issue #486). Default off.
+     *
+     * This is the arm that makes the query and the stored vector the same
+     * KIND of object. Falls back to the deployed projection for any text
+     * with no vocabulary word, so the knob can never leave a query without a
+     * vector.
+     * @param {boolean} content
+     */
+    set_content_query_vector(content) {
+        wasm.uorr4router_set_content_query_vector(this.__wbg_ptr, content);
+    }
+    /**
      * Build the query projection full-width rather than band-only
      * (issue #480). Default off — see `docs/query_projection_480.md` for
      * why the symmetric shape was measured and NOT adopted.
