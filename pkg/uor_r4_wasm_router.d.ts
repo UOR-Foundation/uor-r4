@@ -117,7 +117,9 @@ export class UorR4Router {
     kill_switch_threshold(): number;
     /**
      * The weight one shared query prime carries in retrieval relevance
-     * (issue #484). [`DEFAULT_LEXICAL_WEIGHT`] unless overridden.
+     * (issues #484 / #502). The deployed default depends on the query path
+     * (see [`UorR4Router::default_lexical_weight`]) unless overridden with
+     * [`set_lexical_weight`](UorR4Router::set_lexical_weight).
      */
     lexical_weight(): number;
     /**
