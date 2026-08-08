@@ -452,7 +452,9 @@ export class UorR4Router {
     }
     /**
      * Build the retrieval query vector from the query text's own content
-     * state rather than from the routing state (issue #486). Default off.
+     * state rather than from the routing state (issue #486). **Default ON
+     * since #490**; pass `false` to reproduce the pre-#490 routing-query
+     * ordering for measurement.
      *
      * This is the arm that makes the query and the stored vector the same
      * KIND of object. Falls back to the deployed projection for any text
