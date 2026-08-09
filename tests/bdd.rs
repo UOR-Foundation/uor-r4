@@ -84,8 +84,10 @@ struct R4g1World {
     inv_degree_limit: usize,
     inv_edges: Vec<(u32, u32)>,
     inv_evidence: Vec<u32>,
+    // Outer Option: whether the loader verifier has been run yet.
+    // Inner Option: the total verdict — `Some(err)` on failure, `None` when valid.
     inv_res:
-        Option<Result<usize, uor_r4_graph_format::invariant_ownership::InvariantValidationError>>,
+        Option<Option<uor_r4_graph_format::invariant_ownership::InvariantValidationError>>,
     // Separate Semantic Emission fields (#134)
     decouple_transitions: Vec<(
         &'static str,
@@ -841,7 +843,7 @@ fn bdd_inv_validate_loader(w: &mut R4g1World) {
 
 #[then("validation fails with a degree limit exceeded error")]
 fn bdd_inv_degree_error_check(w: &mut R4g1World) {
-    let err = w.inv_res.as_ref().expect("inv_res").as_ref().unwrap_err();
+    let err = w.inv_res.as_ref().expect("inv_res").as_ref().expect("validation should fail");
     assert!(matches!(
         err,
         InvariantValidationError::DegreeLimitExceeded { .. }
@@ -859,7 +861,7 @@ fn bdd_inv_dangling_given(w: &mut R4g1World) {
 
 #[then("validation fails with a dangling reference error")]
 fn bdd_inv_dangling_error_check(w: &mut R4g1World) {
-    let err = w.inv_res.as_ref().expect("inv_res").as_ref().unwrap_err();
+    let err = w.inv_res.as_ref().expect("inv_res").as_ref().expect("validation should fail");
     assert!(matches!(
         err,
         InvariantValidationError::DanglingReference { .. }
@@ -877,7 +879,7 @@ fn bdd_inv_duplicate_evidence_given(w: &mut R4g1World) {
 
 #[then("validation fails with a duplicate evidence error")]
 fn bdd_inv_duplicate_evidence_error_check(w: &mut R4g1World) {
-    let err = w.inv_res.as_ref().expect("inv_res").as_ref().unwrap_err();
+    let err = w.inv_res.as_ref().expect("inv_res").as_ref().expect("validation should fail");
     assert!(matches!(
         err,
         InvariantValidationError::DuplicateEvidence { .. }
