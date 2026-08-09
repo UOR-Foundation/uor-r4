@@ -86,6 +86,7 @@ pub fn export_hf_bytelevel_tokenizer_with_lengths(
     Ok(lengths)
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn hf_bytelevel_tokens(
     source: impl AsRef<Path>,
 ) -> Result<Vec<Vec<u8>>, uor_r4_model_source::SourceUnavailable> {
@@ -116,6 +117,7 @@ fn hf_bytelevel_tokens(
     Ok(tokens)
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn bytelevel_inverse() -> BTreeMap<char, u8> {
     let mut bytes: Vec<u8> = (b'!'..=b'~')
         .chain(0xA1..=0xAC)
