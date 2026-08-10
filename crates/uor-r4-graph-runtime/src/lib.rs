@@ -4,6 +4,7 @@
 extern crate alloc;
 
 pub mod engine;
+#[cfg(feature = "packed-routing")]
 pub mod packed_kernels;
 pub mod patch_chain;
 pub mod routing;

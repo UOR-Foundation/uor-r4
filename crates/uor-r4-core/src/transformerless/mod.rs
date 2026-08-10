@@ -23,7 +23,9 @@
 // fs-dependent functions are cfg-gated per item (see those files).
 pub mod bott_fock;
 pub mod cd_space;
+#[cfg(feature = "endomorphism")]
 pub mod endomorphism;
+#[cfg(feature = "lie-jordan")]
 pub mod lie_jordan;
 pub mod region_store;
 

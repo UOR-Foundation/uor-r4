@@ -19,3 +19,6 @@ harness = false
 [[bench]]
 name = "session_signature"
 harness = false
+
+[features]
+packed-routing = []
