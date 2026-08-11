@@ -1,0 +1,18 @@
+# model/ledger.toml --- the honesty ledger for claims that are not conformance
+# IDs (R2).
+#
+# The conformance IDs and their levels live in `model/ids.toml`, which is the
+# register; duplicating them here would give a claim two sources, which is
+# exactly what R1 forbids. What remains is the two kinds of claim that have no
+# ID: the facts this repository *reproduces* from an authority, and the
+# quantities it *measures* and never asserts.
+#
+# The meta-gate proves the suite never asserts an `open` claim as established,
+# and `CM-03` proves every `some-true` row cites an authority that exists.
+#
+# The ledger is empty. A claim added here needs its level chosen first, because
+# the level decides what evidence it owes.
+
+spec = "template/1"
+
+claim = []

@@ -1,0 +1,33 @@
+# The normative acceptance gate.
+#
+# `just vv` is the single gate. `honesty` is split out so a claim that has
+# drifted from its evidence reads differently from broken code.
+name: ci
+
+on:
+  push: { branches: [main] }
+  pull_request:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  vv:
+    name: just vv
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with: { components: rustfmt, clippy }
+      - uses: extractions/setup-just@v2
+      - uses: Swatinem/rust-cache@v2
+      - run: just vv
+
+  deny:
+    name: cargo-deny
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2

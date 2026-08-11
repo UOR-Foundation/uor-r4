@@ -1,0 +1,9 @@
+# No `disallowed-types` and no `disallowed-methods`, deliberately.
+#
+# A workspace-wide restriction applies to code that never made the promise it
+# encodes --- gates, fixtures, generators --- and the first thing that does is
+# teach the next contributor to `#[allow]` it, after which it enforces nothing
+# anywhere. A crate with a contract worth enforcing declares it at crate scope,
+# where the deny lands on the code that owes it.
+
+msrv = "1.89"

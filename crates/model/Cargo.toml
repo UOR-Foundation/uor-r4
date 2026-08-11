@@ -1,0 +1,24 @@
+[package]
+name = "repo-model"
+description = "Typed registries parsed from model/*.toml: this repository's single source of every claim (R1)."
+# Build-time and CI infrastructure. Its only dependents are `xtask` and
+# `repo-conformance`, both `publish = false`, and nothing a consumer of this
+# repository builds reaches it.
+publish = false
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+# Build-time and CI only. Not a dependency of any shipped crate; it may use std.
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+
+[lints]
+workspace = true

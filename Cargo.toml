@@ -1,0 +1,37 @@
+[workspace]
+resolver = "2"
+members = ["crates/*", "xtask"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+# Raise this when something here needs a newer compiler; nothing does yet.
+rust-version = "1.89"
+license = "MIT OR Apache-2.0"
+# Set these when the repository takes its name. They are inherited by every
+# crate, so changing them here changes them everywhere.
+repository = "https://github.com/UOR-Foundation/CHANGEME"
+homepage = "https://github.com/UOR-Foundation/CHANGEME"
+authors = ["UOR Foundation"]
+keywords = []
+categories = []
+
+[workspace.dependencies]
+repo-model = { version = "0.1.0", path = "crates/model" }
+# A `path` dependency with no `version` is a wildcard requirement, and
+# `cargo deny` refuses those (`wildcards = "deny"`). Every internal dependency
+# carries both.
+repo-conformance = { version = "0.1.0", path = "crates/conformance" }
+
+[workspace.lints.rust]
+missing_docs = "deny"
+unsafe_op_in_unsafe_fn = "deny"
+
+[workspace.lints.clippy]
+undocumented_unsafe_blocks = "deny"
+missing_safety_doc = "deny"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1

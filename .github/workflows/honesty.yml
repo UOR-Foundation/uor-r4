@@ -1,0 +1,21 @@
+# R2, R3: the honesty meta-gate and the BDD suite.
+#
+# Split from `ci` so that a red mark here reads as what it is: not broken code,
+# but a claim that has drifted from its evidence.
+name: honesty
+
+on:
+  push: { branches: [main] }
+  pull_request:
+
+jobs:
+  honesty:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: extractions/setup-just@v2
+      - uses: Swatinem/rust-cache@v2
+      # Every registered ID has a scenario and a test; no `open` claim is
+      # asserted as established; every `some-true` claim cites an authority.
+      - run: just bdd
