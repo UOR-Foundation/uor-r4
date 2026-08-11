@@ -1362,37 +1362,47 @@ impl From<safetensors::SafeTensorError> for SourceUnavailable {
     }
 }
 
+/// A teacher that can advance a batch of independent sequences one position
+/// each through a single memory-amortized forward. Implemented by the HF oracle
+/// (the deployed teacher) and mockable for tests, so the batched observe driver
+/// need not name a concrete oracle.
+pub trait BatchedTeacher {
+    /// A fresh per-sequence state for this teacher.
+    fn new_state(&self) -> State;
+    /// Maximum context length (teacher-forced positions per article).
+    fn seq_len(&self) -> usize;
+    /// Vocabulary size (logits length).
+    fn vocab(&self) -> usize;
+    /// Advance `states.len()` sequences one position each: sequence `b` steps
+    /// `tokens[b]` at `positions[b]`, leaving its logits in `states[b].logits`.
+    fn forward_batch_into(&self, states: &mut [State], tokens: &[usize], positions: &[usize]);
+}
+
+impl BatchedTeacher for HuggingFaceLlamaOracle {
+    fn new_state(&self) -> State {
+        State::new(&self.model.cfg)
+    }
+    fn seq_len(&self) -> usize {
+        self.model.cfg.seq_len
+    }
+    fn vocab(&self) -> usize {
+        self.model.cfg.vocab
+    }
+    fn forward_batch_into(&self, states: &mut [State], tokens: &[usize], positions: &[usize]) {
+        self.model
+            .forward_batch(states, tokens, positions, self.fast_matmul);
+    }
+}
+
 impl HuggingFaceLlamaOracle {
     #[cfg(not(target_arch = "wasm32"))]
     pub fn load(source: impl AsRef<std::path::Path>) -> Result<Self, SourceUnavailable> {
         Self::load_inner(source, None)
     }
 
-    /// A fresh per-sequence [`State`] for this teacher, for the batched path:
-    /// the batched driver keeps one per in-flight sequence and shares this one
-    /// oracle's (single) weight copy across all of them.
-    pub fn new_state(&self) -> State {
-        State::new(&self.model.cfg)
-    }
-
     /// This teacher's configuration (dims, heads, vocab, sequence length).
     pub fn cfg(&self) -> &Config {
         &self.model.cfg
-    }
-
-    /// Advance a batch of independent sequences one position each through the
-    /// memory-amortized batched forward — sequence `b` steps `tokens[b]` at
-    /// `positions[b]` against its own KV cache in `states[b]`, leaving each
-    /// sequence's logits in `states[b].logits`. This is the throughput lever:
-    /// B sequences cost one weight sweep instead of B.
-    pub fn forward_batch_into(
-        &self,
-        states: &mut [State],
-        tokens: &[usize],
-        positions: &[usize],
-    ) {
-        self.model
-            .forward_batch(states, tokens, positions, self.fast_matmul);
     }
 
     /// Load an offline teacher with a bounded context allocation. Compilation
@@ -1788,7 +1798,8 @@ mod tests {
     /// A tiny synthetic Llama with deterministic weights, for exercising the
     /// forward path without loading a real checkpoint.
     fn tiny_llama() -> Llama {
-        let (dim, hid, nl, kv_dim, vocab, seq_len) = (8usize, 16usize, 2usize, 8usize, 10usize, 8usize);
+        let (dim, hid, nl, kv_dim, vocab, seq_len) =
+            (8usize, 16usize, 2usize, 8usize, 10usize, 8usize);
         let cfg = Config {
             dim,
             hidden: hid,
@@ -1846,6 +1857,7 @@ mod tests {
     /// guards the batched teacher path added for #531.
     #[cfg(not(target_os = "macos"))]
     #[test]
+    #[allow(clippy::needless_range_loop)]
     fn forward_batch_matches_serial_forward() {
         let model = tiny_llama();
         let seqs: [[usize; 4]; 3] = [[1, 3, 5, 2], [4, 0, 7, 8], [2, 9, 1, 6]];
@@ -1870,7 +1882,11 @@ mod tests {
             let positions = vec![pos; 3];
             model.forward_batch(&mut bstates, &tokens, &positions, true);
             for (b, st) in bstates.iter().enumerate() {
-                assert_eq!(st.logits, serial[pos * 3 + b], "logits differ at pos {pos} seq {b}");
+                assert_eq!(
+                    st.logits,
+                    serial[pos * 3 + b],
+                    "logits differ at pos {pos} seq {b}"
+                );
             }
         }
     }
