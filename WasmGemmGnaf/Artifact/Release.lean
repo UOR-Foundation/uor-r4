@@ -991,6 +991,17 @@ blocked traversal terminates inside `2 ^ 320` steps, which needs a termination
 argument for `GNAF.bodyCode`'s loops that this repository does not have, and
 which no amount of `decide` can supply at that fuel.
 
+Since BI-006, part of that is no longer vague.  §5.13 below carries the *real*
+GEMM kernel — `GNAF.gemmKernel`, whose loop bounds are the header's declared
+extents — as far as the Wasm layer allows: its compiled module is profile valid
+on a closed literal, its plan-level static step bound is proved to be about
+`2 ^ 99` and therefore strictly inside the `2 ^ 320` budget
+(`GNAF.gemmKernel_stepBound_le_maxSteps`), and the whole machine and evaluation
+chain is proved from two explicitly named propositions,
+`Release.GemmKernelReducesBounded` and `Release.GemmKernelReachesTerminal`.
+Those two are Wasm-execution facts, not plan facts, and neither is proved here;
+the second one is `Wasm.validation_progress`, OUTSTANDING under `O-6`.
+
 What is used instead is the smallest module `GNAF.moduleOf` emits: the same
 module *shape* — one recursive type group, one function at the pinned `gemm` ABI
 type, one exported single-page memory, no imports, no start function, exactly
@@ -1428,6 +1439,445 @@ theorem witnessPerInput_covers (raw : Gemm.RawInvocation wasmProfile) :
     (witnessPerInput raw).CoversEveryMaximalExecution :=
   witnessInputEvaluationOf_covers raw _ _ _
 
+/-! ### 5.13 The compiled GEMM kernel: what closes, and the two things that do not
+
+`GNAF.gemmKernel` is the input-dependent GEMM plan of `GNAF/CompileCorrect.lean`
+— it loads `m`, `n`, `k` out of the ABI header and runs an `i`/`j`/`k` nest of
+`Plan.loopReg` loops bounded by exactly those registers — and
+`GNAF.gemmKernel_writes_C` proves that evaluating it deposits the modular-`u32`
+product into the declared `C` region.  This section carries that plan as far
+toward the costed machine as the Wasm layer of this repository permits, and
+states the remainder as two named propositions rather than assuming them.
+
+**What is discharged here, unconditionally.**
+
+* `Release.gemmKernelModule` — the module `GNAF.compile` emits from
+  `GNAF.gemmKernelChecked` — validates, stays inside the profile limit table,
+  imports nothing and carries exactly the two required exports, so
+  `Release.gemmKernel_profileValid` holds on the closed byte literal
+  `Release.gemmKernelBytes`.
+* `GNAF.gemmKernel_stepBound_le_maxSteps` (proved in `GNAF/CompileCorrect.lean`)
+  puts the plan's static step bound — `792281624699921518248014643209`, about
+  `2 ^ 99`, the three clamped `loopReg` loops — strictly inside the released
+  costed step budget `2 ^ 320`.  `Release.gemmKernel_stepBound_lt_maxSteps`
+  restates it against `(setting seam).problem.maxSteps` itself.
+* Given the two propositions below, the *whole* machine chain closes:
+  `Release.gemmKernel_machine_completes_of`, and the evaluation
+  `Release.gemmKernelSystemEvaluationOf` in §5.14.
+
+**What does not close, stated exactly.**  `Plan.stepBound` bounds the step count
+of the *GNAF* interpreter `Plan.eval`.  Nothing in this repository relates it to
+the length of a *Wasm* reduction of the compiled module.  `GNAF.compile_resources`
+does not: it bounds the emitted module's static instruction count and says so.
+The two missing facts are exactly:
+
+* `Release.GemmKernelReducesBounded` — every reduction of the compiled kernel
+  from its initial configuration stays inside the released step budget.  This is
+  the termination half of the omitted `compile_refines`: it needs a simulation
+  between `Wasm.Step` on `GNAF.bodyCode` and `Plan.eval`, or at least a direct
+  Wasm-level trip-count argument for every `countLoopVar` the compiler emits,
+  and neither exists here.  `Release.gemmKernelReducesBounded_of_stepBound_multiple`
+  shows that any bound of at most `2 ^ 220` Wasm steps per charged plan step
+  suffices, so the gap is the existence of a bound and not its size.
+* `Release.GemmKernelReachesTerminal` — some branch reaches a *terminal*
+  configuration (`Wasm.observationOfConfig` is `none` on a running one, and a
+  stuck-but-running configuration is exactly what a progress theorem excludes).
+  This is `Wasm.validation_progress`, listed as OUTSTANDING under `O-6` in
+  `Theorems/Status.lean`; no progress theorem exists for the modelled subset.
+
+Neither is assumed anywhere: they appear only as explicit hypotheses of the
+theorems that need them.  `Release.seam_machine_completes` and
+`Release.systemEvaluation_inhabited` continue to be discharged on
+`Release.witnessModule` alone. -/
+
+/-- **The compiled input-dependent GEMM kernel.**  Unlike
+`Artifact.baselineModule` (compiled from the fixed-extent `GNAF.gemmWitness`),
+this is compiled from the plan whose loop bounds are the header's declared
+extents. -/
+def gemmKernelModule : Wasm.Module := GNAF.compile GNAF.gemmKernelChecked
+
+/-- The canonical encoding of `Release.gemmKernelModule`: a closed `ByteArray`. -/
+def gemmKernelBytes : ByteArray := Artifact.emit gemmKernelModule
+
+/-- **SPEC §7.3.**  The compiled kernel passes the release validator. -/
+theorem gemmKernelModule_validate : Wasm.validate gemmKernelModule = true :=
+  GNAF.gemmKernel_compiles
+
+/-- The kernel bytes decode back to the kernel module. -/
+theorem gemmKernel_decode : Wasm.decode gemmKernelBytes = .ok gemmKernelModule :=
+  Artifact.decode_emit gemmKernelModule
+
+/-- **SPEC §7.2.**  Every index-space population of the compiled kernel is
+inside the release profile's limit table. -/
+theorem gemmKernelModule_withinProfileLimits :
+    Universal.WithinProfileLimits wasmProfile gemmKernelModule = true := by decide
+
+/-- **SPEC §10.1.**  The compiled kernel passes `Universal.validateUnder`. -/
+theorem gemmKernelModule_validateUnder :
+    Universal.validateUnder wasmProfile gemmKernelModule = true := by
+  unfold Universal.validateUnder
+  rw [gemmKernelModule_validate, gemmKernelModule_withinProfileLimits]
+  rfl
+
+/-- The compiled kernel declares no import: it is closed. -/
+theorem gemmKernelModule_imports : gemmKernelModule.imports = [] := rfl
+
+/-- The compiled kernel's export list, in full. -/
+theorem gemmKernelModule_exports :
+    gemmKernelModule.exports =
+      [{ name := Wasm.gemmExportName, desc := .func 0 },
+       { name := Wasm.memoryExportName, desc := .mem 0 }] :=
+  GNAF.compile_exports GNAF.gemmKernelChecked
+
+/-- The compiled kernel exports the `gemm` function and the memory, and nothing
+else at all. -/
+theorem gemmKernelModule_hasExactGemmExports :
+    Universal.HasExactGemmExports wasmProfile gemmKernelModule := by
+  have h := gemmKernelModule_validate
+  unfold Wasm.validate at h
+  simp only [Bool.and_eq_true] at h
+  refine ⟨h.1.1.2, h.1.2, ?_⟩
+  intro e he
+  rw [gemmKernelModule_exports] at he
+  simp only [List.mem_cons, List.not_mem_nil, or_false] at he
+  rcases he with rfl | rfl
+  · exact Or.inl rfl
+  · exact Or.inr rfl
+
+/-- **SPEC §10.1.**  The compiled GEMM kernel's bytes are profile valid: they
+decode, the module validates under the profile's limit table, it imports
+nothing, and it carries exactly the two required exports.  Hypothesis-free, on
+a closed literal, and — unlike `Release.witness_profileValid` — on a module
+compiled from a plan that computes a product. -/
+theorem gemmKernel_profileValid : Universal.ProfileValid wasmProfile gemmKernelBytes :=
+  ⟨gemmKernelModule, gemmKernel_decode, gemmKernelModule_validateUnder,
+    gemmKernelModule_imports, gemmKernelModule_hasExactGemmExports⟩
+
+/-- The initial configuration of the compiled kernel at a plain raw
+invocation. -/
+def gemmKernelInitialOf (raw : Wasm.RawInvocation) : Wasm.Config :=
+  GNAF.compiledInitialConfig (GNAF.envOf GNAF.gemmKernelSig GNAF.gemmKernel)
+    (GNAF.bodyCode (GNAF.envOf GNAF.gemmKernelSig GNAF.gemmKernel)
+      GNAF.gemmKernelSig.scratch GNAF.gemmKernel) raw
+
+/-- Initialization of the compiled kernel never faults. -/
+theorem gemmKernel_initialConfig (raw : Wasm.RawInvocation) :
+    Wasm.initialConfig gemmKernelModule raw = .ok (gemmKernelInitialOf raw) :=
+  GNAF.compile_initialConfig GNAF.gemmKernelChecked raw
+
+/-- The initial configuration of the compiled kernel at a GEMM raw
+invocation. -/
+def gemmKernelInitial (raw : Gemm.RawInvocation wasmProfile) : Wasm.Config :=
+  gemmKernelInitialOf (Wasm.rawOfInvocation (Universal.toWasmInvocation raw))
+
+/-- **The kernel's static step bound is strictly inside the released costed step
+budget.**  `GNAF.gemmKernel_stepBound_lt_maxSteps` against
+`(setting seam).problem.maxSteps` itself. -/
+theorem gemmKernel_stepBound_lt_maxSteps :
+    GNAF.gemmKernelChecked.plan.stepBound < (setting seam).problem.maxSteps :=
+  GNAF.gemmKernel_stepBound_lt_maxSteps
+
+/-- **The first missing fact.**  Every reduction of the compiled kernel out of
+its initial configuration stays inside the released costed step budget.
+
+This is the termination half of SPEC §11.4's `compile_refines`, and it is
+**not proved anywhere in this repository**: `Plan.steps_le_stepBound` bounds the
+GNAF interpreter `Plan.eval`, `GNAF.compile_resources` bounds the emitted
+module's static instruction count, and no theorem relates either to the length
+of a `Wasm.Reduces` sequence.  Proving it needs a simulation between `Wasm.Step`
+on `GNAF.bodyCode` and `Plan.eval`, or at least a direct Wasm-level trip-count
+argument for every `countLoopVar` the compiler emits — the counter local is
+incremented by one per iteration and compared unsigned against an extent local
+that the loop body never writes, so the argument exists in outline and is simply
+not mechanized here.
+
+The bound is stated against the budget rather than against
+`Plan.stepBound` on purpose: one plan node compiles to several Wasm
+instructions, so a Wasm trace is *not* bounded by the plan's step count, and a
+hypothesis that said so could be false and would make everything below vacuous.
+`Release.gemmKernelReducesBounded_of_stepBound_multiple` records exactly how
+much slack there is.  It appears below only as an explicit hypothesis. -/
+def GemmKernelReducesBounded : Prop :=
+  ∀ (raw : Gemm.RawInvocation wasmProfile) {tr : List Wasm.Event} {f : Wasm.Config},
+    Wasm.Reduces (gemmKernelInitial raw) tr f →
+      tr.length ≤ (setting seam).problem.maxSteps
+
+/-- **The second missing fact.**  Some branch of the compiled kernel reaches a
+*terminal* configuration inside the same budget.
+
+`Wasm.observationOfConfig` is `none` on a running configuration, so a
+stuck-but-running configuration produces no observation at all and the costed
+frontier would be empty.  Excluding that is `Wasm.validation_progress`, listed
+OUTSTANDING under `O-6` in `Theorems/Status.lean`; it appears below only as an
+explicit hypothesis. -/
+def GemmKernelReachesTerminal : Prop :=
+  ∀ raw : Gemm.RawInvocation wasmProfile,
+    ∃ (tr : List Wasm.Event) (f : Wasm.Config) (o : Wasm.ExecutionObservation),
+      Wasm.Reduces (gemmKernelInitial raw) tr f ∧
+        tr.length ≤ (setting seam).problem.maxSteps ∧
+        Wasm.observationOfConfig tr f = some o
+
+/-- **How much slack the plan's step bound leaves.**  A Wasm-level bound of
+*any* fixed multiple `K ≤ 2 ^ 220` of the plan's static step bound already
+implies `Release.GemmKernelReducesBounded`: the plan bound is about `2 ^ 99`
+(`GNAF.gemmKernel_stepBound_eq`) and the released budget is `2 ^ 320`.  So what
+is missing is the qualitative fact that the compiled loops terminate at all, and
+not headroom in the budget — which is why weakening the budget would be the
+wrong repair. -/
+theorem gemmKernelReducesBounded_of_stepBound_multiple (K : Nat) (hK : K ≤ 2 ^ 220)
+    (h : ∀ (raw : Gemm.RawInvocation wasmProfile) {tr : List Wasm.Event}
+      {f : Wasm.Config}, Wasm.Reduces (gemmKernelInitial raw) tr f →
+        tr.length ≤ K * GNAF.gemmKernelChecked.plan.stepBound) :
+    GemmKernelReducesBounded := by
+  intro raw tr f hred
+  refine Nat.le_trans (h raw hred) ?_
+  show K * GNAF.gemmKernelChecked.plan.stepBound ≤ 2 ^ 320
+  exact Nat.le_trans (Nat.mul_le_mul hK (Nat.le_refl _)) (by decide)
+
+/-! ### 5.13.1 Generic bridges from a reduction bound to the explorer
+
+These three are the general form of the ad-hoc unfoldings §5.10 performs on the
+three-step witness module.  They are proved here, without hypotheses about any
+particular module: a length bound on every reduction kills every still-running
+prefix, one terminal branch makes the tree nonempty, and a length bound rules
+out divergence. -/
+
+/-- **A bound on every reduction length empties the still-running prefixes.**
+If no reduction out of `c` is longer than `N` and the fuel exceeds `N`, then
+`Wasm.prefixes` reports nothing: no branch is still running at the horizon. -/
+theorem prefixes_eq_nil_of_reduces_bound {c : Wasm.Config} {N fuel : Nat}
+    (hlt : N < fuel)
+    (hb : ∀ {tr : List Wasm.Event} {f : Wasm.Config},
+      Wasm.Reduces c tr f → tr.length ≤ N) :
+    Wasm.prefixes fuel [] c = [] := by
+  cases hp : Wasm.prefixes fuel [] c with
+  | nil => rfl
+  | cons t ts =>
+      exfalso
+      have hm : t ∈ Wasm.prefixes fuel [] c := by rw [hp]; exact List.mem_cons_self
+      obtain ⟨suffix, final, ht, hred, -⟩ := Wasm.prefixes_sound fuel [] c t hm
+      have hlen := Wasm.prefixes_length fuel [] c t hm
+      rw [ht] at hlen
+      simp only [List.nil_append, List.length_nil, Nat.zero_add] at hlen
+      have := hb hred
+      omega
+
+/-- **One terminal branch makes the explored tree nonempty.** -/
+theorem exploreTree_ne_nil_of_reduces_terminal {c f : Wasm.Config}
+    {tr : List Wasm.Event} {o : Wasm.ExecutionObservation} {fuel : Nat}
+    (hred : Wasm.Reduces c tr f) (hobs : Wasm.observationOfConfig tr f = some o)
+    (hlen : tr.length ≤ fuel) : Wasm.exploreTree fuel [] c ≠ [] := by
+  have hm : o ∈ Wasm.exploreTree fuel [] c :=
+    Wasm.exploreTree_complete fuel [] tr c f o hred (by simpa using hobs) hlen
+  intro h
+  rw [h] at hm
+  simp at hm
+
+/-- An infinite step stream contains reductions of every length. -/
+theorem reduces_of_stream (events : Nat → Wasm.Event) (configs : Nat → Wasm.Config)
+    (hstep : ∀ i, Wasm.Step (configs i) (events i) (configs (i + 1))) :
+    ∀ (n k : Nat), ∃ tr : List Wasm.Event,
+      tr.length = n ∧ Wasm.Reduces (configs k) tr (configs (k + n)) := by
+  intro n
+  induction n with
+  | zero => intro k; exact ⟨[], rfl, Wasm.Reduces.refl (configs k)⟩
+  | succ m ih =>
+      intro k
+      obtain ⟨tr, hlen, hred⟩ := ih (k + 1)
+      have hk : k + 1 + m = k + (m + 1) := by omega
+      rw [hk] at hred
+      exact ⟨events k :: tr, by simp [hlen], .cons (hstep k) hred⟩
+
+/-! ### 5.13.2 The costed machine on the compiled kernel, modulo those two facts -/
+
+/-- Under the reduction bound, the compiled kernel never diverges. -/
+theorem gemmKernel_not_diverges (h₁ : GemmKernelReducesBounded)
+    (raw : Gemm.RawInvocation wasmProfile)
+    (events : Nat → Wasm.Event) (configs : Nat → Wasm.Config)
+    (starts : configs 0 = gemmKernelInitial raw)
+    (hstep : ∀ i, Wasm.Step (configs i) (events i) (configs (i + 1))) : False := by
+  obtain ⟨tr, hlen, hred⟩ :=
+    reduces_of_stream events configs hstep ((setting seam).problem.maxSteps + 1) 0
+  rw [starts] at hred
+  have := h₁ raw hred
+  omega
+
+/-- Under the reduction bound, every finite execution of the compiled kernel has
+a trace inside the released costed step budget. -/
+theorem gemmKernel_finiteExecution_length (h₁ : GemmKernelReducesBounded)
+    (raw : Gemm.RawInvocation wasmProfile) {o : Wasm.ExecutionObservation}
+    (h : Wasm.FiniteExecution (gemmKernelInitial raw) o) :
+    o.trace.length ≤ (setting seam).problem.maxSteps := by
+  obtain ⟨final, hred, -⟩ := h
+  exact h₁ raw hred
+
+/-- Under the reduction bound, no branch of the compiled kernel is still running
+at the released horizon. -/
+theorem gemmKernel_prefixes_head_none (h₁ : GemmKernelReducesBounded)
+    (raw : Gemm.RawInvocation wasmProfile) :
+    (Wasm.prefixes ((setting seam).problem.maxSteps + 1) []
+      (gemmKernelInitial raw)).head? = none := by
+  rw [prefixes_eq_nil_of_reduces_bound (Nat.lt_succ_self _) (h₁ raw)]
+  rfl
+
+/-- Under the terminal-branch fact, the compiled kernel produces at least one
+observation. -/
+theorem gemmKernel_exploreTree_ne_nil (h₂ : GemmKernelReachesTerminal)
+    (raw : Gemm.RawInvocation wasmProfile) :
+    Wasm.exploreTree ((setting seam).problem.maxSteps + 1) []
+      (gemmKernelInitial raw) ≠ [] := by
+  obtain ⟨tr, f, o, hred, hlen, hobs⟩ := h₂ raw
+  exact exploreTree_ne_nil_of_reduces_terminal hred hobs (Nat.le_succ_of_le hlen)
+
+/-- The seam's machine initializes with `Wasm.initialGemmInvocationCosted`: a
+projection equation, so it holds without unfolding either the module or the
+validator. -/
+theorem machine_initialGemmInvocationCosted (m : Wasm.Module)
+    (inv : Wasm.Invocation wasmProfile) :
+    (setting seam).machine.initialGemmInvocationCosted m inv =
+      Wasm.initialGemmInvocationCosted m inv := rfl
+
+/-- **Costed initialization succeeds on the compiled kernel**, unconditionally:
+this half needs neither missing fact. -/
+theorem gemmKernel_machine_init (raw : Gemm.RawInvocation wasmProfile) :
+    (setting seam).machine.initialGemmInvocationCosted gemmKernelModule
+        (Universal.toWasmInvocation raw) =
+      .ok { initial := gemmKernelInitial raw,
+            cost := Wasm.initializationCost wasmProfile gemmKernelModule } := by
+  rw [machine_initialGemmInvocationCosted]
+  exact Wasm.initialGemmInvocationCosted_ok (gemmKernel_initialConfig _)
+
+/-- **The costed explorer completes with a nonempty frontier on the compiled
+kernel**, on every raw invocation — given the two facts of §5.13. -/
+theorem gemmKernel_machine_explore (h₁ : GemmKernelReducesBounded)
+    (h₂ : GemmKernelReachesTerminal) (raw : Gemm.RawInvocation wasmProfile) :
+    ∃ (frontier : Foundation.NonemptyCanonicalFrontier
+          (Universal.CostedExecutionObservation (setting seam).semantics
+            (gemmKernelInitial raw)))
+      (coverage : Universal.CostedCoverage (setting seam).semantics
+          (setting seam).problem.maxSteps (gemmKernelInitial raw) frontier),
+      (setting seam).machine.exploreAllCosted (setting seam).problem.maxSteps
+          (gemmKernelInitial raw) = .complete frontier coverage :=
+  Wasm.exploreAllCosted_complete_of_exploreTree_ne_nil semantics
+    (setting seam).problem.maxSteps (gemmKernelInitial raw)
+    (gemmKernel_prefixes_head_none h₁ raw) (gemmKernel_exploreTree_ne_nil h₂ raw)
+
+/-- **BI-006, conditional form.**  On the module compiled from `GNAF.gemmKernel`
+— a module that really computes a product — the costed machine initializes and
+returns a completed, nonempty, canonically ordered costed frontier at every raw
+invocation, **given** the two facts §5.13 names and does not prove.
+
+The unconditional statement is not available: see `GemmKernelReducesBounded` and
+`GemmKernelReachesTerminal` for exactly what is missing.  The unconditional
+`Release.seam_machine_completes` remains the one on `Release.witnessModule`. -/
+theorem gemmKernel_machine_completes_of (h₁ : GemmKernelReducesBounded)
+    (h₂ : GemmKernelReachesTerminal) (raw : Gemm.RawInvocation wasmProfile) :
+    seam.machine.initialGemmInvocationCosted gemmKernelModule
+        (Universal.toWasmInvocation raw) =
+      .ok { initial := gemmKernelInitial raw,
+            cost := Wasm.initializationCost wasmProfile gemmKernelModule } ∧
+    ∃ (frontier : Foundation.NonemptyCanonicalFrontier
+          (Universal.CostedExecutionObservation semantics (gemmKernelInitial raw)))
+      (coverage : Universal.CostedCoverage semantics
+          (setting seam).problem.maxSteps (gemmKernelInitial raw) frontier),
+      seam.machine.exploreAllCosted (setting seam).problem.maxSteps
+          (gemmKernelInitial raw) = .complete frontier coverage :=
+  ⟨gemmKernel_machine_init raw, gemmKernel_machine_explore h₁ h₂ raw⟩
+
+theorem gemmKernel_not_nonterminal (h₁ : GemmKernelReducesBounded)
+    (h₂ : GemmKernelReachesTerminal) (raw : Gemm.RawInvocation wasmProfile)
+    (overrun : Universal.NonterminalPrefix (gemmKernelInitial raw)
+      ((setting seam).problem.maxSteps + 1)) :
+    (setting seam).machine.exploreAllCosted (setting seam).problem.maxSteps
+        (gemmKernelInitial raw) ≠ .nonterminalPrefix overrun := by
+  obtain ⟨f, c, h⟩ := gemmKernel_machine_explore h₁ h₂ raw
+  rw [h]
+  intro hh
+  simp at hh
+
+theorem gemmKernel_not_initializationFailure (h₁ : GemmKernelReducesBounded)
+    (h₂ : GemmKernelReachesTerminal) (raw : Gemm.RawInvocation wasmProfile)
+    (fault : Wasm.InstantiationFault) :
+    (setting seam).machine.exploreAllCosted (setting seam).problem.maxSteps
+        (gemmKernelInitial raw) ≠ .initializationFailure fault := by
+  obtain ⟨f, c, h⟩ := gemmKernel_machine_explore h₁ h₂ raw
+  rw [h]
+  intro hh
+  simp at hh
+
+/-- The completed exploration of the compiled kernel, as data. -/
+def gemmKernelCompleteWitness (h₁ : GemmKernelReducesBounded)
+    (h₂ : GemmKernelReachesTerminal) (raw : Gemm.RawInvocation wasmProfile) :
+    Σ' (frontier : Foundation.NonemptyCanonicalFrontier
+          (Universal.CostedExecutionObservation (setting seam).semantics
+            (gemmKernelInitial raw)))
+       (coverage : Universal.CostedCoverage (setting seam).semantics
+          (setting seam).problem.maxSteps (gemmKernelInitial raw) frontier),
+      (setting seam).machine.exploreAllCosted (setting seam).problem.maxSteps
+        (gemmKernelInitial raw) = .complete frontier coverage :=
+  completeWitnessOf
+    ((setting seam).machine.exploreAllCosted (setting seam).problem.maxSteps
+      (gemmKernelInitial raw))
+    (gemmKernel_not_nonterminal h₁ h₂ raw) (gemmKernel_not_initializationFailure h₁ h₂ raw)
+
+/-- One `Universal.InputEvaluation` of the compiled kernel. -/
+def gemmKernelInputEvaluationOf (raw : Gemm.RawInvocation wasmProfile)
+    (frontier : Foundation.NonemptyCanonicalFrontier
+      (Universal.CostedExecutionObservation (setting seam).semantics
+        (gemmKernelInitial raw)))
+    (coverage : Universal.CostedCoverage (setting seam).semantics
+      (setting seam).problem.maxSteps (gemmKernelInitial raw) frontier)
+    (h : (setting seam).machine.exploreAllCosted (setting seam).problem.maxSteps
+      (gemmKernelInitial raw) = .complete frontier coverage) :
+    Universal.InputEvaluation (setting seam) gemmKernelModule raw where
+  initial := gemmKernelInitial raw
+  initialization :=
+    { initial := gemmKernelInitial raw
+      cost := Wasm.initializationCost wasmProfile gemmKernelModule }
+  initialConfigEq := rfl
+  initialEq := gemmKernel_machine_init raw
+  observations := frontier
+  treeComplete := ⟨_, h⟩
+  resourceVector :=
+    Cost.sequentialCompose (Wasm.initializationCost wasmProfile gemmKernelModule)
+      (Cost.maxOverCosts (frontier.elements.map (·.cost)))
+  resourceExact := rfl
+
+/-- **SPEC §10.1, `CoversEveryMaximalExecution`** for the compiled kernel: the
+finite executions are inside the bound by `GemmKernelReducesBounded`, and that
+same fact excludes the divergent ones. -/
+theorem gemmKernelInputEvaluationOf_covers (h₁ : GemmKernelReducesBounded)
+    (raw : Gemm.RawInvocation wasmProfile)
+    (frontier : Foundation.NonemptyCanonicalFrontier
+      (Universal.CostedExecutionObservation (setting seam).semantics
+        (gemmKernelInitial raw)))
+    (coverage : Universal.CostedCoverage (setting seam).semantics
+      (setting seam).problem.maxSteps (gemmKernelInitial raw) frontier)
+    (h : (setting seam).machine.exploreAllCosted (setting seam).problem.maxSteps
+      (gemmKernelInitial raw) = .complete frontier coverage) :
+    (gemmKernelInputEvaluationOf raw frontier coverage h).CoversEveryMaximalExecution := by
+  intro execution
+  cases execution with
+  | finite o run maximal =>
+      have hlen : o.trace.length ≤ (setting seam).problem.maxSteps :=
+        gemmKernel_finiteExecution_length h₁ _ run
+      obtain ⟨c, hc, hco⟩ := coverage.2 o run hlen
+      exact ⟨c, hc, hco.symm⟩
+  | diverges events configs starts step =>
+      exact (gemmKernel_not_diverges h₁ _ events configs starts step).elim
+
+/-- The per-input evaluation of the compiled kernel, at every raw invocation. -/
+def gemmKernelPerInput (h₁ : GemmKernelReducesBounded) (h₂ : GemmKernelReachesTerminal)
+    (raw : Gemm.RawInvocation wasmProfile) :
+    Universal.InputEvaluation (setting seam) gemmKernelModule raw :=
+  gemmKernelInputEvaluationOf raw (gemmKernelCompleteWitness h₁ h₂ raw).1
+    (gemmKernelCompleteWitness h₁ h₂ raw).2.1 (gemmKernelCompleteWitness h₁ h₂ raw).2.2
+
+theorem gemmKernelPerInput_covers (h₁ : GemmKernelReducesBounded)
+    (h₂ : GemmKernelReachesTerminal) (raw : Gemm.RawInvocation wasmProfile) :
+    (gemmKernelPerInput h₁ h₂ raw).CoversEveryMaximalExecution :=
+  gemmKernelInputEvaluationOf_covers h₁ raw _ _ _
+
 section Evaluation
 
 variable [Foundation.Fintype (Gemm.RawInvocation wasmProfile)]
@@ -1503,6 +1953,50 @@ theorem globalOptimal_of_witness_semantics
   exists_globalOptimal_of_admissible_evaluation seam
     ⟨witnessBytes, ⟨witness_profileValid, hcorrect, hresources⟩,
       ⟨witnessSystemEvaluation⟩⟩
+
+/-! ### 5.14 The evaluation of the compiled GEMM kernel, modulo §5.13's two facts -/
+
+/-- **SPEC §9.1.**  The complete charged system cost of the compiled kernel's
+bytes, in the same shape as `Release.witnessCost`. -/
+def gemmKernelCost (h₁ : GemmKernelReducesBounded) (h₂ : GemmKernelReachesTerminal) :
+    Cost.CompleteSystemCost where
+  static :=
+    { moduleBytes := gemmKernelBytes.size
+      decodeSteps := wasmProfile.body.costTableBody.decodeCost gemmKernelBytes
+      validationSteps := (setting seam).semantics.validationSteps gemmKernelModule
+      staticDataBytes := (setting seam).semantics.staticDataBytes gemmKernelModule }
+  dynamicSum :=
+    Cost.scale (setting seam).problem.workloadRepetitions
+      (Cost.fullDomainSum (fun raw => (gemmKernelPerInput h₁ h₂ raw).resourceVector))
+  dynamicMax :=
+    Cost.fullDomainMax (fun raw => (gemmKernelPerInput h₁ h₂ raw).resourceVector)
+
+/-- **BI-006, conditional form.**  A `Universal.SystemEvaluation` at the
+constructed seam of the bytes of a module that really computes a product —
+**given** `Release.GemmKernelReducesBounded` and
+`Release.GemmKernelReachesTerminal`, neither of which is proved anywhere in this
+repository (see §5.13 for exactly what each one needs).
+
+The unconditional inhabitant of `Universal.SystemEvaluation` at this seam
+remains `Release.witnessSystemEvaluation`, on the module whose `gemm` returns
+the constant `0`. -/
+def gemmKernelSystemEvaluationOf (h₁ : GemmKernelReducesBounded)
+    (h₂ : GemmKernelReachesTerminal) :
+    Universal.SystemEvaluation (setting seam) gemmKernelBytes where
+  module := gemmKernelModule
+  decodeEq := gemmKernel_decode
+  perInput := gemmKernelPerInput h₁ h₂
+  observationsComplete := gemmKernelPerInput_covers h₁ h₂
+  cost := gemmKernelCost h₁ h₂
+  costExact := ⟨Nat.le_refl 1, gemmKernel_decode, rfl, rfl, rfl, rfl, rfl, rfl⟩
+
+/-- The same fact in existential form: under §5.13's two facts, the *kernel*
+bytes — not just the witness bytes — carry an evaluation at the constructed
+seam. -/
+theorem gemmKernel_systemEvaluation_of (h₁ : GemmKernelReducesBounded)
+    (h₂ : GemmKernelReachesTerminal) :
+    Nonempty (Universal.SystemEvaluation (setting seam) gemmKernelBytes) :=
+  ⟨gemmKernelSystemEvaluationOf h₁ h₂⟩
 
 end Evaluation
 

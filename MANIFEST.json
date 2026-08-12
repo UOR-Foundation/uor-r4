@@ -23,8 +23,8 @@
       },
       {
         "path": ".github/workflows/verify.yml",
-        "sha256": "9f4d92ee1511af7b536332eacacd9ef68d217d051ba549c7b6242a209848a0cd",
-        "bytes": 1644
+        "sha256": "917a48ad3515e8a54f91786f05a8988cffe570c103520e853f16c7a4ef8b14ef",
+        "bytes": 1924
       },
       {
         "path": ".gitignore",
@@ -38,13 +38,13 @@
       },
       {
         "path": "CERTIFICATION.md",
-        "sha256": "10fce15ca15052e6d4555e5e04bb9438cb8ee73b6f9b20c184aeb0dbdd7d914a",
-        "bytes": 23763
+        "sha256": "3d4cf5916d9aaf16f98929ba1f81b2da5fa1f33d221d7ded24a7601cb0ffd93a",
+        "bytes": 26686
       },
       {
         "path": "Justfile",
-        "sha256": "b37d2aaf1cc97263d0d14d36e9b141e7b998e6cf039978f991f8e65ffaa11218",
-        "bytes": 1491
+        "sha256": "3a0c64c0eb34378fc1b5650e36952e71b200f29e485e299a563c5c4b76572b1a",
+        "bytes": 1749
       },
       {
         "path": "LICENSE-APACHE",
@@ -72,6 +72,11 @@
         "bytes": 644
       },
       {
+        "path": "Tools/__pycache__/scan.cpython-312.pyc",
+        "sha256": "c5ed67d60f92fe2f57159c28207f75fc275d678993c33ecf9a3e3e63616a2ea4",
+        "bytes": 4831
+      },
+      {
         "path": "Tools/axioms.py",
         "sha256": "f6b0cf280bdcebc31f427416feb99a0df70903cce43de4ef37ec3474f248a997",
         "bytes": 1291
@@ -83,8 +88,8 @@
       },
       {
         "path": "Tools/gate.py",
-        "sha256": "945ee202598284b98a6a0ea6205b1188c6ee1713dd349c4786a09007adbd9b54",
-        "bytes": 6451
+        "sha256": "8344d647466525a3ee77e56f31fc3dddeea0655d35ede1273e3f7cd0d7a292df",
+        "bytes": 8557
       },
       {
         "path": "Tools/gen_conformance.py",
@@ -98,8 +103,18 @@
       },
       {
         "path": "Tools/mutation.py",
-        "sha256": "8594a1411128ef46ed1a787c1e0d5ce389a56390f7815c4ea0c1fcac63e8e34a",
-        "bytes": 7081
+        "sha256": "6e2be84db4408b3211834f453d0b229beb07d7e789b504f3b793a8a655a35580",
+        "bytes": 7207
+      },
+      {
+        "path": "Tools/releasepath.py",
+        "sha256": "83931d4f15824af12012883dcd91be63d159ecb5307b56ca44ad0782b129b055",
+        "bytes": 1759
+      },
+      {
+        "path": "Tools/required.py",
+        "sha256": "6e23f3fd406cd49b98e222634eaf03457b146951aba385aaf23c0d7108934976",
+        "bytes": 1986
       },
       {
         "path": "Tools/root.py",
@@ -128,8 +143,8 @@
       },
       {
         "path": "WasmGemmGnaf/Artifact/Release.lean",
-        "sha256": "df96ab286b17e08d38ee94229abeb36ef7933e27e9054cc42036ec1dd3a471be",
-        "bytes": 73375
+        "sha256": "bffbfc7d3d0325739bfb2efa08f5b342e2b5a0d425dad72515997a38127d55ac",
+        "bytes": 99783
       },
       {
         "path": "WasmGemmGnaf/Atlas/Attention.lean",
@@ -313,8 +328,8 @@
       },
       {
         "path": "WasmGemmGnaf/GNAF/CompileCorrect.lean",
-        "sha256": "8a2b9a21792c201332ba2e5e8874ada889c9580c4eef620c1afba17d2c076685",
-        "bytes": 84172
+        "sha256": "6327351aefbbe6c11e9430958b2e2e670da0c4e6d368d9cbb8922d36d7b5a081",
+        "bytes": 87106
       },
       {
         "path": "WasmGemmGnaf/GNAF/Edge.lean",
@@ -638,8 +653,8 @@
       },
       {
         "path": "model/claims.json",
-        "sha256": "e7e66910755f87f0ee5a1220edcec20bd9bb0a44b96059dffba772655ff5e550",
-        "bytes": 42177
+        "sha256": "020f557d2b5e93f50289afde6a85cdc5cc223bcc1ee9d4ca786a15b49dff84a3",
+        "bytes": 46083
       },
       {
         "path": "model/dependencies.json",
@@ -668,11 +683,11 @@
       }
     ]
   },
-  "sourceManifestCoreIdentity": "9dabaadede0b79a9dbf65c5e65af0f31bca433a7e215f177f5575efed1684de7",
+  "sourceManifestCoreIdentity": "1182ba490225561dd351443d82e64c9aac4e45db8fcc5c230028b739c4a38ba8",
   "generatedProofInputBody": {
     "schemaVersion": 1,
     "stage": "GeneratedProofInputBody",
-    "sourceManifestCoreIdentity": "9dabaadede0b79a9dbf65c5e65af0f31bca433a7e215f177f5575efed1684de7",
+    "sourceManifestCoreIdentity": "1182ba490225561dd351443d82e64c9aac4e45db8fcc5c230028b739c4a38ba8",
     "excludes": [
       "its own JSON encoding",
       "every later output"
@@ -686,24 +701,24 @@
     ],
     "note": "Artifact/Bytes.lean is NOT present: no artifact has been emitted, because emission requires WS-001 and BI-002. SPEC 13 Phase F step 4 is therefore not reached."
   },
-  "generatedProofInputIdentity": "db9970272d172a97fba0bb125b2110ddebd631b5efd28361c7a4f17fa7185ab8",
+  "generatedProofInputIdentity": "c7bb2148fc01014fc6287dfe7765bf05523ad43d25efce80f399ac34b5230802",
   "preFinalEnvironmentBody": {
     "schemaVersion": 1,
     "stage": "PreFinalEnvironmentBody",
-    "generatedProofInputIdentity": "db9970272d172a97fba0bb125b2110ddebd631b5efd28361c7a4f17fa7185ab8",
+    "generatedProofInputIdentity": "c7bb2148fc01014fc6287dfe7765bf05523ad43d25efce80f399ac34b5230802",
     "leanToolchain": "leanprover/lean4:v4.30.0",
     "leanCommit": "d024af099ca4bf2c86f649261ebf59565dc8c622",
     "dependencies": [],
     "compiledEnvironmentDigest": null,
     "note": "compiledEnvironmentDigest is null: SPEC 13 Phase F step 5 records the checked final declaration-environment digest, which is only meaningful once the final theorem is on the path. GO-001 is outstanding."
   },
-  "preFinalEnvironmentIdentity": "4b0ef8b7d34907bb97274edd573ae54faa65eea8cbb328568a8ba256124d0855",
+  "preFinalEnvironmentIdentity": "29032152c46d1a5708e7bbb1432d57c1e817f2067fcf9460df653cf9ae0d1934",
   "outputManifestBody": {
     "schemaVersion": 1,
     "stage": "OutputManifestBody",
-    "sourceManifestCoreIdentity": "9dabaadede0b79a9dbf65c5e65af0f31bca433a7e215f177f5575efed1684de7",
-    "generatedProofInputIdentity": "db9970272d172a97fba0bb125b2110ddebd631b5efd28361c7a4f17fa7185ab8",
-    "preFinalEnvironmentIdentity": "4b0ef8b7d34907bb97274edd573ae54faa65eea8cbb328568a8ba256124d0855",
+    "sourceManifestCoreIdentity": "1182ba490225561dd351443d82e64c9aac4e45db8fcc5c230028b739c4a38ba8",
+    "generatedProofInputIdentity": "c7bb2148fc01014fc6287dfe7765bf05523ad43d25efce80f399ac34b5230802",
+    "preFinalEnvironmentIdentity": "29032152c46d1a5708e7bbb1432d57c1e817f2067fcf9460df653cf9ae0d1934",
     "excludes": [
       "MANIFEST.json itself"
     ],
@@ -711,12 +726,12 @@
     "atlasSeal": null,
     "proofRegistry": {
       "path": "model/claims.json",
-      "sha256": "e7e66910755f87f0ee5a1220edcec20bd9bb0a44b96059dffba772655ff5e550"
+      "sha256": "020f557d2b5e93f50289afde6a85cdc5cc223bcc1ee9d4ca786a15b49dff84a3"
     },
     "generatedDocumentation": [
       {
         "path": "CONFORMANCE.md",
-        "sha256": "beaaaf21983f6c990fffb31e1a545acddf9b3064fb89c25f1991a22d41f4c4ab"
+        "sha256": "5a321dac0dc631ffa1d2b9d2287af6b943268298f9022ffe98f20ef667dbe14a"
       }
     ],
     "reproducibilityPlan": {

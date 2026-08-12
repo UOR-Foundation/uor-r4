@@ -74,7 +74,9 @@ expect_reject("M5 planted sorry caught by forbidden-construct scan", m5)
 
 # M6: the release gate must not pass while GO-001 is outstanding.
 def m6():
-    r = subprocess.run(["python3", "Tools/gate.py"], capture_output=True, text=True)
+    # --no-mutation prevents the gate from re-entering this suite (mutual recursion).
+    r = subprocess.run(["python3", "Tools/gate.py", "--no-mutation"],
+                       capture_output=True, text=True)
     return r.returncode != 0
 expect_reject("M6 release gate refuses to pass with GO-001 outstanding", m6)
 

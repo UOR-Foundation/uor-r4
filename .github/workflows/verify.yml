@@ -23,7 +23,12 @@ jobs:
           lean --version
           lean --version | grep -q 'd024af099ca4bf2c86f649261ebf59565dc8c622'
       - name: assert authority digests recomputed from content
-        run: sha256sum -c authority/uor-gnaf.sha256
+        run: |
+          set -euo pipefail
+          # The checksum file names the authority without a directory prefix, so
+          # it must be checked from inside authority/. Running it from the repo
+          # root silently failed the whole workflow before `lake build`.
+          cd authority && sha256sum -c uor-gnaf.sha256
       - name: build
         run: lake build
       - name: forbidden-construct scan (SPEC 19, defence in depth)

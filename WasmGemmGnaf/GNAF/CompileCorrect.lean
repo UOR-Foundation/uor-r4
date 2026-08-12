@@ -1665,4 +1665,56 @@ theorem gemmKernel_eval_conforms (m : Machine) (hm : m.Conforms gemmKernelSig) :
     (gemmKernel.eval m).Conforms gemmKernelOutSig :=
   hasType_preservation gemmKernel_typed m hm
 
+/-! ### The kernel's static step bound (BI-006, step 1)
+
+`Plan.loopReg` reads its trip count out of a register, so its *executed* step
+count is a function of the input; `GNAF/Plan.lean` clamps the executed trip
+count at `loopRegMaxTrips = 2 ^ 32 - 1` and charges `loopRegMaxTrips`
+iterations of the body to the loop, and `Plan.steps_le_stepBound` proves that
+the executed count of *any* plan on *any* configuration is under the resulting
+static number.  For `gemmKernel` — three nested `loopReg` loops — that number is
+therefore finite even though nothing in the plan text names an extent, and this
+section computes it and compares it against the released step budget of SPEC
+§8.3, `2 ^ 320`.
+
+**The exact reach of what follows.**  `Plan.steps` counts steps of the *GNAF*
+machine of `GNAF/Semantics.lean` — the interpreter `Plan.eval` — and of nothing
+else.  These theorems say nothing whatever about the number of *Wasm* reduction
+steps the compiled module `compile gemmKernelChecked` takes: relating the two is
+the refinement obligation this file's header lists as omitted, and it is still
+omitted.  `compile_resources` does not supply it either; it bounds the emitted
+module's static instruction *count*, and explicitly not its execution.  See
+`Release.GemmKernelReducesBounded` in `Artifact/Release.lean` for the exact
+statement that is missing. -/
+
+/-- The kernel's static step bound, as a literal.  Three nested `loopReg` loops
+at the released `i32` ceiling: about `2 ^ 99`. -/
+theorem gemmKernel_stepBound_eq :
+    gemmKernelChecked.plan.stepBound = 792281624699921518248014643209 := rfl
+
+/-- **BI-006, step 1.**  The kernel's static step bound is inside the released
+costed step budget of SPEC §8.3, with about `2 ^ 220` to spare.  This is a
+statement about `Plan.stepBound`, a number computed from the plan text; see the
+section header for what it does *not* say. -/
+theorem gemmKernel_stepBound_le_maxSteps :
+    gemmKernelChecked.plan.stepBound ≤ 2 ^ 320 := by decide
+
+/-- The strict form, which is what a fuel argument at `2 ^ 320` needs. -/
+theorem gemmKernel_stepBound_lt_maxSteps :
+    gemmKernelChecked.plan.stepBound < 2 ^ 320 := by decide
+
+/-- **Every GNAF evaluation of the kernel is inside the released step budget.**
+On *every* configuration — every descriptor, every extent the header can
+declare — the kernel's executed `Plan.steps` count is at most `2 ^ 320`.  This
+is `Plan.steps_le_stepBound` instantiated at the kernel; it is about
+`Plan.eval`, not about the emitted Wasm. -/
+theorem gemmKernel_steps_le_maxSteps (m : Machine) :
+    gemmKernel.steps m ≤ 2 ^ 320 :=
+  Nat.le_trans (Plan.steps_le_stepBound gemmKernel m) gemmKernel_stepBound_le_maxSteps
+
+/-- The kernel's whole certified cost — not just its step coordinate — is inside
+the released step budget as well. -/
+theorem gemmKernel_certifiedCost_le_maxSteps :
+    gemmKernelChecked.plan.certifiedCost ≤ 2 ^ 320 := by decide
+
 end WasmGemmGnaf.GNAF

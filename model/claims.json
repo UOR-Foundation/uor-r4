@@ -371,7 +371,7 @@
       "specSection": "13",
       "status": "discharged",
       "releaseApplicable": true,
-      "note": "SPEC 13 Phase D. The optimality HALF of the release theorem is now discharged. Because the artifact is defined as the selection, the lower bound falls out of the argmin construction rather than needing an analytic certificate: scores are naturals so a nonempty admissible set has a least score; minimizers satisfy moduleBytes <= score by coordinate_le_score hence are bounded-length and finite; a finite nonempty set under the total order CanonicalBytesLE has a canonical-least element. What remains is an EXHIBITION problem, not a lower-bound problem. Correct and Feasible were NOT assumed: correct_of_admissible and feasible_of_admissible are proved from the three extensional predicates, because every recorded CostedExecutionObservation carries a FiniteExecution proof and both branch costs are pinned to Cost.traceCost by costExact. GO-004 carries one hypothesis, UV-003.",
+      "note": "SPEC 13 Phase D. The optimality HALF of the release theorem is now discharged. Because the artifact is defined as the selection, the lower bound falls out of the argmin construction rather than needing an analytic certificate: scores are naturals so a nonempty admissible set has a least score; minimizers satisfy moduleBytes <= score by coordinate_le_score hence are bounded-length and finite; a finite nonempty set under the total order CanonicalBytesLE has a canonical-least element. What remains is an EXHIBITION problem, not a lower-bound problem. Correct and Feasible were NOT assumed: correct_of_admissible and feasible_of_admissible are proved from the three extensional predicates, because every recorded CostedExecutionObservation carries a FiniteExecution proof and both branch costs are pinned to Cost.traceCost by costExact. GO-004 carries one hypothesis, UV-003. AUDIT NOTE: the release instantiation routes through Release.decider, which is noncomputable (see UV-003, reopened). Universal.exists_globalOptimal_of_nonempty itself is decider-agnostic and stands; the RELEASE-scope corollary does not, until a computable evaluator exists.",
       "hypotheses": [
         "UV-003 (DeciderAnswersAdmissible)",
         "GO-006 (nonemptiness)"
@@ -475,18 +475,18 @@
     },
     {
       "id": "UV-003",
-      "level": "formalProof",
+      "level": "open",
       "statement": "The concrete release Decider satisfies DeciderAnswersAdmissible: it returns a completed evaluation on every admissible byte sequence that has one. This is SPEC 10.1's system_evaluation_rel_complete.",
-      "leanDeclaration": "WasmGemmGnaf.Release.deciderAnswersAdmissible",
+      "leanDeclaration": null,
       "sourceModule": "WasmGemmGnaf/Artifact/Release.lean",
       "specSection": "10.1",
-      "status": "discharged",
+      "status": "outstanding",
       "obligation": "O-6",
       "releaseApplicable": true,
       "dependsOn": [
         "WS-001"
       ],
-      "note": "Discharges the decider hypothesis of GO-004 at the release scope. TRADEOFF, stated in the file: the decider is noncomputable, so it satisfies SPEC 1's three stated requirements on the RELATION (sound / complete / functional) -- which is what GlobalOptimal consumes -- but it is not SPEC 10.1's 'implemented finite decoder, validator, input enumerator and all-branch explorer'. It names no executable procedure and emits no artifact.",
+      "note": "REOPENED after external audit. It was promoted on Release.decider, which is `noncomputable` and built from Release.evaluateClassically: that function ASSUMES Nonempty (SystemEvaluation ...) and then extracts a witness with Classical.choice. It decodes, validates, enumerates and executes nothing. SPEC 19 excludes noncomputable definitions from the product/proof path and SPEC 6.3 requires executable proof-producing functions to be computable, so this is not a conforming discharge. Correspondingly the completeness theorem takes an existing evaluation as an argument rather than proving one exists. Tools/releasepath.py now fails on it.",
       "axioms": [
         "propext",
         "Classical.choice",
@@ -555,7 +555,7 @@
       "dependsOn": [
         "WS-001"
       ],
-      "note": "Named by the seam work as the exact reason the costed machine could NOT be discharged on the real GEMM baseline: it needs a termination argument for GNAF.bodyCode's compiled loops, which the repository does not have and which no amount of `decide` supplies at that fuel. Release.witnessModule is the smallest GNAF.moduleOf output (correct shape, correct ABI, body `i32.const 0`) and is used ONLY to witness that the costed machine completes. Its own doc states it computes no product."
+      "note": "Named by the seam work as the exact reason the costed machine could NOT be discharged on the real GEMM baseline: it needs a termination argument for GNAF.bodyCode's compiled loops, which the repository does not have and which no amount of `decide` supplies at that fuel. Release.witnessModule is the smallest GNAF.moduleOf output (correct shape, correct ABI, body `i32.const 0`) and is used ONLY to witness that the costed machine completes. Its own doc states it computes no product. UPDATE (BI-006 revisit): the PLAN-level half is now closed -- Plan.loopReg clamps at loopRegMaxTrips and GNAF.gemmKernel_stepBound_le_maxSteps proves the kernel's static Plan.stepBound (792281624699921518248014643209, about 2^99) is inside 2^320, and GNAF.gemmKernel_steps_le_maxSteps bounds every GNAF evaluation. That says NOTHING about Wasm reduction length: compile_resources bounds emitted code SIZE, not execution. Release section 5.13 now carries the real kernel (Release.gemmKernelModule, gemmKernel_profileValid on a closed literal) and proves the entire machine and evaluation chain -- gemmKernel_machine_completes_of, gemmKernelSystemEvaluationOf -- from exactly two named, unproved propositions: Release.GemmKernelReducesBounded (the termination half of the omitted compile_refines) and Release.GemmKernelReachesTerminal (which is Wasm.validation_progress, OUTSTANDING under O-6). BI-006 stays open because those two are Wasm-execution facts and neither is proved."
     },
     {
       "id": "GO-009",
@@ -608,6 +608,43 @@
       "dependsOn": [
         "BI-007"
       ]
+    },
+    {
+      "id": "CM-004",
+      "level": "buildEvidence",
+      "statement": "CI verifies the exact-SHA build: the authority digest step runs from the directory the checksum file names.",
+      "leanDeclaration": null,
+      "sourceModule": ".github/workflows/verify.yml",
+      "specSection": "20.3",
+      "status": "verified",
+      "releaseApplicable": true,
+      "note": "FIXED after external audit. `sha256sum -c authority/uor-gnaf.sha256` ran from the repo root while the checksum file names UOR-GNAF-v1-draft.2.md WITHOUT a directory prefix, so the step failed and the workflow stopped BEFORE `lake build`. Exact-SHA build and axiom closure had therefore never been established by CI. Now `cd authority && sha256sum -c uor-gnaf.sha256`."
+    },
+    {
+      "id": "CM-005",
+      "level": "buildEvidence",
+      "statement": "The SPEC 15 inventory is derived from SPEC.md and checked against the compiled environment, not from a hand-maintained status field.",
+      "leanDeclaration": null,
+      "sourceModule": "Tools/required.py",
+      "specSection": "15",
+      "status": "verified",
+      "releaseApplicable": true,
+      "note": "ADDED after external audit showed the claims registry materially understated the proof surface: 10 'outstanding' rows against 36 outstanding SPEC 15 declarations. Tools/required.py parses SPEC 15 and queries the compiled environment: 58 required, 22 discharged, 36 outstanding. Gate steps 4, 5, 8 and 9 now test declaration presence instead of reading model/claims.json."
+    },
+    {
+      "id": "WS-003",
+      "level": "open",
+      "statement": "Release.wasmProfile is backed by the completed pinned Core 3.0 semantics rather than the i32 witness profile, and carries SPEC 7.5's Release.wasmCostTableBody.",
+      "leanDeclaration": null,
+      "sourceModule": "WasmGemmGnaf/Artifact/Release.lean",
+      "specSection": "7.2",
+      "status": "outstanding",
+      "obligation": "O-6",
+      "releaseApplicable": true,
+      "dependsOn": [
+        "WS-001"
+      ],
+      "note": "Raised by external audit. `def wasmProfile := Wasm.unitWitnessProfile`, and the cost table is Wasm.canonicalCostTableUnits rather than SPEC 7.5's Release.wasmCostTableBody. The file discloses both, and wasmProfile_body : wasmProfile.body = wasmProfileBody holds by rfl, but the SEMANTICS backing the profile is the i32 subset. So the syntactic 'for all ByteArray' in GlobalOptimal does not yet range over the authority-required Core 3.0 competitor universe."
     }
   ],
   "refutedFramings": [

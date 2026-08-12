@@ -1,6 +1,6 @@
 # Conformance
 
-**Inventory:** 95 Lean modules, 54,358 lines, 3,071 proved theorems.
+**Inventory:** 95 Lean modules, 54,904 lines, 3,103 proved theorems.
 Generated live; prose documents cite this table rather than repeating counts.
 
 Generated from `model/claims.json` by `just docs`. Do not edit by hand.
@@ -45,7 +45,7 @@ words "proved", "theorem", or "globally optimal".
 | `GM-002` | formalProof | discharged | SPEC 8.4 reference obligations: reference_total, valid_reference_nonempty, deterministic_mode_unique, refer... | `WasmGemmGnaf.Gemm.reference_total` |
 | `BI-004` | formalProof | discharged | The GNAF plan language can express writing a computed value into memory. | `WasmGemmGnaf.GNAF.storeReg_reads_back` |
 | `BI-005` | formalProof | discharged | The anti-vacuity GEMM witness WRITES its result: after evaluation the declared C region of gemmWitness hold... | `WasmGemmGnaf.GNAF.gemmWitness_writes_C` |
-| `UV-003` | formalProof | discharged | The concrete release Decider satisfies DeciderAnswersAdmissible: it returns a completed evaluation on every... | `WasmGemmGnaf.Release.deciderAnswersAdmissible` |
+| `UV-003` | open | outstanding | The concrete release Decider satisfies DeciderAnswersAdmissible: it returns a completed evaluation on every... | `—` |
 | `GO-008` | formalProof | discharged | AMENDED: Release.Seam is inhabited by a NON-DEGENERATE seam -- its CostedMachine is the actual all-branch c... | `WasmGemmGnaf.Release.systemEvaluation_inhabited` |
 | `CO-006` | formalProof | discharged | The release cost table contains a row for every pinned Core rule identifier, with exact scalarOps, vectorLa... | `WasmGemmGnaf.Wasm.canonicalCostTable_exact_cover` |
 | `WS-002` | formalProof | discharged | The costed all-branch explorer completes whenever the plain explorer does with a nonempty observation list,... | `WasmGemmGnaf.Wasm.exploreAllCosted_complete_of_nonempty` |
@@ -53,6 +53,9 @@ words "proved", "theorem", or "globally optimal".
 | `GO-009` | open | outstanding | A module that is BOTH evaluable (SystemEvaluation inhabited) AND SemanticCorrect for the release GEMM problem. | `—` |
 | `BI-007` | formalProof | discharged | The GNAF plan language can express input-dependent computation: reading a descriptor field from memory into... | `WasmGemmGnaf.GNAF.gemmKernel_writes_C` |
 | `BI-008` | formalProof | discharged | The GNAF plan language expresses an INPUT-DEPENDENT GEMM: one CheckedPlan, GNAF.gemmKernel, loads m, n and ... | `WasmGemmGnaf.GNAF.gemmKernel_writes_C` |
+| `CM-004` | buildEvidence | verified | CI verifies the exact-SHA build: the authority digest step runs from the directory the checksum file names. | `—` |
+| `CM-005` | buildEvidence | verified | The SPEC 15 inventory is derived from SPEC.md and checked against the compiled environment, not from a hand... | `—` |
+| `WS-003` | open | outstanding | Release.wasmProfile is backed by the completed pinned Core 3.0 semantics rather than the i32 witness profil... | `—` |
 
 ## Axiom closure
 
@@ -80,7 +83,6 @@ Every `formalProof` claim's transitive axioms, from `#print axioms`:
 - `GM-002` — `propext`, `Classical.choice`, `Quot.sound`
 - `BI-004` — `propext`, `Quot.sound`
 - `BI-005` — `propext`, `Quot.sound`
-- `UV-003` — `propext`, `Classical.choice`, `Quot.sound`
 - `GO-008` — `propext`, `Classical.choice`, `Quot.sound`
 - `CO-006` — none
 - `WS-002` — `propext`, `Classical.choice`, `Quot.sound`
@@ -103,7 +105,7 @@ Recorded so they are not silently re-asserted:
 
 ## Outstanding obligations
 
-10 outstanding. Terminal answer for `GO-001`: `WorkloadIncomplete`
+12 outstanding. Terminal answer for `GO-001`: `WorkloadIncomplete`
 (UOR-GNAF v1-draft.2 section 10.9). See `CERTIFICATION.md`.
 
 - `WS-001` (O-6) — Mechanized WebAssembly Core 3.0 semantics (GC, exception handling, fixed SIMD, tail calls) with deco
@@ -114,5 +116,7 @@ Recorded so they are not silently re-asserted:
 - `BI-002` (O-6) — The GNAF compiler can emit a module implementing the FULL released GEMM problem (all four arithmetic
 - `GO-006` (O-6) — NONEMPTINESS: one concrete byte sequence with proofs of ProfileValid, SemanticCorrect and SemanticWi
 - `GO-007` (O-5) — EXHIBITION: the committed release literal equals the byte sequence selected by the argmin.
+- `UV-003` (O-6) — The concrete release Decider satisfies DeciderAnswersAdmissible: it returns a completed evaluation o
 - `BI-006` (O-6) — Every branch of the compiled GEMM baseline terminates within the released 2^320 step bound, so explo
 - `GO-009` (O-6) — A module that is BOTH evaluable (SystemEvaluation inhabited) AND SemanticCorrect for the release GEM
+- `WS-003` (O-6) — Release.wasmProfile is backed by the completed pinned Core 3.0 semantics rather than the i32 witness

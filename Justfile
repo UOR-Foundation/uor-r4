@@ -2,7 +2,7 @@
 default: vv
 
 # The whole gate. Expected to FAIL at step 9 while WGG-GO-1 is outstanding.
-vv: root-check firewall manifest-check build claims axioms
+vv: root-check firewall manifest-check releasepath build required claims axioms
     @python3 Tools/gate.py
 
 bootstrap:
@@ -56,3 +56,11 @@ manifest:
 
 manifest-check:
     @python3 Tools/manifest.py --check
+
+# SPEC 19/6.3: no noncomputable definition on the release path.
+releasepath:
+    @python3 Tools/releasepath.py
+
+# SPEC 15: required declarations, checked against the compiled environment.
+required:
+    @python3 Tools/required.py --list

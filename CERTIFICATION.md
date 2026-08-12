@@ -156,6 +156,54 @@ form; the statement is about `Plan.eval`, not about the emitted Wasm, which is
 the scalar-kind × mode × transpose × layout-class family `BI-002` still records
 as outstanding. Phase B is thus begun, not achieved.
 
+## 2.2 External audit findings (accepted)
+
+An external audit at commit `c44a06d` found the following. All were verified and
+all are accepted; several were missed by this repository's own auditing.
+
+**The inventory materially understated the proof surface.** `model/claims.json`
+showed 10 outstanding rows. SPEC §15 requires 58 declarations, of which **22 are
+discharged and 36 outstanding**. `Tools/required.py` now derives that inventory
+from SPEC.md and queries the *compiled environment*; gate steps 4, 5, 8 and 9 test
+declaration presence instead of reading a status field. A hand-maintained JSON
+status is not evidence.
+
+**CI had never established the exact-SHA build.** `verify.yml` ran
+`sha256sum -c authority/uor-gnaf.sha256` from the repository root, but the
+checksum file names the authority *without* a directory prefix, so the step failed
+and the workflow stopped **before `lake build`**. Neither the build nor the axiom
+closure had been established by CI at any commit. Fixed.
+
+**The decider is noncomputable and its completeness is circular.**
+`Release.evaluateClassically` assumes `Nonempty (SystemEvaluation …)` and extracts
+a witness by `Classical.choice`; `Release.decider` wraps it. It decodes,
+validates, enumerates and executes nothing, and the completeness theorem takes an
+existing evaluation as an *argument* rather than proving one exists. SPEC §19
+excludes noncomputable definitions from the product/proof path. `UV-003` is
+**reopened**, and `Tools/releasepath.py` now fails the gate on it.
+
+**The release profile is the i32 witness profile.** `Release.wasmProfile` is
+`Wasm.unitWitnessProfile`, and its cost table is `canonicalCostTableUnits` rather
+than SPEC §7.5's `Release.wasmCostTableBody`. The syntactic `∀ ByteArray` in
+`GlobalOptimal` therefore does not yet range over the authority-required Core 3.0
+competitor universe. Recorded as `WS-003`.
+
+**The emitter cannot refine the plan.** `Compile.lean`'s `storeReg`/`loadReg`
+clauses bind width as `_` and always emit full-word `storeW`/`loadW`, so the
+emitted code does not respect the declared width `storeReg_reads_back` states.
+The ABI installs raw bytes at the supplied pointer while compilation treats cell
+`i` as an `i32` at absolute address `4*i` with no repacking. Abstract `loopReg`
+snapshots its bound once; emitted code re-reads the extent each test. The shipped
+baseline still compiles `gemmWitnessChecked`, not `gemmKernel`. So every
+`gemmKernel_*` theorem is about `Plan.eval` only, and `compile_refines`,
+`compile_cost_exact` and the termination bound are legitimately open. Recorded as
+`BI-008`.
+
+**Crux delta of the previous commit: zero.** `BI-007` was real progress on the
+abstract plan language, but it closed no executable evaluator, no compiled
+baseline, no universal coverage, no lower bound, no selected artifact and no final
+theorem. That assessment is correct and is recorded here rather than argued with.
+
 ## 3. What is discharged
 
 Kernel-checked under Lean 4.30.0; the live inventory is the first line of
