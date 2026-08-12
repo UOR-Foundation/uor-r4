@@ -13,7 +13,8 @@ represent complete systems, and every item of its list is a constructor here:
 | raw-input classification | `classifyRaw` |
 | shape/layout dispatch | `dispatchLayout` |
 | packing and unpacking | `pack`, `unpack` |
-| loop nests and index maps | `loopNest` (carrying an `IndexMap`) |
+| loop nests and index maps | `loopNest` (fixed extent) and `loopReg` (extent read from a register), both carrying an `IndexMap` |
+| input load | `loadReg` (lift a memory word into a register) |
 | blocking, tiling and traversal order | `tiled` (carrying `Tiling` and `TraversalOrder`) |
 | reductions and arithmetic contracts | `reduce` (carrying an `ArithmeticContract`) |
 | scratch allocation | `allocScratch` |
@@ -181,6 +182,25 @@ structure LoopAxis where
   map : IndexMap
   deriving DecidableEq, Repr, Inhabited
 
+/-- The released static trip limit of a register-driven loop (`Plan.loopReg`).
+
+A `loopReg` node reads its trip count out of a scalar register, so its trip
+count is a function of the *input*, not of the plan text.  A plan language whose
+step bound is a static number therefore cannot admit an unclamped
+register-driven loop: `GNAF/Resource.lean` proves
+`Plan.steps_le_stepBound`, and no fixed natural number bounds
+`m.reg extentReg` over all configurations.  The evaluator of
+`GNAF/Semantics.lean` consequently runs a register-driven loop
+`Nat.min (m.reg extentReg) loopRegMaxTrips` times.
+
+The constant is the released `i32` ceiling, and that is not a coincidence:
+`GNAF/Compile.lean` represents every scalar register as an `i32` local, so a
+register value above `loopRegMaxTrips` has no representation in the released
+profile at all.  The clamp is therefore exactly the point at which the target
+stops being able to express the extent, and it is vacuous on every configuration
+the released ABI can present (`maxRawExtent` is the same number). -/
+def loopRegMaxTrips : Nat := 4294967295
+
 /-- The three GEMM extents a blocked traversal ranges over. -/
 structure Extents where
   m : Nat
@@ -221,8 +241,23 @@ inductive Plan
   computed value — the accumulator of a `reduce` — into the observable store, so
   that "output construction" of SPEC §11.1 has something to construct from. -/
   | storeReg (dst : RegionRef) (map : IndexMap) (width : Nat) (src : Nat)
+  /-- Input load: read `width` little-endian bytes of the memory region `src`,
+  at the address the index map gives under the current loop indices, into scalar
+  register `dst`.  This is the exact dual of `storeReg` — it reuses the same
+  `Machine.storeAddr` addressing — and it is the constructor that lets a plan
+  move a descriptor field (the ABI header's `m`, `n`, `k`) out of the observable
+  store and into the register file, so that a plan can *compute with* its input
+  and not merely branch on it. -/
+  | loadReg (dst : Nat) (src : RegionRef) (map : IndexMap) (width : Nat)
   /-- A loop-nest axis with its index map. -/
   | loopNest (axis : LoopAxis) (body : Plan)
+  /-- A loop whose trip count is read from a register rather than fixed by the
+  plan text: iterate `body` with the counter in `indexReg`, for the number of
+  iterations register `extentReg` holds when the loop is entered (clamped to
+  `loopRegMaxTrips`, which the released `i32` profile can never exceed).  The
+  extent is read *once*, before the loop, so evaluation is the existing
+  `Plan.runLoop` on a natural number and termination stays structural. -/
+  | loopReg (indexReg : Nat) (extentReg : Nat) (map : IndexMap) (body : Plan)
   /-- A blocked traversal in a declared order. -/
   | tiled (order : TraversalOrder) (tiling : Tiling) (extents : Extents) (body : Plan)
   /-- A dot-product reduction under an exact arithmetic contract. -/
@@ -273,7 +308,9 @@ def size : Plan → Nat
   | pack _ _ _ _ => 1
   | unpack _ _ _ _ => 1
   | storeReg _ _ _ _ => 1
+  | loadReg _ _ _ _ => 1
   | loopNest _ body => 1 + body.size
+  | loopReg _ _ _ body => 1 + body.size
   | tiled _ _ _ body => 1 + body.size
   | reduce _ _ _ _ => 1
   | allocScratch _ body => 1 + body.size
@@ -300,7 +337,9 @@ def depth : Plan → Nat
   | pack _ _ _ _ => 0
   | unpack _ _ _ _ => 0
   | storeReg _ _ _ _ => 0
+  | loadReg _ _ _ _ => 0
   | loopNest _ body => 1 + body.depth
+  | loopReg _ _ _ body => 1 + body.depth
   | tiled _ _ _ body => 1 + body.depth
   | reduce _ _ _ _ => 0
   | allocScratch _ body => 1 + body.depth
@@ -334,7 +373,9 @@ theorem depth_lt_size (p : Plan) : p.depth < p.size := by
   | pack _ _ _ _ => simp [depth, size]
   | unpack _ _ _ _ => simp [depth, size]
   | storeReg _ _ _ _ => simp [depth, size]
+  | loadReg _ _ _ _ => simp [depth, size]
   | loopNest _ body ih => simp only [depth, size]; omega
+  | loopReg _ _ _ body ih => simp only [depth, size]; omega
   | tiled _ _ _ body ih => simp only [depth, size]; omega
   | reduce _ _ _ _ => simp [depth, size]
   | allocScratch _ body ih => simp only [depth, size]; omega
@@ -512,7 +553,10 @@ def charges : Plan → Charges
       { Charges.node 3 with
         bytesRead := src.count * width, bytesWritten := src.count * width }
   | storeReg _ _ width _ => { Charges.node 3 with bytesWritten := width }
+  | loadReg _ _ _ width => { Charges.node 3 with bytesRead := width }
   | loopNest axis body => Charges.add (Charges.node 2) (body.charges.iterate axis.extent)
+  | loopReg _ _ _ body =>
+      Charges.add (Charges.node 2) (body.charges.iterate loopRegMaxTrips)
   | tiled _ tiling extents body =>
       Charges.add (Charges.node 3)
         (body.charges.iterate (tiling.totalTiles extents.m extents.n extents.k))
@@ -603,6 +647,7 @@ inductive Sub : Plan → Plan → Prop
   | branchT (co : Cond) (t f : Plan) : Sub t (branch co t f)
   | branchF (co : Cond) (t f : Plan) : Sub f (branch co t f)
   | loopBody (ax : LoopAxis) (b : Plan) : Sub b (loopNest ax b)
+  | loopRegBody (ir er : Nat) (mp : IndexMap) (b : Plan) : Sub b (loopReg ir er mp b)
   | tiledBody (o : TraversalOrder) (ti : Tiling) (ex : Extents) (b : Plan) :
       Sub b (tiled o ti ex b)
   | allocBody (n : Nat) (b : Plan) : Sub b (allocScratch n b)

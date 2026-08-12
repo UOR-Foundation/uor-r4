@@ -116,8 +116,12 @@ def steps : Plan → Machine → Nat
   | pack _ _ _ _, _ => 1
   | unpack _ _ _ _, _ => 1
   | storeReg _ _ _ _, _ => 1
+  | loadReg _ _ _ _, _ => 1
   | loopNest axis body, m =>
       1 + loopSteps body.eval body.steps axis.indexReg axis.extent 0 m
+  | loopReg indexReg extentReg _ body, m =>
+      1 + loopSteps body.eval body.steps indexReg
+        (Nat.min (m.reg extentReg) loopRegMaxTrips) 0 m
   | tiled _ tiling extents body, m =>
       1 + loopSteps body.eval body.steps 0 (tiling.totalTiles extents.m extents.n extents.k) 0 m
   | reduce _ _ lhs rhs, _ => 1 + Nat.min lhs.count rhs.count
@@ -140,6 +144,12 @@ def steps : Plan → Machine → Nat
 theorem steps_loopNest (axis : LoopAxis) (body : Plan) (m : Machine) :
     (loopNest axis body).steps m =
       1 + loopSteps body.eval body.steps axis.indexReg axis.extent 0 m := by
+  simp [steps]
+
+theorem steps_loopReg (ir er : Nat) (map : IndexMap) (body : Plan) (m : Machine) :
+    (loopReg ir er map body).steps m =
+      1 + loopSteps body.eval body.steps ir
+        (Nat.min (m.reg er) loopRegMaxTrips) 0 m := by
   simp [steps]
 
 theorem steps_tiled (o : TraversalOrder) (t : Tiling) (e : Extents) (body : Plan)
@@ -181,6 +191,18 @@ theorem steps_le_stepBound (p : Plan) : ∀ m : Machine, p.steps m ≤ p.stepBou
   | unpack _ _ _ _ => intro m; simp [steps, stepBound, charges, Charges.node, Charges.zero]
   | storeReg _ _ _ _ =>
     intro m; simp [steps, stepBound, charges, Charges.node, Charges.zero]
+  | loadReg _ _ _ _ =>
+    intro m; simp [steps, stepBound, charges, Charges.node, Charges.zero]
+  | loopReg ir er map body ih =>
+    intro m
+    have hloop := loopSteps_le body.eval body.steps ir body.stepBound ih
+      (Nat.min (m.reg er) loopRegMaxTrips) 0 m
+    have hmono : body.stepBound * Nat.min (m.reg er) loopRegMaxTrips ≤
+        body.stepBound * loopRegMaxTrips :=
+      Nat.mul_le_mul_left _ (Nat.min_le_right _ _)
+    simp only [steps_loopReg, stepBound, charges, Charges.add, Charges.node,
+      Charges.zero, Charges.iterate] at *
+    omega
   | loopNest axis body ih =>
     intro m
     have hloop := loopSteps_le body.eval body.steps axis.indexReg body.stepBound ih
@@ -246,11 +268,17 @@ theorem eval_regs_length (p : Plan) : ∀ m : Machine, (p.eval m).regs.length = 
   | pack _ _ _ _ => intro m; rfl
   | unpack _ _ _ _ => intro m; rfl
   | storeReg _ _ _ _ => intro m; rfl
+  | loadReg _ _ _ _ => intro m; simp [eval, Machine.withReg]
   | loopNest axis body ih =>
     intro m
     rw [Plan.eval_loopNest]
     exact runLoop_length_invariant body.eval (fun m => m.regs.length) ih
       (fun m r v => by simp) axis.indexReg axis.extent 0 m
+  | loopReg ir er map body ih =>
+    intro m
+    rw [eval_loopReg]
+    exact runLoop_length_invariant body.eval (fun m => m.regs.length) ih
+      (fun m r v => by simp) ir (Nat.min (m.reg er) loopRegMaxTrips) 0 m
   | tiled o t e body ih =>
     intro m
     rw [Plan.eval_tiled]
@@ -285,11 +313,17 @@ theorem eval_mem_length (p : Plan) : ∀ m : Machine, (p.eval m).mem.length = m.
   | pack _ _ _ _ => intro m; rfl
   | unpack src dst map w => intro m; simp [eval]
   | storeReg dst map w src => intro m; simp [eval]
+  | loadReg dst src map w => intro m; rfl
   | loopNest axis body ih =>
     intro m
     rw [Plan.eval_loopNest]
     exact runLoop_length_invariant body.eval (fun m => m.mem.length) ih
       (fun m r v => rfl) axis.indexReg axis.extent 0 m
+  | loopReg ir er map body ih =>
+    intro m
+    rw [eval_loopReg]
+    exact runLoop_length_invariant body.eval (fun m => m.mem.length) ih
+      (fun m r v => rfl) ir (Nat.min (m.reg er) loopRegMaxTrips) 0 m
   | tiled o t e body ih =>
     intro m
     rw [Plan.eval_tiled]
@@ -363,6 +397,18 @@ theorem eval_scratch_length_le (p : Plan) :
     intro m; simp [eval, scratchBound, charges, Charges.node, Charges.zero]
   | storeReg _ _ _ _ =>
     intro m; simp [eval, scratchBound, charges, Charges.node, Charges.zero]
+  | loadReg _ _ _ _ =>
+    intro m; simp [eval, scratchBound, charges, Charges.node, Charges.zero]
+  | loopReg ir er map body ih =>
+    intro m
+    have hloop := runLoop_scratch_le body.eval body.scratchBound ih ir
+      (Nat.min (m.reg er) loopRegMaxTrips) 0 m
+    have hmono : body.scratchBound * Nat.min (m.reg er) loopRegMaxTrips ≤
+        body.scratchBound * loopRegMaxTrips :=
+      Nat.mul_le_mul_left _ (Nat.min_le_right _ _)
+    simp only [eval_loopReg, scratchBound, charges, Charges.add, Charges.node,
+      Charges.zero, Charges.iterate] at *
+    omega
   | loopNest axis body ih =>
     intro m
     have hloop := runLoop_scratch_le body.eval body.scratchBound ih axis.indexReg

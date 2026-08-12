@@ -1,6 +1,6 @@
 # Conformance
 
-**Inventory:** 95 Lean modules, 52,907 lines, 3,021 proved theorems.
+**Inventory:** 95 Lean modules, 54,358 lines, 3,071 proved theorems.
 Generated live; prose documents cite this table rather than repeating counts.
 
 Generated from `model/claims.json` by `just docs`. Do not edit by hand.
@@ -51,6 +51,8 @@ words "proved", "theorem", or "globally optimal".
 | `WS-002` | formalProof | discharged | The costed all-branch explorer completes whenever the plain explorer does with a nonempty observation list,... | `WasmGemmGnaf.Wasm.exploreAllCosted_complete_of_nonempty` |
 | `BI-006` | open | outstanding | Every branch of the compiled GEMM baseline terminates within the released 2^320 step bound, so exploreAllCo... | `—` |
 | `GO-009` | open | outstanding | A module that is BOTH evaluable (SystemEvaluation inhabited) AND SemanticCorrect for the release GEMM problem. | `—` |
+| `BI-007` | formalProof | discharged | The GNAF plan language can express input-dependent computation: reading a descriptor field from memory into... | `WasmGemmGnaf.GNAF.gemmKernel_writes_C` |
+| `BI-008` | formalProof | discharged | The GNAF plan language expresses an INPUT-DEPENDENT GEMM: one CheckedPlan, GNAF.gemmKernel, loads m, n and ... | `WasmGemmGnaf.GNAF.gemmKernel_writes_C` |
 
 ## Axiom closure
 
@@ -82,6 +84,8 @@ Every `formalProof` claim's transitive axioms, from `#print axioms`:
 - `GO-008` — `propext`, `Classical.choice`, `Quot.sound`
 - `CO-006` — none
 - `WS-002` — `propext`, `Classical.choice`, `Quot.sound`
+- `BI-007` — `propext`, `Quot.sound`
+- `BI-008` — `propext`, `Quot.sound`
 
 Permitted: `propext`, `Quot.sound`, `Classical.choice` (Lean core logical
 axioms, SPEC 4). Any `sorryAx` or project-declared axiom fails the gate.

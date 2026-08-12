@@ -571,6 +571,43 @@
         "BI-002"
       ],
       "note": "The residue of GO-006, stated exactly. Two modules exist and neither is both: Release.witnessModule is evaluable but returns `i32.const 0` and computes no product, so SemanticCorrect is FALSE for it -- which means Release.globalOptimal_of_witness_semantics, though correctly stated and honestly annotated ('conjuncts (b) and (c) are the caller's, and this repository supplies neither'), is a conditional whose antecedent is unsatisfiable at witnessBytes. Artifact.baselineBytes is a real GEMM module with baseline_profileValid proved, but is not known to be evaluable (BI-006). Closing GO-006 needs one module with both properties."
+    },
+    {
+      "id": "BI-007",
+      "level": "formalProof",
+      "statement": "The GNAF plan language can express input-dependent computation: reading a descriptor field from memory into a register, and looping a number of times determined by that register.",
+      "leanDeclaration": "WasmGemmGnaf.GNAF.gemmKernel_writes_C",
+      "sourceModule": "WasmGemmGnaf/GNAF/CompileCorrect.lean",
+      "specSection": "3",
+      "status": "discharged",
+      "obligation": "O-6",
+      "releaseApplicable": true,
+      "note": "DISCHARGED. Plan.loadReg (memory->register, dual to storeReg, sharing its addressing) and Plan.loopReg (extent read once from a register) threaded through all six GNAF files. loopReg_trips_from_memory proves a loadReg followed by a loopReg runs the body exactly as many times as the MEMORY WORD says -- the statement the fixed-extent fragment cannot make. gemmKernel_writes_C is universally quantified over M N K i j. The same plan is proved correct at three different shapes (1x1x1, 2x2x2, 1x3x2 rectangular with k != n), which is the evidence the fixed-extent limitation is gone. A GNAF IndexMap has plan-constant coefficients, so addresses are computed into a register by scalarOp and read through IndexMap.idB -- address arithmetic is data, exactly as the extents are.",
+      "axioms": [
+        "propext",
+        "Quot.sound"
+      ],
+      "scopeLimitation": "Three limits, all stated in the Lean doc comments. (1) THE TRIP COUNT IS CLAMPED. Plan.eval runs a loopReg min(reg extentReg, loopRegMaxTrips) times, with loopRegMaxTrips = 4294967295. A clamp is forced: SPEC 11.2 requires the static bound Plan.steps_le_stepBound, and no fixed natural number bounds an unclamped register-driven loop, so an unclamped constructor would have made that theorem false. The constant is the released i32 ceiling, which is also maxRawExtent, so the clamp is unreachable for any configuration the released ABI can present and for any register value the compiled i32 locals can represent; loopReg_zero, loopReg_succ, loopReg_eq_loopNest and loopReg_trips_from_memory therefore carry the hypothesis n <= loopRegMaxTrips. (2) THE STATIC COST OF A loopReg IS WORST CASE: its charge is the body charge iterated loopRegMaxTrips times, since the plan text no longer knows the trip count. The certified cost of a plan using loopReg is sound but enormous, and no tighter cost claim is made. (3) EXPRESSIVENESS ONLY. This entry closes the language defect; the plan that USES it is BI-008 (GNAF.gemmKernel, an input-dependent GEMM whose i/j/k trip counts are the header's m/n/k, proved correct for arbitrary m,n,k under the bounds stated there, and exhibited on three different shapes). gemmWitness remains the fixed 1x1x1 kernel of BI-003/BI-005 and is unchanged. Everything in both entries is proved of Plan.eval, not of the emitted Wasm (compile_refines remains omitted under BI-002/O-6)."
+    },
+    {
+      "id": "BI-008",
+      "level": "formalProof",
+      "statement": "The GNAF plan language expresses an INPUT-DEPENDENT GEMM: one CheckedPlan, GNAF.gemmKernel, loads m, n and k out of the raw ABI header into registers and runs an i/j/k nest whose every trip count is one of those registers, and after evaluation the declared C region holds the modular-u32 product (A*B)[i,j] for arbitrary m, n, k -- not for one shape fixed by the plan text.",
+      "leanDeclaration": "WasmGemmGnaf.GNAF.gemmKernel_writes_C",
+      "sourceModule": "WasmGemmGnaf/GNAF/CompileCorrect.lean",
+      "specSection": "3",
+      "status": "discharged",
+      "obligation": "O-6",
+      "releaseApplicable": true,
+      "note": "DISCHARGED. gemmKernel classifies the raw header (classifyRaw), dispatches on the layout class (dispatchLayout), LOADS the SPEC 8.3 extents at cells 16..23, 24..31 and 32..39 into registers 3, 4, 5 with Plan.loadReg (gemmKernel_loads_extents), runs three nested Plan.loopReg loops bounded by exactly those registers (gemmKernelNest_trips: the outer trip count IS the header word), accumulates one multiply-accumulate per k iteration, deposits each result into C with Plan.storeReg as a four-cell little-endian u32, sets the success status (gemmKernel_eval_status) and publishes C (gemmKernel_eval_out). Proved: gemmKernel_inReleasedSubset, gemmKernel_usesVector = false, gemmKernel_typed (CheckedPlan gemmKernelSig gemmKernelOutSig), gemmKernel_compiles (Wasm.validate of the compiled module), gemmKernel_no_unreachable, gemmKernel_loads_extents, gemmKernel_writes_C (the claim), gemmKernelCore_frame (nothing outside C is written), gemmKernel_C_is_contract_fold (what lands in C is exactly the fold of ArithmeticContract.step for the modular-u32 contract gemmKernelContract, so the reduction is performed UNDER THE DECLARED CONTRACT of SPEC 8.2), gemmKernel_eval_conforms. The same CheckedPlan is then proved correct on three different descriptors: gemmKernel_writes_C_1x1x1, gemmKernel_writes_C_2x2x2 (all four entries) and gemmKernel_writes_C_1x3x2 (a rectangular shape with k != n, all three entries). Only the descriptor differs between them, which is the evidence that the fixed-extent limitation of BI-003/BI-005 is gone. Because a GNAF IndexMap has plan-text-constant coefficients, no map can address A[i,t] = 256 + 4*(i*k + t) when k is loaded; the kernel therefore computes every element address into register 0 with Plan.scalarOp and reads it through IndexMap.idB, whose storeAddr is base + reg 0. Address arithmetic is data in this plan, exactly as the extents are.",
+      "axioms": [
+        "propext",
+        "Quot.sound"
+      ],
+      "scopeLimitation": "Six limits, all stated in the Lean doc comments. (1) HYPOTHESES, NOT CHECKS. gemmKernel_writes_C is universally quantified over m, n, k and over the entry memory, but assumes: the configuration conforms to gemmKernelSig (14 registers, 1024 memory cells); m.classify = valid and m.layoutClass = rowMajor (the two continuations the kernel body sits in); the header words at 16, 24, 32 are m, n, k; m,n,k <= loopRegMaxTrips (the released i32 ceiling, so this excludes nothing the ABI can present); and m*k <= 64, k*n <= 64, m*n <= 64 so that A, B and C fit their declared 256-cell regions and are therefore disjoint. The plan does not REFUSE a descriptor violating the region bound -- such a descriptor is simply outside the theorem, and Machine.classify does not check it either. (2) alpha AND beta ARE NOT APPLIED: the kernel computes A*B, the alpha=1, beta=0 instance of SPEC 8, exactly as gemmWitness does; it carries no scaling node. (3) THE DECLARED STRIDES ARE NOT CONSULTED: the kernel assumes the packed row-major layout that Machine.layoutClass selects. A descriptor declaring a non-packed row-major view would still enter the kernel and nothing is proved about it. Layout classes other than rowMajor return status unsupported rather than a wrong result. (4) BATCH = 1: the batch axis is not traversed. (5) A CELL IMAGE, NOT THE ABI BYTE IMAGE: as with gemmWitness, the header and element images are the cell-addressed images Machine.byteAt/leWord read; no claim is made that they equal Gemm/ABI.lean's byte image. (6) Plan.eval, NOT WASM: gemmKernel_compiles says the compiled module validates; relating its execution to Plan.eval is compile_refines, still omitted under BI-002/O-6. Also, the static cost of the plan inherits the worst-case loopReg charge recorded under BI-007, so no tight cost claim is made for it.",
+      "dependsOn": [
+        "BI-007"
+      ]
     }
   ],
   "refutedFramings": [

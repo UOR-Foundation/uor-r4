@@ -197,6 +197,21 @@ def countLoop (c n : Nat) (body : List Wasm.Instr) : List Wasm.Instr :=
        ([.localGet c, constI n, geUI, .brIf 1] ++ body ++
         [.localGet c, constI 1, addI, .localSet c, .br 0])]]
 
+/-- The counting loop `for c := 0 while c < !ext do body; c := c + 1`, whose
+bound is the *contents of local `ext`* rather than a constant.  It is
+`countLoop` with the `i32.const n` of the exit test replaced by a `local.get`,
+which is the whole difference between a plan whose trip count is fixed by the
+plan text and a plan whose trip count is fixed by its input.  The extent local
+is read once per test; the body never assigns it, since `Plan.code` gives
+`loopReg` a body that writes only the counter register and the plan's own
+registers. -/
+def countLoopVar (c ext : Nat) (body : List Wasm.Instr) : List Wasm.Instr :=
+  [constI 0, .localSet c,
+   blockE
+     [loopE
+       ([.localGet c, .localGet ext, geUI, .brIf 1] ++ body ++
+        [.localGet c, constI 1, addI, .localSet c, .br 0])]]
+
 /-- Dispatch on a local holding a small tag. -/
 def dispatchOn (t k : Nat) (a b : List Wasm.Instr) : List Wasm.Instr :=
   [.localGet t, constI k, eqI, ifE a b]
@@ -373,7 +388,9 @@ def inReleasedSubset : Plan → Bool
   | pack _ _ _ _ => true
   | unpack _ _ _ _ => true
   | storeReg _ _ _ _ => true
+  | loadReg _ _ _ _ => true
   | loopNest _ body => body.inReleasedSubset
+  | loopReg _ _ _ body => body.inReleasedSubset
   | tiled _ _ _ body => body.inReleasedSubset
   | reduce c _ _ _ => c.releasedB
   | allocScratch _ body => body.inReleasedSubset
@@ -397,7 +414,9 @@ def usesVector : Plan → Bool
   | pack _ _ _ _ => false
   | unpack _ _ _ _ => false
   | storeReg _ _ _ _ => false
+  | loadReg _ _ _ _ => false
   | loopNest _ body => body.usesVector
+  | loopReg _ _ _ body => body.usesVector
   | tiled _ _ _ body => body.usesVector
   | reduce _ _ _ _ => false
   | allocScratch _ body => body.usesVector
@@ -422,7 +441,9 @@ def tableWords : Plan → Nat
   | pack _ _ _ _ => 0
   | unpack _ _ _ _ => 0
   | storeReg _ _ _ _ => 0
+  | loadReg _ _ _ _ => 0
   | loopNest _ body => body.tableWords
+  | loopReg _ _ _ body => body.tableWords
   | tiled _ _ _ body => body.tableWords
   | reduce _ _ _ _ => 0
   | allocScratch _ body => body.tableWords
@@ -445,6 +466,22 @@ admits. -/
     (width src : Nat) :
     (Plan.storeReg dst map width src).inReleasedSubset = true := rfl
 
+/-- **A register load is inside the released subset.**  Its translation is one
+full-width `i32` load on memory 0, a `local.set` and a handful of `i32`
+arithmetic instructions, all of which the released profile of
+`Wasm/Validate.lean` admits. -/
+@[simp] theorem loadReg_inReleasedSubset (dst : Nat) (src : RegionRef)
+    (map : IndexMap) (width : Nat) :
+    (Plan.loadReg dst src map width).inReleasedSubset = true := rfl
+
+/-- **A register-driven loop is inside the released subset exactly when its body
+is.**  The node itself needs only `block`/`loop`/`br_if`, `local.get` and
+`i32` comparison, all of which the released profile admits; it adds no new
+refusal point. -/
+@[simp] theorem loopReg_inReleasedSubset (ir er : Nat) (map : IndexMap)
+    (body : Plan) :
+    (Plan.loopReg ir er map body).inReleasedSubset = body.inReleasedSubset := rfl
+
 /-- A plan typed at a *scalar* interface — one admitting no vector lane at all
 — contains no vector operation.  The `lanes = 0` restriction on `CheckedPlan`
 is therefore exactly a restriction to the plans whose vector fragment the
@@ -464,7 +501,9 @@ theorem hasType_no_vector {s : Sig} {p : Plan} {t : Sig} (h : HasType s p t)
   | pack => rfl
   | unpack => rfl
   | storeReg => rfl
+  | loadReg => rfl
   | loopNest _ _ ih => exact ih hl
+  | loopReg _ _ _ ih => exact ih hl
   | tiled _ _ ih => exact ih hl
   | reduce => rfl
   | allocScratch _ ih => exact ih hl
@@ -518,9 +557,19 @@ def code (e : CompileEnv) : Nat → Nat → Plan → List Wasm.Instr
        .localGet (e.regLocal 1), constI (4 * map.ci), mulI, addI,
        .localGet (e.regLocal 2), constI (4 * map.cj), mulI, addI,
        .localGet (e.regLocal src), storeW]
+  | _, _, .loadReg dst src map _ =>
+      [constI (e.memAddr (src.base + map.c0)),
+       .localGet (e.regLocal 0), constI (4 * map.cb), mulI, addI,
+       .localGet (e.regLocal 1), constI (4 * map.ci), mulI, addI,
+       .localGet (e.regLocal 2), constI (4 * map.cj), mulI, addI,
+       loadW, .localSet (e.regLocal dst)]
   | d, scr, .loopNest axis body =>
       countLoop (e.tempLocal d) axis.extent
         ([.localGet (e.tempLocal d), .localSet (e.regLocal axis.indexReg)] ++
+         code e (d + 1) scr body)
+  | d, scr, .loopReg ir er _ body =>
+      countLoopVar (e.tempLocal d) (e.regLocal er)
+        ([.localGet (e.tempLocal d), .localSet (e.regLocal ir)] ++
          code e (d + 1) scr body)
   | d, scr, .tiled _ tiling extents body =>
       countLoop (e.tempLocal d) (tiling.totalTiles extents.m extents.n extents.k)
@@ -715,6 +764,20 @@ theorem checkList_countLoop (C : Wasm.Ctx) (h c n : Nat) (body : List Wasm.Instr
   rw [List.append_assoc]
   refine checkList_app2 (k := h) (b := body ++ _) ?_ ?_
   · simp [Wasm.checkInstr, constI, geUI, hc]
+  · refine checkList_app2 hbody ?_
+    simp [Wasm.checkInstr, constI, addI, Wasm.SubsetIBinOp, hc]
+
+/-- The register-bounded counting loop is operand-stack neutral. -/
+theorem checkList_countLoopVar (C : Wasm.Ctx) (h c ext : Nat) (body : List Wasm.Instr)
+    (hc : c < C.numLocals) (hext : ext < C.numLocals)
+    (hbody : checkList (pushLabel (pushLabel C h) h) h body = some h) :
+    checkList C h (countLoopVar c ext body) = some h := by
+  refine checkList_app2 (checkList_setConst C h c 0 hc) ?_
+  refine checkList_blockE C h _ ?_
+  refine checkList_loopE _ h _ ?_
+  rw [List.append_assoc]
+  refine checkList_app2 (k := h) (b := body ++ _) ?_ ?_
+  · simp [Wasm.checkInstr, geUI, hc, hext]
   · refine checkList_app2 hbody ?_
     simp [Wasm.checkInstr, constI, addI, Wasm.SubsetIBinOp, hc]
 
@@ -952,6 +1015,29 @@ theorem checkList_code {s : Sig} {p : Plan} {t : Sig} (hp : HasType s p t) :
     have hv : e.regLocal src < C.numLocals := by unfold CompileEnv.regLocal; omega
     simp [Wasm.checkInstr, constI, mulI, addI, storeW, memArg, Wasm.SubsetIBinOp,
       h0, h1, h2, hv]
+  | @loadReg s dst src map w _ _ hdst hregs =>
+    intro e d scr C h hreg hloc
+    simp only [Plan.depth] at hloc
+    simp only [code]
+    have h0 : e.regLocal 0 < C.numLocals := by unfold CompileEnv.regLocal; omega
+    have h1 : e.regLocal 1 < C.numLocals := by unfold CompileEnv.regLocal; omega
+    have h2 : e.regLocal 2 < C.numLocals := by unfold CompileEnv.regLocal; omega
+    have hv : e.regLocal dst < C.numLocals := by unfold CompileEnv.regLocal; omega
+    simp [Wasm.checkInstr, constI, mulI, addI, loadW, memArg, Wasm.SubsetIBinOp,
+      h0, h1, h2, hv]
+  | @loopReg s ir er map body hir her _ ih =>
+    intro e d scr C h hreg hloc
+    simp only [Plan.depth] at hloc
+    simp only [code]
+    have hT : e.tempLocal d < C.numLocals := by unfold CompileEnv.tempLocal; omega
+    have hI : e.regLocal ir < C.numLocals := by unfold CompileEnv.regLocal; omega
+    have hE : e.regLocal er < C.numLocals := by unfold CompileEnv.regLocal; omega
+    refine checkList_countLoopVar C h _ _ _ hT hE ?_
+    refine checkList_app2
+      (a := [Wasm.Instr.localGet (e.tempLocal d),
+             Wasm.Instr.localSet (e.regLocal ir)]) ?_
+      (ih e (d + 1) scr _ h hreg (by simp only [pushLabel_numLocals]; omega))
+    simp [Wasm.checkInstr, hT, hI]
   | @loopNest s axis body hix _ ih =>
     intro e d scr C h hreg hloc
     simp only [Plan.depth] at hloc
@@ -1273,6 +1359,11 @@ theorem listSize_countLoop (c n : Nat) (body : List Wasm.Instr) :
   simp [countLoop, listSize, constI, geUI, addI]
   omega
 
+theorem listSize_countLoopVar (c ext : Nat) (body : List Wasm.Instr) :
+    listSize (countLoopVar c ext body) = 13 + listSize body := by
+  simp [countLoopVar, listSize, constI, geUI, addI]
+  omega
+
 theorem listSize_dispatchOn (t k : Nat) (a b : List Wasm.Instr) :
     listSize (dispatchOn t k a b) = 4 + listSize a + listSize b := by
   simp [dispatchOn, listSize, constI, eqI]
@@ -1421,6 +1512,17 @@ theorem listSize_code (e : CompileEnv) :
   | storeReg dst map w src =>
     simp [code, listSize, constI, mulI, addI, storeW, Plan.codeBudget, Plan.charges,
       Charges.node, Charges.zero]
+  | loadReg dst src map w =>
+    simp [code, listSize, constI, mulI, addI, loadW, Plan.codeBudget, Plan.charges,
+      Charges.node, Charges.zero]
+  | loopReg ir er mp body ih =>
+    have h1 := ih (d + 1) scr
+    simp only [code, listSize_countLoopVar, listSize_append, Plan.codeBudget, Plan.charges,
+      charges_add_moduleBytes, charges_add_dataBytes, charges_node_moduleBytes,
+      charges_node_dataBytes, Charges.iterate_moduleBytes,
+      charges_iterate_dataBytes, instrSize_localGet, instrSize_localSet] at *
+    simp only [listSize, instrSize_localGet, instrSize_localSet] at *
+    omega
   | loopNest axis body ih =>
     have h1 := ih (d + 1) scr
     simp only [code, listSize_countLoop, listSize_append, Plan.codeBudget, Plan.charges,
@@ -1561,6 +1663,10 @@ theorem listHasUnreachable_countLoop (c n : Nat) (body : List Wasm.Instr) :
     listHasUnreachable (countLoop c n body) = listHasUnreachable body := by
   simp [countLoop, listHasUnreachable, constI, geUI, addI]
 
+theorem listHasUnreachable_countLoopVar (c ext : Nat) (body : List Wasm.Instr) :
+    listHasUnreachable (countLoopVar c ext body) = listHasUnreachable body := by
+  simp [countLoopVar, listHasUnreachable, constI, geUI, addI]
+
 theorem listHasUnreachable_dispatchOn (t k : Nat) (a b : List Wasm.Instr) :
     listHasUnreachable (dispatchOn t k a b) =
       (listHasUnreachable a || listHasUnreachable b) := by
@@ -1679,6 +1785,12 @@ theorem code_no_unreachable (e : CompileEnv) :
   | storeReg dst map w src =>
     intro _
     simp [code, listHasUnreachable, constI, mulI, addI, storeW]
+  | loadReg dst src map w =>
+    intro _
+    simp [code, listHasUnreachable, constI, mulI, addI, loadW]
+  | loopReg ir er mp body ih =>
+    intro h
+    simp [code, listHasUnreachable_countLoopVar, listHasUnreachable, ih (d + 1) scr h]
   | loopNest axis body ih =>
     intro h
     simp [code, listHasUnreachable_countLoop, listHasUnreachable, ih (d + 1) scr h]

@@ -29,6 +29,10 @@ rather than by re-running the function.
   the same configuration transformer, and are different plans.  By authority
   §3.3 the proved claim class here is therefore **normal-form**, not
   **canonical**; claiming otherwise would be a false theorem.
+* `normalize` erases a zero-trip `loopNest`, whose extent is a plan literal, but
+  it never erases a `loopReg`: that node's trip count is read from a register at
+  run time, so no syntactic test decides whether it runs, and deleting it would
+  not preserve semantics.  A `loopReg` is normal as soon as its body is.
 * `normalize` does not descend into `opaqueProcess`.  Its retained certificate
   (SPEC §11.1) pins the exact body, and rewriting the body would invalidate the
   certificate the typing rule checks.  Opaque nodes are therefore normal by
@@ -154,7 +158,9 @@ def isNormalB : Plan → Bool
   | .pack _ _ _ _ => true
   | .unpack _ _ _ _ => true
   | .storeReg _ _ _ _ => true
+  | .loadReg _ _ _ _ => true
   | .loopNest ax body => !(ax.extent == 0) && isNormalB body
+  | .loopReg _ _ _ body => isNormalB body
   | .tiled _ _ _ body => isNormalB body
   | .reduce _ _ _ _ => true
   | .allocScratch n body => !(n == 0) && isNormalB body
@@ -215,7 +221,9 @@ def normalize : Plan → Plan
   | .pack a b c d => .pack a b c d
   | .unpack a b c d => .unpack a b c d
   | .storeReg d m w s => .storeReg d m w s
+  | .loadReg d s m w => .loadReg d s m w
   | .loopNest ax body => if ax.extent = 0 then .nop else .loopNest ax (normalize body)
+  | .loopReg ir er mp body => .loopReg ir er mp (normalize body)
   | .tiled o ti ex body => .tiled o ti ex (normalize body)
   | .reduce c acc l r => .reduce c acc l r
   | .allocScratch n body =>
@@ -248,6 +256,7 @@ theorem normalize_isNormal (p : Plan) : IsNormal (normalize p) := by
   | pack a b c d => rfl
   | unpack a b c d => rfl
   | storeReg dst map w src => rfl
+  | loadReg dst src map w => rfl
   | loopNest ax body ih =>
     simp only [normalize]
     by_cases h : ax.extent = 0
@@ -255,6 +264,7 @@ theorem normalize_isNormal (p : Plan) : IsNormal (normalize p) := by
     · rw [if_neg h]
       simp only [isNormalB, Bool.and_eq_true]
       exact ⟨by simpa using h, ih⟩
+  | loopReg ir er mp body ih => simpa [normalize, isNormalB] using ih
   | tiled o ti ex body ih => simpa [normalize, isNormalB] using ih
   | reduce c acc l r => rfl
   | allocScratch n body ih =>
@@ -302,11 +312,13 @@ theorem normalize_eq_self_of_isNormal : ∀ (p : Plan), IsNormal p → normalize
   | pack a b c d => intro _; rfl
   | unpack a b c d => intro _; rfl
   | storeReg dst map w src => intro _; rfl
+  | loadReg dst src map w => intro _; rfl
   | loopNest ax body ih =>
     intro h
     simp only [isNormalB, Bool.and_eq_true] at h
     have hx : ¬ ax.extent = 0 := by simpa using h.1
     simp only [normalize, if_neg hx, ih h.2]
+  | loopReg ir er mp body ih => intro h; simp only [normalize, ih h]
   | tiled o ti ex body ih => intro h; simp only [normalize, ih h]
   | reduce c acc l r => intro _; rfl
   | allocScratch n body ih =>
@@ -366,6 +378,11 @@ theorem eval_normalize : ∀ (p : Plan) (m : Machine), (normalize p).eval m = p.
   | pack a b c d => intro m; rfl
   | unpack a b c d => intro m; rfl
   | storeReg dst map w src => intro m; rfl
+  | loadReg dst src map w => intro m; rfl
+  | loopReg ir er mp body ih =>
+    intro m
+    simp only [normalize]
+    rw [eval_loopReg, eval_loopReg, funext ih]
   | loopNest ax body ih =>
     intro m
     simp only [normalize]
@@ -423,6 +440,10 @@ theorem charges_normalize_le : ∀ p : Plan, Charges.LE (normalize p).charges p.
   | pack a b c d => exact Charges.le_refl _
   | unpack a b c d => exact Charges.le_refl _
   | storeReg dst map w src => exact Charges.le_refl _
+  | loadReg dst src map w => exact Charges.le_refl _
+  | loopReg ir er mp body ih =>
+    simp only [normalize, Plan.charges]
+    exact Charges.add_mono (Charges.le_refl _) (Charges.iterate_mono ih _)
   | loopNest ax body ih =>
     simp only [normalize]
     by_cases h : ax.extent = 0
@@ -486,6 +507,11 @@ theorem normalize_hasType : ∀ {p : Plan} {s t : Sig}, HasType s p t →
   | pack a b c d => intro s t h; exact h
   | unpack a b c d => intro s t h; exact h
   | storeReg dst map w src => intro s t h; exact h
+  | loadReg dst src map w => intro s t h; exact h
+  | loopReg ir er mp body ih =>
+    intro s t h
+    cases h with
+    | loopReg h1 h2 hbody => exact .loopReg h1 h2 (ih hbody)
   | loopNest ax body ih =>
     intro s t h
     cases h with

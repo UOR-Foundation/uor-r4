@@ -39,6 +39,16 @@ running it deposits the modular product into the declared `C` region, so the
 inhabitant is a plan that genuinely computes a GEMM rather than a plan that
 merely type checks.
 
+The final section removes the witness's *fixed-extent* limitation.
+`GNAF.gemmKernel` is an **input-dependent** GEMM plan: it loads the descriptor's
+`m`, `n` and `k` out of the raw ABI header with `Plan.loadReg` and runs an
+`i`/`j`/`k` nest of `Plan.loopReg` loops bounded by exactly those registers, so
+no extent occurs anywhere in the plan text.  `GNAF.gemmKernel_writes_C` proves
+that the declared `C` region then holds the modular-`u32` product for *arbitrary*
+`m`, `n`, `k` (under hypotheses stated exactly there), and the same
+`CheckedPlan` is exhibited computing correctly on three different shapes —
+`1×1×1`, `2×2×2` and the rectangular `1×3×2`.
+
 ## What is deliberately omitted, and why
 
 * **`compile_refines`** (SPEC §11.4).  Omitted.  It would relate
@@ -603,5 +613,1056 @@ theorem exists_inReleasedSubset_checkedPlan :
       listHasUnreachable (bodyCode (envOf s c.plan) s.scratch c.plan) = false :=
   ⟨gemmWitnessSig, gemmWitnessOutSig, gemmWitnessChecked,
     gemmWitness_inReleasedSubset, gemmWitness_compiles, gemmWitness_no_unreachable⟩
+
+/-! ## The input-dependent GEMM kernel (SPEC §11.1; SPEC §3 input totality)
+
+`gemmWitness` above is a *fixed-extent* plan: its loop bounds and its reduction
+length are literals of the plan text, so it computes one shape and one shape
+only.  `gemmKernel` is the plan that removes that limitation, using the two
+constructors `GNAF/Plan.lean` added for it.  It
+
+1. classifies the raw ABI header (`Plan.classifyRaw`) and dispatches on the
+   declared layout class (`Plan.dispatchLayout`);
+2. **loads** the declared extents `m`, `n`, `k` out of the header — SPEC §8.3
+   puts them at cells `16..23`, `24..31`, `32..39`, little-endian — into scalar
+   registers `3`, `4`, `5` with `Plan.loadReg` (`gemmKernel_loads_extents`);
+3. runs an `i`/`j`/`k` nest of three `Plan.loopReg` loops **bounded by exactly
+   those registers**, so every trip count is a function of the input and of
+   nothing in the plan text (`gemmKernelNest_trips`);
+4. accumulates the reduction, one multiply-accumulate per `k` iteration;
+5. deposits each result into the declared `C` region with `Plan.storeReg`, as
+   the four-cell little-endian `u32` image the released contract fixes;
+6. sets the released status word and constructs the output from `C`.
+
+### Why the addressing is computed rather than declared
+
+A GNAF `IndexMap` is affine with coefficients *fixed by the plan text*, so no
+index map can express the address of `A[i,t]`: that address is
+`256 + 4 · (i · k + t)` and `k` is the loaded extent, not a literal.  The kernel
+therefore computes each element address into scalar register `0` with
+`Plan.scalarOp` and reads it through `IndexMap.idB`, whose `storeAddr` is
+`base + reg 0` — the same addressing `storeReg` and `loadReg` share.  Address
+arithmetic is consequently *data* in this plan, exactly as the extents are.
+This is what makes the kernel shape-generic; it is also why the theorems below
+never mention a literal extent.
+
+### The register and memory map
+
+| register | contents |
+|---|---|
+| `0` | computed element address (the `b` slot `storeAddr` reads) |
+| `3`, `4`, `5` | the loaded extents `m`, `n`, `k` |
+| `6`, `7`, `8` | the `i`, `j`, `k` loop counters (`loopReg` index registers) |
+| `9` | the accumulator |
+| `10`, `11`, `12` | the loaded `A` element, `B` element and their product |
+| `13` | the stored element width, `4` cells |
+
+The observable memory is 1024 cells: the 256-cell SPEC §8.3 header, then 256
+cells of `A` at `256`, 256 cells of `B` at `512`, and 256 cells of `C` at `768`.
+Every element is a four-cell little-endian `u32`, so each region holds up to 64
+elements — the source of the `m·k ≤ 64`, `k·n ≤ 64`, `m·n ≤ 64` hypotheses
+below.  As with `gemmWitness`, no claim is made that this cell image coincides
+with the byte image of `Gemm/ABI.lean`; that is a different machine model and it
+is not proved anywhere.
+
+### The modular-`u32` contract
+
+`ScalarOp` has no truncating operation, so the `k` accumulation runs over
+unbounded `Nat` and truncation happens where the released ABI puts it: the
+four-cell `Plan.storeReg` into `C` keeps the result modulo `2 ^ 32`.
+`gemmKernel_C_is_contract_fold` proves that what lands in `C` is exactly the
+fold of `ArithmeticContract.step` for the modular-`u32` contract
+`gemmKernelContract` — the same contract `gemmWitness` declares — so the
+reduction is performed under the declared contract of SPEC §8.2 and not merely
+under a formula that happens to agree with it.
+
+### The reach of `gemmKernel_writes_C`, stated exactly
+
+`gemmKernel_writes_C` is proved for **arbitrary `m`, `n`, `k` and an arbitrary
+entry memory**, under exactly these hypotheses, all of them discharged by `rfl`
+or `decide` on the concrete descriptors further down:
+
+* the configuration conforms to the kernel's interface (`regs` file of 14 cells,
+  1024 memory cells);
+* the descriptor classifies `valid` and its layout class is `rowMajor` — those
+  are the two continuations the kernel body sits in;
+* the header words at `16`, `24`, `32` are `m`, `n`, `k`;
+* `m, n, k ≤ loopRegMaxTrips`, so the `loopReg` clamp is inert (it is the
+  released `i32` ceiling, so this excludes nothing the ABI can present);
+* `m·k ≤ 64`, `k·n ≤ 64`, `m·n ≤ 64`, so `A`, `B` and `C` fit their declared
+  256-cell regions and are therefore disjoint;
+* `i < m` and `j < n`.
+
+Three descriptors of three *different* shapes are then exhibited, and the same
+plan is proved to compute the right product on each:
+`gemmKernel_writes_C_1x1x1` (`1×1×1`), `gemmKernel_writes_C_2x2x2` (`2×2×2`, all
+four entries) and `gemmKernel_writes_C_1x3x2` (`1×3×2`, a rectangular shape with
+`k ≠ n`, all three entries).  That is the evidence that the fixed-extent
+limitation is gone: one `CheckedPlan`, three shapes, no plan-text extent.
+
+### What is still *not* proved here
+
+* **Nothing relates this plan to the emitted Wasm.**  `compile_refines` remains
+  omitted for the reasons given at the top of this file; `gemmKernel_compiles`
+  says the compiled module validates, nothing more.
+* **`alpha` and `beta` are not applied.**  The kernel computes `A · B`, the
+  `alpha = 1`, `beta = 0` instance of SPEC §8, exactly as `gemmWitness` does.
+  The kernel contains no scaling node.
+* **The declared strides are not consulted.**  The kernel assumes the packed
+  row-major layout that `Machine.layoutClass` selects; the hypothesis
+  `m.layoutClass = .rowMajor` is what licenses that, and a descriptor declaring
+  a non-packed row-major view would still enter the kernel.  Nothing here proves
+  anything about such a descriptor.
+* **The batch axis is not traversed.**  This is the `batch = 1` instance.
+* **The region bound is a *hypothesis*, not a check.**  A descriptor declaring
+  `m·n > 64` is not refused by this plan; it is simply outside the theorem.  The
+  released classifier does not check it either (`Machine.classify` checks the
+  header literals, the kind/mode triple and the invocation extent), so no
+  disjointness or capacity claim is made beyond the stated hypotheses.
+-/
+
+/-! ### Register and store lemmas the kernel proof needs -/
+
+/-- Writing one register leaves every other register alone. -/
+theorem Machine.reg_withReg_ne (m : Machine) {i j : Nat} (v : Nat) (h : j ≠ i) :
+    (m.withReg i v).reg j = m.reg j := by
+  simp [Machine.reg, Machine.withReg, List.getD_eq_getElem?_getD,
+    List.getElem?_set_ne (Ne.symm h)]
+
+/-- The evaluation equation of a scalar operation. -/
+@[simp] theorem eval_scalarOp (op : ScalarOp) (dst a b : Nat) (m : Machine) :
+    (Plan.scalarOp op dst a b).eval m = m.withReg dst (op.apply (m.reg a) (m.reg b)) := rfl
+
+/-- The evaluation equation of an immediate load. -/
+@[simp] theorem eval_setReg (dst v : Nat) (m : Machine) :
+    (Plan.setReg dst v).eval m = m.withReg dst v := rfl
+
+/-- A register store writes memory, never the register file. -/
+@[simp] theorem storeReg_reg (dst : RegionRef) (map : IndexMap) (w src r : Nat)
+    (m : Machine) : ((Plan.storeReg dst map w src).eval m).reg r = m.reg r := rfl
+
+/-- A register store never changes the size of the register file. -/
+@[simp] theorem storeReg_regs_length (dst : RegionRef) (map : IndexMap) (w src : Nat)
+    (m : Machine) : ((Plan.storeReg dst map w src).eval m).regs.length = m.regs.length := rfl
+
+/-! ### The regions and index maps of the kernel
+
+`A`, `B` and `C` are the three 256-cell element regions of the observable
+memory; `M`, `N` and `K` field are the three header words SPEC §8.3 declares the
+extents in. -/
+
+/-- The declared `A` region: 256 cells, that is up to 64 `u32` elements. -/
+def gemmKernelA : RegionRef := { base := 256, count := 256 }
+/-- The declared `B` region. -/
+def gemmKernelB : RegionRef := { base := 512, count := 256 }
+/-- The declared `C` region — the output the kernel publishes. -/
+def gemmKernelC : RegionRef := { base := 768, count := 256 }
+/-- The header field SPEC §8.3 puts `m` in: cells `16..23`. -/
+def gemmKernelMField : RegionRef := { base := 16, count := 8 }
+/-- The header field SPEC §8.3 puts `n` in: cells `24..31`. -/
+def gemmKernelNField : RegionRef := { base := 24, count := 8 }
+/-- The header field SPEC §8.3 puts `k` in: cells `32..39`. -/
+def gemmKernelKField : RegionRef := { base := 32, count := 8 }
+
+/-- The constant index map: the address of a header field does not depend on
+any loop index. -/
+def gemmZeroMap : IndexMap := { c0 := 0, cb := 0, ci := 0, cj := 0 }
+
+@[simp] theorem gemmZeroMap_apply (b i j : Nat) : gemmZeroMap.apply b i j = 0 := by
+  simp [IndexMap.apply, gemmZeroMap]
+
+@[simp] theorem storeAddr_gemmZeroMap (m : Machine) (r : RegionRef) :
+    storeAddr m r gemmZeroMap = r.base := by
+  simp [storeAddr]
+
+/-- `IndexMap.idB` addresses `base + reg 0`: this is the map through which the
+kernel's *computed* addresses reach `loadReg` and `storeReg`. -/
+@[simp] theorem storeAddr_idB (m : Machine) (r : RegionRef) :
+    storeAddr m r IndexMap.idB = r.base + m.reg 0 := by
+  simp [storeAddr]
+
+/-! ### The plan
+
+Read bottom up: `gemmKernelKBody` is one multiply-accumulate at computed
+addresses, `gemmKernelJBody` is one output element, `gemmKernelIBody` is one
+output row, `gemmKernelNest` is the whole traversal, and `gemmKernelLoad` is the
+phase that puts the header's extents into the loop-bound registers. -/
+
+/-- The `k` body: compute the address of `A[i,t]` into register `0`, load it,
+compute the address of `B[t,j]`, load it, multiply and accumulate.  Every
+address is `4 · (row · extent + column)` with the extent read from a register,
+which is exactly what a fixed index map cannot express. -/
+def gemmKernelKBody : Plan :=
+  .seq (.scalarOp .mul 0 6 5)
+  (.seq (.scalarOp .add 0 0 8)
+  (.seq (.scalarOp .mul 0 0 13)
+  (.seq (.loadReg 10 gemmKernelA IndexMap.idB 4)
+  (.seq (.scalarOp .mul 0 8 4)
+  (.seq (.scalarOp .add 0 0 7)
+  (.seq (.scalarOp .mul 0 0 13)
+  (.seq (.loadReg 11 gemmKernelB IndexMap.idB 4)
+  (.seq (.scalarOp .mul 12 10 11)
+        (.scalarOp .add 9 9 12)))))))))
+
+/-- The `j` body: clear the accumulator, run the reduction for `reg 5` steps —
+the loaded `k` — then compute the address of `C[i,j]` and store the accumulator
+there as four little-endian cells. -/
+def gemmKernelJBody : Plan :=
+  .seq (.setReg 9 0)
+  (.seq (.loopReg 8 5 gemmZeroMap gemmKernelKBody)
+  (.seq (.scalarOp .mul 0 6 4)
+  (.seq (.scalarOp .add 0 0 7)
+  (.seq (.scalarOp .mul 0 0 13)
+        (.storeReg gemmKernelC IndexMap.idB 4 9)))))
+
+/-- The `i` body: the `j` loop, bounded by the loaded `n`. -/
+def gemmKernelIBody : Plan := .loopReg 7 4 gemmZeroMap gemmKernelJBody
+
+/-- The traversal: the `i` loop, bounded by the loaded `m`. -/
+def gemmKernelNest : Plan := .loopReg 6 3 gemmZeroMap gemmKernelIBody
+
+/-- The load phase: publish the stored element width in register `13`, then
+lift the three header extents into the three loop-bound registers. -/
+def gemmKernelLoad : Plan :=
+  .seq (.setReg 13 4)
+  (.seq (.loadReg 3 gemmKernelMField gemmZeroMap 8)
+  (.seq (.loadReg 4 gemmKernelNField gemmZeroMap 8)
+        (.loadReg 5 gemmKernelKField gemmZeroMap 8)))
+
+/-- The kernel body: load the extents, then run the nest they bound. -/
+def gemmKernelCore : Plan := .seq gemmKernelLoad gemmKernelNest
+
+/-- **The input-dependent GEMM plan.**  Classify the raw header, dispatch on
+the layout class, run the register-bounded kernel on the row-major branch, set
+the released status word, and construct the output from the declared `C`
+region.  Layout classes other than row major are refused with the `unsupported`
+status rather than computed wrongly. -/
+def gemmKernel : Plan :=
+  .seq
+    (.classifyRaw
+      (.dispatchLayout
+        (.seq gemmKernelCore (.setStatus .success))
+        (.setStatus .unsupported)
+        (.setStatus .unsupported))
+      (.setStatus .invalid)
+      (.setStatus .unsupported)
+      (.setStatus .resourceExhausted))
+    (.buildOutput gemmKernelC)
+
+/-! ### The reference product
+
+These are the *specification* side: what the `A` and `B` elements of a memory
+are, and what the dot product of a row and a column is.  They are defined on the
+memory, not on the plan, so the correctness theorems below compare the plan's
+result against something the plan had no part in defining. -/
+
+/-- The `u32` element of a memory at an element index: four little-endian
+cells. -/
+def gemmElemWord (mem : List Nat) (base idx : Nat) : Nat := leWord mem (base + 4 * idx) 4
+
+/-- The `A` element at logical position `(i, t)` of a packed row-major `m × k`
+view based at cell `256`. -/
+def gemmAWord (mem : List Nat) (K i t : Nat) : Nat := gemmElemWord mem 256 (i * K + t)
+
+/-- The `B` element at logical position `(t, j)` of a packed row-major `k × n`
+view based at cell `512`. -/
+def gemmBWord (mem : List Nat) (N t j : Nat) : Nat := gemmElemWord mem 512 (t * N + j)
+
+/-- `gemmSumFrom f n s = f s + f (s+1) + ⋯ + f (s+n-1)`. -/
+def gemmSumFrom (f : Nat → Nat) : Nat → Nat → Nat
+  | 0, _ => 0
+  | n + 1, s => f s + gemmSumFrom f n (s + 1)
+
+/-- The reference dot product of row `i` of `A` and column `j` of `B`, over the
+full loaded extent `k`.  This is the specification the kernel is checked
+against. -/
+def gemmDot (mem : List Nat) (N K i j : Nat) : Nat :=
+  gemmSumFrom (fun t => gemmAWord mem K i t * gemmBWord mem N t j) K 0
+
+/-! ### The `k` body: one multiply-accumulate -/
+
+/-- One `k` iteration adds exactly one product to the accumulator, touches no
+memory, and preserves every register the enclosing loops rely on. -/
+theorem gemmKernelKBody_eval (mm : Machine) (N K i j t : Nat)
+    (hlen : mm.regs.length = 14)
+    (h4 : mm.reg 4 = N) (h5 : mm.reg 5 = K) (h6 : mm.reg 6 = i) (h7 : mm.reg 7 = j)
+    (h8 : mm.reg 8 = t) (h13 : mm.reg 13 = 4) :
+    (gemmKernelKBody.eval mm).mem = mm.mem ∧
+    (gemmKernelKBody.eval mm).regs.length = 14 ∧
+    (gemmKernelKBody.eval mm).reg 3 = mm.reg 3 ∧
+    (gemmKernelKBody.eval mm).reg 4 = N ∧
+    (gemmKernelKBody.eval mm).reg 5 = K ∧
+    (gemmKernelKBody.eval mm).reg 6 = i ∧
+    (gemmKernelKBody.eval mm).reg 7 = j ∧
+    (gemmKernelKBody.eval mm).reg 13 = 4 ∧
+    (gemmKernelKBody.eval mm).reg 9 =
+      mm.reg 9 + gemmAWord mm.mem K i t * gemmBWord mm.mem N t j := by
+  simp only [gemmKernelKBody, Plan.eval_seq, eval_scalarOp, eval_loadReg,
+    loadedReg, storeAddr_idB, Machine.mem_withReg]
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩ <;>
+    simp [Machine.reg_withReg_ne, hlen, h4, h5, h6, h7, h8, h13, gemmAWord, gemmBWord,
+      gemmElemWord, gemmKernelA, gemmKernelB, ScalarOp.apply, Nat.mul_comm]
+
+/-! ### The `k` loop: the reduction -/
+
+/-- **The reduction is the sum.**  `n` iterations of the `k` body add exactly
+the `n` products the reference sum names.  The memory is untouched throughout,
+so the elements read are the entry elements. -/
+theorem gemmKernelKLoop (N K i j : Nat) : ∀ (n t0 : Nat) (mm : Machine),
+    mm.regs.length = 14 → mm.reg 4 = N → mm.reg 5 = K → mm.reg 6 = i → mm.reg 7 = j →
+    mm.reg 13 = 4 →
+    (Plan.runLoop gemmKernelKBody.eval 8 n t0 mm).mem = mm.mem ∧
+    (Plan.runLoop gemmKernelKBody.eval 8 n t0 mm).regs.length = 14 ∧
+    (Plan.runLoop gemmKernelKBody.eval 8 n t0 mm).reg 3 = mm.reg 3 ∧
+    (Plan.runLoop gemmKernelKBody.eval 8 n t0 mm).reg 4 = N ∧
+    (Plan.runLoop gemmKernelKBody.eval 8 n t0 mm).reg 5 = K ∧
+    (Plan.runLoop gemmKernelKBody.eval 8 n t0 mm).reg 6 = i ∧
+    (Plan.runLoop gemmKernelKBody.eval 8 n t0 mm).reg 7 = j ∧
+    (Plan.runLoop gemmKernelKBody.eval 8 n t0 mm).reg 13 = 4 ∧
+    (Plan.runLoop gemmKernelKBody.eval 8 n t0 mm).reg 9 =
+      mm.reg 9 + gemmSumFrom (fun t => gemmAWord mm.mem K i t * gemmBWord mm.mem N t j) n t0 := by
+  intro n
+  induction n with
+  | zero =>
+    intro t0 mm hlen h4 h5 h6 h7 h13
+    exact ⟨rfl, hlen, rfl, h4, h5, h6, h7, h13, rfl⟩
+  | succ n ih =>
+    intro t0 mm hlen h4 h5 h6 h7 h13
+    rw [Plan.runLoop_succ]
+    have hset : (mm.withReg 8 t0).reg 8 = t0 :=
+      Machine.reg_withReg_same mm 8 t0 (by omega)
+    have hb := gemmKernelKBody_eval (mm.withReg 8 t0) N K i j t0
+      (by simpa using hlen)
+      (by rw [Machine.reg_withReg_ne _ _ (by decide)]; exact h4)
+      (by rw [Machine.reg_withReg_ne _ _ (by decide)]; exact h5)
+      (by rw [Machine.reg_withReg_ne _ _ (by decide)]; exact h6)
+      (by rw [Machine.reg_withReg_ne _ _ (by decide)]; exact h7)
+      hset
+      (by rw [Machine.reg_withReg_ne _ _ (by decide)]; exact h13)
+    obtain ⟨hm, hl, h3', h4', h5', h6', h7', h13', h9'⟩ := hb
+    have hmem : (gemmKernelKBody.eval (mm.withReg 8 t0)).mem = mm.mem := hm
+    have h9m : (mm.withReg 8 t0).reg 9 = mm.reg 9 := Machine.reg_withReg_ne _ _ (by decide)
+    have hmm : (mm.withReg 8 t0).mem = mm.mem := rfl
+    have := ih (t0 + 1) (gemmKernelKBody.eval (mm.withReg 8 t0)) hl h4' h5' h6' h7' h13'
+    obtain ⟨im, il, i3, i4, i5, i6, i7, i13, i9⟩ := this
+    rw [hmem] at im i9
+    refine ⟨im, il, ?_, i4, i5, i6, i7, i13, ?_⟩
+    · rw [i3, h3', Machine.reg_withReg_ne _ _ (by decide)]
+    · rw [i9, h9', hmm, h9m]
+      show _ = mm.reg 9 + (gemmAWord mm.mem K i t0 * gemmBWord mm.mem N t0 j +
+        gemmSumFrom (fun t => gemmAWord mm.mem K i t * gemmBWord mm.mem N t j) n (t0 + 1))
+      omega
+
+/-! ### The `j` body: one output element, stored -/
+
+/-- One `j` iteration leaves the memory with the four-cell little-endian image
+of the complete dot product deposited at `C[i,j]`, and nothing else changed. -/
+theorem gemmKernelJBody_eval (mm : Machine) (M N K i j : Nat)
+    (hlen : mm.regs.length = 14) (hK : K ≤ loopRegMaxTrips)
+    (h3 : mm.reg 3 = M) (h4 : mm.reg 4 = N) (h5 : mm.reg 5 = K) (h6 : mm.reg 6 = i)
+    (h7 : mm.reg 7 = j) (h13 : mm.reg 13 = 4) :
+    (gemmKernelJBody.eval mm).mem =
+      gather mm.mem (768 + 4 * (i * N + j))
+        (leBytes (gemmDot mm.mem N K i j) 4) (fun x => x) 4 0 ∧
+    (gemmKernelJBody.eval mm).regs.length = 14 ∧
+    (gemmKernelJBody.eval mm).reg 3 = M ∧
+    (gemmKernelJBody.eval mm).reg 4 = N ∧
+    (gemmKernelJBody.eval mm).reg 5 = K ∧
+    (gemmKernelJBody.eval mm).reg 6 = i ∧
+    (gemmKernelJBody.eval mm).reg 13 = 4 := by
+  have h9z : (mm.withReg 9 0).reg 9 = 0 :=
+    Machine.reg_withReg_same _ _ _ (by rw [hlen]; omega)
+  have hl1 : (mm.withReg 9 0).regs.length = 14 := by simpa using hlen
+  have e3 : (mm.withReg 9 0).reg 3 = M := by
+    rw [Machine.reg_withReg_ne _ _ (by decide)]; exact h3
+  have e4 : (mm.withReg 9 0).reg 4 = N := by
+    rw [Machine.reg_withReg_ne _ _ (by decide)]; exact h4
+  have e5 : (mm.withReg 9 0).reg 5 = K := by
+    rw [Machine.reg_withReg_ne _ _ (by decide)]; exact h5
+  have e6 : (mm.withReg 9 0).reg 6 = i := by
+    rw [Machine.reg_withReg_ne _ _ (by decide)]; exact h6
+  have e7 : (mm.withReg 9 0).reg 7 = j := by
+    rw [Machine.reg_withReg_ne _ _ (by decide)]; exact h7
+  have e13 : (mm.withReg 9 0).reg 13 = 4 := by
+    rw [Machine.reg_withReg_ne _ _ (by decide)]; exact h13
+  have hmem1 : (mm.withReg 9 0).mem = mm.mem := rfl
+  have hloop : (Plan.loopReg 8 5 gemmZeroMap gemmKernelKBody).eval (mm.withReg 9 0)
+      = Plan.runLoop gemmKernelKBody.eval 8 K 0 (mm.withReg 9 0) := by
+    rw [eval_loopReg, e5, min_loopRegMaxTrips hK]
+  obtain ⟨km, kl, k3, k4, k5, k6, k7, k13, k9⟩ :=
+    gemmKernelKLoop N K i j K 0 (mm.withReg 9 0) hl1 e4 e5 e6 e7 e13
+  rw [hmem1] at km k9
+  rw [h9z, Nat.zero_add] at k9
+  rw [e3] at k3
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  · simp only [gemmKernelJBody, Plan.eval_seq, eval_setReg]
+    rw [hloop]
+    simp [Machine.reg_withReg_ne, kl, k4, k6, k7, k13, k9, km, gemmKernelC,
+      ScalarOp.apply, storedRegMem, gemmDot, Nat.mul_comm]
+  all_goals
+    simp only [gemmKernelJBody, Plan.eval_seq, eval_setReg] <;>
+    rw [hloop] <;>
+    simp [Machine.reg_withReg_ne, kl, k3, k4, k5, k6, k13, ScalarOp.apply, -eval_storeReg]
+
+/-! ### Frame and congruence lemmas for the two outer loops -/
+
+/-- A packed row-major index of a bounded position is bounded by the element
+count. -/
+theorem gemmIndex_lt {i M t K : Nat} (hi : i < M) (ht : t < K) : i * K + t < M * K := by
+  have h1 : (i + 1) * K ≤ M * K := Nat.mul_le_mul hi (Nat.le_refl K)
+  rw [Nat.succ_mul] at h1
+  omega
+
+/-- Reading back the image a register store deposited gives the register,
+truncated to the stored width. -/
+theorem leWord_gather (w : Nat) (mem : List Nat) (addr v : Nat)
+    (h : addr + w ≤ mem.length) :
+    leWord (gather mem addr (leBytes v w) (fun x => x) w 0) addr w = v % 256 ^ w := by
+  rw [← leWord_leBytes w v]
+  refine leWord_ext w _ _ _ _ ?_
+  intro k hk
+  rw [gather_getD_inside (leBytes v w) (fun x => x) w mem addr 0 (addr + k)
+    (by omega) (by omega) (by omega)]
+  have he : addr + k - addr = k := by omega
+  rw [he, Nat.zero_add]
+
+/-- A little-endian read depends only on the cells it reads. -/
+theorem leWord_agree {mem mem0 : List Nat} {a w b : Nat}
+    (h : ∀ x, x < b → mem.getD x 0 = mem0.getD x 0) (hb : a + w ≤ b) :
+    leWord mem a w = leWord mem0 a w :=
+  leWord_ext w mem mem0 a a (fun k hk => h (a + k) (by omega))
+
+/-- A sum depends only on the summands it names. -/
+theorem sumFrom_congr (f g : Nat → Nat) : ∀ (n s : Nat),
+    (∀ t, s ≤ t → t < s + n → f t = g t) → gemmSumFrom f n s = gemmSumFrom g n s := by
+  intro n
+  induction n with
+  | zero => intro s _; rfl
+  | succ n ih =>
+    intro s h
+    show f s + gemmSumFrom f n (s + 1) = g s + gemmSumFrom g n (s + 1)
+    rw [h s (Nat.le_refl _) (by omega), ih (s + 1) (fun t h1 h2 => h t (by omega) (by omega))]
+
+/-- **The dot product is insensitive to the output region.**  `A` and `B` lie
+below cell `768` whenever the shape fits its regions, so writing into `C` never
+changes a later dot product.  This is the fact that makes the loop nest's
+iterations independent. -/
+theorem gemmDot_congr {mem mem0 : List Nat} {M N K i j : Nat}
+    (h : ∀ x, x < 768 → mem.getD x 0 = mem0.getD x 0)
+    (hMK : M * K ≤ 64) (hKN : K * N ≤ 64) (hi : i < M) (hj : j < N) :
+    gemmDot mem N K i j = gemmDot mem0 N K i j := by
+  refine sumFrom_congr _ _ K 0 ?_
+  intro t _ ht
+  have ht' : t < K := by omega
+  have hA : i * K + t < 64 := Nat.lt_of_lt_of_le (gemmIndex_lt hi ht') hMK
+  have hB : t * N + j < 64 := Nat.lt_of_lt_of_le (gemmIndex_lt ht' hj) hKN
+  have e1 : gemmAWord mem K i t = gemmAWord mem0 K i t := by
+    unfold gemmAWord gemmElemWord
+    exact leWord_agree h (by omega)
+  have e2 : gemmBWord mem N t j = gemmBWord mem0 N t j := by
+    unfold gemmBWord gemmElemWord
+    exact leWord_agree h (by omega)
+  rw [e1, e2]
+
+/-- The four-cell modulus. -/
+theorem pow_256_four : (256 : Nat) ^ 4 = 4294967296 := by decide
+
+/-! ### The `j` loop: one output row -/
+
+/-- **One output row.**  After `n` iterations of the `j` loop the cells of
+`C[i, j0 .. j0+n)` hold the modular dot products, every cell outside that
+contiguous block is untouched, and the loop-bound registers survive. -/
+theorem gemmKernelJLoop (mem0 : List Nat) (M N K i p : Nat) (hp : p = i * N)
+    (hK : K ≤ loopRegMaxTrips) (hMK : M * K ≤ 64) (hKN : K * N ≤ 64) (hi : i < M) :
+    ∀ (n j0 : Nat) (mm : Machine),
+      mm.regs.length = 14 → mm.mem.length = 1024 →
+      (∀ x, x < 768 → mm.mem.getD x 0 = mem0.getD x 0) →
+      mm.reg 3 = M → mm.reg 4 = N → mm.reg 5 = K → mm.reg 6 = i → mm.reg 13 = 4 →
+      p + j0 + n ≤ 64 → j0 + n ≤ N →
+      (Plan.runLoop gemmKernelJBody.eval 7 n j0 mm).mem.length = 1024 ∧
+      (Plan.runLoop gemmKernelJBody.eval 7 n j0 mm).regs.length = 14 ∧
+      (Plan.runLoop gemmKernelJBody.eval 7 n j0 mm).reg 3 = M ∧
+      (Plan.runLoop gemmKernelJBody.eval 7 n j0 mm).reg 4 = N ∧
+      (Plan.runLoop gemmKernelJBody.eval 7 n j0 mm).reg 5 = K ∧
+      (Plan.runLoop gemmKernelJBody.eval 7 n j0 mm).reg 6 = i ∧
+      (Plan.runLoop gemmKernelJBody.eval 7 n j0 mm).reg 13 = 4 ∧
+      (∀ x, x < 768 + 4 * (p + j0) ∨ 768 + 4 * (p + j0 + n) ≤ x →
+        (Plan.runLoop gemmKernelJBody.eval 7 n j0 mm).mem.getD x 0 = mm.mem.getD x 0) ∧
+      (∀ j, j0 ≤ j → j < j0 + n →
+        leWord (Plan.runLoop gemmKernelJBody.eval 7 n j0 mm).mem (768 + 4 * (p + j)) 4 =
+          gemmDot mem0 N K i j % 4294967296) := by
+  intro n
+  induction n with
+  | zero =>
+    intro j0 mm hlen hml _ h3 h4 h5 h6 h13 _ _
+    exact ⟨hml, hlen, h3, h4, h5, h6, h13, fun _ _ => rfl, fun j _ hj2 => absurd hj2 (by omega)⟩
+  | succ n ih =>
+    intro j0 mm hlen hml hag h3 h4 h5 h6 h13 hb1 hb2
+    rw [Plan.runLoop_succ]
+    -- the machine entering the body
+    have hlen' : (mm.withReg 7 j0).regs.length = 14 := by simpa using hlen
+    have e3 : (mm.withReg 7 j0).reg 3 = M := by
+      rw [Machine.reg_withReg_ne _ _ (by decide)]; exact h3
+    have e4 : (mm.withReg 7 j0).reg 4 = N := by
+      rw [Machine.reg_withReg_ne _ _ (by decide)]; exact h4
+    have e5 : (mm.withReg 7 j0).reg 5 = K := by
+      rw [Machine.reg_withReg_ne _ _ (by decide)]; exact h5
+    have e6 : (mm.withReg 7 j0).reg 6 = i := by
+      rw [Machine.reg_withReg_ne _ _ (by decide)]; exact h6
+    have e7 : (mm.withReg 7 j0).reg 7 = j0 :=
+      Machine.reg_withReg_same _ _ _ (by rw [hlen]; omega)
+    have e13 : (mm.withReg 7 j0).reg 13 = 4 := by
+      rw [Machine.reg_withReg_ne _ _ (by decide)]; exact h13
+    have emem : (mm.withReg 7 j0).mem = mm.mem := rfl
+    obtain ⟨bm, bl, b3, b4, b5, b6, b13⟩ :=
+      gemmKernelJBody_eval (mm.withReg 7 j0) M N K i j0 hlen' hK e3 e4 e5 e6 e7 e13
+    rw [emem] at bm
+    -- the dot product is the one computed from the reference memory
+    have hj0N : j0 < N := by omega
+    have hdot : gemmDot mm.mem N K i j0 = gemmDot mem0 N K i j0 :=
+      gemmDot_congr hag hMK hKN hi hj0N
+    rw [hdot] at bm
+    have haddr : 768 + 4 * (i * N + j0) = 768 + 4 * (p + j0) := by rw [hp]
+    rw [haddr] at bm
+    -- length, frame and agreement of the body's write
+    have bml : (gemmKernelJBody.eval (mm.withReg 7 j0)).mem.length = 1024 := by
+      rw [bm, gather_length]; exact hml
+    have bfr : ∀ x, x < 768 + 4 * (p + j0) ∨ 768 + 4 * (p + j0) + 4 ≤ x →
+        (gemmKernelJBody.eval (mm.withReg 7 j0)).mem.getD x 0 = mm.mem.getD x 0 := by
+      intro x hx
+      rw [bm]
+      exact gather_getD_outside _ _ 4 mm.mem (768 + 4 * (p + j0)) 0 x (by omega)
+    have bag : ∀ x, x < 768 →
+        (gemmKernelJBody.eval (mm.withReg 7 j0)).mem.getD x 0 = mem0.getD x 0 := by
+      intro x hx
+      rw [bfr x (Or.inl (by omega))]
+      exact hag x hx
+    have bread : leWord (gemmKernelJBody.eval (mm.withReg 7 j0)).mem (768 + 4 * (p + j0)) 4 =
+        gemmDot mem0 N K i j0 % 4294967296 := by
+      rw [bm, leWord_gather 4 mm.mem _ _ (by rw [hml]; omega), pow_256_four]
+    -- the induction hypothesis on the remaining iterations
+    obtain ⟨im, il, i3, i4, i5, i6, i13, ifr, ird⟩ :=
+      ih (j0 + 1) (gemmKernelJBody.eval (mm.withReg 7 j0)) bl bml bag b3 b4 b5 b6 b13
+        (by omega) (by omega)
+    refine ⟨im, il, i3, i4, i5, i6, i13, ?_, ?_⟩
+    · intro x hx
+      rw [ifr x (by omega), bfr x (by omega)]
+    · intro j hj1 hj2
+      rcases Nat.eq_or_lt_of_le hj1 with hje | hjl
+      · subst hje
+        rw [← bread]
+        refine leWord_ext 4 _ _ _ _ ?_
+        intro k hk
+        exact ifr (768 + 4 * (p + j0) + k) (Or.inl (by omega))
+      · exact ird j hjl (by omega)
+
+/-! ### The `i` loop: the whole traversal -/
+
+/-- **The whole traversal.**  After `n` iterations of the `i` loop every cell of
+`C[i0 .. i0+n) × [0, n)` holds its modular dot product, and everything outside
+the contiguous block those rows occupy is untouched. -/
+theorem gemmKernelILoop (mem0 : List Nat) (M N K : Nat)
+    (hK : K ≤ loopRegMaxTrips) (hNt : N ≤ loopRegMaxTrips)
+    (hMK : M * K ≤ 64) (hKN : K * N ≤ 64) :
+    ∀ (n i0 p : Nat) (mm : Machine),
+      p = i0 * N → i0 + n ≤ M → p + n * N ≤ 64 →
+      mm.regs.length = 14 → mm.mem.length = 1024 →
+      (∀ x, x < 768 → mm.mem.getD x 0 = mem0.getD x 0) →
+      mm.reg 3 = M → mm.reg 4 = N → mm.reg 5 = K → mm.reg 13 = 4 →
+      (Plan.runLoop gemmKernelIBody.eval 6 n i0 mm).mem.length = 1024 ∧
+      (Plan.runLoop gemmKernelIBody.eval 6 n i0 mm).regs.length = 14 ∧
+      (Plan.runLoop gemmKernelIBody.eval 6 n i0 mm).reg 3 = M ∧
+      (Plan.runLoop gemmKernelIBody.eval 6 n i0 mm).reg 4 = N ∧
+      (Plan.runLoop gemmKernelIBody.eval 6 n i0 mm).reg 5 = K ∧
+      (Plan.runLoop gemmKernelIBody.eval 6 n i0 mm).reg 13 = 4 ∧
+      (∀ x, x < 768 + 4 * p ∨ 768 + 4 * (p + n * N) ≤ x →
+        (Plan.runLoop gemmKernelIBody.eval 6 n i0 mm).mem.getD x 0 = mm.mem.getD x 0) ∧
+      (∀ i j, i0 ≤ i → i < i0 + n → j < N →
+        leWord (Plan.runLoop gemmKernelIBody.eval 6 n i0 mm).mem (768 + 4 * (i * N + j)) 4 =
+          gemmDot mem0 N K i j % 4294967296) := by
+  intro n
+  induction n with
+  | zero =>
+    intro i0 p mm _ _ _ hlen hml _ h3 h4 h5 h13
+    exact ⟨hml, hlen, h3, h4, h5, h13, fun _ _ => rfl,
+      fun _ _ _ h _ => absurd h (by omega)⟩
+  | succ n ih =>
+    intro i0 p mm hp hiM hbound hlen hml hag h3 h4 h5 h13
+    rw [Plan.runLoop_succ]
+    have hsucc : (n + 1) * N = n * N + N := Nat.succ_mul n N
+    rw [hsucc] at hbound
+    have hlen' : (mm.withReg 6 i0).regs.length = 14 := by simpa using hlen
+    have e3 : (mm.withReg 6 i0).reg 3 = M := by
+      rw [Machine.reg_withReg_ne _ _ (by decide)]; exact h3
+    have e4 : (mm.withReg 6 i0).reg 4 = N := by
+      rw [Machine.reg_withReg_ne _ _ (by decide)]; exact h4
+    have e5 : (mm.withReg 6 i0).reg 5 = K := by
+      rw [Machine.reg_withReg_ne _ _ (by decide)]; exact h5
+    have e6 : (mm.withReg 6 i0).reg 6 = i0 :=
+      Machine.reg_withReg_same _ _ _ (by rw [hlen]; omega)
+    have e13 : (mm.withReg 6 i0).reg 13 = 4 := by
+      rw [Machine.reg_withReg_ne _ _ (by decide)]; exact h13
+    have emem : (mm.withReg 6 i0).mem = mm.mem := rfl
+    have eml : (mm.withReg 6 i0).mem.length = 1024 := by rw [emem]; exact hml
+    have eag : ∀ x, x < 768 → (mm.withReg 6 i0).mem.getD x 0 = mem0.getD x 0 := by
+      rw [emem]; exact hag
+    have hbody : gemmKernelIBody.eval (mm.withReg 6 i0) =
+        Plan.runLoop gemmKernelJBody.eval 7 N 0 (mm.withReg 6 i0) := by
+      rw [gemmKernelIBody, eval_loopReg, e4, min_loopRegMaxTrips hNt]
+    obtain ⟨bml, bl, b3, b4, b5, b6, b13, bfr, brd⟩ :=
+      gemmKernelJLoop mem0 M N K i0 p hp hK hMK hKN (by omega) N 0 (mm.withReg 6 i0)
+        hlen' eml eag e3 e4 e5 e6 e13 (by omega) (by omega)
+    rw [← hbody] at bml bl b3 b4 b5 b6 b13 bfr brd
+    rw [emem] at bfr
+    have bag : ∀ x, x < 768 → (gemmKernelIBody.eval (mm.withReg 6 i0)).mem.getD x 0 =
+        mem0.getD x 0 := by
+      intro x hx
+      rw [bfr x (Or.inl (by omega))]
+      exact hag x hx
+    obtain ⟨im, il, i3, i4, i5, i13, ifr, ird⟩ :=
+      ih (i0 + 1) (p + N) (gemmKernelIBody.eval (mm.withReg 6 i0))
+        (by rw [hp, Nat.succ_mul]) (by omega) (by omega) bl bml bag b3 b4 b5 b13
+    refine ⟨im, il, i3, i4, i5, i13, ?_, ?_⟩
+    · intro x hx
+      rw [ifr x (by omega), bfr x (by omega)]
+    · intro i j hi1 hi2 hj
+      rcases Nat.eq_or_lt_of_le hi1 with hie | hil
+      · subst hie
+        have hpi : 768 + 4 * (i0 * N + j) = 768 + 4 * (p + j) := by rw [hp]
+        rw [hpi, ← brd j (Nat.zero_le _) (by omega)]
+        refine leWord_ext 4 _ _ _ _ ?_
+        intro k hk
+        exact ifr (768 + 4 * (p + j) + k) (Or.inl (by omega))
+      · exact ird i j hil (by omega) hj
+
+/-! ### The load phase -/
+
+/-- **The load phase reads the header.**  Registers `3`, `4`, `5` end up holding
+exactly the little-endian header words at cells `16`, `24`, `32`, and register
+`13` holds the stored element width. -/
+theorem gemmKernelLoad_eval (m : Machine) (hlen : m.regs.length = 14) :
+    (gemmKernelLoad.eval m).mem = m.mem ∧
+    (gemmKernelLoad.eval m).regs.length = 14 ∧
+    (gemmKernelLoad.eval m).reg 3 = leWord m.mem 16 8 ∧
+    (gemmKernelLoad.eval m).reg 4 = leWord m.mem 24 8 ∧
+    (gemmKernelLoad.eval m).reg 5 = leWord m.mem 32 8 ∧
+    (gemmKernelLoad.eval m).reg 13 = 4 := by
+  simp only [gemmKernelLoad, Plan.eval_seq, eval_setReg, eval_loadReg, loadedReg,
+    storeAddr_gemmZeroMap, Machine.mem_withReg]
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_⟩ <;>
+    simp [Machine.reg_withReg_ne, hlen, gemmKernelMField, gemmKernelNField, gemmKernelKField]
+
+/-! ### The kernel as a whole -/
+
+/-- On a valid, row-major descriptor the memory the whole plan leaves is the
+memory its kernel body leaves: the status word and the output construction do
+not touch it. -/
+theorem gemmKernel_mem (m : Machine)
+    (hcls : m.classify = Classification.valid)
+    (hlay : m.layoutClass = LayoutClass.rowMajor) :
+    (gemmKernel.eval m).mem = (gemmKernelCore.eval m).mem := by
+  show ((Plan.buildOutput gemmKernelC).eval
+    ((Plan.classifyRaw _ _ _ _).eval m)).mem = _
+  rw [Plan.eval_classifyRaw]
+  simp only [hcls, Plan.eval_dispatchLayout, hlay, Plan.eval_seq]
+  rfl
+
+/-- **The kernel body computes the product**, for every shape satisfying the
+stated hypotheses. -/
+theorem gemmKernelCore_writes_C (m : Machine) (M N K i j : Nat)
+    (hregs : m.regs.length = 14) (hmem : m.mem.length = 1024)
+    (hM : leWord m.mem 16 8 = M) (hN : leWord m.mem 24 8 = N) (hKf : leWord m.mem 32 8 = K)
+    (hMt : M ≤ loopRegMaxTrips) (hNt : N ≤ loopRegMaxTrips) (hKt : K ≤ loopRegMaxTrips)
+    (hMK : M * K ≤ 64) (hKN : K * N ≤ 64) (hMN : M * N ≤ 64)
+    (hi : i < M) (hj : j < N) :
+    leWord (gemmKernelCore.eval m).mem (768 + 4 * (i * N + j)) 4 =
+      gemmDot m.mem N K i j % 4294967296 := by
+  obtain ⟨lm, ll, l3, l4, l5, l13⟩ := gemmKernelLoad_eval m hregs
+  rw [hM] at l3
+  rw [hN] at l4
+  rw [hKf] at l5
+  have hnest : gemmKernelCore.eval m =
+      Plan.runLoop gemmKernelIBody.eval 6 M 0 (gemmKernelLoad.eval m) := by
+    show gemmKernelNest.eval (gemmKernelLoad.eval m) = _
+    rw [gemmKernelNest, eval_loopReg, l3, min_loopRegMaxTrips hMt]
+  obtain ⟨-, -, -, -, -, -, -, ird⟩ :=
+    gemmKernelILoop m.mem M N K hKt hNt hMK hKN M 0 0 (gemmKernelLoad.eval m)
+      (Nat.zero_mul N).symm (by omega) (by omega) ll (by rw [lm]; exact hmem)
+      (by rw [lm]; exact fun _ _ => rfl) l3 l4 l5 l13
+  rw [hnest]
+  exact ird i j (Nat.zero_le _) (by omega) hj
+
+/-- The kernel's interface: fourteen scalar registers, no vector lane at all,
+no scratch and no table, and 1024 cells of observable memory. -/
+def gemmKernelSig : Sig :=
+  { inputType := .bytes 1024
+    outputType := .unit
+    regs := 14, vregs := 0, lanes := 0, scratch := 0, tables := 0, mem := 1024
+    statusSet := false }
+
+/-- The interface the kernel leaves: a status has been constructed and the
+output is the 256-cell `C` region. -/
+def gemmKernelOutSig : Sig :=
+  { gemmKernelSig with outputType := .bytes 256, statusSet := true }
+
+/-- **The input-dependent kernel is inside the released subset.** -/
+theorem gemmKernel_inReleasedSubset : gemmKernel.inReleasedSubset = true := by decide
+
+/-- The kernel uses no vector operation, so the released profile's lack of SIMD
+refuses nothing in it. -/
+theorem gemmKernel_usesVector : gemmKernel.usesVector = false := by decide
+
+/-- **The kernel type checks** at the scalar interface. -/
+theorem gemmKernel_typed : HasType gemmKernelSig gemmKernel gemmKernelOutSig := by decide
+
+/-- The kernel as a `CheckedPlan`. -/
+def gemmKernelChecked : CheckedPlan gemmKernelSig gemmKernelOutSig :=
+  { plan := gemmKernel, typed := gemmKernel_typed }
+
+/-- **The compiled kernel passes release validation.** -/
+theorem gemmKernel_compiles : Wasm.validate (compile gemmKernelChecked) = true :=
+  compile_validates gemmKernelChecked
+
+/-- **The compilation of the kernel contains no `unreachable`**: neither
+`loadReg` nor `loopReg` was refused by the translation. -/
+theorem gemmKernel_no_unreachable :
+    listHasUnreachable
+      (bodyCode (envOf gemmKernelSig gemmKernel) gemmKernelSig.scratch gemmKernel) = false :=
+  bodyCode_no_unreachable _ _ _ gemmKernel_inReleasedSubset
+
+/-- **The kernel loads its extents.**  After the load phase the three
+loop-bound registers hold exactly the header's `m`, `n` and `k` — the SPEC §8.3
+fields at cells `16`, `24` and `32` — for *every* configuration.  No literal
+extent appears anywhere. -/
+theorem gemmKernel_loads_extents (m : Machine) (hregs : m.regs.length = 14) :
+    (gemmKernelLoad.eval m).reg 3 = leWord m.mem gemmKernelMField.base 8 ∧
+    (gemmKernelLoad.eval m).reg 4 = leWord m.mem gemmKernelNField.base 8 ∧
+    (gemmKernelLoad.eval m).reg 5 = leWord m.mem gemmKernelKField.base 8 := by
+  obtain ⟨-, -, l3, l4, l5, -⟩ := gemmKernelLoad_eval m hregs
+  exact ⟨l3, l4, l5⟩
+
+/-- **The same plan computes the GEMM of whatever shape the header declares.**
+For a descriptor whose header declares `m`, `n`, `k`, and for every position
+`i < m`, `j < n`, the `C` region holds the modular-`u32` product
+`(A · B)[i,j]` after evaluation.
+
+The loop bounds really are the loaded registers: `gemmKernelNest_trips` shows the
+outer trip count is the header word itself, and the theorem is quantified over
+`m`, `n`, `k`, so no instance of it can be obtained from a fixed-extent plan.
+The exact reach — every hypothesis, and everything not claimed — is stated in
+the section preamble above. -/
+theorem gemmKernel_writes_C (m : Machine) (M N K i j : Nat)
+    (hregs : m.regs.length = 14) (hmem : m.mem.length = 1024)
+    (hcls : m.classify = Classification.valid)
+    (hlay : m.layoutClass = LayoutClass.rowMajor)
+    (hM : leWord m.mem 16 8 = M) (hN : leWord m.mem 24 8 = N) (hKf : leWord m.mem 32 8 = K)
+    (hMt : M ≤ loopRegMaxTrips) (hNt : N ≤ loopRegMaxTrips) (hKt : K ≤ loopRegMaxTrips)
+    (hMK : M * K ≤ 64) (hKN : K * N ≤ 64) (hMN : M * N ≤ 64)
+    (hi : i < M) (hj : j < N) :
+    leWord (gemmKernel.eval m).mem (gemmKernelC.base + 4 * (i * N + j)) 4 =
+      gemmDot m.mem N K i j % 4294967296 := by
+  rw [gemmKernel_mem m hcls hlay]
+  exact gemmKernelCore_writes_C m M N K i j hregs hmem hM hN hKf hMt hNt hKt hMK hKN hMN hi hj
+
+/-! ### Concrete descriptors of three different shapes
+
+`gemmKernelHeader` is a SPEC §8.3 header for a row-major, modular-`u32`,
+`batch = 1` GEMM of the given shape.  Its field assignment is the one
+`Machine.classify` and `Machine.layoutClass` read: cells `0..15` carry the magic,
+version, header size, the four kind tags and the mode tag; `16..47` the extents
+and the batch; each of the three 40-cell view records carries offset, row
+stride, **column stride**, batch stride and byte length, so that the cell pair
+`64..65` that `Machine.layoutClass` compares against the stored width is the
+column stride — which is the element width exactly when the view is packed
+row-major.  As with `gemmWitness`, this is a *cell* image; no claim is made that
+it equals `Gemm/ABI.lean`'s byte image. -/
+
+/-- The cell image of a list of `u32` elements: four little-endian cells each. -/
+def gemmCells : List Nat → List Nat
+  | [] => []
+  | v :: vs => leBytes v 4 ++ gemmCells vs
+
+/-- Zero padding to a declared region size. -/
+def gemmPad (l : List Nat) (n : Nat) : List Nat := l ++ List.replicate (n - l.length) 0
+
+/-- A SPEC §8.3 header for a row-major, modular-`u32`, `batch = 1` GEMM of the
+given shape, in the field assignment described above. -/
+def gemmKernelHeader (M N K : Nat) : List Nat :=
+  [87, 71, 78, 71, 1, 0, 0, 1] ++
+  [5, 5, 5, 5] ++
+  [0, 0, 0, 0] ++
+  leBytes M 8 ++ leBytes N 8 ++ leBytes K 8 ++ leBytes 1 8 ++
+  leBytes 256 8 ++ leBytes (4 * K) 8 ++ leBytes 4 8 ++ leBytes (4 * (M * K)) 8 ++
+    leBytes (4 * (M * K)) 8 ++
+  leBytes 512 8 ++ leBytes (4 * N) 8 ++ leBytes 4 8 ++ leBytes (4 * (K * N)) 8 ++
+    leBytes (4 * (K * N)) 8 ++
+  leBytes 768 8 ++ leBytes (4 * N) 8 ++ leBytes 4 8 ++ leBytes (4 * (M * N)) 8 ++
+    leBytes (4 * (M * N)) 8 ++
+  leBytes 1 8 ++ List.replicate 8 0 ++ List.replicate 16 0 ++
+  List.replicate 16 0 ++
+  List.replicate 16 0 ++
+  List.replicate 24 0
+
+/-- The header is exactly the 256 cells SPEC §8.3 declares. -/
+theorem gemmKernelHeader_length (M N K : Nat) : (gemmKernelHeader M N K).length = 256 := by
+  simp [gemmKernelHeader, leBytes_length]
+
+/-- A complete 1024-cell observable memory: header, `A`, `B`, and a zeroed
+`C`. -/
+def gemmKernelMem (M N K : Nat) (A B : List Nat) : List Nat :=
+  gemmKernelHeader M N K ++ gemmPad (gemmCells A) 256 ++ gemmPad (gemmCells B) 256 ++
+    List.replicate 256 0
+
+/-- A complete input configuration.  The entry status is deliberately not
+`success`, so `gemmKernel_eval_status` has content. -/
+def gemmKernelMachine (M N K : Nat) (A B : List Nat) : Machine :=
+  { mem := gemmKernelMem M N K A B
+    scratch := []
+    regs := List.replicate 14 0
+    vregs := []
+    tables := []
+    status := Status.arithmeticException.code
+    out := [] }
+
+/-- Each element occupies four cells. -/
+theorem cellsOf_length : ∀ (A : List Nat), (gemmCells A).length = 4 * A.length := by
+  intro A
+  induction A with
+  | nil => rfl
+  | cons v vs ih => simp [gemmCells, leBytes_length, ih]; omega
+
+/-- The observable memory of a concrete descriptor is exactly 1024 cells. -/
+theorem gemmKernelMem_length (M N K : Nat) (A B : List Nat)
+    (hA : A.length ≤ 64) (hB : B.length ≤ 64) :
+    (gemmKernelMem M N K A B).length = 1024 := by
+  simp [gemmKernelMem, gemmPad, gemmKernelHeader_length, cellsOf_length]
+  omega
+
+/-- **The same plan computes the GEMM of whatever shape the header declares.**
+For a descriptor whose header declares `m`, `n`, `k`, and for every position
+`i < m`, `j < n`, the `C` region holds the modular-`u32` product
+`(A · B)[i,j]` after evaluation.
+
+The loop bounds really are the loaded registers: `gemmKernelNest_trips` shows the
+outer trip count is the header word itself, and the theorem is quantified over
+`m`, `n`, `k`, so no instance of it can be obtained from a fixed-extent plan.
+The exact reach — every hypothesis, and everything not claimed — is stated in
+the section preamble above. -/
+theorem gemmKernel_writes_C_1x1x1 :
+    leWord (gemmKernel.eval (gemmKernelMachine 1 1 1 [7] [6])).mem 768 4 = 42 := by
+  have h := gemmKernel_writes_C (gemmKernelMachine 1 1 1 [7] [6]) 1 1 1 0 0
+    (by rfl) (gemmKernelMem_length 1 1 1 [7] [6] (by decide) (by decide))
+    (by rfl) (by rfl) (by rfl) (by rfl) (by rfl)
+    (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)
+    (by decide) (by decide)
+  exact h.trans (by rfl)
+
+/-- **The same plan computes the GEMM of whatever shape the header declares.**
+For a descriptor whose header declares `m`, `n`, `k`, and for every position
+`i < m`, `j < n`, the `C` region holds the modular-`u32` product
+`(A · B)[i,j]` after evaluation.
+
+The loop bounds really are the loaded registers: `gemmKernelNest_trips` shows the
+outer trip count is the header word itself, and the theorem is quantified over
+`m`, `n`, `k`, so no instance of it can be obtained from a fixed-extent plan.
+The exact reach — every hypothesis, and everything not claimed — is stated in
+the section preamble above. -/
+theorem gemmKernel_writes_C_2x2x2 :
+    leWord (gemmKernel.eval (gemmKernelMachine 2 2 2 [1, 2, 3, 4] [5, 6, 7, 8])).mem
+        768 4 = 19 ∧
+    leWord (gemmKernel.eval (gemmKernelMachine 2 2 2 [1, 2, 3, 4] [5, 6, 7, 8])).mem
+        772 4 = 22 ∧
+    leWord (gemmKernel.eval (gemmKernelMachine 2 2 2 [1, 2, 3, 4] [5, 6, 7, 8])).mem
+        776 4 = 43 ∧
+    leWord (gemmKernel.eval (gemmKernelMachine 2 2 2 [1, 2, 3, 4] [5, 6, 7, 8])).mem
+        780 4 = 50 := by
+  refine ⟨?_, ?_, ?_, ?_⟩
+  · exact (gemmKernel_writes_C (gemmKernelMachine 2 2 2 [1, 2, 3, 4] [5, 6, 7, 8]) 2 2 2 0 0
+      (by rfl) (gemmKernelMem_length 2 2 2 _ _ (by decide) (by decide))
+      (by rfl) (by rfl) (by rfl) (by rfl) (by rfl)
+      (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)
+      (by decide) (by decide)).trans (by rfl)
+  · exact (gemmKernel_writes_C (gemmKernelMachine 2 2 2 [1, 2, 3, 4] [5, 6, 7, 8]) 2 2 2 0 1
+      (by rfl) (gemmKernelMem_length 2 2 2 _ _ (by decide) (by decide))
+      (by rfl) (by rfl) (by rfl) (by rfl) (by rfl)
+      (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)
+      (by decide) (by decide)).trans (by rfl)
+  · exact (gemmKernel_writes_C (gemmKernelMachine 2 2 2 [1, 2, 3, 4] [5, 6, 7, 8]) 2 2 2 1 0
+      (by rfl) (gemmKernelMem_length 2 2 2 _ _ (by decide) (by decide))
+      (by rfl) (by rfl) (by rfl) (by rfl) (by rfl)
+      (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)
+      (by decide) (by decide)).trans (by rfl)
+  · exact (gemmKernel_writes_C (gemmKernelMachine 2 2 2 [1, 2, 3, 4] [5, 6, 7, 8]) 2 2 2 1 1
+      (by rfl) (gemmKernelMem_length 2 2 2 _ _ (by decide) (by decide))
+      (by rfl) (by rfl) (by rfl) (by rfl) (by rfl)
+      (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)
+      (by decide) (by decide)).trans (by rfl)
+
+/-- **The same plan computes the GEMM of whatever shape the header declares.**
+For a descriptor whose header declares `m`, `n`, `k`, and for every position
+`i < m`, `j < n`, the `C` region holds the modular-`u32` product
+`(A · B)[i,j]` after evaluation.
+
+The loop bounds really are the loaded registers: `gemmKernelNest_trips` shows the
+outer trip count is the header word itself, and the theorem is quantified over
+`m`, `n`, `k`, so no instance of it can be obtained from a fixed-extent plan.
+The exact reach — every hypothesis, and everything not claimed — is stated in
+the section preamble above. -/
+theorem gemmKernel_writes_C_1x3x2 :
+    leWord (gemmKernel.eval (gemmKernelMachine 1 3 2 [2, 3] [1, 2, 3, 4, 5, 6])).mem
+        768 4 = 14 ∧
+    leWord (gemmKernel.eval (gemmKernelMachine 1 3 2 [2, 3] [1, 2, 3, 4, 5, 6])).mem
+        772 4 = 19 ∧
+    leWord (gemmKernel.eval (gemmKernelMachine 1 3 2 [2, 3] [1, 2, 3, 4, 5, 6])).mem
+        776 4 = 24 := by
+  refine ⟨?_, ?_, ?_⟩
+  · exact (gemmKernel_writes_C (gemmKernelMachine 1 3 2 [2, 3] [1, 2, 3, 4, 5, 6]) 1 3 2 0 0
+      (by rfl) (gemmKernelMem_length 1 3 2 _ _ (by decide) (by decide))
+      (by rfl) (by rfl) (by rfl) (by rfl) (by rfl)
+      (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)
+      (by decide) (by decide)).trans (by rfl)
+  · exact (gemmKernel_writes_C (gemmKernelMachine 1 3 2 [2, 3] [1, 2, 3, 4, 5, 6]) 1 3 2 0 1
+      (by rfl) (gemmKernelMem_length 1 3 2 _ _ (by decide) (by decide))
+      (by rfl) (by rfl) (by rfl) (by rfl) (by rfl)
+      (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)
+      (by decide) (by decide)).trans (by rfl)
+  · exact (gemmKernel_writes_C (gemmKernelMachine 1 3 2 [2, 3] [1, 2, 3, 4, 5, 6]) 1 3 2 0 2
+      (by rfl) (gemmKernelMem_length 1 3 2 _ _ (by decide) (by decide))
+      (by rfl) (by rfl) (by rfl) (by rfl) (by rfl)
+      (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)
+      (by decide) (by decide)).trans (by rfl)
+
+/-! ### The reduction really is the declared contract's -/
+
+/-- The released modular arithmetic contract with a `u32` accumulator: the same
+contract `gemmWitness` declares. -/
+def gemmKernelContract : ArithmeticContract :=
+  { mode := .modular, stored := .u32, accumulator := .u32 }
+
+theorem gemmKernelContract_compatible : gemmKernelContract.compatibleB = true := by decide
+
+theorem gemmKernelContract_released : gemmKernelContract.releasedB = true := by decide
+
+theorem gemmKernelContract_accModulus : gemmKernelContract.accModulus = 4294967296 :=
+  ArithmeticContract.accModulus_of_releasedB gemmKernelContract_released
+
+/-- The reduction the arithmetic contract itself performs over a pair of element
+sequences: `ArithmeticContract.step`, iterated. -/
+def gemmContractFold (c : ArithmeticContract) (f g : Nat → Nat) : Nat → Nat → Nat → Nat
+  | 0, _, acc => acc
+  | n + 1, s, acc => gemmContractFold c f g n (s + 1) (c.step acc (f s) (g s))
+
+/-- A modular contract's fold is the exact sum, reduced. -/
+theorem contractFold_modular (c : ArithmeticContract) (hc : c.mode = .modular)
+    (f g : Nat → Nat) : ∀ (n s acc : Nat), acc < c.accModulus →
+      gemmContractFold c f g n s acc =
+        (acc + gemmSumFrom (fun t => f t * g t) n s) % c.accModulus := by
+  intro n
+  induction n with
+  | zero =>
+    intro s acc hacc
+    show acc = (acc + 0) % c.accModulus
+    rw [Nat.add_zero, Nat.mod_eq_of_lt hacc]
+  | succ n ih =>
+    intro s acc hacc
+    show gemmContractFold c f g n (s + 1) (c.step acc (f s) (g s)) = _
+    rw [ih (s + 1) _ (c.step_modular_lt hc _ _ _)]
+    have hstep : c.step acc (f s) (g s) = (acc + f s * g s) % c.accModulus := by
+      simp only [ArithmeticContract.step, hc]
+    have hsum : gemmSumFrom (fun t => f t * g t) (n + 1) s
+        = f s * g s + gemmSumFrom (fun t => f t * g t) n (s + 1) := rfl
+    rw [hstep, Nat.mod_add_mod, hsum, Nat.add_assoc]
+
+/-- **The kernel's accumulation is the contract's.**  The `u32` word the kernel
+deposits in `C` is exactly the modular-`u32` reduction that
+`ArithmeticContract.step` performs over the `A` row and the `B` column, so the
+reduction is carried out under the declared contract of SPEC §8.2 and not under
+some other formula that happens to agree with it. -/
+theorem gemmKernel_C_is_contract_fold (m : Machine) (M N K i j : Nat)
+    (hregs : m.regs.length = 14) (hmem : m.mem.length = 1024)
+    (hcls : m.classify = Classification.valid)
+    (hlay : m.layoutClass = LayoutClass.rowMajor)
+    (hM : leWord m.mem 16 8 = M) (hN : leWord m.mem 24 8 = N) (hKf : leWord m.mem 32 8 = K)
+    (hMt : M ≤ loopRegMaxTrips) (hNt : N ≤ loopRegMaxTrips) (hKt : K ≤ loopRegMaxTrips)
+    (hMK : M * K ≤ 64) (hKN : K * N ≤ 64) (hMN : M * N ≤ 64)
+    (hi : i < M) (hj : j < N) :
+    leWord (gemmKernel.eval m).mem (gemmKernelC.base + 4 * (i * N + j)) 4 =
+      gemmContractFold gemmKernelContract (fun t => gemmAWord m.mem K i t)
+        (fun t => gemmBWord m.mem N t j) K 0 0 := by
+  rw [gemmKernel_writes_C m M N K i j hregs hmem hcls hlay hM hN hKf hMt hNt hKt
+    hMK hKN hMN hi hj,
+    contractFold_modular gemmKernelContract rfl _ _ K 0 0
+      (by rw [gemmKernelContract_accModulus]; omega),
+    gemmKernelContract_accModulus, Nat.zero_add]
+  rfl
+
+/-- **The trip count is the header word.**  The outer loop of the nest runs for
+the number of iterations the header's `m` field supplies, clamped only by the
+released `i32` ceiling.  This is the statement no fixed-extent plan can make. -/
+theorem gemmKernelNest_trips (m : Machine) (hregs : m.regs.length = 14) :
+    gemmKernelNest.eval (gemmKernelLoad.eval m) =
+      Plan.runLoop gemmKernelIBody.eval 6
+        (Nat.min (leWord m.mem gemmKernelMField.base 8) loopRegMaxTrips) 0
+        (gemmKernelLoad.eval m) := by
+  obtain ⟨l3, -, -⟩ := gemmKernel_loads_extents m hregs
+  rw [gemmKernelNest, eval_loopReg, l3]
+
+/-- **Frame.**  The kernel writes nothing but the `m·n` elements of `C`: the
+header, `A` and `B` are left exactly as the invocation supplied them. -/
+theorem gemmKernelCore_frame (m : Machine) (M N K : Nat)
+    (hregs : m.regs.length = 14) (hmem : m.mem.length = 1024)
+    (hM : leWord m.mem 16 8 = M) (hN : leWord m.mem 24 8 = N) (hKf : leWord m.mem 32 8 = K)
+    (hMt : M ≤ loopRegMaxTrips) (hNt : N ≤ loopRegMaxTrips) (hKt : K ≤ loopRegMaxTrips)
+    (hMK : M * K ≤ 64) (hKN : K * N ≤ 64) (hMN : M * N ≤ 64) :
+    ∀ x, x < 768 ∨ 768 + 4 * (M * N) ≤ x →
+      (gemmKernelCore.eval m).mem.getD x 0 = m.mem.getD x 0 := by
+  obtain ⟨lm, ll, l3, l4, l5, l13⟩ := gemmKernelLoad_eval m hregs
+  rw [hM] at l3
+  rw [hN] at l4
+  rw [hKf] at l5
+  have hnest : gemmKernelCore.eval m =
+      Plan.runLoop gemmKernelIBody.eval 6 M 0 (gemmKernelLoad.eval m) := by
+    show gemmKernelNest.eval (gemmKernelLoad.eval m) = _
+    rw [gemmKernelNest, eval_loopReg, l3, min_loopRegMaxTrips hMt]
+  obtain ⟨-, -, -, -, -, -, ifr, -⟩ :=
+    gemmKernelILoop m.mem M N K hKt hNt hMK hKN M 0 0 (gemmKernelLoad.eval m)
+      (Nat.zero_mul N).symm (by omega) (by omega) ll (by rw [lm]; exact hmem)
+      (by rw [lm]; exact fun _ _ => rfl) l3 l4 l5 l13
+  intro x hx
+  rw [hnest, ifr x (by omega), lm]
+
+/-- The kernel sets the released success status word on a valid row-major
+descriptor. -/
+theorem gemmKernel_eval_status (m : Machine)
+    (hcls : m.classify = Classification.valid)
+    (hlay : m.layoutClass = LayoutClass.rowMajor) :
+    (gemmKernel.eval m).status = Status.success.code := by
+  show ((Plan.buildOutput gemmKernelC).eval ((Plan.classifyRaw _ _ _ _).eval m)).status = _
+  rw [Plan.eval_classifyRaw]
+  simp only [hcls, Plan.eval_dispatchLayout, hlay, Plan.eval_seq]
+  rfl
+
+/-- The kernel publishes the declared `C` region. -/
+theorem gemmKernel_eval_out (m : Machine)
+    (hcls : m.classify = Classification.valid)
+    (hlay : m.layoutClass = LayoutClass.rowMajor) :
+    (gemmKernel.eval m).out =
+      ((gemmKernelCore.eval m).mem.drop gemmKernelC.base).take gemmKernelC.count := by
+  show ((Plan.buildOutput gemmKernelC).eval ((Plan.classifyRaw _ _ _ _).eval m)).out = _
+  rw [Plan.eval_classifyRaw]
+  simp only [hcls, Plan.eval_dispatchLayout, hlay, Plan.eval_seq]
+  rfl
+
+/-- Every concrete descriptor conforms to the kernel's interface. -/
+theorem gemmKernelMachine_conforms (M N K : Nat) (A B : List Nat)
+    (hA : A.length ≤ 64) (hB : B.length ≤ 64) :
+    (gemmKernelMachine M N K A B).Conforms gemmKernelSig :=
+  ⟨by simp [gemmKernelMachine, gemmKernelSig], rfl, gemmKernelMem_length M N K A B hA hB, rfl,
+    Nat.zero_le _⟩
+
+/-- Type safety instantiated at the kernel. -/
+theorem gemmKernel_eval_conforms (m : Machine) (hm : m.Conforms gemmKernelSig) :
+    (gemmKernel.eval m).Conforms gemmKernelOutSig :=
+  hasType_preservation gemmKernel_typed m hm
 
 end WasmGemmGnaf.GNAF

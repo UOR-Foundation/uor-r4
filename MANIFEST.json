@@ -308,13 +308,13 @@
       },
       {
         "path": "WasmGemmGnaf/GNAF/Compile.lean",
-        "sha256": "c60737650ecfc113bbc12259bcff518890b0d12b0b1e0626b44f60e9a9eefb71",
-        "bytes": 76726
+        "sha256": "589fd2c57104cb37ff72858b4cd78604c371fcd06d44017acc5b7f3f07e797c0",
+        "bytes": 82338
       },
       {
         "path": "WasmGemmGnaf/GNAF/CompileCorrect.lean",
-        "sha256": "91aeaca353846ccc7b5640ef3e15ad0dce9b4c20b9ac12e884ddff950d559b43",
-        "bytes": 30279
+        "sha256": "8a2b9a21792c201332ba2e5e8874ada889c9580c4eef620c1afba17d2c076685",
+        "bytes": 84172
       },
       {
         "path": "WasmGemmGnaf/GNAF/Edge.lean",
@@ -323,8 +323,8 @@
       },
       {
         "path": "WasmGemmGnaf/GNAF/Normalize.lean",
-        "sha256": "7327bc40230bffdb9a6768be229db08104f52127cc212a0047f483547cf53286",
-        "bytes": 20009
+        "sha256": "518282894d92fc191b326f536a654aef53d51e37903d34b26f2cc2653a8f30a4",
+        "bytes": 21250
       },
       {
         "path": "WasmGemmGnaf/GNAF/Object.lean",
@@ -333,18 +333,18 @@
       },
       {
         "path": "WasmGemmGnaf/GNAF/Plan.lean",
-        "sha256": "46aa9f2ae3cb3d96fdb53f17247b7155aa6d0e7dbfa004aa107c86063b263df8",
-        "bytes": 23561
+        "sha256": "470ab7b068aa56b44ba1825ef3b7d1979f7016feee2e6c42acab53ca8dd281bb",
+        "bytes": 26389
       },
       {
         "path": "WasmGemmGnaf/GNAF/Resource.lean",
-        "sha256": "f01c79fc19799d725733ea6cf6fe12d476e92ea2221dfa76c7dc718bd4b66695",
-        "bytes": 18438
+        "sha256": "4cc7ad9b199184304d2420ee2b56cb62947be5e97bdb972c6fde03bb887bbf8e",
+        "bytes": 20503
       },
       {
         "path": "WasmGemmGnaf/GNAF/Semantics.lean",
-        "sha256": "0689aa8c2773b19fc68c4d32834732b1f84b902c04b0261f2d42f99b26a996c8",
-        "bytes": 31462
+        "sha256": "8ee947a88298ffc25b1a1cfb9a73ad6a2a591c5d0b2aac4bfca3966025a5d59d",
+        "bytes": 38298
       },
       {
         "path": "WasmGemmGnaf/GNAF/Shape.lean",
@@ -353,8 +353,8 @@
       },
       {
         "path": "WasmGemmGnaf/GNAF/Typing.lean",
-        "sha256": "4d02d74c9ee982169dc0e1800936cf66566e72cba896a8d61f4dc9246d54604c",
-        "bytes": 23782
+        "sha256": "51084b4ed0ad7c42cdb4fc93771e9109ccd3d34dd7612fe6ffc6869472da22c5",
+        "bytes": 25494
       },
       {
         "path": "WasmGemmGnaf/Gemm/ABI.lean",
@@ -638,8 +638,8 @@
       },
       {
         "path": "model/claims.json",
-        "sha256": "effb0a0c645c1ce0af77a31cdbebd059dde1179d1bc0d07f4e82586d2deae551",
-        "bytes": 34707
+        "sha256": "e7e66910755f87f0ee5a1220edcec20bd9bb0a44b96059dffba772655ff5e550",
+        "bytes": 42177
       },
       {
         "path": "model/dependencies.json",
@@ -663,16 +663,16 @@
       },
       {
         "path": "model/spec-deviations.json",
-        "sha256": "879428e17fa5a202f38f3fa1a3496b89ab89d3e0587d51f00aa881dd09c9a720",
-        "bytes": 2258
+        "sha256": "b454f22a983d789f54b83bcdbbf84a6404083d766fa0d92f1116190f142a36a7",
+        "bytes": 3739
       }
     ]
   },
-  "sourceManifestCoreIdentity": "50ff20ee5685d3c281b3c41566688a8bac12965d19966151a553b4fe1651b960",
+  "sourceManifestCoreIdentity": "9dabaadede0b79a9dbf65c5e65af0f31bca433a7e215f177f5575efed1684de7",
   "generatedProofInputBody": {
     "schemaVersion": 1,
     "stage": "GeneratedProofInputBody",
-    "sourceManifestCoreIdentity": "50ff20ee5685d3c281b3c41566688a8bac12965d19966151a553b4fe1651b960",
+    "sourceManifestCoreIdentity": "9dabaadede0b79a9dbf65c5e65af0f31bca433a7e215f177f5575efed1684de7",
     "excludes": [
       "its own JSON encoding",
       "every later output"
@@ -686,24 +686,24 @@
     ],
     "note": "Artifact/Bytes.lean is NOT present: no artifact has been emitted, because emission requires WS-001 and BI-002. SPEC 13 Phase F step 4 is therefore not reached."
   },
-  "generatedProofInputIdentity": "f721a9bbcf12388b4ead7db8023a11a4d617d5ffc038e310375f7beb117bfe73",
+  "generatedProofInputIdentity": "db9970272d172a97fba0bb125b2110ddebd631b5efd28361c7a4f17fa7185ab8",
   "preFinalEnvironmentBody": {
     "schemaVersion": 1,
     "stage": "PreFinalEnvironmentBody",
-    "generatedProofInputIdentity": "f721a9bbcf12388b4ead7db8023a11a4d617d5ffc038e310375f7beb117bfe73",
+    "generatedProofInputIdentity": "db9970272d172a97fba0bb125b2110ddebd631b5efd28361c7a4f17fa7185ab8",
     "leanToolchain": "leanprover/lean4:v4.30.0",
     "leanCommit": "d024af099ca4bf2c86f649261ebf59565dc8c622",
     "dependencies": [],
     "compiledEnvironmentDigest": null,
     "note": "compiledEnvironmentDigest is null: SPEC 13 Phase F step 5 records the checked final declaration-environment digest, which is only meaningful once the final theorem is on the path. GO-001 is outstanding."
   },
-  "preFinalEnvironmentIdentity": "9a06e541e661449ef51a92cbeb1f3bccce1f89baa7ed2a4e60182e3457527605",
+  "preFinalEnvironmentIdentity": "4b0ef8b7d34907bb97274edd573ae54faa65eea8cbb328568a8ba256124d0855",
   "outputManifestBody": {
     "schemaVersion": 1,
     "stage": "OutputManifestBody",
-    "sourceManifestCoreIdentity": "50ff20ee5685d3c281b3c41566688a8bac12965d19966151a553b4fe1651b960",
-    "generatedProofInputIdentity": "f721a9bbcf12388b4ead7db8023a11a4d617d5ffc038e310375f7beb117bfe73",
-    "preFinalEnvironmentIdentity": "9a06e541e661449ef51a92cbeb1f3bccce1f89baa7ed2a4e60182e3457527605",
+    "sourceManifestCoreIdentity": "9dabaadede0b79a9dbf65c5e65af0f31bca433a7e215f177f5575efed1684de7",
+    "generatedProofInputIdentity": "db9970272d172a97fba0bb125b2110ddebd631b5efd28361c7a4f17fa7185ab8",
+    "preFinalEnvironmentIdentity": "4b0ef8b7d34907bb97274edd573ae54faa65eea8cbb328568a8ba256124d0855",
     "excludes": [
       "MANIFEST.json itself"
     ],
@@ -711,12 +711,12 @@
     "atlasSeal": null,
     "proofRegistry": {
       "path": "model/claims.json",
-      "sha256": "effb0a0c645c1ce0af77a31cdbebd059dde1179d1bc0d07f4e82586d2deae551"
+      "sha256": "e7e66910755f87f0ee5a1220edcec20bd9bb0a44b96059dffba772655ff5e550"
     },
     "generatedDocumentation": [
       {
         "path": "CONFORMANCE.md",
-        "sha256": "087985ac795c36fa56fbe3e741c0b1f572017504306c2019e24d049a5aba61f4"
+        "sha256": "beaaaf21983f6c990fffb31e1a545acddf9b3064fb89c25f1991a22d41f4c4ab"
       }
     ],
     "reproducibilityPlan": {

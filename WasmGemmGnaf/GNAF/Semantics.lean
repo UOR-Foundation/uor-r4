@@ -469,6 +469,12 @@ def storedRegMem (m : Machine) (dst : RegionRef) (map : IndexMap) (width src : N
     List Nat :=
   gather m.mem (storeAddr m dst map) (leBytes (m.reg src) width) (fun i => i) width 0
 
+/-- The value a `loadReg` node reads: the little-endian word of `width` cells at
+exactly the address `storeReg` writes.  The two nodes therefore agree on
+addressing by construction, not by coincidence. -/
+def loadedReg (m : Machine) (src : RegionRef) (map : IndexMap) (width : Nat) : Nat :=
+  leWord m.mem (storeAddr m src map) width
+
 @[simp] theorem storedRegMem_length (m : Machine) (dst : RegionRef) (map : IndexMap)
     (width src : Nat) : (storedRegMem m dst map width src).length = m.mem.length :=
   gather_length _ _ _ _ _ _
@@ -517,7 +523,10 @@ def eval : Plan → Machine → Machine
   | pack src dst map _, m => { m with scratch := packedScratch m src dst map }
   | unpack src dst map _, m => { m with mem := unpackedMem m src dst map }
   | storeReg dst map width src, m => { m with mem := storedRegMem m dst map width src }
+  | loadReg dst src map width, m => m.withReg dst (loadedReg m src map width)
   | loopNest axis body, m => runLoop body.eval axis.indexReg axis.extent 0 m
+  | loopReg indexReg extentReg _ body, m =>
+      runLoop body.eval indexReg (Nat.min (m.reg extentReg) loopRegMaxTrips) 0 m
   | tiled _ tiling extents body, m =>
       runLoop body.eval 0 (tiling.totalTiles extents.m extents.n extents.k) 0 m
   | reduce contract acc lhs rhs, m =>
@@ -663,6 +672,123 @@ theorem storeReg_reads_back_exact (dst : RegionRef) (map : IndexMap) (width src 
     leWord ((Plan.storeReg dst map width src).eval m).mem (storeAddr m dst map) width =
       m.reg src := by
   rw [storeReg_reads_back dst map width src m hfit, Nat.mod_eq_of_lt hv]
+
+/-! ## The register load law (SPEC §11.1, and SPEC §3 input totality)
+
+`loadReg` is the dual constructor: it is the only one that moves a value *out*
+of the observable store and into the register file, so it is what lets a plan
+compute with the descriptor it was handed instead of merely branching on it.
+Everything below is about `Plan.eval` alone; nothing here mentions
+compilation. -/
+
+/-- The evaluation equation of a register load. -/
+@[simp] theorem eval_loadReg (dst : Nat) (src : RegionRef) (map : IndexMap)
+    (width : Nat) (m : Machine) :
+    (Plan.loadReg dst src map width).eval m =
+      m.withReg dst (loadedReg m src map width) := rfl
+
+/-- A register load leaves the observable store alone: it reads, it does not
+write. -/
+@[simp] theorem loadReg_mem (dst : Nat) (src : RegionRef) (map : IndexMap)
+    (width : Nat) (m : Machine) :
+    ((Plan.loadReg dst src map width).eval m).mem = m.mem := rfl
+
+/-- A register load never changes the size of the register file. -/
+@[simp] theorem loadReg_regs_length (dst : Nat) (src : RegionRef) (map : IndexMap)
+    (width : Nat) (m : Machine) :
+    ((Plan.loadReg dst src map width).eval m).regs.length = m.regs.length := by
+  simp
+
+/-- **Store then load.**  A `loadReg` reading the address and width a `storeReg`
+just wrote returns the value the register held, truncated to the declared width
+exactly as a `width`-byte machine store truncates it.  This is the round trip
+that makes the pair usable: a plan may deposit a computed value and read it back,
+and — the point of the constructor — may read a value it never wrote, since the
+law holds for the raw invocation's own bytes. -/
+theorem loadReg_reads_stored (r : RegionRef) (map : IndexMap) (width dst src : Nat)
+    (m : Machine) (hfit : storeAddr m r map + width ≤ m.mem.length)
+    (hdst : dst < m.regs.length) :
+    ((Plan.loadReg dst r map width).eval ((Plan.storeReg r map width src).eval m)).reg dst =
+      m.reg src % 256 ^ width := by
+  have hregs : ((Plan.storeReg r map width src).eval m).regs.length = m.regs.length := rfl
+  have haddr :
+      storeAddr ((Plan.storeReg r map width src).eval m) r map = storeAddr m r map := rfl
+  rw [eval_loadReg, Machine.reg_withReg_same _ _ _ (by rw [hregs]; exact hdst)]
+  unfold loadedReg
+  rw [haddr]
+  exact storeReg_reads_back r map width src m hfit
+
+/-- The exact form of the round trip: a register that fits the declared width is
+loaded back unchanged. -/
+theorem loadReg_reads_stored_exact (r : RegionRef) (map : IndexMap)
+    (width dst src : Nat) (m : Machine)
+    (hfit : storeAddr m r map + width ≤ m.mem.length) (hdst : dst < m.regs.length)
+    (hv : m.reg src < 256 ^ width) :
+    ((Plan.loadReg dst r map width).eval ((Plan.storeReg r map width src).eval m)).reg dst =
+      m.reg src := by
+  rw [loadReg_reads_stored r map width dst src m hfit hdst, Nat.mod_eq_of_lt hv]
+
+/-! ## The register-driven loop law
+
+`loopReg` is the constructor that makes a *trip count* a function of the input.
+The three equations below are its complete unfolding theory, and
+`loopReg_eq_loopNest` is what transfers every fixed-extent result of the
+development to it. -/
+
+/-- The evaluation equation of a register-driven loop: the extent is read once,
+before the loop, and the loop is then the ordinary `runLoop` on that natural
+number. -/
+@[simp] theorem eval_loopReg (ir er : Nat) (map : IndexMap) (body : Plan) (m : Machine) :
+    (Plan.loopReg ir er map body).eval m =
+      Plan.runLoop body.eval ir (Nat.min (m.reg er) loopRegMaxTrips) 0 m := rfl
+
+/-- The clamp is inert below the released `i32` ceiling. -/
+theorem min_loopRegMaxTrips {n : Nat} (h : n ≤ loopRegMaxTrips) :
+    Nat.min n loopRegMaxTrips = n := Nat.min_eq_left h
+
+/-- **An empty extent register runs the body not at all.** -/
+theorem loopReg_zero (ir er : Nat) (map : IndexMap) (body : Plan) (m : Machine)
+    (h : m.reg er = 0) : (Plan.loopReg ir er map body).eval m = m := by
+  rw [eval_loopReg, h, min_loopRegMaxTrips (Nat.zero_le _), Plan.runLoop_zero]
+
+/-- **The unfolding equation.**  An extent register holding `n + 1` runs the body
+once at index `0` and then continues as a loop of `n` further iterations. -/
+theorem loopReg_succ (ir er : Nat) (map : IndexMap) (body : Plan) (m : Machine)
+    (n : Nat) (h : m.reg er = n + 1) (hb : n + 1 ≤ loopRegMaxTrips) :
+    (Plan.loopReg ir er map body).eval m =
+      Plan.runLoop body.eval ir n 1 (body.eval (m.withReg ir 0)) := by
+  rw [eval_loopReg, h, min_loopRegMaxTrips hb]
+  rfl
+
+/-- **The transfer law.**  When the extent register holds `n`, a register-driven
+loop is exactly the fixed-extent loop nest at literal extent `n`.  Every result
+proved of `loopNest` at a literal extent therefore applies to the register-driven
+loop that reaches that extent at run time. -/
+theorem loopReg_eq_loopNest (ir er : Nat) (map : IndexMap) (body : Plan) (m : Machine)
+    (n : Nat) (hn : m.reg er = n) (hb : n ≤ loopRegMaxTrips) :
+    (Plan.loopReg ir er map body).eval m =
+      (Plan.loopNest { indexReg := ir, extent := n, map := map } body).eval m := by
+  rw [eval_loopReg, Plan.eval_loopNest, hn, min_loopRegMaxTrips hb]
+
+/-- **The two constructors together: a trip count read out of the input.**
+Loading a memory word into register `dst` and then running a `loopReg` whose
+extent register is `dst` runs the body exactly as many times as *that memory
+word* says — the loop is the fixed-extent nest at the extent the configuration
+supplied, and the plan text names no extent at all.
+
+This is the statement the fixed-extent fragment of the language cannot make, and
+it is what a general GEMM needs: the descriptor's `m`, `n`, `k` reach the loop
+bounds through the register file. -/
+theorem loopReg_trips_from_memory (dst ir : Nat) (src : RegionRef) (map : IndexMap)
+    (width : Nat) (body : Plan) (m : Machine) (hdst : dst < m.regs.length)
+    (hb : loadedReg m src map width ≤ loopRegMaxTrips) :
+    (Plan.seq (Plan.loadReg dst src map width) (Plan.loopReg ir dst map body)).eval m =
+      (Plan.loopNest
+        { indexReg := ir, extent := loadedReg m src map width, map := map } body).eval
+        (m.withReg dst (loadedReg m src map width)) := by
+  rw [Plan.eval_seq, eval_loadReg]
+  exact loopReg_eq_loopNest ir dst map body _ (loadedReg m src map width)
+    (Machine.reg_withReg_same m dst _ hdst) hb
 
 /-! ## The SPEC-facing semantics -/
 

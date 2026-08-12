@@ -96,8 +96,14 @@ inductive HasType : Sig → Plan → Sig → Prop
   | storeReg {s : Sig} {dst : RegionRef} {map : IndexMap} {w src : Nat} :
       dst.Fits s.mem → 0 < w → src < s.regs → 2 < s.regs →
       HasType s (.storeReg dst map w src) s
+  | loadReg {s : Sig} {dst : Nat} {src : RegionRef} {map : IndexMap} {w : Nat} :
+      src.Fits s.mem → 0 < w → dst < s.regs → 2 < s.regs →
+      HasType s (.loadReg dst src map w) s
   | loopNest {s : Sig} {axis : LoopAxis} {body : Plan} :
       axis.indexReg < s.regs → HasType s body s → HasType s (.loopNest axis body) s
+  | loopReg {s : Sig} {ir er : Nat} {map : IndexMap} {body : Plan} :
+      ir < s.regs → er < s.regs → HasType s body s →
+      HasType s (.loopReg ir er map body) s
   | tiled {s : Sig} {o : TraversalOrder} {ti : Tiling} {ex : Extents} {body : Plan} :
       ti.Positive → HasType s body s → HasType s (.tiled o ti ex body) s
   | reduce {s : Sig} {c : ArithmeticContract} {acc : Nat} {lhs rhs : RegionRef} :
@@ -168,8 +174,12 @@ def infer : Sig → Plan → Option Sig
       if src.Fits s.scratch ∧ dst.Fits s.mem ∧ 0 < w then some s else none
   | s, .storeReg dst _ w src =>
       if dst.Fits s.mem ∧ 0 < w ∧ src < s.regs ∧ 2 < s.regs then some s else none
+  | s, .loadReg dst src _ w =>
+      if src.Fits s.mem ∧ 0 < w ∧ dst < s.regs ∧ 2 < s.regs then some s else none
   | s, .loopNest axis body =>
       if axis.indexReg < s.regs ∧ infer s body = some s then some s else none
+  | s, .loopReg ir er _ body =>
+      if ir < s.regs ∧ er < s.regs ∧ infer s body = some s then some s else none
   | s, .tiled _ ti _ body =>
       if ti.Positive ∧ infer s body = some s then some s else none
   | s, .reduce c acc lhs rhs =>
@@ -242,11 +252,23 @@ theorem infer_sound : ∀ (p : Plan) (s t : Sig), infer s p = some t → HasType
     by_cases hc : dst.Fits s.mem ∧ 0 < w ∧ src < s.regs ∧ 2 < s.regs
     · rw [if_pos hc] at h; cases h; exact .storeReg hc.1 hc.2.1 hc.2.2.1 hc.2.2.2
     · rw [if_neg hc] at h; exact absurd h (by simp)
+  | loadReg dst src map w =>
+    intro s t h
+    rw [infer] at h
+    by_cases hc : src.Fits s.mem ∧ 0 < w ∧ dst < s.regs ∧ 2 < s.regs
+    · rw [if_pos hc] at h; cases h; exact .loadReg hc.1 hc.2.1 hc.2.2.1 hc.2.2.2
+    · rw [if_neg hc] at h; exact absurd h (by simp)
   | loopNest axis body ih =>
     intro s t h
     rw [infer] at h
     by_cases hc : axis.indexReg < s.regs ∧ infer s body = some s
     · rw [if_pos hc] at h; cases h; exact .loopNest hc.1 (ih s s hc.2)
+    · rw [if_neg hc] at h; exact absurd h (by simp)
+  | loopReg ir er map body ih =>
+    intro s t h
+    rw [infer] at h
+    by_cases hc : ir < s.regs ∧ er < s.regs ∧ infer s body = some s
+    · rw [if_pos hc] at h; cases h; exact .loopReg hc.1 hc.2.1 (ih s s hc.2.2)
     · rw [if_neg hc] at h; exact absurd h (by simp)
   | tiled o ti ex body ih =>
     intro s t h
@@ -333,7 +355,9 @@ theorem infer_complete {s : Sig} {p : Plan} {t : Sig} (h : HasType s p t) :
   | pack h1 h2 h3 => rw [infer, if_pos ⟨h1, h2, h3⟩]
   | unpack h1 h2 h3 => rw [infer, if_pos ⟨h1, h2, h3⟩]
   | storeReg h1 h2 h3 h4 => rw [infer, if_pos ⟨h1, h2, h3, h4⟩]
+  | loadReg h1 h2 h3 h4 => rw [infer, if_pos ⟨h1, h2, h3, h4⟩]
   | loopNest h1 _ ih => rw [infer, if_pos ⟨h1, ih⟩]
+  | loopReg h1 h2 _ ih => rw [infer, if_pos ⟨h1, h2, ih⟩]
   | tiled h1 _ ih => rw [infer, if_pos ⟨h1, ih⟩]
   | reduce h1 h2 h3 h4 => rw [infer, if_pos ⟨h1, h2, h3, h4⟩]
   | allocScratch _ ih => rw [infer]; exact ih
@@ -378,7 +402,9 @@ theorem hasType_scratch_le {s : Sig} {p : Plan} {t : Sig} (h : HasType s p t) :
   | pack => exact Nat.le_refl _
   | unpack => exact Nat.le_refl _
   | storeReg => exact Nat.le_refl _
+  | loadReg => exact Nat.le_refl _
   | loopNest => exact Nat.le_refl _
+  | loopReg => exact Nat.le_refl _
   | tiled => exact Nat.le_refl _
   | reduce => exact Nat.le_refl _
   | allocScratch _ ih => exact Nat.le_trans (Nat.le_add_right _ _) ih
@@ -409,7 +435,9 @@ theorem hasType_fixed_resources {s : Sig} {p : Plan} {t : Sig} (h : HasType s p 
   | pack => exact ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
   | unpack => exact ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
   | storeReg => exact ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
+  | loadReg => exact ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
   | loopNest => exact ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
+  | loopReg => exact ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
   | tiled => exact ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
   | reduce => exact ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
   | allocScratch _ ih => exact ih
@@ -540,10 +568,17 @@ theorem hasType_preservation {s : Sig} {p : Plan} {t : Sig} (h : HasType s p t) 
     show (storedRegMem m dst map w src).length = s.mem
     rw [storedRegMem_length]
     exact h3
+  | @loadReg s dst src map w _ _ _ _ =>
+    intro m hm
+    exact Machine.conforms_withReg hm _ _
   | @loopNest s axis body _ _ ih =>
     intro m hm
     rw [Plan.eval_loopNest]
     exact runLoop_conforms ih axis.indexReg axis.extent 0 m hm
+  | @loopReg s ir er map body _ _ _ ih =>
+    intro m hm
+    rw [eval_loopReg]
+    exact runLoop_conforms ih ir (Nat.min (m.reg er) loopRegMaxTrips) 0 m hm
   | @tiled s o ti ex body _ _ ih =>
     intro m hm
     rw [Plan.eval_tiled]
