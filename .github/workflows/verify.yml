@@ -1,0 +1,39 @@
+# SPEC 20.3: actions pinned to commit hashes, exact checked-in toolchain,
+# no mutable selector, and one final job running the same `just vv` used locally.
+name: verify
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  gate:
+    runs-on: ubuntu-24.04
+    steps:
+      # actions/checkout v4.2.2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: install pinned Lean toolchain
+        run: |
+          set -euo pipefail
+          curl -sSfL https://github.com/leanprover/elan/releases/download/v3.1.1/elan-x86_64-unknown-linux-gnu.tar.gz \
+            | tar xz
+          ./elan-init -y --default-toolchain "$(cat lean-toolchain)"
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: assert toolchain identity matches the SPEC 4 pin
+        run: |
+          set -euo pipefail
+          lean --version
+          lean --version | grep -q 'd024af099ca4bf2c86f649261ebf59565dc8c622'
+      - name: assert authority digests recomputed from content
+        run: sha256sum -c authority/uor-gnaf.sha256
+      - name: build
+        run: lake build
+      - name: forbidden-construct scan (SPEC 19, defence in depth)
+        run: |
+          set -euo pipefail
+          python3 Tools/scan.py
+      - name: axiom closure audit (SPEC 19, the decisive audit)
+        run: python3 Tools/axioms.py
+      - name: release gate
+        # Expected to FAIL at step 9 while WGG-GO-1 is outstanding. That failure is
+        # the conforming outcome (UOR-GNAF 13.3): the gate MUST NOT return an
+        # unproved global label. Do not add continue-on-error to make this green.
+        run: python3 Tools/gate.py

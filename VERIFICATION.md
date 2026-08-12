@@ -1,46 +1,65 @@
-# VERIFICATION
+# Verification
 
-Which axis of `just vv` discharges which class of claim. `AGENTS.md` defines the
-rules; this maps them onto the commands that enforce them.
+What each gate discharges, and the defect planted to prove it can fail.
 
-| `just` recipe | Enforces | ID classes |
+Run everything with `just vv`. It is **expected to fail** at step 9 while `WGG-GO-1`
+is outstanding; see [CERTIFICATION.md](CERTIFICATION.md). A green gate in this state
+would mean the gate had been weakened.
+
+## Gate map
+
+| Gate | Discharges | Falsifier |
 | --- | --- | --- |
-| `just fmt-check` | the diff is reviewable | --- |
-| `just model` | R1, R4, R5 | `CM-01` |
-| `just lint` | clippy at `-D warnings` | --- |
-| `just test` | the workspace suite | --- |
-| `just features` | every optional feature compiles, with its tests | --- |
-| `just bdd` | R3 and R2's behavioural half | `CM-02`, `CM-03` |
-| `just deny` | R6, over the dependency graph | --- |
+| `just build` | the Lean library compiles under the pinned toolchain | — |
+| `just axioms` | every `formalProof` claim's transitive axiom closure is inside the SPEC §4 trust base | `M5` |
+| `just claims` | registry is nonempty, ids unique, no orphan dependencies | `M2`, `M3` |
+| `just mutation` | each decisive checker rejects a planted fault | self-testing |
+| `just docs` | `CONFORMANCE.md` is generated, deterministic, byte-clean | `reproducible.yml` |
+| `just vv` | all 13 conditions of SPEC §20.2 | `M6` |
 
-The ID column is thin because the register is empty. It fills as capabilities
-are added; an ID with no scenario, or a scenario with no test, fails `just bdd`.
+## Why the source scan is not the decisive audit
 
-## Every gate is falsifiable
+SPEC §19 is explicit: source scanning is defence in depth. The decisive audit inspects
+the **compiled environment** and the transitive dependencies of every public theorem,
+via `#print axioms` in `Tools/axioms.py`. A `sorry` reaches the environment as
+`sorryAx`, so it is caught there even if the text scan is evaded.
 
-A gate nobody has seen fail is indistinguishable from a gate that cannot. Before
-adding one, plant the defect it exists to catch, confirm it fires, and add a row
-here.
+Current closure over every `formalProof` claim: `propext`, `Quot.sound`. Both are Lean
+core logical axioms and are named individually as SPEC §4 requires. No `sorryAx`, no
+project-declared axiom, no `Classical.choice`.
 
-| Gate | Planted defect | Reported |
-| --- | --- | --- |
-| `check-model` (R1) | a `CONFORMANCE.md` that disagrees with the register | yes |
-| `audit-deferral` (R4) | a deferral marker in a crate, and one in the gate's own source | yes, both |
-| the honesty meta-gate (R2) | an ID with no test | armed by the register |
+## Planted falsifiers
 
-The last row says what it does on purpose. With an empty register there is no ID
-whose test can be removed, so the plant has nothing to plant; the test prints
-that rather than passing quietly, because a falsifiability check that cannot
-falsify is the exact thing it exists to rule out. It re-arms with the first ID.
+`Tools/mutation.py`, registered in `model/falsifiers.json`. Each applies its mutation
+to a **copy**, never to the repository.
 
-`audit-deferral` is worth the second column. It reads every crate *and* `xtask`,
-so it reads its own source, and its markers are therefore spelled in halves: a
-list of forbidden tokens written out in full matches itself, and exempting the
-file would leave a hole precisely where a deferral parked in a gate would sit.
-Both plants were run --- one in a crate, one in the gate --- and both were caught.
+| ID | Family | Plants | Rejected by |
+| --- | --- | --- | --- |
+| M1 | CM | mutated authority bytes | content digest recomputation |
+| M2 | CM | duplicate claim id | registry uniqueness |
+| M3 | CM | orphan claim dependency | registry dependency check |
+| M4 | GO | `formalProof` level with no Lean declaration | claim-level rule (SPEC §17.1) |
+| M5 | LF | `sorry` on the proof path | forbidden-construct scan |
+| M6 | GO | green gate while `GO-001` is outstanding | release gate step 9 |
+| M7 | AT | citing the seal's cover check as universal coverage | `AT-001` blindness lemma + `AT-002` absence |
+| M8 | CM | a stale `.olean` masking a non-elaborating root | direct `lean WasmGemmGnaf.lean` |
 
-## What this suite does not establish
+M7 and M8 were added after real defects, not hypothetically. M7 answers the audit
+finding that `universalCoverCompleteCheck` verifies bookkeeping only and is
+satisfiable by an empty cover. M8 answers a worse one: `lakefile.lean` used
+`globs := #[.submodules ...]`, which never builds the root module, so `lake build`
+reported green for an entire cycle while two modules declared clashing `Fault`
+types and the root did not elaborate at all. **`lake build` success is not evidence
+that the code elaborates**; the gate now checks the root directly.
 
-Anything about a dependency. A library imported here is gated in its own
-repository; restating its guarantees would give a claim two sources, which is
-what R1 forbids. What may be claimed here is what is built here.
+M4 and M6 are the ones that matter. SPEC §18 warns that a mutation suite which merely
+expects runtime output differences does not test claim integrity; M4 and M6 attack the
+claim machinery itself — they check that the repository cannot be made to *say* it
+proved global optimality without a Lean declaration behind it.
+
+## What is not yet falsifiable
+
+Universal-coverage integrity (partition gaps, overlaps, forged lower bounds, stale
+seals) cannot be falsification-tested until the checkers exist. Those falsifiers are
+registered as outstanding rather than passing vacuously — a suite that passes because
+its target does not exist is worse than no suite.

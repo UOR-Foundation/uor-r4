@@ -1,49 +1,58 @@
-# `just vv` is the normative acceptance gate. Everything else is a slice of it.
-
+# `just vv` is the normative release gate (SPEC.md section 20.2).
 default: vv
 
-# The whole gate.
-vv: fmt-check model lint test features bdd
-    @echo "vv: the acceptance gate passed"
+# The whole gate. Expected to FAIL at step 9 while WGG-GO-1 is outstanding.
+vv: root-check firewall manifest-check build claims axioms
+    @python3 Tools/gate.py
 
-# R1, R4, R5 --- the repository gates, each falsifiable.
-model:
-    cargo run -q -p xtask -- validate
+bootstrap:
+    @lean --version && lake --version
 
-# Regenerate everything the model owns: CONFORMANCE.md.
-model-write:
-    cargo run -q -p xtask -- check-model --write
-
-fmt:
-    cargo fmt --all
-
-fmt-check:
-    cargo fmt --all -- --check
-
-lint:
-    cargo clippy --workspace --all-targets -- -D warnings
+build:
+    lake build
 
 test:
-    cargo test --workspace
+    lake build
 
-# A feature only its author has built is a feature that does not work: nothing
-# else in the gate compiles a crate at anything but its default features, so a
-# rename upstream of an optional dependency fails nowhere until someone turns
-# the flag on. `--all-targets` because the tests behind a flag are code too.
-#
-# Every optional feature compiles, with its tests.
-features:
-    cargo check --workspace --all-features --all-targets
+prove:
+    lake build
 
-# R3: every capability begins as a Gherkin scenario, and every scenario has a
-# test whose name ends in its ID.
-bdd:
-    cargo test -p repo-conformance
+claims:
+    @python3 -c "import json;d=json.load(open('model/claims.json'));print(f'claims: {len(d[\"claims\"])}');[print(f'  {c[\"id\"]:<8} {c[\"level\"]:<13} {c[\"status\"]}') for c in d['claims']]"
 
-# R6: nothing shipped depends on a dev-only crate, no wildcard version
-# requirement, no advisory against anything in the tree. Needs
-# `cargo install cargo-deny`, which is why it is not in `just vv`.
-#
-# Advisories, bans, licences and sources, over the dependency graph.
-deny:
-    cargo deny --all-features check
+axioms:
+    @python3 Tools/axioms.py
+
+artifact-check:
+    @test -f artifacts/wasm-gemm-gnaf.wasm || (echo "artifact absent: gated on WS-001/LB-001" && exit 1)
+
+emit:
+    @echo "emit: gated on WS-001 (mechanized Core 3.0 semantics)" && exit 1
+
+mutation:
+    @echo "mutation: gated on the checkers it would falsify" && exit 1
+
+reproduce:
+    @echo "reproduce: gated on emit" && exit 1
+
+docs:
+    @python3 Tools/gen_conformance.py
+
+# Regenerate the root import module from the layer tree.
+root:
+    @python3 Tools/root.py
+
+# Fail if the root import is stale or any module belongs to no SPEC 5 layer.
+root-check:
+    @python3 Tools/root.py --check
+
+# SPEC 10.1: the competitor universe must not import the artifact or a conclusion.
+firewall:
+    @python3 Tools/firewall.py
+
+# SPEC 4/5: regenerate the ordered acyclic identity manifest.
+manifest:
+    @python3 Tools/manifest.py
+
+manifest-check:
+    @python3 Tools/manifest.py --check

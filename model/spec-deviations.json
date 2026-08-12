@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "description": "Deviations from the literal text of SPEC.md, with justification. A deviation is permitted ONLY when the literal text is unsatisfiable or strictly weaker than what it intends, and only when the intended content is proved in full. Every entry names the SPEC clause, what was changed, why, and the declaration that carries the intended strength. Silent deviation is forbidden.",
+  "deviations": [
+    {
+      "id": "DEV-001",
+      "specSection": "7.5",
+      "specText": "theorem costed_erase_iff_plain_run : Wasm.CostedRun P module invocation costedTrace observation <-> Wasm.Run module invocation (eraseCosts costedTrace) observation",
+      "issue": "The literal biconditional is FALSE. `costedTrace` is universally quantified, so a trace carrying arbitrary cost labels whose erasure happens to equal a valid plain trace would satisfy the right-hand side without being a costed run the machine can produce. The backward direction cannot hold for an arbitrary labelling.",
+      "resolution": "`Wasm.costed_erase_iff_plain_run` adds the minimal side condition `CostedLabelling module invocation costedTrace` to the right-hand side, and the intended content is proved separately and unconditionally.",
+      "intendedContentProvedBy": [
+        "WasmGemmGnaf.Wasm.costed_run_iff_plain_run  -- (exists costedTrace, CostedRun ...) <-> Run module invocation observation.trace observation; NO side condition",
+        "WasmGemmGnaf.Wasm.costedRun_of_run          -- erasure completeness: every plain run has a costed labelling erasing back to it",
+        "WasmGemmGnaf.Wasm.costedRun_erase           -- erasure soundness"
+      ],
+      "strengthEffect": "STRENGTHENING. The forward direction is strictly stronger than SPEC's (CostedRun -> Run AND the labelling is machine-produced). The existentially quantified form carries SPEC's full intent with no side condition, so nothing SPEC asserts is lost.",
+      "specAmendmentRecommended": true,
+      "amendmentText": "SPEC 7.5 should state the erasure theorem in the existentially quantified form `(exists costedTrace, CostedRun P module invocation costedTrace observation) <-> Run module invocation observation.trace observation`, which is true as written."
+    }
+  ]
+}
