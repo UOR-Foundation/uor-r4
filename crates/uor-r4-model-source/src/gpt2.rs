@@ -558,3 +558,136 @@ mod tests {
         );
     }
 }
+
+/// The GPT-2 adapter: a [`Gpt2`] executor plus its recurrent state, exposed
+/// through the architecture-neutral [`crate::TeacherOracle`] two-surface
+/// trait. Nothing GPT-2-specific escapes this type; the compiler consumes
+/// only the trait, so no downstream crate branches on `gpt2`, `c_attn`, or
+/// `wte`. The compiled representation width it presents is
+/// [`crate::geometry::COMPILED_WIDTH`] (288); `embedding` projects the
+/// source-width rows down through the #600 `bucket-average/1` projection,
+/// exactly as the Llama adapter does for its own source width.
+pub struct HuggingFaceGpt2Oracle {
+    model: Gpt2,
+    state: Gpt2State,
+    bos_token: usize,
+    eos_token: usize,
+}
+
+impl HuggingFaceGpt2Oracle {
+    /// Load the GPT-2 teacher from a snapshot directory.
+    pub fn load(source: impl AsRef<std::path::Path>) -> Result<Self, SourceUnavailable> {
+        Self::build(Gpt2::load(source, None)?)
+    }
+
+    /// Load with a bounded teacher context (short trajectories are all the
+    /// compiler needs; the deployed runtime consumes an eight-token window).
+    pub fn load_with_sequence_length(
+        source: impl AsRef<std::path::Path>,
+        sequence_length: usize,
+    ) -> Result<Self, SourceUnavailable> {
+        if sequence_length == 0 {
+            return Err(SourceUnavailable::new(
+                "teacher sequence length must be greater than zero",
+            ));
+        }
+        Self::build(Gpt2::load(source, Some(sequence_length))?)
+    }
+
+    fn build(model: Gpt2) -> Result<Self, SourceUnavailable> {
+        let state = Gpt2State::new(&model.cfg);
+        let (bos_token, eos_token) = (model.cfg.bos, model.cfg.eos);
+        Ok(Self {
+            model,
+            state,
+            bos_token,
+            eos_token,
+        })
+    }
+
+    /// This teacher's GPT-2 configuration.
+    pub fn cfg(&self) -> &Gpt2Config {
+        &self.model.cfg
+    }
+}
+
+impl crate::RepresentationSource for HuggingFaceGpt2Oracle {
+    fn vocab_size(&self) -> usize {
+        self.model.cfg.vocab
+    }
+    fn source_dimension(&self) -> usize {
+        self.model.cfg.n_embd
+    }
+    fn tokenizer_address(&self) -> &str {
+        "huggingface-tokenizer"
+    }
+    fn read_embedding_rows(
+        &self,
+        range: std::ops::Range<usize>,
+        output: &mut [f32],
+    ) -> Option<()> {
+        let d = self.model.cfg.n_embd;
+        let count = range.end.checked_sub(range.start)?;
+        if output.len() < count * d || range.end > self.model.cfg.vocab {
+            return None;
+        }
+        output[..count * d].copy_from_slice(&self.model.wte[range.start * d..range.end * d]);
+        Some(())
+    }
+}
+
+impl crate::BehaviorSource for HuggingFaceGpt2Oracle {
+    fn reset(&mut self) {
+        self.state.reset();
+    }
+    fn step(&mut self, token: usize, pos: usize, logits: &mut [f32]) {
+        self.model
+            .forward(&mut self.state, token, pos, &[], &mut |_, _| {});
+        logits.copy_from_slice(&self.state.logits);
+    }
+}
+
+impl crate::TeacherOracle for HuggingFaceGpt2Oracle {
+    fn vocab(&self) -> usize {
+        self.model.cfg.vocab
+    }
+    fn dim(&self) -> usize {
+        // The compiled geometry this adapter presents (D = 288), not the
+        // GPT-2 source width; `embedding` projects rows down to it (#600).
+        crate::geometry::COMPILED_WIDTH as usize
+    }
+    fn seq_len(&self) -> usize {
+        self.model.cfg.seq_len
+    }
+    fn bos_token(&self) -> usize {
+        self.bos_token
+    }
+    fn eos_token(&self) -> usize {
+        self.eos_token
+    }
+    fn kappa(&self) -> String {
+        self.model.kappa.clone()
+    }
+    fn source_bytes(&self) -> usize {
+        self.model.source_bytes
+    }
+    fn embedding(&self, token: usize, out: &mut [f32]) {
+        let d = self.model.cfg.n_embd;
+        let row = &self.model.wte[token * d..(token + 1) * d];
+        crate::geometry::bucket_average_project(row, out);
+    }
+    fn geometry_projection(&self) -> Option<crate::geometry::GeometryProjection> {
+        u32::try_from(self.model.cfg.n_embd).ok().map(|source_width| {
+            crate::geometry::GeometryProjection::bucket_average(
+                source_width,
+                crate::geometry::COMPILED_WIDTH,
+            )
+        })
+    }
+    fn hidden_state(&self) -> Option<&[f32]> {
+        Some(&self.state.hidden)
+    }
+    fn top_k(&self, k: usize, out: &mut [(u32, f32)]) -> usize {
+        crate::top_k_from_logits(&self.state.logits, k, out, false)
+    }
+}
