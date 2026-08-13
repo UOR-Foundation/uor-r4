@@ -691,3 +691,84 @@ impl crate::TeacherOracle for HuggingFaceGpt2Oracle {
         crate::top_k_from_logits(&self.state.logits, k, out, false)
     }
 }
+
+#[cfg(test)]
+mod real_tests {
+    use super::*;
+    use crate::{BehaviorSource, TeacherOracle};
+    use std::path::PathBuf;
+
+    /// Presence-gated (#599 three-state) canary over the REAL pinned
+    /// openai-community/gpt2 124M snapshot: the 548 MB source is a
+    /// dev/local compiler input, never a CI download, so when it is absent
+    /// this reports UNAVAILABLE and is a no-op success — never a silent
+    /// skip of a real failure. When present, the oracle must reproduce the
+    /// independent numpy reference (scripts/gen_gpt2_real_golden.py):
+    /// identical argmax and top-5 token set on every prompt, and a final
+    /// hidden state within tolerance.
+    #[test]
+    fn real_gpt2_matches_numpy_reference() {
+        let crate_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let src = crate_dir.join("../../.uor-models/sources/gpt2-124m");
+        let golden_path = crate_dir.join("tests/fixtures/gpt2-real/golden.json");
+        if !src.join("model.safetensors").exists() || !golden_path.exists() {
+            eprintln!(
+                "UNAVAILABLE: real gpt2 snapshot absent at {} — presence-gated canary skipped",
+                src.display()
+            );
+            return;
+        }
+
+        let golden: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&golden_path).unwrap()).unwrap();
+        let mut oracle = HuggingFaceGpt2Oracle::load(&src).expect("load real gpt2 oracle");
+        let vocab = oracle.vocab();
+        let mut logits = vec![0.0f32; vocab];
+
+        for case in golden["cases"].as_array().unwrap() {
+            oracle.reset();
+            let tokens: Vec<usize> = case["tokens"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|v| v.as_u64().unwrap() as usize)
+                .collect();
+            for (pos, &tok) in tokens.iter().enumerate() {
+                oracle.step(tok, pos, &mut logits);
+            }
+
+            // final hidden state within tolerance of the numpy reference.
+            let hidden_golden: Vec<f32> = case["hidden"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|v| v.as_f64().unwrap() as f32)
+                .collect();
+            let hidden = oracle.hidden_state().expect("hidden state");
+            let mut worst = 0.0f32;
+            for (&g, &w) in hidden.iter().zip(&hidden_golden) {
+                worst = worst.max((g - w).abs());
+            }
+            eprintln!("tokens {tokens:?}: hidden worst |Δ| = {worst:e}");
+            assert!(worst < 5e-2, "hidden worst |Δ| {worst} too large for {tokens:?}");
+
+            // argmax and top-5 token set must match exactly.
+            let mut topk = [(0u32, 0.0f32); 10];
+            let n = oracle.top_k(10, &mut topk);
+            assert!(n >= 5);
+            let argmax = case["argmax"].as_u64().unwrap() as u32;
+            assert_eq!(topk[0].0, argmax, "argmax mismatch for {tokens:?}");
+
+            let golden_top5: std::collections::BTreeSet<u32> = case["top_k"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .take(5)
+                .map(|e| e.as_array().unwrap()[0].as_u64().unwrap() as u32)
+                .collect();
+            let mine_top5: std::collections::BTreeSet<u32> =
+                topk[..5].iter().map(|&(t, _)| t).collect();
+            assert_eq!(mine_top5, golden_top5, "top-5 token set mismatch for {tokens:?}");
+        }
+    }
+}
