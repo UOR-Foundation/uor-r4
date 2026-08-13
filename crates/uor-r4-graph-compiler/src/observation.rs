@@ -1303,8 +1303,10 @@ impl TraceRowLayout {
             .qkv_lane
             .as_ref()
             .map_or(0, |lane| lane.layer_indices.len());
-        let (attention_layers, support) =
-            profile.attention_support_lane.as_ref().map_or((0, 0), |lane| {
+        let (attention_layers, support) = profile
+            .attention_support_lane
+            .as_ref()
+            .map_or((0, 0), |lane| {
                 (lane.layer_indices.len(), lane.support_size as usize)
             });
         let residual_width = geometry.residual_width;
@@ -1337,10 +1339,20 @@ impl TraceRowLayout {
             )));
         }
         let read_f32 = |offset: usize| {
-            f32::from_le_bytes([row[offset], row[offset + 1], row[offset + 2], row[offset + 3]])
+            f32::from_le_bytes([
+                row[offset],
+                row[offset + 1],
+                row[offset + 2],
+                row[offset + 3],
+            ])
         };
         let read_u32 = |offset: usize| {
-            u32::from_le_bytes([row[offset], row[offset + 1], row[offset + 2], row[offset + 3]])
+            u32::from_le_bytes([
+                row[offset],
+                row[offset + 1],
+                row[offset + 2],
+                row[offset + 3],
+            ])
         };
         let mut offset = 0usize;
         let take_vec = |offset: &mut usize, width: usize| {

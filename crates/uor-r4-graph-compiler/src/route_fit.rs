@@ -978,7 +978,6 @@ fn read_u32(bytes: &[u8], offset: usize) -> u32 {
     ])
 }
 
-
 /// Load a #603 trace corpus written under a q/k + attention-support
 /// profile (`full/1`) back into the typed fit input. `bos_token` is the
 /// teacher's BOS id (the generation pipeline feeds it at position 0 of
