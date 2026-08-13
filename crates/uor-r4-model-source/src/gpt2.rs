@@ -567,6 +567,14 @@ mod tests {
 /// [`crate::geometry::COMPILED_WIDTH`] (288); `embedding` projects the
 /// source-width rows down through the #600 `bucket-average/1` projection,
 /// exactly as the Llama adapter does for its own source width.
+///
+/// Surfaces this adapter deliberately leaves absent (each scoped, not
+/// silently dropped, in issue #657): the #602 attention-operator record
+/// (see [`Self::attention_operator_spec`]), the #603 trace-capture surface
+/// (`trace_capture_geometry`/`step_with_trace_capture` keep the trait
+/// defaults, so richer trace profiles are refused rather than zero-filled),
+/// a GPT-2-specific #601 tokenizer identity, and the graph-cli/compiler
+/// dispatch that would let a GPT-2 source compile to an artifact.
 pub struct HuggingFaceGpt2Oracle {
     model: Gpt2,
     state: Gpt2State,
@@ -683,6 +691,17 @@ impl crate::TeacherOracle for HuggingFaceGpt2Oracle {
                 crate::geometry::COMPILED_WIDTH,
             )
         })
+    }
+    fn attention_operator_spec(&self) -> Option<crate::attention::AttentionOperatorSpec> {
+        // Deliberately absent, not defaulted by omission: the only
+        // registered #602 operator (`standard-source-attention/1`) declares
+        // `rope-rotation-of-q-and-k-before-scoring` as its positional
+        // action, which GPT-2 (learned absolute positions) does not perform.
+        // Recording it would be a false operator identity. Registering a
+        // learned-absolute operator and wiring it here is scoped future
+        // work in issue #657; until it exists this stays absent rather than
+        // misdeclared.
+        None
     }
     fn hidden_state(&self) -> Option<&[f32]> {
         Some(&self.state.hidden)
