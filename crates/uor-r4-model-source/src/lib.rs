@@ -9,9 +9,11 @@
 pub mod attention;
 pub mod conformance;
 pub mod geometry;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod gpt2;
 pub mod progress;
 
+#[cfg(not(target_arch = "wasm32"))]
 pub use gpt2::HuggingFaceGpt2Oracle;
 pub struct Config {
     pub dim: usize,
