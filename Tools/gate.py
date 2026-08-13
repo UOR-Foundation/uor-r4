@@ -10,7 +10,10 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 os.chdir(ROOT)
 FAIL = []
 def check(n, name, ok, detail=""):
-    print(f"  [{'PASS' if ok else 'FAIL'}] {n}. {name}" + (f" — {detail}" if detail else ""))
+    # Only show the detail on failure: a PASS row carrying a failure explanation
+    # is how a green gate gets misread as a red one and vice versa.
+    shown = detail if (detail and not ok) else ""
+    print(f"  [{'PASS' if ok else 'FAIL'}] {n}. {name}" + (f" — {shown}" if shown else ""))
     if not ok: FAIL.append((n, name, detail))
 
 def sha(p): return hashlib.sha256(open(p, "rb").read()).hexdigest()
@@ -93,6 +96,8 @@ check(2, "SPEC 15 required declarations all discharged", nout == 0,
 # All declaration presence questions are answered by ONE lean invocation; a probe
 # per declaration re-imports 95 modules each time and times the gate out.
 _PROBE = [
+    "WasmGemmGnaf.Conformance.globalOptimal_matches_authority_schema",
+    "WasmGemmGnaf.Conformance.profileValid_matches_authority_schema",
     "WasmGemmGnaf.Wasm.profile_matches_pinned_revision",
     "WasmGemmGnaf.Universal.universal_sublevel_coverage",
     "WasmGemmGnaf.Universal.all_competitors_lower_bound",
@@ -109,6 +114,15 @@ _out = _r.stdout + _r.stderr
 def declared(name):
     """Present in the compiled environment? Answered from the single probe above."""
     return ("'" + name + "' ") in _out
+
+# SPEC 1 / authority WGG-GO-1: the gate must compare the compiled UNFOLDED
+# definition with the frozen schema, not merely find a name. The binding is
+# definitional (Iff.rfl in Conformance/Schema.lean), so a weakened GlobalOptimal
+# or an artifact-specific ProfileValid stops elaborating.
+check(2, "scope-critical definitions match the frozen WGG-GO-1 schema",
+      declared("WasmGemmGnaf.Conformance.globalOptimal_matches_authority_schema")
+      and declared("WasmGemmGnaf.Conformance.profileValid_matches_authority_schema"),
+      "schema binding absent -- a name check alone cannot reject a weakened proposition")
 
 # 4-8. semantics, coverage, artifact, lower bound -- by declaration presence.
 check(4, "WebAssembly and GEMM semantics built",

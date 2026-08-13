@@ -38,3 +38,7 @@
 *~
 .idea/
 .vscode/
+
+# Python bytecode from the gate tools.
+__pycache__/
+*.pyc

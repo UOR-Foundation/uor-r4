@@ -77,6 +77,7 @@ import WasmGemmGnaf.Universal.Argmin
 import WasmGemmGnaf.Universal.BilinearLowerBound
 import WasmGemmGnaf.Universal.Competitor
 import WasmGemmGnaf.Universal.Correct
+import WasmGemmGnaf.Universal.EnumerateInputs
 import WasmGemmGnaf.Universal.Feasible
 import WasmGemmGnaf.Universal.LowerBound
 import WasmGemmGnaf.Universal.Partition
@@ -117,3 +118,4 @@ import WasmGemmGnaf.Conformance.Claim
 import WasmGemmGnaf.Conformance.Manifest
 import WasmGemmGnaf.Conformance.Registry
 import WasmGemmGnaf.Conformance.ReleaseGate
+import WasmGemmGnaf.Conformance.Schema

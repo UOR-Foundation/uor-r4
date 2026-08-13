@@ -64,3 +64,7 @@ releasepath:
 # SPEC 15: required declarations, checked against the compiled environment.
 required:
     @python3 Tools/required.py --list
+
+# SPEC 1: the frozen WGG-GO-1 schema binding is definitional (Iff.rfl).
+schema:
+    @lake build WasmGemmGnaf.Conformance.Schema && echo 'schema binding holds'

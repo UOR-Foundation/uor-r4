@@ -1,6 +1,6 @@
 # Conformance
 
-**Inventory:** 95 Lean modules, 54,904 lines, 3,103 proved theorems.
+**Inventory:** 97 Lean modules, 55,504 lines, 3,146 proved theorems.
 Generated live; prose documents cite this table rather than repeating counts.
 
 Generated from `model/claims.json` by `just docs`. Do not edit by hand.
@@ -56,6 +56,7 @@ words "proved", "theorem", or "globally optimal".
 | `CM-004` | buildEvidence | verified | CI verifies the exact-SHA build: the authority digest step runs from the directory the checksum file names. | `—` |
 | `CM-005` | buildEvidence | verified | The SPEC 15 inventory is derived from SPEC.md and checked against the compiled environment, not from a hand... | `—` |
 | `WS-003` | open | outstanding | Release.wasmProfile is backed by the completed pinned Core 3.0 semantics rather than the i32 witness profil... | `—` |
+| `UV-004` | formalProof | discharged | Constructive duplicate-free enumeration of every lawful raw invocation, with a global choice-free Fintype i... | `WasmGemmGnaf.Gemm.raw_input_finite` |
 
 ## Axiom closure
 
@@ -88,6 +89,7 @@ Every `formalProof` claim's transitive axioms, from `#print axioms`:
 - `WS-002` — `propext`, `Classical.choice`, `Quot.sound`
 - `BI-007` — `propext`, `Quot.sound`
 - `BI-008` — `propext`, `Quot.sound`
+- `UV-004` — `propext`, `Quot.sound`
 
 Permitted: `propext`, `Quot.sound`, `Classical.choice` (Lean core logical
 axioms, SPEC 4). Any `sorryAx` or project-declared axiom fails the gate.

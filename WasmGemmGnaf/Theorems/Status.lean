@@ -9,9 +9,9 @@ proposition exists in this repository.  Where the repository proves something
 *near* a required name but strictly weaker, the required name is recorded as
 OUTSTANDING and the nearer result is named as such — never promoted.
 
-Score: **22 of 58 discharged, 36 outstanding.**
+Score: **25 of 58 discharged, 33 outstanding.**
 
-One of the 22, `Wasm.costed_erase_iff_plain_run`, is discharged in the `DEV-001`
+One of the 25, `Wasm.costed_erase_iff_plain_run`, is discharged in the `DEV-001`
 amended form because SPEC's literal biconditional is false as written; the row
 says so.
 
@@ -58,14 +58,14 @@ hence no sublevel, hence no argmin.  `O-5` is obstructed independently.
 | `Wasm.costed_initialization_erase` | **OUTSTANDING — `O-6`.**  `Wasm/Erasure.lean` covers the reduction phase only. |
 | `Wasm.profile_matches_pinned_revision` | **OUTSTANDING — `O-6`.**  Nearest proved: `WasmGemmGnaf.Wasm.ProfileLawful.revisionCommit`, which fixes the pinned commit *string* on a lawful profile body; it does not say the modelled semantics match that revision. |
 
-## Gemm — 8 of 10 discharged
+## Gemm — 10 of 10 discharged
 
 | SPEC §15 name | discharged by / blocked by |
 |---|---|
 | `Gemm.classify_total` | `WasmGemmGnaf.Gemm.classify_total`, re-indexed as `Theorems.classify_total`.  (`WasmGemmGnaf.GNAF.classify_total` is a different, unrelated theorem about `GNAF.Machine`.) |
 | `Gemm.reference_total` | `WasmGemmGnaf.Gemm.reference_total` (`Gemm/Reference.lean`), re-indexed as `Theorems.reference_total`: every raw invocation — malformed, truncated, unsupported, resource-invalid or valid — has an accepted observation. |
-| `Gemm.valid_input_finite` | **OUTSTANDING — `O-3`.**  No finiteness enumeration of the valid-input carrier. |
-| `Gemm.raw_input_finite` | **OUTSTANDING — `O-3`.**  No finiteness enumeration of the raw-input carrier.  This is the same obligation as SPEC §8.4's `instance problem_input_fintype`, which every `Universal` and `Artifact` result therefore carries as the hypothesis `[Foundation.Fintype (Gemm.RawInvocation P)]`. |
+| `Gemm.valid_input_finite` | `WasmGemmGnaf.Gemm.valid_input_finite` (`Universal/EnumerateInputs.lean`): a global, constructive `Foundation.Fintype` on `{raw : RawInvocation P // refValid raw.body = true}`, the subtype `Gemm.refValid_iff_classify` identifies with the classifier's `valid` verdict.  The enumeration `validRawInvocations` and both of its proofs are choice-free; the *carrier predicate* inherits `Classical.choice` from the pre-existing `Gemm/Layout.lean` proofs behind `Decidable (View.ElementsInInterval …)`, exactly as `Gemm.classify_total` and `Gemm.reference_total` already do. |
+| `Gemm.raw_input_finite` | `WasmGemmGnaf.Gemm.raw_input_finite` (`Universal/EnumerateInputs.lean`): SPEC §8.4's `instance problem_input_fintype`, as a **global** instance with no instance hypothesis.  `Gemm.rawInvocations` ranges `ptr` and `len` over `Gemm.allUInt32` and `bytes` over `Gemm.byteArraysOfSize len.toNat`, attaching the SPEC §8.3 lawfulness proof; `Gemm.mem_rawInvocations` and `Gemm.rawInvocations_nodup` are proved structurally, never by evaluation.  Axiom closure: `[propext, Quot.sound]` — no `Classical.choice`.  The hypothesis `[Foundation.Fintype (Gemm.RawInvocation P)]` still *appears* on the older `Universal` and `Artifact` results, which were written before the instance existed; it is now discharged by this instance rather than assumed. |
 | `Gemm.raw_invocation_roundtrip` | `WasmGemmGnaf.Gemm.raw_invocation_roundtrip`, re-indexed as `Theorems.raw_invocation_roundtrip`. |
 | `Gemm.raw_invocation_surjective` | `WasmGemmGnaf.Gemm.raw_invocation_surjective`, re-indexed as `Theorems.raw_invocation_surjective`. |
 | `Gemm.abi_roundtrip` | `WasmGemmGnaf.Gemm.abi_roundtrip`, re-indexed as `Theorems.abi_roundtrip`. |
@@ -94,20 +94,21 @@ the objective but anything to apply it to.
 | `GNAF.compile_cost_exact` | **OUTSTANDING — `O-6`.**  Absent. |
 | `Artifact.decode_emit` | `WasmGemmGnaf.Artifact.decode_emit` (`Artifact/Emit.lean`); `emit` is *defined* as `Wasm.encode`, so this is the verified codec's round trip transported along the definition. |
 
-## Universal — 0 of 12 discharged
+## Universal — 1 of 12 discharged
 
 `Universal/Competitor.lean`, `Correct.lean`, `Feasible.lean`, `Sublevel.lean`,
 `LowerBound.lean`, `BilinearLowerBound.lean`, `Partition.lean` and `Argmin.lean`
 exist and are proof-carrying, but none of them proves a §15 name: they establish
 the *definitions* at full strength and the algebraic facts around them.
-`Universal/EnumerateBytes.lean`, `EnumerateInputs.lean`, `CheckExecution.lean`
-and `Coverage.lean` do not exist.
+`Universal/EnumerateInputs.lean` now exists and proves one.
+`Universal/EnumerateBytes.lean`, `CheckExecution.lean` and `Coverage.lean` do
+not exist.
 
 | SPEC §15 name | discharged by / blocked by |
 |---|---|
 | `Universal.possible_winner_within_sublevel` | **OUTSTANDING — `O-4`, `O-6`.**  Needs an attained upper bound, which needs a baseline.  Nearest proved: `WasmGemmGnaf.Universal.sublevel_bytes_size_le` and `sublevel_bytes_enumerated` (`UV-002`) — the finiteness half only. |
 | `Universal.byte_enumerator_complete` | **OUTSTANDING — `O-4`, `O-6`.**  `Universal/EnumerateBytes.lean` does not exist.  Nearest proved: `WasmGemmGnaf.Universal.Enumerate.mem_boundedByteArrays_iff`, which is exactness of the *carrier* enumeration, not of a decoder/validator pipeline over it. |
-| `Universal.input_enumerator_complete` | **OUTSTANDING — `O-3`.**  `Universal/EnumerateInputs.lean` does not exist; depends on `Gemm.raw_input_finite`. |
+| `Universal.input_enumerator_complete` | `WasmGemmGnaf.Universal.input_enumerator_complete` (`Universal/EnumerateInputs.lean`): every `raw : Gemm.RawInvocation P` occurs in `Universal.inputEnumerator P`, unconditionally — no `Fintype` hypothesis, no sublevel bound, no scope predicate.  `Universal.inputEnumerator_nodup` gives the exactness half. |
 | `Universal.execution_checker_sound` | **OUTSTANDING — `O-3`, `O-6`.**  `Universal/CheckExecution.lean` does not exist. |
 | `Universal.execution_checker_complete_within_sublevel` | **OUTSTANDING — `O-3`, `O-6`.** |
 | `Universal.system_evaluation_rel_sound` | **OUTSTANDING — `O-3`, `O-6`.**  SPEC §10.1 states this as the *reflection biconditional* `(Correct ↔ SemanticCorrect) ∧ (Feasible ↔ SemanticWithinResources)` over the implemented `Universal.evaluate`, which does not exist here.  Nearest proved: `WasmGemmGnaf.Universal.correct_of_admissible` and `feasible_of_admissible` (the ⟸ direction of each, from the three extensional predicates), and `WasmGemmGnaf.Release.systemEvaluationRel_sound`, which is *structural* soundness (decode equation, coverage obligation, exact aggregate cost) at the classical release decider, not the biconditional. |
@@ -199,10 +200,15 @@ reduction checkable:
   parameter.  None of this discharges a §15 name, and none of it makes any
   byte sequence `Universal.Admissible`.
 
-Four hypotheses remain, all of them explicit arguments of those theorems:
+Four hypotheses were recorded here; the first is now closed.  All four are
+explicit arguments of those theorems:
 
 1. `[Foundation.Fintype (Gemm.RawInvocation Release.wasmProfile)]` — SPEC §8.4's
-   `problem_input_fintype`; the `Gemm.raw_input_finite` row above, `O-3`.
+   `problem_input_fintype`.  **CLOSED.**  `Gemm.raw_input_finite`
+   (`Universal/EnumerateInputs.lean`) is a global constructive instance, so this
+   hypothesis is now satisfied rather than assumed.  It is still written as an
+   explicit instance binder on the theorems listed above, which predate the
+   instance; that is a residual signature, not a residual assumption.
 2. `Release.Seam.semantics` — **CLOSED (GO-008).**  `Release.semantics` is
    `Release.costEvent` together with `Wasm.validationCost` and
    `Wasm.instantiatedStaticBytes`.  Disclosure, and it is not small:

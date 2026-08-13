@@ -645,6 +645,21 @@
         "WS-001"
       ],
       "note": "Raised by external audit. `def wasmProfile := Wasm.unitWitnessProfile`, and the cost table is Wasm.canonicalCostTableUnits rather than SPEC 7.5's Release.wasmCostTableBody. The file discloses both, and wasmProfile_body : wasmProfile.body = wasmProfileBody holds by rfl, but the SEMANTICS backing the profile is the i32 subset. So the syntactic 'for all ByteArray' in GlobalOptimal does not yet range over the authority-required Core 3.0 competitor universe."
+    },
+    {
+      "id": "UV-004",
+      "level": "formalProof",
+      "statement": "Constructive duplicate-free enumeration of every lawful raw invocation, with a global choice-free Fintype instance, the classifier-driven valid-input enumeration, and an executable input enumerator with completeness.",
+      "leanDeclaration": "WasmGemmGnaf.Gemm.raw_input_finite",
+      "sourceModule": "WasmGemmGnaf/Universal/EnumerateInputs.lean",
+      "axioms": [
+        "propext",
+        "Quot.sound"
+      ],
+      "specSection": "15",
+      "status": "discharged",
+      "releaseApplicable": true,
+      "note": "Closes three SPEC 15 declarations: Gemm.raw_input_finite, Gemm.valid_input_finite, Universal.input_enumerator_complete. required.py 22 -> 25 of 58, verified independently. raw_input_finite and input_enumerator_complete are CHOICE-FREE ([propext, Quot.sound]); the instance is global with no hypothesis. Achieving that required reproving List.nodup_range, because the toolchain's goes through List.range_eq_range' and depends on Classical.choice. valid_input_finite DOES carry Classical.choice, inherited from Gemm.classify/refValid in committed code (omega discharges Iff/And/Or classically); no enumeration of the VALID carrier can be choice-free while the classifier is not. Recorded rather than glossed."
     }
   ],
   "refutedFramings": [

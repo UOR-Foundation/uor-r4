@@ -27,19 +27,22 @@
   four rejection theorems that discharge "trapped and uncaught-exception
   observations are rejected by every released problem case".
 
-  ## SPEC §15 Gemm declarations that remain OUTSTANDING
+  ## SPEC §15 Gemm declarations: the input-finiteness pair is now CLOSED
 
-  * `Gemm.valid_input_finite`, `Gemm.raw_input_finite` — no finiteness
-    enumeration of the input carrier is proved.  These are the inputs to the
-    all-input sublevel coverage of SPEC §10.3.  Blocking obligation: `O-3`.
-    SPEC §8.4's `instance problem_input_fintype : Fintype problem.RawInvocation`
-    is the same obligation in instance form and is likewise **omitted**: the
-    carrier is mathematically finite (`RawInvocationLawful` bounds
-    `ptr + len ≤ 2 ^ P.addressBits`), but `Foundation.Fintype` demands an actual
-    duplicate-free `List` covering it, and no such enumeration — nor its `Nodup`
-    and coverage proofs — exists here.  `Universal/Competitor.lean` therefore
-    takes `[Foundation.Fintype (Gemm.RawInvocation P)]` as a hypothesis rather
-    than discharging it.
+  * `Gemm.valid_input_finite`, `Gemm.raw_input_finite` — **discharged** in
+    `Universal/EnumerateInputs.lean`.  `Foundation.Fintype` demands an actual
+    duplicate-free `List` covering the carrier, and `Gemm.rawInvocations` is
+    that list: `ptr` and `len` range over `Gemm.allUInt32`, `bytes` over
+    `Gemm.byteArraysOfSize len.toNat`, and the SPEC §8.3 lawfulness proof is
+    attached by a dependent filter-map.  `Gemm.mem_rawInvocations` and
+    `Gemm.rawInvocations_nodup` are proved structurally — by induction on the
+    construction, never by evaluating a list of about `256 ^ (2 ^ 32)` entries.
+    SPEC §8.4's `instance problem_input_fintype : Fintype
+    problem.RawInvocation` is the same obligation in instance form and is
+    supplied globally, with no instance hypothesis and no `Classical.choice`.
+    `Universal/Competitor.lean` still *writes* `[Foundation.Fintype
+    (Gemm.RawInvocation P)]` as a binder; that binder is now satisfied by an
+    instance in the environment rather than assumed.
 
   ## Scope of what the reference obligations do and do not say
 
