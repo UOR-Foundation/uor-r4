@@ -1435,16 +1435,12 @@ mod gpt2_feature_tests {
     #[test]
     fn cross_family_configs_rejected_at_model_type() {
         assert_eq!(
-            rejected_feature(
-                AdapterFeatures::huggingface_llama().validate_config(&gpt2_config())
-            ),
+            rejected_feature(AdapterFeatures::huggingface_llama().validate_config(&gpt2_config())),
             AdapterFeature::ModelType,
             "a GPT-2 config must be refused by the Llama adapter"
         );
         assert_eq!(
-            rejected_feature(
-                AdapterFeatures::huggingface_gpt2().validate_config(&llama_config())
-            ),
+            rejected_feature(AdapterFeatures::huggingface_gpt2().validate_config(&llama_config())),
             AdapterFeature::ModelType,
             "a Llama config must be refused by the GPT-2 adapter"
         );

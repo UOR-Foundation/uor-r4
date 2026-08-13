@@ -99,7 +99,11 @@ fn gpt2_family_tokens_stay_inside_the_adapter_crate() {
         for (lineno, line) in text.lines().enumerate() {
             for token in GPT2_TOKENS {
                 if line.contains(token) {
-                    leaks.push(format!("{}:{}: leaks `{token}`", file.display(), lineno + 1));
+                    leaks.push(format!(
+                        "{}:{}: leaks `{token}`",
+                        file.display(),
+                        lineno + 1
+                    ));
                 }
             }
         }

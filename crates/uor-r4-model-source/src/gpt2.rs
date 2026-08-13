@@ -86,11 +86,13 @@ impl Gpt2Config {
             .get("layer_norm_epsilon")
             .and_then(serde_json::Value::as_f64)
             .unwrap_or(1e-5) as f32;
-        let bos = uint("bos_token_id").unwrap_or(config
-            .get("bos_token_id")
-            .and_then(serde_json::Value::as_u64)
-            .map(|value| value as usize)
-            .unwrap_or(0));
+        let bos = uint("bos_token_id").unwrap_or(
+            config
+                .get("bos_token_id")
+                .and_then(serde_json::Value::as_u64)
+                .map(|value| value as usize)
+                .unwrap_or(0),
+        );
         let eos = config
             .get("eos_token_id")
             .and_then(serde_json::Value::as_u64)
@@ -103,7 +105,10 @@ impl Gpt2Config {
             }
             .into());
         }
-        let seq_len = sequence_length.unwrap_or(n_positions).min(n_positions).max(1);
+        let seq_len = sequence_length
+            .unwrap_or(n_positions)
+            .min(n_positions)
+            .max(1);
         Ok(Self {
             n_embd,
             n_head,
@@ -164,8 +169,14 @@ pub struct Gpt2 {
 pub(crate) fn required_gpt2_tensors(cfg: &Gpt2Config) -> Vec<TensorRequirement> {
     let (d, inner, three) = (cfg.n_embd, cfg.n_inner, 3 * cfg.n_embd);
     let mut req = vec![
-        TensorRequirement { name: "wte.weight".to_owned(), shape: vec![cfg.vocab, d] },
-        TensorRequirement { name: "wpe.weight".to_owned(), shape: vec![cfg.n_positions, d] },
+        TensorRequirement {
+            name: "wte.weight".to_owned(),
+            shape: vec![cfg.vocab, d],
+        },
+        TensorRequirement {
+            name: "wpe.weight".to_owned(),
+            shape: vec![cfg.n_positions, d],
+        },
     ];
     for l in 0..cfg.n_layer {
         for (suffix, shape) in [
@@ -182,11 +193,20 @@ pub(crate) fn required_gpt2_tensors(cfg: &Gpt2Config) -> Vec<TensorRequirement> 
             ("mlp.c_proj.weight", vec![inner, d]),
             ("mlp.c_proj.bias", vec![d]),
         ] {
-            req.push(TensorRequirement { name: format!("h.{l}.{suffix}"), shape });
+            req.push(TensorRequirement {
+                name: format!("h.{l}.{suffix}"),
+                shape,
+            });
         }
     }
-    req.push(TensorRequirement { name: "ln_f.weight".to_owned(), shape: vec![d] });
-    req.push(TensorRequirement { name: "ln_f.bias".to_owned(), shape: vec![d] });
+    req.push(TensorRequirement {
+        name: "ln_f.weight".to_owned(),
+        shape: vec![d],
+    });
+    req.push(TensorRequirement {
+        name: "ln_f.bias".to_owned(),
+        shape: vec![d],
+    });
     req
 }
 
@@ -344,14 +364,28 @@ impl Gpt2 {
         let mut mlp_out = vec![0.0f32; d];
         for l in 0..self.cfg.n_layer {
             self.block_forward(
-                st, l, pos, &mut normed, &mut qkv, &mut attn, &mut proj, &mut inner, &mut mlp_out,
+                st,
+                l,
+                pos,
+                &mut normed,
+                &mut qkv,
+                &mut attn,
+                &mut proj,
+                &mut inner,
+                &mut mlp_out,
             );
             if capture.contains(&l) {
                 sink(l, &st.x);
             }
         }
         // final LayerNorm and tied lm-head.
-        layer_norm(&st.x, &self.ln_f_w, &self.ln_f_b, self.cfg.layer_norm_eps, &mut st.hidden);
+        layer_norm(
+            &st.x,
+            &self.ln_f_w,
+            &self.ln_f_b,
+            self.cfg.layer_norm_eps,
+            &mut st.hidden,
+        );
         let hidden = st.hidden.clone();
         for v in 0..self.cfg.vocab {
             let row = &self.wte[v * d..(v + 1) * d];
@@ -383,7 +417,13 @@ impl Gpt2 {
         let seq = self.cfg.seq_len;
 
         // --- attention ---
-        layer_norm(&st.x, &layer.ln1_w, &layer.ln1_b, self.cfg.layer_norm_eps, normed);
+        layer_norm(
+            &st.x,
+            &layer.ln1_w,
+            &layer.ln1_b,
+            self.cfg.layer_norm_eps,
+            normed,
+        );
         conv1d(normed, &layer.c_attn_w, &layer.c_attn_b, 3 * d, qkv);
         // store this position's k, v (thirds 1 and 2 of the fused qkv).
         let base = (l * seq + pos) * d;
@@ -431,7 +471,13 @@ impl Gpt2 {
         }
 
         // --- MLP ---
-        layer_norm(&st.x, &layer.ln2_w, &layer.ln2_b, self.cfg.layer_norm_eps, normed);
+        layer_norm(
+            &st.x,
+            &layer.ln2_w,
+            &layer.ln2_b,
+            self.cfg.layer_norm_eps,
+            normed,
+        );
         conv1d(normed, &layer.fc_w, &layer.fc_b, self.cfg.n_inner, inner);
         for v in inner.iter_mut() {
             *v = gelu_new(*v);
@@ -530,9 +576,9 @@ mod tests {
             assert_close(&st.hidden, &f32_vec(&case["hidden"]), 2e-3, "hidden");
             assert_close(&st.logits, &f32_vec(&case["logits"]), 3e-3, "logits");
 
-            let top_token =
-                case["top_k"].as_array().unwrap()[0].as_array().unwrap()[0].as_u64().unwrap()
-                    as usize;
+            let top_token = case["top_k"].as_array().unwrap()[0].as_array().unwrap()[0]
+                .as_u64()
+                .unwrap() as usize;
             assert_eq!(argmax(&st.logits), top_token, "top-1 token for {tokens:?}");
         }
     }
@@ -629,11 +675,7 @@ impl crate::RepresentationSource for HuggingFaceGpt2Oracle {
     fn tokenizer_address(&self) -> &str {
         "huggingface-tokenizer"
     }
-    fn read_embedding_rows(
-        &self,
-        range: std::ops::Range<usize>,
-        output: &mut [f32],
-    ) -> Option<()> {
+    fn read_embedding_rows(&self, range: std::ops::Range<usize>, output: &mut [f32]) -> Option<()> {
         let d = self.model.cfg.n_embd;
         let count = range.end.checked_sub(range.start)?;
         if output.len() < count * d || range.end > self.model.cfg.vocab {
@@ -685,12 +727,14 @@ impl crate::TeacherOracle for HuggingFaceGpt2Oracle {
         crate::geometry::bucket_average_project(row, out);
     }
     fn geometry_projection(&self) -> Option<crate::geometry::GeometryProjection> {
-        u32::try_from(self.model.cfg.n_embd).ok().map(|source_width| {
-            crate::geometry::GeometryProjection::bucket_average(
-                source_width,
-                crate::geometry::COMPILED_WIDTH,
-            )
-        })
+        u32::try_from(self.model.cfg.n_embd)
+            .ok()
+            .map(|source_width| {
+                crate::geometry::GeometryProjection::bucket_average(
+                    source_width,
+                    crate::geometry::COMPILED_WIDTH,
+                )
+            })
     }
     fn attention_operator_spec(&self) -> Option<crate::attention::AttentionOperatorSpec> {
         // Deliberately absent, not defaulted by omission: the only
@@ -769,7 +813,10 @@ mod real_tests {
                 worst = worst.max((g - w).abs());
             }
             eprintln!("tokens {tokens:?}: hidden worst |Δ| = {worst:e}");
-            assert!(worst < 5e-2, "hidden worst |Δ| {worst} too large for {tokens:?}");
+            assert!(
+                worst < 5e-2,
+                "hidden worst |Δ| {worst} too large for {tokens:?}"
+            );
 
             // argmax and top-5 token set must match exactly.
             let mut topk = [(0u32, 0.0f32); 10];
@@ -787,7 +834,10 @@ mod real_tests {
                 .collect();
             let mine_top5: std::collections::BTreeSet<u32> =
                 topk[..5].iter().map(|&(t, _)| t).collect();
-            assert_eq!(mine_top5, golden_top5, "top-5 token set mismatch for {tokens:?}");
+            assert_eq!(
+                mine_top5, golden_top5,
+                "top-5 token set mismatch for {tokens:?}"
+            );
         }
     }
 }
