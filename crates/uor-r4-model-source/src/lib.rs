@@ -9,6 +9,7 @@
 pub mod attention;
 pub mod conformance;
 pub mod geometry;
+pub mod gpt2;
 pub mod progress;
 pub struct Config {
     pub dim: usize,
