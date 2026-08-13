@@ -75,7 +75,6 @@ use crate::observation::{
     ObservationManifest, ObserveSummary, RECORD_SIZE, merge_probability_metadata, merge_shards,
     merge_trace_rows, observe_sharded_traced,
 };
-#[cfg(not(target_arch = "wasm32"))]
 use crate::trace_profile::TraceProfile;
 use uor_r4_core::transformerless::compiler::xorshift;
 #[cfg(not(target_arch = "wasm32"))]
