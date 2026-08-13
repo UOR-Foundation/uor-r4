@@ -231,11 +231,8 @@ pub fn observe_command(args: &[String]) -> Result<(), SourceUnavailable> {
             .ok_or_else(|| SourceUnavailable::new("checkpoint path is not UTF-8"))?;
         Box::new(LlamaOracle::load(path))
     } else {
-        let oracle = Teacher::load_with_sequence_length(
-            &options.source,
-            options.sequence_length,
-        )
-        .map_err(|error| {
+        let oracle = Teacher::load_with_sequence_length(&options.source, options.sequence_length)
+            .map_err(|error| {
             SourceUnavailable::new(format!("failed to load Hugging Face model: {error}"))
         })?;
         eprintln!("exporting tokenizer...");
@@ -425,11 +422,8 @@ pub fn observe_text_command(args: &[String]) -> Result<(), SourceUnavailable> {
             .ok_or_else(|| SourceUnavailable::new("checkpoint path is not UTF-8"))?;
         Box::new(LlamaOracle::load(path))
     } else {
-        let oracle = Teacher::load_with_sequence_length(
-            &options.source,
-            options.sequence_length,
-        )
-        .map_err(|error| {
+        let oracle = Teacher::load_with_sequence_length(&options.source, options.sequence_length)
+            .map_err(|error| {
             SourceUnavailable::new(format!("failed to load Hugging Face model: {error}"))
         })?;
         eprintln!("exporting tokenizer...");
@@ -473,13 +467,12 @@ pub fn observe_text_command(args: &[String]) -> Result<(), SourceUnavailable> {
             Box::new(LlamaOracle::load(path))
         } else {
             Box::new(
-                Teacher::load_with_sequence_length(
-                    &options.source,
-                    options.sequence_length,
-                )
-                .map_err(|error| {
-                    SourceUnavailable::new(format!("failed to load Hugging Face model: {error}"))
-                })?,
+                Teacher::load_with_sequence_length(&options.source, options.sequence_length)
+                    .map_err(|error| {
+                        SourceUnavailable::new(format!(
+                            "failed to load Hugging Face model: {error}"
+                        ))
+                    })?,
             )
         };
         pool.push(extra);
@@ -2177,11 +2170,10 @@ fn evaluate_report(args: &[String]) -> Result<(), SourceUnavailable> {
     // causal over cached positions); it does not change the arithmetic
     // of the no-BOS arms.
     let oracle_sequence_length = options.sequence_length + usize::from(options.bos);
-    let mut oracle =
-        Teacher::load_with_sequence_length(&options.source, oracle_sequence_length)
-            .map_err(|error| {
-                SourceUnavailable::new(format!("failed to load Hugging Face model: {error}"))
-            })?;
+    let mut oracle = Teacher::load_with_sequence_length(&options.source, oracle_sequence_length)
+        .map_err(|error| {
+            SourceUnavailable::new(format!("failed to load Hugging Face model: {error}"))
+        })?;
     let mut teacher_logits = vec![0f32; oracle.vocab()];
     let artifacts_bytes = std::fs::read(&artifacts_path)?;
     let tokenizer_bytes = std::fs::read(&tokenizer_path)?;
@@ -2646,10 +2638,9 @@ where
         .to_str()
         .ok_or_else(|| SourceUnavailable::new("corpus records path is not UTF-8"))?;
     let mut oracle =
-        Teacher::load_with_sequence_length(&source, options.sequence_length)
-            .map_err(|error| {
-                SourceUnavailable::new(format!("failed to load Hugging Face model: {error}"))
-            })?;
+        Teacher::load_with_sequence_length(&source, options.sequence_length).map_err(|error| {
+            SourceUnavailable::new(format!("failed to load Hugging Face model: {error}"))
+        })?;
     if options.r4_attention {
         oracle.set_r4_attention(true);
     }

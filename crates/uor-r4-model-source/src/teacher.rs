@@ -79,11 +79,13 @@ fn family_for_model_type(model_type: Option<&str>) -> Result<Family, SourceUnava
 /// Read `<source>/config.json` and resolve its family.
 fn detect_family(source: &Path) -> Result<Family, SourceUnavailable> {
     let config_path = source.join("config.json");
-    let text = std::fs::read_to_string(&config_path).map_err(|error| {
-        SourceUnavailable::new(format!("{}: {error}", config_path.display()))
-    })?;
+    let text = std::fs::read_to_string(&config_path)
+        .map_err(|error| SourceUnavailable::new(format!("{}: {error}", config_path.display())))?;
     let config: serde_json::Value = serde_json::from_str(&text).map_err(|error| {
-        SourceUnavailable::new(format!("{}: not valid JSON: {error}", config_path.display()))
+        SourceUnavailable::new(format!(
+            "{}: not valid JSON: {error}",
+            config_path.display()
+        ))
     })?;
     family_for_model_type(config.get("model_type").and_then(|value| value.as_str()))
 }
@@ -246,5 +248,60 @@ mod tests {
         ));
         assert!(family_for_model_type(Some("mistral")).is_err());
         assert!(family_for_model_type(Some("")).is_err());
+    }
+
+    // #657 regression gate: routing a Llama/SmolLM2 source through `Teacher`
+    // must be behaviorally identical to the concrete `HuggingFaceLlamaOracle`
+    // — same κ/geometry and bit-identical forward logits — so a compile
+    // through the dispatched path is byte-unchanged (the compile is
+    // deterministic; identical oracle behavior ⇒ identical artifact bytes).
+    // Presence-gated on local weights; `#[ignore]` (loads a 135M checkpoint):
+    //   R4_TEACHER_PARITY_SOURCE=/abs/path/to/smollm2-135m-instruct \
+    //   cargo test -p uor-r4-model-source --release teacher_llama_matches -- --ignored --nocapture
+    #[test]
+    #[ignore = "#657 SmolLM2 parity; needs local weights — run with --ignored + R4_TEACHER_PARITY_SOURCE"]
+    fn teacher_llama_matches_direct_oracle_on_smollm2() {
+        let source = std::env::var("R4_TEACHER_PARITY_SOURCE")
+            .unwrap_or_else(|_| ".uor-models/sources/smollm2-135m-instruct".to_owned());
+        if !std::path::Path::new(&source).join("config.json").is_file() {
+            eprintln!("teacher parity: source absent at {source}, skipping (κ-test convention)");
+            return;
+        }
+        let seq = 8;
+        let mut via_enum = Teacher::load_with_sequence_length(&source, seq).expect("Teacher::load");
+        let mut direct =
+            HuggingFaceLlamaOracle::load_with_sequence_length(&source, seq).expect("direct load");
+
+        assert!(
+            matches!(via_enum, Teacher::Llama(_)),
+            "a llama-family source must route to Teacher::Llama"
+        );
+        assert_eq!(via_enum.kappa(), direct.kappa(), "source κ diverged");
+        assert_eq!(via_enum.vocab(), direct.vocab());
+        assert_eq!(via_enum.dim(), direct.dim());
+        assert_eq!(via_enum.seq_len(), direct.seq_len());
+
+        // One forward step from BOS must yield bit-identical logits.
+        let vocab = via_enum.vocab();
+        let (mut le, mut ld) = (vec![0f32; vocab], vec![0f32; vocab]);
+        let bos = via_enum.bos_token();
+        via_enum.reset();
+        direct.reset();
+        via_enum.step(bos, 0, &mut le);
+        direct.step(bos, 0, &mut ld);
+        let bit_identical = le
+            .iter()
+            .zip(ld.iter())
+            .all(|(a, b)| a.to_bits() == b.to_bits());
+        assert!(
+            bit_identical,
+            "forward logits diverged between Teacher::Llama and the direct oracle"
+        );
+        eprintln!(
+            "#657 parity — Teacher::Llama == HuggingFaceLlamaOracle on {source} \
+             (κ {}, vocab {vocab}, {} logits bit-identical)",
+            via_enum.kappa(),
+            le.len()
+        );
     }
 }

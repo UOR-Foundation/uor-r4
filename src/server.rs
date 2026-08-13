@@ -245,8 +245,7 @@ pub fn run_server(cli: Arc<ServerConfig>) {
     let start_time = Instant::now();
     let router = Arc::new(Mutex::new(UorR4Router::new(0.85)));
     let tless: Arc<Mutex<Option<tless_uor::TlessState>>> = Arc::new(Mutex::new(None));
-    let oracle: Arc<Mutex<Option<uor_r4_model_source::Teacher>>> =
-        Arc::new(Mutex::new(None));
+    let oracle: Arc<Mutex<Option<uor_r4_model_source::Teacher>>> = Arc::new(Mutex::new(None));
 
     let last_model = std::fs::read_to_string(".uor-models/last_model_name.txt").unwrap_or_default();
     let last_model_name = last_model.trim();
