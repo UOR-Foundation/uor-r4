@@ -251,7 +251,7 @@ impl Gpt2 {
 /// with): `0.5 x (1 + tanh(sqrt(2/pi) (x + 0.044715 x^3)))`.
 #[inline]
 fn gelu_new(x: f32) -> f32 {
-    const C: f32 = 0.797_884_56; // sqrt(2/pi)
+    const C: f32 = 0.797_884_6; // sqrt(2/pi)
     0.5 * x * (1.0 + (C * (x + 0.044_715 * x * x * x)).tanh())
 }
 
@@ -426,8 +426,8 @@ impl Gpt2 {
             }
         }
         conv1d(attn, &layer.c_proj_w, &layer.c_proj_b, d, proj);
-        for i in 0..d {
-            st.x[i] += proj[i];
+        for (xi, &p) in st.x.iter_mut().zip(&proj[..d]) {
+            *xi += p;
         }
 
         // --- MLP ---
@@ -437,8 +437,8 @@ impl Gpt2 {
             *v = gelu_new(*v);
         }
         conv1d(inner, &layer.mlp_w, &layer.mlp_b, d, mlp_out);
-        for i in 0..d {
-            st.x[i] += mlp_out[i];
+        for (xi, &m) in st.x.iter_mut().zip(&mlp_out[..d]) {
+            *xi += m;
         }
     }
 }
