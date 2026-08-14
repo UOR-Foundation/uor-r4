@@ -201,15 +201,13 @@ pub fn export_runtime_tokenizer_table(
     table: &RuntimeTokenizerDecodeTable,
     destination: impl AsRef<Path>,
 ) -> Result<RuntimeTokenizerExport, uor_r4_model_source::SourceUnavailable> {
-    let decode_byte_lengths = table
-        .pieces
-        .iter()
-        .map(|piece| {
-            u32::try_from(piece.len()).map_err(|_| {
-                uor_r4_model_source::SourceUnavailable::new("runtime tokenizer piece too long")
-            })
-        })
-        .collect::<Result<Vec<_>, _>>()?;
+    let mut decode_byte_lengths = Vec::with_capacity(table.pieces.len());
+    for piece in &table.pieces {
+        let length = u32::try_from(piece.len()).map_err(|_| {
+            uor_r4_model_source::SourceUnavailable::new("runtime tokenizer piece too long")
+        })?;
+        decode_byte_lengths.push(length);
+    }
 
     if let Some(source_lengths) = &table.source_byte_lengths {
         if source_lengths.len() != table.pieces.len() {
