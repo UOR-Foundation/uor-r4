@@ -174,8 +174,9 @@ promise.
   surfaced a latent bug: `compile-recorded --out $D` re-emits
   `corpus.meta`/`corpus.records` into `$D`, clobbering same-directory inputs.
   The harness now writes each sub-sample as a canonical pair under
-  `$D/input/`, uses `copy-recorded-attention` to preserve its
-  registry-validated source-attention binding, and uses the copied output pair
+  `$D/input/`, uses `copy-recorded-attention` to preserve its complete
+  registry-validated source-execution pair (attention plus optional dense), and
+  uses the copied output pair
   for cover/score. Keeping input and output roots distinct also prevents an
   unrelated same-directory filename pair from inheriting another corpus's
   provenance.
