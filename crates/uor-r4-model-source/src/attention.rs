@@ -825,6 +825,12 @@ enum CertificationRejection {
     Cell,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum CertificationVerdict {
+    Certified(f32),
+    Rejected(CertificationRejection),
+}
+
 impl AttentionDotCensus {
     fn zero_dot(lanes: usize, arithmetic: AttentionArithmetic) -> Self {
         match arithmetic {
@@ -919,36 +925,32 @@ fn next_down_f32(value: f32) -> f32 {
 /// accumulation cannot underflow binary64; with `k <= 2^53`, even
 /// `k * f32::MAX^2` remains far below binary64 overflow.
 #[inline]
-fn certify_dot(
-    approximate: f64,
-    max_product_abs: f64,
-    k: usize,
-) -> Result<f32, CertificationRejection> {
+fn certify_dot(approximate: f64, max_product_abs: f64, k: usize) -> CertificationVerdict {
     if !approximate.is_finite() || !max_product_abs.is_finite() {
-        return Err(CertificationRejection::Nonfinite);
+        return CertificationVerdict::Rejected(CertificationRejection::Nonfinite);
     }
     let candidate = approximate as f32;
     if candidate == 0.0 {
-        return Err(CertificationRejection::Zero);
+        return CertificationVerdict::Rejected(CertificationRejection::Zero);
     }
     if !candidate.is_finite() || candidate.abs() == f32::MAX {
-        return Err(CertificationRejection::Overflow);
+        return CertificationVerdict::Rejected(CertificationRejection::Overflow);
     }
     if (k as u128) > (1u128 << f64::MANTISSA_DIGITS) {
-        return Err(CertificationRejection::Cell);
+        return CertificationVerdict::Rejected(CertificationRejection::Cell);
     }
 
     const UNIT_ROUNDOFF: f64 = 1.0 / ((1u64 << 53) as f64);
     let mu = next_up_f64((k as f64) * UNIT_ROUNDOFF);
     if mu >= 1.0 {
-        return Err(CertificationRejection::Cell);
+        return CertificationVerdict::Rejected(CertificationRejection::Cell);
     }
     let denominator = next_down_f64(1.0 - mu);
     let gamma = next_up_f64(mu / denominator);
     let sum_abs = next_up_f64((k as f64) * max_product_abs);
     let error = next_up_f64(gamma * sum_abs);
     if !error.is_finite() {
-        return Err(CertificationRejection::Cell);
+        return CertificationVerdict::Rejected(CertificationRejection::Cell);
     }
     let lower = next_down_f64(approximate - error);
     let upper = next_up_f64(approximate + error);
@@ -956,14 +958,14 @@ fn certify_dot(
     let previous = next_down_f32(candidate);
     let next = next_up_f32(candidate);
     if !previous.is_finite() || !next.is_finite() {
-        return Err(CertificationRejection::Overflow);
+        return CertificationVerdict::Rejected(CertificationRejection::Overflow);
     }
     let cell_lower = (f64::from(previous) + f64::from(candidate)) * 0.5;
     let cell_upper = (f64::from(candidate) + f64::from(next)) * 0.5;
     if lower > cell_lower && upper < cell_upper {
-        Ok(candidate)
+        CertificationVerdict::Certified(candidate)
     } else {
-        Err(CertificationRejection::Cell)
+        CertificationVerdict::Rejected(CertificationRejection::Cell)
     }
 }
 
@@ -1073,14 +1075,14 @@ fn controlled_strided_matrix_vector(
                 let verdict = if finite {
                     certify_dot(sum, max_product_abs, columns)
                 } else {
-                    Err(CertificationRejection::Nonfinite)
+                    CertificationVerdict::Rejected(CertificationRejection::Nonfinite)
                 };
                 match verdict {
-                    Ok(value) => {
+                    CertificationVerdict::Certified(value) => {
                         *output = value;
                         census.certified += 1;
                     }
-                    Err(reason) => {
+                    CertificationVerdict::Rejected(reason) => {
                         census.reject(reason);
                         *output = exact_strided_dot(
                             matrix,

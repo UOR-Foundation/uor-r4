@@ -25,6 +25,8 @@ use std::collections::{BTreeMap, HashMap};
 use std::io::Write;
 #[cfg(not(target_arch = "wasm32"))]
 use std::sync::atomic::{AtomicU64, Ordering};
+#[cfg(not(target_arch = "wasm32"))]
+use uor_r4_model_source::SourceUnavailable;
 use uor_r4_model_source::{RepresentationSource, TeacherOracle};
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -72,7 +74,7 @@ fn source_corpus_checkpoint_bytes(n: u64, stories: u64, rng: u64, done: u8) -> [
 /// by the caller before invoking this helper so metadata can never durably
 /// name rows whose bytes were not durably committed first.
 #[cfg(not(target_arch = "wasm32"))]
-fn publish_source_corpus_checkpoint(mp: &str, bytes: &[u8; 25]) -> std::io::Result<()> {
+fn publish_source_corpus_checkpoint(mp: &str, bytes: &[u8; 25]) -> Result<(), SourceUnavailable> {
     let destination = std::path::Path::new(mp);
     let parent = destination
         .parent()
@@ -82,28 +84,22 @@ fn publish_source_corpus_checkpoint(mp: &str, bytes: &[u8; 25]) -> std::io::Resu
         .file_name()
         .and_then(|name| name.to_str())
         .ok_or_else(|| {
-            std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                format!(
-                    "corpus checkpoint path is not UTF-8: {}",
-                    destination.display()
-                ),
-            )
+            SourceUnavailable::new(format!(
+                "corpus checkpoint path is not UTF-8: {}",
+                destination.display()
+            ))
         })?;
 
     match std::fs::symlink_metadata(destination) {
         Ok(metadata) if metadata.file_type().is_file() => {}
         Ok(_) => {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                format!(
-                    "corpus checkpoint {} is not a regular non-symlink file",
-                    destination.display()
-                ),
-            ));
+            return Err(SourceUnavailable::new(format!(
+                "corpus checkpoint {} is not a regular non-symlink file",
+                destination.display()
+            )));
         }
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-        Err(error) => return Err(error),
+        Err(error) => return Err(SourceUnavailable::new(error)),
     }
 
     let (temporary, mut file) = loop {
@@ -120,20 +116,22 @@ fn publish_source_corpus_checkpoint(mp: &str, bytes: &[u8; 25]) -> std::io::Resu
         {
             Ok(file) => break (candidate, file),
             Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
-            Err(error) => return Err(error),
+            Err(error) => return Err(SourceUnavailable::new(error)),
         }
     };
 
     if let Err(error) = file.write_all(bytes).and_then(|()| file.sync_all()) {
         let _ = std::fs::remove_file(&temporary);
-        return Err(error);
+        return Err(SourceUnavailable::new(error));
     }
     drop(file);
     if let Err(error) = std::fs::rename(&temporary, destination) {
         let _ = std::fs::remove_file(&temporary);
-        return Err(error);
+        return Err(SourceUnavailable::new(error));
     }
-    std::fs::File::open(parent)?.sync_all()
+    std::fs::File::open(parent)?
+        .sync_all()
+        .map_err(SourceUnavailable::new)
 }
 
 #[inline]

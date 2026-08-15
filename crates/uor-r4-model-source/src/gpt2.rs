@@ -459,44 +459,28 @@ impl Gpt2AttentionCanaryDotCensus {
         self.fallback_cell
     }
 
-    pub fn fallbacks(self) -> Result<usize, Gpt2AttentionCanaryError> {
-        checked_canary_count(
-            "fallback census",
-            self.fallback_nonfinite,
-            self.fallback_zero,
-        )
-        .and_then(|total| checked_canary_count("fallback census", total, self.fallback_overflow))
-        .and_then(|total| checked_canary_count("fallback census", total, self.fallback_cell))
+    /// Total fallback count, or `None` when the private counters do not form a
+    /// `usize` product.
+    pub fn fallbacks(self) -> Option<usize> {
+        checked_canary_count(self.fallback_nonfinite, self.fallback_zero)
+            .and_then(|total| checked_canary_count(total, self.fallback_overflow))
+            .and_then(|total| checked_canary_count(total, self.fallback_cell))
     }
 
-    fn checked_merge(
-        self,
-        other: Self,
-        component: &'static str,
-    ) -> Result<Self, Gpt2AttentionCanaryError> {
-        Ok(Self {
-            lanes: checked_canary_count(component, self.lanes, other.lanes)?,
-            certified: checked_canary_count(component, self.certified, other.certified)?,
+    fn checked_merge(self, other: Self) -> Option<Self> {
+        Some(Self {
+            lanes: checked_canary_count(self.lanes, other.lanes)?,
+            certified: checked_canary_count(self.certified, other.certified)?,
             fallback_nonfinite: checked_canary_count(
-                component,
                 self.fallback_nonfinite,
                 other.fallback_nonfinite,
             )?,
-            fallback_zero: checked_canary_count(
-                component,
-                self.fallback_zero,
-                other.fallback_zero,
-            )?,
+            fallback_zero: checked_canary_count(self.fallback_zero, other.fallback_zero)?,
             fallback_overflow: checked_canary_count(
-                component,
                 self.fallback_overflow,
                 other.fallback_overflow,
             )?,
-            fallback_cell: checked_canary_count(
-                component,
-                self.fallback_cell,
-                other.fallback_cell,
-            )?,
+            fallback_cell: checked_canary_count(self.fallback_cell, other.fallback_cell)?,
         })
     }
 }
@@ -531,12 +515,14 @@ impl Gpt2AttentionCanaryCensus {
         self.value
     }
 
-    pub fn merge(&mut self, other: Self) -> Result<(), Gpt2AttentionCanaryError> {
-        let qk = self.qk.checked_merge(other.qk, "QK census")?;
-        let value = self.value.checked_merge(other.value, "value census")?;
+    /// Merge a story census atomically. `None` means the combined counters do
+    /// not form a `usize` product and leaves `self` byte-identical.
+    pub fn merge(&mut self, other: Self) -> Option<()> {
+        let qk = self.qk.checked_merge(other.qk)?;
+        let value = self.value.checked_merge(other.value)?;
         self.qk = qk;
         self.value = value;
-        Ok(())
+        Some(())
     }
 }
 
@@ -549,86 +535,8 @@ impl From<crate::attention::AttentionArithmeticCensus> for Gpt2AttentionCanaryCe
     }
 }
 
-/// Failure from the checked, evidence-only GPT-2 attention canary façade.
-/// Every error is reported before either recurrent state or workspace bytes
-/// are mutated.
-#[doc(hidden)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[non_exhaustive]
-pub enum Gpt2AttentionCanaryError {
-    IndexOutOfRange {
-        component: &'static str,
-        index: usize,
-        bound: usize,
-    },
-    InvalidGeometry {
-        component: &'static str,
-    },
-    GeometryOverflow {
-        component: &'static str,
-    },
-    CounterOverflow {
-        component: &'static str,
-    },
-    LengthMismatch {
-        component: &'static str,
-        layer: Option<usize>,
-        expected: usize,
-        actual: usize,
-    },
-}
-
-impl std::fmt::Display for Gpt2AttentionCanaryError {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::IndexOutOfRange {
-                component,
-                index,
-                bound,
-            } => write!(formatter, "{component} index {index} is outside 0..{bound}"),
-            Self::InvalidGeometry { component } => {
-                write!(formatter, "invalid GPT-2 canary geometry: {component}")
-            }
-            Self::GeometryOverflow { component } => {
-                write!(
-                    formatter,
-                    "GPT-2 canary geometry overflows usize: {component}"
-                )
-            }
-            Self::CounterOverflow { component } => {
-                write!(formatter, "GPT-2 attention canary {component} overflow")
-            }
-            Self::LengthMismatch {
-                component,
-                layer,
-                expected,
-                actual,
-            } => {
-                if let Some(layer) = layer {
-                    write!(
-                        formatter,
-                        "GPT-2 canary layer {layer} {component} length {actual}, expected {expected}"
-                    )
-                } else {
-                    write!(
-                        formatter,
-                        "GPT-2 canary {component} length {actual}, expected {expected}"
-                    )
-                }
-            }
-        }
-    }
-}
-
-impl std::error::Error for Gpt2AttentionCanaryError {}
-
-fn checked_canary_count(
-    component: &'static str,
-    left: usize,
-    right: usize,
-) -> Result<usize, Gpt2AttentionCanaryError> {
+fn checked_canary_count(left: usize, right: usize) -> Option<usize> {
     left.checked_add(right)
-        .ok_or(Gpt2AttentionCanaryError::CounterOverflow { component })
 }
 
 impl Gpt2State {
@@ -682,15 +590,15 @@ impl Gpt2AttentionCanaryWorkspace {
     }
 }
 
-fn canary_product(
-    component: &'static str,
-    factors: &[usize],
-) -> Result<usize, Gpt2AttentionCanaryError> {
-    factors.iter().try_fold(1usize, |product, &factor| {
-        product
-            .checked_mul(factor)
-            .ok_or(Gpt2AttentionCanaryError::GeometryOverflow { component })
-    })
+fn canary_product(component: &'static str, factors: &[usize]) -> Result<usize, SourceUnavailable> {
+    factors
+        .iter()
+        .try_fold(1usize, |product, &factor| product.checked_mul(factor))
+        .ok_or_else(|| {
+            SourceUnavailable::new(format!(
+                "GPT-2 attention canary geometry overflows usize: {component}"
+            ))
+        })
 }
 
 fn require_canary_length(
@@ -698,46 +606,44 @@ fn require_canary_length(
     layer: Option<usize>,
     actual: usize,
     expected: usize,
-) -> Result<(), Gpt2AttentionCanaryError> {
+) -> Result<(), SourceUnavailable> {
     if actual == expected {
         Ok(())
     } else {
-        Err(Gpt2AttentionCanaryError::LengthMismatch {
-            component,
-            layer,
-            expected,
-            actual,
-        })
+        let layer = layer.map_or_else(String::new, |layer| format!(" layer {layer}"));
+        Err(SourceUnavailable::new(format!(
+            "GPT-2 attention canary{layer} {component} length {actual}, expected {expected}"
+        )))
     }
 }
 
 impl Gpt2 {
-    fn validate_attention_canary_model(&self) -> Result<(), Gpt2AttentionCanaryError> {
+    fn validate_attention_canary_model(&self) -> Result<(), SourceUnavailable> {
         let config = &self.cfg;
         if config.n_embd == 0 {
-            return Err(Gpt2AttentionCanaryError::InvalidGeometry {
-                component: "n_embd must be nonzero",
-            });
+            return Err(SourceUnavailable::new(
+                "invalid GPT-2 attention canary geometry: n_embd must be nonzero",
+            ));
         }
         if config.n_layer == 0 {
-            return Err(Gpt2AttentionCanaryError::InvalidGeometry {
-                component: "n_layer must be nonzero",
-            });
+            return Err(SourceUnavailable::new(
+                "invalid GPT-2 attention canary geometry: n_layer must be nonzero",
+            ));
         }
         if config.vocab == 0 {
-            return Err(Gpt2AttentionCanaryError::InvalidGeometry {
-                component: "vocab must be nonzero",
-            });
+            return Err(SourceUnavailable::new(
+                "invalid GPT-2 attention canary geometry: vocab must be nonzero",
+            ));
         }
         if config.n_head == 0 || !config.n_embd.is_multiple_of(config.n_head) {
-            return Err(Gpt2AttentionCanaryError::InvalidGeometry {
-                component: "n_head must be nonzero and divide n_embd",
-            });
+            return Err(SourceUnavailable::new(
+                "invalid GPT-2 attention canary geometry: n_head must be nonzero and divide n_embd",
+            ));
         }
         if config.seq_len == 0 || config.seq_len > config.n_positions {
-            return Err(Gpt2AttentionCanaryError::InvalidGeometry {
-                component: "seq_len must be in 1..=n_positions",
-            });
+            return Err(SourceUnavailable::new(
+                "invalid GPT-2 attention canary geometry: seq_len must be in 1..=n_positions",
+            ));
         }
 
         let d = config.n_embd;
@@ -816,53 +722,40 @@ impl Gpt2 {
         workspace: &Gpt2AttentionCanaryWorkspace,
         token: usize,
         pos: usize,
-    ) -> Result<(), Gpt2AttentionCanaryError> {
-        self.validate_attention_canary_model()?;
+    ) -> Option<()> {
+        self.validate_attention_canary_model().ok()?;
         let config = &self.cfg;
         if token >= config.vocab {
-            return Err(Gpt2AttentionCanaryError::IndexOutOfRange {
-                component: "token",
-                index: token,
-                bound: config.vocab,
-            });
+            return None;
         }
         if pos >= config.seq_len {
-            return Err(Gpt2AttentionCanaryError::IndexOutOfRange {
-                component: "position",
-                index: pos,
-                bound: config.seq_len,
-            });
+            return None;
         }
 
         let d = config.n_embd;
-        let three_d = canary_product("3 * n_embd", &[3, d])?;
+        let three_d = canary_product("3 * n_embd", &[3, d]).ok()?;
         let cache = canary_product(
             "n_layer * seq_len * n_embd",
             &[config.n_layer, config.seq_len, d],
-        )?;
-        require_canary_length("state.k_cache", None, state.k_cache.len(), cache)?;
-        require_canary_length("state.v_cache", None, state.v_cache.len(), cache)?;
-        require_canary_length("state.logits", None, state.logits.len(), config.vocab)?;
-        require_canary_length("state.hidden", None, state.hidden.len(), d)?;
-        require_canary_length("state.x", None, state.x.len(), d)?;
-        require_canary_length("workspace.normed", None, workspace.normed.len(), d)?;
-        require_canary_length("workspace.qkv", None, workspace.qkv.len(), three_d)?;
-        require_canary_length("workspace.attn", None, workspace.attn.len(), d)?;
-        require_canary_length("workspace.proj", None, workspace.proj.len(), d)?;
-        require_canary_length(
-            "workspace.inner",
-            None,
-            workspace.inner.len(),
-            config.n_inner,
-        )?;
-        require_canary_length("workspace.mlp_out", None, workspace.mlp_out.len(), d)?;
-        require_canary_length(
-            "workspace.scores",
-            None,
-            workspace.scores.len(),
-            config.seq_len,
-        )?;
-        Ok(())
+        )
+        .ok()?;
+        [
+            (state.k_cache.len(), cache),
+            (state.v_cache.len(), cache),
+            (state.logits.len(), config.vocab),
+            (state.hidden.len(), d),
+            (state.x.len(), d),
+            (workspace.normed.len(), d),
+            (workspace.qkv.len(), three_d),
+            (workspace.attn.len(), d),
+            (workspace.proj.len(), d),
+            (workspace.inner.len(), config.n_inner),
+            (workspace.mlp_out.len(), d),
+            (workspace.scores.len(), config.seq_len),
+        ]
+        .into_iter()
+        .all(|(actual, expected)| actual == expected)
+        .then_some(())
     }
 
     /// One teacher-forced forward step at `pos` (0-based), leaving logits
@@ -948,14 +841,14 @@ impl Gpt2 {
     #[doc(hidden)]
     pub fn attention_canary_workspace(
         &self,
-    ) -> Result<Gpt2AttentionCanaryWorkspace, Gpt2AttentionCanaryError> {
+    ) -> Result<Gpt2AttentionCanaryWorkspace, SourceUnavailable> {
         self.validate_attention_canary_model()?;
         Ok(Gpt2AttentionCanaryWorkspace::new(&self.cfg))
     }
 
     /// Execute one matched attention-canary step after validating every model,
     /// state, workspace, token, position, and derived slice extent. Validation
-    /// completes before any mutable byte is touched, so every `Err` is failure
+    /// completes before any mutable byte is touched, so `None` is failure
     /// atomic. Production [`Self::forward`] remains the normal executor.
     #[doc(hidden)]
     pub fn forward_attention_canary(
@@ -965,7 +858,7 @@ impl Gpt2 {
         token: usize,
         pos: usize,
         mode: Gpt2AttentionCanaryMode,
-    ) -> Result<Gpt2AttentionCanaryCensus, Gpt2AttentionCanaryError> {
+    ) -> Option<Gpt2AttentionCanaryCensus> {
         self.validate_attention_canary_inputs(st, workspace, token, pos)?;
         let arithmetic = match mode {
             Gpt2AttentionCanaryMode::Conventional => {
@@ -976,9 +869,10 @@ impl Gpt2 {
                 crate::attention::AttentionArithmetic::CertifiedNative
             }
         };
-        Ok(self
-            .forward_with_attention_arithmetic_unchecked(st, workspace, token, pos, arithmetic)
-            .into())
+        Some(
+            self.forward_with_attention_arithmetic_unchecked(st, workspace, token, pos, arithmetic)
+                .into(),
+        )
     }
 
     fn finish_forward_without_allocation(&self, st: &mut Gpt2State) {
@@ -1527,83 +1421,54 @@ mod tests {
             .expect("valid model admits canary scratch");
         let state_before = state.clone();
         let workspace_before = workspace.clone();
-        let error = model
-            .forward_attention_canary(
-                &mut state,
-                &mut workspace,
-                model.cfg.vocab,
-                0,
-                Gpt2AttentionCanaryMode::CertifiedNative,
-            )
-            .expect_err("out-of-range token must fail");
-        assert!(matches!(
-            error,
-            Gpt2AttentionCanaryError::IndexOutOfRange {
-                component: "token",
-                ..
-            }
-        ));
+        let result = model.forward_attention_canary(
+            &mut state,
+            &mut workspace,
+            model.cfg.vocab,
+            0,
+            Gpt2AttentionCanaryMode::CertifiedNative,
+        );
+        assert_eq!(result, None, "out-of-range token must have no product");
         assert_canary_unchanged(&state, &state_before, &workspace, &workspace_before);
 
-        let error = model
-            .forward_attention_canary(
-                &mut state,
-                &mut workspace,
-                0,
-                model.cfg.seq_len,
-                Gpt2AttentionCanaryMode::CertifiedNative,
-            )
-            .expect_err("out-of-range position must fail");
-        assert!(matches!(
-            error,
-            Gpt2AttentionCanaryError::IndexOutOfRange {
-                component: "position",
-                ..
-            }
-        ));
+        let result = model.forward_attention_canary(
+            &mut state,
+            &mut workspace,
+            0,
+            model.cfg.seq_len,
+            Gpt2AttentionCanaryMode::CertifiedNative,
+        );
+        assert_eq!(result, None, "out-of-range position must have no product");
         assert_canary_unchanged(&state, &state_before, &workspace, &workspace_before);
 
         state.logits.pop();
         let state_before = state.clone();
         let workspace_before = workspace.clone();
-        let error = model
-            .forward_attention_canary(
-                &mut state,
-                &mut workspace,
-                0,
-                0,
-                Gpt2AttentionCanaryMode::CertifiedNative,
-            )
-            .expect_err("invalid state geometry must fail");
-        assert!(matches!(
-            error,
-            Gpt2AttentionCanaryError::LengthMismatch {
-                component: "state.logits",
-                ..
-            }
-        ));
+        let result = model.forward_attention_canary(
+            &mut state,
+            &mut workspace,
+            0,
+            0,
+            Gpt2AttentionCanaryMode::CertifiedNative,
+        );
+        assert_eq!(result, None, "invalid state must have no canary product");
         assert_canary_unchanged(&state, &state_before, &workspace, &workspace_before);
 
         state = Gpt2State::new(&model.cfg);
         workspace.scores.pop();
         let state_before = state.clone();
         let workspace_before = workspace.clone();
-        let error = model
-            .forward_attention_canary(
-                &mut state,
-                &mut workspace,
-                0,
-                0,
-                Gpt2AttentionCanaryMode::CertifiedNative,
-            )
-            .expect_err("invalid workspace geometry must fail");
-        assert!(matches!(
-            error,
-            Gpt2AttentionCanaryError::LengthMismatch {
-                component: "workspace.scores",
-                ..
-            }
-        ));
+        let result = model.forward_attention_canary(
+            &mut state,
+            &mut workspace,
+            0,
+            0,
+            Gpt2AttentionCanaryMode::CertifiedNative,
+        );
+        assert_eq!(
+            result, None,
+            "invalid workspace must have no canary product"
+        );
         assert_canary_unchanged(&state, &state_before, &workspace, &workspace_before);
 
         workspace = Gpt2AttentionCanaryWorkspace::new(&model.cfg);
@@ -1612,57 +1477,65 @@ mod tests {
         let original_head_count = model.cfg.n_head;
         model.cfg.n_head = 0;
         let error = model
-            .forward_attention_canary(
-                &mut state,
-                &mut workspace,
-                0,
-                0,
-                Gpt2AttentionCanaryMode::CertifiedNative,
-            )
-            .expect_err("invalid model geometry must fail");
-        assert!(matches!(
-            error,
-            Gpt2AttentionCanaryError::InvalidGeometry { .. }
-        ));
+            .attention_canary_workspace()
+            .expect_err("invalid model geometry must refuse workspace construction");
+        assert_eq!(
+            error.reason,
+            "invalid GPT-2 attention canary geometry: n_head must be nonzero and divide n_embd"
+        );
+        let result = model.forward_attention_canary(
+            &mut state,
+            &mut workspace,
+            0,
+            0,
+            Gpt2AttentionCanaryMode::CertifiedNative,
+        );
+        assert_eq!(result, None, "invalid model must have no canary product");
         assert_canary_unchanged(&state, &state_before, &workspace, &workspace_before);
 
         model.cfg.n_head = original_head_count;
         let original_layer_count = model.cfg.n_layer;
         model.cfg.n_layer = 0;
         let error = model
-            .forward_attention_canary(
-                &mut state,
-                &mut workspace,
-                0,
-                0,
-                Gpt2AttentionCanaryMode::CertifiedNative,
-            )
-            .expect_err("zero-layer canary must be non-vacuously rejected");
-        assert!(matches!(
-            error,
-            Gpt2AttentionCanaryError::InvalidGeometry {
-                component: "n_layer must be nonzero"
-            }
-        ));
+            .attention_canary_workspace()
+            .expect_err("zero-layer model must refuse workspace construction");
+        assert_eq!(
+            error.reason,
+            "invalid GPT-2 attention canary geometry: n_layer must be nonzero"
+        );
+        let result = model.forward_attention_canary(
+            &mut state,
+            &mut workspace,
+            0,
+            0,
+            Gpt2AttentionCanaryMode::CertifiedNative,
+        );
+        assert_eq!(
+            result, None,
+            "zero-layer canary must be non-vacuously absent"
+        );
         assert_canary_unchanged(&state, &state_before, &workspace, &workspace_before);
 
         model.cfg.n_layer = original_layer_count;
         model.cfg.vocab = 0;
         let error = model
-            .forward_attention_canary(
-                &mut state,
-                &mut workspace,
-                0,
-                0,
-                Gpt2AttentionCanaryMode::CertifiedNative,
-            )
-            .expect_err("zero-vocabulary canary must be non-vacuously rejected");
-        assert!(matches!(
-            error,
-            Gpt2AttentionCanaryError::InvalidGeometry {
-                component: "vocab must be nonzero"
-            }
-        ));
+            .attention_canary_workspace()
+            .expect_err("zero-vocabulary model must refuse workspace construction");
+        assert_eq!(
+            error.reason,
+            "invalid GPT-2 attention canary geometry: vocab must be nonzero"
+        );
+        let result = model.forward_attention_canary(
+            &mut state,
+            &mut workspace,
+            0,
+            0,
+            Gpt2AttentionCanaryMode::CertifiedNative,
+        );
+        assert_eq!(
+            result, None,
+            "zero-vocabulary canary must be non-vacuously absent"
+        );
         assert_canary_unchanged(&state, &state_before, &workspace, &workspace_before);
     }
 
@@ -1673,12 +1546,7 @@ mod tests {
             fallback_zero: 1,
             ..Gpt2AttentionCanaryDotCensus::default()
         };
-        assert!(matches!(
-            overflowing_fallbacks.fallbacks(),
-            Err(Gpt2AttentionCanaryError::CounterOverflow {
-                component: "fallback census"
-            })
-        ));
+        assert_eq!(overflowing_fallbacks.fallbacks(), None);
 
         let mut census = Gpt2AttentionCanaryCensus {
             qk: Gpt2AttentionCanaryDotCensus {
@@ -1704,15 +1572,7 @@ mod tests {
                 ..Gpt2AttentionCanaryDotCensus::default()
             },
         };
-        let error = census
-            .merge(other)
-            .expect_err("value overflow must reject the whole merge");
-        assert!(matches!(
-            error,
-            Gpt2AttentionCanaryError::CounterOverflow {
-                component: "value census"
-            }
-        ));
+        assert_eq!(census.merge(other), None);
         assert_eq!(census, before, "failed merge mutated the public census");
     }
 
