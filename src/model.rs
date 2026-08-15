@@ -1090,8 +1090,12 @@ fn verify_opened_snapshot_child(
     } else {
         0
     };
+    // `libc::dev_t` is already `u64` on Linux but is narrower on Darwin;
+    // normalize the platform ABI before comparing it with `MetadataExt::dev`.
+    #[allow(clippy::unnecessary_cast)]
+    let status_device = status.st_dev as u64;
     if kind != expected_kind
-        || status.st_dev as u64 != opened_metadata.dev()
+        || status_device != opened_metadata.dev()
         || status.st_ino != opened_metadata.ino()
     {
         return Err(ModelError::Io(std::io::Error::new(
