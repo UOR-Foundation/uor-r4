@@ -24,6 +24,7 @@ use uor_r4_core::transformerless::hf_bpe::{
 use uor_r4_core::transformerless::scenarios::RuntimeTokenizerIdentity;
 use uor_r4_graph_certify::ScoreStatus;
 use uor_r4_model_source::attention::AttentionOperatorSpec;
+use uor_r4_model_source::dense::DenseOperatorSpec;
 use uor_r4_model_source::{BehaviorSource, TeacherOracle};
 use uor_r4_router::fallback::{
     run_cascade, CascadeOutcome, EngineStatus, TierFn, TierOutcome, TierResult,
@@ -432,10 +433,42 @@ impl R4g1CompileStatus {
             "report": self.report,
             "model_name": active_canonical_model_name(serving),
             "physical_root": status_physical_root(serving.active_bundle.as_ref()),
+            "attention_operator": serving.active_bundle.as_ref().map(|bundle| &bundle.attention_operator),
+            "dense_operator": serving.active_bundle.as_ref().and_then(|bundle| bundle.dense_operator.as_ref()),
             "terminal_error": serving.terminal_load_error.as_deref(),
             "last_operation_error": serving.last_operation_error.as_deref(),
         })
     }
+}
+
+fn uor_status_json(installed: &ServingModelState) -> serde_json::Value {
+    let graph_loaded = installed.r4g1.is_some();
+    let graph_ready = graph_text_ready(installed);
+    let decode_only = graph_loaded && !graph_ready;
+    let teacher_ready = teacher_text_ready(installed);
+    let engine_active = graph_ready || teacher_ready;
+    let logical_name = installed_logical_model_name(installed);
+    let bundle_compiled = installed.active_bundle.is_some();
+
+    serde_json::json!({
+        "model_name": logical_name,
+        "physical_root": status_physical_root(installed.active_bundle.as_ref()),
+        "attention_operator": installed.active_bundle.as_ref().map(|bundle| &bundle.attention_operator),
+        "dense_operator": installed.active_bundle.as_ref().and_then(|bundle| bundle.dense_operator.as_ref()),
+        "r4g1_loaded": graph_loaded,
+        "r4g1_ready": graph_ready,
+        "decode_only": decode_only,
+        "teacher_ready": teacher_ready,
+        "engine_active": engine_active,
+        "terminal_error": installed.terminal_load_error.as_deref(),
+        "last_operation_error": installed.last_operation_error.as_deref(),
+        "stages": {
+            "stage_1_download": installed.active_teacher_source.is_some(),
+            "stage_2_compile": bundle_compiled,
+            "stage_3_graph_score": graph_loaded,
+            "stage_4_r4g1_active": graph_ready
+        }
+    })
 }
 
 /// Owns the single long-running R4G1 replacement slot while a reload is
@@ -1264,9 +1297,19 @@ enum CompiledRootState {
     /// stage A did not yet publish any corpus payload or attention binding.
     /// This is a resumable preflight state, not an implicit historical bundle.
     PreAttentionIdentity,
-    ImplicitV1(Box<AttentionOperatorSpec>),
-    BoundHistorical(Box<AttentionOperatorSpec>),
-    BoundCurrent(Box<AttentionOperatorSpec>),
+    /// A composite GPT-2 compile published its exact current attention record
+    /// but crashed before the matching dense record became stable. Only a
+    /// recognized identity-only prefix can enter this resumable state.
+    PreDenseIdentity(Box<AttentionOperatorSpec>),
+    ImplicitV1(Box<SourceExecutionIdentity>),
+    BoundHistorical(Box<SourceExecutionIdentity>),
+    BoundCurrent(Box<SourceExecutionIdentity>),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct SourceExecutionIdentity {
+    attention: AttentionOperatorSpec,
+    dense: Option<DenseOperatorSpec>,
 }
 
 impl CompiledRootState {
@@ -1274,8 +1317,31 @@ impl CompiledRootState {
         match self {
             Self::ImplicitV1(operator)
             | Self::BoundHistorical(operator)
-            | Self::BoundCurrent(operator) => Some(operator),
+            | Self::BoundCurrent(operator) => Some(&operator.attention),
+            Self::PreDenseIdentity(operator) => Some(operator),
             Self::Absent | Self::Empty | Self::PreAttentionIdentity => None,
+        }
+    }
+
+    fn dense_operator(&self) -> Option<&DenseOperatorSpec> {
+        match self {
+            Self::ImplicitV1(identity)
+            | Self::BoundHistorical(identity)
+            | Self::BoundCurrent(identity) => identity.dense.as_ref(),
+            Self::Absent | Self::Empty | Self::PreAttentionIdentity | Self::PreDenseIdentity(_) => {
+                None
+            }
+        }
+    }
+
+    fn identity(&self) -> Option<&SourceExecutionIdentity> {
+        match self {
+            Self::ImplicitV1(identity)
+            | Self::BoundHistorical(identity)
+            | Self::BoundCurrent(identity) => Some(identity),
+            Self::Absent | Self::Empty | Self::PreAttentionIdentity | Self::PreDenseIdentity(_) => {
+                None
+            }
         }
     }
 }
@@ -1287,6 +1353,8 @@ struct CompiledModelPair {
     conventional: CompiledRootState,
     current_root: PathBuf,
     current: CompiledRootState,
+    composite_root: PathBuf,
+    composite: CompiledRootState,
 }
 
 /// One logical source resolved to the exact physical bundle selected for
@@ -1299,6 +1367,7 @@ struct ResolvedCompiledBundle {
     graph: PathBuf,
     teacher: PathBuf,
     attention_operator: AttentionOperatorSpec,
+    dense_operator: Option<DenseOperatorSpec>,
     /// Exact source snapshot root recorded by the selected cover report.
     /// `None` is the historical pre-#597 state, not an inferred identity.
     source_manifest_kappa: Option<String>,
@@ -1344,8 +1413,16 @@ fn attention_era_suffix(current_version: u32) -> String {
     format!("-attention-v{current_version}")
 }
 
+fn composite_era_suffix(current_version: u32) -> String {
+    format!(
+        "-attention-v{current_version}-dense-v{}",
+        DenseOperatorSpec::GPT2_VERSION
+    )
+}
+
 fn validate_logical_model_name(name: &str, current_version: u32) -> Result<(), String> {
-    let suffix = attention_era_suffix(current_version);
+    let attention_suffix = attention_era_suffix(current_version);
+    let composite_suffix = composite_era_suffix(current_version);
     let path = Path::new(name);
     let one_normal_component = path.components().count() == 1
         && path.file_name().and_then(|part| part.to_str()) == Some(name)
@@ -1356,18 +1433,20 @@ fn validate_logical_model_name(name: &str, current_version: u32) -> Result<(), S
             "model name {name:?} is not one logical source basename"
         ));
     }
-    if name.ends_with(&suffix) {
+    if name.ends_with(&composite_suffix) || name.ends_with(&attention_suffix) {
         return Err(format!(
-            "model name {name:?} uses the resolver-owned suffix {suffix}; source basenames ending in that suffix are reserved"
+            "model name {name:?} uses a resolver-owned arithmetic suffix ({attention_suffix} or {composite_suffix}); source basenames ending in either suffix are reserved"
         ));
     }
     Ok(())
 }
 
 fn logical_model_name_for_request(requested: &str, current_version: u32) -> Result<String, String> {
-    let suffix = attention_era_suffix(current_version);
+    let composite_suffix = composite_era_suffix(current_version);
+    let attention_suffix = attention_era_suffix(current_version);
     let logical = requested
-        .strip_suffix(&suffix)
+        .strip_suffix(&composite_suffix)
+        .or_else(|| requested.strip_suffix(&attention_suffix))
         .filter(|base| !base.is_empty())
         .unwrap_or(requested);
     validate_logical_model_name(logical, current_version)?;
@@ -1378,6 +1457,7 @@ fn inspect_compiled_root(
     root: &Path,
     current_version: u32,
     resolver_owned_current_root: bool,
+    resolver_owned_dense_root: bool,
 ) -> Result<CompiledRootState, String> {
     let metadata = match fs::symlink_metadata(root) {
         Ok(metadata) => metadata,
@@ -1420,10 +1500,11 @@ fn inspect_compiled_root(
         return Ok(CompiledRootState::Empty);
     }
 
+    let dense_operator = source_compile_dense_binding(root)?;
     let binding = source_compile_attention_binding(root)?;
     let (operator, explicit_binding) = match binding {
         Some(operator) => (operator, true),
-        None if source_compile_pre_attention_prefix(root)? => {
+        None if dense_operator.is_none() && source_compile_pre_attention_prefix(root)? => {
             return Ok(CompiledRootState::PreAttentionIdentity);
         }
         None if resolver_owned_current_root => {
@@ -1459,13 +1540,55 @@ fn inspect_compiled_root(
             operator.version
         ));
     }
-    let operator = Box::new(operator);
+    if resolver_owned_dense_root
+        && dense_operator.is_none()
+        && source_compile_pre_attention_prefix(root)?
+    {
+        return Ok(CompiledRootState::PreDenseIdentity(Box::new(operator)));
+    }
+    uor_r4_model_source::dense::validate_source_execution_pair(
+        Some(&operator),
+        dense_operator.as_ref(),
+    )
+    .map_err(|error| format!("compiled model root {}: {error}", root.display()))?;
+    if resolver_owned_dense_root {
+        let dense = dense_operator.as_ref().ok_or_else(|| {
+            format!(
+                "deterministic composite bundle {} contains payload without {}; refusing fallback or relabeling",
+                root.display(),
+                uor_r4_graph_cli::DENSE_OPERATOR_BINDING_FILE
+            )
+        })?;
+        if dense.version != DenseOperatorSpec::GPT2_VERSION {
+            return Err(format!(
+                "deterministic composite bundle {} is pinned to dense operator {}/{}; expected current version {}",
+                root.display(), dense.id, dense.version, DenseOperatorSpec::GPT2_VERSION
+            ));
+        }
+    } else if resolver_owned_current_root && dense_operator.is_some() {
+        return Err(format!(
+            "attention-only resolver root {} contains {}; current GPT-2 dense provenance belongs in the composite resolver root",
+            root.display(),
+            uor_r4_graph_cli::DENSE_OPERATOR_BINDING_FILE
+        ));
+    } else if let Some(dense) = dense_operator.as_ref() {
+        if dense.version == DenseOperatorSpec::GPT2_VERSION {
+            return Err(format!(
+                "unsuffixed compiled root {} contains current dense operator {}/{}; current GPT-2 dense provenance belongs exclusively in the composite resolver root",
+                root.display(), dense.id, dense.version
+            ));
+        }
+    }
+    let identity = Box::new(SourceExecutionIdentity {
+        attention: operator,
+        dense: dense_operator,
+    });
     Ok(if !explicit_binding {
-        CompiledRootState::ImplicitV1(operator)
-    } else if operator.version == current_version {
-        CompiledRootState::BoundCurrent(operator)
+        CompiledRootState::ImplicitV1(identity)
+    } else if identity.attention.version == current_version {
+        CompiledRootState::BoundCurrent(identity)
     } else {
-        CompiledRootState::BoundHistorical(operator)
+        CompiledRootState::BoundHistorical(identity)
     })
 }
 
@@ -1482,39 +1605,69 @@ fn inspect_compiled_model_pair(
         "{logical_name}{}",
         attention_era_suffix(current_version)
     ));
-    let conventional = inspect_compiled_root(&conventional_root, current_version, false)?;
-    let current = inspect_compiled_root(&current_root, current_version, true)?;
+    let composite_root = compiled_root.join(format!(
+        "{logical_name}{}",
+        composite_era_suffix(current_version)
+    ));
+    let conventional = inspect_compiled_root(&conventional_root, current_version, false, false)?;
+    let current = inspect_compiled_root(&current_root, current_version, true, false)?;
+    let composite = inspect_compiled_root(&composite_root, current_version, true, true)?;
 
     if matches!(conventional, CompiledRootState::PreAttentionIdentity)
-        && current.operator().is_some()
+        && (current.operator().is_some() || composite.operator().is_some())
     {
         return Err(format!(
-            "conventional root {} contains an unfinished pre-attention identity while current root {} is already bound; refusing to hide or overwrite either initialization",
+            "conventional root {} contains an unfinished pre-attention identity while a preferred root ({}, {}) is already bound; refusing to hide or overwrite either initialization",
             conventional_root.display(),
-            current_root.display()
+            current_root.display(),
+            composite_root.display()
+        ));
+    }
+    if matches!(current, CompiledRootState::PreAttentionIdentity) && composite.operator().is_some()
+    {
+        return Err(format!(
+            "attention root {} contains an unfinished pre-attention identity while composite root {} is already bound; refusing to hide or overwrite either initialization",
+            current_root.display(),
+            composite_root.display()
         ));
     }
 
-    if let (Some(historical), Some(current_operator)) =
-        (conventional.operator(), current.operator())
-    {
-        if historical.id != current_operator.id {
-            return Err(format!(
-                "compiled roots {} and {} conflict across source-attention families ({}/{} versus {}/{})",
-                conventional_root.display(),
-                current_root.display(),
-                historical.id,
-                historical.version,
-                current_operator.id,
-                current_operator.version
-            ));
-        }
-        if historical.version == current_version {
-            return Err(format!(
-                "duplicate current source-attention bundles exist for logical model {logical_name}: {} and {}",
-                conventional_root.display(),
-                current_root.display()
-            ));
+    let roots = [
+        (&conventional_root, &conventional),
+        (&current_root, &current),
+        (&composite_root, &composite),
+    ];
+    for left in 0..roots.len() {
+        for right in (left + 1)..roots.len() {
+            let (Some(left_operator), Some(right_operator)) =
+                (roots[left].1.operator(), roots[right].1.operator())
+            else {
+                continue;
+            };
+            if left_operator.id != right_operator.id {
+                return Err(format!(
+                    "compiled roots {} and {} conflict across source-attention families ({}/{} versus {}/{})",
+                    roots[left].0.display(),
+                    roots[right].0.display(),
+                    left_operator.id,
+                    left_operator.version,
+                    right_operator.id,
+                    right_operator.version
+                ));
+            }
+            if roots[left].1.identity() == roots[right].1.identity() {
+                return Err(format!(
+                    "compiled roots {} and {} duplicate the same source-execution identity {}/{} with dense {:?}",
+                    roots[left].0.display(),
+                    roots[right].0.display(),
+                    left_operator.id,
+                    left_operator.version,
+                    roots[left]
+                        .1
+                        .dense_operator()
+                        .map(|operator| format!("{}/{}", operator.id, operator.version))
+                ));
+            }
         }
     }
 
@@ -1524,22 +1677,28 @@ fn inspect_compiled_model_pair(
         conventional,
         current_root,
         current,
+        composite_root,
+        composite,
     })
 }
 
-fn selected_compiled_root(pair: &CompiledModelPair) -> Option<(&Path, &AttentionOperatorSpec)> {
-    if let Some(operator) = pair.current.operator() {
-        Some((&pair.current_root, operator))
+fn selected_compiled_root(pair: &CompiledModelPair) -> Option<(&Path, &SourceExecutionIdentity)> {
+    if let Some(identity) = pair.composite.identity() {
+        Some((&pair.composite_root, identity))
+    } else if let Some(identity) = pair.current.identity() {
+        Some((&pair.current_root, identity))
     } else {
         pair.conventional
-            .operator()
-            .map(|operator| (pair.conventional_root.as_path(), operator))
+            .identity()
+            .map(|identity| (pair.conventional_root.as_path(), identity))
     }
 }
 
 struct CoverProvenanceProjection {
     attention_present: bool,
     operator: Option<AttentionOperatorSpec>,
+    dense_present: bool,
+    dense_operator: Option<DenseOperatorSpec>,
     source_manifest_kappa_present: bool,
     source_manifest_kappa: Option<String>,
 }
@@ -1564,6 +1723,8 @@ impl<'de> Deserialize<'de> for CoverProvenanceProjection {
             {
                 let mut attention_present = false;
                 let mut operator = None;
+                let mut dense_present = false;
+                let mut dense_operator = None;
                 let mut source_manifest_kappa_present = false;
                 let mut source_manifest_kappa = None;
                 while let Some(key) = map.next_key::<String>()? {
@@ -1576,6 +1737,13 @@ impl<'de> Deserialize<'de> for CoverProvenanceProjection {
                             }
                             attention_present = true;
                             operator = map.next_value()?;
+                        }
+                        "dense_operator" => {
+                            if dense_present {
+                                return Err(serde::de::Error::duplicate_field("dense_operator"));
+                            }
+                            dense_present = true;
+                            dense_operator = map.next_value()?;
                         }
                         "source_manifest_kappa" => {
                             if source_manifest_kappa_present {
@@ -1594,6 +1762,8 @@ impl<'de> Deserialize<'de> for CoverProvenanceProjection {
                 Ok(CoverProvenanceProjection {
                     attention_present,
                     operator,
+                    dense_present,
+                    dense_operator,
                     source_manifest_kappa_present,
                     source_manifest_kappa,
                 })
@@ -1613,11 +1783,16 @@ fn canonical_source_manifest_kappa(kappa: &str) -> bool {
     })
 }
 
-fn parse_cover_provenance(
-    report_path: &Path,
-) -> Result<(bool, Option<AttentionOperatorSpec>, Option<String>), String> {
+type CoverProvenance = (
+    bool,
+    Option<AttentionOperatorSpec>,
+    Option<DenseOperatorSpec>,
+    Option<String>,
+);
+
+fn parse_cover_provenance(report_path: &Path) -> Result<CoverProvenance, String> {
     let Some(bytes) = read_regular_file_nofollow(report_path, "cover report")? else {
-        return Ok((false, None, None));
+        return Ok((false, None, None, None));
     };
     let projection: CoverProvenanceProjection = serde_json::from_slice(&bytes)
         .map_err(|error| format!("{} is malformed JSON: {error}", report_path.display()))?;
@@ -1644,10 +1819,35 @@ fn parse_cover_provenance(
             }
         }
     }
+    if projection.dense_present {
+        if let Some(recorded) = projection.dense_operator.as_ref() {
+            let registered =
+                uor_r4_model_source::dense::operator_spec(&recorded.id, recorded.version)
+                    .map_err(|error| format!("{}: {error}", report_path.display()))?;
+            if &registered != recorded {
+                return Err(format!(
+                    "{} does not contain a registry-exact dense operator {}/{}",
+                    report_path.display(),
+                    recorded.id,
+                    recorded.version
+                ));
+            }
+        }
+    }
+    uor_r4_model_source::dense::validate_source_execution_pair(
+        projection.operator.as_ref(),
+        projection.dense_operator.as_ref(),
+    )
+    .map_err(|error| format!("{}: {error}", report_path.display()))?;
     // A JSON `null` is compatible with the historical unrecorded state; the
     // presence bit exists only so duplicate top-level controls are rejected.
     let _ = projection.source_manifest_kappa_present;
-    Ok((true, projection.operator, projection.source_manifest_kappa))
+    Ok((
+        true,
+        projection.operator,
+        projection.dense_operator,
+        projection.source_manifest_kappa,
+    ))
 }
 
 /// Reconcile every attention identity the server bundle records. Current-v2
@@ -1658,6 +1858,7 @@ fn parse_cover_provenance(
 fn validate_serving_attention_provenance(
     bundle: &Path,
     expected: &AttentionOperatorSpec,
+    expected_dense: Option<&DenseOperatorSpec>,
     current_version: u32,
 ) -> Result<Option<String>, String> {
     // New server-published generations carry a digest-complete transaction
@@ -1668,9 +1869,11 @@ fn validate_serving_attention_provenance(
     let records = bundle.join("corpus.records");
     let meta_present = regular_file_presence(&meta)?;
     let records_present = regular_file_presence(&records)?;
-    let recorded_corpus = match (meta_present, records_present) {
-        (true, true) => uor_r4_graph_cli::recorded_corpus_attention_operator(&meta, &records)
-            .map_err(|error| error.to_string())?,
+    let recorded_execution = match (meta_present, records_present) {
+        (true, true) => Some(
+            uor_r4_graph_cli::recorded_corpus_execution_identity(&meta, &records)
+                .map_err(|error| error.to_string())?,
+        ),
         (false, false) if expected.version < current_version => None,
         (false, false) => {
             return Err(format!(
@@ -1685,6 +1888,12 @@ fn validate_serving_attention_provenance(
             ))
         }
     };
+    let recorded_corpus = recorded_execution
+        .as_ref()
+        .and_then(|identity| identity.attention_operator.clone());
+    let recorded_dense = recorded_execution
+        .as_ref()
+        .and_then(|identity| identity.dense_operator.clone());
     if meta_present {
         let recorded = recorded_corpus.unwrap_or_else(AttentionOperatorSpec::standard_v1);
         if &recorded != expected {
@@ -1698,9 +1907,19 @@ fn validate_serving_attention_provenance(
             ));
         }
     }
+    if meta_present && recorded_dense.as_ref() != expected_dense {
+        return Err(format!(
+            "compiled bundle {} records dense operator {:?} in its corpus provenance but its selected root records {:?}",
+            bundle.display(),
+            recorded_dense
+                .as_ref()
+                .map(|operator| format!("{}/{}", operator.id, operator.version)),
+            expected_dense.map(|operator| format!("{}/{}", operator.id, operator.version)),
+        ));
+    }
 
     let report_path = bundle.join("graph-cover/cover_report.json");
-    let (report_present, report_operator, source_manifest_kappa) =
+    let (report_present, report_operator, report_dense, source_manifest_kappa) =
         parse_cover_provenance(&report_path)?;
     if expected.version == current_version && !report_present {
         return Err(format!(
@@ -1720,6 +1939,17 @@ fn validate_serving_attention_provenance(
                 bundle.display(),
                 expected.id,
                 expected.version
+            ));
+        }
+        if report_dense.as_ref() != expected_dense {
+            return Err(format!(
+                "{} records dense operator {:?} but selected bundle {} records {:?}",
+                report_path.display(),
+                report_dense
+                    .as_ref()
+                    .map(|operator| format!("{}/{}", operator.id, operator.version)),
+                bundle.display(),
+                expected_dense.map(|operator| format!("{}/{}", operator.id, operator.version)),
             ));
         }
     }
@@ -1769,15 +1999,27 @@ fn resolve_loadable_compiled_bundle(
     current_version: u32,
 ) -> Result<Option<ResolvedCompiledBundle>, String> {
     if matches!(
+        pair.composite,
+        CompiledRootState::Empty
+            | CompiledRootState::PreAttentionIdentity
+            | CompiledRootState::PreDenseIdentity(_)
+    ) {
+        return Err(format!(
+            "preferred composite source-execution root {} is present but incomplete; refusing attention-only or historical fallback",
+            pair.composite_root.display()
+        ));
+    }
+    if matches!(
         pair.current,
         CompiledRootState::Empty | CompiledRootState::PreAttentionIdentity
-    ) {
+    ) && matches!(pair.composite, CompiledRootState::Absent)
+    {
         return Err(format!(
             "preferred current source-attention root {} is present but incomplete; refusing historical fallback",
             pair.current_root.display()
         ));
     }
-    let Some((physical_root, operator)) = selected_compiled_root(pair) else {
+    let Some((physical_root, identity)) = selected_compiled_root(pair) else {
         return Ok(None);
     };
     let primary_graph = physical_root.join("graph/score.r4g1");
@@ -1802,14 +2044,19 @@ fn resolve_loadable_compiled_bundle(
             teacher.display()
         ));
     }
-    let source_manifest_kappa =
-        validate_serving_attention_provenance(physical_root, operator, current_version)?;
+    let source_manifest_kappa = validate_serving_attention_provenance(
+        physical_root,
+        &identity.attention,
+        identity.dense.as_ref(),
+        current_version,
+    )?;
     Ok(Some(ResolvedCompiledBundle {
         logical_name: pair.logical_name.clone(),
         physical_root: physical_root.to_path_buf(),
         graph,
         teacher,
-        attention_operator: operator.clone(),
+        attention_operator: identity.attention.clone(),
+        dense_operator: identity.dense.clone(),
         source_manifest_kappa,
     }))
 }
@@ -1838,8 +2085,11 @@ fn reject_requested_suffix_source_collision(
     models_root: &Path,
     current_version: u32,
 ) -> Result<(), String> {
-    let suffix = attention_era_suffix(current_version);
-    if requested.strip_suffix(&suffix).is_none() {
+    let attention_suffix = attention_era_suffix(current_version);
+    let composite_suffix = composite_era_suffix(current_version);
+    if requested.strip_suffix(&composite_suffix).is_none()
+        && requested.strip_suffix(&attention_suffix).is_none()
+    {
         return Ok(());
     }
     let ambiguous = models_root.join("sources").join(requested);
@@ -2006,11 +2256,19 @@ fn resolve_managed_teacher_bundle_in(
     let logical_name = logical_model_name_for_request(physical_name, current_version)?;
     let pair = inspect_compiled_model_pair(&compiled_root, &logical_name, current_version)?;
     if matches!(
-        pair.current,
-        CompiledRootState::Empty | CompiledRootState::PreAttentionIdentity
-    ) {
+        pair.composite,
+        CompiledRootState::Empty
+            | CompiledRootState::PreAttentionIdentity
+            | CompiledRootState::PreDenseIdentity(_)
+    ) || (matches!(pair.composite, CompiledRootState::Absent)
+        && matches!(
+            pair.current,
+            CompiledRootState::Empty | CompiledRootState::PreAttentionIdentity
+        ))
+    {
         return Ok(ConfiguredManagedBundle::Incomplete(format!(
-            "preferred current bundle {} exists but is incomplete; refusing historical adjacent-path fallback",
+            "preferred compiled bundle exists but is incomplete (composite {}, attention {}); refusing lower-precedence fallback",
+            pair.composite_root.display(),
             pair.current_root.display()
         )));
     }
@@ -2018,7 +2276,8 @@ fn resolve_managed_teacher_bundle_in(
         Some(bundle) => Ok(ConfiguredManagedBundle::Selected(Box::new(bundle))),
         None
             if matches!(pair.conventional, CompiledRootState::Absent)
-                && matches!(pair.current, CompiledRootState::Absent) =>
+                && matches!(pair.current, CompiledRootState::Absent)
+                && matches!(pair.composite, CompiledRootState::Absent) =>
         {
             Ok(ConfiguredManagedBundle::Absent)
         }
@@ -2045,17 +2304,26 @@ fn reject_reserved_suffix_source_collision(
     models_root: &Path,
     current_version: u32,
 ) -> Result<(), String> {
-    let expected_physical = format!(
+    let physical_name = bundle
+        .physical_root
+        .file_name()
+        .and_then(|name| name.to_str());
+    let attention_name = format!(
         "{}{}",
         bundle.logical_name,
         attention_era_suffix(current_version)
     );
-    if bundle
-        .physical_root
-        .file_name()
-        .and_then(|name| name.to_str())
-        != Some(expected_physical.as_str())
-    {
+    let composite_name = format!(
+        "{}{}",
+        bundle.logical_name,
+        composite_era_suffix(current_version)
+    );
+    let expected_physical = match physical_name {
+        Some(name) if name == attention_name => attention_name,
+        Some(name) if name == composite_name => composite_name,
+        _ => return Ok(()),
+    };
+    if physical_name != Some(expected_physical.as_str()) {
         return Ok(());
     }
     let ambiguous = models_root.join("sources").join(&expected_physical);
@@ -2251,7 +2519,8 @@ fn discover_compiled_r4g1_candidates_in(
             ));
         }
     };
-    let suffix = attention_era_suffix(current_version);
+    let attention_suffix = attention_era_suffix(current_version);
+    let composite_suffix = composite_era_suffix(current_version);
     let mut logical_names = std::collections::BTreeSet::<String>::new();
 
     for entry in entries {
@@ -2284,7 +2553,8 @@ fn discover_compiled_r4g1_candidates_in(
             .into_string()
             .map_err(|_| format!("compiled bundle name is not UTF-8: {}", bundle.display()))?;
         let logical_name = name
-            .strip_suffix(&suffix)
+            .strip_suffix(&composite_suffix)
+            .or_else(|| name.strip_suffix(&attention_suffix))
             .filter(|base| !base.is_empty())
             .unwrap_or(&name)
             .to_owned();
@@ -2438,7 +2708,10 @@ fn source_for_compiled_teacher_in(
         )
     })?;
     let pair = inspect_compiled_model_pair(compiled_root, &logical_name, current_version)?;
-    if bundle != pair.conventional_root && bundle != pair.current_root {
+    if bundle != pair.conventional_root
+        && bundle != pair.current_root
+        && bundle != pair.composite_root
+    {
         return Err(format!(
             "compiled teacher {} is outside the resolved roots for logical model {}",
             teacher_path.display(),
@@ -2753,7 +3026,10 @@ fn reconcile_prepared_teacher_with_bundle(
     if let Some(mode) =
         teacher_mode_for_bundle_records(&default, experimental.as_ref(), &bundle.attention_operator)
     {
-        return Ok((mode, None));
+        let actual_dense = prepared_teacher.teacher.dense_operator_spec();
+        if actual_dense == bundle.dense_operator {
+            return Ok((mode, None));
+        }
     }
 
     let available = experimental
@@ -2765,11 +3041,19 @@ fn reconcile_prepared_teacher_with_bundle(
         })
         .unwrap_or_else(|| format!("{}/{}", default.id, default.version));
     let message = format!(
-        "teacher source {} provides {available}, but compiled bundle {} records {}/{}; keeping the valid graph and omitting its incompatible teacher fallback",
+        "teacher source {} provides attention {available} and dense {:?}, but compiled bundle {} records {}/{} and dense {:?}; keeping the valid graph and omitting its incompatible teacher fallback",
         prepared_teacher.source.display(),
+        prepared_teacher
+            .teacher
+            .dense_operator_spec()
+            .map(|operator| format!("{}/{}", operator.id, operator.version)),
         bundle.physical_root.display(),
         bundle.attention_operator.id,
-        bundle.attention_operator.version
+        bundle.attention_operator.version,
+        bundle
+            .dense_operator
+            .as_ref()
+            .map(|operator| format!("{}/{}", operator.id, operator.version))
     );
     *prepared = None;
     Ok((false, Some(message)))
@@ -3775,6 +4059,26 @@ fn validate_source_bundle_inventory(output: &Path) -> Result<(), String> {
             }
         }
     }
+    let attention = source_compile_attention_binding(output)?.ok_or_else(|| {
+        format!(
+            "transformerless bundle {} lost its source attention binding",
+            output.display()
+        )
+    })?;
+    let dense = source_compile_dense_binding(output)?;
+    uor_r4_model_source::dense::validate_source_execution_pair(Some(&attention), dense.as_ref())
+        .map_err(|error| format!("transformerless bundle {}: {error}", output.display()))?;
+    if attention.id == AttentionOperatorSpec::LEARNED_ABSOLUTE_ID
+        && attention.version == AttentionOperatorSpec::LEARNED_ABSOLUTE_VERSION
+        && dense.is_none()
+    {
+        return Err(format!(
+            "transformerless GPT-2 bundle compilation is incomplete; missing {}",
+            output
+                .join(uor_r4_graph_cli::DENSE_OPERATOR_BINDING_FILE)
+                .display()
+        ));
+    }
     Ok(())
 }
 
@@ -3890,6 +4194,23 @@ fn source_compile_attention_binding(
         file,
         &path,
         uor_r4_graph_cli::ATTENTION_OPERATOR_BINDING_FILE,
+    )?;
+    serde_json::from_value(value)
+        .map(Some)
+        .map_err(|error| format!("{} is malformed: {error}", path.display()))
+}
+
+/// Read an output directory's exact optional host-side dense binding through
+/// the same no-follow, duplicate-rejecting path as attention provenance.
+fn source_compile_dense_binding(output: &Path) -> Result<Option<DenseOperatorSpec>, String> {
+    let path = output.join(uor_r4_graph_cli::DENSE_OPERATOR_BINDING_FILE);
+    let Some(file) = open_regular_file_nofollow(&path, "dense-operator binding")? else {
+        return Ok(None);
+    };
+    let value = validate_pre_attention_identity_handle(
+        file,
+        &path,
+        uor_r4_graph_cli::DENSE_OPERATOR_BINDING_FILE,
     )?;
     serde_json::from_value(value)
         .map(Some)
@@ -4221,6 +4542,7 @@ fn source_compile_output_has_payload(output: &Path) -> Result<bool, String> {
         }
         if name == "tokenizer_adapter.json"
             || name == uor_r4_graph_cli::ATTENTION_OPERATOR_BINDING_FILE
+            || name == uor_r4_graph_cli::DENSE_OPERATOR_BINDING_FILE
         {
             validate_pre_attention_identity_file(&entry.path(), name)?;
             continue;
@@ -4246,6 +4568,7 @@ fn looks_like_atomic_identity_temporary(name: &str) -> bool {
         SOURCE_MANIFEST_KAPPA_BINDING_FILE,
         "tokenizer_adapter.json",
         uor_r4_graph_cli::ATTENTION_OPERATOR_BINDING_FILE,
+        uor_r4_graph_cli::DENSE_OPERATOR_BINDING_FILE,
     ]
     .iter()
     .any(|sidecar| name.starts_with(&format!(".{sidecar}.")) && name.ends_with(".tmp"))
@@ -4257,6 +4580,7 @@ fn atomic_identity_temporary_kind(name: &str) -> Option<&'static str> {
         SOURCE_MANIFEST_KAPPA_BINDING_FILE,
         "tokenizer_adapter.json",
         uor_r4_graph_cli::ATTENTION_OPERATOR_BINDING_FILE,
+        uor_r4_graph_cli::DENSE_OPERATOR_BINDING_FILE,
     ] {
         let prefix = format!(".{sidecar}.");
         let Some(sequence) = name
@@ -4287,6 +4611,7 @@ fn validate_source_compile_identity_temporaries(output: &Path) -> Result<(), Str
         SOURCE_MANIFEST_KAPPA_BINDING_FILE,
         "tokenizer_adapter.json",
         uor_r4_graph_cli::ATTENTION_OPERATOR_BINDING_FILE,
+        uor_r4_graph_cli::DENSE_OPERATOR_BINDING_FILE,
     ] {
         let path = output.join(kind);
         if let Some(file) = open_regular_file_nofollow(&path, "pre-attention identity record")? {
@@ -4294,6 +4619,36 @@ fn validate_source_compile_identity_temporaries(output: &Path) -> Result<(), Str
             identities.insert(kind, value);
         }
     }
+    let stable_attention = identities
+        .get(uor_r4_graph_cli::ATTENTION_OPERATOR_BINDING_FILE)
+        .map(|value| serde_json::from_value::<AttentionOperatorSpec>(value.clone()))
+        .transpose()
+        .map_err(|error| {
+            format!(
+                "source compile output {} has an unreadable stable attention identity: {error}",
+                output.display()
+            )
+        })?;
+    let stable_dense = identities
+        .get(uor_r4_graph_cli::DENSE_OPERATOR_BINDING_FILE)
+        .map(|value| serde_json::from_value::<DenseOperatorSpec>(value.clone()))
+        .transpose()
+        .map_err(|error| {
+            format!(
+                "source compile output {} has an unreadable stable dense identity: {error}",
+                output.display()
+            )
+        })?;
+    uor_r4_model_source::dense::validate_source_execution_pair(
+        stable_attention.as_ref(),
+        stable_dense.as_ref(),
+    )
+    .map_err(|error| {
+        format!(
+            "source compile output {} has an invalid stable attention/dense identity: {error}",
+            output.display()
+        )
+    })?;
     let entries = fs::read_dir(output)
         .map_err(|error| format!("{} cannot be enumerated: {error}", output.display()))?;
     for entry in entries {
@@ -4325,6 +4680,35 @@ fn validate_source_compile_identity_temporaries(output: &Path) -> Result<(), Str
             ));
         }
     }
+    let attention = identities
+        .get(uor_r4_graph_cli::ATTENTION_OPERATOR_BINDING_FILE)
+        .map(|value| {
+            serde_json::from_value::<AttentionOperatorSpec>(value.clone()).map_err(|error| {
+                format!(
+                    "source compile output {} has an unreadable effective attention identity: {error}",
+                    output.display()
+                )
+            })
+        })
+        .transpose()?;
+    let dense = identities
+        .get(uor_r4_graph_cli::DENSE_OPERATOR_BINDING_FILE)
+        .map(|value| {
+            serde_json::from_value::<DenseOperatorSpec>(value.clone()).map_err(|error| {
+                format!(
+                    "source compile output {} has an unreadable effective dense identity: {error}",
+                    output.display()
+                )
+            })
+        })
+        .transpose()?;
+    uor_r4_model_source::dense::validate_source_execution_pair(attention.as_ref(), dense.as_ref())
+        .map_err(|error| {
+            format!(
+            "source compile output {} has an invalid effective attention/dense identity: {error}",
+            output.display()
+        )
+        })?;
     Ok(())
 }
 
@@ -4345,6 +4729,11 @@ fn recover_source_compile_identity_temporaries(output: &Path) -> Result<(), Stri
             output.display()
         ));
     }
+    // Prove every stable and temporary identity record is canonical and that
+    // a temporary agrees with any stable peer before deleting one byte.
+    // Malformed, nonregular, or conflicting attention/dense residue remains
+    // terminal and byte-preserved for operator review.
+    validate_source_compile_identity_temporaries(output)?;
     let entries = fs::read_dir(output)
         .map_err(|error| format!("{} cannot be enumerated: {error}", output.display()))?;
     for entry in entries {
@@ -4462,10 +4851,12 @@ fn validate_pre_attention_identity_handle(
     path: &Path,
     kind: &str,
 ) -> Result<serde_json::Value, String> {
-    let description = if kind == uor_r4_graph_cli::ATTENTION_OPERATOR_BINDING_FILE {
-        "attention-operator binding"
-    } else {
-        "pre-attention identity record"
+    let description = match kind {
+        kind if kind == uor_r4_graph_cli::ATTENTION_OPERATOR_BINDING_FILE => {
+            "attention-operator binding"
+        }
+        kind if kind == uor_r4_graph_cli::DENSE_OPERATOR_BINDING_FILE => "dense-operator binding",
+        _ => "pre-attention identity record",
     };
     let bytes = read_opened_regular_file_nofollow(file, path, description)?;
     reject_duplicate_json_fields(&bytes, path, description)?;
@@ -4569,6 +4960,25 @@ fn validate_pre_attention_identity_handle(
                 ));
             }
         }
+        kind if kind == uor_r4_graph_cli::DENSE_OPERATOR_BINDING_FILE => {
+            let operator: DenseOperatorSpec =
+                serde_json::from_value(value.clone()).map_err(|error| {
+                    format!("{} is not a dense operator record: {error}", path.display())
+                })?;
+            let registered =
+                uor_r4_model_source::dense::operator_spec(&operator.id, operator.version)
+                    .map_err(|error| format!("{}: {error}", path.display()))?;
+            if operator != registered
+                || value
+                    != serde_json::to_value(&registered)
+                        .map_err(|error| format!("{}: {error}", path.display()))?
+            {
+                return Err(format!(
+                    "{} is not the full registered dense operator record",
+                    path.display()
+                ));
+            }
+        }
         _ => {
             return Err(format!(
                 "{} is not a recognized pre-attention identity entry",
@@ -4615,7 +5025,10 @@ fn source_compile_pre_attention_prefix(output: &Path) -> Result<bool, String> {
             saw_identity = true;
             continue;
         }
-        if name == "tokenizer_adapter.json" {
+        if name == "tokenizer_adapter.json"
+            || name == uor_r4_graph_cli::ATTENTION_OPERATOR_BINDING_FILE
+            || name == uor_r4_graph_cli::DENSE_OPERATOR_BINDING_FILE
+        {
             validate_pre_attention_identity_file(&entry.path(), name)?;
             saw_identity = true;
             continue;
@@ -6110,6 +6523,25 @@ fn publish_compiled_bundle_completion(root: &Path) -> Result<(), String> {
                 root.display()
             ));
         }
+    }
+    let attention = source_compile_attention_binding(root)?.ok_or_else(|| {
+        format!(
+            "compiled-bundle stage {} lost its attention binding before completion",
+            root.display()
+        )
+    })?;
+    let dense = source_compile_dense_binding(root)?;
+    uor_r4_model_source::dense::validate_source_execution_pair(Some(&attention), dense.as_ref())
+        .map_err(|error| format!("compiled-bundle stage {}: {error}", root.display()))?;
+    if attention.id == AttentionOperatorSpec::LEARNED_ABSOLUTE_ID
+        && attention.version == current_source_attention_era_version()?
+        && dense.is_none()
+    {
+        return Err(format!(
+            "current GPT-2 compiled-bundle stage {} is missing required {}",
+            root.display(),
+            uor_r4_graph_cli::DENSE_OPERATOR_BINDING_FILE
+        ));
     }
     // The completion record is the commit point. Every member and directory
     // entry it names must reach stable storage before that record can become
@@ -7922,7 +8354,7 @@ fn preflight_and_bind_source_snapshot_kappa(
         if let Some(requested) = requested.as_deref() {
             if source_compile_output_has_payload(output)? {
                 let report = output.join("graph-cover/cover_report.json");
-                let (present, _, cover_kappa) = parse_cover_provenance(&report)?;
+                let (present, _, _, cover_kappa) = parse_cover_provenance(&report)?;
                 if !present || cover_kappa.as_deref() != Some(requested) {
                     return Err(format!(
                         "populated source compile output {} has no immutable source-manifest kappa binding or exact cover provenance for {requested}; refusing to resume or relabel it",
@@ -8004,6 +8436,12 @@ fn source_compile_output_for_attention_era(
 }
 
 fn select_source_compile_output_from_pair(pair: CompiledModelPair) -> Result<PathBuf, String> {
+    if !matches!(pair.composite, CompiledRootState::Absent) {
+        return Err(format!(
+            "preferred composite root {} is present; attention-only output selection cannot bypass it",
+            pair.composite_root.display()
+        ));
+    }
     match (&pair.conventional, &pair.current) {
         (_, CompiledRootState::Empty) => Err(format!(
             "preferred current bundle {} exists but is empty; refusing compile mutation until the stale empty root is removed",
@@ -8013,24 +8451,37 @@ fn select_source_compile_output_from_pair(pair: CompiledModelPair) -> Result<Pat
             CompiledRootState::ImplicitV1(_) | CompiledRootState::BoundHistorical(_),
             CompiledRootState::PreAttentionIdentity,
         ) => Ok(pair.current_root),
-        (_, CompiledRootState::PreAttentionIdentity) => Err(format!(
-            "preferred current bundle {} contains only a pre-attention identity prefix without a matching historical conventional bundle; refusing ambiguous compile mutation",
-            pair.current_root.display()
-        )),
-        (_, CompiledRootState::BoundCurrent(_)) => Ok(pair.current_root),
-        (CompiledRootState::BoundCurrent(_), CompiledRootState::Absent) => {
-            Ok(pair.conventional_root)
+        (CompiledRootState::BoundCurrent(_), CompiledRootState::PreAttentionIdentity) => {
+            Err(format!(
+                "unsuffixed current root {} is already bound while resolver root {} contains an unfinished duplicate-current identity; refusing resume before mutation",
+                pair.conventional_root.display(),
+                pair.current_root.display()
+            ))
         }
+        (_, CompiledRootState::PreAttentionIdentity) => Ok(pair.current_root),
+        (_, CompiledRootState::BoundCurrent(_)) => Ok(pair.current_root),
         (
             CompiledRootState::ImplicitV1(_) | CompiledRootState::BoundHistorical(_),
             CompiledRootState::Absent,
         ) => Ok(pair.current_root),
         (
-            CompiledRootState::Absent
-                | CompiledRootState::Empty
-                | CompiledRootState::PreAttentionIdentity,
+            CompiledRootState::Absent | CompiledRootState::Empty,
             CompiledRootState::Absent,
         ) => Ok(pair.conventional_root),
+        (CompiledRootState::PreAttentionIdentity, CompiledRootState::Absent) => {
+            Ok(pair.conventional_root)
+        }
+        (CompiledRootState::BoundCurrent(_), CompiledRootState::Absent) => {
+            Ok(pair.conventional_root)
+        }
+        (CompiledRootState::BoundCurrent(_), _) => Err(format!(
+            "unsuffixed current root {} conflicts with the resolver-owned root {}",
+            pair.conventional_root.display(),
+            pair.current_root.display()
+        )),
+        (CompiledRootState::PreDenseIdentity(_), _) | (_, CompiledRootState::PreDenseIdentity(_)) => {
+            Err("internal placement error: a pre-dense identity was classified outside the composite resolver root".to_owned())
+        }
         (_, CompiledRootState::ImplicitV1(_) | CompiledRootState::BoundHistorical(_)) => {
             Err(format!(
                 "resolver-owned current root {} was not classified as current",
@@ -8040,11 +8491,12 @@ fn select_source_compile_output_from_pair(pair: CompiledModelPair) -> Result<Pat
     }
 }
 
-fn source_compile_output_for_operator_era(
+fn source_compile_output_for_operator_era_with_dense(
     compiled_root: &Path,
     name: &str,
     current_version: u32,
     source_operator: &AttentionOperatorSpec,
+    source_dense: Option<&DenseOperatorSpec>,
 ) -> Result<PathBuf, String> {
     let registered =
         uor_r4_model_source::attention::operator_spec(&source_operator.id, source_operator.version)
@@ -8058,10 +8510,16 @@ fn source_compile_output_for_operator_era(
             source_operator.id, source_operator.version
         ));
     }
+    uor_r4_model_source::dense::validate_source_execution_pair(Some(source_operator), source_dense)
+        .map_err(|error| format!("source teacher execution identity is invalid: {error}"))?;
     let pair = inspect_compiled_model_pair(compiled_root, name, current_version)?;
-    for recorded in [pair.conventional.operator(), pair.current.operator()]
-        .into_iter()
-        .flatten()
+    for recorded in [
+        pair.conventional.operator(),
+        pair.current.operator(),
+        pair.composite.operator(),
+    ]
+    .into_iter()
+    .flatten()
     {
         if recorded.id != source_operator.id {
             return Err(format!(
@@ -8074,7 +8532,81 @@ fn source_compile_output_for_operator_era(
             ));
         }
     }
+    if let Some(source_dense) = source_dense {
+        if matches!(pair.conventional, CompiledRootState::PreAttentionIdentity)
+            || matches!(pair.current, CompiledRootState::PreAttentionIdentity)
+        {
+            return Err(format!(
+                "cannot select composite root {} while a lower-precedence root ({}, {}) contains an unfinished pre-attention identity; refusing to hide or mutate any initialization",
+                pair.composite_root.display(),
+                pair.conventional_root.display(),
+                pair.current_root.display()
+            ));
+        }
+        return match &pair.composite {
+            CompiledRootState::Absent | CompiledRootState::PreAttentionIdentity => {
+                Ok(pair.composite_root)
+            }
+            CompiledRootState::PreDenseIdentity(operator) if **operator == *source_operator => {
+                Ok(pair.composite_root)
+            }
+            CompiledRootState::PreDenseIdentity(operator) => Err(format!(
+                "composite root {} has a resumable attention identity {}/{}, not requested {}/{}",
+                pair.composite_root.display(),
+                operator.id,
+                operator.version,
+                source_operator.id,
+                source_operator.version
+            )),
+            CompiledRootState::BoundCurrent(identity)
+                if identity.attention == *source_operator
+                    && identity.dense.as_ref() == Some(source_dense) =>
+            {
+                Ok(pair.composite_root)
+            }
+            CompiledRootState::BoundCurrent(identity) => Err(format!(
+                "composite root {} records {}/{} with dense {:?}, not requested {}/{} with {}/{}",
+                pair.composite_root.display(),
+                identity.attention.id,
+                identity.attention.version,
+                identity
+                    .dense
+                    .as_ref()
+                    .map(|operator| format!("{}/{}", operator.id, operator.version)),
+                source_operator.id,
+                source_operator.version,
+                source_dense.id,
+                source_dense.version
+            )),
+            CompiledRootState::Empty => Err(format!(
+                "preferred composite root {} exists but is empty; refusing compile mutation",
+                pair.composite_root.display()
+            )),
+            CompiledRootState::ImplicitV1(_) | CompiledRootState::BoundHistorical(_) => {
+                Err(format!(
+                    "resolver-owned composite root {} was not classified as current",
+                    pair.composite_root.display()
+                ))
+            }
+        };
+    }
     select_source_compile_output_from_pair(pair)
+}
+
+#[cfg(test)]
+fn source_compile_output_for_operator_era(
+    compiled_root: &Path,
+    name: &str,
+    current_version: u32,
+    source_operator: &AttentionOperatorSpec,
+) -> Result<PathBuf, String> {
+    source_compile_output_for_operator_era_with_dense(
+        compiled_root,
+        name,
+        current_version,
+        source_operator,
+        None,
+    )
 }
 
 struct CompiledSourceBundle {
@@ -8162,14 +8694,22 @@ fn compile_bundle_from_source(
     let source_operator = teacher
         .attention_operator_spec()
         .ok_or_else(|| "source teacher declares no attention operator".to_owned())?;
+    let source_dense = teacher.dense_operator_spec();
+    uor_r4_model_source::dense::validate_source_execution_pair(
+        Some(&source_operator),
+        source_dense.as_ref(),
+    )
+    .map_err(|error| format!("source teacher execution identity is invalid: {error}"))?;
     let compiled_root = Path::new(".uor-models/compiled");
     let current_version = current_source_attention_era_version()?;
     let conventional = compiled_root.join(name);
     let current = compiled_root.join(format!("{name}{}", attention_era_suffix(current_version)));
+    let composite = compiled_root.join(format!("{name}{}", composite_era_suffix(current_version)));
     let mut session_subjects = vec![
         compiled_root.to_path_buf(),
         conventional.clone(),
         current.clone(),
+        composite.clone(),
         source
             .parent()
             .unwrap_or_else(|| Path::new("."))
@@ -8191,21 +8731,24 @@ fn compile_bundle_from_source(
     )?;
     recover_source_compile_identity_temporaries(&conventional)?;
     recover_source_compile_identity_temporaries(&current)?;
-    let output = source_compile_output_for_operator_era(
+    recover_source_compile_identity_temporaries(&composite)?;
+    let output = source_compile_output_for_operator_era_with_dense(
         compiled_root,
         name,
         current_version,
         &source_operator,
+        source_dense.as_ref(),
     )?;
     // The process-local source-cache reservation is acquired by the HTTP
     // handler first. Both era siblings and any external score sink are now
     // exclusively owned before selection, preflight publication, or adoption.
     // The returned guards remain live through final serving installation.
-    let refreshed_output = source_compile_output_for_operator_era(
+    let refreshed_output = source_compile_output_for_operator_era_with_dense(
         compiled_root,
         name,
         current_version,
         &source_operator,
+        source_dense.as_ref(),
     )?;
     if refreshed_output != output {
         return Err(format!(
@@ -8319,6 +8862,7 @@ fn panic_payload_message(payload: &(dyn Any + Send)) -> String {
 /// corpus. A genuinely operator-less caller corpus retains the historical
 /// implicit standard/1 interpretation; source-driven compiles must carry the
 /// explicit sidecar written by stage A.
+#[cfg(test)]
 fn append_recorded_attention_operator(
     cover_args: &mut Vec<String>,
     corpus_meta: &Path,
@@ -8343,6 +8887,56 @@ fn append_recorded_attention_operator(
         }
         None => Ok(()),
     }
+}
+
+/// Append both halves from one stable recorded-corpus snapshot. Source
+/// compilation uses this joint boundary so attention and dense can never be
+/// assembled from two filesystem generations.
+fn append_recorded_execution_identity(
+    cover_args: &mut Vec<String>,
+    corpus_meta: &Path,
+    corpus_recs: &Path,
+    require_explicit: bool,
+) -> Result<(), String> {
+    let identity = uor_r4_graph_cli::recorded_corpus_execution_identity(corpus_meta, corpus_recs)
+        .map_err(|error| error.to_string())?;
+    match identity.attention_operator.as_ref() {
+        Some(operator) => {
+            let json = serde_json::to_string(operator).map_err(|error| error.to_string())?;
+            cover_args.extend(["--attention-operator".to_owned(), json]);
+        }
+        None if require_explicit => {
+            let root = corpus_meta.parent().unwrap_or_else(|| Path::new("."));
+            return Err(format!(
+                "compiled source corpus is missing its attention-operator binding: {}",
+                root.join(uor_r4_graph_cli::ATTENTION_OPERATOR_BINDING_FILE)
+                    .display()
+            ));
+        }
+        None => {}
+    }
+    if require_explicit
+        && identity
+            .attention_operator
+            .as_ref()
+            .is_some_and(|operator| {
+                operator.id == AttentionOperatorSpec::LEARNED_ABSOLUTE_ID
+                    && operator.version == AttentionOperatorSpec::LEARNED_ABSOLUTE_VERSION
+            })
+        && identity.dense_operator.is_none()
+    {
+        let root = corpus_meta.parent().unwrap_or_else(|| Path::new("."));
+        return Err(format!(
+            "current GPT-2 source corpus is missing its dense-operator binding: {}",
+            root.join(uor_r4_graph_cli::DENSE_OPERATOR_BINDING_FILE)
+                .display()
+        ));
+    }
+    if let Some(operator) = identity.dense_operator.as_ref() {
+        let json = serde_json::to_string(operator).map_err(|error| error.to_string())?;
+        cover_args.extend(["--dense-operator".to_owned(), json]);
+    }
+    Ok(())
 }
 
 fn compile_r4g1_bundle(
@@ -8536,7 +9130,7 @@ fn compile_r4g1_bundle(
     // #602/#704: bind the identity stage A or the observation manifest
     // actually recorded. Reconstructing it as standard from the absent
     // experimental switch would mislabel GPT-2's learned-absolute operator.
-    append_recorded_attention_operator(
+    append_recorded_execution_identity(
         &mut cover_args,
         &corpus_meta,
         &corpus_recs,
@@ -8740,7 +9334,7 @@ fn compile_r4g1_bundle(
                     compiled.working_output.display()
                 )
             })?;
-            let (_, _, cover_kappa) = parse_cover_provenance(
+            let (_, _, _, cover_kappa) = parse_cover_provenance(
                 &compiled
                     .working_output
                     .join("graph-cover/cover_report.json"),
@@ -10619,32 +11213,7 @@ fn handle_connection(
         // alias (Deprecation header) so /v1 is OpenAI-only without losing this.
         let dep = deprecation_headers(clean_path);
         let installed = serving.lock().unwrap();
-        let graph_loaded = installed.r4g1.is_some();
-        let graph_ready = graph_text_ready(&installed);
-        let decode_only = graph_loaded && !graph_ready;
-        let teacher_ready = teacher_text_ready(&installed);
-        let engine_active = graph_ready || teacher_ready;
-        let logical_name = installed_logical_model_name(&installed);
-        let bundle_compiled = installed.active_bundle.is_some();
-
-        let body = serde_json::json!({
-            "model_name": logical_name,
-            "physical_root": status_physical_root(installed.active_bundle.as_ref()),
-            "attention_operator": installed.active_bundle.as_ref().map(|bundle| &bundle.attention_operator),
-            "r4g1_loaded": graph_loaded,
-            "r4g1_ready": graph_ready,
-            "decode_only": decode_only,
-            "teacher_ready": teacher_ready,
-            "engine_active": engine_active,
-            "terminal_error": installed.terminal_load_error.as_deref(),
-            "last_operation_error": installed.last_operation_error.as_deref(),
-            "stages": {
-                "stage_1_download": installed.active_teacher_source.is_some(),
-                "stage_2_compile": bundle_compiled,
-                "stage_3_graph_score": graph_loaded,
-                "stage_4_r4g1_active": graph_ready
-            }
-        });
+        let body = uor_status_json(&installed);
         send_json_response_ext(stream, 200, &body.to_string(), &dep);
         return;
     }
@@ -13752,6 +14321,21 @@ mod tests {
         bytes
     }
 
+    fn write_dense_binding(
+        root: &std::path::Path,
+        operator: &uor_r4_model_source::dense::DenseOperatorSpec,
+    ) -> Vec<u8> {
+        std::fs::create_dir_all(root).expect("create dense-bound compile root");
+        let mut bytes = serde_json::to_vec_pretty(operator).expect("serialize full dense operator");
+        bytes.push(b'\n');
+        std::fs::write(
+            root.join(uor_r4_graph_cli::DENSE_OPERATOR_BINDING_FILE),
+            &bytes,
+        )
+        .expect("write dense binding");
+        bytes
+    }
+
     fn write_tokenizer_adapter_binding(root: &std::path::Path, marker: &str) -> Vec<u8> {
         let tokenizer_json = format!(
             r#"{{
@@ -13900,6 +14484,76 @@ mod tests {
     }
 
     #[test]
+    fn source_dense_cover_completion_and_resolver_share_one_exact_identity() {
+        use uor_r4_model_source::attention::AttentionOperatorSpec;
+        use uor_r4_model_source::dense::DenseOperatorSpec;
+
+        let root = attention_provenance_test_dir("dense-cover-completion-resolver");
+        let output = root.join("compiled/teacher-attention-v2-dense-v2");
+        let attention = AttentionOperatorSpec::learned_absolute_v2();
+        let dense = DenseOperatorSpec::gpt2_v2();
+        let source_kappa = format!("blake3:{}", "7".repeat(64));
+        super::publish_source_compile_preflight(&output, Some(&source_kappa))
+            .expect("source preflight identity");
+        super::publish_source_manifest_kappa_binding(&output, &source_kappa)
+            .expect("source snapshot binding");
+        write_attention_binding(&output, &attention);
+        write_dense_binding(&output, &dense);
+        let (meta, records) = attention_corpus_markers(&output);
+
+        let mut cover_args = Vec::new();
+        super::append_recorded_execution_identity(&mut cover_args, &meta, &records, true)
+            .expect("source compile forwards its recorded execution pair");
+        let argument = |flag: &str| {
+            cover_args
+                .windows(2)
+                .find(|pair| pair[0] == flag)
+                .map(|pair| pair[1].clone())
+                .unwrap_or_else(|| panic!("missing {flag} cover argument"))
+        };
+        let cover_attention: AttentionOperatorSpec =
+            serde_json::from_str(&argument("--attention-operator"))
+                .expect("cover attention record");
+        let cover_dense: DenseOperatorSpec =
+            serde_json::from_str(&argument("--dense-operator")).expect("cover dense record");
+        assert_eq!(cover_attention, attention);
+        assert_eq!(cover_dense, dense);
+
+        std::fs::create_dir_all(output.join("graph")).expect("graph directory");
+        std::fs::write(output.join("graph/score.r4g1"), b"graph").expect("graph marker");
+        std::fs::write(output.join("graph/score_report.json"), b"{}\n")
+            .expect("score report marker");
+        std::fs::write(output.join("tless_artifacts.bin"), b"teacher").expect("teacher marker");
+        std::fs::write(output.join("tokenizer.bin"), b"tokenizer").expect("tokenizer marker");
+        std::fs::write(output.join("tokenizer_adapter.json"), b"{}\n")
+            .expect("tokenizer adapter marker");
+        std::fs::create_dir_all(output.join("graph-cover")).expect("cover directory");
+        std::fs::write(output.join("graph-cover/cover.r4g1"), b"cover").expect("cover marker");
+        std::fs::write(
+            output.join("graph-cover/cover_report.json"),
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "attention_operator": cover_attention,
+                "dense_operator": cover_dense,
+                "source_manifest_kappa": source_kappa,
+            }))
+            .expect("cover report JSON"),
+        )
+        .expect("cover report");
+        super::publish_compiled_bundle_completion(&output).expect("publish exact completion");
+        super::validate_compiled_bundle_completion(&output)
+            .expect("completion validates")
+            .expect("completion exists");
+
+        let resolved = super::resolve_requested_compiled_bundle_in(&root, "teacher", 2)
+            .expect("resolver accepts completed source bundle")
+            .expect("completed source bundle is loadable");
+        assert_eq!(resolved.physical_root, output);
+        assert_eq!(resolved.attention_operator, attention);
+        assert_eq!(resolved.dense_operator, Some(dense));
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn source_compile_routes_immutable_v1_bundles_to_a_fresh_v2_era() {
         use uor_r4_model_source::attention::AttentionOperatorSpec;
 
@@ -14040,6 +14694,174 @@ mod tests {
     }
 
     #[test]
+    fn current_gpt2_dense_identity_is_composite_root_only() {
+        use uor_r4_model_source::attention::AttentionOperatorSpec;
+        use uor_r4_model_source::dense::DenseOperatorSpec;
+
+        let root = attention_provenance_test_dir("dense-composite-only");
+        let compiled = root.join("compiled");
+        let attention = AttentionOperatorSpec::learned_absolute_v2();
+        let dense = DenseOperatorSpec::gpt2_v2();
+        let composite = compiled.join("teacher-attention-v2-dense-v2");
+        assert_eq!(
+            super::source_compile_output_for_operator_era_with_dense(
+                &compiled,
+                "teacher",
+                2,
+                &attention,
+                Some(&dense),
+            )
+            .expect("fresh GPT-2 compile selects the composite root"),
+            composite
+        );
+        assert!(!compiled.exists(), "selection is read-only");
+
+        for misplaced in [
+            compiled.join("teacher"),
+            compiled.join("teacher-attention-v2"),
+        ] {
+            write_attention_binding(&misplaced, &attention);
+            write_dense_binding(&misplaced, &dense);
+            std::fs::write(
+                misplaced.join("corpus.records"),
+                b"immutable misplaced payload",
+            )
+            .expect("misplaced payload");
+            let before_attention =
+                std::fs::read(misplaced.join(uor_r4_graph_cli::ATTENTION_OPERATOR_BINDING_FILE))
+                    .expect("attention before");
+            let before_dense =
+                std::fs::read(misplaced.join(uor_r4_graph_cli::DENSE_OPERATOR_BINDING_FILE))
+                    .expect("dense before");
+            let error = super::source_compile_output_for_operator_era_with_dense(
+                &compiled,
+                "teacher",
+                2,
+                &attention,
+                Some(&dense),
+            )
+            .expect_err("current dense provenance outside the composite root is terminal");
+            assert!(
+                error.contains("composite resolver root")
+                    || error.contains("composite resolver root")
+                    || error.contains("composite"),
+                "{error}"
+            );
+            assert_eq!(
+                std::fs::read(misplaced.join(uor_r4_graph_cli::ATTENTION_OPERATOR_BINDING_FILE))
+                    .expect("attention after"),
+                before_attention
+            );
+            assert_eq!(
+                std::fs::read(misplaced.join(uor_r4_graph_cli::DENSE_OPERATOR_BINDING_FILE))
+                    .expect("dense after"),
+                before_dense
+            );
+            std::fs::remove_dir_all(&misplaced).expect("reset misplaced root");
+        }
+
+        write_attention_binding(&composite, &attention);
+        write_dense_binding(&composite, &dense);
+        std::fs::write(
+            composite.join("corpus.records"),
+            b"current composite payload",
+        )
+        .expect("composite payload");
+        assert_eq!(
+            super::source_compile_output_for_operator_era_with_dense(
+                &compiled,
+                "teacher",
+                2,
+                &attention,
+                Some(&dense),
+            )
+            .expect("matching composite resumes"),
+            composite
+        );
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn historical_dense_base_and_current_attention_only_can_coexist_with_composite() {
+        use uor_r4_model_source::attention::AttentionOperatorSpec;
+        use uor_r4_model_source::dense::DenseOperatorSpec;
+
+        let root = attention_provenance_test_dir("dense-era-coexistence");
+        let compiled = root.join("compiled");
+        let base = compiled.join("teacher");
+        write_attention_binding(&base, &AttentionOperatorSpec::learned_absolute_v1());
+        write_dense_binding(&base, &DenseOperatorSpec::gpt2_v1());
+        std::fs::write(base.join("corpus.records"), b"historical v1/v1")
+            .expect("historical payload");
+
+        let current = compiled.join("teacher-attention-v2");
+        write_attention_binding(&current, &AttentionOperatorSpec::learned_absolute_v2());
+        std::fs::write(current.join("corpus.records"), b"attention-only v2")
+            .expect("attention payload");
+
+        let composite = compiled.join("teacher-attention-v2-dense-v2");
+        write_attention_binding(&composite, &AttentionOperatorSpec::learned_absolute_v2());
+        write_dense_binding(&composite, &DenseOperatorSpec::gpt2_v2());
+        std::fs::write(composite.join("corpus.records"), b"dense v2").expect("dense payload");
+
+        let pair = super::inspect_compiled_model_pair(&compiled, "teacher", 2)
+            .expect("three distinct valid execution identities coexist");
+        let (selected, identity) = super::selected_compiled_root(&pair).expect("selected root");
+        assert_eq!(selected, composite);
+        assert_eq!(identity.dense.as_ref(), Some(&DenseOperatorSpec::gpt2_v2()));
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn dense_composite_selection_refuses_lower_unfinished_identities_before_mutation() {
+        use uor_r4_model_source::attention::AttentionOperatorSpec;
+        use uor_r4_model_source::dense::DenseOperatorSpec;
+
+        for (label, lower_suffixes) in [
+            ("base", vec![""]),
+            ("attention", vec!["-attention-v2"]),
+            ("both", vec!["", "-attention-v2"]),
+        ] {
+            let root = attention_provenance_test_dir(&format!("dense-lower-prefix-{label}"));
+            let compiled = root.join("compiled");
+            let kappa = format!("blake3:{}", "a".repeat(64));
+            let mut snapshots = Vec::new();
+            for suffix in lower_suffixes {
+                let lower = compiled.join(format!("teacher{suffix}"));
+                super::publish_source_compile_preflight(&lower, Some(&kappa))
+                    .expect("publish lower preflight");
+                snapshots.push((
+                    lower.clone(),
+                    std::fs::read(lower.join(super::SOURCE_COMPILE_PREFLIGHT_FILE))
+                        .expect("preflight bytes"),
+                ));
+            }
+            let composite = compiled.join("teacher-attention-v2-dense-v2");
+            let error = super::source_compile_output_for_operator_era_with_dense(
+                &compiled,
+                "teacher",
+                2,
+                &AttentionOperatorSpec::learned_absolute_v2(),
+                Some(&DenseOperatorSpec::gpt2_v2()),
+            )
+            .expect_err("lower unfinished identity blocks composite selection");
+            assert!(error.contains("lower-precedence"), "{error}");
+            assert!(
+                !composite.exists(),
+                "selection cannot create composite output"
+            );
+            for (lower, before) in snapshots {
+                assert_eq!(
+                    std::fs::read(lower.join(super::SOURCE_COMPILE_PREFLIGHT_FILE))
+                        .expect("preflight after"),
+                    before
+                );
+            }
+            let _ = std::fs::remove_dir_all(root);
+        }
+    }
+
+    #[test]
     fn source_compile_era_selection_fails_closed_on_invalid_provenance() {
         let root = attention_provenance_test_dir("era-invalid");
         let compiled = root.join("compiled");
@@ -14098,7 +14920,47 @@ mod tests {
             .expect("write suffix payload");
         let error = super::source_compile_output_for_attention_era(&compiled, "teacher", 2)
             .expect_err("two current roots are ambiguous");
-        assert!(error.contains("duplicate current"), "{error}");
+        assert!(
+            error.contains("duplicate the same source-execution identity"),
+            "{error}"
+        );
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn current_base_refuses_torn_attention_suffix_before_mutation() {
+        use uor_r4_model_source::attention::AttentionOperatorSpec;
+
+        let root = attention_provenance_test_dir("current-base-torn-suffix");
+        let compiled = root.join("compiled");
+        let conventional = compiled.join("teacher");
+        let current = compiled.join("teacher-attention-v2");
+        let binding = write_attention_binding(&conventional, &AttentionOperatorSpec::standard_v2());
+        let payload = conventional.join("corpus.records");
+        std::fs::write(&payload, b"current conventional payload").expect("payload");
+        let kappa = format!("blake3:{}", "4".repeat(64));
+        super::publish_source_compile_preflight(&current, Some(&kappa))
+            .expect("torn suffix preflight");
+        let prefix = std::fs::read(current.join(super::SOURCE_COMPILE_PREFLIGHT_FILE))
+            .expect("prefix before");
+
+        let error = super::source_compile_output_for_attention_era(&compiled, "teacher", 2)
+            .expect_err("torn suffix cannot duplicate a bound-current base");
+        assert!(error.contains("duplicate-current"), "{error}");
+        assert_eq!(
+            std::fs::read(conventional.join(uor_r4_graph_cli::ATTENTION_OPERATOR_BINDING_FILE))
+                .expect("binding after"),
+            binding
+        );
+        assert_eq!(
+            std::fs::read(&payload).expect("payload after"),
+            b"current conventional payload"
+        );
+        assert_eq!(
+            std::fs::read(current.join(super::SOURCE_COMPILE_PREFLIGHT_FILE))
+                .expect("prefix after"),
+            prefix
+        );
         let _ = std::fs::remove_dir_all(root);
     }
 
@@ -14816,8 +15678,16 @@ mod tests {
             std::fs::write(&empty, b"").expect("zero-byte torn create");
             std::fs::write(&truncated, b"{\"prefix\":").expect("mid-write crash prefix");
         }
-        super::recover_source_compile_identity_temporaries(&output)
-            .expect("exclusive owner reclaims strict reserved temp names");
+        let before_recovery = std::fs::read_dir(&output)
+            .expect("enumerate torn identities")
+            .map(|entry| entry.expect("identity entry").file_name())
+            .collect::<Vec<_>>();
+        let error = super::recover_source_compile_identity_temporaries(&output)
+            .expect_err("malformed reserved identities remain terminal");
+        assert!(
+            error.contains("malformed") || error.contains("canonical"),
+            "{error}"
+        );
         assert_eq!(
             std::fs::read(output.join(super::SOURCE_COMPILE_PREFLIGHT_FILE))
                 .expect("stable P after recovery"),
@@ -14828,13 +15698,20 @@ mod tests {
                 .expect("stable K after recovery"),
             kappa_before
         );
-        assert!(std::fs::read_dir(&output)
-            .expect("enumerate recovered root")
-            .all(|entry| !entry
-                .expect("entry")
-                .file_name()
-                .to_string_lossy()
-                .ends_with(".tmp")));
+        let after_recovery = std::fs::read_dir(&output)
+            .expect("enumerate preserved torn identities")
+            .map(|entry| entry.expect("identity entry").file_name())
+            .collect::<Vec<_>>();
+        assert_eq!(after_recovery.len(), before_recovery.len());
+        assert!(after_recovery
+            .iter()
+            .any(|name| name.to_string_lossy().ends_with(".tmp")));
+
+        for name in &before_recovery {
+            if name.to_string_lossy().ends_with(".tmp") {
+                std::fs::remove_file(output.join(name)).expect("remove malformed test residue");
+            }
+        }
 
         let unknown = output.join(".tokenizer_adapter.json.owner.tmp");
         std::fs::write(&unknown, b"").expect("unknown temp spelling");
@@ -14873,11 +15750,166 @@ mod tests {
             }
             let error = super::recover_source_compile_identity_temporaries(&output)
                 .expect_err("special entry is terminal and nonblocking");
-            assert!(error.contains("not a regular non-symlink file"), "{error}");
+            assert!(
+                error.contains("not a regular") || error.contains("cannot be opened"),
+                "{error}"
+            );
             assert!(std::fs::symlink_metadata(&temporary).is_ok());
             drop(session);
             let _ = std::fs::remove_dir_all(root);
         }
+    }
+
+    #[test]
+    fn identity_temp_recovery_rejects_cross_era_pairs_without_deleting_evidence() {
+        use uor_r4_model_source::attention::AttentionOperatorSpec;
+        use uor_r4_model_source::dense::DenseOperatorSpec;
+
+        for scenario in [
+            "dense-temp-only",
+            "stable-attention-dense-temp",
+            "stable-dense-attention-temp",
+            "stable-mismatch",
+        ] {
+            let root = attention_provenance_test_dir(&format!("cross-era-temp-{scenario}"));
+            let output = root.join("compiled/teacher");
+            std::fs::create_dir_all(&output).expect("output root");
+            let dense_temp = output.join(".dense_operator.json.900.1.tmp");
+            let dense_v2 = {
+                let mut bytes = serde_json::to_vec_pretty(&DenseOperatorSpec::gpt2_v2())
+                    .expect("dense fixture");
+                bytes.push(b'\n');
+                bytes
+            };
+            match scenario {
+                "dense-temp-only" => {
+                    std::fs::write(&dense_temp, &dense_v2).expect("dense temp");
+                }
+                "stable-attention-dense-temp" => {
+                    write_attention_binding(&output, &AttentionOperatorSpec::learned_absolute_v1());
+                    std::fs::write(&dense_temp, &dense_v2).expect("dense temp");
+                }
+                "stable-dense-attention-temp" => {
+                    write_dense_binding(&output, &DenseOperatorSpec::gpt2_v2());
+                    let mut bytes =
+                        serde_json::to_vec_pretty(&AttentionOperatorSpec::learned_absolute_v2())
+                            .expect("attention fixture");
+                    bytes.push(b'\n');
+                    std::fs::write(output.join(".attention_operator.json.900.3.tmp"), bytes)
+                        .expect("attention temp");
+                }
+                "stable-mismatch" => {
+                    write_attention_binding(&output, &AttentionOperatorSpec::learned_absolute_v1());
+                    write_dense_binding(&output, &DenseOperatorSpec::gpt2_v2());
+                    let unrelated = output.join(".source_compile_preflight.json.900.2.tmp");
+                    std::fs::write(
+                        &unrelated,
+                        super::source_compile_preflight_bytes(None).expect("preflight fixture"),
+                    )
+                    .expect("unrelated temp");
+                }
+                _ => unreachable!(),
+            }
+            let before = std::fs::read_dir(&output)
+                .expect("enumerate before")
+                .map(|entry| {
+                    let entry = entry.expect("entry");
+                    (
+                        entry.file_name(),
+                        std::fs::read(entry.path()).expect("regular fixture bytes"),
+                    )
+                })
+                .collect::<std::collections::BTreeMap<_, _>>();
+            let error = super::recover_source_compile_identity_temporaries(&output)
+                .expect_err("invalid effective execution identity is terminal");
+            assert!(
+                error.contains("invalid effective attention/dense identity")
+                    || error.contains("invalid stable attention/dense identity"),
+                "{scenario}: {error}"
+            );
+            let after = std::fs::read_dir(&output)
+                .expect("enumerate after")
+                .map(|entry| {
+                    let entry = entry.expect("entry");
+                    (
+                        entry.file_name(),
+                        std::fs::read(entry.path()).expect("regular fixture bytes"),
+                    )
+                })
+                .collect::<std::collections::BTreeMap<_, _>>();
+            assert_eq!(after, before, "{scenario}: refusal is byte-preserving");
+            let _ = std::fs::remove_dir_all(root);
+        }
+    }
+
+    #[test]
+    fn composite_attention_first_crashes_resume_but_payload_without_dense_is_terminal() {
+        use uor_r4_model_source::attention::AttentionOperatorSpec;
+        use uor_r4_model_source::dense::DenseOperatorSpec;
+
+        for with_dense_temp in [false, true] {
+            let root = attention_provenance_test_dir(if with_dense_temp {
+                "pre-dense-temp"
+            } else {
+                "pre-dense-stable-attention"
+            });
+            let compiled = root.join("compiled");
+            let composite = compiled.join("teacher-attention-v2-dense-v2");
+            let attention = AttentionOperatorSpec::learned_absolute_v2();
+            let dense = DenseOperatorSpec::gpt2_v2();
+            write_attention_binding(&composite, &attention);
+            if with_dense_temp {
+                let mut bytes = serde_json::to_vec_pretty(&dense).expect("dense temp fixture");
+                bytes.push(b'\n');
+                let temporary = composite.join(".dense_operator.json.901.1.tmp");
+                std::fs::write(&temporary, bytes).expect("dense temp");
+                super::recover_source_compile_identity_temporaries(&composite)
+                    .expect("canonical matching temp is recoverable");
+                assert!(!temporary.exists(), "validated temp is reclaimed");
+            }
+            assert_eq!(
+                super::source_compile_output_for_operator_era_with_dense(
+                    &compiled,
+                    "teacher",
+                    2,
+                    &attention,
+                    Some(&dense),
+                )
+                .expect("pre-dense identity resumes exact composite"),
+                composite
+            );
+            write_dense_binding(&composite, &dense);
+            let pair = super::inspect_compiled_model_pair(&compiled, "teacher", 2)
+                .expect("completed composite is valid");
+            assert!(matches!(
+                pair.composite,
+                super::CompiledRootState::BoundCurrent(_)
+            ));
+            let _ = std::fs::remove_dir_all(root);
+        }
+
+        let root = attention_provenance_test_dir("pre-dense-with-payload");
+        let compiled = root.join("compiled");
+        let composite = compiled.join("teacher-attention-v2-dense-v2");
+        let attention = AttentionOperatorSpec::learned_absolute_v2();
+        write_attention_binding(&composite, &attention);
+        let payload = composite.join("corpus.records");
+        std::fs::write(&payload, b"payload before dense binding").expect("payload fixture");
+        let before = std::fs::read(&payload).expect("payload before");
+        let error = super::source_compile_output_for_operator_era_with_dense(
+            &compiled,
+            "teacher",
+            2,
+            &attention,
+            Some(&DenseOperatorSpec::gpt2_v2()),
+        )
+        .expect_err("payload without dense is not a resumable prefix");
+        assert!(
+            error.contains("corpus.records") || error.contains("dense"),
+            "{error}"
+        );
+        assert_eq!(std::fs::read(&payload).expect("payload after"), before);
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]
@@ -14937,7 +15969,17 @@ mod tests {
             super::SOURCE_COMPILE_PREFLIGHT_FILE,
             super::SOURCE_MANIFEST_KAPPA_BINDING_FILE,
         ] {
-            std::fs::write(root.join(file), tag).expect("bundle fixture member");
+            let bytes = if file == uor_r4_graph_cli::ATTENTION_OPERATOR_BINDING_FILE {
+                let mut bytes = serde_json::to_vec_pretty(
+                    &uor_r4_model_source::attention::AttentionOperatorSpec::standard_v2(),
+                )
+                .expect("serialize fixture attention");
+                bytes.push(b'\n');
+                bytes
+            } else {
+                tag.to_vec()
+            };
+            std::fs::write(root.join(file), bytes).expect("bundle fixture member");
         }
         for file in [
             "graph-cover/cover.r4g1",
@@ -15106,7 +16148,11 @@ mod tests {
         symlink(root.join("missing"), &temporary).expect("dangling publisher temporary");
         let error = super::CompiledBundleStage::allocate(&output, &source_kappa)
             .expect_err("special publisher residue is terminal");
-        assert!(error.contains("not a regular non-symlink file"), "{error}");
+        assert!(
+            error.contains("not a regular non-symlink file")
+                || error.contains("cannot be opened as a regular non-symlink"),
+            "{error}"
+        );
         assert!(std::fs::symlink_metadata(&temporary).is_ok());
         let _ = std::fs::remove_dir_all(root);
     }
@@ -15893,6 +16939,7 @@ mod tests {
             teacher: output.join("tless_artifacts.bin"),
             attention_operator: uor_r4_model_source::attention::AttentionOperatorSpec::standard_v2(
             ),
+            dense_operator: None,
             source_manifest_kappa: Some(m1.content_kappa.clone()),
         };
         let error = super::validate_resolved_source_snapshot_binding(&resolved, Some(&m2), 2)
@@ -16089,7 +17136,10 @@ mod tests {
             2,
         )
         .expect_err("resolver-owned suffix is not an arbitrary source basename");
-        assert!(error.contains("resolver-owned suffix"), "{error}");
+        assert!(
+            error.contains("resolver-owned arithmetic suffix"),
+            "{error}"
+        );
         assert!(!compiled.exists(), "name rejection is read-only");
         let _ = std::fs::remove_dir_all(root);
     }
@@ -16291,6 +17341,62 @@ mod tests {
             .is_some());
         let error = super::resolve_reload_bundle_in(&root, "teacher-attention-v2", 2)
             .expect_err("exact suffix alias cannot consume a genuine source basename");
+        assert!(
+            error.contains("request the logical base explicitly"),
+            "{error}"
+        );
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn composite_suffix_is_reserved_and_stripped_as_one_longest_match() {
+        use uor_r4_model_source::attention::AttentionOperatorSpec;
+        use uor_r4_model_source::dense::DenseOperatorSpec;
+
+        assert_eq!(
+            super::logical_model_name_for_request("teacher-attention-v2-dense-v2", 2)
+                .expect("exact composite alias resolves"),
+            "teacher"
+        );
+        assert_eq!(
+            super::logical_model_name_for_request("teacher-attention-v2", 2)
+                .expect("exact attention alias resolves"),
+            "teacher"
+        );
+        assert!(
+            super::logical_model_name_for_request("teacher-attention-v2-dense-v2-attention-v2", 2,)
+                .is_err(),
+            "stripping a shorter trailing suffix cannot expose a second reserved basename"
+        );
+
+        let root = attention_provenance_test_dir("reserved-composite-source-collision");
+        let composite = root.join("compiled/teacher-attention-v2-dense-v2");
+        write_loadable_graph_bundle(
+            &composite,
+            Some(&AttentionOperatorSpec::learned_absolute_v2()),
+        );
+        let dense = DenseOperatorSpec::gpt2_v2();
+        write_dense_binding(&composite, &dense);
+        let report_path = composite.join("graph-cover/cover_report.json");
+        let mut report: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(&report_path).expect("read cover report fixture"),
+        )
+        .expect("parse cover report fixture");
+        report["dense_operator"] =
+            serde_json::to_value(&dense).expect("serialize dense cover identity");
+        std::fs::write(
+            &report_path,
+            serde_json::to_vec_pretty(&report).expect("serialize dense cover report"),
+        )
+        .expect("write dense cover report");
+        std::fs::create_dir_all(root.join("sources/teacher-attention-v2-dense-v2"))
+            .expect("create genuine pre-upgrade composite-suffixed source");
+
+        let error = super::discover_compiled_r4g1_candidates_in(&root.join("compiled"), 2)
+            .expect_err("composite suffix collision cannot be reinterpreted as teacher");
+        assert!(error.contains("pre-existing source basename"), "{error}");
+        let error = super::resolve_reload_bundle_in(&root, "teacher-attention-v2-dense-v2", 2)
+            .expect_err("exact composite alias cannot consume a genuine source basename");
         assert!(
             error.contains("request the logical base explicitly"),
             "{error}"
@@ -16794,6 +17900,7 @@ mod tests {
                 graph: root.join("compiled/teacher/graph/score.r4g1"),
                 teacher: root.join("compiled/teacher/tless_artifacts.bin"),
                 attention_operator: AttentionOperatorSpec::standard_v1(),
+                dense_operator: None,
                 source_manifest_kappa: None,
             }),
             ..super::ServingModelState::default()
@@ -17000,6 +18107,7 @@ mod tests {
             graph: "/compiled/alpha-attention-v2/graph/score.r4g1".into(),
             teacher: "/compiled/alpha-attention-v2/tless_artifacts.bin".into(),
             attention_operator: AttentionOperatorSpec::standard_v2(),
+            dense_operator: None,
             source_manifest_kappa: None,
         };
         let serving = Arc::new(Mutex::new(super::ServingModelState {
@@ -17070,6 +18178,59 @@ mod tests {
             None,
             "a source path alone is not a text-ready engine"
         );
+    }
+
+    #[test]
+    fn both_status_surfaces_report_the_exact_optional_source_execution_pair() {
+        use uor_r4_model_source::attention::AttentionOperatorSpec;
+        use uor_r4_model_source::dense::DenseOperatorSpec;
+
+        let attention = AttentionOperatorSpec::learned_absolute_v2();
+        let dense = DenseOperatorSpec::gpt2_v2();
+        let serving = super::ServingModelState {
+            active_bundle: Some(super::ResolvedCompiledBundle {
+                logical_name: "teacher".to_owned(),
+                physical_root: "/compiled/teacher-attention-v2-dense-v2".into(),
+                graph: "/compiled/teacher-attention-v2-dense-v2/graph/score.r4g1".into(),
+                teacher: "/compiled/teacher-attention-v2-dense-v2/tless_artifacts.bin".into(),
+                attention_operator: attention.clone(),
+                dense_operator: Some(dense.clone()),
+                source_manifest_kappa: None,
+            }),
+            ..super::ServingModelState::default()
+        };
+        let compile = super::R4g1CompileStatus {
+            running: false,
+            ready: false,
+            progress: 0,
+            message: "idle".to_owned(),
+            report: None,
+        };
+
+        for (surface, status) in [
+            ("/uor/v1/status", super::uor_status_json(&serving)),
+            ("/api/r4g1/status", compile.json(&serving)),
+        ] {
+            assert_eq!(
+                status.get("attention_operator"),
+                Some(&serde_json::to_value(&attention).expect("serialize attention")),
+                "{surface} attention provenance"
+            );
+            assert_eq!(
+                status.get("dense_operator"),
+                Some(&serde_json::to_value(&dense).expect("serialize dense")),
+                "{surface} dense provenance"
+            );
+        }
+
+        let absent = super::ServingModelState::default();
+        for status in [super::uor_status_json(&absent), compile.json(&absent)] {
+            assert_eq!(
+                status.get("attention_operator"),
+                Some(&serde_json::Value::Null)
+            );
+            assert_eq!(status.get("dense_operator"), Some(&serde_json::Value::Null));
+        }
     }
 
     #[test]
@@ -18356,7 +19517,12 @@ mod tests {
             .expect_err("present-invalid attention sidecar fails closed");
         assert!(error.contains("not a regular file"), "{error}");
         std::fs::remove_dir(&attention).expect("remove invalid attention sidecar");
-        std::fs::write(&attention, b"{}").expect("regular attention sidecar");
+        let mut attention_bytes = serde_json::to_vec_pretty(
+            &uor_r4_model_source::attention::AttentionOperatorSpec::standard_v2(),
+        )
+        .expect("serialize attention sidecar");
+        attention_bytes.push(b'\n');
+        std::fs::write(&attention, attention_bytes).expect("regular attention sidecar");
         super::validate_source_bundle_inventory(&root).expect("complete regular inventory");
         let _ = std::fs::remove_dir_all(root);
     }

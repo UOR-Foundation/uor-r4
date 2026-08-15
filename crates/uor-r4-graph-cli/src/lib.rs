@@ -32,15 +32,18 @@ use uor_r4_graph_certify as score_runtime;
 use uor_r4_graph_compiler::induction as cover;
 use uor_r4_graph_compiler::observation as observe;
 use uor_r4_graph_compiler::observation_text as observe_text;
+use uor_r4_graph_compiler::recorded_corpus::{
+    PLANNED_OUTPUT_RESERVED_PREFIX, PlannedOutputMember, RecordedCorpusRole,
+};
 use uor_r4_graph_compiler::reproducibility as repro;
 mod convert_r4g1;
 pub mod cover_sweep;
 pub mod recommend_scale;
 mod runtime_corpus;
 mod scenarios;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::collections::BTreeMap;
-use std::io::{Read, Write};
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use uor_r4_core::transformerless::hf_bpe::{
@@ -51,7 +54,7 @@ use uor_r4_core::transformerless::scenarios as core_scenarios;
 use uor_r4_core::transformerless::scenarios::RuntimeTokenizerDecodeTable;
 use uor_r4_model_source::{
     BehaviorSource, LlamaOracle, SourceUnavailable, Teacher, TeacherOracle,
-    attention::AttentionOperatorSpec,
+    attention::AttentionOperatorSpec, dense::DenseOperatorSpec,
 };
 
 const DEFAULT_CHECKPOINT: &str = "/tmp/ref/out/model.bin";
@@ -65,11 +68,16 @@ const TOKENIZER_ADAPTER_FILE: &str = "tokenizer_adapter.json";
 /// Compile-directory binding for the source attention operator that produced
 /// `corpus.meta` / `corpus.records`.
 pub const ATTENTION_OPERATOR_BINDING_FILE: &str = "attention_operator.json";
+/// Compile-directory binding for the host-side dense arithmetic that produced
+/// `corpus.meta` / `corpus.records`.
+pub const DENSE_OPERATOR_BINDING_FILE: &str = "dense_operator.json";
 // Pre-#602 corpora computed the immutable standard-source-attention/1
 // operator even after the registry's current source version advances.
 const LEGACY_STANDARD_ATTENTION_OPERATOR_VERSION: u32 = 1;
 static TOKENIZER_ADAPTER_TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 static ATTENTION_OPERATOR_TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+static DENSE_OPERATOR_TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+static PLANNED_OUTPUT_TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 fn is_blake3_cid(value: &str) -> bool {
     value.len() == "blake3:".len() + 64
@@ -221,7 +229,7 @@ struct CompileOutputPayloadInventory {
 // Identity sidecars are validated separately by their strict readers and are
 // published atomically; every other output is inventoried here before either
 // identity can take an exact-resume fast path.
-const COMPILE_OUTPUT_MUTABLE_FILES: [&str; 9] = [
+const COMPILE_OUTPUT_MUTABLE_FILES: [&str; 10] = [
     "tokenizer.bin",
     "corpus.meta",
     "corpus.records",
@@ -231,6 +239,7 @@ const COMPILE_OUTPUT_MUTABLE_FILES: [&str; 9] = [
     "hamming_calibration.json",
     "hierarchical_codes.json",
     "space_manifest.json",
+    uor_r4_graph_compiler::recorded_corpus::RECORDED_CORPUS_BINDING_FILE,
 ];
 
 const SOURCE_CORPUS_META_BYTES: usize = 25;
@@ -328,13 +337,233 @@ fn sync_compile_output_directory(output: &Path) -> Result<(), SourceUnavailable>
         })
 }
 
+fn write_regular_file_synced(
+    path: &Path,
+    bytes: &[u8],
+    context: &str,
+) -> Result<(), SourceUnavailable> {
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create(true).truncate(false);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+
+        options.custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW | libc::O_NONBLOCK);
+    }
+    let mut file = options.open(path).map_err(|error| {
+        SourceUnavailable::new(format!(
+            "{context} {} cannot be opened without following links: {error}",
+            path.display()
+        ))
+    })?;
+    let path_metadata = std::fs::symlink_metadata(path).map_err(SourceUnavailable::new)?;
+    let file_metadata = file.metadata().map_err(SourceUnavailable::new)?;
+    if !path_metadata.file_type().is_file() || !file_metadata.file_type().is_file() {
+        return Err(SourceUnavailable::new(format!(
+            "{context} {} is not a regular non-symlink file",
+            path.display()
+        )));
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+
+        if path_metadata.dev() != file_metadata.dev() || path_metadata.ino() != file_metadata.ino()
+        {
+            return Err(SourceUnavailable::new(format!(
+                "{context} {} changed identity while opened",
+                path.display()
+            )));
+        }
+    }
+    file.set_len(0)
+        .and_then(|()| file.write_all(bytes))
+        .and_then(|()| file.sync_all())
+        .map_err(|error| {
+            SourceUnavailable::new(format!(
+                "{context} {} cannot be durably written: {error}",
+                path.display()
+            ))
+        })?;
+    let final_path = std::fs::symlink_metadata(path).map_err(SourceUnavailable::new)?;
+    let final_file = file.metadata().map_err(SourceUnavailable::new)?;
+    if !final_path.file_type().is_file()
+        || !final_file.file_type().is_file()
+        || final_file.len() != bytes.len() as u64
+    {
+        return Err(SourceUnavailable::new(format!(
+            "{context} {} changed type or length during its durable write",
+            path.display()
+        )));
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+
+        if final_path.dev() != final_file.dev() || final_path.ino() != final_file.ino() {
+            return Err(SourceUnavailable::new(format!(
+                "{context} {} changed identity during its durable write",
+                path.display()
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn planned_output_member(
+    path: &Path,
+    context: &str,
+) -> Result<PlannedOutputMember, SourceUnavailable> {
+    let stable_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| SourceUnavailable::new(format!("{context} stable filename is not UTF-8")))?;
+    PlannedOutputMember::ALL
+        .into_iter()
+        .find(|member| member.stable_name() == stable_name)
+        .ok_or_else(|| {
+            SourceUnavailable::new(format!(
+                "{context} stable filename {stable_name:?} is not a registered planned-output member"
+            ))
+        })
+}
+
+fn preflight_guarded_planned_file(
+    guard: &uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerGuard,
+    path: &Path,
+    expected: &[u8],
+    context: &str,
+) -> Result<bool, SourceUnavailable> {
+    let _ = planned_output_member(path, context)?;
+    guard.preflight_planned_output_scope(&PlannedOutputMember::ALL)?;
+    require_existing_file_matches_if_present(path, Some(expected), context)
+}
+
+fn preflight_guarded_planned_absence(
+    guard: &uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerGuard,
+    path: &Path,
+    context: &str,
+) -> Result<(), SourceUnavailable> {
+    let member = planned_output_member(path, context)?;
+    guard.preflight_planned_output_scope(&PlannedOutputMember::ALL)?;
+    if guard.has_planned_output_residue(member)? {
+        return Err(SourceUnavailable::new(format!(
+            "{context} has staged bytes but the planned generation declares this member absent"
+        )));
+    }
+    let _ = require_existing_file_matches_if_present(path, None, context)?;
+    Ok(())
+}
+
+fn preflight_guarded_planned_scope(
+    guard: &uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerGuard,
+    allowed: &[PlannedOutputMember],
+    context: &str,
+) -> Result<(), SourceUnavailable> {
+    guard
+        .preflight_planned_output_scope(allowed)
+        .map_err(|mut error| {
+            error.reason = format!("{context}: {}", error.reason);
+            error
+        })
+}
+
+/// Publish one deterministic member without ever exposing a zero/partial
+/// authoritative pathname. Honest process death can leave only a recognized
+/// non-authoritative `.writing` inode, which an exact guarded retry reclaims.
+fn publish_guarded_planned_file(
+    guard: &uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerGuard,
+    path: &Path,
+    expected: &[u8],
+    context: &str,
+) -> Result<(), SourceUnavailable> {
+    let member = planned_output_member(path, context)?;
+    guard.preflight_planned_output_scope(&PlannedOutputMember::ALL)?;
+    if require_existing_file_matches_if_present(path, Some(expected), context)? {
+        guard.reclaim_planned_output_residues(member)?;
+        return sync_compile_output_directory(guard.root());
+    }
+    guard.reclaim_planned_output_residues(member)?;
+
+    let stable_name = member.stable_name();
+    let staging = loop {
+        let sequence = PLANNED_OUTPUT_TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+        let candidate = guard.root().join(format!(
+            "{PLANNED_OUTPUT_RESERVED_PREFIX}{stable_name}--{}.{}.writing",
+            std::process::id(),
+            sequence
+        ));
+        let mut options = std::fs::OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+
+            options
+                .mode(0o600)
+                .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW | libc::O_NONBLOCK);
+        }
+        match options.open(&candidate) {
+            Ok(mut file) => {
+                file.write_all(expected)
+                    .and_then(|()| file.sync_all())
+                    .map_err(|error| {
+                        SourceUnavailable::new(format!(
+                            "{context} staging {} cannot be durably written: {error}",
+                            candidate.display()
+                        ))
+                    })?;
+                break candidate;
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(SourceUnavailable::new(error)),
+        }
+    };
+    guard.verify_owned_root()?;
+    match std::fs::hard_link(&staging, path) {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+            let published =
+                read_optional_regular_file_nofollow(path, context)?.ok_or_else(|| {
+                    SourceUnavailable::new(format!(
+                        "{context} stable path {} appeared and disappeared",
+                        path.display()
+                    ))
+                })?;
+            if published != expected {
+                return Err(SourceUnavailable::new(format!(
+                    "{context} stable path {} appeared with conflicting bytes",
+                    path.display()
+                )));
+            }
+        }
+        Err(error) => return Err(SourceUnavailable::new(error)),
+    }
+    std::fs::remove_file(&staging).map_err(SourceUnavailable::new)?;
+    sync_compile_output_directory(guard.root())?;
+    let published = read_optional_regular_file_nofollow(path, context)?.ok_or_else(|| {
+        SourceUnavailable::new(format!(
+            "{context} stable path {} disappeared after publication",
+            path.display()
+        ))
+    })?;
+    if published != expected {
+        return Err(SourceUnavailable::new(format!(
+            "{context} stable path {} does not contain the exact planned bytes",
+            path.display()
+        )));
+    }
+    guard.verify_owned_root()
+}
+
 struct SourceCorpusSession {
     file: std::fs::File,
+    recorded_corpus: Option<uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerGuard>,
 }
 
 impl Drop for SourceCorpusSession {
     fn drop(&mut self) {
-        let _ = self.file.unlock();
+        self.release_in_order(|| {});
     }
 }
 
@@ -389,7 +618,83 @@ fn source_corpus_session(output: &Path) -> Result<SourceCorpusSession, SourceUna
             output.display()
         ))
     })?;
-    Ok(SourceCorpusSession { file })
+    Ok(SourceCorpusSession {
+        file,
+        recorded_corpus: None,
+    })
+}
+
+impl SourceCorpusSession {
+    fn release_in_order<F>(&mut self, after_common_release: F)
+    where
+        F: FnOnce(),
+    {
+        // Reverse the canonical acquisition order: common corpus guard first,
+        // source-specific outer session second. Releasing the outer lock while
+        // the common guard is still live would let another source writer enter
+        // and then fail BUSY on the inner guard.
+        drop(self.recorded_corpus.take());
+        after_common_release();
+        let _ = self.file.unlock();
+    }
+
+    /// Acquire the common recorded-corpus guard after all read-only semantic
+    /// preflights, then create/bind a fresh root before the first member
+    /// mutation. The source-specific session is always acquired first.
+    fn acquire_recorded_corpus(
+        &mut self,
+        output: &Path,
+    ) -> Result<
+        &uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerGuard,
+        SourceUnavailable,
+    > {
+        if self.recorded_corpus.is_none() {
+            let mut guard =
+                uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerGuard::try_acquire(
+                    output,
+                )?;
+            guard.ensure_root()?;
+            guard.preflight_planned_output_scope(&[])?;
+            let _ = guard.preflight_publication_namespace_for(RecordedCorpusRole::Compile)?;
+            self.recorded_corpus = Some(guard);
+        }
+        self.recorded_corpus.as_ref().ok_or_else(|| {
+            SourceUnavailable::new("recorded-corpus producer guard was not retained")
+        })
+    }
+
+    fn recorded_corpus_guard(
+        &self,
+    ) -> Result<
+        &uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerGuard,
+        SourceUnavailable,
+    > {
+        self.recorded_corpus.as_ref().ok_or_else(|| {
+            SourceUnavailable::new("recorded-corpus producer guard was not acquired")
+        })
+    }
+
+    /// Begin the source mutation only after the caller has repeated every
+    /// requested identity/resume preflight under the retained common guard.
+    fn begin_recorded_corpus_mutation(&self, output: &Path) -> Result<(), SourceUnavailable> {
+        let guard = self.recorded_corpus_guard()?;
+        guard.preflight_planned_output_scope(&[])?;
+        let publication =
+            uor_r4_graph_compiler::recorded_corpus::preflight_source_update_publication(
+                guard,
+                &output.join("corpus.meta"),
+                &output.join("corpus.records"),
+            )?;
+        guard.begin_compile_attempt()?;
+        if publication.recoverable_binding {
+            uor_r4_graph_compiler::recorded_corpus::publish_binding(
+                guard,
+                &output.join("corpus.meta"),
+                &output.join("corpus.records"),
+            )?;
+        }
+        Ok(())
+    }
 }
 
 /// Inspect every mutable compile-output leaf without following it. Binding
@@ -949,6 +1254,272 @@ fn strict_regular_file_if_present(path: &Path, context: &str) -> Result<bool, So
     }
 }
 
+#[cfg(unix)]
+fn opened_file_identity_matches(
+    path_metadata: &std::fs::Metadata,
+    file_metadata: &std::fs::Metadata,
+) -> bool {
+    use std::os::unix::fs::MetadataExt;
+
+    path_metadata.dev() == file_metadata.dev() && path_metadata.ino() == file_metadata.ino()
+}
+
+#[cfg(unix)]
+fn opened_file_generation_matches(
+    initial: &std::fs::Metadata,
+    final_metadata: &std::fs::Metadata,
+) -> bool {
+    use std::os::unix::fs::MetadataExt;
+
+    opened_file_identity_matches(initial, final_metadata)
+        && initial.len() == final_metadata.len()
+        && initial.mtime() == final_metadata.mtime()
+        && initial.mtime_nsec() == final_metadata.mtime_nsec()
+        && initial.ctime() == final_metadata.ctime()
+        && initial.ctime_nsec() == final_metadata.ctime_nsec()
+}
+
+#[cfg(not(unix))]
+fn opened_file_generation_matches(
+    initial: &std::fs::Metadata,
+    final_metadata: &std::fs::Metadata,
+) -> bool {
+    opened_file_identity_matches(initial, final_metadata)
+        && initial.len() == final_metadata.len()
+        && initial.modified().ok() == final_metadata.modified().ok()
+}
+
+#[cfg(not(unix))]
+fn opened_file_identity_matches(
+    _path_metadata: &std::fs::Metadata,
+    _file_metadata: &std::fs::Metadata,
+) -> bool {
+    // The opened handle and both path checks still reject pre-existing links
+    // and type changes. Unix additionally exposes a stable inode identity.
+    true
+}
+
+/// Read one optional provenance sidecar through a single opened handle. The
+/// path is never reopened for bytes: Unix refuses links at `open(2)`, while
+/// every platform checks that the path still names the opened regular file
+/// before and after the read.
+fn read_optional_regular_file_nofollow_with<F>(
+    path: &Path,
+    context: &str,
+    after_open: F,
+) -> Result<Option<Vec<u8>>, SourceUnavailable>
+where
+    F: FnOnce(),
+{
+    let mut options = std::fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+
+        // `O_NOFOLLOW` closes the lstat/open link-swap seam. `O_NONBLOCK`
+        // prevents a raced FIFO or device from hanging before the opened
+        // handle's type is rejected below.
+        options.custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW | libc::O_NONBLOCK);
+    }
+    let mut file = match options.open(path) {
+        Ok(file) => file,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => {
+            return Err(SourceUnavailable::new(format!(
+                "{context} {} is not a regular file or cannot be opened without following links: {error}",
+                path.display()
+            )));
+        }
+    };
+    let opened_metadata = file.metadata().map_err(|error| {
+        SourceUnavailable::new(format!(
+            "{context} {} opened handle cannot be inspected: {error}",
+            path.display()
+        ))
+    })?;
+    if !opened_metadata.file_type().is_file() {
+        return Err(SourceUnavailable::new(format!(
+            "{context} {} opened handle is not a regular file",
+            path.display()
+        )));
+    }
+
+    let path_metadata = std::fs::symlink_metadata(path).map_err(|error| {
+        SourceUnavailable::new(format!(
+            "{context} {} cannot be reinspected after open: {error}",
+            path.display()
+        ))
+    })?;
+    if !path_metadata.file_type().is_file()
+        || !opened_file_identity_matches(&path_metadata, &opened_metadata)
+    {
+        return Err(SourceUnavailable::new(format!(
+            "{context} {} changed identity or is not a regular non-symlink file",
+            path.display()
+        )));
+    }
+
+    let mut bytes = Vec::new();
+    file.read_to_end(&mut bytes).map_err(|error| {
+        SourceUnavailable::new(format!(
+            "{context} {} cannot be read: {error}",
+            path.display()
+        ))
+    })?;
+    if opened_metadata.len() != bytes.len() as u64 {
+        return Err(SourceUnavailable::new(format!(
+            "{context} {} changed length while its bytes were read",
+            path.display()
+        )));
+    }
+
+    // Tests use this seam to model an adversarial path or same-inode rewrite
+    // at the only meaningful boundary: after one exact handle read but before
+    // the generation is accepted. Production supplies an empty closure.
+    after_open();
+
+    file.seek(SeekFrom::Start(0)).map_err(|error| {
+        SourceUnavailable::new(format!(
+            "{context} {} opened handle cannot be rewound: {error}",
+            path.display()
+        ))
+    })?;
+    let mut verification_offset = 0usize;
+    let mut verification_buffer = [0u8; 8192];
+    loop {
+        let count = file.read(&mut verification_buffer).map_err(|error| {
+            SourceUnavailable::new(format!(
+                "{context} {} cannot be verified through its opened handle: {error}",
+                path.display()
+            ))
+        })?;
+        if count == 0 {
+            break;
+        }
+        let end = verification_offset.checked_add(count).ok_or_else(|| {
+            SourceUnavailable::new(format!("{context} verification byte count overflow"))
+        })?;
+        if bytes.get(verification_offset..end) != Some(&verification_buffer[..count]) {
+            return Err(SourceUnavailable::new(format!(
+                "{context} {} changed content while its opened handle was verified",
+                path.display()
+            )));
+        }
+        verification_offset = end;
+    }
+    let final_file_metadata = file.metadata().map_err(|error| {
+        SourceUnavailable::new(format!(
+            "{context} {} opened handle cannot be reinspected: {error}",
+            path.display()
+        ))
+    })?;
+    let final_path_metadata = std::fs::symlink_metadata(path).map_err(|error| {
+        SourceUnavailable::new(format!(
+            "{context} {} cannot be reinspected after read: {error}",
+            path.display()
+        ))
+    })?;
+    if !final_file_metadata.file_type().is_file()
+        || !final_path_metadata.file_type().is_file()
+        || !opened_file_generation_matches(&opened_metadata, &final_file_metadata)
+        || !opened_file_identity_matches(&final_path_metadata, &final_file_metadata)
+        || verification_offset != bytes.len()
+        || final_file_metadata.len() != bytes.len() as u64
+    {
+        return Err(SourceUnavailable::new(format!(
+            "{context} {} changed identity, type, length, content, or generation while its bytes were read",
+            path.display()
+        )));
+    }
+    Ok(Some(bytes))
+}
+
+fn read_optional_regular_file_nofollow(
+    path: &Path,
+    context: &str,
+) -> Result<Option<Vec<u8>>, SourceUnavailable> {
+    read_optional_regular_file_nofollow_with(path, context, || {})
+}
+
+fn verify_optional_regular_file_nofollow(
+    path: &Path,
+    context: &str,
+    expected: Option<&[u8]>,
+) -> Result<(), SourceUnavailable> {
+    let Some(expected) = expected else {
+        return match std::fs::symlink_metadata(path) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(SourceUnavailable::new(format!(
+                "{context} {} cannot be reinspected: {error}",
+                path.display()
+            ))),
+            Ok(_) => Err(SourceUnavailable::new(format!(
+                "{context} {} appeared after typed absence was captured",
+                path.display()
+            ))),
+        };
+    };
+
+    let mut options = std::fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW | libc::O_NONBLOCK);
+    }
+    let mut file = options.open(path).map_err(|error| {
+        SourceUnavailable::new(format!(
+            "{context} {} cannot be reopened without following links: {error}",
+            path.display()
+        ))
+    })?;
+    let initial_file_metadata = file.metadata().map_err(SourceUnavailable::new)?;
+    let initial_path_metadata = std::fs::symlink_metadata(path).map_err(SourceUnavailable::new)?;
+    if !initial_file_metadata.file_type().is_file()
+        || !initial_path_metadata.file_type().is_file()
+        || !opened_file_identity_matches(&initial_path_metadata, &initial_file_metadata)
+        || initial_file_metadata.len() != expected.len() as u64
+    {
+        return Err(SourceUnavailable::new(format!(
+            "{context} {} no longer names the captured regular-file generation",
+            path.display()
+        )));
+    }
+    let mut offset = 0usize;
+    let mut buffer = [0u8; 8192];
+    loop {
+        let count = file.read(&mut buffer).map_err(SourceUnavailable::new)?;
+        if count == 0 {
+            break;
+        }
+        let end = offset
+            .checked_add(count)
+            .ok_or_else(|| SourceUnavailable::new(format!("{context} byte count overflow")))?;
+        if expected.get(offset..end) != Some(&buffer[..count]) {
+            return Err(SourceUnavailable::new(format!(
+                "{context} {} changed bytes after capture",
+                path.display()
+            )));
+        }
+        offset = end;
+    }
+    let final_file_metadata = file.metadata().map_err(SourceUnavailable::new)?;
+    let final_path_metadata = std::fs::symlink_metadata(path).map_err(SourceUnavailable::new)?;
+    if offset != expected.len()
+        || !final_file_metadata.file_type().is_file()
+        || !final_path_metadata.file_type().is_file()
+        || !opened_file_generation_matches(&initial_file_metadata, &final_file_metadata)
+        || !opened_file_identity_matches(&final_path_metadata, &final_file_metadata)
+    {
+        return Err(SourceUnavailable::new(format!(
+            "{context} {} changed identity, bytes, or generation after capture",
+            path.display()
+        )));
+    }
+    Ok(())
+}
+
 fn validate_attention_operator(
     recorded: &AttentionOperatorSpec,
     context: &str,
@@ -978,93 +1549,7 @@ fn validate_attention_operator(
     Ok(registered)
 }
 
-/// Parse a JSON document solely to reject duplicate object keys at every
-/// nesting level. `serde_json::Value` is last-key-wins, which is unsuitable
-/// for provenance records where duplicated fields could spell two arithmetic
-/// eras in one sidecar.
-struct DuplicateRejectingJson;
-
-impl<'de> Deserialize<'de> for DuplicateRejectingJson {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        struct Visitor;
-
-        impl<'de> serde::de::Visitor<'de> for Visitor {
-            type Value = DuplicateRejectingJson;
-
-            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                formatter.write_str("JSON without duplicate object keys")
-            }
-
-            fn visit_bool<E>(self, _: bool) -> Result<Self::Value, E> {
-                Ok(DuplicateRejectingJson)
-            }
-
-            fn visit_i64<E>(self, _: i64) -> Result<Self::Value, E> {
-                Ok(DuplicateRejectingJson)
-            }
-
-            fn visit_u64<E>(self, _: u64) -> Result<Self::Value, E> {
-                Ok(DuplicateRejectingJson)
-            }
-
-            fn visit_f64<E>(self, _: f64) -> Result<Self::Value, E> {
-                Ok(DuplicateRejectingJson)
-            }
-
-            fn visit_str<E>(self, _: &str) -> Result<Self::Value, E> {
-                Ok(DuplicateRejectingJson)
-            }
-
-            fn visit_string<E>(self, _: String) -> Result<Self::Value, E> {
-                Ok(DuplicateRejectingJson)
-            }
-
-            fn visit_none<E>(self) -> Result<Self::Value, E> {
-                Ok(DuplicateRejectingJson)
-            }
-
-            fn visit_unit<E>(self) -> Result<Self::Value, E> {
-                Ok(DuplicateRejectingJson)
-            }
-
-            fn visit_some<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
-            where
-                D: serde::Deserializer<'de>,
-            {
-                DuplicateRejectingJson::deserialize(deserializer)
-            }
-
-            fn visit_seq<A>(self, mut sequence: A) -> Result<Self::Value, A::Error>
-            where
-                A: serde::de::SeqAccess<'de>,
-            {
-                while sequence.next_element::<DuplicateRejectingJson>()?.is_some() {}
-                Ok(DuplicateRejectingJson)
-            }
-
-            fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
-            where
-                A: serde::de::MapAccess<'de>,
-            {
-                let mut keys = std::collections::BTreeSet::new();
-                while let Some(key) = map.next_key::<String>()? {
-                    if !keys.insert(key.clone()) {
-                        return Err(serde::de::Error::custom(format!(
-                            "duplicate JSON field {key:?}"
-                        )));
-                    }
-                    map.next_value::<DuplicateRejectingJson>()?;
-                }
-                Ok(DuplicateRejectingJson)
-            }
-        }
-
-        deserializer.deserialize_any(Visitor)
-    }
-}
+type DuplicateRejectingJson = uor_r4_graph_compiler::recorded_corpus::DuplicateRejectingJson;
 
 fn reject_duplicate_attention_operator_json(
     bytes: &[u8],
@@ -1100,27 +1585,36 @@ fn validate_attention_operator_json(
     Ok(registered)
 }
 
-fn read_optional_compiled_attention_operator(
-    output: &Path,
-) -> Result<Option<AttentionOperatorSpec>, SourceUnavailable> {
-    let path = output.join(ATTENTION_OPERATOR_BINDING_FILE);
-    if !strict_regular_file_if_present(&path, "attention-operator binding")? {
-        return Ok(None);
-    }
-    let bytes = std::fs::read(&path).map_err(|error| {
-        SourceUnavailable::new(format!(
-            "{}: unreadable attention-operator binding: {error}",
-            path.display()
-        ))
-    })?;
-    reject_duplicate_attention_operator_json(&bytes, &path)?;
-    let value: serde_json::Value = serde_json::from_slice(&bytes).map_err(|error| {
+fn parse_compiled_attention_operator_bytes(
+    path: &Path,
+    bytes: &[u8],
+) -> Result<AttentionOperatorSpec, SourceUnavailable> {
+    reject_duplicate_attention_operator_json(bytes, path)?;
+    let value: serde_json::Value = serde_json::from_slice(bytes).map_err(|error| {
         SourceUnavailable::new(format!(
             "{}: malformed attention-operator binding: {error}",
             path.display()
         ))
     })?;
-    validate_attention_operator_json(&value, &path.display().to_string()).map(Some)
+    validate_attention_operator_json(&value, &path.display().to_string())
+}
+
+fn read_optional_compiled_attention_operator_with_bytes(
+    output: &Path,
+) -> Result<Option<(AttentionOperatorSpec, Vec<u8>)>, SourceUnavailable> {
+    let path = output.join(ATTENTION_OPERATOR_BINDING_FILE);
+    let Some(bytes) = read_optional_regular_file_nofollow(&path, "attention-operator binding")?
+    else {
+        return Ok(None);
+    };
+    let operator = parse_compiled_attention_operator_bytes(&path, &bytes)?;
+    Ok(Some((operator, bytes)))
+}
+
+fn read_optional_compiled_attention_operator(
+    output: &Path,
+) -> Result<Option<AttentionOperatorSpec>, SourceUnavailable> {
+    Ok(read_optional_compiled_attention_operator_with_bytes(output)?.map(|(operator, _)| operator))
 }
 
 /// Read and registry-validate a compile directory's attention-operator
@@ -1283,17 +1777,300 @@ fn bind_compiled_attention_operator(
     publish_attention_operator_binding(output, &requested)
 }
 
+fn validate_dense_operator(
+    recorded: &DenseOperatorSpec,
+    context: &str,
+) -> Result<DenseOperatorSpec, SourceUnavailable> {
+    let registered = uor_r4_model_source::dense::operator_spec(&recorded.id, recorded.version)
+        .map_err(|mut error| {
+            error.reason = format!("{context}: {}", error.reason);
+            error
+        })?;
+    if recorded != &registered {
+        return Err(SourceUnavailable::new(format!(
+            "{context} does not match registered dense operator {}/{}",
+            recorded.id, recorded.version
+        )));
+    }
+    Ok(registered)
+}
+
+fn validate_source_execution_pair(
+    attention: &AttentionOperatorSpec,
+    dense: Option<&DenseOperatorSpec>,
+    context: &str,
+) -> Result<(), SourceUnavailable> {
+    uor_r4_model_source::dense::validate_source_execution_pair(Some(attention), dense).map_err(
+        |mut error| {
+            error.reason = format!("{context}: {}", error.reason);
+            error
+        },
+    )
+}
+
+fn reject_duplicate_dense_operator_json(
+    bytes: &[u8],
+    path: &Path,
+) -> Result<(), SourceUnavailable> {
+    serde_json::from_slice::<DuplicateRejectingJson>(bytes)
+        .map(|_| ())
+        .map_err(|error| {
+            SourceUnavailable::new(format!(
+                "{}: malformed dense-operator binding: {error}",
+                path.display()
+            ))
+        })
+}
+
+fn validate_dense_operator_json(
+    value: &serde_json::Value,
+    context: &str,
+) -> Result<DenseOperatorSpec, SourceUnavailable> {
+    let recorded: DenseOperatorSpec = serde_json::from_value(value.clone()).map_err(|error| {
+        SourceUnavailable::new(format!(
+            "{context}: malformed dense-operator record: {error}"
+        ))
+    })?;
+    let registered = validate_dense_operator(&recorded, context)?;
+    let registered_json = serde_json::to_value(&registered).map_err(SourceUnavailable::new)?;
+    if value != &registered_json {
+        return Err(SourceUnavailable::new(format!(
+            "{context} is not the full registered dense-operator record; missing, unknown, or noncanonical fields are refused"
+        )));
+    }
+    Ok(registered)
+}
+
+fn parse_compiled_dense_operator_bytes(
+    path: &Path,
+    bytes: &[u8],
+) -> Result<DenseOperatorSpec, SourceUnavailable> {
+    reject_duplicate_dense_operator_json(bytes, path)?;
+    let value: serde_json::Value = serde_json::from_slice(bytes).map_err(|error| {
+        SourceUnavailable::new(format!(
+            "{}: malformed dense-operator binding: {error}",
+            path.display()
+        ))
+    })?;
+    validate_dense_operator_json(&value, &path.display().to_string())
+}
+
+fn read_optional_compiled_dense_operator_with_bytes(
+    output: &Path,
+) -> Result<Option<(DenseOperatorSpec, Vec<u8>)>, SourceUnavailable> {
+    let path = output.join(DENSE_OPERATOR_BINDING_FILE);
+    let Some(bytes) = read_optional_regular_file_nofollow(&path, "dense-operator binding")? else {
+        return Ok(None);
+    };
+    let operator = parse_compiled_dense_operator_bytes(&path, &bytes)?;
+    Ok(Some((operator, bytes)))
+}
+
+fn read_optional_compiled_dense_operator(
+    output: &Path,
+) -> Result<Option<DenseOperatorSpec>, SourceUnavailable> {
+    Ok(read_optional_compiled_dense_operator_with_bytes(output)?.map(|(operator, _)| operator))
+}
+
+/// Read a compile directory's optional dense-execution binding. Absence is a
+/// real compatibility state for Llama and historical corpora and is never
+/// synthesized as GPT-2 v1.
+pub fn compiled_dense_operator(
+    output: &Path,
+) -> Result<Option<DenseOperatorSpec>, SourceUnavailable> {
+    read_optional_compiled_dense_operator(output)
+}
+
+/// Jointly preflight optional dense provenance. `true` means no publication
+/// is needed (the exact record exists, or both requested and recorded are
+/// absent).
+fn preflight_compiled_dense_operator(
+    output: &Path,
+    requested: Option<&DenseOperatorSpec>,
+) -> Result<bool, SourceUnavailable> {
+    let requested = requested
+        .map(|record| validate_dense_operator(record, "proposed teacher dense-operator binding"))
+        .transpose()?;
+    let inventory = compile_output_payload_inventory(output)?;
+    let recorded = read_optional_compiled_dense_operator(output)?;
+    match (recorded.as_ref(), requested.as_ref()) {
+        (Some(recorded), Some(requested)) if recorded == requested => Ok(true),
+        (Some(recorded), Some(requested)) => Err(SourceUnavailable::new(format!(
+            "{} is pinned to dense operator {}/{} (digest {}); requested {}/{} (digest {}); use a fresh output directory for the new teacher-execution era",
+            output.display(),
+            recorded.id,
+            recorded.version,
+            recorded.declared_digest(),
+            requested.id,
+            requested.version,
+            requested.declared_digest(),
+        ))),
+        (Some(recorded), None) => Err(SourceUnavailable::new(format!(
+            "{} is pinned to dense operator {}/{} (digest {}); the requested producer declares none; incompatible compile resume refused before mutation",
+            output.display(),
+            recorded.id,
+            recorded.version,
+            recorded.declared_digest(),
+        ))),
+        (None, Some(requested)) if inventory.first_present.is_some() => {
+            let name = inventory.first_present.unwrap_or("compiler");
+            Err(SourceUnavailable::new(format!(
+                "{} contains {name} payload without {DENSE_OPERATOR_BINDING_FILE}; it belongs to a legacy dense-execution era and cannot resume under {}/{}; use a fresh output directory",
+                output.display(),
+                requested.id,
+                requested.version,
+            )))
+        }
+        (None, Some(_)) => Ok(false),
+        (None, None) => Ok(true),
+    }
+}
+
+fn require_matching_compiled_dense_operator(
+    output: &Path,
+    requested: &DenseOperatorSpec,
+    recorded: &DenseOperatorSpec,
+) -> Result<(), SourceUnavailable> {
+    if recorded == requested {
+        return Ok(());
+    }
+    Err(SourceUnavailable::new(format!(
+        "{} is pinned to dense operator {}/{} (digest {}); requested {}/{} (digest {}); incompatible compile resume refused before mutation",
+        output.display(),
+        recorded.id,
+        recorded.version,
+        recorded.declared_digest(),
+        requested.id,
+        requested.version,
+        requested.declared_digest(),
+    )))
+}
+
+fn publish_dense_operator_binding(
+    output: &Path,
+    requested: &DenseOperatorSpec,
+) -> Result<(), SourceUnavailable> {
+    let requested = validate_dense_operator(requested, "proposed teacher dense-operator binding")?;
+    if let Some(recorded) = read_optional_compiled_dense_operator(output)? {
+        return require_matching_compiled_dense_operator(output, &requested, &recorded);
+    }
+
+    std::fs::create_dir_all(output).map_err(SourceUnavailable::new)?;
+    let path = output.join(DENSE_OPERATOR_BINDING_FILE);
+    let mut bytes = serde_json::to_vec_pretty(&requested).map_err(SourceUnavailable::new)?;
+    bytes.push(b'\n');
+    let temporary = loop {
+        let sequence = DENSE_OPERATOR_TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+        let candidate = output.join(format!(
+            ".{DENSE_OPERATOR_BINDING_FILE}.{}.{}.tmp",
+            std::process::id(),
+            sequence
+        ));
+        match std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&candidate)
+        {
+            Ok(mut file) => {
+                if let Err(error) = file.write_all(&bytes).and_then(|()| file.sync_all()) {
+                    let _ = std::fs::remove_file(&candidate);
+                    return Err(SourceUnavailable::new(format!(
+                        "{}: {error}",
+                        candidate.display()
+                    )));
+                }
+                drop(file);
+                break candidate;
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => {
+                return Err(SourceUnavailable::new(format!(
+                    "{}: {error}",
+                    candidate.display()
+                )));
+            }
+        }
+    };
+
+    match std::fs::hard_link(&temporary, &path) {
+        Ok(()) => {
+            std::fs::remove_file(&temporary).map_err(|error| {
+                SourceUnavailable::new(format!("{}: {error}", temporary.display()))
+            })?;
+            sync_compile_output_directory(output)
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+            let _ = std::fs::remove_file(&temporary);
+            let recorded = read_optional_compiled_dense_operator(output)?.ok_or_else(|| {
+                SourceUnavailable::new(format!(
+                    "{} appeared during dense-operator publication but is now absent",
+                    path.display()
+                ))
+            })?;
+            require_matching_compiled_dense_operator(output, &requested, &recorded)?;
+            sync_compile_output_directory(output)
+        }
+        Err(error) => {
+            let _ = std::fs::remove_file(&temporary);
+            Err(SourceUnavailable::new(format!(
+                "dense-operator sidecar publish {} -> {}: {error}",
+                temporary.display(),
+                path.display()
+            )))
+        }
+    }
+}
+
+fn bind_compiled_dense_operator(
+    output: &Path,
+    requested: Option<&DenseOperatorSpec>,
+) -> Result<(), SourceUnavailable> {
+    if preflight_compiled_dense_operator(output, requested)? {
+        return Ok(());
+    }
+    let requested = requested.ok_or_else(|| {
+        SourceUnavailable::new("dense-operator publication requested without a record")
+    })?;
+    publish_dense_operator_binding(output, requested)
+}
+
+fn pin_compile_identities_with_dense(
+    output: &Path,
+    tokenizer: &TokenizerAdapter,
+    attention_operator: &AttentionOperatorSpec,
+    dense_operator: Option<&DenseOperatorSpec>,
+) -> Result<(), SourceUnavailable> {
+    validate_source_execution_pair(
+        attention_operator,
+        dense_operator,
+        "teacher-declared source execution",
+    )?;
+    // Every check is deliberately read-only. Do not let a successful prefix
+    // of a mismatched identity bundle mutate a resumable output.
+    preflight_compile_tokenizer_adapter(output, tokenizer)?;
+    preflight_compiled_attention_operator(output, attention_operator)?;
+    preflight_compiled_dense_operator(output, dense_operator)?;
+    pin_compile_tokenizer_adapter(output, tokenizer)?;
+    if dense_operator.is_some() {
+        // Dense-first makes every crash prefix fail closed. Publishing
+        // attention first would leave a valid-looking learned-v2/absent-dense
+        // compatibility record until the final generation binding appeared.
+        bind_compiled_dense_operator(output, dense_operator)?;
+    }
+    bind_compiled_attention_operator(output, attention_operator)?;
+    if dense_operator.is_none() {
+        bind_compiled_dense_operator(output, dense_operator)?;
+    }
+    Ok(())
+}
+
+#[cfg(test)]
 fn pin_compile_identities(
     output: &Path,
     tokenizer: &TokenizerAdapter,
     attention_operator: &AttentionOperatorSpec,
 ) -> Result<(), SourceUnavailable> {
-    // Both checks are deliberately read-only. Do not let the successful half
-    // of a mismatched identity pair mutate a resumable output.
-    preflight_compile_tokenizer_adapter(output, tokenizer)?;
-    preflight_compiled_attention_operator(output, attention_operator)?;
-    pin_compile_tokenizer_adapter(output, tokenizer)?;
-    bind_compiled_attention_operator(output, attention_operator)
+    pin_compile_identities_with_dense(output, tokenizer, attention_operator, None)
 }
 
 /// Recorded compilation has no tokenizer authority: its input is already a
@@ -1301,10 +2078,15 @@ fn pin_compile_identities(
 /// compiler's adapter claim or its runtime table would produce a bundle that
 /// looks bound to a token space the recorded path never verified.
 fn preflight_recorded_compile_output(output: &Path) -> Result<(), SourceUnavailable> {
-    const FORBIDDEN_RECORDED_OUTPUT_LEAVES: [&str; 3] = [
+    const FORBIDDEN_RECORDED_OUTPUT_LEAVES: [&str; 8] = [
         "tokenizer.bin",
-        "corpus.records.hidden",
         "space_manifest.json",
+        "compile_report.json",
+        "source_compile_preflight.json",
+        "source_manifest_kappa.json",
+        "compiled_bundle_completion.json",
+        ".compiled_bundle_stage.json",
+        "tokenizer_adapter.json",
     ];
     let _ = compile_output_payload_inventory(output)?;
     if read_compile_tokenizer_adapter(output)?.is_some() {
@@ -1313,11 +2095,24 @@ fn preflight_recorded_compile_output(output: &Path) -> Result<(), SourceUnavaila
             output.display()
         )));
     }
-    for name in FORBIDDEN_RECORDED_OUTPUT_LEAVES {
-        let path = output.join(name);
-        if strict_regular_file_if_present(&path, "recorded compile unsupported leaf")? {
+    let entries = match std::fs::read_dir(output) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(SourceUnavailable::new(error)),
+    };
+    for entry in entries {
+        let entry = entry.map_err(SourceUnavailable::new)?;
+        let Some(entry_name) = entry.file_name().to_str().map(str::to_owned) else {
+            continue;
+        };
+        let forbidden = FORBIDDEN_RECORDED_OUTPUT_LEAVES.iter().any(|stable| {
+            entry_name == *stable
+                || entry_name.starts_with(&format!(".{stable}."))
+                || entry_name.starts_with(&format!("{stable}."))
+        });
+        if forbidden {
             return Err(SourceUnavailable::new(format!(
-                "recorded compile output {} contains {name}, which compile-recorded cannot verify or reproduce; use a fresh recorded-only output directory",
+                "recorded compile output {} contains {entry_name}, which compile-recorded cannot verify or reproduce; use a fresh recorded-only output directory",
                 output.display()
             )));
         }
@@ -1351,6 +2146,87 @@ struct CopyRecordedAttentionOptions {
     corpus_meta: PathBuf,
     corpus_recs: PathBuf,
     output: PathBuf,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct SubsampleRecordedCorpusOptions {
+    source_meta: PathBuf,
+    source_records: PathBuf,
+    output_meta: PathBuf,
+    output_records: PathBuf,
+    records: usize,
+}
+
+fn parse_subsample_recorded_corpus_options(
+    args: &[String],
+) -> Result<SubsampleRecordedCorpusOptions, SourceUnavailable> {
+    let mut source_meta = None;
+    let mut source_records = None;
+    let mut output_meta = None;
+    let mut output_records = None;
+    let mut records = None;
+    let mut index = 0usize;
+    while index < args.len() {
+        let flag = &args[index];
+        let value = args
+            .get(index + 1)
+            .ok_or_else(|| SourceUnavailable::new(format!("missing value for {flag}")))?;
+        match flag.as_str() {
+            "--src-meta" => source_meta = Some(PathBuf::from(value)),
+            "--src-recs" => source_records = Some(PathBuf::from(value)),
+            "--out-meta" => output_meta = Some(PathBuf::from(value)),
+            "--out-recs" => output_records = Some(PathBuf::from(value)),
+            "--records" => {
+                let parsed = value.parse::<usize>().map_err(|_| {
+                    SourceUnavailable::new(format!("invalid --records value: {value}"))
+                })?;
+                if parsed == 0 {
+                    return Err(SourceUnavailable::new(
+                        "--records must be greater than zero",
+                    ));
+                }
+                records = Some(parsed);
+            }
+            _ => {
+                return Err(SourceUnavailable::new(format!(
+                    "unknown subsample-recorded-corpus option: {flag}"
+                )));
+            }
+        }
+        index += 2;
+    }
+    let output_meta =
+        output_meta.ok_or_else(|| SourceUnavailable::new("--out-meta is required"))?;
+    let output_records =
+        output_records.ok_or_else(|| SourceUnavailable::new("--out-recs is required"))?;
+    if output_meta.file_name() != Some(std::ffi::OsStr::new("corpus.meta"))
+        || output_records.file_name() != Some(std::ffi::OsStr::new("corpus.records"))
+    {
+        return Err(SourceUnavailable::new(
+            "subsample output must use the exact canonical corpus.meta/corpus.records filenames",
+        ));
+    }
+    let meta_parent = output_meta
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let records_parent = output_records
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    if meta_parent != records_parent {
+        return Err(SourceUnavailable::new(
+            "--out-meta and --out-recs must have one exact lexical parent directory",
+        ));
+    }
+    Ok(SubsampleRecordedCorpusOptions {
+        source_meta: source_meta.ok_or_else(|| SourceUnavailable::new("--src-meta is required"))?,
+        source_records: source_records
+            .ok_or_else(|| SourceUnavailable::new("--src-recs is required"))?,
+        output_meta,
+        output_records,
+        records: records.ok_or_else(|| SourceUnavailable::new("--records is required"))?,
+    })
 }
 
 fn parse_copy_recorded_attention_options(
@@ -1572,20 +2448,12 @@ fn parse_observe_options(args: &[String]) -> Result<ObserveOptions, SourceUnavai
     Ok(options)
 }
 
-fn read_optional_observation_manifest(
+fn parse_observation_manifest_bytes(
     output: &Path,
-) -> Result<Option<observe::ObservationManifest>, SourceUnavailable> {
-    let path = output.join(observe::MANIFEST_FILE);
-    if !strict_regular_file_if_present(&path, "observation manifest")? {
-        return Ok(None);
-    }
-    let bytes = std::fs::read(&path).map_err(|error| {
-        SourceUnavailable::new(format!(
-            "{}: unreadable observation manifest: {error}",
-            path.display()
-        ))
-    })?;
-    let value: serde_json::Value = serde_json::from_slice(&bytes).map_err(|error| {
+    path: &Path,
+    bytes: &[u8],
+) -> Result<observe::ObservationManifest, SourceUnavailable> {
+    let value: serde_json::Value = serde_json::from_slice(bytes).map_err(|error| {
         SourceUnavailable::new(format!(
             "{}: malformed observation manifest: {error}",
             path.display()
@@ -1593,6 +2461,9 @@ fn read_optional_observation_manifest(
     })?;
     if let Some(operator) = value.get("attention_operator") {
         validate_attention_operator_json(operator, &path.display().to_string())?;
+    }
+    if let Some(operator) = value.get("dense_operator") {
+        validate_dense_operator_json(operator, &path.display().to_string())?;
     }
     let parsed: observe::ObservationManifest = serde_json::from_value(value).map_err(|error| {
         SourceUnavailable::new(format!(
@@ -1616,7 +2487,23 @@ fn read_optional_observation_manifest(
             path.display()
         )));
     }
-    Ok(Some(validated))
+    Ok(validated)
+}
+
+fn read_optional_observation_manifest(
+    output: &Path,
+) -> Result<Option<observe::ObservationManifest>, SourceUnavailable> {
+    let path = output.join(observe::MANIFEST_FILE);
+    if !strict_regular_file_if_present(&path, "observation manifest")? {
+        return Ok(None);
+    }
+    let bytes = std::fs::read(&path).map_err(|error| {
+        SourceUnavailable::new(format!(
+            "{}: unreadable observation manifest: {error}",
+            path.display()
+        ))
+    })?;
+    parse_observation_manifest_bytes(output, &path, &bytes).map(Some)
 }
 
 fn observation_payload_exists(
@@ -1696,11 +2583,12 @@ fn observation_payload_exists(
 /// Validate the tokenizer and operator halves of an observation identity
 /// without opening a writer. Any conflict therefore leaves both manifest
 /// fields and `tokenizer.bin` unchanged.
-fn preflight_observation_identities(
+fn preflight_observation_identities_with_dense(
     output: &Path,
     shard_bits: u8,
     tokenizer: Option<&TokenizerAdapter>,
     attention_operator: Option<&AttentionOperatorSpec>,
+    dense_operator: Option<&DenseOperatorSpec>,
 ) -> Result<(), SourceUnavailable> {
     if let Some(tokenizer) = tokenizer {
         validate_tokenizer_adapter_record(tokenizer)?;
@@ -1710,6 +2598,21 @@ fn preflight_observation_identities(
             validate_attention_operator(operator, "teacher-declared attention operator")
         })
         .transpose()?;
+    let requested_dense = dense_operator
+        .map(|operator| validate_dense_operator(operator, "teacher-declared dense operator"))
+        .transpose()?;
+    match (requested_operator.as_ref(), requested_dense.as_ref()) {
+        (Some(attention), dense) => {
+            validate_source_execution_pair(attention, dense, "teacher-declared source execution")?
+        }
+        (None, Some(dense)) => {
+            return Err(SourceUnavailable::new(format!(
+                "teacher-declared source execution supplies dense operator {}/{} without an attention operator",
+                dense.id, dense.version
+            )));
+        }
+        (None, None) => {}
+    }
     let manifest = read_optional_observation_manifest(output)?;
     if let Some(manifest) = &manifest {
         if manifest.shard_bits != shard_bits {
@@ -1732,6 +2635,31 @@ fn preflight_observation_identities(
                 recorded,
                 &output.join(observe::MANIFEST_FILE).display().to_string(),
             )?;
+        }
+        if let Some(recorded) = &manifest.dense_operator {
+            validate_dense_operator(
+                recorded,
+                &output.join(observe::MANIFEST_FILE).display().to_string(),
+            )?;
+        }
+        match (
+            manifest.attention_operator.as_ref(),
+            manifest.dense_operator.as_ref(),
+        ) {
+            (Some(attention), dense) => validate_source_execution_pair(
+                attention,
+                dense,
+                &output.join(observe::MANIFEST_FILE).display().to_string(),
+            )?,
+            (None, Some(dense)) => {
+                return Err(SourceUnavailable::new(format!(
+                    "{} records dense operator {}/{} without an attention operator",
+                    output.join(observe::MANIFEST_FILE).display(),
+                    dense.id,
+                    dense.version
+                )));
+            }
+            (None, None) => {}
         }
     }
     // Inventory every payload entry even when the two recorded identities
@@ -1811,48 +2739,169 @@ fn preflight_observation_identities(
         }
         (None, _) => {}
     }
+
+    match (
+        manifest
+            .as_ref()
+            .and_then(|manifest| manifest.dense_operator.as_ref()),
+        requested_dense.as_ref(),
+    ) {
+        (Some(recorded), Some(requested)) if recorded == requested => {}
+        (Some(recorded), Some(requested)) => {
+            return Err(SourceUnavailable::new(format!(
+                "{} is pinned to dense operator {}/{} (digest {}); requested {}/{} (digest {}); incompatible observation resume refused before mutation",
+                output.display(),
+                recorded.id,
+                recorded.version,
+                recorded.declared_digest(),
+                requested.id,
+                requested.version,
+                requested.declared_digest(),
+            )));
+        }
+        (Some(recorded), None) => {
+            return Err(SourceUnavailable::new(format!(
+                "{} is pinned to dense operator {}/{} but the requested oracle declares no operator; use a fresh output directory for the legacy arithmetic era",
+                output.display(),
+                recorded.id,
+                recorded.version,
+            )));
+        }
+        (None, Some(requested)) if payload_exists => {
+            return Err(SourceUnavailable::new(format!(
+                "{} has no recorded dense operator but already contains observation payload; refusing to relabel legacy rows as {}/{} before mutation",
+                output.display(),
+                requested.id,
+                requested.version,
+            )));
+        }
+        (None, _) => {}
+    }
     Ok(())
 }
 
-fn pin_raw_observation_identities_before_output(
+#[cfg(test)]
+fn preflight_observation_identities(
+    output: &Path,
+    shard_bits: u8,
+    tokenizer: Option<&TokenizerAdapter>,
+    attention_operator: Option<&AttentionOperatorSpec>,
+) -> Result<(), SourceUnavailable> {
+    preflight_observation_identities_with_dense(
+        output,
+        shard_bits,
+        tokenizer,
+        attention_operator,
+        None,
+    )
+}
+
+fn pin_raw_observation_identities_before_output_with_dense(
     session: &observe::ObservationSession,
     tokenizer: Option<&TokenizerAdapter>,
     geometry: Option<&uor_r4_model_source::geometry::GeometryProjection>,
     attention_operator: Option<&AttentionOperatorSpec>,
+    dense_operator: Option<&DenseOperatorSpec>,
 ) -> Result<(), SourceUnavailable> {
-    preflight_observation_identities(
+    preflight_observation_identities_with_dense(
         session.dir(),
         session.shard_bits(),
         tokenizer,
         attention_operator,
+        dense_operator,
     )?;
     let operator = attention_operator
         .map(|operator| {
             validate_attention_operator(operator, "teacher-declared attention operator")
         })
         .transpose()?;
+    let dense = dense_operator
+        .map(|operator| validate_dense_operator(operator, "teacher-declared dense operator"))
+        .transpose()?;
     // The lower boundary joins geometry with tokenizer/operator on the same
     // locked snapshot. Run its full read-only pass before publishing any
     // identity, then repeat and pin the whole bundle while this session stays
     // live through tokenizer export, reconciliation, and row writes.
-    observe::preflight_observation_identities_in_session(
+    observe::preflight_observation_identities_in_session_with_dense(
         session,
         None,
         geometry,
         tokenizer,
         operator.as_ref(),
+        dense.as_ref(),
         None,
     )?;
-    observe::pin_observation_identities_in_session(
+    observe::pin_observation_identities_in_session_with_dense(
         session,
         None,
         geometry,
         tokenizer,
         operator.as_ref(),
+        dense.as_ref(),
         None,
     )
 }
 
+#[cfg(test)]
+fn pin_raw_observation_identities_before_output(
+    session: &observe::ObservationSession,
+    tokenizer: Option<&TokenizerAdapter>,
+    geometry: Option<&uor_r4_model_source::geometry::GeometryProjection>,
+    attention_operator: Option<&AttentionOperatorSpec>,
+) -> Result<(), SourceUnavailable> {
+    pin_raw_observation_identities_before_output_with_dense(
+        session,
+        tokenizer,
+        geometry,
+        attention_operator,
+        None,
+    )
+}
+
+fn pin_text_observation_identities_before_output_with_dense(
+    session: &observe::ObservationSession,
+    input: &Path,
+    tokenizer: Option<&TokenizerAdapter>,
+    geometry: Option<&uor_r4_model_source::geometry::GeometryProjection>,
+    attention_operator: Option<&AttentionOperatorSpec>,
+    dense_operator: Option<&DenseOperatorSpec>,
+) -> Result<(), SourceUnavailable> {
+    preflight_observation_identities_with_dense(
+        session.dir(),
+        session.shard_bits(),
+        tokenizer,
+        attention_operator,
+        dense_operator,
+    )?;
+    let operator = attention_operator
+        .map(|operator| {
+            validate_attention_operator(operator, "teacher-declared attention operator")
+        })
+        .transpose()?;
+    let dense = dense_operator
+        .map(|operator| validate_dense_operator(operator, "teacher-declared dense operator"))
+        .transpose()?;
+    observe_text::preflight_text_observation_in_session_with_dense(
+        session,
+        input,
+        true,
+        geometry,
+        operator.as_ref(),
+        dense.as_ref(),
+        tokenizer,
+    )?;
+    observe_text::pin_text_observation_identities_in_session_with_dense(
+        session,
+        input,
+        true,
+        geometry,
+        operator.as_ref(),
+        dense.as_ref(),
+        tokenizer,
+    )
+}
+
+#[cfg(test)]
 fn pin_text_observation_identities_before_output(
     session: &observe::ObservationSession,
     input: &Path,
@@ -1860,32 +2909,13 @@ fn pin_text_observation_identities_before_output(
     geometry: Option<&uor_r4_model_source::geometry::GeometryProjection>,
     attention_operator: Option<&AttentionOperatorSpec>,
 ) -> Result<(), SourceUnavailable> {
-    preflight_observation_identities(
-        session.dir(),
-        session.shard_bits(),
+    pin_text_observation_identities_before_output_with_dense(
+        session,
+        input,
         tokenizer,
+        geometry,
         attention_operator,
-    )?;
-    let operator = attention_operator
-        .map(|operator| {
-            validate_attention_operator(operator, "teacher-declared attention operator")
-        })
-        .transpose()?;
-    observe_text::preflight_text_observation_in_session(
-        session,
-        input,
-        true,
-        geometry,
-        operator.as_ref(),
-        tokenizer,
-    )?;
-    observe_text::pin_text_observation_identities_in_session(
-        session,
-        input,
-        true,
-        geometry,
-        operator.as_ref(),
-        tokenizer,
+        None,
     )
 }
 
@@ -1929,11 +2959,13 @@ pub fn observe_command(args: &[String]) -> Result<(), SourceUnavailable> {
     let session = observe::ObservationSession::acquire(&options.output, options.shards)?;
     let geometry = oracle.geometry_projection();
     let attention_operator = oracle.attention_operator_spec();
-    pin_raw_observation_identities_before_output(
+    let dense_operator = oracle.dense_operator_spec();
+    pin_raw_observation_identities_before_output_with_dense(
         &session,
         adapter.as_ref(),
         geometry.as_ref(),
         attention_operator.as_ref(),
+        dense_operator.as_ref(),
     )?;
     let token_byte_lengths = if let Some(runtime_table) = runtime_table.as_ref() {
         eprintln!("exporting tokenizer...");
@@ -1960,7 +2992,19 @@ pub fn observe_command(args: &[String]) -> Result<(), SourceUnavailable> {
         // as the from-text driver, issue #75).
         let merged = observe::merge_shards(session.dir()).map_err(SourceUnavailable::new)?;
         let merged_path = session.dir().join("merged.bin");
-        std::fs::write(&merged_path, &merged)?;
+        write_regular_file_synced(&merged_path, &merged, "merged raw observation corpus")?;
+        let state_path = session.dir().join(observe::STATE_FILE);
+        let binding_cid = uor_r4_graph_compiler::recorded_corpus::publish_binding(
+            session.recorded_corpus_guard(),
+            &state_path,
+            &merged_path,
+        )?;
+        let captured = uor_r4_graph_compiler::recorded_corpus::capture(&state_path, &merged_path)?;
+        if captured.binding_cid.as_deref() != Some(binding_cid.as_str()) {
+            return Err(SourceUnavailable::new(
+                "raw observation binding changed during exact post-publication capture",
+            ));
+        }
         println!(
             "observe complete: {} records at {}",
             summary.records,
@@ -2210,6 +3254,7 @@ pub fn observe_text_command(args: &[String]) -> Result<(), SourceUnavailable> {
     }
     let geometry = pool[0].geometry_projection();
     let attention_operator = pool[0].attention_operator_spec();
+    let dense_operator = pool[0].dense_operator_spec();
     for (worker, oracle) in pool.iter().enumerate().skip(1) {
         if oracle.geometry_projection() != geometry {
             return Err(SourceUnavailable::new(format!(
@@ -2221,17 +3266,23 @@ pub fn observe_text_command(args: &[String]) -> Result<(), SourceUnavailable> {
                 "observe-text worker {worker} loaded a different attention operator before output; refusing a mixed teacher pool"
             )));
         }
+        if oracle.dense_operator_spec() != dense_operator {
+            return Err(SourceUnavailable::new(format!(
+                "observe-text worker {worker} loaded a different dense operator before output; refusing a mixed teacher pool"
+            )));
+        }
     }
     // All potentially fallible teacher/tokenizer loading is complete before
     // the locked output session publishes identities or tokenizer bytes.
     let session = observe::ObservationSession::acquire(&options.output, options.shards)?;
     let adapter = tokenizer.adapter();
-    pin_text_observation_identities_before_output(
+    pin_text_observation_identities_before_output_with_dense(
         &session,
         &options.input,
         adapter.as_ref(),
         geometry.as_ref(),
         attention_operator.as_ref(),
+        dense_operator.as_ref(),
     )?;
     if let Some(runtime_table) = runtime_table.as_ref() {
         token_byte_lengths = export_observation_tokenizer_in_session(&session, runtime_table)?;
@@ -2249,7 +3300,7 @@ pub fn observe_text_command(args: &[String]) -> Result<(), SourceUnavailable> {
         true,
     )
     .map_err(SourceUnavailable::new)?;
-    let result = finish_observe_text_report(&report, session.dir());
+    let result = finish_observe_text_report(&report, &session);
     drop(session);
     result
 }
@@ -2275,12 +3326,14 @@ fn observe_text_batched_command(options: &ObserveTextOptions) -> Result<(), Sour
     let adapter = tokenizer.adapter();
     let geometry = teacher.geometry_projection();
     let attention_operator = teacher.attention_operator_spec();
-    pin_text_observation_identities_before_output(
+    let dense_operator = teacher.dense_operator_spec();
+    pin_text_observation_identities_before_output_with_dense(
         &session,
         &options.input,
         adapter.as_ref(),
         geometry.as_ref(),
         attention_operator.as_ref(),
+        dense_operator.as_ref(),
     )?;
     let token_byte_lengths = export_observation_tokenizer_in_session(&session, &runtime_table)?;
     eprintln!("observing with batch {}", options.batch);
@@ -2307,7 +3360,7 @@ fn observe_text_batched_command(options: &ObserveTextOptions) -> Result<(), Sour
         ),
     }
     .map_err(SourceUnavailable::new)?;
-    let result = finish_observe_text_report(&report, session.dir());
+    let result = finish_observe_text_report(&report, &session);
     drop(session);
     result
 }
@@ -2316,8 +3369,9 @@ fn observe_text_batched_command(options: &ObserveTextOptions) -> Result<(), Sour
 /// merged record stream. Shared by the serial/pool and batched entry points.
 fn finish_observe_text_report(
     report: &observe_text::ObservationReport,
-    output: &std::path::Path,
+    session: &observe::ObservationSession,
 ) -> Result<(), SourceUnavailable> {
+    let output = session.dir();
     println!(
         "observe-text: {} records across {}/{} shards ({} written this run)",
         report.records, report.shards_completed, report.shard_count, report.written
@@ -2347,7 +3401,19 @@ fn finish_observe_text_report(
         // --corpus-recs with state.bin as --corpus-meta (issue #72).
         let merged = observe::merge_shards(output).map_err(SourceUnavailable::new)?;
         let merged_path = output.join("merged.bin");
-        std::fs::write(&merged_path, &merged)?;
+        write_regular_file_synced(&merged_path, &merged, "merged text observation corpus")?;
+        let state_path = output.join(observe::STATE_FILE);
+        let binding_cid = uor_r4_graph_compiler::recorded_corpus::publish_binding(
+            session.recorded_corpus_guard(),
+            &state_path,
+            &merged_path,
+        )?;
+        let captured = uor_r4_graph_compiler::recorded_corpus::capture(&state_path, &merged_path)?;
+        if captured.binding_cid.as_deref() != Some(binding_cid.as_str()) {
+            return Err(SourceUnavailable::new(
+                "text observation binding changed during exact post-publication capture",
+            ));
+        }
         println!(
             "observe-text complete: merged κ {} at {}",
             report
@@ -2398,6 +3464,9 @@ struct CoverOptions {
     /// record itself; the pipeline that held the oracle (or its
     /// `r4_attention` switch) passes it.
     attention_operator: Option<uor_r4_model_source::attention::AttentionOperatorSpec>,
+    /// Typed host-side dense-execution record. Absence is retained for
+    /// historical corpora and Llama; present records are registry exact.
+    dense_operator: Option<DenseOperatorSpec>,
 }
 
 fn parse_cover_options(args: &[String]) -> Result<CoverOptions, SourceUnavailable> {
@@ -2418,6 +3487,7 @@ fn parse_cover_options(args: &[String]) -> Result<CoverOptions, SourceUnavailabl
         source_manifest_kappa: None,
         geometry: None,
         attention_operator: None,
+        dense_operator: None,
     };
     let mut index = 0usize;
     while index < args.len() {
@@ -2504,6 +3574,9 @@ fn parse_cover_options(args: &[String]) -> Result<CoverOptions, SourceUnavailabl
                 })?);
             }
             "--attention-operator" => {
+                serde_json::from_str::<DuplicateRejectingJson>(value).map_err(|error| {
+                    SourceUnavailable::new(format!("invalid --attention-operator value: {error}"))
+                })?;
                 let recorded: serde_json::Value = serde_json::from_str(value).map_err(|error| {
                     SourceUnavailable::new(format!("invalid --attention-operator value: {error}"))
                 })?;
@@ -2511,6 +3584,16 @@ fn parse_cover_options(args: &[String]) -> Result<CoverOptions, SourceUnavailabl
                     &recorded,
                     "--attention-operator",
                 )?);
+            }
+            "--dense-operator" => {
+                serde_json::from_str::<DuplicateRejectingJson>(value).map_err(|error| {
+                    SourceUnavailable::new(format!("invalid --dense-operator value: {error}"))
+                })?;
+                let recorded: serde_json::Value = serde_json::from_str(value).map_err(|error| {
+                    SourceUnavailable::new(format!("invalid --dense-operator value: {error}"))
+                })?;
+                options.dense_operator =
+                    Some(validate_dense_operator_json(&recorded, "--dense-operator")?);
             }
             _ => {
                 return Err(SourceUnavailable::new(format!(
@@ -2520,7 +3603,53 @@ fn parse_cover_options(args: &[String]) -> Result<CoverOptions, SourceUnavailabl
         }
         index += 2;
     }
+    match (
+        options.attention_operator.as_ref(),
+        options.dense_operator.as_ref(),
+    ) {
+        (Some(attention), dense) => {
+            validate_source_execution_pair(attention, dense, "cover provenance")?;
+        }
+        (None, Some(dense)) => {
+            return Err(SourceUnavailable::new(format!(
+                "cover provenance supplies dense operator {}/{} without an attention operator",
+                dense.id, dense.version
+            )));
+        }
+        (None, None) => {}
+    }
     Ok(options)
+}
+
+fn require_cover_recorded_execution_identity(
+    options: &CoverOptions,
+    recorded: &RecordedCorpusExecutionIdentity,
+) -> Result<(), SourceUnavailable> {
+    let attention_label = |record: Option<&AttentionOperatorSpec>| {
+        record
+            .map(|record| format!("{}/{}", record.id, record.version))
+            .unwrap_or_else(|| "absent".to_owned())
+    };
+    let dense_label = |record: Option<&DenseOperatorSpec>| {
+        record
+            .map(|record| format!("{}/{}", record.id, record.version))
+            .unwrap_or_else(|| "absent".to_owned())
+    };
+    if options.attention_operator.as_ref() != recorded.attention_operator.as_ref() {
+        return Err(SourceUnavailable::new(format!(
+            "cover --attention-operator {} does not match recorded corpus attention provenance {}; refusing before output mutation",
+            attention_label(options.attention_operator.as_ref()),
+            attention_label(recorded.attention_operator.as_ref())
+        )));
+    }
+    if options.dense_operator.as_ref() != recorded.dense_operator.as_ref() {
+        return Err(SourceUnavailable::new(format!(
+            "cover --dense-operator {} does not match recorded corpus dense provenance {}; refusing before output mutation",
+            dense_label(options.dense_operator.as_ref()),
+            dense_label(recorded.dense_operator.as_ref())
+        )));
+    }
+    Ok(())
 }
 
 /// Multiresolution cover induction (plan §5 Phase 2, issue #60): induce
@@ -2567,12 +3696,8 @@ pub fn cover_command(args: &[String]) -> Result<(), SourceUnavailable> {
         options.corpus_recs.clone()
     };
 
-    let corpus_meta = corpus_meta_path
-        .to_str()
-        .ok_or_else(|| SourceUnavailable::new("corpus metadata path is not UTF-8"))?;
-    let corpus_recs = corpus_recs_path
-        .to_str()
-        .ok_or_else(|| SourceUnavailable::new("corpus records path is not UTF-8"))?;
+    let recorded_corpus = recorded_corpus_snapshot(&corpus_meta_path, &corpus_recs_path)?;
+    require_cover_recorded_execution_identity(&options, &recorded_corpus.execution)?;
     // #450: resolve and announce the inputs *before* the long work, so the
     // run says which teacher container it actually read. `--artifacts`
     // defaults to a shared mutable path that helper scripts overwrite.
@@ -2587,25 +3712,16 @@ pub fn cover_command(args: &[String]) -> Result<(), SourceUnavailable> {
     })?;
     let artifact_kappa = repro::container_kappa(&artifact_container);
     repro::announce_teacher_container(&options.artifacts, &artifact_kappa);
-    let meta_bytes = std::fs::read(&options.corpus_meta).map_err(|error| {
-        SourceUnavailable::new(format!("{}: {error}", options.corpus_meta.display()))
-    })?;
-    let recs_bytes = std::fs::read(&options.corpus_recs).map_err(|error| {
-        SourceUnavailable::new(format!("{}: {error}", options.corpus_recs.display()))
-    })?;
+    let meta_bytes = recorded_corpus.meta_bytes;
+    let recs_bytes = recorded_corpus.records_bytes;
     let corpus_kappa = repro::corpus_stream_kappa(&meta_bytes, &recs_bytes);
-    repro::announce_corpus(&options.corpus_meta, &options.corpus_recs, &corpus_kappa);
-    if options.corpus_meta != corpus_meta_path || options.corpus_recs != corpus_recs_path {
-        // The κ above addresses the requested paths; the corpus itself is
-        // loaded from the fallback-resolved ones. Say so rather than let a
-        // reader assume the printed κ covers the loaded records.
-        eprintln!(
-            "corpus streams (loaded, after fallback resolution): {} + {}",
-            corpus_meta_path.display(),
-            corpus_recs_path.display()
-        );
-    }
-    let corpus = compiler::load_corpus_from(corpus_meta, corpus_recs).ok_or_else(|| {
+    repro::announce_corpus(&corpus_meta_path, &corpus_recs_path, &corpus_kappa);
+    let corpus = compiler::load_corpus_bytes(
+        &meta_bytes,
+        &recs_bytes,
+        recorded_corpus.hidden_bytes.as_deref(),
+    )
+    .ok_or_else(|| {
         SourceUnavailable::new(format!(
             "corpus is incomplete at {}/{}; run compile until it is complete",
             corpus_meta_path.display(),
@@ -2699,6 +3815,9 @@ pub fn cover_command(args: &[String]) -> Result<(), SourceUnavailable> {
     // #602: bind the teacher's attention-operator record when the caller
     // passed it (`--attention-operator`).
     report.attention_operator = options.attention_operator.clone();
+    // Bind optional host-side dense arithmetic without changing the graph
+    // runtime or artifact format.
+    report.dense_operator = options.dense_operator.clone();
 
     std::fs::create_dir_all(&options.output)?;
     let artifact_path = options.output.join("cover.r4g1");
@@ -3657,6 +4776,12 @@ struct EvaluationSource {
     /// #268 candidate 3: whether a BOS token was prepended at every
     /// held-out story boundary during teacher-forcing (schema 3).
     bos_prefix: bool,
+    /// Exact source-attention arithmetic replayed by the evaluation oracle
+    /// (schema 4).
+    attention_operator: AttentionOperatorSpec,
+    /// Exact optional host-side dense arithmetic replayed by the evaluation
+    /// oracle. `None` is durable typed absence for Llama/historical bundles.
+    dense_operator: Option<DenseOperatorSpec>,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -3667,6 +4792,11 @@ struct EvaluationArtifacts {
     tokenizer_cid: String,
     corpus_meta_cid: String,
     corpus_records_cid: String,
+    attention_operator_cid: String,
+    dense_operator_cid: Option<String>,
+    /// Exact content address of the canonical generation commit. Historical
+    /// markerless/Llama bundles retain typed absence.
+    recorded_corpus_binding_cid: Option<String>,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -4042,6 +5172,41 @@ fn require_matching_evaluation_attention_operator(
     )))
 }
 
+fn require_matching_evaluation_dense_operator(
+    compiled: &Path,
+    recorded: Option<&DenseOperatorSpec>,
+    actual: Option<&DenseOperatorSpec>,
+) -> Result<(), SourceUnavailable> {
+    match (recorded, actual) {
+        (Some(recorded), Some(actual)) if recorded == actual => Ok(()),
+        (None, None) => Ok(()),
+        (Some(recorded), Some(actual)) => Err(SourceUnavailable::new(format!(
+            "{} is pinned to dense operator {}/{} (digest {}), but the loaded evaluation teacher computes {}/{} (digest {}); evaluation refused before replay",
+            compiled.display(),
+            recorded.id,
+            recorded.version,
+            recorded.declared_digest(),
+            actual.id,
+            actual.version,
+            actual.declared_digest(),
+        ))),
+        (Some(recorded), None) => Err(SourceUnavailable::new(format!(
+            "{} is pinned to dense operator {}/{} (digest {}), but the loaded evaluation teacher declares none; evaluation refused before replay",
+            compiled.display(),
+            recorded.id,
+            recorded.version,
+            recorded.declared_digest(),
+        ))),
+        (None, Some(actual)) => Err(SourceUnavailable::new(format!(
+            "{} records the legacy dense-operator-absent era, but the loaded evaluation teacher computes {}/{} (digest {}); evaluation refused before replay",
+            compiled.display(),
+            actual.id,
+            actual.version,
+            actual.declared_digest(),
+        ))),
+    }
+}
+
 fn evaluate_report(args: &[String]) -> Result<(), SourceUnavailable> {
     let options = parse_evaluate_report_options(args)?;
     // Evaluation decodes/classifies in the same registered id space selected
@@ -4062,7 +5227,6 @@ fn evaluate_report(args: &[String]) -> Result<(), SourceUnavailable> {
         &tokenizer_adapter,
         &recorded_adapter,
     )?;
-    let recorded_attention_operator = compiled_attention_operator(&options.compiled)?;
     let report_path = options
         .report
         .clone()
@@ -4074,6 +5238,40 @@ fn evaluate_report(args: &[String]) -> Result<(), SourceUnavailable> {
     let scored_graph_path = options.compiled.join("graph").join("score.r4g1");
     let corpus_meta_path = options.compiled.join("corpus.meta");
     let corpus_records_path = options.compiled.join("corpus.records");
+    let recorded_corpus = recorded_corpus_snapshot(&corpus_meta_path, &corpus_records_path)?;
+    let recorded_attention_operator = recorded_corpus
+        .execution
+        .attention_operator
+        .clone()
+        .ok_or_else(|| {
+            SourceUnavailable::new(format!(
+                "{}: missing teacher attention-operator binding",
+                options
+                    .compiled
+                    .join(ATTENTION_OPERATOR_BINDING_FILE)
+                    .display()
+            ))
+        })?;
+    let attention_bytes = recorded_corpus
+        .attention_operator_bytes
+        .as_deref()
+        .ok_or_else(|| {
+            SourceUnavailable::new(
+                "compiled evaluation attention identity has no exact captured sidecar bytes",
+            )
+        })?;
+    let recorded_dense_operator = recorded_corpus.execution.dense_operator.clone();
+    if recorded_dense_operator.is_some() != recorded_corpus.dense_operator_bytes.is_some() {
+        return Err(SourceUnavailable::new(
+            "compiled evaluation dense identity and exact captured sidecar-byte presence disagree",
+        ));
+    }
+    let attention_operator_cid = format!("blake3:{}", blake3::hash(attention_bytes).to_hex());
+    let dense_operator_cid = recorded_corpus
+        .dense_operator_bytes
+        .as_deref()
+        .map(|bytes| format!("blake3:{}", blake3::hash(bytes).to_hex()));
+    let recorded_corpus_binding_cid = recorded_corpus.binding_cid.clone();
     let scored_graph_bytes =
         read_required_regular_file(&scored_graph_path, "final scored R4G1 graph")?;
     let tokenizer_bytes = read_required_regular_file(&tokenizer_path, "tokenizer.bin")?;
@@ -4082,16 +5280,20 @@ fn evaluate_report(args: &[String]) -> Result<(), SourceUnavailable> {
     let artifacts_cid = file_cid(&artifacts_path)?;
     let store_cid = file_cid(&store_path)?;
     let tokenizer_cid = format!("blake3:{}", blake3::hash(&tokenizer_bytes).to_hex());
-    let corpus_meta_cid = file_cid(&corpus_meta_path)?;
-    let corpus_records_cid = file_cid(&corpus_records_path)?;
-
-    let corpus_meta = corpus_meta_path
-        .to_str()
-        .ok_or_else(|| SourceUnavailable::new("corpus metadata path is not UTF-8"))?;
-    let corpus_records = corpus_records_path
-        .to_str()
-        .ok_or_else(|| SourceUnavailable::new("corpus records path is not UTF-8"))?;
-    let corpus = compiler::load_corpus_from(corpus_meta, corpus_records).ok_or_else(|| {
+    let corpus_meta_cid = format!(
+        "blake3:{}",
+        blake3::hash(&recorded_corpus.meta_bytes).to_hex()
+    );
+    let corpus_records_cid = format!(
+        "blake3:{}",
+        blake3::hash(&recorded_corpus.records_bytes).to_hex()
+    );
+    let corpus = compiler::load_corpus_bytes(
+        &recorded_corpus.meta_bytes,
+        &recorded_corpus.records_bytes,
+        recorded_corpus.hidden_bytes.as_deref(),
+    )
+    .ok_or_else(|| {
         SourceUnavailable::new(format!(
             "corpus is incomplete at {}; rerun compile until it is complete",
             options.compiled.display()
@@ -4118,10 +5320,24 @@ fn evaluate_report(args: &[String]) -> Result<(), SourceUnavailable> {
         &actual_attention_operator,
         "evaluation teacher attention operator",
     )?;
+    let actual_dense_operator = oracle
+        .dense_operator_spec()
+        .map(|operator| validate_dense_operator(&operator, "evaluation teacher dense operator"))
+        .transpose()?;
+    validate_source_execution_pair(
+        &actual_attention_operator,
+        actual_dense_operator.as_ref(),
+        "evaluation teacher source execution",
+    )?;
     require_matching_evaluation_attention_operator(
         &options.compiled,
         &recorded_attention_operator,
         &actual_attention_operator,
+    )?;
+    require_matching_evaluation_dense_operator(
+        &options.compiled,
+        recorded_dense_operator.as_ref(),
+        actual_dense_operator.as_ref(),
     )?;
     let mut teacher_logits = vec![0f32; oracle.vocab()];
     let artifacts_bytes = std::fs::read(&artifacts_path)?;
@@ -4377,7 +5593,7 @@ fn evaluate_report(args: &[String]) -> Result<(), SourceUnavailable> {
         ),
     };
     let report = EvaluationReport {
-        schema: 3,
+        schema: 5,
         distribution: EvaluationDistribution {
             name: distribution_name,
             split: "compiler::train_cut 80/20 by story id".to_owned(),
@@ -4388,6 +5604,8 @@ fn evaluate_report(args: &[String]) -> Result<(), SourceUnavailable> {
             cid: source_cid,
             sequence_length: options.sequence_length,
             bos_prefix: options.bos,
+            attention_operator: recorded_attention_operator,
+            dense_operator: recorded_dense_operator,
         },
         artifacts: EvaluationArtifacts {
             directory: options.compiled.display().to_string(),
@@ -4396,6 +5614,9 @@ fn evaluate_report(args: &[String]) -> Result<(), SourceUnavailable> {
             tokenizer_cid,
             corpus_meta_cid,
             corpus_records_cid,
+            attention_operator_cid,
+            dense_operator_cid,
+            recorded_corpus_binding_cid,
         },
         metrics: EvaluationMetrics {
             top1_accuracy_pct,
@@ -4570,7 +5791,7 @@ where
         .output
         .clone()
         .unwrap_or_else(|| PathBuf::from(".uor-models/compiled").join(&slug));
-    let _corpus_session = source_corpus_session(&output)?;
+    let mut corpus_session = source_corpus_session(&output)?;
     eprintln!("compiler output: {}", output.display());
     let meta = output.join("corpus.meta");
     let records = output.join("corpus.records");
@@ -4590,11 +5811,18 @@ where
     let attention_operator = oracle.attention_operator_spec().ok_or_else(|| {
         SourceUnavailable::new("Hugging Face teacher declares no attention operator")
     })?;
+    let dense_operator = oracle.dense_operator_spec();
+    validate_source_execution_pair(
+        &attention_operator,
+        dense_operator.as_ref(),
+        "Hugging Face teacher source execution",
+    )?;
     // Keep every identity and corpus-resume check read-only until the whole
     // bundle has been accepted. In particular, malformed regular metadata
     // must not be mistaken for a fresh corpus after either sidecar is pinned.
     preflight_compile_tokenizer_adapter(&output, &tokenizer_adapter)?;
     preflight_compiled_attention_operator(&output, &attention_operator)?;
+    preflight_compiled_dense_operator(&output, dense_operator.as_ref())?;
     let hidden_row_bytes = oracle
         .hidden_state()
         .map(|hidden| {
@@ -4606,7 +5834,17 @@ where
                 })
         })
         .transpose()?;
+    let _ = preflight_source_compile_resume(&output, hidden_row_bytes, options.target)?;
+    // Canonical order: source-specific outer session, then the one common
+    // recorded-corpus producer guard. Repeat every semantic/resume preflight
+    // after the common guard creates or binds the root and before the first
+    // recover/pin/generate mutation.
+    corpus_session.acquire_recorded_corpus(&output)?;
+    preflight_compile_tokenizer_adapter(&output, &tokenizer_adapter)?;
+    preflight_compiled_attention_operator(&output, &attention_operator)?;
+    preflight_compiled_dense_operator(&output, dense_operator.as_ref())?;
     let resume = preflight_source_compile_resume(&output, hidden_row_bytes, options.target)?;
+    corpus_session.begin_recorded_corpus_mutation(&output)?;
     // All read-only identity and resume checks have now accepted the bundle.
     // Under the server's cross-process output session, reclaim only the
     // core compiler's exact reserved checkpoint temporaries; arbitrary names
@@ -4615,7 +5853,12 @@ where
     // A story checkpoint commits records and hidden rows together. Normalize
     // both interrupted tails before the core generator reopens either stream.
     reconcile_source_compile_resume(&output, &resume)?;
-    pin_compile_identities(&output, &tokenizer_adapter, &attention_operator)?;
+    pin_compile_identities_with_dense(
+        &output,
+        &tokenizer_adapter,
+        &attention_operator,
+        dense_operator.as_ref(),
+    )?;
     progress(5, "Exporting tokenizer...");
     eprintln!("exporting tokenizer...");
     let tokenizer_export = core_scenarios::export_runtime_tokenizer_table(
@@ -4632,13 +5875,36 @@ where
         records,
         tokenizer_export.source_byte_lengths.as_deref(),
     );
-    let Some(corpus) = compiler::load_corpus_from(meta, records) else {
+    if compiler::load_corpus_from(meta, records).is_none() {
         println!(
             "corpus is not complete; rerun the same command to resume {}",
             output.display()
         );
         return Ok(());
-    };
+    }
+    let binding_cid = uor_r4_graph_compiler::recorded_corpus::publish_binding(
+        corpus_session.recorded_corpus_guard()?,
+        Path::new(meta),
+        Path::new(records),
+    )?;
+    let captured =
+        uor_r4_graph_compiler::recorded_corpus::capture(Path::new(meta), Path::new(records))?;
+    if captured.binding_cid.as_deref() != Some(binding_cid.as_str()) {
+        return Err(SourceUnavailable::new(
+            "published recorded-corpus binding CID changed during exact recapture",
+        ));
+    }
+    corpus_session
+        .recorded_corpus_guard()?
+        .finish_compile_attempt()?;
+    let corpus = compiler::load_corpus_bytes(
+        &captured.meta_bytes,
+        &captured.records_bytes,
+        captured.hidden_bytes.as_deref(),
+    )
+    .ok_or_else(|| {
+        SourceUnavailable::new("published recorded corpus failed exact-byte recapture and parsing")
+    })?;
     progress(55, "Compiling table-native artifact...");
     eprintln!("teacher corpus complete; compiling table-native artifact...");
     let artifacts = compiler::compile(&oracle, &corpus);
@@ -4729,6 +5995,83 @@ where
     Ok(())
 }
 
+/// Registry-exact host execution identity attached to a recorded corpus.
+/// Both fields preserve genuine historical absence; callers that need the
+/// pre-#602 standard/1 interpretation apply it only after this joint snapshot.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecordedCorpusExecutionIdentity {
+    pub attention_operator: Option<AttentionOperatorSpec>,
+    pub dense_operator: Option<DenseOperatorSpec>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct RecordedCorpusSnapshot {
+    execution: RecordedCorpusExecutionIdentity,
+    attention_operator_bytes: Option<Vec<u8>>,
+    dense_operator_bytes: Option<Vec<u8>>,
+    meta_bytes: Vec<u8>,
+    records_bytes: Vec<u8>,
+    hidden_bytes: Option<Vec<u8>>,
+    binding_cid: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct RecordedCorpusStreamFingerprint {
+    meta_bytes: Vec<u8>,
+    records_length: u64,
+    records_digest: String,
+    hidden: Option<(u64, String)>,
+}
+
+fn recorded_corpus_stream_fingerprint(
+    snapshot: &uor_r4_graph_compiler::recorded_corpus::RecordedCorpusStreamSnapshot,
+) -> RecordedCorpusStreamFingerprint {
+    RecordedCorpusStreamFingerprint {
+        meta_bytes: snapshot.meta_bytes.clone(),
+        records_length: snapshot.records.len(),
+        records_digest: snapshot.records.declared_digest().to_owned(),
+        hidden: snapshot
+            .hidden
+            .as_ref()
+            .map(|hidden| (hidden.len(), hidden.declared_digest().to_owned())),
+    }
+}
+
+fn recorded_execution_from_stream(
+    snapshot: &uor_r4_graph_compiler::recorded_corpus::RecordedCorpusStreamSnapshot,
+) -> RecordedCorpusExecutionIdentity {
+    RecordedCorpusExecutionIdentity {
+        attention_operator: snapshot.execution.attention_operator.clone(),
+        dense_operator: snapshot.execution.dense_operator.clone(),
+    }
+}
+
+#[cfg(test)]
+fn recorded_hidden_path(corpus_records: &Path) -> Result<PathBuf, SourceUnavailable> {
+    let records = corpus_records
+        .to_str()
+        .ok_or_else(|| SourceUnavailable::new("corpus records path is not UTF-8"))?;
+    Ok(if records.ends_with("_recs.bin") {
+        PathBuf::from(records.replace("_recs.bin", "_hidden.bin"))
+    } else {
+        PathBuf::from(format!("{records}.hidden"))
+    })
+}
+
+#[cfg(test)]
+fn recorded_provenance_snapshot(root: &Path) -> Result<[Option<Vec<u8>>; 3], SourceUnavailable> {
+    let paths = [
+        root.join(observe::MANIFEST_FILE),
+        root.join(ATTENTION_OPERATOR_BINDING_FILE),
+        root.join(DENSE_OPERATOR_BINDING_FILE),
+    ];
+    let mut snapshot: [Option<Vec<u8>>; 3] = [None, None, None];
+    for (slot, path) in paths.iter().enumerate() {
+        snapshot[slot] = read_optional_regular_file_nofollow(path, "recorded provenance")?;
+    }
+    Ok(snapshot)
+}
+
 /// Resolve the arithmetic era accompanying a canonically paired recorded
 /// corpus. Observation directories carry it in `manifest.json`; compile
 /// directories carry the extracted sidecar. `None` means both records are
@@ -4738,10 +6081,17 @@ where
 /// (`corpus.meta` / `corpus.records`) or observation (`state.bin` /
 /// `merged.bin`) pair. Arbitrarily named files remain compatible only when
 /// both provenance entries are genuinely absent.
-pub fn recorded_corpus_attention_operator(
+#[cfg(test)]
+fn recorded_corpus_execution_identity_and_capture_with_recheck_hooks<T, F, G>(
     corpus_meta: &Path,
     corpus_records: &Path,
-) -> Result<Option<AttentionOperatorSpec>, SourceUnavailable> {
+    after_snapshot: F,
+    before_recheck: G,
+) -> Result<(RecordedCorpusExecutionIdentity, T), SourceUnavailable>
+where
+    F: FnOnce(),
+    G: FnOnce() -> Result<T, SourceUnavailable>,
+{
     fn canonical_parent(path: &Path, label: &str) -> Result<PathBuf, SourceUnavailable> {
         let metadata = std::fs::symlink_metadata(path).map_err(|error| {
             SourceUnavailable::new(format!(
@@ -4802,18 +6152,48 @@ pub fn recorded_corpus_attention_operator(
         )));
     }
     let root = meta_root;
-    let sidecar = read_optional_compiled_attention_operator(&root)?;
+    let before = recorded_provenance_snapshot(&root)?;
+    after_snapshot();
+    let captured = before_recheck()?;
+    let after = recorded_provenance_snapshot(&root)?;
+    if before != after {
+        return Err(SourceUnavailable::new(format!(
+            "recorded corpus provenance in {} changed or disappeared while its attention/dense identity was resolved; retry from a stable snapshot",
+            root.display()
+        )));
+    }
+    let attention_path = root.join(ATTENTION_OPERATOR_BINDING_FILE);
+    let sidecar = before[1]
+        .as_deref()
+        .map(|bytes| parse_compiled_attention_operator_bytes(&attention_path, bytes))
+        .transpose()?;
+    let dense_path = root.join(DENSE_OPERATOR_BINDING_FILE);
+    let dense_sidecar = before[2]
+        .as_deref()
+        .map(|bytes| parse_compiled_dense_operator_bytes(&dense_path, bytes))
+        .transpose()?;
     let manifest_path = root.join(observe::MANIFEST_FILE);
-    let manifest = read_optional_observation_manifest(&root)?;
+    let manifest = before[0]
+        .as_deref()
+        .map(|bytes| parse_observation_manifest_bytes(&root, &manifest_path, bytes))
+        .transpose()?;
     let manifest_present = manifest.is_some();
     let manifest_operator = manifest
-        .and_then(|manifest| manifest.attention_operator)
+        .as_ref()
+        .and_then(|manifest| manifest.attention_operator.clone())
         .map(|recorded| {
             validate_attention_operator(&recorded, &manifest_path.display().to_string())
         })
         .transpose()?;
+    let manifest_dense = manifest
+        .as_ref()
+        .and_then(|manifest| manifest.dense_operator.clone())
+        .map(|recorded| validate_dense_operator(&recorded, &manifest_path.display().to_string()))
+        .transpose()?;
 
-    if (sidecar.is_some() || manifest_present) && !is_canonical_pair(corpus_meta, corpus_records) {
+    if (sidecar.is_some() || dense_sidecar.is_some() || manifest_present)
+        && !is_canonical_pair(corpus_meta, corpus_records)
+    {
         return Err(SourceUnavailable::new(format!(
             "recorded-corpus provenance in {} applies only to the canonical corpus.meta/corpus.records or state.bin/merged.bin pair; refusing to attach it to {}/{}",
             root.display(),
@@ -4835,9 +6215,9 @@ pub fn recorded_corpus_attention_operator(
         )));
     }
 
-    match (sidecar, manifest_operator) {
+    let attention = match (sidecar, manifest_operator) {
         (Some(sidecar), Some(manifest)) if sidecar != manifest => {
-            Err(SourceUnavailable::new(format!(
+            return Err(SourceUnavailable::new(format!(
                 "{} and {} declare different attention operators ({}/{} digest {} versus {}/{} digest {})",
                 root.join(ATTENTION_OPERATOR_BINDING_FILE).display(),
                 manifest_path.display(),
@@ -4847,62 +6227,744 @@ pub fn recorded_corpus_attention_operator(
                 manifest.id,
                 manifest.version,
                 manifest.declared_digest(),
-            )))
+            )));
         }
-        (Some(sidecar), _) => Ok(Some(sidecar)),
-        (None, Some(manifest)) => Ok(Some(manifest)),
-        (None, None) => Ok(None),
+        (Some(sidecar), _) => Some(sidecar),
+        (None, Some(manifest)) => Some(manifest),
+        (None, None) => None,
+    };
+    if let Some(sidecar) = dense_sidecar.as_ref()
+        && manifest_present
+        && manifest_dense.is_none()
+    {
+        return Err(SourceUnavailable::new(format!(
+            "{} declares dense operator {}/{} but present {} records the legacy dense-operator-absent era; refusing conflicting recorded-corpus provenance",
+            root.join(DENSE_OPERATOR_BINDING_FILE).display(),
+            sidecar.id,
+            sidecar.version,
+            manifest_path.display(),
+        )));
     }
+    let dense = match (dense_sidecar, manifest_dense) {
+        (Some(sidecar), Some(manifest)) if sidecar != manifest => {
+            return Err(SourceUnavailable::new(format!(
+                "{} and {} declare different dense operators ({}/{} digest {} versus {}/{} digest {})",
+                root.join(DENSE_OPERATOR_BINDING_FILE).display(),
+                manifest_path.display(),
+                sidecar.id,
+                sidecar.version,
+                sidecar.declared_digest(),
+                manifest.id,
+                manifest.version,
+                manifest.declared_digest(),
+            )));
+        }
+        (Some(sidecar), _) => Some(sidecar),
+        (None, Some(manifest)) => Some(manifest),
+        (None, None) => None,
+    };
+    match (attention.as_ref(), dense.as_ref()) {
+        (Some(attention), dense) => {
+            validate_source_execution_pair(attention, dense, "recorded corpus provenance")?;
+        }
+        (None, Some(dense)) => {
+            return Err(SourceUnavailable::new(format!(
+                "recorded corpus declares dense operator {}/{} without an attention operator",
+                dense.id, dense.version
+            )));
+        }
+        (None, None) => {}
+    }
+    Ok((
+        RecordedCorpusExecutionIdentity {
+            attention_operator: attention,
+            dense_operator: dense,
+        },
+        captured,
+    ))
 }
 
-/// Copy only the registry-exact source-attention provenance of a recorded
-/// corpus. This tooling seam deliberately delegates all source pairing and
-/// manifest validation to [`recorded_corpus_attention_operator`] instead of
-/// reinterpreting observation JSON in a shell/Python helper.
+#[cfg(test)]
+fn recorded_corpus_execution_identity_with_recheck_hooks<F, G>(
+    corpus_meta: &Path,
+    corpus_records: &Path,
+    after_snapshot: F,
+    before_recheck: G,
+) -> Result<RecordedCorpusExecutionIdentity, SourceUnavailable>
+where
+    F: FnOnce(),
+    G: FnOnce(),
+{
+    recorded_corpus_execution_identity_and_capture_with_recheck_hooks(
+        corpus_meta,
+        corpus_records,
+        after_snapshot,
+        || {
+            before_recheck();
+            Ok(())
+        },
+    )
+    .map(|(execution, ())| execution)
+}
+
+/// Resolve attention and dense provenance from one stable filesystem
+/// snapshot, refusing any change or disappearance observed during the read.
+pub fn recorded_corpus_execution_identity(
+    corpus_meta: &Path,
+    corpus_records: &Path,
+) -> Result<RecordedCorpusExecutionIdentity, SourceUnavailable> {
+    let captured =
+        uor_r4_graph_compiler::recorded_corpus::execution_identity(corpus_meta, corpus_records)?;
+    Ok(RecordedCorpusExecutionIdentity {
+        attention_operator: captured.attention_operator,
+        dense_operator: captured.dense_operator,
+    })
+}
+
+#[cfg(test)]
+fn recorded_corpus_snapshot_with_hooks<F, G>(
+    corpus_meta: &Path,
+    corpus_records: &Path,
+    after_provenance_capture: F,
+    after_corpus_capture: G,
+) -> Result<RecordedCorpusSnapshot, SourceUnavailable>
+where
+    F: FnOnce(),
+    G: FnOnce(),
+{
+    let (execution, (meta_bytes, records_bytes, hidden_bytes)) =
+        recorded_corpus_execution_identity_and_capture_with_recheck_hooks(
+            corpus_meta,
+            corpus_records,
+            after_provenance_capture,
+            || {
+                let meta_bytes =
+                    read_optional_regular_file_nofollow(corpus_meta, "recorded corpus metadata")?
+                        .ok_or_else(|| {
+                        SourceUnavailable::new(format!(
+                            "recorded corpus metadata {} disappeared during capture",
+                            corpus_meta.display()
+                        ))
+                    })?;
+                let records_bytes =
+                    read_optional_regular_file_nofollow(corpus_records, "recorded corpus records")?
+                        .ok_or_else(|| {
+                            SourceUnavailable::new(format!(
+                                "recorded corpus records {} disappeared during capture",
+                                corpus_records.display()
+                            ))
+                        })?;
+                let hidden_path = recorded_hidden_path(corpus_records)?;
+                let hidden_bytes = read_optional_regular_file_nofollow(
+                    &hidden_path,
+                    "recorded corpus hidden stream",
+                )?;
+
+                after_corpus_capture();
+
+                verify_optional_regular_file_nofollow(
+                    corpus_meta,
+                    "recorded corpus metadata",
+                    Some(meta_bytes.as_slice()),
+                )?;
+                verify_optional_regular_file_nofollow(
+                    corpus_records,
+                    "recorded corpus records",
+                    Some(records_bytes.as_slice()),
+                )?;
+                verify_optional_regular_file_nofollow(
+                    &hidden_path,
+                    "recorded corpus hidden stream",
+                    hidden_bytes.as_deref(),
+                )?;
+                Ok((meta_bytes, records_bytes, hidden_bytes))
+            },
+        )?;
+    Ok(RecordedCorpusSnapshot {
+        execution,
+        attention_operator_bytes: None,
+        dense_operator_bytes: None,
+        meta_bytes,
+        records_bytes,
+        hidden_bytes,
+        binding_cid: None,
+    })
+}
+
+#[cfg(test)]
+fn recorded_corpus_snapshot_with_hook<F>(
+    corpus_meta: &Path,
+    corpus_records: &Path,
+    after_capture: F,
+) -> Result<RecordedCorpusSnapshot, SourceUnavailable>
+where
+    F: FnOnce(),
+{
+    recorded_corpus_snapshot_with_hooks(corpus_meta, corpus_records, || {}, after_capture)
+}
+
+fn recorded_corpus_snapshot(
+    corpus_meta: &Path,
+    corpus_records: &Path,
+) -> Result<RecordedCorpusSnapshot, SourceUnavailable> {
+    let captured = uor_r4_graph_compiler::recorded_corpus::capture(corpus_meta, corpus_records)?;
+    Ok(RecordedCorpusSnapshot {
+        execution: RecordedCorpusExecutionIdentity {
+            attention_operator: captured.execution.attention_operator,
+            dense_operator: captured.execution.dense_operator,
+        },
+        attention_operator_bytes: captured.attention_operator_bytes,
+        dense_operator_bytes: captured.dense_operator_bytes,
+        meta_bytes: captured.meta_bytes,
+        records_bytes: captured.records_bytes,
+        hidden_bytes: captured.hidden_bytes,
+        binding_cid: captured.binding_cid,
+    })
+}
+
+pub fn recorded_corpus_attention_operator(
+    corpus_meta: &Path,
+    corpus_records: &Path,
+) -> Result<Option<AttentionOperatorSpec>, SourceUnavailable> {
+    Ok(recorded_corpus_execution_identity(corpus_meta, corpus_records)?.attention_operator)
+}
+
+/// Resolve the optional dense-execution record accompanying a recorded
+/// corpus. Unlike the pre-#602 attention interpretation, genuine absence is
+/// never synthesized: it is the exact historical/Llama compatibility state.
+pub fn recorded_corpus_dense_operator(
+    corpus_meta: &Path,
+    corpus_records: &Path,
+) -> Result<Option<DenseOperatorSpec>, SourceUnavailable> {
+    Ok(recorded_corpus_execution_identity(corpus_meta, corpus_records)?.dense_operator)
+}
+
+/// Copy the complete registry-exact source-execution pair of a recorded
+/// corpus. The historical command name and `--out attention_operator.json`
+/// spelling remain stable; a present dense record is published to the sibling
+/// `dense_operator.json`. Every source and destination check precedes either
+/// publication so a conflict cannot partially relabel the derived corpus.
 pub fn copy_recorded_attention(args: &[String]) -> Result<(), SourceUnavailable> {
+    copy_recorded_attention_with_after_dense(args, || Ok(()))
+}
+
+fn copy_recorded_attention_with_after_dense<F>(
+    args: &[String],
+    _after_dense: F,
+) -> Result<(), SourceUnavailable>
+where
+    F: FnOnce() -> Result<(), SourceUnavailable>,
+{
     let options = parse_copy_recorded_attention_options(args)?;
-    let resolved = recorded_corpus_attention_operator(&options.corpus_meta, &options.corpus_recs)?;
-    match resolved {
-        Some(operator) => {
-            let parent = options
-                .output
+    // Resolve the source pair before touching the destination. The lower
+    // bounded reader hashes large members without retaining them and holds a
+    // source guard for markerless compatibility generations.
+    let resolved = recorded_corpus_execution_identity(&options.corpus_meta, &options.corpus_recs)?;
+    let parent = options
+        .output
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    match std::fs::symlink_metadata(parent) {
+        Ok(metadata) if metadata.file_type().is_dir() => {}
+        Ok(_) => {
+            return Err(SourceUnavailable::new(format!(
+                "source-execution destination parent {} is not a real directory",
+                parent.display()
+            )));
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Err(SourceUnavailable::new(format!(
+                "source-execution destination parent {} is absent; create its complete canonical corpus pair before copying provenance",
+                parent.display()
+            )));
+        }
+        Err(error) => {
+            return Err(SourceUnavailable::new(format!(
+                "source-execution destination parent {} cannot be inspected: {error}",
+                parent.display()
+            )));
+        }
+    }
+
+    let destination_root = std::fs::canonicalize(parent).map_err(SourceUnavailable::new)?;
+    let mut producer =
+        uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerGuard::try_acquire(
+            &destination_root,
+        )?;
+    producer.ensure_root()?;
+    let source_root = std::fs::canonicalize(
+        options
+            .corpus_meta
+            .parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
+            .unwrap_or_else(|| Path::new(".")),
+    )
+    .map_err(SourceUnavailable::new)?;
+    if producer.protects_directory(&source_root)? {
+        return Err(SourceUnavailable::new(
+            "copy-recorded-attention source and destination resolve to the same canonical corpus root; in-place provenance copy is refused before mutation",
+        ));
+    }
+
+    preflight_guarded_planned_scope(&producer, &[], "provenance-copy destination")?;
+    let recoverable_binding =
+        producer.preflight_publication_namespace_for(RecordedCorpusRole::Compile)?;
+    if recoverable_binding {
+        return Err(SourceUnavailable::new(
+            "copy-recorded-attention owns no corpus generation and cannot recover a canonical binding temporary",
+        ));
+    }
+    let destination_meta = destination_root.join("corpus.meta");
+    let destination_records = destination_root.join("corpus.records");
+    let destination = uor_r4_graph_compiler::recorded_corpus::open_stream(
+        &destination_meta,
+        &destination_records,
+    )?;
+    let destination_execution = recorded_execution_from_stream(&destination);
+    let destination_fingerprint = recorded_corpus_stream_fingerprint(&destination);
+    if destination.binding_cid.is_some() {
+        if destination_execution == resolved {
+            destination.verify_generation()?;
+            return Ok(());
+        }
+        return Err(SourceUnavailable::new(
+            "destination corpus is already binding-committed under a different source-execution identity; refusing relabel before mutation",
+        ));
+    }
+    if resolved.dense_operator.is_some() {
+        return Err(SourceUnavailable::new(
+            "copy-recorded-attention cannot authorize a new dense-present derivation; use subsample-recorded-corpus so derived bytes and provenance commit in one guarded transaction",
+        ));
+    }
+    if destination_execution == resolved {
+        destination.verify_generation()?;
+        return Ok(());
+    }
+    let destination_unbound = destination_execution.attention_operator.is_none()
+        && destination_execution.dense_operator.is_none();
+    if !destination_unbound {
+        return Err(SourceUnavailable::new(
+            "destination markerless corpus already carries a different execution identity; refusing relabel before mutation",
+        ));
+    }
+    let Some(attention) = resolved.attention_operator.as_ref() else {
+        destination.verify_generation()?;
+        return Ok(());
+    };
+    destination.verify_generation()?;
+    publish_attention_operator_binding(&destination_root, attention)?;
+    let published = uor_r4_graph_compiler::recorded_corpus::open_stream(
+        &destination_meta,
+        &destination_records,
+    )?;
+    let published_execution = recorded_execution_from_stream(&published);
+    if published_execution.attention_operator.as_ref() != Some(attention)
+        || published_execution.dense_operator.is_some()
+        || published.binding_cid.is_some()
+        || recorded_corpus_stream_fingerprint(&published) != destination_fingerprint
+    {
+        return Err(SourceUnavailable::new(
+            "markerless attention provenance copy changed during exact recapture",
+        ));
+    }
+    published.verify_generation()?;
+    Ok(())
+}
+
+fn exact_finalized_record_width(records: usize, byte_len: usize) -> Option<usize> {
+    [88usize, 48, 32, 12].into_iter().find(|width| {
+        records
+            .checked_mul(*width)
+            .is_some_and(|expected| expected == byte_len)
+    })
+}
+
+/// Derive one smaller, story-run-aligned corpus from a single exact source
+/// snapshot. Unlike the historical Python+copy sequence, corpus bytes and the
+/// complete source-execution pair commit under one destination guard and one
+/// canonical generation binding.
+pub fn subsample_recorded_corpus(args: &[String]) -> Result<(), SourceUnavailable> {
+    subsample_recorded_corpus_with_before_binding(args, || Ok(()))
+}
+
+fn subsample_recorded_corpus_with_before_binding<F>(
+    args: &[String],
+    before_binding: F,
+) -> Result<(), SourceUnavailable>
+where
+    F: FnOnce() -> Result<(), SourceUnavailable>,
+{
+    let options = parse_subsample_recorded_corpus_options(args)?;
+    let mut source = recorded_corpus_snapshot(&options.source_meta, &options.source_records)?;
+    if source.binding_cid.is_none() {
+        // Compatibility for archived legacy/attention-only scale inputs: one
+        // cooperative source guard makes the lower repeated-read snapshot
+        // stable against every in-repo producer. Dense input never reaches
+        // this lane because lower capture requires its canonical binding.
+        let source_root = std::fs::canonicalize(
+            options
+                .source_meta
                 .parent()
                 .filter(|parent| !parent.as_os_str().is_empty())
-                .unwrap_or_else(|| Path::new("."));
-            match std::fs::symlink_metadata(parent) {
-                Ok(metadata) if metadata.file_type().is_dir() => {}
-                Ok(_) => {
-                    return Err(SourceUnavailable::new(format!(
-                        "attention-operator destination parent {} is not a real directory",
-                        parent.display()
-                    )));
-                }
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-                Err(error) => {
-                    return Err(SourceUnavailable::new(format!(
-                        "attention-operator destination parent {} cannot be inspected: {error}",
-                        parent.display()
-                    )));
-                }
-            }
-            publish_attention_operator_binding(parent, &operator)
-        }
-        None => match std::fs::symlink_metadata(&options.output) {
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-            Err(error) => Err(SourceUnavailable::new(format!(
-                "legacy recorded corpus destination {} cannot be inspected: {error}",
-                options.output.display()
-            ))),
-            Ok(_) => Err(SourceUnavailable::new(format!(
-                "recorded corpus has no attention-operator provenance, but destination {} is present; refusing to preserve or relabel a stale binding",
-                options.output.display()
-            ))),
-        },
+                .unwrap_or_else(|| Path::new(".")),
+        )
+        .map_err(SourceUnavailable::new)?;
+        let source_guard =
+            uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerGuard::try_acquire(
+                &source_root,
+            )?;
+        source = recorded_corpus_snapshot(&options.source_meta, &options.source_records)?;
+        drop(source_guard);
     }
+    if source.meta_bytes.len() != SOURCE_CORPUS_META_BYTES || source.meta_bytes[24] != 1 {
+        return Err(SourceUnavailable::new(
+            "subsample source is not one exact finalized 25-byte corpus generation",
+        ));
+    }
+    let source_records_u64 = u64::from_le_bytes(
+        source.meta_bytes[0..8]
+            .try_into()
+            .map_err(|_| SourceUnavailable::new("invalid source corpus record count"))?,
+    );
+    let source_records = usize::try_from(source_records_u64).map_err(|_| {
+        SourceUnavailable::new(format!(
+            "source corpus record count {source_records_u64} cannot be represented on this host"
+        ))
+    })?;
+    if options.records >= source_records {
+        return Err(SourceUnavailable::new(format!(
+            "source has {source_records} finalized records; --records {} must be strictly smaller",
+            options.records
+        )));
+    }
+    let record_width = exact_finalized_record_width(source_records, source.records_bytes.len())
+        .ok_or_else(|| {
+            SourceUnavailable::new(format!(
+                "source record stream length {} is not exactly n times one registered width (88, 48, 32, or 12) for n={source_records}",
+                source.records_bytes.len()
+            ))
+        })?;
+    let parsed = compiler::load_corpus_bytes(&source.meta_bytes, &source.records_bytes, None)
+        .ok_or_else(|| SourceUnavailable::new("subsample source corpus bytes are malformed"))?;
+    let source_stories_u64 = u64::from_le_bytes(
+        source.meta_bytes[8..16]
+            .try_into()
+            .map_err(|_| SourceUnavailable::new("invalid source corpus story count"))?,
+    );
+    let source_stories = u32::try_from(source_stories_u64).map_err(|_| {
+        SourceUnavailable::new(format!(
+            "source corpus story count {source_stories_u64} exceeds the u32 story-id range"
+        ))
+    })?;
+    let source_train_cut = ((f64::from(source_stories) * 0.8) as u32).max(1);
+    let mut runs = Vec::new();
+    let mut start = 0usize;
+    while start < source_records {
+        let story = parsed.story[start];
+        if story >= source_stories {
+            return Err(SourceUnavailable::new(format!(
+                "source record {start} declares story {story}, outside the metadata story range 0..{source_stories}"
+            )));
+        }
+        let mut end = start + 1;
+        while end < source_records && parsed.story[end] == story {
+            end += 1;
+        }
+        runs.push((start, end, story, story < source_train_cut));
+        start = end;
+    }
+
+    // Preserve the source compiler's fixed story partition. Quotas are
+    // deterministic 80/20 record budgets; only complete story runs that fit
+    // their side's budget are retained, in original source order.
+    let train_quota = options
+        .records
+        .checked_mul(4)
+        .ok_or_else(|| SourceUnavailable::new("subsample train quota overflows"))?
+        / 5;
+    let held_out_quota = options.records - train_quota;
+    if train_quota == 0 || held_out_quota == 0 {
+        return Err(SourceUnavailable::new(
+            "subsample target is too small to retain records from both fixed source partitions",
+        ));
+    }
+    let mut train_remaining = train_quota;
+    let mut held_out_remaining = held_out_quota;
+    let mut selected = Vec::new();
+    let mut train_records = 0usize;
+    let mut held_out_records = 0usize;
+    let mut last_selected_story = None;
+    for &(run_start, run_end, story, train) in &runs {
+        let rows = run_end - run_start;
+        let remaining = if train {
+            &mut train_remaining
+        } else {
+            &mut held_out_remaining
+        };
+        // Filtering cannot make two source-separated runs of the same story
+        // adjacent: v1/v2 rows reconstruct input/span boundaries solely from
+        // adjacent story equality and would otherwise stitch them together.
+        if rows <= *remaining && last_selected_story != Some(story) {
+            *remaining -= rows;
+            if train {
+                train_records += rows;
+            } else {
+                held_out_records += rows;
+            }
+            selected.push((run_start, run_end));
+            last_selected_story = Some(story);
+        }
+    }
+    if train_records == 0 || held_out_records == 0 {
+        return Err(SourceUnavailable::new(format!(
+            "no complete story-run selection fits both fixed source partitions within train/held-out quotas {train_quota}/{held_out_quota}"
+        )));
+    }
+    let retained_records = train_records
+        .checked_add(held_out_records)
+        .ok_or_else(|| SourceUnavailable::new("subsample retained count overflows"))?;
+    let output_capacity = retained_records
+        .checked_mul(record_width)
+        .ok_or_else(|| SourceUnavailable::new("subsample record byte length overflows"))?;
+    let mut output_records_bytes = Vec::with_capacity(output_capacity);
+    for &(run_start, run_end) in &selected {
+        let byte_start = run_start
+            .checked_mul(record_width)
+            .ok_or_else(|| SourceUnavailable::new("subsample record start overflows"))?;
+        let byte_end = run_end
+            .checked_mul(record_width)
+            .ok_or_else(|| SourceUnavailable::new("subsample record end overflows"))?;
+        output_records_bytes.extend_from_slice(&source.records_bytes[byte_start..byte_end]);
+    }
+    let mut output_meta_bytes = Vec::with_capacity(SOURCE_CORPUS_META_BYTES);
+    output_meta_bytes.extend_from_slice(
+        &u64::try_from(retained_records)
+            .map_err(|_| SourceUnavailable::new("subsample count exceeds u64"))?
+            .to_le_bytes(),
+    );
+    output_meta_bytes.extend_from_slice(&source_stories_u64.to_le_bytes());
+    output_meta_bytes.extend_from_slice(&source.meta_bytes[16..24]);
+    output_meta_bytes.push(1);
+
+    let output_hidden_bytes = source
+        .hidden_bytes
+        .as_deref()
+        .map(|hidden| {
+            if source_records == 0 || hidden.len() % source_records != 0 {
+                return Err(SourceUnavailable::new(format!(
+                    "source hidden stream is {} bytes, which is not an exact nonzero row width for {source_records} finalized rows",
+                    hidden.len()
+                )));
+            }
+            let row_bytes = hidden.len() / source_records;
+            if row_bytes == 0 || row_bytes % std::mem::size_of::<f32>() != 0 {
+                return Err(SourceUnavailable::new(
+                    "source hidden stream row width is zero or is not an exact f32 byte multiple",
+                ));
+            }
+            let output_capacity = retained_records
+                .checked_mul(row_bytes)
+                .ok_or_else(|| SourceUnavailable::new("subsample hidden length overflows"))?;
+            let mut output = Vec::with_capacity(output_capacity);
+            for &(run_start, run_end) in &selected {
+                let byte_start = run_start
+                    .checked_mul(row_bytes)
+                    .ok_or_else(|| SourceUnavailable::new("subsample hidden start overflows"))?;
+                let byte_end = run_end
+                    .checked_mul(row_bytes)
+                    .ok_or_else(|| SourceUnavailable::new("subsample hidden end overflows"))?;
+                output.extend_from_slice(&hidden[byte_start..byte_end]);
+            }
+            Ok(output)
+        })
+        .transpose()?;
+
+    let output_root = options
+        .output_meta
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let output_parent = output_root
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    std::fs::create_dir_all(output_parent).map_err(SourceUnavailable::new)?;
+    let mut producer =
+        uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerGuard::try_acquire(
+            output_root,
+        )?;
+    let source_root = std::fs::canonicalize(
+        options
+            .source_meta
+            .parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
+            .unwrap_or_else(|| Path::new(".")),
+    )
+    .map_err(SourceUnavailable::new)?;
+    if producer.protects_directory(&source_root)? {
+        return Err(SourceUnavailable::new(
+            "subsample source and destination resolve to the same canonical corpus root; in-place derivation is refused before mutation",
+        ));
+    }
+    producer.ensure_root()?;
+    let output_root = producer.root().to_path_buf();
+    let output_meta = output_root.join("corpus.meta");
+    let output_records = output_root.join("corpus.records");
+    let output_hidden = output_root.join("corpus.records.hidden");
+    if strict_regular_file_if_present(
+        &output_root.join(observe::MANIFEST_FILE),
+        "subsample destination observation manifest",
+    )? {
+        return Err(SourceUnavailable::new(
+            "subsample destination contains an observation manifest; use a fresh compile-style corpus root",
+        ));
+    }
+    let subsample_members = [
+        PlannedOutputMember::Records,
+        PlannedOutputMember::Hidden,
+        PlannedOutputMember::Metadata,
+    ];
+    preflight_guarded_planned_scope(&producer, &subsample_members, "subsample destination")?;
+    producer.preflight_planned_output_stable_scope(&subsample_members)?;
+    producer.preflight_deterministic_compile_inventory(&subsample_members)?;
+    let recoverable_temporary =
+        producer.preflight_publication_namespace_for(RecordedCorpusRole::Compile)?;
+
+    let attention_ready = match source.execution.attention_operator.as_ref() {
+        Some(attention) => preflight_compiled_attention_operator(&output_root, attention)?,
+        None => {
+            if read_optional_compiled_attention_operator(&output_root)?.is_some() {
+                return Err(SourceUnavailable::new(
+                    "subsample source declares no attention identity but destination has one",
+                ));
+            }
+            true
+        }
+    };
+    let dense_ready =
+        preflight_compiled_dense_operator(&output_root, source.execution.dense_operator.as_ref())?;
+    let records_ready = preflight_guarded_planned_file(
+        &producer,
+        &output_records,
+        &output_records_bytes,
+        "subsample destination records",
+    )?;
+    let hidden_ready = match output_hidden_bytes.as_deref() {
+        Some(hidden) => preflight_guarded_planned_file(
+            &producer,
+            &output_hidden,
+            hidden,
+            "subsample destination hidden stream",
+        )?,
+        None => {
+            preflight_guarded_planned_absence(
+                &producer,
+                &output_hidden,
+                "subsample destination hidden stream",
+            )?;
+            true
+        }
+    };
+    let meta_ready = preflight_guarded_planned_file(
+        &producer,
+        &output_meta,
+        &output_meta_bytes,
+        "subsample destination metadata",
+    )?;
+
+    let stable_binding = strict_regular_file_if_present(
+        &output_root.join(uor_r4_graph_compiler::recorded_corpus::RECORDED_CORPUS_BINDING_FILE),
+        "subsample destination generation binding",
+    )?;
+    if stable_binding || recoverable_temporary {
+        if !attention_ready || !dense_ready || !records_ready || !hidden_ready || !meta_ready {
+            return Err(SourceUnavailable::new(
+                "subsample destination has binding commit evidence without the exact complete planned generation; refusing recovery before mutation",
+            ));
+        }
+        uor_r4_graph_compiler::recorded_corpus::preflight_binding_evidence_matches_current(
+            &producer,
+            &output_meta,
+            &output_records,
+        )?;
+    }
+    producer.begin_compile_attempt()?;
+    if stable_binding || recoverable_temporary {
+        let binding_cid = uor_r4_graph_compiler::recorded_corpus::publish_binding(
+            &producer,
+            &output_meta,
+            &output_records,
+        )?;
+        let published = recorded_corpus_snapshot(&output_meta, &output_records)?;
+        if published.execution != source.execution
+            || published.meta_bytes != output_meta_bytes
+            || published.records_bytes != output_records_bytes
+            || published.hidden_bytes != output_hidden_bytes
+            || published.binding_cid.as_deref() != Some(binding_cid.as_str())
+        {
+            return Err(SourceUnavailable::new(
+                "subsample binding recovery does not match the exact planned generation",
+            ));
+        }
+        producer.finish_compile_attempt()?;
+        return Ok(());
+    }
+
+    if let Some(dense) = source.execution.dense_operator.as_ref() {
+        publish_dense_operator_binding(&output_root, dense)?;
+    }
+    if let Some(attention) = source.execution.attention_operator.as_ref() {
+        publish_attention_operator_binding(&output_root, attention)?;
+    }
+    publish_guarded_planned_file(
+        &producer,
+        &output_records,
+        &output_records_bytes,
+        "subsample destination records",
+    )?;
+    if let Some(hidden) = output_hidden_bytes.as_deref() {
+        publish_guarded_planned_file(
+            &producer,
+            &output_hidden,
+            hidden,
+            "subsample destination hidden stream",
+        )?;
+    }
+    publish_guarded_planned_file(
+        &producer,
+        &output_meta,
+        &output_meta_bytes,
+        "subsample destination metadata",
+    )?;
+    before_binding()?;
+    let binding_cid = uor_r4_graph_compiler::recorded_corpus::publish_binding(
+        &producer,
+        &output_meta,
+        &output_records,
+    )?;
+    let published = recorded_corpus_snapshot(&output_meta, &output_records)?;
+    if published.execution != source.execution
+        || published.meta_bytes != output_meta_bytes
+        || published.records_bytes != output_records_bytes
+        || published.hidden_bytes != output_hidden_bytes
+        || published.binding_cid.as_deref() != Some(binding_cid.as_str())
+    {
+        return Err(SourceUnavailable::new(
+            "subsample publication changed during exact post-binding recapture",
+        ));
+    }
+    producer.finish_compile_attempt()?;
+    println!(
+        "subsample recorded corpus: {retained_records} records ({train_records} train, {held_out_records} held out; target {}) of {source_records}; {}-byte rows; binding {binding_cid}",
+        options.records, record_width
+    );
+    Ok(())
 }
 
 /// Resolve explicit recorded provenance or the immutable standard/1 meaning
 /// of genuine pre-provenance absence for `compile-recorded`.
+#[cfg(test)]
 fn recorded_compile_attention_operator(
     corpus_meta: &Path,
     corpus_recs: &Path,
@@ -4920,21 +6982,105 @@ fn recorded_compile_attention_operator(
 /// transformer. This is the observation-first production path; teacher
 /// capture remains available through `observe`/`compile` as an explicitly
 /// separate offline step.
+struct PreparedRecordedCompile {
+    corpus: RecordedCorpusSnapshot,
+    attention_operator: AttentionOperatorSpec,
+    dense_operator: Option<DenseOperatorSpec>,
+}
+
+fn write_captured_recorded_corpus(
+    guard: &uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerGuard,
+    output: &Path,
+    corpus: &RecordedCorpusSnapshot,
+) -> Result<(), SourceUnavailable> {
+    publish_guarded_planned_file(
+        guard,
+        &output.join("corpus.records"),
+        &corpus.records_bytes,
+        "recorded compile corpus records",
+    )?;
+    if let Some(hidden) = corpus.hidden_bytes.as_deref() {
+        publish_guarded_planned_file(
+            guard,
+            &output.join("corpus.records.hidden"),
+            hidden,
+            "recorded compile corpus hidden stream",
+        )?;
+    }
+    // Metadata is the core corpus checkpoint and therefore commits last among
+    // corpus members. A crash before this write cannot advertise new counts
+    // for records or hidden rows that were not durably synchronized.
+    publish_guarded_planned_file(
+        guard,
+        &output.join("corpus.meta"),
+        &corpus.meta_bytes,
+        "recorded compile corpus metadata",
+    )?;
+    Ok(())
+}
+
+fn require_existing_file_matches_if_present(
+    path: &Path,
+    expected: Option<&[u8]>,
+    context: &str,
+) -> Result<bool, SourceUnavailable> {
+    match std::fs::symlink_metadata(path) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(SourceUnavailable::new(format!(
+            "{context} {} cannot be inspected: {error}",
+            path.display()
+        ))),
+        Ok(_) => {
+            verify_optional_regular_file_nofollow(path, context, expected).map_err(
+                |mut error| {
+                    error.reason = format!(
+                        "{}; deterministic planned member mismatch is terminal before mutation",
+                        error.reason
+                    );
+                    error
+                },
+            )?;
+            Ok(true)
+        }
+    }
+}
+
+fn preflight_recorded_compile_execution_identity(
+    options: &RecordedCompileOptions,
+) -> Result<PreparedRecordedCompile, SourceUnavailable> {
+    preflight_recorded_compile_output(&options.output)?;
+    let corpus = recorded_corpus_snapshot(&options.corpus_meta, &options.corpus_recs)?;
+    let attention_operator = match corpus.execution.attention_operator.as_ref() {
+        Some(recorded) => recorded.clone(),
+        None => uor_r4_model_source::attention::operator_spec(
+            AttentionOperatorSpec::STANDARD_ID,
+            LEGACY_STANDARD_ATTENTION_OPERATOR_VERSION,
+        )?,
+    };
+    let dense_operator = corpus.execution.dense_operator.clone();
+    validate_source_execution_pair(
+        &attention_operator,
+        dense_operator.as_ref(),
+        "recorded compile provenance",
+    )?;
+    preflight_compiled_attention_operator(&options.output, &attention_operator)?;
+    preflight_compiled_dense_operator(&options.output, dense_operator.as_ref())?;
+    Ok(PreparedRecordedCompile {
+        corpus,
+        attention_operator,
+        dense_operator,
+    })
+}
+
 pub fn compile_recorded_corpus(args: &[String]) -> Result<(), SourceUnavailable> {
     let options = parse_recorded_compile_options(args)?;
-    preflight_recorded_compile_output(&options.output)?;
-    let attention_operator =
-        recorded_compile_attention_operator(&options.corpus_meta, &options.corpus_recs)?;
-    preflight_compiled_attention_operator(&options.output, &attention_operator)?;
-    let meta = options
-        .corpus_meta
-        .to_str()
-        .ok_or_else(|| SourceUnavailable::new("corpus metadata path is not UTF-8"))?;
-    let records = options
-        .corpus_recs
-        .to_str()
-        .ok_or_else(|| SourceUnavailable::new("corpus records path is not UTF-8"))?;
-    let corpus = compiler::load_corpus_from(meta, records).ok_or_else(|| {
+    let prepared = preflight_recorded_compile_execution_identity(&options)?;
+    let corpus = compiler::load_corpus_bytes(
+        &prepared.corpus.meta_bytes,
+        &prepared.corpus.records_bytes,
+        prepared.corpus.hidden_bytes.as_deref(),
+    )
+    .ok_or_else(|| {
         SourceUnavailable::new(format!(
             "recorded corpus is incomplete or invalid at {}/{}",
             options.corpus_meta.display(),
@@ -4955,28 +7101,241 @@ pub fn compile_recorded_corpus(args: &[String]) -> Result<(), SourceUnavailable>
         .map(|count| count.get().min(8))
         .unwrap_or(1);
     let (store, _) = runtime::build_store_with_threads(&artifacts, &corpus, threads);
-
-    bind_compiled_attention_operator(&options.output, &attention_operator)?;
-    std::fs::write(
-        options.output.join("tless_artifacts.bin"),
-        compiler::artifact_bytes(&artifacts),
-    )?;
-    std::fs::write(
-        options.output.join("tless_store.bin"),
-        runtime::store_bytes(&store),
-    )?;
-    std::fs::write(
-        options.output.join("hamming_calibration.json"),
-        serde_json::to_string_pretty(&calibration).map_err(SourceUnavailable::from)?,
-    )?;
-    std::fs::write(
-        options.output.join("hierarchical_codes.json"),
-        serde_json::to_string_pretty(&hierarchical).map_err(SourceUnavailable::from)?,
-    )?;
-    std::fs::copy(&options.corpus_meta, options.output.join("corpus.meta"))?;
-    std::fs::copy(&options.corpus_recs, options.output.join("corpus.records"))?;
-
     let artifact_bytes = compiler::artifact_bytes(&artifacts);
+    let store_bytes = runtime::store_bytes(&store);
+    let calibration_bytes = serde_json::to_vec_pretty(&calibration)?;
+    let hierarchical_bytes = serde_json::to_vec_pretty(&hierarchical)?;
+
+    let preflight_planned_files = || -> Result<(), SourceUnavailable> {
+        require_existing_file_matches_if_present(
+            &options.output.join("tless_artifacts.bin"),
+            Some(&artifact_bytes),
+            "recorded compile artifact",
+        )?;
+        require_existing_file_matches_if_present(
+            &options.output.join("tless_store.bin"),
+            Some(&store_bytes),
+            "recorded compile store",
+        )?;
+        require_existing_file_matches_if_present(
+            &options.output.join("hamming_calibration.json"),
+            Some(&calibration_bytes),
+            "recorded compile calibration",
+        )?;
+        require_existing_file_matches_if_present(
+            &options.output.join("hierarchical_codes.json"),
+            Some(&hierarchical_bytes),
+            "recorded compile hierarchical codes",
+        )?;
+        require_existing_file_matches_if_present(
+            &options.output.join("corpus.meta"),
+            Some(&prepared.corpus.meta_bytes),
+            "recorded compile corpus metadata",
+        )?;
+        require_existing_file_matches_if_present(
+            &options.output.join("corpus.records"),
+            Some(&prepared.corpus.records_bytes),
+            "recorded compile corpus records",
+        )?;
+        require_existing_file_matches_if_present(
+            &options.output.join("corpus.records.hidden"),
+            prepared.corpus.hidden_bytes.as_deref(),
+            "recorded compile corpus hidden stream",
+        )?;
+        Ok(())
+    };
+
+    preflight_planned_files()?;
+    let output_parent = options
+        .output
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    std::fs::create_dir_all(output_parent).map_err(SourceUnavailable::new)?;
+    let mut producer =
+        uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerGuard::try_acquire(
+            &options.output,
+        )?;
+    let source_root = std::fs::canonicalize(
+        options
+            .corpus_meta
+            .parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
+            .unwrap_or_else(|| Path::new(".")),
+    )
+    .map_err(SourceUnavailable::new)?;
+    if producer.protects_directory(&source_root)? {
+        return Err(SourceUnavailable::new(
+            "compile-recorded source and destination resolve to the same canonical corpus root; in-place derivation is refused before mutation",
+        ));
+    }
+    producer.ensure_root()?;
+    preflight_guarded_planned_scope(
+        &producer,
+        &PlannedOutputMember::ALL,
+        "recorded compile destination",
+    )?;
+    let recoverable_temporary =
+        producer.preflight_publication_namespace_for(RecordedCorpusRole::Compile)?;
+    preflight_recorded_compile_output(&options.output)?;
+    let attention_ready =
+        preflight_compiled_attention_operator(&options.output, &prepared.attention_operator)?;
+    let dense_ready =
+        preflight_compiled_dense_operator(&options.output, prepared.dense_operator.as_ref())?;
+    preflight_planned_files()?;
+    let artifact_ready = preflight_guarded_planned_file(
+        &producer,
+        &options.output.join("tless_artifacts.bin"),
+        &artifact_bytes,
+        "recorded compile artifact",
+    )?;
+    let store_ready = preflight_guarded_planned_file(
+        &producer,
+        &options.output.join("tless_store.bin"),
+        &store_bytes,
+        "recorded compile store",
+    )?;
+    let calibration_ready = preflight_guarded_planned_file(
+        &producer,
+        &options.output.join("hamming_calibration.json"),
+        &calibration_bytes,
+        "recorded compile calibration",
+    )?;
+    let hierarchical_ready = preflight_guarded_planned_file(
+        &producer,
+        &options.output.join("hierarchical_codes.json"),
+        &hierarchical_bytes,
+        "recorded compile hierarchical codes",
+    )?;
+    let records_ready = preflight_guarded_planned_file(
+        &producer,
+        &options.output.join("corpus.records"),
+        &prepared.corpus.records_bytes,
+        "recorded compile corpus records",
+    )?;
+    let hidden_ready = match prepared.corpus.hidden_bytes.as_deref() {
+        Some(hidden) => preflight_guarded_planned_file(
+            &producer,
+            &options.output.join("corpus.records.hidden"),
+            hidden,
+            "recorded compile corpus hidden stream",
+        )?,
+        None => {
+            preflight_guarded_planned_absence(
+                &producer,
+                &options.output.join("corpus.records.hidden"),
+                "recorded compile corpus hidden stream",
+            )?;
+            true
+        }
+    };
+    let meta_ready = preflight_guarded_planned_file(
+        &producer,
+        &options.output.join("corpus.meta"),
+        &prepared.corpus.meta_bytes,
+        "recorded compile corpus metadata",
+    )?;
+    let stable_binding = strict_regular_file_if_present(
+        &options
+            .output
+            .join(uor_r4_graph_compiler::recorded_corpus::RECORDED_CORPUS_BINDING_FILE),
+        "recorded compile generation binding",
+    )?;
+    let planned_ready = artifact_ready
+        && store_ready
+        && calibration_ready
+        && hierarchical_ready
+        && records_ready
+        && hidden_ready
+        && meta_ready;
+    if stable_binding || recoverable_temporary {
+        if !planned_ready || !attention_ready || !dense_ready {
+            return Err(SourceUnavailable::new(
+                "recorded compile output contains binding commit evidence but not the exact complete intended generation; refusing member mutation before recovery",
+            ));
+        }
+        uor_r4_graph_compiler::recorded_corpus::preflight_binding_evidence_matches_current(
+            &producer,
+            &options.output.join("corpus.meta"),
+            &options.output.join("corpus.records"),
+        )?;
+    }
+    if stable_binding && !recoverable_temporary && planned_ready && attention_ready && dense_ready {
+        if producer.compile_attempt_active()? {
+            producer.finish_compile_attempt()?;
+        }
+        println!(
+            "recorded compile complete: {} ({} corpus records, artifact κ blake3:{})",
+            options.output.display(),
+            corpus.n,
+            blake3::hash(&artifact_bytes).to_hex()
+        );
+        return Ok(());
+    }
+    producer.preflight_deterministic_compile_inventory(&PlannedOutputMember::ALL)?;
+    producer.begin_compile_attempt()?;
+    if recoverable_temporary {
+        uor_r4_graph_compiler::recorded_corpus::publish_binding(
+            &producer,
+            &options.output.join("corpus.meta"),
+            &options.output.join("corpus.records"),
+        )?;
+    }
+
+    // Dense-first ensures every crash prefix of a current GPT-2 generation is
+    // invalid rather than a false, valid-looking attention-only generation.
+    bind_compiled_dense_operator(&options.output, prepared.dense_operator.as_ref())?;
+    bind_compiled_attention_operator(&options.output, &prepared.attention_operator)?;
+    publish_guarded_planned_file(
+        &producer,
+        &options.output.join("tless_artifacts.bin"),
+        &artifact_bytes,
+        "recorded compile artifact",
+    )?;
+    publish_guarded_planned_file(
+        &producer,
+        &options.output.join("tless_store.bin"),
+        &store_bytes,
+        "recorded compile store",
+    )?;
+    publish_guarded_planned_file(
+        &producer,
+        &options.output.join("hamming_calibration.json"),
+        &calibration_bytes,
+        "recorded compile calibration",
+    )?;
+    publish_guarded_planned_file(
+        &producer,
+        &options.output.join("hierarchical_codes.json"),
+        &hierarchical_bytes,
+        "recorded compile hierarchical codes",
+    )?;
+    write_captured_recorded_corpus(&producer, &options.output, &prepared.corpus)?;
+    let binding_cid = uor_r4_graph_compiler::recorded_corpus::publish_binding(
+        &producer,
+        &options.output.join("corpus.meta"),
+        &options.output.join("corpus.records"),
+    )?;
+    let published = recorded_corpus_snapshot(
+        &options.output.join("corpus.meta"),
+        &options.output.join("corpus.records"),
+    )?;
+    let destination_execution = RecordedCorpusExecutionIdentity {
+        attention_operator: Some(prepared.attention_operator.clone()),
+        dense_operator: prepared.dense_operator.clone(),
+    };
+    if published.binding_cid.as_deref() != Some(binding_cid.as_str())
+        || published.execution != destination_execution
+        || published.meta_bytes != prepared.corpus.meta_bytes
+        || published.records_bytes != prepared.corpus.records_bytes
+        || published.hidden_bytes != prepared.corpus.hidden_bytes
+    {
+        return Err(SourceUnavailable::new(
+            "recorded compile publication changed during exact post-binding recapture",
+        ));
+    }
+    producer.finish_compile_attempt()?;
+
     println!(
         "recorded compile complete: {} ({} corpus records, artifact κ blake3:{})",
         options.output.display(),
@@ -5144,6 +7503,7 @@ pub fn run(args: &[String]) -> Result<(), SourceUnavailable> {
         }
         Some("compile-recorded") => compile_recorded_corpus(&args[1..])?,
         Some("copy-recorded-attention") => copy_recorded_attention(&args[1..])?,
+        Some("subsample-recorded-corpus") => subsample_recorded_corpus(&args[1..])?,
         Some("store") => {
             let c = compiler::load_corpus()
                 .expect("corpus incomplete: run `transformerless gen` first");
@@ -5188,7 +7548,8 @@ pub fn run(args: &[String]) -> Result<(), SourceUnavailable> {
                 "R4 transformerless — compile a mul-free table artifact\n\
                  commands: setup | gen [secs] [target] | compile [--model REPO --revision SHA | --source DIR] [--tokenizer-family FAMILY --tokenizer-version N] [--output DIR] [--seconds N] [--target N] [--sequence-length N] | store | compare | compare-report | scenarios | teacher-kappa | convert-r4g1 --artifacts <TLA> --store <TLS1> [--calibration <hamming_calibration.json>] --out <R4G1>\n\
                  recorded compile (no transformer): compile-recorded --corpus-meta <META> --corpus-recs <RECS> --vocab-size <N> --out <DIR>\n\
-                 recorded provenance copy: copy-recorded-attention --corpus-meta <META> --corpus-recs <RECS> --out <attention_operator.json>\n\
+                 recorded execution copy (including dense sibling): copy-recorded-attention --corpus-meta <META> --corpus-recs <RECS> --out <attention_operator.json>\n\
+                 guarded recorded-corpus derivation: subsample-recorded-corpus --src-meta <META> --src-recs <RECS> --out-meta <corpus.meta> --out-recs <corpus.records> --records <N>\n\
                  transformer-free refresh: runtime-corpus --artifacts <TLA> --store <TLS1> --seed-meta <META> --seed-recs <RECS> --out <DIR> --target N [--threads N]\n\
                  observation pipeline: observe [--source DIR [--tokenizer-family FAMILY --tokenizer-version N] | --checkpoint BIN] [--seconds N] [--target N] [--shards N] [--out DIR] [--sequence-length N]\n\
                  text observations (D3): observe-text [--input PATH] [--out DIR] [--shards N] [--seconds N] [--source DIR [--tokenizer-family FAMILY --tokenizer-version N] | --checkpoint BIN --tokenizer PATH] [--sequence-length N]\n\
@@ -5279,6 +7640,31 @@ mod tests {
         std::env::temp_dir().join(format!("uor-r4-cli-{name}-{nonce}"))
     }
 
+    #[test]
+    fn source_corpus_session_releases_common_guard_before_outer_lock() {
+        let base = unique_cli_test_path("source-session-drop-order");
+        let root = base.join("compiled");
+        std::fs::create_dir_all(&root).expect("root");
+        let mut session = source_corpus_session(&root).expect("outer session");
+        session
+            .acquire_recorded_corpus(&root)
+            .expect("common guard");
+
+        session.release_in_order(|| {
+            let error = source_corpus_session(&root)
+                .err()
+                .expect("outer lock remains BUSY until common guard is released");
+            assert!(error.to_string().contains("BUSY"), "{error}");
+        });
+
+        let mut successor = source_corpus_session(&root).expect("outer lock released last");
+        successor
+            .acquire_recorded_corpus(&root)
+            .expect("common guard can be reacquired after full release");
+        drop(successor);
+        std::fs::remove_dir_all(&base).expect("cleanup root");
+    }
+
     fn fixture_adapter(marker: &str) -> TokenizerAdapter {
         let tokenizer_json = format!(
             r#"{{
@@ -5359,6 +7745,23 @@ mod tests {
         entries
     }
 
+    fn dense_operator_temp_entries(path: &Path) -> Vec<String> {
+        let prefix = format!(".{DENSE_OPERATOR_BINDING_FILE}.");
+        let mut entries: Vec<String> = std::fs::read_dir(path)
+            .expect("read test directory")
+            .map(|entry| {
+                entry
+                    .expect("directory entry")
+                    .file_name()
+                    .to_string_lossy()
+                    .into_owned()
+            })
+            .filter(|name| name.starts_with(&prefix) && name.ends_with(".tmp"))
+            .collect();
+        entries.sort();
+        entries
+    }
+
     fn write_observation_manifest(path: &Path, manifest: &observe::ObservationManifest) {
         std::fs::create_dir_all(path).expect("observation directory");
         std::fs::write(
@@ -5404,6 +7807,27 @@ mod tests {
             (position, position + 1),
             (position, position + 1),
         )
+    }
+
+    fn complete_test_corpus(path: &Path) -> (PathBuf, PathBuf) {
+        std::fs::create_dir_all(path).expect("corpus directory");
+        let meta = path.join("corpus.meta");
+        let records = path.join("corpus.records");
+        std::fs::write(&records, source_v3_record(0, 0)).expect("complete corpus records");
+        std::fs::write(&meta, source_resume_meta(1, 1)).expect("complete corpus metadata");
+        (meta, records)
+    }
+
+    fn publish_test_corpus_binding(path: &Path, meta: &Path, records: &Path) -> String {
+        let mut guard =
+            uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerGuard::try_acquire(path)
+                .expect("test producer guard");
+        guard.ensure_root().expect("test corpus root");
+        guard.begin_compile_attempt().expect("test compile attempt");
+        let cid = uor_r4_graph_compiler::recorded_corpus::publish_binding(&guard, meta, records)
+            .expect("test corpus binding");
+        guard.finish_compile_attempt().expect("finish test attempt");
+        cid
     }
 
     fn source_v2_record(story: u32) -> [u8; 32] {
@@ -5565,6 +7989,159 @@ mod tests {
         ])
         .expect_err("unknown provenance fields are refused");
         assert!(error.reason.contains("unregistered_claim"));
+
+        let duplicate = serde_json::to_string(&AttentionOperatorSpec::learned_absolute_v2())
+            .expect("attention JSON")
+            .replacen("\"version\":2", "\"version\":1,\"version\":2", 1);
+        let error = parse_cover_options(&["--attention-operator".to_owned(), duplicate])
+            .expect_err("duplicate attention era is ambiguous");
+        assert!(error.reason.contains("duplicate JSON field \"version\""));
+    }
+
+    #[test]
+    fn cover_options_carry_only_registered_joint_dense_execution_eras() {
+        use uor_r4_model_source::dense::DenseOperatorSpec;
+
+        for (attention, dense) in [
+            (
+                AttentionOperatorSpec::learned_absolute_v1(),
+                DenseOperatorSpec::gpt2_v1(),
+            ),
+            (
+                AttentionOperatorSpec::learned_absolute_v2(),
+                DenseOperatorSpec::gpt2_v2(),
+            ),
+        ] {
+            let args = [
+                "--attention-operator".to_owned(),
+                serde_json::to_string(&attention).expect("attention JSON"),
+                "--dense-operator".to_owned(),
+                serde_json::to_string(&dense).expect("dense JSON"),
+            ];
+            let options = parse_cover_options(&args).expect("registered source-execution era");
+            assert_eq!(options.attention_operator.as_ref(), Some(&attention));
+            assert_eq!(options.dense_operator.as_ref(), Some(&dense));
+        }
+        let defaults = parse_cover_options(&[]).expect("legacy/Llama defaults");
+        assert_eq!(defaults.dense_operator, None);
+
+        let dense_json =
+            serde_json::to_string(&DenseOperatorSpec::gpt2_v2()).expect("current dense JSON");
+        let error = parse_cover_options(&["--dense-operator".to_owned(), dense_json.clone()])
+            .expect_err("dense without attention is terminal");
+        assert!(error.reason.contains("without an attention"), "{error}");
+        let error = parse_cover_options(&[
+            "--attention-operator".to_owned(),
+            serde_json::to_string(&AttentionOperatorSpec::learned_absolute_v1())
+                .expect("v1 attention JSON"),
+            "--dense-operator".to_owned(),
+            dense_json,
+        ])
+        .expect_err("cross-era cover provenance is terminal");
+        assert!(error.reason.contains("source execution pair"), "{error}");
+
+        let error = parse_cover_options(&[
+            "--attention-operator".to_owned(),
+            serde_json::to_string(&AttentionOperatorSpec::learned_absolute_v2())
+                .expect("attention JSON"),
+            "--dense-operator".to_owned(),
+            "{not json".to_owned(),
+        ])
+        .expect_err("malformed dense record is terminal");
+        assert!(error.reason.contains("--dense-operator"), "{error}");
+
+        let mut drifted = DenseOperatorSpec::gpt2_v2();
+        drifted.conv1d_bias.push_str("-tampered");
+        drifted.implementation_digest = drifted.declared_digest();
+        let error = parse_cover_options(&[
+            "--attention-operator".to_owned(),
+            serde_json::to_string(&AttentionOperatorSpec::learned_absolute_v2())
+                .expect("attention JSON"),
+            "--dense-operator".to_owned(),
+            serde_json::to_string(&drifted).expect("drifted dense JSON"),
+        ])
+        .expect_err("registry-divergent dense record is terminal");
+        assert!(
+            error.reason.contains("does not match registered"),
+            "{error}"
+        );
+
+        let duplicate_dense = serde_json::to_string(&DenseOperatorSpec::gpt2_v2())
+            .expect("dense JSON")
+            .replacen("\"version\":2", "\"version\":1,\"version\":2", 1);
+        let error = parse_cover_options(&[
+            "--attention-operator".to_owned(),
+            serde_json::to_string(&AttentionOperatorSpec::learned_absolute_v2())
+                .expect("attention JSON"),
+            "--dense-operator".to_owned(),
+            duplicate_dense,
+        ])
+        .expect_err("duplicate dense era is ambiguous");
+        assert!(error.reason.contains("duplicate JSON field \"version\""));
+    }
+
+    #[test]
+    fn cover_reconciles_the_exact_recorded_pair_before_any_output_mutation() {
+        let corpus_root = unique_cli_test_path("cover-recorded-execution");
+        let attention = AttentionOperatorSpec::learned_absolute_v2();
+        let dense = DenseOperatorSpec::gpt2_v2();
+        bind_compiled_attention_operator(&corpus_root, &attention).expect("attention sidecar");
+        bind_compiled_dense_operator(&corpus_root, Some(&dense)).expect("dense sidecar");
+        let (meta, records) = corpus_markers(&corpus_root);
+        let artifacts = corpus_root.join("missing-artifacts.bin");
+        let output = unique_cli_test_path("cover-recorded-execution-output");
+        std::fs::create_dir_all(&output).expect("cover output");
+        std::fs::write(output.join("sentinel"), b"output-before").expect("output sentinel");
+        let output_before = directory_bytes(&output);
+
+        let base_args = || {
+            vec![
+                "--corpus-meta".to_owned(),
+                meta.display().to_string(),
+                "--corpus-recs".to_owned(),
+                records.display().to_string(),
+                "--artifacts".to_owned(),
+                artifacts.display().to_string(),
+                "--out".to_owned(),
+                output.display().to_string(),
+            ]
+        };
+        let missing_pair = base_args();
+        let mut missing_dense = base_args();
+        missing_dense.extend([
+            "--attention-operator".to_owned(),
+            serde_json::to_string(&attention).expect("attention JSON"),
+        ]);
+        let mut wrong_pair = base_args();
+        wrong_pair.extend([
+            "--attention-operator".to_owned(),
+            serde_json::to_string(&AttentionOperatorSpec::learned_absolute_v1())
+                .expect("v1 attention JSON"),
+            "--dense-operator".to_owned(),
+            serde_json::to_string(&DenseOperatorSpec::gpt2_v1()).expect("v1 dense JSON"),
+        ]);
+        for args in [missing_pair, missing_dense, wrong_pair] {
+            let error = cover_command(&args).expect_err("recorded pair mismatch is terminal");
+            assert!(
+                error.reason.contains("does not match recorded corpus"),
+                "{error}"
+            );
+            assert_eq!(directory_bytes(&output), output_before);
+        }
+
+        let mut matching = base_args();
+        matching.extend([
+            "--attention-operator".to_owned(),
+            serde_json::to_string(&attention).expect("attention JSON"),
+            "--dense-operator".to_owned(),
+            serde_json::to_string(&dense).expect("dense JSON"),
+        ]);
+        let error = cover_command(&matching).expect_err("missing artifact follows pair preflight");
+        assert!(error.reason.contains("missing-artifacts.bin"), "{error}");
+        assert_eq!(directory_bytes(&output), output_before);
+
+        let _ = std::fs::remove_dir_all(corpus_root);
+        let _ = std::fs::remove_dir_all(output);
     }
 
     #[test]
@@ -5597,7 +8174,7 @@ mod tests {
         let directory = unique_cli_test_path("stage-tokenizer-directory");
         std::fs::create_dir_all(&directory).expect("create directory");
         let error = explicit_tokenizer_cid(Some(&directory)).expect_err("directory refused");
-        assert!(error.reason.contains("not a regular file"));
+        assert!(error.reason.contains("not a regular file"), "{error}");
 
         let _ = std::fs::remove_file(tokenizer);
         let _ = std::fs::remove_dir_all(directory);
@@ -5948,6 +8525,238 @@ mod tests {
     }
 
     #[test]
+    fn compile_dense_operator_sidecar_is_optional_registry_exact_and_atomic() {
+        use uor_r4_model_source::dense::DenseOperatorSpec;
+
+        let absent = unique_cli_test_path("compile-dense-absent");
+        assert_eq!(
+            compiled_dense_operator(&absent).expect("optional absence"),
+            None
+        );
+
+        for operator in [DenseOperatorSpec::gpt2_v1(), DenseOperatorSpec::gpt2_v2()] {
+            let output =
+                unique_cli_test_path(&format!("compile-dense-reader-v{}", operator.version));
+            bind_compiled_dense_operator(&output, Some(&operator)).expect("publish dense record");
+            let sidecar = output.join(DENSE_OPERATOR_BINDING_FILE);
+            let before = std::fs::read(&sidecar).expect("dense sidecar bytes");
+            assert_eq!(before.last(), Some(&b'\n'));
+            assert_eq!(
+                compiled_dense_operator(&output).expect("registry-validated dense read"),
+                Some(operator.clone())
+            );
+            bind_compiled_dense_operator(&output, Some(&operator)).expect("idempotent dense pin");
+            assert_eq!(
+                std::fs::read(&sidecar).expect("dense sidecar reread"),
+                before
+            );
+            assert!(dense_operator_temp_entries(&output).is_empty());
+            let _ = std::fs::remove_dir_all(output);
+        }
+
+        let parked = unique_cli_test_path("compile-dense-parked-temp");
+        std::fs::create_dir_all(&parked).expect("parked temp output");
+        let temporary = parked.join(format!(".{DENSE_OPERATOR_BINDING_FILE}.123.1.tmp"));
+        std::fs::write(&temporary, b"incomplete abandoned writer")
+            .expect("park abandoned temporary");
+        bind_compiled_dense_operator(&parked, Some(&DenseOperatorSpec::gpt2_v2()))
+            .expect("unique atomic publication does not adopt an abandoned temp");
+        assert_eq!(
+            compiled_dense_operator(&parked).expect("stable record wins"),
+            Some(DenseOperatorSpec::gpt2_v2())
+        );
+        assert_eq!(
+            std::fs::read(&temporary).expect("abandoned temp is not reclaimed here"),
+            b"incomplete abandoned writer"
+        );
+        let _ = std::fs::remove_dir_all(parked);
+    }
+
+    #[test]
+    fn compile_dense_operator_reader_rejects_invalid_evidence_without_mutation() {
+        use uor_r4_model_source::dense::DenseOperatorSpec;
+
+        let malformed = unique_cli_test_path("compile-dense-malformed");
+        std::fs::create_dir_all(&malformed).expect("malformed output");
+        std::fs::write(malformed.join(DENSE_OPERATOR_BINDING_FILE), b"{not json")
+            .expect("malformed dense binding");
+        let before = directory_bytes(&malformed);
+        let error = compiled_dense_operator(&malformed).expect_err("malformed is terminal");
+        assert!(error.reason.contains("malformed dense-operator binding"));
+        assert_eq!(directory_bytes(&malformed), before);
+
+        let duplicate = unique_cli_test_path("compile-dense-duplicate");
+        std::fs::create_dir_all(&duplicate).expect("duplicate output");
+        let canonical =
+            serde_json::to_string_pretty(&DenseOperatorSpec::gpt2_v2()).expect("dense JSON");
+        let duplicate_json =
+            canonical.replacen("\"version\": 2", "\"version\": 1,\n  \"version\": 2", 1);
+        std::fs::write(duplicate.join(DENSE_OPERATOR_BINDING_FILE), duplicate_json)
+            .expect("duplicate dense binding");
+        let before = directory_bytes(&duplicate);
+        let error = compiled_dense_operator(&duplicate).expect_err("duplicate key is terminal");
+        assert!(
+            error.reason.contains("duplicate JSON field \"version\""),
+            "{error}"
+        );
+        assert_eq!(directory_bytes(&duplicate), before);
+
+        let unknown = unique_cli_test_path("compile-dense-unknown");
+        std::fs::create_dir_all(&unknown).expect("unknown output");
+        let mut unknown_record = DenseOperatorSpec::gpt2_v2();
+        unknown_record.version = u32::MAX;
+        unknown_record.implementation_digest = unknown_record.declared_digest();
+        std::fs::write(
+            unknown.join(DENSE_OPERATOR_BINDING_FILE),
+            serde_json::to_vec_pretty(&unknown_record).expect("unknown dense JSON"),
+        )
+        .expect("unknown dense binding");
+        let error = compiled_dense_operator(&unknown).expect_err("unknown version is terminal");
+        assert!(matches!(
+            error.kind,
+            uor_r4_model_source::SourceIngestKind::UnknownDenseOperator { version, .. }
+                if version == u32::MAX
+        ));
+
+        let drift = unique_cli_test_path("compile-dense-drift");
+        std::fs::create_dir_all(&drift).expect("drift output");
+        let mut drifted = DenseOperatorSpec::gpt2_v2();
+        drifted.conv1d_bias.push_str("-tampered");
+        drifted.implementation_digest = drifted.declared_digest();
+        std::fs::write(
+            drift.join(DENSE_OPERATOR_BINDING_FILE),
+            serde_json::to_vec_pretty(&drifted).expect("drifted dense JSON"),
+        )
+        .expect("drifted dense binding");
+        let error = compiled_dense_operator(&drift).expect_err("record drift is terminal");
+        assert!(
+            error.reason.contains("does not match registered"),
+            "{error}"
+        );
+
+        let nonregular = unique_cli_test_path("compile-dense-directory");
+        std::fs::create_dir_all(nonregular.join(DENSE_OPERATOR_BINDING_FILE))
+            .expect("directory dense binding");
+        let error = compiled_dense_operator(&nonregular).expect_err("nonregular is terminal");
+        assert!(error.reason.contains("not a regular file"), "{error}");
+
+        for output in [malformed, duplicate, unknown, drift, nonregular] {
+            let _ = std::fs::remove_dir_all(output);
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn compiled_execution_sidecar_reader_rejects_post_open_link_swap() {
+        use std::os::unix::fs::symlink;
+
+        for name in [ATTENTION_OPERATOR_BINDING_FILE, DENSE_OPERATOR_BINDING_FILE] {
+            let output = unique_cli_test_path(&format!("compiled-sidecar-swap-{name}"));
+            std::fs::create_dir_all(&output).expect("sidecar output");
+            let path = output.join(name);
+            std::fs::write(&path, b"opened provenance bytes").expect("initial regular sidecar");
+            let target = output.with_extension(format!("{name}.external"));
+            let target_bytes = b"external target must never be read or changed";
+            std::fs::write(&target, target_bytes).expect("external target");
+
+            let error = read_optional_regular_file_nofollow_with(
+                &path,
+                "execution-operator binding",
+                || {
+                    std::fs::remove_file(&path).expect("replace opened sidecar");
+                    symlink(&target, &path).expect("swap path to link after open");
+                },
+            )
+            .expect_err("path/handle identity mismatch is terminal");
+            assert!(error.reason.contains("changed identity"), "{error}");
+            assert_eq!(
+                std::fs::read(&target).expect("external target survives"),
+                target_bytes
+            );
+            assert_eq!(
+                std::fs::read_link(&path).expect("swapped link survives"),
+                target
+            );
+
+            std::fs::remove_file(&path).expect("remove swapped link");
+            std::fs::remove_file(&target).expect("remove external target");
+            let _ = std::fs::remove_dir_all(output);
+        }
+
+        let rewrites = [
+            (
+                ATTENTION_OPERATOR_BINDING_FILE,
+                serde_json::to_vec_pretty(&AttentionOperatorSpec::learned_absolute_v1())
+                    .expect("attention v1 JSON"),
+                serde_json::to_vec_pretty(&AttentionOperatorSpec::learned_absolute_v2())
+                    .expect("attention v2 JSON"),
+            ),
+            (
+                DENSE_OPERATOR_BINDING_FILE,
+                serde_json::to_vec_pretty(&DenseOperatorSpec::gpt2_v1()).expect("dense v1 JSON"),
+                serde_json::to_vec_pretty(&DenseOperatorSpec::gpt2_v2()).expect("dense v2 JSON"),
+            ),
+        ];
+        for (name, initial, replacement) in rewrites {
+            let output = unique_cli_test_path(&format!("compiled-sidecar-rewrite-{name}"));
+            std::fs::create_dir_all(&output).expect("sidecar output");
+            let path = output.join(name);
+            std::fs::write(&path, &initial).expect("initial canonical sidecar");
+
+            let error = read_optional_regular_file_nofollow_with(
+                &path,
+                "execution-operator binding",
+                || std::fs::write(&path, &replacement).expect("in-place canonical rewrite"),
+            )
+            .expect_err("same-inode rewrite is a changed generation");
+            assert!(error.reason.contains("changed"), "{error}");
+            assert_eq!(
+                std::fs::read(&path).expect("replacement survives refusal"),
+                replacement
+            );
+            let _ = std::fs::remove_dir_all(output);
+        }
+    }
+
+    #[test]
+    fn compile_dense_operator_refuses_payload_relabel_and_cross_era_joint_pin() {
+        use uor_r4_model_source::dense::DenseOperatorSpec;
+
+        let legacy = unique_cli_test_path("compile-dense-legacy-payload");
+        std::fs::create_dir_all(&legacy).expect("legacy output");
+        std::fs::write(legacy.join("corpus.records"), b"legacy dense rows")
+            .expect("legacy payload");
+        let before = directory_bytes(&legacy);
+        let error = bind_compiled_dense_operator(&legacy, Some(&DenseOperatorSpec::gpt2_v2()))
+            .expect_err("legacy payload cannot be relabelled");
+        assert!(
+            error.reason.contains("legacy dense-execution era"),
+            "{error}"
+        );
+        assert_eq!(directory_bytes(&legacy), before);
+
+        let cross_era = unique_cli_test_path("compile-dense-cross-era");
+        std::fs::create_dir_all(&cross_era).expect("cross-era output");
+        std::fs::write(cross_era.join("sentinel"), b"before").expect("sentinel");
+        let before = directory_bytes(&cross_era);
+        let error = pin_compile_identities_with_dense(
+            &cross_era,
+            &fixture_adapter("cross-era"),
+            &AttentionOperatorSpec::learned_absolute_v1(),
+            Some(&DenseOperatorSpec::gpt2_v2()),
+        )
+        .expect_err("cross-era joint identity must fail before publication");
+        assert!(error.reason.contains("source execution pair"), "{error}");
+        assert_eq!(directory_bytes(&cross_era), before);
+        assert!(!cross_era.join(TOKENIZER_ADAPTER_FILE).exists());
+        assert!(!cross_era.join(ATTENTION_OPERATOR_BINDING_FILE).exists());
+        assert!(!cross_era.join(DENSE_OPERATOR_BINDING_FILE).exists());
+
+        let _ = std::fs::remove_dir_all(legacy);
+        let _ = std::fs::remove_dir_all(cross_era);
+    }
+
+    #[test]
     fn compile_attention_operator_reader_accepts_every_immutable_and_current_source_record() {
         for operator in [
             AttentionOperatorSpec::standard_v1(),
@@ -6073,6 +8882,76 @@ mod tests {
         assert!(error.reason.contains("evaluation refused before replay"));
         assert!(error.reason.contains("standard-source-attention/1"));
         assert!(error.reason.contains("standard-source-attention/2"));
+    }
+
+    #[test]
+    fn evaluation_dense_operator_requires_exact_value_and_exact_absence() {
+        use uor_r4_model_source::dense::DenseOperatorSpec;
+
+        let compiled = Path::new("compiled-fixture");
+        let v1 = DenseOperatorSpec::gpt2_v1();
+        let v2 = DenseOperatorSpec::gpt2_v2();
+        require_matching_evaluation_dense_operator(compiled, Some(&v1), Some(&v1))
+            .expect("exact historical dense replay");
+        require_matching_evaluation_dense_operator(compiled, Some(&v2), Some(&v2))
+            .expect("exact current dense replay");
+        require_matching_evaluation_dense_operator(compiled, None, None)
+            .expect("typed dense absence replay");
+
+        for (recorded, actual) in [(Some(&v1), Some(&v2)), (Some(&v2), None), (None, Some(&v2))] {
+            let error = require_matching_evaluation_dense_operator(compiled, recorded, actual)
+                .expect_err("dense era mismatch must fail before replay");
+            assert!(
+                error.reason.contains("evaluation refused before replay"),
+                "{error}"
+            );
+        }
+    }
+
+    #[test]
+    fn evaluation_snapshot_cids_are_from_one_binding_checked_generation() {
+        let compiled = unique_cli_test_path("evaluation-captured-execution");
+        let attention_v2 = AttentionOperatorSpec::learned_absolute_v2();
+        let dense_v2 = DenseOperatorSpec::gpt2_v2();
+        bind_compiled_attention_operator(&compiled, &attention_v2).expect("v2 attention");
+        bind_compiled_dense_operator(&compiled, Some(&dense_v2)).expect("v2 dense");
+        let (meta, records) = complete_test_corpus(&compiled);
+        let binding_cid = publish_test_corpus_binding(&compiled, &meta, &records);
+        let attention_path = compiled.join(ATTENTION_OPERATOR_BINDING_FILE);
+        let dense_path = compiled.join(DENSE_OPERATOR_BINDING_FILE);
+        let attention_v2_bytes = std::fs::read(&attention_path).expect("captured attention bytes");
+        let dense_v2_bytes = std::fs::read(&dense_path).expect("captured dense bytes");
+        let captured = recorded_corpus_snapshot(&meta, &records).expect("exact snapshot");
+        assert_eq!(captured.execution.attention_operator, Some(attention_v2));
+        assert_eq!(captured.execution.dense_operator, Some(dense_v2));
+        assert_eq!(
+            format!(
+                "blake3:{}",
+                blake3::hash(
+                    captured
+                        .attention_operator_bytes
+                        .as_deref()
+                        .expect("attention bytes")
+                )
+                .to_hex()
+            ),
+            format!("blake3:{}", blake3::hash(&attention_v2_bytes).to_hex())
+        );
+        assert_eq!(
+            format!(
+                "blake3:{}",
+                blake3::hash(
+                    captured
+                        .dense_operator_bytes
+                        .as_deref()
+                        .expect("dense bytes")
+                )
+                .to_hex()
+            ),
+            format!("blake3:{}", blake3::hash(&dense_v2_bytes).to_hex())
+        );
+        assert_eq!(captured.binding_cid, Some(binding_cid));
+        let _ = std::fs::remove_dir_all(compiled);
     }
 
     #[test]
@@ -6759,7 +9638,7 @@ mod tests {
 
     #[test]
     fn recorded_compile_refuses_unsupported_source_bundle_leaves_before_mutation() {
-        for case in ["adapter", "table", "hidden", "space-manifest"] {
+        for case in ["adapter", "table", "space-manifest"] {
             let output = unique_cli_test_path(&format!("recorded-output-stale-{case}"));
             if case == "adapter" {
                 pin_compile_tokenizer_adapter(&output, &fixture_adapter("stale-recorded"))
@@ -6773,13 +9652,6 @@ mod tests {
                     b"stale tokenizer table sentinel",
                 )
                 .expect("stale tokenizer table");
-            }
-            if case == "hidden" {
-                std::fs::write(
-                    output.join("corpus.records.hidden"),
-                    b"stale teacher hidden-row sentinel",
-                )
-                .expect("stale hidden stream");
             }
             if case == "space-manifest" {
                 std::fs::write(
@@ -7202,6 +10074,123 @@ mod tests {
     }
 
     #[test]
+    fn compile_recorded_preflight_propagates_the_joint_dense_execution_identity() {
+        use uor_r4_model_source::dense::DenseOperatorSpec;
+
+        let source = unique_cli_test_path("compile-recorded-dense-source");
+        let attention = AttentionOperatorSpec::learned_absolute_v2();
+        let dense = DenseOperatorSpec::gpt2_v2();
+        bind_compiled_attention_operator(&source, &attention).expect("source attention binding");
+        bind_compiled_dense_operator(&source, Some(&dense)).expect("source dense binding");
+        let (meta, records) = corpus_markers(&source);
+
+        let output = unique_cli_test_path("compile-recorded-dense-output");
+        let args = vec![
+            "--corpus-meta".to_owned(),
+            meta.display().to_string(),
+            "--corpus-recs".to_owned(),
+            records.display().to_string(),
+            "--vocab-size".to_owned(),
+            "16".to_owned(),
+            "--out".to_owned(),
+            output.display().to_string(),
+        ];
+        let options = parse_recorded_compile_options(&args).expect("recorded compile options");
+        let prepared = preflight_recorded_compile_execution_identity(&options)
+            .expect("preflight current GPT-2 recorded corpus");
+        assert_eq!(prepared.attention_operator, attention);
+        assert_eq!(prepared.dense_operator, Some(dense));
+        assert_eq!(prepared.corpus.meta_bytes, b"meta marker");
+        assert_eq!(prepared.corpus.records_bytes, b"records marker");
+        assert!(
+            !output.exists(),
+            "all recorded execution checks precede output publication"
+        );
+
+        let _ = std::fs::remove_dir_all(source);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn recorded_corpus_capture_refuses_post_resolution_swap_and_copy_never_reopens_source() {
+        use std::os::unix::fs::symlink;
+
+        let source = unique_cli_test_path("recorded-corpus-captured-source");
+        let (meta, records) = corpus_markers(&source);
+        let hidden = source.join("corpus.records.hidden");
+        std::fs::write(&hidden, b"captured hidden bytes").expect("hidden bytes");
+        let external = unique_cli_test_path("recorded-corpus-external-records");
+        std::fs::write(&external, b"external replacement bytes").expect("external records");
+        let output = unique_cli_test_path("recorded-corpus-swap-output");
+        std::fs::create_dir_all(&output).expect("output");
+        std::fs::write(output.join("sentinel"), b"before").expect("sentinel");
+        let output_before = directory_bytes(&output);
+
+        let error = recorded_corpus_snapshot_with_hook(&meta, &records, || {
+            std::fs::remove_file(&records).expect("remove captured records path");
+            symlink(&external, &records).expect("post-resolution records symlink")
+        })
+        .expect_err("post-resolution path generation swap is terminal");
+        assert!(
+            error.reason.contains("without following links")
+                || error.reason.contains("captured regular-file generation"),
+            "{error}"
+        );
+        assert_eq!(directory_bytes(&output), output_before);
+        std::fs::remove_file(&records).expect("remove swapped link");
+        std::fs::write(&records, b"records marker").expect("restore records");
+
+        let captured = recorded_corpus_snapshot(&meta, &records).expect("stable exact capture");
+        assert_eq!(captured.meta_bytes, b"meta marker");
+        assert_eq!(captured.records_bytes, b"records marker");
+        assert_eq!(
+            captured.hidden_bytes.as_deref(),
+            Some(b"captured hidden bytes".as_slice())
+        );
+        std::fs::remove_file(&meta).expect("remove captured metadata source");
+        std::fs::remove_file(&records).expect("remove captured records source");
+        symlink(&external, &meta).expect("swap metadata after complete capture");
+        symlink(&external, &records).expect("swap records after complete capture");
+
+        let mut output_guard =
+            uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerGuard::try_acquire(
+                &output,
+            )
+            .expect("output guard");
+        output_guard.ensure_root().expect("output root");
+        write_captured_recorded_corpus(&output_guard, &output, &captured)
+            .expect("copy uses owned captured bytes only");
+        assert_eq!(
+            std::fs::read(output.join("corpus.meta")).expect("output meta"),
+            b"meta marker"
+        );
+        assert_eq!(
+            std::fs::read(output.join("corpus.records")).expect("output records"),
+            b"records marker"
+        );
+        assert_eq!(
+            std::fs::read(&external).expect("external survives"),
+            b"external replacement bytes"
+        );
+
+        let _ = std::fs::remove_dir_all(source);
+        let _ = std::fs::remove_dir_all(output);
+        let _ = std::fs::remove_file(external);
+    }
+
+    #[test]
+    fn captured_corpus_byte_parser_matches_the_path_wrapper_contract() {
+        let meta = source_resume_meta(1, 1);
+        let record = source_v3_record(7, 0);
+        let corpus =
+            compiler::load_corpus_bytes(&meta, &record, None).expect("captured v3 corpus parses");
+        assert_eq!(corpus.n, 1);
+        assert_eq!(corpus.stories, 1);
+        assert_eq!(corpus.story, vec![7]);
+        assert_eq!(corpus.next, vec![7]);
+    }
+
+    #[test]
     fn recorded_corpus_attention_operator_reads_both_sources_and_rejects_conflicts() {
         let sidecar_root = unique_cli_test_path("recorded-attention-sidecar");
         let sidecar_operator = AttentionOperatorSpec::learned_absolute_source_attention();
@@ -7267,6 +10256,150 @@ mod tests {
         let _ = std::fs::remove_dir_all(conflict_root);
         let _ = std::fs::remove_dir_all(operatorless_manifest_root);
         let _ = std::fs::remove_dir_all(legacy_root);
+    }
+
+    #[test]
+    fn recorded_corpus_execution_identity_resolves_dense_and_rejects_impossible_pairs() {
+        use uor_r4_model_source::dense::DenseOperatorSpec;
+
+        let sidecar_root = unique_cli_test_path("recorded-execution-sidecars");
+        let attention = AttentionOperatorSpec::learned_absolute_v2();
+        let dense = DenseOperatorSpec::gpt2_v2();
+        bind_compiled_attention_operator(&sidecar_root, &attention).expect("attention sidecar");
+        bind_compiled_dense_operator(&sidecar_root, Some(&dense)).expect("dense sidecar");
+        let (meta, records) = corpus_markers(&sidecar_root);
+        assert_eq!(
+            recorded_corpus_execution_identity(&meta, &records).expect("joint sidecar identity"),
+            RecordedCorpusExecutionIdentity {
+                attention_operator: Some(attention.clone()),
+                dense_operator: Some(dense.clone()),
+            }
+        );
+
+        let manifest_root = unique_cli_test_path("recorded-execution-manifest");
+        let mut manifest = observe::ObservationManifest::new(1);
+        manifest.attention_operator = Some(attention.clone());
+        manifest.dense_operator = Some(dense.clone());
+        write_observation_manifest(&manifest_root, &manifest);
+        let (state, merged) = observation_corpus_markers(&manifest_root);
+        assert_eq!(
+            recorded_corpus_execution_identity(&state, &merged).expect("joint manifest identity"),
+            RecordedCorpusExecutionIdentity {
+                attention_operator: Some(attention),
+                dense_operator: Some(dense),
+            }
+        );
+
+        let cross_era = unique_cli_test_path("recorded-execution-cross-era");
+        let mut manifest = observe::ObservationManifest::new(1);
+        manifest.attention_operator = Some(AttentionOperatorSpec::learned_absolute_v1());
+        manifest.dense_operator = Some(DenseOperatorSpec::gpt2_v2());
+        write_observation_manifest(&cross_era, &manifest);
+        let (state, merged) = observation_corpus_markers(&cross_era);
+        let before = directory_bytes(&cross_era);
+        let error = recorded_corpus_execution_identity(&state, &merged)
+            .expect_err("cross-era pair is terminal");
+        assert!(
+            error.reason.contains("does not match") || error.reason.contains("not registered"),
+            "{error}"
+        );
+        assert_eq!(directory_bytes(&cross_era), before);
+
+        let dense_only = unique_cli_test_path("recorded-execution-dense-only");
+        bind_compiled_dense_operator(&dense_only, Some(&DenseOperatorSpec::gpt2_v2()))
+            .expect("dense-only sidecar fixture");
+        let (meta, records) = corpus_markers(&dense_only);
+        let before = directory_bytes(&dense_only);
+        let error = recorded_corpus_execution_identity(&meta, &records)
+            .expect_err("dense without attention is terminal");
+        assert!(error.reason.contains("without an attention"), "{error}");
+        assert_eq!(directory_bytes(&dense_only), before);
+
+        for root in [sidecar_root, manifest_root, cross_era, dense_only] {
+            let _ = std::fs::remove_dir_all(root);
+        }
+    }
+
+    #[test]
+    fn recorded_corpus_joint_snapshot_rejects_manifest_disappearance_before_output_mutation() {
+        use uor_r4_model_source::dense::DenseOperatorSpec;
+
+        let root = unique_cli_test_path("recorded-execution-toctou");
+        let mut manifest = observe::ObservationManifest::new(1);
+        manifest.attention_operator = Some(AttentionOperatorSpec::learned_absolute_v2());
+        manifest.dense_operator = Some(DenseOperatorSpec::gpt2_v2());
+        write_observation_manifest(&root, &manifest);
+        let (state, merged) = observation_corpus_markers(&root);
+        let output = unique_cli_test_path("recorded-execution-toctou-output");
+        std::fs::create_dir_all(&output).expect("output directory");
+        std::fs::write(output.join("sentinel"), b"last-good output").expect("sentinel");
+        let output_before = directory_bytes(&output);
+        let manifest_path = root.join(observe::MANIFEST_FILE);
+
+        let error = recorded_corpus_execution_identity_with_recheck_hooks(
+            &state,
+            &merged,
+            || {},
+            || std::fs::remove_file(&manifest_path).expect("simulate manifest disappearance"),
+        )
+        .expect_err("one execution identity cannot span filesystem generations");
+        assert!(error.reason.contains("changed or disappeared"), "{error}");
+        assert_eq!(directory_bytes(&output), output_before);
+
+        let _ = std::fs::remove_dir_all(root);
+        let _ = std::fs::remove_dir_all(output);
+    }
+
+    #[test]
+    fn recorded_corpus_joint_snapshot_returns_only_captured_bytes_across_aba_swap() {
+        let root = unique_cli_test_path("recorded-execution-aba");
+        let v1_attention = AttentionOperatorSpec::learned_absolute_v1();
+        let v1_dense = DenseOperatorSpec::gpt2_v1();
+        bind_compiled_attention_operator(&root, &v1_attention).expect("v1 attention");
+        bind_compiled_dense_operator(&root, Some(&v1_dense)).expect("v1 dense");
+        let (meta, records) = corpus_markers(&root);
+        let attention_path = root.join(ATTENTION_OPERATOR_BINDING_FILE);
+        let dense_path = root.join(DENSE_OPERATOR_BINDING_FILE);
+        let attention_v1_bytes = std::fs::read(&attention_path).expect("v1 attention bytes");
+        let dense_v1_bytes = std::fs::read(&dense_path).expect("v1 dense bytes");
+        let mut attention_v2_bytes =
+            serde_json::to_vec_pretty(&AttentionOperatorSpec::learned_absolute_v2())
+                .expect("v2 attention JSON");
+        attention_v2_bytes.push(b'\n');
+        let mut dense_v2_bytes =
+            serde_json::to_vec_pretty(&DenseOperatorSpec::gpt2_v2()).expect("v2 dense JSON");
+        dense_v2_bytes.push(b'\n');
+
+        let resolved = recorded_corpus_execution_identity_with_recheck_hooks(
+            &meta,
+            &records,
+            || {
+                std::fs::write(&attention_path, &attention_v2_bytes)
+                    .expect("transient v2 attention");
+                std::fs::write(&dense_path, &dense_v2_bytes).expect("transient v2 dense");
+            },
+            || {
+                std::fs::write(&attention_path, &attention_v1_bytes).expect("restore v1 attention");
+                std::fs::write(&dense_path, &dense_v1_bytes).expect("restore v1 dense");
+            },
+        )
+        .expect("the exact captured A generation remains authoritative");
+        assert_eq!(
+            resolved,
+            RecordedCorpusExecutionIdentity {
+                attention_operator: Some(v1_attention),
+                dense_operator: Some(v1_dense),
+            }
+        );
+        assert_eq!(
+            std::fs::read(attention_path).expect("restored attention"),
+            attention_v1_bytes
+        );
+        assert_eq!(
+            std::fs::read(dense_path).expect("restored dense"),
+            dense_v1_bytes
+        );
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]
@@ -7409,30 +10542,35 @@ mod tests {
         symlink(&target, root.join(observe::MANIFEST_FILE)).expect("manifest symlink");
         let error = recorded_corpus_attention_operator(&meta, &records)
             .expect_err("a present manifest symlink is not legacy absence");
-        assert!(error.reason.contains("not a regular file"));
+        assert!(error.reason.contains("not a regular"), "{error}");
         let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]
-    fn copy_recorded_attention_uses_registry_resolver_and_preserves_true_legacy_absence() {
+    fn copy_recorded_attention_preserves_markerless_legacy_compatibility() {
         let source = unique_cli_test_path("copy-recorded-attention-source");
-        let operator = AttentionOperatorSpec::learned_absolute_source_attention();
+        let operator = AttentionOperatorSpec::standard_v1();
         bind_compiled_attention_operator(&source, &operator).expect("source binding");
-        let (meta, records) = corpus_markers(&source);
-        let destination = unique_cli_test_path("copy-recorded-attention-destination")
-            .join(ATTENTION_OPERATOR_BINDING_FILE);
+        let (meta, records) = complete_test_corpus(&source);
+        let destination_root = unique_cli_test_path("copy-recorded-attention-destination");
+        let (destination_meta, destination_records) = complete_test_corpus(&destination_root);
+        let destination = destination_root.join(ATTENTION_OPERATOR_BINDING_FILE);
         copy_recorded_attention(&copy_recorded_attention_args(&meta, &records, &destination))
-            .expect("copy exact source provenance");
+            .expect("copy historical attention provenance");
         assert_eq!(
-            compiled_attention_operator(destination.parent().expect("destination parent"))
-                .expect("copied binding"),
+            compiled_attention_operator(&destination_root).expect("copied binding"),
             operator
         );
+        assert_eq!(compiled_dense_operator(&destination_root).unwrap(), None);
+        let captured = recorded_corpus_snapshot(&destination_meta, &destination_records)
+            .expect("markerless compatibility destination");
+        assert!(captured.binding_cid.is_none());
 
         let legacy = unique_cli_test_path("copy-recorded-attention-legacy");
-        let (legacy_meta, legacy_records) = corpus_markers(&legacy);
-        let absent_destination = unique_cli_test_path("copy-recorded-attention-legacy-destination")
-            .join(ATTENTION_OPERATOR_BINDING_FILE);
+        let (legacy_meta, legacy_records) = complete_test_corpus(&legacy);
+        let absent_root = unique_cli_test_path("copy-recorded-attention-legacy-destination");
+        complete_test_corpus(&absent_root);
+        let absent_destination = absent_root.join(ATTENTION_OPERATOR_BINDING_FILE);
         copy_recorded_attention(&copy_recorded_attention_args(
             &legacy_meta,
             &legacy_records,
@@ -7441,33 +10579,69 @@ mod tests {
         .expect("true legacy absence is a no-op");
         assert!(!absent_destination.exists());
 
-        let stale_parent = unique_cli_test_path("copy-recorded-attention-stale-legacy");
-        std::fs::create_dir_all(&stale_parent).expect("stale destination parent");
-        let stale_destination = stale_parent.join(ATTENTION_OPERATOR_BINDING_FILE);
-        std::fs::write(&stale_destination, b"stale binding").expect("stale destination");
-        let stale_before = std::fs::read(&stale_destination).expect("stale bytes");
-        let error = copy_recorded_attention(&copy_recorded_attention_args(
-            &legacy_meta,
-            &legacy_records,
-            &stale_destination,
-        ))
-        .expect_err("legacy absence cannot retain a stale destination");
-        assert!(
-            error
-                .reason
-                .contains("has no attention-operator provenance")
+        for root in [source, destination_root, legacy, absent_root] {
+            let _ = std::fs::remove_dir_all(root);
+        }
+    }
+
+    #[test]
+    fn copy_recorded_attention_dense_is_bound_verification_only() {
+        let source = unique_cli_test_path("copy-recorded-dense-first-source");
+        let attention = AttentionOperatorSpec::learned_absolute_v2();
+        let dense = DenseOperatorSpec::gpt2_v2();
+        bind_compiled_attention_operator(&source, &attention).expect("source attention");
+        bind_compiled_dense_operator(&source, Some(&dense)).expect("source dense");
+        let (meta, records) = complete_test_corpus(&source);
+        publish_test_corpus_binding(&source, &meta, &records);
+        let destination_root = unique_cli_test_path("copy-recorded-dense-first-destination");
+        complete_test_corpus(&destination_root);
+        let destination = destination_root.join(ATTENTION_OPERATOR_BINDING_FILE);
+        let args = copy_recorded_attention_args(&meta, &records, &destination);
+        let before = directory_bytes(&destination_root);
+        let error = copy_recorded_attention(&args)
+            .expect_err("unbound destination cannot acquire dense provenance");
+        assert!(error.reason.contains("cannot authorize"), "{error}");
+        assert_eq!(directory_bytes(&destination_root), before);
+
+        std::fs::remove_dir_all(&destination_root).expect("replace unbound fixture");
+        bind_compiled_dense_operator(&destination_root, Some(&dense)).expect("bound dense");
+        bind_compiled_attention_operator(&destination_root, &attention).expect("bound attention");
+        let (destination_meta, destination_records) = complete_test_corpus(&destination_root);
+        publish_test_corpus_binding(&destination_root, &destination_meta, &destination_records);
+        let bound_before = directory_bytes(&destination_root);
+        copy_recorded_attention(&args).expect("exact bound destination verifies as a no-op");
+        assert_eq!(directory_bytes(&destination_root), bound_before);
+
+        let attention_only_source = unique_cli_test_path("copy-recorded-attention-only-source");
+        let attention_only = AttentionOperatorSpec::standard_v1();
+        bind_compiled_attention_operator(&attention_only_source, &attention_only)
+            .expect("attention-only source");
+        let (meta, records) = complete_test_corpus(&attention_only_source);
+        let attention_only_root = unique_cli_test_path("copy-recorded-attention-only-destination");
+        complete_test_corpus(&attention_only_root);
+        let attention_only_destination = attention_only_root.join(ATTENTION_OPERATOR_BINDING_FILE);
+        copy_recorded_attention_with_after_dense(
+            &copy_recorded_attention_args(&meta, &records, &attention_only_destination),
+            || Err(SourceUnavailable::new("dense hook must not run")),
+        )
+        .expect("attention-only publication order is unchanged");
+        assert_eq!(
+            compiled_attention_operator(&attention_only_root).expect("attention-only destination"),
+            attention_only
         );
         assert_eq!(
-            std::fs::read(&stale_destination).expect("stale bytes"),
-            stale_before
+            compiled_dense_operator(&attention_only_root).expect("typed dense absence"),
+            None
         );
 
-        let _ = std::fs::remove_dir_all(source);
-        if let Some(parent) = destination.parent() {
-            let _ = std::fs::remove_dir_all(parent);
+        for root in [
+            source,
+            destination_root,
+            attention_only_source,
+            attention_only_root,
+        ] {
+            let _ = std::fs::remove_dir_all(root);
         }
-        let _ = std::fs::remove_dir_all(legacy);
-        let _ = std::fs::remove_dir_all(stale_parent);
     }
 
     #[test]
@@ -7544,10 +10718,10 @@ mod tests {
         let source = unique_cli_test_path("copy-recorded-attention-symlink-source");
         bind_compiled_attention_operator(&source, &AttentionOperatorSpec::standard())
             .expect("source binding");
-        let (meta, records) = corpus_markers(&source);
+        let (meta, records) = complete_test_corpus(&source);
         let destination_parent =
             unique_cli_test_path("copy-recorded-attention-symlink-destination");
-        std::fs::create_dir_all(&destination_parent).expect("destination parent");
+        complete_test_corpus(&destination_parent);
         let destination = destination_parent.join(ATTENTION_OPERATOR_BINDING_FILE);
         let sentinel = unique_cli_test_path("copy-recorded-attention-symlink-sentinel");
         let sentinel_bytes = b"external sentinel must remain unchanged";
@@ -7557,7 +10731,11 @@ mod tests {
         let error =
             copy_recorded_attention(&copy_recorded_attention_args(&meta, &records, &destination))
                 .expect_err("destination symlink must be refused");
-        assert!(error.reason.contains("not a regular file"));
+        assert!(
+            error.reason.contains("not a regular")
+                || error.reason.contains("without following links"),
+            "{error}"
+        );
         assert_eq!(std::fs::read(&sentinel).expect("sentinel"), sentinel_bytes);
         assert!(
             std::fs::symlink_metadata(&destination)
@@ -7630,6 +10808,8 @@ mod tests {
                 cid: "blake3:1111".to_owned(),
                 sequence_length: 256,
                 bos_prefix: false,
+                attention_operator: AttentionOperatorSpec::standard_v1(),
+                dense_operator: None,
             },
             artifacts: EvaluationArtifacts {
                 directory: ".uor-models/compiled/smollm2-135m-instruct".to_owned(),
@@ -7638,6 +10818,9 @@ mod tests {
                 tokenizer_cid: "blake3:4444".to_owned(),
                 corpus_meta_cid: "blake3:5555".to_owned(),
                 corpus_records_cid: "blake3:6666".to_owned(),
+                attention_operator_cid: "blake3:7777".to_owned(),
+                dense_operator_cid: None,
+                recorded_corpus_binding_cid: None,
             },
             metrics: EvaluationMetrics {
                 top1_accuracy_pct: 35.5,
@@ -7671,6 +10854,38 @@ mod tests {
         assert_eq!(envelope.report.metrics.top1_accuracy_pct, 35.5);
         assert_eq!(envelope.report.source.sequence_length, 256);
         assert!(envelope.report_cid_of_report_bytes.starts_with("blake3:"));
+        let legacy_json: serde_json::Value =
+            serde_json::from_slice(&json).expect("legacy-compatible report JSON");
+        assert_eq!(
+            legacy_json["source"]["dense_operator"],
+            serde_json::Value::Null
+        );
+        assert_eq!(
+            legacy_json["artifacts"]["dense_operator_cid"],
+            serde_json::Value::Null
+        );
+        assert_eq!(
+            legacy_json["artifacts"]["recorded_corpus_binding_cid"],
+            serde_json::Value::Null
+        );
+
+        let mut gpt2 = report;
+        gpt2.schema = 5;
+        gpt2.source.attention_operator = AttentionOperatorSpec::learned_absolute_v2();
+        gpt2.source.dense_operator = Some(DenseOperatorSpec::gpt2_v2());
+        gpt2.artifacts.dense_operator_cid = Some("blake3:8888".to_owned());
+        gpt2.artifacts.recorded_corpus_binding_cid = Some("blake3:9999".to_owned());
+        let gpt2_json = serde_json::to_value(&gpt2).expect("GPT-2 evaluation report JSON");
+        assert_eq!(gpt2_json["schema"], 5);
+        assert_eq!(
+            gpt2_json["source"]["dense_operator"]["implementation_digest"],
+            DenseOperatorSpec::gpt2_v2().implementation_digest
+        );
+        assert_eq!(gpt2_json["artifacts"]["dense_operator_cid"], "blake3:8888");
+        assert_eq!(
+            gpt2_json["artifacts"]["recorded_corpus_binding_cid"],
+            "blake3:9999"
+        );
     }
 
     #[test]

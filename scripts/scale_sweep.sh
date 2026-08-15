@@ -35,39 +35,47 @@ printf '%-12s %-10s %-12s %-12s\n' records held_out top1_rule12 exct_miss_%
 
 # Each sub-sample is a canonical corpus pair in its own input directory.
 # `compile-recorded` may then emit its canonical output pair in "$D" without
-# clobbering the input, while attention provenance remains directory-scoped and
-# cannot be inherited by an unrelated same-directory filename pair.
+# clobbering the input, while source-execution provenance remains
+# directory-scoped and cannot be inherited by an unrelated same-directory
+# filename pair.
 for N in "${SIZES[@]}"; do
     D="$WORK/n-$N"
     INPUT="$D/input"
     mkdir -p "$INPUT"
-    python3 scripts/mc1_subsample_corpus.py \
+    "$R4" transformerless subsample-recorded-corpus \
         --src-meta "$SRC_META" --src-recs "$SRC_RECS" \
         --out-meta "$INPUT/corpus.meta" --out-recs "$INPUT/corpus.records" \
         --records "$N" >/dev/null
-
-    # Preserve the source corpus's exact attention era without copying a
-    # manifest whose record counts describe the unsampled corpus. The Rust
-    # boundary validates the complete source manifest, canonical corpus pair,
-    # registry record, and no-clobber destination before publishing anything.
-    "$R4" transformerless copy-recorded-attention \
-        --corpus-meta "$SRC_META" --corpus-recs "$SRC_RECS" \
-        --out "$INPUT/attention_operator.json" >/dev/null
+    ACTUAL_N="$(python3 - "$INPUT/corpus.meta" <<'PY'
+import struct, sys
+with open(sys.argv[1], "rb") as f:
+    meta = f.read()
+if len(meta) != 25 or meta[24] != 1:
+    raise SystemExit("subsample output is not one finalized 25-byte corpus metadata record")
+print(struct.unpack("<Q", meta[:8])[0])
+PY
+)"
 
     "$R4" transformerless compile-recorded \
         --corpus-meta "$INPUT/corpus.meta" --corpus-recs "$INPUT/corpus.records" \
         --vocab-size "$VOCAB" --out "$D" >/dev/null 2>&1
     ATTENTION_OPERATOR="$(python3 -c 'import json,sys; print(json.dumps(json.load(open(sys.argv[1])),separators=(",",":")))' "$D/attention_operator.json")"
+    DENSE_OPERATOR_ARGS=()
+    if [ -f "$D/dense_operator.json" ]; then
+        DENSE_OPERATOR="$(python3 -c 'import json,sys; print(json.dumps(json.load(open(sys.argv[1])),separators=(",",":")))' "$D/dense_operator.json")"
+        DENSE_OPERATOR_ARGS=(--dense-operator "$DENSE_OPERATOR")
+    fi
     "$R4" transformerless cover \
         --corpus-meta "$D/corpus.meta" --corpus-recs "$D/corpus.records" \
         --artifacts "$D/tless_artifacts.bin" \
         --attention-operator "$ATTENTION_OPERATOR" \
+        "${DENSE_OPERATOR_ARGS[@]}" \
         --out "$D/graph-cover" >/dev/null 2>&1
     "$R4" transformerless score \
         --corpus-meta "$D/corpus.meta" --corpus-recs "$D/corpus.records" \
         --artifacts "$D/tless_artifacts.bin" --cover "$D/graph-cover/cover.r4g1" \
         --quality-profile relative_tla --out "$D/graph" >/dev/null 2>&1
-    python3 - "$D/graph/score_report.json" "$N" <<'PY'
+    python3 - "$D/graph/score_report.json" "$ACTUAL_N" <<'PY'
 import json, sys
 d = json.load(open(sys.argv[1]))
 n = sys.argv[2]
