@@ -696,9 +696,11 @@ pub fn run_server(cli: Arc<ServerConfig>) {
     let (startup_read_sessions, r4g1_discovery_allowed) = match startup_sessions {
         Ok(sessions) => {
             let recovery = if cli.r4g1_artifact.is_none() {
-                recover_managed_compiled_bundle_completion_temporaries(Path::new(
-                    ".uor-models/compiled",
-                ))
+                // Managed roots are recovered one selected logical trio at a
+                // time under the lower common producer authority immediately
+                // before their reader pins are acquired. The inventory outer
+                // lock alone is not publication authority.
+                Ok(())
             } else {
                 configured_graph
                     .as_deref()
@@ -740,6 +742,7 @@ pub fn run_server(cli: Arc<ServerConfig>) {
                     graph,
                     PathBuf::from(&cli.tless_artifacts),
                     None::<ResolvedCompiledBundle>,
+                    None::<uor_r4_graph_compiler::recorded_corpus::RecordedCorpusReaderPins>,
                 )]
             })
             .unwrap_or_default()
@@ -750,61 +753,103 @@ pub fn run_server(cli: Arc<ServerConfig>) {
         let mut discovery_valid = true;
         let mut configured_external = false;
         let mut configured_managed_logical = None;
-        match current_source_attention_era_version().and_then(|version| {
-            resolve_managed_teacher_bundle_in(
+        let current_version = match current_source_attention_era_version() {
+            Ok(version) => version,
+            Err(error) => {
+                set_r4g1_terminal_load_error(&serving, error);
+                r4g1_candidates.clear();
+                discovery_valid = false;
+                0
+            }
+        };
+        if discovery_valid {
+            match classify_managed_teacher_logical_name_in(
                 Path::new(&cli.tless_artifacts),
                 Path::new(".uor-models"),
-                version,
-            )
-        }) {
-            Ok(ConfiguredManagedBundle::Selected(candidate)) => {
-                let candidate = *candidate;
-                configured_managed_logical = Some(candidate.logical_name.clone());
-                r4g1_candidates = vec![(
-                    candidate.graph.clone(),
-                    candidate.teacher.clone(),
-                    Some(candidate),
-                )];
-            }
-            Ok(external @ ConfiguredManagedBundle::External) => {
-                configured_external = true;
-                discovery_valid = external.permits_inventory_discovery();
-            }
-            Ok(ConfiguredManagedBundle::Absent) => {
-                // A configured managed path selects one logical model even
-                // when that model is absent. Do not silently boot an
-                // unrelated bundle discovered elsewhere in the inventory.
-                r4g1_candidates.clear();
-                discovery_valid = ConfiguredManagedBundle::Absent.permits_inventory_discovery();
-            }
-            Ok(ConfiguredManagedBundle::Incomplete(error)) => {
-                println!("[-] Refusing incomplete configured managed R4G1 bundle: {error}");
-                set_r4g1_terminal_load_error(&serving, error);
-                r4g1_candidates.clear();
-                discovery_valid = false;
-            }
-            Err(error) => {
-                println!("[-] Refusing configured managed R4G1 bundle: {error}");
-                set_r4g1_terminal_load_error(&serving, error);
-                r4g1_candidates.clear();
-                discovery_valid = false;
+                current_version,
+            ) {
+                Ok(Some(logical_name)) => {
+                    configured_managed_logical = Some(logical_name.clone());
+                    match acquire_managed_compiled_bundle_read(
+                        Path::new(".uor-models/compiled"),
+                        &logical_name,
+                        current_version,
+                    ) {
+                        Ok(ManagedCompiledBundleRead {
+                            resolved: Some(candidate),
+                            pins,
+                        }) => {
+                            r4g1_candidates = vec![(
+                                candidate.graph.clone(),
+                                candidate.teacher.clone(),
+                                Some(candidate),
+                                Some(pins),
+                            )];
+                        }
+                        Ok(ManagedCompiledBundleRead { resolved: None, .. }) => {
+                            // A configured managed path selects one logical model
+                            // even when absent. Never fall through to an unrelated
+                            // inventory candidate.
+                            r4g1_candidates.clear();
+                            discovery_valid = false;
+                        }
+                        Err(error) if source_compile_session_is_busy(&error) => {
+                            println!(
+                            "[-] Deferring configured managed R4G1 startup while common publication is busy: {error}"
+                        );
+                            r4g1_candidates.clear();
+                            discovery_valid = false;
+                        }
+                        Err(error) => {
+                            println!("[-] Refusing configured managed R4G1 bundle: {error}");
+                            set_r4g1_terminal_load_error(&serving, error);
+                            r4g1_candidates.clear();
+                            discovery_valid = false;
+                        }
+                    }
+                }
+                Ok(None) => {
+                    configured_external = true;
+                }
+                Err(error) if source_compile_session_is_busy(&error) => {
+                    println!(
+                    "[-] Deferring configured managed R4G1 startup while common publication is busy: {error}"
+                );
+                    r4g1_candidates.clear();
+                    discovery_valid = false;
+                }
+                Err(error) => {
+                    println!("[-] Refusing configured managed R4G1 bundle: {error}");
+                    set_r4g1_terminal_load_error(&serving, error);
+                    r4g1_candidates.clear();
+                    discovery_valid = false;
+                }
             }
         }
-        if discovery_valid {
-            match discover_compiled_r4g1_candidates() {
-                Ok(candidates) => {
-                    for candidate in candidates {
-                        if configured_managed_logical.as_deref()
-                            == Some(candidate.logical_name.as_str())
-                        {
+        if discovery_valid && !configured_external {
+            match discover_managed_compiled_reads_in(
+                Path::new(".uor-models/compiled"),
+                current_version,
+                configured_managed_logical.as_deref(),
+            ) {
+                Ok(reads) => {
+                    for ManagedCompiledBundleRead { resolved, pins } in reads {
+                        let Some(candidate) = resolved else {
                             continue;
-                        }
+                        };
                         r4g1_candidates.push((
                             candidate.graph.clone(),
                             candidate.teacher.clone(),
                             Some(candidate),
+                            Some(pins),
                         ));
                     }
+                }
+                Err(error) if source_compile_session_is_busy(&error) => {
+                    println!(
+                        "[-] Deferring compiled R4G1 discovery while common publication is busy: {error}"
+                    );
+                    r4g1_candidates.clear();
                 }
                 Err(error) => {
                     println!("[-] Refusing compiled R4G1 discovery: {error}");
@@ -821,7 +866,60 @@ pub fn run_server(cli: Arc<ServerConfig>) {
         }
     }
     let mut loaded_r4g1 = false;
-    for (graph_path, teacher_path, resolved) in r4g1_candidates {
+    for (mut graph_path, mut teacher_path, mut resolved, mut managed_read_pins) in r4g1_candidates {
+        if managed_read_pins.is_none() {
+            if let Some(candidate) = resolved.as_ref() {
+                let Some(compiled_root) = candidate.physical_root.parent() else {
+                    let error = format!(
+                        "managed bundle {} has no compiled-model parent",
+                        candidate.physical_root.display()
+                    );
+                    set_r4g1_terminal_load_error(&serving, error);
+                    break;
+                };
+                let managed_current_version = match current_source_attention_era_version() {
+                    Ok(version) => version,
+                    Err(error) => {
+                        set_r4g1_terminal_load_error(&serving, error);
+                        break;
+                    }
+                };
+                let read = match acquire_managed_compiled_bundle_read(
+                    compiled_root,
+                    &candidate.logical_name,
+                    managed_current_version,
+                ) {
+                    Ok(read) => read,
+                    Err(error) if source_compile_session_is_busy(&error) => {
+                        println!(
+                        "[-] Deferring R4G1 startup while common bundle publication is busy: {error}"
+                    );
+                        break;
+                    }
+                    Err(error) => {
+                        println!("[-] Refusing managed R4G1 startup transaction: {error}");
+                        set_r4g1_terminal_load_error(&serving, error);
+                        break;
+                    }
+                };
+                let ManagedCompiledBundleRead {
+                    resolved: refreshed,
+                    pins,
+                } = read;
+                let Some(refreshed) = refreshed else {
+                    let error = format!(
+                        "managed model {} disappeared before startup loading",
+                        candidate.logical_name
+                    );
+                    set_r4g1_terminal_load_error(&serving, error);
+                    break;
+                };
+                graph_path = refreshed.graph.clone();
+                teacher_path = refreshed.teacher.clone();
+                resolved = Some(refreshed);
+                managed_read_pins = Some(pins);
+            }
+        }
         if let Err(error) = validate_legacy_graph_generation_for_serving(&graph_path) {
             println!(
                 "[-] Refusing incomplete or changed legacy R4G1 generation {}: {error}",
@@ -840,25 +938,6 @@ pub fn run_server(cli: Arc<ServerConfig>) {
         };
         if !inputs_present {
             continue;
-        }
-        if let Some(bundle) = resolved.as_ref() {
-            let current_version = match current_source_attention_era_version() {
-                Ok(version) => version,
-                Err(error) => {
-                    set_r4g1_terminal_load_error(&serving, error);
-                    break;
-                }
-            };
-            if let Err(error) =
-                ensure_compiled_bundle_completion_for_serving(bundle, current_version)
-            {
-                println!(
-                    "[-] Refusing R4G1 graph {} because its bundle completion is invalid: {error}",
-                    graph_path.display()
-                );
-                set_r4g1_terminal_load_error(&serving, error);
-                break;
-            }
         }
         let resolved_source = match resolved.as_ref() {
             Some(bundle) => match source_for_resolved_bundle_in(bundle, Path::new(".uor-models")) {
@@ -979,19 +1058,27 @@ pub fn run_server(cli: Arc<ServerConfig>) {
                     println!("[-] {message}");
                 }
                 let refreshed = match resolved.as_ref() {
-                    Some(candidate) => match current_source_attention_era_version()
-                        .and_then(|version| refresh_resolved_compiled_bundle(candidate, version))
-                    {
-                        Ok(refreshed) => Some(refreshed),
-                        Err(error) => {
-                            println!(
-                                "[-] Refusing R4G1 graph {} after provenance re-check: {error}",
-                                graph_path.display()
-                            );
-                            set_r4g1_terminal_load_error(&serving, error);
-                            break;
+                    Some(candidate) => {
+                        match current_source_attention_era_version().and_then(|version| {
+                            refresh_resolved_compiled_bundle_with_authority(
+                                candidate,
+                                version,
+                                managed_read_pins
+                                    .as_ref()
+                                    .map(RecordedCorpusReadAuthority::ReaderPins),
+                            )
+                        }) {
+                            Ok(refreshed) => Some(refreshed),
+                            Err(error) => {
+                                println!(
+                                    "[-] Refusing R4G1 graph {} after provenance re-check: {error}",
+                                    graph_path.display()
+                                );
+                                set_r4g1_terminal_load_error(&serving, error);
+                                break;
+                            }
                         }
-                    },
+                    }
                     None => None,
                 };
                 println!(
@@ -1051,6 +1138,17 @@ pub fn run_server(cli: Arc<ServerConfig>) {
                             set_r4g1_terminal_load_error(&serving, error);
                             break;
                         }
+                    }
+                }
+                if let Some(pins) = managed_read_pins.as_ref() {
+                    if let Err(error) = pins.verify() {
+                        let error = error.to_string();
+                        println!(
+                            "[-] Refusing R4G1 graph {} after final managed-root re-check: {error}",
+                            graph_path.display()
+                        );
+                        set_r4g1_terminal_load_error(&serving, error);
+                        break;
                     }
                 }
                 let mut installed = serving.lock().unwrap();
@@ -1542,7 +1640,7 @@ fn inspect_compiled_root(
     }
     if resolver_owned_dense_root
         && dense_operator.is_none()
-        && source_compile_pre_attention_prefix(root)?
+        && !source_compile_output_has_payload(root)?
     {
         return Ok(CompiledRootState::PreDenseIdentity(Box::new(operator)));
     }
@@ -1791,7 +1889,12 @@ type CoverProvenance = (
 );
 
 fn parse_cover_provenance(report_path: &Path) -> Result<CoverProvenance, String> {
-    let Some(bytes) = read_regular_file_nofollow(report_path, "cover report")? else {
+    let Some(bytes) = read_regular_file_nofollow_capped(
+        report_path,
+        "cover report",
+        COVER_REPORT_CONTROL_MAX_BYTES,
+    )?
+    else {
         return Ok((false, None, None, None));
     };
     let projection: CoverProvenanceProjection = serde_json::from_slice(&bytes)
@@ -1855,11 +1958,18 @@ fn parse_cover_provenance(report_path: &Path) -> Result<CoverProvenance, String>
 /// v1 bundles remain readable when those supporting records are genuinely
 /// absent. R4G1 graph-byte provenance itself remains the separate #637 PROV
 /// contract, so this check deliberately makes no stronger claim.
-fn validate_serving_attention_provenance(
+#[derive(Clone, Copy)]
+enum RecordedCorpusReadAuthority<'a> {
+    Producer(&'a uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerGuard),
+    ReaderPins(&'a uor_r4_graph_compiler::recorded_corpus::RecordedCorpusReaderPins),
+}
+
+fn validate_serving_attention_provenance_with_authority(
     bundle: &Path,
     expected: &AttentionOperatorSpec,
     expected_dense: Option<&DenseOperatorSpec>,
     current_version: u32,
+    authority: Option<RecordedCorpusReadAuthority<'_>>,
 ) -> Result<Option<String>, String> {
     // New server-published generations carry a digest-complete transaction
     // record. Its presence is authoritative; no caller may silently fall
@@ -1870,10 +1980,22 @@ fn validate_serving_attention_provenance(
     let meta_present = regular_file_presence(&meta)?;
     let records_present = regular_file_presence(&records)?;
     let recorded_execution = match (meta_present, records_present) {
-        (true, true) => Some(
-            uor_r4_graph_cli::recorded_corpus_execution_identity(&meta, &records)
+        (true, true) => Some(match authority {
+            Some(RecordedCorpusReadAuthority::Producer(guard)) => {
+                uor_r4_graph_compiler::recorded_corpus::execution_identity_under_producer_guard(
+                    guard, &meta, &records,
+                )
+                .map_err(|error| error.to_string())?
+            }
+            Some(RecordedCorpusReadAuthority::ReaderPins(pins)) => {
+                uor_r4_graph_compiler::recorded_corpus::execution_identity_under_reader_pins(
+                    pins, &meta, &records,
+                )
+                .map_err(|error| error.to_string())?
+            }
+            None => uor_r4_graph_compiler::recorded_corpus::execution_identity(&meta, &records)
                 .map_err(|error| error.to_string())?,
-        ),
+        }),
         (false, false) if expected.version < current_version => None,
         (false, false) => {
             return Err(format!(
@@ -1994,9 +2116,10 @@ fn validate_resolved_source_snapshot_binding(
     Ok(())
 }
 
-fn resolve_loadable_compiled_bundle(
+fn resolve_loadable_compiled_bundle_with_authority(
     pair: &CompiledModelPair,
     current_version: u32,
+    authority: Option<RecordedCorpusReadAuthority<'_>>,
 ) -> Result<Option<ResolvedCompiledBundle>, String> {
     if matches!(
         pair.composite,
@@ -2044,11 +2167,12 @@ fn resolve_loadable_compiled_bundle(
             teacher.display()
         ));
     }
-    let source_manifest_kappa = validate_serving_attention_provenance(
+    let source_manifest_kappa = validate_serving_attention_provenance_with_authority(
         physical_root,
         &identity.attention,
         identity.dense.as_ref(),
         current_version,
+        authority,
     )?;
     Ok(Some(ResolvedCompiledBundle {
         logical_name: pair.logical_name.clone(),
@@ -2061,6 +2185,15 @@ fn resolve_loadable_compiled_bundle(
     }))
 }
 
+#[cfg(test)]
+fn resolve_loadable_compiled_bundle(
+    pair: &CompiledModelPair,
+    current_version: u32,
+) -> Result<Option<ResolvedCompiledBundle>, String> {
+    resolve_loadable_compiled_bundle_with_authority(pair, current_version, None)
+}
+
+#[cfg(test)]
 fn resolve_requested_compiled_bundle_in(
     models_root: &Path,
     requested: &str,
@@ -2103,6 +2236,7 @@ fn reject_requested_suffix_source_collision(
     }
 }
 
+#[cfg(test)]
 #[derive(Debug, PartialEq, Eq)]
 enum ConfiguredManagedBundle {
     External,
@@ -2111,6 +2245,7 @@ enum ConfiguredManagedBundle {
     Selected(Box<ResolvedCompiledBundle>),
 }
 
+#[cfg(test)]
 impl ConfiguredManagedBundle {
     fn permits_inventory_discovery(&self) -> bool {
         matches!(self, Self::External | Self::Selected(_))
@@ -2143,16 +2278,16 @@ fn normalized_absolute_path(path: &Path) -> Result<PathBuf, String> {
 /// are classified by their canonical target so a symlink alias cannot bypass
 /// the paired-era resolver. Lexical normalization is used only when the target
 /// is genuinely absent and therefore cannot be canonicalized.
-fn resolve_managed_teacher_bundle_in(
+fn classify_managed_teacher_logical_name_in(
     teacher_path: &Path,
     models_root: &Path,
     current_version: u32,
-) -> Result<ConfiguredManagedBundle, String> {
+) -> Result<Option<String>, String> {
     if teacher_path.file_name() != Some(std::ffi::OsStr::new("tless_artifacts.bin")) {
-        return Ok(ConfiguredManagedBundle::External);
+        return Ok(None);
     }
     let Some(physical_root) = teacher_path.parent() else {
-        return Ok(ConfiguredManagedBundle::External);
+        return Ok(None);
     };
     let compiled_root = models_root.join("compiled");
     let normalized_compiled_root = normalized_absolute_path(&compiled_root)?;
@@ -2191,7 +2326,7 @@ fn resolve_managed_teacher_bundle_in(
                     compiled_root.display()
                 ));
             }
-            return Ok(ConfiguredManagedBundle::External);
+            return Ok(None);
         }
         let canonical_compiled = fs::canonicalize(&compiled_root).map_err(|error| {
             format!(
@@ -2237,11 +2372,11 @@ fn resolve_managed_teacher_bundle_in(
                     compiled_root.display()
                 ));
             } else {
-                return Ok(ConfiguredManagedBundle::External);
+                return Ok(None);
             }
         }
     } else if !lexical_managed {
-        return Ok(ConfiguredManagedBundle::External);
+        return Ok(None);
     }
 
     let physical_name = classified_root
@@ -2254,6 +2389,21 @@ fn resolve_managed_teacher_bundle_in(
             )
         })?;
     let logical_name = logical_model_name_for_request(physical_name, current_version)?;
+    Ok(Some(logical_name))
+}
+
+#[cfg(test)]
+fn resolve_managed_teacher_bundle_in(
+    teacher_path: &Path,
+    models_root: &Path,
+    current_version: u32,
+) -> Result<ConfiguredManagedBundle, String> {
+    let Some(logical_name) =
+        classify_managed_teacher_logical_name_in(teacher_path, models_root, current_version)?
+    else {
+        return Ok(ConfiguredManagedBundle::External);
+    };
+    let compiled_root = models_root.join("compiled");
     let pair = inspect_compiled_model_pair(&compiled_root, &logical_name, current_version)?;
     if matches!(
         pair.composite,
@@ -2428,6 +2578,7 @@ fn active_models(state: &ServingModelState) -> Vec<(String, u64)> {
     vec![(name, created)]
 }
 
+#[cfg(test)]
 fn resolve_reload_bundle_in(
     models_root: &Path,
     requested: &str,
@@ -2442,9 +2593,10 @@ fn resolve_reload_bundle_in(
     Ok(Some((bundle, source)))
 }
 
-fn refresh_resolved_compiled_bundle(
+fn refresh_resolved_compiled_bundle_with_authority(
     resolved: &ResolvedCompiledBundle,
     current_version: u32,
+    authority: Option<RecordedCorpusReadAuthority<'_>>,
 ) -> Result<ResolvedCompiledBundle, String> {
     let compiled_root = resolved.physical_root.parent().ok_or_else(|| {
         format!(
@@ -2453,12 +2605,14 @@ fn refresh_resolved_compiled_bundle(
         )
     })?;
     let pair = inspect_compiled_model_pair(compiled_root, &resolved.logical_name, current_version)?;
-    let refreshed = resolve_loadable_compiled_bundle(&pair, current_version)?.ok_or_else(|| {
-        format!(
-            "resolved compiled bundle {} disappeared before installation",
-            resolved.physical_root.display()
-        )
-    })?;
+    let refreshed =
+        resolve_loadable_compiled_bundle_with_authority(&pair, current_version, authority)?
+            .ok_or_else(|| {
+                format!(
+                    "resolved compiled bundle {} disappeared before installation",
+                    resolved.physical_root.display()
+                )
+            })?;
     if &refreshed != resolved {
         return Err(format!(
             "compiled model {} changed between resolution and installation",
@@ -2472,13 +2626,6 @@ fn refresh_resolved_compiled_bundle(
 /// explicit `--r4g1-artifact`. Every immediate entry is part of a logical
 /// pair: non-directories/symlinks and invalid siblings are terminal, while a
 /// valid current-era root wins over its historical sibling deterministically.
-fn discover_compiled_r4g1_candidates() -> Result<Vec<ResolvedCompiledBundle>, String> {
-    discover_compiled_r4g1_candidates_in(
-        Path::new(".uor-models/compiled"),
-        current_source_attention_era_version()?,
-    )
-}
-
 #[allow(dead_code)] // retained for protocol tests and future non-mutating inventory clients
 fn try_lock_managed_inventory_read_sessions(
     compiled_root: &Path,
@@ -2505,10 +2652,7 @@ fn try_lock_managed_inventory_write_sessions(
     try_lock_source_compile_sessions(subjects, SourceCompileSessionMode::ExclusiveWriter)
 }
 
-fn discover_compiled_r4g1_candidates_in(
-    root: &Path,
-    current_version: u32,
-) -> Result<Vec<ResolvedCompiledBundle>, String> {
+fn compiled_logical_names_in(root: &Path, current_version: u32) -> Result<Vec<String>, String> {
     let entries = match fs::read_dir(root) {
         Ok(entries) => entries,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
@@ -2542,6 +2686,19 @@ fn discover_compiled_r4g1_candidates_in(
             }
             continue;
         }
+        if entry.file_name()
+            == std::ffi::OsStr::new(
+                uor_r4_graph_compiler::recorded_corpus::RECORDED_CORPUS_PRODUCER_COORDINATION_DIR,
+            )
+        {
+            if !metadata.file_type().is_dir() {
+                return Err(format!(
+                    "recorded-corpus coordination namespace {} is not a regular non-symlink directory",
+                    bundle.display()
+                ));
+            }
+            continue;
+        }
         if !metadata.file_type().is_dir() {
             return Err(format!(
                 "compiled model candidate {} is not a regular non-symlink directory",
@@ -2562,8 +2719,16 @@ fn discover_compiled_r4g1_candidates_in(
         logical_names.insert(logical_name);
     }
 
+    Ok(logical_names.into_iter().collect())
+}
+
+#[cfg(test)]
+fn discover_compiled_r4g1_candidates_in(
+    root: &Path,
+    current_version: u32,
+) -> Result<Vec<ResolvedCompiledBundle>, String> {
     let mut selected = Vec::new();
-    for logical_name in logical_names {
+    for logical_name in compiled_logical_names_in(root, current_version)? {
         let pair = inspect_compiled_model_pair(root, &logical_name, current_version)?;
         if let Some(candidate) = resolve_loadable_compiled_bundle(&pair, current_version)? {
             reject_reserved_suffix_source_collision(
@@ -4225,9 +4390,16 @@ const SOURCE_COMPILE_STAGING_DIR: &str = ".uor-r4-source-compile-staging";
 const SOURCE_COMPILE_SESSION_LOCK_SUFFIX: &str = ".compile-session.lock";
 const COMPILED_BUNDLE_STAGE_TAG: &str = "bundle-stage";
 const COMPILED_BUNDLE_STAGE_MARKER_FILE: &str = ".compiled_bundle_stage.json";
-const COMPILED_BUNDLE_STAGE_SCHEMA: &str = "uor-r4-compiled-bundle-stage/1";
+const COMPILED_BUNDLE_STAGE_SCHEMA: &str = "uor-r4-compiled-bundle-stage/2";
 const COMPILED_BUNDLE_COMPLETION_FILE: &str = "compiled_bundle_completion.json";
 const COMPILED_BUNDLE_COMPLETION_SCHEMA: &str = "uor-r4-compiled-bundle-completion/1";
+const COMPILED_BUNDLE_CONTROL_MAX_BYTES: u64 = 64 * 1024;
+const COVER_REPORT_CONTROL_MAX_BYTES: u64 = 16 * 1024 * 1024;
+// Current managed score reports are below 25 KiB; one MiB leaves bounded
+// format-growth headroom without allowing an attacker-controlled allocation.
+const SCORE_REPORT_CONTROL_MAX_BYTES: u64 = 1024 * 1024;
+const COMPILED_BUNDLE_COMPLETION_TEMP_LIMIT: usize = 64;
+const COMPILED_BUNDLE_STAGE_LIMIT: usize = 64;
 const LEGACY_GRAPH_GENERATION_SCHEMA: &str = "uor-r4-legacy-graph-generation/1";
 const LEGACY_GRAPH_ATTEMPT_SCHEMA: &str = "uor-r4-legacy-graph-attempt/1";
 static NEXT_SOURCE_KAPPA_BINDING_ID: AtomicU64 = AtomicU64::new(0);
@@ -4253,6 +4425,38 @@ struct CompiledBundleCompletion {
     files: std::collections::BTreeMap<String, String>,
 }
 
+/// Durable compare-and-swap identity for the public root from which a private
+/// compiled-bundle stage was derived. The inode generation is pinned in
+/// memory by the lower handoff guard; this content descriptor survives a
+/// process death so an old resumable stage can never overwrite a newer direct
+/// writer's committed generation.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+enum CompiledBundleBaseGeneration {
+    Absent,
+    Incomplete {
+        files: std::collections::BTreeMap<String, String>,
+    },
+    /// Exact fixed-inventory witness for a readable pre-transaction sibling
+    /// (normally the immutable conventional v1 root). It is not promoted to a
+    /// new completion/binding generation; it exists only so long stage builds
+    /// can content-CAS the resolver's full three-root selection.
+    Legacy {
+        files: std::collections::BTreeMap<String, String>,
+    },
+    Complete {
+        completion_cid: String,
+        recorded_corpus_binding_cid: String,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+#[serde(deny_unknown_fields)]
+struct CompiledBundleSelectionGeneration {
+    root: String,
+    generation: CompiledBundleBaseGeneration,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 #[serde(deny_unknown_fields)]
 struct CompiledBundleStageMarker {
@@ -4260,6 +4464,7 @@ struct CompiledBundleStageMarker {
     final_output: String,
     stage_path: String,
     source_snapshot_kappa: String,
+    selection_base: Vec<CompiledBundleSelectionGeneration>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
@@ -4346,9 +4551,33 @@ fn read_opened_regular_file_nofollow(
             path.display()
         ));
     }
+    let length = usize::try_from(opened_metadata.len()).map_err(|_| {
+        format!(
+            "{} {label} length cannot be represented in memory",
+            path.display()
+        )
+    })?;
     let mut bytes = Vec::new();
-    file.read_to_end(&mut bytes)
+    bytes.try_reserve_exact(length).map_err(|error| {
+        format!(
+            "{} {label} cannot reserve its declared {length} bytes: {error}",
+            path.display()
+        )
+    })?;
+    bytes.resize(length, 0);
+    file.read_exact(&mut bytes)
         .map_err(|error| format!("{} cannot be read: {error}", path.display()))?;
+    let mut extra = [0u8; 1];
+    if file
+        .read(&mut extra)
+        .map_err(|error| format!("{} cannot be read: {error}", path.display()))?
+        != 0
+    {
+        return Err(format!(
+            "{} grew beyond its opened {label} length",
+            path.display()
+        ));
+    }
     let final_file_metadata = file.metadata().map_err(|error| {
         format!(
             "{} opened {label} handle cannot be reinspected: {error}",
@@ -4361,7 +4590,8 @@ fn read_opened_regular_file_nofollow(
         || !final_path_metadata.file_type().is_file()
         || !source_compile_lock_metadata_matches(&opened_metadata, &final_file_metadata)
         || !source_compile_lock_metadata_matches(&final_path_metadata, &final_file_metadata)
-        || final_file_metadata.len() != bytes.len() as u64
+        || final_file_metadata.len() != opened_metadata.len()
+        || final_path_metadata.len() != opened_metadata.len()
     {
         return Err(format!(
             "{} changed identity, type, or length while its {label} bytes were read",
@@ -4369,6 +4599,213 @@ fn read_opened_regular_file_nofollow(
         ));
     }
     Ok(bytes)
+}
+
+/// Read one control record at its exact opened length. The limit is checked
+/// before allocation and the one-byte EOF probe rejects a file that grows
+/// after metadata capture instead of following a moving EOF.
+fn read_opened_regular_file_nofollow_capped(
+    file: fs::File,
+    path: &Path,
+    label: &str,
+    max_bytes: u64,
+) -> Result<Vec<u8>, String> {
+    read_opened_regular_file_nofollow_capped_with_after_eof(file, path, label, max_bytes, || Ok(()))
+}
+
+fn read_opened_regular_file_nofollow_capped_with_after_eof<F>(
+    mut file: fs::File,
+    path: &Path,
+    label: &str,
+    max_bytes: u64,
+    after_eof: F,
+) -> Result<Vec<u8>, String>
+where
+    F: FnOnce() -> Result<(), String>,
+{
+    let opened_metadata = file.metadata().map_err(|error| {
+        format!(
+            "{} opened {label} handle cannot be inspected: {error}",
+            path.display()
+        )
+    })?;
+    if !opened_metadata.file_type().is_file() || opened_metadata.len() > max_bytes {
+        return Err(format!(
+            "{} is not a regular {label} within the registered {max_bytes}-byte control-record limit",
+            path.display()
+        ));
+    }
+    let length = usize::try_from(opened_metadata.len()).map_err(|_| {
+        format!(
+            "{} {label} length cannot be represented in memory",
+            path.display()
+        )
+    })?;
+    let mut bytes = Vec::new();
+    bytes.try_reserve_exact(length).map_err(|error| {
+        format!(
+            "{} {label} cannot reserve its declared {length} bytes: {error}",
+            path.display()
+        )
+    })?;
+    bytes.resize(length, 0);
+    file.read_exact(&mut bytes)
+        .map_err(|error| format!("{} cannot be read: {error}", path.display()))?;
+    let mut extra = [0u8; 1];
+    if file
+        .read(&mut extra)
+        .map_err(|error| format!("{} cannot be read: {error}", path.display()))?
+        != 0
+    {
+        return Err(format!(
+            "{} grew beyond its opened {label} length",
+            path.display()
+        ));
+    }
+    after_eof()?;
+    let final_file_metadata = file.metadata().map_err(|error| {
+        format!(
+            "{} opened {label} handle cannot be reinspected: {error}",
+            path.display()
+        )
+    })?;
+    let final_path_metadata = fs::symlink_metadata(path)
+        .map_err(|error| format!("{} cannot be reinspected: {error}", path.display()))?;
+    if !final_file_metadata.file_type().is_file()
+        || !final_path_metadata.file_type().is_file()
+        || !source_compile_lock_metadata_matches(&opened_metadata, &final_file_metadata)
+        || !source_compile_lock_metadata_matches(&final_path_metadata, &final_file_metadata)
+        || final_file_metadata.len() != opened_metadata.len()
+        || final_path_metadata.len() != opened_metadata.len()
+    {
+        return Err(format!(
+            "{} changed identity, type, or generation while its {label} bytes were read",
+            path.display()
+        ));
+    }
+    Ok(bytes)
+}
+
+fn read_regular_file_nofollow_capped(
+    path: &Path,
+    label: &str,
+    max_bytes: u64,
+) -> Result<Option<Vec<u8>>, String> {
+    open_regular_file_nofollow(path, label)?
+        .map(|file| read_opened_regular_file_nofollow_capped(file, path, label, max_bytes))
+        .transpose()
+}
+
+fn read_required_regular_file_nofollow_capped(
+    path: &Path,
+    label: &str,
+    max_bytes: u64,
+) -> Result<Vec<u8>, String> {
+    read_regular_file_nofollow_capped(path, label, max_bytes)?.ok_or_else(|| {
+        format!(
+            "{} disappeared before its {label} bytes could be read",
+            path.display()
+        )
+    })
+}
+
+/// Hash a large bundle member through one no-follow handle using its initial
+/// exact length. No body is retained, and an append/truncate/replacement is
+/// rejected before the digest can enter a completion record.
+fn regular_file_blake3_nofollow(path: &Path, label: &str) -> Result<String, String> {
+    regular_file_blake3_nofollow_with_limit_and_after_eof(path, label, None, || Ok(()))
+}
+
+fn regular_file_blake3_nofollow_capped(
+    path: &Path,
+    label: &str,
+    max_bytes: u64,
+) -> Result<String, String> {
+    regular_file_blake3_nofollow_with_limit_and_after_eof(path, label, Some(max_bytes), || Ok(()))
+}
+
+#[cfg(test)]
+fn regular_file_blake3_nofollow_with_after_eof<F>(
+    path: &Path,
+    label: &str,
+    after_eof: F,
+) -> Result<String, String>
+where
+    F: FnOnce() -> Result<(), String>,
+{
+    regular_file_blake3_nofollow_with_limit_and_after_eof(path, label, None, after_eof)
+}
+
+fn regular_file_blake3_nofollow_with_limit_and_after_eof<F>(
+    path: &Path,
+    label: &str,
+    max_bytes: Option<u64>,
+    after_eof: F,
+) -> Result<String, String>
+where
+    F: FnOnce() -> Result<(), String>,
+{
+    let mut file = open_regular_file_nofollow(path, label)?
+        .ok_or_else(|| format!("{} disappeared before hashing", path.display()))?;
+    let opened = file
+        .metadata()
+        .map_err(|error| format!("{} cannot be inspected: {error}", path.display()))?;
+    if let Some(max_bytes) = max_bytes {
+        if opened.len() > max_bytes {
+            return Err(format!(
+                "{} is not a regular {label} within the registered {max_bytes}-byte control-record limit",
+                path.display()
+            ));
+        }
+    }
+    let mut remaining = opened.len();
+    let mut hasher = blake3::Hasher::new();
+    let mut buffer = [0u8; 64 * 1024];
+    while remaining != 0 {
+        let limit = usize::try_from(remaining.min(buffer.len() as u64))
+            .map_err(|error| format!("{} length is unsupported: {error}", path.display()))?;
+        let read = file
+            .read(&mut buffer[..limit])
+            .map_err(|error| format!("{} cannot be hashed: {error}", path.display()))?;
+        if read == 0 {
+            return Err(format!(
+                "{} ended before its opened {label} length",
+                path.display()
+            ));
+        }
+        hasher.update(&buffer[..read]);
+        remaining -= read as u64;
+    }
+    let mut extra = [0u8; 1];
+    if file
+        .read(&mut extra)
+        .map_err(|error| format!("{} cannot be hashed: {error}", path.display()))?
+        != 0
+    {
+        return Err(format!(
+            "{} grew beyond its opened {label} length",
+            path.display()
+        ));
+    }
+    after_eof()?;
+    let final_handle = file
+        .metadata()
+        .map_err(|error| format!("{} cannot be reinspected: {error}", path.display()))?;
+    let final_path = fs::symlink_metadata(path)
+        .map_err(|error| format!("{} cannot be reinspected: {error}", path.display()))?;
+    if !final_handle.file_type().is_file()
+        || !final_path.file_type().is_file()
+        || !source_compile_lock_metadata_matches(&opened, &final_handle)
+        || !source_compile_lock_metadata_matches(&final_path, &final_handle)
+        || final_handle.len() != opened.len()
+        || final_path.len() != opened.len()
+    {
+        return Err(format!(
+            "{} changed identity, type, or generation while its {label} digest was computed",
+            path.display()
+        ));
+    }
+    Ok(format!("blake3:{}", hasher.finalize().to_hex()))
 }
 
 fn read_regular_file_nofollow(path: &Path, label: &str) -> Result<Option<Vec<u8>>, String> {
@@ -4403,7 +4840,11 @@ fn source_compile_preflight_bytes(kappa: Option<&str>) -> Result<Vec<u8>, String
 }
 
 fn read_source_compile_preflight_path(path: &Path) -> Result<SourceCompilePreflight, String> {
-    let bytes = read_required_regular_file_nofollow(path, "source compile preflight")?;
+    let bytes = read_required_regular_file_nofollow_capped(
+        path,
+        "source compile preflight",
+        COMPILED_BUNDLE_CONTROL_MAX_BYTES,
+    )?;
     reject_duplicate_json_fields(&bytes, path, "source compile preflight")?;
     let record: SourceCompilePreflight = serde_json::from_slice(&bytes)
         .map_err(|error| format!("{} is malformed: {error}", path.display()))?;
@@ -4449,7 +4890,12 @@ fn read_optional_source_compile_preflight(
     let path = output.join(SOURCE_COMPILE_PREFLIGHT_FILE);
     match open_regular_file_nofollow(&path, "source compile preflight")? {
         Some(file) => {
-            let bytes = read_opened_regular_file_nofollow(file, &path, "source compile preflight")?;
+            let bytes = read_opened_regular_file_nofollow_capped(
+                file,
+                &path,
+                "source compile preflight",
+                COMPILED_BUNDLE_CONTROL_MAX_BYTES,
+            )?;
             reject_duplicate_json_fields(&bytes, &path, "source compile preflight")?;
             let record: SourceCompilePreflight = serde_json::from_slice(&bytes)
                 .map_err(|error| format!("{} is malformed: {error}", path.display()))?;
@@ -4489,7 +4935,12 @@ fn source_manifest_kappa_binding_bytes(kappa: &str) -> Result<Vec<u8>, String> {
 
 fn read_optional_source_manifest_kappa_binding(output: &Path) -> Result<Option<String>, String> {
     let path = output.join(SOURCE_MANIFEST_KAPPA_BINDING_FILE);
-    let Some(bytes) = read_regular_file_nofollow(&path, "source-manifest kappa binding")? else {
+    let Some(bytes) = read_regular_file_nofollow_capped(
+        &path,
+        "source-manifest kappa binding",
+        COMPILED_BUNDLE_CONTROL_MAX_BYTES,
+    )?
+    else {
         return Ok(None);
     };
     reject_duplicate_json_fields(&bytes, &path, "source-manifest kappa binding")?;
@@ -4510,6 +4961,23 @@ fn read_optional_source_manifest_kappa_binding(output: &Path) -> Result<Option<S
         ));
     }
     Ok(Some(binding.source_manifest_kappa))
+}
+
+fn validate_recorded_corpus_compile_attempt_marker(path: &Path) -> Result<(), String> {
+    let bytes = read_required_regular_file_nofollow_capped(
+        path,
+        "recorded-corpus compile-attempt marker",
+        1024,
+    )?;
+    let expected = uor_r4_graph_compiler::recorded_corpus::recorded_corpus_compile_attempt_bytes()
+        .map_err(|error| error.to_string())?;
+    if bytes != expected {
+        return Err(format!(
+            "{} is not the exact canonical recorded-corpus compile-attempt marker",
+            path.display()
+        ));
+    }
+    Ok(())
 }
 
 fn source_compile_output_has_payload(output: &Path) -> Result<bool, String> {
@@ -4538,6 +5006,14 @@ fn source_compile_output_has_payload(output: &Path) -> Result<bool, String> {
             )
         })?;
         if name == SOURCE_MANIFEST_KAPPA_BINDING_FILE || name == SOURCE_COMPILE_PREFLIGHT_FILE {
+            continue;
+        }
+        if name == COMPILED_BUNDLE_STAGE_MARKER_FILE {
+            validate_source_prefix_stage_marker(output)?;
+            continue;
+        }
+        if name == uor_r4_graph_compiler::recorded_corpus::RECORDED_CORPUS_COMPILE_ATTEMPT_FILE {
+            validate_recorded_corpus_compile_attempt_marker(&entry.path())?;
             continue;
         }
         if name == "tokenizer_adapter.json"
@@ -4858,7 +5334,12 @@ fn validate_pre_attention_identity_handle(
         kind if kind == uor_r4_graph_cli::DENSE_OPERATOR_BINDING_FILE => "dense-operator binding",
         _ => "pre-attention identity record",
     };
-    let bytes = read_opened_regular_file_nofollow(file, path, description)?;
+    let bytes = read_opened_regular_file_nofollow_capped(
+        file,
+        path,
+        description,
+        COMPILED_BUNDLE_CONTROL_MAX_BYTES,
+    )?;
     reject_duplicate_json_fields(&bytes, path, description)?;
     let value: serde_json::Value = serde_json::from_slice(&bytes)
         .map_err(|error| format!("{} is malformed: {error}", path.display()))?;
@@ -4993,6 +5474,7 @@ fn validate_pre_attention_identity_handle(
 /// publish before its attention sidecar. This makes a process-death retry
 /// resumable without treating arbitrary payload as an implicit v1 bundle.
 fn source_compile_pre_attention_prefix(output: &Path) -> Result<bool, String> {
+    validate_source_compile_identity_temporaries(output)?;
     let preflight = read_optional_source_compile_preflight(output)?;
     reject_legacy_source_compile_initialization(output)?;
     let kappa = read_optional_source_manifest_kappa_binding(output)?;
@@ -5008,6 +5490,7 @@ fn source_compile_pre_attention_prefix(output: &Path) -> Result<bool, String> {
         }
     }
     let mut saw_identity = preflight.is_some() || kappa.is_some();
+    let mut saw_attention = false;
     let mut unexpected = Vec::new();
     let entries = fs::read_dir(output)
         .map_err(|error| format!("{} cannot be enumerated: {error}", output.display()))?;
@@ -5025,10 +5508,27 @@ fn source_compile_pre_attention_prefix(output: &Path) -> Result<bool, String> {
             saw_identity = true;
             continue;
         }
-        if name == "tokenizer_adapter.json"
-            || name == uor_r4_graph_cli::ATTENTION_OPERATOR_BINDING_FILE
-            || name == uor_r4_graph_cli::DENSE_OPERATOR_BINDING_FILE
-        {
+        if name == COMPILED_BUNDLE_STAGE_MARKER_FILE {
+            validate_source_prefix_stage_marker(output)?;
+            continue;
+        }
+        if name == uor_r4_graph_compiler::recorded_corpus::RECORDED_CORPUS_COMPILE_ATTEMPT_FILE {
+            validate_recorded_corpus_compile_attempt_marker(&entry.path())?;
+            saw_identity = true;
+            continue;
+        }
+        if name == "tokenizer_adapter.json" {
+            validate_pre_attention_identity_file(&entry.path(), name)?;
+            saw_identity = true;
+            continue;
+        }
+        if name == uor_r4_graph_cli::ATTENTION_OPERATOR_BINDING_FILE {
+            validate_pre_attention_identity_file(&entry.path(), name)?;
+            saw_identity = true;
+            saw_attention = true;
+            continue;
+        }
+        if name == uor_r4_graph_cli::DENSE_OPERATOR_BINDING_FILE {
             validate_pre_attention_identity_file(&entry.path(), name)?;
             saw_identity = true;
             continue;
@@ -5046,6 +5546,9 @@ fn source_compile_pre_attention_prefix(output: &Path) -> Result<bool, String> {
         }
         unexpected.push(name.to_owned());
     }
+    if saw_attention {
+        return Ok(false);
+    }
     if saw_identity && !unexpected.is_empty() {
         return Err(format!(
             "source compile root {} contains {} beside {} but has no {}; refusing to infer a historical era from an interrupted current-era compile",
@@ -5059,7 +5562,13 @@ fn source_compile_pre_attention_prefix(output: &Path) -> Result<bool, String> {
 }
 
 fn publish_bytes_no_clobber(path: &Path, expected: &[u8], label: &str) -> Result<(), String> {
-    if let Some(existing) = read_regular_file_nofollow(path, label)? {
+    let expected_len = u64::try_from(expected.len()).map_err(|_| {
+        format!(
+            "{} expected {label} length cannot be represented",
+            path.display()
+        )
+    })?;
+    if let Some(existing) = read_regular_file_nofollow_capped(path, label, expected_len)? {
         return if existing == expected {
             sync_parent_directory(path, label)
         } else {
@@ -5109,12 +5618,13 @@ fn publish_bytes_no_clobber(path: &Path, expected: &[u8], label: &str) -> Result
             }
             Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
                 let _ = fs::remove_file(&temporary);
-                let existing = read_regular_file_nofollow(path, label)?.ok_or_else(|| {
-                    format!(
-                        "{} concurrently appeared and disappeared while publishing {label}",
-                        path.display()
-                    )
-                })?;
+                let existing = read_regular_file_nofollow_capped(path, label, expected_len)?
+                    .ok_or_else(|| {
+                        format!(
+                            "{} concurrently appeared and disappeared while publishing {label}",
+                            path.display()
+                        )
+                    })?;
                 return if existing == expected {
                     sync_parent_directory(path, label)
                 } else {
@@ -5340,6 +5850,7 @@ impl SourceCompileSessionMode {
 
 fn source_compile_session_is_busy(error: &str) -> bool {
     error.contains(" is BUSY under an active cross-process compile session; refusing ")
+        || uor_r4_graph_compiler::recorded_corpus::is_recorded_corpus_busy_message(error)
 }
 
 fn graph_output_session_subject(graph_path: &Path) -> PathBuf {
@@ -5599,6 +6110,7 @@ fn compiled_bundle_stage_marker_bytes(
     final_output: &Path,
     stage_path: &Path,
     source_snapshot_kappa: &str,
+    selection_base: &[CompiledBundleSelectionGeneration],
 ) -> Result<Vec<u8>, String> {
     if !canonical_source_manifest_kappa(source_snapshot_kappa) {
         return Err(format!(
@@ -5624,6 +6136,7 @@ fn compiled_bundle_stage_marker_bytes(
         final_output: final_output.to_owned(),
         stage_path: stage_path.to_owned(),
         source_snapshot_kappa: source_snapshot_kappa.to_owned(),
+        selection_base: selection_base.to_vec(),
     })
     .map_err(|error| error.to_string())?;
     bytes.push(b'\n');
@@ -5632,7 +6145,12 @@ fn compiled_bundle_stage_marker_bytes(
 
 fn read_compiled_bundle_stage_marker(stage: &Path) -> Result<Option<Vec<u8>>, String> {
     let path = stage.join(COMPILED_BUNDLE_STAGE_MARKER_FILE);
-    let Some(bytes) = read_regular_file_nofollow(&path, "compiled-bundle stage marker")? else {
+    let Some(bytes) = read_regular_file_nofollow_capped(
+        &path,
+        "compiled-bundle stage marker",
+        COMPILED_BUNDLE_CONTROL_MAX_BYTES,
+    )?
+    else {
         return Ok(None);
     };
     reject_duplicate_json_fields(&bytes, &path, "compiled-bundle stage marker")?;
@@ -5646,6 +6164,7 @@ fn read_compiled_bundle_stage_marker(stage: &Path) -> Result<Option<Vec<u8>>, St
             path.display()
         ));
     }
+    validate_compiled_bundle_selection_base(&record.selection_base, &record.final_output)?;
     Ok(Some(bytes))
 }
 
@@ -5659,6 +6178,7 @@ fn validate_compiled_bundle_stage_marker_location(root: &Path, bytes: &[u8]) -> 
             record.source_snapshot_kappa
         ));
     }
+    validate_compiled_bundle_selection_base(&record.selection_base, &record.final_output)?;
     let final_output = canonical_compile_session_subject(Path::new(&record.final_output))?;
     let stage_path = canonical_compile_session_subject(Path::new(&record.stage_path))?;
     if final_output.to_str() != Some(record.final_output.as_str())
@@ -5701,26 +6221,93 @@ fn validate_compiled_bundle_stage_marker_location(root: &Path, bytes: &[u8]) -> 
     Ok(())
 }
 
+/// A private stage marker is coordination, not source payload. Only the exact
+/// canonical marker whose encoded public/staging locations include `root` is
+/// ignored by the source-identity prefix classifiers; malformed or copied
+/// markers remain terminal evidence.
+fn validate_source_prefix_stage_marker(root: &Path) -> Result<(), String> {
+    let bytes = read_compiled_bundle_stage_marker(root)?.ok_or_else(|| {
+        format!(
+            "compiled-bundle stage marker disappeared from {} during source-prefix validation",
+            root.display()
+        )
+    })?;
+    validate_compiled_bundle_stage_marker_location(root, &bytes)
+}
+
+/// A freshly allocated private stage contains only its exact durable owner
+/// marker. That marker authorizes the first P/K publication without making an
+/// arbitrary pre-existing directory adoptable as compiler output.
+fn exact_empty_compiled_bundle_stage(root: &Path) -> Result<bool, String> {
+    let Some(bytes) = read_compiled_bundle_stage_marker(root)? else {
+        return Ok(false);
+    };
+    validate_compiled_bundle_stage_marker_location(root, &bytes)?;
+    let mut saw_marker = false;
+    let mut saw_attempt = false;
+    for entry in fs::read_dir(root)
+        .map_err(|error| format!("{} cannot be enumerated: {error}", root.display()))?
+    {
+        let entry =
+            entry.map_err(|error| format!("{} cannot be enumerated: {error}", root.display()))?;
+        if entry.file_name() == COMPILED_BUNDLE_STAGE_MARKER_FILE && !saw_marker {
+            saw_marker = true;
+        } else if entry.file_name()
+            == uor_r4_graph_compiler::recorded_corpus::RECORDED_CORPUS_COMPILE_ATTEMPT_FILE
+            && !saw_attempt
+        {
+            let actual = read_required_regular_file_nofollow_capped(
+                &entry.path(),
+                "recorded-corpus compile-attempt marker",
+                1024,
+            )?;
+            let expected =
+                uor_r4_graph_compiler::recorded_corpus::recorded_corpus_compile_attempt_bytes()
+                    .map_err(|error| error.to_string())?;
+            if actual != expected {
+                return Ok(false);
+            }
+            saw_attempt = true;
+        } else {
+            return Ok(false);
+        }
+    }
+    Ok(saw_marker)
+}
+
 fn validate_compiled_bundle_stage_marker(stage: &Path, expected: &[u8]) -> Result<bool, String> {
     Ok(read_compiled_bundle_stage_marker(stage)?.is_some_and(|bytes| bytes == expected))
 }
 
-fn cleanup_published_compiled_bundle_stage_marker(
-    final_output: &Path,
-    source_snapshot_kappa: &str,
-) -> Result<(), String> {
+fn cleanup_published_compiled_bundle_stage_marker(final_output: &Path) -> Result<(), String> {
     let Some(bytes) = read_compiled_bundle_stage_marker(final_output)? else {
         return Ok(());
     };
     validate_compiled_bundle_stage_marker_location(final_output, &bytes)?;
     let record: CompiledBundleStageMarker =
         serde_json::from_slice(&bytes).map_err(|error| error.to_string())?;
-    if record.source_snapshot_kappa != source_snapshot_kappa {
+    let bound = read_optional_source_manifest_kappa_binding(final_output)?.ok_or_else(|| {
+        format!(
+            "published compiled-bundle marker in {} has no canonical source snapshot binding",
+            final_output.display()
+        )
+    })?;
+    let preflight = read_optional_source_compile_preflight(final_output)?.ok_or_else(|| {
+        format!(
+            "published compiled-bundle marker in {} has no canonical source preflight",
+            final_output.display()
+        )
+    })?;
+    let report = final_output.join("graph-cover/cover_report.json");
+    let (_, _, _, report_kappa) = parse_cover_provenance(&report)?;
+    if bound != record.source_snapshot_kappa
+        || preflight.source_manifest_kappa.as_deref() != Some(record.source_snapshot_kappa.as_str())
+        || report_kappa.as_deref() != Some(record.source_snapshot_kappa.as_str())
+    {
         return Err(format!(
-            "published compiled-bundle marker in {} binds source snapshot {}, not {}",
+            "published compiled-bundle marker in {} does not match its completed generation's own P/K/cover source snapshot {}",
             final_output.display(),
-            record.source_snapshot_kappa,
-            source_snapshot_kappa
+            record.source_snapshot_kappa
         ));
     }
     validate_compiled_bundle_completion(final_output)?.ok_or_else(|| {
@@ -5790,6 +6377,13 @@ fn compiled_bundle_stage_temporaries(stage: &Path) -> Result<Vec<PathBuf>, Strin
         .into_iter()
         .any(|stable| looks_like_atomic_publisher_temporary(name, stable));
         if exact {
+            if temporaries.len() == COMPILED_BUNDLE_STAGE_LIMIT {
+                return Err(format!(
+                    "compiled-bundle stage {} exceeds the fixed {}-entry publisher-temporary limit",
+                    stage.display(),
+                    COMPILED_BUNDLE_STAGE_LIMIT
+                ));
+            }
             let metadata = fs::symlink_metadata(entry.path()).map_err(|error| {
                 format!("{} cannot be inspected: {error}", entry.path().display())
             })?;
@@ -5849,6 +6443,25 @@ fn reset_resumable_compiled_bundle_stage(
             }
         }
     }
+    let mut derived_files = Vec::new();
+    for name in [
+        "instruction-eval.json",
+        "compiled.r4g1",
+        "compile_report.json",
+    ] {
+        let path = stage.join(name);
+        match fs::symlink_metadata(&path) {
+            Ok(metadata) if metadata.file_type().is_file() => derived_files.push(path),
+            Ok(_) => {
+                return Err(format!(
+                    "resumable derived compiled-bundle output {} is not a regular non-symlink file",
+                    path.display()
+                ));
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(format!("{} cannot be inspected: {error}", path.display())),
+        }
+    }
     if remove_completion {
         fs::remove_file(&completion)
             .map_err(|error| format!("{} cannot be reclaimed: {error}", completion.display()))?;
@@ -5858,6 +6471,14 @@ fn reset_resumable_compiled_bundle_stage(
             format!(
                 "recognized compiled-bundle publisher temporary {} cannot be reclaimed: {error}",
                 temporary.display()
+            )
+        })?;
+    }
+    for path in derived_files {
+        fs::remove_file(&path).map_err(|error| {
+            format!(
+                "derived compiled-bundle stage output {} cannot be reclaimed: {error}",
+                path.display()
             )
         })?;
     }
@@ -5874,10 +6495,116 @@ fn reset_resumable_compiled_bundle_stage(
         .map_err(|error| format!("{} cannot be synced: {error}", stage.display()))
 }
 
+/// A stage without a stable recorded-corpus binding has no committed payload
+/// generation. An honest death during prefix copy or compiler publication may
+/// therefore leave torn canonical members. Under the retained source/common
+/// transaction, classify the complete private-stage namespace first, then
+/// reclaim only registered compile members so the exact retry can reconstruct
+/// the prefix from its authoritative base.
+fn reset_unbound_compiled_bundle_stage(
+    stage: &Path,
+    temporaries: Vec<PathBuf>,
+) -> Result<(), String> {
+    let mut files = Vec::new();
+    let mut directories = Vec::new();
+    for entry in fs::read_dir(stage)
+        .map_err(|error| format!("{} cannot be enumerated: {error}", stage.display()))?
+    {
+        let entry =
+            entry.map_err(|error| format!("{} cannot be enumerated: {error}", stage.display()))?;
+        let path = entry.path();
+        let name = entry.file_name();
+        let name = name.to_str().ok_or_else(|| {
+            format!(
+                "compiled-bundle stage {} contains a non-UTF-8 entry",
+                stage.display()
+            )
+        })?;
+        let metadata = fs::symlink_metadata(&path)
+            .map_err(|error| format!("{} cannot be inspected: {error}", path.display()))?;
+        if matches!(
+            name,
+            COMPILED_BUNDLE_STAGE_MARKER_FILE
+                | uor_r4_graph_compiler::recorded_corpus::RECORDED_CORPUS_COMPILE_ATTEMPT_FILE
+        ) {
+            if !metadata.file_type().is_file() {
+                return Err(format!(
+                    "private-stage coordination entry {} is not a regular non-symlink file",
+                    path.display()
+                ));
+            }
+            continue;
+        }
+        if temporaries.iter().any(|temporary| temporary == &path) {
+            if !metadata.file_type().is_file() {
+                return Err(format!(
+                    "private-stage publisher residue {} is not a regular non-symlink file",
+                    path.display()
+                ));
+            }
+            files.push(path);
+            continue;
+        }
+        if matches!(name, "graph" | "graph-cover") {
+            if !metadata.file_type().is_dir() {
+                return Err(format!(
+                    "private-stage derived output {} is not a regular non-symlink directory",
+                    path.display()
+                ));
+            }
+            directories.push(path);
+            continue;
+        }
+        let registered = matches!(
+            name,
+            "corpus.meta"
+                | "corpus.records"
+                | "corpus.records.hidden"
+                | "tless_artifacts.bin"
+                | "tless_store.bin"
+                | "tokenizer.bin"
+                | "tokenizer_adapter.json"
+                | "hamming_calibration.json"
+                | "hierarchical_codes.json"
+                | "space_manifest.json"
+                | "compiled.r4g1"
+                | "compile_report.json"
+                | "instruction-eval.json"
+                | SOURCE_COMPILE_PREFLIGHT_FILE
+                | SOURCE_MANIFEST_KAPPA_BINDING_FILE
+                | COMPILED_BUNDLE_COMPLETION_FILE
+                | uor_r4_graph_cli::ATTENTION_OPERATOR_BINDING_FILE
+                | uor_r4_graph_cli::DENSE_OPERATOR_BINDING_FILE
+        );
+        if !registered || !metadata.file_type().is_file() {
+            return Err(format!(
+                "unbound private stage {} contains unsupported or nonregular entry {}",
+                stage.display(),
+                path.display()
+            ));
+        }
+        files.push(path);
+    }
+    for path in files {
+        fs::remove_file(&path)
+            .map_err(|error| format!("{} cannot be reclaimed: {error}", path.display()))?;
+    }
+    for path in directories {
+        fs::remove_dir_all(&path)
+            .map_err(|error| format!("{} cannot be reclaimed: {error}", path.display()))?;
+    }
+    fs::File::open(stage)
+        .and_then(|directory| directory.sync_all())
+        .map_err(|error| format!("{} cannot be synced: {error}", stage.display()))
+}
+
+type RecoverableCompiledBundleStage = (PathBuf, Vec<u8>, Vec<PathBuf>);
+
 fn recover_compiled_bundle_stages(
     output: &Path,
     source_snapshot_kappa: &str,
-) -> Result<Option<(PathBuf, Vec<u8>)>, String> {
+    selection_base: &[CompiledBundleSelectionGeneration],
+) -> Result<Option<RecoverableCompiledBundleStage>, String> {
     let parent = output.parent().ok_or_else(|| {
         format!(
             "source compile output {} has no staging parent",
@@ -5891,6 +6618,7 @@ fn recover_compiled_bundle_stages(
     let staging = ensure_source_compile_staging_root(parent)?;
     let mut resumable = None;
     let mut stale = Vec::new();
+    let mut recognized_stages = 0usize;
     for entry in fs::read_dir(&staging)
         .map_err(|error| format!("{} cannot be enumerated: {error}", staging.display()))?
     {
@@ -5904,6 +6632,14 @@ fn recover_compiled_bundle_stages(
             )
         })?;
         if is_compiled_bundle_stage_name(name, output_name) {
+            if recognized_stages == COMPILED_BUNDLE_STAGE_LIMIT {
+                return Err(format!(
+                    "source compile output {} exceeds the fixed {}-entry compiled-stage limit",
+                    output.display(),
+                    COMPILED_BUNDLE_STAGE_LIMIT
+                ));
+            }
+            recognized_stages += 1;
             let metadata = fs::symlink_metadata(entry.path()).map_err(|error| {
                 format!("{} cannot be inspected: {error}", entry.path().display())
             })?;
@@ -5914,8 +6650,12 @@ fn recover_compiled_bundle_stages(
                 ));
             }
             let temporaries = compiled_bundle_stage_temporaries(&entry.path())?;
-            let expected_marker =
-                compiled_bundle_stage_marker_bytes(output, &entry.path(), source_snapshot_kappa)?;
+            let expected_marker = compiled_bundle_stage_marker_bytes(
+                output,
+                &entry.path(),
+                source_snapshot_kappa,
+                selection_base,
+            )?;
             let recorded_marker = read_compiled_bundle_stage_marker(&entry.path())?;
             if recorded_marker.as_deref() == Some(expected_marker.as_slice()) {
                 if resumable.is_some() {
@@ -5925,11 +6665,9 @@ fn recover_compiled_bundle_stages(
                     ));
                 }
                 resumable = Some((entry.path(), expected_marker, temporaries));
-            } else if recorded_marker.is_some()
-                && validate_compiled_bundle_completion(&entry.path())?.is_none()
-            {
+            } else if recorded_marker.is_some() {
                 return Err(format!(
-                    "{} does not bind this exact compiled output, stage path, and source snapshot",
+                    "{} does not bind this exact compiled output, stage path, source snapshot, and three-root base generation",
                     entry
                         .path()
                         .join(COMPILED_BUNDLE_STAGE_MARKER_FILE)
@@ -5954,26 +6692,32 @@ fn recover_compiled_bundle_stages(
     // or duplicate candidate can therefore never leave earlier stage entries
     // partially reclaimed.
     for stage in stale {
+        let guard =
+            uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerGuard::try_acquire(
+                &stage,
+            )
+            .map_err(|error| error.to_string())?;
+        if !guard
+            .protects_directory(&stage)
+            .map_err(|error| error.to_string())?
+        {
+            return Err(format!(
+                "common producer guard does not protect stale compiled stage {}",
+                stage.display()
+            ));
+        }
         fs::remove_dir_all(&stage).map_err(|error| {
             format!(
                 "stale compiled-bundle stage {} cannot be reclaimed under exclusive session ownership: {error}",
                 stage.display()
             )
         })?;
-    }
-    if let Some((stage, expected_marker, temporaries)) = resumable.as_ref() {
-        reset_resumable_compiled_bundle_stage(stage, temporaries.clone())?;
-        if !validate_compiled_bundle_stage_marker(stage, expected_marker)? {
-            return Err(format!(
-                "resumable compiled-bundle stage {} lost its owner marker during recovery",
-                stage.display()
-            ));
-        }
+        drop(guard);
     }
     fs::File::open(&staging)
         .and_then(|directory| directory.sync_all())
         .map_err(|error| format!("{} cannot be synced: {error}", staging.display()))?;
-    Ok(resumable.map(|(path, marker, _)| (path, marker)))
+    Ok(resumable)
 }
 
 fn copy_regular_file_nofollow(source: &Path, destination: &Path) -> Result<(), String> {
@@ -5987,8 +6731,38 @@ fn copy_regular_file_nofollow(source: &Path, destination: &Path) -> Result<(), S
         .create_new(true)
         .open(destination)
         .map_err(|error| format!("{} cannot be created: {error}", destination.display()))?;
-    let copied = std::io::copy(&mut source_file, &mut destination_file)
-        .map_err(|error| format!("{} cannot be copied: {error}", source.display()))?;
+    let mut copied = 0u64;
+    let mut remaining = opened_metadata.len();
+    let mut buffer = [0u8; 64 * 1024];
+    while remaining != 0 {
+        let limit = usize::try_from(remaining.min(buffer.len() as u64))
+            .map_err(|error| format!("{} length is unsupported: {error}", source.display()))?;
+        let read = source_file
+            .read(&mut buffer[..limit])
+            .map_err(|error| format!("{} cannot be copied: {error}", source.display()))?;
+        if read == 0 {
+            return Err(format!(
+                "{} ended before its opened compiled-bundle source length",
+                source.display()
+            ));
+        }
+        destination_file
+            .write_all(&buffer[..read])
+            .map_err(|error| format!("{} cannot be written: {error}", destination.display()))?;
+        copied += read as u64;
+        remaining -= read as u64;
+    }
+    let mut extra = [0u8; 1];
+    if source_file
+        .read(&mut extra)
+        .map_err(|error| format!("{} cannot be copied: {error}", source.display()))?
+        != 0
+    {
+        return Err(format!(
+            "{} grew beyond its opened compiled-bundle source length",
+            source.display()
+        ));
+    }
     destination_file
         .sync_all()
         .map_err(|error| format!("{} cannot be synced: {error}", destination.display()))?;
@@ -6001,6 +6775,8 @@ fn copy_regular_file_nofollow(source: &Path, destination: &Path) -> Result<(), S
         || !final_path_metadata.file_type().is_file()
         || !source_compile_lock_metadata_matches(&opened_metadata, &final_source_metadata)
         || !source_compile_lock_metadata_matches(&final_path_metadata, &final_source_metadata)
+        || final_source_metadata.len() != opened_metadata.len()
+        || final_path_metadata.len() != opened_metadata.len()
         || copied != final_source_metadata.len()
     {
         return Err(format!(
@@ -6058,7 +6834,15 @@ fn validate_legacy_coordination_directory_for_prefix_copy(path: &Path) -> Result
     Ok(())
 }
 
-fn copy_compiled_bundle_prefix(source: &Path, destination: &Path) -> Result<(), String> {
+fn copy_compiled_bundle_prefix_with_after_first_copy<F>(
+    source: &Path,
+    destination: &Path,
+    mut after_first_copy: F,
+) -> Result<(), String>
+where
+    F: FnMut(&Path) -> Result<(), String>,
+{
+    let mut copied_any = false;
     for entry in fs::read_dir(source)
         .map_err(|error| format!("{} cannot be enumerated: {error}", source.display()))?
     {
@@ -6067,8 +6851,15 @@ fn copy_compiled_bundle_prefix(source: &Path, destination: &Path) -> Result<(), 
         let name = entry.file_name();
         if name == std::ffi::OsStr::new("graph")
             || name == std::ffi::OsStr::new("graph-cover")
+            || name == std::ffi::OsStr::new("compiled.r4g1")
+            || name == std::ffi::OsStr::new("compile_report.json")
+            || name == std::ffi::OsStr::new("instruction-eval.json")
             || name == std::ffi::OsStr::new(COMPILED_BUNDLE_COMPLETION_FILE)
             || name == std::ffi::OsStr::new(COMPILED_BUNDLE_STAGE_MARKER_FILE)
+            || name
+                == std::ffi::OsStr::new(
+                    uor_r4_graph_compiler::recorded_corpus::RECORDED_CORPUS_BINDING_FILE,
+                )
         {
             continue;
         }
@@ -6086,6 +6877,10 @@ fn copy_compiled_bundle_prefix(source: &Path, destination: &Path) -> Result<(), 
             ));
         }
         copy_regular_file_nofollow(&entry.path(), &destination.join(name))?;
+        if !copied_any {
+            copied_any = true;
+            after_first_copy(destination)?;
+        }
     }
     fs::File::open(destination)
         .and_then(|directory| directory.sync_all())
@@ -6117,28 +6912,133 @@ fn validate_copied_compiled_bundle_prefix(
 #[derive(Debug)]
 struct CompiledBundleStage {
     path: PathBuf,
+    #[cfg(test)]
     final_output: PathBuf,
     marker_bytes: Vec<u8>,
 }
 
 impl CompiledBundleStage {
-    fn allocate(final_output: &Path, source_snapshot_kappa: &str) -> Result<Self, String> {
+    fn allocate_with_selection_transaction_with_after_first_copy<F>(
+        final_output: &Path,
+        source_snapshot_kappa: &str,
+        selection_base: &[CompiledBundleSelectionGeneration],
+        mut after_first_copy: F,
+    ) -> Result<(Self, uor_r4_graph_cli::SourceCorpusSession), String>
+    where
+        F: FnMut(&Path) -> Result<(), String>,
+    {
+        let final_output_canonical = canonical_compile_session_subject(final_output)?;
+        let final_output_utf8 = final_output_canonical.to_str().ok_or_else(|| {
+            format!(
+                "compiled output is not UTF-8: {}",
+                final_output_canonical.display()
+            )
+        })?;
+        validate_compiled_bundle_selection_base(selection_base, final_output_utf8)?;
+        let expected_base = selection_base
+            .iter()
+            .find(|entry| entry.root == final_output_utf8)
+            .map(|entry| &entry.generation)
+            .ok_or_else(|| "compiled-bundle selection omitted its final root".to_owned())?;
         // A stable completion is authoritative. Validate every recorded
         // corpus/artifact member before copying a single byte into a resumable
         // refresh stage, and retain the exact record for a post-copy recheck.
         // This prevents a structurally parseable tamper from being copied and
         // freshly re-certified as a new generation.
-        recover_compiled_bundle_completion_temporaries(final_output)?;
         let authoritative_completion = validate_compiled_bundle_completion(final_output)?;
-        cleanup_published_compiled_bundle_stage_marker(final_output, source_snapshot_kappa)?;
-        if let Some((path, marker_bytes)) =
-            recover_compiled_bundle_stages(final_output, source_snapshot_kappa)?
+        match (expected_base, authoritative_completion.as_ref()) {
+            (CompiledBundleBaseGeneration::Absent, None) => {}
+            (
+                CompiledBundleBaseGeneration::Incomplete { .. }
+                | CompiledBundleBaseGeneration::Legacy { .. },
+                None,
+            ) => {
+                if &capture_compiled_bundle_base_generation(final_output)? != expected_base {
+                    return Err(format!(
+                        "incomplete compiled-bundle base {} changed before stage allocation",
+                        final_output.display()
+                    ));
+                }
+            }
+            (CompiledBundleBaseGeneration::Complete { .. }, Some(_)) => {
+                if &capture_compiled_bundle_base_generation(final_output)? != expected_base {
+                    return Err(format!(
+                        "completed compiled-bundle base {} changed before stage allocation",
+                        final_output.display()
+                    ));
+                }
+            }
+            _ => {
+                return Err(format!(
+                    "compiled-bundle base {} no longer matches its captured absence/completion state",
+                    final_output.display()
+                ));
+            }
+        }
+        if let Some((path, marker_bytes, temporaries)) =
+            recover_compiled_bundle_stages(final_output, source_snapshot_kappa, selection_base)?
         {
-            return Ok(Self {
-                path,
-                final_output: final_output.to_path_buf(),
-                marker_bytes,
-            });
+            let session = uor_r4_graph_cli::acquire_source_corpus_session(&path)
+                .map_err(|error| error.to_string())?;
+            let guard = session
+                .recorded_corpus_guard()
+                .map_err(|error| error.to_string())?;
+            guard
+                .begin_compile_attempt()
+                .map_err(|error| error.to_string())?;
+            let binding =
+                path.join(uor_r4_graph_compiler::recorded_corpus::RECORDED_CORPUS_BINDING_FILE);
+            if regular_file_presence(&binding)? {
+                reset_resumable_compiled_bundle_stage(&path, temporaries)?;
+            } else {
+                reset_unbound_compiled_bundle_stage(&path, temporaries)?;
+                if !matches!(expected_base, CompiledBundleBaseGeneration::Absent) {
+                    copy_compiled_bundle_prefix_with_after_first_copy(
+                        final_output,
+                        &path,
+                        &mut after_first_copy,
+                    )?;
+                }
+                if let Some(before) = authoritative_completion.as_ref() {
+                    uor_r4_graph_compiler::recorded_corpus::publish_binding(
+                        guard,
+                        &path.join("corpus.meta"),
+                        &path.join("corpus.records"),
+                    )
+                    .map_err(|error| error.to_string())?;
+                    let after = validate_compiled_bundle_completion(final_output)?.ok_or_else(|| {
+                        format!(
+                            "authoritative compiled bundle {} lost its completion record while a refresh stage was recovered",
+                            final_output.display()
+                        )
+                    })?;
+                    if &after != before {
+                        return Err(format!(
+                            "authoritative compiled bundle {} changed completion identity while a refresh stage was recovered",
+                            final_output.display()
+                        ));
+                    }
+                    validate_copied_compiled_bundle_prefix(&path, before)?;
+                }
+            }
+            if !validate_compiled_bundle_stage_marker(&path, &marker_bytes)? {
+                return Err(format!(
+                    "resumable compiled-bundle stage {} lost its owner marker during recovery",
+                    path.display()
+                ));
+            }
+            guard
+                .verify_owned_root()
+                .map_err(|error| error.to_string())?;
+            return Ok((
+                Self {
+                    path,
+                    #[cfg(test)]
+                    final_output: final_output.to_path_buf(),
+                    marker_bytes,
+                },
+                session,
+            ));
         }
         let parent = final_output.parent().ok_or_else(|| {
             format!(
@@ -6169,6 +7069,7 @@ impl CompiledBundleStage {
                         final_output,
                         &path,
                         source_snapshot_kappa,
+                        selection_base,
                     ) {
                         Ok(bytes) => bytes,
                         Err(error) => {
@@ -6178,37 +7079,6 @@ impl CompiledBundleStage {
                             return Err(error);
                         }
                     };
-                    if let Err(error) = copy_compiled_bundle_prefix(final_output, &path) {
-                        let _ = fs::remove_dir_all(&path);
-                        return Err(error);
-                    }
-                    if let Some(before) = authoritative_completion.as_ref() {
-                        let after = match validate_compiled_bundle_completion(final_output) {
-                            Ok(Some(after)) => after,
-                            Ok(None) => {
-                                let _ = fs::remove_dir_all(&path);
-                                return Err(format!(
-                                    "authoritative compiled bundle {} lost its completion record while a refresh stage was copied",
-                                    final_output.display()
-                                ));
-                            }
-                            Err(error) => {
-                                let _ = fs::remove_dir_all(&path);
-                                return Err(error);
-                            }
-                        };
-                        if &after != before {
-                            let _ = fs::remove_dir_all(&path);
-                            return Err(format!(
-                                "authoritative compiled bundle {} changed completion identity while a refresh stage was copied",
-                                final_output.display()
-                            ));
-                        }
-                        if let Err(error) = validate_copied_compiled_bundle_prefix(&path, before) {
-                            let _ = fs::remove_dir_all(&path);
-                            return Err(error);
-                        }
-                    }
                     if let Err(error) = publish_bytes_no_clobber(
                         &path.join(COMPILED_BUNDLE_STAGE_MARKER_FILE),
                         &marker_bytes,
@@ -6224,11 +7094,55 @@ impl CompiledBundleStage {
                         let _ = fs::File::open(&staging).and_then(|directory| directory.sync_all());
                         return Err(format!("{} cannot be synced: {error}", staging.display()));
                     }
-                    return Ok(Self {
-                        path,
-                        final_output: final_output.to_path_buf(),
-                        marker_bytes,
-                    });
+                    let session = uor_r4_graph_cli::acquire_source_corpus_session(&path)
+                        .map_err(|error| error.to_string())?;
+                    let guard = session
+                        .recorded_corpus_guard()
+                        .map_err(|error| error.to_string())?;
+                    guard
+                        .begin_compile_attempt()
+                        .map_err(|error| error.to_string())?;
+                    if !matches!(expected_base, CompiledBundleBaseGeneration::Absent) {
+                        copy_compiled_bundle_prefix_with_after_first_copy(
+                            final_output,
+                            &path,
+                            &mut after_first_copy,
+                        )?;
+                    }
+                    if let Some(before) = authoritative_completion.as_ref() {
+                        uor_r4_graph_compiler::recorded_corpus::publish_binding(
+                            guard,
+                            &path.join("corpus.meta"),
+                            &path.join("corpus.records"),
+                        )
+                        .map_err(|error| error.to_string())?;
+                        let after = validate_compiled_bundle_completion(final_output)?
+                            .ok_or_else(|| {
+                                format!(
+                                    "authoritative compiled bundle {} lost its completion record while a refresh stage was copied",
+                                    final_output.display()
+                                )
+                            })?;
+                        if &after != before {
+                            return Err(format!(
+                                "authoritative compiled bundle {} changed completion identity while a refresh stage was copied",
+                                final_output.display()
+                            ));
+                        }
+                        validate_copied_compiled_bundle_prefix(&path, before)?;
+                    }
+                    guard
+                        .verify_owned_root()
+                        .map_err(|error| error.to_string())?;
+                    return Ok((
+                        Self {
+                            path,
+                            #[cfg(test)]
+                            final_output: final_output.to_path_buf(),
+                            marker_bytes,
+                        },
+                        session,
+                    ));
                 }
                 Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
                 Err(error) => {
@@ -6245,6 +7159,71 @@ impl CompiledBundleStage {
         ))
     }
 
+    fn allocate_with_selection_transaction(
+        final_output: &Path,
+        source_snapshot_kappa: &str,
+        selection_base: &[CompiledBundleSelectionGeneration],
+    ) -> Result<(Self, uor_r4_graph_cli::SourceCorpusSession), String> {
+        Self::allocate_with_selection_transaction_with_after_first_copy(
+            final_output,
+            source_snapshot_kappa,
+            selection_base,
+            |_| Ok(()),
+        )
+    }
+
+    #[cfg(test)]
+    fn allocate_with_selection(
+        final_output: &Path,
+        source_snapshot_kappa: &str,
+        selection_base: &[CompiledBundleSelectionGeneration],
+    ) -> Result<Self, String> {
+        let (stage, session) = Self::allocate_with_selection_transaction(
+            final_output,
+            source_snapshot_kappa,
+            selection_base,
+        )?;
+        drop(session);
+        Ok(stage)
+    }
+
+    #[cfg(test)]
+    fn allocate(final_output: &Path, source_snapshot_kappa: &str) -> Result<Self, String> {
+        let final_root = canonical_compile_session_subject(final_output)?;
+        let parent = final_root
+            .parent()
+            .ok_or_else(|| format!("{} has no parent", final_root.display()))?;
+        let name = final_root
+            .file_name()
+            .and_then(|name| name.to_str())
+            .ok_or_else(|| format!("{} is not UTF-8", final_root.display()))?;
+        let mut roots = vec![
+            parent.join(format!(".{name}.test-selection-a")),
+            final_root.clone(),
+            parent.join(format!(".{name}.test-selection-z")),
+        ];
+        roots.sort();
+        let selection = roots
+            .into_iter()
+            .map(|root| {
+                let generation = if root == final_root {
+                    capture_compiled_bundle_base_generation(&root)?
+                } else {
+                    CompiledBundleBaseGeneration::Absent
+                };
+                Ok(CompiledBundleSelectionGeneration {
+                    root: root
+                        .to_str()
+                        .ok_or_else(|| format!("{} is not UTF-8", root.display()))?
+                        .to_owned(),
+                    generation,
+                })
+            })
+            .collect::<Result<Vec<_>, String>>()?;
+        Self::allocate_with_selection(final_output, source_snapshot_kappa, &selection)
+    }
+
+    #[cfg(test)]
     fn sync_publication_parents(&self, label: &str) -> Result<(), String> {
         // The working generation lives in the hidden staging namespace while
         // the public generation lives directly below the compiled root. A
@@ -6260,6 +7239,7 @@ impl CompiledBundleStage {
         }
     }
 
+    #[cfg(test)]
     fn publish(&mut self) -> Result<(), String> {
         validate_compiled_bundle_completion(&self.path)?.ok_or_else(|| {
             format!(
@@ -6356,18 +7336,90 @@ impl CompiledBundleStage {
     }
 }
 
+fn compiled_bundle_semantic_control_max_bytes(relative: &str) -> Option<u64> {
+    match relative {
+        "corpus.meta"
+        | "tokenizer_adapter.json"
+        | "space_manifest.json"
+        | SOURCE_COMPILE_PREFLIGHT_FILE
+        | SOURCE_MANIFEST_KAPPA_BINDING_FILE
+        | uor_r4_graph_compiler::recorded_corpus::RECORDED_CORPUS_BINDING_FILE
+        | uor_r4_graph_cli::ATTENTION_OPERATOR_BINDING_FILE
+        | uor_r4_graph_cli::DENSE_OPERATOR_BINDING_FILE => Some(COMPILED_BUNDLE_CONTROL_MAX_BYTES),
+        "graph-cover/cover_report.json" => Some(COVER_REPORT_CONTROL_MAX_BYTES),
+        "graph/score_report.json" => Some(SCORE_REPORT_CONTROL_MAX_BYTES),
+        _ => None,
+    }
+}
+
+fn require_compiled_bundle_semantic_control_size(
+    relative: &str,
+    path: &Path,
+    metadata: &fs::Metadata,
+) -> Result<(), String> {
+    if let Some(max_bytes) = compiled_bundle_semantic_control_max_bytes(relative) {
+        if metadata.len() > max_bytes {
+            return Err(format!(
+                "{} exceeds the registered {max_bytes}-byte compiled-bundle control-record limit for {relative}",
+                path.display()
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn compiled_bundle_member_kappa(
+    relative: &str,
+    path: &Path,
+    label: &str,
+) -> Result<String, String> {
+    match compiled_bundle_semantic_control_max_bytes(relative) {
+        Some(max_bytes) => regular_file_blake3_nofollow_capped(path, label, max_bytes),
+        None => regular_file_blake3_nofollow(path, label),
+    }
+}
+
 fn collect_compiled_bundle_files(
     root: &Path,
     directory: &Path,
     files: &mut Vec<(String, PathBuf)>,
     ignored: &std::collections::BTreeSet<PathBuf>,
 ) -> Result<(), String> {
-    let mut entries = fs::read_dir(directory)
+    collect_compiled_bundle_files_with_legacy_fallbacks(root, directory, files, ignored, false)
+}
+
+fn collect_compiled_bundle_files_with_legacy_fallbacks(
+    root: &Path,
+    directory: &Path,
+    files: &mut Vec<(String, PathBuf)>,
+    ignored: &std::collections::BTreeSet<PathBuf>,
+    allow_legacy_fallbacks: bool,
+) -> Result<(), String> {
+    let relative_directory = directory.strip_prefix(root).map_err(|_| {
+        format!(
+            "compiled-bundle directory {} escaped root {}",
+            directory.display(),
+            root.display()
+        )
+    })?;
+    let relative_directory = relative_directory.to_str().ok_or_else(|| {
+        format!(
+            "compiled-bundle directory {} has a non-UTF-8 relative path",
+            directory.display()
+        )
+    })?;
+    if !matches!(relative_directory, "" | "graph" | "graph-cover") {
+        return Err(format!(
+            "compiled bundle {} contains unsupported directory {}",
+            root.display(),
+            directory.display()
+        ));
+    }
+    for entry in fs::read_dir(directory)
         .map_err(|error| format!("{} cannot be enumerated: {error}", directory.display()))?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|error| format!("{} cannot be enumerated: {error}", directory.display()))?;
-    entries.sort_by_key(fs::DirEntry::file_name);
-    for entry in entries {
+    {
+        let entry = entry
+            .map_err(|error| format!("{} cannot be enumerated: {error}", directory.display()))?;
         let path = entry.path();
         if ignored.contains(&path) {
             continue;
@@ -6385,40 +7437,146 @@ fn collect_compiled_bundle_files(
                 path.display()
             )
         })?;
-        if relative_utf8 == COMPILED_BUNDLE_COMPLETION_FILE {
-            continue;
-        }
-        if relative_utf8 == COMPILED_BUNDLE_STAGE_MARKER_FILE {
-            let bytes = read_required_regular_file_nofollow(&path, "compiled-bundle stage marker")?;
-            reject_duplicate_json_fields(&bytes, &path, "compiled-bundle stage marker")?;
-            let record: CompiledBundleStageMarker = serde_json::from_slice(&bytes)
-                .map_err(|error| format!("{} is malformed: {error}", path.display()))?;
-            let mut canonical =
-                serde_json::to_vec_pretty(&record).map_err(|error| error.to_string())?;
-            canonical.push(b'\n');
-            if record.schema != COMPILED_BUNDLE_STAGE_SCHEMA || bytes != canonical {
+        let metadata = fs::symlink_metadata(&path)
+            .map_err(|error| format!("{} cannot be inspected: {error}", path.display()))?;
+        if relative_directory.is_empty() {
+            if relative_utf8 == COMPILED_BUNDLE_COMPLETION_FILE {
+                if !metadata.file_type().is_file() {
+                    return Err(format!(
+                        "compiled-bundle completion {} is not a regular non-symlink file",
+                        path.display()
+                    ));
+                }
+                continue;
+            }
+            if relative_utf8 == COMPILED_BUNDLE_STAGE_MARKER_FILE {
+                if !metadata.file_type().is_file() {
+                    return Err(format!(
+                        "compiled-bundle stage marker {} is not a regular non-symlink file",
+                        path.display()
+                    ));
+                }
+                let bytes = read_required_regular_file_nofollow_capped(
+                    &path,
+                    "compiled-bundle stage marker",
+                    COMPILED_BUNDLE_CONTROL_MAX_BYTES,
+                )?;
+                reject_duplicate_json_fields(&bytes, &path, "compiled-bundle stage marker")?;
+                let record: CompiledBundleStageMarker = serde_json::from_slice(&bytes)
+                    .map_err(|error| format!("{} is malformed: {error}", path.display()))?;
+                let mut canonical =
+                    serde_json::to_vec_pretty(&record).map_err(|error| error.to_string())?;
+                canonical.push(b'\n');
+                if record.schema != COMPILED_BUNDLE_STAGE_SCHEMA || bytes != canonical {
+                    return Err(format!(
+                        "{} is not a canonical supported compiled-bundle stage marker",
+                        path.display()
+                    ));
+                }
+                validate_compiled_bundle_stage_marker_location(root, &bytes)?;
+                continue;
+            }
+            if relative_utf8
+                == uor_r4_graph_compiler::recorded_corpus::RECORDED_CORPUS_COMPILE_ATTEMPT_FILE
+            {
+                if !metadata.file_type().is_file() {
+                    return Err(format!(
+                        "recorded-corpus compile-attempt marker {} is not a regular non-symlink file",
+                        path.display()
+                    ));
+                }
+                let bytes = read_required_regular_file_nofollow_capped(
+                    &path,
+                    "recorded-corpus compile-attempt marker",
+                    1024,
+                )?;
+                let expected =
+                    uor_r4_graph_compiler::recorded_corpus::recorded_corpus_compile_attempt_bytes()
+                        .map_err(|error| error.to_string())?;
+                if bytes != expected {
+                    return Err(format!(
+                        "{} is not the exact canonical recorded-corpus compile-attempt marker",
+                        path.display()
+                    ));
+                }
+                // Coordination state spans a binding-last commit. It is not
+                // immutable bundle payload and therefore never enters the
+                // completion CID inventory.
+                continue;
+            }
+            if relative_utf8 == "instruction-eval.json" {
+                if !metadata.file_type().is_file() {
+                    return Err(format!(
+                        "derived evaluation report {} is not a regular non-symlink file",
+                        path.display()
+                    ));
+                }
+                // The evaluator publishes after the immutable compiled
+                // generation and defaults to this root. It is derived output,
+                // not a member of the completion CID transaction.
+                continue;
+            }
+            if matches!(relative_utf8, "graph" | "graph-cover") {
+                if !metadata.file_type().is_dir() {
+                    return Err(format!(
+                        "compiled-bundle output {} is not a regular non-symlink directory",
+                        path.display()
+                    ));
+                }
+                collect_compiled_bundle_files_with_legacy_fallbacks(
+                    root,
+                    &path,
+                    files,
+                    ignored,
+                    allow_legacy_fallbacks,
+                )?;
+                continue;
+            }
+            let allowed = matches!(
+                relative_utf8,
+                "corpus.meta"
+                    | "corpus.records"
+                    | "corpus.records.hidden"
+                    | "tless_artifacts.bin"
+                    | "tless_store.bin"
+                    | "tokenizer.bin"
+                    | "tokenizer_adapter.json"
+                    | "hamming_calibration.json"
+                    | "hierarchical_codes.json"
+                    | "space_manifest.json"
+                    | SOURCE_COMPILE_PREFLIGHT_FILE
+                    | SOURCE_MANIFEST_KAPPA_BINDING_FILE
+                    | uor_r4_graph_compiler::recorded_corpus::RECORDED_CORPUS_BINDING_FILE
+                    | uor_r4_graph_cli::ATTENTION_OPERATOR_BINDING_FILE
+                    | uor_r4_graph_cli::DENSE_OPERATOR_BINDING_FILE
+            ) || (allow_legacy_fallbacks
+                && matches!(relative_utf8, "compiled.r4g1" | "compile_report.json"));
+            if !allowed || !metadata.file_type().is_file() {
                 return Err(format!(
-                    "{} is not a canonical supported compiled-bundle stage marker",
+                    "compiled bundle {} contains unsupported entry {}",
+                    root.display(),
                     path.display()
                 ));
             }
-            validate_compiled_bundle_stage_marker_location(root, &bytes)?;
+            require_compiled_bundle_semantic_control_size(relative_utf8, &path, &metadata)?;
+            files.push((relative_utf8.to_owned(), path));
             continue;
         }
-        let metadata = fs::symlink_metadata(&path)
-            .map_err(|error| format!("{} cannot be inspected: {error}", path.display()))?;
-        if metadata.file_type().is_file() {
-            files.push((relative_utf8.to_owned(), path));
-        } else if metadata.file_type().is_dir() && matches!(relative_utf8, "graph" | "graph-cover")
-        {
-            collect_compiled_bundle_files(root, &path, files, ignored)?;
-        } else {
+
+        let allowed = matches!(
+            (relative_directory, entry.file_name().to_str()),
+            ("graph", Some("score.r4g1" | "score_report.json"))
+                | ("graph-cover", Some("cover.r4g1" | "cover_report.json"))
+        );
+        if !allowed || !metadata.file_type().is_file() {
             return Err(format!(
-                "compiled bundle {} contains unsupported nonregular entry {}",
+                "compiled bundle {} contains unsupported entry {}",
                 root.display(),
                 path.display()
             ));
         }
+        require_compiled_bundle_semantic_control_size(relative_utf8, &path, &metadata)?;
+        files.push((relative_utf8.to_owned(), path));
     }
     Ok(())
 }
@@ -6429,6 +7587,26 @@ fn compiled_bundle_file_kappas(
     compiled_bundle_file_kappas_ignoring(root, &std::collections::BTreeSet::new())
 }
 
+fn legacy_compiled_bundle_file_kappas(
+    root: &Path,
+) -> Result<std::collections::BTreeMap<String, String>, String> {
+    let mut files = Vec::new();
+    collect_compiled_bundle_files_with_legacy_fallbacks(
+        root,
+        root,
+        &mut files,
+        &std::collections::BTreeSet::new(),
+        true,
+    )?;
+    let mut kappas = std::collections::BTreeMap::new();
+    for (relative, path) in files {
+        let digest =
+            compiled_bundle_member_kappa(&relative, &path, "legacy compiled-bundle member")?;
+        kappas.insert(relative, digest);
+    }
+    Ok(kappas)
+}
+
 fn compiled_bundle_file_kappas_ignoring(
     root: &Path,
     ignored: &std::collections::BTreeSet<PathBuf>,
@@ -6437,11 +7615,8 @@ fn compiled_bundle_file_kappas_ignoring(
     collect_compiled_bundle_files(root, root, &mut files, ignored)?;
     let mut kappas = std::collections::BTreeMap::new();
     for (relative, path) in files {
-        let bytes = read_required_regular_file_nofollow(&path, "compiled-bundle member")?;
-        kappas.insert(
-            relative,
-            format!("blake3:{}", blake3::hash(&bytes).to_hex()),
-        );
+        let digest = compiled_bundle_member_kappa(&relative, &path, "compiled-bundle member")?;
+        kappas.insert(relative, digest);
     }
     Ok(kappas)
 }
@@ -6502,6 +7677,236 @@ fn compiled_bundle_completion_bytes(
     Ok(bytes)
 }
 
+fn canonical_blake3_cid(value: &str) -> bool {
+    value.strip_prefix("blake3:").is_some_and(|digest| {
+        digest.len() == 64
+            && digest
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    })
+}
+
+fn validate_compiled_bundle_base_generation(
+    base: &CompiledBundleBaseGeneration,
+) -> Result<(), String> {
+    match base {
+        CompiledBundleBaseGeneration::Absent => Ok(()),
+        CompiledBundleBaseGeneration::Incomplete { files } => {
+            if files.is_empty()
+                || files.len() > 5
+                || files.iter().any(|(name, digest)| {
+                    !matches!(
+                        name.as_str(),
+                        SOURCE_COMPILE_PREFLIGHT_FILE
+                            | SOURCE_MANIFEST_KAPPA_BINDING_FILE
+                            | "tokenizer_adapter.json"
+                            | uor_r4_graph_cli::ATTENTION_OPERATOR_BINDING_FILE
+                            | uor_r4_graph_cli::DENSE_OPERATOR_BINDING_FILE
+                    ) || !canonical_blake3_cid(digest)
+                })
+            {
+                return Err(
+                    "compiled-bundle base generation is not an exact bounded source-identity prefix"
+                        .to_owned(),
+                );
+            }
+            Ok(())
+        }
+        CompiledBundleBaseGeneration::Legacy { files } => {
+            if files.is_empty()
+                || files.len() > 21
+                || files.iter().any(|(name, digest)| {
+                    !matches!(
+                        name.as_str(),
+                        "corpus.meta"
+                            | "corpus.records"
+                            | "corpus.records.hidden"
+                            | "tless_artifacts.bin"
+                            | "tless_store.bin"
+                            | "tokenizer.bin"
+                            | "tokenizer_adapter.json"
+                            | "hamming_calibration.json"
+                            | "hierarchical_codes.json"
+                            | "space_manifest.json"
+                            | SOURCE_COMPILE_PREFLIGHT_FILE
+                            | SOURCE_MANIFEST_KAPPA_BINDING_FILE
+                            | uor_r4_graph_compiler::recorded_corpus::RECORDED_CORPUS_BINDING_FILE
+                            | uor_r4_graph_cli::ATTENTION_OPERATOR_BINDING_FILE
+                            | uor_r4_graph_cli::DENSE_OPERATOR_BINDING_FILE
+                            | "graph/score.r4g1"
+                            | "graph/score_report.json"
+                            | "graph-cover/cover.r4g1"
+                            | "graph-cover/cover_report.json"
+                            | "compiled.r4g1"
+                            | "compile_report.json"
+                    ) || !canonical_blake3_cid(digest)
+                })
+            {
+                return Err(
+                    "compiled-bundle legacy base is not an exact bounded fixed-inventory witness"
+                        .to_owned(),
+                );
+            }
+            Ok(())
+        }
+        CompiledBundleBaseGeneration::Complete {
+            completion_cid,
+            recorded_corpus_binding_cid,
+        } => {
+            if !canonical_blake3_cid(completion_cid)
+                || !canonical_blake3_cid(recorded_corpus_binding_cid)
+            {
+                return Err(
+                    "compiled-bundle complete base generation contains a noncanonical CID"
+                        .to_owned(),
+                );
+            }
+            Ok(())
+        }
+    }
+}
+
+fn validate_compiled_bundle_selection_base(
+    selection: &[CompiledBundleSelectionGeneration],
+    final_output: &str,
+) -> Result<(), String> {
+    if selection.len() != 3 {
+        return Err(format!(
+            "compiled-bundle stage selection base must contain exactly three resolver roots, not {}",
+            selection.len()
+        ));
+    }
+    let mut previous: Option<&str> = None;
+    let mut contains_final = false;
+    for entry in selection {
+        let canonical = canonical_compile_session_subject(Path::new(&entry.root))?;
+        if canonical.to_str() != Some(entry.root.as_str()) {
+            return Err(format!(
+                "compiled-bundle stage selection root {:?} is not canonical UTF-8",
+                entry.root
+            ));
+        }
+        if previous.is_some_and(|previous| previous >= entry.root.as_str()) {
+            return Err(
+                "compiled-bundle stage selection roots are not strictly canonical-sorted"
+                    .to_owned(),
+            );
+        }
+        previous = Some(&entry.root);
+        contains_final |= entry.root == final_output;
+        validate_compiled_bundle_base_generation(&entry.generation)?;
+    }
+    if !contains_final {
+        return Err(
+            "compiled-bundle stage selection base does not include its final output root"
+                .to_owned(),
+        );
+    }
+    Ok(())
+}
+
+/// Capture the content half of the public-root CAS identity. The caller holds
+/// one lower common reader/producer authority for `root` across this whole
+/// function; the lower root-generation witness supplies the inode/absence
+/// half used by the final handoff.
+fn capture_compiled_bundle_base_generation(
+    root: &Path,
+) -> Result<CompiledBundleBaseGeneration, String> {
+    match fs::symlink_metadata(root) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(CompiledBundleBaseGeneration::Absent)
+        }
+        Err(error) => return Err(format!("{} cannot be inspected: {error}", root.display())),
+        Ok(metadata) if !metadata.file_type().is_dir() => {
+            return Err(format!(
+                "compiled bundle root {} is not a regular non-symlink directory",
+                root.display()
+            ))
+        }
+        Ok(_) => {}
+    }
+    if validate_compiled_bundle_completion(root)?.is_some() {
+        let completion = read_required_regular_file_nofollow_capped(
+            &root.join(COMPILED_BUNDLE_COMPLETION_FILE),
+            "compiled-bundle completion",
+            COMPILED_BUNDLE_CONTROL_MAX_BYTES,
+        )?;
+        let binding = read_required_regular_file_nofollow_capped(
+            &root.join(uor_r4_graph_compiler::recorded_corpus::RECORDED_CORPUS_BINDING_FILE),
+            "recorded-corpus generation binding",
+            COMPILED_BUNDLE_CONTROL_MAX_BYTES,
+        )?;
+        return Ok(CompiledBundleBaseGeneration::Complete {
+            completion_cid: format!("blake3:{}", blake3::hash(&completion).to_hex()),
+            recorded_corpus_binding_cid: format!("blake3:{}", blake3::hash(&binding).to_hex()),
+        });
+    }
+    if source_compile_pre_attention_prefix(root)? && !source_compile_output_has_payload(root)? {
+        let files = compiled_bundle_file_kappas(root)?;
+        let base = CompiledBundleBaseGeneration::Incomplete { files };
+        validate_compiled_bundle_base_generation(&base)?;
+        return Ok(base);
+    }
+    let files = legacy_compiled_bundle_file_kappas(root)?;
+    let base = CompiledBundleBaseGeneration::Legacy { files };
+    validate_compiled_bundle_base_generation(&base)?;
+    Ok(base)
+}
+
+fn capture_compiled_bundle_selection_base(
+    roots: &[PathBuf; 3],
+    final_output: &Path,
+) -> Result<Vec<CompiledBundleSelectionGeneration>, String> {
+    let mut selection = roots
+        .iter()
+        .map(|root| {
+            let canonical = canonical_compile_session_subject(root)?;
+            let root_utf8 = canonical
+                .to_str()
+                .ok_or_else(|| format!("compiled root is not UTF-8: {}", canonical.display()))?;
+            Ok(CompiledBundleSelectionGeneration {
+                root: root_utf8.to_owned(),
+                generation: capture_compiled_bundle_base_generation(&canonical)?,
+            })
+        })
+        .collect::<Result<Vec<_>, String>>()?;
+    selection.sort_by(|left, right| left.root.cmp(&right.root));
+    let final_output = canonical_compile_session_subject(final_output)?;
+    let final_output = final_output.to_str().ok_or_else(|| {
+        format!(
+            "compiled final output is not UTF-8: {}",
+            final_output.display()
+        )
+    })?;
+    validate_compiled_bundle_selection_base(&selection, final_output)?;
+    Ok(selection)
+}
+
+fn require_compiled_bundle_selection_base_unchanged(
+    expected: &[CompiledBundleSelectionGeneration],
+    final_output: &Path,
+) -> Result<(), String> {
+    if expected.len() != 3 {
+        return Err("compiled-bundle selection CAS witness has the wrong arity".to_owned());
+    }
+    let roots = expected
+        .iter()
+        .map(|entry| PathBuf::from(&entry.root))
+        .collect::<Vec<_>>();
+    let roots: [PathBuf; 3] = roots
+        .try_into()
+        .map_err(|_| "compiled-bundle selection CAS witness has the wrong arity".to_owned())?;
+    let current = capture_compiled_bundle_selection_base(&roots, final_output)?;
+    if current != expected {
+        return Err(format!(
+            "compiled-bundle resolver selection changed while its private stage was built; refusing stale publication into {}",
+            final_output.display()
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
 fn publish_compiled_bundle_completion(root: &Path) -> Result<(), String> {
     for required in [
         "corpus.meta",
@@ -6510,6 +7915,7 @@ fn publish_compiled_bundle_completion(root: &Path) -> Result<(), String> {
         "tokenizer.bin",
         "tokenizer_adapter.json",
         uor_r4_graph_cli::ATTENTION_OPERATOR_BINDING_FILE,
+        uor_r4_graph_compiler::recorded_corpus::RECORDED_CORPUS_BINDING_FILE,
         SOURCE_COMPILE_PREFLIGHT_FILE,
         SOURCE_MANIFEST_KAPPA_BINDING_FILE,
         "graph-cover/cover.r4g1",
@@ -6557,6 +7963,317 @@ fn publish_compiled_bundle_completion(root: &Path) -> Result<(), String> {
     )
 }
 
+fn publish_compiled_bundle_completion_under_guard(
+    guard: &uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerGuard,
+    root: &Path,
+) -> Result<(), String> {
+    if !guard
+        .protects_directory(root)
+        .map_err(|error| error.to_string())?
+    {
+        return Err(format!(
+            "recorded-corpus producer authority for {} does not protect completion root {}",
+            guard.root().display(),
+            root.display()
+        ));
+    }
+    // Reuse the common validation/hash path, but commit the final control leaf
+    // through the retained root descriptor so a logical-root redirection
+    // cannot move the commit to a different inode.
+    for required in [
+        "corpus.meta",
+        "corpus.records",
+        "tless_artifacts.bin",
+        "tokenizer.bin",
+        "tokenizer_adapter.json",
+        uor_r4_graph_cli::ATTENTION_OPERATOR_BINDING_FILE,
+        uor_r4_graph_compiler::recorded_corpus::RECORDED_CORPUS_BINDING_FILE,
+        SOURCE_COMPILE_PREFLIGHT_FILE,
+        SOURCE_MANIFEST_KAPPA_BINDING_FILE,
+        "graph-cover/cover.r4g1",
+        "graph-cover/cover_report.json",
+        "graph/score.r4g1",
+        "graph/score_report.json",
+    ] {
+        if !regular_file_presence(&root.join(required))? {
+            return Err(format!(
+                "compiled-bundle stage {} is incomplete; missing required {required}",
+                root.display()
+            ));
+        }
+    }
+    sync_compiled_bundle_members(root)?;
+    let files = compiled_bundle_file_kappas(root)?;
+    let bytes = compiled_bundle_completion_bytes(files)?;
+    let stable = std::ffi::OsStr::new(COMPILED_BUNDLE_COMPLETION_FILE);
+    if guard
+        .verify_optional_owned_entry_bytes(
+            stable,
+            &bytes,
+            COMPILED_BUNDLE_CONTROL_MAX_BYTES,
+            "compiled-bundle completion",
+        )
+        .map_err(|error| error.to_string())?
+    {
+        guard.sync_owned_root().map_err(|error| error.to_string())?;
+        return Ok(());
+    }
+    for _ in 0..128 {
+        let id = NEXT_SOURCE_KAPPA_BINDING_ID.fetch_add(1, Ordering::Relaxed);
+        let temporary = std::ffi::OsString::from(format!(
+            ".{COMPILED_BUNDLE_COMPLETION_FILE}.{}.{}.tmp",
+            std::process::id(),
+            id
+        ));
+        let mut file = match guard.create_new_owned_entry(&temporary) {
+            Ok(file) => file,
+            Err(error) if error.reason.contains("exists") => continue,
+            Err(error) => return Err(error.to_string()),
+        };
+        file.write_all(&bytes).map_err(|error| error.to_string())?;
+        file.sync_all().map_err(|error| error.to_string())?;
+        guard
+            .verify_owned_entry_bytes(
+                &temporary,
+                &bytes,
+                COMPILED_BUNDLE_CONTROL_MAX_BYTES,
+                "compiled-bundle completion temporary",
+            )
+            .map_err(|error| error.to_string())?;
+        if let Err(error) = guard.link_owned_entry(&temporary, stable) {
+            let _ = guard.unlink_owned_entry(&temporary);
+            return Err(error.to_string());
+        }
+        guard.sync_owned_root().map_err(|error| error.to_string())?;
+        guard
+            .verify_owned_entry_bytes(
+                stable,
+                &bytes,
+                COMPILED_BUNDLE_CONTROL_MAX_BYTES,
+                "compiled-bundle completion",
+            )
+            .map_err(|error| error.to_string())?;
+        guard
+            .unlink_owned_entry(&temporary)
+            .map_err(|error| error.to_string())?;
+        guard.sync_owned_root().map_err(|error| error.to_string())?;
+        return Ok(());
+    }
+    Err(format!(
+        "could not reserve a compiled-bundle completion temporary in {}",
+        root.display()
+    ))
+}
+
+fn validate_compiled_stage_transaction_under_guard(
+    guard: &uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerGuard,
+    root: &Path,
+    source_snapshot_kappa: &str,
+) -> Result<(), String> {
+    if !guard
+        .protects_directory(root)
+        .map_err(|error| error.to_string())?
+    {
+        return Err(format!(
+            "recorded-corpus producer authority for {} does not protect compiled stage {}",
+            guard.root().display(),
+            root.display()
+        ));
+    }
+    let recoverable = guard
+        .preflight_publication_namespace_for(
+            uor_r4_graph_compiler::recorded_corpus::RecordedCorpusRole::Compile,
+        )
+        .map_err(|error| error.to_string())?;
+    if recoverable {
+        return Err(format!(
+            "compiled stage {} still contains a recoverable recorded-corpus binding temporary",
+            root.display()
+        ));
+    }
+    guard
+        .preflight_planned_output_scope(&[])
+        .map_err(|error| error.to_string())?;
+    if guard
+        .compile_attempt_active()
+        .map_err(|error| error.to_string())?
+    {
+        return Err(format!(
+            "compiled stage {} still has an active recorded-corpus compile attempt",
+            root.display()
+        ));
+    }
+    validate_source_bundle_inventory(root)?;
+    validate_staged_graph_outputs(root)?;
+    let meta = root.join("corpus.meta");
+    let records = root.join("corpus.records");
+    let snapshot =
+        uor_r4_graph_compiler::recorded_corpus::open_stream_under_guard(guard, &meta, &records)
+            .map_err(|error| error.to_string())?;
+    let binding_cid = snapshot.binding_cid.as_deref().ok_or_else(|| {
+        format!(
+            "compiled stage {} has no canonical recorded-corpus generation binding",
+            root.display()
+        )
+    })?;
+    if !canonical_blake3_cid(binding_cid) {
+        return Err(format!(
+            "compiled stage {} reports a noncanonical recorded-corpus binding CID",
+            root.display()
+        ));
+    }
+    let attention = source_compile_attention_binding(root)?.ok_or_else(|| {
+        format!(
+            "compiled stage {} lost its source attention binding",
+            root.display()
+        )
+    })?;
+    let dense = source_compile_dense_binding(root)?;
+    if snapshot.execution.attention_operator.as_ref() != Some(&attention)
+        || snapshot.execution.dense_operator.as_ref() != dense.as_ref()
+    {
+        return Err(format!(
+            "compiled stage {} records a corpus execution identity that differs from its canonical operator sidecars",
+            root.display()
+        ));
+    }
+    uor_r4_model_source::dense::validate_source_execution_pair(Some(&attention), dense.as_ref())
+        .map_err(|error| format!("compiled stage {}: {error}", root.display()))?;
+    let preflight = read_optional_source_compile_preflight(root)?.ok_or_else(|| {
+        format!(
+            "compiled stage {} lost its source compile preflight",
+            root.display()
+        )
+    })?;
+    let kappa = read_optional_source_manifest_kappa_binding(root)?.ok_or_else(|| {
+        format!(
+            "compiled stage {} lost its source snapshot binding",
+            root.display()
+        )
+    })?;
+    if preflight.source_manifest_kappa.as_deref() != Some(source_snapshot_kappa)
+        || kappa != source_snapshot_kappa
+    {
+        return Err(format!(
+            "compiled stage {} does not bind requested source snapshot {} consistently across P/K",
+            root.display(),
+            source_snapshot_kappa
+        ));
+    }
+    let report = root.join("graph-cover/cover_report.json");
+    let (present, report_attention, report_dense, report_kappa) = parse_cover_provenance(&report)?;
+    if !present
+        || report_attention.as_ref() != Some(&attention)
+        || report_dense.as_ref() != dense.as_ref()
+        || report_kappa.as_deref() != Some(source_snapshot_kappa)
+    {
+        return Err(format!(
+            "compiled stage {} does not reconcile its corpus/operator/source identity with {}",
+            root.display(),
+            report.display()
+        ));
+    }
+    snapshot
+        .verify_generation()
+        .map_err(|error| error.to_string())?;
+    guard.verify_owned_root().map_err(|error| error.to_string())
+}
+
+/// Validate a complete pre-transaction compiler generation before minting its
+/// first recorded-corpus binding. This is deliberately read-only: every
+/// server/operator/source/graph check and the lower streaming binding
+/// candidate check completes before `begin_compile_attempt` mutates the root.
+fn validate_unbound_compiled_stage_transaction_under_guard(
+    guard: &uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerGuard,
+    root: &Path,
+    source_snapshot_kappa: &str,
+) -> Result<(), String> {
+    if !guard
+        .protects_directory(root)
+        .map_err(|error| error.to_string())?
+    {
+        return Err(format!(
+            "recorded-corpus producer authority for {} does not protect unbound compiled stage {}",
+            guard.root().display(),
+            root.display()
+        ));
+    }
+    if regular_file_presence(
+        &root.join(uor_r4_graph_compiler::recorded_corpus::RECORDED_CORPUS_BINDING_FILE),
+    )? {
+        return Err(format!(
+            "unbound compiled-stage preflight for {} found a stable recorded-corpus binding",
+            root.display()
+        ));
+    }
+    let recoverable = guard
+        .preflight_publication_namespace_for(
+            uor_r4_graph_compiler::recorded_corpus::RecordedCorpusRole::Compile,
+        )
+        .map_err(|error| error.to_string())?;
+    if recoverable {
+        return Err(format!(
+            "unbound compiled stage {} contains a recoverable binding temporary",
+            root.display()
+        ));
+    }
+    guard
+        .preflight_planned_output_scope(&[])
+        .map_err(|error| error.to_string())?;
+    validate_source_bundle_inventory(root)?;
+    validate_staged_graph_outputs(root)?;
+    let meta = root.join("corpus.meta");
+    let records = root.join("corpus.records");
+    uor_r4_graph_compiler::recorded_corpus::preflight_binding_evidence_matches_current(
+        guard, &meta, &records,
+    )
+    .map_err(|error| error.to_string())?;
+    let attention = source_compile_attention_binding(root)?.ok_or_else(|| {
+        format!(
+            "unbound compiled stage {} lost its source attention binding",
+            root.display()
+        )
+    })?;
+    let dense = source_compile_dense_binding(root)?;
+    uor_r4_model_source::dense::validate_source_execution_pair(Some(&attention), dense.as_ref())
+        .map_err(|error| format!("unbound compiled stage {}: {error}", root.display()))?;
+    let preflight = read_optional_source_compile_preflight(root)?.ok_or_else(|| {
+        format!(
+            "unbound compiled stage {} lost its source compile preflight",
+            root.display()
+        )
+    })?;
+    let kappa = read_optional_source_manifest_kappa_binding(root)?.ok_or_else(|| {
+        format!(
+            "unbound compiled stage {} lost its source snapshot binding",
+            root.display()
+        )
+    })?;
+    if preflight.source_manifest_kappa.as_deref() != Some(source_snapshot_kappa)
+        || kappa != source_snapshot_kappa
+    {
+        return Err(format!(
+            "unbound compiled stage {} does not bind requested source snapshot {} consistently across P/K",
+            root.display(),
+            source_snapshot_kappa
+        ));
+    }
+    let report = root.join("graph-cover/cover_report.json");
+    let (present, report_attention, report_dense, report_kappa) = parse_cover_provenance(&report)?;
+    if !present
+        || report_attention.as_ref() != Some(&attention)
+        || report_dense.as_ref() != dense.as_ref()
+        || report_kappa.as_deref() != Some(source_snapshot_kappa)
+    {
+        return Err(format!(
+            "unbound compiled stage {} does not reconcile its operator/source identity with {}",
+            root.display(),
+            report.display()
+        ));
+    }
+    guard.verify_owned_root().map_err(|error| error.to_string())
+}
+
 fn validate_staged_graph_outputs(root: &Path) -> Result<(), String> {
     for relative in ["graph-cover/cover.r4g1", "graph/score.r4g1"] {
         let path = root.join(relative);
@@ -6573,15 +8290,26 @@ fn validate_staged_graph_outputs(root: &Path) -> Result<(), String> {
             return Err(format!("{} has no R4G1 HEAD section", path.display()));
         }
     }
-    for relative in ["graph-cover/cover_report.json", "graph/score_report.json"] {
+    for (relative, max_bytes) in [
+        (
+            "graph-cover/cover_report.json",
+            COVER_REPORT_CONTROL_MAX_BYTES,
+        ),
+        ("graph/score_report.json", SCORE_REPORT_CONTROL_MAX_BYTES),
+    ] {
         let path = root.join(relative);
-        let bytes = read_required_regular_file_nofollow(&path, "staged graph report")?;
-        reject_duplicate_json_fields(&bytes, &path, "staged graph report")?;
-        let value: serde_json::Value = serde_json::from_slice(&bytes)
-            .map_err(|error| format!("{} is malformed: {error}", path.display()))?;
-        if !value.is_object() {
-            return Err(format!("{} must contain a JSON object", path.display()));
-        }
+        validate_staged_graph_report(&path, max_bytes)?;
+    }
+    Ok(())
+}
+
+fn validate_staged_graph_report(path: &Path, max_bytes: u64) -> Result<(), String> {
+    let bytes = read_required_regular_file_nofollow_capped(path, "staged graph report", max_bytes)?;
+    reject_duplicate_json_fields(&bytes, path, "staged graph report")?;
+    let value: serde_json::Value = serde_json::from_slice(&bytes)
+        .map_err(|error| format!("{} is malformed: {error}", path.display()))?;
+    if !value.is_object() {
+        return Err(format!("{} must contain a JSON object", path.display()));
     }
     Ok(())
 }
@@ -7802,6 +9530,13 @@ fn compiled_bundle_completion_temporaries(root: &Path) -> Result<Vec<(PathBuf, V
             )
         })?;
         if is_atomic_publisher_temporary(name, COMPILED_BUNDLE_COMPLETION_FILE) {
+            if temporaries.len() == COMPILED_BUNDLE_COMPLETION_TEMP_LIMIT {
+                return Err(format!(
+                    "compiled bundle {} exceeds the fixed {}-entry completion-temporary limit",
+                    root.display(),
+                    COMPILED_BUNDLE_COMPLETION_TEMP_LIMIT
+                ));
+            }
             let metadata = fs::symlink_metadata(entry.path()).map_err(|error| {
                 format!("{} cannot be inspected: {error}", entry.path().display())
             })?;
@@ -7811,9 +9546,10 @@ fn compiled_bundle_completion_temporaries(root: &Path) -> Result<Vec<(PathBuf, V
                     entry.path().display()
                 ));
             }
-            let bytes = read_required_regular_file_nofollow(
+            let bytes = read_required_regular_file_nofollow_capped(
                 &entry.path(),
                 "compiled-bundle completion temporary",
+                COMPILED_BUNDLE_CONTROL_MAX_BYTES,
             )?;
             temporaries.push((entry.path(), bytes));
         } else if looks_like_atomic_publisher_temporary(name, COMPILED_BUNDLE_COMPLETION_FILE) {
@@ -7872,7 +9608,11 @@ fn recover_compiled_bundle_completion_temporaries(root: &Path) -> Result<(), Str
         return Ok(());
     }
     let stable = root.join(COMPILED_BUNDLE_COMPLETION_FILE);
-    let stable_bytes = read_regular_file_nofollow(&stable, "compiled-bundle completion")?;
+    let stable_bytes = read_regular_file_nofollow_capped(
+        &stable,
+        "compiled-bundle completion",
+        COMPILED_BUNDLE_CONTROL_MAX_BYTES,
+    )?;
     let candidate = stable_bytes
         .as_deref()
         .unwrap_or_else(|| temporaries[0].1.as_slice());
@@ -7895,9 +9635,10 @@ fn recover_compiled_bundle_completion_temporaries(root: &Path) -> Result<(), Str
         match fs::hard_link(&temporaries[0].0, &stable) {
             Ok(()) => sync_parent_directory(&stable, "compiled-bundle completion recovery")?,
             Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-                let raced = read_required_regular_file_nofollow(
+                let raced = read_required_regular_file_nofollow_capped(
                     &stable,
                     "concurrently recovered compiled-bundle completion",
+                    COMPILED_BUNDLE_CONTROL_MAX_BYTES,
                 )?;
                 if raced != candidate {
                     return Err(format!(
@@ -7916,9 +9657,10 @@ fn recover_compiled_bundle_completion_temporaries(root: &Path) -> Result<(), Str
         }
     }
     for (temporary, expected) in temporaries {
-        let current = read_required_regular_file_nofollow(
+        let current = read_required_regular_file_nofollow_capped(
             &temporary,
             "compiled-bundle completion temporary before recovery",
+            COMPILED_BUNDLE_CONTROL_MAX_BYTES,
         )?;
         if current != expected {
             return Err(format!(
@@ -7947,7 +9689,12 @@ fn validate_compiled_bundle_completion(
     root: &Path,
 ) -> Result<Option<CompiledBundleCompletion>, String> {
     let path = root.join(COMPILED_BUNDLE_COMPLETION_FILE);
-    let Some(bytes) = read_regular_file_nofollow(&path, "compiled-bundle completion")? else {
+    let Some(bytes) = read_regular_file_nofollow_capped(
+        &path,
+        "compiled-bundle completion",
+        COMPILED_BUNDLE_CONTROL_MAX_BYTES,
+    )?
+    else {
         return Ok(None);
     };
     validate_compiled_bundle_completion_bytes(
@@ -7959,31 +9706,7 @@ fn validate_compiled_bundle_completion(
     .map(Some)
 }
 
-fn ensure_compiled_bundle_completion_for_serving(
-    bundle: &ResolvedCompiledBundle,
-    current_version: u32,
-) -> Result<(), String> {
-    recover_compiled_bundle_completion_temporaries(&bundle.physical_root)?;
-    if validate_compiled_bundle_completion(&bundle.physical_root)?.is_some() {
-        return Ok(());
-    }
-    if bundle.attention_operator.version < current_version {
-        // Historical completed v1 roots predate this server transaction
-        // record. Their existing provenance compatibility remains unchanged.
-        return Ok(());
-    }
-    validate_staged_graph_outputs(&bundle.physical_root)?;
-    publish_compiled_bundle_completion(&bundle.physical_root)?;
-    validate_compiled_bundle_completion(&bundle.physical_root)?
-        .ok_or_else(|| {
-            format!(
-                "current compiled bundle {} lost its bootstrapped completion record",
-                bundle.physical_root.display()
-            )
-        })
-        .map(|_| ())
-}
-
+#[cfg(test)]
 fn recover_managed_compiled_bundle_completion_temporaries(
     compiled_root: &Path,
 ) -> Result<(), String> {
@@ -8159,7 +9882,8 @@ fn publish_source_compile_preflight(output: &Path, kappa: Option<&str>) -> Resul
                     kappa
                 ));
             }
-            if !source_compile_pre_attention_prefix(output)? {
+            let exact_empty_stage = exact_empty_compiled_bundle_stage(output)?;
+            if !source_compile_pre_attention_prefix(output)? && !exact_empty_stage {
                 return Err(format!(
                     "source compile output {} exists without a stable source compile preflight; refusing to adopt or mutate it",
                     output.display()
@@ -8183,6 +9907,14 @@ fn publish_source_compile_preflight(output: &Path, kappa: Option<&str>) -> Resul
                 (None, None) => None,
             };
             let Some(recovered) = recovered else {
+                if exact_empty_stage {
+                    publish_bytes_no_clobber(
+                        &output.join(SOURCE_COMPILE_PREFLIGHT_FILE),
+                        &expected,
+                        "source compile preflight",
+                    )?;
+                    return Ok(());
+                }
                 return Err(format!(
                     "source compile output {} has identity sidecars but no recoverable source snapshot binding",
                     output.display()
@@ -8613,6 +10345,15 @@ struct CompiledSourceBundle {
     final_output: PathBuf,
     working_output: PathBuf,
     stage: CompiledBundleStage,
+    selection_generations:
+        Vec<uor_r4_graph_compiler::recorded_corpus::RecordedCorpusRootGeneration>,
+    selection_base: Vec<CompiledBundleSelectionGeneration>,
+    stage_reader_pins: Option<uor_r4_graph_compiler::recorded_corpus::RecordedCorpusReaderPins>,
+    source_snapshot_kappa: String,
+    logical_name: String,
+    current_version: u32,
+    source_operator: AttentionOperatorSpec,
+    source_dense: Option<DenseOperatorSpec>,
     /// Held until the caller finishes cover/score validation and atomically
     /// installs the replacement serving state. This is intentionally not
     /// released when Stage A returns: every compiler write derived from the
@@ -8620,16 +10361,541 @@ struct CompiledSourceBundle {
     _sessions: SourceCompileSessionLocks,
 }
 
+fn recorded_handoff_guard_for_root<'a>(
+    handoff: &'a uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerHandoff,
+    root: &Path,
+) -> Result<&'a uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerGuard, String> {
+    let canonical = canonical_compile_session_subject(root)?;
+    handoff
+        .guards()
+        .find(|guard| guard.root() == canonical)
+        .ok_or_else(|| {
+            format!(
+                "recorded-corpus handoff does not own selected root {}",
+                canonical.display()
+            )
+        })
+}
+
+fn prepare_compiled_selection_sibling_under_guard(
+    guard: &uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerGuard,
+    root: &Path,
+) -> Result<(), String> {
+    if !guard.root_exists() {
+        return Ok(());
+    }
+    guard
+        .preflight_planned_output_scope(&[])
+        .map_err(|error| error.to_string())?;
+    let recover_binding = guard
+        .preflight_publication_namespace_for(
+            uor_r4_graph_compiler::recorded_corpus::RecordedCorpusRole::Compile,
+        )
+        .map_err(|error| error.to_string())?;
+    let meta = root.join("corpus.meta");
+    let records = root.join("corpus.records");
+    if recover_binding {
+        uor_r4_graph_compiler::recorded_corpus::publish_binding(guard, &meta, &records)
+            .map_err(|error| error.to_string())?;
+    }
+    if guard
+        .compile_attempt_active()
+        .map_err(|error| error.to_string())?
+    {
+        if !regular_file_presence(
+            &root.join(uor_r4_graph_compiler::recorded_corpus::RECORDED_CORPUS_BINDING_FILE),
+        )? {
+            return Err(format!(
+                "non-selected compiled sibling {} has an active uncommitted source update; only its original compiler may resume it",
+                root.display()
+            ));
+        }
+        guard
+            .finish_compile_attempt()
+            .map_err(|error| error.to_string())?;
+    }
+    recover_compiled_bundle_completion_temporaries(root)?;
+    if validate_compiled_bundle_completion(root)?.is_some() {
+        cleanup_published_compiled_bundle_stage_marker(root)?;
+    }
+    Ok(())
+}
+
+fn prepare_compiled_root_transaction_under_guard(
+    guard: &uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerGuard,
+    root: &Path,
+    source_snapshot_kappa: &str,
+) -> Result<(), String> {
+    if !guard.root_exists() {
+        return Ok(());
+    }
+    guard
+        .preflight_planned_output_scope(&[])
+        .map_err(|error| error.to_string())?;
+    let recover_binding = guard
+        .preflight_publication_namespace_for(
+            uor_r4_graph_compiler::recorded_corpus::RecordedCorpusRole::Compile,
+        )
+        .map_err(|error| error.to_string())?;
+    let meta = root.join("corpus.meta");
+    let records = root.join("corpus.records");
+    let binding_path =
+        root.join(uor_r4_graph_compiler::recorded_corpus::RECORDED_CORPUS_BINDING_FILE);
+    if recover_binding {
+        uor_r4_graph_compiler::recorded_corpus::publish_binding(guard, &meta, &records)
+            .map_err(|error| error.to_string())?;
+    }
+    let attempt_active = guard
+        .compile_attempt_active()
+        .map_err(|error| error.to_string())?;
+    if attempt_active && !regular_file_presence(&binding_path)? {
+        // Crash before the binding temporary existed. Re-run every read-only
+        // semantic/streaming preflight before completing the exact old
+        // generation under the already-durable compile-attempt marker.
+        validate_unbound_compiled_stage_transaction_under_guard(
+            guard,
+            root,
+            source_snapshot_kappa,
+        )?;
+        uor_r4_graph_compiler::recorded_corpus::publish_binding(guard, &meta, &records)
+            .map_err(|error| error.to_string())?;
+    }
+    if attempt_active {
+        guard
+            .finish_compile_attempt()
+            .map_err(|error| error.to_string())?;
+    }
+    recover_compiled_bundle_completion_temporaries(root)?;
+    match validate_compiled_bundle_completion(root)? {
+        Some(_) => {
+            cleanup_published_compiled_bundle_stage_marker(root)?;
+            Ok(())
+        }
+        None if source_compile_pre_attention_prefix(root)? => Ok(()),
+        None if source_compile_output_has_payload(root)? => {
+            // Pre-#728 current bundles are migrated exactly once under the
+            // common producer authority before the long private-stage build.
+            // All terminal identity/graph/corpus checks complete before the
+            // compile-attempt marker is published.
+            if !regular_file_presence(&binding_path)? {
+                validate_unbound_compiled_stage_transaction_under_guard(
+                    guard,
+                    root,
+                    source_snapshot_kappa,
+                )?;
+                guard
+                    .begin_compile_attempt()
+                    .map_err(|error| error.to_string())?;
+                uor_r4_graph_compiler::recorded_corpus::publish_binding(
+                    guard, &meta, &records,
+                )
+                .map_err(|error| error.to_string())?;
+                guard
+                    .finish_compile_attempt()
+                    .map_err(|error| error.to_string())?;
+            }
+            validate_compiled_stage_transaction_under_guard(
+                guard,
+                root,
+                source_snapshot_kappa,
+            )?;
+            publish_compiled_bundle_completion_under_guard(guard, root)?;
+            validate_compiled_bundle_completion(root)?.ok_or_else(|| {
+                format!(
+                    "compiled bundle {} lost its bootstrapped completion",
+                    root.display()
+                )
+            })?;
+            Ok(())
+        }
+        None => Err(format!(
+            "compiled root {} is neither absent, a resumable source-identity prefix, nor a complete bundle",
+            root.display()
+        )),
+    }
+}
+
+/// A completed source-derived root is an immutable snapshot lineage for
+/// refresh.  Reject a different requested source while the public selection
+/// is still exclusively pinned, before a durable private stage can be
+/// allocated or populated from the old generation.
+fn require_compiled_refresh_source_snapshot(
+    root: &Path,
+    requested_source_snapshot_kappa: &str,
+) -> Result<(), String> {
+    if let Some(preflight) = read_optional_source_compile_preflight(root)? {
+        if let Some(recorded) = preflight.source_manifest_kappa.as_deref() {
+            if recorded != requested_source_snapshot_kappa {
+                return Err(format!(
+                    "compiled root {} is preflight-bound to source snapshot {recorded}, not requested {requested_source_snapshot_kappa}; refusing cross-snapshot refresh before private-stage allocation",
+                    root.display()
+                ));
+            }
+        }
+    }
+    if let Some(recorded) = read_optional_source_manifest_kappa_binding(root)? {
+        if recorded != requested_source_snapshot_kappa {
+            return Err(format!(
+                "compiled root {} is bound to source snapshot {recorded}, not requested {requested_source_snapshot_kappa}; refusing cross-snapshot refresh before private-stage allocation",
+                root.display()
+            ));
+        }
+    }
+    Ok(())
+}
+
+struct ManagedCompiledBundleRead {
+    resolved: Option<ResolvedCompiledBundle>,
+    pins: uor_r4_graph_compiler::recorded_corpus::RecordedCorpusReaderPins,
+}
+
+fn managed_compiled_selection_roots(
+    compiled_root: &Path,
+    logical_name: &str,
+    current_version: u32,
+) -> [PathBuf; 3] {
+    [
+        compiled_root.join(logical_name),
+        compiled_root.join(format!(
+            "{logical_name}{}",
+            attention_era_suffix(current_version)
+        )),
+        compiled_root.join(format!(
+            "{logical_name}{}",
+            composite_era_suffix(current_version)
+        )),
+    ]
+}
+
+/// Reconcile one managed logical selection under the common exclusive root
+/// protocol. This is a short migration/recovery transaction: it may finish an
+/// exact publication residue or bootstrap the durable completion record of a
+/// valid pre-#728 current bundle, but it never spans runtime loading.
+fn bootstrap_managed_compiled_bundle(
+    compiled_root: &Path,
+    logical_name: &str,
+    current_version: u32,
+) -> Result<(), String> {
+    let roots = managed_compiled_selection_roots(compiled_root, logical_name, current_version);
+    let generations = roots
+        .iter()
+        .map(uor_r4_graph_compiler::recorded_corpus::RecordedCorpusRootGeneration::capture)
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| error.to_string())?;
+    // No promotion occurs in this short ownership set; the designated indices
+    // simply satisfy the handoff type while it provides sorted, failure-atomic
+    // exclusive authority over the complete resolver selection.
+    let handoff =
+        uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerHandoff::try_acquire(
+            &generations,
+            0,
+            1,
+        )
+        .map_err(|error| error.to_string())?;
+    let pair = inspect_compiled_model_pair(compiled_root, logical_name, current_version)?;
+    if let Some((selected_root, identity)) = selected_compiled_root(&pair) {
+        let selected_guard = recorded_handoff_guard_for_root(&handoff, selected_root)?;
+        if identity.attention.version == current_version {
+            let source_snapshot_kappa = read_optional_source_manifest_kappa_binding(selected_root)?
+                .ok_or_else(|| {
+                    format!(
+                        "current compiled bundle {} has no canonical source snapshot binding",
+                        selected_root.display()
+                    )
+                })?;
+            prepare_compiled_root_transaction_under_guard(
+                selected_guard,
+                selected_root,
+                &source_snapshot_kappa,
+            )?;
+        } else {
+            // Historical roots may legitimately predate both the binding and
+            // completion records. If a completion record exists, it remains
+            // authoritative and must validate exactly.
+            recover_compiled_bundle_completion_temporaries(selected_root)?;
+            let _ = validate_compiled_bundle_completion(selected_root)?;
+        }
+        let refreshed = inspect_compiled_model_pair(compiled_root, logical_name, current_version)?;
+        resolve_loadable_compiled_bundle_with_authority(
+            &refreshed,
+            current_version,
+            Some(RecordedCorpusReadAuthority::Producer(selected_guard)),
+        )?
+        .ok_or_else(|| {
+            format!("managed compiled model {logical_name} disappeared during completion bootstrap")
+        })?;
+    }
+    handoff.verify().map_err(|error| error.to_string())
+}
+
+/// Bootstrap under short exclusive authority, then pin the full precedence
+/// trio shared through resolution, runtime loading, and installation. Managed
+/// pins seed permanent lock inodes for absent siblings, so a cooperating
+/// writer cannot create a newly preferred root in the installation window.
+fn acquire_managed_compiled_bundle_read(
+    compiled_root: &Path,
+    logical_name: &str,
+    current_version: u32,
+) -> Result<ManagedCompiledBundleRead, String> {
+    bootstrap_managed_compiled_bundle(compiled_root, logical_name, current_version)?;
+    let roots = managed_compiled_selection_roots(compiled_root, logical_name, current_version);
+    let pins =
+        uor_r4_graph_compiler::recorded_corpus::RecordedCorpusReaderPins::try_acquire_managed(
+            &roots,
+        )
+        .map_err(|error| error.to_string())?;
+    let pair = inspect_compiled_model_pair(compiled_root, logical_name, current_version)?;
+    let resolved = resolve_loadable_compiled_bundle_with_authority(
+        &pair,
+        current_version,
+        Some(RecordedCorpusReadAuthority::ReaderPins(&pins)),
+    )?;
+    pins.verify().map_err(|error| error.to_string())?;
+    Ok(ManagedCompiledBundleRead { resolved, pins })
+}
+
+fn discover_managed_compiled_reads_in(
+    compiled_root: &Path,
+    current_version: u32,
+    skip_logical_name: Option<&str>,
+) -> Result<Vec<ManagedCompiledBundleRead>, String> {
+    let mut reads = Vec::new();
+    for logical_name in compiled_logical_names_in(compiled_root, current_version)? {
+        if skip_logical_name == Some(logical_name.as_str()) {
+            continue;
+        }
+        let read =
+            acquire_managed_compiled_bundle_read(compiled_root, &logical_name, current_version)?;
+        if let Some(candidate) = read.resolved.as_ref() {
+            reject_reserved_suffix_source_collision(
+                candidate,
+                compiled_root.parent().unwrap_or_else(|| Path::new(".")),
+                current_version,
+            )?;
+            reads.push(read);
+        }
+    }
+    Ok(reads)
+}
+
 impl CompiledSourceBundle {
-    fn publish(&mut self) -> Result<(), String> {
-        publish_compiled_bundle_completion(&self.working_output)?;
+    fn publish(
+        &mut self,
+    ) -> Result<uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerHandoff, String> {
+        self.publish_with_transition_hooks(|_| Ok(()), |_| Ok(()))
+    }
+
+    #[cfg(test)]
+    fn publish_with_before_handoff<F>(
+        &mut self,
+        before_handoff: F,
+    ) -> Result<uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerHandoff, String>
+    where
+        F: FnOnce(&Path) -> Result<(), String>,
+    {
+        self.publish_with_transition_hooks(|_| Ok(()), before_handoff)
+    }
+
+    fn publish_with_transition_hooks<F, G>(
+        &mut self,
+        before_stage_guard: F,
+        before_handoff: G,
+    ) -> Result<uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerHandoff, String>
+    where
+        F: FnOnce(&Path) -> Result<(), String>,
+        G: FnOnce(&Path) -> Result<(), String>,
+    {
+        // The shared stage pin protected the exact corpus generation while
+        // cover/score wrote only private derived outputs. Convert it to
+        // exclusive stage ownership before completion publication. Capture a
+        // full fixed-inventory content witness while the shared pins are still
+        // live, then require it immediately after exclusive acquisition so a
+        // supported writer cannot win the reader-to-producer transition and
+        // silently splice corpus B under graph A.
+        let stage_before_transition =
+            capture_compiled_bundle_base_generation(&self.working_output)?;
+        if !validate_compiled_bundle_stage_marker(&self.working_output, &self.stage.marker_bytes)? {
+            return Err(format!(
+                "compiled-bundle stage {} lost its exact owner/base marker before producer transition",
+                self.working_output.display()
+            ));
+        }
+        if let Some(pins) = self.stage_reader_pins.as_ref() {
+            pins.verify().map_err(|error| error.to_string())?;
+        }
+        drop(self.stage_reader_pins.take());
+        before_stage_guard(&self.working_output)?;
+        let stage_guard =
+            uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerGuard::try_acquire(
+                &self.working_output,
+            )
+            .map_err(|error| error.to_string())?;
+        let stage_after_transition = capture_compiled_bundle_base_generation(&self.working_output)?;
+        if stage_after_transition != stage_before_transition
+            || !validate_compiled_bundle_stage_marker(
+                &self.working_output,
+                &self.stage.marker_bytes,
+            )?
+        {
+            return Err(format!(
+                "compiled-bundle stage {} changed generation while serving pins transitioned to exclusive publication authority",
+                self.working_output.display()
+            ));
+        }
+        stage_guard
+            .verify_owned_root()
+            .map_err(|error| error.to_string())?;
+        validate_compiled_stage_transaction_under_guard(
+            &stage_guard,
+            &self.working_output,
+            &self.source_snapshot_kappa,
+        )?;
+        publish_compiled_bundle_completion_under_guard(&stage_guard, &self.working_output)?;
         validate_compiled_bundle_completion(&self.working_output)?.ok_or_else(|| {
             format!(
                 "compiled-bundle stage {} lost its completion record before publication",
                 self.working_output.display()
             )
         })?;
-        self.stage.publish()
+        if !validate_compiled_bundle_stage_marker(&self.working_output, &self.stage.marker_bytes)? {
+            return Err(format!(
+                "compiled-bundle stage {} lost its exact owner/base marker before publication",
+                self.working_output.display()
+            ));
+        }
+        let stage_content_generation =
+            capture_compiled_bundle_base_generation(&self.working_output)?;
+        if !matches!(
+            &stage_content_generation,
+            CompiledBundleBaseGeneration::Complete { .. }
+        ) {
+            return Err(format!(
+                "compiled-bundle stage {} did not yield a complete content generation before handoff",
+                self.working_output.display()
+            ));
+        }
+        let stage_generation =
+            uor_r4_graph_compiler::recorded_corpus::RecordedCorpusRootGeneration::capture(
+                &self.working_output,
+            )
+            .map_err(|error| error.to_string())?;
+        stage_generation
+            .verify()
+            .map_err(|error| error.to_string())?;
+        drop(stage_guard);
+        before_handoff(&self.working_output)?;
+
+        let mut expected = std::mem::take(&mut self.selection_generations);
+        let final_canonical = canonical_compile_session_subject(&self.final_output)?;
+        let final_index = expected
+            .iter()
+            .position(|generation| generation.root() == final_canonical)
+            .ok_or_else(|| {
+                format!(
+                    "compiled-bundle selection lost final root {}",
+                    final_canonical.display()
+                )
+            })?;
+        let stage_index = expected.len();
+        expected.push(stage_generation);
+        let mut handoff =
+            uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerHandoff::try_acquire(
+                &expected,
+                final_index,
+                stage_index,
+            )
+            .map_err(|error| error.to_string())?;
+
+        handoff
+            .promote_stage_if(|authority| {
+                let fail = |error: String| uor_r4_model_source::SourceUnavailable::new(error);
+                require_compiled_bundle_selection_base_unchanged(
+                    &self.selection_base,
+                    &self.final_output,
+                )
+                .map_err(fail)?;
+                let compiled_root = self.final_output.parent().ok_or_else(|| {
+                    fail(format!(
+                        "compiled output {} has no resolver parent",
+                        self.final_output.display()
+                    ))
+                })?;
+                let selected = source_compile_output_for_operator_era_with_dense(
+                    compiled_root,
+                    &self.logical_name,
+                    self.current_version,
+                    &self.source_operator,
+                    self.source_dense.as_ref(),
+                )
+                .map_err(fail)?;
+                if canonical_compile_session_subject(&selected).map_err(fail)? != final_canonical {
+                    return Err(fail(format!(
+                        "compiled-bundle resolver selection changed from {} to {} during private stage construction; preserving the newer generation",
+                        self.final_output.display(),
+                        selected.display()
+                    )));
+                }
+                let current_stage_generation =
+                    capture_compiled_bundle_base_generation(&self.working_output).map_err(fail)?;
+                if current_stage_generation != stage_content_generation {
+                    return Err(fail(format!(
+                        "compiled-bundle stage {} changed content generation between completion and final handoff; preserving the newer stage",
+                        self.working_output.display()
+                    )));
+                }
+                if !validate_compiled_bundle_stage_marker(
+                    &self.working_output,
+                    &self.stage.marker_bytes,
+                )
+                .map_err(fail)?
+                {
+                    return Err(fail(format!(
+                        "compiled-bundle stage {} changed its exact owner/base marker during final handoff",
+                        self.working_output.display()
+                    )));
+                }
+                validate_compiled_stage_transaction_under_guard(
+                    authority.stage_guard(),
+                    &self.working_output,
+                    &self.source_snapshot_kappa,
+                )
+                .map_err(fail)?;
+                validate_compiled_bundle_completion(&self.working_output)
+                    .map_err(fail)?
+                    .ok_or_else(|| {
+                        fail(format!(
+                            "compiled-bundle stage {} lost its durable completion during final CAS",
+                            self.working_output.display()
+                        ))
+                    })?;
+                Ok(())
+            })
+            .map_err(|error| error.to_string())?;
+        handoff.verify().map_err(|error| error.to_string())?;
+        validate_compiled_bundle_completion(&self.final_output)?.ok_or_else(|| {
+            format!(
+                "promoted compiled bundle {} lost its durable completion",
+                self.final_output.display()
+            )
+        })?;
+        handoff
+            .final_guard()
+            .verify_owned_entry_bytes(
+                std::ffi::OsStr::new(COMPILED_BUNDLE_STAGE_MARKER_FILE),
+                &self.stage.marker_bytes,
+                COMPILED_BUNDLE_CONTROL_MAX_BYTES,
+                "promoted compiled-bundle stage marker",
+            )
+            .map_err(|error| error.to_string())?;
+        handoff
+            .final_guard()
+            .unlink_owned_entry(std::ffi::OsStr::new(COMPILED_BUNDLE_STAGE_MARKER_FILE))
+            .map_err(|error| error.to_string())?;
+        handoff
+            .final_guard()
+            .sync_owned_root()
+            .map_err(|error| error.to_string())?;
+        Ok(handoff)
     }
 }
 
@@ -8729,6 +10995,23 @@ fn compile_bundle_from_source(
         session_subjects,
         SourceCompileSessionMode::ExclusiveWriter,
     )?;
+    let selection_roots = [conventional.clone(), current.clone(), composite.clone()];
+    let selection_generations = selection_roots
+        .iter()
+        .map(uor_r4_graph_compiler::recorded_corpus::RecordedCorpusRootGeneration::capture)
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| error.to_string())?;
+    // Short common ownership makes crash-residue recovery and legacy
+    // completion bootstrap one coherent base capture. It is released before
+    // the long private-stage build; the retained generation witnesses and
+    // persisted content descriptor are re-CASed by the final handoff.
+    let base_handoff =
+        uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerHandoff::try_acquire(
+            &selection_generations,
+            0,
+            1,
+        )
+        .map_err(|error| error.to_string())?;
     recover_source_compile_identity_temporaries(&conventional)?;
     recover_source_compile_identity_temporaries(&current)?;
     recover_source_compile_identity_temporaries(&composite)?;
@@ -8739,6 +11022,15 @@ fn compile_bundle_from_source(
         &source_operator,
         source_dense.as_ref(),
     )?;
+    require_compiled_refresh_source_snapshot(&output, source_snapshot_kappa)?;
+    for root in &selection_roots {
+        let guard = recorded_handoff_guard_for_root(&base_handoff, root)?;
+        if root == &output {
+            prepare_compiled_root_transaction_under_guard(guard, root, source_snapshot_kappa)?;
+        } else {
+            prepare_compiled_selection_sibling_under_guard(guard, root)?;
+        }
+    }
     // The process-local source-cache reservation is acquired by the HTTP
     // handler first. Both era siblings and any external score sink are now
     // exclusively owned before selection, preflight publication, or adoption.
@@ -8757,6 +11049,9 @@ fn compile_bundle_from_source(
             refreshed_output.display()
         ));
     }
+    let selection_base = capture_compiled_bundle_selection_base(&selection_roots, &output)?;
+    base_handoff.verify().map_err(|error| error.to_string())?;
+    drop(base_handoff);
     let canonical_graph_path = output.join("graph/score.r4g1");
     if let Some(requested) = requested_graph_path {
         if normalized_absolute_path(requested)? != normalized_absolute_path(&canonical_graph_path)?
@@ -8768,9 +11063,13 @@ fn compile_bundle_from_source(
             ));
         }
     }
-    preflight_and_bind_source_snapshot_kappa(&output, Some(source_snapshot_kappa))?;
-    let stage = CompiledBundleStage::allocate(&output, source_snapshot_kappa)?;
+    let (stage, stage_compile_session) = CompiledBundleStage::allocate_with_selection_transaction(
+        &output,
+        source_snapshot_kappa,
+        &selection_base,
+    )?;
     let working_output = stage.path.clone();
+    preflight_and_bind_source_snapshot_kappa(&working_output, Some(source_snapshot_kappa))?;
     let args = vec![
         "--source".to_owned(),
         source.display().to_string(),
@@ -8798,7 +11097,7 @@ fn compile_bundle_from_source(
             6,
             "Loading teacher model and preparing corpus...",
         );
-        uor_r4_graph_cli::compile_hugging_face(&args)
+        uor_r4_graph_cli::compile_hugging_face_with_session(&args, stage_compile_session)
     });
     while !compiler.is_finished() {
         let observed = fs::read(&meta_path).ok().and_then(|bytes| {
@@ -8825,6 +11124,11 @@ fn compile_bundle_from_source(
             )
         })?
         .map_err(|error| error.to_string())?;
+    let stage_reader_pins =
+        uor_r4_graph_compiler::recorded_corpus::RecordedCorpusReaderPins::try_acquire([
+            &working_output,
+        ])
+        .map_err(|error| error.to_string())?;
     validate_source_bundle_inventory(&working_output)?;
     let meta = working_output.join("corpus.meta");
     let records = working_output.join("corpus.records");
@@ -8844,6 +11148,14 @@ fn compile_bundle_from_source(
         final_output: output,
         working_output,
         stage,
+        selection_generations,
+        selection_base,
+        stage_reader_pins: Some(stage_reader_pins),
+        source_snapshot_kappa: source_snapshot_kappa.to_owned(),
+        logical_name: name.to_owned(),
+        current_version,
+        source_operator,
+        source_dense,
         _sessions: sessions,
     })
 }
@@ -9304,6 +11616,7 @@ fn compile_r4g1_bundle(
         _ => None,
     };
 
+    let mut publication_handoff = None;
     if let Some(compiled) = compiled_source.as_mut() {
         validate_staged_graph_outputs(&compiled.working_output)?;
         // Exercise the exact runtime/quality-policy loader against the staged
@@ -9349,7 +11662,7 @@ fn compile_r4g1_bundle(
                 ));
             }
         }
-        compiled.publish()?;
+        publication_handoff = Some(compiled.publish()?);
         let final_root = compiled.final_output.clone();
         artifacts = final_root.join("tless_artifacts.bin");
         graph_output = final_root.join("graph");
@@ -9376,13 +11689,17 @@ fn compile_r4g1_bundle(
                 )
             })?;
             let pair = inspect_compiled_model_pair(compiled_root, logical_name, current_version)?;
+            let authority = publication_handoff
+                .as_ref()
+                .map(|handoff| RecordedCorpusReadAuthority::Producer(handoff.final_guard()));
             let resolved =
-                resolve_loadable_compiled_bundle(&pair, current_version)?.ok_or_else(|| {
-                    format!(
-                        "compiled output {} did not resolve to a loadable graph bundle",
-                        root.display()
-                    )
-                })?;
+                resolve_loadable_compiled_bundle_with_authority(&pair, current_version, authority)?
+                    .ok_or_else(|| {
+                        format!(
+                            "compiled output {} did not resolve to a loadable graph bundle",
+                            root.display()
+                        )
+                    })?;
             if resolved.physical_root != *root
                 || resolved.graph != graph_path
                 || resolved.teacher != artifacts
@@ -9439,9 +11756,18 @@ fn compile_r4g1_bundle(
     )?;
     let (teacher_default_r4_attention, _teacher_mismatch) =
         reconcile_prepared_teacher_with_bundle(&mut replacement_teacher, resolved.as_ref())?;
+    let publication_authority = publication_handoff
+        .as_ref()
+        .map(|handoff| RecordedCorpusReadAuthority::Producer(handoff.final_guard()));
     let refreshed = resolved
         .as_ref()
-        .map(|resolved| refresh_resolved_compiled_bundle(resolved, current_version))
+        .map(|resolved| {
+            refresh_resolved_compiled_bundle_with_authority(
+                resolved,
+                current_version,
+                publication_authority,
+            )
+        })
         .transpose()?;
     if let (Some(source), Some(before)) = (source_for_host, source_snapshot_before_prepare.as_ref())
     {
@@ -11319,11 +13645,13 @@ fn handle_connection(
         };
         let compiled_root = Path::new(".uor-models/compiled");
         let suffix = attention_era_suffix(current_version);
+        let composite_suffix = composite_era_suffix(current_version);
         let reload_read_sessions = match try_lock_managed_inventory_write_sessions(
             compiled_root,
             [
                 compiled_root.join(&reload_logical),
                 compiled_root.join(format!("{reload_logical}{suffix}")),
+                compiled_root.join(format!("{reload_logical}{composite_suffix}")),
                 PathBuf::from(".uor-models/sources"),
             ],
         ) {
@@ -11365,32 +13693,47 @@ fn handle_connection(
                 return;
             }
         };
-        if let Err(error) = recover_managed_compiled_bundle_completion_temporaries(compiled_root) {
+        if let Err(error) = reject_requested_suffix_source_collision(
+            target_model,
+            Path::new(".uor-models"),
+            current_version,
+        ) {
             record_replacement_failure(&serving, error.clone());
             send_json_response_ext(
                 stream,
-                500,
+                400,
                 &serde_json::json!({ "status": "error", "message": error }).to_string(),
                 &dep,
             );
             return;
         }
-        let (resolved, source_for_reload) = match resolve_reload_bundle_in(
-            Path::new(".uor-models"),
-            target_model,
+        let managed_read = match acquire_managed_compiled_bundle_read(
+            compiled_root,
+            &reload_logical,
             current_version,
         ) {
-            Ok(Some(resolved)) => resolved,
-            Ok(None) => {
-                record_replacement_failure(
-                    &serving,
-                    format!("no compiled R4G1 graph artifact found for model '{target_model}'"),
+            Ok(read) => read,
+            Err(error) if source_compile_session_is_busy(&error) => {
+                reload_reservation.disarm();
+                let installed = serving.lock().unwrap();
+                let mut status = r4g1_compile.lock().unwrap();
+                status.running = false;
+                status.ready = graph_text_ready(&installed);
+                status.message =
+                    "R4G1 reload deferred while another process publishes the bundle".to_owned();
+                drop(status);
+                drop(installed);
+                send_json_response_ext(
+                    stream,
+                    409,
+                    &serde_json::json!({
+                        "status": "error",
+                        "running": true,
+                        "message": error,
+                    })
+                    .to_string(),
+                    &dep,
                 );
-                let resp = serde_json::json!({
-                    "status": "error",
-                    "message": format!("No compiled R4G1 graph artifact found for model '{}'. Please compile it first.", target_model)
-                });
-                send_json_response_ext(stream, 404, &resp.to_string(), &dep);
                 return;
             }
             Err(error) => {
@@ -11404,19 +13747,40 @@ fn handle_connection(
                 return;
             }
         };
+        let ManagedCompiledBundleRead {
+            resolved,
+            pins: reload_bundle_pins,
+        } = managed_read;
+        let resolved = match resolved {
+            Some(resolved) => resolved,
+            None => {
+                record_replacement_failure(
+                    &serving,
+                    format!("no compiled R4G1 graph artifact found for model '{target_model}'"),
+                );
+                let resp = serde_json::json!({
+                    "status": "error",
+                    "message": format!("No compiled R4G1 graph artifact found for model '{}'. Please compile it first.", target_model)
+                });
+                send_json_response_ext(stream, 404, &resp.to_string(), &dep);
+                return;
+            }
+        };
+        let source_for_reload =
+            match source_for_resolved_bundle_in(&resolved, Path::new(".uor-models")) {
+                Ok(source) => source,
+                Err(error) => {
+                    record_replacement_failure(&serving, error.clone());
+                    send_json_response_ext(
+                        stream,
+                        500,
+                        &serde_json::json!({ "status": "error", "message": error }).to_string(),
+                        &dep,
+                    );
+                    return;
+                }
+            };
         if let Err(error) = validate_legacy_graph_generation_for_serving(&resolved.graph) {
-            record_replacement_failure(&serving, error.clone());
-            send_json_response_ext(
-                stream,
-                500,
-                &serde_json::json!({ "status": "error", "message": error }).to_string(),
-                &dep,
-            );
-            return;
-        }
-        if let Err(error) =
-            ensure_compiled_bundle_completion_for_serving(&resolved, current_version)
-        {
             record_replacement_failure(&serving, error.clone());
             send_json_response_ext(
                 stream,
@@ -11514,7 +13878,11 @@ fn handle_connection(
                     return;
                 }
             };
-        let refreshed = match refresh_resolved_compiled_bundle(&resolved, current_version) {
+        let refreshed = match refresh_resolved_compiled_bundle_with_authority(
+            &resolved,
+            current_version,
+            Some(RecordedCorpusReadAuthority::ReaderPins(&reload_bundle_pins)),
+        ) {
             Ok(refreshed) => refreshed,
             Err(error) => {
                 record_replacement_failure(&serving, error.clone());
@@ -11581,6 +13949,17 @@ fn handle_connection(
                 ),
                 None => (None, None, None),
             };
+        if let Err(error) = reload_bundle_pins.verify() {
+            let error = error.to_string();
+            record_replacement_failure(&serving, error.clone());
+            send_json_response_ext(
+                stream,
+                500,
+                &serde_json::json!({ "status": "error", "message": error }).to_string(),
+                &dep,
+            );
+            return;
+        }
         let mut installed = serving.lock().unwrap();
         if installed.epoch != base_epoch {
             let error =
@@ -11614,6 +13993,7 @@ fn handle_connection(
             refreshed.logical_name
         );
         reload_reservation.disarm();
+        drop(reload_bundle_pins);
         drop(reload_read_sessions);
         let resp = serde_json::json!({
             "status": "success",
@@ -14241,6 +16621,46 @@ mod tests {
         (meta, records)
     }
 
+    fn valid_attention_corpus_markers(
+        root: &std::path::Path,
+    ) -> (std::path::PathBuf, std::path::PathBuf) {
+        let meta = root.join("corpus.meta");
+        let records = root.join("corpus.records");
+        let mut metadata = [0u8; 25];
+        metadata[0..8].copy_from_slice(&1u64.to_le_bytes());
+        metadata[8..16].copy_from_slice(&1u64.to_le_bytes());
+        metadata[16..24].copy_from_slice(&7u64.to_le_bytes());
+        metadata[24] = 1;
+        let mut record = [0u8; 48];
+        record[20..24].copy_from_slice(&34u32.to_le_bytes());
+        record[24..28].copy_from_slice(&33u32.to_le_bytes());
+        record[28..32].copy_from_slice(&33u32.to_le_bytes());
+        record[36..40].copy_from_slice(&1u32.to_le_bytes());
+        record[40..44].copy_from_slice(&u32::MAX.to_le_bytes());
+        record[44..48].copy_from_slice(&u32::MAX.to_le_bytes());
+        std::fs::write(&meta, metadata).expect("write valid corpus metadata");
+        std::fs::write(&records, record).expect("write valid corpus record");
+        (meta, records)
+    }
+
+    fn commit_test_recorded_corpus_binding(root: &std::path::Path) {
+        let producer =
+            uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerGuard::try_acquire(root)
+                .expect("test recorded-corpus producer guard");
+        producer
+            .begin_compile_attempt()
+            .expect("test recorded-corpus compile attempt");
+        uor_r4_graph_compiler::recorded_corpus::publish_binding(
+            &producer,
+            &root.join("corpus.meta"),
+            &root.join("corpus.records"),
+        )
+        .expect("test recorded-corpus binding");
+        producer
+            .finish_compile_attempt()
+            .expect("finish test recorded-corpus attempt");
+    }
+
     fn write_test_source_manifest(
         source_dir: &std::path::Path,
         source: &crate::model::SourceDownload,
@@ -14499,7 +16919,8 @@ mod tests {
             .expect("source snapshot binding");
         write_attention_binding(&output, &attention);
         write_dense_binding(&output, &dense);
-        let (meta, records) = attention_corpus_markers(&output);
+        let (meta, records) = valid_attention_corpus_markers(&output);
+        commit_test_recorded_corpus_binding(&output);
 
         let mut cover_args = Vec::new();
         super::append_recorded_execution_identity(&mut cover_args, &meta, &records, true)
@@ -15959,35 +18380,784 @@ mod tests {
     fn write_completion_fixture(root: &std::path::Path, tag: &[u8]) {
         std::fs::create_dir_all(root.join("graph-cover")).expect("cover directory");
         std::fs::create_dir_all(root.join("graph")).expect("graph directory");
-        for file in [
-            "corpus.meta",
-            "corpus.records",
-            "tless_artifacts.bin",
-            "tokenizer.bin",
-            "tokenizer_adapter.json",
-            uor_r4_graph_cli::ATTENTION_OPERATOR_BINDING_FILE,
-            super::SOURCE_COMPILE_PREFLIGHT_FILE,
-            super::SOURCE_MANIFEST_KAPPA_BINDING_FILE,
-        ] {
-            let bytes = if file == uor_r4_graph_cli::ATTENTION_OPERATOR_BINDING_FILE {
-                let mut bytes = serde_json::to_vec_pretty(
-                    &uor_r4_model_source::attention::AttentionOperatorSpec::standard_v2(),
-                )
-                .expect("serialize fixture attention");
-                bytes.push(b'\n');
-                bytes
-            } else {
-                tag.to_vec()
-            };
-            std::fs::write(root.join(file), bytes).expect("bundle fixture member");
+        let producer =
+            uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerGuard::try_acquire(root)
+                .expect("fixture producer guard");
+        producer
+            .begin_compile_attempt()
+            .expect("fixture compile attempt");
+        let source_kappa = format!("blake3:{}", "0".repeat(64));
+        let mut meta = [0u8; 25];
+        meta[0..8].copy_from_slice(&1u64.to_le_bytes());
+        meta[8..16].copy_from_slice(&1u64.to_le_bytes());
+        meta[16..24].copy_from_slice(&7u64.to_le_bytes());
+        meta[24] = 1;
+        let mut record = [0u8; 48];
+        record[4..8].copy_from_slice(&(tag.first().copied().unwrap_or(0) as u32).to_le_bytes());
+        record[20..24].copy_from_slice(&34u32.to_le_bytes());
+        record[24..28].copy_from_slice(&33u32.to_le_bytes());
+        record[28..32].copy_from_slice(&33u32.to_le_bytes());
+        record[36..40].copy_from_slice(&1u32.to_le_bytes());
+        record[40..44].copy_from_slice(&u32::MAX.to_le_bytes());
+        record[44..48].copy_from_slice(&u32::MAX.to_le_bytes());
+        for file in ["tless_artifacts.bin", "tless_store.bin", "tokenizer.bin"] {
+            std::fs::write(root.join(file), tag).expect("bundle fixture member");
         }
+        write_tokenizer_adapter_binding(root, "compiled-bundle-fixture");
+        std::fs::write(root.join("corpus.meta"), meta).expect("fixture corpus metadata");
+        std::fs::write(root.join("corpus.records"), record).expect("fixture corpus records");
+        let mut attention = serde_json::to_vec_pretty(
+            &uor_r4_model_source::attention::AttentionOperatorSpec::standard_v2(),
+        )
+        .expect("serialize fixture attention");
+        attention.push(b'\n');
+        std::fs::write(
+            root.join(uor_r4_graph_cli::ATTENTION_OPERATOR_BINDING_FILE),
+            attention,
+        )
+        .expect("fixture attention binding");
+        std::fs::write(
+            root.join(super::SOURCE_COMPILE_PREFLIGHT_FILE),
+            super::source_compile_preflight_bytes(Some(&source_kappa))
+                .expect("fixture source preflight"),
+        )
+        .expect("fixture source preflight");
+        std::fs::write(
+            root.join(super::SOURCE_MANIFEST_KAPPA_BINDING_FILE),
+            super::source_manifest_kappa_binding_bytes(&source_kappa)
+                .expect("fixture source binding"),
+        )
+        .expect("fixture source binding");
         for file in [
             "graph-cover/cover.r4g1",
-            "graph-cover/cover_report.json",
             "graph/score.r4g1",
             "graph/score_report.json",
         ] {
             std::fs::write(root.join(file), tag).expect("graph fixture member");
+        }
+        let cover_report = serde_json::to_vec_pretty(&serde_json::json!({
+            "attention_operator": uor_r4_model_source::attention::AttentionOperatorSpec::standard_v2(),
+            "dense_operator": null,
+            "source_manifest_kappa": source_kappa,
+        }))
+        .expect("fixture cover report");
+        std::fs::write(root.join("graph-cover/cover_report.json"), cover_report)
+            .expect("fixture cover report");
+        uor_r4_graph_compiler::recorded_corpus::publish_binding(
+            &producer,
+            &root.join("corpus.meta"),
+            &root.join("corpus.records"),
+        )
+        .expect("fixture corpus binding");
+        producer
+            .finish_compile_attempt()
+            .expect("finish fixture compile attempt");
+        super::publish_compiled_bundle_completion_under_guard(&producer, root)
+            .expect("fixture bundle completion");
+    }
+
+    fn make_completion_fixture_graph_outputs_valid(root: &std::path::Path, tag: &str) {
+        std::fs::remove_file(root.join(super::COMPILED_BUNDLE_COMPLETION_FILE))
+            .expect("remove fixture completion before graph replacement");
+        for relative in ["graph-cover/cover.r4g1", "graph/score.r4g1"] {
+            std::fs::write(root.join(relative), minimal_r4g1_bytes())
+                .expect("valid fixture R4G1 bytes");
+        }
+        std::fs::write(
+            root.join("graph/score_report.json"),
+            serde_json::to_vec(&serde_json::json!({ "tag": tag })).expect("fixture score report"),
+        )
+        .expect("fixture score report");
+        let producer =
+            uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerGuard::try_acquire(root)
+                .expect("valid-graph fixture producer guard");
+        super::publish_compiled_bundle_completion_under_guard(&producer, root)
+            .expect("valid-graph fixture completion");
+    }
+
+    fn compiled_source_bundle_publish_fixture(
+        root: &std::path::Path,
+        tag: &str,
+    ) -> super::CompiledSourceBundle {
+        compiled_source_bundle_publish_fixture_with_final(root, tag, None)
+    }
+
+    fn compiled_source_bundle_publish_fixture_with_final(
+        root: &std::path::Path,
+        tag: &str,
+        final_tag: Option<&str>,
+    ) -> super::CompiledSourceBundle {
+        let compiled = root.join("compiled");
+        let conventional = compiled.join("teacher");
+        let current = compiled.join("teacher-attention-v2");
+        let composite = compiled.join("teacher-attention-v2-dense-v2");
+        std::fs::create_dir_all(&compiled).expect("compiled fixture root");
+        if let Some(final_tag) = final_tag {
+            write_completion_fixture(&conventional, final_tag.as_bytes());
+            make_completion_fixture_graph_outputs_valid(&conventional, final_tag);
+        }
+        let roots = [conventional.clone(), current.clone(), composite.clone()];
+        let selection = super::capture_compiled_bundle_selection_base(&roots, &conventional)
+            .expect("empty three-root selection");
+        let source_kappa = format!("blake3:{}", "0".repeat(64));
+        let stage = super::CompiledBundleStage::allocate_with_selection(
+            &conventional,
+            &source_kappa,
+            &selection,
+        )
+        .expect("private publication stage");
+        write_completion_fixture(&stage.path, tag.as_bytes());
+        make_completion_fixture_graph_outputs_valid(&stage.path, tag);
+        let stage_reader_pins =
+            uor_r4_graph_compiler::recorded_corpus::RecordedCorpusReaderPins::try_acquire([
+                &stage.path
+            ])
+            .expect("serving-stage reader pin");
+        let selection_generations = roots
+            .iter()
+            .map(uor_r4_graph_compiler::recorded_corpus::RecordedCorpusRootGeneration::capture)
+            .collect::<Result<Vec<_>, _>>()
+            .expect("selection root identities");
+        let sessions = super::try_lock_source_compile_sessions(
+            [
+                compiled,
+                conventional.clone(),
+                current.clone(),
+                composite,
+                stage.path.clone(),
+            ],
+            super::SourceCompileSessionMode::ExclusiveWriter,
+        )
+        .expect("server source sessions");
+        super::CompiledSourceBundle {
+            final_output: conventional,
+            working_output: stage.path.clone(),
+            stage,
+            selection_generations,
+            selection_base: selection,
+            stage_reader_pins: Some(stage_reader_pins),
+            source_snapshot_kappa: source_kappa,
+            logical_name: "teacher".to_owned(),
+            current_version: 2,
+            source_operator: uor_r4_model_source::attention::AttentionOperatorSpec::standard_v2(),
+            source_dense: None,
+            _sessions: sessions,
+        }
+    }
+
+    fn advance_private_stage_generation(stage: &std::path::Path, tag: &[u8]) {
+        let producer =
+            uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerGuard::try_acquire(stage)
+                .expect("stage-B producer");
+        producer
+            .begin_compile_attempt()
+            .expect("stage-B compile attempt");
+        std::fs::remove_file(stage.join(super::COMPILED_BUNDLE_COMPLETION_FILE))
+            .expect("remove stage-A completion");
+        std::fs::write(stage.join("tless_artifacts.bin"), tag).expect("stage-B artifact commit");
+        super::publish_compiled_bundle_completion_under_guard(&producer, stage)
+            .expect("stage-B completion");
+        producer
+            .finish_compile_attempt()
+            .expect("finish stage-B attempt");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn compiled_bundle_stage_v2_canonical_bytes_and_cid_are_pinned() {
+        let conventional = "/uor-r4-stage-pin";
+        let current = "/uor-r4-stage-pin-attention-v2";
+        let composite = "/uor-r4-stage-pin-attention-v2-dense-v2";
+        let stage =
+            "/.uor-r4-source-compile-staging/.uor-r4-stage-pin-attention-v2.bundle-stage.7.9";
+        let source_kappa = format!("blake3:{}", "0".repeat(64));
+        let selection = [conventional, current, composite]
+            .into_iter()
+            .map(|root| super::CompiledBundleSelectionGeneration {
+                root: root.to_owned(),
+                generation: super::CompiledBundleBaseGeneration::Absent,
+            })
+            .collect::<Vec<_>>();
+        let bytes = super::compiled_bundle_stage_marker_bytes(
+            std::path::Path::new(current),
+            std::path::Path::new(stage),
+            &source_kappa,
+            &selection,
+        )
+        .expect("canonical stage marker");
+        let expected = format!(
+            concat!(
+                "{{\n",
+                "  \"schema\": \"uor-r4-compiled-bundle-stage/2\",\n",
+                "  \"final_output\": \"/uor-r4-stage-pin-attention-v2\",\n",
+                "  \"stage_path\": \"/.uor-r4-source-compile-staging/.uor-r4-stage-pin-attention-v2.bundle-stage.7.9\",\n",
+                "  \"source_snapshot_kappa\": \"blake3:{}\",\n",
+                "  \"selection_base\": [\n",
+                "    {{\n",
+                "      \"root\": \"/uor-r4-stage-pin\",\n",
+                "      \"generation\": {{\n",
+                "        \"kind\": \"absent\"\n",
+                "      }}\n",
+                "    }},\n",
+                "    {{\n",
+                "      \"root\": \"/uor-r4-stage-pin-attention-v2\",\n",
+                "      \"generation\": {{\n",
+                "        \"kind\": \"absent\"\n",
+                "      }}\n",
+                "    }},\n",
+                "    {{\n",
+                "      \"root\": \"/uor-r4-stage-pin-attention-v2-dense-v2\",\n",
+                "      \"generation\": {{\n",
+                "        \"kind\": \"absent\"\n",
+                "      }}\n",
+                "    }}\n",
+                "  ]\n",
+                "}}\n"
+            ),
+            "0".repeat(64)
+        );
+        assert_eq!(bytes, expected.as_bytes());
+        assert_eq!(
+            format!("blake3:{}", blake3::hash(&bytes).to_hex()),
+            "blake3:ca8826c3b1b5661d61702178d92c76d9e5f92c6fd838f7acef36dd8a1241af80"
+        );
+    }
+
+    #[test]
+    fn private_stage_marker_is_ignored_only_when_exact_and_location_bound() {
+        for scenario in ["exact", "malformed", "wrong-stage"] {
+            let root = attention_provenance_test_dir(&format!("stage-prefix-{scenario}"));
+            let compiled = root.join("compiled");
+            let conventional = compiled.join("teacher");
+            let current = compiled.join("teacher-attention-v2");
+            let composite = compiled.join("teacher-attention-v2-dense-v2");
+            let selection_roots = [conventional, current.clone(), composite];
+            let selection =
+                super::capture_compiled_bundle_selection_base(&selection_roots, &current)
+                    .expect("absent selection");
+            std::fs::create_dir_all(&compiled).expect("compiled root");
+            let source_kappa = format!("blake3:{}", "0".repeat(64));
+            let stage = super::CompiledBundleStage::allocate_with_selection(
+                &current,
+                &source_kappa,
+                &selection,
+            )
+            .expect("private stage");
+            let marker = stage.path.join(super::COMPILED_BUNDLE_STAGE_MARKER_FILE);
+            let expected = std::fs::read(&marker).expect("stage marker");
+            match scenario {
+                "exact" => {}
+                "malformed" => std::fs::write(&marker, b"{}\n").expect("malformed marker"),
+                "wrong-stage" => {
+                    let wrong = stage.path.parent().expect("stage parent").join(
+                        super::compiled_bundle_stage_name("teacher-attention-v2", 999, 999),
+                    );
+                    let bytes = super::compiled_bundle_stage_marker_bytes(
+                        &current,
+                        &wrong,
+                        &source_kappa,
+                        &selection,
+                    )
+                    .expect("wrong-stage canonical marker");
+                    std::fs::write(&marker, bytes).expect("wrong-stage marker");
+                }
+                _ => unreachable!(),
+            }
+            let session = uor_r4_graph_cli::acquire_source_corpus_session(&stage.path)
+                .expect("private-stage source/common session");
+            session
+                .recorded_corpus_guard()
+                .expect("private-stage common guard")
+                .begin_compile_attempt()
+                .expect("compile-attempt marker precedes P/K");
+            let result =
+                super::preflight_and_bind_source_snapshot_kappa(&stage.path, Some(&source_kappa));
+            match scenario {
+                "exact" => {
+                    result.expect("exact stage marker is non-payload coordination");
+                    assert!(stage
+                        .path
+                        .join(super::SOURCE_COMPILE_PREFLIGHT_FILE)
+                        .is_file());
+                    assert!(stage
+                        .path
+                        .join(super::SOURCE_MANIFEST_KAPPA_BINDING_FILE)
+                        .is_file());
+                    assert_eq!(std::fs::read(&marker).expect("marker unchanged"), expected);
+                }
+                _ => {
+                    let error = result.expect_err("nonexact stage marker is terminal");
+                    assert!(
+                        error.contains("marker")
+                            || error.contains("canonical")
+                            || error.contains("malformed"),
+                        "{error}"
+                    );
+                    assert!(!stage
+                        .path
+                        .join(super::SOURCE_COMPILE_PREFLIGHT_FILE)
+                        .exists());
+                    assert!(!stage
+                        .path
+                        .join(super::SOURCE_MANIFEST_KAPPA_BINDING_FILE)
+                        .exists());
+                    assert_ne!(
+                        std::fs::read(&marker).expect("evidence preserved"),
+                        expected
+                    );
+                }
+            }
+            drop(session);
+            let _ = std::fs::remove_dir_all(root);
+        }
+    }
+
+    #[test]
+    fn compiled_bundle_namespaces_are_bounded_and_preserved_on_refusal() {
+        let root = attention_provenance_test_dir("compiled-bundle-bounded-namespaces");
+
+        let completion_root = root.join("completion-temps");
+        std::fs::create_dir_all(&completion_root).expect("completion root");
+        for id in 0..=super::COMPILED_BUNDLE_COMPLETION_TEMP_LIMIT {
+            std::fs::write(
+                completion_root.join(format!(
+                    ".{}.1.{id}.tmp",
+                    super::COMPILED_BUNDLE_COMPLETION_FILE
+                )),
+                b"{}\n",
+            )
+            .expect("completion temp");
+        }
+        let error = super::recover_compiled_bundle_completion_temporaries(&completion_root)
+            .expect_err("65 completion temporaries exceed the fixed registry bound");
+        assert!(error.contains("fixed 64-entry"), "{error}");
+        assert_eq!(
+            std::fs::read_dir(&completion_root)
+                .expect("preserved completion temps")
+                .count(),
+            super::COMPILED_BUNDLE_COMPLETION_TEMP_LIMIT + 1
+        );
+
+        let compiled = root.join("compiled");
+        let conventional = compiled.join("model");
+        let current = compiled.join("model-attention-v2");
+        let composite = compiled.join("model-attention-v2-dense-v2");
+        let selection_roots = [conventional, current.clone(), composite];
+        let selection = super::capture_compiled_bundle_selection_base(&selection_roots, &current)
+            .expect("absent three-root base");
+        std::fs::create_dir_all(&compiled).expect("compiled root");
+        let staging =
+            super::ensure_source_compile_staging_root(&compiled).expect("stage registry root");
+        for id in 0..=super::COMPILED_BUNDLE_STAGE_LIMIT {
+            std::fs::create_dir(staging.join(super::compiled_bundle_stage_name(
+                "model-attention-v2",
+                1,
+                id as u64,
+            )))
+            .expect("recognized stage");
+        }
+        let source_kappa = format!("blake3:{}", "0".repeat(64));
+        let error = super::recover_compiled_bundle_stages(&current, &source_kappa, &selection)
+            .expect_err("65 stages exceed the fixed registry bound");
+        assert!(error.contains("fixed 64-entry"), "{error}");
+        assert_eq!(
+            std::fs::read_dir(&staging)
+                .expect("preserved stages")
+                .count(),
+            super::COMPILED_BUNDLE_STAGE_LIMIT + 1
+        );
+
+        let oversized = root.join("oversized-control");
+        std::fs::create_dir_all(&oversized).expect("oversized root");
+        let completion = oversized.join(super::COMPILED_BUNDLE_COMPLETION_FILE);
+        let file = std::fs::File::create(&completion).expect("sparse control");
+        file.set_len(1_u64 << 40).expect("1 TiB sparse control");
+        drop(file);
+        let error = super::validate_compiled_bundle_completion(&oversized)
+            .expect_err("oversized control is rejected before its body is retained");
+        assert!(error.contains("65536-byte control-record limit"), "{error}");
+        assert_eq!(
+            std::fs::metadata(&completion)
+                .expect("sparse control preserved")
+                .len(),
+            1_u64 << 40
+        );
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn bounded_server_reads_reject_growth_after_the_eof_probe() {
+        use std::io::Write as _;
+
+        let root = attention_provenance_test_dir("server-post-eof-growth");
+        let control = root.join("control.json");
+        std::fs::write(&control, b"{}\n").expect("control fixture");
+        let opened = super::open_regular_file_nofollow(&control, "test control")
+            .expect("open control")
+            .expect("control present");
+        let control_error = super::read_opened_regular_file_nofollow_capped_with_after_eof(
+            opened,
+            &control,
+            "test control",
+            1024,
+            || {
+                std::fs::OpenOptions::new()
+                    .append(true)
+                    .open(&control)
+                    .and_then(|mut file| file.write_all(b"x"))
+                    .map_err(|error| error.to_string())
+            },
+        )
+        .expect_err("post-EOF control growth is rejected");
+        assert!(control_error.contains("changed"), "{control_error}");
+
+        let member = root.join("member.bin");
+        std::fs::write(&member, b"member-a").expect("member fixture");
+        let member_error =
+            super::regular_file_blake3_nofollow_with_after_eof(&member, "test member", || {
+                std::fs::OpenOptions::new()
+                    .append(true)
+                    .open(&member)
+                    .and_then(|mut file| file.write_all(b"b"))
+                    .map_err(|error| error.to_string())
+            })
+            .expect_err("post-EOF streamed-member growth is rejected");
+        assert!(member_error.contains("changed"), "{member_error}");
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn semantic_bundle_controls_are_capped_before_json_parsing() {
+        let root = attention_provenance_test_dir("semantic-control-caps");
+        let large_cover = root.join("large-cover-report.json");
+        let source_kappa = format!("blake3:{}", "0".repeat(64));
+        let decisions = (0..128)
+            .map(|region| {
+                serde_json::json!({
+                    "region": region,
+                    "objective_components": vec![0.0_f64; 24],
+                    "explanation": "x".repeat(768),
+                })
+            })
+            .collect::<Vec<_>>();
+        let large_cover_bytes = serde_json::to_vec(&serde_json::json!({
+            "attention_operator": uor_r4_model_source::attention::AttentionOperatorSpec::standard_v2(),
+            "dense_operator": null,
+            "source_manifest_kappa": source_kappa,
+            "region_decisions": decisions,
+        }))
+        .expect("large supported cover report");
+        assert!(large_cover_bytes.len() > super::COMPILED_BUNDLE_CONTROL_MAX_BYTES as usize);
+        assert!(large_cover_bytes.len() < super::COVER_REPORT_CONTROL_MAX_BYTES as usize);
+        std::fs::write(&large_cover, large_cover_bytes).expect("large cover report fixture");
+        let (present, attention, dense, recorded_kappa) =
+            super::parse_cover_provenance(&large_cover)
+                .expect("supported cover report may exceed the scalar-control cap");
+        assert!(present);
+        assert_eq!(
+            attention,
+            Some(uor_r4_model_source::attention::AttentionOperatorSpec::standard_v2())
+        );
+        assert_eq!(dense, None);
+        assert_eq!(recorded_kappa.as_deref(), Some(source_kappa.as_str()));
+        super::validate_staged_graph_report(&large_cover, super::COVER_REPORT_CONTROL_MAX_BYTES)
+            .expect("staged validator accepts a supported cover report above 64 KiB");
+
+        for (case, leaf, max_bytes) in [
+            (
+                "preflight",
+                super::SOURCE_COMPILE_PREFLIGHT_FILE,
+                super::COMPILED_BUNDLE_CONTROL_MAX_BYTES,
+            ),
+            (
+                "source-binding",
+                super::SOURCE_MANIFEST_KAPPA_BINDING_FILE,
+                super::COMPILED_BUNDLE_CONTROL_MAX_BYTES,
+            ),
+            (
+                "attention",
+                uor_r4_graph_cli::ATTENTION_OPERATOR_BINDING_FILE,
+                super::COMPILED_BUNDLE_CONTROL_MAX_BYTES,
+            ),
+            (
+                "dense",
+                uor_r4_graph_cli::DENSE_OPERATOR_BINDING_FILE,
+                super::COMPILED_BUNDLE_CONTROL_MAX_BYTES,
+            ),
+            (
+                "cover",
+                "cover_report.json",
+                super::COVER_REPORT_CONTROL_MAX_BYTES,
+            ),
+            (
+                "staged-cover",
+                "cover_report.json",
+                super::COVER_REPORT_CONTROL_MAX_BYTES,
+            ),
+            (
+                "staged-score",
+                "score_report.json",
+                super::SCORE_REPORT_CONTROL_MAX_BYTES,
+            ),
+        ] {
+            let case_root = root.join(case);
+            std::fs::create_dir_all(&case_root).expect("semantic-control case root");
+            let path = case_root.join(leaf);
+            let file = std::fs::File::create(&path).expect("sparse semantic control");
+            file.set_len(1_u64 << 40)
+                .expect("1 TiB sparse semantic control");
+            drop(file);
+            let error = match case {
+                "preflight" => {
+                    super::read_optional_source_compile_preflight(&case_root).map(|_| ())
+                }
+                "source-binding" => {
+                    super::read_optional_source_manifest_kappa_binding(&case_root).map(|_| ())
+                }
+                "attention" => super::validate_pre_attention_identity_file(
+                    &path,
+                    uor_r4_graph_cli::ATTENTION_OPERATOR_BINDING_FILE,
+                )
+                .map(|_| ()),
+                "dense" => super::validate_pre_attention_identity_file(
+                    &path,
+                    uor_r4_graph_cli::DENSE_OPERATOR_BINDING_FILE,
+                )
+                .map(|_| ()),
+                "cover" => super::parse_cover_provenance(&path).map(|_| ()),
+                "staged-cover" | "staged-score" => {
+                    super::validate_staged_graph_report(&path, max_bytes)
+                }
+                _ => unreachable!(),
+            }
+            .expect_err("oversized semantic control is rejected before JSON parsing");
+            assert!(
+                error.contains(&format!("{max_bytes}-byte control-record limit")),
+                "{error}"
+            );
+            assert_eq!(
+                std::fs::metadata(&path)
+                    .expect("sparse semantic control preserved")
+                    .len(),
+                1_u64 << 40
+            );
+        }
+
+        let no_clobber = root.join("oversized-existing-control.json");
+        let file = std::fs::File::create(&no_clobber).expect("sparse no-clobber control");
+        file.set_len(1_u64 << 40)
+            .expect("1 TiB sparse no-clobber control");
+        drop(file);
+        let error = super::publish_bytes_no_clobber(&no_clobber, b"{}\n", "test control")
+            .expect_err("no-clobber comparison rejects oversized existing control");
+        assert!(error.contains("3-byte control-record limit"), "{error}");
+        assert_eq!(
+            std::fs::metadata(&no_clobber)
+                .expect("sparse no-clobber control preserved")
+                .len(),
+            1_u64 << 40
+        );
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn completed_bundle_validation_caps_semantic_controls_before_hashing() {
+        let root = attention_provenance_test_dir("completed-semantic-control-caps");
+        for (case, relative, max_bytes) in [
+            (
+                "source-binding",
+                super::SOURCE_MANIFEST_KAPPA_BINDING_FILE,
+                super::COMPILED_BUNDLE_CONTROL_MAX_BYTES,
+            ),
+            (
+                "attention",
+                uor_r4_graph_cli::ATTENTION_OPERATOR_BINDING_FILE,
+                super::COMPILED_BUNDLE_CONTROL_MAX_BYTES,
+            ),
+            (
+                "cover",
+                "graph-cover/cover_report.json",
+                super::COVER_REPORT_CONTROL_MAX_BYTES,
+            ),
+            (
+                "score",
+                "graph/score_report.json",
+                super::SCORE_REPORT_CONTROL_MAX_BYTES,
+            ),
+        ] {
+            let output = root.join(case);
+            write_completion_fixture(&output, case.as_bytes());
+            make_completion_fixture_graph_outputs_valid(&output, case);
+            let control = output.join(relative);
+            std::fs::remove_file(&control).expect("remove completed semantic control");
+            let file = std::fs::File::create(&control).expect("sparse completed control");
+            file.set_len(1_u64 << 40)
+                .expect("1 TiB sparse completed semantic control");
+            drop(file);
+            let error = super::validate_compiled_bundle_completion(&output)
+                .expect_err("completion validation caps semantic controls before hashing");
+            assert!(error.contains(&max_bytes.to_string()), "{case}: {error}");
+            assert!(error.contains(relative), "{case}: {error}");
+            assert_eq!(
+                std::fs::metadata(&control)
+                    .expect("sparse completed semantic control preserved")
+                    .len(),
+                1_u64 << 40
+            );
+        }
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn compiled_bundle_unknown_inventory_is_refused_without_commit() {
+        let root = attention_provenance_test_dir("compiled-bundle-unknown-inventory");
+        let output = root.join("compiled/model-attention-v2");
+        write_completion_fixture(&output, b"stable");
+        make_completion_fixture_graph_outputs_valid(&output, "stable");
+        std::fs::remove_file(output.join(super::COMPILED_BUNDLE_COMPLETION_FILE))
+            .expect("remove completion");
+        let unknown = output.join("unknown-stable-claim.json");
+        std::fs::write(&unknown, b"do not delete").expect("unknown stable claim");
+        let error = super::publish_compiled_bundle_completion(&output)
+            .expect_err("unknown stable inventory is terminal");
+        assert!(error.contains("unsupported entry"), "{error}");
+        assert_eq!(
+            std::fs::read(&unknown).expect("unknown claim preserved"),
+            b"do not delete"
+        );
+        assert!(!output.join(super::COMPILED_BUNDLE_COMPLETION_FILE).exists());
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn canonical_compile_attempt_is_coordination_not_completion_payload() {
+        let root = attention_provenance_test_dir("completion-excludes-attempt");
+        let output = root.join("compiled/model-attention-v2");
+        write_completion_fixture(&output, b"stable");
+        make_completion_fixture_graph_outputs_valid(&output, "stable");
+        let before = super::compiled_bundle_file_kappas(&output)
+            .expect("completed payload inventory before attempt");
+        std::fs::write(
+            output.join("instruction-eval.json"),
+            b"{\"derived\":true}\n",
+        )
+        .expect("post-compile evaluation report");
+        super::validate_compiled_bundle_completion(&output)
+            .expect("derived evaluation report does not invalidate completion")
+            .expect("completion remains present");
+        assert_eq!(
+            super::compiled_bundle_file_kappas(&output)
+                .expect("derived evaluation report is excluded"),
+            before
+        );
+        let producer =
+            uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerGuard::try_acquire(
+                &output,
+            )
+            .expect("fixture producer");
+        producer
+            .begin_compile_attempt()
+            .expect("canonical lower attempt marker");
+        let after = super::compiled_bundle_file_kappas(&output)
+            .expect("attempt marker is recognized and excluded");
+        assert_eq!(after, before);
+        super::publish_compiled_bundle_completion_under_guard(&producer, &output)
+            .expect("idempotent completion remains valid while attempt is active");
+        producer
+            .finish_compile_attempt()
+            .expect("finish exact no-op attempt");
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn malformed_legacy_bundle_is_not_bootstrapped_or_mutated() {
+        let root = attention_provenance_test_dir("malformed-legacy-bootstrap");
+        let compiled = root.join("compiled");
+        let current = compiled.join("teacher-attention-v2");
+        write_completion_fixture(&current, b"legacy-current");
+        make_completion_fixture_graph_outputs_valid(&current, "legacy-current");
+        std::fs::remove_file(current.join(super::COMPILED_BUNDLE_COMPLETION_FILE))
+            .expect("simulate pre-#728 bundle");
+        let report = current.join("graph-cover/cover_report.json");
+        std::fs::write(&report, b"{}\n").expect("malformed identity report");
+        let before = std::fs::read(&report).expect("malformed report before");
+        let error = match super::acquire_managed_compiled_bundle_read(&compiled, "teacher", 2) {
+            Ok(_) => panic!("malformed legacy payload is never bootstrapped"),
+            Err(error) => error,
+        };
+        assert!(
+            error.contains("does not reconcile") || error.contains("missing"),
+            "{error}"
+        );
+        assert_eq!(std::fs::read(&report).expect("report preserved"), before);
+        assert!(!current
+            .join(super::COMPILED_BUNDLE_COMPLETION_FILE)
+            .exists());
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn staged_binding_absence_or_conflict_never_mutates_last_good_final() {
+        for scenario in ["missing", "conflicting"] {
+            let root = attention_provenance_test_dir(&format!("stage-binding-{scenario}"));
+            let compiled = root.join("compiled");
+            let conventional = compiled.join("teacher");
+            let current = compiled.join("teacher-attention-v2");
+            let composite = compiled.join("teacher-attention-v2-dense-v2");
+            write_completion_fixture(&current, b"last-good");
+            make_completion_fixture_graph_outputs_valid(&current, "last-good");
+            let final_completion =
+                std::fs::read(current.join(super::COMPILED_BUNDLE_COMPLETION_FILE))
+                    .expect("last-good completion");
+            let selection_roots = [conventional, current.clone(), composite];
+            let selection =
+                super::capture_compiled_bundle_selection_base(&selection_roots, &current)
+                    .expect("capture last-good selection");
+            let source_kappa = format!("blake3:{}", "0".repeat(64));
+            let stage = super::CompiledBundleStage::allocate_with_selection(
+                &current,
+                &source_kappa,
+                &selection,
+            )
+            .expect("private stage");
+            write_completion_fixture(&stage.path, b"candidate");
+            make_completion_fixture_graph_outputs_valid(&stage.path, "candidate");
+            std::fs::remove_file(stage.path.join(super::COMPILED_BUNDLE_COMPLETION_FILE))
+                .expect("remove candidate completion");
+            let binding = stage
+                .path
+                .join(uor_r4_graph_compiler::recorded_corpus::RECORDED_CORPUS_BINDING_FILE);
+            match scenario {
+                "missing" => std::fs::remove_file(&binding).expect("remove binding"),
+                "conflicting" => std::fs::write(&binding, b"{}\n").expect("conflict binding"),
+                _ => unreachable!(),
+            }
+            let producer =
+                uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerGuard::try_acquire(
+                    &stage.path,
+                )
+                .expect("stage producer");
+            let error = super::validate_compiled_stage_transaction_under_guard(
+                &producer,
+                &stage.path,
+                &source_kappa,
+            )
+            .expect_err("binding failure is terminal before completion/publication");
+            assert!(
+                error.contains("binding") || error.contains("recorded"),
+                "{error}"
+            );
+            assert!(!stage
+                .path
+                .join(super::COMPILED_BUNDLE_COMPLETION_FILE)
+                .exists());
+            assert_eq!(
+                std::fs::read(current.join(super::COMPILED_BUNDLE_COMPLETION_FILE))
+                    .expect("last-good completion preserved"),
+                final_completion
+            );
+            drop(producer);
+            let _ = std::fs::remove_dir_all(root);
         }
     }
 
@@ -16043,9 +19213,11 @@ mod tests {
             std::fs::read(output.join("graph/score.r4g1")).expect("new graph"),
             b"new"
         );
+        let new_records = std::fs::read(output.join("corpus.records")).expect("advanced corpus");
+        assert_ne!(new_records, old_corpus);
         assert_eq!(
-            std::fs::read(output.join("corpus.records")).expect("advanced corpus"),
-            b"new"
+            u32::from_le_bytes(new_records[4..8].try_into().expect("next-token field")),
+            u32::from(b'n')
         );
         super::validate_compiled_bundle_completion(&output)
             .expect("new completion validates")
@@ -16083,6 +19255,123 @@ mod tests {
     }
 
     #[test]
+    fn compiled_bundle_stage_recovery_is_busy_before_any_reset_mutation() {
+        let root = attention_provenance_test_dir("compiled-stage-common-busy");
+        let output = root.join("compiled/model");
+        write_completion_fixture(&output, b"old");
+        let source_kappa = format!("blake3:{}", "0".repeat(64));
+        let stage =
+            super::CompiledBundleStage::allocate(&output, &source_kappa).expect("resumable stage");
+        std::fs::create_dir_all(stage.path.join("graph")).expect("partial graph directory");
+        let partial = stage.path.join("graph/score.r4g1");
+        std::fs::write(&partial, b"owned-partial").expect("partial graph evidence");
+        let marker = std::fs::read(stage.path.join(super::COMPILED_BUNDLE_STAGE_MARKER_FILE))
+            .expect("stage marker before contention");
+        let stage_path = stage.path.clone();
+        drop(stage);
+        let producer =
+            uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerGuard::try_acquire(
+                &stage_path,
+            )
+            .expect("supported stage writer owns common guard");
+        let error = super::CompiledBundleStage::allocate(&output, &source_kappa)
+            .expect_err("retry cannot reset a stage owned by another common writer");
+        assert!(super::source_compile_session_is_busy(&error), "{error}");
+        assert_eq!(
+            std::fs::read(&partial).expect("partial bytes preserved"),
+            b"owned-partial"
+        );
+        assert_eq!(
+            std::fs::read(stage_path.join(super::COMPILED_BUNDLE_STAGE_MARKER_FILE))
+                .expect("marker preserved"),
+            marker
+        );
+        drop(producer);
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn refresh_prefix_crash_has_marker_attempt_and_recovers_binding_last() {
+        let root = attention_provenance_test_dir("compiled-stage-prefix-crash");
+        let compiled = root.join("compiled");
+        let conventional = compiled.join("teacher");
+        let current = compiled.join("teacher-attention-v2");
+        let composite = compiled.join("teacher-attention-v2-dense-v2");
+        write_completion_fixture(&current, b"generation-a");
+        make_completion_fixture_graph_outputs_valid(&current, "generation-a");
+        std::fs::write(current.join("instruction-eval.json"), b"stale-evaluation\n")
+            .expect("derived report on generation A");
+        let roots = [conventional, current.clone(), composite];
+        let selection = super::capture_compiled_bundle_selection_base(&roots, &current)
+            .expect("capture generation A selection");
+        let source_kappa = format!("blake3:{}", "0".repeat(64));
+        let observed_stage = std::sync::Mutex::new(None::<std::path::PathBuf>);
+        let crashed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _ = super::CompiledBundleStage::allocate_with_selection_transaction_with_after_first_copy(
+                &current,
+                &source_kappa,
+                &selection,
+                |stage| {
+                    *observed_stage.lock().expect("stage observation lock") =
+                        Some(stage.to_path_buf());
+                    assert!(stage.join(super::COMPILED_BUNDLE_STAGE_MARKER_FILE).is_file());
+                    assert!(stage
+                        .join(
+                            uor_r4_graph_compiler::recorded_corpus::RECORDED_CORPUS_COMPILE_ATTEMPT_FILE,
+                        )
+                        .is_file());
+                    assert!(!stage
+                        .join(
+                            uor_r4_graph_compiler::recorded_corpus::RECORDED_CORPUS_BINDING_FILE,
+                        )
+                        .exists());
+                    let busy = uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerGuard::try_acquire(stage)
+                        .expect_err("retained prefix transaction excludes another supported writer");
+                    assert!(
+                        uor_r4_graph_compiler::recorded_corpus::is_recorded_corpus_busy(&busy),
+                        "{busy}"
+                    );
+                    panic!("injected death after first prefix member");
+                },
+            );
+        }));
+        assert!(crashed.is_err(), "injected crash reached its boundary");
+        let stage_path = observed_stage
+            .into_inner()
+            .expect("stage observation mutex")
+            .expect("stage path captured before crash");
+        assert!(stage_path.exists(), "crash residue remains resumable");
+        assert!(!stage_path
+            .join(uor_r4_graph_compiler::recorded_corpus::RECORDED_CORPUS_BINDING_FILE)
+            .exists());
+
+        let (stage, session) = super::CompiledBundleStage::allocate_with_selection_transaction(
+            &current,
+            &source_kappa,
+            &selection,
+        )
+        .expect("exact retry reconstructs the private prefix");
+        assert_eq!(stage.path, stage_path, "exact owner adopts the crash stage");
+        assert!(stage
+            .path
+            .join(uor_r4_graph_compiler::recorded_corpus::RECORDED_CORPUS_BINDING_FILE)
+            .is_file());
+        assert!(
+            !stage.path.join("instruction-eval.json").exists(),
+            "generation-A derived evaluation is never copied into generation B"
+        );
+        super::validate_copied_compiled_bundle_prefix(
+            &stage.path,
+            &super::validate_compiled_bundle_completion(&current)
+                .expect("source completion validates")
+                .expect("source completion present"),
+        )
+        .expect("binding-last recovered prefix exactly matches generation A");
+        drop(session);
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn compiled_bundle_stage_recovers_only_exact_regular_publisher_temporaries() {
         let root = attention_provenance_test_dir("compiled-stage-publisher-temporaries");
         let output = root.join("compiled/model");
@@ -16102,12 +19391,30 @@ mod tests {
         ));
         std::fs::write(&marker_temp, b"").expect("pre-write marker crash");
         std::fs::write(&completion_temp, b"{\n").expect("mid-write completion crash");
+        for name in [
+            "instruction-eval.json",
+            "compiled.r4g1",
+            "compile_report.json",
+        ] {
+            std::fs::write(stage_path.join(name), b"stale-derived")
+                .expect("stale derived stage leaf");
+        }
 
         let recovered = super::CompiledBundleStage::allocate(&output, &source_kappa)
             .expect("exact regular residue recovers");
         assert_eq!(recovered.path, stage_path);
         assert!(!marker_temp.exists());
         assert!(!completion_temp.exists());
+        for name in [
+            "instruction-eval.json",
+            "compiled.r4g1",
+            "compile_report.json",
+        ] {
+            assert!(
+                !stage_path.join(name).exists(),
+                "bound-stage recovery removes stale derived {name}"
+            );
+        }
         drop(recovered);
 
         let unknown = stage_path.join(format!(
@@ -16163,7 +19470,7 @@ mod tests {
         let output = root.join("compiled/model");
         write_completion_fixture(&output, b"old");
         super::publish_compiled_bundle_completion(&output).expect("old completion");
-        let source_kappa = format!("blake3:{}", "5".repeat(64));
+        let source_kappa = format!("blake3:{}", "0".repeat(64));
         let stage = super::CompiledBundleStage::allocate(&output, &source_kappa)
             .expect("replacement stage");
         write_completion_fixture(&stage.path, b"new");
@@ -16182,17 +19489,551 @@ mod tests {
         super::validate_compiled_bundle_completion(&output)
             .expect("published completion validates")
             .expect("published completion present");
+        let new_records = std::fs::read(output.join("corpus.records")).expect("new corpus");
         assert_eq!(
-            std::fs::read(output.join("corpus.records")).expect("new corpus"),
-            b"new"
+            u32::from_le_bytes(new_records[4..8].try_into().expect("next-token field")),
+            u32::from(b'n')
         );
 
-        let retry = super::CompiledBundleStage::allocate(&output, &source_kappa)
-            .expect("next owner reclaims exchanged old generation");
+        let next_source_kappa = format!("blake3:{}", "6".repeat(64));
+        let producer =
+            uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerGuard::try_acquire(
+                &output,
+            )
+            .expect("next source owns completed root cleanup");
+        super::prepare_compiled_root_transaction_under_guard(
+            &producer,
+            &output,
+            &next_source_kappa,
+        )
+        .expect("old post-exchange marker is validated against generation A, not request B");
+        assert!(!output
+            .join(super::COMPILED_BUNDLE_STAGE_MARKER_FILE)
+            .exists());
+        drop(producer);
+        let retry = super::CompiledBundleStage::allocate(&output, &next_source_kappa)
+            .expect("next source owner reclaims exchanged old generation");
         assert_ne!(retry.path, stage.path);
         assert_eq!(
             std::fs::read(output.join("corpus.records")).expect("published corpus unchanged"),
-            b"new"
+            new_records
+        );
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn managed_bundle_bootstraps_legacy_completion_and_pins_absent_precedence_roots() {
+        let root = attention_provenance_test_dir("managed-bootstrap-reader-pins");
+        let compiled = root.join("compiled");
+        let current = compiled.join("teacher-attention-v2");
+        let composite = compiled.join("teacher-attention-v2-dense-v2");
+        write_completion_fixture(&current, b"legacy-current");
+        make_completion_fixture_graph_outputs_valid(&current, "legacy-current");
+        std::fs::remove_file(current.join(super::COMPILED_BUNDLE_COMPLETION_FILE))
+            .expect("simulate valid pre-#728 current bundle");
+        std::fs::remove_file(
+            current.join(uor_r4_graph_compiler::recorded_corpus::RECORDED_CORPUS_BINDING_FILE),
+        )
+        .expect("simulate bundle predating the recorded-corpus binding");
+
+        let read = super::acquire_managed_compiled_bundle_read(&compiled, "teacher", 2)
+            .expect("legacy current bundle bootstraps under common authority");
+        let resolved = read.resolved.as_ref().expect("current bundle resolves");
+        assert_eq!(resolved.physical_root, current);
+        super::validate_compiled_bundle_completion(&current)
+            .expect("bootstrapped completion validates")
+            .expect("completion was published");
+        assert!(
+            current
+                .join(uor_r4_graph_compiler::recorded_corpus::RECORDED_CORPUS_BINDING_FILE)
+                .is_file(),
+            "guarded bootstrap migrates the exact old corpus before completion"
+        );
+
+        let busy =
+            uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerGuard::try_acquire(
+                &composite,
+            )
+            .expect_err("absent preferred root stays BUSY while serving pins are live");
+        assert!(
+            uor_r4_graph_compiler::recorded_corpus::is_recorded_corpus_busy(&busy),
+            "{busy}"
+        );
+        read.pins.verify().expect("managed pins remain exact");
+        drop(read);
+        let contender =
+            uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerGuard::try_acquire(
+                &composite,
+            )
+            .expect("preferred-root writer proceeds after serving install releases pins");
+        drop(contender);
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn managed_common_writer_busy_is_transient_before_legacy_bootstrap() {
+        let root = attention_provenance_test_dir("managed-bootstrap-common-busy");
+        let compiled = root.join("compiled");
+        let current = compiled.join("teacher-attention-v2");
+        let composite = compiled.join("teacher-attention-v2-dense-v2");
+        write_completion_fixture(&current, b"legacy-current");
+        make_completion_fixture_graph_outputs_valid(&current, "legacy-current");
+        std::fs::remove_file(current.join(super::COMPILED_BUNDLE_COMPLETION_FILE))
+            .expect("simulate legacy completion absence");
+        std::fs::remove_file(
+            current.join(uor_r4_graph_compiler::recorded_corpus::RECORDED_CORPUS_BINDING_FILE),
+        )
+        .expect("simulate legacy binding absence");
+        let writer =
+            uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerGuard::try_acquire(
+                &composite,
+            )
+            .expect("direct preferred-root writer");
+        let error = match super::acquire_managed_compiled_bundle_read(&compiled, "teacher", 2) {
+            Ok(_) => panic!("startup/reload reader cannot inspect through a common writer"),
+            Err(error) => error,
+        };
+        assert!(super::source_compile_session_is_busy(&error), "{error}");
+        assert!(!current
+            .join(super::COMPILED_BUNDLE_COMPLETION_FILE)
+            .exists());
+        assert!(!current
+            .join(uor_r4_graph_compiler::recorded_corpus::RECORDED_CORPUS_BINDING_FILE)
+            .exists());
+        assert!(
+            std::fs::read_dir(&current)
+                .expect("legacy current inventory")
+                .all(|entry| !entry
+                    .expect("legacy entry")
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with(&format!(".{}.", super::COMPILED_BUNDLE_COMPLETION_FILE))),
+            "BUSY never publishes a completion temporary"
+        );
+        drop(writer);
+        let read = super::acquire_managed_compiled_bundle_read(&compiled, "teacher", 2)
+            .expect("quiescent exact retry bootstraps and pins");
+        assert!(read.resolved.is_some());
+        drop(read);
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn historical_markerless_sibling_has_a_durable_bounded_selection_witness() {
+        let root = attention_provenance_test_dir("historical-selection-witness");
+        let compiled = root.join("compiled");
+        let conventional = compiled.join("teacher");
+        let current = compiled.join("teacher-attention-v2");
+        let composite = compiled.join("teacher-attention-v2-dense-v2");
+        write_attention_binding(
+            &conventional,
+            &uor_r4_model_source::attention::AttentionOperatorSpec::standard_v1(),
+        );
+        let mut meta = [0u8; 25];
+        meta[0..8].copy_from_slice(&1u64.to_le_bytes());
+        meta[8..16].copy_from_slice(&1u64.to_le_bytes());
+        meta[16..24].copy_from_slice(&7u64.to_le_bytes());
+        meta[24] = 1;
+        let mut record = [0u8; 48];
+        record[4..8].copy_from_slice(&1u32.to_le_bytes());
+        record[20..24].copy_from_slice(&34u32.to_le_bytes());
+        record[24..28].copy_from_slice(&33u32.to_le_bytes());
+        record[28..32].copy_from_slice(&33u32.to_le_bytes());
+        record[36..40].copy_from_slice(&1u32.to_le_bytes());
+        record[40..44].copy_from_slice(&u32::MAX.to_le_bytes());
+        record[44..48].copy_from_slice(&u32::MAX.to_le_bytes());
+        std::fs::write(conventional.join("corpus.meta"), meta).expect("historical metadata");
+        std::fs::write(conventional.join("corpus.records"), record).expect("historical corpus");
+        std::fs::write(
+            conventional.join("tless_artifacts.bin"),
+            b"historical-teacher",
+        )
+        .expect("historical teacher");
+        std::fs::write(conventional.join("compiled.r4g1"), minimal_r4g1_bytes())
+            .expect("historical root graph fallback");
+        std::fs::write(conventional.join("compile_report.json"), b"{}\n")
+            .expect("historical root compile report");
+        let strict_error = super::compiled_bundle_file_kappas(&conventional)
+            .expect_err("new completion inventory never admits legacy root graph outputs");
+        assert!(strict_error.contains("unsupported entry"), "{strict_error}");
+        let roots = [conventional.clone(), current.clone(), composite];
+        let base = super::capture_compiled_bundle_selection_base(&roots, &current)
+            .expect("markerless historical sibling has a fixed-inventory witness");
+        let legacy = base
+            .iter()
+            .find_map(|entry| match &entry.generation {
+                super::CompiledBundleBaseGeneration::Legacy { files } => Some(files),
+                _ => None,
+            })
+            .expect("historical root is captured as a Legacy witness");
+        assert!(legacy.contains_key("compiled.r4g1"));
+        assert!(legacy.contains_key("compile_report.json"));
+        let pair = super::inspect_compiled_model_pair(&compiled, "teacher", 2)
+            .expect("historical pair is structurally readable");
+        let resolved = super::resolve_loadable_compiled_bundle(&pair, 2)
+            .expect("historical fallback resolves")
+            .expect("historical fallback is loadable");
+        assert_eq!(resolved.graph, conventional.join("compiled.r4g1"));
+        let source_kappa = format!("blake3:{}", "0".repeat(64));
+        let stage =
+            super::CompiledBundleStage::allocate_with_selection(&current, &source_kappa, &base)
+                .expect("new current stage can coexist with historical conventional root");
+        record[4..8].copy_from_slice(&2u32.to_le_bytes());
+        std::fs::write(conventional.join("corpus.records"), record)
+            .expect("supported sibling advances in the same directory");
+        let error = super::require_compiled_bundle_selection_base_unchanged(&base, &current)
+            .expect_err("content CAS detects historical sibling drift");
+        assert!(error.contains("selection changed"), "{error}");
+        assert!(stage.path.exists(), "private stage remains preserved");
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn three_root_base_reconciles_exact_nonselected_completion_residue() {
+        let root = attention_provenance_test_dir("selection-sibling-completion-residue");
+        let compiled = root.join("compiled");
+        let conventional = compiled.join("teacher");
+        let current = compiled.join("teacher-attention-v2");
+        let composite = compiled.join("teacher-attention-v2-dense-v2");
+        write_completion_fixture(&conventional, b"lower-sibling");
+        make_completion_fixture_graph_outputs_valid(&conventional, "lower-sibling");
+        let stable = conventional.join(super::COMPILED_BUNDLE_COMPLETION_FILE);
+        let temporary = conventional.join(format!(
+            ".{}.700.1.tmp",
+            super::COMPILED_BUNDLE_COMPLETION_FILE
+        ));
+        std::fs::hard_link(&stable, &temporary).expect("honest completion hard-link residue");
+        let roots = [conventional.clone(), current, composite];
+        let generations = roots
+            .iter()
+            .map(uor_r4_graph_compiler::recorded_corpus::RecordedCorpusRootGeneration::capture)
+            .collect::<Result<Vec<_>, _>>()
+            .expect("selection root generations");
+        let handoff =
+            uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerHandoff::try_acquire(
+                &generations,
+                0,
+                1,
+            )
+            .expect("three-root base authority");
+        let guard = super::recorded_handoff_guard_for_root(&handoff, &conventional)
+            .expect("conventional sibling guard");
+        super::prepare_compiled_selection_sibling_under_guard(guard, &conventional)
+            .expect("exact sibling residue recovers before base capture");
+        assert!(!temporary.exists());
+        super::validate_compiled_bundle_completion(&conventional)
+            .expect("stable sibling remains valid")
+            .expect("stable sibling completion remains present");
+        handoff.verify().expect("selection identities remain held");
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn compiled_handoff_refuses_same_directory_generation_b_before_promotion() {
+        let root = attention_provenance_test_dir("compiled-handoff-content-cas");
+        let compiled = root.join("compiled");
+        let conventional = compiled.join("teacher");
+        let current = compiled.join("teacher-attention-v2");
+        let composite = compiled.join("teacher-attention-v2-dense-v2");
+        let stage = compiled.join("private-stage");
+        write_completion_fixture(&current, b"generation-a");
+        std::fs::create_dir_all(&stage).expect("private stage");
+        std::fs::write(stage.join("stage-sentinel"), b"stage-a").expect("stage sentinel");
+        let selection_roots = [conventional.clone(), current.clone(), composite.clone()];
+        let base_a = super::capture_compiled_bundle_selection_base(&selection_roots, &current)
+            .expect("capture generation A");
+        let mut generations = selection_roots
+            .iter()
+            .map(uor_r4_graph_compiler::recorded_corpus::RecordedCorpusRootGeneration::capture)
+            .collect::<Result<Vec<_>, _>>()
+            .expect("capture selection directories");
+
+        // Commit generation B by atomically replacing its completion member
+        // after changing one stable payload, while preserving the directory
+        // inode captured above. Directory-only CAS must not miss this.
+        std::fs::write(current.join("tless_artifacts.bin"), b"generation-b")
+            .expect("generation B artifact");
+        let files = super::compiled_bundle_file_kappas(&current)
+            .expect("generation B completion inventory");
+        let completion =
+            super::compiled_bundle_completion_bytes(files).expect("generation B completion bytes");
+        let temporary = current.join(".completion-generation-b");
+        std::fs::write(&temporary, completion).expect("generation B completion temporary");
+        std::fs::rename(
+            &temporary,
+            current.join(super::COMPILED_BUNDLE_COMPLETION_FILE),
+        )
+        .expect("atomically commit generation B completion");
+        super::validate_compiled_bundle_completion(&current)
+            .expect("generation B validates")
+            .expect("generation B completion present");
+
+        let final_index = 1;
+        let stage_index = generations.len();
+        generations.push(
+            uor_r4_graph_compiler::recorded_corpus::RecordedCorpusRootGeneration::capture(&stage)
+                .expect("capture stage"),
+        );
+        let mut handoff =
+            uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerHandoff::try_acquire(
+                &generations,
+                final_index,
+                stage_index,
+            )
+            .expect("directory identities still match");
+        let error = handoff
+            .promote_stage_if(|_| {
+                super::require_compiled_bundle_selection_base_unchanged(&base_a, &current)
+                    .map_err(uor_r4_model_source::SourceUnavailable::new)
+            })
+            .expect_err("content CAS refuses stale generation A promotion");
+        assert!(error.to_string().contains("selection changed"), "{error}");
+        assert_eq!(
+            std::fs::read(current.join("tless_artifacts.bin")).expect("generation B preserved"),
+            b"generation-b"
+        );
+        assert_eq!(
+            std::fs::read(stage.join("stage-sentinel")).expect("stage preserved"),
+            b"stage-a"
+        );
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn compiled_source_publish_refuses_stage_b_in_each_lock_transition_gap() {
+        for scenario in [
+            "reader-to-producer",
+            "producer-to-handoff",
+            "marker-to-handoff",
+        ] {
+            let root = attention_provenance_test_dir(&format!("stage-content-cas-{scenario}"));
+            let mut bundle = compiled_source_bundle_publish_fixture(&root, "stage-a");
+            let final_output = bundle.final_output.clone();
+            let stage_path = bundle.working_output.clone();
+            let error = match scenario {
+                "reader-to-producer" => bundle.publish_with_transition_hooks(
+                    |stage| {
+                        advance_private_stage_generation(stage, b"stage-b-before-producer");
+                        Ok(())
+                    },
+                    |_| Ok(()),
+                ),
+                "producer-to-handoff" => bundle.publish_with_before_handoff(|stage| {
+                    advance_private_stage_generation(stage, b"stage-b-before-handoff");
+                    Ok(())
+                }),
+                "marker-to-handoff" => {
+                    let replacement = super::compiled_bundle_stage_marker_bytes(
+                        &bundle.final_output,
+                        &bundle.working_output,
+                        &format!("blake3:{}", "9".repeat(64)),
+                        &bundle.selection_base,
+                    )
+                    .expect("alternate canonical marker");
+                    bundle.publish_with_before_handoff(|stage| {
+                        let temporary = stage.join(".replacement-stage-marker");
+                        std::fs::write(&temporary, &replacement)
+                            .expect("alternate marker temporary");
+                        std::fs::rename(
+                            &temporary,
+                            stage.join(super::COMPILED_BUNDLE_STAGE_MARKER_FILE),
+                        )
+                        .expect("atomically replace marker");
+                        Ok(())
+                    })
+                }
+                _ => unreachable!(),
+            }
+            .expect_err("stage B is never promoted as stage A");
+            assert!(error.contains("changed"), "{scenario}: {error}");
+            assert!(
+                !final_output.exists(),
+                "{scenario}: absent final remains absent"
+            );
+            assert!(stage_path.exists(), "{scenario}: newer stage is preserved");
+            let _ = std::fs::remove_dir_all(root);
+        }
+    }
+
+    #[test]
+    fn compiled_source_publish_refuses_missing_or_conflicting_stage_binding_before_final_mutation()
+    {
+        for scenario in ["missing", "conflicting"] {
+            let root = attention_provenance_test_dir(&format!("publish-stage-binding-{scenario}"));
+            let mut bundle = compiled_source_bundle_publish_fixture(&root, "binding-a");
+            let final_output = bundle.final_output.clone();
+            let stage = bundle.working_output.clone();
+            let binding =
+                stage.join(uor_r4_graph_compiler::recorded_corpus::RECORDED_CORPUS_BINDING_FILE);
+            match scenario {
+                "missing" => std::fs::remove_file(&binding).expect("remove stage binding"),
+                "conflicting" => {
+                    std::fs::write(&binding, b"{}\n").expect("conflicting stage binding")
+                }
+                _ => unreachable!(),
+            }
+            let error = bundle
+                .publish()
+                .expect_err("invalid stage binding is terminal before final handoff");
+            assert!(
+                error.contains("binding") || error.contains("changed after"),
+                "{scenario}: {error}"
+            );
+            assert!(
+                !final_output.exists(),
+                "{scenario}: final namespace remains absent"
+            );
+            assert!(stage.exists(), "{scenario}: private evidence is preserved");
+            let _ = std::fs::remove_dir_all(root);
+        }
+    }
+
+    #[test]
+    fn compiled_source_publish_adopts_exact_stage_inode_for_fresh_and_refresh() {
+        for existing in [false, true] {
+            let root = attention_provenance_test_dir(if existing {
+                "production-handoff-refresh"
+            } else {
+                "production-handoff-fresh"
+            });
+            let mut bundle = compiled_source_bundle_publish_fixture_with_final(
+                &root,
+                "generation-b",
+                existing.then_some("generation-a"),
+            );
+            let final_output = bundle.final_output.clone();
+            let stage_path = bundle.working_output.clone();
+            let stage_before = std::fs::metadata(&stage_path).expect("stage inode before publish");
+            let final_before = existing
+                .then(|| std::fs::metadata(&final_output).expect("final-A inode before refresh"));
+            let handoff = bundle
+                .publish()
+                .expect("production handoff publishes stage B");
+            assert!(
+                handoff
+                    .final_guard()
+                    .protects_directory(&final_output)
+                    .expect("final guard identity"),
+                "returned authority owns the promoted final root"
+            );
+            let final_after = std::fs::metadata(&final_output).expect("promoted final inode");
+            assert!(
+                super::source_compile_lock_metadata_matches(&stage_before, &final_after),
+                "promoted final adopts the exact validated stage inode"
+            );
+            super::validate_compiled_bundle_completion(&final_output)
+                .expect("promoted completion validates")
+                .expect("promoted completion remains present");
+            if let Some(final_before) = final_before {
+                let displaced = std::fs::metadata(&stage_path).expect("old final displaced");
+                assert!(
+                    super::source_compile_lock_metadata_matches(&final_before, &displaced),
+                    "refresh exchange preserves the displaced last-good inode"
+                );
+            } else {
+                assert!(
+                    !stage_path.exists(),
+                    "fresh rename consumes the stage namespace"
+                );
+            }
+            let busy =
+                uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerGuard::try_acquire(
+                    &final_output,
+                )
+                .expect_err("final remains exclusively owned through serving installation");
+            assert!(
+                uor_r4_graph_compiler::recorded_corpus::is_recorded_corpus_busy(&busy),
+                "{busy}"
+            );
+            drop(handoff);
+            let _ = std::fs::remove_dir_all(root);
+        }
+    }
+
+    #[test]
+    fn serving_stage_reader_pin_blocks_cli_and_observation_writers() {
+        let root = attention_provenance_test_dir("serving-stage-pin-contention");
+        let bundle = compiled_source_bundle_publish_fixture(&root, "pinned-stage");
+        let stage = bundle.working_output.clone();
+        let busy =
+            uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerGuard::try_acquire(
+                &stage,
+            )
+            .expect_err("CLI/common producer is BUSY while serving stage pins are live");
+        assert!(
+            uor_r4_graph_compiler::recorded_corpus::is_recorded_corpus_busy(&busy),
+            "{busy}"
+        );
+        let observation =
+            match uor_r4_graph_compiler::observation::ObservationSession::acquire(&stage, 1) {
+                Ok(_) => panic!("observation writer is BUSY while serving stage pins are live"),
+                Err(error) => error,
+            };
+        assert!(
+            uor_r4_graph_compiler::recorded_corpus::is_recorded_corpus_busy(&observation),
+            "{observation}"
+        );
+        drop(bundle);
+        let producer =
+            uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerGuard::try_acquire(
+                &stage,
+            )
+            .expect("supported writer proceeds after serving pins are released");
+        drop(producer);
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn persisted_stage_a_base_never_adopts_after_final_b_commit() {
+        let root = attention_provenance_test_dir("persisted-stage-base-cas");
+        let compiled = root.join("compiled");
+        let conventional = compiled.join("teacher");
+        let current = compiled.join("teacher-attention-v2");
+        let composite = compiled.join("teacher-attention-v2-dense-v2");
+        write_completion_fixture(&current, b"final-a");
+        make_completion_fixture_graph_outputs_valid(&current, "final-a");
+        let roots = [conventional, current.clone(), composite];
+        let base_a = super::capture_compiled_bundle_selection_base(&roots, &current)
+            .expect("capture final A");
+        let source_kappa = format!("blake3:{}", "0".repeat(64));
+        let stage_a =
+            super::CompiledBundleStage::allocate_with_selection(&current, &source_kappa, &base_a)
+                .expect("persisted stage A");
+        let stage_path = stage_a.path.clone();
+        std::fs::write(stage_path.join("stage-a-sentinel"), b"preserve-stage-a")
+            .expect("stage A evidence");
+        drop(stage_a);
+
+        let final_b =
+            uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerGuard::try_acquire(
+                &current,
+            )
+            .expect("direct final-B writer");
+        final_b
+            .begin_compile_attempt()
+            .expect("final-B compile attempt");
+        std::fs::remove_file(current.join(super::COMPILED_BUNDLE_COMPLETION_FILE))
+            .expect("remove final-A completion");
+        std::fs::write(current.join("tless_artifacts.bin"), b"final-b").expect("final-B artifact");
+        super::publish_compiled_bundle_completion_under_guard(&final_b, &current)
+            .expect("final-B completion");
+        final_b
+            .finish_compile_attempt()
+            .expect("finish final-B attempt");
+        drop(final_b);
+        let base_b = super::capture_compiled_bundle_selection_base(&roots, &current)
+            .expect("capture final B");
+        let error =
+            super::CompiledBundleStage::allocate_with_selection(&current, &source_kappa, &base_b)
+                .expect_err("stage A marker cannot be adopted against base B");
+        assert!(error.contains("does not bind this exact"), "{error}");
+        assert_eq!(
+            std::fs::read(current.join("tless_artifacts.bin")).expect("final B preserved"),
+            b"final-b"
+        );
+        assert_eq!(
+            std::fs::read(stage_path.join("stage-a-sentinel")).expect("stage A preserved"),
+            b"preserve-stage-a"
         );
         let _ = std::fs::remove_dir_all(root);
     }
@@ -16213,7 +20054,7 @@ mod tests {
 
         let strict_error = super::validate_compiled_bundle_completion(&output)
             .expect_err("raw member hashing sees the unrecovered residue");
-        assert!(strict_error.contains("changed after"), "{strict_error}");
+        assert!(strict_error.contains("unsupported entry"), "{strict_error}");
         super::recover_managed_compiled_bundle_completion_temporaries(&root.join("compiled"))
             .expect("startup/reload inventory owner reclaims exact linked residue");
         assert!(!temporary.exists());
@@ -16950,6 +20791,85 @@ mod tests {
     }
 
     #[test]
+    fn cross_snapshot_refresh_refuses_before_private_stage_allocation() {
+        let root = attention_provenance_test_dir("cross-snapshot-refresh-stage-gate");
+        let compiled = root.join("compiled");
+        let conventional = compiled.join("teacher");
+        let current = compiled.join("teacher-attention-v2");
+        let composite = compiled.join("teacher-attention-v2-dense-v2");
+        write_completion_fixture(&conventional, b"generation-a");
+        make_completion_fixture_graph_outputs_valid(&conventional, "generation-a");
+        let source_a = super::read_optional_source_manifest_kappa_binding(&conventional)
+            .expect("read generation-A source binding")
+            .expect("generation-A source binding");
+        let source_b = format!("blake3:{}", "b".repeat(64));
+        assert_ne!(source_a, source_b);
+        let completion_before =
+            std::fs::read(conventional.join(super::COMPILED_BUNDLE_COMPLETION_FILE))
+                .expect("generation-A completion before refusal");
+        let preflight_before =
+            std::fs::read(conventional.join(super::SOURCE_COMPILE_PREFLIGHT_FILE))
+                .expect("generation-A preflight before refusal");
+        let binding_before =
+            std::fs::read(conventional.join(super::SOURCE_MANIFEST_KAPPA_BINDING_FILE))
+                .expect("generation-A source binding before refusal");
+
+        let roots = [conventional.clone(), current, composite];
+        let generations = roots
+            .iter()
+            .map(uor_r4_graph_compiler::recorded_corpus::RecordedCorpusRootGeneration::capture)
+            .collect::<Result<Vec<_>, _>>()
+            .expect("capture generation-A selection roots");
+        let handoff =
+            uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerHandoff::try_acquire(
+                &generations,
+                0,
+                1,
+            )
+            .expect("pin generation-A selection roots");
+        let error = super::require_compiled_refresh_source_snapshot(&conventional, &source_b)
+            .expect_err("generation B cannot allocate a stage derived from generation A");
+        assert!(error.contains("before private-stage allocation"), "{error}");
+        assert!(
+            !super::source_compile_staging_root(&compiled).exists(),
+            "cross-snapshot refusal creates no private-stage namespace"
+        );
+        assert_eq!(
+            std::fs::read(conventional.join(super::COMPILED_BUNDLE_COMPLETION_FILE))
+                .expect("generation-A completion after refusal"),
+            completion_before
+        );
+        assert_eq!(
+            std::fs::read(conventional.join(super::SOURCE_COMPILE_PREFLIGHT_FILE))
+                .expect("generation-A preflight after refusal"),
+            preflight_before
+        );
+        assert_eq!(
+            std::fs::read(conventional.join(super::SOURCE_MANIFEST_KAPPA_BINDING_FILE))
+                .expect("generation-A source binding after refusal"),
+            binding_before
+        );
+
+        super::require_compiled_refresh_source_snapshot(&conventional, &source_a)
+            .expect("generation A remains retryable after generation-B refusal");
+        let selection = super::capture_compiled_bundle_selection_base(&roots, &conventional)
+            .expect("capture unchanged generation-A selection");
+        handoff.verify().expect("generation-A roots remain exact");
+        drop(handoff);
+        let stage = super::CompiledBundleStage::allocate_with_selection(
+            &conventional,
+            &source_a,
+            &selection,
+        )
+        .expect("generation A can still allocate its private refresh stage");
+        assert!(stage
+            .path
+            .join(super::COMPILED_BUNDLE_STAGE_MARKER_FILE)
+            .is_file());
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn manifestless_tree_kappa_rejects_hidden_shards_and_binds_visible_weights() {
         let root = attention_provenance_test_dir("manifestless-hidden-shards");
         let source = root.join("source");
@@ -17377,6 +21297,8 @@ mod tests {
         );
         let dense = DenseOperatorSpec::gpt2_v2();
         write_dense_binding(&composite, &dense);
+        valid_attention_corpus_markers(&composite);
+        commit_test_recorded_corpus_binding(&composite);
         let report_path = composite.join("graph-cover/cover_report.json");
         let mut report: serde_json::Value = serde_json::from_slice(
             &std::fs::read(&report_path).expect("read cover report fixture"),

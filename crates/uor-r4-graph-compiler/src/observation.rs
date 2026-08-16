@@ -5482,6 +5482,26 @@ mod attention_operator_resume_tests {
     }
 
     #[test]
+    fn observation_session_rejects_any_planned_output_residue_before_root_mutation() {
+        let dir = TestDir::new("observation-planned-output-preflight");
+        let residue = dir.path().join(format!(
+            "{}{}--77.3.writing",
+            crate::recorded_corpus::PLANNED_OUTPUT_RESERVED_PREFIX,
+            crate::recorded_corpus::PlannedOutputMember::Records.stable_name()
+        ));
+        fs::write(&residue, b"partial compile output").expect("planned-output residue");
+        let before = dir.bytes();
+
+        let error = match ObservationSession::acquire(dir.path(), 1) {
+            Ok(_) => panic!("observation sessions own an empty planned-output scope"),
+            Err(error) => error,
+        };
+        assert!(error.reason.contains("foreign member"), "{error}");
+        assert_eq!(dir.bytes(), before, "preflight refusal mutated the root");
+        assert!(!dir.path().join(MANIFEST_FILE).exists());
+    }
+
+    #[test]
     fn one_session_never_issues_stale_or_concurrent_writers() {
         let dir = TestDir::new("single-writer-lease");
         let session = ObservationSession::acquire(dir.path(), 1).expect("acquire session");

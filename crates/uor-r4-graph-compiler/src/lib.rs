@@ -193,18 +193,47 @@ fn explicit_tokenizer_cid(path: Option<&std::path::Path>) -> Result<[u8; 32], So
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn preflight_graph_compile_corpus(
-    options: &GraphCompileOptions,
-) -> Result<(recorded_corpus::RecordedCorpusSnapshot, compiler::Corpus), SourceUnavailable> {
-    preflight_graph_compile_corpus_with_hooks(options, || {}, || {})
+struct PreparedGraphCompileCorpus {
+    meta_bytes: Vec<u8>,
+    records_bytes: Vec<u8>,
+    corpus: compiler::Corpus,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
+fn preflight_graph_compile_corpus(
+    options: &GraphCompileOptions,
+) -> Result<PreparedGraphCompileCorpus, SourceUnavailable> {
+    let (mut snapshot, _source_guard) =
+        recorded_corpus::open_stream_for_derivation(&options.corpus_meta, &options.corpus_recs)?;
+    recorded_corpus::require_execution_identity(
+        &snapshot.execution,
+        options.attention_operator.as_ref(),
+        options.dense_operator.as_ref(),
+        "graph-compile provenance",
+    )?;
+    let (records_bytes, hidden_bytes) = snapshot.materialize_compiler_corpus_bytes()?;
+    let meta_bytes = snapshot.meta_bytes.clone();
+    let corpus = compiler::load_corpus_bytes(&meta_bytes, &records_bytes, hidden_bytes.as_deref())
+        .ok_or_else(|| {
+            SourceUnavailable::new(format!(
+                "corpus is incomplete at {}/{}; run compile until it is complete",
+                options.corpus_meta.display(),
+                options.corpus_recs.display()
+            ))
+        })?;
+    Ok(PreparedGraphCompileCorpus {
+        meta_bytes,
+        records_bytes,
+        corpus,
+    })
+}
+
+#[cfg(all(not(target_arch = "wasm32"), test))]
 fn preflight_graph_compile_corpus_with_hooks<F, G>(
     options: &GraphCompileOptions,
     after_provenance_capture: F,
     after_corpus_capture: G,
-) -> Result<(recorded_corpus::RecordedCorpusSnapshot, compiler::Corpus), SourceUnavailable>
+) -> Result<PreparedGraphCompileCorpus, SourceUnavailable>
 where
     F: FnOnce(),
     G: FnOnce(),
@@ -233,7 +262,11 @@ where
             options.corpus_recs.display()
         ))
     })?;
-    Ok((snapshot, corpus))
+    Ok(PreparedGraphCompileCorpus {
+        meta_bytes: snapshot.meta_bytes,
+        records_bytes: snapshot.records_bytes,
+        corpus,
+    })
 }
 
 /// Run the full multiresolution graph compilation pipeline (Option 1).
@@ -253,7 +286,8 @@ pub fn compile(args: &[String]) -> Result<(), SourceUnavailable> {
     // Capture corpus bytes and their exact attention+dense execution identity
     // as one no-following transaction. This lower boundary rejects caller
     // relabeling and inter-phase generation swaps before output mutation.
-    let (recorded_corpus, corpus) = preflight_graph_compile_corpus(&options)?;
+    let recorded_corpus = preflight_graph_compile_corpus(&options)?;
+    let corpus = &recorded_corpus.corpus;
     let env_jobs = std::env::var("R4_COMPILER_THREADS").ok();
     let jobs_config = jobs_config::CompilerJobsConfig::resolve(options.jobs, env_jobs.as_deref())
         .ok_or_else(|| {
@@ -294,9 +328,9 @@ pub fn compile(args: &[String]) -> Result<(), SourceUnavailable> {
         "graph-compiler: inducing (depths {}, k0 {}, regions budget {}, memory budget {} MiB)...",
         config.depths, config.k0, config.regions_budget, options.memory_budget_mb
     );
-    let (train_positions, held_out_positions) = induction::split_positions(&corpus);
-    let train = induction::build_observations(&artifacts, &corpus, &train_positions);
-    let held_out = induction::build_observations(&artifacts, &corpus, &held_out_positions);
+    let (train_positions, held_out_positions) = induction::split_positions(corpus);
+    let train = induction::build_observations(&artifacts, corpus, &train_positions);
+    let held_out = induction::build_observations(&artifacts, corpus, &held_out_positions);
     let induced = induction::induce_cover(&train, &config, &artifact_kappa, &corpus_kappa)
         .ok_or_else(|| {
             SourceUnavailable::new("cover induction needs at least one train observation")
@@ -1185,8 +1219,14 @@ mod tokenizer_observe_tests {
     fn graph_compile_preflight_rejects_dense_absence_and_wrong_era_before_mutation() {
         let root = unique_path("graph-compile-recorded-dense-v2");
         std::fs::create_dir_all(&root).expect("corpus root");
-        std::fs::write(root.join("corpus.meta"), b"captured metadata").expect("metadata");
-        std::fs::write(root.join("corpus.records"), b"captured records").expect("records");
+        let meta = root.join("corpus.meta");
+        let records = root.join("corpus.records");
+        let mut meta_bytes = [0u8; 25];
+        meta_bytes[0..8].copy_from_slice(&1u64.to_le_bytes());
+        meta_bytes[8..16].copy_from_slice(&1u64.to_le_bytes());
+        meta_bytes[24] = 1;
+        std::fs::write(&meta, meta_bytes).expect("metadata");
+        std::fs::write(&records, [0u8; 48]).expect("records");
         write_execution_sidecar(
             &root.join(recorded_corpus::ATTENTION_OPERATOR_BINDING_FILE),
             &uor_r4_model_source::attention::AttentionOperatorSpec::learned_absolute_v2(),
@@ -1195,6 +1235,12 @@ mod tokenizer_observe_tests {
             &root.join(recorded_corpus::DENSE_OPERATOR_BINDING_FILE),
             &uor_r4_model_source::dense::DenseOperatorSpec::gpt2_v2(),
         );
+        let guard =
+            recorded_corpus::RecordedCorpusProducerGuard::try_acquire(&root).expect("source guard");
+        guard.begin_compile_attempt().expect("source attempt");
+        recorded_corpus::publish_binding(&guard, &meta, &records).expect("source binding");
+        guard.finish_compile_attempt().expect("finish source");
+        drop(guard);
         let output = unique_path("graph-compile-recorded-dense-output");
         std::fs::create_dir_all(&output).expect("output root");
         std::fs::write(output.join("sentinel"), b"last-good output").expect("sentinel");

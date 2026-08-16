@@ -418,7 +418,7 @@ fn planned_output_member(
         .file_name()
         .and_then(|name| name.to_str())
         .ok_or_else(|| SourceUnavailable::new(format!("{context} stable filename is not UTF-8")))?;
-    PlannedOutputMember::ALL
+    PlannedOutputMember::REGISTERED
         .into_iter()
         .find(|member| member.stable_name() == stable_name)
         .ok_or_else(|| {
@@ -434,9 +434,32 @@ fn preflight_guarded_planned_file(
     expected: &[u8],
     context: &str,
 ) -> Result<bool, SourceUnavailable> {
-    let _ = planned_output_member(path, context)?;
-    guard.preflight_planned_output_scope(&PlannedOutputMember::ALL)?;
-    require_existing_file_matches_if_present(path, Some(expected), context)
+    preflight_guarded_planned_file_in_scope(
+        guard,
+        path,
+        expected,
+        context,
+        &PlannedOutputMember::ALL,
+    )
+}
+
+fn preflight_guarded_planned_file_in_scope(
+    guard: &uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerGuard,
+    path: &Path,
+    expected: &[u8],
+    context: &str,
+    allowed: &[PlannedOutputMember],
+) -> Result<bool, SourceUnavailable> {
+    let member = planned_output_member(path, context)?;
+    guard.preflight_planned_output_scope(allowed)?;
+    let max_bytes = u64::try_from(expected.len())
+        .map_err(|_| SourceUnavailable::new(format!("{context} length exceeds u64")))?;
+    guard.verify_optional_owned_entry_bytes(
+        std::ffi::OsStr::new(member.stable_name()),
+        expected,
+        max_bytes,
+        context,
+    )
 }
 
 fn preflight_guarded_planned_absence(
@@ -477,86 +500,318 @@ fn publish_guarded_planned_file(
     expected: &[u8],
     context: &str,
 ) -> Result<(), SourceUnavailable> {
+    publish_guarded_planned_file_with_after_sync(
+        guard,
+        path,
+        expected,
+        context,
+        &PlannedOutputMember::ALL,
+        |_| Ok(()),
+    )
+}
+
+/// Testable crash boundary for deterministic planned members. Returning an
+/// error from `after_sync` models process death after the complete staging
+/// inode is durable but before its atomic no-clobber publication. The staging
+/// inode deliberately remains for the exact guarded retry to reclaim.
+fn publish_guarded_planned_file_with_after_sync<F>(
+    guard: &uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerGuard,
+    path: &Path,
+    expected: &[u8],
+    context: &str,
+    allowed: &[PlannedOutputMember],
+    after_sync: F,
+) -> Result<(), SourceUnavailable>
+where
+    F: FnOnce(&Path) -> Result<(), SourceUnavailable>,
+{
     let member = planned_output_member(path, context)?;
-    guard.preflight_planned_output_scope(&PlannedOutputMember::ALL)?;
-    if require_existing_file_matches_if_present(path, Some(expected), context)? {
+    guard.preflight_planned_output_scope(allowed)?;
+    let max_bytes = u64::try_from(expected.len())
+        .map_err(|_| SourceUnavailable::new(format!("{context} length exceeds u64")))?;
+    let stable_name = std::ffi::OsStr::new(member.stable_name());
+    if guard.verify_optional_owned_entry_bytes(stable_name, expected, max_bytes, context)? {
         guard.reclaim_planned_output_residues(member)?;
-        return sync_compile_output_directory(guard.root());
+        guard.sync_owned_root()?;
+        return guard.verify_owned_root();
     }
     guard.reclaim_planned_output_residues(member)?;
 
-    let stable_name = member.stable_name();
-    let staging = loop {
-        let sequence = PLANNED_OUTPUT_TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed);
-        let candidate = guard.root().join(format!(
-            "{PLANNED_OUTPUT_RESERVED_PREFIX}{stable_name}--{}.{}.writing",
-            std::process::id(),
-            sequence
-        ));
-        let mut options = std::fs::OpenOptions::new();
-        options.write(true).create_new(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-
-            options
-                .mode(0o600)
-                .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW | libc::O_NONBLOCK);
-        }
-        match options.open(&candidate) {
-            Ok(mut file) => {
-                file.write_all(expected)
-                    .and_then(|()| file.sync_all())
-                    .map_err(|error| {
-                        SourceUnavailable::new(format!(
-                            "{context} staging {} cannot be durably written: {error}",
-                            candidate.display()
-                        ))
-                    })?;
-                break candidate;
-            }
-            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
-            Err(error) => return Err(SourceUnavailable::new(error)),
-        }
-    };
+    let sequence = PLANNED_OUTPUT_TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+    let staging_name = format!(
+        "{PLANNED_OUTPUT_RESERVED_PREFIX}{}--{}.{}.writing",
+        member.stable_name(),
+        std::process::id(),
+        sequence
+    );
+    let staging_leaf = std::ffi::OsStr::new(&staging_name);
+    let staging = guard.root().join(staging_leaf);
+    let mut file = guard.create_new_owned_entry(staging_leaf)?;
+    file.write_all(expected)
+        .and_then(|()| file.sync_all())
+        .map_err(|error| {
+            SourceUnavailable::new(format!(
+                "{context} staging {} cannot be durably written: {error}",
+                staging.display()
+            ))
+        })?;
+    drop(file);
     guard.verify_owned_root()?;
-    match std::fs::hard_link(&staging, path) {
-        Ok(()) => {}
-        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-            let published =
-                read_optional_regular_file_nofollow(path, context)?.ok_or_else(|| {
-                    SourceUnavailable::new(format!(
-                        "{context} stable path {} appeared and disappeared",
-                        path.display()
-                    ))
-                })?;
-            if published != expected {
-                return Err(SourceUnavailable::new(format!(
-                    "{context} stable path {} appeared with conflicting bytes",
-                    path.display()
-                )));
-            }
-        }
-        Err(error) => return Err(SourceUnavailable::new(error)),
-    }
-    std::fs::remove_file(&staging).map_err(SourceUnavailable::new)?;
-    sync_compile_output_directory(guard.root())?;
-    let published = read_optional_regular_file_nofollow(path, context)?.ok_or_else(|| {
-        SourceUnavailable::new(format!(
-            "{context} stable path {} disappeared after publication",
-            path.display()
-        ))
-    })?;
-    if published != expected {
-        return Err(SourceUnavailable::new(format!(
-            "{context} stable path {} does not contain the exact planned bytes",
-            path.display()
-        )));
-    }
+    after_sync(&staging)?;
+    guard.link_owned_entry(staging_leaf, stable_name)?;
+    guard.unlink_owned_entry(staging_leaf)?;
+    guard.sync_owned_root()?;
+    guard.verify_owned_entry_bytes(stable_name, expected, max_bytes, context)?;
     guard.verify_owned_root()
 }
 
-struct SourceCorpusSession {
+fn stream_regular_file_summary_nofollow(
+    path: &Path,
+    context: &str,
+) -> Result<
+    Option<uor_r4_graph_compiler::recorded_corpus::RecordedCorpusMemberSummary>,
+    SourceUnavailable,
+> {
+    let mut options = std::fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+
+        options.custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW | libc::O_NONBLOCK);
+    }
+    let mut file = match options.open(path) {
+        Ok(file) => file,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => {
+            return Err(SourceUnavailable::new(format!(
+                "{context} {} cannot be streamed without following links: {error}",
+                path.display()
+            )));
+        }
+    };
+    let initial_file = file.metadata().map_err(SourceUnavailable::new)?;
+    let initial_path = std::fs::symlink_metadata(path).map_err(SourceUnavailable::new)?;
+    if !initial_file.file_type().is_file()
+        || !initial_path.file_type().is_file()
+        || !opened_file_identity_matches(&initial_path, &initial_file)
+    {
+        return Err(SourceUnavailable::new(format!(
+            "{context} {} is not one regular non-symlink inode",
+            path.display()
+        )));
+    }
+    let captured_length = initial_file.len();
+    let mut remaining = captured_length;
+    let mut hasher = blake3::Hasher::new();
+    let mut buffer = [0u8; 64 * 1024];
+    while remaining != 0 {
+        let limit = usize::try_from(remaining.min(buffer.len() as u64))
+            .map_err(|_| SourceUnavailable::new(format!("{context} length overflows usize")))?;
+        let count = file
+            .read(&mut buffer[..limit])
+            .map_err(SourceUnavailable::new)?;
+        if count == 0 {
+            return Err(SourceUnavailable::new(format!(
+                "{context} {} ended before its captured {captured_length}-byte length",
+                path.display()
+            )));
+        }
+        hasher.update(&buffer[..count]);
+        remaining -= count as u64;
+    }
+    let mut extra = [0u8; 1];
+    if file.read(&mut extra).map_err(SourceUnavailable::new)? != 0 {
+        return Err(SourceUnavailable::new(format!(
+            "{context} {} grew beyond its captured {captured_length}-byte length",
+            path.display()
+        )));
+    }
+    let final_file = file.metadata().map_err(SourceUnavailable::new)?;
+    let final_path = std::fs::symlink_metadata(path).map_err(SourceUnavailable::new)?;
+    if !final_file.file_type().is_file()
+        || !final_path.file_type().is_file()
+        || !opened_file_generation_matches(&initial_file, &final_file)
+        || !opened_file_identity_matches(&final_path, &final_file)
+    {
+        return Err(SourceUnavailable::new(format!(
+            "{context} {} changed generation while it was streamed",
+            path.display()
+        )));
+    }
+    Ok(Some(
+        uor_r4_graph_compiler::recorded_corpus::RecordedCorpusMemberSummary {
+            length: captured_length,
+            blake3: format!("blake3:{}", hasher.finalize().to_hex()),
+        },
+    ))
+}
+
+fn preflight_guarded_planned_stream(
+    guard: &uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerGuard,
+    path: &Path,
+    expected: Option<&uor_r4_graph_compiler::recorded_corpus::RecordedCorpusMemberSummary>,
+    context: &str,
+) -> Result<bool, SourceUnavailable> {
+    preflight_guarded_planned_stream_in_scope(
+        guard,
+        path,
+        expected,
+        context,
+        &PlannedOutputMember::ALL,
+    )
+}
+
+fn preflight_guarded_planned_stream_in_scope(
+    guard: &uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerGuard,
+    path: &Path,
+    expected: Option<&uor_r4_graph_compiler::recorded_corpus::RecordedCorpusMemberSummary>,
+    context: &str,
+    allowed: &[PlannedOutputMember],
+) -> Result<bool, SourceUnavailable> {
+    let member = planned_output_member(path, context)?;
+    guard.preflight_planned_output_scope(allowed)?;
+    if let Some(expected) = expected {
+        return guard.verify_optional_owned_entry_summary(
+            std::ffi::OsStr::new(member.stable_name()),
+            expected,
+            context,
+        );
+    }
+    let actual = stream_regular_file_summary_nofollow(path, context)?;
+    if actual.is_some() {
+        return Err(SourceUnavailable::new(format!(
+            "{context} {} is present but the planned generation declares typed absence",
+            path.display()
+        )));
+    }
+    if guard.has_planned_output_residue(member)? {
+        return Err(SourceUnavailable::new(format!(
+            "{context} has staged bytes but the planned generation declares this member absent"
+        )));
+    }
+    Ok(true)
+}
+
+/// Stream one deterministic large member through a guarded owner-only stage.
+/// The source is never accumulated in memory; the staged length/digest must
+/// equal the predeclared source summary before the stable hard-link appears.
+fn publish_guarded_planned_stream<R: Read + Seek>(
+    guard: &uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerGuard,
+    path: &Path,
+    source: &mut R,
+    expected: &uor_r4_graph_compiler::recorded_corpus::RecordedCorpusMemberSummary,
+    context: &str,
+) -> Result<(), SourceUnavailable> {
+    publish_guarded_planned_stream_with_before_link(guard, path, source, expected, context, |_| {
+        Ok(())
+    })
+}
+
+fn publish_guarded_planned_stream_with_before_link<R, F>(
+    guard: &uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerGuard,
+    path: &Path,
+    source: &mut R,
+    expected: &uor_r4_graph_compiler::recorded_corpus::RecordedCorpusMemberSummary,
+    context: &str,
+    before_link: F,
+) -> Result<(), SourceUnavailable>
+where
+    R: Read + Seek,
+    F: FnOnce(&Path) -> Result<(), SourceUnavailable>,
+{
+    let member = planned_output_member(path, context)?;
+    if preflight_guarded_planned_stream(guard, path, Some(expected), context)? {
+        guard.reclaim_planned_output_residues(member)?;
+        guard.sync_owned_root()?;
+        return guard.verify_owned_root();
+    }
+    guard.reclaim_planned_output_residues(member)?;
+
+    let stable_name = std::ffi::OsStr::new(member.stable_name());
+    let sequence = PLANNED_OUTPUT_TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+    let staging_name = format!(
+        "{PLANNED_OUTPUT_RESERVED_PREFIX}{}--{}.{}.writing",
+        member.stable_name(),
+        std::process::id(),
+        sequence
+    );
+    let staging_leaf = std::ffi::OsStr::new(&staging_name);
+    let staging = guard.root().join(staging_leaf);
+    let mut staging_file = guard.create_new_owned_entry(staging_leaf)?;
+    let staging_initial = staging_file.metadata().map_err(SourceUnavailable::new)?;
+
+    source
+        .seek(SeekFrom::Start(0))
+        .map_err(SourceUnavailable::new)?;
+    let mut length = 0u64;
+    let mut remaining = expected.length;
+    let mut hasher = blake3::Hasher::new();
+    let mut buffer = [0u8; 64 * 1024];
+    while remaining != 0 {
+        let limit = usize::try_from(remaining.min(buffer.len() as u64))
+            .map_err(|_| SourceUnavailable::new(format!("{context} length overflows usize")))?;
+        let count = source
+            .read(&mut buffer[..limit])
+            .map_err(SourceUnavailable::new)?;
+        if count == 0 {
+            return Err(SourceUnavailable::new(format!(
+                "{context} source ended before its declared {}-byte length",
+                expected.length
+            )));
+        }
+        staging_file
+            .write_all(&buffer[..count])
+            .map_err(SourceUnavailable::new)?;
+        length = length.checked_add(count as u64).ok_or_else(|| {
+            SourceUnavailable::new(format!("{context} staged length overflows u64"))
+        })?;
+        hasher.update(&buffer[..count]);
+        remaining -= count as u64;
+    }
+    let mut extra = [0u8; 1];
+    if source.read(&mut extra).map_err(SourceUnavailable::new)? != 0 {
+        return Err(SourceUnavailable::new(format!(
+            "{context} source grew beyond its declared {}-byte length",
+            expected.length
+        )));
+    }
+    staging_file.sync_all().map_err(SourceUnavailable::new)?;
+    let staged = uor_r4_graph_compiler::recorded_corpus::RecordedCorpusMemberSummary {
+        length,
+        blake3: format!("blake3:{}", hasher.finalize().to_hex()),
+    };
+    if &staged != expected {
+        return Err(SourceUnavailable::new(format!(
+            "{context} source stream changed from its predeclared length or BLAKE3 while staged"
+        )));
+    }
+    let staging_final = staging_file.metadata().map_err(SourceUnavailable::new)?;
+    if !staging_final.file_type().is_file()
+        || staging_final.len() != expected.length
+        || !opened_file_identity_matches(&staging_initial, &staging_final)
+    {
+        return Err(SourceUnavailable::new(format!(
+            "{context} staging {} changed identity, length, or generation before publication",
+            staging.display()
+        )));
+    }
+    drop(staging_file);
+    guard.verify_owned_entry_summary(staging_leaf, expected, context)?;
+    guard.verify_owned_root()?;
+    before_link(&staging)?;
+    guard.link_owned_entry(staging_leaf, stable_name)?;
+    guard.unlink_owned_entry(staging_leaf)?;
+    guard.sync_owned_root()?;
+    guard.verify_owned_entry_summary(stable_name, expected, context)?;
+    guard.verify_owned_root()
+}
+
+/// Exclusive source-corpus transaction retained across one complete teacher
+/// compile. Managed server callers may acquire this before publishing their
+/// stage-local source identity and pass it into `compile_hugging_face_with_session`
+/// so P/K and corpus/artifact publication share one common producer interval.
+pub struct SourceCorpusSession {
     file: std::fs::File,
     recorded_corpus: Option<uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerGuard>,
 }
@@ -624,6 +879,16 @@ fn source_corpus_session(output: &Path) -> Result<SourceCorpusSession, SourceUna
     })
 }
 
+/// Acquire the source-specific outer session followed by the common recorded-
+/// corpus producer guard for an already chosen output root.
+pub fn acquire_source_corpus_session(
+    output: &Path,
+) -> Result<SourceCorpusSession, SourceUnavailable> {
+    let mut session = source_corpus_session(output)?;
+    session.acquire_recorded_corpus(output)?;
+    Ok(session)
+}
+
 impl SourceCorpusSession {
     fn release_in_order<F>(&mut self, after_common_release: F)
     where
@@ -663,7 +928,7 @@ impl SourceCorpusSession {
         })
     }
 
-    fn recorded_corpus_guard(
+    pub fn recorded_corpus_guard(
         &self,
     ) -> Result<
         &uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerGuard,
@@ -1360,16 +1625,30 @@ where
         )));
     }
 
-    let mut bytes = Vec::new();
-    file.read_to_end(&mut bytes).map_err(|error| {
+    let captured_len = usize::try_from(opened_metadata.len()).map_err(|_| {
         SourceUnavailable::new(format!(
-            "{context} {} cannot be read: {error}",
+            "{context} {} length cannot be represented on this host",
             path.display()
         ))
     })?;
-    if opened_metadata.len() != bytes.len() as u64 {
+    let mut bytes = Vec::new();
+    bytes.try_reserve_exact(captured_len).map_err(|error| {
+        SourceUnavailable::new(format!(
+            "{context} {} cannot reserve {captured_len} bytes: {error}",
+            path.display()
+        ))
+    })?;
+    bytes.resize(captured_len, 0);
+    file.read_exact(&mut bytes).map_err(|error| {
+        SourceUnavailable::new(format!(
+            "{context} {} cannot read its captured {captured_len}-byte generation: {error}",
+            path.display()
+        ))
+    })?;
+    let mut extra = [0u8; 1];
+    if file.read(&mut extra).map_err(SourceUnavailable::new)? != 0 {
         return Err(SourceUnavailable::new(format!(
-            "{context} {} changed length while its bytes were read",
+            "{context} {} grew beyond its captured length while its bytes were read",
             path.display()
         )));
     }
@@ -1687,6 +1966,16 @@ fn require_matching_compiled_attention_operator(
     )))
 }
 
+fn canonical_attention_operator_bytes(
+    requested: &AttentionOperatorSpec,
+) -> Result<Vec<u8>, SourceUnavailable> {
+    let requested =
+        validate_attention_operator(requested, "proposed teacher attention-operator binding")?;
+    let mut bytes = serde_json::to_vec_pretty(&requested).map_err(SourceUnavailable::new)?;
+    bytes.push(b'\n');
+    Ok(bytes)
+}
+
 fn publish_attention_operator_binding(
     output: &Path,
     requested: &AttentionOperatorSpec,
@@ -1699,8 +1988,7 @@ fn publish_attention_operator_binding(
 
     std::fs::create_dir_all(output).map_err(SourceUnavailable::new)?;
     let path = output.join(ATTENTION_OPERATOR_BINDING_FILE);
-    let mut bytes = serde_json::to_vec_pretty(&requested).map_err(SourceUnavailable::new)?;
-    bytes.push(b'\n');
+    let bytes = canonical_attention_operator_bytes(&requested)?;
     let temporary = loop {
         let sequence = ATTENTION_OPERATOR_TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed);
         let candidate = output.join(format!(
@@ -1946,6 +2234,15 @@ fn require_matching_compiled_dense_operator(
     )))
 }
 
+fn canonical_dense_operator_bytes(
+    requested: &DenseOperatorSpec,
+) -> Result<Vec<u8>, SourceUnavailable> {
+    let requested = validate_dense_operator(requested, "proposed teacher dense-operator binding")?;
+    let mut bytes = serde_json::to_vec_pretty(&requested).map_err(SourceUnavailable::new)?;
+    bytes.push(b'\n');
+    Ok(bytes)
+}
+
 fn publish_dense_operator_binding(
     output: &Path,
     requested: &DenseOperatorSpec,
@@ -1957,8 +2254,7 @@ fn publish_dense_operator_binding(
 
     std::fs::create_dir_all(output).map_err(SourceUnavailable::new)?;
     let path = output.join(DENSE_OPERATOR_BINDING_FILE);
-    let mut bytes = serde_json::to_vec_pretty(&requested).map_err(SourceUnavailable::new)?;
-    bytes.push(b'\n');
+    let bytes = canonical_dense_operator_bytes(&requested)?;
     let temporary = loop {
         let sequence = DENSE_OPERATOR_TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed);
         let candidate = output.join(format!(
@@ -2999,12 +3295,17 @@ pub fn observe_command(args: &[String]) -> Result<(), SourceUnavailable> {
             &state_path,
             &merged_path,
         )?;
-        let captured = uor_r4_graph_compiler::recorded_corpus::capture(&state_path, &merged_path)?;
+        let captured = uor_r4_graph_compiler::recorded_corpus::open_stream_under_guard(
+            session.recorded_corpus_guard(),
+            &state_path,
+            &merged_path,
+        )?;
         if captured.binding_cid.as_deref() != Some(binding_cid.as_str()) {
             return Err(SourceUnavailable::new(
-                "raw observation binding changed during exact post-publication capture",
+                "raw observation binding changed during bounded post-publication verification",
             ));
         }
+        captured.verify_generation()?;
         println!(
             "observe complete: {} records at {}",
             summary.records,
@@ -3408,12 +3709,17 @@ fn finish_observe_text_report(
             &state_path,
             &merged_path,
         )?;
-        let captured = uor_r4_graph_compiler::recorded_corpus::capture(&state_path, &merged_path)?;
+        let captured = uor_r4_graph_compiler::recorded_corpus::open_stream_under_guard(
+            session.recorded_corpus_guard(),
+            &state_path,
+            &merged_path,
+        )?;
         if captured.binding_cid.as_deref() != Some(binding_cid.as_str()) {
             return Err(SourceUnavailable::new(
-                "text observation binding changed during exact post-publication capture",
+                "text observation binding changed during bounded post-publication verification",
             ));
         }
+        captured.verify_generation()?;
         println!(
             "observe-text complete: merged κ {} at {}",
             report
@@ -3696,7 +4002,7 @@ pub fn cover_command(args: &[String]) -> Result<(), SourceUnavailable> {
         options.corpus_recs.clone()
     };
 
-    let recorded_corpus = recorded_corpus_snapshot(&corpus_meta_path, &corpus_recs_path)?;
+    let recorded_corpus = recorded_compiler_corpus(&corpus_meta_path, &corpus_recs_path)?;
     require_cover_recorded_execution_identity(&options, &recorded_corpus.execution)?;
     // #450: resolve and announce the inputs *before* the long work, so the
     // run says which teacher container it actually read. `--artifacts`
@@ -3716,18 +4022,7 @@ pub fn cover_command(args: &[String]) -> Result<(), SourceUnavailable> {
     let recs_bytes = recorded_corpus.records_bytes;
     let corpus_kappa = repro::corpus_stream_kappa(&meta_bytes, &recs_bytes);
     repro::announce_corpus(&corpus_meta_path, &corpus_recs_path, &corpus_kappa);
-    let corpus = compiler::load_corpus_bytes(
-        &meta_bytes,
-        &recs_bytes,
-        recorded_corpus.hidden_bytes.as_deref(),
-    )
-    .ok_or_else(|| {
-        SourceUnavailable::new(format!(
-            "corpus is incomplete at {}/{}; run compile until it is complete",
-            corpus_meta_path.display(),
-            corpus_recs_path.display()
-        ))
-    })?;
+    let corpus = recorded_corpus.corpus;
 
     let config = cover::CoverConfig {
         depths: options.depths,
@@ -4146,12 +4441,6 @@ pub fn score_command(args: &[String]) -> Result<(), SourceUnavailable> {
         options.corpus_recs.clone()
     };
 
-    let corpus_meta = corpus_meta_path
-        .to_str()
-        .ok_or_else(|| SourceUnavailable::new("corpus metadata path is not UTF-8"))?;
-    let corpus_recs = corpus_recs_path
-        .to_str()
-        .ok_or_else(|| SourceUnavailable::new("corpus records path is not UTF-8"))?;
     // #450: resolve and announce the inputs *before* the long work, so the
     // run says which teacher container it actually read. `--artifacts`
     // defaults to a shared mutable path that helper scripts overwrite.
@@ -4166,21 +4455,12 @@ pub fn score_command(args: &[String]) -> Result<(), SourceUnavailable> {
     })?;
     let artifact_kappa = repro::container_kappa(&artifact_container);
     repro::announce_teacher_container(&options.artifacts, &artifact_kappa);
-    let meta_bytes = std::fs::read(&corpus_meta_path).map_err(|error| {
-        SourceUnavailable::new(format!("{}: {error}", corpus_meta_path.display()))
-    })?;
-    let recs_bytes = std::fs::read(&corpus_recs_path).map_err(|error| {
-        SourceUnavailable::new(format!("{}: {error}", corpus_recs_path.display()))
-    })?;
+    let recorded_corpus = recorded_compiler_corpus(&corpus_meta_path, &corpus_recs_path)?;
+    let meta_bytes = recorded_corpus.meta_bytes;
+    let recs_bytes = recorded_corpus.records_bytes;
     let corpus_kappa = repro::corpus_stream_kappa(&meta_bytes, &recs_bytes);
     repro::announce_corpus(&corpus_meta_path, &corpus_recs_path, &corpus_kappa);
-    let corpus = compiler::load_corpus_from(corpus_meta, corpus_recs).ok_or_else(|| {
-        SourceUnavailable::new(format!(
-            "corpus is incomplete at {}/{}; run compile until it is complete",
-            corpus_meta_path.display(),
-            corpus_recs_path.display()
-        ))
-    })?;
+    let corpus = recorded_corpus.corpus;
 
     let config = score::ScoreConfig {
         transition_out_degree: options.transition_out_degree,
@@ -5238,7 +5518,7 @@ fn evaluate_report(args: &[String]) -> Result<(), SourceUnavailable> {
     let scored_graph_path = options.compiled.join("graph").join("score.r4g1");
     let corpus_meta_path = options.compiled.join("corpus.meta");
     let corpus_records_path = options.compiled.join("corpus.records");
-    let recorded_corpus = recorded_corpus_snapshot(&corpus_meta_path, &corpus_records_path)?;
+    let recorded_corpus = recorded_compiler_corpus(&corpus_meta_path, &corpus_records_path)?;
     let recorded_attention_operator = recorded_corpus
         .execution
         .attention_operator
@@ -5284,21 +5564,8 @@ fn evaluate_report(args: &[String]) -> Result<(), SourceUnavailable> {
         "blake3:{}",
         blake3::hash(&recorded_corpus.meta_bytes).to_hex()
     );
-    let corpus_records_cid = format!(
-        "blake3:{}",
-        blake3::hash(&recorded_corpus.records_bytes).to_hex()
-    );
-    let corpus = compiler::load_corpus_bytes(
-        &recorded_corpus.meta_bytes,
-        &recorded_corpus.records_bytes,
-        recorded_corpus.hidden_bytes.as_deref(),
-    )
-    .ok_or_else(|| {
-        SourceUnavailable::new(format!(
-            "corpus is incomplete at {}; rerun compile until it is complete",
-            options.compiled.display()
-        ))
-    })?;
+    let corpus_records_cid = recorded_corpus.records_cid.clone();
+    let corpus = recorded_corpus.corpus;
     let held_out_cut = compiler::train_cut(&corpus);
     // --bos occupies one oracle position per story, so a full
     // `sequence_length`-token story needs one extra cache slot. The
@@ -5750,10 +6017,31 @@ pub fn compile_hugging_face(args: &[String]) -> Result<(), SourceUnavailable> {
     compile_hugging_face_with_progress(args, |_, _| {})
 }
 
+/// Compile through a caller-retained source/common transaction. The session
+/// must protect the parsed `--output`; it is consumed so neither lock can be
+/// released before every compiler-side write has finished.
+pub fn compile_hugging_face_with_session(
+    args: &[String],
+    session: SourceCorpusSession,
+) -> Result<(), SourceUnavailable> {
+    compile_hugging_face_with_progress_and_session(args, Some(session), |_, _| {})
+}
+
 /// Compile a Hugging Face teacher bundle and report coarse compiler phases.
 /// The callback is compiler-side only and does not affect generated bytes.
 pub fn compile_hugging_face_with_progress<F>(
     args: &[String],
+    progress: F,
+) -> Result<(), SourceUnavailable>
+where
+    F: FnMut(u8, &'static str),
+{
+    compile_hugging_face_with_progress_and_session(args, None, progress)
+}
+
+fn compile_hugging_face_with_progress_and_session<F>(
+    args: &[String],
+    provided_session: Option<SourceCorpusSession>,
     mut progress: F,
 ) -> Result<(), SourceUnavailable>
 where
@@ -5791,7 +6079,21 @@ where
         .output
         .clone()
         .unwrap_or_else(|| PathBuf::from(".uor-models/compiled").join(&slug));
-    let mut corpus_session = source_corpus_session(&output)?;
+    let mut corpus_session = if let Some(session) = provided_session {
+        if !session
+            .recorded_corpus_guard()?
+            .protects_directory(&output)?
+        {
+            return Err(SourceUnavailable::new(format!(
+                "provided source-corpus session for {} does not protect parsed compile output {}",
+                session.recorded_corpus_guard()?.root().display(),
+                output.display()
+            )));
+        }
+        session
+    } else {
+        source_corpus_session(&output)?
+    };
     eprintln!("compiler output: {}", output.display());
     let meta = output.join("corpus.meta");
     let records = output.join("corpus.records");
@@ -5875,7 +6177,12 @@ where
         records,
         tokenizer_export.source_byte_lengths.as_deref(),
     );
-    if compiler::load_corpus_from(meta, records).is_none() {
+    let finalized_meta =
+        read_optional_regular_file_nofollow(Path::new(meta), "source compile corpus metadata")?;
+    if !finalized_meta
+        .as_deref()
+        .is_some_and(|bytes| bytes.len() == SOURCE_CORPUS_META_BYTES && bytes[24] == 1)
+    {
         println!(
             "corpus is not complete; rerun the same command to resume {}",
             output.display()
@@ -5887,24 +6194,28 @@ where
         Path::new(meta),
         Path::new(records),
     )?;
-    let captured =
-        uor_r4_graph_compiler::recorded_corpus::capture(Path::new(meta), Path::new(records))?;
+    let mut captured = uor_r4_graph_compiler::recorded_corpus::open_stream_under_guard(
+        corpus_session.recorded_corpus_guard()?,
+        Path::new(meta),
+        Path::new(records),
+    )?;
     if captured.binding_cid.as_deref() != Some(binding_cid.as_str()) {
         return Err(SourceUnavailable::new(
-            "published recorded-corpus binding CID changed during exact recapture",
+            "published recorded-corpus binding CID changed during bounded verification",
         ));
     }
+    let meta_bytes = captured.meta_bytes.clone();
+    let (records_bytes, hidden_bytes) = captured.materialize_compiler_corpus_bytes()?;
+    let corpus = compiler::load_corpus_bytes(&meta_bytes, &records_bytes, hidden_bytes.as_deref())
+        .ok_or_else(|| {
+            SourceUnavailable::new(
+                "published recorded corpus failed bounded exact-generation parsing",
+            )
+        })?;
+    drop(captured);
     corpus_session
         .recorded_corpus_guard()?
         .finish_compile_attempt()?;
-    let corpus = compiler::load_corpus_bytes(
-        &captured.meta_bytes,
-        &captured.records_bytes,
-        captured.hidden_bytes.as_deref(),
-    )
-    .ok_or_else(|| {
-        SourceUnavailable::new("published recorded corpus failed exact-byte recapture and parsing")
-    })?;
     progress(55, "Compiling table-native artifact...");
     eprintln!("teacher corpus complete; compiling table-native artifact...");
     let artifacts = compiler::compile(&oracle, &corpus);
@@ -6013,6 +6324,66 @@ struct RecordedCorpusSnapshot {
     records_bytes: Vec<u8>,
     hidden_bytes: Option<Vec<u8>>,
     binding_cid: Option<String>,
+}
+
+/// The exact recorded generation required by compiler/evaluation consumers.
+/// Record bytes are materialized because the existing compiler parses them;
+/// hidden rows are materialized only when they have the compiler's fixed `D`
+/// width. Wider source-model rows remain bound by their retained stream digest
+/// and never become a multi-gigabyte allocation that the compiler discards.
+struct RecordedCompilerCorpus {
+    execution: RecordedCorpusExecutionIdentity,
+    attention_operator_bytes: Option<Vec<u8>>,
+    dense_operator_bytes: Option<Vec<u8>>,
+    meta_bytes: Vec<u8>,
+    records_bytes: Vec<u8>,
+    records_cid: String,
+    corpus: compiler::Corpus,
+    binding_cid: Option<String>,
+}
+
+fn materialize_recorded_compiler_corpus(
+    mut stream: uor_r4_graph_compiler::recorded_corpus::RecordedCorpusStreamSnapshot,
+    corpus_meta: &Path,
+    corpus_records: &Path,
+) -> Result<RecordedCompilerCorpus, SourceUnavailable> {
+    let execution = recorded_execution_from_stream(&stream);
+    let attention_operator_bytes = stream.attention_operator_bytes.clone();
+    let dense_operator_bytes = stream.dense_operator_bytes.clone();
+    let meta_bytes = stream.meta_bytes.clone();
+    let records_cid = stream.records.declared_digest().to_owned();
+    let binding_cid = stream.binding_cid.clone();
+    let (records_bytes, hidden_bytes) = stream.materialize_compiler_corpus_bytes()?;
+    let corpus = compiler::load_corpus_bytes(&meta_bytes, &records_bytes, hidden_bytes.as_deref())
+        .ok_or_else(|| {
+            SourceUnavailable::new(format!(
+                "corpus is incomplete at {}/{}; run compile until it is complete",
+                corpus_meta.display(),
+                corpus_records.display()
+            ))
+        })?;
+    Ok(RecordedCompilerCorpus {
+        execution,
+        attention_operator_bytes,
+        dense_operator_bytes,
+        meta_bytes,
+        records_bytes,
+        records_cid,
+        corpus,
+        binding_cid,
+    })
+}
+
+fn recorded_compiler_corpus(
+    corpus_meta: &Path,
+    corpus_records: &Path,
+) -> Result<RecordedCompilerCorpus, SourceUnavailable> {
+    let (stream, _source_guard) =
+        uor_r4_graph_compiler::recorded_corpus::open_stream_for_derivation(
+            corpus_meta,
+            corpus_records,
+        )?;
+    materialize_recorded_compiler_corpus(stream, corpus_meta, corpus_records)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -6457,8 +6828,8 @@ where
 {
     let options = parse_copy_recorded_attention_options(args)?;
     // Resolve the source pair before touching the destination. The lower
-    // bounded reader hashes large members without retaining them and holds a
-    // source guard for markerless compatibility generations.
+    // bounded reader hashes large members without retaining them and takes a
+    // non-mutating shared coordination lock when one already exists.
     let resolved = recorded_corpus_execution_identity(&options.corpus_meta, &options.corpus_recs)?;
     let parent = options
         .output
@@ -6983,7 +7354,11 @@ fn recorded_compile_attention_operator(
 /// capture remains available through `observe`/`compile` as an explicitly
 /// separate offline step.
 struct PreparedRecordedCompile {
-    corpus: RecordedCorpusSnapshot,
+    source: uor_r4_graph_compiler::recorded_corpus::RecordedCorpusStreamSnapshot,
+    source_guard: Option<uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerGuard>,
+    meta_bytes: Vec<u8>,
+    records_bytes: Vec<u8>,
+    corpus: compiler::Corpus,
     attention_operator: AttentionOperatorSpec,
     dense_operator: Option<DenseOperatorSpec>,
 }
@@ -6991,19 +7366,21 @@ struct PreparedRecordedCompile {
 fn write_captured_recorded_corpus(
     guard: &uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerGuard,
     output: &Path,
-    corpus: &RecordedCorpusSnapshot,
+    prepared: &mut PreparedRecordedCompile,
 ) -> Result<(), SourceUnavailable> {
     publish_guarded_planned_file(
         guard,
         &output.join("corpus.records"),
-        &corpus.records_bytes,
+        &prepared.records_bytes,
         "recorded compile corpus records",
     )?;
-    if let Some(hidden) = corpus.hidden_bytes.as_deref() {
-        publish_guarded_planned_file(
+    if let Some(hidden) = prepared.source.hidden.as_mut() {
+        let summary = hidden.summary();
+        publish_guarded_planned_stream(
             guard,
             &output.join("corpus.records.hidden"),
             hidden,
+            &summary,
             "recorded compile corpus hidden stream",
         )?;
     }
@@ -7013,7 +7390,7 @@ fn write_captured_recorded_corpus(
     publish_guarded_planned_file(
         guard,
         &output.join("corpus.meta"),
-        &corpus.meta_bytes,
+        &prepared.meta_bytes,
         "recorded compile corpus metadata",
     )?;
     Ok(())
@@ -7045,27 +7422,65 @@ fn require_existing_file_matches_if_present(
     }
 }
 
+fn require_existing_stream_matches_if_present(
+    path: &Path,
+    expected: Option<&uor_r4_graph_compiler::recorded_corpus::RecordedCorpusMemberSummary>,
+    context: &str,
+) -> Result<bool, SourceUnavailable> {
+    let actual = stream_regular_file_summary_nofollow(path, context)?;
+    match (actual.as_ref(), expected) {
+        (None, _) => Ok(false),
+        (Some(actual), Some(expected)) if actual == expected => Ok(true),
+        (Some(_), Some(_)) => Err(SourceUnavailable::new(format!(
+            "{context} {} has a different length or BLAKE3; deterministic planned member mismatch is terminal before mutation",
+            path.display()
+        ))),
+        (Some(_), None) => Err(SourceUnavailable::new(format!(
+            "{context} {} is present but the planned generation declares typed absence; deterministic planned member mismatch is terminal before mutation",
+            path.display()
+        ))),
+    }
+}
+
 fn preflight_recorded_compile_execution_identity(
     options: &RecordedCompileOptions,
 ) -> Result<PreparedRecordedCompile, SourceUnavailable> {
     preflight_recorded_compile_output(&options.output)?;
-    let corpus = recorded_corpus_snapshot(&options.corpus_meta, &options.corpus_recs)?;
-    let attention_operator = match corpus.execution.attention_operator.as_ref() {
+    let (mut source, source_guard) =
+        uor_r4_graph_compiler::recorded_corpus::open_stream_for_derivation(
+            &options.corpus_meta,
+            &options.corpus_recs,
+        )?;
+    let attention_operator = match source.execution.attention_operator.as_ref() {
         Some(recorded) => recorded.clone(),
         None => uor_r4_model_source::attention::operator_spec(
             AttentionOperatorSpec::STANDARD_ID,
             LEGACY_STANDARD_ATTENTION_OPERATOR_VERSION,
         )?,
     };
-    let dense_operator = corpus.execution.dense_operator.clone();
+    let dense_operator = source.execution.dense_operator.clone();
     validate_source_execution_pair(
         &attention_operator,
         dense_operator.as_ref(),
         "recorded compile provenance",
     )?;
+    let meta_bytes = source.meta_bytes.clone();
+    let (records_bytes, hidden_bytes) = source.materialize_compiler_corpus_bytes()?;
+    let corpus = compiler::load_corpus_bytes(&meta_bytes, &records_bytes, hidden_bytes.as_deref())
+        .ok_or_else(|| {
+            SourceUnavailable::new(format!(
+                "recorded corpus is incomplete or invalid at {}/{}",
+                options.corpus_meta.display(),
+                options.corpus_recs.display()
+            ))
+        })?;
     preflight_compiled_attention_operator(&options.output, &attention_operator)?;
     preflight_compiled_dense_operator(&options.output, dense_operator.as_ref())?;
     Ok(PreparedRecordedCompile {
+        source,
+        source_guard,
+        meta_bytes,
+        records_bytes,
         corpus,
         attention_operator,
         dense_operator,
@@ -7073,39 +7488,75 @@ fn preflight_recorded_compile_execution_identity(
 }
 
 pub fn compile_recorded_corpus(args: &[String]) -> Result<(), SourceUnavailable> {
-    let options = parse_recorded_compile_options(args)?;
-    let prepared = preflight_recorded_compile_execution_identity(&options)?;
-    let corpus = compiler::load_corpus_bytes(
-        &prepared.corpus.meta_bytes,
-        &prepared.corpus.records_bytes,
-        prepared.corpus.hidden_bytes.as_deref(),
+    compile_recorded_corpus_with(
+        args,
+        build_recorded_compile_products,
+        |_| Ok(()),
+        |_| Ok(()),
     )
-    .ok_or_else(|| {
-        SourceUnavailable::new(format!(
-            "recorded corpus is incomplete or invalid at {}/{}",
-            options.corpus_meta.display(),
-            options.corpus_recs.display()
-        ))
+}
+
+struct RecordedCompileProducts {
+    artifact_bytes: Vec<u8>,
+    store_bytes: Vec<u8>,
+    calibration_bytes: Vec<u8>,
+    hierarchical_bytes: Vec<u8>,
+}
+
+fn build_recorded_compile_products(
+    corpus: &compiler::Corpus,
+    vocab_size: usize,
+) -> Result<RecordedCompileProducts, SourceUnavailable> {
+    let artifacts = compiler::compile_recorded(corpus, vocab_size).ok_or_else(|| {
+        SourceUnavailable::new("recorded compile failed: empty corpus or invalid vocabulary")
     })?;
+    let calibration = compiler::calibrate_hamming_regions(&artifacts, corpus);
+    let hierarchical =
+        compiler::induce_hierarchical_codes(&artifacts.token_codes, vocab_size, corpus);
+    let threads = std::thread::available_parallelism()
+        .map(|count| count.get().min(8))
+        .unwrap_or(1);
+    let (store, _) = runtime::build_store_with_threads(&artifacts, corpus, threads);
+    Ok(RecordedCompileProducts {
+        artifact_bytes: compiler::artifact_bytes(&artifacts),
+        store_bytes: runtime::store_bytes(&store),
+        calibration_bytes: serde_json::to_vec_pretty(&calibration)?,
+        hierarchical_bytes: serde_json::to_vec_pretty(&hierarchical)?,
+    })
+}
+
+fn compile_recorded_corpus_with<B, D, A>(
+    args: &[String],
+    build_products: B,
+    after_dense_sync: D,
+    after_attention_sync: A,
+) -> Result<(), SourceUnavailable>
+where
+    B: FnOnce(&compiler::Corpus, usize) -> Result<RecordedCompileProducts, SourceUnavailable>,
+    D: FnOnce(&Path) -> Result<(), SourceUnavailable>,
+    A: FnOnce(&Path) -> Result<(), SourceUnavailable>,
+{
+    let options = parse_recorded_compile_options(args)?;
+    let mut prepared = preflight_recorded_compile_execution_identity(&options)?;
+    let corpus = &prepared.corpus;
+    let corpus_records = corpus.n;
     eprintln!(
         "recorded compile: {} records, {} stories, vocabulary {} (no teacher loaded)",
         corpus.n, corpus.stories, options.vocab_size
     );
-    let artifacts = compiler::compile_recorded(&corpus, options.vocab_size).ok_or_else(|| {
-        SourceUnavailable::new("recorded compile failed: empty corpus or invalid vocabulary")
-    })?;
-    let calibration = compiler::calibrate_hamming_regions(&artifacts, &corpus);
-    let hierarchical =
-        compiler::induce_hierarchical_codes(&artifacts.token_codes, options.vocab_size, &corpus);
-    let threads = std::thread::available_parallelism()
-        .map(|count| count.get().min(8))
-        .unwrap_or(1);
-    let (store, _) = runtime::build_store_with_threads(&artifacts, &corpus, threads);
-    let artifact_bytes = compiler::artifact_bytes(&artifacts);
-    let store_bytes = runtime::store_bytes(&store);
-    let calibration_bytes = serde_json::to_vec_pretty(&calibration)?;
-    let hierarchical_bytes = serde_json::to_vec_pretty(&hierarchical)?;
+    let RecordedCompileProducts {
+        artifact_bytes,
+        store_bytes,
+        calibration_bytes,
+        hierarchical_bytes,
+    } = build_products(corpus, options.vocab_size)?;
 
+    let source_records_summary = prepared.source.records.summary();
+    let source_hidden_summary = prepared
+        .source
+        .hidden
+        .as_ref()
+        .map(|hidden| hidden.summary());
     let preflight_planned_files = || -> Result<(), SourceUnavailable> {
         require_existing_file_matches_if_present(
             &options.output.join("tless_artifacts.bin"),
@@ -7129,23 +7580,28 @@ pub fn compile_recorded_corpus(args: &[String]) -> Result<(), SourceUnavailable>
         )?;
         require_existing_file_matches_if_present(
             &options.output.join("corpus.meta"),
-            Some(&prepared.corpus.meta_bytes),
+            Some(&prepared.meta_bytes),
             "recorded compile corpus metadata",
         )?;
         require_existing_file_matches_if_present(
             &options.output.join("corpus.records"),
-            Some(&prepared.corpus.records_bytes),
+            Some(&prepared.records_bytes),
             "recorded compile corpus records",
         )?;
-        require_existing_file_matches_if_present(
+        require_existing_stream_matches_if_present(
             &options.output.join("corpus.records.hidden"),
-            prepared.corpus.hidden_bytes.as_deref(),
+            source_hidden_summary.as_ref(),
             "recorded compile corpus hidden stream",
         )?;
         Ok(())
     };
 
     preflight_planned_files()?;
+    // Markerless compatibility ownership cannot be nested with the
+    // destination producer guard. The retained no-follow source handles and
+    // their final generation check remain live after this lock is released.
+    prepared.source.verify_generation()?;
+    drop(prepared.source_guard.take());
     let output_parent = options
         .output
         .parent()
@@ -7172,7 +7628,7 @@ pub fn compile_recorded_corpus(args: &[String]) -> Result<(), SourceUnavailable>
     producer.ensure_root()?;
     preflight_guarded_planned_scope(
         &producer,
-        &PlannedOutputMember::ALL,
+        &PlannedOutputMember::REGISTERED,
         "recorded compile destination",
     )?;
     let recoverable_temporary =
@@ -7180,60 +7636,87 @@ pub fn compile_recorded_corpus(args: &[String]) -> Result<(), SourceUnavailable>
     preflight_recorded_compile_output(&options.output)?;
     let attention_ready =
         preflight_compiled_attention_operator(&options.output, &prepared.attention_operator)?;
+    let attention_bytes = canonical_attention_operator_bytes(&prepared.attention_operator)?;
+    let attention_bytes_ready = preflight_guarded_planned_file_in_scope(
+        &producer,
+        &options.output.join(ATTENTION_OPERATOR_BINDING_FILE),
+        &attention_bytes,
+        "recorded compile attention operator",
+        &PlannedOutputMember::REGISTERED,
+    )?;
     let dense_ready =
         preflight_compiled_dense_operator(&options.output, prepared.dense_operator.as_ref())?;
-    preflight_planned_files()?;
-    let artifact_ready = preflight_guarded_planned_file(
-        &producer,
-        &options.output.join("tless_artifacts.bin"),
-        &artifact_bytes,
-        "recorded compile artifact",
-    )?;
-    let store_ready = preflight_guarded_planned_file(
-        &producer,
-        &options.output.join("tless_store.bin"),
-        &store_bytes,
-        "recorded compile store",
-    )?;
-    let calibration_ready = preflight_guarded_planned_file(
-        &producer,
-        &options.output.join("hamming_calibration.json"),
-        &calibration_bytes,
-        "recorded compile calibration",
-    )?;
-    let hierarchical_ready = preflight_guarded_planned_file(
-        &producer,
-        &options.output.join("hierarchical_codes.json"),
-        &hierarchical_bytes,
-        "recorded compile hierarchical codes",
-    )?;
-    let records_ready = preflight_guarded_planned_file(
-        &producer,
-        &options.output.join("corpus.records"),
-        &prepared.corpus.records_bytes,
-        "recorded compile corpus records",
-    )?;
-    let hidden_ready = match prepared.corpus.hidden_bytes.as_deref() {
-        Some(hidden) => preflight_guarded_planned_file(
+    let dense_bytes = prepared
+        .dense_operator
+        .as_ref()
+        .map(canonical_dense_operator_bytes)
+        .transpose()?;
+    let dense_bytes_ready = match dense_bytes.as_deref() {
+        Some(bytes) => preflight_guarded_planned_file_in_scope(
             &producer,
-            &options.output.join("corpus.records.hidden"),
-            hidden,
-            "recorded compile corpus hidden stream",
+            &options.output.join(DENSE_OPERATOR_BINDING_FILE),
+            bytes,
+            "recorded compile dense operator",
+            &PlannedOutputMember::REGISTERED,
         )?,
         None => {
             preflight_guarded_planned_absence(
                 &producer,
-                &options.output.join("corpus.records.hidden"),
-                "recorded compile corpus hidden stream",
+                &options.output.join(DENSE_OPERATOR_BINDING_FILE),
+                "recorded compile dense operator",
             )?;
             true
         }
     };
-    let meta_ready = preflight_guarded_planned_file(
+    preflight_planned_files()?;
+    let artifact_ready = preflight_guarded_planned_file_in_scope(
+        &producer,
+        &options.output.join("tless_artifacts.bin"),
+        &artifact_bytes,
+        "recorded compile artifact",
+        &PlannedOutputMember::REGISTERED,
+    )?;
+    let store_ready = preflight_guarded_planned_file_in_scope(
+        &producer,
+        &options.output.join("tless_store.bin"),
+        &store_bytes,
+        "recorded compile store",
+        &PlannedOutputMember::REGISTERED,
+    )?;
+    let calibration_ready = preflight_guarded_planned_file_in_scope(
+        &producer,
+        &options.output.join("hamming_calibration.json"),
+        &calibration_bytes,
+        "recorded compile calibration",
+        &PlannedOutputMember::REGISTERED,
+    )?;
+    let hierarchical_ready = preflight_guarded_planned_file_in_scope(
+        &producer,
+        &options.output.join("hierarchical_codes.json"),
+        &hierarchical_bytes,
+        "recorded compile hierarchical codes",
+        &PlannedOutputMember::REGISTERED,
+    )?;
+    let records_ready = preflight_guarded_planned_stream_in_scope(
+        &producer,
+        &options.output.join("corpus.records"),
+        Some(&source_records_summary),
+        "recorded compile corpus records",
+        &PlannedOutputMember::REGISTERED,
+    )?;
+    let hidden_ready = preflight_guarded_planned_stream_in_scope(
+        &producer,
+        &options.output.join("corpus.records.hidden"),
+        source_hidden_summary.as_ref(),
+        "recorded compile corpus hidden stream",
+        &PlannedOutputMember::REGISTERED,
+    )?;
+    let meta_ready = preflight_guarded_planned_file_in_scope(
         &producer,
         &options.output.join("corpus.meta"),
-        &prepared.corpus.meta_bytes,
+        &prepared.meta_bytes,
         "recorded compile corpus metadata",
+        &PlannedOutputMember::REGISTERED,
     )?;
     let stable_binding = strict_regular_file_if_present(
         &options
@@ -7241,7 +7724,9 @@ pub fn compile_recorded_corpus(args: &[String]) -> Result<(), SourceUnavailable>
             .join(uor_r4_graph_compiler::recorded_corpus::RECORDED_CORPUS_BINDING_FILE),
         "recorded compile generation binding",
     )?;
-    let planned_ready = artifact_ready
+    let planned_ready = attention_bytes_ready
+        && dense_bytes_ready
+        && artifact_ready
         && store_ready
         && calibration_ready
         && hierarchical_ready
@@ -7261,18 +7746,20 @@ pub fn compile_recorded_corpus(args: &[String]) -> Result<(), SourceUnavailable>
         )?;
     }
     if stable_binding && !recoverable_temporary && planned_ready && attention_ready && dense_ready {
+        producer
+            .preflight_ready_deterministic_compile_inventory(&PlannedOutputMember::REGISTERED)?;
         if producer.compile_attempt_active()? {
             producer.finish_compile_attempt()?;
         }
         println!(
             "recorded compile complete: {} ({} corpus records, artifact κ blake3:{})",
             options.output.display(),
-            corpus.n,
+            corpus_records,
             blake3::hash(&artifact_bytes).to_hex()
         );
         return Ok(());
     }
-    producer.preflight_deterministic_compile_inventory(&PlannedOutputMember::ALL)?;
+    producer.preflight_deterministic_compile_inventory(&PlannedOutputMember::REGISTERED)?;
     producer.begin_compile_attempt()?;
     if recoverable_temporary {
         uor_r4_graph_compiler::recorded_corpus::publish_binding(
@@ -7284,8 +7771,24 @@ pub fn compile_recorded_corpus(args: &[String]) -> Result<(), SourceUnavailable>
 
     // Dense-first ensures every crash prefix of a current GPT-2 generation is
     // invalid rather than a false, valid-looking attention-only generation.
-    bind_compiled_dense_operator(&options.output, prepared.dense_operator.as_ref())?;
-    bind_compiled_attention_operator(&options.output, &prepared.attention_operator)?;
+    if let Some(bytes) = dense_bytes.as_deref() {
+        publish_guarded_planned_file_with_after_sync(
+            &producer,
+            &options.output.join(DENSE_OPERATOR_BINDING_FILE),
+            bytes,
+            "recorded compile dense operator",
+            &PlannedOutputMember::REGISTERED,
+            after_dense_sync,
+        )?;
+    }
+    publish_guarded_planned_file_with_after_sync(
+        &producer,
+        &options.output.join(ATTENTION_OPERATOR_BINDING_FILE),
+        &attention_bytes,
+        "recorded compile attention operator",
+        &PlannedOutputMember::REGISTERED,
+        after_attention_sync,
+    )?;
     publish_guarded_planned_file(
         &producer,
         &options.output.join("tless_artifacts.bin"),
@@ -7310,13 +7813,18 @@ pub fn compile_recorded_corpus(args: &[String]) -> Result<(), SourceUnavailable>
         &hierarchical_bytes,
         "recorded compile hierarchical codes",
     )?;
-    write_captured_recorded_corpus(&producer, &options.output, &prepared.corpus)?;
+    write_captured_recorded_corpus(&producer, &options.output, &mut prepared)?;
+    // All derived payload bytes are now durable but uncommitted. Refuse a
+    // changed source generation before the destination binding can make them
+    // authoritative as one corpus.
+    prepared.source.verify_generation()?;
     let binding_cid = uor_r4_graph_compiler::recorded_corpus::publish_binding(
         &producer,
         &options.output.join("corpus.meta"),
         &options.output.join("corpus.records"),
     )?;
-    let published = recorded_corpus_snapshot(
+    let published = uor_r4_graph_compiler::recorded_corpus::open_stream_under_guard(
+        &producer,
         &options.output.join("corpus.meta"),
         &options.output.join("corpus.records"),
     )?;
@@ -7325,21 +7833,23 @@ pub fn compile_recorded_corpus(args: &[String]) -> Result<(), SourceUnavailable>
         dense_operator: prepared.dense_operator.clone(),
     };
     if published.binding_cid.as_deref() != Some(binding_cid.as_str())
-        || published.execution != destination_execution
-        || published.meta_bytes != prepared.corpus.meta_bytes
-        || published.records_bytes != prepared.corpus.records_bytes
-        || published.hidden_bytes != prepared.corpus.hidden_bytes
+        || recorded_execution_from_stream(&published) != destination_execution
+        || published.meta_bytes != prepared.meta_bytes
+        || published.records.summary() != source_records_summary
+        || published.hidden.as_ref().map(|hidden| hidden.summary()) != source_hidden_summary
     {
         return Err(SourceUnavailable::new(
             "recorded compile publication changed during exact post-binding recapture",
         ));
     }
+    published.verify_generation()?;
+    drop(published);
     producer.finish_compile_attempt()?;
 
     println!(
         "recorded compile complete: {} ({} corpus records, artifact κ blake3:{})",
         options.output.display(),
-        corpus.n,
+        corpus_records,
         blake3::hash(&artifact_bytes).to_hex()
     );
     Ok(())
@@ -7665,6 +8175,147 @@ mod tests {
         std::fs::remove_dir_all(&base).expect("cleanup root");
     }
 
+    #[test]
+    fn guarded_stream_publication_recovers_partial_stage_without_body_buffering() {
+        let root = unique_cli_test_path("planned-stream-recovery");
+        std::fs::create_dir_all(&root).expect("root");
+        let guard =
+            uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerGuard::try_acquire(&root)
+                .expect("producer guard");
+        let residue = root.join(format!(
+            "{PLANNED_OUTPUT_RESERVED_PREFIX}{}--999.1.writing",
+            PlannedOutputMember::Hidden.stable_name()
+        ));
+        std::fs::write(&residue, b"partial").expect("honest crash residue");
+        let bytes = b"complete hidden stream";
+        let expected = uor_r4_graph_compiler::recorded_corpus::RecordedCorpusMemberSummary {
+            length: bytes.len() as u64,
+            blake3: format!("blake3:{}", blake3::hash(bytes).to_hex()),
+        };
+        let mut source = std::io::Cursor::new(bytes.as_slice());
+        let stable = root.join(PlannedOutputMember::Hidden.stable_name());
+        publish_guarded_planned_stream(
+            &guard,
+            &stable,
+            &mut source,
+            &expected,
+            "test hidden stream",
+        )
+        .expect("exact retry publishes stream");
+        assert_eq!(std::fs::read(&stable).unwrap(), bytes);
+        assert!(!residue.exists());
+        assert_eq!(
+            stream_regular_file_summary_nofollow(&stable, "test hidden stream")
+                .expect("summary")
+                .expect("present"),
+            expected
+        );
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn guarded_planned_byte_commit_cannot_be_redirected_after_last_root_check() {
+        let root = unique_cli_test_path("planned-byte-root-swap");
+        std::fs::create_dir_all(&root).expect("root");
+        let guard =
+            uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerGuard::try_acquire(&root)
+                .expect("producer guard");
+        let guarded_root = guard.root().to_path_buf();
+        let displaced = guarded_root.with_file_name(format!(
+            "{}-guarded",
+            guarded_root
+                .file_name()
+                .expect("root leaf")
+                .to_string_lossy()
+        ));
+        let stable = guarded_root.join(PlannedOutputMember::Artifact.stable_name());
+        let expected = b"retained-root artifact";
+        let error = publish_guarded_planned_file_with_after_sync(
+            &guard,
+            &stable,
+            expected,
+            "planned byte root swap",
+            &PlannedOutputMember::ALL,
+            |_| {
+                std::fs::rename(&guarded_root, &displaced).expect("displace guarded root");
+                std::fs::create_dir(&guarded_root).expect("replacement root");
+                std::fs::write(guarded_root.join("replacement-sentinel"), b"replacement")
+                    .expect("replacement sentinel");
+                Ok(())
+            },
+        )
+        .expect_err("path replacement must be reported after retained-root commit");
+        assert!(error.reason.contains("changed"), "{error}");
+        assert_eq!(
+            std::fs::read(displaced.join(PlannedOutputMember::Artifact.stable_name()))
+                .expect("commit stayed on retained root"),
+            expected
+        );
+        assert!(!stable.exists(), "replacement root was not mutated");
+        assert_eq!(
+            std::fs::read(guarded_root.join("replacement-sentinel")).expect("sentinel"),
+            b"replacement"
+        );
+        drop(guard);
+        let _ = std::fs::remove_dir_all(guarded_root);
+        let _ = std::fs::remove_dir_all(displaced);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn guarded_planned_stream_commit_cannot_be_redirected_after_last_root_check() {
+        let root = unique_cli_test_path("planned-stream-root-swap");
+        std::fs::create_dir_all(&root).expect("root");
+        let guard =
+            uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerGuard::try_acquire(&root)
+                .expect("producer guard");
+        let guarded_root = guard.root().to_path_buf();
+        let displaced = guarded_root.with_file_name(format!(
+            "{}-guarded",
+            guarded_root
+                .file_name()
+                .expect("root leaf")
+                .to_string_lossy()
+        ));
+        let stable = guarded_root.join(PlannedOutputMember::Hidden.stable_name());
+        let expected_bytes = b"retained-root hidden stream";
+        let expected = uor_r4_graph_compiler::recorded_corpus::RecordedCorpusMemberSummary {
+            length: expected_bytes.len() as u64,
+            blake3: format!("blake3:{}", blake3::hash(expected_bytes).to_hex()),
+        };
+        let mut source = std::io::Cursor::new(expected_bytes.as_slice());
+        let error = publish_guarded_planned_stream_with_before_link(
+            &guard,
+            &stable,
+            &mut source,
+            &expected,
+            "planned stream root swap",
+            |_| {
+                std::fs::rename(&guarded_root, &displaced).expect("displace guarded root");
+                std::fs::create_dir(&guarded_root).expect("replacement root");
+                std::fs::write(guarded_root.join("replacement-sentinel"), b"replacement")
+                    .expect("replacement sentinel");
+                Ok(())
+            },
+        )
+        .expect_err("path replacement must be reported after retained-root commit");
+        assert!(error.reason.contains("changed"), "{error}");
+        assert_eq!(
+            std::fs::read(displaced.join(PlannedOutputMember::Hidden.stable_name()))
+                .expect("stream commit stayed on retained root"),
+            expected_bytes
+        );
+        assert!(!stable.exists(), "replacement root was not mutated");
+        assert_eq!(
+            std::fs::read(guarded_root.join("replacement-sentinel")).expect("sentinel"),
+            b"replacement"
+        );
+        drop(guard);
+        let _ = std::fs::remove_dir_all(guarded_root);
+        let _ = std::fs::remove_dir_all(displaced);
+    }
+
     fn fixture_adapter(marker: &str) -> TokenizerAdapter {
         let tokenizer_json = format!(
             r#"{{
@@ -7778,6 +8429,55 @@ mod tests {
         std::fs::write(&meta, b"meta marker").expect("metadata marker");
         std::fs::write(&records, b"records marker").expect("records marker");
         (meta, records)
+    }
+
+    fn finalized_corpus(path: &Path, next: u32) -> (PathBuf, PathBuf, Vec<u8>, Vec<u8>) {
+        std::fs::create_dir_all(path).expect("corpus directory");
+        let meta = path.join("corpus.meta");
+        let records = path.join("corpus.records");
+        let mut meta_bytes = vec![0u8; SOURCE_CORPUS_META_BYTES];
+        meta_bytes[0..8].copy_from_slice(&1u64.to_le_bytes());
+        meta_bytes[8..16].copy_from_slice(&1u64.to_le_bytes());
+        meta_bytes[16..24].copy_from_slice(&0x5EEDu64.to_le_bytes());
+        meta_bytes[24] = 1;
+        let mut record_bytes = vec![0u8; observe::RECORD_SIZE];
+        record_bytes[4..8].copy_from_slice(&next.to_le_bytes());
+        record_bytes[20..24].copy_from_slice(&next.to_le_bytes());
+        record_bytes[32..36].copy_from_slice(&100u32.to_le_bytes());
+        record_bytes[36..40].copy_from_slice(&1u32.to_le_bytes());
+        record_bytes[40..44].copy_from_slice(&u32::MAX.to_le_bytes());
+        record_bytes[44..48].copy_from_slice(&u32::MAX.to_le_bytes());
+        std::fs::write(&meta, &meta_bytes).expect("finalized metadata");
+        std::fs::write(&records, &record_bytes).expect("finalized records");
+        (meta, records, meta_bytes, record_bytes)
+    }
+
+    fn fixture_recorded_compile_products(
+        _corpus: &compiler::Corpus,
+        _vocab_size: usize,
+    ) -> Result<RecordedCompileProducts, SourceUnavailable> {
+        Ok(RecordedCompileProducts {
+            artifact_bytes: b"fixture recorded artifact".to_vec(),
+            store_bytes: b"fixture recorded store".to_vec(),
+            calibration_bytes: b"{\"fixture\":\"calibration\"}".to_vec(),
+            hierarchical_bytes: b"{\"fixture\":\"hierarchical\"}".to_vec(),
+        })
+    }
+
+    fn planned_output_residue_entries(path: &Path) -> Vec<String> {
+        let mut entries: Vec<_> = std::fs::read_dir(path)
+            .expect("read planned-output root")
+            .map(|entry| {
+                entry
+                    .expect("planned-output entry")
+                    .file_name()
+                    .to_string_lossy()
+                    .into_owned()
+            })
+            .filter(|name| name.starts_with(PLANNED_OUTPUT_RESERVED_PREFIX))
+            .collect();
+        entries.sort();
+        entries
     }
 
     fn observation_corpus_markers(path: &Path) -> (PathBuf, PathBuf) {
@@ -10082,7 +10782,19 @@ mod tests {
         let dense = DenseOperatorSpec::gpt2_v2();
         bind_compiled_attention_operator(&source, &attention).expect("source attention binding");
         bind_compiled_dense_operator(&source, Some(&dense)).expect("source dense binding");
-        let (meta, records) = corpus_markers(&source);
+        let (meta, records, meta_bytes, record_bytes) = finalized_corpus(&source, 7);
+        let guard =
+            uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerGuard::try_acquire(
+                &source,
+            )
+            .expect("source guard");
+        guard.begin_compile_attempt().expect("source attempt");
+        uor_r4_graph_compiler::recorded_corpus::publish_binding(&guard, &meta, &records)
+            .expect("source binding");
+        guard
+            .finish_compile_attempt()
+            .expect("finish source binding");
+        drop(guard);
 
         let output = unique_cli_test_path("compile-recorded-dense-output");
         let args = vec![
@@ -10100,8 +10812,9 @@ mod tests {
             .expect("preflight current GPT-2 recorded corpus");
         assert_eq!(prepared.attention_operator, attention);
         assert_eq!(prepared.dense_operator, Some(dense));
-        assert_eq!(prepared.corpus.meta_bytes, b"meta marker");
-        assert_eq!(prepared.corpus.records_bytes, b"records marker");
+        assert_eq!(prepared.meta_bytes, meta_bytes);
+        assert_eq!(prepared.records_bytes, record_bytes);
+        assert_eq!(prepared.corpus.n, 1);
         assert!(
             !output.exists(),
             "all recorded execution checks precede output publication"
@@ -10110,9 +10823,239 @@ mod tests {
         let _ = std::fs::remove_dir_all(source);
     }
 
+    #[test]
+    fn compile_recorded_command_recovers_each_sidecar_sync_crash_and_is_ready_idempotent() {
+        let source = unique_cli_test_path("compile-recorded-sidecar-crash-source");
+        let attention = AttentionOperatorSpec::learned_absolute_v2();
+        let dense = DenseOperatorSpec::gpt2_v2();
+        bind_compiled_dense_operator(&source, Some(&dense)).expect("source dense binding");
+        bind_compiled_attention_operator(&source, &attention).expect("source attention binding");
+        let (meta, records, _, _) = finalized_corpus(&source, 11);
+        publish_test_corpus_binding(&source, &meta, &records);
+
+        for crash_member in [
+            PlannedOutputMember::DenseOperator,
+            PlannedOutputMember::AttentionOperator,
+        ] {
+            let output = unique_cli_test_path(match crash_member {
+                PlannedOutputMember::DenseOperator => "compile-recorded-dense-sync-crash",
+                PlannedOutputMember::AttentionOperator => "compile-recorded-attention-sync-crash",
+                _ => unreachable!("sidecar crash fixture"),
+            });
+            let args = vec![
+                "--corpus-meta".to_owned(),
+                meta.display().to_string(),
+                "--corpus-recs".to_owned(),
+                records.display().to_string(),
+                "--vocab-size".to_owned(),
+                "16".to_owned(),
+                "--out".to_owned(),
+                output.display().to_string(),
+            ];
+
+            let injected = match crash_member {
+                PlannedOutputMember::DenseOperator => compile_recorded_corpus_with(
+                    &args,
+                    fixture_recorded_compile_products,
+                    |_| Err(SourceUnavailable::new("injected dense sidecar sync crash")),
+                    |_| Ok(()),
+                ),
+                PlannedOutputMember::AttentionOperator => compile_recorded_corpus_with(
+                    &args,
+                    fixture_recorded_compile_products,
+                    |_| Ok(()),
+                    |_| {
+                        Err(SourceUnavailable::new(
+                            "injected attention sidecar sync crash",
+                        ))
+                    },
+                ),
+                _ => unreachable!("sidecar crash fixture"),
+            }
+            .expect_err("injected post-sync crash must interrupt publication");
+            assert!(injected.reason.contains("sidecar sync crash"), "{injected}");
+            let residues = planned_output_residue_entries(&output);
+            assert_eq!(residues.len(), 1, "one exact durable crash residue");
+            assert!(
+                residues[0].contains(crash_member.stable_name()),
+                "residue belongs to the interrupted sidecar: {residues:?}"
+            );
+            assert!(
+                !output.join(crash_member.stable_name()).exists(),
+                "post-sync crash precedes stable hard-link publication"
+            );
+
+            compile_recorded_corpus_with(
+                &args,
+                fixture_recorded_compile_products,
+                |_| Ok(()),
+                |_| Ok(()),
+            )
+            .expect("exact command retry recovers and commits");
+            assert!(planned_output_residue_entries(&output).is_empty());
+            assert!(attention_operator_temp_entries(&output).is_empty());
+            assert!(dense_operator_temp_entries(&output).is_empty());
+            assert_eq!(
+                compiled_dense_operator(&output).expect("published dense"),
+                Some(dense.clone())
+            );
+            assert_eq!(
+                compiled_attention_operator(&output).expect("published attention"),
+                attention
+            );
+            assert!(
+                output
+                    .join(uor_r4_graph_compiler::recorded_corpus::RECORDED_CORPUS_BINDING_FILE)
+                    .is_file(),
+                "the command reaches binding-last commit"
+            );
+
+            let ready = directory_bytes(&output);
+            compile_recorded_corpus_with(
+                &args,
+                fixture_recorded_compile_products,
+                |_| panic!("ready rerun must not republish dense"),
+                |_| panic!("ready rerun must not republish attention"),
+            )
+            .expect("ready command rerun is idempotent");
+            assert_eq!(directory_bytes(&output), ready);
+            let _ = std::fs::remove_dir_all(output);
+        }
+
+        let _ = std::fs::remove_dir_all(source);
+    }
+
+    #[test]
+    fn compile_recorded_preflight_and_publication_stream_opaque_hidden() {
+        let source = unique_cli_test_path("compile-recorded-stream-source");
+        let attention = AttentionOperatorSpec::learned_absolute_v2();
+        let dense = DenseOperatorSpec::gpt2_v2();
+        bind_compiled_attention_operator(&source, &attention).expect("source attention");
+        bind_compiled_dense_operator(&source, Some(&dense)).expect("source dense");
+        let (meta, records, _, _) = finalized_corpus(&source, 9);
+        let hidden = source.join("corpus.records.hidden");
+        let hidden_bytes = [
+            0.0f32.to_le_bytes(),
+            0.25f32.to_le_bytes(),
+            (-1.0f32).to_le_bytes(),
+        ]
+        .concat();
+        std::fs::write(&hidden, &hidden_bytes).expect("opaque hidden rows");
+        let guard =
+            uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerGuard::try_acquire(
+                &source,
+            )
+            .expect("source guard");
+        guard.begin_compile_attempt().expect("source attempt");
+        uor_r4_graph_compiler::recorded_corpus::publish_binding(&guard, &meta, &records)
+            .expect("source binding");
+        guard.finish_compile_attempt().expect("finish source");
+        drop(guard);
+
+        let output = unique_cli_test_path("compile-recorded-stream-output");
+        let args = vec![
+            "--corpus-meta".to_owned(),
+            meta.display().to_string(),
+            "--corpus-recs".to_owned(),
+            records.display().to_string(),
+            "--vocab-size".to_owned(),
+            "16".to_owned(),
+            "--out".to_owned(),
+            output.display().to_string(),
+        ];
+        let options = parse_recorded_compile_options(&args).expect("compile options");
+        let mut prepared = preflight_recorded_compile_execution_identity(&options)
+            .expect("bounded compile preflight");
+        assert!(
+            prepared.corpus.hidden.is_none(),
+            "non-D hidden rows are not materialized into compiler state"
+        );
+        let expected_hidden = prepared
+            .source
+            .hidden
+            .as_ref()
+            .expect("retained opaque hidden stream")
+            .summary();
+        prepared
+            .source
+            .verify_generation()
+            .expect("source generation");
+        drop(prepared.source_guard.take());
+
+        std::fs::create_dir_all(&output).expect("output root");
+        let producer =
+            uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerGuard::try_acquire(
+                &output,
+            )
+            .expect("output guard");
+        producer
+            .preflight_deterministic_compile_inventory(&PlannedOutputMember::ALL)
+            .expect("fresh deterministic inventory");
+        producer.begin_compile_attempt().expect("output attempt");
+        bind_compiled_dense_operator(&output, prepared.dense_operator.as_ref())
+            .expect("output dense");
+        bind_compiled_attention_operator(&output, &prepared.attention_operator)
+            .expect("output attention");
+        write_captured_recorded_corpus(&producer, &output, &mut prepared)
+            .expect("stream recorded corpus");
+        prepared
+            .source
+            .verify_generation()
+            .expect("final source generation");
+        let binding_cid = uor_r4_graph_compiler::recorded_corpus::publish_binding(
+            &producer,
+            &output.join("corpus.meta"),
+            &output.join("corpus.records"),
+        )
+        .expect("output binding");
+        producer.finish_compile_attempt().expect("finish output");
+        assert_eq!(
+            std::fs::read(output.join("corpus.records.hidden")).expect("copied hidden"),
+            hidden_bytes
+        );
+        assert!(
+            !output
+                .join(uor_r4_graph_compiler::recorded_corpus::RECORDED_CORPUS_COMPILE_ATTEMPT_FILE)
+                .exists()
+        );
+        let captured = uor_r4_graph_compiler::recorded_corpus::open_stream(
+            &output.join("corpus.meta"),
+            &output.join("corpus.records"),
+        )
+        .expect("bound recorded output");
+        assert_eq!(captured.execution.attention_operator, Some(attention));
+        assert_eq!(captured.execution.dense_operator, Some(dense));
+        assert_eq!(captured.binding_cid.as_deref(), Some(binding_cid.as_str()));
+        assert_eq!(
+            captured.hidden.as_ref().expect("hidden summary").summary(),
+            expected_hidden
+        );
+        captured.verify_generation().expect("stable output");
+
+        std::fs::create_dir(output.join("graph")).expect("downstream graph");
+        std::fs::create_dir(output.join("graph-cover")).expect("downstream cover");
+        std::fs::write(output.join("graph/sentinel"), b"graph").expect("graph sentinel");
+        std::fs::write(output.join("graph-cover/sentinel"), b"cover").expect("cover sentinel");
+        producer
+            .preflight_ready_deterministic_compile_inventory(&PlannedOutputMember::ALL)
+            .expect("ready exact inventory tolerates downstream graph outputs");
+        assert_eq!(
+            std::fs::read(output.join("graph/sentinel")).unwrap(),
+            b"graph"
+        );
+        assert_eq!(
+            std::fs::read(output.join("graph-cover/sentinel")).unwrap(),
+            b"cover"
+        );
+
+        drop(producer);
+        let _ = std::fs::remove_dir_all(source);
+        let _ = std::fs::remove_dir_all(output);
+    }
+
     #[cfg(unix)]
     #[test]
-    fn recorded_corpus_capture_refuses_post_resolution_swap_and_copy_never_reopens_source() {
+    fn recorded_corpus_capture_refuses_post_resolution_swap() {
         use std::os::unix::fs::symlink;
 
         let source = unique_cli_test_path("recorded-corpus-captured-source");
@@ -10121,11 +11064,6 @@ mod tests {
         std::fs::write(&hidden, b"captured hidden bytes").expect("hidden bytes");
         let external = unique_cli_test_path("recorded-corpus-external-records");
         std::fs::write(&external, b"external replacement bytes").expect("external records");
-        let output = unique_cli_test_path("recorded-corpus-swap-output");
-        std::fs::create_dir_all(&output).expect("output");
-        std::fs::write(output.join("sentinel"), b"before").expect("sentinel");
-        let output_before = directory_bytes(&output);
-
         let error = recorded_corpus_snapshot_with_hook(&meta, &records, || {
             std::fs::remove_file(&records).expect("remove captured records path");
             symlink(&external, &records).expect("post-resolution records symlink")
@@ -10136,7 +11074,6 @@ mod tests {
                 || error.reason.contains("captured regular-file generation"),
             "{error}"
         );
-        assert_eq!(directory_bytes(&output), output_before);
         std::fs::remove_file(&records).expect("remove swapped link");
         std::fs::write(&records, b"records marker").expect("restore records");
 
@@ -10152,29 +11089,12 @@ mod tests {
         symlink(&external, &meta).expect("swap metadata after complete capture");
         symlink(&external, &records).expect("swap records after complete capture");
 
-        let mut output_guard =
-            uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerGuard::try_acquire(
-                &output,
-            )
-            .expect("output guard");
-        output_guard.ensure_root().expect("output root");
-        write_captured_recorded_corpus(&output_guard, &output, &captured)
-            .expect("copy uses owned captured bytes only");
-        assert_eq!(
-            std::fs::read(output.join("corpus.meta")).expect("output meta"),
-            b"meta marker"
-        );
-        assert_eq!(
-            std::fs::read(output.join("corpus.records")).expect("output records"),
-            b"records marker"
-        );
         assert_eq!(
             std::fs::read(&external).expect("external survives"),
             b"external replacement bytes"
         );
 
         let _ = std::fs::remove_dir_all(source);
-        let _ = std::fs::remove_dir_all(output);
         let _ = std::fs::remove_file(external);
     }
 
