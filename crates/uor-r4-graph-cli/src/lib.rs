@@ -33,7 +33,8 @@ use uor_r4_graph_compiler::induction as cover;
 use uor_r4_graph_compiler::observation as observe;
 use uor_r4_graph_compiler::observation_text as observe_text;
 use uor_r4_graph_compiler::recorded_corpus::{
-    PLANNED_OUTPUT_RESERVED_PREFIX, PlannedOutputMember, RecordedCorpusRole,
+    PLANNED_OUTPUT_RESERVED_PREFIX, PlannedOutputMember, RecordedCorpusProducerGuard,
+    RecordedCorpusReaderPins, RecordedCorpusRole,
 };
 use uor_r4_graph_compiler::reproducibility as repro;
 mod convert_r4g1;
@@ -816,6 +817,15 @@ pub struct SourceCorpusSession {
     recorded_corpus: Option<uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerGuard>,
 }
 
+impl std::fmt::Debug for SourceCorpusSession {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("SourceCorpusSession")
+            .field("recorded_corpus", &self.recorded_corpus.is_some())
+            .finish_non_exhaustive()
+    }
+}
+
 impl Drop for SourceCorpusSession {
     fn drop(&mut self) {
         self.release_in_order(|| {});
@@ -1554,6 +1564,59 @@ fn opened_file_generation_matches(
         && initial.modified().ok() == final_metadata.modified().ok()
 }
 
+#[cfg(unix)]
+fn is_publisher_alias_cleanup_transition(
+    initial: &std::fs::Metadata,
+    final_metadata: &std::fs::Metadata,
+    final_path_metadata: &std::fs::Metadata,
+    captured_len: usize,
+    verification_offset: usize,
+) -> bool {
+    use std::os::unix::fs::MetadataExt;
+
+    initial.file_type().is_file()
+        && final_metadata.file_type().is_file()
+        && final_path_metadata.file_type().is_file()
+        && opened_file_identity_matches(initial, final_metadata)
+        && opened_file_identity_matches(final_path_metadata, final_metadata)
+        && initial.len() == captured_len as u64
+        && final_metadata.len() == captured_len as u64
+        && verification_offset == captured_len
+        && initial.mtime() == final_metadata.mtime()
+        && initial.mtime_nsec() == final_metadata.mtime_nsec()
+        && (initial.ctime() != final_metadata.ctime()
+            || initial.ctime_nsec() != final_metadata.ctime_nsec())
+        && initial.nlink() == 2
+        && final_metadata.nlink() == 1
+}
+
+#[cfg(not(unix))]
+fn is_publisher_alias_cleanup_transition(
+    _initial: &std::fs::Metadata,
+    _final_metadata: &std::fs::Metadata,
+    _final_path_metadata: &std::fs::Metadata,
+    _captured_len: usize,
+    _verification_offset: usize,
+) -> bool {
+    false
+}
+
+struct StrictRegularFileSnapshot {
+    bytes: Vec<u8>,
+    metadata: std::fs::Metadata,
+}
+
+struct PublisherAliasCleanup {
+    snapshot: StrictRegularFileSnapshot,
+    terminal_error: SourceUnavailable,
+}
+
+enum StrictOptionalRegularFileCapture {
+    Absent,
+    Stable(StrictRegularFileSnapshot),
+    PublisherAliasCleanup(PublisherAliasCleanup),
+}
+
 #[cfg(not(unix))]
 fn opened_file_identity_matches(
     _path_metadata: &std::fs::Metadata,
@@ -1568,11 +1631,11 @@ fn opened_file_identity_matches(
 /// path is never reopened for bytes: Unix refuses links at `open(2)`, while
 /// every platform checks that the path still names the opened regular file
 /// before and after the read.
-fn read_optional_regular_file_nofollow_with<F>(
+fn capture_optional_regular_file_nofollow_with<F>(
     path: &Path,
     context: &str,
     after_open: F,
-) -> Result<Option<Vec<u8>>, SourceUnavailable>
+) -> Result<StrictOptionalRegularFileCapture, SourceUnavailable>
 where
     F: FnOnce(),
 {
@@ -1589,7 +1652,9 @@ where
     }
     let mut file = match options.open(path) {
         Ok(file) => file,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(StrictOptionalRegularFileCapture::Absent);
+        }
         Err(error) => {
             return Err(SourceUnavailable::new(format!(
                 "{context} {} is not a regular file or cannot be opened without following links: {error}",
@@ -1699,6 +1764,12 @@ where
             path.display()
         ))
     })?;
+    let terminal_error = || {
+        SourceUnavailable::new(format!(
+            "{context} {} changed identity, type, length, content, or generation while its bytes were read",
+            path.display()
+        ))
+    };
     if !final_file_metadata.file_type().is_file()
         || !final_path_metadata.file_type().is_file()
         || !opened_file_generation_matches(&opened_metadata, &final_file_metadata)
@@ -1706,12 +1777,100 @@ where
         || verification_offset != bytes.len()
         || final_file_metadata.len() != bytes.len() as u64
     {
-        return Err(SourceUnavailable::new(format!(
-            "{context} {} changed identity, type, length, content, or generation while its bytes were read",
-            path.display()
-        )));
+        let error = terminal_error();
+        if is_publisher_alias_cleanup_transition(
+            &opened_metadata,
+            &final_file_metadata,
+            &final_path_metadata,
+            bytes.len(),
+            verification_offset,
+        ) {
+            return Ok(StrictOptionalRegularFileCapture::PublisherAliasCleanup(
+                PublisherAliasCleanup {
+                    snapshot: StrictRegularFileSnapshot {
+                        bytes,
+                        metadata: final_file_metadata,
+                    },
+                    terminal_error: error,
+                },
+            ));
+        }
+        return Err(error);
     }
-    Ok(Some(bytes))
+    Ok(StrictOptionalRegularFileCapture::Stable(
+        StrictRegularFileSnapshot {
+            bytes,
+            metadata: final_file_metadata,
+        },
+    ))
+}
+
+fn read_optional_regular_file_nofollow_with<F>(
+    path: &Path,
+    context: &str,
+    after_open: F,
+) -> Result<Option<Vec<u8>>, SourceUnavailable>
+where
+    F: FnOnce(),
+{
+    match capture_optional_regular_file_nofollow_with(path, context, after_open)? {
+        StrictOptionalRegularFileCapture::Absent => Ok(None),
+        StrictOptionalRegularFileCapture::Stable(snapshot) => Ok(Some(snapshot.bytes)),
+        StrictOptionalRegularFileCapture::PublisherAliasCleanup(cleanup) => {
+            Err(cleanup.terminal_error)
+        }
+    }
+}
+
+fn read_optional_regular_file_for_operator_publisher_with_hooks<F, B, G>(
+    path: &Path,
+    context: &str,
+    after_first_open: F,
+    before_retry: B,
+    after_retry_open: G,
+) -> Result<Option<Vec<u8>>, SourceUnavailable>
+where
+    F: FnOnce(),
+    B: FnOnce(),
+    G: FnOnce(),
+{
+    let first = capture_optional_regular_file_nofollow_with(path, context, after_first_open)?;
+    let StrictOptionalRegularFileCapture::PublisherAliasCleanup(first_cleanup) = first else {
+        return match first {
+            StrictOptionalRegularFileCapture::Absent => Ok(None),
+            StrictOptionalRegularFileCapture::Stable(snapshot) => Ok(Some(snapshot.bytes)),
+            StrictOptionalRegularFileCapture::PublisherAliasCleanup(_) => unreachable!(),
+        };
+    };
+
+    before_retry();
+    match capture_optional_regular_file_nofollow_with(path, context, after_retry_open)? {
+        StrictOptionalRegularFileCapture::Absent => Err(SourceUnavailable::new(format!(
+            "{context} {} disappeared during the one permitted publisher alias-cleanup retry",
+            path.display()
+        ))),
+        StrictOptionalRegularFileCapture::PublisherAliasCleanup(cleanup) => {
+            Err(cleanup.terminal_error)
+        }
+        StrictOptionalRegularFileCapture::Stable(retry) => {
+            if !opened_file_generation_matches(&first_cleanup.snapshot.metadata, &retry.metadata)
+                || first_cleanup.snapshot.bytes != retry.bytes
+            {
+                return Err(SourceUnavailable::new(format!(
+                    "{context} {} changed generation or content across the one permitted publisher alias-cleanup retry",
+                    path.display()
+                )));
+            }
+            Ok(Some(retry.bytes))
+        }
+    }
+}
+
+fn read_optional_regular_file_for_operator_publisher(
+    path: &Path,
+    context: &str,
+) -> Result<Option<Vec<u8>>, SourceUnavailable> {
+    read_optional_regular_file_for_operator_publisher_with_hooks(path, context, || {}, || {}, || {})
 }
 
 fn read_optional_regular_file_nofollow(
@@ -1896,6 +2055,44 @@ fn read_optional_compiled_attention_operator(
     Ok(read_optional_compiled_attention_operator_with_bytes(output)?.map(|(operator, _)| operator))
 }
 
+#[cfg(test)]
+fn read_optional_compiled_attention_operator_for_publisher_with_hooks<F, B, G>(
+    output: &Path,
+    after_first_open: F,
+    before_retry: B,
+    after_retry_open: G,
+) -> Result<Option<AttentionOperatorSpec>, SourceUnavailable>
+where
+    F: FnOnce(),
+    B: FnOnce(),
+    G: FnOnce(),
+{
+    let path = output.join(ATTENTION_OPERATOR_BINDING_FILE);
+    let Some(bytes) = read_optional_regular_file_for_operator_publisher_with_hooks(
+        &path,
+        "attention-operator binding",
+        after_first_open,
+        before_retry,
+        after_retry_open,
+    )?
+    else {
+        return Ok(None);
+    };
+    parse_compiled_attention_operator_bytes(&path, &bytes).map(Some)
+}
+
+fn read_optional_compiled_attention_operator_for_publisher(
+    output: &Path,
+) -> Result<Option<AttentionOperatorSpec>, SourceUnavailable> {
+    let path = output.join(ATTENTION_OPERATOR_BINDING_FILE);
+    let Some(bytes) =
+        read_optional_regular_file_for_operator_publisher(&path, "attention-operator binding")?
+    else {
+        return Ok(None);
+    };
+    parse_compiled_attention_operator_bytes(&path, &bytes).map(Some)
+}
+
 /// Read and registry-validate a compile directory's attention-operator
 /// binding. A missing sidecar is an error on this source-driven/API seam; use
 /// [`recorded_corpus_attention_operator`] when legacy absence is meaningful.
@@ -1919,7 +2116,7 @@ fn preflight_compiled_attention_operator(
     let requested =
         validate_attention_operator(requested, "proposed teacher attention-operator binding")?;
     let inventory = compile_output_payload_inventory(output)?;
-    let recorded = read_optional_compiled_attention_operator(output)?;
+    let recorded = read_optional_compiled_attention_operator_for_publisher(output)?;
     if let Some(recorded) = recorded {
         if recorded != requested {
             return Err(SourceUnavailable::new(format!(
@@ -1982,7 +2179,7 @@ fn publish_attention_operator_binding(
 ) -> Result<(), SourceUnavailable> {
     let requested =
         validate_attention_operator(requested, "proposed teacher attention-operator binding")?;
-    if let Some(recorded) = read_optional_compiled_attention_operator(output)? {
+    if let Some(recorded) = read_optional_compiled_attention_operator_for_publisher(output)? {
         return require_matching_compiled_attention_operator(output, &requested, &recorded);
     }
 
@@ -2033,12 +2230,13 @@ fn publish_attention_operator_binding(
         }
         Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
             let _ = std::fs::remove_file(&temporary);
-            let recorded = read_optional_compiled_attention_operator(output)?.ok_or_else(|| {
-                SourceUnavailable::new(format!(
-                    "{} appeared during attention-operator publication but is now absent",
-                    path.display()
-                ))
-            })?;
+            let recorded = read_optional_compiled_attention_operator_for_publisher(output)?
+                .ok_or_else(|| {
+                    SourceUnavailable::new(format!(
+                        "{} appeared during attention-operator publication but is now absent",
+                        path.display()
+                    ))
+                })?;
             require_matching_compiled_attention_operator(output, &requested, &recorded)?;
             sync_compile_output_directory(output)
         }
@@ -2160,6 +2358,44 @@ fn read_optional_compiled_dense_operator(
     Ok(read_optional_compiled_dense_operator_with_bytes(output)?.map(|(operator, _)| operator))
 }
 
+#[cfg(test)]
+fn read_optional_compiled_dense_operator_for_publisher_with_hooks<F, B, G>(
+    output: &Path,
+    after_first_open: F,
+    before_retry: B,
+    after_retry_open: G,
+) -> Result<Option<DenseOperatorSpec>, SourceUnavailable>
+where
+    F: FnOnce(),
+    B: FnOnce(),
+    G: FnOnce(),
+{
+    let path = output.join(DENSE_OPERATOR_BINDING_FILE);
+    let Some(bytes) = read_optional_regular_file_for_operator_publisher_with_hooks(
+        &path,
+        "dense-operator binding",
+        after_first_open,
+        before_retry,
+        after_retry_open,
+    )?
+    else {
+        return Ok(None);
+    };
+    parse_compiled_dense_operator_bytes(&path, &bytes).map(Some)
+}
+
+fn read_optional_compiled_dense_operator_for_publisher(
+    output: &Path,
+) -> Result<Option<DenseOperatorSpec>, SourceUnavailable> {
+    let path = output.join(DENSE_OPERATOR_BINDING_FILE);
+    let Some(bytes) =
+        read_optional_regular_file_for_operator_publisher(&path, "dense-operator binding")?
+    else {
+        return Ok(None);
+    };
+    parse_compiled_dense_operator_bytes(&path, &bytes).map(Some)
+}
+
 /// Read a compile directory's optional dense-execution binding. Absence is a
 /// real compatibility state for Llama and historical corpora and is never
 /// synthesized as GPT-2 v1.
@@ -2180,7 +2416,7 @@ fn preflight_compiled_dense_operator(
         .map(|record| validate_dense_operator(record, "proposed teacher dense-operator binding"))
         .transpose()?;
     let inventory = compile_output_payload_inventory(output)?;
-    let recorded = read_optional_compiled_dense_operator(output)?;
+    let recorded = read_optional_compiled_dense_operator_for_publisher(output)?;
     match (recorded.as_ref(), requested.as_ref()) {
         (Some(recorded), Some(requested)) if recorded == requested => Ok(true),
         (Some(recorded), Some(requested)) => Err(SourceUnavailable::new(format!(
@@ -2248,7 +2484,7 @@ fn publish_dense_operator_binding(
     requested: &DenseOperatorSpec,
 ) -> Result<(), SourceUnavailable> {
     let requested = validate_dense_operator(requested, "proposed teacher dense-operator binding")?;
-    if let Some(recorded) = read_optional_compiled_dense_operator(output)? {
+    if let Some(recorded) = read_optional_compiled_dense_operator_for_publisher(output)? {
         return require_matching_compiled_dense_operator(output, &requested, &recorded);
     }
 
@@ -2297,12 +2533,13 @@ fn publish_dense_operator_binding(
         }
         Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
             let _ = std::fs::remove_file(&temporary);
-            let recorded = read_optional_compiled_dense_operator(output)?.ok_or_else(|| {
-                SourceUnavailable::new(format!(
-                    "{} appeared during dense-operator publication but is now absent",
-                    path.display()
-                ))
-            })?;
+            let recorded = read_optional_compiled_dense_operator_for_publisher(output)?
+                .ok_or_else(|| {
+                    SourceUnavailable::new(format!(
+                        "{} appeared during dense-operator publication but is now absent",
+                        path.display()
+                    ))
+                })?;
             require_matching_compiled_dense_operator(output, &requested, &recorded)?;
             sync_compile_output_directory(output)
         }
@@ -2414,6 +2651,219 @@ fn preflight_recorded_compile_output(output: &Path) -> Result<(), SourceUnavaila
         }
     }
     Ok(())
+}
+
+/// Resolve a compile output through the deepest existing physical ancestor
+/// without creating any parent or output entry. A final symlink is never a
+/// compile root; intermediate aliases are collapsed once so all later owner
+/// checks, session acquisition, and writes use the same physical namespace.
+fn canonical_hf_compile_output_subject(output: &Path) -> Result<PathBuf, SourceUnavailable> {
+    match std::fs::symlink_metadata(output) {
+        Ok(metadata) if metadata.file_type().is_symlink() => {
+            return Err(SourceUnavailable::new(format!(
+                "compile output {} is a symlink; a physical non-symlink directory is required",
+                output.display()
+            )));
+        }
+        Ok(metadata) if metadata.file_type().is_dir() => {
+            return std::fs::canonicalize(output).map_err(SourceUnavailable::new);
+        }
+        Ok(_) => {
+            return Err(SourceUnavailable::new(format!(
+                "compile output {} is not a regular non-symlink directory",
+                output.display()
+            )));
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(SourceUnavailable::new(error)),
+    }
+
+    let mut cursor = output;
+    let mut missing = Vec::<std::ffi::OsString>::new();
+    loop {
+        match std::fs::symlink_metadata(cursor) {
+            Ok(_) => {
+                let physical = std::fs::canonicalize(cursor).map_err(SourceUnavailable::new)?;
+                let metadata =
+                    std::fs::symlink_metadata(&physical).map_err(SourceUnavailable::new)?;
+                if !metadata.file_type().is_dir() {
+                    return Err(SourceUnavailable::new(format!(
+                        "deepest existing compile-output ancestor {} does not resolve to a physical directory",
+                        cursor.display()
+                    )));
+                }
+                let mut resolved = physical;
+                for leaf in missing.iter().rev() {
+                    resolved.push(leaf);
+                }
+                return Ok(resolved);
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                let leaf = cursor.file_name().ok_or_else(|| {
+                    SourceUnavailable::new(format!(
+                        "compile output {} has no physical ancestor and final name",
+                        output.display()
+                    ))
+                })?;
+                if leaf == std::ffi::OsStr::new(".") || leaf == std::ffi::OsStr::new("..") {
+                    return Err(SourceUnavailable::new(format!(
+                        "compile output {} contains a reserved unresolved path component",
+                        output.display()
+                    )));
+                }
+                missing.push(leaf.to_os_string());
+                cursor = cursor
+                    .parent()
+                    .filter(|parent| !parent.as_os_str().is_empty())
+                    .unwrap_or_else(|| Path::new("."));
+            }
+            Err(error) => return Err(SourceUnavailable::new(error)),
+        }
+    }
+}
+
+fn has_server_private_stage_topology(root: &Path) -> bool {
+    if root.parent().and_then(Path::file_name)
+        != Some(std::ffi::OsStr::new(".uor-r4-source-compile-staging"))
+    {
+        return false;
+    }
+    let Some(name) = root.file_name().and_then(|name| name.to_str()) else {
+        return false;
+    };
+    let Some((logical, sequence)) = name.rsplit_once(".bundle-stage.") else {
+        return false;
+    };
+    if !logical.starts_with('.') || logical.len() == 1 {
+        return false;
+    }
+    let mut parts = sequence.split('.');
+    parts
+        .next()
+        .is_some_and(|part| !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit()))
+        && parts
+            .next()
+            .is_some_and(|part| !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit()))
+        && parts.next().is_none()
+}
+
+fn compiled_bundle_owner_ancestor(output: &Path) -> Result<Option<PathBuf>, SourceUnavailable> {
+    let mut candidate = match std::fs::symlink_metadata(output) {
+        Ok(metadata) if metadata.file_type().is_dir() => Some(output),
+        Ok(_) => {
+            return Err(SourceUnavailable::new(format!(
+                "compile output {} is not a regular non-symlink directory",
+                output.display()
+            )));
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => output.parent(),
+        Err(error) => return Err(SourceUnavailable::new(error)),
+    };
+    while let Some(root) = candidate {
+        let metadata = match std::fs::symlink_metadata(root) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                candidate = root.parent();
+                continue;
+            }
+            Err(error) => return Err(SourceUnavailable::new(error)),
+        };
+        if metadata.file_type().is_dir() {
+            // The private-stage topology itself reserves this root for the
+            // managed server. Select its common authority even in the narrow
+            // interval before the owner marker is published, so a direct
+            // child compile cannot race marker appearance and seed an
+            // independent child transaction inside the stage.
+            if has_server_private_stage_topology(root) {
+                return std::fs::canonicalize(root)
+                    .map(Some)
+                    .map_err(SourceUnavailable::new);
+            }
+            for leaf in [
+                "compiled_bundle_completion.json",
+                ".compiled_bundle_stage.json",
+                ".compiled_bundle_stage_a.json",
+            ] {
+                match std::fs::symlink_metadata(root.join(leaf)) {
+                    Ok(_) => {
+                        return std::fs::canonicalize(root)
+                            .map(Some)
+                            .map_err(SourceUnavailable::new);
+                    }
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(error) => return Err(SourceUnavailable::new(error)),
+                }
+            }
+        }
+        candidate = root.parent();
+    }
+    Ok(None)
+}
+
+fn reject_foreign_compiled_bundle_stage_owner(output: &Path) -> Result<(), SourceUnavailable> {
+    let Some(owner_root) = compiled_bundle_owner_ancestor(output)? else {
+        return Ok(());
+    };
+    // The read-only ancestor classification precedes any child session/root
+    // creation. Reacquire that exact ancestor's common authority and recheck
+    // while held; never seed independent coordination inside a private stage.
+    let guard = RecordedCorpusProducerGuard::try_acquire(&owner_root)?;
+    guard.verify_owned_root()?;
+    let mut present = false;
+    for leaf in [
+        "compiled_bundle_completion.json",
+        ".compiled_bundle_stage.json",
+        ".compiled_bundle_stage_a.json",
+    ] {
+        match std::fs::symlink_metadata(owner_root.join(leaf)) {
+            Ok(_) => present = true,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(SourceUnavailable::new(error)),
+        }
+    }
+    guard.verify_owned_root()?;
+    let state = if present {
+        "is an owned or completed server compiled-bundle ancestor"
+    } else {
+        "changed owner state during guarded classification"
+    };
+    Err(SourceUnavailable::new(format!(
+        "compile output {} {state} at {}; direct source compilation cannot mutate it without the exact managed capability",
+        output.display(),
+        owner_root.display()
+    )))
+}
+
+fn require_exact_managed_compiled_bundle_stage_owner(
+    guard: &RecordedCorpusProducerGuard,
+    output: &Path,
+) -> Result<(), SourceUnavailable> {
+    if !guard.protects_directory(output)? {
+        return Err(SourceUnavailable::new(format!(
+            "managed source capability for {} does not protect exact output {}",
+            guard.root().display(),
+            output.display()
+        )));
+    }
+    guard.verify_owned_root()?;
+    let marker = output.join(".compiled_bundle_stage.json");
+    match std::fs::symlink_metadata(&marker) {
+        Ok(metadata) if metadata.file_type().is_file() => {}
+        Ok(_) => {
+            return Err(SourceUnavailable::new(format!(
+                "managed compiled-bundle owner marker {} is not a regular non-symlink file",
+                marker.display()
+            )));
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Err(SourceUnavailable::new(format!(
+                "managed source capability cannot mutate {} without its exact server owner marker",
+                output.display()
+            )));
+        }
+        Err(error) => return Err(SourceUnavailable::new(error)),
+    }
+    guard.verify_owned_root()
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -3753,6 +4203,10 @@ struct CoverOptions {
     entropy_gain_bits: f64,
     radius_quantile: u32,
     output: PathBuf,
+    /// Explicit stable mutation authority for a managed/canonical bundle.
+    /// Without this flag, `--out` is always an arbitrary standalone root,
+    /// even when its basename is `graph-cover`.
+    bundle_root: Option<PathBuf>,
     /// Root κ of the #597 source-snapshot manifest of the teacher source
     /// (`--source-manifest-kappa`), carried verbatim into the cover
     /// report. This crate never computes the κ (no uor-addr dependency).
@@ -3790,6 +4244,7 @@ fn parse_cover_options(args: &[String]) -> Result<CoverOptions, SourceUnavailabl
         entropy_gain_bits: cover::DEFAULT_SPLIT_ENTROPY_GAIN_BITS,
         radius_quantile: cover::RADIUS_QUANTILE_NUMERATOR,
         output: PathBuf::from("cover"),
+        bundle_root: None,
         source_manifest_kappa: None,
         geometry: None,
         attention_operator: None,
@@ -3871,6 +4326,7 @@ fn parse_cover_options(args: &[String]) -> Result<CoverOptions, SourceUnavailabl
                 }
             }
             "--out" => options.output = PathBuf::from(value),
+            "--bundle-root" => options.bundle_root = Some(PathBuf::from(value)),
             "--source-manifest-kappa" => {
                 options.source_manifest_kappa = Some(value.clone());
             }
@@ -3964,12 +4420,29 @@ fn require_cover_recorded_execution_identity(
 /// against it and against the incumbent 4×256 class cover, and write the
 /// R4G1 artifact plus the JSON recall/stability report.
 pub fn cover_command(args: &[String]) -> Result<(), SourceUnavailable> {
+    cover_command_with_authority(args, GraphCommandCallerAuthority::Public)
+}
+
+/// Run cover induction while a managed caller retains the one common
+/// recorded-corpus producer transaction for the bundle root. This is the
+/// server-only seam: acquiring again would self-contend, while falling back to
+/// pathname reads would leave completion publication outside the transaction.
+pub fn cover_command_under_producer_guard(
+    args: &[String],
+    guard: &RecordedCorpusProducerGuard,
+) -> Result<(), SourceUnavailable> {
+    cover_command_with_authority(args, GraphCommandCallerAuthority::Provided(guard))
+}
+
+fn cover_command_with_authority(
+    args: &[String],
+    caller_authority: GraphCommandCallerAuthority<'_>,
+) -> Result<(), SourceUnavailable> {
     #[cfg(debug_assertions)]
     eprintln!(
         "warning: debug builds make cover induction much slower; use `cargo run --release -- transformerless cover ...`"
     );
-    let options = parse_cover_options(args)?;
-    let tokenizer_cid = explicit_tokenizer_cid(options.tokenizer.as_deref())?.unwrap_or([0; 32]);
+    let mut options = parse_cover_options(args)?;
     let corpus_meta_path = if !options.corpus_meta.exists() {
         if let Some(parent) = options.corpus_meta.parent() {
             if parent.join("corpus.meta").exists() {
@@ -4002,7 +4475,30 @@ pub fn cover_command(args: &[String]) -> Result<(), SourceUnavailable> {
         options.corpus_recs.clone()
     };
 
-    let recorded_corpus = recorded_compiler_corpus(&corpus_meta_path, &corpus_recs_path)?;
+    let transaction_authority = match caller_authority {
+        GraphCommandCallerAuthority::Public => match options.bundle_root.as_deref() {
+            Some(root) => GraphTransactionAuthority::DeclaredBundle(root),
+            None => GraphTransactionAuthority::StandaloneExact,
+        },
+        GraphCommandCallerAuthority::Provided(guard) => {
+            if let Some(root) = options.bundle_root.as_deref() {
+                return Err(SourceUnavailable::new(format!(
+                    "cover already has retained producer authority for {}; do not supply a second --bundle-root {} declaration",
+                    guard.root().display(),
+                    root.display()
+                )));
+            }
+            GraphTransactionAuthority::ProvidedBundle(guard)
+        }
+    };
+    let (recorded_corpus, mut transaction) = begin_graph_command_transaction(
+        transaction_authority,
+        &corpus_meta_path,
+        &corpus_recs_path,
+        &mut options.output,
+        "cover",
+    )?;
+    let tokenizer_cid = explicit_tokenizer_cid(options.tokenizer.as_deref())?.unwrap_or([0; 32]);
     require_cover_recorded_execution_identity(&options, &recorded_corpus.execution)?;
     // #450: resolve and announce the inputs *before* the long work, so the
     // run says which teacher container it actually read. `--artifacts`
@@ -4114,15 +4610,18 @@ pub fn cover_command(args: &[String]) -> Result<(), SourceUnavailable> {
     // runtime or artifact format.
     report.dense_operator = options.dense_operator.clone();
 
-    std::fs::create_dir_all(&options.output)?;
+    transaction.prepare_output_directory(&options.output)?;
     let artifact_path = options.output.join("cover.r4g1");
-    std::fs::write(&artifact_path, &artifact_bytes)
-        .map_err(|error| SourceUnavailable::new(format!("{}: {error}", artifact_path.display())))?;
+    write_regular_file_synced(&artifact_path, &artifact_bytes, "cover R4G1 artifact")?;
     let report_json = serde_json::to_string_pretty(&report)?;
     let report_path = options.output.join("cover_report.json");
-    std::fs::write(&report_path, &report_json)
-        .map_err(|error| SourceUnavailable::new(format!("{}: {error}", report_path.display())))?;
-
+    write_regular_file_synced(
+        &report_path,
+        report_json.as_bytes(),
+        "cover induction report",
+    )?;
+    sync_compile_output_directory(&options.output)?;
+    transaction.verify_after_output(&options.output)?;
     println!(
         "cover complete: {} regions ({} splits), {} edges ({} refinement + {} neighbor), depths 1..={}",
         induced.cover.regions.len(),
@@ -4184,6 +4683,10 @@ struct ScoreOptions {
     scoring_variant: score_runtime::ScoringVariant,
     quality_profile: String,
     output: PathBuf,
+    /// Explicit stable mutation authority for a managed/canonical bundle.
+    /// Without this flag, `--out` is always an arbitrary standalone root,
+    /// even when its basename is `graph`.
+    bundle_root: Option<PathBuf>,
 }
 
 fn parse_score_options(args: &[String]) -> Result<ScoreOptions, SourceUnavailable> {
@@ -4210,6 +4713,7 @@ fn parse_score_options(args: &[String]) -> Result<ScoreOptions, SourceUnavailabl
         scoring_variant: score_runtime::ScoringVariant::ChainTelescoped,
         quality_profile: "pinned".to_owned(),
         output: PathBuf::from("score"),
+        bundle_root: None,
     };
     let mut index = 0usize;
     while index < args.len() {
@@ -4366,6 +4870,7 @@ fn parse_score_options(args: &[String]) -> Result<ScoreOptions, SourceUnavailabl
                 options.quality_profile = value.clone();
             }
             "--out" => options.output = PathBuf::from(value),
+            "--bundle-root" => options.bundle_root = Some(PathBuf::from(value)),
             _ => {
                 return Err(SourceUnavailable::new(format!(
                     "unknown score option: {flag}"
@@ -4385,24 +4890,27 @@ fn parse_score_options(args: &[String]) -> Result<ScoreOptions, SourceUnavailabl
 /// side by side on the held-out partition — writing `score.r4g1` and
 /// `score_report.json`.
 pub fn score_command(args: &[String]) -> Result<(), SourceUnavailable> {
+    score_command_with_authority(args, GraphCommandCallerAuthority::Public)
+}
+
+/// Score a managed bundle while its server-owned common producer transaction
+/// remains live from Stage A through completion publication.
+pub fn score_command_under_producer_guard(
+    args: &[String],
+    guard: &RecordedCorpusProducerGuard,
+) -> Result<(), SourceUnavailable> {
+    score_command_with_authority(args, GraphCommandCallerAuthority::Provided(guard))
+}
+
+fn score_command_with_authority(
+    args: &[String],
+    caller_authority: GraphCommandCallerAuthority<'_>,
+) -> Result<(), SourceUnavailable> {
     #[cfg(debug_assertions)]
     eprintln!(
         "warning: debug builds make scoring much slower; use `cargo run --release -- transformerless score ...`"
     );
-    let options = parse_score_options(args)?;
-    // Resolve tokenizer/cover identity before corpus observation or output
-    // mutation. This both preserves a bound cover CID when no tokenizer flag is
-    // repeated and rejects an explicit cross-id-space swap up front.
-    let explicit_tokenizer_cid = explicit_tokenizer_cid(options.tokenizer.as_deref())?;
-    let cover_bytes = options
-        .cover
-        .as_ref()
-        .map(|path| {
-            std::fs::read(path)
-                .map_err(|error| SourceUnavailable::new(format!("{}: {error}", path.display())))
-        })
-        .transpose()?;
-    let tokenizer_cid = scored_tokenizer_cid(cover_bytes.as_deref(), explicit_tokenizer_cid)?;
+    let mut options = parse_score_options(args)?;
     // #488: account for where a real corpus's hours go across the WHOLE score
     // pipeline, not just Gate C. Same instrument, same conventions as #471
     // (stderr only — a duration in `score_report.json` would break the
@@ -4441,9 +4949,35 @@ pub fn score_command(args: &[String]) -> Result<(), SourceUnavailable> {
         options.corpus_recs.clone()
     };
 
-    // #450: resolve and announce the inputs *before* the long work, so the
-    // run says which teacher container it actually read. `--artifacts`
-    // defaults to a shared mutable path that helper scripts overwrite.
+    let transaction_authority = match caller_authority {
+        GraphCommandCallerAuthority::Public => match options.bundle_root.as_deref() {
+            Some(root) => GraphTransactionAuthority::DeclaredBundle(root),
+            None => GraphTransactionAuthority::StandaloneExact,
+        },
+        GraphCommandCallerAuthority::Provided(guard) => {
+            if let Some(root) = options.bundle_root.as_deref() {
+                return Err(SourceUnavailable::new(format!(
+                    "score already has retained producer authority for {}; do not supply a second --bundle-root {} declaration",
+                    guard.root().display(),
+                    root.display()
+                )));
+            }
+            GraphTransactionAuthority::ProvidedBundle(guard)
+        }
+    };
+    let (recorded_corpus, mut transaction) = begin_graph_command_transaction(
+        transaction_authority,
+        &corpus_meta_path,
+        &corpus_recs_path,
+        &mut options.output,
+        "score",
+    )?;
+    // Same-root/server transactions are already protected here; standalone
+    // cross-root output ownership remains deferred. Capture every remaining
+    // input inside that ordering so a cooperating same-bundle writer cannot
+    // create a mixed source/graph generation. For cross-root output, these
+    // bytes are all materialized before prepare_output_directory acquires its
+    // sole output producer.
     let artifact_container = std::fs::read(&options.artifacts).map_err(|error| {
         SourceUnavailable::new(format!("{}: {error}", options.artifacts.display()))
     })?;
@@ -4455,7 +4989,16 @@ pub fn score_command(args: &[String]) -> Result<(), SourceUnavailable> {
     })?;
     let artifact_kappa = repro::container_kappa(&artifact_container);
     repro::announce_teacher_container(&options.artifacts, &artifact_kappa);
-    let recorded_corpus = recorded_compiler_corpus(&corpus_meta_path, &corpus_recs_path)?;
+    let explicit_tokenizer_cid = explicit_tokenizer_cid(options.tokenizer.as_deref())?;
+    let cover_bytes = options
+        .cover
+        .as_ref()
+        .map(|path| {
+            std::fs::read(path)
+                .map_err(|error| SourceUnavailable::new(format!("{}: {error}", path.display())))
+        })
+        .transpose()?;
+    let tokenizer_cid = scored_tokenizer_cid(cover_bytes.as_deref(), explicit_tokenizer_cid)?;
     let meta_bytes = recorded_corpus.meta_bytes;
     let recs_bytes = recorded_corpus.records_bytes;
     let corpus_kappa = repro::corpus_stream_kappa(&meta_bytes, &recs_bytes);
@@ -4686,14 +5229,14 @@ pub fn score_command(args: &[String]) -> Result<(), SourceUnavailable> {
             histogram.join(" ")
         );
     }
-    std::fs::create_dir_all(&options.output).map_err(SourceUnavailable::new)?;
+    transaction.prepare_output_directory(&options.output)?;
     let artifact_path = options.output.join("score.r4g1");
-    std::fs::write(&artifact_path, &artifact_bytes)
-        .map_err(|error| SourceUnavailable::new(format!("{}: {error}", artifact_path.display())))?;
+    write_regular_file_synced(&artifact_path, &artifact_bytes, "scored R4G1 artifact")?;
     let report_json = serde_json::to_string_pretty(&report).map_err(SourceUnavailable::new)?;
     let report_path = options.output.join("score_report.json");
-    std::fs::write(&report_path, &report_json)
-        .map_err(|error| SourceUnavailable::new(format!("{}: {error}", report_path.display())))?;
+    write_regular_file_synced(&report_path, report_json.as_bytes(), "graph score report")?;
+    sync_compile_output_directory(&options.output)?;
+    transaction.verify_after_output(&options.output)?;
     // #488: report build (from the gate-c mark) + both artifact writes. The
     // trailing stdout summary below is negligible and shows up as the total's
     // remainder — which is the check that no stage went unnamed.
@@ -6018,12 +6561,13 @@ pub fn compile_hugging_face(args: &[String]) -> Result<(), SourceUnavailable> {
 }
 
 /// Compile through a caller-retained source/common transaction. The session
-/// must protect the parsed `--output`; it is consumed so neither lock can be
-/// released before every compiler-side write has finished.
+/// must protect the parsed `--output`; the same opaque authority is returned
+/// so a managed caller can validate and seal the exact compiled generation
+/// before either lock is released.
 pub fn compile_hugging_face_with_session(
     args: &[String],
     session: SourceCorpusSession,
-) -> Result<(), SourceUnavailable> {
+) -> Result<SourceCorpusSession, SourceUnavailable> {
     compile_hugging_face_with_progress_and_session(args, Some(session), |_, _| {})
 }
 
@@ -6036,14 +6580,14 @@ pub fn compile_hugging_face_with_progress<F>(
 where
     F: FnMut(u8, &'static str),
 {
-    compile_hugging_face_with_progress_and_session(args, None, progress)
+    compile_hugging_face_with_progress_and_session(args, None, progress).map(drop)
 }
 
 fn compile_hugging_face_with_progress_and_session<F>(
     args: &[String],
     provided_session: Option<SourceCorpusSession>,
     mut progress: F,
-) -> Result<(), SourceUnavailable>
+) -> Result<SourceCorpusSession, SourceUnavailable>
 where
     F: FnMut(u8, &'static str),
 {
@@ -6058,6 +6602,15 @@ where
         .source
         .clone()
         .unwrap_or_else(|| PathBuf::from(".uor-models/sources").join(&slug));
+    let requested_output = options
+        .output
+        .clone()
+        .unwrap_or_else(|| PathBuf::from(".uor-models/compiled").join(&slug));
+    let output = canonical_hf_compile_output_subject(&requested_output)?;
+    let server_owned_stage = provided_session.is_some();
+    if !server_owned_stage {
+        reject_foreign_compiled_bundle_stage_owner(&output)?;
+    }
     if let Some(repository) = options.model.as_deref() {
         download_hf_source(
             repository,
@@ -6075,21 +6628,11 @@ where
     let runtime_table = tokenizer.runtime_decode_table().ok_or_else(|| {
         SourceUnavailable::new("registered source tokenizer has no runtime decode table")
     })?;
-    let output = options
-        .output
-        .clone()
-        .unwrap_or_else(|| PathBuf::from(".uor-models/compiled").join(&slug));
     let mut corpus_session = if let Some(session) = provided_session {
-        if !session
-            .recorded_corpus_guard()?
-            .protects_directory(&output)?
-        {
-            return Err(SourceUnavailable::new(format!(
-                "provided source-corpus session for {} does not protect parsed compile output {}",
-                session.recorded_corpus_guard()?.root().display(),
-                output.display()
-            )));
-        }
+        require_exact_managed_compiled_bundle_stage_owner(
+            session.recorded_corpus_guard()?,
+            &output,
+        )?;
         session
     } else {
         source_corpus_session(&output)?
@@ -6142,6 +6685,11 @@ where
     // after the common guard creates or binds the root and before the first
     // recover/pin/generate mutation.
     corpus_session.acquire_recorded_corpus(&output)?;
+    if !server_owned_stage {
+        // Repeat under the common producer authority so a cooperating server
+        // cannot install an owner marker in the check-to-lock interval.
+        reject_foreign_compiled_bundle_stage_owner(&output)?;
+    }
     preflight_compile_tokenizer_adapter(&output, &tokenizer_adapter)?;
     preflight_compiled_attention_operator(&output, &attention_operator)?;
     preflight_compiled_dense_operator(&output, dense_operator.as_ref())?;
@@ -6187,7 +6735,7 @@ where
             "corpus is not complete; rerun the same command to resume {}",
             output.display()
         );
-        return Ok(());
+        return Ok(corpus_session);
     }
     let binding_cid = uor_r4_graph_compiler::recorded_corpus::publish_binding(
         corpus_session.recorded_corpus_guard()?,
@@ -6303,7 +6851,7 @@ where
     println!(
         "bundle ready for local `ask`; use `cargo run -- import --help` to attach a quality attestation and persist a named manifest (name: {slug})"
     );
-    Ok(())
+    Ok(corpus_session)
 }
 
 /// Registry-exact host execution identity attached to a recorded corpus.
@@ -6340,6 +6888,567 @@ struct RecordedCompilerCorpus {
     records_cid: String,
     corpus: compiler::Corpus,
     binding_cid: Option<String>,
+}
+
+#[derive(Clone, Copy)]
+enum GraphCommandCallerAuthority<'a> {
+    /// Public CLI/API entry point. Parsed `--bundle-root` selects the declared
+    /// bundle mode; its absence selects exact standalone mode.
+    Public,
+    /// Managed server stage whose producer interval began after Stage A and
+    /// remains live through completion publication.
+    Provided(&'a RecordedCorpusProducerGuard),
+}
+
+#[derive(Clone, Copy)]
+enum GraphTransactionAuthority<'a> {
+    /// Exact canonical `--out`; physical owner evidence present at transaction
+    /// start is terminal, but no later ancestor state changes this mode.
+    StandaloneExact,
+    /// Public caller explicitly joins one canonical bundle-root transaction.
+    DeclaredBundle(&'a Path),
+    /// Managed caller already holds that bundle-root producer transaction.
+    ProvidedBundle(&'a RecordedCorpusProducerGuard),
+}
+
+enum GraphTransactionProducer<'a> {
+    Provided(&'a RecordedCorpusProducerGuard),
+    Owned(RecordedCorpusProducerGuard),
+    /// Cross-root lane. The source reader pin has already been released;
+    /// acquire the stable exact-output or declared-bundle root only
+    /// immediately before mutation.
+    Pending(Option<PathBuf>),
+}
+
+struct GraphCommandTransaction<'a> {
+    producer: GraphTransactionProducer<'a>,
+    root: PathBuf,
+    direct_entrypoint: bool,
+    label: &'static str,
+}
+
+impl GraphCommandTransaction<'_> {
+    fn guard(&self) -> Result<&RecordedCorpusProducerGuard, SourceUnavailable> {
+        match &self.producer {
+            GraphTransactionProducer::Provided(guard) => Ok(guard),
+            GraphTransactionProducer::Owned(guard) => Ok(guard),
+            GraphTransactionProducer::Pending(_) => Err(SourceUnavailable::new(format!(
+                "{} output producer authority has not been acquired",
+                self.label
+            ))),
+        }
+    }
+
+    fn acquire_pending_output(&mut self) -> Result<(), SourceUnavailable> {
+        let pending = match &mut self.producer {
+            GraphTransactionProducer::Pending(root) => root.take(),
+            GraphTransactionProducer::Provided(_) | GraphTransactionProducer::Owned(_) => None,
+        };
+        if let Some(root) = pending {
+            let guard = RecordedCorpusProducerGuard::try_acquire(&root)?;
+            if self.direct_entrypoint && guard.root_exists() {
+                reject_foreign_compiled_bundle_stage_owner_for_graph(&guard)?;
+            }
+            reject_completed_graph_transaction(&guard, self.label)?;
+            self.producer = GraphTransactionProducer::Owned(guard);
+        }
+        Ok(())
+    }
+
+    fn prepare_output_directory(&mut self, output: &Path) -> Result<(), SourceUnavailable> {
+        self.prepare_output_directory_with_after_guard(output, |_| Ok(()))
+    }
+
+    fn prepare_output_directory_with_after_guard<F>(
+        &mut self,
+        output: &Path,
+        after_guard: F,
+    ) -> Result<(), SourceUnavailable>
+    where
+        F: FnOnce(&RecordedCorpusProducerGuard) -> Result<(), SourceUnavailable>,
+    {
+        self.acquire_pending_output()?;
+        reject_completed_graph_transaction(self.guard()?, self.label)?;
+        after_guard(self.guard()?)?;
+
+        match &mut self.producer {
+            GraphTransactionProducer::Owned(guard) if !guard.root_exists() => {
+                guard.ensure_root()?;
+            }
+            GraphTransactionProducer::Provided(guard) if !guard.root_exists() => {
+                return Err(SourceUnavailable::new(format!(
+                    "provided {} producer root {} is absent",
+                    self.label,
+                    guard.root().display()
+                )));
+            }
+            GraphTransactionProducer::Pending(_) => {
+                return Err(SourceUnavailable::new(format!(
+                    "{} output producer authority remained pending",
+                    self.label
+                )));
+            }
+            GraphTransactionProducer::Provided(_) | GraphTransactionProducer::Owned(_) => {}
+        }
+        let guard = self.guard()?;
+        if !guard.protects_directory(&self.root)? {
+            return Err(SourceUnavailable::new(format!(
+                "{} producer guard for {} does not protect canonical transaction root {}",
+                self.label,
+                guard.root().display(),
+                self.root.display()
+            )));
+        }
+        if output != self.root {
+            if output.parent() != Some(self.root.as_path()) {
+                return Err(SourceUnavailable::new(format!(
+                    "{} output {} is not the transaction root or one direct owned child of {}",
+                    self.label,
+                    output.display(),
+                    self.root.display()
+                )));
+            }
+            match std::fs::symlink_metadata(output) {
+                Ok(metadata) if metadata.file_type().is_dir() => {}
+                Ok(_) => {
+                    return Err(SourceUnavailable::new(format!(
+                        "{} output {} is not a regular non-symlink directory",
+                        self.label,
+                        output.display()
+                    )));
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                    std::fs::create_dir(output).map_err(|error| {
+                        SourceUnavailable::new(format!(
+                            "{} output {} cannot be created under retained producer authority: {error}",
+                            self.label,
+                            output.display()
+                        ))
+                    })?;
+                }
+                Err(error) => return Err(SourceUnavailable::new(error)),
+            }
+        }
+        let canonical_output = std::fs::canonicalize(output).map_err(SourceUnavailable::new)?;
+        if canonical_output != output {
+            return Err(SourceUnavailable::new(format!(
+                "{} output {} changed canonical identity before mutation",
+                self.label,
+                output.display()
+            )));
+        }
+        reject_completed_graph_transaction(guard, self.label)
+    }
+
+    fn verify_after_output(&self, output: &Path) -> Result<(), SourceUnavailable> {
+        let guard = self.guard()?;
+        if !guard.protects_directory(&self.root)? {
+            return Err(SourceUnavailable::new(format!(
+                "{} producer guard stopped protecting transaction root {}",
+                self.label,
+                self.root.display()
+            )));
+        }
+        let metadata = std::fs::symlink_metadata(output).map_err(SourceUnavailable::new)?;
+        if !metadata.file_type().is_dir()
+            || std::fs::canonicalize(output).map_err(SourceUnavailable::new)? != output
+        {
+            return Err(SourceUnavailable::new(format!(
+                "{} output {} changed directory identity during publication",
+                self.label,
+                output.display()
+            )));
+        }
+        reject_completed_graph_transaction(guard, self.label)?;
+        guard.verify_owned_root()
+    }
+}
+
+fn canonical_existing_corpus_root(
+    corpus_meta: &Path,
+    corpus_records: &Path,
+) -> Result<PathBuf, SourceUnavailable> {
+    let parent = |path: &Path, label: &str| -> Result<PathBuf, SourceUnavailable> {
+        let parent = path
+            .parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
+            .unwrap_or_else(|| Path::new("."));
+        std::fs::canonicalize(parent).map_err(|error| {
+            SourceUnavailable::new(format!(
+                "{label} parent {} cannot be canonicalized: {error}",
+                parent.display()
+            ))
+        })
+    };
+    let meta_root = parent(corpus_meta, "recorded corpus metadata")?;
+    let records_root = parent(corpus_records, "recorded corpus records")?;
+    if meta_root != records_root {
+        return Err(SourceUnavailable::new(format!(
+            "corpus.meta and corpus.records have different canonical parent roots ({} versus {}); no graph transaction can bind them",
+            meta_root.display(),
+            records_root.display()
+        )));
+    }
+    Ok(meta_root)
+}
+
+fn canonical_output_subject(output: &Path, label: &str) -> Result<PathBuf, SourceUnavailable> {
+    match std::fs::symlink_metadata(output) {
+        Ok(metadata) if metadata.file_type().is_dir() => {
+            std::fs::canonicalize(output).map_err(SourceUnavailable::new)
+        }
+        Ok(_) => Err(SourceUnavailable::new(format!(
+            "{label} output {} is not a regular non-symlink directory",
+            output.display()
+        ))),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            let leaf = output.file_name().ok_or_else(|| {
+                SourceUnavailable::new(format!(
+                    "{label} output {} has no final directory name",
+                    output.display()
+                ))
+            })?;
+            if leaf == std::ffi::OsStr::new(".") || leaf == std::ffi::OsStr::new("..") {
+                return Err(SourceUnavailable::new(format!(
+                    "{label} output {} has a reserved final directory name",
+                    output.display()
+                )));
+            }
+            let parent = output
+                .parent()
+                .filter(|parent| !parent.as_os_str().is_empty())
+                .unwrap_or_else(|| Path::new("."));
+            let parent = std::fs::canonicalize(parent).map_err(|error| {
+                SourceUnavailable::new(format!(
+                    "{label} output parent {} cannot be canonicalized before publication: {error}",
+                    parent.display()
+                ))
+            })?;
+            Ok(parent.join(leaf))
+        }
+        Err(error) => Err(SourceUnavailable::new(error)),
+    }
+}
+
+/// Read-only start-time classification for exact standalone output. This does
+/// not select or widen transaction authority: it only refuses an output that
+/// was already physically nested in a completed/owned bundle when the command
+/// began. Later ancestor changes do not alter standalone exact-root mode.
+fn existing_graph_owner_ancestor(output: &Path) -> Result<Option<PathBuf>, SourceUnavailable> {
+    let mut candidate = if output.exists() {
+        Some(output)
+    } else {
+        output.parent()
+    };
+    while let Some(root) = candidate {
+        let metadata = match std::fs::symlink_metadata(root) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                candidate = root.parent();
+                continue;
+            }
+            Err(error) => return Err(SourceUnavailable::new(error)),
+        };
+        if metadata.file_type().is_dir() {
+            for leaf in [
+                "compiled_bundle_completion.json",
+                ".compiled_bundle_stage.json",
+                ".compiled_bundle_stage_a.json",
+            ] {
+                match std::fs::symlink_metadata(root.join(leaf)) {
+                    Ok(_) => {
+                        return std::fs::canonicalize(root)
+                            .map(Some)
+                            .map_err(SourceUnavailable::new);
+                    }
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(error) => return Err(SourceUnavailable::new(error)),
+                }
+            }
+            let completion_prefix = ".compiled_bundle_completion.json.";
+            for entry in std::fs::read_dir(root).map_err(SourceUnavailable::new)? {
+                let entry = entry.map_err(SourceUnavailable::new)?;
+                let Some(name) = entry.file_name().to_str().map(str::to_owned) else {
+                    continue;
+                };
+                if name.starts_with(completion_prefix) && name.ends_with(".tmp") {
+                    return std::fs::canonicalize(root)
+                        .map(Some)
+                        .map_err(SourceUnavailable::new);
+                }
+            }
+        }
+        candidate = root.parent();
+    }
+    Ok(None)
+}
+
+fn reject_existing_graph_owner_ancestor(
+    output: &Path,
+    label: &str,
+) -> Result<(), SourceUnavailable> {
+    let Some(root) = existing_graph_owner_ancestor(output)? else {
+        return Ok(());
+    };
+    let completion = root.join("compiled_bundle_completion.json");
+    match std::fs::symlink_metadata(&completion) {
+        Ok(metadata) if metadata.file_type().is_file() => {
+            return Err(SourceUnavailable::new(format!(
+                "{label} standalone output ancestor {} was already an immutable completed bundle at transaction start; pass --bundle-root to participate explicitly",
+                root.display()
+            )));
+        }
+        Ok(_) => {
+            return Err(SourceUnavailable::new(format!(
+                "{label} standalone output ancestor {} had a malformed nonregular completion record at transaction start; refusing graph mutation",
+                root.display()
+            )));
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(SourceUnavailable::new(error)),
+    }
+    let completion_prefix = ".compiled_bundle_completion.json.";
+    for entry in std::fs::read_dir(&root).map_err(SourceUnavailable::new)? {
+        let entry = entry.map_err(SourceUnavailable::new)?;
+        let Some(name) = entry.file_name().to_str().map(str::to_owned) else {
+            continue;
+        };
+        if name.starts_with(completion_prefix) && name.ends_with(".tmp") {
+            return Err(SourceUnavailable::new(format!(
+                "{label} standalone output ancestor {} had unfinished completion publication evidence {name} at transaction start; refusing graph mutation",
+                root.display()
+            )));
+        }
+    }
+    Err(SourceUnavailable::new(format!(
+        "{label} standalone output ancestor {} was already an owned server compiled-bundle stage at transaction start; pass --bundle-root only for a public completed bundle",
+        root.display()
+    )))
+}
+
+fn declared_graph_transaction_root(
+    output: &Path,
+    declared: &Path,
+    label: &str,
+) -> Result<PathBuf, SourceUnavailable> {
+    let metadata = std::fs::symlink_metadata(declared).map_err(|error| {
+        SourceUnavailable::new(format!(
+            "declared {label} --bundle-root {} cannot be inspected: {error}",
+            declared.display()
+        ))
+    })?;
+    if !metadata.file_type().is_dir() {
+        return Err(SourceUnavailable::new(format!(
+            "declared {label} --bundle-root {} is not a regular non-symlink directory",
+            declared.display()
+        )));
+    }
+    let root = std::fs::canonicalize(declared).map_err(SourceUnavailable::new)?;
+    if output.parent() != Some(root.as_path()) {
+        return Err(SourceUnavailable::new(format!(
+            "{label} output {} is not one direct child of declared bundle root {}",
+            output.display(),
+            root.display()
+        )));
+    }
+    Ok(root)
+}
+
+fn reject_foreign_compiled_bundle_stage_owner_for_graph(
+    guard: &RecordedCorpusProducerGuard,
+) -> Result<(), SourceUnavailable> {
+    guard.verify_owned_root()?;
+    for leaf in [
+        ".compiled_bundle_stage.json",
+        ".compiled_bundle_stage_a.json",
+    ] {
+        match std::fs::symlink_metadata(guard.root().join(leaf)) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(SourceUnavailable::new(error)),
+            Ok(_) => {
+                return Err(SourceUnavailable::new(format!(
+                    "graph output ancestor {} is an owned server compiled-bundle stage; direct graph commands require the explicit server-retained producer seam",
+                    guard.root().display()
+                )));
+            }
+        }
+    }
+    guard.verify_owned_root()
+}
+
+fn reject_completed_graph_transaction(
+    guard: &RecordedCorpusProducerGuard,
+    label: &str,
+) -> Result<(), SourceUnavailable> {
+    if !guard.root_exists() {
+        return Ok(());
+    }
+    guard.verify_owned_root()?;
+    let completion = guard.root().join("compiled_bundle_completion.json");
+    match std::fs::symlink_metadata(&completion) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(SourceUnavailable::new(error)),
+        Ok(metadata) if metadata.file_type().is_file() => {
+            return Err(SourceUnavailable::new(format!(
+                "{label} output ancestor {} is an immutable completed bundle; refusing graph mutation",
+                guard.root().display()
+            )));
+        }
+        Ok(_) => {
+            return Err(SourceUnavailable::new(format!(
+                "{label} output ancestor {} has a malformed nonregular completion record; refusing graph mutation",
+                guard.root().display()
+            )));
+        }
+    }
+    let prefix = ".compiled_bundle_completion.json.";
+    for entry in std::fs::read_dir(guard.root()).map_err(SourceUnavailable::new)? {
+        let entry = entry.map_err(SourceUnavailable::new)?;
+        let Some(name) = entry.file_name().to_str().map(str::to_owned) else {
+            continue;
+        };
+        if name.starts_with(prefix) && name.ends_with(".tmp") {
+            return Err(SourceUnavailable::new(format!(
+                "{label} output ancestor {} has unfinished completion publication residue {name}; refusing graph mutation",
+                guard.root().display()
+            )));
+        }
+    }
+    guard.verify_owned_root()
+}
+
+fn begin_graph_command_transaction<'a>(
+    authority: GraphTransactionAuthority<'a>,
+    corpus_meta: &Path,
+    corpus_records: &Path,
+    output: &mut PathBuf,
+    label: &'static str,
+) -> Result<(RecordedCompilerCorpus, GraphCommandTransaction<'a>), SourceUnavailable> {
+    let source_root = canonical_existing_corpus_root(corpus_meta, corpus_records)?;
+    let canonical_output = canonical_output_subject(output, label)?;
+    let transaction_root = match authority {
+        GraphTransactionAuthority::StandaloneExact => {
+            reject_existing_graph_owner_ancestor(&canonical_output, label)?;
+            canonical_output.clone()
+        }
+        GraphTransactionAuthority::DeclaredBundle(root) => {
+            declared_graph_transaction_root(&canonical_output, root, label)?
+        }
+        GraphTransactionAuthority::ProvidedBundle(guard) => guard.root().to_path_buf(),
+    };
+    if canonical_output != transaction_root
+        && canonical_output.parent() != Some(transaction_root.as_path())
+    {
+        return Err(SourceUnavailable::new(format!(
+            "{label} output {} is neither the selected transaction root nor one direct physical child of {}",
+            canonical_output.display(),
+            transaction_root.display()
+        )));
+    }
+    *output = canonical_output;
+
+    match authority {
+        GraphTransactionAuthority::ProvidedBundle(guard) => {
+            if transaction_root != source_root || !guard.protects_directory(&source_root)? {
+                return Err(SourceUnavailable::new(format!(
+                    "provided {label} producer guard for {} does not own canonical corpus/output transaction root {}",
+                    guard.root().display(),
+                    source_root.display()
+                )));
+            }
+            reject_completed_graph_transaction(guard, label)?;
+            let stream = uor_r4_graph_compiler::recorded_corpus::open_stream_under_guard(
+                guard,
+                corpus_meta,
+                corpus_records,
+            )?;
+            let recorded =
+                materialize_recorded_compiler_corpus(stream, corpus_meta, corpus_records)?;
+            guard.verify_owned_root()?;
+            Ok((
+                recorded,
+                GraphCommandTransaction {
+                    producer: GraphTransactionProducer::Provided(guard),
+                    root: transaction_root,
+                    direct_entrypoint: false,
+                    label,
+                },
+            ))
+        }
+        GraphTransactionAuthority::StandaloneExact
+        | GraphTransactionAuthority::DeclaredBundle(_)
+            if transaction_root == source_root =>
+        {
+            let guard = RecordedCorpusProducerGuard::try_acquire(&source_root)?;
+            reject_foreign_compiled_bundle_stage_owner_for_graph(&guard)?;
+            reject_completed_graph_transaction(&guard, label)?;
+            let stream = uor_r4_graph_compiler::recorded_corpus::open_stream_under_guard(
+                &guard,
+                corpus_meta,
+                corpus_records,
+            )?;
+            let recorded =
+                materialize_recorded_compiler_corpus(stream, corpus_meta, corpus_records)?;
+            guard.verify_owned_root()?;
+            Ok((
+                recorded,
+                GraphCommandTransaction {
+                    producer: GraphTransactionProducer::Owned(guard),
+                    root: transaction_root,
+                    direct_entrypoint: true,
+                    label,
+                },
+            ))
+        }
+        GraphTransactionAuthority::StandaloneExact
+        | GraphTransactionAuthority::DeclaredBundle(_) => {
+            // Capture the complete source generation under one shared pin,
+            // perform its final verification, then release it before any
+            // output producer is acquired. This avoids unordered two-root
+            // locks for arbitrary standalone layouts.
+            let pins = RecordedCorpusReaderPins::try_acquire([&source_root])?;
+            let stream = uor_r4_graph_compiler::recorded_corpus::open_stream_under_reader_pins(
+                &pins,
+                corpus_meta,
+                corpus_records,
+            )?;
+            let recorded = if stream.binding_cid.is_some() {
+                let recorded =
+                    materialize_recorded_compiler_corpus(stream, corpus_meta, corpus_records)?;
+                pins.verify()?;
+                drop(pins);
+                recorded
+            } else {
+                // A shared pin excludes cooperating writers but is not the
+                // lower protocol's markerless cross-file ABA authority. Reopen
+                // that compatibility generation through its documented
+                // producer lane, retaining it through final materialization.
+                drop(stream);
+                drop(pins);
+                let (stream, source_guard) =
+                    uor_r4_graph_compiler::recorded_corpus::open_stream_for_derivation(
+                        corpus_meta,
+                        corpus_records,
+                    )?;
+                let recorded =
+                    materialize_recorded_compiler_corpus(stream, corpus_meta, corpus_records)?;
+                if let Some(guard) = source_guard.as_ref() {
+                    guard.verify_owned_root()?;
+                }
+                drop(source_guard);
+                recorded
+            };
+            Ok((
+                recorded,
+                GraphCommandTransaction {
+                    producer: GraphTransactionProducer::Pending(Some(transaction_root.clone())),
+                    root: transaction_root,
+                    direct_entrypoint: true,
+                    label,
+                },
+            ))
+        }
+    }
 }
 
 fn materialize_recorded_compiler_corpus(
@@ -6686,6 +7795,25 @@ pub fn recorded_corpus_execution_identity(
 ) -> Result<RecordedCorpusExecutionIdentity, SourceUnavailable> {
     let captured =
         uor_r4_graph_compiler::recorded_corpus::execution_identity(corpus_meta, corpus_records)?;
+    Ok(RecordedCorpusExecutionIdentity {
+        attention_operator: captured.attention_operator,
+        dense_operator: captured.dense_operator,
+    })
+}
+
+/// Resolve the recorded execution identity while a managed caller already
+/// retains the exact common producer root. This is the non-self-contending
+/// companion used between Stage A and graph completion.
+pub fn recorded_corpus_execution_identity_under_producer_guard(
+    guard: &RecordedCorpusProducerGuard,
+    corpus_meta: &Path,
+    corpus_records: &Path,
+) -> Result<RecordedCorpusExecutionIdentity, SourceUnavailable> {
+    let captured = uor_r4_graph_compiler::recorded_corpus::execution_identity_under_producer_guard(
+        guard,
+        corpus_meta,
+        corpus_records,
+    )?;
     Ok(RecordedCorpusExecutionIdentity {
         attention_operator: captured.attention_operator,
         dense_operator: captured.dense_operator,
@@ -8061,6 +9189,9 @@ pub fn run(args: &[String]) -> Result<(), SourceUnavailable> {
                  recorded execution copy (including dense sibling): copy-recorded-attention --corpus-meta <META> --corpus-recs <RECS> --out <attention_operator.json>\n\
                  guarded recorded-corpus derivation: subsample-recorded-corpus --src-meta <META> --src-recs <RECS> --out-meta <corpus.meta> --out-recs <corpus.records> --records <N>\n\
                  transformer-free refresh: runtime-corpus --artifacts <TLA> --store <TLS1> --seed-meta <META> --seed-recs <RECS> --out <DIR> --target N [--threads N]\n\
+                 graph cover: cover --corpus-meta <META> --corpus-recs <RECS> --artifacts <TLA> --out <DIR> [--bundle-root <ROOT>]\n\
+                 graph score: score --corpus-meta <META> --corpus-recs <RECS> --artifacts <TLA> --out <DIR> [--bundle-root <ROOT>]\n\
+                   --bundle-root explicitly declares one managed/canonical bundle authority; without it, --out is an exact standalone root fixed at transaction start\n\
                  observation pipeline: observe [--source DIR [--tokenizer-family FAMILY --tokenizer-version N] | --checkpoint BIN] [--seconds N] [--target N] [--shards N] [--out DIR] [--sequence-length N]\n\
                  text observations (D3): observe-text [--input PATH] [--out DIR] [--shards N] [--seconds N] [--source DIR [--tokenizer-family FAMILY --tokenizer-version N] | --checkpoint BIN --tokenizer PATH] [--sequence-length N]\n\
                  A-mode infill serving: graph infill --artifact <scored R4G1> --skeleton <token ids, _ for free> [--teacher <TLA container>]\n\
@@ -8150,6 +9281,29 @@ mod tests {
         std::env::temp_dir().join(format!("uor-r4-cli-{name}-{nonce}"))
     }
 
+    #[cfg(unix)]
+    fn hard_link_test_sidecar(
+        output: &Path,
+        stable_name: &str,
+        bytes: &[u8],
+        alias_tag: &str,
+    ) -> (PathBuf, PathBuf) {
+        std::fs::create_dir_all(output).expect("sidecar output");
+        let stable = output.join(stable_name);
+        let alias = output.join(format!(".{stable_name}.{alias_tag}.tmp"));
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&alias)
+            .expect("create sidecar alias");
+        file.write_all(bytes).expect("write sidecar alias");
+        file.sync_all().expect("sync sidecar alias");
+        drop(file);
+        std::fs::hard_link(&alias, &stable).expect("publish sidecar hard link");
+        sync_compile_output_directory(output).expect("sync sidecar directory");
+        (stable, alias)
+    }
+
     #[test]
     fn source_corpus_session_releases_common_guard_before_outer_lock() {
         let base = unique_cli_test_path("source-session-drop-order");
@@ -8162,8 +9316,7 @@ mod tests {
 
         session.release_in_order(|| {
             let error = source_corpus_session(&root)
-                .err()
-                .expect("outer lock remains BUSY until common guard is released");
+                .expect_err("outer lock remains BUSY until common guard is released");
             assert!(error.to_string().contains("BUSY"), "{error}");
         });
 
@@ -8518,6 +9671,15 @@ mod tests {
         (meta, records)
     }
 
+    fn complete_test_observation_corpus(path: &Path) -> (PathBuf, PathBuf) {
+        std::fs::create_dir_all(path).expect("observation directory");
+        let state = path.join(observe::STATE_FILE);
+        let merged = path.join("merged.bin");
+        std::fs::write(&merged, source_v3_record(0, 0)).expect("complete observation records");
+        std::fs::write(&state, source_resume_meta(1, 1)).expect("complete observation state");
+        (state, merged)
+    }
+
     fn publish_test_corpus_binding(path: &Path, meta: &Path, records: &Path) -> String {
         let mut guard =
             uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerGuard::try_acquire(path)
@@ -8528,6 +9690,615 @@ mod tests {
             .expect("test corpus binding");
         guard.finish_compile_attempt().expect("finish test attempt");
         cid
+    }
+
+    fn publish_test_observation_binding(path: &Path, state: &Path, merged: &Path) -> String {
+        let mut guard =
+            uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerGuard::try_acquire(path)
+                .expect("test observation producer guard");
+        guard.ensure_root().expect("test observation root");
+        uor_r4_graph_compiler::recorded_corpus::publish_binding(&guard, state, merged)
+            .expect("test observation binding")
+    }
+
+    fn directory_entry_names(path: &Path) -> Vec<String> {
+        let mut names = std::fs::read_dir(path)
+            .expect("directory inventory")
+            .map(|entry| {
+                entry
+                    .expect("directory entry")
+                    .file_name()
+                    .to_string_lossy()
+                    .into_owned()
+            })
+            .collect::<Vec<_>>();
+        names.sort();
+        names
+    }
+
+    #[test]
+    fn direct_cover_and_score_refuse_completed_bundle_ancestor_without_member_mutation() {
+        let root = unique_cli_test_path("graph-completed-ancestor");
+        std::fs::create_dir_all(&root).expect("completed root");
+        std::fs::write(root.join("corpus.meta"), b"unread completion sentinel")
+            .expect("metadata sentinel");
+        std::fs::write(root.join("corpus.records"), b"unread completion sentinel")
+            .expect("records sentinel");
+        std::fs::write(root.join("compiled_bundle_completion.json"), b"{}\n")
+            .expect("completion sentinel");
+        let before = directory_entry_names(&root);
+        for (command, output_leaf) in [("cover", "graph-cover"), ("score", "graph")] {
+            let args = vec![
+                "--corpus-meta".to_owned(),
+                root.join("corpus.meta").display().to_string(),
+                "--corpus-recs".to_owned(),
+                root.join("corpus.records").display().to_string(),
+                "--bundle-root".to_owned(),
+                root.display().to_string(),
+                "--out".to_owned(),
+                root.join(output_leaf).display().to_string(),
+            ];
+            let error = match command {
+                "cover" => cover_command(&args),
+                "score" => score_command(&args),
+                _ => unreachable!(),
+            }
+            .expect_err("completed bundle is immutable");
+            assert!(
+                error.reason.contains("immutable completed bundle"),
+                "{command}: {error}"
+            );
+            assert_eq!(directory_entry_names(&root), before, "{command}");
+            assert!(!root.join(".uor-r4-recorded-corpus-locks").exists());
+            assert!(!root.join(output_leaf).exists());
+        }
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn declared_bundle_graph_holds_parent_guard_before_child_mutation() {
+        let root = unique_cli_test_path("graph-parent-completion-race");
+        let source = root.join("source");
+        let bundle = root.join("bundle");
+        std::fs::create_dir_all(&bundle).expect("markerless bundle parent");
+        let (meta, records, _, _) = finalized_corpus(&source, 7);
+        publish_test_corpus_binding(&source, &meta, &records);
+        let output = bundle.join("graph");
+        let mut canonical_output = output.clone();
+        let (_, mut transaction) = begin_graph_command_transaction(
+            GraphTransactionAuthority::DeclaredBundle(&bundle),
+            &meta,
+            &records,
+            &mut canonical_output,
+            "score",
+        )
+        .expect("source generation is captured before deferred output ownership");
+        assert!(!output.exists());
+
+        transaction
+            .prepare_output_directory_with_after_guard(&canonical_output, |authority| {
+                assert_eq!(
+                    authority.root(),
+                    std::fs::canonicalize(&bundle).expect("canonical declared bundle")
+                );
+                assert!(!output.exists(), "child mutation follows parent authority");
+                let busy = RecordedCorpusProducerGuard::try_acquire(&bundle)
+                    .expect_err("cooperating parent publisher is BUSY at the barrier");
+                assert!(busy.reason.contains("BUSY"), "{busy}");
+                Ok(())
+            })
+            .expect("declared bundle child publication");
+        assert_eq!(
+            directory_entry_names(&bundle),
+            vec!["graph"],
+            "the child appears only inside the retained parent transaction"
+        );
+        assert!(output.is_dir());
+        assert!(!bundle
+            .join(
+                uor_r4_graph_compiler::recorded_corpus::RECORDED_CORPUS_PRODUCER_COORDINATION_DIR,
+            )
+            .exists());
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn standalone_graph_refuses_owner_evidence_present_at_transaction_start_without_mutation() {
+        let root = unique_cli_test_path("graph-standalone-existing-owner");
+        let source = root.join("source");
+        let (meta, records, _, _) = finalized_corpus(&source, 7);
+        publish_test_corpus_binding(&source, &meta, &records);
+        for leaf in [
+            "compiled_bundle_completion.json",
+            ".compiled_bundle_stage.json",
+            ".compiled_bundle_stage_a.json",
+            ".compiled_bundle_completion.json.17.19.tmp",
+            ".compiled_bundle_completion.json.reserved.tmp",
+        ] {
+            let bundle = root.join(leaf.replace('.', "-"));
+            std::fs::create_dir_all(&bundle).expect("owned ancestor");
+            std::fs::write(bundle.join(leaf), b"stable owner evidence\n").expect("owner evidence");
+            let before = directory_entry_names(&bundle);
+            let mut output = bundle.join("graph");
+            let error = match begin_graph_command_transaction(
+                GraphTransactionAuthority::StandaloneExact,
+                &meta,
+                &records,
+                &mut output,
+                "score",
+            ) {
+                Ok(_) => panic!("pre-existing owner ancestor must refuse standalone start"),
+                Err(error) => error,
+            };
+            assert!(
+                error.reason.contains("transaction start"),
+                "{leaf}: {error}"
+            );
+            assert_eq!(directory_entry_names(&bundle), before, "{leaf}");
+            assert!(!bundle.join("graph").exists(), "{leaf}");
+            assert!(!bundle
+                .join(
+                    uor_r4_graph_compiler::recorded_corpus::RECORDED_CORPUS_PRODUCER_COORDINATION_DIR,
+                )
+                .exists());
+        }
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn standalone_graph_never_adopts_parent_completion_published_after_start() {
+        let root = unique_cli_test_path("graph-standalone-late-parent-owner");
+        let source = root.join("source");
+        let bundle = root.join("bundle");
+        std::fs::create_dir_all(&bundle).expect("standalone output parent");
+        let (meta, records, _, _) = finalized_corpus(&source, 7);
+        publish_test_corpus_binding(&source, &meta, &records);
+        let output = bundle.join("graph");
+        let mut canonical_output = output.clone();
+        let (_, mut transaction) = begin_graph_command_transaction(
+            GraphTransactionAuthority::StandaloneExact,
+            &meta,
+            &records,
+            &mut canonical_output,
+            "score",
+        )
+        .expect("standalone mode is fixed at transaction start");
+
+        let parent_writer = RecordedCorpusProducerGuard::try_acquire(&bundle)
+            .expect("independent parent publisher after standalone start");
+        let completion = bundle.join("compiled_bundle_completion.json");
+        std::fs::write(&completion, b"late parent completion\n").expect("late parent completion");
+        parent_writer
+            .verify_owned_root()
+            .expect("parent publisher authority");
+        drop(parent_writer);
+        let completion_before = std::fs::read(&completion).expect("completion before output");
+
+        transaction
+            .prepare_output_directory(&canonical_output)
+            .expect("late parent state never changes standalone exact-root mode");
+        assert_eq!(
+            transaction.guard().expect("standalone guard").root(),
+            std::fs::canonicalize(&output).expect("canonical standalone output")
+        );
+        assert_eq!(
+            std::fs::read(&completion).expect("completion after output"),
+            completion_before,
+            "the independent standalone transaction never edits parent evidence"
+        );
+        drop(transaction);
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn declared_bundle_root_requires_physical_direct_child_without_mutation() {
+        use std::os::unix::fs::symlink;
+
+        let root = unique_cli_test_path("graph-declared-physical-containment");
+        let source = root.join("source");
+        let bundle = root.join("bundle");
+        let unrelated = root.join("unrelated");
+        let outside = root.join("outside");
+        std::fs::create_dir_all(&bundle).expect("declared bundle");
+        std::fs::create_dir_all(&unrelated).expect("unrelated root");
+        std::fs::create_dir_all(&outside).expect("outside root");
+        let (meta, records, _, _) = finalized_corpus(&source, 7);
+        publish_test_corpus_binding(&source, &meta, &records);
+
+        let before = [
+            directory_entry_names(&bundle),
+            directory_entry_names(&unrelated),
+            directory_entry_names(&outside),
+        ];
+        let mut unrelated_output = bundle.join("graph-unrelated");
+        let error = match begin_graph_command_transaction(
+            GraphTransactionAuthority::DeclaredBundle(&unrelated),
+            &meta,
+            &records,
+            &mut unrelated_output,
+            "score",
+        ) {
+            Ok(_) => panic!("unrelated declared root must refuse"),
+            Err(error) => error,
+        };
+        assert!(error.reason.contains("not one direct child"), "{error}");
+
+        symlink(&outside, bundle.join("escape")).expect("parent escape alias");
+        let mut escaped_output = bundle.join("escape/graph");
+        let error = match begin_graph_command_transaction(
+            GraphTransactionAuthority::DeclaredBundle(&bundle),
+            &meta,
+            &records,
+            &mut escaped_output,
+            "score",
+        ) {
+            Ok(_) => panic!("physical parent escape must refuse"),
+            Err(error) => error,
+        };
+        assert!(error.reason.contains("not one direct child"), "{error}");
+        assert!(!outside.join("graph").exists());
+
+        let target = outside.join("target");
+        std::fs::create_dir(&target).expect("final symlink target");
+        let final_alias = bundle.join("graph");
+        symlink(&target, &final_alias).expect("final output alias");
+        let mut final_output = final_alias.clone();
+        let error = match begin_graph_command_transaction(
+            GraphTransactionAuthority::DeclaredBundle(&bundle),
+            &meta,
+            &records,
+            &mut final_output,
+            "score",
+        ) {
+            Ok(_) => panic!("final output symlink must refuse"),
+            Err(error) => error,
+        };
+        assert!(error.reason.contains("non-symlink directory"), "{error}");
+        assert!(
+            final_alias
+                .symlink_metadata()
+                .expect("final alias")
+                .file_type()
+                .is_symlink()
+        );
+
+        assert_eq!(directory_entry_names(&unrelated), before[1]);
+        assert!(
+            directory_entry_names(&bundle).contains(&"escape".to_owned()),
+            "only the test's preexisting aliases are present"
+        );
+        assert!(!bundle
+            .join(
+                uor_r4_graph_compiler::recorded_corpus::RECORDED_CORPUS_PRODUCER_COORDINATION_DIR,
+            )
+            .exists());
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn graph_same_root_public_contender_is_busy_and_managed_seam_reuses_guard() {
+        let root = unique_cli_test_path("graph-managed-producer");
+        let (meta, records, _, _) = finalized_corpus(&root, 7);
+        publish_test_corpus_binding(&root, &meta, &records);
+        let guard = RecordedCorpusProducerGuard::try_acquire(&root).expect("managed producer");
+        let output = root.join("graph-cover");
+        let mut output_for_transaction = output.clone();
+        let (recorded, mut transaction) = begin_graph_command_transaction(
+            GraphTransactionAuthority::ProvidedBundle(&guard),
+            &meta,
+            &records,
+            &mut output_for_transaction,
+            "cover",
+        )
+        .expect("provided managed producer avoids self-contention");
+        assert_eq!(recorded.corpus.n, 1);
+        transaction
+            .prepare_output_directory(&output_for_transaction)
+            .expect("managed output directory");
+        let busy = RecordedCorpusProducerGuard::try_acquire(&root)
+            .expect_err("external graph contender is BUSY");
+        assert!(busy.reason.contains("BUSY"), "{busy}");
+        transaction
+            .verify_after_output(&output_for_transaction)
+            .expect("managed authority remains valid");
+        let duplicate_authority_args = vec![
+            "--corpus-meta".to_owned(),
+            meta.display().to_string(),
+            "--corpus-recs".to_owned(),
+            records.display().to_string(),
+            "--bundle-root".to_owned(),
+            root.display().to_string(),
+            "--out".to_owned(),
+            output.display().to_string(),
+        ];
+        let before_duplicate = directory_entry_names(&root);
+        let error = cover_command_under_producer_guard(&duplicate_authority_args, &guard)
+            .expect_err("provided authority rejects a second root declaration");
+        assert!(error.reason.contains("second --bundle-root"), "{error}");
+        assert_eq!(directory_entry_names(&root), before_duplicate);
+        drop(transaction);
+        drop(guard);
+
+        let blocker = RecordedCorpusProducerGuard::try_acquire(&root).expect("public blocker");
+        let before = directory_entry_names(&root);
+        let args = vec![
+            "--corpus-meta".to_owned(),
+            meta.display().to_string(),
+            "--corpus-recs".to_owned(),
+            records.display().to_string(),
+            "--bundle-root".to_owned(),
+            root.display().to_string(),
+            "--out".to_owned(),
+            output.display().to_string(),
+        ];
+        let error = cover_command(&args).expect_err("public same-root contender is BUSY");
+        assert!(error.reason.contains("BUSY"), "{error}");
+        assert_eq!(directory_entry_names(&root), before);
+        drop(blocker);
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn standalone_graph_outputs_guard_only_their_exact_roots_and_do_not_contend() {
+        let root = unique_cli_test_path("graph-standalone-output-roots");
+        let source = root.join("source");
+        let (meta, records, _, _) = finalized_corpus(&source, 7);
+        publish_test_corpus_binding(&source, &meta, &records);
+        let output_a = root.join("graph");
+        let output_b = root.join("graph-cover");
+
+        let mut canonical_a = output_a.clone();
+        let (_, mut transaction_a) = begin_graph_command_transaction(
+            GraphTransactionAuthority::StandaloneExact,
+            &meta,
+            &records,
+            &mut canonical_a,
+            "cover",
+        )
+        .expect("capture source before standalone output A");
+        let mut canonical_b = output_b.clone();
+        let (_, mut transaction_b) = begin_graph_command_transaction(
+            GraphTransactionAuthority::StandaloneExact,
+            &meta,
+            &records,
+            &mut canonical_b,
+            "score",
+        )
+        .expect("capture source before standalone output B");
+        assert!(!output_a.exists());
+        assert!(!output_b.exists());
+
+        transaction_a
+            .prepare_output_directory(&canonical_a)
+            .expect("acquire exact standalone output A");
+        transaction_b
+            .prepare_output_directory(&canonical_b)
+            .expect("unrelated standalone output B does not contend");
+        assert!(
+            transaction_a
+                .guard()
+                .expect("output A guard")
+                .protects_directory(&output_a)
+                .expect("output A identity")
+        );
+        assert_eq!(
+            transaction_a.guard().expect("output A guard").root(),
+            std::fs::canonicalize(&output_a).expect("canonical output A"),
+            "the conventional basename never widens arbitrary --out authority to its parent"
+        );
+        assert!(
+            transaction_b
+                .guard()
+                .expect("output B guard")
+                .protects_directory(&output_b)
+                .expect("output B identity")
+        );
+        assert_eq!(
+            transaction_b.guard().expect("output B guard").root(),
+            std::fs::canonicalize(&output_b).expect("canonical output B"),
+            "graph-cover is also an exact standalone output without provided bundle authority"
+        );
+        assert!(!output_a
+            .join(
+                uor_r4_graph_compiler::recorded_corpus::RECORDED_CORPUS_PRODUCER_COORDINATION_DIR,
+            )
+            .exists());
+        assert!(!output_b
+            .join(
+                uor_r4_graph_compiler::recorded_corpus::RECORDED_CORPUS_PRODUCER_COORDINATION_DIR,
+            )
+            .exists());
+        assert!(
+            root.join(
+                uor_r4_graph_compiler::recorded_corpus::RECORDED_CORPUS_PRODUCER_COORDINATION_DIR,
+            )
+            .is_dir()
+        );
+
+        let busy = RecordedCorpusProducerGuard::try_acquire(&output_a)
+            .expect_err("only output A itself contends with output A");
+        assert!(busy.reason.contains("BUSY"), "{busy}");
+        transaction_a
+            .verify_after_output(&canonical_a)
+            .expect("output A authority remains exact");
+        transaction_b
+            .verify_after_output(&canonical_b)
+            .expect("output B authority remains exact");
+        drop(transaction_b);
+        drop(transaction_a);
+
+        let source_bundle = root.join("unflagged-source-bundle");
+        let (same_meta, same_records, _, _) = finalized_corpus(&source_bundle, 11);
+        publish_test_corpus_binding(&source_bundle, &same_meta, &same_records);
+        let same_root_child = source_bundle.join("graph");
+        let mut canonical_child = same_root_child.clone();
+        let (_, mut child_transaction) = begin_graph_command_transaction(
+            GraphTransactionAuthority::StandaloneExact,
+            &same_meta,
+            &same_records,
+            &mut canonical_child,
+            "score",
+        )
+        .expect("unflagged source-child output is captured as standalone");
+        child_transaction
+            .prepare_output_directory(&canonical_child)
+            .expect("unflagged source-child exact authority");
+        assert_eq!(
+            child_transaction
+                .guard()
+                .expect("source-child guard")
+                .root(),
+            std::fs::canonicalize(&same_root_child).expect("canonical source-child output"),
+            "lexical output.parent == corpus root never implies public bundle mode"
+        );
+        let parent_guard = RecordedCorpusProducerGuard::try_acquire(&source_bundle)
+            .expect("standalone child guard does not contend with undeclared parent authority");
+        drop(parent_guard);
+        drop(child_transaction);
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn public_hf_compile_refuses_server_owner_records_but_provided_session_passes_owner_gate() {
+        for owner_leaf in [
+            ".compiled_bundle_stage.json",
+            ".compiled_bundle_stage_a.json",
+        ] {
+            let root =
+                unique_cli_test_path(&format!("hf-owner-{}", owner_leaf.replace(['.', '_'], "-")));
+            std::fs::create_dir_all(&root).expect("owned server stage");
+            std::fs::write(
+                root.join(".compiled_bundle_stage.json"),
+                b"owner sentinel\n",
+            )
+            .expect("owner marker");
+            if owner_leaf == ".compiled_bundle_stage_a.json" {
+                std::fs::write(root.join(owner_leaf), b"seal sentinel\n").expect("owner seal");
+            }
+            let source = root.with_file_name(format!(
+                "{}-missing-source",
+                root.file_name().expect("root leaf").to_string_lossy()
+            ));
+            let args = vec![
+                "--source".to_owned(),
+                source.display().to_string(),
+                "--output".to_owned(),
+                root.display().to_string(),
+            ];
+            let before = directory_bytes(&root);
+            let error = compile_hugging_face(&args)
+                .expect_err("public compiler cannot adopt a private server stage");
+            assert!(error.reason.contains("compiled-bundle ancestor"), "{error}");
+            assert_eq!(directory_bytes(&root), before);
+
+            let child = root.join("child");
+            let child_args = vec![
+                "--source".to_owned(),
+                source.display().to_string(),
+                "--output".to_owned(),
+                child.display().to_string(),
+            ];
+            let error = compile_hugging_face(&child_args)
+                .expect_err("public compiler cannot seed a child inside a private stage");
+            assert!(error.reason.contains("compiled-bundle ancestor"), "{error}");
+            assert_eq!(directory_bytes(&root), before);
+            assert!(!child.exists());
+            assert!(!root
+                .join(
+                    uor_r4_graph_compiler::recorded_corpus::RECORDED_CORPUS_PRODUCER_COORDINATION_DIR,
+                )
+                .exists());
+
+            let mut session = source_corpus_session(&root).expect("server outer session");
+            session
+                .acquire_recorded_corpus(&root)
+                .expect("server common producer");
+            let error = compile_hugging_face_with_session(&args, session)
+                .expect_err("missing source fails only after the provided-session owner gate");
+            assert!(!error.reason.contains("server owner marker"), "{error}");
+            assert_eq!(directory_bytes(&root), before);
+            let _ = std::fs::remove_dir_all(root);
+        }
+    }
+
+    #[test]
+    fn public_hf_child_compile_reserves_markerless_private_stage_topology() {
+        let root = unique_cli_test_path("hf-markerless-private-stage-topology");
+        let staging = root.join(".uor-r4-source-compile-staging");
+        let stage = staging.join(".teacher.bundle-stage.7.9");
+        let child = stage.join("child");
+        std::fs::create_dir_all(&stage).expect("markerless private-stage allocation boundary");
+        let source = root.join("missing-source");
+        let args = vec![
+            "--source".to_owned(),
+            source.display().to_string(),
+            "--output".to_owned(),
+            child.display().to_string(),
+        ];
+        let stage_before = directory_bytes(&stage);
+
+        let error = compile_hugging_face(&args)
+            .expect_err("private-stage topology is reserved before owner-marker publication");
+        assert!(error.reason.contains("managed capability"), "{error}");
+        assert_eq!(directory_bytes(&stage), stage_before);
+        assert!(!child.exists());
+        assert!(!stage
+            .join(
+                uor_r4_graph_compiler::recorded_corpus::RECORDED_CORPUS_PRODUCER_COORDINATION_DIR,
+            )
+            .exists());
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn public_hf_compile_canonicalizes_alias_ancestors_before_any_creation() {
+        use std::os::unix::fs::symlink;
+
+        let root = unique_cli_test_path("hf-private-stage-alias");
+        let stage = root.join("private-stage");
+        let alias = root.join("stage-alias");
+        std::fs::create_dir_all(&stage).expect("private stage");
+        std::fs::write(
+            stage.join(".compiled_bundle_stage.json"),
+            b"owner sentinel\n",
+        )
+        .expect("private owner marker");
+        std::fs::write(stage.join("sentinel"), b"private bytes").expect("private stage sentinel");
+        symlink(&stage, &alias).expect("alias to private stage");
+        let source = root.join("missing-source");
+        let stage_before = directory_bytes(&stage);
+
+        let child_args = vec![
+            "--source".to_owned(),
+            source.display().to_string(),
+            "--output".to_owned(),
+            alias.join("child").display().to_string(),
+        ];
+        let error = compile_hugging_face(&child_args)
+            .expect_err("physical private-stage ancestor is detected through an alias");
+        assert!(error.reason.contains("compiled-bundle ancestor"), "{error}");
+        assert_eq!(directory_bytes(&stage), stage_before);
+        assert!(!stage.join("child").exists());
+        assert!(
+            std::fs::symlink_metadata(&alias)
+                .expect("alias remains")
+                .file_type()
+                .is_symlink()
+        );
+
+        let final_alias_args = vec![
+            "--source".to_owned(),
+            source.display().to_string(),
+            "--output".to_owned(),
+            alias.display().to_string(),
+        ];
+        let error = compile_hugging_face(&final_alias_args)
+            .expect_err("a final output symlink is rejected before owner/session creation");
+        assert!(error.reason.contains("is a symlink"), "{error}");
+        assert_eq!(directory_bytes(&stage), stage_before);
+        let _ = std::fs::remove_dir_all(root);
     }
 
     fn source_v2_record(story: u32) -> [u8; 32] {
@@ -8787,7 +10558,8 @@ mod tests {
         let dense = DenseOperatorSpec::gpt2_v2();
         bind_compiled_attention_operator(&corpus_root, &attention).expect("attention sidecar");
         bind_compiled_dense_operator(&corpus_root, Some(&dense)).expect("dense sidecar");
-        let (meta, records) = corpus_markers(&corpus_root);
+        let (meta, records) = complete_test_corpus(&corpus_root);
+        publish_test_corpus_binding(&corpus_root, &meta, &records);
         let artifacts = corpus_root.join("missing-artifacts.bin");
         let output = unique_cli_test_path("cover-recorded-execution-output");
         std::fs::create_dir_all(&output).expect("cover output");
@@ -9416,6 +11188,154 @@ mod tests {
             );
             let _ = std::fs::remove_dir_all(output);
         }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn operator_publisher_retry_is_narrow_exact_and_preserves_a_conflicting_winner() {
+        let operator = AttentionOperatorSpec::standard_v1();
+        let bytes = canonical_attention_operator_bytes(&operator).expect("attention bytes");
+
+        let generic = unique_cli_test_path("publisher-alias-generic-terminal");
+        let (generic_stable, generic_alias) =
+            hard_link_test_sidecar(&generic, ATTENTION_OPERATOR_BINDING_FILE, &bytes, "generic");
+        let error = read_optional_regular_file_nofollow_with(
+            &generic_stable,
+            "attention-operator binding",
+            || std::fs::remove_file(&generic_alias).expect("unlink publisher alias"),
+        )
+        .expect_err("the generic strict reader keeps ctime transitions terminal");
+        assert!(error.reason.contains("changed identity"), "{error}");
+        assert_eq!(std::fs::read(&generic_stable).unwrap(), bytes);
+
+        let exact = unique_cli_test_path("publisher-alias-attention-exact");
+        let (exact_stable, exact_alias) =
+            hard_link_test_sidecar(&exact, ATTENTION_OPERATOR_BINDING_FILE, &bytes, "exact");
+        let recorded = read_optional_compiled_attention_operator_for_publisher_with_hooks(
+            &exact,
+            || std::fs::remove_file(&exact_alias).expect("unlink exact publisher alias"),
+            || {},
+            || {},
+        )
+        .expect("one exact retry accepts the stable winner");
+        assert_eq!(recorded, Some(operator.clone()));
+        assert_eq!(std::fs::read(&exact_stable).unwrap(), bytes);
+
+        let conflicting = unique_cli_test_path("publisher-alias-attention-conflict");
+        let (conflicting_stable, conflicting_alias) = hard_link_test_sidecar(
+            &conflicting,
+            ATTENTION_OPERATOR_BINDING_FILE,
+            &bytes,
+            "conflict",
+        );
+        let recorded = read_optional_compiled_attention_operator_for_publisher_with_hooks(
+            &conflicting,
+            || {
+                std::fs::remove_file(&conflicting_alias)
+                    .expect("unlink conflicting publisher alias")
+            },
+            || {},
+            || {},
+        )
+        .expect("retry reads the complete conflicting winner")
+        .expect("conflicting winner is present");
+        let error = require_matching_compiled_attention_operator(
+            &conflicting,
+            &AttentionOperatorSpec::standard_v2(),
+            &recorded,
+        )
+        .expect_err("a complete conflicting winner remains terminal");
+        assert!(
+            error.reason.contains("pinned to attention operator"),
+            "{error}"
+        );
+        assert_eq!(std::fs::read(&conflicting_stable).unwrap(), bytes);
+
+        for output in [generic, exact, conflicting] {
+            let _ = std::fs::remove_dir_all(output);
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn operator_publisher_retry_rejects_second_cleanup_aba_path_and_content_changes() {
+        let original = b"publisher generation A";
+
+        let second = unique_cli_test_path("publisher-alias-second-cleanup");
+        let (second_stable, first_alias) =
+            hard_link_test_sidecar(&second, ATTENTION_OPERATOR_BINDING_FILE, original, "first");
+        let second_alias = second.join(format!(".{ATTENTION_OPERATOR_BINDING_FILE}.second.tmp"));
+        let error = read_optional_regular_file_for_operator_publisher_with_hooks(
+            &second_stable,
+            "attention-operator binding",
+            || std::fs::remove_file(&first_alias).expect("unlink first alias"),
+            || std::fs::hard_link(&second_stable, &second_alias).expect("plant second alias"),
+            || std::fs::remove_file(&second_alias).expect("unlink second alias"),
+        )
+        .expect_err("a second alias-cleanup transition is terminal");
+        assert!(error.reason.contains("changed identity"), "{error}");
+        assert_eq!(std::fs::read(&second_stable).unwrap(), original);
+
+        let aba = unique_cli_test_path("publisher-alias-aba");
+        let (aba_stable, aba_alias) =
+            hard_link_test_sidecar(&aba, ATTENTION_OPERATOR_BINDING_FILE, original, "first");
+        let replacement = aba.join("replacement");
+        std::fs::write(&replacement, original).expect("write ABA replacement");
+        let error = read_optional_regular_file_for_operator_publisher_with_hooks(
+            &aba_stable,
+            "attention-operator binding",
+            || std::fs::remove_file(&aba_alias).expect("unlink ABA alias"),
+            || {
+                std::fs::remove_file(&aba_stable).expect("remove first stable inode");
+                std::fs::rename(&replacement, &aba_stable).expect("replace stable path")
+            },
+            || {},
+        )
+        .expect_err("an exact-byte path ABA between attempts is terminal");
+        assert!(error.reason.contains("across the one permitted"), "{error}");
+        assert_eq!(std::fs::read(&aba_stable).unwrap(), original);
+
+        let content = unique_cli_test_path("publisher-alias-content");
+        let (content_stable, content_alias) =
+            hard_link_test_sidecar(&content, ATTENTION_OPERATOR_BINDING_FILE, original, "first");
+        let replacement = b"publisher generation B";
+        assert_eq!(replacement.len(), original.len());
+        let error = read_optional_regular_file_for_operator_publisher_with_hooks(
+            &content_stable,
+            "attention-operator binding",
+            || std::fs::remove_file(&content_alias).expect("unlink content alias"),
+            || std::fs::write(&content_stable, replacement).expect("rewrite between attempts"),
+            || {},
+        )
+        .expect_err("a same-inode content change between attempts is terminal");
+        assert!(error.reason.contains("across the one permitted"), "{error}");
+        assert_eq!(std::fs::read(&content_stable).unwrap(), replacement);
+
+        for output in [second, aba, content] {
+            let _ = std::fs::remove_dir_all(output);
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn dense_operator_publisher_retries_one_exact_alias_cleanup() {
+        let operator = DenseOperatorSpec::gpt2_v2();
+        let bytes = canonical_dense_operator_bytes(&operator).expect("dense bytes");
+        let output = unique_cli_test_path("publisher-alias-dense-exact");
+        let (stable, alias) =
+            hard_link_test_sidecar(&output, DENSE_OPERATOR_BINDING_FILE, &bytes, "exact");
+
+        let recorded = read_optional_compiled_dense_operator_for_publisher_with_hooks(
+            &output,
+            || std::fs::remove_file(&alias).expect("unlink dense publisher alias"),
+            || {},
+            || {},
+        )
+        .expect("one exact retry accepts the dense winner");
+        assert_eq!(recorded, Some(operator));
+        assert_eq!(std::fs::read(stable).unwrap(), bytes);
+
+        let _ = std::fs::remove_dir_all(output);
     }
 
     #[test]
@@ -11187,7 +13107,8 @@ mod tests {
         let dense = DenseOperatorSpec::gpt2_v2();
         bind_compiled_attention_operator(&sidecar_root, &attention).expect("attention sidecar");
         bind_compiled_dense_operator(&sidecar_root, Some(&dense)).expect("dense sidecar");
-        let (meta, records) = corpus_markers(&sidecar_root);
+        let (meta, records) = complete_test_corpus(&sidecar_root);
+        publish_test_corpus_binding(&sidecar_root, &meta, &records);
         assert_eq!(
             recorded_corpus_execution_identity(&meta, &records).expect("joint sidecar identity"),
             RecordedCorpusExecutionIdentity {
@@ -11201,7 +13122,8 @@ mod tests {
         manifest.attention_operator = Some(attention.clone());
         manifest.dense_operator = Some(dense.clone());
         write_observation_manifest(&manifest_root, &manifest);
-        let (state, merged) = observation_corpus_markers(&manifest_root);
+        let (state, merged) = complete_test_observation_corpus(&manifest_root);
+        publish_test_observation_binding(&manifest_root, &state, &merged);
         assert_eq!(
             recorded_corpus_execution_identity(&state, &merged).expect("joint manifest identity"),
             RecordedCorpusExecutionIdentity {

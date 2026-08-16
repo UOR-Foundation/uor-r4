@@ -1324,7 +1324,12 @@ mod tokenizer_observe_tests {
         )
         .err()
         .expect("provenance A cannot label corpus B");
-        assert!(error.reason.contains("changed after capture"), "{error}");
+        assert!(
+            error
+                .reason
+                .contains("changed identity, type, or length after capture"),
+            "{error}"
+        );
         assert_eq!(directory_bytes(&output), output_before);
 
         let _ = std::fs::remove_dir_all(root);

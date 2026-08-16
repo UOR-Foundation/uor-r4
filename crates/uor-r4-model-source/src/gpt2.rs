@@ -330,6 +330,12 @@ enum DenseCertificationRejection {
     Cell,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum DenseCertificationOutcome {
+    Certified(f32),
+    Rejected(DenseCertificationRejection),
+}
+
 #[inline]
 fn dense_next_up_f64(value: f64) -> f64 {
     if value.is_nan() || value == f64::INFINITY {
@@ -415,48 +421,46 @@ fn dense_rounding_cell_contains(
     approximate: f64,
     lower: f64,
     upper: f64,
-) -> Result<f32, DenseCertificationRejection> {
+) -> DenseCertificationOutcome {
     if !approximate.is_finite() || !lower.is_finite() || !upper.is_finite() {
-        return Err(DenseCertificationRejection::Nonfinite);
+        return DenseCertificationOutcome::Rejected(DenseCertificationRejection::Nonfinite);
     }
     let candidate = approximate as f32;
     if candidate == 0.0 {
-        return Err(DenseCertificationRejection::Zero);
+        return DenseCertificationOutcome::Rejected(DenseCertificationRejection::Zero);
     }
     if !candidate.is_finite() || candidate.abs() == f32::MAX {
-        return Err(DenseCertificationRejection::Overflow);
+        return DenseCertificationOutcome::Rejected(DenseCertificationRejection::Overflow);
     }
     let previous = dense_next_down_f32(candidate);
     let next = dense_next_up_f32(candidate);
     if !previous.is_finite() || !next.is_finite() {
-        return Err(DenseCertificationRejection::Overflow);
+        return DenseCertificationOutcome::Rejected(DenseCertificationRejection::Overflow);
     }
     // Both binary32 values and their midpoint are represented exactly in
     // binary64. Strict containment rejects midpoint ties without a parity arm.
     let cell_lower = (f64::from(previous) + f64::from(candidate)) * 0.5;
     let cell_upper = (f64::from(candidate) + f64::from(next)) * 0.5;
     if lower > cell_lower && upper < cell_upper {
-        Ok(candidate)
+        DenseCertificationOutcome::Certified(candidate)
     } else {
-        Err(DenseCertificationRejection::Cell)
+        DenseCertificationOutcome::Rejected(DenseCertificationRejection::Cell)
     }
 }
 
 /// Certify a binary64 left fold using an independently supplied outward upper
 /// bound on `sum_i |x_i*w_i|`.
 #[inline]
-fn certify_dense_sum(
-    approximate: f64,
-    sum_abs_upper: f64,
-    k: usize,
-) -> Result<f32, DenseCertificationRejection> {
+fn certify_dense_sum(approximate: f64, sum_abs_upper: f64, k: usize) -> DenseCertificationOutcome {
     if !approximate.is_finite() || !sum_abs_upper.is_finite() {
-        return Err(DenseCertificationRejection::Nonfinite);
+        return DenseCertificationOutcome::Rejected(DenseCertificationRejection::Nonfinite);
     }
-    let gamma = dense_gamma(k).ok_or(DenseCertificationRejection::Cell)?;
+    let Some(gamma) = dense_gamma(k) else {
+        return DenseCertificationOutcome::Rejected(DenseCertificationRejection::Cell);
+    };
     let error = dense_next_up_f64(gamma * sum_abs_upper);
     if !error.is_finite() {
-        return Err(DenseCertificationRejection::Cell);
+        return DenseCertificationOutcome::Rejected(DenseCertificationRejection::Cell);
     }
     let lower = dense_next_down_f64(approximate - error);
     let upper = dense_next_up_f64(approximate + error);
@@ -483,14 +487,14 @@ fn refine_dense_lane(
     w: &[f32],
     out_dim: usize,
     lane: usize,
-) -> Result<f32, DenseCertificationRejection> {
+) -> DenseCertificationOutcome {
     let mut high = 0.0f64;
     let mut correction = 0.0f64;
     let mut correction_abs = 0.0f64;
     for (input_index, &activation) in x.iter().enumerate() {
         let weight = w[input_index * out_dim + lane];
         if !activation.is_finite() || !weight.is_finite() {
-            return Err(DenseCertificationRejection::Nonfinite);
+            return DenseCertificationOutcome::Rejected(DenseCertificationRejection::Nonfinite);
         }
         // A finite binary32 product has at most 48 significant bits and is
         // therefore exact in binary64.
@@ -501,14 +505,17 @@ fn refine_dense_lane(
         correction_abs += error.abs();
     }
     if !high.is_finite() || !correction.is_finite() || !correction_abs.is_finite() {
-        return Err(DenseCertificationRejection::Nonfinite);
+        return DenseCertificationOutcome::Rejected(DenseCertificationRejection::Nonfinite);
     }
-    let correction_abs_upper = dense_positive_sum_upper(correction_abs, x.len())
-        .ok_or(DenseCertificationRejection::Cell)?;
-    let gamma = dense_gamma(x.len()).ok_or(DenseCertificationRejection::Cell)?;
+    let Some(correction_abs_upper) = dense_positive_sum_upper(correction_abs, x.len()) else {
+        return DenseCertificationOutcome::Rejected(DenseCertificationRejection::Cell);
+    };
+    let Some(gamma) = dense_gamma(x.len()) else {
+        return DenseCertificationOutcome::Rejected(DenseCertificationRejection::Cell);
+    };
     let error = dense_next_up_f64(gamma * correction_abs_upper);
     if !error.is_finite() {
-        return Err(DenseCertificationRejection::Cell);
+        return DenseCertificationOutcome::Rejected(DenseCertificationRejection::Cell);
     }
 
     // `high + correction` itself is represented as a TwoSum pair. Outward
@@ -580,24 +587,26 @@ fn certified_dense_dots_with_scratch(
     for lane in 0..out_dim {
         let sum_abs_upper = dense_next_up_f64(max_activation_abs * sum_abs_weight_upper[lane]);
         let dot = match certify_dense_sum(sums[lane], sum_abs_upper, x.len()) {
-            Ok(value) => {
+            DenseCertificationOutcome::Certified(value) => {
                 census.fast_certified += 1;
                 value
             }
-            Err(DenseCertificationRejection::Nonfinite) => {
+            DenseCertificationOutcome::Rejected(DenseCertificationRejection::Nonfinite) => {
                 census.reject(DenseCertificationRejection::Nonfinite);
                 exact_dense_lane(x, w, out_dim, lane)
             }
-            Err(_) => match refine_dense_lane(x, w, out_dim, lane) {
-                Ok(value) => {
-                    census.refined_certified += 1;
-                    value
+            DenseCertificationOutcome::Rejected(_) => {
+                match refine_dense_lane(x, w, out_dim, lane) {
+                    DenseCertificationOutcome::Certified(value) => {
+                        census.refined_certified += 1;
+                        value
+                    }
+                    DenseCertificationOutcome::Rejected(reason) => {
+                        census.reject(reason);
+                        exact_dense_lane(x, w, out_dim, lane)
+                    }
                 }
-                Err(reason) => {
-                    census.reject(reason);
-                    exact_dense_lane(x, w, out_dim, lane)
-                }
-            },
+            }
         };
         out[lane] = dot;
     }
@@ -741,24 +750,26 @@ fn certified_dense_dots_batched_with_scratch(
             let index = batch_index * out_dim + lane;
             let sum_abs_upper = dense_next_up_f64(max_activation_abs[batch_index] * weight_bound);
             let dot = match certify_dense_sum(sums[index], sum_abs_upper, in_dim) {
-                Ok(value) => {
+                DenseCertificationOutcome::Certified(value) => {
                     census.fast_certified += 1;
                     value
                 }
-                Err(DenseCertificationRejection::Nonfinite) => {
+                DenseCertificationOutcome::Rejected(DenseCertificationRejection::Nonfinite) => {
                     census.reject(DenseCertificationRejection::Nonfinite);
                     exact_dense_lane(input, weights, out_dim, lane)
                 }
-                Err(_) => match refine_dense_lane(input, weights, out_dim, lane) {
-                    Ok(value) => {
-                        census.refined_certified += 1;
-                        value
+                DenseCertificationOutcome::Rejected(_) => {
+                    match refine_dense_lane(input, weights, out_dim, lane) {
+                        DenseCertificationOutcome::Certified(value) => {
+                            census.refined_certified += 1;
+                            value
+                        }
+                        DenseCertificationOutcome::Rejected(reason) => {
+                            census.reject(reason);
+                            exact_dense_lane(input, weights, out_dim, lane)
+                        }
                     }
-                    Err(reason) => {
-                        census.reject(reason);
-                        exact_dense_lane(input, weights, out_dim, lane)
-                    }
-                },
+                }
             };
             out[index] = dot;
         }
@@ -904,12 +915,18 @@ fn production_dense_projection_batched(
             let sum_abs_upper =
                 dense_next_up_f64(*max_activation_abs * metadata.sum_abs_weight_upper[lane]);
             let dot = match certify_dense_sum(sums[lane], sum_abs_upper, in_dim) {
-                Ok(value) => value,
-                Err(DenseCertificationRejection::Nonfinite) => {
+                DenseCertificationOutcome::Certified(value) => value,
+                DenseCertificationOutcome::Rejected(DenseCertificationRejection::Nonfinite) => {
                     exact_dense_lane(input, weights, out_dim, lane)
                 }
-                Err(_) => refine_dense_lane(input, weights, out_dim, lane)
-                    .unwrap_or_else(|_| exact_dense_lane(input, weights, out_dim, lane)),
+                DenseCertificationOutcome::Rejected(_) => {
+                    match refine_dense_lane(input, weights, out_dim, lane) {
+                        DenseCertificationOutcome::Certified(value) => value,
+                        DenseCertificationOutcome::Rejected(_) => {
+                            exact_dense_lane(input, weights, out_dim, lane)
+                        }
+                    }
+                }
             };
             output[lane] = bias.map_or(dot, |bias| dot + bias[lane]);
         }

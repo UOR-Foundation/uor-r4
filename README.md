@@ -290,14 +290,22 @@ r4 transformerless observe-text \
   [--input PATH] \
   [--source DIR [--tokenizer-family FAMILY --tokenizer-version N] | --checkpoint BIN --tokenizer PATH] \
   [--out obs-text]
-r4 transformerless cover        [--corpus-meta M] [--corpus-recs R] [--artifacts A] [--tokenizer PATH] [--out cover]
+r4 transformerless cover        [--corpus-meta M] [--corpus-recs R] [--artifacts A] [--tokenizer PATH] [--out cover] [--bundle-root ROOT]
 r4 transformerless cover-sweep  [...]
-r4 transformerless score        [--corpus-meta M] [--corpus-recs R] [--artifacts A] [--tokenizer PATH] [--out DIR]
+r4 transformerless score        [--corpus-meta M] [--corpus-recs R] [--artifacts A] [--tokenizer PATH] [--out DIR] [--bundle-root ROOT]
 r4 transformerless convert-r4g1 --artifacts TLA --store TLS1 --out R4G1
 r4 transformerless copy-recorded-attention --corpus-meta M --corpus-recs R --out attention_operator.json
 r4 transformerless compile-recorded --corpus-meta M --corpus-recs R --vocab-size N --out DIR
 r4 graph infill --artifact score.r4g1 --skeleton 12,_,_,_,99,_,_,_,7
 ```
+
+`--bundle-root ROOT` explicitly joins cover/score output publication to that
+managed bundle's producer transaction. Without it, `--out` is an exact
+standalone output root, including a direct child of the corpus root or paths
+whose basename is `graph` or `graph-cover`. Physically present completion,
+owner, or Stage-A-seal evidence is refused at transaction start; later parent
+state never changes an already selected standalone transaction into bundle
+participation.
 
 **Certification and comparison** (need the llama2.c checkpoint — see
 [Troubleshooting](#troubleshooting))

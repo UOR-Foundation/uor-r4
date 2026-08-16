@@ -330,11 +330,10 @@ fn validate_binding_role(
 }
 
 fn validate_role_inventory(root: &Path, role: RecordedCorpusRole) -> Result<(), SourceUnavailable> {
-    const COMPILE_ONLY: [&str; 19] = [
+    const COMPILE_ONLY: [&str; 18] = [
         "corpus.meta",
         "corpus.records",
         "corpus.records.hidden",
-        "tokenizer.bin",
         "tless_artifacts.bin",
         "tless_store.bin",
         "hamming_calibration.json",
@@ -638,7 +637,7 @@ impl VerifiedCorpusMember {
     }
 }
 
-impl Read for VerifiedCorpusMember {
+impl std::io::Read for VerifiedCorpusMember {
     fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
         let remaining = self.len().saturating_sub(self.position);
         if remaining == 0 || buffer.is_empty() {
@@ -659,27 +658,28 @@ impl Read for VerifiedCorpusMember {
     }
 }
 
-impl Seek for VerifiedCorpusMember {
+impl std::io::Seek for VerifiedCorpusMember {
     fn seek(&mut self, position: SeekFrom) -> std::io::Result<u64> {
         let target = match position {
-            SeekFrom::Start(target) => target,
-            SeekFrom::End(offset) => bounded_seek_target(self.len(), offset)?,
-            SeekFrom::Current(offset) => bounded_seek_target(self.position, offset)?,
-        };
+            SeekFrom::Start(target) => Some(target),
+            SeekFrom::End(offset) => bounded_seek_target(self.len(), offset),
+            SeekFrom::Current(offset) => bounded_seek_target(self.position, offset),
+        }
+        .ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "verified corpus member seek is outside the u64 address space",
+            )
+        })?;
         self.file.seek(SeekFrom::Start(target))?;
         self.position = target;
         Ok(target)
     }
 }
 
-fn bounded_seek_target(base: u64, offset: i64) -> std::io::Result<u64> {
+fn bounded_seek_target(base: u64, offset: i64) -> Option<u64> {
     let target = i128::from(base) + i128::from(offset);
-    u64::try_from(target).map_err(|_| {
-        std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            "verified corpus member seek is outside the u64 address space",
-        )
-    })
+    u64::try_from(target).ok()
 }
 
 /// Small provenance/metadata plus retained verified handles for large corpus
@@ -1061,6 +1061,35 @@ impl RecordedCorpusProducerGuard {
         }
         self.verify_root()?;
         Ok(!residues.temporaries.is_empty())
+    }
+
+    /// Reclaim only non-authoritative binding `.writing` inodes after the
+    /// complete role namespace has been validated under this retained root.
+    /// A canonical `.tmp` is an authoritative recoverable commit candidate
+    /// and is never discarded here; the caller must promote it through
+    /// [`publish_binding`] before deciding whether the generation is bound.
+    pub fn reclaim_uncommitted_binding_writings_for(
+        &self,
+        role: RecordedCorpusRole,
+    ) -> Result<(), SourceUnavailable> {
+        self.verify_root()?;
+        if self.preflight_publication_namespace_for(role)? {
+            return Err(SourceUnavailable::new(format!(
+                "recorded corpus root {} contains an authoritative recoverable binding temporary; refusing to discard publication evidence",
+                self.root.display()
+            )));
+        }
+        let residues = binding_publication_residues(&self.root, true)?;
+        for (path, bytes) in residues.writings {
+            remove_exact_owned_binding_residue(
+                self,
+                &path,
+                &bytes,
+                "non-authoritative binding staging",
+            )?;
+        }
+        self.sync_owned_root()?;
+        self.verify_root()
     }
 
     /// Durably declare a compile-style mutation attempt before the first
@@ -2108,10 +2137,10 @@ impl RecordedCorpusProducerHandoff {
             unique.push(expected);
         }
 
-        let guards = unique
-            .into_iter()
-            .map(acquire_expected)
-            .collect::<Result<Vec<_>, _>>()?;
+        let mut guards = Vec::with_capacity(unique.len());
+        for expected in unique {
+            guards.push(acquire_expected(expected)?);
+        }
         let locate_guard = |expected: &RecordedCorpusRootGeneration| {
             guards
                 .iter()
@@ -2695,10 +2724,10 @@ impl RecordedCorpusReaderPins {
             roots,
             "recorded corpus reader-pin acquisition",
         )?;
-        let mut generations = roots
-            .into_iter()
-            .map(RecordedCorpusRootGeneration::capture)
-            .collect::<Result<Vec<_>, _>>()?;
+        let mut generations = Vec::with_capacity(roots.len());
+        for root in roots {
+            generations.push(RecordedCorpusRootGeneration::capture(root)?);
+        }
         if generations.is_empty() {
             return Err(SourceUnavailable::new(
                 "recorded corpus reader pins require at least one logical root",
@@ -2722,107 +2751,10 @@ impl RecordedCorpusReaderPins {
             unique.push(generation);
         }
 
-        let pins = unique
-            .into_iter()
-            .map(RecordedCorpusReaderPin::try_acquire)
-            .collect::<Result<Vec<_>, _>>()?;
-        let result = Self { pins };
-        result.verify()?;
-        Ok(result)
-    }
-
-    /// Acquire shared pins for a writable managed namespace, creating every
-    /// permanent coordination inode before downgrading a canonically sorted
-    /// exclusive lock set to shared ownership. Unlike the read-only variant,
-    /// typed-absent roots are therefore actively protected: a cooperating
-    /// producer cannot create a newly preferred sibling until these pins are
-    /// dropped.
-    ///
-    /// Callers must hold their writer-specific outer inventory/session lock
-    /// before this method, matching the producer acquisition order.
-    pub fn try_acquire_managed<I, P>(roots: I) -> Result<Self, SourceUnavailable>
-    where
-        I: IntoIterator<Item = P>,
-        P: AsRef<Path>,
-    {
-        let roots = collect_bounded_recorded_corpus_root_paths(
-            roots,
-            "managed recorded corpus reader-pin acquisition",
-        )?;
-        let mut generations = roots
-            .into_iter()
-            .map(RecordedCorpusRootGeneration::capture)
-            .collect::<Result<Vec<_>, _>>()?;
-        if generations.is_empty() {
-            return Err(SourceUnavailable::new(
-                "managed recorded corpus reader pins require at least one logical root",
-            ));
+        let mut pins = Vec::with_capacity(unique.len());
+        for generation in unique {
+            pins.push(RecordedCorpusReaderPin::try_acquire(generation)?);
         }
-        generations.sort_by(|left, right| left.root.cmp(&right.root));
-        let mut unique = Vec::<RecordedCorpusRootGeneration>::new();
-        for generation in generations {
-            if let Some(previous) = unique.last()
-                && previous.root == generation.root
-            {
-                if !previous.same_generation(&generation)? {
-                    return Err(SourceUnavailable::new(format!(
-                        "managed recorded corpus reader pin root {} changed generation while aliases were canonicalized",
-                        generation.root.display()
-                    )));
-                }
-                continue;
-            }
-            unique.push(generation);
-        }
-
-        let mut guards = Vec::with_capacity(unique.len());
-        for generation in &unique {
-            let guard = RecordedCorpusProducerGuard::try_acquire(&generation.root)?;
-            if !generation.matches_guard(&guard)? {
-                return Err(SourceUnavailable::new(format!(
-                    "managed recorded corpus root {} changed generation while its coordination inode was seeded",
-                    generation.root.display()
-                )));
-            }
-            guards.push(guard);
-        }
-
-        // Downgrade in canonical order while every not-yet-downgraded root is
-        // still exclusive. There is no interval in which a seeded root is
-        // unlocked before the complete shared set exists.
-        for guard in &guards {
-            guard._file.try_lock_shared().map_err(|error| match error {
-                std::fs::TryLockError::WouldBlock => SourceUnavailable::new(format!(
-                    "recorded corpus root {} is BUSY while managed reader ownership is downgraded",
-                    guard.root.display()
-                )),
-                std::fs::TryLockError::Error(error) => SourceUnavailable::new(format!(
-                    "recorded corpus reader coordination for {} cannot be downgraded to shared: {error}",
-                    guard.root.display()
-                )),
-            })?;
-        }
-
-        let pins = unique
-            .into_iter()
-            .zip(guards)
-            .map(|(generation, guard)| {
-                let coordination_path = generation
-                    .parent
-                    .join(RECORDED_CORPUS_PRODUCER_COORDINATION_DIR);
-                let lock_path =
-                    coordination_path.join(generation.root.file_name().ok_or_else(|| {
-                        SourceUnavailable::new("managed recorded corpus root has no name")
-                    })?);
-                Ok(RecordedCorpusReaderPin {
-                    generation,
-                    coordination_path,
-                    coordination_file: Some(guard._coordination_file),
-                    lock_path,
-                    lock_file: Some(guard._file),
-                })
-            })
-            .collect::<Result<Vec<_>, SourceUnavailable>>()?;
         let result = Self { pins };
         result.verify()?;
         Ok(result)
@@ -5187,10 +5119,75 @@ pub fn preflight_source_update_publication(
             !attempt_active,
         )?;
     }
+    if stable && attempt_active {
+        // The compile-attempt marker records only the producer role.  It is
+        // deliberately not an authority to splice a different manifest or
+        // arithmetic era onto corpus bytes advanced by a resume checkpoint.
+        // A legitimate A -> B source resume may change metadata/records while
+        // retaining the last-good binding A, but every provenance member must
+        // still equal the generation that authorized that resume.
+        preflight_stable_binding_provenance_matches_current(guard, corpus_meta, corpus_records)?;
+    }
     Ok(SourceUpdatePublicationState {
         recoverable_binding,
         attempt_active,
     })
+}
+
+fn preflight_stable_binding_provenance_matches_current(
+    guard: &RecordedCorpusProducerGuard,
+    corpus_meta: &Path,
+    corpus_records: &Path,
+) -> Result<(), SourceUnavailable> {
+    guard.verify_root()?;
+    let (root, resolved_meta, resolved_records) =
+        resolved_corpus_paths(corpus_meta, corpus_records)?;
+    if root != guard.root {
+        return Err(SourceUnavailable::new(format!(
+            "recorded corpus producer guard owns {}, but source-resume provenance preflight resolved to {}",
+            guard.root.display(),
+            root.display()
+        )));
+    }
+    if !is_canonical_pair(&resolved_meta, &resolved_records) {
+        return Err(SourceUnavailable::new(
+            "source-resume provenance preflight requires canonical corpus.meta/corpus.records",
+        ));
+    }
+    let stable_path = binding_path(&root);
+    let stable_bytes = capture_optional_control_file(
+        &stable_path,
+        "stable recorded corpus generation binding",
+        BINDING_CONTROL_MAX_BYTES,
+    )?
+    .ok_or_else(|| {
+        SourceUnavailable::new(
+            "source-resume provenance preflight requires the observed stable binding",
+        )
+    })?;
+    let stable = parse_binding_bytes(&stable_path, &stable_bytes)?;
+    validate_binding_role(&stable, RecordedCorpusRole::Compile, &stable_path)?;
+    let provenance = capture_provenance(&root)?;
+    let context = format!(
+        "stable recorded corpus binding {} source-resume provenance",
+        stable_path.display()
+    );
+    stable.manifest.validate(
+        observation::MANIFEST_FILE,
+        provenance[0].as_deref(),
+        &context,
+    )?;
+    stable.attention_operator.validate(
+        ATTENTION_OPERATOR_BINDING_FILE,
+        provenance[1].as_deref(),
+        &context,
+    )?;
+    stable.dense_operator.validate(
+        DENSE_OPERATOR_BINDING_FILE,
+        provenance[2].as_deref(),
+        &context,
+    )?;
+    guard.verify_root()
 }
 
 fn preflight_binding_evidence_matches_current_inner(
@@ -6374,6 +6371,23 @@ mod tests {
     }
 
     #[test]
+    fn tokenizer_payload_is_shared_between_compile_and_observation_roles() {
+        let root = unique_root("shared-tokenizer-role-inventory");
+        let guard = producer_guard(&root);
+        std::fs::write(root.join("tokenizer.bin"), b"shared tokenizer payload")
+            .expect("tokenizer payload");
+
+        guard
+            .preflight_publication_namespace_for(RecordedCorpusRole::Compile)
+            .expect("compile role accepts its tokenizer payload");
+        guard
+            .preflight_publication_namespace_for(RecordedCorpusRole::Observation)
+            .expect("observation resume accepts its tokenizer payload");
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn compile_attempt_marker_bytes_digest_and_lifecycle_are_pinned() {
         let expected = b"{\n  \"schema\": \"uor-r4-recorded-corpus-compile-attempt/1\",\n  \"role\": \"compile\"\n}\n";
         let canonical = RecordedCorpusCompileAttempt::compile()
@@ -6542,6 +6556,41 @@ mod tests {
 
         let _ = std::fs::remove_dir_all(interrupted);
         let _ = std::fs::remove_dir_all(unowned);
+    }
+
+    #[test]
+    fn active_source_update_never_authorizes_mixed_provenance() {
+        let root = unique_root("source-update-mixed-provenance");
+        let guard = producer_guard(&root);
+        let (meta, records) = complete_source_corpus(&root, 53);
+        publish_compile_binding(&guard, &meta, &records);
+        guard.finish_compile_attempt().expect("finish generation A");
+        guard.begin_compile_attempt().expect("begin generation B");
+        let _ = complete_source_corpus(&root, 71);
+
+        let mut attention = serde_json::to_vec_pretty(&AttentionOperatorSpec::standard_v2())
+            .expect("serialize injected provenance");
+        attention.push(b'\n');
+        std::fs::write(root.join(ATTENTION_OPERATOR_BINDING_FILE), attention)
+            .expect("inject different current provenance");
+        let binding_before =
+            std::fs::read(root.join(RECORDED_CORPUS_BINDING_FILE)).expect("binding before");
+        let records_before = std::fs::read(&records).expect("records before");
+
+        let error = preflight_source_update_publication(&guard, &meta, &records)
+            .expect_err("role-only attempt marker cannot authorize mixed provenance");
+        assert!(error.reason.contains("does not match"), "{error}");
+        assert_eq!(
+            std::fs::read(root.join(RECORDED_CORPUS_BINDING_FILE)).expect("binding after"),
+            binding_before
+        );
+        assert_eq!(
+            std::fs::read(&records).expect("records after"),
+            records_before
+        );
+        assert!(root.join(RECORDED_CORPUS_COMPILE_ATTEMPT_FILE).exists());
+
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]
@@ -7077,10 +7126,12 @@ mod tests {
         let (state, merged) =
             write_corpus_pair(&top_manifest_root, observation::STATE_FILE, "merged.bin");
         let mut duplicate_top = manifest_json
-            .strip_suffix('}')
+            .strip_suffix(char::from(125))
             .expect("manifest object")
             .to_owned();
-        duplicate_top.push_str(&format!(",\"dense_operator\":{dense_json}}}"));
+        duplicate_top.push_str(",\"dense_operator\":");
+        duplicate_top.push_str(&dense_json);
+        duplicate_top.push(char::from(125));
         std::fs::write(
             top_manifest_root.join(observation::MANIFEST_FILE),
             duplicate_top,
@@ -7873,58 +7924,6 @@ mod tests {
             .expect("read-only over-limit pins retained no lock");
         drop(probe);
         let _ = std::fs::remove_dir_all(duplicate_container);
-
-        let unique_container = unique_root("managed-reader-pin-root-ceiling-unique");
-        std::fs::create_dir_all(&unique_container).expect("unique container");
-        let unique_roots = (0..=RECORDED_CORPUS_MULTI_ROOT_MAX_ENTRIES)
-            .map(|index| unique_container.join(format!("absent-{index:02}")))
-            .collect::<Vec<_>>();
-        let error = RecordedCorpusReaderPins::try_acquire_managed(&unique_roots)
-            .expect_err("unique over-limit managed pins must fail closed");
-        assert!(
-            error.reason.contains("fixed 16-entry logical-root ceiling"),
-            "{error}"
-        );
-        assert!(
-            !unique_container
-                .join(RECORDED_CORPUS_PRODUCER_COORDINATION_DIR)
-                .exists(),
-            "managed ceiling is checked before generation capture or lock seeding"
-        );
-        for root in &unique_roots {
-            let probe = RecordedCorpusProducerGuard::try_acquire(root)
-                .expect("managed over-limit pins retained no unique-root lock");
-            drop(probe);
-        }
-        let _ = std::fs::remove_dir_all(unique_container);
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn managed_reader_pins_seed_unseen_absent_roots_without_an_unlock_gap() {
-        let container = unique_root("managed-reader-pins-absent");
-        std::fs::create_dir_all(&container).expect("container");
-        let conventional = container.join("conventional");
-        let current = container.join("current");
-        let composite = container.join("composite");
-        std::fs::create_dir(&conventional).expect("existing conventional root");
-
-        let pins =
-            RecordedCorpusReaderPins::try_acquire_managed([&conventional, &current, &composite])
-                .expect("managed pins seed all three lock inodes");
-        assert!(!current.exists());
-        assert!(!composite.exists());
-        for root in [&conventional, &current, &composite] {
-            let busy = RecordedCorpusProducerGuard::try_acquire(root)
-                .expect_err("managed shared pin excludes every producer");
-            assert!(is_recorded_corpus_busy(&busy), "{busy}");
-        }
-        pins.verify().expect("managed pins remain exact");
-        drop(pins);
-        let writer = RecordedCorpusProducerGuard::try_acquire(&composite)
-            .expect("producer proceeds after managed pins drop");
-        drop(writer);
-        let _ = std::fs::remove_dir_all(container);
     }
 
     #[test]
