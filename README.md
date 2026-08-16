@@ -295,9 +295,18 @@ r4 transformerless cover-sweep  [...]
 r4 transformerless score        [--corpus-meta M] [--corpus-recs R] [--artifacts A] [--tokenizer PATH] [--out DIR] [--bundle-root ROOT]
 r4 transformerless convert-r4g1 --artifacts TLA --store TLS1 --out R4G1
 r4 transformerless copy-recorded-attention --corpus-meta M --corpus-recs R --out attention_operator.json
+r4 transformerless subsample-recorded-corpus --src-meta M --src-recs R --out-meta M2 --out-recs R2 --records N
 r4 transformerless compile-recorded --corpus-meta M --corpus-recs R --vocab-size N --out DIR
 r4 graph infill --artifact score.r4g1 --skeleton 12,_,_,_,99,_,_,_,7
 ```
+
+`subsample-recorded-corpus` is the provenance-preserving derivation path for
+scaling controls: it retains complete deterministic story runs from the
+finalized source's fixed train/held partitions and publishes records, hidden
+rows, execution sidecars, and their binding as one transaction. The historical
+`copy-recorded-attention` command is limited to legacy attention-only corpora;
+it refuses a source with dense execution provenance instead of silently
+dropping or relabelling the dense sidecar.
 
 `--bundle-root ROOT` explicitly joins cover/score output publication to that
 managed bundle's producer transaction. Without it, `--out` is an exact

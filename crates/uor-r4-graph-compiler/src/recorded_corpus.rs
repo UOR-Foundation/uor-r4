@@ -2282,6 +2282,64 @@ impl RecordedCorpusProducerHandoff {
     }
 }
 
+/// Canonically sorted, non-promoting ownership of one source/destination
+/// derivation pair.
+///
+/// A derivation reads one complete source generation while publishing a
+/// different destination generation. Acquiring the two ordinary producer
+/// guards independently would make lock order caller-dependent, while exposing
+/// [`RecordedCorpusProducerHandoff`] directly would also expose an unrelated
+/// root-promotion capability. This narrow facade reuses the handoff's sorted,
+/// failure-atomic acquisition and deliberately provides only stable
+/// source/destination guard access.
+#[derive(Debug)]
+pub struct RecordedCorpusDerivationGuards {
+    handoff: RecordedCorpusProducerHandoff,
+}
+
+impl RecordedCorpusDerivationGuards {
+    /// Capture and exclusively acquire a distinct source and destination root.
+    ///
+    /// Both parents must already exist. Existing roots are pinned by directory
+    /// inode and an absent destination is pinned as typed absence until the
+    /// destination guard creates it. Canonical aliases, symlink roots, and an
+    /// in-place source/destination pair fail before corpus-member mutation.
+    pub fn try_acquire(
+        source_root: impl AsRef<Path>,
+        destination_root: impl AsRef<Path>,
+    ) -> Result<Self, SourceUnavailable> {
+        let expected = [
+            RecordedCorpusRootGeneration::capture(source_root)?,
+            RecordedCorpusRootGeneration::capture(destination_root)?,
+        ];
+        let handoff = RecordedCorpusProducerHandoff::try_acquire(&expected, 0, 1)?;
+        handoff.verify()?;
+        Ok(Self { handoff })
+    }
+
+    /// Exclusive guard for the immutable derivation source.
+    pub fn source_guard(&self) -> &RecordedCorpusProducerGuard {
+        self.handoff.final_guard()
+    }
+
+    /// Exclusive guard for the destination publication transaction.
+    pub fn destination_guard(&self) -> &RecordedCorpusProducerGuard {
+        self.handoff.stage_guard()
+    }
+
+    /// Mutable destination access required to create a previously absent
+    /// output root. No mutable source access and no promotion API are exposed.
+    pub fn destination_guard_mut(&mut self) -> &mut RecordedCorpusProducerGuard {
+        let index = self.handoff.stage_guard_index;
+        &mut self.handoff.guards[index]
+    }
+
+    /// Recheck both retained root generations and coordination handles.
+    pub fn verify(&self) -> Result<(), SourceUnavailable> {
+        self.handoff.verify()
+    }
+}
+
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn atomic_promote_recorded_corpus_roots(
     final_guard: &RecordedCorpusProducerGuard,
@@ -7554,6 +7612,83 @@ mod tests {
         }
         drop(handoff);
         drop(expected);
+        let _ = std::fs::remove_dir_all(container);
+    }
+
+    #[test]
+    fn derivation_guards_sort_source_and_destination_without_promotion_capability() {
+        let container = unique_root("derivation-guards");
+        std::fs::create_dir_all(&container).expect("container");
+        let source = container.join("z-source");
+        let destination = container.join("a-destination");
+        std::fs::create_dir(&source).expect("source");
+
+        let mut guards = RecordedCorpusDerivationGuards::try_acquire(&source, &destination)
+            .expect("sorted derivation authority");
+        assert_eq!(
+            guards.source_guard().root(),
+            std::fs::canonicalize(&source).expect("canonical source")
+        );
+        assert_eq!(
+            guards.destination_guard().root(),
+            std::fs::canonicalize(&container)
+                .expect("canonical container")
+                .join("a-destination")
+        );
+        assert!(!guards.destination_guard().root_exists());
+        guards
+            .destination_guard_mut()
+            .ensure_root()
+            .expect("create guarded destination");
+        guards.verify().expect("both generations remain guarded");
+
+        for root in [&source, &destination] {
+            let busy = RecordedCorpusProducerGuard::try_acquire(root)
+                .expect_err("derivation retains both exclusive guards");
+            assert!(is_recorded_corpus_busy(&busy), "{busy}");
+        }
+        drop(guards);
+        for root in [&source, &destination] {
+            let probe = RecordedCorpusProducerGuard::try_acquire(root)
+                .expect("derivation releases both guards together");
+            drop(probe);
+        }
+        let _ = std::fs::remove_dir_all(container);
+    }
+
+    #[test]
+    fn derivation_guards_reject_aliases_and_release_partial_sorted_acquisition() {
+        let container = unique_root("derivation-guards-alias");
+        std::fs::create_dir_all(&container).expect("container");
+        let source = container.join("z-source");
+        let destination = container.join("a-destination");
+        std::fs::create_dir(&source).expect("source");
+        std::fs::create_dir(&destination).expect("destination");
+
+        let alias = RecordedCorpusDerivationGuards::try_acquire(
+            &source,
+            container.join(".").join("z-source"),
+        )
+        .expect_err("in-place canonical alias is refused");
+        assert!(alias.reason.contains("same canonical root"), "{alias}");
+
+        let blocker = RecordedCorpusProducerGuard::try_acquire(&source).expect("source blocker");
+        let busy = RecordedCorpusDerivationGuards::try_acquire(&source, &destination)
+            .expect_err("later sorted source contention fails atomically");
+        assert!(is_recorded_corpus_busy(&busy), "{busy}");
+        let destination_probe = RecordedCorpusProducerGuard::try_acquire(&destination)
+            .expect("earlier sorted destination acquisition was released");
+        drop(destination_probe);
+        drop(blocker);
+
+        #[cfg(unix)]
+        {
+            let link = container.join("source-link");
+            std::os::unix::fs::symlink(&source, &link).expect("source symlink");
+            let error = RecordedCorpusDerivationGuards::try_acquire(&link, &destination)
+                .expect_err("symlink root is terminal");
+            assert!(error.reason.contains("not a real non-symlink"), "{error}");
+        }
         let _ = std::fs::remove_dir_all(container);
     }
 

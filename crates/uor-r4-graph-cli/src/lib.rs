@@ -429,21 +429,6 @@ fn planned_output_member(
         })
 }
 
-fn preflight_guarded_planned_file(
-    guard: &uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerGuard,
-    path: &Path,
-    expected: &[u8],
-    context: &str,
-) -> Result<bool, SourceUnavailable> {
-    preflight_guarded_planned_file_in_scope(
-        guard,
-        path,
-        expected,
-        context,
-        &PlannedOutputMember::ALL,
-    )
-}
-
 fn preflight_guarded_planned_file_in_scope(
     guard: &uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerGuard,
     path: &Path,
@@ -468,8 +453,17 @@ fn preflight_guarded_planned_absence(
     path: &Path,
     context: &str,
 ) -> Result<(), SourceUnavailable> {
+    preflight_guarded_planned_absence_in_scope(guard, path, context, &PlannedOutputMember::ALL)
+}
+
+fn preflight_guarded_planned_absence_in_scope(
+    guard: &uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerGuard,
+    path: &Path,
+    context: &str,
+    allowed: &[PlannedOutputMember],
+) -> Result<(), SourceUnavailable> {
     let member = planned_output_member(path, context)?;
-    guard.preflight_planned_output_scope(&PlannedOutputMember::ALL)?;
+    guard.preflight_planned_output_scope(allowed)?;
     if guard.has_planned_output_residue(member)? {
         return Err(SourceUnavailable::new(format!(
             "{context} has staged bytes but the planned generation declares this member absent"
@@ -2900,7 +2894,7 @@ struct SubsampleRecordedCorpusOptions {
     source_records: PathBuf,
     output_meta: PathBuf,
     output_records: PathBuf,
-    records: usize,
+    records: u64,
 }
 
 fn parse_subsample_recorded_corpus_options(
@@ -2923,7 +2917,7 @@ fn parse_subsample_recorded_corpus_options(
             "--out-meta" => output_meta = Some(PathBuf::from(value)),
             "--out-recs" => output_records = Some(PathBuf::from(value)),
             "--records" => {
-                let parsed = value.parse::<usize>().map_err(|_| {
+                let parsed = value.parse::<u64>().map_err(|_| {
                     SourceUnavailable::new(format!("invalid --records value: {value}"))
                 })?;
                 if parsed == 0 {
@@ -6864,6 +6858,7 @@ pub struct RecordedCorpusExecutionIdentity {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg(test)]
 struct RecordedCorpusSnapshot {
     execution: RecordedCorpusExecutionIdentity,
     attention_operator_bytes: Option<Vec<u8>>,
@@ -7902,6 +7897,7 @@ where
     recorded_corpus_snapshot_with_hooks(corpus_meta, corpus_records, || {}, after_capture)
 }
 
+#[cfg(test)]
 fn recorded_corpus_snapshot(
     corpus_meta: &Path,
     corpus_records: &Path,
@@ -8071,12 +8067,454 @@ where
     Ok(())
 }
 
-fn exact_finalized_record_width(records: usize, byte_len: usize) -> Option<usize> {
-    [88usize, 48, 32, 12].into_iter().find(|width| {
+fn exact_finalized_record_width(records: u64, byte_len: u64) -> Option<u64> {
+    if records == 0 {
+        return None;
+    }
+    [88u64, 48, 32, 12].into_iter().find(|width| {
         records
             .checked_mul(*width)
             .is_some_and(|expected| expected == byte_len)
     })
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct SelectedRowRange {
+    start: u64,
+    end: u64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct SelectedByteRange {
+    start: u64,
+    end: u64,
+}
+
+impl SelectedByteRange {
+    fn len(self) -> u64 {
+        self.end - self.start
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct RecordedCorpusSelection {
+    ranges: Vec<SelectedRowRange>,
+    retained_records: u64,
+    train_records: u64,
+    held_out_records: u64,
+}
+
+fn append_selected_row_range(ranges: &mut Vec<SelectedRowRange>, start: u64, end: u64) {
+    if let Some(previous) = ranges.last_mut()
+        && previous.end == start
+    {
+        previous.end = end;
+        return;
+    }
+    ranges.push(SelectedRowRange { start, end });
+}
+
+/// Scan the record body once, validate every story id, and greedily retain
+/// complete runs under quotas derived from the source compiler's fixed story
+/// partition. The plan is row-index-only: no record or output body is retained.
+fn select_recorded_corpus_ranges<R: Read + Seek>(
+    records: &mut R,
+    source_records: u64,
+    record_width: u64,
+    source_stories: u64,
+    target_records: u64,
+) -> Result<RecordedCorpusSelection, SourceUnavailable> {
+    if target_records > source_records {
+        return Err(SourceUnavailable::new(format!(
+            "source has {source_records} finalized records; --records {target_records} exceeds the source generation"
+        )));
+    }
+    if target_records == 0 || source_records == 0 {
+        return Err(SourceUnavailable::new(
+            "subsample source and target must each contain at least one finalized record",
+        ));
+    }
+    let width = usize::try_from(record_width).map_err(|_| {
+        SourceUnavailable::new(format!(
+            "registered record width {record_width} cannot be represented on this host"
+        ))
+    })?;
+    if width > 88 || width < std::mem::size_of::<u32>() {
+        return Err(SourceUnavailable::new(format!(
+            "registered record width {record_width} is outside the supported scanner range"
+        )));
+    }
+
+    let full_source = target_records == source_records;
+    let (mut train_remaining, mut held_out_remaining) = if full_source {
+        (u64::MAX, u64::MAX)
+    } else {
+        let train = target_records
+            .checked_mul(4)
+            .ok_or_else(|| SourceUnavailable::new("subsample train quota overflows u64"))?
+            / 5;
+        let held_out = target_records - train;
+        if train == 0 || held_out == 0 {
+            return Err(SourceUnavailable::new(
+                "subsample target is too small to retain records from both fixed source partitions",
+            ));
+        }
+        (train, held_out)
+    };
+    // This expression is intentionally identical to compiler::train_cut.
+    let source_train_cut = ((source_stories as f64 * 0.8) as u32).max(1);
+    let mut selected = Vec::new();
+    let mut train_records = 0u64;
+    let mut held_out_records = 0u64;
+    let mut last_selected_story = None;
+
+    let mut consider_run =
+        |run_start: u64, run_end: u64, story: u32| -> Result<(), SourceUnavailable> {
+            let rows = run_end
+                .checked_sub(run_start)
+                .ok_or_else(|| SourceUnavailable::new("subsample story-run bounds are reversed"))?;
+            let train = story < source_train_cut;
+            let remaining = if train {
+                &mut train_remaining
+            } else {
+                &mut held_out_remaining
+            };
+            if full_source || (rows <= *remaining && last_selected_story != Some(story)) {
+                if !full_source {
+                    *remaining -= rows;
+                }
+                if train {
+                    train_records = train_records.checked_add(rows).ok_or_else(|| {
+                        SourceUnavailable::new("subsample retained train count overflows u64")
+                    })?;
+                } else {
+                    held_out_records = held_out_records.checked_add(rows).ok_or_else(|| {
+                        SourceUnavailable::new("subsample retained held-out count overflows u64")
+                    })?;
+                }
+                append_selected_row_range(&mut selected, run_start, run_end);
+                last_selected_story = Some(story);
+            }
+            Ok(())
+        };
+
+    records
+        .seek(SeekFrom::Start(0))
+        .map_err(SourceUnavailable::new)?;
+    let mut row = [0u8; 88];
+    let mut run_start = 0u64;
+    let mut current_story = None;
+    for index in 0..source_records {
+        records.read_exact(&mut row[..width]).map_err(|error| {
+            SourceUnavailable::new(format!(
+                "subsample source records ended while reading row {index} at width {record_width}: {error}"
+            ))
+        })?;
+        let story = u32::from_le_bytes(
+            row[0..4]
+                .try_into()
+                .map_err(|_| SourceUnavailable::new("record story id is truncated"))?,
+        );
+        if u64::from(story) >= source_stories {
+            return Err(SourceUnavailable::new(format!(
+                "source record {index} declares story {story}, outside the metadata story range 0..{source_stories}"
+            )));
+        }
+        match current_story {
+            Some(previous) if previous != story => {
+                consider_run(run_start, index, previous)?;
+                run_start = index;
+                current_story = Some(story);
+            }
+            None => current_story = Some(story),
+            Some(_) => {}
+        }
+    }
+    if let Some(story) = current_story {
+        consider_run(run_start, source_records, story)?;
+    }
+    let mut extra = [0u8; 1];
+    if records.read(&mut extra).map_err(SourceUnavailable::new)? != 0 {
+        return Err(SourceUnavailable::new(
+            "subsample source records extend beyond the exact finalized row layout",
+        ));
+    }
+
+    if train_records == 0 || held_out_records == 0 {
+        let train_quota = target_records * 4 / 5;
+        let held_out_quota = target_records - train_quota;
+        return Err(SourceUnavailable::new(format!(
+            "source selection does not represent both fixed source partitions within train/held-out quotas {train_quota}/{held_out_quota}"
+        )));
+    }
+    let retained_records = train_records
+        .checked_add(held_out_records)
+        .ok_or_else(|| SourceUnavailable::new("subsample retained count overflows u64"))?;
+    if retained_records > target_records {
+        return Err(SourceUnavailable::new(
+            "subsample greedy selection exceeded its declared target",
+        ));
+    }
+    Ok(RecordedCorpusSelection {
+        ranges: selected,
+        retained_records,
+        train_records,
+        held_out_records,
+    })
+}
+
+fn selected_byte_ranges(
+    rows: &[SelectedRowRange],
+    row_bytes: u64,
+) -> Result<Vec<SelectedByteRange>, SourceUnavailable> {
+    if row_bytes == 0 {
+        return Err(SourceUnavailable::new(
+            "selected byte ranges require a nonzero row width",
+        ));
+    }
+    let mut ranges: Vec<SelectedByteRange> = Vec::with_capacity(rows.len());
+    for row_range in rows {
+        let start = row_range
+            .start
+            .checked_mul(row_bytes)
+            .ok_or_else(|| SourceUnavailable::new("selected byte-range start overflows u64"))?;
+        let end = row_range
+            .end
+            .checked_mul(row_bytes)
+            .ok_or_else(|| SourceUnavailable::new("selected byte-range end overflows u64"))?;
+        if let Some(previous) = ranges.last_mut()
+            && previous.end == start
+        {
+            previous.end = end;
+        } else {
+            ranges.push(SelectedByteRange { start, end });
+        }
+    }
+    Ok(ranges)
+}
+
+/// Read/seek view that concatenates selected source ranges without allocating
+/// or spooling the selected body. Source offsets and logical length remain
+/// u64, so sparse multi-gigabyte inputs do not become host-sized allocations.
+trait SelectedRangeSource: Read + Seek {}
+
+impl<T: Read + Seek> SelectedRangeSource for T {}
+
+struct SelectedRangesReader<'a> {
+    source: &'a mut dyn SelectedRangeSource,
+    ranges: &'a [SelectedByteRange],
+    length: u64,
+    position: u64,
+    range_index: usize,
+    range_offset: u64,
+    source_position: Option<u64>,
+}
+
+impl<'a> SelectedRangesReader<'a> {
+    fn new<R: Read + Seek>(
+        source: &'a mut R,
+        ranges: &'a [SelectedByteRange],
+    ) -> Result<Self, SourceUnavailable> {
+        let mut length = 0u64;
+        let mut previous_end = None;
+        for range in ranges {
+            if range.start >= range.end {
+                return Err(SourceUnavailable::new(
+                    "selected source range is empty or reversed",
+                ));
+            }
+            if previous_end.is_some_and(|end| end >= range.start) {
+                return Err(SourceUnavailable::new(
+                    "selected source ranges overlap or were not coalesced",
+                ));
+            }
+            length = length
+                .checked_add(range.len())
+                .ok_or_else(|| SourceUnavailable::new("selected stream length overflows u64"))?;
+            previous_end = Some(range.end);
+        }
+        Ok(Self {
+            source,
+            ranges,
+            length,
+            position: 0,
+            range_index: 0,
+            range_offset: 0,
+            source_position: None,
+        })
+    }
+
+    fn len(&self) -> u64 {
+        self.length
+    }
+
+    fn reset_cursor(&mut self, target: u64) {
+        self.position = target;
+        self.source_position = None;
+        let mut remaining = target;
+        for (index, range) in self.ranges.iter().enumerate() {
+            if remaining < range.len() {
+                self.range_index = index;
+                self.range_offset = remaining;
+                return;
+            }
+            remaining -= range.len();
+        }
+        self.range_index = self.ranges.len();
+        self.range_offset = 0;
+    }
+}
+
+impl std::io::Read for SelectedRangesReader<'_> {
+    fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+        if buffer.is_empty() || self.position >= self.length {
+            return Ok(0);
+        }
+        let mut written = 0usize;
+        while written < buffer.len() && self.position < self.length {
+            let range = self.ranges.get(self.range_index).ok_or_else(|| {
+                std::io::Error::new(
+                    std::io::ErrorKind::UnexpectedEof,
+                    "selected range cursor ended before the declared logical length",
+                )
+            })?;
+            let source_target = range.start.checked_add(self.range_offset).ok_or_else(|| {
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "selected source cursor overflows u64",
+                )
+            })?;
+            if self.source_position != Some(source_target) {
+                self.source.seek(SeekFrom::Start(source_target))?;
+                self.source_position = Some(source_target);
+            }
+            let range_remaining = range.end - source_target;
+            let limit = usize::try_from(range_remaining.min((buffer.len() - written) as u64))
+                .map_err(|_| {
+                    std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        "selected read length does not fit usize",
+                    )
+                })?;
+            let count = self.source.read(&mut buffer[written..written + limit])?;
+            if count == 0 {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::UnexpectedEof,
+                    "selected source range ended before its declared boundary",
+                ));
+            }
+            let count_u64 = count as u64;
+            written += count;
+            self.position = self.position.checked_add(count_u64).ok_or_else(|| {
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "selected logical position overflows u64",
+                )
+            })?;
+            self.range_offset += count_u64;
+            self.source_position = source_target.checked_add(count_u64);
+            if self.range_offset == range.len() {
+                self.range_index += 1;
+                self.range_offset = 0;
+            }
+        }
+        Ok(written)
+    }
+}
+
+impl std::io::Seek for SelectedRangesReader<'_> {
+    fn seek(&mut self, position: SeekFrom) -> std::io::Result<u64> {
+        let target = match position {
+            SeekFrom::Start(target) => i128::from(target),
+            SeekFrom::End(offset) => i128::from(self.length) + i128::from(offset),
+            SeekFrom::Current(offset) => i128::from(self.position) + i128::from(offset),
+        };
+        let target = u64::try_from(target).map_err(|_| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "selected logical seek is outside the u64 address space",
+            )
+        })?;
+        self.reset_cursor(target);
+        Ok(target)
+    }
+}
+
+fn summarize_selected_stream(
+    reader: &mut SelectedRangesReader<'_>,
+    context: &str,
+) -> Result<uor_r4_graph_compiler::recorded_corpus::RecordedCorpusMemberSummary, SourceUnavailable>
+{
+    reader
+        .seek(SeekFrom::Start(0))
+        .map_err(SourceUnavailable::new)?;
+    let length = reader.len();
+    let mut remaining = length;
+    let mut hasher = blake3::Hasher::new();
+    let mut buffer = [0u8; 64 * 1024];
+    while remaining != 0 {
+        let limit = usize::try_from(remaining.min(buffer.len() as u64))
+            .map_err(|_| SourceUnavailable::new(format!("{context} length overflows usize")))?;
+        let count = reader
+            .read(&mut buffer[..limit])
+            .map_err(SourceUnavailable::new)?;
+        if count == 0 {
+            return Err(SourceUnavailable::new(format!(
+                "{context} ended before its declared {length}-byte length"
+            )));
+        }
+        hasher.update(&buffer[..count]);
+        remaining -= count as u64;
+    }
+    let mut extra = [0u8; 1];
+    if reader.read(&mut extra).map_err(SourceUnavailable::new)? != 0 {
+        return Err(SourceUnavailable::new(format!(
+            "{context} grew beyond its declared {length}-byte length"
+        )));
+    }
+    Ok(
+        uor_r4_graph_compiler::recorded_corpus::RecordedCorpusMemberSummary {
+            length,
+            blake3: format!("blake3:{}", hasher.finalize().to_hex()),
+        },
+    )
+}
+
+struct ExpectedSubsampleGeneration<'a> {
+    execution: &'a RecordedCorpusExecutionIdentity,
+    meta: &'a [u8],
+    records: &'a uor_r4_graph_compiler::recorded_corpus::RecordedCorpusMemberSummary,
+    hidden: Option<&'a uor_r4_graph_compiler::recorded_corpus::RecordedCorpusMemberSummary>,
+}
+
+fn postcheck_subsample_generation(
+    guard: &RecordedCorpusProducerGuard,
+    output_meta: &Path,
+    output_records: &Path,
+    expected: &ExpectedSubsampleGeneration<'_>,
+    expected_binding_cid: Option<&str>,
+) -> Result<String, SourceUnavailable> {
+    let published = uor_r4_graph_compiler::recorded_corpus::open_stream_under_guard(
+        guard,
+        output_meta,
+        output_records,
+    )?;
+    let binding_cid = published.binding_cid.clone().ok_or_else(|| {
+        SourceUnavailable::new("subsample postcheck found no canonical generation binding")
+    })?;
+    if expected_binding_cid.is_some_and(|expected| expected != binding_cid)
+        || recorded_execution_from_stream(&published) != *expected.execution
+        || published.meta_bytes != expected.meta
+        || &published.records.summary() != expected.records
+        || published.hidden.as_ref().map(|hidden| hidden.summary()) != expected.hidden.cloned()
+    {
+        return Err(SourceUnavailable::new(
+            "subsample publication changed during bounded post-binding recapture",
+        ));
+    }
+    published.verify_generation()?;
+    guard.verify_owned_root()?;
+    Ok(binding_cid)
 }
 
 /// Derive one smaller, story-run-aligned corpus from a single exact source
@@ -8095,222 +8533,118 @@ where
     F: FnOnce() -> Result<(), SourceUnavailable>,
 {
     let options = parse_subsample_recorded_corpus_options(args)?;
-    let mut source = recorded_corpus_snapshot(&options.source_meta, &options.source_records)?;
-    if source.binding_cid.is_none() {
-        // Compatibility for archived legacy/attention-only scale inputs: one
-        // cooperative source guard makes the lower repeated-read snapshot
-        // stable against every in-repo producer. Dense input never reaches
-        // this lane because lower capture requires its canonical binding.
-        let source_root = std::fs::canonicalize(
-            options
-                .source_meta
-                .parent()
-                .filter(|parent| !parent.as_os_str().is_empty())
-                .unwrap_or_else(|| Path::new(".")),
-        )
-        .map_err(SourceUnavailable::new)?;
-        let source_guard =
-            uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerGuard::try_acquire(
-                &source_root,
-            )?;
-        source = recorded_corpus_snapshot(&options.source_meta, &options.source_records)?;
-        drop(source_guard);
-    }
+    let requested_output_root = options
+        .output_meta
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let source_root = options
+        .source_meta
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let mut authority =
+        uor_r4_graph_compiler::recorded_corpus::RecordedCorpusDerivationGuards::try_acquire(
+            source_root,
+            requested_output_root,
+        )?;
+    authority.verify()?;
+    let output_root = authority.destination_guard().root().to_path_buf();
+    let output_meta = output_root.join("corpus.meta");
+    let output_records = output_root.join("corpus.records");
+    let output_hidden = output_root.join("corpus.records.hidden");
+
+    let mut source = uor_r4_graph_compiler::recorded_corpus::open_stream_under_guard(
+        authority.source_guard(),
+        &options.source_meta,
+        &options.source_records,
+    )?;
     if source.meta_bytes.len() != SOURCE_CORPUS_META_BYTES || source.meta_bytes[24] != 1 {
         return Err(SourceUnavailable::new(
             "subsample source is not one exact finalized 25-byte corpus generation",
         ));
     }
-    let source_records_u64 = u64::from_le_bytes(
+    let source_records = u64::from_le_bytes(
         source.meta_bytes[0..8]
             .try_into()
             .map_err(|_| SourceUnavailable::new("invalid source corpus record count"))?,
     );
-    let source_records = usize::try_from(source_records_u64).map_err(|_| {
-        SourceUnavailable::new(format!(
-            "source corpus record count {source_records_u64} cannot be represented on this host"
-        ))
-    })?;
-    if options.records >= source_records {
+    if options.records > source_records {
         return Err(SourceUnavailable::new(format!(
-            "source has {source_records} finalized records; --records {} must be strictly smaller",
+            "source has {source_records} finalized records; --records {} exceeds the source generation",
             options.records
         )));
     }
-    let record_width = exact_finalized_record_width(source_records, source.records_bytes.len())
-        .ok_or_else(|| {
-            SourceUnavailable::new(format!(
-                "source record stream length {} is not exactly n times one registered width (88, 48, 32, or 12) for n={source_records}",
-                source.records_bytes.len()
-            ))
-        })?;
-    let parsed = compiler::load_corpus_bytes(&source.meta_bytes, &source.records_bytes, None)
-        .ok_or_else(|| SourceUnavailable::new("subsample source corpus bytes are malformed"))?;
     let source_stories_u64 = u64::from_le_bytes(
         source.meta_bytes[8..16]
             .try_into()
             .map_err(|_| SourceUnavailable::new("invalid source corpus story count"))?,
     );
-    let source_stories = u32::try_from(source_stories_u64).map_err(|_| {
-        SourceUnavailable::new(format!(
-            "source corpus story count {source_stories_u64} exceeds the u32 story-id range"
-        ))
-    })?;
-    let source_train_cut = ((f64::from(source_stories) * 0.8) as u32).max(1);
-    let mut runs = Vec::new();
-    let mut start = 0usize;
-    while start < source_records {
-        let story = parsed.story[start];
-        if story >= source_stories {
-            return Err(SourceUnavailable::new(format!(
-                "source record {start} declares story {story}, outside the metadata story range 0..{source_stories}"
-            )));
-        }
-        let mut end = start + 1;
-        while end < source_records && parsed.story[end] == story {
-            end += 1;
-        }
-        runs.push((start, end, story, story < source_train_cut));
-        start = end;
-    }
-
-    // Preserve the source compiler's fixed story partition. Quotas are
-    // deterministic 80/20 record budgets; only complete story runs that fit
-    // their side's budget are retained, in original source order.
-    let train_quota = options
-        .records
-        .checked_mul(4)
-        .ok_or_else(|| SourceUnavailable::new("subsample train quota overflows"))?
-        / 5;
-    let held_out_quota = options.records - train_quota;
-    if train_quota == 0 || held_out_quota == 0 {
+    let record_width = exact_finalized_record_width(source_records, source.records.len())
+        .ok_or_else(|| {
+            SourceUnavailable::new(format!(
+                "source record stream length {} is not exactly n times one registered width (88, 48, 32, or 12) for n={source_records}",
+                source.records.len()
+            ))
+        })?;
+    let selection = select_recorded_corpus_ranges(
+        &mut source.records,
+        source_records,
+        record_width,
+        source_stories_u64,
+        options.records,
+    )?;
+    let record_ranges = selected_byte_ranges(&selection.ranges, record_width)?;
+    let records_summary = {
+        let mut reader = SelectedRangesReader::new(&mut source.records, &record_ranges)?;
+        summarize_selected_stream(&mut reader, "subsample selected record stream")?
+    };
+    let expected_records_length = selection
+        .retained_records
+        .checked_mul(record_width)
+        .ok_or_else(|| SourceUnavailable::new("subsample record byte length overflows u64"))?;
+    if records_summary.length != expected_records_length {
         return Err(SourceUnavailable::new(
-            "subsample target is too small to retain records from both fixed source partitions",
+            "subsample selected record summary has an inconsistent row length",
         ));
     }
-    let mut train_remaining = train_quota;
-    let mut held_out_remaining = held_out_quota;
-    let mut selected = Vec::new();
-    let mut train_records = 0usize;
-    let mut held_out_records = 0usize;
-    let mut last_selected_story = None;
-    for &(run_start, run_end, story, train) in &runs {
-        let rows = run_end - run_start;
-        let remaining = if train {
-            &mut train_remaining
-        } else {
-            &mut held_out_remaining
-        };
-        // Filtering cannot make two source-separated runs of the same story
-        // adjacent: v1/v2 rows reconstruct input/span boundaries solely from
-        // adjacent story equality and would otherwise stitch them together.
-        if rows <= *remaining && last_selected_story != Some(story) {
-            *remaining -= rows;
-            if train {
-                train_records += rows;
-            } else {
-                held_out_records += rows;
-            }
-            selected.push((run_start, run_end));
-            last_selected_story = Some(story);
-        }
-    }
-    if train_records == 0 || held_out_records == 0 {
-        return Err(SourceUnavailable::new(format!(
-            "no complete story-run selection fits both fixed source partitions within train/held-out quotas {train_quota}/{held_out_quota}"
-        )));
-    }
-    let retained_records = train_records
-        .checked_add(held_out_records)
-        .ok_or_else(|| SourceUnavailable::new("subsample retained count overflows"))?;
-    let output_capacity = retained_records
-        .checked_mul(record_width)
-        .ok_or_else(|| SourceUnavailable::new("subsample record byte length overflows"))?;
-    let mut output_records_bytes = Vec::with_capacity(output_capacity);
-    for &(run_start, run_end) in &selected {
-        let byte_start = run_start
-            .checked_mul(record_width)
-            .ok_or_else(|| SourceUnavailable::new("subsample record start overflows"))?;
-        let byte_end = run_end
-            .checked_mul(record_width)
-            .ok_or_else(|| SourceUnavailable::new("subsample record end overflows"))?;
-        output_records_bytes.extend_from_slice(&source.records_bytes[byte_start..byte_end]);
-    }
-    let mut output_meta_bytes = Vec::with_capacity(SOURCE_CORPUS_META_BYTES);
-    output_meta_bytes.extend_from_slice(
-        &u64::try_from(retained_records)
-            .map_err(|_| SourceUnavailable::new("subsample count exceeds u64"))?
-            .to_le_bytes(),
-    );
-    output_meta_bytes.extend_from_slice(&source_stories_u64.to_le_bytes());
-    output_meta_bytes.extend_from_slice(&source.meta_bytes[16..24]);
-    output_meta_bytes.push(1);
 
-    let output_hidden_bytes = source
-        .hidden_bytes
-        .as_deref()
-        .map(|hidden| {
-            if source_records == 0 || hidden.len() % source_records != 0 {
+    let (hidden_ranges, hidden_summary) = match source.hidden.as_mut() {
+        Some(hidden) => {
+            if hidden.len() % source_records != 0 {
                 return Err(SourceUnavailable::new(format!(
-                    "source hidden stream is {} bytes, which is not an exact nonzero row width for {source_records} finalized rows",
+                    "source hidden stream is {} bytes, which is not an exact row width for {source_records} finalized rows",
                     hidden.len()
                 )));
             }
             let row_bytes = hidden.len() / source_records;
-            if row_bytes == 0 || row_bytes % std::mem::size_of::<f32>() != 0 {
+            if row_bytes == 0 || row_bytes % std::mem::size_of::<f32>() as u64 != 0 {
                 return Err(SourceUnavailable::new(
                     "source hidden stream row width is zero or is not an exact f32 byte multiple",
                 ));
             }
-            let output_capacity = retained_records
+            let ranges = selected_byte_ranges(&selection.ranges, row_bytes)?;
+            let summary = {
+                let mut reader = SelectedRangesReader::new(hidden, &ranges)?;
+                summarize_selected_stream(&mut reader, "subsample selected hidden stream")?
+            };
+            let expected_length = selection
+                .retained_records
                 .checked_mul(row_bytes)
-                .ok_or_else(|| SourceUnavailable::new("subsample hidden length overflows"))?;
-            let mut output = Vec::with_capacity(output_capacity);
-            for &(run_start, run_end) in &selected {
-                let byte_start = run_start
-                    .checked_mul(row_bytes)
-                    .ok_or_else(|| SourceUnavailable::new("subsample hidden start overflows"))?;
-                let byte_end = run_end
-                    .checked_mul(row_bytes)
-                    .ok_or_else(|| SourceUnavailable::new("subsample hidden end overflows"))?;
-                output.extend_from_slice(&hidden[byte_start..byte_end]);
+                .ok_or_else(|| SourceUnavailable::new("subsample hidden length overflows u64"))?;
+            if summary.length != expected_length {
+                return Err(SourceUnavailable::new(
+                    "subsample selected hidden summary has an inconsistent row length",
+                ));
             }
-            Ok(output)
-        })
-        .transpose()?;
-
-    let output_root = options
-        .output_meta
-        .parent()
-        .filter(|parent| !parent.as_os_str().is_empty())
-        .unwrap_or_else(|| Path::new("."));
-    let output_parent = output_root
-        .parent()
-        .filter(|parent| !parent.as_os_str().is_empty())
-        .unwrap_or_else(|| Path::new("."));
-    std::fs::create_dir_all(output_parent).map_err(SourceUnavailable::new)?;
-    let mut producer =
-        uor_r4_graph_compiler::recorded_corpus::RecordedCorpusProducerGuard::try_acquire(
-            output_root,
-        )?;
-    let source_root = std::fs::canonicalize(
-        options
-            .source_meta
-            .parent()
-            .filter(|parent| !parent.as_os_str().is_empty())
-            .unwrap_or_else(|| Path::new(".")),
-    )
-    .map_err(SourceUnavailable::new)?;
-    if producer.protects_directory(&source_root)? {
-        return Err(SourceUnavailable::new(
-            "subsample source and destination resolve to the same canonical corpus root; in-place derivation is refused before mutation",
-        ));
-    }
-    producer.ensure_root()?;
-    let output_root = producer.root().to_path_buf();
-    let output_meta = output_root.join("corpus.meta");
-    let output_records = output_root.join("corpus.records");
-    let output_hidden = output_root.join("corpus.records.hidden");
+            (Some(ranges), Some(summary))
+        }
+        None => (None, None),
+    };
+    source.verify_generation()?;
+    authority.verify()?;
+    authority.destination_guard_mut().ensure_root()?;
+    authority.verify()?;
     if strict_regular_file_if_present(
         &output_root.join(observe::MANIFEST_FILE),
         "subsample destination observation manifest",
@@ -8319,18 +8653,38 @@ where
             "subsample destination contains an observation manifest; use a fresh compile-style corpus root",
         ));
     }
+
+    let mut output_meta_bytes = source.meta_bytes.clone();
+    output_meta_bytes[0..8].copy_from_slice(&selection.retained_records.to_le_bytes());
+    let expected_execution = RecordedCorpusExecutionIdentity {
+        attention_operator: source.execution.attention_operator.clone(),
+        dense_operator: source.execution.dense_operator.clone(),
+    };
+    let attention_bytes = expected_execution
+        .attention_operator
+        .as_ref()
+        .map(canonical_attention_operator_bytes)
+        .transpose()?;
+    let dense_bytes = expected_execution
+        .dense_operator
+        .as_ref()
+        .map(canonical_dense_operator_bytes)
+        .transpose()?;
     let subsample_members = [
+        PlannedOutputMember::AttentionOperator,
+        PlannedOutputMember::DenseOperator,
         PlannedOutputMember::Records,
         PlannedOutputMember::Hidden,
         PlannedOutputMember::Metadata,
     ];
-    preflight_guarded_planned_scope(&producer, &subsample_members, "subsample destination")?;
+    let producer = authority.destination_guard();
+    preflight_guarded_planned_scope(producer, &subsample_members, "subsample destination")?;
     producer.preflight_planned_output_stable_scope(&subsample_members)?;
     producer.preflight_deterministic_compile_inventory(&subsample_members)?;
     let recoverable_temporary =
         producer.preflight_publication_namespace_for(RecordedCorpusRole::Compile)?;
 
-    let attention_ready = match source.execution.attention_operator.as_ref() {
+    let attention_ready = match expected_execution.attention_operator.as_ref() {
         Some(attention) => preflight_compiled_attention_operator(&output_root, attention)?,
         None => {
             if read_optional_compiled_attention_operator(&output_root)?.is_some() {
@@ -8341,122 +8695,243 @@ where
             true
         }
     };
-    let dense_ready =
-        preflight_compiled_dense_operator(&output_root, source.execution.dense_operator.as_ref())?;
-    let records_ready = preflight_guarded_planned_file(
-        &producer,
-        &output_records,
-        &output_records_bytes,
-        "subsample destination records",
-    )?;
-    let hidden_ready = match output_hidden_bytes.as_deref() {
-        Some(hidden) => preflight_guarded_planned_file(
-            &producer,
-            &output_hidden,
-            hidden,
-            "subsample destination hidden stream",
+    let attention_bytes_ready = match attention_bytes.as_deref() {
+        Some(bytes) => preflight_guarded_planned_file_in_scope(
+            producer,
+            &output_root.join(ATTENTION_OPERATOR_BINDING_FILE),
+            bytes,
+            "subsample destination attention operator",
+            &subsample_members,
         )?,
         None => {
-            preflight_guarded_planned_absence(
-                &producer,
-                &output_hidden,
-                "subsample destination hidden stream",
+            preflight_guarded_planned_absence_in_scope(
+                producer,
+                &output_root.join(ATTENTION_OPERATOR_BINDING_FILE),
+                "subsample destination attention operator",
+                &subsample_members,
             )?;
             true
         }
     };
-    let meta_ready = preflight_guarded_planned_file(
-        &producer,
+    let dense_ready = preflight_compiled_dense_operator(
+        &output_root,
+        expected_execution.dense_operator.as_ref(),
+    )?;
+    let dense_bytes_ready = match dense_bytes.as_deref() {
+        Some(bytes) => preflight_guarded_planned_file_in_scope(
+            producer,
+            &output_root.join(DENSE_OPERATOR_BINDING_FILE),
+            bytes,
+            "subsample destination dense operator",
+            &subsample_members,
+        )?,
+        None => {
+            preflight_guarded_planned_absence_in_scope(
+                producer,
+                &output_root.join(DENSE_OPERATOR_BINDING_FILE),
+                "subsample destination dense operator",
+                &subsample_members,
+            )?;
+            true
+        }
+    };
+    let records_ready = preflight_guarded_planned_stream_in_scope(
+        producer,
+        &output_records,
+        Some(&records_summary),
+        "subsample destination records",
+        &subsample_members,
+    )?;
+    let hidden_ready = match hidden_summary.as_ref() {
+        Some(hidden) => preflight_guarded_planned_stream_in_scope(
+            producer,
+            &output_hidden,
+            Some(hidden),
+            "subsample destination hidden stream",
+            &subsample_members,
+        )?,
+        None => {
+            preflight_guarded_planned_absence_in_scope(
+                producer,
+                &output_hidden,
+                "subsample destination hidden stream",
+                &subsample_members,
+            )?;
+            true
+        }
+    };
+    let meta_ready = preflight_guarded_planned_file_in_scope(
+        producer,
         &output_meta,
         &output_meta_bytes,
         "subsample destination metadata",
+        &subsample_members,
     )?;
 
     let stable_binding = strict_regular_file_if_present(
         &output_root.join(uor_r4_graph_compiler::recorded_corpus::RECORDED_CORPUS_BINDING_FILE),
         "subsample destination generation binding",
     )?;
+    let planned_ready =
+        attention_bytes_ready && dense_bytes_ready && records_ready && hidden_ready && meta_ready;
     if stable_binding || recoverable_temporary {
-        if !attention_ready || !dense_ready || !records_ready || !hidden_ready || !meta_ready {
+        if !attention_ready || !dense_ready || !planned_ready {
             return Err(SourceUnavailable::new(
                 "subsample destination has binding commit evidence without the exact complete planned generation; refusing recovery before mutation",
             ));
         }
         uor_r4_graph_compiler::recorded_corpus::preflight_binding_evidence_matches_current(
-            &producer,
+            producer,
             &output_meta,
             &output_records,
         )?;
     }
-    producer.begin_compile_attempt()?;
-    if stable_binding || recoverable_temporary {
-        let binding_cid = uor_r4_graph_compiler::recorded_corpus::publish_binding(
-            &producer,
+    if stable_binding && !recoverable_temporary && attention_ready && dense_ready && planned_ready {
+        producer.preflight_ready_deterministic_compile_inventory(&subsample_members)?;
+        source.verify_generation()?;
+        authority.verify()?;
+        let expected = ExpectedSubsampleGeneration {
+            execution: &expected_execution,
+            meta: &output_meta_bytes,
+            records: &records_summary,
+            hidden: hidden_summary.as_ref(),
+        };
+        let binding_cid = postcheck_subsample_generation(
+            producer,
             &output_meta,
             &output_records,
+            &expected,
+            None,
         )?;
-        let published = recorded_corpus_snapshot(&output_meta, &output_records)?;
-        if published.execution != source.execution
-            || published.meta_bytes != output_meta_bytes
-            || published.records_bytes != output_records_bytes
-            || published.hidden_bytes != output_hidden_bytes
-            || published.binding_cid.as_deref() != Some(binding_cid.as_str())
-        {
-            return Err(SourceUnavailable::new(
-                "subsample binding recovery does not match the exact planned generation",
-            ));
+        if producer.compile_attempt_active()? {
+            producer.finish_compile_attempt()?;
         }
-        producer.finish_compile_attempt()?;
+        println!(
+            "subsample recorded corpus: {} records ({} train, {} held out; requested {}) of {source_records}; {record_width}-byte rows; binding {binding_cid}",
+            selection.retained_records,
+            selection.train_records,
+            selection.held_out_records,
+            options.records,
+        );
         return Ok(());
     }
 
-    if let Some(dense) = source.execution.dense_operator.as_ref() {
-        publish_dense_operator_binding(&output_root, dense)?;
+    producer.preflight_deterministic_compile_inventory(&subsample_members)?;
+    producer.begin_compile_attempt()?;
+    if stable_binding || recoverable_temporary {
+        source.verify_generation()?;
+        authority.verify()?;
+        let binding_cid = uor_r4_graph_compiler::recorded_corpus::publish_binding(
+            producer,
+            &output_meta,
+            &output_records,
+        )?;
+        let expected = ExpectedSubsampleGeneration {
+            execution: &expected_execution,
+            meta: &output_meta_bytes,
+            records: &records_summary,
+            hidden: hidden_summary.as_ref(),
+        };
+        let checked_binding_cid = postcheck_subsample_generation(
+            producer,
+            &output_meta,
+            &output_records,
+            &expected,
+            Some(&binding_cid),
+        )?;
+        debug_assert_eq!(checked_binding_cid, binding_cid);
+        producer.finish_compile_attempt()?;
+        println!(
+            "subsample recorded corpus: {} records ({} train, {} held out; requested {}) of {source_records}; {record_width}-byte rows; binding {binding_cid}",
+            selection.retained_records,
+            selection.train_records,
+            selection.held_out_records,
+            options.records,
+        );
+        return Ok(());
     }
-    if let Some(attention) = source.execution.attention_operator.as_ref() {
-        publish_attention_operator_binding(&output_root, attention)?;
+
+    // Dense-first makes every GPT-2 crash prefix invalid rather than a
+    // valid-looking attention-only generation.
+    if let Some(bytes) = dense_bytes.as_deref() {
+        publish_guarded_planned_file_with_after_sync(
+            producer,
+            &output_root.join(DENSE_OPERATOR_BINDING_FILE),
+            bytes,
+            "subsample destination dense operator",
+            &subsample_members,
+            |_| Ok(()),
+        )?;
     }
-    publish_guarded_planned_file(
-        &producer,
-        &output_records,
-        &output_records_bytes,
-        "subsample destination records",
-    )?;
-    if let Some(hidden) = output_hidden_bytes.as_deref() {
-        publish_guarded_planned_file(
-            &producer,
+    if let Some(bytes) = attention_bytes.as_deref() {
+        publish_guarded_planned_file_with_after_sync(
+            producer,
+            &output_root.join(ATTENTION_OPERATOR_BINDING_FILE),
+            bytes,
+            "subsample destination attention operator",
+            &subsample_members,
+            |_| Ok(()),
+        )?;
+    }
+    {
+        let mut reader = SelectedRangesReader::new(&mut source.records, &record_ranges)?;
+        publish_guarded_planned_stream(
+            producer,
+            &output_records,
+            &mut reader,
+            &records_summary,
+            "subsample destination records",
+        )?;
+    }
+    if let (Some(hidden), Some(ranges), Some(summary)) = (
+        source.hidden.as_mut(),
+        hidden_ranges.as_deref(),
+        hidden_summary.as_ref(),
+    ) {
+        let mut reader = SelectedRangesReader::new(hidden, ranges)?;
+        publish_guarded_planned_stream(
+            producer,
             &output_hidden,
-            hidden,
+            &mut reader,
+            summary,
             "subsample destination hidden stream",
         )?;
     }
     publish_guarded_planned_file(
-        &producer,
+        producer,
         &output_meta,
         &output_meta_bytes,
         "subsample destination metadata",
     )?;
     before_binding()?;
+    source.verify_generation()?;
+    authority.verify()?;
     let binding_cid = uor_r4_graph_compiler::recorded_corpus::publish_binding(
-        &producer,
+        producer,
         &output_meta,
         &output_records,
     )?;
-    let published = recorded_corpus_snapshot(&output_meta, &output_records)?;
-    if published.execution != source.execution
-        || published.meta_bytes != output_meta_bytes
-        || published.records_bytes != output_records_bytes
-        || published.hidden_bytes != output_hidden_bytes
-        || published.binding_cid.as_deref() != Some(binding_cid.as_str())
-    {
-        return Err(SourceUnavailable::new(
-            "subsample publication changed during exact post-binding recapture",
-        ));
-    }
+    let expected = ExpectedSubsampleGeneration {
+        execution: &expected_execution,
+        meta: &output_meta_bytes,
+        records: &records_summary,
+        hidden: hidden_summary.as_ref(),
+    };
+    let checked_binding_cid = postcheck_subsample_generation(
+        producer,
+        &output_meta,
+        &output_records,
+        &expected,
+        Some(&binding_cid),
+    )?;
+    debug_assert_eq!(checked_binding_cid, binding_cid);
     producer.finish_compile_attempt()?;
     println!(
-        "subsample recorded corpus: {retained_records} records ({train_records} train, {held_out_records} held out; target {}) of {source_records}; {}-byte rows; binding {binding_cid}",
-        options.records, record_width
+        "subsample recorded corpus: {} records ({} train, {} held out; requested {}) of {source_records}; {record_width}-byte rows; binding {binding_cid}",
+        selection.retained_records,
+        selection.train_records,
+        selection.held_out_records,
+        options.records,
     );
     Ok(())
 }
@@ -9186,8 +9661,8 @@ pub fn run(args: &[String]) -> Result<(), SourceUnavailable> {
                 "R4 transformerless — compile a mul-free table artifact\n\
                  commands: setup | gen [secs] [target] | compile [--model REPO --revision SHA | --source DIR] [--tokenizer-family FAMILY --tokenizer-version N] [--output DIR] [--seconds N] [--target N] [--sequence-length N] | store | compare | compare-report | scenarios | teacher-kappa | convert-r4g1 --artifacts <TLA> --store <TLS1> [--calibration <hamming_calibration.json>] --out <R4G1>\n\
                  recorded compile (no transformer): compile-recorded --corpus-meta <META> --corpus-recs <RECS> --vocab-size <N> --out <DIR>\n\
-                 recorded execution copy (including dense sibling): copy-recorded-attention --corpus-meta <META> --corpus-recs <RECS> --out <attention_operator.json>\n\
-                 guarded recorded-corpus derivation: subsample-recorded-corpus --src-meta <META> --src-recs <RECS> --out-meta <corpus.meta> --out-recs <corpus.records> --records <N>\n\
+                 markerless legacy attention copy (dense-present derivations are refused): copy-recorded-attention --corpus-meta <META> --corpus-recs <RECS> --out <attention_operator.json>\n\
+                 guarded streaming corpus derivation (N <= source; complete runs may undershoot): subsample-recorded-corpus --src-meta <META> --src-recs <RECS> --out-meta <corpus.meta> --out-recs <corpus.records> --records <N>\n\
                  transformer-free refresh: runtime-corpus --artifacts <TLA> --store <TLS1> --seed-meta <META> --seed-recs <RECS> --out <DIR> --target N [--threads N]\n\
                  graph cover: cover --corpus-meta <META> --corpus-recs <RECS> --artifacts <TLA> --out <DIR> [--bundle-root <ROOT>]\n\
                  graph score: score --corpus-meta <META> --corpus-recs <RECS> --artifacts <TLA> --out <DIR> [--bundle-root <ROOT>]\n\
@@ -10314,6 +10789,531 @@ mod tests {
             record[offset..offset + 4].copy_from_slice(&weight.to_le_bytes());
         }
         record
+    }
+
+    fn subsample_args(source: &Path, destination: &Path, records: u64) -> Vec<String> {
+        vec![
+            "--src-meta".to_owned(),
+            source.join("corpus.meta").to_string_lossy().into_owned(),
+            "--src-recs".to_owned(),
+            source.join("corpus.records").to_string_lossy().into_owned(),
+            "--out-meta".to_owned(),
+            destination
+                .join("corpus.meta")
+                .to_string_lossy()
+                .into_owned(),
+            "--out-recs".to_owned(),
+            destination
+                .join("corpus.records")
+                .to_string_lossy()
+                .into_owned(),
+            "--records".to_owned(),
+            records.to_string(),
+        ]
+    }
+
+    fn subsample_fixture_row(width: usize, story: u32, index: u32) -> Vec<u8> {
+        let next = 100 + index;
+        match width {
+            12 => {
+                let mut row = vec![0u8; 12];
+                row[0..4].copy_from_slice(&story.to_le_bytes());
+                row[4..6].copy_from_slice(&(next as u16).to_le_bytes());
+                row[6..8].copy_from_slice(&(next as u16).to_le_bytes());
+                row[8..12].copy_from_slice(&(-0.25f32).to_le_bytes());
+                row
+            }
+            32 => {
+                let mut row = vec![0u8; 32];
+                row[0..4].copy_from_slice(&story.to_le_bytes());
+                row[4..8].copy_from_slice(&next.to_le_bytes());
+                for (slot, token) in [next, next + 1, next + 2].into_iter().enumerate() {
+                    let offset = 8 + slot * 4;
+                    row[offset..offset + 4].copy_from_slice(&token.to_le_bytes());
+                }
+                for (slot, weight) in [70u32, 20, 10].into_iter().enumerate() {
+                    let offset = 20 + slot * 4;
+                    row[offset..offset + 4].copy_from_slice(&weight.to_le_bytes());
+                }
+                row
+            }
+            48 => compiler::encode_v3_record(
+                story,
+                next,
+                &[next, next + 1, next + 2],
+                &[70, 20, 10],
+                (1_000 + index, 1_001 + index),
+                (2_000 + index, 2_001 + index),
+            )
+            .to_vec(),
+            88 => {
+                let mut row = vec![0u8; 88];
+                row[0..4].copy_from_slice(&story.to_le_bytes());
+                row[4..8].copy_from_slice(&next.to_le_bytes());
+                for slot in 0..8usize {
+                    let token = next + slot as u32;
+                    let token_offset = 8 + slot * 4;
+                    let weight_offset = 40 + slot * 4;
+                    row[token_offset..token_offset + 4].copy_from_slice(&token.to_le_bytes());
+                    row[weight_offset..weight_offset + 4]
+                        .copy_from_slice(&(80u32.saturating_sub(slot as u32 * 10)).to_le_bytes());
+                }
+                row[72..76].copy_from_slice(&(1_000 + index).to_le_bytes());
+                row[76..80].copy_from_slice(&(1_001 + index).to_le_bytes());
+                row[80..84].copy_from_slice(&(2_000 + index).to_le_bytes());
+                row[84..88].copy_from_slice(&(2_001 + index).to_le_bytes());
+                row
+            }
+            _ => panic!("unsupported fixture width {width}"),
+        }
+    }
+
+    fn write_subsample_fixture(root: &Path, width: usize, hidden_row_bytes: usize) -> Vec<Vec<u8>> {
+        std::fs::create_dir_all(root).expect("fixture root");
+        bind_compiled_dense_operator(root, Some(&DenseOperatorSpec::gpt2_v2()))
+            .expect("fixture dense identity");
+        bind_compiled_attention_operator(root, &AttentionOperatorSpec::learned_absolute_v2())
+            .expect("fixture attention identity");
+        let stories = [
+            0u32, 0, 0, // selected train run
+            1, 1, 1, 1, 1, 1, // skipped: too large
+            0, 0, // skipped: would stitch the selected story-0 run
+            2, 2, // selected
+            3, 3, 3, 3, // skipped: too large for remaining quota
+            4, 4, 4, // selected
+            8, 8, // selected held-out run
+            9, 9, // skipped: held-out quota has one row left
+        ];
+        let rows = stories
+            .into_iter()
+            .enumerate()
+            .map(|(index, story)| subsample_fixture_row(width, story, index as u32))
+            .collect::<Vec<_>>();
+        let records = rows.iter().flatten().copied().collect::<Vec<_>>();
+        let mut meta = vec![0u8; SOURCE_CORPUS_META_BYTES];
+        meta[0..8].copy_from_slice(&(rows.len() as u64).to_le_bytes());
+        meta[8..16].copy_from_slice(&10u64.to_le_bytes());
+        meta[16..24].copy_from_slice(&0x0729_5EED_u64.to_le_bytes());
+        meta[24] = 1;
+        std::fs::write(root.join("corpus.records"), records).expect("fixture records");
+        std::fs::write(root.join("corpus.meta"), meta).expect("fixture metadata");
+        if hidden_row_bytes != 0 {
+            let hidden = (0..rows.len())
+                .flat_map(|index| {
+                    (0..hidden_row_bytes)
+                        .map(move |byte| (index as u8).wrapping_mul(17).wrapping_add(byte as u8))
+                })
+                .collect::<Vec<_>>();
+            std::fs::write(root.join("corpus.records.hidden"), hidden).expect("fixture hidden");
+        }
+        rows
+    }
+
+    #[test]
+    fn subsample_streams_all_registered_widths_with_fixed_partition_and_exact_raw_rows() {
+        let selected_indices = [0usize, 1, 2, 11, 12, 17, 18, 19, 20, 21];
+        let expected_story = [0u32, 0, 0, 2, 2, 4, 4, 4, 8, 8];
+        let base = unique_cli_test_path("subsample-all-widths");
+        std::fs::create_dir_all(&base).expect("base");
+
+        for width in [12usize, 32, 48, 88] {
+            let source = base.join(format!("source-{width}"));
+            let destination = base.join(format!("destination-{width}"));
+            let rows = write_subsample_fixture(&source, width, 12);
+            let attention = AttentionOperatorSpec::learned_absolute_v2();
+            let dense = DenseOperatorSpec::gpt2_v2();
+            publish_test_corpus_binding(
+                &source,
+                &source.join("corpus.meta"),
+                &source.join("corpus.records"),
+            );
+
+            subsample_recorded_corpus(&subsample_args(&source, &destination, 11))
+                .expect("streaming subsample");
+            let meta = std::fs::read(destination.join("corpus.meta")).expect("output meta");
+            let source_meta = std::fs::read(source.join("corpus.meta")).expect("source meta");
+            assert_eq!(u64::from_le_bytes(meta[0..8].try_into().unwrap()), 10);
+            assert_eq!(u64::from_le_bytes(meta[8..16].try_into().unwrap()), 10);
+            assert_eq!(&meta[16..25], &source_meta[16..25]);
+
+            let expected_records = selected_indices
+                .iter()
+                .flat_map(|&index| rows[index].iter().copied())
+                .collect::<Vec<_>>();
+            let output_records =
+                std::fs::read(destination.join("corpus.records")).expect("output records");
+            assert_eq!(output_records, expected_records, "raw width {width}");
+            let corpus = compiler::load_corpus_bytes(&meta, &output_records, None)
+                .expect("derived corpus parses");
+            assert_eq!(corpus.story, expected_story, "stories width {width}");
+            let expected_input = [1u32, 100, 101, 1, 111, 1, 117, 118, 1, 120];
+            assert_eq!(corpus.input, expected_input, "inputs width {width}");
+            if matches!(width, 48 | 88) {
+                assert_eq!(
+                    corpus.span_start,
+                    selected_indices
+                        .iter()
+                        .map(|index| 1_000 + *index as u32)
+                        .collect::<Vec<_>>()
+                );
+                assert_eq!(
+                    corpus.byte_end,
+                    selected_indices
+                        .iter()
+                        .map(|index| 2_001 + *index as u32)
+                        .collect::<Vec<_>>()
+                );
+            } else {
+                assert_eq!(corpus.span_start, [0u32, 1, 2, 0, 1, 0, 1, 2, 0, 1]);
+                assert_eq!(corpus.byte_start, [u32::MAX; 10]);
+            }
+            let source_hidden =
+                std::fs::read(source.join("corpus.records.hidden")).expect("source hidden");
+            let expected_hidden = selected_indices
+                .iter()
+                .flat_map(|index| source_hidden[index * 12..index * 12 + 12].iter().copied())
+                .collect::<Vec<_>>();
+            assert_eq!(
+                std::fs::read(destination.join("corpus.records.hidden")).unwrap(),
+                expected_hidden
+            );
+            assert_eq!(
+                compiled_attention_operator(&destination).unwrap(),
+                attention
+            );
+            assert_eq!(compiled_dense_operator(&destination).unwrap(), Some(dense));
+            if width == 48 {
+                let binding = std::fs::read(
+                    destination
+                        .join(uor_r4_graph_compiler::recorded_corpus::RECORDED_CORPUS_BINDING_FILE),
+                )
+                .expect("canonical output binding");
+                assert_eq!(
+                    format!("blake3:{}", blake3::hash(&binding).to_hex()),
+                    "blake3:2c05c249b75bc7dbc52cd79412443b4fc49bd9b6f01f86d660b5e908f1998c26"
+                );
+            }
+
+            let ready = directory_bytes(&destination);
+            subsample_recorded_corpus(&subsample_args(&source, &destination, 11))
+                .expect("idempotent ready rerun");
+            assert_eq!(directory_bytes(&destination), ready);
+        }
+        let _ = std::fs::remove_dir_all(base);
+    }
+
+    #[test]
+    fn selected_ranges_reader_uses_fixed_buffers_at_multi_gigabyte_offsets() {
+        #[derive(Default)]
+        struct SparseReader {
+            position: u64,
+            max_request: usize,
+        }
+        impl Read for SparseReader {
+            fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+                self.max_request = self.max_request.max(buffer.len());
+                for (offset, byte) in buffer.iter_mut().enumerate() {
+                    *byte = self.position.wrapping_add(offset as u64) as u8;
+                }
+                self.position += buffer.len() as u64;
+                Ok(buffer.len())
+            }
+        }
+        impl Seek for SparseReader {
+            fn seek(&mut self, position: SeekFrom) -> std::io::Result<u64> {
+                let next = match position {
+                    SeekFrom::Start(next) => next,
+                    SeekFrom::Current(offset) => {
+                        u64::try_from(i128::from(self.position) + i128::from(offset)).unwrap()
+                    }
+                    SeekFrom::End(_) => panic!("fixture has no finite physical end"),
+                };
+                self.position = next;
+                Ok(next)
+            }
+        }
+
+        let ranges = [
+            SelectedByteRange {
+                start: 5 * 1024 * 1024 * 1024,
+                end: 5 * 1024 * 1024 * 1024 + 70_000,
+            },
+            SelectedByteRange {
+                start: 9 * 1024 * 1024 * 1024,
+                end: 9 * 1024 * 1024 * 1024 + 123,
+            },
+        ];
+        let mut source = SparseReader::default();
+        let summary = {
+            let mut selected = SelectedRangesReader::new(&mut source, &ranges).expect("ranges");
+            summarize_selected_stream(&mut selected, "sparse selected stream").expect("summary")
+        };
+        assert_eq!(summary.length, 70_123);
+        assert!(summary.blake3.starts_with("blake3:"));
+        assert!(source.max_request <= 64 * 1024, "{}", source.max_request);
+    }
+
+    #[test]
+    fn selector_preserves_u64_story_count_train_cut_and_requires_both_partitions() {
+        let mut records = Vec::new();
+        records.extend_from_slice(&subsample_fixture_row(12, 0, 0));
+        records.extend_from_slice(&subsample_fixture_row(12, u32::MAX, 1));
+        let mut cursor = std::io::Cursor::new(records);
+        let selected =
+            select_recorded_corpus_ranges(&mut cursor, 2, 12, u64::from(u32::MAX) + 100, 2)
+                .expect("u64 story metadata uses compiler train-cut cast semantics");
+        assert_eq!(selected.train_records, 1);
+        assert_eq!(selected.held_out_records, 1);
+        assert_eq!(selected.ranges, [SelectedRowRange { start: 0, end: 2 }]);
+
+        let mut train_only = std::io::Cursor::new(
+            [
+                subsample_fixture_row(12, 0, 0),
+                subsample_fixture_row(12, 0, 1),
+            ]
+            .concat(),
+        );
+        let error = select_recorded_corpus_ranges(&mut train_only, 2, 12, 10, 2)
+            .expect_err("full-source lane still requires both fixed partitions");
+        assert!(
+            error.reason.contains("both fixed source partitions"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn subsample_full_lane_refuses_oversize_and_malformed_hidden_rows() {
+        let base = unique_cli_test_path("subsample-full-and-hidden");
+        std::fs::create_dir_all(&base).expect("base");
+        let source = base.join("source");
+        write_subsample_fixture(&source, 48, 12);
+        publish_test_corpus_binding(
+            &source,
+            &source.join("corpus.meta"),
+            &source.join("corpus.records"),
+        );
+
+        let full = base.join("full");
+        subsample_recorded_corpus(&subsample_args(&source, &full, 24))
+            .expect("N equal to source is an exact full lane");
+        for member in ["corpus.meta", "corpus.records", "corpus.records.hidden"] {
+            assert_eq!(
+                std::fs::read(full.join(member)).unwrap(),
+                std::fs::read(source.join(member)).unwrap(),
+                "full lane member {member}"
+            );
+        }
+
+        let oversize = base.join("oversize");
+        let error = subsample_recorded_corpus(&subsample_args(&source, &oversize, 25))
+            .expect_err("N above the finalized source is refused");
+        assert!(error.reason.contains("exceeds the source"), "{error}");
+        assert!(
+            !oversize.exists(),
+            "oversize refusal publishes no output root"
+        );
+
+        for (name, hidden_bytes, expected) in [
+            (
+                "not-divisible",
+                vec![0u8; 24 * 4 + 1],
+                "not an exact row width",
+            ),
+            (
+                "not-f32-aligned",
+                vec![0u8; 24 * 6],
+                "not an exact f32 byte multiple",
+            ),
+        ] {
+            let malformed = base.join(name);
+            write_subsample_fixture(&malformed, 48, 0);
+            std::fs::write(malformed.join("corpus.records.hidden"), hidden_bytes)
+                .expect("malformed hidden body");
+            publish_test_corpus_binding(
+                &malformed,
+                &malformed.join("corpus.meta"),
+                &malformed.join("corpus.records"),
+            );
+            let destination = base.join(format!("{name}-output"));
+            let error = subsample_recorded_corpus(&subsample_args(&malformed, &destination, 11))
+                .expect_err("malformed hidden layout is terminal");
+            assert!(error.reason.contains(expected), "{error}");
+            assert!(
+                !destination.exists(),
+                "hidden-layout refusal publishes no output root"
+            );
+        }
+        let _ = std::fs::remove_dir_all(base);
+    }
+
+    #[test]
+    fn subsample_refuses_alias_missing_parent_and_busy_roots_without_payload_mutation() {
+        let base = unique_cli_test_path("subsample-root-authority");
+        std::fs::create_dir_all(&base).expect("base");
+        let source = base.join("source");
+        write_subsample_fixture(&source, 48, 12);
+        publish_test_corpus_binding(
+            &source,
+            &source.join("corpus.meta"),
+            &source.join("corpus.records"),
+        );
+        let source_before = directory_bytes(&source);
+
+        let in_place = subsample_recorded_corpus(&subsample_args(&source, &source, 11))
+            .expect_err("in-place derivation is refused");
+        assert!(
+            in_place.reason.contains("same canonical root"),
+            "{in_place}"
+        );
+        assert_eq!(directory_bytes(&source), source_before);
+
+        let missing_parent = base.join("missing-parent").join("destination");
+        let error = subsample_recorded_corpus(&subsample_args(&source, &missing_parent, 11))
+            .expect_err("destination immediate parent must already exist");
+        assert!(error.reason.contains("cannot be canonicalized"), "{error}");
+        assert!(!base.join("missing-parent").exists());
+        assert_eq!(directory_bytes(&source), source_before);
+
+        #[cfg(unix)]
+        {
+            let source_link = base.join("source-link");
+            std::os::unix::fs::symlink(&source, &source_link).expect("source symlink");
+            let destination = base.join("symlink-output");
+            let error = subsample_recorded_corpus(&subsample_args(&source_link, &destination, 11))
+                .expect_err("lexical source-root symlink is refused");
+            assert!(error.reason.contains("not a real non-symlink"), "{error}");
+            assert!(!destination.exists());
+            assert_eq!(directory_bytes(&source), source_before);
+        }
+
+        let source_blocker =
+            RecordedCorpusProducerGuard::try_acquire(&source).expect("source contention fixture");
+        let source_busy_output = base.join("source-busy-output");
+        let error = subsample_recorded_corpus(&subsample_args(&source, &source_busy_output, 11))
+            .expect_err("source BUSY is propagated");
+        assert!(
+            uor_r4_graph_compiler::recorded_corpus::is_recorded_corpus_busy(&error),
+            "{error}"
+        );
+        assert!(!source_busy_output.exists());
+        assert_eq!(directory_bytes(&source), source_before);
+        drop(source_blocker);
+
+        let destination = base.join("destination-busy");
+        std::fs::create_dir(&destination).expect("destination fixture");
+        let destination_blocker = RecordedCorpusProducerGuard::try_acquire(&destination)
+            .expect("destination contention fixture");
+        let error = subsample_recorded_corpus(&subsample_args(&source, &destination, 11))
+            .expect_err("destination BUSY is propagated");
+        assert!(
+            uor_r4_graph_compiler::recorded_corpus::is_recorded_corpus_busy(&error),
+            "{error}"
+        );
+        assert!(directory_bytes(&destination).is_empty());
+        assert_eq!(directory_bytes(&source), source_before);
+        drop(destination_blocker);
+
+        let _ = std::fs::remove_dir_all(base);
+    }
+
+    #[test]
+    fn subsample_markerless_compatibility_crash_recovery_and_wrong_role_are_exact() {
+        let base = unique_cli_test_path("subsample-compat-recovery");
+        std::fs::create_dir_all(&base).expect("base");
+
+        let attention_only = base.join("attention-only");
+        write_subsample_fixture(&attention_only, 48, 12);
+        std::fs::remove_file(attention_only.join(DENSE_OPERATOR_BINDING_FILE))
+            .expect("make markerless attention-only source");
+        let attention_output = base.join("attention-output");
+        subsample_recorded_corpus(&subsample_args(&attention_only, &attention_output, 11))
+            .expect("markerless attention-only source remains compatible");
+        assert_eq!(
+            compiled_attention_operator(&attention_output).unwrap(),
+            AttentionOperatorSpec::learned_absolute_v2()
+        );
+        assert_eq!(compiled_dense_operator(&attention_output).unwrap(), None);
+
+        let markerless_dense = base.join("markerless-dense");
+        write_subsample_fixture(&markerless_dense, 48, 12);
+        std::fs::remove_file(markerless_dense.join(ATTENTION_OPERATOR_BINDING_FILE))
+            .expect("make invalid markerless dense source");
+        let dense_before = directory_bytes(&markerless_dense);
+        let dense_output = base.join("dense-output");
+        let error =
+            subsample_recorded_corpus(&subsample_args(&markerless_dense, &dense_output, 11))
+                .expect_err("markerless dense source is refused");
+        assert!(
+            error.reason.contains("dense")
+                && (error.reason.contains("binding") || error.reason.contains("attention")),
+            "{error}"
+        );
+        assert!(!dense_output.exists());
+        assert_eq!(directory_bytes(&markerless_dense), dense_before);
+
+        let source = base.join("bound-source");
+        write_subsample_fixture(&source, 48, 12);
+        publish_test_corpus_binding(
+            &source,
+            &source.join("corpus.meta"),
+            &source.join("corpus.records"),
+        );
+        let recovered = base.join("recovered");
+        let args = subsample_args(&source, &recovered, 11);
+        let error = subsample_recorded_corpus_with_before_binding(&args, || {
+            Err(SourceUnavailable::new("injected crash before binding"))
+        })
+        .expect_err("pre-binding crash boundary");
+        assert!(error.reason.contains("injected crash"), "{error}");
+        assert!(
+            !recovered
+                .join(uor_r4_graph_compiler::recorded_corpus::RECORDED_CORPUS_BINDING_FILE)
+                .exists()
+        );
+        assert!(
+            recovered
+                .join(uor_r4_graph_compiler::recorded_corpus::RECORDED_CORPUS_COMPILE_ATTEMPT_FILE)
+                .exists()
+        );
+        let records_before = std::fs::read(recovered.join("corpus.records")).unwrap();
+        let hidden_before = std::fs::read(recovered.join("corpus.records.hidden")).unwrap();
+        let meta_before = std::fs::read(recovered.join("corpus.meta")).unwrap();
+        subsample_recorded_corpus(&args).expect("exact crash-prefix rerun commits binding");
+        assert_eq!(
+            std::fs::read(recovered.join("corpus.records")).unwrap(),
+            records_before
+        );
+        assert_eq!(
+            std::fs::read(recovered.join("corpus.records.hidden")).unwrap(),
+            hidden_before
+        );
+        assert_eq!(
+            std::fs::read(recovered.join("corpus.meta")).unwrap(),
+            meta_before
+        );
+        assert!(
+            recovered
+                .join(uor_r4_graph_compiler::recorded_corpus::RECORDED_CORPUS_BINDING_FILE)
+                .exists()
+        );
+        assert!(
+            !recovered
+                .join(uor_r4_graph_compiler::recorded_corpus::RECORDED_CORPUS_COMPILE_ATTEMPT_FILE)
+                .exists()
+        );
+
+        let wrong_role = base.join("wrong-role");
+        let (state, merged) = complete_test_observation_corpus(&wrong_role);
+        publish_test_observation_binding(&wrong_role, &state, &merged);
+        std::fs::remove_file(state).expect("remove observation state body");
+        std::fs::remove_file(merged).expect("remove observation merged body");
+        let wrong_before = directory_bytes(&wrong_role);
+        let error = subsample_recorded_corpus(&subsample_args(&source, &wrong_role, 11))
+            .expect_err("observation-role binding cannot become a compile corpus");
+        assert!(error.reason.contains("cross-role"), "{error}");
+        assert_eq!(directory_bytes(&wrong_role), wrong_before);
+
+        let _ = std::fs::remove_dir_all(base);
     }
 
     fn copy_recorded_attention_args(meta: &Path, records: &Path, output: &Path) -> Vec<String> {
