@@ -12,6 +12,7 @@ use repo_model::{codegen, Model};
 
 mod audit;
 mod gate;
+mod gnaf_firewall;
 mod kappa;
 
 fn main() -> ExitCode {
@@ -34,6 +35,7 @@ fn main() -> ExitCode {
             }
         },
         "validate" => validate(&root),
+        "gnaf-firewall" => gnaf_firewall::gnaf_firewall(&root),
         "kappa" => kappa::run(&std::env::args().skip(2).collect::<Vec<_>>()),
         _ => {
             eprintln!(
@@ -45,6 +47,7 @@ fn main() -> ExitCode {
                  gates             #515: list every dormant claim's activation gate and status\n\
                  gate <claim-id>   #515: report one dormant claim's activation gate and status\n\
                  validate          run every gate above\n\
+                 gnaf-firewall     #653 SPEC 10.1: GNAF competitor universe stays artifact-/selector-/conclusion-blind\n\
                  kappa <cmd>       #624: publish/fetch/tag against a kappa-registry (R4_KAPPA_REGISTRY)\n\
                  \n\
                  --write           check-model only: rewrite the generated file"
@@ -107,6 +110,7 @@ fn validate(root: &Path) -> Result<(), Fail> {
     check_model(root, false)?;
     audit::audit_limits(root)?;
     audit::audit_deferral(root)?;
+    gnaf_firewall::gnaf_firewall(root)?;
     println!("validate: every gate passed");
     Ok(())
 }
