@@ -89,7 +89,7 @@ fn collect_lean(dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), Fail> {
 /// character becomes a space, a blanked newline stays a newline) so line
 /// numbers in a later report line up with the original file. A faithful
 /// character-by-character port of `Tools/scan.py`'s `strip()`.
-fn strip_comments_and_strings(src: &str) -> String {
+pub(crate) fn strip_comments_and_strings(src: &str) -> String {
     let chars: Vec<char> = src.chars().collect();
     let n = chars.len();
     let mut out = String::with_capacity(src.len());
