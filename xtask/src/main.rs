@@ -13,6 +13,7 @@ use repo_model::{codegen, Model};
 mod audit;
 mod gate;
 mod gnaf_firewall;
+mod gnaf_manifest;
 mod gnaf_release_path;
 mod gnaf_root;
 mod gnaf_scan;
@@ -42,6 +43,7 @@ fn main() -> ExitCode {
         "gnaf-root" => gnaf_root::gnaf_root(&root, !write),
         "gnaf-scan" => gnaf_scan::gnaf_scan(&root),
         "gnaf-release-path" => gnaf_release_path::gnaf_release_path(&root),
+        "gnaf-manifest" => gnaf_manifest::gnaf_manifest(&root, !write),
         "kappa" => kappa::run(&std::env::args().skip(2).collect::<Vec<_>>()),
         _ => {
             eprintln!(
@@ -57,9 +59,10 @@ fn main() -> ExitCode {
                  gnaf-root         #653 SPEC 5: every GNAF .lean file is layer-owned; root imports current\n\
                  gnaf-scan         #653 SPEC 19: no sorry/admit/native_decide/axiom/unsafe/partial in GNAF code\n\
                  gnaf-release-path #653 SPEC 19/6.3: no noncomputable def/abbrev/instance on the GNAF release path (currently red: WGG-GO-1 outstanding; not in `validate`)\n\
+                 gnaf-manifest     #653 SPEC 4/5: MANIFEST.json's 3 identity stages are current and acyclic (currently red: pre-existing staleness; not in `validate`)\n\
                  kappa <cmd>       #624: publish/fetch/tag against a kappa-registry (R4_KAPPA_REGISTRY)\n\
                  \n\
-                 --write           check-model/gnaf-root: rewrite the generated file instead of checking it"
+                 --write           check-model/gnaf-root/gnaf-manifest: rewrite the generated file instead of checking it"
             );
             return ExitCode::from(2);
         }
