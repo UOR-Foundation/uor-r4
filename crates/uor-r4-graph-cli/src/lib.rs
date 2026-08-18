@@ -15218,7 +15218,10 @@ mod transformerless_dispatch_790 {
         let unknown = super::run(&["definitely-not-a-subcommand".to_string()]);
         assert!(unknown.is_err(), "unknown subcommand must fail loudly");
         assert!(
-            unknown.unwrap_err().to_string().contains("definitely-not-a-subcommand"),
+            unknown
+                .unwrap_err()
+                .to_string()
+                .contains("definitely-not-a-subcommand"),
             "the error must name the unknown subcommand"
         );
         assert!(super::run(&["help".to_string()]).is_ok());
@@ -15232,8 +15235,17 @@ mod transformerless_dispatch_790 {
             !usage.contains("compare"),
             "compare/compare-report are top-level r4 commands, not transformerless subcommands"
         );
-        for advertised in ["setup", "store", "scenarios", "teacher-kappa", "convert-r4g1"] {
-            assert!(usage.contains(advertised), "banner must keep `{advertised}`");
+        for advertised in [
+            "setup",
+            "store",
+            "scenarios",
+            "teacher-kappa",
+            "convert-r4g1",
+        ] {
+            assert!(
+                usage.contains(advertised),
+                "banner must keep `{advertised}`"
+            );
         }
     }
 }
