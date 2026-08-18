@@ -1586,6 +1586,23 @@ pub fn observe_text_corpus_in_session(
     )
 }
 
+/// Pin the #603 trace profile (and its resolved row width) into a
+/// session's manifest during identity pinning — BEFORE any tokenizer
+/// export or other payload write — so a traced session is never mistaken
+/// for a minimal-era one by the payload-presence preflight
+/// (`observation_payload_present` counts the exported `tokenizer.bin` as
+/// era evidence). Idempotent for the same profile: the traced corpus
+/// driver re-pins as a no-op, and every mismatch refuses.
+pub fn pin_text_observation_trace_profile_in_session(
+    session: &observe::ObservationSession,
+    oracle: &dyn TeacherOracle,
+    profile: &TraceProfile,
+) -> Result<(), SourceUnavailable> {
+    let capture = observe::TraceCapture::new(profile, oracle)?;
+    let mut writer = session.writer()?;
+    observe::pin_writer_trace_profile(&mut writer, Some(&capture), session.dir())
+}
+
 /// [`observe_text_corpus`] under a non-minimal #603 trace profile — the
 /// session-less twin of [`observe_text_corpus_traced_in_session`], with
 /// identical semantics.
@@ -3858,6 +3875,52 @@ mod tests {
                 .expect("same-profile resume pins cleanly");
         }
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// The CLI ordering contract behind
+    /// `pin_text_observation_trace_profile_in_session`: the profile must
+    /// pin BEFORE any payload (e.g. the exported `tokenizer.bin`) lands in
+    /// the session dir — pin-first survives later payload and same-profile
+    /// re-pins, while payload-first is refused as a minimal-era relabel
+    /// (the falsifier half, which is exactly the defect the S1 smoke run
+    /// caught).
+    #[test]
+    fn trace_pin_before_payload_export_survives_the_payload_preflight() {
+        let profile = traced_profile();
+        let oracle = TracedFakeOracle::default();
+
+        let dir = unique_path("trace-pin-order");
+        fs::create_dir_all(&dir).expect("pin dir");
+        {
+            let mut writer = ObservationShardWriter::open(&dir, SHARD_BITS).expect("writer opens");
+            let capture = observe::TraceCapture::new(&profile, &oracle).expect("capture");
+            observe::pin_writer_trace_profile(&mut writer, Some(&capture), &dir)
+                .expect("pin before payload");
+        }
+        fs::write(dir.join("tokenizer.bin"), b"exported-table").expect("tokenizer export");
+        {
+            let mut writer =
+                ObservationShardWriter::open(&dir, SHARD_BITS).expect("writer reopens");
+            let capture = observe::TraceCapture::new(&profile, &oracle).expect("capture");
+            observe::pin_writer_trace_profile(&mut writer, Some(&capture), &dir)
+                .expect("same-profile re-pin passes over exported payload");
+        }
+        let _ = fs::remove_dir_all(&dir);
+
+        let late = unique_path("trace-pin-order-late");
+        fs::create_dir_all(&late).expect("late dir");
+        fs::write(late.join("tokenizer.bin"), b"exported-table").expect("tokenizer export");
+        {
+            let mut writer = ObservationShardWriter::open(&late, SHARD_BITS).expect("writer opens");
+            let capture = observe::TraceCapture::new(&profile, &oracle).expect("capture");
+            let error = observe::pin_writer_trace_profile(&mut writer, Some(&capture), &late)
+                .expect_err("payload-first pin refuses the relabel");
+            assert!(
+                error.to_string().contains("refusing to relabel"),
+                "unexpected error: {error}"
+            );
+        }
+        let _ = fs::remove_dir_all(&late);
     }
 
     /// The resume-side sidecar alignment: uncommitted (or torn) tail rows

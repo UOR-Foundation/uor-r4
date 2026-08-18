@@ -4140,6 +4140,17 @@ pub fn observe_text_command(args: &[String]) -> Result<(), SourceUnavailable> {
         attention_operator.as_ref(),
         dense_operator.as_ref(),
     )?;
+    // #603/#605 S1: the trace profile pins into the session manifest
+    // BEFORE the tokenizer export below — the payload-presence preflight
+    // counts `tokenizer.bin` as era evidence, so pinning after the export
+    // would misread a fresh traced session as a minimal-era one.
+    if let Some(profile) = trace_profile.as_ref() {
+        observe_text::pin_text_observation_trace_profile_in_session(
+            &session,
+            pool[0].as_ref(),
+            profile,
+        )?;
+    }
     if let Some(runtime_table) = runtime_table.as_ref() {
         token_byte_lengths = export_observation_tokenizer_in_session(&session, runtime_table)?;
     }
