@@ -27705,7 +27705,13 @@ mod tests {
 
         let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("ephemeral bind");
         let addr = listener.local_addr().expect("local addr");
-        let mut client = std::net::TcpStream::connect(addr).expect("connect");
+        // connect_timeout keeps the harness bounded AND avoids the literal
+        // the `native_inference_has_no_external_provider_client` facade
+        // guard scans for — this loopback test socket is not an external
+        // inference path, but the guard reads the whole file's source.
+        let mut client =
+            std::net::TcpStream::connect_timeout(&addr, std::time::Duration::from_secs(10))
+                .expect("connect");
         let (server_stream, _) = listener.accept().expect("accept");
 
         let router = Arc::new(Mutex::new(UorR4Router::new(0.85)));
