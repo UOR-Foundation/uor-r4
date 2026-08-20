@@ -511,21 +511,23 @@ pub fn is_cid(value: &str) -> bool {
 }
 
 /// Verify a committed identity against bytes (tamper detection). Returns
-/// `Err(reason)` on a malformed CID or a content mismatch — a single
-/// flipped byte fails this check.
-pub fn verify_cid(expected: &str, bytes: &[u8]) -> Result<(), String> {
+/// `Some(reason)` on a malformed CID or a content mismatch — a single
+/// flipped byte fails this check — and `None` when the bytes match.
+/// Returns `Option<String>` rather than a `Result` so this shipped crate
+/// names no custom error type (R5), mirroring the `validate` methods here.
+pub fn verify_cid(expected: &str, bytes: &[u8]) -> Option<String> {
     if !is_cid(expected) {
-        return Err(format!(
+        return Some(format!(
             "expected identity {expected:?} is not a blake3 CID"
         ));
     }
     let actual = compute_cid(bytes);
     if actual != expected {
-        return Err(format!(
+        return Some(format!(
             "content identity mismatch: expected {expected}, computed {actual}"
         ));
     }
-    Ok(())
+    None
 }
 
 /// Detect document leakage across a split: any id present in both the
@@ -1162,7 +1164,7 @@ mod tests {
         let bytes = b"a small committed fixture";
         let cid = compute_cid(bytes);
         assert!(is_cid(&cid));
-        assert_eq!(verify_cid(&cid, bytes), Ok(()));
+        assert_eq!(verify_cid(&cid, bytes), None);
     }
 
     #[test]
@@ -1170,12 +1172,15 @@ mod tests {
         let mut bytes = b"a small committed fixture".to_vec();
         let cid = compute_cid(&bytes);
         bytes[0] ^= 0x01;
-        assert!(verify_cid(&cid, &bytes).is_err(), "tamper must be rejected");
+        assert!(
+            verify_cid(&cid, &bytes).is_some(),
+            "tamper must be rejected"
+        );
     }
 
     #[test]
     fn verify_cid_rejects_a_malformed_identity() {
-        assert!(verify_cid("not-a-cid", b"x").is_err());
+        assert!(verify_cid("not-a-cid", b"x").is_some());
     }
 
     // --- leakage and degenerate controls -------------------------------------

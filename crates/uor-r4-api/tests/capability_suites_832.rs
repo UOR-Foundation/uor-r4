@@ -297,10 +297,10 @@ fn production_report_is_byte_deterministic() {
 fn committed_fixture_cid_detects_a_tampered_byte() {
     let (mut r4g1, _teacher) = synthetic_bundle();
     let cid = compute_cid(&r4g1);
-    assert_eq!(verify_cid(&cid, &r4g1), Ok(()));
+    assert_eq!(verify_cid(&cid, &r4g1), None);
     r4g1[0] ^= 0x01;
     assert!(
-        verify_cid(&cid, &r4g1).is_err(),
+        verify_cid(&cid, &r4g1).is_some(),
         "a single flipped byte fails the content check"
     );
 }
