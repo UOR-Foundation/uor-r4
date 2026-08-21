@@ -225,6 +225,14 @@ export function init_wasm(): void;
  */
 export function set_r4g1_bundle(graph: Uint8Array, tokenizer: Uint8Array): void;
 
+/**
+ * #839 phase 1 (RF-30): the typed selective-prediction boundary export
+ * (spec §5, WASM row) — always a typed JSON value with the canonical
+ * labels, never a trap; see [`tless_uor::typed_r4g1_response`]. The legacy
+ * `Option<String>` export above is retained unchanged.
+ */
+export function typed_r4g1_response(prompt: string, max_tokens: number): string;
+
 export function vsa_encode_event(subj: string, act: string, time: string, loc: string, space: string): Uint8Array;
 
 export function vsa_encode_graph_edge(src: string, rel: string, tgt: string, space: string): Uint8Array;
@@ -237,6 +245,7 @@ export interface InitOutput {
     readonly memory: WebAssembly.Memory;
     readonly generate_r4g1_response: (a: number, b: number, c: number) => [number, number];
     readonly set_r4g1_bundle: (a: number, b: number, c: number, d: number) => [number, number];
+    readonly typed_r4g1_response: (a: number, b: number, c: number) => [number, number];
     readonly __wbg_get_uorr4router_geometry_type: (a: number) => number;
     readonly __wbg_set_uorr4router_geometry_type: (a: number, b: number) => void;
     readonly __wbg_uorr4router_free: (a: number, b: number) => void;

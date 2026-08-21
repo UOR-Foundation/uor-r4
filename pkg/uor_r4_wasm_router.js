@@ -584,6 +584,30 @@ export function set_r4g1_bundle(graph, tokenizer) {
 }
 
 /**
+ * #839 phase 1 (RF-30): the typed selective-prediction boundary export
+ * (spec §5, WASM row) — always a typed JSON value with the canonical
+ * labels, never a trap; see [`tless_uor::typed_r4g1_response`]. The legacy
+ * `Option<String>` export above is retained unchanged.
+ * @param {string} prompt
+ * @param {number} max_tokens
+ * @returns {string}
+ */
+export function typed_r4g1_response(prompt, max_tokens) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ptr0 = passStringToWasm0(prompt, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.typed_r4g1_response(ptr0, len0, max_tokens);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
  * @param {string} subj
  * @param {string} act
  * @param {string} time
