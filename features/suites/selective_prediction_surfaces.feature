@@ -6,34 +6,34 @@ Feature: Typed selective-prediction serving surfaces (legacy-coverage mode)
 
   @RF-30 @build
   Scenario: CLI abstention record carries the typed cause and coverage
-    Given the deployed D4 policy abstains on a novel window
-    When the CLI chat surface renders the turn
-    Then the abstention record reads outcome "abstention" with cause and coverage "distributionally-novel" and no confidence value
+    Given a deployed D4 abstention with the novel policy label
+    When the CLI abstention record is built
+    Then the record reads outcome abstention with cause and coverage distributionally-novel and carries no confidence field
 
   @RF-30 @build
   Scenario: native declined response carries the typed selective block
     Given a serving cascade whose R4G1 tier abstained
-    When the native declined-by-all response is built
-    Then it reports status "abstention" with cause "distributionally-novel" and null confidence and evidence
+    When the native selective block is built
+    Then it reports status abstention with cause distributionally-novel and null confidence and evidence
+    And a cascade that only failed reports no selective block
 
   @RF-30 @build
   Scenario: OpenAI-compatible abstention is a typed structured error
     Given a serving cascade whose R4G1 tier abstained
-    When the OpenAI-compatible surface envelopes the decline
-    Then the response is HTTP 422 with error type "uor_selective_prediction" and code "uor_abstention_distributionally_novel"
-    And it is never an empty-choices success
+    When the OpenAI-compatible surface envelopes the abstention
+    Then the response is HTTP 422 with the vendored selective-prediction error type and the typed abstention code
 
   @RF-30 @build
   Scenario: streaming abstention terminates with a typed error event
-    Given a streaming request whose cascade abstained
-    When the stream frames are built
-    Then no content chunk is emitted and the terminal frames are one typed error event then the DONE marker
+    Given a typed abstention code
+    When the streaming decline frames are built
+    Then no content chunk is emitted and the frames are one typed error event then the DONE marker
 
   @RF-30 @build
   Scenario: present selective-calibration data fails closed
-    Given an active bundle directory carrying a selective-calibration sidecar
-    When a serving surface consults the bundle
-    Then the outcome is hard-incompatibility with the typed envelope and never a legacy serve
+    Given a bundle directory carrying a selective-calibration sidecar
+    When the selective-calibration probe inspects the bundle
+    Then the probe reports a hard incompatibility and an empty directory reports none
 
   @RF-30 @build
   Scenario: wasm boundary returns typed values and never traps

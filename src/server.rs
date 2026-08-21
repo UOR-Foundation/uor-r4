@@ -4482,9 +4482,14 @@ fn cascade_trail_json(trail: &[TierOutcome]) -> serde_json::Value {
 /// is untouched.
 fn selective_calibration_incompatibility(serving: &ServingModelState) -> Option<String> {
     let bundle = serving.active_bundle.as_ref()?;
-    let path = bundle
-        .physical_root
-        .join(crate::selective::SELECTIVE_CALIBRATION_FILE);
+    selective_calibration_probe(&bundle.physical_root)
+}
+
+/// The primitive form of the fail-closed probe: inspect one bundle
+/// directory. `pub` for the RF-30 behavior suite (`tests/bdd.rs`) — not a
+/// stable API surface.
+pub fn selective_calibration_probe(bundle_root: &Path) -> Option<String> {
+    let path = bundle_root.join(crate::selective::SELECTIVE_CALIBRATION_FILE);
     if path.is_file() {
         Some(format!(
             "selective-prediction calibration data is present at {} but no executable \
@@ -4504,13 +4509,19 @@ fn selective_calibration_incompatibility(serving: &ServingModelState) -> Option<
 /// is outside the §2 outcome space and reports `null` — absence is absence,
 /// never a fabricated status.
 fn selective_decline_block(cascade: &ServingCascade) -> serde_json::Value {
-    if !cascade.r4g1.abstained {
+    selective_abstention_block(cascade.r4g1.abstained, cascade.r4g1.status)
+}
+
+/// The primitive form of the declined-cascade selective block. `pub` for the
+/// RF-30 behavior suite (`tests/bdd.rs`) — not a stable API surface.
+pub fn selective_abstention_block(
+    abstained: bool,
+    status_label: Option<&'static str>,
+) -> serde_json::Value {
+    if !abstained {
         return serde_json::Value::Null;
     }
-    let coverage = cascade
-        .r4g1
-        .status
-        .and_then(crate::selective::coverage_for_policy_label);
+    let coverage = status_label.and_then(crate::selective::coverage_for_policy_label);
     serde_json::json!({
         "status": crate::selective::STATUS_ABSTENTION,
         "coverage": coverage,
@@ -4541,10 +4552,16 @@ fn selective_error_code(body: &serde_json::Value) -> Option<String> {
 /// generic `engine_declined` envelope for abstentions (spec §5's "migration
 /// ancestor" note); non-abstention declines keep the historical envelope.
 fn openai_selective_abstention(cascade: &ServingCascade) -> GenerationOutcome {
-    let coverage = cascade
-        .r4g1
-        .status
-        .and_then(crate::selective::coverage_for_policy_label);
+    let (status, body) = openai_selective_abstention_envelope(cascade.r4g1.status);
+    GenerationOutcome::Declined { status, body }
+}
+
+/// The primitive form of the typed OpenAI abstention envelope. `pub` for the
+/// RF-30 behavior suite (`tests/bdd.rs`) — not a stable API surface.
+pub fn openai_selective_abstention_envelope(
+    status_label: Option<&'static str>,
+) -> (u16, serde_json::Value) {
+    let coverage = status_label.and_then(crate::selective::coverage_for_policy_label);
     let mut body = openai_error_body(
         crate::selective::OPENAI_ERROR_TYPE,
         "the deployed selective-prediction policy abstained: no answer is \
@@ -4559,14 +4576,15 @@ fn openai_selective_abstention(cascade: &ServingCascade) -> GenerationOutcome {
             serde_json::json!(crate::selective::CAUSE_DISTRIBUTIONALLY_NOVEL),
         );
     }
-    GenerationOutcome::Declined { status: 422, body }
+    (422, body)
 }
 
 /// Spec §5, streaming: a typed abstention or hard incompatibility on a
 /// streaming request emits **no** content chunk — one terminal typed SSE
 /// `error` event carrying the same code as the non-streaming envelope, then
-/// the `[DONE]` marker; never a silent stream end.
-fn selective_stream_decline_frames(code: &str) -> Vec<String> {
+/// the `[DONE]` marker; never a silent stream end. `pub` for the RF-30
+/// behavior suite (`tests/bdd.rs`) — not a stable API surface.
+pub fn selective_stream_decline_frames(code: &str) -> Vec<String> {
     vec![
         format!(
             "event: error\ndata: {{\"error\":{{\"type\":\"{}\",\"code\":\"{code}\"}}}}\n\n",
