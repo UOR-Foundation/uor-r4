@@ -286,6 +286,15 @@ impl<'a> PsiBagTable<'a> {
         self.max_entries
     }
 
+    /// The exact section bytes this table was parsed (or cheaply
+    /// reconstructed) from -- e.g. so a caller can retain just the bytes as
+    /// owned storage and later reconstruct a borrowed view cheaply via
+    /// [`Self::from_trusted_bytes`], without holding this borrowed `Self`
+    /// itself (and its lifetime) any longer than the current use.
+    pub fn bytes(&self) -> &'a [u8] {
+        self.bytes
+    }
+
     fn row(&self, index: usize) -> Option<PsiBagRow<'a>> {
         if index >= self.row_count as usize {
             return None;
@@ -566,6 +575,14 @@ impl<'a> SkipmixTable<'a> {
     }
     pub fn max_entries(&self) -> u16 {
         self.max_entries
+    }
+
+    /// The exact section bytes this table was parsed (or cheaply
+    /// reconstructed) from -- see [`PsiBagTable::bytes`] for why a caller
+    /// wants this (retaining owned bytes and re-borrowing cheaply via
+    /// [`Self::from_trusted_bytes`] rather than holding this borrowed `Self`).
+    pub fn bytes(&self) -> &'a [u8] {
+        self.bytes
     }
 
     fn slot_row(&self, index: u32) -> Option<SkipmixRow<'a>> {
