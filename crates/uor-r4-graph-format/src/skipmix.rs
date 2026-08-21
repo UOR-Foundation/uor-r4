@@ -243,6 +243,41 @@ impl<'a> PsiBagTable<'a> {
         })
     }
 
+    /// Cheap reconstruction from bytes that have **already** been fully
+    /// validated once via [`PsiBagTable::parse`] -- intended for a deployed
+    /// engine that owns a validated `Vec<u8>` (validated once, at artifact
+    /// load) and wants a fresh borrowed view at each inference step without
+    /// re-running `parse`'s O(row_count) structural scan on every lookup.
+    /// Repeats only the O(1) header checks (magic, version, length) needed
+    /// for [`Self::find`]'s arithmetic to stay bounds-safe.
+    ///
+    /// Every lookup still goes through `.get()`-guarded, checked-arithmetic
+    /// accessors, so this can never panic -- but unlike `parse`, it does
+    /// *not* re-verify sortedness, exact byte coverage, or row structure.
+    /// Callers MUST only pass bytes that previously passed `parse`
+    /// successfully; on bytes that never passed `parse`, this method may
+    /// return a table whose lookups are wrong or spuriously absent instead
+    /// of surfacing a typed error. It is not a substitute for `parse` on
+    /// untrusted input -- only a cheap re-view of already-trusted bytes.
+    pub fn from_trusted_bytes(bytes: &'a [u8]) -> Option<Self> {
+        if bytes.len() < PSIB_HEADER_LEN {
+            return None;
+        }
+        if bytes[..4] != PSIB_MAGIC {
+            return None;
+        }
+        if read_u16(&bytes[4..6]) != PSIB_VERSION {
+            return None;
+        }
+        let row_count = read_u32(&bytes[8..12]);
+        let max_entries = read_u16(&bytes[12..14]);
+        Some(Self {
+            bytes,
+            row_count,
+            max_entries,
+        })
+    }
+
     pub fn row_count(&self) -> u32 {
         self.row_count
     }
@@ -477,6 +512,45 @@ impl<'a> SkipmixTable<'a> {
         }
 
         Ok(Self {
+            bytes,
+            capacity,
+            max_probe,
+            max_entries,
+        })
+    }
+
+    /// Cheap reconstruction from bytes that have **already** been fully
+    /// validated once via [`SkipmixTable::parse`]. See
+    /// [`PsiBagTable::from_trusted_bytes`] for the exact contract: this
+    /// repeats only the O(1) header checks (magic, version, length,
+    /// `capacity` a positive power of two) needed for [`Self::find`]'s
+    /// arithmetic to stay bounds-safe -- never `parse`'s O(capacity)
+    /// structural scan (per-slot entry validation and the open-addressing
+    /// placement invariant). `find` still reads only through
+    /// `.get()`-guarded, checked-arithmetic accessors, so this can never
+    /// panic, but callers MUST only pass bytes that previously passed
+    /// `parse` successfully -- on bytes that never passed `parse`, lookups
+    /// may be wrong or spuriously absent instead of a typed error. This
+    /// exists so a deployed engine can hold one validated `Vec<u8>` (from
+    /// artifact load) and take a fresh borrowed view at every inference
+    /// step without re-running the full structural scan each time.
+    pub fn from_trusted_bytes(bytes: &'a [u8]) -> Option<Self> {
+        if bytes.len() < SKMX_HEADER_LEN {
+            return None;
+        }
+        if bytes[..4] != SKMX_MAGIC {
+            return None;
+        }
+        if read_u16(&bytes[4..6]) != SKMX_VERSION {
+            return None;
+        }
+        let capacity = read_u32(&bytes[8..12]);
+        if capacity == 0 || capacity.count_ones() != 1 {
+            return None;
+        }
+        let max_probe = read_u16(&bytes[12..14]);
+        let max_entries = read_u16(&bytes[14..16]);
+        Some(Self {
             bytes,
             capacity,
             max_probe,
@@ -810,6 +884,46 @@ mod tests {
         assert!(build_psi_bag_table(&[(1, vec![(2, 1), (2, 5)])]).is_err());
     }
 
+    #[test]
+    fn psi_bag_trusted_reconstruction_matches_parse() {
+        let bytes = psi_sample();
+        let parsed = PsiBagTable::parse(&bytes).expect("parse");
+        let trusted = PsiBagTable::from_trusted_bytes(&bytes).expect("trusted reconstruction");
+        assert_eq!(trusted.row_count(), parsed.row_count());
+        assert_eq!(trusted.max_entries(), parsed.max_entries());
+        for key in [5u32, 10, 11, 20, 999] {
+            let expected: Option<Vec<(u32, i32)>> = parsed.find(key).map(|row| {
+                row.entries()
+                    .iter()
+                    .map(|e| (e.token, e.score_q.raw()))
+                    .collect()
+            });
+            let actual: Option<Vec<(u32, i32)>> = trusted.find(key).map(|row| {
+                row.entries()
+                    .iter()
+                    .map(|e| (e.token, e.score_q.raw()))
+                    .collect()
+            });
+            assert_eq!(actual, expected, "key {key}");
+        }
+    }
+
+    #[test]
+    fn psi_bag_trusted_reconstruction_never_panics_on_garbage() {
+        assert!(PsiBagTable::from_trusted_bytes(&[]).is_none());
+        assert!(PsiBagTable::from_trusted_bytes(&[0u8; 4]).is_none());
+        assert!(PsiBagTable::from_trusted_bytes(&[b'X'; 64]).is_none());
+        let mut truncated = psi_sample();
+        truncated.truncate(PSIB_HEADER_LEN);
+        // Header-only bytes reconstruct (row_count from the header is 0
+        // there is no valid header claiming otherwise in this fixture) --
+        // the point is simply that no panic occurs either way.
+        let _ = PsiBagTable::from_trusted_bytes(&truncated);
+        let mut bad_version = psi_sample();
+        bad_version[4] = 9;
+        assert!(PsiBagTable::from_trusted_bytes(&bad_version).is_none());
+    }
+
     fn skipmix_sample() -> Vec<u8> {
         // A handful of distinct (content_token, last_token) keys.
         let rows: Vec<SkipmixInputRow> = vec![
@@ -899,6 +1013,62 @@ mod tests {
         let table = SkipmixTable::parse(&bytes).expect("empty parses");
         assert_eq!(table.max_probe(), 0);
         assert!(table.find(1, 1).is_none());
+    }
+
+    #[test]
+    fn skipmix_trusted_reconstruction_matches_parse() {
+        let bytes = skipmix_sample();
+        let parsed = SkipmixTable::parse(&bytes).expect("parse");
+        let trusted = SkipmixTable::from_trusted_bytes(&bytes).expect("trusted reconstruction");
+        assert_eq!(trusted.capacity(), parsed.capacity());
+        assert_eq!(trusted.max_probe(), parsed.max_probe());
+        assert_eq!(trusted.max_entries(), parsed.max_entries());
+        for (content_token, last_token) in [
+            (10u32, 1u32),
+            (10, 2),
+            (5, 9),
+            (2001, 77),
+            (10, 3),
+            (999, 999),
+        ] {
+            let expected: Option<Vec<(u32, i32)>> =
+                parsed.find(content_token, last_token).map(|row| {
+                    row.entries()
+                        .iter()
+                        .map(|e| (e.token, e.score_q.raw()))
+                        .collect()
+                });
+            let actual: Option<Vec<(u32, i32)>> =
+                trusted.find(content_token, last_token).map(|row| {
+                    row.entries()
+                        .iter()
+                        .map(|e| (e.token, e.score_q.raw()))
+                        .collect()
+                });
+            assert_eq!(actual, expected, "key ({content_token}, {last_token})");
+        }
+    }
+
+    #[test]
+    fn skipmix_trusted_reconstruction_never_panics_on_garbage() {
+        assert!(SkipmixTable::from_trusted_bytes(&[]).is_none());
+        assert!(SkipmixTable::from_trusted_bytes(&[0u8; 4]).is_none());
+        assert!(SkipmixTable::from_trusted_bytes(&[b'X'; 64]).is_none());
+        let mut bad_version = skipmix_sample();
+        bad_version[4] = 9;
+        assert!(SkipmixTable::from_trusted_bytes(&bad_version).is_none());
+        // capacity not a power of two is rejected at the header stage.
+        let mut bad_cap = skipmix_sample();
+        let cap: u32 = 3;
+        bad_cap[8..12].copy_from_slice(&cap.to_le_bytes());
+        assert!(SkipmixTable::from_trusted_bytes(&bad_cap).is_none());
+        // A truncated buffer reconstructs cheaply (header still fits) but
+        // every lookup must stay panic-free via `.get()`-guarded access.
+        let mut truncated = skipmix_sample();
+        truncated.truncate(SKMX_HEADER_LEN);
+        if let Some(table) = SkipmixTable::from_trusted_bytes(&truncated) {
+            assert!(table.find(10, 1).is_none());
+        }
     }
 
     #[test]
