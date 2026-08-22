@@ -312,6 +312,22 @@ struct Episode<'q, 'a, 'b> {
     counters: PlanCounters,
 }
 
+/// The outcome of a bounded search: a goal node, an exhausted space, or a typed
+/// decline.
+///
+/// Modelled as data rather than as a `Result`, for two reasons that point the
+/// same way. A decline is an outcome the planner *reports*, not an error it
+/// suffers, so it should be as inspectable as a plan and impossible to discard
+/// with a `?`. And the repository sanctions only a fixed set of error types on
+/// a shipped boundary (R5): a bound is a property of the caller's chosen
+/// instantiation, so a `Result` over anything else would be claiming a
+/// limitation the model does not sanction.
+enum Search {
+    Found(u16),
+    Exhausted,
+    Declined(PackedDecline),
+}
+
 /// The reason a step could not be taken. Kept separate from a decline so a
 /// blocked candidate does not end the episode.
 enum Step {
@@ -565,7 +581,7 @@ pub fn plan(query: &PlanQuery<'_, '_>, scratch: &mut PlanScratch) -> PlanResult 
     };
 
     match found {
-        Ok(Some(node)) => {
+        Search::Found(node) => {
             if !episode.unwind(scratch, node) {
                 return decline(PackedDecline::Unknown, episode.counters);
             }
@@ -576,8 +592,8 @@ pub fn plan(query: &PlanQuery<'_, '_>, scratch: &mut PlanScratch) -> PlanResult 
                 counters: episode.counters,
             }
         }
-        Ok(None) => decline(PackedDecline::NoPlan, episode.counters),
-        Err(reason) => decline(reason, episode.counters),
+        Search::Exhausted => decline(PackedDecline::NoPlan, episode.counters),
+        Search::Declined(reason) => decline(reason, episode.counters),
     }
 }
 
@@ -598,7 +614,7 @@ fn search_layered(
     scratch: &mut PlanScratch,
     root: u16,
     ordered: bool,
-) -> Result<Option<u16>, PackedDecline> {
+) -> Search {
     scratch.frontier[0] = Frame {
         state: scratch.visited[usize::from(root)].state,
         node: root,
@@ -611,7 +627,7 @@ fn search_layered(
         let width = usize::from(scratch.frontier_len);
         for slot in 0..width {
             if episode.over_budget() {
-                return Err(PackedDecline::Capacity);
+                return Search::Declined(PackedDecline::Capacity);
             }
             let frame = scratch.frontier[slot];
             episode.counters.expansions = episode.counters.expansions.saturating_add(1);
@@ -635,7 +651,7 @@ fn search_layered(
                         Step::Taken(node) => {
                             let successor = scratch.visited[usize::from(node)].state;
                             if episode.query.predicates.satisfies_goal(&successor) {
-                                return Ok(Some(node));
+                                return Search::Found(node);
                             }
                             let at = usize::from(scratch.next_len);
                             if at >= usize::from(episode.query.budget.frontier) {
@@ -657,21 +673,21 @@ fn search_layered(
                             scratch.next_len = scratch.next_len.saturating_add(1);
                         }
                         Step::Blocked => {}
-                        Step::Capacity => return Err(PackedDecline::Capacity),
-                        Step::Unknown => return Err(PackedDecline::Unknown),
+                        Step::Capacity => return Search::Declined(PackedDecline::Capacity),
+                        Step::Unknown => return Search::Declined(PackedDecline::Unknown),
                     }
                 }
             }
         }
         if scratch.next_len == 0 {
-            return Ok(None);
+            return Search::Exhausted;
         }
         scratch.frontier_len = scratch.next_len;
         for slot in 0..usize::from(scratch.next_len) {
             scratch.frontier[slot] = scratch.next[slot];
         }
     }
-    Ok(None)
+    Search::Exhausted
 }
 
 /// Swap `node` in for the retained candidate furthest from the goal, when it is
@@ -709,7 +725,7 @@ fn search_deepening(
     episode: &mut Episode<'_, '_, '_>,
     scratch: &mut PlanScratch,
     root: u16,
-) -> Result<Option<u16>, PackedDecline> {
+) -> Search {
     let root_state = scratch.visited[usize::from(root)].state;
     for limit in 1..=episode.query.budget.horizon {
         // Each round starts from a clean visited set, so a state pruned at a
@@ -720,7 +736,7 @@ fn search_deepening(
             *entry = EMPTY;
         }
         let Some(Some(fresh_root)) = episode.admit(scratch, &saved) else {
-            return Err(PackedDecline::Capacity);
+            return Search::Declined(PackedDecline::Capacity);
         };
         scratch.visited[usize::from(fresh_root)] = VisitedNode {
             state: saved,
@@ -729,11 +745,13 @@ fn search_deepening(
             operator: 0,
             depth: 0,
         };
-        if let Some(node) = descend(episode, scratch, fresh_root, limit)? {
-            return Ok(Some(node));
+        match descend(episode, scratch, fresh_root, limit) {
+            Search::Found(node) => return Search::Found(node),
+            Search::Declined(reason) => return Search::Declined(reason),
+            Search::Exhausted => {}
         }
     }
-    Ok(None)
+    Search::Exhausted
 }
 
 fn descend(
@@ -741,12 +759,12 @@ fn descend(
     scratch: &mut PlanScratch,
     node: u16,
     remaining: u8,
-) -> Result<Option<u16>, PackedDecline> {
+) -> Search {
     if remaining == 0 {
-        return Ok(None);
+        return Search::Exhausted;
     }
     if episode.over_budget() {
-        return Err(PackedDecline::Capacity);
+        return Search::Declined(PackedDecline::Capacity);
     }
     let state = scratch.visited[usize::from(node)].state;
     let depth = scratch.visited[usize::from(node)].depth;
@@ -764,21 +782,21 @@ fn descend(
                 Step::Taken(child) => {
                     let successor = scratch.visited[usize::from(child)].state;
                     if episode.query.predicates.satisfies_goal(&successor) {
-                        return Ok(Some(child));
+                        return Search::Found(child);
                     }
-                    if let Some(found) =
-                        descend(episode, scratch, child, remaining.saturating_sub(1))?
-                    {
-                        return Ok(Some(found));
+                    match descend(episode, scratch, child, remaining.saturating_sub(1)) {
+                        Search::Found(found) => return Search::Found(found),
+                        Search::Declined(reason) => return Search::Declined(reason),
+                        Search::Exhausted => {}
                     }
                 }
                 Step::Blocked => {}
-                Step::Capacity => return Err(PackedDecline::Capacity),
-                Step::Unknown => return Err(PackedDecline::Unknown),
+                Step::Capacity => return Search::Declined(PackedDecline::Capacity),
+                Step::Unknown => return Search::Declined(PackedDecline::Unknown),
             }
         }
     }
-    Ok(None)
+    Search::Exhausted
 }
 
 /// A planning request in the form the engine takes: everything a query needs
