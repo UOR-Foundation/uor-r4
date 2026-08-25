@@ -55,6 +55,7 @@ uor-r4-core = { version = "0.1.0", path = "crates/uor-r4-core" }
 uor-r4-graph-format = { version = "0.1.0", path = "crates/uor-r4-graph-format" }
 uor-r4-proof-model = { version = "0.1.0", path = "crates/uor-r4-proof-model" }
 uor-r4-graph-runtime = { version = "0.1.0", path = "crates/uor-r4-graph-runtime" }
+uor-r4-api = { version = "0.1.0", path = "crates/uor-r4-api", default-features = false, features = ["runtime"] }
 uor-r4-router = { version = "0.1.0", path = "crates/uor-r4-router" }
 uor-addr = { version = "0.2.0", git = "https://github.com/UOR-Foundation/uor-addr.git", rev = "165b51e3e2113ee5d032730cde709335d4fe9b60", default-features = false, features = ["alloc"] }
 uor-foundation-sdk = { version = "0.5.2", git = "https://github.com/UOR-Foundation/UOR-Framework.git", rev = "51c01382200b0179d6640b07e9c8119364ab69a1" }
@@ -72,7 +73,7 @@ uor-r4-model-source = { version = "0.1.0", path = "crates/uor-r4-model-source" }
 uor-r4-graph-compiler = { version = "0.1.0", path = "crates/uor-r4-graph-compiler" }
 uor-r4-graph-certify = { version = "0.1.0", path = "crates/uor-r4-graph-certify" }
 uor-r4-graph-cli = { version = "0.1.0", path = "crates/uor-r4-graph-cli" }
-uor-r4-api = { version = "0.1.0", path = "crates/uor-r4-api" }
+uor-r4-api = { version = "0.1.0", path = "crates/uor-r4-api", default-features = false, features = ["full"] }
 libc = "0.2"
 rustyline = "14.0"
 
@@ -109,3 +110,46 @@ uor-foundation-sdk = { git = "https://github.com/UOR-Foundation/UOR-Framework.gi
 # workspace exclude) when uor-addr/uor-prism-crypto move to a blake3 (>=1.6) that
 # no longer depends on arrayref. Tracked in #868.
 arrayref = { path = "third_party/arrayref" }
+
+# #932: fixture-present host verification executes the exact certifier-side
+# teacher harness. These narrow overrides intentionally affect every test build
+# of the listed packages so that verification never becomes an opt-level-0 run.
+[profile.test.package.uor-r4-model-source]
+opt-level = 3
+
+[profile.test.package.uor-matmul]
+opt-level = 3
+
+[profile.test.package.uor-matmul-core]
+opt-level = 3
+
+[profile.test.package.uor-matmul-codec]
+opt-level = 3
+
+[profile.test.package.uor-matmul-gemm]
+opt-level = 3
+
+[profile.test.package.uor-matmul-kernels]
+opt-level = 3
+
+# S4 compares the deployed compiled engines with the teacher. Leaving those
+# engines at test-profile opt-level 0 would waste wall time and turn the
+# empirical ratio into a debug-build comparison rather than the shipped CPU
+# path. Keep only the packages on that measured path optimized.
+[profile.test.package.uor-r4-core]
+opt-level = 3
+
+[profile.test.package.uor-r4-graph-format]
+opt-level = 3
+
+[profile.test.package.uor-r4-graph-runtime]
+opt-level = 3
+
+[profile.test.package.uor-r4-graph-certify]
+opt-level = 3
+
+[profile.test.package.uor-r4-api]
+opt-level = 3
+
+[profile.test.package.uor-r4-wasm-router]
+opt-level = 3

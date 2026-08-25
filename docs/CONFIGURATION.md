@@ -20,7 +20,7 @@ are accepted (`R4_GATE_C_SAMPLE=10_000`).
 | `TLESS_TOKENIZER` | llama2.c tokenizer | `/tmp/ref/tokenizer.bin` |
 | `TLESS_MODEL` | Model name or CID for `ask` / `chat` | newest `models/*.json`, else `smollm2-135m-instruct` |
 | `TLESS_CORPUS_META` / `TLESS_CORPUS_RECS` | Dashboard R4G1-compiler corpus | none |
-| `R4G1_ARTIFACT` | Scored R4G1 for serving | `graph/score.r4g1` beside the artifacts |
+| `R4G1_ARTIFACT` | Scored R4G1 for research loading. Production admission additionally requires the schema-2 release envelope and its content-bound full-census deployed-quality report | `graph/score.r4g1` beside the artifacts |
 | `R4_CORPUS_META` / `R4_CORPUS_RECS` | Override the corpus pair everywhere — compiler and every measurement harness | `/tmp/c_meta.bin` / `/tmp/c_recs.bin`; harnesses default to the committed fixtures |
 | `R4_ARTIFACTS` | Override the TLA container in harnesses | the committed fixture |
 | `R4_STORIES` | `stories.jsonl` giving the construction/held-out split | derived 80/20 split |
@@ -80,6 +80,9 @@ These are κ-relevant: changing them can change artifact bytes.
 | `R4_CAP_THREADS` | `capacity_scaling` harness | 2 |
 | `R4_SCALING_THREADS` | `cover_scaling` harness | 2 |
 | `R4_TS_THREADS` | `two_sided_context` harness | env-derived |
+| `R4_PARITY_WORKERS` | Size `W` of the one persistent exact output-row worker pool. Diagnostic range is `1..=available_parallelism()`; `0`, malformed values, and requests above the host budget fail instead of being clamped. Fixture-present execution adopts the faster exact W=available/W=min(4, available) tuner result, so this input cannot force a different binding selection. The candidate widths are a bounded tuning choice, not a utilization target. | all available logical CPUs before probe selection |
+| `R4_PARITY_STREAMS` | Independent private-state trajectory and physical-batch width `S`. `S` is scientific work, not a worker bound: it may exceed or be less than `W`. The binding fixture-present workload requires the eight canonical prompt lanes. | 8 |
+| `R4_PARITY_BATCH_PER_WORKER` | Bounded exact output-row task fan-out per worker. This changes scheduling granularity only; it cannot select Accelerate or change exact arithmetic. Requested and effective fan-out are recorded. | 4 |
 
 ## Cover induction and compiler capacity
 
@@ -124,12 +127,112 @@ All follow the override contract above.
 
 | Variable | Meaning | Default |
 |---|---|---|
-| `R4_CERTIFY_C_ONLY` | ≠`0` runs only the C serving row, no teacher load | off |
+| `R4_CERTIFY_C_ONLY` | ≠`0` runs only the historical C research diagnostic, no teacher load. It is not production-admission evidence; use `r4 deployed-quality` | off |
 | `R4_CERTIFY_ROWS_ONLY` | ≠`0` skips the C serving row. Explicitly **not** a full certificate | off |
 | `R4_CERTIFY_PHASE_C_ONLY` | ≠`0` certifies phase C only | off |
 | `R4_CERTIFY_R4G1_BUDGET_SECS` | Readiness-probe wall clock | 120 |
 | `R4_CERTIFY_R4G1_EVAL_BUDGET_SECS` | Subsampled-eval wall clock | 600 |
 | `R4_CERTIFY_SERVING_BUNDLE` | Bundle for the certify C row | scans under `.` |
+
+## Normative deployed-quality evaluation (#933)
+
+These knobs drive the teacher-free `R4G1Runtime` evaluator. Worker partitions
+are deterministic and reductions are replayed in canonical position order, so
+changing the worker count changes wall time but not report bytes. Once an
+evaluation phase launches it writes monotonic progress plus its phase terminal;
+a missing control, timeout, or absent identity is `UNAVAILABLE`/skipped and
+cannot authorize production.
+
+| Variable | Meaning | Default |
+|---|---|---|
+| `R4_DEPLOYED_QUALITY_MODE` | `full` selects the complete held-out census; every other value selects the deterministic sample | sample |
+| `R4_DEPLOYED_QUALITY_POSITIONS` | Sample size when mode is not `full` | 6,000 |
+| `R4_DEPLOYED_QUALITY_WORKERS` | Evaluation workers. Results are canonically ordered after parallel execution | available logical CPUs |
+| `R4_CERTIFY_R4G1_BUDGET_SECS` | Cheap readiness-probe wall-clock budget | 120 |
+| `R4_CERTIFY_R4G1_EVAL_BUDGET_SECS` | Sample/census wall-clock budget | 3,600 |
+
+The historical certify-C diagnostic above and this normative command share
+the two budget variable names but retain distinct defaults: 600 seconds for
+the non-binding diagnostic, 3,600 seconds for `r4 deployed-quality`. Explicit
+CLI flags override their environment variables.
+
+Every invocation against a valid, non-symlink bundle root first creates
+`evidence/deployed_quality_invocation_terminal.jsonl`. The create-once JSONL
+journal is synced after its `started` row and again after exactly one
+`completed`, `failed`, or best-effort `interrupted` terminal row, so argument,
+bundle-discovery, cross-surface, witness, sample-gate, projection, and evaluator
+failures are all durable. A synced `started` row without a terminal row means
+the process was externally interrupted or otherwise unresolved; signals,
+power loss, and `SIGKILL` cannot be guaranteed to run cleanup code. An absent,
+symlinked, or non-directory bundle cannot safely host in-bundle evidence and
+therefore fails before journal creation. Reusing the same staged bundle is
+refused rather than overwriting its first invocation.
+
+The invocation journal is local, non-semantic evidence. It is excluded from
+the generation CID, production admission, and release archives, as are the
+resource sidecar and terminal transcript described below. Phase progress and
+phase terminal files under `graph/` remain authoritative only after that phase
+actually launches.
+
+Production admission accepts only a schema-2 `release-bundle.json` whose
+component digests and compiler/selector identities reproduce from the loaded
+graph, teacher artifact, corpus pair, tokenizer, tokenizer adapter, score
+report, cover report, and deployed-quality report. A sampled report remains
+research evidence even when all measured rows are favorable.
+
+The release CLI exposes the same contract directly. `--mode full` cannot
+bypass the cheap instrument: it first runs the exact 6,000-position prefix of
+the canonical label-free, story-distributed order on the same bundle/evidence
+generation. Any structural, reachability,
+non-futility, planted-control, cross-surface, or witness falsifier emits
+`STOP:` and returns without starting the census. `PROCEED:` launches the
+census. A typed `INCONCLUSIVE:` extends the same immutable nested order to
+18,000 positions; if that interval still overlaps the gate, it can launch only
+the census and only when the measured reachable ceiling remains sufficient.
+Before any census launch, the authorizing stage's measured throughput is
+scaled to the full population; a projection beyond the configured evaluation
+budget or one hour refuses launch and requires a revised run contract. No
+sample report can authorize production admission.
+
+```bash
+cargo run --release -- deployed-quality \
+  --bundle .uor-models/compiled/<model>-staging \
+  --compiler-revision <full-40-character-revision> \
+  --mode sample --positions 6000 --workers 8
+```
+
+For a canonical run, wrap the command so host identity, effective workers,
+wall time, peak child RSS, free storage, bundle growth, exit status, and every
+graph evidence-file size are durable even when the evaluator fails. A
+create-once JSONL beside the summary samples the complete child process tree's
+CPU share, RSS, process count, host-memory headroom, and filesystem headroom
+every five seconds. The wrapped evaluator still streams its phase counters,
+throughput, and ETA. On
+the canonical macOS host, `/usr/bin/script -e -F` preserves that stream in a
+separate terminal transcript and propagates the child exit status; require a
+new transcript path before launch just as the wrapper requires a new sidecar.
+The resource summary, live-sample JSONL, and transcript are explicitly
+non-semantic and are never admission inputs. The inventory snapshot is captured
+when the child exits. If the live-sample JSONL is placed inside the bundle it is
+therefore present in that snapshot; the subsequently written resource summary
+and the outer transcript's final trailer are not. Both resource paths are
+append-only: the wrapper refuses to overwrite either one, and it verifies that
+its `--bundle` exactly matches the wrapped command's `--bundle` (evaluation) or
+`--bundle-root` (graph emission) before launch. It also records `--workers` or
+`--jobs` as the effective requested worker count. Use `--samples-output` to
+select the JSONL path; otherwise it is `<output>.samples.jsonl`.
+
+```bash
+test ! -e .uor-models/compiled/<model>-staging/graph/deployed_quality_full.log
+/usr/bin/script -q -e -F .uor-models/compiled/<model>-staging/graph/deployed_quality_full.log \
+  python3 scripts/run_deployed_quality.py \
+  --bundle .uor-models/compiled/<model>-staging \
+  --output .uor-models/compiled/<model>-staging/graph/deployed_quality_full_resources.json \
+  -- target/release/r4 deployed-quality \
+  --bundle .uor-models/compiled/<model>-staging \
+  --compiler-revision <full-40-character-revision> \
+  --mode full --positions 6000 --workers 8
+```
 
 ## Measurement harnesses
 
@@ -155,12 +258,96 @@ All follow the override contract above.
 | `R4_MEMLIFT_CONSTR_STORIES` / `R4_MEMLIFT_PROBES` | 2,000 / 500 | `memory_lift_corpus` |
 | `R4_ARM_SKIP_SAMPLE` / `R4_ARM_SKIP_FIXTURE_DIR` | 10,000 / the committed fixtures | `gate_c_arm_skip` |
 | `R4_STATUS_FIXTURE_DIR` | `/tmp/r4-status-fixture` | `status_policy` |
-| `R4_PARITY_POSITIONS` / `_GEN_TOKENS` / `_RUNS` / `_CORPUS_POSITIONS` | 256 / 128 / 3 / 1000 | BDD teacher parity |
+| `R4_PARITY_POSITIONS` / `_GEN_TOKENS` / `_RUNS` / `_CORPUS_POSITIONS` | 256 / 8 / 1 / 1000. The binding registered work uses exactly eight lanes and an eight-token maximum; S4 starts at one causal continuation step per lane, then may extend through 2, 4, and 8 only while more work can change the verdict. Smaller generation caps are diagnostic only and cannot qualify the full run. Fixture-present execution requires one causal run. The report records actual tokenized/executed work; caps are not forward-count claims. | BDD teacher parity |
+| `R4_PARITY_PREFLIGHT_ONLY` | Off. Set to `1` to validate the schema-2 `release-bundle.json` production envelope and deployed-quality bindings, then parse and exercise the tokenizer, legacy artifact/store, graph, graph report, and all eight canonical deployed seeds without opening the live teacher. It writes a `uor-r4.teacher-parity-preflight/1` success or refusal artifact with `teacher_source_opened=false` and `teacher_forwards=0`, then exits before Cucumber. The ordinary BDD fixture loader publishes the same artifact automatically. Any missing or invalid prerequisite blocks expensive teacher work truthfully. | Teacher-free BDD preflight |
+| `R4_PARITY_PREFLIGHT_REPORT` | `target/teacher-parity/teacher-free-preflight.json`. Relative paths resolve from the repository workspace root for both the BDD owner and direct tuner. Atomic deterministic output used by explicit and automatic preflight. Non-PASS artifacts retain the exact reason, selected paths, safe per-input presence/CIDs, and current `authorizing_contract_cid` before returning; an empty, non-Unicode, uncreatable, or unwritable path fails the preflight visibly. The direct tuner validates the current contract, exact report/source/bundle paths, and recomputed compiled-input plus complete production-admission CIDs before opening teacher weights. | Teacher-free BDD preflight and exact live admission probe |
+| `R4_PARITY_PROGRESS_EVERY_SECS` | 10. Periodic human-readable and flushed JSONL heartbeat cadence, including while no exact forward has completed. In-flight matrix/tile/cell/scalar counters drive liveness and the ETA basis; whole-forward throughput remains separate. Zero or malformed values fail. | BDD teacher parity |
+| `R4_PARITY_MAX_WALL_SECS` | 28,800 (8 h). Stops dispatching new work at the ceiling and records `ABORTED`; it never converts partial work into PASS. Values above 28,800 fail: the override may shorten but never widen the hard ceiling. The full run is also refused before launch unless the cheap probe projects completion below this ceiling. | BDD teacher parity |
+| `R4_PARITY_REPORT` | `target/teacher-parity/parity-report.json`. Final versioned JSON report; the flushed event stream is written beside it as `parity-report.events.jsonl`. A create/write/flush failure is `FAIL`, not missing telemetry on a PASS. | BDD teacher parity |
+| `R4_PARITY_TELEMETRY` | `1` / enabled. `0` exists only for focused planted/unit controls; fixture-present parity refuses to run without telemetry. Invalid booleans fail. | BDD teacher parity |
+| `R4_EXACT_PROBE_REPORT` | `target/teacher-parity/exact-multicore-probe.json`; relative paths resolve from the repository workspace root and flushed events use `exact-multicore-probe.events.jsonl`. An empty/non-Unicode path refuses admission. | Exact live admission probe and BDD consumer |
+| `R4_EXACT_PROBE_POSITIONS` | 1; valid range `1..=8`. Every configured position is exercised over the same eight canonical states at W=available and W=min(4, available), deduplicated when equal. | Exact live admission probe |
+| `R4_PARITY_SOURCE` | `.uor-models/sources/smollm2-135m-instruct`. Teacher source directory used consistently by the exact probe and fixture-present BDD run. Relative paths resolve from the repository workspace root; empty or non-Unicode values fail closed. The teacher-free preflight records this selection but does not open it. | Exact live admission probe and BDD teacher parity |
+| `R4_PARITY_BUNDLE` | `.uor-models/compiled/smollm2-135m-instruct`. Compiled schema-2 `release-bundle.json`/deployed-quality envelope plus tokenizer/artifact/store/graph/report bundle used consistently by teacher-free preflight and fixture-present BDD work. A pre-schema-2 bundle is refused before teacher access. Relative paths resolve from the repository workspace root; empty or non-Unicode values fail closed. | Teacher-free preflight and BDD teacher parity |
 | `R4_FMM_POSITIONS` / `R4_FMM_RANK` / `R4_FMM_TOLERANCE` | 256 / — / — | BDD FMM |
 | `SMOLLM2_SOURCE` | — | `smollm2_adapter` tests |
 | `UOR_R4_API_E2E_SOURCE` | — | `uor-r4-api` E2E test |
 | `UOR_R4_RELEASE_BUNDLE_PATH` | — | `release_bundle_packager` real-local-bundle test (`#[ignore]`d; mirrors the `UOR_R4_API_E2E_SOURCE` convention) |
 | `PORT` | 8000 | `./uor-r4-cli` orchestrator only (shell script; the `r4` binary itself reads `UOR_R4_PORT`) |
+
+Teacher-parity controls govern host-side verification only and do not enter
+artifact identities or deployed serving. `S` private sequence states must share
+one immutable weight allocation and advance in one physical exact batch; the one
+`W`-thread pool must schedule disjoint output rows without nested
+oversubscription.
+Every output row must keep the pinned `uor-matmul` dot reduction intact;
+splitting or reassociating the reduction dimension is not permitted. Results
+return to canonical prompt/position order before metrics are reduced.
+
+The 36 logical teacher-forced positions are executed once in six physical
+batches with registered widths `8, 8, 8, 7, 4, 1`. That transcript retains each
+canonical lane at its distinct final teacher-forced prompt prefix (lengths
+`5, 6, 5, 4, 3, 4, 5, 4` for the pinned tokenizer), rather than truncating
+different prompts to a colliding common prefix. S4 clones the templates,
+appends the already-computed teacher next token to each logical seed, and times
+only new causal continuation steps. Exact batches carry the per-lane sequence
+positions explicitly, so variable histories do not serialize the cohort.
+There is no duplicate live-teacher prefill and no independent full-model S4
+warm-up. Preparation, decode, and one-shot elapsed time remain separate
+evidence fields.
+
+Before measurement, the harness reserves the bounded model-wide batch buffers,
+exact input/output transpose buffers, and one exact scratch slot per dedicated
+worker, then exercises the worker pool/backend with a tiny known product. Its
+elapsed time, retained capacity, capacity-growth event count, and actual added
+capacity bytes are recorded as excluded preparation. Measurement counters are
+reset without discarding those buffers. Every transcript and S4 physical
+forward must subsequently report zero workspace-growth events and bytes;
+otherwise the run fails rather than presenting allocation churn as steady-state
+throughput.
+
+Conditional source, artifact, store, graph, tokenizer, or corpus evidence is
+reported as `AVAILABLE`, `UNAVAILABLE`, `FAILED`, or `NOT_RUN`. An absent
+fixture is never a parity PASS merely because the enclosing test executable
+returns success. The progress/event/report schema and the launch gate are
+specified in [the #932 run record](teacher_parity_parallelism_932.md).
+
+The durable artifact set is:
+
+| Artifact | Schema id | Default path | Role |
+|---|---|---|---|
+| Progress events | `uor-r4.teacher-parity-progress/2` | `target/teacher-parity/parity-report.events.jsonl` | Flushed heartbeat, phase, work, failure, and completion snapshots |
+| Final run report | `uor-r4.teacher-parity-report/2` | `target/teacher-parity/parity-report.json` | Empirical timing/resource/occupancy verdict and exact reason |
+| Deterministic evidence | `uor-r4.teacher-parity-evidence/2` | `target/teacher-parity/parity-report.evidence.json` | Timing-free identities, exact outputs, reductions, and verdict inputs |
+| Exact admission probe | `uor-r4.exact-multicore-probe/2` | `target/teacher-parity/exact-multicore-probe.json` plus `.events.jsonl` | Source/host/executor-bound equal-work W=available/W=min(4, available) selection evidence |
+
+For `uor-r4.exact-multicore-probe/2`, `probe_deadline_policy` means that no new
+exact forward is admitted after 3,600 seconds; an already-active fixture load or
+exact forward may finish, then the probe records `ABORTED`, and elapsed time at
+or beyond the deadline cannot qualify. The report's required `events` object
+binds the sibling `file_name`, full-byte `content_cid`, `byte_len`,
+`record_count`, `final_record_number`, `final_event`, `final_status`,
+`final_qualifies_full_run`, and non-cyclic `report_body_cid`. FINAL is synchronized
+before the report is atomically committed, carries
+`sequence == final_record_number == record_count`, and must be the last JSONL
+record. Admission validates the current sidecar before teacher weights load;
+missing, truncated, appended, or tampered bytes refuse the run.
+
+Schema `/1` bytes describe the superseded fixed-sweep design and remain
+historical evidence. Schema `/2` binds the adaptive candidate set, fastest-exact
+selection policy, and the complete registered admission shape: 36 transcript
+logical forwards in batch widths `8, 8, 8, 7, 4, 1`; eight continuation tokens
+across eight lanes; 100 logical forwards in 14 physical shared-weight batches;
+zero-based maximum sequence position 13; and private-state capacity 14. A
+smaller operator cap may produce diagnostic evidence but cannot qualify the
+binding suite. `reference_workers` names the first measured exact candidate,
+`equal_to_reference` binds every candidate's raw trace to it, and the cheap
+worker-pool/backend `prestart` is recorded separately and excluded from timed
+forward rates. CPU and RSS fields are diagnostics: they must be structurally
+valid and truthful, but a platform-reported `UNAVAILABLE` value does not by
+itself refuse exact admission. A later change to field meaning, type,
+requiredness, units, or artifact partition requires another schema id rather
+than reinterpreting an existing record.
 
 ## Served model identity (#655-F)
 
