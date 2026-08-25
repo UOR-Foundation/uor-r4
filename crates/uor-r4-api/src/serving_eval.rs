@@ -1448,12 +1448,7 @@ pub fn evaluate_serving_snapshot(
         ));
     }
     let workers = budgets.workers.max(1).min(positions.len().max(1));
-    let parts = EngineParts {
-        graph: graph_bytes,
-        signature_artifact: teacher_bytes,
-        tokenizer: None,
-        score_report,
-    };
+    let parts = serving_engine_parts(snapshot, graph_bytes, score_report);
     let mut probe_engine = NormativeServingEngine::load_for_research(parts)?;
     let mut probe_canonical_base = canonical_base_bytes
         .map(|graph| NormativeServingEngine::load_for_research(EngineParts { graph, ..parts }))
@@ -1764,6 +1759,19 @@ pub fn evaluate_serving_snapshot(
         eval_start,
     ));
     Ok(ServingEvalOutcome::Row(Box::new(row)))
+}
+
+fn serving_engine_parts<'a>(
+    snapshot: &'a ServingBundleSnapshot,
+    graph: &'a [u8],
+    score_report: Option<&'a [u8]>,
+) -> EngineParts<'a> {
+    EngineParts {
+        graph,
+        signature_artifact: snapshot.teacher.as_slice(),
+        tokenizer: snapshot.tokenizer.as_deref(),
+        score_report,
+    }
 }
 
 /// Build the deterministic, content-bound quality report for one completed
@@ -2936,12 +2944,19 @@ mod tests {
             b"control",
         )
         .unwrap();
+        std::fs::write(root.join("tokenizer.bin"), b"captured-tokenizer").unwrap();
         let with_controls = ServingBundle::discover(&root).expect("bundle with controls");
         assert!(with_controls.canonical_base_graph.is_some());
         assert!(with_controls.sections_absent_graph.is_some());
         assert!(with_controls.label_shuffled_graph.is_some());
         let first = ServingBundleSnapshot::capture(&with_controls).expect("capture generation");
         assert_eq!(first.generation_cid().len(), "blake3:".len() + 64);
+        let parts = serving_engine_parts(&first, first.graph.as_slice(), None);
+        assert_eq!(
+            parts.tokenizer,
+            Some(b"captured-tokenizer".as_slice()),
+            "every probe, worker, and control engine must receive the tokenizer captured in the immutable generation"
+        );
         std::fs::write(
             root.join("graph").join("score_canonical_base.r4g1"),
             b"changed-canonical-diagnostic",
