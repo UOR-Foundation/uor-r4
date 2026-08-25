@@ -41,6 +41,7 @@ const GRAPH_RELATIVE_PATH: &str = "graph/score.r4g1";
 const SECTIONS_ABSENT_GRAPH_RELATIVE_PATH: &str = "graph/score_sections_absent.r4g1";
 const LABEL_SHUFFLED_GRAPH_RELATIVE_PATH: &str = "graph/score_label_shuffled.r4g1";
 const SIGNATURE_ARTIFACT_RELATIVE_PATH: &str = "tless_artifacts.bin";
+const TLA_COMPARATOR_STORE_RELATIVE_PATH: &str = "tless_store.bin";
 const TOKENIZER_RELATIVE_PATH: &str = "tokenizer.bin";
 const SCORE_REPORT_RELATIVE_PATH: &str = "graph/score_report.json";
 const DEPLOYED_QUALITY_REPORT_RELATIVE_PATH: &str = "graph/deployed_quality_report.json";
@@ -287,6 +288,7 @@ fn install_into_staging(
         SECTIONS_ABSENT_GRAPH_RELATIVE_PATH.to_owned(),
         LABEL_SHUFFLED_GRAPH_RELATIVE_PATH.to_owned(),
         SIGNATURE_ARTIFACT_RELATIVE_PATH.to_owned(),
+        TLA_COMPARATOR_STORE_RELATIVE_PATH.to_owned(),
         SCORE_REPORT_RELATIVE_PATH.to_owned(),
         DEPLOYED_QUALITY_REPORT_RELATIVE_PATH.to_owned(),
         CROSS_SURFACE_PARITY_RELATIVE_PATH.to_owned(),
@@ -339,6 +341,17 @@ fn install_into_staging(
         &bundle_dir.join(SIGNATURE_ARTIFACT_RELATIVE_PATH),
         &manifest.components.signature_artifact,
         "components.signature_artifact",
+    )?;
+    digest_matches(
+        &bundle_dir.join(TLA_COMPARATOR_STORE_RELATIVE_PATH),
+        manifest
+            .components
+            .tla_comparator_store
+            .as_deref()
+            .ok_or_else(|| {
+                "schema-2 release manifest omitted components.tla_comparator_store".to_owned()
+            })?,
+        "components.tla_comparator_store",
     )?;
     digest_matches(
         &bundle_dir.join(SCORE_REPORT_RELATIVE_PATH),
@@ -582,6 +595,7 @@ mod tests {
             "graph/score_sections_absent.r4g1",
             "graph/score_label_shuffled.r4g1",
             "tless_artifacts.bin",
+            "tless_store.bin",
             "tokenizer.bin",
             "graph/score_report.json",
             "graph/deployed_quality_report.json",

@@ -36,8 +36,14 @@ pub const NORMATIVE_EXECUTION_SCOPE: &str = "normative-runtime";
 /// Era-neutral same-position plain-TLA runtime comparator identity. The exact
 /// container/store generation is bound separately by its byte-derived CID.
 pub const TLA_COMPARATOR_ID: &str = "plain-tla-runtime";
+/// Versioned plain-TLA comparator implementation. The production envelope
+/// independently hashes this tag together with the exact graded-store bytes.
+pub const TLA_COMPARATOR_VERSION: &str = "plain-tla-same-position/1";
 /// Normative selector with SKMX/PSIB absent, used for RF-31's causal delta.
 pub const SECTIONS_ABSENT_COMPARATOR_ID: &str = "R4G1Runtime-sections-absent";
+/// Versioned sections-absent comparator implementation. Its definition CID is
+/// independently reproduced from the exact planted control graph.
+pub const SECTIONS_ABSENT_COMPARATOR_VERSION: &str = "r4g1-sections-absent/1";
 /// The required label-shuffled conditioning-specificity falsifier.
 pub const LABEL_SHUFFLED_CONTROL_ID: &str = "label-shuffled-skmx-psib";
 /// RF-31's frozen +20 per-mille paired lower-bound floor, in ppm.
@@ -1857,21 +1863,48 @@ impl DeployedQualityReport {
                 reason: "full-census PASS has no measurements".to_string(),
             });
         };
-        if measurements.versus_tla.comparator.id != TLA_COMPARATOR_ID {
+        if measurements.versus_tla.comparator.id != TLA_COMPARATOR_ID
+            || measurements.versus_tla.comparator.version != TLA_COMPARATOR_VERSION
+        {
             return Some(DeployedQualityValidationError::NotProductionAdmissible {
                 reason: format!(
-                    "TLA comparison names {:?}, expected {:?}",
-                    measurements.versus_tla.comparator.id, TLA_COMPARATOR_ID
+                    "TLA comparison identifies {:?}@{:?}, expected {:?}@{:?}",
+                    measurements.versus_tla.comparator.id,
+                    measurements.versus_tla.comparator.version,
+                    TLA_COMPARATOR_ID,
+                    TLA_COMPARATOR_VERSION
                 ),
             });
         }
-        if measurements.versus_sections_absent.comparator.id != SECTIONS_ABSENT_COMPARATOR_ID {
+        if measurements.versus_tla.comparator.positions_cid
+            != self.bindings.partition.evaluated_positions_cid
+        {
+            return Some(DeployedQualityValidationError::NotProductionAdmissible {
+                reason: "TLA comparison does not use the bound evaluated-position partition"
+                    .to_string(),
+            });
+        }
+        if measurements.versus_sections_absent.comparator.id != SECTIONS_ABSENT_COMPARATOR_ID
+            || measurements.versus_sections_absent.comparator.version
+                != SECTIONS_ABSENT_COMPARATOR_VERSION
+        {
             return Some(DeployedQualityValidationError::NotProductionAdmissible {
                 reason: format!(
-                    "lane comparison names {:?}, expected {:?}",
+                    "lane comparison identifies {:?}@{:?}, expected {:?}@{:?}",
                     measurements.versus_sections_absent.comparator.id,
-                    SECTIONS_ABSENT_COMPARATOR_ID
+                    measurements.versus_sections_absent.comparator.version,
+                    SECTIONS_ABSENT_COMPARATOR_ID,
+                    SECTIONS_ABSENT_COMPARATOR_VERSION
                 ),
+            });
+        }
+        if measurements.versus_sections_absent.comparator.positions_cid
+            != self.bindings.partition.evaluated_positions_cid
+        {
+            return Some(DeployedQualityValidationError::NotProductionAdmissible {
+                reason:
+                    "sections-absent comparison does not use the bound evaluated-position partition"
+                        .to_string(),
             });
         }
         if measurements.versus_tla.interval.lower_delta_ppm < 0 {
@@ -1950,6 +1983,12 @@ impl DeployedQualityReport {
                 ),
             });
         };
+        if label_shuffled.comparator != measurements.versus_sections_absent.comparator {
+            return Some(DeployedQualityValidationError::NotProductionAdmissible {
+                reason: "label-shuffled control is not paired against the exact validated sections-absent comparator"
+                    .to_string(),
+            });
+        }
         if label_shuffled.delta.numerator > 0 {
             return Some(DeployedQualityValidationError::NotProductionAdmissible {
                 reason: format!(

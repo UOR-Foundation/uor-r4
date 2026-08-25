@@ -109,6 +109,7 @@ pub fn set_r4g1_production_bundle(
     sections_absent_graph: Vec<u8>,
     label_shuffled_graph: Vec<u8>,
     signature_artifact: Vec<u8>,
+    tla_comparator_store: Vec<u8>,
     tokenizer: Vec<u8>,
     score_report: Vec<u8>,
     compile_report: Vec<u8>,
@@ -125,6 +126,7 @@ pub fn set_r4g1_production_bundle(
         sections_absent_graph,
         label_shuffled_graph,
         signature_artifact,
+        tla_comparator_store,
         tokenizer,
         score_report,
         compile_report,
@@ -229,11 +231,16 @@ mod facade_smoke_tests {
             );
             for component in [
                 "./graph/score.r4g1",
+                "./graph/score_sections_absent.r4g1",
+                "./graph/score_label_shuffled.r4g1",
                 "./tless_artifacts.bin",
+                "./tless_store.bin",
                 "./tokenizer.bin",
                 "./graph/score_report.json",
                 "./graph-cover/cover_report.json",
                 "./graph/deployed_quality_report.json",
+                "./graph/cross_surface_parity.json",
+                "./graph/witness_replay.json",
                 "./corpus.meta",
                 "./corpus.records",
                 "./tokenizer_adapter.json",
@@ -244,6 +251,12 @@ mod facade_smoke_tests {
                     "{label} omitted required production component {component}"
                 );
             }
+            assert!(
+                source.contains(
+                    "bytes.signatureArtifact,\n        bytes.tlaComparatorStore,\n        bytes.tokenizer,"
+                ),
+                "{label} must pass the exact TLA store between the signature artifact and tokenizer"
+            );
             assert!(
                 !source.contains("geometric-fallback-wasm")
                     && !source.contains("falling back to geometric"),

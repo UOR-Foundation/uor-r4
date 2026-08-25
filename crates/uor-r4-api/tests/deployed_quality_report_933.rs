@@ -10,7 +10,8 @@ use uor_r4_api::{
     QualityVerdict, ResearchDeployedQualityReport, SeedIdentity, SelectorIdentity,
     WitnessReplayEvidence, DEPLOYED_QUALITY_PROFILE_ID, DEPLOYED_QUALITY_PROFILE_VERSION,
     DEPLOYED_QUALITY_REPORT_SCHEMA, LABEL_SHUFFLED_CONTROL_ID, NORMATIVE_EXECUTION_SCOPE,
-    NORMATIVE_SELECTOR_ID, SECTIONS_ABSENT_COMPARATOR_ID, TLA_COMPARATOR_ID,
+    NORMATIVE_SELECTOR_ID, SECTIONS_ABSENT_COMPARATOR_ID, SECTIONS_ABSENT_COMPARATOR_VERSION,
+    TLA_COMPARATOR_ID, TLA_COMPARATOR_VERSION,
 };
 
 const N: u64 = 1_000;
@@ -37,6 +38,7 @@ fn signed_rate(numerator: i64, denominator: u64) -> ExactSignedRate {
 
 fn comparison(
     id: &str,
+    version: &str,
     both_correct: u64,
     selector_only_correct: u64,
     comparator_only_correct: u64,
@@ -55,7 +57,7 @@ fn comparison(
     PairedComparison {
         comparator: ComparatorIdentity {
             id: id.to_string(),
-            version: "1.0.0".to_string(),
+            version: version.to_string(),
             definition_cid: cid(20),
             positions_cid: cid(8),
         },
@@ -152,10 +154,18 @@ fn valid_report() -> DeployedQualityReport {
             verdict: QualityVerdict::Pass,
             measurements: Some(QualityMeasurements {
                 // Selector 350/1000, TLA 300/1000, positive paired lower bound.
-                versus_tla: comparison(TLA_COMPARATOR_ID, 250, 100, 50, 600),
+                versus_tla: comparison(
+                    TLA_COMPARATOR_ID,
+                    TLA_COMPARATOR_VERSION,
+                    250,
+                    100,
+                    50,
+                    600,
+                ),
                 // Same selector 350/1000, base 280/1000, lower bound > +20permille.
                 versus_sections_absent: comparison(
                     SECTIONS_ABSENT_COMPARATOR_ID,
+                    SECTIONS_ABSENT_COMPARATOR_VERSION,
                     250,
                     100,
                     30,
@@ -179,7 +189,14 @@ fn valid_report() -> DeployedQualityReport {
             identity_cid: cid(23),
             verdict: NegativeControlVerdict::Passed,
             // Shuffled labels have a negative paired effect (-10permille).
-            comparison: Some(comparison("sections-absent-control", 250, 20, 30, 700)),
+            comparison: Some(comparison(
+                SECTIONS_ABSENT_COMPARATOR_ID,
+                SECTIONS_ABSENT_COMPARATOR_VERSION,
+                250,
+                20,
+                30,
+                700,
+            )),
         }],
     }
 }

@@ -61,6 +61,7 @@ const GRAPH_RELATIVE_PATH: &str = "graph/score.r4g1";
 pub const SECTIONS_ABSENT_GRAPH_RELATIVE_PATH: &str = "graph/score_sections_absent.r4g1";
 pub const LABEL_SHUFFLED_GRAPH_RELATIVE_PATH: &str = "graph/score_label_shuffled.r4g1";
 const SIGNATURE_ARTIFACT_RELATIVE_PATH: &str = "tless_artifacts.bin";
+pub const TLA_COMPARATOR_STORE_RELATIVE_PATH: &str = "tless_store.bin";
 const TOKENIZER_RELATIVE_PATH: &str = "tokenizer.bin";
 const SCORE_REPORT_RELATIVE_PATH: &str = "graph/score_report.json";
 pub const DEPLOYED_QUALITY_REPORT_RELATIVE_PATH: &str = "graph/deployed_quality_report.json";
@@ -146,6 +147,7 @@ pub fn verify_bundle_for_production_packaging(
     let sections_absent_graph = read_required(physical_root, SECTIONS_ABSENT_GRAPH_RELATIVE_PATH)?;
     let label_shuffled_graph = read_required(physical_root, LABEL_SHUFFLED_GRAPH_RELATIVE_PATH)?;
     let signature_artifact = read_required(physical_root, SIGNATURE_ARTIFACT_RELATIVE_PATH)?;
+    let tla_comparator_store = read_required(physical_root, TLA_COMPARATOR_STORE_RELATIVE_PATH)?;
     let tokenizer = read_required(physical_root, TOKENIZER_RELATIVE_PATH)?;
     let score_report = read_required(physical_root, SCORE_REPORT_RELATIVE_PATH)?;
     let compile_report = read_required(physical_root, COMPILE_REPORT_RELATIVE_PATH)?;
@@ -231,6 +233,7 @@ pub fn verify_bundle_for_production_packaging(
             sections_absent_graph: &sections_absent_graph,
             label_shuffled_graph: &label_shuffled_graph,
             signature_artifact: &signature_artifact,
+            tla_comparator_store: &tla_comparator_store,
             tokenizer: &tokenizer,
             score_report: &score_report,
             deployed_quality_report: &deployed_quality_report,
@@ -267,6 +270,7 @@ pub fn package_release_bundle(
     let sections_absent_graph = read_required(physical_root, SECTIONS_ABSENT_GRAPH_RELATIVE_PATH)?;
     let label_shuffled_graph = read_required(physical_root, LABEL_SHUFFLED_GRAPH_RELATIVE_PATH)?;
     let signature_artifact = read_required(physical_root, SIGNATURE_ARTIFACT_RELATIVE_PATH)?;
+    let tla_comparator_store = read_required(physical_root, TLA_COMPARATOR_STORE_RELATIVE_PATH)?;
     let score_report = read_required(physical_root, SCORE_REPORT_RELATIVE_PATH)?;
     let deployed_quality_report =
         read_required(physical_root, DEPLOYED_QUALITY_REPORT_RELATIVE_PATH)?;
@@ -286,6 +290,7 @@ pub fn package_release_bundle(
             sections_absent_graph: Some(digest(&sections_absent_graph)),
             label_shuffled_graph: Some(digest(&label_shuffled_graph)),
             signature_artifact: digest(&signature_artifact),
+            tla_comparator_store: Some(digest(&tla_comparator_store)),
             tokenizer: tokenizer.as_deref().map(digest),
             score_report: digest(&score_report),
             compile_report: digest(&compile_report),
@@ -345,6 +350,7 @@ pub fn package_verified_release_bundle(
         read_required(physical_root, SECTIONS_ABSENT_GRAPH_RELATIVE_PATH)?;
     let current_label_shuffled = read_required(physical_root, LABEL_SHUFFLED_GRAPH_RELATIVE_PATH)?;
     let current_teacher = read_required(physical_root, SIGNATURE_ARTIFACT_RELATIVE_PATH)?;
+    let current_tla_store = read_required(physical_root, TLA_COMPARATOR_STORE_RELATIVE_PATH)?;
     let current_score = read_required(physical_root, SCORE_REPORT_RELATIVE_PATH)?;
     let current_compile = read_required(physical_root, COMPILE_REPORT_RELATIVE_PATH)?;
     let current_quality = read_required(physical_root, DEPLOYED_QUALITY_REPORT_RELATIVE_PATH)?;
@@ -357,6 +363,8 @@ pub fn package_verified_release_bundle(
         || manifest.components.label_shuffled_graph.as_deref()
             != Some(digest(&current_label_shuffled).as_str())
         || manifest.components.signature_artifact != digest(&current_teacher)
+        || manifest.components.tla_comparator_store.as_deref()
+            != Some(digest(&current_tla_store).as_str())
         || manifest.components.score_report != digest(&current_score)
         || manifest.components.compile_report != digest(&current_compile)
         || manifest.components.deployed_quality_report.as_deref()
@@ -412,7 +420,8 @@ pub(crate) mod tests {
         PairedInterval, QualityMeasurements, QualityProfileIdentity, QualityVerdict,
         WitnessReplayEvidence, DEPLOYED_QUALITY_PROFILE_ID, DEPLOYED_QUALITY_PROFILE_VERSION,
         DEPLOYED_QUALITY_REPORT_SCHEMA, LABEL_SHUFFLED_CONTROL_ID, NORMATIVE_EXECUTION_SCOPE,
-        SECTIONS_ABSENT_COMPARATOR_ID, TLA_COMPARATOR_ID,
+        SECTIONS_ABSENT_COMPARATOR_ID, SECTIONS_ABSENT_COMPARATOR_VERSION, TLA_COMPARATOR_ID,
+        TLA_COMPARATOR_VERSION,
     };
     use uor_r4_core::transformerless::{convert_r4g1, runtime};
     use uor_r4_graph_format::{ArtifactBuilder, GraphView, SectionId};
@@ -457,6 +466,7 @@ pub(crate) mod tests {
             b"label shuffled graph bytes",
         );
         write(dir, SIGNATURE_ARTIFACT_RELATIVE_PATH, b"signature bytes");
+        write(dir, TLA_COMPARATOR_STORE_RELATIVE_PATH, b"store bytes");
         write(dir, TOKENIZER_RELATIVE_PATH, b"tokenizer bytes");
         write(dir, SCORE_REPORT_RELATIVE_PATH, b"{\"score\":true}");
         write(
@@ -645,8 +655,7 @@ pub(crate) mod tests {
     }
 
     fn comparison(
-        id: &str,
-        positions_cid: &str,
+        comparator: ComparatorIdentity,
         both_correct: u64,
         selector_only_correct: u64,
         comparator_only_correct: u64,
@@ -661,12 +670,7 @@ pub(crate) mod tests {
         let denominator =
             both_correct + selector_only_correct + comparator_only_correct + neither_correct;
         PairedComparison {
-            comparator: ComparatorIdentity {
-                id: id.to_owned(),
-                version: "fixture/1".to_owned(),
-                definition_cid: digest(format!("fixture-comparator-{id}").as_bytes()),
-                positions_cid: positions_cid.to_owned(),
-            },
+            comparator,
             counts,
             selector_rate: rate(both_correct + selector_only_correct, denominator),
             comparator_rate: rate(both_correct + comparator_only_correct, denominator),
@@ -680,6 +684,7 @@ pub(crate) mod tests {
 
     fn production_report(
         bindings: DeployedQualityBindings,
+        tla_comparator_store: &[u8],
         sections_absent_graph: &[u8],
         label_shuffled_graph: &[u8],
         cross_surface_parity: &[u8],
@@ -687,10 +692,28 @@ pub(crate) mod tests {
         witness: &uor_r4_api::NormativeWitnessReplayArtifact,
     ) -> DeployedQualityReport {
         let positions_cid = bindings.partition.evaluated_positions_cid.clone();
+        let tla_comparator = ComparatorIdentity {
+            id: TLA_COMPARATOR_ID.to_owned(),
+            version: TLA_COMPARATOR_VERSION.to_owned(),
+            definition_cid: report_tagged_cid(
+                b"r4-deployed-quality-tla-comparator/1",
+                &[TLA_COMPARATOR_VERSION.as_bytes(), tla_comparator_store],
+            ),
+            positions_cid: positions_cid.clone(),
+        };
         let absent_definition_cid = report_tagged_cid(
             b"r4-deployed-quality-sections-absent-comparator/1",
-            &[b"r4g1-sections-absent/1", sections_absent_graph],
+            &[
+                SECTIONS_ABSENT_COMPARATOR_VERSION.as_bytes(),
+                sections_absent_graph,
+            ],
         );
+        let sections_absent_comparator = ComparatorIdentity {
+            id: SECTIONS_ABSENT_COMPARATOR_ID.to_owned(),
+            version: SECTIONS_ABSENT_COMPARATOR_VERSION.to_owned(),
+            definition_cid: absent_definition_cid,
+            positions_cid: positions_cid.clone(),
+        };
         let label_identity_cid = report_tagged_cid(
             b"r4-deployed-quality-label-shuffled-control/1",
             &[
@@ -726,20 +749,14 @@ pub(crate) mod tests {
                 evaluated_positions: 1_000,
                 verdict: QualityVerdict::Pass,
                 measurements: Some(QualityMeasurements {
-                    versus_tla: comparison(TLA_COMPARATOR_ID, &positions_cid, 250, 100, 50, 600),
-                    versus_sections_absent: {
-                        let mut row = comparison(
-                            SECTIONS_ABSENT_COMPARATOR_ID,
-                            &positions_cid,
-                            250,
-                            100,
-                            30,
-                            620,
-                        );
-                        row.comparator.version = "r4g1-sections-absent/1".to_owned();
-                        row.comparator.definition_cid = absent_definition_cid;
-                        row
-                    },
+                    versus_tla: comparison(tla_comparator, 250, 100, 50, 600),
+                    versus_sections_absent: comparison(
+                        sections_absent_comparator.clone(),
+                        250,
+                        100,
+                        30,
+                        620,
+                    ),
                     internal_base_control_checks: 1_000,
                     internal_base_control_mismatches: 0,
                     cross_surface_checks: cross_surface
@@ -760,14 +777,7 @@ pub(crate) mod tests {
                 id: LABEL_SHUFFLED_CONTROL_ID.to_owned(),
                 identity_cid: label_identity_cid,
                 verdict: NegativeControlVerdict::Passed,
-                comparison: Some(comparison(
-                    "sections-absent-control",
-                    &positions_cid,
-                    250,
-                    20,
-                    30,
-                    700,
-                )),
+                comparison: Some(comparison(sections_absent_comparator, 250, 20, 30, 700)),
             }],
         }
     }
@@ -839,6 +849,7 @@ pub(crate) mod tests {
             &label_shuffled_graph,
         );
         write(dir, SIGNATURE_ARTIFACT_RELATIVE_PATH, &teacher);
+        write(dir, TLA_COMPARATOR_STORE_RELATIVE_PATH, &store_bytes);
         write(dir, TOKENIZER_RELATIVE_PATH, &tokenizer);
         write(dir, SCORE_REPORT_RELATIVE_PATH, score_report);
         write(dir, COMPILE_REPORT_RELATIVE_PATH, compile_report);
@@ -1024,6 +1035,7 @@ pub(crate) mod tests {
 
         let report = production_report(
             bindings,
+            &store_bytes,
             &sections_absent_graph,
             &label_shuffled_graph,
             &cross_surface_bytes,
@@ -1230,6 +1242,147 @@ pub(crate) mod tests {
                 .contains("graph.HEAD.corpus_construction_cid"),
             "{error}"
         );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn production_packaging_rejects_comparator_substitution() {
+        let dir = scratch_dir("comparator-substitution");
+        let admission = write_production_bundle(&dir);
+        let report_path = dir.join(DEPLOYED_QUALITY_REPORT_RELATIVE_PATH);
+        let store_path = dir.join(TLA_COMPARATOR_STORE_RELATIVE_PATH);
+        let original_store = std::fs::read(&store_path).expect("fixture TLA store");
+        let original_report_bytes = std::fs::read(&report_path).expect("fixture quality report");
+        let original_report: DeployedQualityReport =
+            serde_json::from_slice(&original_report_bytes).expect("fixture report parses");
+
+        let write_planted_report = |report: &DeployedQualityReport| {
+            write(
+                &dir,
+                DEPLOYED_QUALITY_REPORT_RELATIVE_PATH,
+                &report.deterministic_json_bytes().expect("planted report"),
+            );
+        };
+
+        let mut planted = original_report.clone();
+        planted
+            .evaluation
+            .measurements
+            .as_mut()
+            .expect("production measurements")
+            .versus_tla
+            .comparator
+            .version = "plain-tla-same-position/substituted".to_owned();
+        write_planted_report(&planted);
+        let error = verify_bundle_for_production_packaging(&dir, PRODUCTION_COMPILER_REVISION)
+            .expect_err("an unrecognized TLA comparator version must fail closed");
+        assert!(
+            error.to_string().contains("TLA comparison identifies"),
+            "{error}"
+        );
+
+        let mut planted = original_report.clone();
+        planted
+            .evaluation
+            .measurements
+            .as_mut()
+            .expect("production measurements")
+            .versus_tla
+            .comparator
+            .definition_cid = PLACEHOLDER_DIGEST.to_owned();
+        write_planted_report(&planted);
+        let error = verify_bundle_for_production_packaging(&dir, PRODUCTION_COMPILER_REVISION)
+            .expect_err("a substituted TLA comparator definition must fail closed");
+        assert!(error.to_string().contains("tless_store.bin"), "{error}");
+
+        let mut malformed_store = original_store.clone();
+        malformed_store[0] ^= 1;
+        let mut rebound = original_report.clone();
+        rebound
+            .evaluation
+            .measurements
+            .as_mut()
+            .expect("production measurements")
+            .versus_tla
+            .comparator
+            .definition_cid = report_tagged_cid(
+            b"r4-deployed-quality-tla-comparator/1",
+            &[TLA_COMPARATOR_VERSION.as_bytes(), &malformed_store],
+        );
+        write_planted_report(&rebound);
+        write(&dir, TLA_COMPARATOR_STORE_RELATIVE_PATH, &malformed_store);
+        let structurally_rebound_manifest =
+            package_release_bundle(&dir, production_inputs(&admission))
+                .expect("a structural manifest can be rebound to the malformed inputs");
+        assert_eq!(
+            structurally_rebound_manifest
+                .components
+                .tla_comparator_store
+                .as_deref(),
+            Some(digest(&malformed_store).as_str())
+        );
+        let error = verify_bundle_for_production_packaging(&dir, PRODUCTION_COMPILER_REVISION)
+            .expect_err("a malformed but content-rebound TLA store must fail closed");
+        assert!(error.to_string().contains("not a valid TLS1"), "{error}");
+
+        write(
+            &dir,
+            DEPLOYED_QUALITY_REPORT_RELATIVE_PATH,
+            &original_report_bytes,
+        );
+        write(&dir, TLA_COMPARATOR_STORE_RELATIVE_PATH, &original_store);
+        let mut planted = original_report.clone();
+        planted
+            .evaluation
+            .measurements
+            .as_mut()
+            .expect("production measurements")
+            .versus_sections_absent
+            .comparator
+            .positions_cid = PLACEHOLDER_DIGEST.to_owned();
+        write_planted_report(&planted);
+        let error = verify_bundle_for_production_packaging(&dir, PRODUCTION_COMPILER_REVISION)
+            .expect_err("a comparator over different positions must fail closed");
+        assert!(
+            error
+                .to_string()
+                .contains("comparison.comparator.positions_cid"),
+            "{error}"
+        );
+
+        let mut planted = original_report.clone();
+        planted.negative_controls[0]
+            .comparison
+            .as_mut()
+            .expect("label-shuffled comparison")
+            .comparator
+            .version = "r4g1-sections-absent/substituted".to_owned();
+        write_planted_report(&planted);
+        let error = verify_bundle_for_production_packaging(&dir, PRODUCTION_COMPILER_REVISION)
+            .expect_err("a nested control comparator substitution must fail closed");
+        assert!(
+            error
+                .to_string()
+                .contains("exact validated sections-absent comparator"),
+            "{error}"
+        );
+
+        write(
+            &dir,
+            DEPLOYED_QUALITY_REPORT_RELATIVE_PATH,
+            &original_report_bytes,
+        );
+        let mut substituted_store = original_store;
+        let last = substituted_store
+            .len()
+            .checked_sub(1)
+            .expect("fixture TLA store is nonempty");
+        substituted_store[last] ^= 1;
+        write(&dir, TLA_COMPARATOR_STORE_RELATIVE_PATH, &substituted_store);
+        let error = verify_bundle_for_production_packaging(&dir, PRODUCTION_COMPILER_REVISION)
+            .expect_err("changed TLA store bytes must invalidate comparator admission");
+        assert!(error.to_string().contains("tless_store.bin"), "{error}");
+
         let _ = std::fs::remove_dir_all(&dir);
     }
 

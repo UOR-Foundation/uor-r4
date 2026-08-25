@@ -42,7 +42,8 @@ use crate::deployed_quality::{
     DEPLOYED_QUALITY_PROFILE_VERSION, DEPLOYED_QUALITY_REPORT_SCHEMA,
     DETERMINISTIC_SAMPLE_SELECTION_ALGORITHM, FULL_POPULATION_SELECTION_ALGORITHM,
     LABEL_SHUFFLED_CONTROL_ID, NORMATIVE_EXECUTION_SCOPE, RF31_MIN_LANE_DELTA_PPM,
-    SECTIONS_ABSENT_COMPARATOR_ID, TLA_COMPARATOR_ID,
+    SECTIONS_ABSENT_COMPARATOR_ID, SECTIONS_ABSENT_COMPARATOR_VERSION, TLA_COMPARATOR_ID,
+    TLA_COMPARATOR_VERSION,
 };
 use crate::engine::{EngineParts, PolicyStatus};
 use crate::serving::{
@@ -67,8 +68,6 @@ pub const PROBE_POSITIONS: usize = 64;
 
 const PROBE_PROGRESS_INTERVAL: usize = 16;
 const EVAL_PROGRESS_INTERVAL: usize = 256;
-const TLA_COMPARATOR_VERSION: &str = "plain-tla-same-position/1";
-const SECTIONS_ABSENT_COMPARATOR_VERSION: &str = "r4g1-sections-absent/1";
 const LABEL_SHUFFLED_CONTROL_VERSION: &str = "train-target-rotation-half-plus-one/1";
 const REPORT_TERMINAL_SCHEMA: &str = "uor-r4-deployed-quality-terminal/2";
 const REPORT_PROGRESS_SCHEMA: &str = "uor-r4-deployed-quality-progress/1";

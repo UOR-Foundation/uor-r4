@@ -186,6 +186,7 @@ pub fn set_r4g1_production_bundle(
     sections_absent_graph: Vec<u8>,
     label_shuffled_graph: Vec<u8>,
     signature_artifact: Vec<u8>,
+    tla_comparator_store: Vec<u8>,
     tokenizer_bytes: Vec<u8>,
     score_report: Vec<u8>,
     compile_report: Vec<u8>,
@@ -220,6 +221,7 @@ pub fn set_r4g1_production_bundle(
         sections_absent_graph: &sections_absent_graph,
         label_shuffled_graph: &label_shuffled_graph,
         signature_artifact: &signature_artifact,
+        tla_comparator_store: &tla_comparator_store,
         tokenizer: &tokenizer_bytes,
         score_report: &score_report,
         compile_report: &compile_report,
@@ -1580,6 +1582,7 @@ mod tests {
             Vec::new(),
             Vec::new(),
             Vec::new(),
+            Vec::new(),
             tokenizer,
             Vec::new(),
             Vec::new(),
@@ -1646,6 +1649,7 @@ mod tests {
         let sections_absent_graph = read("graph/score_sections_absent.r4g1");
         let label_shuffled_graph = read("graph/score_label_shuffled.r4g1");
         let teacher = read("tless_artifacts.bin");
+        let tla_comparator_store = read("tless_store.bin");
         let tokenizer = read("tokenizer.bin");
         let score_report = read("graph/score_report.json");
         let compile_report = read("graph-cover/cover_report.json");
@@ -1662,6 +1666,7 @@ mod tests {
             sections_absent_graph.clone(),
             label_shuffled_graph.clone(),
             teacher.clone(),
+            tla_comparator_store.clone(),
             tokenizer.clone(),
             score_report.clone(),
             compile_report.clone(),
@@ -1694,6 +1699,7 @@ mod tests {
             sections_absent_graph,
             label_shuffled_graph,
             teacher,
+            tla_comparator_store,
             tokenizer,
             score_report,
             compile_report,

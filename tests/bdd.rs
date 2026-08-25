@@ -790,6 +790,7 @@ fn rf31_test_cid(hex_digit: char) -> String {
 
 fn rf31_paired_comparison(
     comparator_id: &str,
+    comparator_version: &str,
     positions_cid: &str,
     counts: uor_r4_api::deployed_quality::PairedCounts,
 ) -> uor_r4_api::deployed_quality::PairedComparison {
@@ -809,7 +810,7 @@ fn rf31_paired_comparison(
     PairedComparison {
         comparator: ComparatorIdentity {
             id: comparator_id.to_owned(),
-            version: "1".to_owned(),
+            version: comparator_version.to_owned(),
             definition_cid: rf31_test_cid('d'),
             positions_cid: positions_cid.to_owned(),
         },
@@ -937,11 +938,13 @@ fn rf31_valid_quality_report() -> uor_r4_api::deployed_quality::DeployedQualityR
             measurements: Some(QualityMeasurements {
                 versus_tla: rf31_paired_comparison(
                     TLA_COMPARATOR_ID,
+                    TLA_COMPARATOR_VERSION,
                     &positions_cid,
                     selector_counts,
                 ),
                 versus_sections_absent: rf31_paired_comparison(
                     SECTIONS_ABSENT_COMPARATOR_ID,
+                    SECTIONS_ABSENT_COMPARATOR_VERSION,
                     &positions_cid,
                     lane_counts,
                 ),
@@ -963,7 +966,8 @@ fn rf31_valid_quality_report() -> uor_r4_api::deployed_quality::DeployedQualityR
             identity_cid: rf31_test_cid('9'),
             verdict: NegativeControlVerdict::Passed,
             comparison: Some(rf31_paired_comparison(
-                LABEL_SHUFFLED_CONTROL_ID,
+                SECTIONS_ABSENT_COMPARATOR_ID,
+                SECTIONS_ABSENT_COMPARATOR_VERSION,
                 &positions_cid,
                 shuffled_counts,
             )),

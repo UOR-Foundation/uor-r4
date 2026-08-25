@@ -6,13 +6,14 @@
 //! bindings, and the token-free-D4 plus R4G1Runtime serving composition are all
 //! checked before a generation can become active.
 
-use uor_r4_core::transformerless::{compiler, hf_bpe::TokenizerAdapter};
+use uor_r4_core::transformerless::{compiler, hf_bpe::TokenizerAdapter, runtime};
 use uor_r4_graph_format::{GraphView, SectionId};
 use uor_r4_model_source::SourceUnavailable;
 
 use crate::deployed_quality::{
     derive_deployed_quality_bindings, DeployedQualityBindingMaterial, DeployedQualityBindings,
     DeployedQualityReport, WitnessReplayEvidence, LABEL_SHUFFLED_CONTROL_ID,
+    SECTIONS_ABSENT_COMPARATOR_VERSION, TLA_COMPARATOR_VERSION,
 };
 use crate::engine::{AbiVersion, EngineParts};
 use crate::release_bundle::{BundleAbi, ReleaseBundleManifest};
@@ -33,6 +34,7 @@ pub struct ProductionEnvelopeParts<'a> {
     pub sections_absent_graph: &'a [u8],
     pub label_shuffled_graph: &'a [u8],
     pub signature_artifact: &'a [u8],
+    pub tla_comparator_store: &'a [u8],
     pub tokenizer: &'a [u8],
     pub score_report: &'a [u8],
     pub compile_report: &'a [u8],
@@ -55,6 +57,7 @@ pub struct ProductionEvidenceParts<'a> {
     pub sections_absent_graph: &'a [u8],
     pub label_shuffled_graph: &'a [u8],
     pub signature_artifact: &'a [u8],
+    pub tla_comparator_store: &'a [u8],
     pub tokenizer: &'a [u8],
     pub score_report: &'a [u8],
     pub deployed_quality_report: &'a [u8],
@@ -126,6 +129,11 @@ pub fn verify_production_envelope(
         "tless_artifacts.bin",
         parts.signature_artifact,
         &manifest.components.signature_artifact,
+    )?;
+    require_schema_two_digest(
+        "tless_store.bin",
+        parts.tla_comparator_store,
+        manifest.components.tla_comparator_store.as_deref(),
     )?;
     require_digest(
         "graph/score_report.json",
@@ -252,6 +260,7 @@ pub fn verify_production_envelope(
             sections_absent_graph: parts.sections_absent_graph,
             label_shuffled_graph: parts.label_shuffled_graph,
             signature_artifact: parts.signature_artifact,
+            tla_comparator_store: parts.tla_comparator_store,
             tokenizer: parts.tokenizer,
             score_report: parts.score_report,
             deployed_quality_report: parts.deployed_quality_report,
@@ -294,10 +303,30 @@ pub fn validate_production_evidence_links(
         unavailable("production deployed-quality report omitted measured evidence")
     })?;
 
-    const ABSENT_VERSION: &str = "r4g1-sections-absent/1";
+    if runtime::parse_store(parts.tla_comparator_store).is_none() {
+        return Err(unavailable(
+            "tless_store.bin is not a valid TLS1 plain-TLA comparator store",
+        ));
+    }
+    let expected_tla = tagged_cid(
+        b"r4-deployed-quality-tla-comparator/1",
+        &[
+            TLA_COMPARATOR_VERSION.as_bytes(),
+            parts.tla_comparator_store,
+        ],
+    );
+    if measurements.versus_tla.comparator.definition_cid != expected_tla {
+        return Err(unavailable(
+            "deployed-quality report is not bound to tless_store.bin",
+        ));
+    }
+
     let expected_absent = tagged_cid(
         b"r4-deployed-quality-sections-absent-comparator/1",
-        &[ABSENT_VERSION.as_bytes(), parts.sections_absent_graph],
+        &[
+            SECTIONS_ABSENT_COMPARATOR_VERSION.as_bytes(),
+            parts.sections_absent_graph,
+        ],
     );
     if measurements
         .versus_sections_absent
@@ -559,6 +588,7 @@ mod tests {
             sections_absent_graph: empty,
             label_shuffled_graph: empty,
             signature_artifact: empty,
+            tla_comparator_store: empty,
             tokenizer: empty,
             score_report: empty,
             compile_report: empty,

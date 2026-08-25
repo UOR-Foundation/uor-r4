@@ -47,6 +47,7 @@ pub(crate) struct CapturedProductionAdmission {
     pub(crate) deployed_quality_report: Vec<u8>,
     pub(crate) sections_absent_graph: Vec<u8>,
     pub(crate) label_shuffled_graph: Vec<u8>,
+    pub(crate) tla_comparator_store: Vec<u8>,
     pub(crate) cross_surface_parity: Vec<u8>,
     pub(crate) witness_replay: Vec<u8>,
     pub(crate) score_report: Vec<u8>,
@@ -110,6 +111,7 @@ pub(crate) fn capture_production_admission(
             &root.join("graph/score_sections_absent.r4g1"),
         )?,
         label_shuffled_graph: read_required_regular(&root.join("graph/score_label_shuffled.r4g1"))?,
+        tla_comparator_store: read_required_regular(&root.join("tless_store.bin"))?,
         cross_surface_parity: read_required_regular(&root.join("graph/cross_surface_parity.json"))?,
         witness_replay: read_required_regular(&root.join("graph/witness_replay.json"))?,
         score_report: read_required_regular(&root.join("graph/score_report.json"))?,
@@ -135,6 +137,7 @@ pub(crate) fn verify_production_admission(
         sections_absent_graph: &captured.sections_absent_graph,
         label_shuffled_graph: &captured.label_shuffled_graph,
         signature_artifact: teacher,
+        tla_comparator_store: &captured.tla_comparator_store,
         tokenizer,
         score_report: &captured.score_report,
         compile_report: &captured.compile_report,
@@ -203,6 +206,10 @@ pub(crate) fn verify_release_bundle_sidecar(
         return None;
     }
     if !file_matches_digest(teacher_path, &manifest.components.signature_artifact) {
+        return None;
+    }
+    let tla_store = manifest.components.tla_comparator_store.as_deref()?;
+    if !file_matches_digest(&physical_root.join("tless_store.bin"), tla_store) {
         return None;
     }
     if !file_matches_digest(
@@ -299,6 +306,7 @@ mod tests {
                 sections_absent_graph: Some(digest_of(b"absent")),
                 label_shuffled_graph: Some(digest_of(b"shuffled")),
                 signature_artifact: teacher_digest,
+                tla_comparator_store: Some(digest_of(b"tla-store")),
                 tokenizer: None,
                 score_report: digest_of(b"score"),
                 compile_report: digest_of(b"cover"),
@@ -338,6 +346,7 @@ mod tests {
         for (relative, bytes) in [
             ("graph/score_sections_absent.r4g1", b"absent".as_slice()),
             ("graph/score_label_shuffled.r4g1", b"shuffled".as_slice()),
+            ("tless_store.bin", b"tla-store".as_slice()),
             ("graph/score_report.json", b"score".as_slice()),
             ("graph-cover/cover_report.json", b"cover".as_slice()),
             ("graph/deployed_quality_report.json", b"quality".as_slice()),
@@ -383,6 +392,7 @@ mod tests {
             deployed_quality_report: Vec::new(),
             sections_absent_graph: Vec::new(),
             label_shuffled_graph: Vec::new(),
+            tla_comparator_store: Vec::new(),
             cross_surface_parity: Vec::new(),
             witness_replay: Vec::new(),
             score_report: Vec::new(),

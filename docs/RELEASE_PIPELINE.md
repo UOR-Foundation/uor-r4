@@ -19,10 +19,10 @@ A release tag `vX.Y` binds, in one auditable place:
   `docs/inference_contract.md` (in the release notes);
 - **bundle identity** — the blake3 component digests (normative graph,
   sections-absent and label-shuffled control graphs, signature artifact,
-  tokenizer, score/compile reports, normative deployed-quality report, raw
-  cross-surface parity evidence, and raw witness replay) declared by the
-  attached schema-2 `release-bundle.json`. The quality report in turn
-  content-binds the corpus pair, tokenizer adapter, compiler
+  plain-TLA comparator store, tokenizer, score/compile reports, normative
+  deployed-quality report, raw cross-surface parity evidence, and raw witness
+  replay) declared by the attached schema-2 `release-bundle.json`. The quality
+  report in turn content-binds the corpus pair, tokenizer adapter, compiler
   revision/configuration, selector semantics, held-out partition, controls,
   raw parity/replay evidence, and exact production decode profile. Schema-1
   manifests remain readable only as historical research evidence and cannot
@@ -68,7 +68,8 @@ pinned snapshot), so the model bundle is attached by the maintainer:
    cd .uor-models/compiled/<name>
    tar -czf /tmp/release-bundle.tar.gz \
      graph/score.r4g1 graph/score_sections_absent.r4g1 \
-     graph/score_label_shuffled.r4g1 tless_artifacts.bin tokenizer.bin \
+     graph/score_label_shuffled.r4g1 tless_artifacts.bin tless_store.bin \
+     tokenizer.bin \
      graph/score_report.json graph/deployed_quality_report.json \
      graph/cross_surface_parity.json graph/witness_replay.json \
      graph-cover/cover_report.json corpus.meta corpus.records \
@@ -96,9 +97,9 @@ r4 install-release --tag vX.Y --repo owner/name --name custom-install
 `install-release` (`src/release_install.rs`) downloads the two bundle assets,
 requires exactly the schema-2 production inventory above, hard-verifies every
 manifest component digest, and independently reproduces the deployed-quality
-bindings from the extracted graph, teacher artifact, corpus, tokenizer,
-adapter, reports, both planted control graphs, raw cross-surface rows, and
-independently replayed witness rows. It refuses unknown files, symlinks,
+bindings from the extracted graph, teacher artifact, exact plain-TLA comparator
+store, corpus, tokenizer, adapter, reports, both planted control graphs, raw
+cross-surface rows, and independently replayed witness rows. It refuses unknown files, symlinks,
 missing/tampered raw evidence, legacy/sample/off-serving evidence, or any
 identity mismatch, never overwrites an existing install, and only then moves
 the bundle into

@@ -101,6 +101,11 @@ pub struct BundleComponentDigests {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub label_shuffled_graph: Option<String>,
     pub signature_artifact: String,
+    /// Required in schema 2: exact graded-store bytes used by the same-position
+    /// plain-TLA comparator. Production admission re-hashes this component and
+    /// reproduces the comparator definition CID carried by the quality report.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tla_comparator_store: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tokenizer: Option<String>,
     pub score_report: String,
@@ -144,6 +149,7 @@ pub struct ReleaseAdmissionIdentity {
     pub deployed_quality_report_cid: String,
     pub sections_absent_graph_cid: String,
     pub label_shuffled_graph_cid: String,
+    pub tla_comparator_store_cid: String,
     pub cross_surface_parity_cid: String,
     pub witness_replay_cid: String,
     pub selector: SelectorIdentity,
@@ -256,6 +262,7 @@ impl ReleaseBundleManifest {
                 sections_absent_graph: Some(admission.sections_absent_graph_cid),
                 label_shuffled_graph: Some(admission.label_shuffled_graph_cid),
                 signature_artifact: provenance.digests.signature_artifact.clone(),
+                tla_comparator_store: Some(admission.tla_comparator_store_cid),
                 tokenizer: provenance.digests.tokenizer.clone(),
                 score_report: provenance.digests.score_report.clone(),
                 compile_report: provenance.digests.compile_report.clone(),
@@ -414,6 +421,17 @@ impl ReleaseBundleManifest {
             }
             Some(_) | None => {}
         }
+        match self.components.tla_comparator_store.as_deref() {
+            Some(digest) if !is_blake3_cid(digest) => {
+                return Some(format!(
+                    "components.tla_comparator_store {digest:?} is not a blake3:<hex> digest"
+                ));
+            }
+            None if require_deployed_quality => {
+                return Some("schema 2 requires components.tla_comparator_store".to_string());
+            }
+            Some(_) | None => {}
+        }
         let schema_two_evidence = [
             (
                 "components.sections_absent_graph",
@@ -494,6 +512,7 @@ mod tests {
                 sections_absent_graph: Some(VALID_DIGEST.to_string()),
                 label_shuffled_graph: Some(VALID_DIGEST.to_string()),
                 signature_artifact: VALID_DIGEST.to_string(),
+                tla_comparator_store: Some(VALID_DIGEST.to_string()),
                 tokenizer: Some(VALID_DIGEST.to_string()),
                 score_report: VALID_DIGEST.to_string(),
                 compile_report: VALID_DIGEST.to_string(),
@@ -571,6 +590,7 @@ mod tests {
                 deployed_quality_report_cid: VALID_DIGEST.to_string(),
                 sections_absent_graph_cid: VALID_DIGEST.to_string(),
                 label_shuffled_graph_cid: VALID_DIGEST.to_string(),
+                tla_comparator_store_cid: VALID_DIGEST.to_string(),
                 cross_surface_parity_cid: VALID_DIGEST.to_string(),
                 witness_replay_cid: VALID_DIGEST.to_string(),
                 selector: valid_selector(),
@@ -610,6 +630,10 @@ mod tests {
         );
         assert_eq!(
             manifest.components.label_shuffled_graph.as_deref(),
+            Some(VALID_DIGEST)
+        );
+        assert_eq!(
+            manifest.components.tla_comparator_store.as_deref(),
             Some(VALID_DIGEST)
         );
         assert_eq!(
@@ -663,6 +687,7 @@ mod tests {
                 deployed_quality_report_cid: VALID_DIGEST.to_string(),
                 sections_absent_graph_cid: VALID_DIGEST.to_string(),
                 label_shuffled_graph_cid: VALID_DIGEST.to_string(),
+                tla_comparator_store_cid: VALID_DIGEST.to_string(),
                 cross_surface_parity_cid: VALID_DIGEST.to_string(),
                 witness_replay_cid: VALID_DIGEST.to_string(),
                 selector: valid_selector(),
@@ -759,6 +784,16 @@ mod tests {
             .expect("missing deployed-quality report rejected");
         assert!(
             reason.contains("deployed_quality_report"),
+            "reason was: {reason}"
+        );
+
+        let mut manifest = valid_manifest();
+        manifest.components.tla_comparator_store = None;
+        let reason = manifest
+            .validate()
+            .expect("missing TLA comparator store rejected");
+        assert!(
+            reason.contains("tla_comparator_store"),
             "reason was: {reason}"
         );
 
