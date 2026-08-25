@@ -123,6 +123,7 @@ fn routing_record(trace: SignatureRoutingTrace) -> RoutingRecord {
             SignatureRoutingSource::SuffixDfa => "suffix-dfa",
             SignatureRoutingSource::ContextSignature => "context-signature",
             SignatureRoutingSource::SessionSignature => "session-signature",
+            SignatureRoutingSource::ComposedSignatures => "composed-signatures",
             SignatureRoutingSource::NearestContextSignature => "nearest-context-signature",
             SignatureRoutingSource::NearestSessionSignature => "nearest-session-signature",
             SignatureRoutingSource::DefaultNode => "default-node",
@@ -152,7 +153,10 @@ fn is_effect(record: &EffectRecord) -> bool {
         && record.full_routing.context_admitted_nodes == 0
         && record.full_routing.session_probe_attempted
         && record.full_routing.session_admitted_nodes > 0
-        && record.full_routing.selected_source == "session-signature"
+        && matches!(
+            record.full_routing.selected_source,
+            "session-signature" | "composed-signatures"
+        )
         && (record.candidate_list_changed || record.served_token_changed)
 }
 
