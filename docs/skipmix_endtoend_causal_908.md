@@ -1,28 +1,38 @@
-# Skip-mix end-to-end deployed causal run (#908, follow-up to #897/#904/#906)
+# Skip-mix end-to-end R4Engine causal run (#908, follow-up to #897/#904/#906)
 
 Empirical record. The S1-redesign injected-candidate skip-mix lane cleared its
-deployed **fidelity** spot-check in #906 (58/87, `docs/skipmix_candidate_injection_906.md`).
-Fidelity is not promotion: per the #822 §6-4 re-entry decision the frozen **20‰
-end-to-end causal floor** is the S1 promotion gate. This run measures the lane's
-causal effect on deployed held-out top-1 against that floor.
+then-described deployed **fidelity** spot-check in #906 (58/87,
+`docs/skipmix_candidate_injection_906.md`). Fidelity is not promotion: per the
+#822 §6-4 re-entry decision the frozen **20‰ end-to-end causal floor** is the
+S1 promotion gate. This run measures the lane's causal effect in the exact
+`R4Engine` harness against that floor; the #933 correction below classifies
+that harness as reference/off-serving.
 
 - **Status:** S1 (#822) child #908. Evidence for the maintainer S1 promotion
   verdict; this record does not itself promote the stage.
-- **Execution scope:** offline fit + emit, plus the **deployed** `R4Engine`
-  admission and prediction path. **Teacher-free** — deployed base vs deployed
-  skip-mix served tokens, both scored against the corpus's recorded `t_argmax`
-  labels. No live teacher pass.
-- **Conformance mapping:** binds existing capabilities on the deployed path; no
-  `model/ids.toml` row and no `CONFORMANCE.md` change under this issue (RF-31
-  registration is a separate, promotion-conditional step).
-- **Claim status:** Empirical Criterion (`docs/formal_vocabulary.md`).
+- **Historical execution-scope declaration (#908; corrected below):** offline
+  fit + emit, plus the then-described **deployed** `R4Engine` admission and
+  prediction path. **Teacher-free** — base vs skip-mix selected tokens, both
+  scored against the corpus's recorded `t_argmax` labels. The #933 audit later
+  classified that exact selector as reference/off-serving, not the normative
+  production token selector. No live teacher pass.
+- **Historical conformance declaration (#908; corrected below):** the run was
+  recorded as binding existing deployed-path capabilities. The #933 audit
+  supersedes that scope. No `model/ids.toml` row and no `CONFORMANCE.md` change
+  landed under #908; RF-31 registration remained a separate,
+  promotion-conditional step.
+- **Claim class and status:** **Empirical Criterion. Status: Empirical.**
 
 Harness: `crates/uor-r4-api/tests/skipmix_endtoend_causal_908.rs` (`--ignored`;
-exercises the real production code path). Machine result:
+exercises the exact `R4Engine` path, now classified reference/off-serving).
+Machine result:
 `docs/skipmix_endtoend_causal_908_result.json` (result_cid
 `blake3:e32e4e33…`).
 
 ## Hypothesis
+
+**Empirical Criterion. Status: Empirical. Historical declared execution scope:
+the #908 `R4Engine` harness; corrected to reference/off-serving below.**
 
 The injected-candidate skip-mix lane (`predict_decision_candidates_with_skipmix`),
 fit + emitted through the real release emitter and consumed by the deployed
@@ -59,6 +69,9 @@ reachability ceiling 549.2‰ (≫ 20‰), subsample net delta +35.67‰ [25.76,
 was then launched.
 
 ## Results — attested bundle `smollm2-360m-broad-clean`
+
+**Empirical Criterion. Status: Empirical. Execution scope: the exact #908
+`R4Engine` harness, now classified as reference/off-serving.**
 
 `corpus.meta` CID `blake3:aa9d1767…`; train / held-out 288,794 / 72,130.
 skip_artifact_cid `blake3:19eb04d7…`; base_artifact_cid `blake3:aaf98b68…`.
@@ -117,3 +130,24 @@ serving row, no `CONFORMANCE.md` change, no wire-format/compile-time change and
 no recompile of any released bundle. This record measures what the lane *would*
 do if turned on; turning it on (RF-31) is a separate, promotion-conditional step
 gated on the maintainer S1 verdict.
+
+## Append-only execution-scope correction — 2026-08-24 (#933)
+
+**Empirical Criterion. Status: Empirical. Execution scope:
+reference/off-serving.** The counts, paired interval, reachability
+decomposition, null collapse, CIDs, and deterministic reproduction above remain
+valid for the exact harness. The harness exercised
+`R4Engine::predict_decision_candidates_with_skipmix`, which ADR-0001 scopes as
+reference/certifier plus D4 policy—not as the normative production token
+selector. Descriptions above that call this a “deployed” served-token result are
+therefore superseded in scope, not erased: the exact result is **29.702% top-1,
++28.45‰ [25.57, 31.32], reference/off-serving**.
+
+#910 subsequently routed `R4Engine::predict_decision` through this lane and
+emitted SKMX/PSIB, but did not make `R4G1Runtime` consume those sections and did
+not bind a normative full-census report to the release artifact. RF-31 is thus
+NOT ESTABLISHED at normative deployed-serving scope. #933 must reproduce or
+limit this effect through `R4G1Runtime` itself, with absent-section identity,
+planted reachability, common sampled/greedy/beam candidates, typed report
+binding, and the predeclared teacher-free decision gates. The frozen +20‰ floor
+is unchanged.

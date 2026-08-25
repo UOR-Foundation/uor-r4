@@ -6,9 +6,9 @@ programme — what has been measured, refuted and left open — lives in
 purpose. Research direction is set by measurement and changes faster than this
 list does.
 
-_Last reviewed: 2026-08-22 (S4 closed `LIMIT`: RF-33 remains limited to 12/20 prior
-joint-split cells, geometry added no advantage, and untouched final-partition reasoning was
-not established). Prior: 2026-08-20 (S0 promoted; S1 became the entry stage)._
+_Last reviewed: 2026-08-24 (#933 reopened S0 after a scorer-scope audit: RF-31 is
+NOT ESTABLISHED at normative deployed-serving scope pending an exact R4G1Runtime
+re-emission and teacher-free census). Prior: 2026-08-22 (S4 closed `LIMIT`)._
 
 > **Post-v0.1 intelligence sequencing lives in the
 > [R4 Intelligence Completion Plan](docs/r4_intelligence_completion_plan.md)** —
@@ -18,39 +18,29 @@ not established). Prior: 2026-08-20 (S0 promoted; S1 became the entry stage)._
 
 ## Next up (recommended sequencing)
 
-The v0.1 engineering epics closed 2026-08-19 — the serving epic (**#655**),
-distribution (**#741**, release **v0.1** published), the ask-path abstention gate
-(**#811**), and the route-attention decision (**#804**). The sequenced successor is the
-**R4 Intelligence programme (#820)**; its authoritative completion plan holds the live
-stage hierarchy and verdicts. As of 2026-08-22, S4 (#826) is closed **`LIMIT`**:
-RF-33 establishes bounded typed state-transition planning on 12/20 previously evaluated
-joint-split cells; the pinned W(3,3) mapping adds no equal-budget advantage; and the
-untouched final-partition reasoning claim is not established because the committed
-benchmark has no valid sealed final cell. This is not a general-reasoning or free-running
-generation claim. The maintainer-decision items below remain valid inputs to the programme,
-each needing its own contract when picked up:
+The immediate prerequisite is **#933**, the reopened S0 truth-boundary child.
+ADR-0001 still names `R4G1Runtime` as the sole normative production
+candidate/token selector, but #908 measured `R4Engine` in a reference/off-serving
+harness and #910 did not add SKMX/PSIB consumption to `R4G1Runtime`. The existing
+29.702% result therefore remains valid empirical reference evidence, not a
+deployed-serving result. #933 must unify the production decode surfaces, bind a
+versioned deployed-quality report, re-emit the canonical broad graph, and record a
+teacher-free RATIFY/LIMIT/RETIRE/UNAVAILABLE verdict before downstream work resumes.
 
-1. **Recompile the canonical local bundles with the #755 fix and take a
-   fresh quality read** (the audit's E-1 run contract; the standing next
-   action). The decode-default change made baseline output *valid* (15/15
-   on the declared canary) but distinctness and factual quality remain
-   research-grade, and the v0.1 bundle's own score report keeps it below
-   the serving-admission quality bar (CLI-served today, refused by the
-   server's r4g1 tier). A post-#755 recompile that clears its own bar is
-   the path to a **server-admissible release bundle**, and it decides
-   whether the #460-lineage codebook-collision work needs its own issue.
-2. **The #784 family** — output distinctness (context-code convergence)
-   plus the D4 semantic-OOD finding (#811): the sharpest open quality
-   question now that route-attention is measured and closed. Needs a
-   maintainer-approved pre-registered contract; the S1 verdict's
-   temporal-smoothness finding (#605) is directly relevant input.
-3. **Untracked remnants worth new issues when picked up:** the #653
-   phase-2 "defer-open" items (GNAF cost/witness seam, xtask
-   proof-integrity ports, Lean CI policy), the #759→#460
-   codebook-collision root cause, a future vacuity-robust route-attention
-   contract (excess-over-N2 primary, or restricted-forward parity — #605
-   verdict), and the eventual `uor-r4` alias-removal cleanup (#655-F
-   deprecation window).
+Current order:
+
+1. **#933 — restore normative R4G1 serving reachability and re-ratify RF-31.**
+   The #933 implementation restores RF-31's structural scope as
+   `normative-runtime` / `deployed-serving`, while its empirical quality remains
+   NOT ESTABLISHED until the exact canonical sample/census records RATIFY,
+   LIMIT, RETIRE, or UNAVAILABLE.
+2. **Then follow the native dependency chain #932 → #931 → #839.** No hours-class
+   teacher or parity run is part of #933; its quality evidence is teacher-free over
+   the already-recorded canonical labels.
+3. **Deferred research and product backlog remains unchanged:** the #784
+   context-code-convergence family, the #653 phase-2 formal remnants, the
+   #759→#460 codebook-collision root cause, a future vacuity-robust
+   route-attention contract, and eventual `uor-r4` alias removal.
 
 ## Landed
 

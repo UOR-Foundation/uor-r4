@@ -303,6 +303,20 @@ scorers are explicitly scoped; a certifier measurement is no longer read as a
 served-path result, and scorer divergence fails closed rather than serving a
 drifted token.)
 
+**Scope correction (2026-08-24, #933).** **Empirical Criterion. Status:
+Empirical. Execution scope: reference/off-serving.** #908's 29.702% skip-mix
+result and +28.45‰ paired improvement exercised
+`R4Engine::predict_decision_candidates_with_skipmix`, explicitly outside the
+ADR-0001 normative served-token selector. #910 changed that reference lane and
+compiler emission, but `R4G1Runtime` did not consume SKMX/PSIB, default sampled
+generation could bypass the lane, and the strict quality report scored a
+certifier row rather than the exact normative production selector. Those exact
+measurements remain valid only for that declared harness and execution scope;
+they do not establish RF-31 deployed serving. #933 reopens S0 to restore one
+selector, bind the exact report identities, re-emit the broad graph, and record
+a teacher-free normative RATIFY/LIMIT/RETIRE/UNAVAILABLE verdict. Until then,
+RF-31 is **NOT ESTABLISHED** at normative deployed-serving scope.
+
 **Continuation (2026-08-19, the #655 close-out measurements).** The
 prompt-insensitivity question got sharper and partially decomposed. The F-p2
 canary (#655, 20 declared prompts × 2 passes on `smollm2-360m-broad`)
@@ -487,7 +501,7 @@ is total.** [`docs/free_running_eval_841.md`](free_running_eval_841.md) freezes 
 sequence-level evaluation (prompt-family v1, horizon ladder, trace schema v1 with
 per-step path attribution, deterministic primary metrics, planted early-drift and
 repetition-only negatives, the corrective-round stopping rule for #840) and run-1
-executes it against the normative deployed `R4Engine` on the #833 bundle (harness
+executes it against the `R4Engine` reference/off-serving path on the #833 bundle (harness
 `crates/uor-r4-api/tests/free_running_eval_841.rs`; record
 `docs/free_running_841_result.json`). Under greedy decoding on 100 held-out story
 prompts at H=32: the **median first-divergence step is 0** (590‰ of student rollouts
@@ -511,10 +525,11 @@ executes the #840 run contract's binding cheap instrument before any corrective 
 (harness `crates/uor-r4-api/tests/free_running_reachability_840.rs`; CID-bound record
 `docs/free_running_reachability_840_result.json`, `result_cid blake3:e9f48e20…`). It
 re-measures the frozen prompt-family v1 free-running gap, teacher-free, on TWO engines
-built from the same recompiled sections (the #908 machinery): a `base` engine (empty lane
+built from the same recompiled sections (the #908 machinery): a `base` `R4Engine` (empty lane
 sections — it reproduces #841 exactly: 304‰ TF, 99/100 suffix-local, and its base graph
-CID `blake3:aaf98b68…` is byte-identical to #908's) and the deployed `skip` engine (the
-real fitted SKMX/PSIB — the RF-31 lane). **Empirical Criterion. Status: Empirical.** The
+CID `blake3:aaf98b68…` is byte-identical to #908's) and a `skip` `R4Engine` (the
+real fitted SKMX/PSIB — now scoped as the RF-31 reference lane). **Empirical Criterion.
+Status: Empirical. Execution scope: reference/off-serving.** The
 activated lane raises matched teacher-forced agreement (304 → 348‰) and perturbs
 free-running (suffix-locality 99/100 → 19/100; 100/100 rollouts differ from base), but it
 moves free-running *away* from coherence, not toward it: diverged-at-step-0 rises
@@ -563,10 +578,12 @@ stage verdict against its three completed children (a separate tracker action).
 **S4 — bounded typed planning is LIMITED; geometry adds no advantage; untouched final-partition
 reasoning is not established (#843/#845/#846, 2026-08-22).**
 [`docs/bounded_semantic_transitions_843.md`](bounded_semantic_transitions_843.md) establishes
-RF-33 on the normative deployed path: the fixed-capacity, allocation-free, P-4-only
-`bounded-breadth-first` planner reaches correct-outcome rate 1.0000 in all 20 development
-joint-split cells and clears the frozen effect floor over the strongest non-oracle null in
-**12/20**. It remains `LIMITED` because direct continuation also solves the other eight cells.
+RF-33 only for the portable `R4G1Runtime::plan_bounded` API and its certifier harness: the
+fixed-capacity, allocation-free, P-4-only `bounded-breadth-first` planner reaches
+correct-outcome rate 1.0000 in all 20 development joint-split cells and clears the frozen
+effect floor over the strongest non-oracle null in **12/20**. It remains `LIMITED` because
+direct continuation also solves the other eight cells. No deployed serving surface calls the
+planner, so this evidence is off-serving and does not establish deployed planning reachability.
 [`docs/w33_geometry_qualification_845.md`](w33_geometry_qualification_845.md) then records
 `NO GEOMETRIC ADVANTAGE`: the pinned mapping loses to informed non-geometric ordering under equal
 budgets and behaves like its randomized/relabelled/phase controls, so it stays offline/reference.

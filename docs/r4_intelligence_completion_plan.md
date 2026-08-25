@@ -76,6 +76,8 @@ children, its milestone, its promotion gate, and its final verdict.
 3. #831 — Designate the normative R4G1 scorer
 4. #832 — Commit CID-bound suites and per-token attribution
 5. #833 — Rebuild the attested broad bundle and re-ratify the baseline
+6. #933 — Restore normative R4G1 serving reachability, bind deployed quality,
+   and re-ratify RF-31 *(foundational truth correction; added 2026-08-24)*
 
 Stage order, then the parent tracker's listed child order, governs what is worked next.
 A later stage's preparatory child does **not** displace the next sequential stage item
@@ -116,6 +118,26 @@ The stage kill/redesign criterion is **not** triggered: the claimed signals repr
 pinned source inputs through the deployed path (byte-reproducible rebuild, admitted bundle,
 Gate C within bound). Downstream quality, geometry, and scale promotions are therefore
 authorized to proceed from this baseline.
+
+### S0 evidence-boundary correction — REOPENED (2026-08-24, #933)
+
+The PROMOTE entry above is retained as the decision recorded on 2026-08-20, but it
+is not the current completion verdict. A source-and-call-graph audit found that its
+production-quality premise crossed ADR-0001's scorer boundary: #833's source,
+corpus, attestation, and byte-determinism evidence remains established, while its
+Gate C and local `R4Engine` canaries do not establish strict production admission
+or token selection by the sole normative scorer. #821 is therefore reopened with
+foundational child #933.
+
+Likewise, #908's 29.702% top-1 and +28.45‰ paired effect remain valid
+teacher-free empirical evidence for the `R4Engine` reference/off-serving harness.
+#910 routed `R4Engine` and compiler emission through SKMX/PSIB but did not make
+`R4G1Runtime` consume those sections; it therefore did not establish RF-31 at
+`normative-runtime` / `deployed-serving` scope. RF-31 is NOT ESTABLISHED there
+until #933 produces exact absent/present reachability, unified production decode,
+CID-bound report admission, and the conditional full-census verdict. #933 is a
+prerequisite for #932 → #931 → #839; no later-stage result may silently substitute
+for this missing S0 evidence.
 
 ### S1 stage verdict — REVISE (2026-08-21)
 
@@ -205,6 +227,13 @@ happened, and this is its resolution.
   routes through the lane, the compile path fits and emits the SKMX/PSIB
   sections, and the capability is registered as **RF-31** — under #910.
 
+**Evidence-scope correction (2026-08-24, #933).** The S1 decision and frozen
+20‰ floor remain historical inputs, but “deployed” in the #908/#910 chain meant
+the `R4Engine` harness, not ADR-0001's normative `R4G1Runtime` served-token path.
+The +28.45‰ result is retained at reference/off-serving scope. RF-31 serving
+activation and the S1 production attribution are NOT ESTABLISHED pending #933's
+normative re-emission and teacher-free evidence branch.
+
 ### S2 stage verdict — REVISE (2026-08-21)
 
 Items A and B are closed and item C is re-scoped, so **S2 is revised**: abstention
@@ -254,7 +283,8 @@ generation claim into any downstream stage. This entry mirrors the tracker verdi
 - **#840 (item B).** `GENERATION-NOT-ESTABLISHED` (do-not-launch) (PR #912, `35f8cc87`):
   the corrective student-prefix run is not launched because the reachable ceiling is
   ~100× below the frozen §6 bar (correctable footprint ~1‰ vs the required 100‰
-  diverged-at-0 drop) and the promoted skip-mix representation (RF-31) *regresses*
+  diverged-at-0 drop) and the then-measured `R4Engine` skip-mix representation
+  (retained as reference/off-serving evidence under #933) *regresses*
   free-running (suffix-locality 99→19 of 100, cycle collapse 710‰→1000‰). The limiting
   factor is the representation, not more same-distribution data or decoding. Records
   `docs/free_running_reachability_840.md`,
@@ -289,8 +319,10 @@ to #823 is converted to a sanctioned parallel-start. This entry mirrors the trac
 decision; **GitHub #826 remains the source of record** (maintainer decision comment,
 2026-08-22).
 
-- **Amended substrate.** S4 builds on the established — not promoted-generative — substrate:
-  S1 prompt causality is promoted (RF-31, +28.45‰ [25.57, 31.32]); S2 selective prediction
+- **Amended substrate.** S4 built on the then-established — not promoted-generative — substrate:
+  S1 had reference/off-serving `R4Engine` prompt-conditioning evidence
+  (+28.45‰ [25.57, 31.32]), while RF-31 normative deployed-serving attribution is now
+  NOT ESTABLISHED pending #933; S2 selective prediction
   is frozen and honest (REVISE, no calibrator, #839 phase-2 independently trigger-gated); S3
   is `LIMIT` (teacher-forced retrieval/continuation, no free-running generation at this
   scope).

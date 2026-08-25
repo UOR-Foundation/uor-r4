@@ -72,3 +72,19 @@ runs only in the `R4G1Runtime` multi-candidate slice; see
   (generated file, not hand-edited).
 - `docs/RESEARCH.md` and `ROADMAP.md` note the S0 normative-scorer designation and link the ADR.
 - Per-token CID-bound attribution **suites** remain scoped to #832 (documented exception).
+
+## Append-only correction — 2026-08-24 (#933)
+
+The ownership decision and the accumulator/selector differential evidence above
+remain established. The broader reachability sentence in acceptance item 2 did
+not remain true after #910: SKMX/PSIB was consumed by `R4Engine`, not by the
+normative `R4G1Runtime`, and production decode surfaces did not share one
+candidate list. That is an implementation/evidence-boundary failure, not a
+superseding scorer decision.
+
+Current status: ADR-0001 is reaffirmed; #821 is reopened with #933; RF-31 is
+NOT ESTABLISHED at normative deployed-serving scope. The missing evidence is
+exact `R4G1Runtime` SKMX/PSIB reachability plus unified production decode and a
+CID-bound deployed-quality census. The planted spec-vs-accumulator negative in
+this record remains valid structural evidence but cannot substitute for that
+serving-path proof.

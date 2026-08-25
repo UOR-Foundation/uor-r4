@@ -260,3 +260,24 @@ and were freshly measured.
 corpus integrity, and attestation are resolved; the bundle lives at
 `.uor-models/compiled/smollm2-360m-broad-clean` (regenerable from the pinned inputs via
 the fixed converter + the recorded-corpus compile chain).
+
+## Append-only scope correction — 2026-08-24 (#933)
+
+The source snapshot, clean-corpus identities, #755 ordering, deterministic
+compiler outputs, package attestation, and teacher-floor invariance recorded
+above remain valid. The production-quality attribution does not.
+
+The cited `r4 ask` canary loaded with `R4Engine::load_accepting_quality`, an
+explicit research/quality-bypass loader, rather than proving strict production
+admission. Gate C's Rule 1+2, best-live, and TLA rows are certifier/offline
+measurements; they do not demonstrate the token selected by ADR-0001's sole
+normative `R4G1Runtime` serving path. The attested graph also predates #910 and
+carries no active SKMX/PSIB serving sections. Consequently the 24.39% Rule 1+2
+and 28.12% TLA rows remain valid historical comparator evidence, while normative
+served-token quality and RF-31 activation on this bundle are **NOT ESTABLISHED**.
+
+#933 retains this bundle's pinned inputs, re-emits its graph through the
+production path, binds the exact deployed-quality report and release manifest,
+and performs only teacher-free reachability/sample/conditional-census evidence.
+Until that outcome is recorded, this record establishes provenance and
+reproducibility, not strict production admission or normative serving quality.
