@@ -99,8 +99,9 @@ impl VpTree {
                 node_id,
                 prototype: masked_prototype,
                 radius: if trajectory {
-                    let metadata =
-                        trajectory_metadata_word_start(node, head.signature_words())? as usize << 3;
+                    let metadata = (trajectory_metadata_word_start(node, head.signature_words())?
+                        as usize)
+                        << 3;
                     let bytes = rout.get(metadata..metadata + 2)?;
                     u32::from(u16::from_le_bytes([bytes[0], bytes[1]]))
                 } else {
