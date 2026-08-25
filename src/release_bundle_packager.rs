@@ -810,7 +810,12 @@ pub(crate) mod tests {
             bind_graph_head_and_lanes(&base, &teacher, &tokenizer, &corpus_meta, &corpus_records);
         let sections_absent_graph = graph_without_lanes(&graph);
         let label_shuffled_graph = graph_with_shuffled_lane(&graph);
-        let tokenizer_cid = digest(&tokenizer);
+        let tokenizer_cid = digest(b"distinct raw tokenizer definition fixture");
+        assert_ne!(
+            tokenizer_cid,
+            digest(&tokenizer),
+            "source tokenizer definition and exported runtime bytes are separate identities"
+        );
         let mut adapter = TokenizerAdapter {
             family: TokenizerAdapter::HF_BYTE_BPE_FAMILY.to_owned(),
             version: TokenizerAdapter::HF_BYTE_BPE_VERSION,

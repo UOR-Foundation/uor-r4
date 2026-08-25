@@ -301,6 +301,15 @@ pub fn is_blake3_cid(value: &str) -> bool {
         .is_some_and(|hex| hex.len() == 64 && hex.chars().all(|c| c.is_ascii_hexdigit()))
 }
 
+fn is_canonical_blake3_cid(value: &str) -> bool {
+    value.strip_prefix("blake3:").is_some_and(|hex| {
+        hex.len() == 64
+            && hex
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    })
+}
+
 fn validate_cid(field: &'static str, value: &str) -> Option<DeployedQualityValidationError> {
     (!is_blake3_cid(value)).then(|| structural(field, format!("{value:?} is not a blake3 CID")))
 }
@@ -752,6 +761,12 @@ pub fn derive_deployed_quality_bindings(
             "adapter family is empty or version is zero",
         ));
     }
+    if !is_canonical_blake3_cid(&adapter.tokenizer_cid) || cid_is_zero(&adapter.tokenizer_cid) {
+        return Err(binding_error(
+            "tokenizer_adapter.tokenizer_cid",
+            "source tokenizer definition CID is malformed or zero",
+        ));
+    }
     let declared_adapter_digest = adapter.declared_digest();
     if adapter.adapter_digest != declared_adapter_digest {
         return Err(binding_error(
@@ -762,10 +777,15 @@ pub fn derive_deployed_quality_bindings(
             ),
         ));
     }
+    // The adapter record binds the raw source definition (for example,
+    // tokenizer.json), while HEAD binds the exported runtime tokenizer.bin
+    // bytes consumed by the serving engine. They are deliberately distinct
+    // identities and must not be conflated.
+    let deployed_tokenizer_cid = bytes_cid(material.tokenizer);
     require_head_cid(
         "graph.HEAD.tokenizer_cid",
         head.tokenizer_cid(),
-        &adapter.tokenizer_cid,
+        &deployed_tokenizer_cid,
     )?;
 
     let construction_cid = head_cid_string(head.corpus_construction_cid());
@@ -2051,6 +2071,17 @@ mod tests {
             deterministic_story_sample(&noncontiguous_stories, &[0, 1, 2, 3], 2).is_err(),
             "a story that reappears in a disjoint corpus segment must fail closed"
         );
+    }
+
+    #[test]
+    fn adapter_source_cids_are_canonical_lowercase_and_nonzero() {
+        let lower = format!("blake3:{}", "a1".repeat(32));
+        let upper = format!("blake3:{}", "A1".repeat(32));
+        let zero = format!("blake3:{}", "0".repeat(64));
+        assert!(is_canonical_blake3_cid(&lower));
+        assert!(!is_canonical_blake3_cid(&upper));
+        assert!(is_canonical_blake3_cid(&zero));
+        assert!(cid_is_zero(&zero));
     }
 
     #[test]
