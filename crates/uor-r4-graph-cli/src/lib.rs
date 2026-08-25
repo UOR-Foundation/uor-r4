@@ -5471,6 +5471,16 @@ pub fn score_command(args: &[String]) -> Result<(), SourceUnavailable> {
     score_command_with_authority(args, GraphCommandCallerAuthority::Public)
 }
 
+/// Stable score-report provenance for an externally supplied cover.
+///
+/// The report is a deterministic semantic artifact, so it must not retain the
+/// host-specific path from which identical cover bytes happened to be read.
+/// The human-facing terminal log still prints that path; the report binds the
+/// cover container itself.
+fn supplied_cover_report_source(bytes: &[u8]) -> String {
+    format!("provided cover artifact {}", repro::container_kappa(bytes))
+}
+
 /// Score a managed bundle while its server-owned common producer transaction
 /// remains live from Stage A through completion publication.
 pub fn score_command_under_producer_guard(
@@ -5724,11 +5734,7 @@ fn score_command_with_authority(
                 regions.len(),
                 path.display()
             );
-            (
-                regions,
-                structural,
-                format!("cover artifact {}", path.display()),
-            )
+            (regions, structural, supplied_cover_report_source(bytes))
         }
         None => {
             let cover_progress = ScoreProgress::opaque(
@@ -16028,6 +16034,23 @@ mod tests {
 
         let bad = ["--regions-budget", "4"].map(str::to_owned);
         assert!(parse_score_options(&bad).is_err());
+    }
+
+    #[test]
+    fn supplied_cover_report_provenance_is_content_bound() {
+        let bytes = b"same semantic cover bytes";
+        let source = supplied_cover_report_source(bytes);
+        assert_eq!(source, supplied_cover_report_source(bytes));
+        assert_eq!(
+            source,
+            format!("provided cover artifact {}", repro::container_kappa(bytes))
+        );
+        assert_ne!(
+            source,
+            supplied_cover_report_source(b"different semantic cover bytes")
+        );
+        assert!(!source.contains("/tmp/first-stage"));
+        assert!(!source.contains("/tmp/second-stage"));
     }
 
     #[test]
