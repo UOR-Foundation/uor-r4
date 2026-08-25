@@ -210,8 +210,9 @@ CIDs before loading teacher weights.
 
 - **Merge workflow (since 2026-07-22): NO direct pushes to `main`.** A ruleset
   ("main: required checks + merge queue", id 19597522) protects `main`: all
-  changes land via PR, and the single `fast build + product smoke` context must
-  pass with the branch up to date (strict policy). **The merge queue is
+  changes land via PR. `fast build + product smoke` is the single substantive
+  gate; five zero-work compatibility contexts mirror its result until a
+  repository administrator updates the required-context list. **The merge queue is
   ENABLED (since 2026-07-31)**: PRs merge through the queue, and a queued
   PR's head branch is LOCKED — pushes are rejected ("branches that are
   queued for merging cannot be updated") until the PR merges or is
@@ -219,7 +220,7 @@ CIDs before loading teacher weights.
   `main` after it lands (the #323 lesson), not as extra commits on the
   queued branch.
 - **CI critical-path budget (issue #940, 2026-08-25).** Pull requests and
-  speculative merges have one required context: `fast build + product smoke`.
+  speculative merges have one substantive gate: `fast build + product smoke`.
   Docs/non-build changes run claim wording only. Rust/build changes additionally
   run fmt, `cargo check --workspace --all-targets`, and
   `cargo test --workspace --lib`. Do not add certification, research, proof,

@@ -1,8 +1,10 @@
 name: ci
 
 # Issue #940 restores a development gate instead of a certification gauntlet.
-# Pull requests and speculative merges have one required context:
-# `fast build + product smoke`. Documentation changes run claim wording only;
+# Pull requests and speculative merges have one substantive gate:
+# `fast build + product smoke`. The five legacy ruleset names mirror that
+# result until a repository administrator replaces them with the single gate.
+# Documentation changes run claim wording only;
 # Rust/build changes add formatting, workspace compilation, and library tests
 # (which include the product chat/server path). The exhaustive research,
 # portability, proof, fuzz, and release suites remain available on the nightly
@@ -91,6 +93,55 @@ jobs:
         if: steps.scope.outputs.code == 'true'
         run: cargo test --workspace --lib
 
+  # Temporary ruleset compatibility. These jobs perform no duplicate work;
+  # they propagate the one fast gate's result under the five names currently
+  # configured in repository ruleset 19597522. Delete them after an admin
+  # changes the ruleset to require only `fast build + product smoke`.
+  required-core-compat:
+    name: fmt / clippy / tests / no_std / κ
+    if: ${{ always() && (github.event_name == 'pull_request' || github.event_name == 'merge_group') }}
+    needs: fast-gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mirror fast gate result
+        run: test "${{ needs.fast-gate.result }}" = success
+
+  required-audit-compat:
+    name: cargo audit
+    if: ${{ always() && (github.event_name == 'pull_request' || github.event_name == 'merge_group') }}
+    needs: fast-gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mirror fast gate result
+        run: test "${{ needs.fast-gate.result }}" = success
+
+  required-fuzz-compat:
+    name: fuzz smoke (nightly libfuzzer)
+    if: ${{ always() && (github.event_name == 'pull_request' || github.event_name == 'merge_group') }}
+    needs: fast-gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mirror fast gate result
+        run: test "${{ needs.fast-gate.result }}" = success
+
+  required-wasm-compat:
+    name: wasm-pack build (dashboard facade, deploy.yml parity)
+    if: ${{ always() && (github.event_name == 'pull_request' || github.event_name == 'merge_group') }}
+    needs: fast-gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mirror fast gate result
+        run: test "${{ needs.fast-gate.result }}" = success
+
+  required-gate-c-compat:
+    name: Gate C trend alarm
+    if: ${{ always() && (github.event_name == 'pull_request' || github.event_name == 'merge_group') }}
+    needs: fast-gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mirror fast gate result
+        run: test "${{ needs.fast-gate.result }}" = success
+
   # Full certification is retained, but it is no longer a merge requirement.
   gates:
     name: "nightly certification: core ladder"
@@ -168,7 +219,7 @@ jobs:
         run: TLESS_CANONICAL_DETERMINISTIC=1 TLESS_CHECKPOINT=/tmp/ref/out/model.bin cargo test -p uor-r4-core --release --test kappa_reproduction -- --ignored
 
   wasm:
-    name: wasm-pack build (dashboard facade, deploy.yml parity)
+    name: "nightly certification: wasm-pack build"
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
@@ -183,7 +234,7 @@ jobs:
         run: wasm-pack build --target web
 
   gate-c-trend:
-    name: Gate C trend alarm
+    name: "nightly certification: Gate C trend alarm"
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
@@ -210,7 +261,7 @@ jobs:
           retention-days: 90
 
   audit:
-    name: cargo audit
+    name: "nightly certification: cargo audit"
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
@@ -220,7 +271,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
   fuzz-smoke:
-    name: fuzz smoke (nightly libfuzzer)
+    name: "nightly certification: fuzz smoke"
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:

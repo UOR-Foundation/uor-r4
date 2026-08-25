@@ -37,8 +37,10 @@ For example, a WASM-boundary change needs:
 cargo check --target wasm32-unknown-unknown -p uor-r4-wasm-router --lib
 ```
 
-The required CI context compiles the workspace and runs library/product-path
+The substantive CI gate compiles the workspace and runs library/product-path
 unit tests for Rust/build changes. Docs-only changes run claim wording only.
+Temporary zero-work compatibility contexts mirror that result under the
+repository ruleset's five legacy required names.
 BDD, doctests, no_std, deterministic rebuild, κ, Gate C, all-features, WASM,
 fuzz, Kani, conformance, and audit are nightly/manual certification—not routine
 merge blockers.
