@@ -67,14 +67,19 @@ operation census, not by convention.
 > **Status: research project.** Historical
 > [release v0.1](https://github.com/UOR-Foundation/uor-r4/releases/tag/v0.1)
 > ships working binaries and a digest-verified, pre-schema-2 research bundle.
-> Current `main` serves that bundle only through the explicit `--research`
-> compatibility path. Production admission now requires a schema-2 envelope
-> bound to a full deployed-quality census; a missing, sampled, mismatched, or
-> off-serving result is not production evidence. The compiler, runtime,
-> artifact format and measurement harnesses are exercised by CI. Generation
-> quality is *not* competitive with the teacher models it compiles — answers
-> are valid English with weak prompt-conditioning and research-grade
-> factuality; see
+> Current `main` serves that historical bundle only through the explicit
+> `--research` compatibility path. Production admission requires a schema-2
+> envelope bound to a full deployed-quality census; a missing, sampled,
+> mismatched, or off-serving result is not production evidence. #933 has now
+> produced a distinct schema-2 canonical broad bundle whose evaluation required
+> no live teacher forward and that passes those exact admission gates, including
+> strict admission from an empty model store. That result is bound to its
+> artifact, population, selector, and decode configuration; it does not upgrade
+> v0.1 or establish live-teacher parity. The compiler, runtime, artifact format
+> and measurement harnesses are exercised by CI. Generation quality is *not*
+> competitive with the teacher
+> models it compiles — answers are valid English with weak prompt-conditioning
+> and research-grade factuality; see
 > [What actually works](#what-actually-works) for honest numbers. This
 > repository is run as a measured research programme;
 > [docs/RESEARCH.md](docs/RESEARCH.md) records what has been established
@@ -192,18 +197,23 @@ blocks new additions, though ~1,100 legacy files remain tracked in the tree
 Being precise here matters more than being impressive, because this repository's
 whole method is measurement.
 
-> **Current quality-baseline scope (#934 audit, 2026-08-24).** The rounded
-> **29.7%** fixed floor is a tolerance derived from the historical pinned
-> fixture and applies only to pinned/legacy reports. Broad-corpus
-> `relative_tla` reports instead require graph top-1 to meet or exceed the TLA
-> row in the same report. The attested `smollm2-360m-broad-clean` full census is
-> Rule 1+2 **24.393%** versus TLA **28.121%**, so strict production admission is
-> not established. The nearby **29.702%** result from #908 is `R4Engine`
-> reference/off-serving evidence against a paired **+20‰** lane-improvement
-> gate, not an absolute 30% floor. The audit and bounded remediation order live
-> in [the #934 record](docs/canonical_quality_baseline_934.md); follow-on order is
-> #933 (normative R4G1 reachability/admission), then #932 (observable exact BDD
-> parity infrastructure).
+> **Current quality-baseline scope (#933/#934, 2026-08-25).** There is no
+> universal absolute 30% floor. The rounded **29.7%** tolerance belongs only to
+> historical pinned/legacy reports. On the exact 72,130-position canonical
+> broad population, the CID-bound `R4G1Runtime` census records **21,293 / 72,130
+> = 29.5203%**, versus same-position TLA **20,284 / 72,130 = 28.1214%**: paired
+> **+13.988‰**, 95% CI **[11.057, 16.919]**. Against the same-generation
+> sections-absent runtime it records **18,806 / 72,130 = 26.0723%**: paired
+> **+34.479‰ [31.681, 37.277]**, clearing the frozen +20‰ RF-31 floor. #933
+> therefore records **RATIFY** for that exact graph, report, population,
+> selector, and greedy decode, with zero binding/surface/witness failures and
+> strict empty-store admission. The historical **29.702%** #908 result remains
+> separate `R4Engine` reference/off-serving evidence. The repository BDD run
+> was **124 / 124**, but live-teacher parity fixtures were absent and those
+> scenarios vacuously skipped, so it is not parity evidence. See the
+> [#933 evidence record](docs/normative_r4g1_quality_933.md) and
+> [#934 genealogy](docs/canonical_quality_baseline_934.md); #932's observable
+> exact live-teacher BDD work remains a distinct downstream verification task.
 
 **Solid, exercised by CI:**
 
@@ -250,7 +260,10 @@ whole method is measurement.
   in-domain canary from **0/15 valid completions to 15/15** — but
   **prompt-conditioning is still weak**: distinct prompts converge onto
   similar completions (5/15 distinct, tracked as #784), factual content
-  wanders, and the canonical local bundles still predate the #755 recompile.
+  wanders, and the historical shipped/chat bundles still predate the #755
+  recompile. The #933 canonical broad evidence bundle is #755-native, but its
+  teacher-free per-position RATIFY is not an instruction-following or
+  free-running coherence result.
   Semantically unanswerable prompts ("what did I eat for breakfast?") are
   served rather than abstained, because they do not present as
   signature-space novelty to the D4 policy — a measured substrate property

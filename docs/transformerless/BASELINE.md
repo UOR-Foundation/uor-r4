@@ -88,6 +88,34 @@ scope until the content-bound normative-runtime report in
 [`normative_r4g1_quality_933.md`](../normative_r4g1_quality_933.md) receives an
 evidence-backed verdict; #932's BDD parity harness remains downstream.
 
+**Current normative outcome (#933, 2026-08-25; appended correction).** The
+content-bound schema-2 production bundle is **RATIFIED at its exact scope**:
+`R4G1Runtime` greedy decode records **21,293 / 72,130 (29.5203%)**, compared
+with same-position TLA **20,284 / 72,130 (28.1214%)**, for a paired **+13.988
+permille, 95% CI [11.057, 16.919]**. Its same-generation sections-absent
+control records **18,806 / 72,130 (26.0723%)**, giving the RF-31 lane **+34.479
+permille [31.681, 37.277]**. These paired gates, not an absolute 30% threshold,
+are the decision rule.
+
+The binding graph/report CIDs are
+`ff82dfd5f04eac7e944443b1ea4cc9fe93a007b3b8f07286876d52709a98bc49`
+and `88ee8210e1f4c48dc26999f5685350b2d2343676cdbd6f9b1aee7c7f1c66146f`.
+The hardened release manifest's raw BLAKE3 is
+`c2025e9e507e8367993d78bd83ef099ce5851c838d3cc5cf01eda5560986ad33`
+(SHA-256
+`7572e07a1e3722f3ffc0ea749a67b4ac162221de79b5b4b8a315f4e4e6570fde`)
+and it binds comparator-store CID
+`c1749e62077758c4a098e2a02150b5455e1ca3c02c60b87e6d45fcbb9e2b4404`.
+Strict admission passed from an empty model store after verifier hardening at
+`f901cd97577da3117fd52c9b1c6dcf075cc4d3a2` (graph/evaluator revision
+`74ced4d12a84a176d73665106f88d0aab9407453`).
+
+This does not relabel #908's 29.702% `R4Engine` reference/off-serving row and
+does not establish instruction following, reasoning, factuality, semantic
+abstention, free-running coherence, live-teacher parity, or a cross-model
+floor. The BDD suite was 124 / 124, but live-teacher parity fixtures were absent
+and those scenarios vacuously skipped; #932 remains downstream.
+
 **Canonical bits/token (issue #76, resolved 2026-07-22):** one definition — mean cross-entropy of
 the true next token under a scorer's predicted distribution, `(1/N) Σ −log2 P_scorer(v_i|c_i)`
 with floor mass included (GLOSSARY.md). Values are comparable only within the same scorer AND

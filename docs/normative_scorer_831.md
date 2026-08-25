@@ -88,3 +88,35 @@ exact `R4G1Runtime` SKMX/PSIB reachability plus unified production decode and a
 CID-bound deployed-quality census. The planted spec-vs-accumulator negative in
 this record remains valid structural evidence but cannot substitute for that
 serving-path proof.
+
+## Append-only resolution — 2026-08-25 (#933)
+
+The missing serving-path evidence named in the preceding correction is now
+present for one exact canonical bundle. `R4G1Runtime` is the sole candidate and
+token selector across the schema-2 production envelope, and its greedy-decode
+full census records **21,293 / 72,130 (29.5203%)** versus same-position TLA
+**20,284 / 72,130 (28.1214%)**, paired **+13.988 permille, 95% CI [11.057,
+16.919]**. The sections-absent control records **18,806 / 72,130 (26.0723%)**,
+for **+34.479 permille [31.681, 37.277]** attributable to the bounded lane.
+
+The full report records zero mismatch across 72,138 surface checks, zero
+mismatch across 72,130 absent-section identity checks, and 64 / 64 witness
+replays. Its CID is
+`88ee8210e1f4c48dc26999f5685350b2d2343676cdbd6f9b1aee7c7f1c66146f`;
+the graph CID is
+`ff82dfd5f04eac7e944443b1ea4cc9fe93a007b3b8f07286876d52709a98bc49`.
+After hardening, release-manifest raw BLAKE3
+`c2025e9e507e8367993d78bd83ef099ce5851c838d3cc5cf01eda5560986ad33`
+(SHA-256
+`7572e07a1e3722f3ffc0ea749a67b4ac162221de79b5b4b8a315f4e4e6570fde`)
+binds comparator-store CID
+`c1749e62077758c4a098e2a02150b5455e1ca3c02c60b87e6d45fcbb9e2b4404`,
+and strict production admission passed from an empty model store.
+
+**Resolution: RF-31 RATIFY at this exact CID-bound bundle, held-out population,
+`R4G1Runtime`, greedy-decode, schema-2 scope.** This closes the reachability
+exception without broadening ADR-0001 into a universal quality claim. It does
+not establish a 30% absolute floor, live-teacher parity, free-running quality,
+instruction following, reasoning, factuality, or semantic abstention. The BDD
+suite passed 124 / 124, but live-teacher parity fixtures were absent and those
+scenarios vacuously skipped.

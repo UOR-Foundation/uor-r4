@@ -148,6 +148,40 @@ admission, the bounded diagnostic, and the conditional full-census verdict.
 #933 is the prerequisite for #932 → #931 → #839; no later-stage result may
 silently substitute for this missing S0 evidence.
 
+### S0 evidence-boundary correction — RATIFY (2026-08-25, #933)
+
+The reopened evidence branch is resolved. **Empirical Criterion. Status:
+Empirical. Execution scope: normative-runtime / deployed-serving.** Revision
+`74ced4d12a84a176d73665106f88d0aab9407453` re-emitted the canonical broad
+graph and controls, unified every production candidate/token adapter on
+`R4G1Runtime`, and ran the predeclared teacher-free funnel. The 6,000-position
+sample was correctly `INCONCLUSIVE`; the nested 18,000-position extension
+returned `PROCEED`; the full 72,130-position census returned PASS.
+
+The normative row is 21,293 / 72,130 = **29.5203%**, versus same-position TLA
+20,284 / 72,130 = **28.1214%**: +13.988‰, 95% CI [11.057, 16.919]. The
+same-generation sections-absent row is 18,806 / 72,130 = **26.0723%**:
++34.479‰ [31.681, 37.277], clearing the unchanged +20‰ floor. The
+label-shuffled control is −229.003‰; absent identity, cross-surface, and witness
+failures are all zero. Independent 4- and 8-worker runs reproduce the exact
+report and raw parity/witness bytes. Hardened verifier revision
+`f901cd97577da3117fd52c9b1c6dcf075cc4d3a2` strictly admits the schema-2 bundle
+from an empty model store. The manifest's hardened raw BLAKE3 is
+`c2025e9e507e8367993d78bd83ef099ce5851c838d3cc5cf01eda5560986ad33`
+(SHA-256
+`7572e07a1e3722f3ffc0ea749a67b4ac162221de79b5b4b8a315f4e4e6570fde`)
+and it binds comparator store CID
+`c1749e62077758c4a098e2a02150b5455e1ca3c02c60b87e6d45fcbb9e2b4404`.
+
+**Verdict: RATIFY RF-31 and restore the corrected S0 promotion for the exact
+measured artifact/population/decode.** The 2026-08-20 PROMOTE and 2026-08-24
+REOPENED entries above remain the historical decision trail; this entry is the
+current resolution. #908 remains reference/off-serving evidence. No teacher
+forward or live parity run occurred. The BDD suite was 124 / 124, but its
+live-teacher fixtures were absent and those scenarios vacuously skipped; no
+instruction-following, reasoning, or free-running generation claim is promoted.
+The next native dependency is #932 → #931 → #839.
+
 ### S1 stage verdict — REVISE (2026-08-21)
 
 All S1 child work is resolved and the pre-registered kill/redesign criterion is met, so
@@ -242,6 +276,13 @@ the `R4Engine` harness, not ADR-0001's normative `R4G1Runtime` served-token path
 The +28.45‰ result is retained at reference/off-serving scope. RF-31 serving
 activation and the S1 production attribution are NOT ESTABLISHED pending #933's
 normative re-emission and teacher-free evidence branch.
+
+**Evidence-scope resolution (2026-08-25, #933).** The branch named above
+completed with RF-31 RATIFY for its exact canonical bundle, held-out population,
+`R4G1Runtime` greedy decode, and schema-2 envelope: 29.5203% versus TLA 28.1214%
+and +34.479 permille [31.681, 37.277] over the sections-absent control. This
+resolves the production attribution at that bound scope; it does not relabel
+#908 or change S1's historical decisions into free-running evidence.
 
 ### S2 stage verdict — REVISE (2026-08-21)
 
@@ -347,6 +388,12 @@ decision; **GitHub #826 remains the source of record** (maintainer decision comm
   equal-budget baselines) → #846 (certify and bound the claim). Frozen gates unchanged (20‰
   causal floor, #838 selective gates, #841 §6 bar for any generation re-entry). Next
   executable issue: **#844**.
+
+**Substrate resolution (2026-08-25, #933).** RF-31's normative
+deployed-serving attribution is now RATIFIED for the exact #933 canonical
+bundle/population/greedy-decode/schema-2 scope. That later S0 correction does not
+promote S2 or S3, revise any S4 result, or establish free-running coherence; the
+rest of this S4 entry remains unchanged.
 
 ### S4 item A closed; item B active; benchmark Amendment A1 (2026-08-22)
 

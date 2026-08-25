@@ -7,11 +7,11 @@
   selection. `R4Engine` / `GraphScorer` is token-free D4 policy plus an
   explicitly named reference / certifier scope; evidence from it is not
   credited as a deployed-serving result.
-- **Implementation evidence status:** **Historical/partial.** #831 accepted the
-  semantic owner and exercised a limited reachability surface, but did not
-  establish every production entry point or SKMX/PSIB consumption by that
-  owner. RF-31 remains **NOT ESTABLISHED** at deployed-serving scope pending the
-  #933 evidence contract.
+- **Implementation evidence status:** **Current and empirically bound at the
+  #933 scope.** #831 accepted the semantic owner; #933 subsequently established
+  SKMX/PSIB consumption, common production-adapter ownership, zero-mismatch
+  cross-surface evidence, and a strict schema-2 full-census admission envelope.
+  RF-31 is RATIFIED only for that exact measured artifact/population/decode.
 - **Relation to prior records:** Extends `docs/inference_contract.md` (RF-10) and
   `docs/scoring_semantics.md`; does not retract them. Claim language follows
   `docs/formal_vocabulary.md` (normative). **Definition.** This record designates
@@ -134,10 +134,10 @@ deliverable of sibling item **#832** (documented exception, not omitted).
 **Definition.** Every production entry point that selects a token is required
 to reach the normative `R4G1Runtime` selector; the reference scorer is permitted
 only in its named token-free policy and reference/certifier roles. The table
-below records that accepted architecture. It is not proof that #831 mechanically
-executed every row: the #933 audit classified #831 reachability evidence as
-historical/partial, and deployed-serving reachability remains **NOT ESTABLISHED**
-until #933's behavior tests and content-bound cross-surface artifact complete.
+below records that accepted architecture. #831 did not mechanically execute
+every row; its reachability evidence remains historical/partial. #933 supplies
+the missing behavior tests and content-bound cross-surface artifact, with zero
+mismatches on the exact admitted evidence generation.
 
 | Entry point | Path | Reaches |
 |---|---|---|
@@ -226,3 +226,34 @@ proves exact absent-section identity, planted SKMX/PSIB reachability in
 surface, and production admission of a versioned full-census report bound to the
 exact graph, artifact, corpus, tokenizer, partition, selector, and release
 manifest. A missing or mismatched binding is a typed decline, never a PASS.
+
+## Implementation and evidence resolution — 2026-08-25 (#933)
+
+This append resolves the condition above without superseding the ADR.
+`R4G1Runtime::predict_served_candidates*` remains the one candidate/token
+authority; D4 remains token-free policy. Local ask/chat, greedy, pinned-seed
+sampled, beam, HTTP response surfaces, the public library, and WASM all compose
+through the shared normative adapter. The raw eight-row cross-surface artifact
+and the full evaluator together record 72,138 checks with zero mismatches.
+
+**Empirical Criterion. Status: Empirical. Execution scope: normative-runtime /
+deployed-serving.** Graph/evaluator revision
+`74ced4d12a84a176d73665106f88d0aab9407453` records 21,293 / 72,130 =
+29.5203% through the normative selector, versus same-position TLA 20,284 /
+72,130 = 28.1214% (+13.988‰, 95% CI [11.057, 16.919]) and same-generation
+sections absent 18,806 / 72,130 = 26.0723% (+34.479‰ [31.681, 37.277]).
+Internal absent identity is exact on 72,130 positions, the label-shuffled
+control is negative, and witness replay is 64/64 with zero failures.
+
+Hardened verifier revision
+`f901cd97577da3117fd52c9b1c6dcf075cc4d3a2` strictly admits the exact
+schema-2 envelope from an empty model store. The release manifest's hardened raw
+BLAKE3 is
+`c2025e9e507e8367993d78bd83ef099ce5851c838d3cc5cf01eda5560986ad33`
+(SHA-256
+`7572e07a1e3722f3ffc0ea749a67b4ac162221de79b5b4b8a315f4e4e6570fde`)
+and it binds TLA comparator store CID
+`c1749e62077758c4a098e2a02150b5455e1ca3c02c60b87e6d45fcbb9e2b4404`.
+**Verdict: RF-31 RATIFY for this exact graph/report/population/decode.** This is
+not scorer-wide equivalence, a universal quality floor, live-teacher
+parity, instruction following, reasoning, or free-running coherence.

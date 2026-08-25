@@ -2,9 +2,10 @@
 Feature: Normative R4G1 skip-mix serving lane (S0 reconciliation)
   ADR-0001 assigns every production candidate and served token to
   R4G1Runtime. R4Engine may resolve D4 policy but may not substitute its own
-  token. RF-31 stays NOT ESTABLISHED at deployed-serving scope until #933
-  proves bounded SKMX/PSIB reachability, exact absent-section identity,
-  common greedy/sampled/beam candidates, and a CID-bound full-census report.
+  token. These build scenarios establish structural reachability. The separate
+  #933 CID-bound full census RATIFIES only the exact canonical bundle,
+  population, R4G1Runtime greedy decode, and schema-2 envelope; it does not turn
+  this structural row into a universal quality claim.
 
   @RF-31 @build
   Scenario: artifacts without skip-mix sections preserve normative candidates exactly

@@ -151,3 +151,34 @@ limit this effect through `R4G1Runtime` itself, with absent-section identity,
 planted reachability, common sampled/greedy/beam candidates, typed report
 binding, and the predeclared teacher-free decision gates. The frozen +20‰ floor
 is unchanged.
+
+## Append-only normative follow-up — 2026-08-25 (#933)
+
+#933 supplied the distinct evidence that this record deliberately lacked. On
+the newly emitted canonical schema-2 bundle, `R4G1Runtime` greedy decode records
+**21,293 / 72,130 (29.5203%)**, compared with same-position TLA **20,284 /
+72,130 (28.1214%)**, paired **+13.988 permille, 95% CI [11.057, 16.919]**. Its
+same-generation sections-absent control records **18,806 / 72,130 (26.0723%)**,
+so the normative lane effect is **+34.479 permille, 95% CI [31.681, 37.277]**
+and clears the unchanged +20 permille lower-bound gate.
+
+The #933 graph/report CIDs are
+`ff82dfd5f04eac7e944443b1ea4cc9fe93a007b3b8f07286876d52709a98bc49`
+and `88ee8210e1f4c48dc26999f5685350b2d2343676cdbd6f9b1aee7c7f1c66146f`.
+The hardened release-manifest raw BLAKE3
+`c2025e9e507e8367993d78bd83ef099ce5851c838d3cc5cf01eda5560986ad33`
+(SHA-256
+`7572e07a1e3722f3ffc0ea749a67b4ac162221de79b5b4b8a315f4e4e6570fde`)
+binds comparator-store CID
+`c1749e62077758c4a098e2a02150b5455e1ca3c02c60b87e6d45fcbb9e2b4404`;
+strict production admission passed from an empty model store after verifier
+hardening.
+
+**RF-31 is therefore RATIFIED only for the exact #933 bundle, population,
+`R4G1Runtime`, greedy decode, and schema-2 envelope.** This does not relabel the
+#908 29.702% result: that result remains the original `R4Engine`
+reference/off-serving measurement, with its own graph and result CIDs. Neither
+record establishes a universal 30% floor, live-teacher parity, free-running
+coherence, instruction following, reasoning, factuality, or semantic
+abstention. The BDD suite was 124 / 124, but live-teacher parity fixtures were
+absent and those scenarios vacuously skipped.

@@ -6,9 +6,9 @@ programme — what has been measured, refuted and left open — lives in
 purpose. Research direction is set by measurement and changes faster than this
 list does.
 
-_Last reviewed: 2026-08-24 (#933 reopened S0 after a scorer-scope audit: RF-31 is
-NOT ESTABLISHED at normative deployed-serving scope pending an exact R4G1Runtime
-re-emission and teacher-free census). Prior: 2026-08-22 (S4 closed `LIMIT`)._
+_Last reviewed: 2026-08-25 (#933 completed the exact normative-runtime evidence
+branch with RATIFY and strict schema-2 admission). Prior: 2026-08-24 (#933
+reopened S0 after the scorer-scope audit)._
 
 > **Post-v0.1 intelligence sequencing lives in the
 > [R4 Intelligence Completion Plan](docs/r4_intelligence_completion_plan.md)** —
@@ -16,42 +16,49 @@ re-emission and teacher-free census). Prior: 2026-08-22 (S4 closed `LIMIT`)._
 > cross-cutting F0 formal lane). This file stays the **product** capability
 > checklist and defers the ordering of intelligence work to that plan.
 
-> **Quality-baseline sequencing correction (#934 audit, 2026-08-24).** The
-> legacy pinned-report tolerance rounds to 29.7%; it is not a universal 30%
-> product floor. Broad `relative_tla` admission compares graph top-1 with TLA on
-> the same report, and the current broad-clean census is 24.393% versus 28.121%,
-> so strict admission is not established. #908's 29.702% is separate
-> `R4Engine` reference/off-serving evidence whose gate was a paired +20‰ lane
-> delta. [#934's audit record](docs/canonical_quality_baseline_934.md) owns the
-> remediation order; dependent execution proceeds through #933 and then #932.
+> **Quality-baseline reconciliation (#933/#934, 2026-08-25).** The legacy
+> pinned-report tolerance rounds to 29.7%; it is not a universal 30% product
+> floor. The exact canonical broad `R4G1Runtime` census is now 29.5203% versus
+> same-position TLA 28.1214% (+13.988‰, 95% CI [11.057, 16.919]) and 26.0723%
+> with SKMX/PSIB absent (+34.479‰ [31.681, 37.277]). #933 records RATIFY for
+> that CID-bound bundle/population/decode and strict schema-2 admission. #908's
+> 29.702% remains separate `R4Engine` reference/off-serving evidence. See the
+> [#933 record](docs/normative_r4g1_quality_933.md) and
+> [#934 genealogy](docs/canonical_quality_baseline_934.md).
 
 ## Next up (recommended sequencing)
 
-The immediate prerequisite is **#933**, the reopened S0 truth-boundary child.
-ADR-0001 still names `R4G1Runtime` as the sole normative production
-candidate/token selector, but #908 measured `R4Engine` in a reference/off-serving
-harness and #910 did not add SKMX/PSIB consumption to `R4G1Runtime`. The existing
-29.702% result therefore remains valid empirical reference evidence, not a
-deployed-serving result. #933 must unify the production decode surfaces, bind a
-versioned deployed-quality report, re-emit the canonical broad graph, and record a
-teacher-free RATIFY/LIMIT/RETIRE/UNAVAILABLE verdict before downstream work resumes.
+The foundational #933 truth-boundary correction has completed its empirical
+branch with RATIFY: ADR-0001's sole selector now consumes SKMX/PSIB across the
+shared production adapters, and the exact canonical full census is bound into a
+hardened schema-2 envelope that admits from an empty model store. This restores
+the corrected S0 evidence boundary without relabeling #908's reference result or
+claiming live-teacher parity.
 
 Current order:
 
-1. **#933 — restore normative R4G1 serving reachability and re-ratify RF-31.**
-   The #933 implementation restores RF-31's structural scope as
-   `normative-runtime` / `deployed-serving`, while its empirical quality remains
-   NOT ESTABLISHED until the exact canonical sample/census records RATIFY,
-   LIMIT, RETIRE, or UNAVAILABLE.
-2. **Then follow the native dependency chain #932 → #931 → #839.** No hours-class
-   teacher or parity run is part of #933; its quality evidence is teacher-free over
-   the already-recorded canonical labels.
+1. **Continue through the native dependency chain #932 → #931 → #839.** #932
+   owns the exact-parallel, observable live-teacher BDD harness. #933 ran no
+   teacher forward or parity marathon; its full-census quality evidence is
+   teacher-free over already-recorded canonical labels. The repository BDD run
+   was 124 / 124, but live-teacher fixtures were absent and those scenarios
+   vacuously skipped.
+2. **Keep the claim boundary fixed.** The #933 RATIFY is exact-artifact and
+   teacher-forced-position evidence, not instruction following, reasoning, or
+   free-running coherence.
 3. **Deferred research and product backlog remains unchanged:** the #784
    context-code-convergence family, the #653 phase-2 formal remnants, the
    #759→#460 codebook-collision root cause, a future vacuity-robust
    route-attention contract, and eventual `uor-r4` alias removal.
 
 ## Landed
+
+- [x] **#933 normative R4G1 serving and deployed-quality reconciliation** —
+  *RATIFY, 2026-08-25*. One `R4G1Runtime` candidate/token owner now reaches the
+  production adapters; the canonical schema-2 bundle clears same-position TLA
+  and the frozen +20‰ sections-absent gate with zero surface/binding/witness
+  failures and strict empty-store admission. The result is scoped to its exact
+  measured envelope.
 
 - [x] **Wrap transformerless into r4** — *done 2026-07-18*. The full
   transformerless program is integrated into

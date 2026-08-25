@@ -1,8 +1,9 @@
 # Normative R4G1 serving and deployed-quality reconciliation (#933)
 
 - **Parent / stage:** #821, S0 truth and inference closure.
-- **Status:** implementation and evidence pending; RF-31 **NOT ESTABLISHED** at
-  normative deployed-serving scope.
+- **Status:** **RATIFY** for the exact CID-bound canonical bundle, 72,130-position
+  held-out population, `R4G1Runtime` selector, greedy decode, and schema-2
+  production envelope recorded below. This is not a universal 30% floor.
 - **Normative authority:** ADR-0001. `R4G1Runtime` is the sole production
   candidate/token selector; `R4Engine` / `GraphScorer` may resolve tokenless D4
   policy and serve as an explicitly named reference/certifier only.
@@ -305,3 +306,84 @@ failures. No teacher forward, observation run, source download, parity marathon,
 or hours-class process is authorized. Every phase must retain durable progress
 and terminal evidence; missing or interrupted evidence remains `UNAVAILABLE` or
 `NOT_RUN`, never `PASS`.
+
+## Final evidence and verdict — 2026-08-25
+
+**Verdict: RATIFY, at the exact bound scope only.** The canonical full census
+recorded 21,293 / 72,130 correct (**29.5203%**) through `R4G1Runtime`, against
+same-position TLA at 20,284 / 72,130 (**28.1214%**). The paired difference is
+**+13.988 permille**, 95% CI **[+11.057, +16.919]**, or 1,009 additional hits.
+This clears the frozen non-inferiority floor without creating an absolute 30%
+requirement.
+
+The same-generation sections-absent control recorded 18,806 / 72,130
+(**26.0723%**). The sections-present lane therefore contributes **+34.479
+permille**, 95% CI **[+31.681, +37.277]**, or 2,487 additional hits, clearing
+RF-31's frozen +20 permille lower-bound gate. The TRAIN-label-rotated control
+recorded 2,288 / 72,130; its paired effect is **-229.003 permille**, 95% CI
+**[-232.359, -225.647]**, so the planted null has teeth and collapses in the
+predeclared direction.
+
+| Evidence item | Bound value / result |
+|---|---|
+| Canonical graph bytes CID | `ff82dfd5f04eac7e944443b1ea4cc9fe93a007b3b8f07286876d52709a98bc49` |
+| Report-declared graph artifact kappa | `9b7541315037bf4a22173811de57fd9a8af935f90c1a5d2d3f35454b3122ef97` |
+| Score-emitter artifact kappa | `9686cedc18e96cdaebdde1d0903c592f258f0b5633c7b4f9c3511885e9ff9e07` |
+| Canonical full report CID | `88ee8210e1f4c48dc26999f5685350b2d2343676cdbd6f9b1aee7c7f1c66146f` |
+| Score report CID | `f607e4c855ec1fdb7c2f1b9b36267686e6cf57b91dd343b0eb8e9cb364f2e029` |
+| Generation CID | `6a0743691591c553767b25140bdf507de29be7036a968f437ff1d119b0e68f2a` |
+| Sections-absent control CID | `83d57b47cd22ac618e3c3c48806f78fa55b3a16af8c6688fe2ee129a90692d8b` |
+| Rotated-label control CID | `c2dac66217c85306f9eff8a7e1f6125bed33c317405aaabb9498cd84a9c1f871` |
+| Raw cross-surface parity CID | `acc299dabc0415aec0e2cd0dc79368dcd6771dd6817da155c6b0f74258bf651c` |
+| Raw witness replay CID | `8ee93ac2f644f52ce718926cf206625a865ae6fc1d8646aa33219f83860d1898` |
+| TLA/signature CID | `6324aabec22fca5af371333cefc206f9b6762bfb52dccfb8efa0dc8fe5a1efaa` |
+| Tokenizer CID | `70af0cb08bbcd3b323d3387ca1d7d33da39873820604d183711e8e99f9903fc1` |
+| Corpus metadata / records CIDs | `aa9d176779c1d2411e872c49c95ed585ee805ded5fa1b808ddf2f517a245b0ce` / `4692307368fecce481a4aac452fd8df4e63d2f1bd07ee0f2932108f8595f8f62` |
+| Hardened release-manifest raw BLAKE3 | `c2025e9e507e8367993d78bd83ef099ce5851c838d3cc5cf01eda5560986ad33` |
+| Hardened release-manifest SHA-256 | `7572e07a1e3722f3ffc0ea749a67b4ac162221de79b5b4b8a315f4e4e6570fde` |
+| Manifest-bound TLA comparator store CID | `c1749e62077758c4a098e2a02150b5455e1ca3c02c60b87e6d45fcbb9e2b4404` |
+| Graph/evaluator revision | `74ced4d12a84a176d73665106f88d0aab9407453` |
+| Hardened admission-verifier revision | `f901cd97577da3117fd52c9b1c6dcf075cc4d3a2` |
+
+The staged funnel remained decision-bearing: the 6,000-position sample returned
+`INCONCLUSIVE` (report CID
+`e4e25faa2f11061719a02613fd60fe2df3ccf60a359fd7d963f426beb47ca2d5`),
+the independently extended 18,000-position sample returned `PROCEED` (report
+CID `6c0179e20219aa03f07375c790b598814262a1e45db1484d62e60a357711fc16`),
+and only then did the full census run.
+
+All structural falsifiers stayed clear. The evaluator performed 72,130 internal
+absent-section identity checks with zero mismatch. The report records 72,138
+cross-surface checks with zero mismatch: 72,130 population checks plus the eight
+explicit rows retained in the raw parity artifact. Witness replay passed 64 / 64
+with zero failure. Of 71,488 lane-reachable positions, 38,976 changed; 6,586
+moved toward and 4,099 moved away from the recorded label. Final dispositions
+were 71,488 served, 43 abstained, and 599 declined.
+
+Fresh 4-worker and 8-worker staging copies emitted byte-identical graph/control
+artifacts. Their 6,000-position reports, full reports, raw parity artifacts, and
+raw witness artifacts were also byte-identical. The 4-worker and 8-worker full
+evaluations took 246,286 ms and 193,968 ms respectively; graph emission took
+235,842 ms and 170,684 ms, with about 1.45 GB peak resident memory. The wrapped
+8-worker production funnel took 309,640 ms, peaked at 5,525,864,448 bytes, grew
+the bundle by 68,249,064 bytes, and produced a 356,937,979-byte final bundle.
+Worker-count and timing fields intentionally make progress/terminal telemetry
+differ; semantic artifacts do not.
+
+After the admission verifier was hardened to bind the raw manifest, its TLA
+comparator store, and the full evidence chain, strict production admission
+passed from an empty model store. This is the binding admission result; earlier
+pre-hardening or bypass-loader observations are historical diagnostics only.
+
+The repository BDD suite passed **124 / 124**. The live-teacher parity fixtures
+were absent, so those fixture-gated scenarios vacuously skipped; this run is not
+live-teacher parity evidence. #932 remains the downstream live-teacher
+BDD/performance/observability work.
+
+This RATIFY verdict is limited to the exact CIDs above, the declared held-out
+population, `R4G1Runtime`, greedy decode, and the schema-2 production envelope.
+It does not establish instruction following, reasoning, factuality, semantic
+abstention, free-running coherence, live-teacher parity, a cross-model floor, or
+a universal 30% threshold. The 29.702% #908 `R4Engine` result remains valid
+reference/off-serving evidence under its original scope and is not relabeled as
+this deployed-runtime result.
