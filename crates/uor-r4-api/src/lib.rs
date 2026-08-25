@@ -43,7 +43,6 @@ pub mod release_bundle;
 pub mod serving;
 #[cfg(feature = "full")]
 pub mod serving_eval;
-#[cfg(feature = "full")]
 pub mod witness_replay;
 
 // `capability_suite::Stage` (programme stage S0–S7) is deliberately NOT
@@ -68,12 +67,12 @@ pub use deployed_quality::{
     deployed_quality_positions_cid, derive_deployed_quality_bindings, is_blake3_cid,
     parse_deployed_quality_for_research, ActiveSectionIdentity, ActiveSectionSetIdentity,
     ArtifactIdentity, ComparatorIdentity, CompilerIdentity, CorpusIdentity, DecodeIdentity,
-    DecodeMode, DeployedQualityBindingError, DeployedQualityBindingMaterial,
-    DeployedQualityBindings, DeployedQualityReport, DeployedQualityValidationError,
-    EvaluationEvidence, EvaluationMode, ExactRate, ExactSignedRate, NegativeControlEvidence,
-    NegativeControlVerdict, PairedComparison, PairedCounts, PairedInterval, PartitionIdentity,
-    PositionSelectionMode, QualityMeasurements, QualityProfileIdentity, QualityTokenizerIdentity,
-    QualityVerdict, ResearchDeployedQualityReport, SeedIdentity, SelectorIdentity,
+    DecodeMode, DeployedQualityBindingMaterial, DeployedQualityBindings, DeployedQualityReport,
+    DeployedQualityValidationError, EvaluationEvidence, EvaluationMode, ExactRate, ExactSignedRate,
+    NegativeControlEvidence, NegativeControlVerdict, PairedComparison, PairedCounts,
+    PairedInterval, PartitionIdentity, PositionSelectionMode, QualityMeasurements,
+    QualityProfileIdentity, QualityTokenizerIdentity, QualityVerdict,
+    ResearchDeployedQualityReport, SampleDecisionKind, SeedIdentity, SelectorIdentity,
     WitnessReplayEvidence, DEPLOYED_QUALITY_PROFILE_ID, DEPLOYED_QUALITY_PROFILE_VERSION,
     DEPLOYED_QUALITY_REPORT_SCHEMA, LABEL_SHUFFLED_CONTROL_ID, NORMATIVE_EXECUTION_SCOPE,
     NORMATIVE_SELECTOR_ID, NORMATIVE_SELECTOR_SEMANTICS_VERSION, PAIRED_INTERVAL_CONFIDENCE_PPM,
@@ -104,7 +103,6 @@ pub use serving::{
     CROSS_SURFACE_CONTEXT_CAPACITY, CROSS_SURFACE_PARITY_BUNDLE_PATH,
     CROSS_SURFACE_PARITY_EVIDENCE_SCHEMA, CROSS_SURFACE_SESSION_SIGNATURE_CAPACITY,
 };
-#[cfg(feature = "full")]
 pub use witness_replay::{
     parse_and_validate_normative_witness_replay, produce_normative_witness_replay,
     select_normative_witness_positions, NormativeWitnessCandidate, NormativeWitnessCandidateSource,

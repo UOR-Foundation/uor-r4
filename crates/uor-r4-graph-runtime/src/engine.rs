@@ -35,6 +35,10 @@ pub struct ServedCandidate {
     pub token: u32,
     pub score: ScoreQ,
     pub source: ServedCandidateSource,
+    /// A nonzero SKMX primary-row entry contributed to this candidate score.
+    pub skmx_contributed: bool,
+    /// A nonzero PSIB fallback-row entry contributed to this candidate score.
+    pub psib_contributed: bool,
 }
 
 impl ServedCandidate {
@@ -42,6 +46,8 @@ impl ServedCandidate {
         token: 0,
         score: ScoreQ::MIN,
         source: ServedCandidateSource::Base,
+        skmx_contributed: false,
+        psib_contributed: false,
     };
 }
 
@@ -767,12 +773,16 @@ fn make_served_candidate(
             token,
             score: ScoreQ::from_raw(contribution.raw),
             source: ServedCandidateSource::Skipmix,
+            skmx_contributed: contribution.skmx_contributed,
+            psib_contributed: contribution.psib_contributed,
         })
     } else {
         base_score.map(|score| ServedCandidate {
             token,
             score,
             source: ServedCandidateSource::Base,
+            skmx_contributed: false,
+            psib_contributed: false,
         })
     }
 }
@@ -1324,6 +1334,8 @@ impl<'a> R4G1Runtime<'a> {
                         token,
                         score,
                         source: ServedCandidateSource::Base,
+                        skmx_contributed: false,
+                        psib_contributed: false,
                     },
                 );
             }

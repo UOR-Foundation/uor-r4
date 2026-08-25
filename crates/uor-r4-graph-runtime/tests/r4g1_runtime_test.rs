@@ -408,6 +408,8 @@ fn absent_skipmix_sections_preserve_base_candidate_identity() {
     for (served, &(token, score)) in served.ranked().iter().zip(&base[..base_len]) {
         assert_eq!((served.token, served.score), (token, score));
         assert_eq!(served.source, ServedCandidateSource::Base);
+        assert!(!served.skmx_contributed);
+        assert!(!served.psib_contributed);
     }
 }
 
@@ -424,6 +426,8 @@ fn skmx_candidate_injection_reaches_the_normative_winner_without_allocations() {
     assert_eq!(winner.token, 42);
     assert_eq!(winner.score, ScoreQ::from_raw(1_000));
     assert_eq!(winner.source, ServedCandidateSource::Skipmix);
+    assert!(winner.skmx_contributed);
+    assert!(!winner.psib_contributed);
     let attribution = served.attribution().expect("promotion is attributed");
     assert_eq!(attribution.base_token, 8);
     assert_eq!(attribution.promoted_token, 42);
@@ -461,11 +465,11 @@ fn joint_row_presence_gates_psib_and_absent_joint_row_uses_it() {
     let fallback_runtime = R4G1Runtime::parse(&fallback_bytes).expect("fallback artifact parses");
     let mut scores = vec![ScoreQ::MIN; fallback_runtime.node_count() as usize];
     let fallback = fallback_runtime.predict_served_candidates(&[1, 10, 20], None, &mut scores);
-    assert_eq!(
-        fallback.winner().map(|candidate| candidate.token),
-        Some(43),
-        "PSIB supplies candidates only when the joint row is absent"
-    );
+    let fallback_winner = fallback.winner().expect("PSIB supplies a candidate");
+    assert_eq!(fallback_winner.token, 43);
+    assert_eq!(fallback_winner.source, ServedCandidateSource::Skipmix);
+    assert!(!fallback_winner.skmx_contributed);
+    assert!(fallback_winner.psib_contributed);
     let attribution = fallback.attribution().expect("PSIB promotion attribution");
     assert!(!attribution.skmx_contributed);
     assert!(attribution.psib_contributed);
@@ -583,6 +587,8 @@ fn runtime_skipmix_winner_and_attribution_match_an_independent_window_combinator
     let winner = served.winner().expect("runtime winner");
     assert_eq!((winner.token, winner.score.raw()), expected);
     assert_eq!(winner.source, ServedCandidateSource::Skipmix);
+    assert!(winner.skmx_contributed);
+    assert!(winner.psib_contributed);
     let attribution = served.attribution().expect("promotion attribution");
     assert_eq!(
         attribution.base_token,

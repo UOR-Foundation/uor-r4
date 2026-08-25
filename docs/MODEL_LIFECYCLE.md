@@ -1192,6 +1192,15 @@ construction-label rotation, then evaluated on pristine held-out labels).
 Missing controls make the deployed-quality verdict `UNAVAILABLE`; they are
 never treated as favorable zero rows.
 
+When reconciling a previously pinned sections-absent generation, preserve its
+exact pre-transaction `graph/score.r4g1` bytes outside `graph/` before scoring,
+then install those unchanged bytes as
+`graph/score_canonical_base.r4g1` after the successful transaction. This
+optional fourth arm diagnoses compiler/artifact/selector drift only. It is
+bound into the evaluation generation but excluded from quality measurements,
+RF-31/TLA gates, packaging, and production admission. Copying the newly emitted
+graph into that filename would not be a valid pre-re-emission control.
+
 Canonical re-emission uses the same resource wrapper as evaluation so every
 parallel fit retains peak RSS, elapsed time, storage growth, and worker count.
 Its create-once live JSONL samples child-process-tree CPU, RSS, process count,
@@ -1214,7 +1223,7 @@ test ! -e .uor-models/compiled/<model>-staging/graph_emission.log
   --corpus-meta .uor-models/compiled/<model>-staging/corpus.meta \
   --corpus-recs .uor-models/compiled/<model>-staging/corpus.records \
   --artifacts .uor-models/compiled/<model>-staging/tless_artifacts.bin \
-  --cover .uor-models/compiled/<model>/graph-cover/cover.r4g1 \
+  --cover .uor-models/compiled/<model>-staging/graph-cover/cover.r4g1 \
   --out .uor-models/compiled/<model>-staging/graph \
   --bundle-root .uor-models/compiled/<model>-staging \
   --quality-controls on --jobs 8
@@ -1225,11 +1234,21 @@ raw cross-surface artifact and the bounded witness replay from the exact graph,
 teacher artifact, tokenizer, score report, corpus, and evaluated positions.
 Both artifacts bind the tokenizer rather than replaying a nonzero-tokenizer-CID
 graph with an empty adapter. Full mode always executes the deterministic first
-6,000 held-out positions first. A typed `STOP:` sample decision prevents the
-72,130-position census; only `PROCEED:` can launch it. Use
-`scripts/run_deployed_quality.py` for the canonical invocation so resource and
-storage evidence survives negative and unavailable outcomes as a non-semantic
-sidecar.
+6,000 positions of the canonical label-free, story-distributed order first. A
+typed `STOP:` decision prevents the census;
+`PROCEED:` launches it. An underpowered but still reachable result is typed
+`INCONCLUSIVE:` and extends the same immutable, label-free order to 18,000
+positions. At 18,000, an overlapping interval can launch only the full census,
+and only when the reachable ceiling can still clear RF-31 and the measured
+projection is at most 60 minutes. A sample never authorizes production.
+
+Worker-invariance evidence uses independent fresh staging copies: run
+`--mode sample --positions 6000` at each worker count and require identical
+semantic report bytes/CIDs. A later `--mode full` uses another fresh copy and
+executes the binding 6,000 → optional 18,000 → census funnel in one create-once
+invocation. Use `scripts/run_deployed_quality.py` for every canonical invocation
+so resource and storage evidence survives negative and unavailable outcomes as
+a non-semantic sidecar.
 
 Against a valid real bundle directory, the command itself creates and syncs
 `evidence/deployed_quality_invocation_terminal.jsonl` before compiler-revision,

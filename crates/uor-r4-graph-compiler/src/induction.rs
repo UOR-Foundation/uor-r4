@@ -124,7 +124,7 @@ use std::fmt::Write as _;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use uor_r4_core::transformerless::compiler::{
-    self, Corpus, D, SIG_BYTES, SIG_WORDS, STAGES, WINDOW, quantile_radius,
+    self, Corpus, D, SIG_BYTES, SIG_WORDS, STAGES, quantile_radius,
 };
 use uor_r4_core::transformerless::runtime;
 
@@ -642,14 +642,11 @@ pub struct Observation {
 }
 
 /// The context window of one corpus position, oldest first: the fed
-/// tokens `input[start..=i]` within one story, capped at [`WINDOW`] —
+/// tokens `input[start..=i]` within one story, capped at
+/// [`compiler::WINDOW`] —
 /// the same window `observe::observe_sharded` hashes for sample ids.
 pub fn context_window(corpus: &Corpus, i: usize) -> Vec<u32> {
-    let mut start = i;
-    while start > 0 && corpus.story[start - 1] == corpus.story[i] && i + 1 - start < WINDOW {
-        start -= 1;
-    }
-    (start..=i).map(|j| corpus.input[j]).collect()
+    compiler::context_window(corpus, i)
 }
 
 /// Build the cover input vectors of the given corpus positions from the

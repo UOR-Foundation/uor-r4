@@ -6,18 +6,21 @@
 //! bindings, and the token-free-D4 plus R4G1Runtime serving composition are all
 //! checked before a generation can become active.
 
-use serde::Deserialize;
 use uor_r4_core::transformerless::{compiler, hf_bpe::TokenizerAdapter};
 use uor_r4_graph_format::{GraphView, SectionId};
 use uor_r4_model_source::SourceUnavailable;
 
 use crate::deployed_quality::{
     derive_deployed_quality_bindings, DeployedQualityBindingMaterial, DeployedQualityBindings,
-    DeployedQualityReport, LABEL_SHUFFLED_CONTROL_ID,
+    DeployedQualityReport, WitnessReplayEvidence, LABEL_SHUFFLED_CONTROL_ID,
 };
 use crate::engine::{AbiVersion, EngineParts};
 use crate::release_bundle::{BundleAbi, ReleaseBundleManifest};
 use crate::serving::{validate_production_serving_parts, ProductionServingParts};
+use crate::witness_replay::{
+    parse_and_validate_normative_witness_replay, NormativeWitnessReplayMaterial,
+    NormativeWitnessReplaySpec, DEFAULT_NORMATIVE_WITNESS_SAMPLE,
+};
 
 /// Exact bytes that make up one settled schema-2 production generation.
 ///
@@ -191,7 +194,7 @@ pub fn verify_production_envelope(
                 unavailable("certification corpus position does not fit the u64 wire identity")
             })
         })
-        .collect::<Result<Vec<_>, _>>()?;
+        .collect::<Result<Vec<_>, SourceUnavailable>>()?;
 
     let manifest_selector = manifest
         .selector
@@ -274,27 +277,6 @@ fn require_schema_two_digest(
         ))
     })?;
     require_digest(label, bytes, declared)
-}
-
-/// Runtime-readable projection of the canonical witness artifact. Native
-/// packaging independently replays every row; production hosts retain and
-/// check the exact generation identities and aggregate claims consumed by the
-/// deployed-quality report.
-#[derive(Deserialize)]
-struct WitnessReplaySummary {
-    schema: String,
-    graph_cid: String,
-    signature_artifact_cid: String,
-    tokenizer_cid: String,
-    score_report_cid: Option<String>,
-    corpus_meta_cid: String,
-    corpus_records_cid: String,
-    evaluated_positions_cid: String,
-    sample_positions_cid: String,
-    requested: u64,
-    replayed: u64,
-    failures: u64,
-    records: Vec<serde_json::Value>,
 }
 
 pub fn validate_production_evidence_links(
@@ -400,25 +382,46 @@ pub fn validate_production_evidence_links(
         ));
     }
 
-    let witness: WitnessReplaySummary = serde_json::from_slice(parts.witness_replay)
-        .map_err(|error| unavailable(format!("invalid witness replay JSON: {error}")))?;
-    let expected_positions_cid =
-        crate::deployed_quality::deployed_quality_positions_cid(certification_positions);
-    let expected_score_cid = bytes_cid(parts.score_report);
-    if witness.schema != "uor-r4-normative-witness-replay/1"
-        || witness.graph_cid != bytes_cid(parts.graph)
-        || witness.signature_artifact_cid != bytes_cid(parts.signature_artifact)
-        || witness.tokenizer_cid != bytes_cid(parts.tokenizer)
-        || witness.score_report_cid.as_deref() != Some(expected_score_cid.as_str())
-        || witness.corpus_meta_cid != bytes_cid(parts.corpus_meta)
-        || witness.corpus_records_cid != bytes_cid(parts.corpus_records)
-        || witness.evaluated_positions_cid != expected_positions_cid
-        || witness.requested != witness.records.len() as u64
-        || witness.replayed != witness.records.len() as u64
-        || witness.sample_positions_cid != report.witness_replay.sample_cid
-        || witness.requested != report.witness_replay.requested
-        || witness.replayed != report.witness_replay.replayed
-        || witness.failures != report.witness_replay.failures
+    validate_bound_witness_replay(
+        parts.witness_replay,
+        NormativeWitnessReplayMaterial {
+            graph: parts.graph,
+            signature_artifact: parts.signature_artifact,
+            tokenizer: parts.tokenizer,
+            score_report: Some(parts.score_report),
+            corpus_meta: parts.corpus_meta,
+            corpus_records: parts.corpus_records,
+        },
+        certification_positions,
+        &report.witness_replay,
+    )?;
+    Ok(())
+}
+
+/// Validate the complete canonical witness stream at the final production
+/// trust boundary. Digest and aggregate equality are insufficient here: every
+/// schema-2 candidate, including its SKMX/PSIB provenance and lane
+/// attribution, must replay through a fresh normative engine over the exact
+/// certification positions and immutable generation bytes.
+fn validate_bound_witness_replay(
+    bytes: &[u8],
+    material: NormativeWitnessReplayMaterial<'_>,
+    certification_positions: &[u64],
+    expected: &WitnessReplayEvidence,
+) -> Result<(), SourceUnavailable> {
+    let witness = parse_and_validate_normative_witness_replay(
+        bytes,
+        NormativeWitnessReplaySpec {
+            material,
+            evaluated_positions: certification_positions,
+            sample_size: DEFAULT_NORMATIVE_WITNESS_SAMPLE,
+        },
+    )
+    .map_err(|error| unavailable(format!("production witness replay failed: {error}")))?;
+    if witness.sample_positions_cid != expected.sample_cid
+        || witness.requested != expected.requested
+        || witness.replayed != expected.replayed
+        || witness.failures != expected.failures
     {
         return Err(unavailable(
             "deployed-quality report and graph/witness_replay.json do not describe the same replay evidence",
@@ -509,10 +512,6 @@ fn require_non_lane_identity(
     Ok(())
 }
 
-fn bytes_cid(bytes: &[u8]) -> String {
-    format!("blake3:{}", blake3::hash(bytes).to_hex())
-}
-
 fn tagged_cid(tag: &[u8], parts: &[&[u8]]) -> String {
     let mut hasher = blake3::Hasher::new();
     hasher.update(&(tag.len() as u64).to_le_bytes());
@@ -541,7 +540,16 @@ fn unavailable(reason: impl Into<String>) -> SourceUnavailable {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
+    use uor_r4_core::transformerless::compiler::STAGES;
+    use uor_r4_core::transformerless::{convert_r4g1, runtime};
+
     use super::*;
+    use crate::serving::{NormativeServingDecision, NormativeServingEngine};
+    use crate::witness_replay::{
+        produce_normative_witness_replay, NormativeWitnessCandidateSource,
+    };
 
     #[test]
     fn malformed_manifest_is_refused_before_any_component_can_activate() {
@@ -564,5 +572,143 @@ mod tests {
         })
         .expect_err("an incomplete envelope must fail closed");
         assert!(error.to_string().contains("release-bundle.json"));
+    }
+
+    struct SyntheticWitnessMaterial {
+        graph: Vec<u8>,
+        teacher: Vec<u8>,
+        tokenizer: Vec<u8>,
+        score_report: Vec<u8>,
+        corpus_meta: Vec<u8>,
+        corpus_records: Vec<u8>,
+        served_position: u64,
+    }
+
+    fn synthetic_witness_material() -> SyntheticWitnessMaterial {
+        let teacher = std::fs::read(format!(
+            "{}/../uor-r4-core/tests/fixtures/tless_artifacts.bin",
+            env!("CARGO_MANIFEST_DIR")
+        ))
+        .expect("teacher artifact fixture");
+        let artifacts = compiler::parse_artifacts(&teacher).expect("teacher artifact parses");
+        let mut store: runtime::Store = (0..=STAGES).map(|_| BTreeMap::new()).collect();
+        for (index, code) in [
+            [3, 1, 4, 1],
+            [3, 1, 4, 2],
+            [3, 5, 9, 2],
+            [7, 5, 9, 2],
+            [7, 5, 8, 2],
+            [11, 5, 8, 7],
+        ]
+        .iter()
+        .enumerate()
+        {
+            runtime::add_evidence(&mut store, code, (index + 1) as u32, 1);
+        }
+        let store_bytes = runtime::store_bytes(&store);
+        let graph = convert_r4g1::convert(&teacher, &artifacts, &store, &store_bytes, None)
+            .expect("convert synthetic graph")
+            .0;
+
+        let next = [3u16, 1, 4, 3, 1, 4, 7, 5, 8, 3, 1, 4, 7, 5, 8, 3];
+        let mut corpus_meta = Vec::with_capacity(25);
+        corpus_meta.extend_from_slice(&(next.len() as u64).to_le_bytes());
+        corpus_meta.extend_from_slice(&1u64.to_le_bytes());
+        corpus_meta.extend_from_slice(&0u64.to_le_bytes());
+        corpus_meta.push(1);
+        let mut corpus_records = Vec::with_capacity(next.len() * 16);
+        for token in next {
+            corpus_records.extend_from_slice(&0u32.to_le_bytes());
+            corpus_records.extend_from_slice(&token.to_le_bytes());
+            corpus_records.extend_from_slice(&token.to_le_bytes());
+            corpus_records.extend_from_slice(&(-0.1f32).to_le_bytes());
+        }
+        let tokenizer = [b"<unk>".as_slice(), b"<s>", b"</s>", b" ", b"a"]
+            .into_iter()
+            .fold(Vec::new(), |mut bytes, token| {
+                bytes.extend_from_slice(&(token.len() as i32).to_le_bytes());
+                bytes.extend_from_slice(token);
+                bytes
+            });
+        let score_report = b"{}".to_vec();
+        let corpus = compiler::load_corpus_bytes(&corpus_meta, &corpus_records, None)
+            .expect("synthetic corpus parses");
+        let mut engine = NormativeServingEngine::load_for_research(EngineParts {
+            graph: &graph,
+            signature_artifact: &teacher,
+            tokenizer: Some(&tokenizer),
+            score_report: Some(&score_report),
+        })
+        .expect("synthetic serving engine loads");
+        let served_position = (0..corpus.n)
+            .find(|&position| {
+                engine.reset_policy_state();
+                let window = uor_r4_graph_compiler::induction::context_window(&corpus, position);
+                matches!(
+                    engine.predict(&window).expect("synthetic decision"),
+                    NormativeServingDecision::Serve(_)
+                )
+            })
+            .expect("synthetic corpus has a served position") as u64;
+        SyntheticWitnessMaterial {
+            graph,
+            teacher,
+            tokenizer,
+            score_report,
+            corpus_meta,
+            corpus_records,
+            served_position,
+        }
+    }
+
+    #[test]
+    fn production_boundary_replays_candidate_provenance_instead_of_trusting_records() {
+        let fixture = synthetic_witness_material();
+        let evaluated = [fixture.served_position];
+        let material = NormativeWitnessReplayMaterial {
+            graph: &fixture.graph,
+            signature_artifact: &fixture.teacher,
+            tokenizer: &fixture.tokenizer,
+            score_report: Some(&fixture.score_report),
+            corpus_meta: &fixture.corpus_meta,
+            corpus_records: &fixture.corpus_records,
+        };
+        let spec = NormativeWitnessReplaySpec {
+            material,
+            evaluated_positions: &evaluated,
+            sample_size: DEFAULT_NORMATIVE_WITNESS_SAMPLE,
+        };
+        let artifact = produce_normative_witness_replay(spec).expect("produce witness replay");
+        let expected = WitnessReplayEvidence {
+            sample_cid: artifact.sample_positions_cid.clone(),
+            requested: artifact.requested,
+            replayed: artifact.replayed,
+            failures: artifact.failures,
+        };
+        let canonical = artifact
+            .deterministic_json_bytes()
+            .expect("canonical witness bytes");
+        validate_bound_witness_replay(&canonical, material, &evaluated, &expected)
+            .expect("canonical witness replays at the production boundary");
+
+        for (skmx_contributed, psib_contributed) in [(true, false), (false, true)] {
+            let mut planted = artifact.clone();
+            let candidate = planted.records[0]
+                .candidate
+                .as_mut()
+                .expect("served record has a candidate");
+            assert_eq!(candidate.source, NormativeWitnessCandidateSource::Base);
+            candidate.source = NormativeWitnessCandidateSource::Skipmix;
+            candidate.skmx_contributed = skmx_contributed;
+            candidate.psib_contributed = psib_contributed;
+            let planted = planted
+                .deterministic_json_bytes()
+                .expect("canonical planted witness bytes");
+            let error = validate_bound_witness_replay(&planted, material, &evaluated, &expected)
+                .expect_err("forged candidate provenance must fail independent replay");
+            assert!(error
+                .to_string()
+                .contains("production witness replay failed"));
+        }
     }
 }

@@ -4357,11 +4357,22 @@ pub(crate) mod tests {
         /// abstains on. Returns
         /// `(graph, teacher, covered question, novel question)`.
         pub(crate) fn fixture() -> (Vec<u8>, Vec<u8>, String, String) {
-            fixture_with_extra_lower_ranked_candidate(false)
+            fixture_with_lane_shape(false, false)
         }
 
         fn fixture_with_extra_lower_ranked_candidate(
             extra_lower_ranked_candidate: bool,
+        ) -> (Vec<u8>, Vec<u8>, String, String) {
+            fixture_with_lane_shape(extra_lower_ranked_candidate, false)
+        }
+
+        fn fixture_with_psib_partner() -> (Vec<u8>, Vec<u8>, String, String) {
+            fixture_with_lane_shape(false, true)
+        }
+
+        fn fixture_with_lane_shape(
+            extra_lower_ranked_candidate: bool,
+            psib_partner: bool,
         ) -> (Vec<u8>, Vec<u8>, String, String) {
             let artifacts = synthetic_compiled();
             let teacher = compiler::artifact_bytes(&artifacts);
@@ -4425,8 +4436,18 @@ pub(crate) mod tests {
             }];
             // A runtime-only partner for #933's default-sampled base-bypass
             // falsifier. Token 50 is absent from every base emission list;
-            // only the normative SKMX lane can place it in the shortlist.
-            let skipmix_rows = vec![(covered_last, covered_last, vec![(50u32, 1_500_000_000i32)])];
+            // only the normative SKMX/PSIB lane can place it in the shortlist.
+            let (skipmix_rows, psi_bag_rows) = if psib_partner {
+                (
+                    Vec::new(),
+                    vec![(covered_last, vec![(50u32, 1_500_000_000i32)])],
+                )
+            } else {
+                (
+                    vec![(covered_last, covered_last, vec![(50u32, 1_500_000_000i32)])],
+                    Vec::new(),
+                )
+            };
             let store: runtime::Store = (0..=STAGES).map(|_| Default::default()).collect();
             let tls1 = runtime::store_bytes(&store);
             let (graph, _) = score::emit_scored_r4g1(
@@ -4455,7 +4476,7 @@ pub(crate) mod tests {
                     context_rows: &context_rows,
                     fwd_rows: &[],
                     skipmix_rows: &skipmix_rows,
-                    psi_bag_rows: &[],
+                    psi_bag_rows: &psi_bag_rows,
                     exct_tls1: &tls1,
                     exct_top_x: score::ScoreConfig::default().exct_top_x,
                 },
@@ -4777,6 +4798,8 @@ pub(crate) mod tests {
                 ServedCandidateSource::Skipmix,
                 "the pinned default seed must select the runtime-only planted partner"
             );
+            assert!(sampled_candidate.skmx_contributed);
+            assert!(!sampled_candidate.psib_contributed);
             assert_ne!(
                 sampled_expected, sampled_serve.base_token,
                 "a base/reference-candidate bypass would erase this falsifier"
@@ -4901,6 +4924,22 @@ pub(crate) mod tests {
                     &teacher,
                 )
                 .is_err()
+            );
+
+            let mut old_schema: serde_json::Value =
+                serde_json::from_slice(&bytes).expect("parse evidence for schema control");
+            old_schema["schema"] = serde_json::json!("uor-r4-normative-selector-cross-surface/3");
+            let mut old_schema_bytes =
+                serde_json::to_vec_pretty(&old_schema).expect("serialize old-schema control");
+            old_schema_bytes.push(b'\n');
+            assert!(
+                CrossSurfaceParityEvidence::parse_and_validate_for_artifacts(
+                    &old_schema_bytes,
+                    &graph,
+                    &teacher,
+                )
+                .is_err(),
+                "version-3 parity evidence cannot inherit version-4 provenance credit"
             );
 
             let mut tampered_counts: serde_json::Value =
@@ -5033,6 +5072,74 @@ pub(crate) mod tests {
             .expect("persisted mismatch remains replayable evidence");
             assert_eq!((replayed.checks, replayed.mismatches), (1, 1));
             let _ = std::fs::remove_dir_all(&mismatch_root);
+
+            // Provenance-only negative control: SKMX and PSIB produce the
+            // same token/score/source shortlist and winner, but their exact
+            // contribution flags differ. Version-4 candidate CIDs must retain
+            // that distinction.
+            let (psib_graph, psib_teacher, psib_question, _) = fixture_with_psib_partner();
+            assert_eq!(psib_teacher, teacher);
+            assert_eq!(psib_question, covered_question);
+            let skmx_authoritative = authoritative_step(&graph, &teacher, &context, None);
+            let skmx_serve = served(skmx_authoritative);
+            let psib_observed = authoritative_step(&psib_graph, &teacher, &context, None);
+            let psib_serve = served(psib_observed);
+            let projection = |serve: uor_r4_api::NormativeServe| {
+                serve
+                    .candidates
+                    .ranked()
+                    .iter()
+                    .map(|candidate| (candidate.token, candidate.score, candidate.source))
+                    .collect::<Vec<_>>()
+            };
+            assert_eq!(skmx_serve.token, psib_serve.token);
+            assert_eq!(projection(skmx_serve), projection(psib_serve));
+            let skmx_partner = skmx_serve
+                .candidates
+                .ranked()
+                .iter()
+                .find(|candidate| candidate.token == 50)
+                .expect("SKMX partner");
+            let psib_partner = psib_serve
+                .candidates
+                .ranked()
+                .iter()
+                .find(|candidate| candidate.token == 50)
+                .expect("PSIB partner");
+            assert_eq!(
+                (skmx_partner.skmx_contributed, skmx_partner.psib_contributed),
+                (true, false)
+            );
+            assert_eq!(
+                (psib_partner.skmx_contributed, psib_partner.psib_contributed),
+                (false, true)
+            );
+            let mut provenance_divergence =
+                CrossSurfaceParityEvidenceBuilder::new(&graph, &teacher);
+            provenance_divergence
+                .record(CrossSurfaceParityObservation {
+                    surface: "planted-provenance-only-divergence",
+                    decode_policy: "greedy",
+                    context_tokens: &context,
+                    session_signature: None,
+                    authoritative: skmx_authoritative,
+                    authoritative_token: Some(skmx_serve.token),
+                    observed_disposition: CrossSurfaceDisposition::Serve,
+                    observed_token: Some(psib_serve.token),
+                    observed_candidates: Some(psib_serve.candidates),
+                })
+                .expect("record provenance-only divergence");
+            let provenance_divergence = provenance_divergence
+                .finish()
+                .expect("finish provenance-only divergence");
+            assert_eq!(
+                (
+                    provenance_divergence.checks,
+                    provenance_divergence.mismatches
+                ),
+                (1, 1)
+            );
+            assert!(!provenance_divergence.records[0].matched);
 
             assert!(matches!(direct, NormativeServingDecision::Serve(_)));
         }

@@ -19,6 +19,7 @@ use uor_r4_core::transformerless::{compiler, hf_bpe::TokenizerAdapter};
 use uor_r4_graph_format::{
     corpus_partition_cid, ArtifactCid, CorpusPartitionRole, GraphView, SectionId,
 };
+use uor_r4_model_source::SourceUnavailable;
 
 /// Current deployed-quality report schema.
 pub const DEPLOYED_QUALITY_REPORT_SCHEMA: u32 = 1;
@@ -41,6 +42,14 @@ pub const SECTIONS_ABSENT_COMPARATOR_ID: &str = "R4G1Runtime-sections-absent";
 pub const LABEL_SHUFFLED_CONTROL_ID: &str = "label-shuffled-skmx-psib";
 /// RF-31's frozen +20 per-mille paired lower-bound floor, in ppm.
 pub const RF31_MIN_LANE_DELTA_PPM: i64 = 20_000;
+/// Canonical full-population position order bound into production evidence.
+pub const FULL_POPULATION_SELECTION_ALGORITHM: &str = "ascending-certification-position/1";
+/// Canonical nested sample selection. Stories and their positions are both
+/// visited in recursive midpoint order, round by round; the chosen set is then
+/// sorted for deterministic reduction. A larger requested prefix therefore
+/// contains every position from a smaller prefix while spreading both
+/// prefixes across held-out stories and within-story regions.
+pub const DETERMINISTIC_SAMPLE_SELECTION_ALGORITHM: &str = "story-round-robin-midpoint-prefix/1";
 
 /// Canonical paired-interval implementation emitted and recomputed by schema
 /// version one. The fixed rational `196/100` is the predeclared normal approximation.
@@ -67,31 +76,141 @@ mode=greedy-top1\n\
 tie-break=canonical-candidate-order\n";
 const PARTITION_SPLIT_VERSION: &str = "story-disjoint-80-20/1";
 
-/// Why exact bundle material could not be converted into independently
-/// recomputable deployed-quality bindings.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DeployedQualityBindingError {
-    pub field: &'static str,
-    pub reason: String,
+/// Report a field-specific failure at the sanctioned host-ingestion boundary.
+fn binding_error(field: &'static str, reason: impl Into<String>) -> SourceUnavailable {
+    SourceUnavailable::new(format!(
+        "deployed-quality binding {field}: {}",
+        reason.into()
+    ))
 }
 
-impl fmt::Display for DeployedQualityBindingError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "deployed-quality binding {}: {}",
-            self.field, self.reason
-        )
+/// Select one nested, story-distributed prefix from a canonical certification
+/// population. This function owns the sample semantics used by evaluators,
+/// witness generation, report construction, and binding validation.
+///
+/// `population` must be strictly increasing and every absolute position must
+/// index `story_by_position`. The returned positions are strictly increasing;
+/// selection order itself is committed by
+/// [`DETERMINISTIC_SAMPLE_SELECTION_ALGORITHM`].
+pub fn deterministic_story_sample(
+    story_by_position: &[u32],
+    population: &[u64],
+    requested: usize,
+) -> Result<Vec<u64>, SourceUnavailable> {
+    if requested == 0 {
+        return Err(binding_error("evaluated_positions", "sample size is zero"));
     }
-}
-
-impl std::error::Error for DeployedQualityBindingError {}
-
-fn binding_error(field: &'static str, reason: impl Into<String>) -> DeployedQualityBindingError {
-    DeployedQualityBindingError {
-        field,
-        reason: reason.into(),
+    validate_positions("full_population_positions", population, false)?;
+    for &position in population {
+        let index = usize::try_from(position).map_err(|_| {
+            binding_error(
+                "full_population_positions",
+                "a corpus position does not fit usize",
+            )
+        })?;
+        if index >= story_by_position.len() {
+            return Err(binding_error(
+                "full_population_positions",
+                format!(
+                    "position {position} is outside story map length {}",
+                    story_by_position.len()
+                ),
+            ));
+        }
     }
+    let target = requested.min(population.len());
+    if target == population.len() {
+        return Ok(population.to_vec());
+    }
+
+    // The certification partition is in corpus order, so equal story IDs are
+    // contiguous. Preserve that canonical story order without a map whose
+    // iteration semantics could become part of the evidence contract.
+    let mut stories: Vec<&[u64]> = Vec::new();
+    let mut seen_story_ids = std::collections::BTreeSet::new();
+    let mut start = 0usize;
+    while start < population.len() {
+        let absolute = usize::try_from(population[start]).map_err(|_| {
+            binding_error(
+                "full_population_positions",
+                "a corpus position does not fit usize",
+            )
+        })?;
+        let story = story_by_position[absolute];
+        if !seen_story_ids.insert(story) {
+            return Err(binding_error(
+                "full_population_positions",
+                format!("story {story} appears in more than one disjoint corpus segment"),
+            ));
+        }
+        let mut end = start + 1;
+        while end < population.len() {
+            let absolute = usize::try_from(population[end]).map_err(|_| {
+                binding_error(
+                    "full_population_positions",
+                    "a corpus position does not fit usize",
+                )
+            })?;
+            if story_by_position[absolute] != story {
+                break;
+            }
+            end += 1;
+        }
+        stories.push(&population[start..end]);
+        start = end;
+    }
+
+    fn midpoint_indices(len: usize) -> Vec<usize> {
+        let mut order = Vec::with_capacity(len);
+        let mut ranges = std::collections::VecDeque::from([(0usize, len)]);
+        while let Some((start, end)) = ranges.pop_front() {
+            if start >= end {
+                continue;
+            }
+            let midpoint = start + (end - start - 1) / 2;
+            order.push(midpoint);
+            if start < midpoint {
+                ranges.push_back((start, midpoint));
+            }
+            if midpoint + 1 < end {
+                ranges.push_back((midpoint + 1, end));
+            }
+        }
+        order
+    }
+
+    let story_order = midpoint_indices(stories.len());
+    let per_story: Vec<Vec<u64>> = stories
+        .into_iter()
+        .map(|story| {
+            midpoint_indices(story.len())
+                .into_iter()
+                .map(|index| story[index])
+                .collect()
+        })
+        .collect();
+    let mut selected = Vec::with_capacity(target);
+    let mut round = 0usize;
+    while selected.len() < target {
+        let before = selected.len();
+        for &story_index in &story_order {
+            if let Some(&position) = per_story[story_index].get(round) {
+                selected.push(position);
+                if selected.len() == target {
+                    break;
+                }
+            }
+        }
+        if selected.len() == before {
+            return Err(binding_error(
+                "evaluated_positions",
+                "story-distributed selector exhausted before filling the sample",
+            ));
+        }
+        round += 1;
+    }
+    selected.sort_unstable();
+    Ok(selected)
 }
 
 /// Raw byte material from one loaded generation. With the exception of the
@@ -519,7 +638,7 @@ impl DeployedQualityBindings {
 /// cannot choose a second spelling for a CID or position selection.
 pub fn derive_deployed_quality_bindings(
     material: DeployedQualityBindingMaterial<'_>,
-) -> Result<DeployedQualityBindings, DeployedQualityBindingError> {
+) -> Result<DeployedQualityBindings, SourceUnavailable> {
     validate_json_bytes("score_report", material.score_report)?;
     validate_json_bytes("compile_report", material.compile_report)?;
     if material.tokenizer.is_empty() {
@@ -706,6 +825,21 @@ pub fn derive_deployed_quality_bindings(
     let selection_mode = if material.evaluated_positions == material.full_population_positions {
         PositionSelectionMode::FullPopulation
     } else {
+        let expected = deterministic_story_sample(
+            &corpus.story,
+            material.full_population_positions,
+            material.evaluated_positions.len(),
+        )?;
+        if material.evaluated_positions != expected.as_slice() {
+            return Err(binding_error(
+                "evaluated_positions",
+                format!(
+                    "does not equal the canonical {} selection of size {}",
+                    DETERMINISTIC_SAMPLE_SELECTION_ALGORITHM,
+                    material.evaluated_positions.len()
+                ),
+            ));
+        }
         PositionSelectionMode::DeterministicSample
     };
 
@@ -756,10 +890,10 @@ pub fn derive_deployed_quality_bindings(
             mode: selection_mode,
             algorithm: match selection_mode {
                 PositionSelectionMode::FullPopulation => {
-                    "ascending-certification-position/1".to_string()
+                    FULL_POPULATION_SELECTION_ALGORITHM.to_string()
                 }
                 PositionSelectionMode::DeterministicSample => {
-                    "ascending-certification-prefix/1".to_string()
+                    DETERMINISTIC_SAMPLE_SELECTION_ALGORITHM.to_string()
                 }
             },
             seed: 0,
@@ -774,10 +908,7 @@ pub fn deployed_quality_positions_cid(positions: &[u64]) -> String {
     positions_cid(positions)
 }
 
-fn validate_json_bytes(
-    field: &'static str,
-    bytes: &[u8],
-) -> Result<(), DeployedQualityBindingError> {
+fn validate_json_bytes(field: &'static str, bytes: &[u8]) -> Result<(), SourceUnavailable> {
     serde_json::from_slice::<serde_json::Value>(bytes)
         .map(|_| ())
         .map_err(|error| binding_error(field, format!("invalid JSON: {error}")))
@@ -787,7 +918,7 @@ fn validate_positions(
     field: &'static str,
     positions: &[u64],
     allow_empty: bool,
-) -> Result<(), DeployedQualityBindingError> {
+) -> Result<(), SourceUnavailable> {
     if positions.is_empty() && !allow_empty {
         return Err(binding_error(field, "position list is empty"));
     }
@@ -849,7 +980,7 @@ fn require_head_cid(
     field: &'static str,
     head: ArtifactCid,
     actual: &str,
-) -> Result<(), DeployedQualityBindingError> {
+) -> Result<(), SourceUnavailable> {
     let declared = head_cid_string(head);
     if cid_is_zero(&declared) {
         return Err(binding_error(field, "zero CID is unavailable evidence"));
@@ -939,6 +1070,49 @@ pub enum QualityVerdict {
     Fail { reason: String },
     Estimate { decision: String },
     Unavailable { reason: String },
+}
+
+/// Typed interpretation of a sample estimate. Samples remain research-only:
+/// even [`SampleDecisionKind::Proceed`] authorizes only the predeclared full
+/// census, never production admission.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SampleDecisionKind {
+    Proceed,
+    Stop,
+    Inconclusive,
+}
+
+impl SampleDecisionKind {
+    /// Parse the schema-1 decision vocabulary. The one legacy phrase remains
+    /// readable for checkpoint compatibility; new producers emit one of the
+    /// three uppercase typed prefixes.
+    pub fn parse(value: &str) -> Option<Self> {
+        let value = value.trim();
+        let has_reason = |prefix: &str| {
+            value
+                .strip_prefix(prefix)
+                .is_some_and(|reason| !reason.trim().is_empty())
+        };
+        if value == "proceed to census" || has_reason("PROCEED:") {
+            Some(Self::Proceed)
+        } else if has_reason("STOP:") {
+            Some(Self::Stop)
+        } else if has_reason("INCONCLUSIVE:") {
+            Some(Self::Inconclusive)
+        } else {
+            None
+        }
+    }
+}
+
+impl QualityVerdict {
+    /// Return the typed decision carried by a sample estimate.
+    pub fn sample_decision(&self) -> Option<SampleDecisionKind> {
+        match self {
+            Self::Estimate { decision } => SampleDecisionKind::parse(decision),
+            Self::Pass | Self::Fail { .. } | Self::Unavailable { .. } => None,
+        }
+    }
 }
 
 /// Exact fraction plus its deterministic fixed-point presentation.
@@ -1439,6 +1613,12 @@ impl EvaluationEvidence {
                 if decision.trim().is_empty() {
                     return Some(structural("evaluation.verdict.decision", "is empty"));
                 }
+                if SampleDecisionKind::parse(decision).is_none() {
+                    return Some(structural(
+                        "evaluation.verdict.decision",
+                        "must use the typed PROCEED, STOP, or INCONCLUSIVE vocabulary",
+                    ));
+                }
                 if self.evaluated_positions == 0 || self.evaluated_positions >= self.population_size
                 {
                     return Some(structural(
@@ -1764,14 +1944,19 @@ impl DeployedQualityReport {
     /// Stable pretty JSON bytes (field order is declaration order, all maps are
     /// excluded from the schema, and validated variable rows have a canonical
     /// strict order). A final newline is part of the byte contract.
-    pub fn deterministic_json_bytes(&self) -> Result<Vec<u8>, serde_json::Error> {
-        let mut bytes = serde_json::to_vec_pretty(self)?;
+    pub fn deterministic_json_bytes(&self) -> Result<Vec<u8>, SourceUnavailable> {
+        let mut bytes = serde_json::to_vec_pretty(self).map_err(|error| {
+            binding_error(
+                "deployed_quality_report",
+                format!("JSON serialization failed: {error}"),
+            )
+        })?;
         bytes.push(b'\n');
         Ok(bytes)
     }
 
     /// BLAKE3 CID of [`Self::deterministic_json_bytes`].
-    pub fn cid(&self) -> Result<String, serde_json::Error> {
+    pub fn cid(&self) -> Result<String, SourceUnavailable> {
         let bytes = self.deterministic_json_bytes()?;
         Ok(format!("blake3:{}", blake3::hash(&bytes).to_hex()))
     }
@@ -1794,19 +1979,104 @@ pub enum ResearchDeployedQualityReport {
 /// [`DeployedQualityReport::validate_for_production`].
 pub fn parse_deployed_quality_for_research(
     bytes: &[u8],
-) -> Result<ResearchDeployedQualityReport, serde_json::Error> {
-    let document: serde_json::Value = serde_json::from_slice(bytes)?;
+) -> Result<ResearchDeployedQualityReport, SourceUnavailable> {
+    let document: serde_json::Value = serde_json::from_slice(bytes).map_err(|error| {
+        binding_error("research_report", format!("invalid JSON document: {error}"))
+    })?;
     let declared_schema = document.get("schema").and_then(serde_json::Value::as_u64);
     if declared_schema == Some(u64::from(DEPLOYED_QUALITY_REPORT_SCHEMA))
         && document.get("profile").is_some()
         && document.get("bindings").is_some()
     {
-        let report = serde_json::from_value(document)?;
+        let report = serde_json::from_value(document).map_err(|error| {
+            binding_error(
+                "research_report",
+                format!("current schema decode failed: {error}"),
+            )
+        })?;
         Ok(ResearchDeployedQualityReport::Current(Box::new(report)))
     } else {
         Ok(ResearchDeployedQualityReport::LegacyUnavailable {
             declared_schema,
             document,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn typed_sample_decision_vocabulary_is_fail_closed() {
+        assert_eq!(
+            SampleDecisionKind::parse("PROCEED: full census next"),
+            Some(SampleDecisionKind::Proceed)
+        );
+        assert_eq!(
+            SampleDecisionKind::parse("STOP: upper bound misses"),
+            Some(SampleDecisionKind::Stop)
+        );
+        assert_eq!(
+            SampleDecisionKind::parse("INCONCLUSIVE: extend to 18000"),
+            Some(SampleDecisionKind::Inconclusive)
+        );
+        assert_eq!(SampleDecisionKind::parse("STOP:"), None);
+        assert_eq!(SampleDecisionKind::parse("looks promising"), None);
+    }
+
+    #[test]
+    fn story_sample_rejects_zero_and_preserves_nested_prefixes() {
+        let stories: Vec<u32> = (0..40).map(|position| position / 10).collect();
+        let population: Vec<u64> = (0..40).collect();
+        assert!(deterministic_story_sample(&stories, &population, 0).is_err());
+        let small = deterministic_story_sample(&stories, &population, 8).expect("small");
+        let large = deterministic_story_sample(&stories, &population, 20).expect("large");
+        assert!(small
+            .iter()
+            .all(|position| large.binary_search(position).is_ok()));
+        assert!(small.windows(2).all(|pair| pair[0] < pair[1]));
+        for story in 0..4 {
+            assert_eq!(
+                small
+                    .iter()
+                    .filter(|&&position| stories[position as usize] == story)
+                    .count(),
+                2
+            );
+        }
+
+        let noncontiguous_stories = [0, 1, 0, 1];
+        assert!(
+            deterministic_story_sample(&noncontiguous_stories, &[0, 1, 2, 3], 2).is_err(),
+            "a story that reappears in a disjoint corpus segment must fail closed"
+        );
+    }
+
+    #[test]
+    fn deployed_quality_failures_use_the_sanctioned_field_specific_boundary() {
+        let sample_error = deterministic_story_sample(&[], &[], 0)
+            .expect_err("a zero-sized sample must fail closed");
+        assert_eq!(
+            sample_error.reason,
+            "deployed-quality binding evaluated_positions: sample size is zero"
+        );
+
+        let parse_error = parse_deployed_quality_for_research(b"{")
+            .expect_err("malformed research JSON must fail closed");
+        assert!(
+            parse_error
+                .reason
+                .starts_with("deployed-quality binding research_report: invalid JSON document:"),
+            "{}",
+            parse_error.reason
+        );
+
+        let _: fn(&DeployedQualityReport) -> Result<Vec<u8>, SourceUnavailable> =
+            DeployedQualityReport::deterministic_json_bytes;
+        let _: fn(&DeployedQualityReport) -> Result<String, SourceUnavailable> =
+            DeployedQualityReport::cid;
+        let _: fn(&[u8]) -> Result<ResearchDeployedQualityReport, SourceUnavailable> =
+            parse_deployed_quality_for_research;
     }
 }

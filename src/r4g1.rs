@@ -167,8 +167,9 @@ fn normative_inference_witness(
     if lane_present {
         return Ok(InferenceWitness {
             // The served-candidate surface does not claim a reference-scorer
-            // traversal. Runtime candidate/score/source and lane attribution
-            // are the complete production claim replayed below.
+            // traversal. Runtime candidate/score/source/SKMX/PSIB provenance
+            // and lane attribution are the complete production claim replayed
+            // below.
             region_kappa: None,
             region_id: None,
             depth: 0,

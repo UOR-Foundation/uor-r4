@@ -178,13 +178,18 @@ report, cover report, and deployed-quality report. A sampled report remains
 research evidence even when all measured rows are favorable.
 
 The release CLI exposes the same contract directly. `--mode full` cannot
-bypass the cheap instrument: it first runs the exact 6,000-position sample on
-the same bundle/evidence generation and launches the census only when the
-typed decision begins `PROCEED:`. Any reachability, interval, planted-control,
-cross-surface, or witness failure emits `STOP:` and returns without starting
-the census. Even after `PROCEED:`, the sample's measured throughput is scaled
-to the full population; a projection beyond the configured evaluation budget
-or one hour refuses launch and requires a revised run contract.
+bypass the cheap instrument: it first runs the exact 6,000-position prefix of
+the canonical label-free, story-distributed order on the same bundle/evidence
+generation. Any structural, reachability,
+non-futility, planted-control, cross-surface, or witness falsifier emits
+`STOP:` and returns without starting the census. `PROCEED:` launches the
+census. A typed `INCONCLUSIVE:` extends the same immutable nested order to
+18,000 positions; if that interval still overlaps the gate, it can launch only
+the census and only when the measured reachable ceiling remains sufficient.
+Before any census launch, the authorizing stage's measured throughput is
+scaled to the full population; a projection beyond the configured evaluation
+budget or one hour refuses launch and requires a revised run contract. No
+sample report can authorize production admission.
 
 ```bash
 cargo run --release -- deployed-quality \

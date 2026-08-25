@@ -693,7 +693,10 @@ mod tests {
         };
         let error = install_release(&store, &request(), &mut fetcher)
             .expect_err("report-bound corpus mutation must refuse");
-        assert!(error.contains("identity mismatch"), "{error}");
+        assert!(
+            error.contains("corpus construction positions"),
+            "the exact graph/corpus binding must diagnose the mutation: {error}"
+        );
         assert!(!store.join("compiled").join("r4").exists());
         let _ = std::fs::remove_dir_all(&root);
     }

@@ -8,7 +8,6 @@
 
 use serde::{Deserialize, Serialize};
 use uor_r4_core::transformerless::compiler::{self, Corpus};
-use uor_r4_graph_compiler::induction;
 use uor_r4_graph_runtime::ServedCandidateSource;
 use uor_r4_model_source::SourceUnavailable;
 
@@ -17,14 +16,14 @@ use crate::engine::{EngineParts, PolicyStatus};
 use crate::serving::{NormativeServingDecision, NormativeServingEngine};
 
 /// Canonical normative witness-replay artifact schema.
-pub const NORMATIVE_WITNESS_REPLAY_SCHEMA: &str = "uor-r4-normative-witness-replay/1";
+pub const NORMATIVE_WITNESS_REPLAY_SCHEMA: &str = "uor-r4-normative-witness-replay/2";
 
 /// Stable schema-2 bundle path for the durable replay evidence.
 pub const NORMATIVE_WITNESS_REPLAY_BUNDLE_PATH: &str = "graph/witness_replay.json";
 
 /// Established Gate C witness sample size, applied to the evaluator's exact
 /// selected population (or the whole population when it is smaller). This is
-/// literal schema-1 behavior; changing it requires a schema/version decision.
+/// retained schema-1 behavior; changing it requires a schema/version decision.
 pub const DEFAULT_NORMATIVE_WITNESS_SAMPLE: usize = 64;
 
 /// Exact immutable inputs required to reproduce a serving witness.
@@ -100,6 +99,8 @@ pub struct NormativeWitnessCandidate {
     pub token: u32,
     pub score_raw: i32,
     pub source: NormativeWitnessCandidateSource,
+    pub skmx_contributed: bool,
+    pub psib_contributed: bool,
 }
 
 /// Exact learned-lane promotion attached to the runtime winner.
@@ -160,8 +161,12 @@ pub struct NormativeWitnessReplayArtifact {
 
 impl NormativeWitnessReplayArtifact {
     /// Deterministic pretty JSON with one trailing newline.
-    pub fn deterministic_json_bytes(&self) -> Result<Vec<u8>, serde_json::Error> {
-        let mut bytes = serde_json::to_vec_pretty(self)?;
+    pub fn deterministic_json_bytes(&self) -> Result<Vec<u8>, SourceUnavailable> {
+        let mut bytes = serde_json::to_vec_pretty(self).map_err(|error| {
+            SourceUnavailable::new(format!(
+                "serialize normative witness replay as deterministic JSON: {error}"
+            ))
+        })?;
         bytes.push(b'\n');
         Ok(bytes)
     }
@@ -193,6 +198,8 @@ impl ReplayClaim {
                         token: winner.token,
                         score_raw: winner.score.raw(),
                         source: winner.source.into(),
+                        skmx_contributed: winner.skmx_contributed,
+                        psib_contributed: winner.psib_contributed,
                     }),
                     lane_attribution: outcome.candidates.attribution().map(|attribution| {
                         NormativeWitnessLaneAttribution {
@@ -332,9 +339,7 @@ pub fn parse_and_validate_normative_witness_replay(
 ) -> Result<NormativeWitnessReplayArtifact, SourceUnavailable> {
     let artifact: NormativeWitnessReplayArtifact = serde_json::from_slice(bytes)
         .map_err(|error| SourceUnavailable::new(format!("invalid witness replay JSON: {error}")))?;
-    let canonical = artifact.deterministic_json_bytes().map_err(|error| {
-        SourceUnavailable::new(format!("canonicalize witness replay JSON: {error}"))
-    })?;
+    let canonical = artifact.deterministic_json_bytes()?;
     if canonical != bytes {
         return Err(SourceUnavailable::new(
             "witness replay artifact bytes are not canonical",
@@ -422,6 +427,16 @@ fn validate_record_shape(record: &NormativeWitnessReplayRecord) -> Result<(), So
         NormativeWitnessDisposition::Serve => {
             record.policy_status.is_some()
                 && record.candidate.is_some()
+                && record
+                    .candidate
+                    .is_some_and(|candidate| match candidate.source {
+                        NormativeWitnessCandidateSource::Base => {
+                            !candidate.skmx_contributed && !candidate.psib_contributed
+                        }
+                        NormativeWitnessCandidateSource::Skipmix => {
+                            candidate.skmx_contributed || candidate.psib_contributed
+                        }
+                    })
                 && record.lane_attribution.is_none_or(|attribution| {
                     record.candidate.is_some_and(|candidate| {
                         candidate.source == NormativeWitnessCandidateSource::Skipmix
@@ -522,7 +537,7 @@ fn replay_position(
     // Serving evaluation treats every teacher-forced position as an isolated
     // decision. Resetting here is part of the replay contract, not cleanup.
     engine.reset_policy_state();
-    let window = induction::context_window(corpus, position);
+    let window = compiler::context_window(corpus, position);
     let decision = engine
         .predict(&window)
         .map_err(|error| SourceUnavailable::new(format!("witness replay decision: {error}")))?;

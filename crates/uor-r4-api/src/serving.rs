@@ -368,7 +368,7 @@ impl<'state, 'graph> NormativeStepAdapter<'state, 'graph> {
 }
 
 /// Deterministic, replayable cross-surface selector evidence schema.
-pub const CROSS_SURFACE_PARITY_EVIDENCE_SCHEMA: &str = "uor-r4-normative-selector-cross-surface/3";
+pub const CROSS_SURFACE_PARITY_EVIDENCE_SCHEMA: &str = "uor-r4-normative-selector-cross-surface/4";
 
 /// Stable schema-2 bundle path for cross-surface evidence.
 pub const CROSS_SURFACE_PARITY_BUNDLE_PATH: &str = "graph/cross_surface_parity.json";
@@ -464,8 +464,12 @@ pub struct CrossSurfaceParityEvidence {
 }
 
 impl CrossSurfaceParityEvidence {
-    pub fn deterministic_json_bytes(&self) -> Result<Vec<u8>, serde_json::Error> {
-        let mut bytes = serde_json::to_vec_pretty(self)?;
+    pub fn deterministic_json_bytes(&self) -> Result<Vec<u8>, SourceUnavailable> {
+        let mut bytes = serde_json::to_vec_pretty(self).map_err(|error| {
+            SourceUnavailable::new(format!(
+                "serialize cross-surface parity evidence as deterministic JSON: {error}"
+            ))
+        })?;
         bytes.push(b'\n');
         Ok(bytes)
     }
@@ -497,11 +501,7 @@ impl CrossSurfaceParityEvidence {
             SourceUnavailable::new(format!("invalid cross-surface parity evidence: {error}"))
         })?;
         evidence.validate_for_bundle(graph, signature_artifact, tokenizer, score_report)?;
-        let canonical = evidence.deterministic_json_bytes().map_err(|error| {
-            SourceUnavailable::new(format!(
-                "canonicalize cross-surface parity evidence: {error}"
-            ))
-        })?;
+        let canonical = evidence.deterministic_json_bytes()?;
         if canonical != bytes {
             return Err(SourceUnavailable::new(
                 "cross-surface parity evidence bytes are not canonical",
@@ -1264,7 +1264,7 @@ fn parity_tokens_cid(tokens: &[u32]) -> String {
 }
 
 fn parity_candidates_cid(candidates: &ServedCandidates) -> String {
-    let mut bytes = Vec::with_capacity(8 + candidates.len() * 9);
+    let mut bytes = Vec::with_capacity(8 + candidates.len() * 11);
     bytes.extend_from_slice(&(candidates.len() as u64).to_le_bytes());
     for candidate in candidates.ranked() {
         bytes.extend_from_slice(&candidate.token.to_le_bytes());
@@ -1273,8 +1273,10 @@ fn parity_candidates_cid(candidates: &ServedCandidates) -> String {
             ServedCandidateSource::Base => 0,
             ServedCandidateSource::Skipmix => 1,
         });
+        bytes.push(u8::from(candidate.skmx_contributed));
+        bytes.push(u8::from(candidate.psib_contributed));
     }
-    parity_tagged_cid(b"r4-cross-surface-ranked-candidates/2", &[&bytes])
+    parity_tagged_cid(b"r4-cross-surface-ranked-candidates/3", &[&bytes])
 }
 
 fn parity_tagged_cid(tag: &[u8], parts: &[&[u8]]) -> String {

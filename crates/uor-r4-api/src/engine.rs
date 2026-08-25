@@ -123,13 +123,18 @@ pub enum ServedCandidateWitnessSource {
 /// Exact selected member of `R4G1Runtime::predict_served_candidates`.
 ///
 /// The token is deliberately repeated beside [`InferenceWitness::token`]:
-/// replay checks both fields and the score/source tuple, so a response cannot
-/// splice a token claim onto a different ranked-candidate claim.
+/// replay checks both fields and the score/source/SKMX/PSIB provenance tuple,
+/// so a response cannot splice a token claim onto a different ranked-candidate
+/// claim.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ServedCandidateWitness {
     pub token: u32,
     pub score_q: i32,
     pub source: ServedCandidateWitnessSource,
+    #[serde(default)]
+    pub skmx_contributed: bool,
+    #[serde(default)]
+    pub psib_contributed: bool,
 }
 
 /// Token-free reference attribution retained only to preserve the historical
@@ -159,6 +164,8 @@ impl ServedCandidateWitness {
                     ServedCandidateWitnessSource::Skipmix
                 }
             },
+            skmx_contributed: candidate.skmx_contributed,
+            psib_contributed: candidate.psib_contributed,
         }
     }
 }
@@ -2529,11 +2536,15 @@ mod tests {
             token: 42,
             score: ScoreQ::from_raw(1_234),
             source: uor_r4_graph_runtime::ServedCandidateSource::Skipmix,
+            skmx_contributed: true,
+            psib_contributed: false,
         };
         let witness = ServedCandidateWitness::from_runtime(runtime);
         assert_eq!(witness.token, 42);
         assert_eq!(witness.score_q, 1_234);
         assert_eq!(witness.source, ServedCandidateWitnessSource::Skipmix);
+        assert!(witness.skmx_contributed);
+        assert!(!witness.psib_contributed);
         let json = serde_json::to_string(&witness).expect("serialize candidate witness");
         assert_eq!(
             serde_json::from_str::<ServedCandidateWitness>(&json)

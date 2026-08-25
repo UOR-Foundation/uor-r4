@@ -27954,15 +27954,29 @@ mod tests {
             std::env::temp_dir().join(format!("uor-r4-models-c1d-verified-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let bundle = dir.join("verified-model");
-        write_loadable_graph_bundle(&bundle, None);
-
-        let graph_bytes = std::fs::read(bundle.join("graph/score.r4g1")).expect("read graph");
-        let teacher_bytes =
-            std::fs::read(bundle.join("tless_artifacts.bin")).expect("read teacher");
-        let mut manifest = sample_release_bundle_manifest();
-        manifest.components.graph = format!("blake3:{}", blake3::hash(&graph_bytes).to_hex());
-        manifest.components.signature_artifact =
-            format!("blake3:{}", blake3::hash(&teacher_bytes).to_hex());
+        let admission = crate::release_bundle_packager::tests::write_production_bundle(&bundle);
+        write_attention_binding(
+            &bundle,
+            &uor_r4_model_source::attention::AttentionOperatorSpec::standard_v1(),
+        );
+        let manifest = crate::release_bundle_packager::package_release_bundle(
+            &bundle,
+            crate::release_bundle_packager::PackageInputs {
+                model_id: "verified-model".to_owned(),
+                capability: uor_r4_api::BundleCapability::InstructionChat,
+                uor_matmul: uor_r4_api::UorMatmulProvenance {
+                    rev: "b13c98449948174f590e337c4dc25dfc394a07d0".to_owned(),
+                    operation_profile: "exact-gemm-float".to_owned(),
+                    license: "MIT".to_owned(),
+                    source_digest: None,
+                },
+                tokenizer_adapter: admission.tokenizer_adapter,
+                selector: admission.bindings.selector,
+                compiler: admission.bindings.compiler,
+                provenance_note: None,
+            },
+        )
+        .expect("package complete production fixture");
         std::fs::write(
             bundle.join(crate::release_bundle_loader::RELEASE_BUNDLE_SIDECAR_FILE_NAME),
             serde_json::to_vec_pretty(&manifest).expect("serialize manifest"),

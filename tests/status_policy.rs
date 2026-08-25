@@ -205,6 +205,8 @@ fn planted_skipmix_witness_binds_runtime_candidate_and_rejects_tampering() {
     assert_eq!(candidate.token, 42);
     assert_eq!(candidate.score_q, 1_000);
     assert_eq!(candidate.source, ServedCandidateWitnessSource::Skipmix);
+    assert!(candidate.skmx_contributed);
+    assert!(!candidate.psib_contributed);
     let attribution = witness
         .skipmix_lane
         .as_ref()
@@ -212,6 +214,8 @@ fn planted_skipmix_witness_binds_runtime_candidate_and_rejects_tampering() {
     assert_eq!(attribution.promoted_token, 42);
     assert_eq!(attribution.base_token, 10);
     assert_eq!(attribution.boost, 1_000);
+    assert!(attribution.skmx_contributed);
+    assert!(!attribution.psib_contributed);
     state
         .verify_witnesses(&seed, &generated, &witnesses)
         .expect("runtime-authored witness replays");
@@ -224,6 +228,18 @@ fn planted_skipmix_witness_binds_runtime_candidate_and_rejects_tampering() {
         .score_q += 1;
     assert_eq!(
         state.verify_witnesses(&seed, &generated, &wrong_candidate),
+        Err(WitnessVerificationError::CandidateMismatch)
+    );
+
+    let mut wrong_candidate_provenance = witnesses.clone();
+    let candidate = wrong_candidate_provenance[0]
+        .served_candidate
+        .as_mut()
+        .expect("candidate");
+    candidate.skmx_contributed = false;
+    candidate.psib_contributed = true;
+    assert_eq!(
+        state.verify_witnesses(&seed, &generated, &wrong_candidate_provenance),
         Err(WitnessVerificationError::CandidateMismatch)
     );
 

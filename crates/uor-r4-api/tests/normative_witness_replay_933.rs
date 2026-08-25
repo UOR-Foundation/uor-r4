@@ -6,6 +6,7 @@ use uor_r4_api::{
     parse_and_validate_normative_witness_replay, produce_normative_witness_replay, EngineParts,
     NormativeServingDecision, NormativeServingEngine, NormativeWitnessCandidateSource,
     NormativeWitnessReplayMaterial, NormativeWitnessReplaySpec, NormativeWitnessReplayVerdict,
+    NORMATIVE_WITNESS_REPLAY_SCHEMA,
 };
 use uor_r4_core::transformerless::compiler::{self, STAGES};
 use uor_r4_core::transformerless::{convert_r4g1, runtime};
@@ -154,6 +155,7 @@ fn canonical_artifact_binds_runtime_winner_and_replays_independently() {
     };
 
     let artifact = produce_normative_witness_replay(spec).expect("produce replay artifact");
+    assert_eq!(artifact.schema, NORMATIVE_WITNESS_REPLAY_SCHEMA);
     assert_eq!(
         (artifact.requested, artifact.replayed, artifact.failures),
         (1, 1, 0)
@@ -166,9 +168,15 @@ fn canonical_artifact_binds_runtime_winner_and_replays_independently() {
     let candidate = record.candidate.expect("served runtime winner");
     assert_eq!(candidate.token, partner);
     assert_eq!(candidate.source, NormativeWitnessCandidateSource::Skipmix);
+    assert!(candidate.skmx_contributed);
+    assert!(!candidate.psib_contributed);
     let attribution = record.lane_attribution.expect("exact lane attribution");
     assert_eq!(attribution.promoted_token, partner);
     assert_eq!(attribution.contribution_raw, candidate.score_raw);
+    assert_eq!(
+        (attribution.skmx_contributed, attribution.psib_contributed),
+        (candidate.skmx_contributed, candidate.psib_contributed)
+    );
     assert_eq!(record.replay_verdict, NormativeWitnessReplayVerdict::Match);
 
     let bytes = artifact
@@ -184,6 +192,31 @@ fn canonical_artifact_binds_runtime_winner_and_replays_independently() {
             .expect("serialize repeat"),
         bytes,
         "producer bytes are deterministic"
+    );
+
+    let mut missing_provenance: serde_json::Value =
+        serde_json::from_slice(&bytes).expect("parse canonical JSON");
+    missing_provenance["records"][0]["candidate"]
+        .as_object_mut()
+        .expect("candidate object")
+        .remove("skmx_contributed");
+    assert!(
+        parse_and_validate_normative_witness_replay(
+            &serde_json::to_vec(&missing_provenance).expect("serialize missing-field control"),
+            spec,
+        )
+        .is_err(),
+        "schema-2 evidence must explicitly carry both provenance bits"
+    );
+
+    let mut old_schema = artifact;
+    old_schema.schema = "uor-r4-normative-witness-replay/1".to_owned();
+    let old_schema_bytes = old_schema
+        .deterministic_json_bytes()
+        .expect("serialize old-schema control");
+    assert!(
+        parse_and_validate_normative_witness_replay(&old_schema_bytes, spec).is_err(),
+        "schema-1 evidence cannot inherit schema-2 candidate provenance credit"
     );
 }
 
@@ -224,6 +257,28 @@ fn planted_candidate_and_foreign_generation_cannot_fake_zero_failures() {
     assert!(
         parse_and_validate_normative_witness_replay(&planted, spec).is_err(),
         "validator must replay the planted token rather than accept its zero counter"
+    );
+
+    let mut provenance_tamper =
+        produce_normative_witness_replay(spec).expect("produce provenance control");
+    let candidate = provenance_tamper.records[0]
+        .candidate
+        .as_mut()
+        .expect("served candidate");
+    assert!(candidate.skmx_contributed);
+    assert!(!candidate.psib_contributed);
+    candidate.skmx_contributed = false;
+    candidate.psib_contributed = true;
+    assert_eq!(
+        provenance_tamper.failures, 0,
+        "planted artifact still claims zero failures"
+    );
+    let provenance_tamper_bytes = provenance_tamper
+        .deterministic_json_bytes()
+        .expect("serialize provenance tamper");
+    assert!(
+        parse_and_validate_normative_witness_replay(&provenance_tamper_bytes, spec).is_err(),
+        "validator must replay SKMX/PSIB provenance rather than accept a token-identical claim"
     );
 
     let mut foreign_graph = graph.clone();

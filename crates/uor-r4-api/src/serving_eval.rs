@@ -13,8 +13,8 @@
 //! retired; the recorded 0.0% stands in issue #280 as the reason.
 //!
 //! Discipline carried over from the retired row (#279/#282/#232):
-//! deterministic ascending-prefix sample, wall-clock budgets that turn silent
-//! stalls into recorded skips, and a readiness probe extended with an
+//! deterministic nested story-distributed sample, wall-clock budgets that
+//! turn silent stalls into recorded skips, and a readiness probe extended with an
 //! accuracy spot-check — scored + non-constant demonstrably does not
 //! imply functional, so the probe now requires at least one served
 //! prediction that matches the recorded corpus/teacher continuation
@@ -34,14 +34,15 @@ use uor_r4_graph_compiler::induction;
 use uor_r4_model_source::SourceUnavailable;
 
 use crate::deployed_quality::{
-    deployed_quality_positions_cid, derive_deployed_quality_bindings, ComparatorIdentity,
-    DeployedQualityBindingMaterial, DeployedQualityReport, EvaluationEvidence, EvaluationMode,
-    ExactRate, ExactSignedRate, NegativeControlEvidence, NegativeControlVerdict, PairedComparison,
-    PairedCounts as QualityPairedCounts, PairedInterval, QualityMeasurements,
+    deployed_quality_positions_cid, derive_deployed_quality_bindings, deterministic_story_sample,
+    ComparatorIdentity, DeployedQualityBindingMaterial, DeployedQualityReport, EvaluationEvidence,
+    EvaluationMode, ExactRate, ExactSignedRate, NegativeControlEvidence, NegativeControlVerdict,
+    PairedComparison, PairedCounts as QualityPairedCounts, PairedInterval, QualityMeasurements,
     QualityProfileIdentity, QualityVerdict, WitnessReplayEvidence, DEPLOYED_QUALITY_PROFILE_ID,
-    DEPLOYED_QUALITY_PROFILE_VERSION, DEPLOYED_QUALITY_REPORT_SCHEMA, LABEL_SHUFFLED_CONTROL_ID,
-    NORMATIVE_EXECUTION_SCOPE, RF31_MIN_LANE_DELTA_PPM, SECTIONS_ABSENT_COMPARATOR_ID,
-    TLA_COMPARATOR_ID,
+    DEPLOYED_QUALITY_PROFILE_VERSION, DEPLOYED_QUALITY_REPORT_SCHEMA,
+    DETERMINISTIC_SAMPLE_SELECTION_ALGORITHM, FULL_POPULATION_SELECTION_ALGORITHM,
+    LABEL_SHUFFLED_CONTROL_ID, NORMATIVE_EXECUTION_SCOPE, RF31_MIN_LANE_DELTA_PPM,
+    SECTIONS_ABSENT_COMPARATOR_ID, TLA_COMPARATOR_ID,
 };
 use crate::engine::{EngineParts, PolicyStatus};
 use crate::serving::{
@@ -51,9 +52,14 @@ use crate::witness_replay::{
     parse_and_validate_normative_witness_replay, NormativeWitnessReplayArtifact,
     NormativeWitnessReplayMaterial, NormativeWitnessReplaySpec, DEFAULT_NORMATIVE_WITNESS_SAMPLE,
 };
+use uor_r4_graph_runtime::{ServedCandidateSource, ServedCandidates};
 
-/// Default size of the predeclared ascending held-out prefix instrument.
+/// Default size of the predeclared nested story-distributed instrument.
 pub const SAMPLE_TARGET: usize = 6000;
+
+/// Predeclared non-census extension used when the 6,000-position screen is
+/// statistically inconclusive but neither bound rules the mechanism out.
+pub const EXTENDED_SAMPLE_TARGET: usize = 18_000;
 
 /// Probe positions spent on the readiness/accuracy spot-check before
 /// the full sample runs (#232 and its #280 extension).
@@ -64,7 +70,7 @@ const EVAL_PROGRESS_INTERVAL: usize = 256;
 const TLA_COMPARATOR_VERSION: &str = "plain-tla-same-position/1";
 const SECTIONS_ABSENT_COMPARATOR_VERSION: &str = "r4g1-sections-absent/1";
 const LABEL_SHUFFLED_CONTROL_VERSION: &str = "train-target-rotation-half-plus-one/1";
-const REPORT_TERMINAL_SCHEMA: &str = "uor-r4-deployed-quality-terminal/1";
+const REPORT_TERMINAL_SCHEMA: &str = "uor-r4-deployed-quality-terminal/2";
 const REPORT_PROGRESS_SCHEMA: &str = "uor-r4-deployed-quality-progress/1";
 
 /// Deterministic evaluation extent. A sample can guide whether a census is
@@ -83,6 +89,10 @@ pub enum ServingEvalMode {
 pub struct ServingBundle {
     pub root: PathBuf,
     pub graph: PathBuf,
+    /// Diagnostic-only pre-re-emission canonical graph. When present, it is
+    /// evaluated beside the newly emitted sections-absent graph to expose
+    /// compiler/artifact/selector drift. It never enters production admission.
+    pub canonical_base_graph: Option<PathBuf>,
     /// Planted causal control: the same graph generation with SKMX/PSIB
     /// omitted. Absence keeps research evaluation available but makes
     /// production quality evidence UNAVAILABLE.
@@ -110,6 +120,7 @@ pub struct ServingBundle {
 pub struct ServingBundleSnapshot {
     bundle: ServingBundle,
     graph: Vec<u8>,
+    canonical_base_graph: Option<Vec<u8>>,
     sections_absent_graph: Option<Vec<u8>>,
     label_shuffled_graph: Option<Vec<u8>>,
     teacher: Vec<u8>,
@@ -140,6 +151,10 @@ impl ServingBundleSnapshot {
             |field: &str, path: Option<&Path>| path.map(|path| read(field, path)).transpose();
 
         let graph = read("graph", &bundle.graph)?;
+        let canonical_base_graph = read_optional(
+            "pre-re-emission canonical diagnostic",
+            bundle.canonical_base_graph.as_deref(),
+        )?;
         let sections_absent_graph = read_optional(
             "sections-absent control",
             bundle.sections_absent_graph.as_deref(),
@@ -159,6 +174,7 @@ impl ServingBundleSnapshot {
         let compile_report = read_optional("compile report", bundle.compile_report.as_deref())?;
         let generation_cid = serving_generation_cid(&[
             ("graph", Some(graph.as_slice())),
+            ("canonical_base_graph", canonical_base_graph.as_deref()),
             ("sections_absent_graph", sections_absent_graph.as_deref()),
             ("label_shuffled_graph", label_shuffled_graph.as_deref()),
             ("teacher", Some(teacher.as_slice())),
@@ -174,6 +190,7 @@ impl ServingBundleSnapshot {
         Ok(Self {
             bundle: bundle.clone(),
             graph,
+            canonical_base_graph,
             sections_absent_graph,
             label_shuffled_graph,
             teacher,
@@ -318,6 +335,312 @@ impl PairedCounts {
     }
 }
 
+/// Post-selection policy disposition used by the diagnostic attribution
+/// table. Candidate selection has already completed before this value or any
+/// teacher target is inspected.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum AttributionDisposition {
+    Served,
+    Abstained,
+    Declined,
+}
+
+/// Stable wire vocabulary for D4 status attribution. `Unavailable` is used
+/// only when D4 declined before a policy status existed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum AttributionStatus {
+    ExactContext,
+    Graph,
+    Novel,
+    Contradictory,
+    Unavailable,
+}
+
+impl From<Option<PolicyStatus>> for AttributionStatus {
+    fn from(status: Option<PolicyStatus>) -> Self {
+        match status {
+            Some(PolicyStatus::ExactContext) => Self::ExactContext,
+            Some(PolicyStatus::Graph) => Self::Graph,
+            Some(PolicyStatus::Novel) => Self::Novel,
+            Some(PolicyStatus::Contradictory) => Self::Contradictory,
+            None => Self::Unavailable,
+        }
+    }
+}
+
+/// Same-position normative/TLA correctness cell.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum NormativeTlaCell {
+    BothCorrect,
+    NormativeOnlyCorrect,
+    TlaOnlyCorrect,
+    NeitherCorrect,
+}
+
+/// Runtime-owned source of the recorded teacher target when it is present in
+/// the post-lane normative shortlist.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum AttributionCandidateSource {
+    Base,
+    Skipmix,
+}
+
+impl From<ServedCandidateSource> for AttributionCandidateSource {
+    fn from(source: ServedCandidateSource) -> Self {
+        match source {
+            ServedCandidateSource::Base => Self::Base,
+            ServedCandidateSource::Skipmix => Self::Skipmix,
+        }
+    }
+}
+
+/// Exact effect of the learned lane on teacher-target correctness.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum LaneTransition {
+    Unchanged,
+    TowardTarget,
+    AwayFromTarget,
+    ChangedOther,
+}
+
+/// Cross-tab dimensions for one evaluated position. `*_target_rank` is
+/// one-based and `None` means absent only when the corresponding
+/// `*_candidates_evaluated` flag is true. This distinguishes absence from an
+/// abstained/declined or unavailable-control decision.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+pub struct DecisionAttributionDimensions {
+    pub status: AttributionStatus,
+    pub disposition: AttributionDisposition,
+    pub normative_tla_cell: NormativeTlaCell,
+    /// Candidate rank under the pre-re-emission canonical graph. This arm is
+    /// diagnostic only and cannot contribute to an admission comparison.
+    pub canonical_base_candidates_evaluated: bool,
+    pub canonical_base_target_rank: Option<u8>,
+    pub normative_candidates_evaluated: bool,
+    pub normative_target_rank: Option<u8>,
+    pub sections_absent_candidates_evaluated: bool,
+    pub sections_absent_target_rank: Option<u8>,
+    pub target_source: Option<AttributionCandidateSource>,
+    pub target_skmx_contributed: bool,
+    pub target_psib_contributed: bool,
+    pub lane_transition: LaneTransition,
+}
+
+/// One post-hoc position record. The target is used only to construct this
+/// record after main and control predictions have returned.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct PositionDecisionAttribution {
+    pub position: u64,
+    pub dimensions: DecisionAttributionDimensions,
+}
+
+/// Canonically ordered run-length reduction of identical attribution
+/// dimensions.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct DecisionAttributionCell {
+    pub dimensions: DecisionAttributionDimensions,
+    pub count: u64,
+}
+
+/// Deterministic per-position evidence and its independently reproducible
+/// aggregate. Both are emitted because aggregates guide the next experiment,
+/// while position rows make every bucket falsifiable without rerunning.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct DecisionAttributionEvidence {
+    pub positions: Vec<PositionDecisionAttribution>,
+    pub cells: Vec<DecisionAttributionCell>,
+}
+
+impl DecisionAttributionEvidence {
+    fn record(&mut self, position: PositionDecisionAttribution) {
+        self.positions.push(position);
+    }
+
+    fn finalize(&mut self) {
+        let mut dimensions: Vec<_> = self
+            .positions
+            .iter()
+            .map(|position| position.dimensions)
+            .collect();
+        dimensions.sort_unstable();
+        self.cells.clear();
+        for dimensions in dimensions {
+            if let Some(last) = self
+                .cells
+                .last_mut()
+                .filter(|last| last.dimensions == dimensions)
+            {
+                last.count += 1;
+            } else {
+                self.cells.push(DecisionAttributionCell {
+                    dimensions,
+                    count: 1,
+                });
+            }
+        }
+    }
+
+    /// Stable bytes retained inside the atomic terminal artifact and bound by
+    /// [`Self::cid`].
+    pub fn deterministic_json_bytes(&self) -> Result<Vec<u8>, SourceUnavailable> {
+        serde_json::to_vec(self).map_err(|error| {
+            SourceUnavailable::new(format!("serialize decision attribution: {error}"))
+        })
+    }
+
+    /// Content identity of the complete typed attribution evidence, its
+    /// immutable bundle generation, and exact evaluated-position population.
+    pub fn cid(
+        &self,
+        generation_cid: &str,
+        evaluated_positions_cid: &str,
+    ) -> Result<String, SourceUnavailable> {
+        let bytes = self.deterministic_json_bytes()?;
+        Ok(report_tagged_cid(
+            b"r4-serving-decision-attribution/1",
+            &[
+                generation_cid.as_bytes(),
+                evaluated_positions_cid.as_bytes(),
+                &bytes,
+            ],
+        ))
+    }
+
+    fn validate(
+        &self,
+        expected_positions: &[usize],
+        normative_vs_tla: PairedCounts,
+        lane_changed: u64,
+        lane_toward: u64,
+        lane_away: u64,
+    ) -> Result<(), SourceUnavailable> {
+        if self.positions.len() != expected_positions.len() {
+            return Err(SourceUnavailable::new(format!(
+                "attribution has {} positions, expected {}",
+                self.positions.len(),
+                expected_positions.len()
+            )));
+        }
+        for (record, &expected) in self.positions.iter().zip(expected_positions) {
+            if record.position != expected as u64 {
+                return Err(SourceUnavailable::new(format!(
+                    "attribution position {} does not equal selected position {expected}",
+                    record.position
+                )));
+            }
+            let dimensions = record.dimensions;
+            for (name, evaluated, rank) in [
+                (
+                    "pre-re-emission-canonical",
+                    dimensions.canonical_base_candidates_evaluated,
+                    dimensions.canonical_base_target_rank,
+                ),
+                (
+                    "normative",
+                    dimensions.normative_candidates_evaluated,
+                    dimensions.normative_target_rank,
+                ),
+                (
+                    "sections-absent",
+                    dimensions.sections_absent_candidates_evaluated,
+                    dimensions.sections_absent_target_rank,
+                ),
+            ] {
+                if !evaluated && rank.is_some() {
+                    return Err(SourceUnavailable::new(format!(
+                        "{name} target rank is present without an evaluated candidate list"
+                    )));
+                }
+                if rank.is_some_and(|rank| rank == 0 || usize::from(rank) > 8) {
+                    return Err(SourceUnavailable::new(format!(
+                        "{name} target rank is outside 1..=8"
+                    )));
+                }
+            }
+            if dimensions.target_source.is_some() != dimensions.normative_target_rank.is_some() {
+                return Err(SourceUnavailable::new(
+                    "target source and normative target presence disagree",
+                ));
+            }
+            if dimensions.target_source != Some(AttributionCandidateSource::Skipmix)
+                && (dimensions.target_skmx_contributed || dimensions.target_psib_contributed)
+            {
+                return Err(SourceUnavailable::new(
+                    "base/absent target claims SKMX or PSIB contribution",
+                ));
+            }
+            if dimensions.target_source == Some(AttributionCandidateSource::Skipmix)
+                && !dimensions.target_skmx_contributed
+                && !dimensions.target_psib_contributed
+            {
+                return Err(SourceUnavailable::new(
+                    "skipmix target has neither SKMX nor PSIB contribution",
+                ));
+            }
+        }
+
+        let mut expected_cells = self.clone();
+        expected_cells.finalize();
+        if self.cells != expected_cells.cells {
+            return Err(SourceUnavailable::new(
+                "aggregate attribution cells do not reproduce from positions",
+            ));
+        }
+        let total = self.cells.iter().try_fold(0u64, |total, cell| {
+            total
+                .checked_add(cell.count)
+                .ok_or_else(|| SourceUnavailable::new("attribution cell count overflow"))
+        })?;
+        if total != expected_positions.len() as u64 {
+            return Err(SourceUnavailable::new(format!(
+                "aggregate attribution total {total} does not equal {}",
+                expected_positions.len()
+            )));
+        }
+
+        let mut paired = PairedCounts::default();
+        let mut changed = 0u64;
+        let mut toward = 0u64;
+        let mut away = 0u64;
+        for position in &self.positions {
+            match position.dimensions.normative_tla_cell {
+                NormativeTlaCell::BothCorrect => paired.both += 1,
+                NormativeTlaCell::NormativeOnlyCorrect => paired.normative_only += 1,
+                NormativeTlaCell::TlaOnlyCorrect => paired.comparator_only += 1,
+                NormativeTlaCell::NeitherCorrect => paired.neither += 1,
+            }
+            match position.dimensions.lane_transition {
+                LaneTransition::Unchanged => {}
+                LaneTransition::TowardTarget => {
+                    changed += 1;
+                    toward += 1;
+                }
+                LaneTransition::AwayFromTarget => {
+                    changed += 1;
+                    away += 1;
+                }
+                LaneTransition::ChangedOther => changed += 1,
+            }
+        }
+        if paired != normative_vs_tla {
+            return Err(SourceUnavailable::new(
+                "attribution normative/TLA cells disagree with paired counts",
+            ));
+        }
+        if (changed, toward, away) != (lane_changed, lane_toward, lane_away) {
+            return Err(SourceUnavailable::new(format!(
+                "attribution lane transitions {changed}/{toward}/{away} disagree with row {lane_changed}/{lane_toward}/{lane_away}"
+            )));
+        }
+        Ok(())
+    }
+}
+
 /// Live, monotonic evaluation counters. The callback receives this after the
 /// probe and at least every 256 completed positions, so a run always exposes
 /// rate, ETA, reachability, and both decision branches.
@@ -373,12 +696,15 @@ pub struct ServingEvalRow {
     /// Exact component generation captured before any probe or measurement.
     /// The report builder rejects a row if it is not given this same snapshot.
     pub generation_cid: String,
-    /// Stride-subsample size actually evaluated.
+    /// Canonical nested-sample size actually evaluated.
     pub sample_n: usize,
     /// Full held-out population from which this deterministic evaluation was
     /// selected.
     pub population_n: usize,
     pub mode: ServingEvalMode,
+    /// Versioned position-selection semantics. Report binding independently
+    /// reproduces this value and the selected position CID.
+    pub position_selection_algorithm: String,
     pub workers: usize,
     pub elapsed_millis: u64,
     /// Positions where the policy served a token.
@@ -402,6 +728,11 @@ pub struct ServingEvalRow {
     /// Main graph versus its in-runtime sections-absent candidate. Retained as
     /// an implementation cross-check, not used for RF-31 promotion.
     pub normative_vs_base: PairedCounts,
+    /// Diagnostic-only comparison between the pre-re-emission canonical graph
+    /// and the newly emitted sections-absent graph. Excluded from
+    /// `QualityMeasurements`, promotion failures, and production admission.
+    pub canonical_base_vs_sections_absent: Option<PairedCounts>,
+    pub canonical_base_hits: u64,
     /// Main graph versus the independently emitted sections-absent artifact.
     pub normative_vs_sections_absent: Option<PairedCounts>,
     /// Label-shuffled planted graph versus the independently emitted
@@ -415,6 +746,9 @@ pub struct ServingEvalRow {
     pub lane_changed: u64,
     pub lane_toward: u64,
     pub lane_away: u64,
+    /// Post-hoc decision evidence. Teacher targets are inspected only after
+    /// the runtime and both planted controls have selected their candidates.
+    pub decision_attribution: DecisionAttributionEvidence,
     /// D4 permitted, but the normative runtime could not select a candidate.
     pub declined: u64,
     /// Probe evidence: positions probed / served / hits.
@@ -512,8 +846,8 @@ pub enum ServingEvalSkip {
     /// The probe served predictions but none matched the corpus
     /// continuation or teacher argmax (#280 functional spot-check).
     ProbeFunctionalCheckFailed { served: u64, probed: usize },
-    /// The subsampled evaluation exceeded its budget; partial counts
-    /// are discarded (a truncated prefix is biased by construction).
+    /// The subsampled evaluation exceeded its budget; partial counts are
+    /// discarded because they do not equal the selected position population.
     EvalBudgetExceeded {
         done: usize,
         sample_n: usize,
@@ -544,6 +878,7 @@ impl ServingBundle {
         };
         let graph_dir = graph.parent()?.to_path_buf();
         let optional_file = |path: PathBuf| path.is_file().then_some(path);
+        let canonical_base_graph = optional_file(graph_dir.join("score_canonical_base.r4g1"));
         let sections_absent_graph = optional_file(graph_dir.join("score_sections_absent.r4g1"));
         let label_shuffled_graph = optional_file(graph_dir.join("score_label_shuffled.r4g1"));
         let teacher = root.join("tless_artifacts.bin");
@@ -560,6 +895,7 @@ impl ServingBundle {
         Some(Self {
             root: root.to_path_buf(),
             graph,
+            canonical_base_graph,
             sections_absent_graph,
             label_shuffled_graph,
             teacher,
@@ -591,8 +927,10 @@ impl ServingBundle {
 
 #[derive(Debug, Clone, Copy)]
 struct PositionRow {
+    position: usize,
     token: Option<u32>,
     internal_base_token: Option<u32>,
+    canonical_base_token: Option<u32>,
     sections_absent_token: Option<u32>,
     label_shuffled_token: Option<u32>,
     status: Option<PolicyStatus>,
@@ -605,6 +943,13 @@ struct PositionRow {
     next: u32,
     teacher_argmax: u32,
     tla_token: u32,
+    attribution_dimensions: DecisionAttributionDimensions,
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct ControlPositionDecision {
+    token: Option<u32>,
+    candidates: Option<ServedCandidates>,
 }
 
 #[derive(Clone, Copy)]
@@ -617,6 +962,7 @@ struct EvaluationContext<'a> {
 }
 
 struct ControlEngines<'borrow, 'graph> {
+    canonical_base: Option<&'borrow mut NormativeServingEngine<'graph>>,
     sections_absent: Option<&'borrow mut NormativeServingEngine<'graph>>,
     label_shuffled: Option<&'borrow mut NormativeServingEngine<'graph>>,
 }
@@ -626,7 +972,7 @@ fn evaluate_position(
     controls: ControlEngines<'_, '_>,
     context: EvaluationContext<'_>,
     position: usize,
-) -> Result<PositionRow, String> {
+) -> Result<PositionRow, SourceUnavailable> {
     // Each recorded position is an isolated teacher-forced decision. D4's
     // bounded session memory therefore resets between positions; no worker or
     // sharding order can change a verdict.
@@ -641,10 +987,11 @@ fn evaluate_position(
     );
     let tla_token = runtime::predict_witness_plain(context.store, &code).token;
     let next = context.corpus.next[position];
-    let teacher_argmax = context.corpus.t_argmax[position];
     let mut row = PositionRow {
+        position,
         token: None,
         internal_base_token: None,
+        canonical_base_token: None,
         sections_absent_token: None,
         label_shuffled_token: None,
         status: None,
@@ -655,12 +1002,31 @@ fn evaluate_position(
         lane_reachable: false,
         lane_changed: false,
         next,
-        teacher_argmax,
+        // The recorded target is deliberately not read until every selector
+        // below has returned.
+        teacher_argmax: 0,
         tla_token,
+        // Replaced only after main and both control predictions finish.
+        attribution_dimensions: DecisionAttributionDimensions {
+            status: AttributionStatus::Unavailable,
+            disposition: AttributionDisposition::Declined,
+            normative_tla_cell: NormativeTlaCell::NeitherCorrect,
+            canonical_base_candidates_evaluated: false,
+            canonical_base_target_rank: None,
+            normative_candidates_evaluated: false,
+            normative_target_rank: None,
+            sections_absent_candidates_evaluated: false,
+            sections_absent_target_rank: None,
+            target_source: None,
+            target_skmx_contributed: false,
+            target_psib_contributed: false,
+            lane_transition: LaneTransition::Unchanged,
+        },
     };
+    let mut normative_candidates = None;
     match engine
         .predict(&window)
-        .map_err(|error| format!("serving decision: {error}"))?
+        .map_err(|error| SourceUnavailable::new(format!("serving decision: {error}")))?
     {
         NormativeServingDecision::Serve(outcome) => {
             row.token = Some(outcome.token);
@@ -670,6 +1036,7 @@ fn evaluate_position(
             row.widened = outcome.widened;
             row.lane_reachable = outcome.lane_reachable;
             row.lane_changed = outcome.token != outcome.base_token;
+            normative_candidates = Some(outcome.candidates);
         }
         NormativeServingDecision::Abstain(outcome) => {
             row.status = Some(outcome.status.into());
@@ -679,25 +1046,115 @@ fn evaluate_position(
         }
         NormativeServingDecision::Decline(_) => row.declined = true,
     }
-    row.sections_absent_token = evaluate_control_token(controls.sections_absent, &window)?;
-    row.label_shuffled_token = evaluate_control_token(controls.label_shuffled, &window)?;
+    let canonical_base = evaluate_control_decision(controls.canonical_base, &window)?;
+    let sections_absent = evaluate_control_decision(controls.sections_absent, &window)?;
+    let label_shuffled = evaluate_control_decision(controls.label_shuffled, &window)?;
+    row.canonical_base_token = canonical_base.token;
+    row.sections_absent_token = sections_absent.token;
+    row.label_shuffled_token = label_shuffled.token;
+    row.teacher_argmax = context.corpus.t_argmax[position];
+
+    // Teacher targets are diagnostic labels, never selector inputs. All
+    // runtime decisions above are complete before this post-hoc cross-tab is
+    // constructed.
+    row.attribution_dimensions = posthoc_attribution_dimensions(
+        &row,
+        canonical_base.candidates.as_ref(),
+        normative_candidates.as_ref(),
+        sections_absent.candidates.as_ref(),
+    );
     Ok(row)
 }
 
-fn evaluate_control_token(
+fn evaluate_control_decision(
     engine: Option<&mut NormativeServingEngine<'_>>,
     window: &[u32],
-) -> Result<Option<u32>, String> {
+) -> Result<ControlPositionDecision, SourceUnavailable> {
     let Some(engine) = engine else {
-        return Ok(None);
+        return Ok(ControlPositionDecision::default());
     };
     engine.reset_policy_state();
     match engine
         .predict(window)
-        .map_err(|error| format!("control serving decision: {error}"))?
+        .map_err(|error| SourceUnavailable::new(format!("control serving decision: {error}")))?
     {
-        NormativeServingDecision::Serve(outcome) => Ok(Some(outcome.token)),
-        NormativeServingDecision::Abstain(_) | NormativeServingDecision::Decline(_) => Ok(None),
+        NormativeServingDecision::Serve(outcome) => Ok(ControlPositionDecision {
+            token: Some(outcome.token),
+            candidates: Some(outcome.candidates),
+        }),
+        NormativeServingDecision::Abstain(_) | NormativeServingDecision::Decline(_) => {
+            Ok(ControlPositionDecision::default())
+        }
+    }
+}
+
+fn posthoc_attribution_dimensions(
+    row: &PositionRow,
+    canonical_base_candidates: Option<&ServedCandidates>,
+    normative_candidates: Option<&ServedCandidates>,
+    sections_absent_candidates: Option<&ServedCandidates>,
+) -> DecisionAttributionDimensions {
+    let normative_hit = row.token == Some(row.teacher_argmax);
+    let tla_hit = row.tla_token == row.teacher_argmax;
+    let base_hit = row.internal_base_token == Some(row.teacher_argmax);
+    let normative_target = normative_candidates.and_then(|candidates| {
+        candidates
+            .ranked()
+            .iter()
+            .enumerate()
+            .find(|(_, candidate)| candidate.token == row.teacher_argmax)
+    });
+    let canonical_base_target_rank = canonical_base_candidates.and_then(|candidates| {
+        candidates
+            .ranked()
+            .iter()
+            .position(|candidate| candidate.token == row.teacher_argmax)
+            .map(|rank| (rank + 1) as u8)
+    });
+    let sections_absent_target_rank = sections_absent_candidates.and_then(|candidates| {
+        candidates
+            .ranked()
+            .iter()
+            .position(|candidate| candidate.token == row.teacher_argmax)
+            .map(|rank| (rank + 1) as u8)
+    });
+    let disposition = if row.declined {
+        AttributionDisposition::Declined
+    } else if row.abstained {
+        AttributionDisposition::Abstained
+    } else {
+        AttributionDisposition::Served
+    };
+    let lane_transition = if !row.lane_changed {
+        LaneTransition::Unchanged
+    } else if normative_hit && !base_hit {
+        LaneTransition::TowardTarget
+    } else if !normative_hit && base_hit {
+        LaneTransition::AwayFromTarget
+    } else {
+        LaneTransition::ChangedOther
+    };
+    DecisionAttributionDimensions {
+        status: row.status.into(),
+        disposition,
+        normative_tla_cell: match (normative_hit, tla_hit) {
+            (true, true) => NormativeTlaCell::BothCorrect,
+            (true, false) => NormativeTlaCell::NormativeOnlyCorrect,
+            (false, true) => NormativeTlaCell::TlaOnlyCorrect,
+            (false, false) => NormativeTlaCell::NeitherCorrect,
+        },
+        canonical_base_candidates_evaluated: canonical_base_candidates.is_some(),
+        canonical_base_target_rank,
+        normative_candidates_evaluated: normative_candidates.is_some(),
+        normative_target_rank: normative_target.map(|(rank, _)| (rank + 1) as u8),
+        sections_absent_candidates_evaluated: sections_absent_candidates.is_some(),
+        sections_absent_target_rank,
+        target_source: normative_target.map(|(_, candidate)| candidate.source.into()),
+        target_skmx_contributed: normative_target
+            .is_some_and(|(_, candidate)| candidate.skmx_contributed),
+        target_psib_contributed: normative_target
+            .is_some_and(|(_, candidate)| candidate.psib_contributed),
+        lane_transition,
     }
 }
 
@@ -709,6 +1166,12 @@ fn record_position(row: &mut ServingEvalRow, position: PositionRow) {
     row.normative_vs_base.record(normative_hit, base_hit);
     row.tla_hits += u64::from(tla_hit);
     row.base_hits += u64::from(base_hit);
+    if let Some(counts) = row.canonical_base_vs_sections_absent.as_mut() {
+        let canonical_hit = position.canonical_base_token == Some(position.teacher_argmax);
+        let absent_hit = position.sections_absent_token == Some(position.teacher_argmax);
+        counts.record(canonical_hit, absent_hit);
+        row.canonical_base_hits += u64::from(canonical_hit);
+    }
     if let Some(counts) = row.normative_vs_sections_absent.as_mut() {
         let absent_hit = position.sections_absent_token == Some(position.teacher_argmax);
         counts.record(normative_hit, absent_hit);
@@ -729,6 +1192,11 @@ fn record_position(row: &mut ServingEvalRow, position: PositionRow) {
         row.lane_toward += u64::from(normative_hit && !base_hit);
         row.lane_away += u64::from(!normative_hit && base_hit);
     }
+    row.decision_attribution
+        .record(PositionDecisionAttribution {
+            position: position.position as u64,
+            dimensions: position.attribution_dimensions,
+        });
     if position.declined {
         row.declined += 1;
     } else if position.abstained {
@@ -829,16 +1297,61 @@ fn probe_progress_snapshot(
     }
 }
 
-fn select_positions(held_out: &[usize], mode: ServingEvalMode) -> Vec<usize> {
-    match mode {
-        ServingEvalMode::FullCensus => held_out.to_vec(),
-        ServingEvalMode::Sample { positions } => held_out[..positions.min(held_out.len())].to_vec(),
-    }
-}
-
 fn positions_cid_usize(positions: &[usize]) -> String {
     let positions: Vec<u64> = positions.iter().map(|&position| position as u64).collect();
     deployed_quality_positions_cid(&positions)
+}
+
+/// One canonical, content-bound serving-evaluation selection. Callers which
+/// generate witness evidence must consume this exact list and CID rather than
+/// independently slicing the certification partition.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ServingEvalSelection {
+    pub positions: Vec<usize>,
+    pub evaluated_positions_cid: String,
+    pub population_positions_cid: String,
+    pub algorithm: &'static str,
+}
+
+/// Select a full census or nested story-distributed sample from the canonical
+/// certification population. This is the sole public evaluator/witness seam;
+/// it delegates sample semantics to
+/// [`crate::deployed_quality::deterministic_story_sample`], which the report
+/// binding layer independently invokes as well.
+pub fn select_serving_eval_positions(
+    story_by_position: &[u32],
+    held_out: &[usize],
+    mode: ServingEvalMode,
+) -> Result<ServingEvalSelection, SourceUnavailable> {
+    let population: Vec<u64> = held_out
+        .iter()
+        .copied()
+        .map(|position| {
+            u64::try_from(position)
+                .map_err(|_| SourceUnavailable::new("corpus position does not fit u64"))
+        })
+        .collect::<Result<Vec<_>, SourceUnavailable>>()?;
+    let (positions, algorithm) = match mode {
+        ServingEvalMode::FullCensus => (population.clone(), FULL_POPULATION_SELECTION_ALGORITHM),
+        ServingEvalMode::Sample { positions } => (
+            deterministic_story_sample(story_by_position, &population, positions)
+                .map_err(|error| SourceUnavailable::new(error.to_string()))?,
+            DETERMINISTIC_SAMPLE_SELECTION_ALGORITHM,
+        ),
+    };
+    let positions: Vec<usize> = positions
+        .into_iter()
+        .map(|position| {
+            usize::try_from(position)
+                .map_err(|_| SourceUnavailable::new("selected corpus position does not fit usize"))
+        })
+        .collect::<Result<Vec<_>, SourceUnavailable>>()?;
+    Ok(ServingEvalSelection {
+        evaluated_positions_cid: positions_cid_usize(&positions),
+        population_positions_cid: deployed_quality_positions_cid(&population),
+        positions,
+        algorithm,
+    })
 }
 
 /// Evaluate one bundle's exact normative serving surface on its held-out
@@ -886,9 +1399,15 @@ pub fn evaluate_serving_snapshot(
         workers: budgets.workers.max(1),
     });
     let graph_bytes = snapshot.graph.as_slice();
+    let canonical_base_bytes = snapshot.canonical_base_graph.as_deref();
     let sections_absent_bytes = snapshot.sections_absent_graph.as_deref();
     let label_shuffled_bytes = snapshot.label_shuffled_graph.as_deref();
-    validate_planted_control_graphs(graph_bytes, sections_absent_bytes, label_shuffled_bytes)?;
+    validate_planted_control_graphs(
+        graph_bytes,
+        canonical_base_bytes,
+        sections_absent_bytes,
+        label_shuffled_bytes,
+    )?;
     let teacher_bytes = snapshot.teacher.as_slice();
     let store_bytes = snapshot.store.as_slice();
     let score_report = snapshot
@@ -912,7 +1431,12 @@ pub fn evaluate_serving_snapshot(
             "the bundle's held-out partition is empty",
         ));
     }
-    let positions = select_positions(&held_out, budgets.mode);
+    let ServingEvalSelection {
+        positions,
+        evaluated_positions_cid,
+        population_positions_cid,
+        algorithm: position_selection_algorithm,
+    } = select_serving_eval_positions(&corpus.story, &held_out, budgets.mode)?;
     if positions.is_empty() {
         return Err(SourceUnavailable::new(
             "the configured serving evaluation selects zero positions",
@@ -931,6 +1455,9 @@ pub fn evaluate_serving_snapshot(
         score_report,
     };
     let mut probe_engine = NormativeServingEngine::load_for_research(parts)?;
+    let mut probe_canonical_base = canonical_base_bytes
+        .map(|graph| NormativeServingEngine::load_for_research(EngineParts { graph, ..parts }))
+        .transpose()?;
     let mut probe_sections_absent = sections_absent_bytes
         .map(|graph| NormativeServingEngine::load_for_research(EngineParts { graph, ..parts }))
         .transpose()?;
@@ -952,6 +1479,7 @@ pub fn evaluate_serving_snapshot(
         let measured = evaluate_position(
             &mut probe_engine,
             ControlEngines {
+                canonical_base: probe_canonical_base.as_mut(),
                 sections_absent: probe_sections_absent.as_mut(),
                 label_shuffled: probe_label_shuffled.as_mut(),
             },
@@ -998,6 +1526,7 @@ pub fn evaluate_serving_snapshot(
         sample_n: positions.len(),
         population_n: held_out.len(),
         mode: budgets.mode,
+        position_selection_algorithm: position_selection_algorithm.to_string(),
         workers,
         elapsed_millis: 0,
         served: 0,
@@ -1010,6 +1539,10 @@ pub fn evaluate_serving_snapshot(
         base_hits: 0,
         normative_vs_tla: PairedCounts::default(),
         normative_vs_base: PairedCounts::default(),
+        canonical_base_vs_sections_absent: (canonical_base_bytes.is_some()
+            && sections_absent_bytes.is_some())
+        .then(PairedCounts::default),
+        canonical_base_hits: 0,
         normative_vs_sections_absent: sections_absent_bytes.is_some().then(PairedCounts::default),
         label_shuffled_vs_sections_absent: (sections_absent_bytes.is_some()
             && label_shuffled_bytes.is_some())
@@ -1022,15 +1555,16 @@ pub fn evaluate_serving_snapshot(
         lane_changed: 0,
         lane_toward: 0,
         lane_away: 0,
+        decision_attribution: DecisionAttributionEvidence::default(),
         declined: 0,
         probe_positions: probe_n,
         probe_served,
         probe_hits,
-        evaluated_positions_cid: positions_cid_usize(&positions),
-        population_positions_cid: positions_cid_usize(&held_out),
+        evaluated_positions_cid: evaluated_positions_cid.clone(),
+        population_positions_cid: population_positions_cid.clone(),
     };
     let cancelled = AtomicBool::new(false);
-    let (sender, receiver) = mpsc::channel::<(usize, Result<PositionRow, String>)>();
+    let (sender, receiver) = mpsc::channel::<(usize, Result<PositionRow, SourceUnavailable>)>();
     let mut ordered = vec![None; positions.len()];
     let mut done = 0usize;
     let mut worker_error = None;
@@ -1050,7 +1584,19 @@ pub fn evaluate_serving_snapshot(
                 let mut engine = match NormativeServingEngine::load_for_research(parts) {
                     Ok(engine) => engine,
                     Err(error) => {
-                        let _ = sender.send((usize::MAX, Err(error.to_string())));
+                        let _ = sender.send((usize::MAX, Err(error)));
+                        return;
+                    }
+                };
+                let mut canonical_base_engine = match canonical_base_bytes
+                    .map(|graph| {
+                        NormativeServingEngine::load_for_research(EngineParts { graph, ..parts })
+                    })
+                    .transpose()
+                {
+                    Ok(engine) => engine,
+                    Err(error) => {
+                        let _ = sender.send((usize::MAX, Err(error)));
                         return;
                     }
                 };
@@ -1062,7 +1608,7 @@ pub fn evaluate_serving_snapshot(
                 {
                     Ok(engine) => engine,
                     Err(error) => {
-                        let _ = sender.send((usize::MAX, Err(error.to_string())));
+                        let _ = sender.send((usize::MAX, Err(error)));
                         return;
                     }
                 };
@@ -1074,7 +1620,7 @@ pub fn evaluate_serving_snapshot(
                 {
                     Ok(engine) => engine,
                     Err(error) => {
-                        let _ = sender.send((usize::MAX, Err(error.to_string())));
+                        let _ = sender.send((usize::MAX, Err(error)));
                         return;
                     }
                 };
@@ -1085,6 +1631,7 @@ pub fn evaluate_serving_snapshot(
                     let result = evaluate_position(
                         &mut engine,
                         ControlEngines {
+                            canonical_base: canonical_base_engine.as_mut(),
                             sections_absent: sections_absent_engine.as_mut(),
                             label_shuffled: label_shuffled_engine.as_mut(),
                         },
@@ -1131,7 +1678,9 @@ pub fn evaluate_serving_snapshot(
                     break;
                 }
                 Ok((ordinal, Ok(_))) => {
-                    worker_error = Some(format!("worker returned out-of-range ordinal {ordinal}"));
+                    worker_error = Some(SourceUnavailable::new(format!(
+                        "worker returned out-of-range ordinal {ordinal}"
+                    )));
                     cancelled.store(true, Ordering::Relaxed);
                     break;
                 }
@@ -1141,7 +1690,7 @@ pub fn evaluate_serving_snapshot(
         }
     });
     if let Some(error) = worker_error {
-        return Err(SourceUnavailable::new(error));
+        return Err(error);
     }
     if budget_exceeded || done != positions.len() {
         return Ok(ServingEvalOutcome::Skipped(
@@ -1162,6 +1711,7 @@ pub fn evaluate_serving_snapshot(
         sample_n: positions.len(),
         population_n: held_out.len(),
         mode: budgets.mode,
+        position_selection_algorithm: position_selection_algorithm.to_string(),
         workers,
         elapsed_millis: eval_start.elapsed().as_millis().min(u128::from(u64::MAX)) as u64,
         served: 0,
@@ -1174,6 +1724,10 @@ pub fn evaluate_serving_snapshot(
         base_hits: 0,
         normative_vs_tla: PairedCounts::default(),
         normative_vs_base: PairedCounts::default(),
+        canonical_base_vs_sections_absent: (canonical_base_bytes.is_some()
+            && sections_absent_bytes.is_some())
+        .then(PairedCounts::default),
+        canonical_base_hits: 0,
         normative_vs_sections_absent: sections_absent_bytes.is_some().then(PairedCounts::default),
         label_shuffled_vs_sections_absent: (sections_absent_bytes.is_some()
             && label_shuffled_bytes.is_some())
@@ -1186,12 +1740,13 @@ pub fn evaluate_serving_snapshot(
         lane_changed: 0,
         lane_toward: 0,
         lane_away: 0,
+        decision_attribution: DecisionAttributionEvidence::default(),
         declined: 0,
         probe_positions: probe_n,
         probe_served,
         probe_hits,
-        evaluated_positions_cid: positions_cid_usize(&positions),
-        population_positions_cid: positions_cid_usize(&held_out),
+        evaluated_positions_cid,
+        population_positions_cid,
     };
     for position in ordered {
         record_position(
@@ -1199,6 +1754,7 @@ pub fn evaluate_serving_snapshot(
             position.expect("every completed ordinal has a measured row"),
         );
     }
+    row.decision_attribution.finalize();
     debug_assert_eq!(row.normative_vs_tla.total(), positions.len() as u64);
     progress(progress_snapshot(
         "complete",
@@ -1259,7 +1815,8 @@ fn build_deployed_quality_report_from_snapshot(
     let corpus = compiler::load_corpus_bytes(corpus_meta, corpus_records, None)
         .ok_or_else(|| SourceUnavailable::new("deployed-quality corpus parse failed"))?;
     let (_, held_out) = induction::split_positions(&corpus);
-    let selected = select_positions(&held_out, row.mode);
+    let selection = select_serving_eval_positions(&corpus.story, &held_out, row.mode)?;
+    let selected = selection.positions;
     if selected.len() != row.sample_n || held_out.len() != row.population_n {
         return Err(SourceUnavailable::new(format!(
             "serving row population {}/{}, recomputed {}/{}",
@@ -1269,15 +1826,32 @@ fn build_deployed_quality_report_from_snapshot(
             held_out.len()
         )));
     }
+    if row.position_selection_algorithm != selection.algorithm {
+        return Err(SourceUnavailable::new(format!(
+            "serving row selection algorithm {:?} does not equal canonical {:?}",
+            row.position_selection_algorithm, selection.algorithm
+        )));
+    }
     let full_positions = usize_positions_to_u64(&held_out)?;
     let evaluated_positions = usize_positions_to_u64(&selected)?;
-    if deployed_quality_positions_cid(&full_positions) != row.population_positions_cid
-        || deployed_quality_positions_cid(&evaluated_positions) != row.evaluated_positions_cid
+    if selection.population_positions_cid != row.population_positions_cid
+        || selection.evaluated_positions_cid != row.evaluated_positions_cid
     {
         return Err(SourceUnavailable::new(
             "serving row position identities do not reproduce from the loaded corpus",
         ));
     }
+    row.decision_attribution
+        .validate(
+            &selected,
+            row.normative_vs_tla,
+            row.lane_changed,
+            row.lane_toward,
+            row.lane_away,
+        )
+        .map_err(|reason| {
+            SourceUnavailable::new(format!("serving row decision attribution: {reason}"))
+        })?;
     let witness_artifact =
         evidence.validated_witness_replay_evidence(NormativeWitnessReplaySpec {
             material: NormativeWitnessReplayMaterial {
@@ -1325,7 +1899,12 @@ fn build_deployed_quality_report_from_snapshot(
         && label_shuffled_bytes.is_some()
         && row.normative_vs_sections_absent.is_some()
         && row.label_shuffled_vs_sections_absent.is_some();
-    validate_planted_control_graphs(graph, sections_absent_bytes, label_shuffled_bytes)?;
+    validate_planted_control_graphs(
+        graph,
+        snapshot.canonical_base_graph.as_deref(),
+        sections_absent_bytes,
+        label_shuffled_bytes,
+    )?;
 
     let (versus_sections_absent, label_control) = if planted_controls_available {
         let sections_absent_bytes = sections_absent_bytes.ok_or_else(|| {
@@ -1442,7 +2021,7 @@ fn build_deployed_quality_report_from_snapshot(
         failures: witness_artifact.failures,
     };
 
-    let promotion_failures = promotion_failures(PromotionGateInputs {
+    let gate_inputs = PromotionGateInputs {
         row,
         measurements: &measurements,
         label_control: &label_control,
@@ -1451,19 +2030,13 @@ fn build_deployed_quality_report_from_snapshot(
         combined_cross_surface_mismatches: cross_surface_mismatches,
         witness_replayed: witness_artifact.replayed,
         witness_failures: witness_artifact.failures,
-    });
+    };
+    let promotion_failures = promotion_failures(gate_inputs);
     let (mode, verdict, measurements) = match row.mode {
         ServingEvalMode::Sample { .. } => (
             EvaluationMode::Sample,
             QualityVerdict::Estimate {
-                decision: if promotion_failures.is_empty() {
-                    format!(
-                        "PROCEED: binding sample satisfies all predeclared gates; lane_reachable={}/{}; run the full census on this exact bundle and evidence generation",
-                        row.lane_reachable, row.sample_n
-                    )
-                } else {
-                    format!("STOP: {}", promotion_failures.join("; "))
-                },
+                decision: staged_sample_decision(gate_inputs).render(),
             },
             Some(measurements),
         ),
@@ -1513,6 +2086,7 @@ fn build_deployed_quality_report_from_snapshot(
     Ok(report)
 }
 
+#[derive(Clone, Copy)]
 struct PromotionGateInputs<'a> {
     row: &'a ServingEvalRow,
     measurements: &'a QualityMeasurements,
@@ -1524,10 +2098,51 @@ struct PromotionGateInputs<'a> {
     witness_failures: u64,
 }
 
-fn promotion_failures(inputs: PromotionGateInputs<'_>) -> Vec<String> {
+/// Typed outcome of the pre-registered sample funnel. It never represents a
+/// production verdict: `Proceed` authorizes only the full census on the same
+/// captured generation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ServingSampleDecision {
+    Proceed,
+    Stop {
+        reasons: Vec<String>,
+    },
+    Inconclusive {
+        reasons: Vec<String>,
+        /// `Some(n)` requests the one predeclared non-census extension.
+        /// `None` means that extension already ran; only a separately
+        /// authorized full census can resolve the overlap.
+        next_positions: Option<usize>,
+    },
+}
+
+impl ServingSampleDecision {
+    fn render(&self) -> String {
+        match self {
+            Self::Proceed => "PROCEED: binding sample satisfies every structural and paired lower-bound gate; run the full census on this exact evidence generation".to_string(),
+            Self::Stop { reasons } => format!("STOP: {}", reasons.join("; ")),
+            Self::Inconclusive {
+                reasons,
+                next_positions: Some(next_positions),
+            } => format!(
+                "INCONCLUSIVE: {}; extend this exact generation to {next_positions} positions with {DETERMINISTIC_SAMPLE_SELECTION_ALGORITHM}",
+                reasons.join("; ")
+            ),
+            Self::Inconclusive {
+                reasons,
+                next_positions: None,
+            } => format!(
+                "INCONCLUSIVE: {}; the predeclared extension is complete, so only a separately authorized full census on this exact generation can resolve the overlapping interval",
+                reasons.join("; ")
+            ),
+        }
+    }
+}
+
+fn structural_failures(inputs: PromotionGateInputs<'_>) -> Vec<String> {
     let PromotionGateInputs {
         row,
-        measurements,
+        measurements: _,
         label_control,
         planted_controls_available,
         external_cross_surface_checks,
@@ -1538,9 +2153,6 @@ fn promotion_failures(inputs: PromotionGateInputs<'_>) -> Vec<String> {
     let mut failures = Vec::new();
     if row.lane_reachable == 0 {
         failures.push("SKMX/PSIB lane is unreachable on the evaluated positions".to_string());
-    }
-    if measurements.versus_tla.interval.lower_delta_ppm < 0 {
-        failures.push("paired lower bound versus TLA is below zero".to_string());
     }
     if !planted_controls_available {
         failures.push(
@@ -1557,11 +2169,6 @@ fn promotion_failures(inputs: PromotionGateInputs<'_>) -> Vec<String> {
                 row.internal_base_control_checks,
                 row.sample_n,
                 row.internal_base_control_mismatches
-            ));
-        }
-        if measurements.versus_sections_absent.interval.lower_delta_ppm < RF31_MIN_LANE_DELTA_PPM {
-            failures.push(format!(
-                "paired lane lower bound is below {RF31_MIN_LANE_DELTA_PPM} ppm"
             ));
         }
         if label_control.verdict != NegativeControlVerdict::Passed
@@ -1584,6 +2191,90 @@ fn promotion_failures(inputs: PromotionGateInputs<'_>) -> Vec<String> {
         ));
     }
     failures
+}
+
+fn promotion_failures(inputs: PromotionGateInputs<'_>) -> Vec<String> {
+    let mut failures = structural_failures(inputs);
+    if inputs.measurements.versus_tla.interval.lower_delta_ppm < 0 {
+        failures.push("paired lower bound versus TLA is below zero".to_string());
+    }
+    if inputs
+        .measurements
+        .versus_sections_absent
+        .interval
+        .lower_delta_ppm
+        < RF31_MIN_LANE_DELTA_PPM
+    {
+        failures.push(format!(
+            "paired lane lower bound is below {RF31_MIN_LANE_DELTA_PPM} ppm"
+        ));
+    }
+    failures
+}
+
+fn staged_sample_decision(inputs: PromotionGateInputs<'_>) -> ServingSampleDecision {
+    let structural = structural_failures(inputs);
+    if !structural.is_empty() {
+        return ServingSampleDecision::Stop {
+            reasons: structural,
+        };
+    }
+
+    let tla = &inputs.measurements.versus_tla.interval;
+    let lane = &inputs.measurements.versus_sections_absent.interval;
+    if tla.lower_delta_ppm >= 0 && lane.lower_delta_ppm >= RF31_MIN_LANE_DELTA_PPM {
+        return ServingSampleDecision::Proceed;
+    }
+
+    let mut impossible = Vec::new();
+    if tla.upper_delta_ppm < 0 {
+        impossible.push(format!(
+            "paired TLA upper bound {} ppm is below zero",
+            tla.upper_delta_ppm
+        ));
+    }
+    if lane.upper_delta_ppm < RF31_MIN_LANE_DELTA_PPM {
+        impossible.push(format!(
+            "paired lane upper bound {} ppm is below {RF31_MIN_LANE_DELTA_PPM} ppm",
+            lane.upper_delta_ppm
+        ));
+    }
+    let reachability_ceiling_ppm = if inputs.row.sample_n == 0 {
+        0
+    } else {
+        ((u128::from(inputs.row.lane_reachable) * 1_000_000) / inputs.row.sample_n as u128) as i64
+    };
+    if reachability_ceiling_ppm < RF31_MIN_LANE_DELTA_PPM {
+        impossible.push(format!(
+            "lane reachability ceiling {reachability_ceiling_ppm} ppm is below {RF31_MIN_LANE_DELTA_PPM} ppm"
+        ));
+    }
+    if !impossible.is_empty() {
+        return ServingSampleDecision::Stop {
+            reasons: impossible,
+        };
+    }
+
+    let max_non_census = inputs.row.population_n.saturating_sub(1);
+    let extension_target = EXTENDED_SAMPLE_TARGET.min(max_non_census);
+    let next_positions = (inputs.row.sample_n < extension_target).then_some(extension_target);
+    let mut reasons = Vec::new();
+    if tla.lower_delta_ppm < 0 {
+        reasons.push(format!(
+            "paired TLA interval [{}, {}] ppm crosses zero",
+            tla.lower_delta_ppm, tla.upper_delta_ppm
+        ));
+    }
+    if lane.lower_delta_ppm < RF31_MIN_LANE_DELTA_PPM {
+        reasons.push(format!(
+            "paired lane interval [{}, {}] ppm crosses the {} ppm floor",
+            lane.lower_delta_ppm, lane.upper_delta_ppm, RF31_MIN_LANE_DELTA_PPM
+        ));
+    }
+    ServingSampleDecision::Inconclusive {
+        reasons,
+        next_positions,
+    }
 }
 
 /// Run the evaluator with a durable append-only progress stream, then write a
@@ -1696,6 +2387,12 @@ pub fn evaluate_serving_snapshot_recorded(
             })
         }
         ServingEvalOutcome::Row(row) => {
+            let decision_attribution_cid = row
+                .decision_attribution
+                .cid(&row.generation_cid, &row.evaluated_positions_cid)
+                .map_err(|error| {
+                    SourceUnavailable::new(format!("serialize decision attribution: {error}"))
+                })?;
             let report = match build_deployed_quality_report_from_snapshot(snapshot, row, evidence)
             {
                 Ok(report) => report,
@@ -1708,6 +2405,7 @@ pub fn evaluate_serving_snapshot_recorded(
                             "reason": error.to_string(),
                             "generation_cid": snapshot.generation_cid,
                             "evaluation": row,
+                            "decision_attribution_cid": decision_attribution_cid,
                             "evidence_hooks": evidence_hooks,
                             "report_emitted": false,
                         }),
@@ -1746,6 +2444,7 @@ pub fn evaluate_serving_snapshot_recorded(
                     "status": terminal_status,
                     "generation_cid": snapshot.generation_cid,
                     "evaluation": row,
+                    "decision_attribution_cid": decision_attribution_cid,
                     "quality_verdict": &report.evaluation.verdict,
                     "report_path": paths.deployed_quality_json,
                     "report_cid": report_cid,
@@ -1932,6 +2631,7 @@ fn report_tagged_cid(tag: &[u8], parts: &[&[u8]]) -> String {
 
 fn validate_planted_control_graphs(
     main: &[u8],
+    canonical_base: Option<&[u8]>,
     sections_absent: Option<&[u8]>,
     label_shuffled: Option<&[u8]>,
 ) -> Result<(), SourceUnavailable> {
@@ -1943,6 +2643,16 @@ fn validate_planted_control_graphs(
         return Err(SourceUnavailable::new(
             "main graph lacks required SKMX/PSIB sections",
         ));
+    }
+    if let Some(bytes) = canonical_base {
+        let canonical_view = parse_control_graph("pre-re-emission canonical", bytes)?;
+        if canonical_view.section(SectionId::SKMX).is_some()
+            || canonical_view.section(SectionId::PSIB).is_some()
+        {
+            return Err(SourceUnavailable::new(
+                "pre-re-emission canonical diagnostic contains SKMX or PSIB",
+            ));
+        }
     }
     if let Some(bytes) = sections_absent {
         let absent_view = parse_control_graph("sections-absent", bytes)?;
@@ -2049,15 +2759,19 @@ fn create_progress_file(path: &Path) -> Result<File, SourceUnavailable> {
         })
 }
 
-fn append_progress(file: &mut File, state: &ServingProgress) -> Result<(), std::io::Error> {
+fn append_progress(file: &mut File, state: &ServingProgress) -> Result<(), SourceUnavailable> {
     let record = serde_json::json!({
         "schema": REPORT_PROGRESS_SCHEMA,
         "progress": state,
     });
-    serde_json::to_writer(&mut *file, &record).map_err(std::io::Error::other)?;
-    file.write_all(b"\n")?;
-    file.flush()?;
+    serde_json::to_writer(&mut *file, &record)
+        .map_err(|error| SourceUnavailable::new(format!("serialize progress record: {error}")))?;
+    file.write_all(b"\n")
+        .map_err(|error| SourceUnavailable::new(format!("append progress record: {error}")))?;
+    file.flush()
+        .map_err(|error| SourceUnavailable::new(format!("flush progress record: {error}")))?;
     file.sync_data()
+        .map_err(|error| SourceUnavailable::new(format!("sync progress record: {error}")))
 }
 
 fn write_terminal(path: &Path, value: serde_json::Value) -> Result<(), SourceUnavailable> {
@@ -2126,6 +2840,61 @@ fn skip_reason(skip: &ServingEvalSkip) -> String {
 mod tests {
     use super::*;
 
+    fn control_graph_with_lane(candidate: Option<u32>) -> Vec<u8> {
+        use uor_r4_graph_format::{
+            build_psi_bag_table, build_skipmix_table, ArtifactBuilder, SectionId,
+        };
+
+        let mut head = Vec::with_capacity(uor_r4_graph_format::HEAD_PAYLOAD_LEN);
+        head.extend_from_slice(&[0x11; 32]);
+        head.extend_from_slice(&[0x22; 32]);
+        head.extend_from_slice(&[0x33; 32]);
+        head.extend_from_slice(&[0x44; 32]);
+        head.extend_from_slice(b"0123456789abcdef0123");
+        head.extend_from_slice(&[0x55; 32]);
+        head.extend_from_slice(&32u16.to_le_bytes());
+        head.extend_from_slice(&16u16.to_le_bytes());
+        head.extend_from_slice(&8u16.to_le_bytes());
+        head.extend_from_slice(&8u16.to_le_bytes());
+        head.extend_from_slice(&64u32.to_le_bytes());
+        head.extend_from_slice(&64u32.to_le_bytes());
+        head.extend_from_slice(&0u32.to_le_bytes());
+        head.extend_from_slice(&0u32.to_le_bytes());
+        head.push(1);
+        head.extend_from_slice(&[0; 7]);
+        head.extend_from_slice(&64u16.to_le_bytes());
+        head.extend_from_slice(&1u16.to_le_bytes());
+        head.extend_from_slice(&0u16.to_le_bytes());
+        head.extend_from_slice(&0u16.to_le_bytes());
+        head.extend_from_slice(&100u32.to_le_bytes());
+        assert_eq!(head.len(), uor_r4_graph_format::HEAD_PAYLOAD_LEN);
+
+        let mut builder = ArtifactBuilder::new(3);
+        builder.add_section(SectionId::HEAD, 0, &head);
+        if let Some(candidate) = candidate {
+            let skmx =
+                build_skipmix_table(&[(1, 2, vec![(candidate, 3)])]).expect("test SKMX table");
+            let psib = build_psi_bag_table(&[(1, vec![(candidate, 4)])]).expect("test PSIB table");
+            builder.add_section(SectionId::SKMX, 0, &skmx);
+            builder.add_section(SectionId::PSIB, 0, &psib);
+        }
+        builder.build().expect("test control graph")
+    }
+
+    #[test]
+    fn pre_reemission_diagnostic_must_really_be_sections_absent() {
+        let main = control_graph_with_lane(Some(3));
+        let absent = control_graph_with_lane(None);
+        let shuffled = control_graph_with_lane(Some(4));
+        validate_planted_control_graphs(&main, Some(&absent), Some(&absent), Some(&shuffled))
+            .expect("sections-absent diagnostic is valid");
+
+        let error =
+            validate_planted_control_graphs(&main, Some(&main), Some(&absent), Some(&shuffled))
+                .expect_err("lane-bearing graph cannot be labelled pre-re-emission absent");
+        assert!(error.reason.contains("canonical diagnostic contains SKMX"));
+    }
+
     #[test]
     fn discover_requires_all_bundle_files() {
         let root = std::env::temp_dir().join(format!("r4-serving-eval-{}", std::process::id()));
@@ -2149,8 +2918,14 @@ mod tests {
         assert_eq!(bundle.graph, root.join("graph").join("score.r4g1"));
         assert_eq!(bundle.teacher, root.join("tless_artifacts.bin"));
         assert_eq!(bundle.store, root.join("tless_store.bin"));
+        assert!(bundle.canonical_base_graph.is_none());
         assert!(bundle.sections_absent_graph.is_none());
         assert!(bundle.label_shuffled_graph.is_none());
+        std::fs::write(
+            root.join("graph").join("score_canonical_base.r4g1"),
+            b"canonical-diagnostic",
+        )
+        .unwrap();
         std::fs::write(
             root.join("graph").join("score_sections_absent.r4g1"),
             b"control",
@@ -2162,10 +2937,23 @@ mod tests {
         )
         .unwrap();
         let with_controls = ServingBundle::discover(&root).expect("bundle with controls");
+        assert!(with_controls.canonical_base_graph.is_some());
         assert!(with_controls.sections_absent_graph.is_some());
         assert!(with_controls.label_shuffled_graph.is_some());
         let first = ServingBundleSnapshot::capture(&with_controls).expect("capture generation");
         assert_eq!(first.generation_cid().len(), "blake3:".len() + 64);
+        std::fs::write(
+            root.join("graph").join("score_canonical_base.r4g1"),
+            b"changed-canonical-diagnostic",
+        )
+        .unwrap();
+        let diagnostic_changed =
+            ServingBundleSnapshot::capture(&with_controls).expect("recapture diagnostic");
+        assert_ne!(
+            first.generation_cid(),
+            diagnostic_changed.generation_cid(),
+            "a diagnostic-arm byte change must create a different generation"
+        );
         std::fs::write(root.join("tless_store.bin"), b"changed").unwrap();
         let second = ServingBundleSnapshot::capture(&with_controls).expect("recapture generation");
         assert_ne!(
@@ -2206,10 +2994,164 @@ mod tests {
     }
 
     #[test]
-    fn sample_is_the_exact_ascending_certification_prefix() {
+    fn sample_is_story_distributed_and_canonically_sorted() {
         let held_out: Vec<usize> = (100..1_100).collect();
-        let selected = select_positions(&held_out, ServingEvalMode::Sample { positions: 7 });
-        assert_eq!(selected, held_out[..7]);
+        let story: Vec<u32> = (0..1_100).map(|position| position / 100).collect();
+        let selection = select_serving_eval_positions(
+            &story,
+            &held_out,
+            ServingEvalMode::Sample { positions: 7 },
+        )
+        .expect("selection");
+        assert_eq!(selection.positions.len(), 7);
+        assert!(selection.positions.windows(2).all(|pair| pair[0] < pair[1]));
+        let selected_stories: Vec<_> = selection
+            .positions
+            .iter()
+            .map(|&position| story[position])
+            .collect();
+        assert_eq!(selected_stories, vec![1, 2, 3, 5, 6, 8, 9]);
+        assert_eq!(
+            selection.algorithm,
+            DETERMINISTIC_SAMPLE_SELECTION_ALGORITHM
+        );
+    }
+
+    #[test]
+    fn six_thousand_position_sample_is_nested_in_eighteen_thousand_extension() {
+        const POPULATION: usize = 24_000;
+        const STORY_LEN: usize = 6_000;
+        let held_out: Vec<usize> = (0..POPULATION).collect();
+        let story: Vec<u32> = (0..POPULATION)
+            .map(|position| (position / STORY_LEN) as u32)
+            .collect();
+        let screen = select_serving_eval_positions(
+            &story,
+            &held_out,
+            ServingEvalMode::Sample {
+                positions: SAMPLE_TARGET,
+            },
+        )
+        .expect("screen");
+        let extension = select_serving_eval_positions(
+            &story,
+            &held_out,
+            ServingEvalMode::Sample {
+                positions: EXTENDED_SAMPLE_TARGET,
+            },
+        )
+        .expect("extension");
+        assert_eq!(screen.positions.len(), SAMPLE_TARGET);
+        assert_eq!(extension.positions.len(), EXTENDED_SAMPLE_TARGET);
+        assert!(screen
+            .positions
+            .iter()
+            .all(|position| extension.positions.binary_search(position).is_ok()));
+        for story_id in 0..4 {
+            assert_eq!(
+                screen
+                    .positions
+                    .iter()
+                    .filter(|&&position| story[position] == story_id)
+                    .count(),
+                SAMPLE_TARGET / 4
+            );
+            assert_eq!(
+                extension
+                    .positions
+                    .iter()
+                    .filter(|&&position| story[position] == story_id)
+                    .count(),
+                EXTENDED_SAMPLE_TARGET / 4
+            );
+        }
+        assert_eq!(
+            screen,
+            select_serving_eval_positions(
+                &story,
+                &held_out,
+                ServingEvalMode::Sample {
+                    positions: SAMPLE_TARGET,
+                },
+            )
+            .expect("deterministic screen")
+        );
+    }
+
+    #[test]
+    fn attribution_rows_reproduce_aggregate_and_bind_generation_and_positions() {
+        let base = DecisionAttributionDimensions {
+            status: AttributionStatus::Graph,
+            disposition: AttributionDisposition::Served,
+            normative_tla_cell: NormativeTlaCell::NormativeOnlyCorrect,
+            canonical_base_candidates_evaluated: true,
+            canonical_base_target_rank: None,
+            normative_candidates_evaluated: true,
+            normative_target_rank: Some(1),
+            sections_absent_candidates_evaluated: true,
+            sections_absent_target_rank: None,
+            target_source: Some(AttributionCandidateSource::Skipmix),
+            target_skmx_contributed: true,
+            target_psib_contributed: false,
+            lane_transition: LaneTransition::TowardTarget,
+        };
+        let mut evidence = DecisionAttributionEvidence::default();
+        evidence.record(PositionDecisionAttribution {
+            position: 10,
+            dimensions: base,
+        });
+        evidence.record(PositionDecisionAttribution {
+            position: 20,
+            dimensions: DecisionAttributionDimensions {
+                normative_tla_cell: NormativeTlaCell::TlaOnlyCorrect,
+                normative_target_rank: None,
+                target_source: None,
+                target_skmx_contributed: false,
+                lane_transition: LaneTransition::AwayFromTarget,
+                ..base
+            },
+        });
+        evidence.finalize();
+        assert_eq!(evidence.cells.len(), 2);
+        assert!(evidence
+            .validate(
+                &[10, 20],
+                PairedCounts {
+                    both: 0,
+                    normative_only: 1,
+                    comparator_only: 1,
+                    neither: 0,
+                },
+                2,
+                1,
+                1,
+            )
+            .is_ok());
+        let first = evidence
+            .cid("blake3:generation-a", "blake3:positions")
+            .expect("cid");
+        let second = evidence
+            .cid("blake3:generation-b", "blake3:positions")
+            .expect("cid");
+        assert_ne!(first, second);
+
+        evidence.cells[0].count += 1;
+        assert!(evidence
+            .validate(
+                &[10, 20],
+                PairedCounts {
+                    both: 0,
+                    normative_only: 1,
+                    comparator_only: 1,
+                    neither: 0,
+                },
+                2,
+                1,
+                1,
+            )
+            .expect_err("tampered aggregate rejected")
+            .reason
+            .contains("do not reproduce"));
     }
 
     #[test]
@@ -2305,6 +3247,7 @@ mod tests {
             mode: ServingEvalMode::Sample {
                 positions: SAMPLE_TARGET,
             },
+            position_selection_algorithm: DETERMINISTIC_SAMPLE_SELECTION_ALGORITHM.to_string(),
             workers: 8,
             elapsed_millis: 1,
             served: SAMPLE_TARGET as u64,
@@ -2317,16 +3260,19 @@ mod tests {
             base_hits: 0,
             normative_vs_tla: PairedCounts::default(),
             normative_vs_base: PairedCounts::default(),
+            canonical_base_vs_sections_absent: None,
+            canonical_base_hits: 0,
             normative_vs_sections_absent: Some(PairedCounts::default()),
             label_shuffled_vs_sections_absent: Some(PairedCounts::default()),
             sections_absent_hits: 0,
             label_shuffled_hits: 0,
             internal_base_control_checks: SAMPLE_TARGET as u64,
             internal_base_control_mismatches: 0,
-            lane_reachable: 100,
+            lane_reachable: 1_000,
             lane_changed: 100,
             lane_toward: 100,
             lane_away: 0,
+            decision_attribution: DecisionAttributionEvidence::default(),
             declined: 0,
             probe_positions: 256,
             probe_served: 256,
@@ -2354,7 +3300,7 @@ mod tests {
             verdict: NegativeControlVerdict::Passed,
             comparison: Some(gate_comparison(-1, 0)),
         };
-        assert!(promotion_failures(PromotionGateInputs {
+        let inputs = PromotionGateInputs {
             row: &row,
             measurements: &measurements,
             label_control: &label_control,
@@ -2363,8 +3309,52 @@ mod tests {
             combined_cross_surface_mismatches: 0,
             witness_replayed: 64,
             witness_failures: 0,
-        })
-        .is_empty());
+        };
+        assert!(promotion_failures(inputs).is_empty());
+        assert_eq!(
+            staged_sample_decision(inputs),
+            ServingSampleDecision::Proceed
+        );
+    }
+
+    #[test]
+    fn pre_reemission_canonical_arm_is_diagnostic_only() {
+        let mut row = gate_row();
+        row.canonical_base_vs_sections_absent = Some(PairedCounts {
+            both: 0,
+            normative_only: SAMPLE_TARGET as u64,
+            comparator_only: 0,
+            neither: 0,
+        });
+        row.canonical_base_hits = SAMPLE_TARGET as u64;
+        let measurements = QualityMeasurements {
+            versus_tla: gate_comparison(0, 1),
+            versus_sections_absent: gate_comparison(RF31_MIN_LANE_DELTA_PPM, 1),
+            internal_base_control_checks: SAMPLE_TARGET as u64,
+            internal_base_control_mismatches: 0,
+            cross_surface_checks: SAMPLE_TARGET as u64 + 6,
+            cross_surface_mismatches: 0,
+            cross_surface_evidence_cid: "blake3:evidence".to_owned(),
+        };
+        let label_control = NegativeControlEvidence {
+            id: LABEL_SHUFFLED_CONTROL_ID.to_owned(),
+            identity_cid: "blake3:control".to_owned(),
+            verdict: NegativeControlVerdict::Passed,
+            comparison: Some(gate_comparison(-1, 0)),
+        };
+        assert_eq!(
+            staged_sample_decision(PromotionGateInputs {
+                row: &row,
+                measurements: &measurements,
+                label_control: &label_control,
+                planted_controls_available: true,
+                external_cross_surface_checks: 6,
+                combined_cross_surface_mismatches: 0,
+                witness_replayed: 64,
+                witness_failures: 0,
+            }),
+            ServingSampleDecision::Proceed
+        );
     }
 
     #[test]
@@ -2412,5 +3402,128 @@ mod tests {
                 "missing {expected:?} from {failures:?}"
             );
         }
+        assert!(matches!(
+            staged_sample_decision(PromotionGateInputs {
+                row: &row,
+                measurements: &measurements,
+                label_control: &label_control,
+                planted_controls_available: true,
+                external_cross_surface_checks: 0,
+                combined_cross_surface_mismatches: 1,
+                witness_replayed: 0,
+                witness_failures: 1,
+            }),
+            ServingSampleDecision::Stop { .. }
+        ));
+    }
+
+    #[test]
+    fn sample_gate_distinguishes_upper_bound_stop_from_extendable_inconclusive() {
+        let row = gate_row();
+        let label_control = NegativeControlEvidence {
+            id: LABEL_SHUFFLED_CONTROL_ID.to_owned(),
+            identity_cid: "blake3:control".to_owned(),
+            verdict: NegativeControlVerdict::Passed,
+            comparison: Some(gate_comparison(-1, 0)),
+        };
+        fn make_inputs<'a>(
+            row: &'a ServingEvalRow,
+            measurements: &'a QualityMeasurements,
+            label_control: &'a NegativeControlEvidence,
+        ) -> PromotionGateInputs<'a> {
+            PromotionGateInputs {
+                row,
+                measurements,
+                label_control,
+                planted_controls_available: true,
+                external_cross_surface_checks: 6,
+                combined_cross_surface_mismatches: 0,
+                witness_replayed: 64,
+                witness_failures: 0,
+            }
+        }
+
+        let mut upper_miss_tla = gate_comparison(-10, 0);
+        upper_miss_tla.interval.upper_delta_ppm = -1;
+        let upper_miss = QualityMeasurements {
+            versus_tla: upper_miss_tla,
+            versus_sections_absent: gate_comparison(RF31_MIN_LANE_DELTA_PPM, 1),
+            internal_base_control_checks: SAMPLE_TARGET as u64,
+            internal_base_control_mismatches: 0,
+            cross_surface_checks: SAMPLE_TARGET as u64 + 6,
+            cross_surface_mismatches: 0,
+            cross_surface_evidence_cid: "blake3:evidence".to_owned(),
+        };
+        assert!(matches!(
+            staged_sample_decision(make_inputs(&row, &upper_miss, &label_control)),
+            ServingSampleDecision::Stop { reasons }
+                if reasons.iter().any(|reason| reason.contains("upper bound"))
+        ));
+
+        let mut crossing_tla = gate_comparison(-1, 0);
+        crossing_tla.interval.upper_delta_ppm = 1;
+        let mut crossing_lane = gate_comparison(RF31_MIN_LANE_DELTA_PPM - 1, 0);
+        crossing_lane.interval.upper_delta_ppm = RF31_MIN_LANE_DELTA_PPM + 1;
+        let inconclusive = QualityMeasurements {
+            versus_tla: crossing_tla,
+            versus_sections_absent: crossing_lane,
+            internal_base_control_checks: SAMPLE_TARGET as u64,
+            internal_base_control_mismatches: 0,
+            cross_surface_checks: SAMPLE_TARGET as u64 + 6,
+            cross_surface_mismatches: 0,
+            cross_surface_evidence_cid: "blake3:evidence".to_owned(),
+        };
+        assert_eq!(
+            staged_sample_decision(make_inputs(&row, &inconclusive, &label_control)),
+            ServingSampleDecision::Inconclusive {
+                reasons: vec![
+                    "paired TLA interval [-1, 1] ppm crosses zero".to_string(),
+                    format!(
+                        "paired lane interval [{}, {}] ppm crosses the {} ppm floor",
+                        RF31_MIN_LANE_DELTA_PPM - 1,
+                        RF31_MIN_LANE_DELTA_PPM + 1,
+                        RF31_MIN_LANE_DELTA_PPM
+                    ),
+                ],
+                next_positions: Some(EXTENDED_SAMPLE_TARGET),
+            }
+        );
+
+        let mut small_population_row = row.clone();
+        small_population_row.population_n = 10_000;
+        small_population_row.sample_n = 9_999;
+        small_population_row.mode = ServingEvalMode::Sample { positions: 9_999 };
+        small_population_row.internal_base_control_checks = 9_999;
+        let mut small_population = inconclusive.clone();
+        small_population.internal_base_control_checks = 9_999;
+        small_population.cross_surface_checks = 10_005;
+        assert!(matches!(
+            staged_sample_decision(make_inputs(
+                &small_population_row,
+                &small_population,
+                &label_control,
+            )),
+            ServingSampleDecision::Inconclusive {
+                next_positions: None,
+                ..
+            }
+        ));
+
+        let mut extended_row = row.clone();
+        extended_row.sample_n = EXTENDED_SAMPLE_TARGET;
+        extended_row.mode = ServingEvalMode::Sample {
+            positions: EXTENDED_SAMPLE_TARGET,
+        };
+        extended_row.internal_base_control_checks = EXTENDED_SAMPLE_TARGET as u64;
+        let mut extended = inconclusive;
+        extended.internal_base_control_checks = EXTENDED_SAMPLE_TARGET as u64;
+        extended.cross_surface_checks = EXTENDED_SAMPLE_TARGET as u64 + 6;
+        assert!(matches!(
+            staged_sample_decision(make_inputs(&extended_row, &extended, &label_control)),
+            ServingSampleDecision::Inconclusive {
+                next_positions: None,
+                ..
+            }
+        ));
     }
 }

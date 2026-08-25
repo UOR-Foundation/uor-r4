@@ -5656,7 +5656,7 @@ fn score_command_with_authority(
                 SourceUnavailable::new("construction position exceeds the R4G1 CID format")
             })
         })
-        .collect::<Result<_, _>>()?;
+        .collect::<Result<Vec<_>, SourceUnavailable>>()?;
     let certification_positions_u64: Vec<u64> = held_out_positions
         .iter()
         .map(|&position| {
@@ -5664,7 +5664,7 @@ fn score_command_with_authority(
                 SourceUnavailable::new("certification position exceeds the R4G1 CID format")
             })
         })
-        .collect::<Result<_, _>>()?;
+        .collect::<Result<Vec<_>, SourceUnavailable>>()?;
     let corpus_construction_cid = uor_r4_graph_format::corpus_partition_cid(
         &meta_bytes,
         &recs_bytes,
@@ -5991,13 +5991,15 @@ fn score_command_with_authority(
     let gate_c = pool
         .install(|| {
             score::evaluate_gate_c_with_progress(
-                &artifact_bytes,
-                &artifact_container,
-                &artifacts,
-                &store,
-                &corpus,
-                &held_out,
-                &config,
+                score::GateCEvaluationInputs {
+                    r4g1: &artifact_bytes,
+                    artifact_container: &artifact_container,
+                    artifacts: &artifacts,
+                    store: &store,
+                    corpus: &corpus,
+                    held_out: &held_out,
+                    config: &config,
+                },
                 &report_gate_c_progress,
             )
         })

@@ -356,7 +356,8 @@ struct DeployedQualityArgs {
         default_value = "sample"
     )]
     mode: DeployedQualityMode,
-    /// Exact ascending held-out prefix size in sample mode.
+    /// Exact nested, story-distributed sample size. Selection is label-free
+    /// and shared by evaluation, report binding, and witness production.
     #[arg(
         long,
         env = "R4_DEPLOYED_QUALITY_POSITIONS",
@@ -1344,8 +1345,6 @@ fn deployed_quality_command(args: &DeployedQualityArgs) -> Result<(), RunError> 
 
 fn deployed_quality_command_inner(args: &DeployedQualityArgs) -> Result<(), RunError> {
     use uor_r4_api::serving_eval::{ServingBundle, ServingEvalMode, ServingReportPaths};
-    use uor_r4_api::{EvaluationMode, QualityVerdict};
-
     if args.compiler_revision.len() != 40
         || !args
             .compiler_revision
@@ -1386,10 +1385,14 @@ fn deployed_quality_command_inner(args: &DeployedQualityArgs) -> Result<(), RunE
 
     match args.mode {
         DeployedQualityMode::Sample => {
-            let paths = ServingReportPaths::in_bundle(&bundle);
-            let witness_path = bundle
-                .root
-                .join(uor_r4_api::NORMATIVE_WITNESS_REPLAY_BUNDLE_PATH);
+            let graph_dir = bundle.graph.parent().unwrap_or(bundle.root.as_path());
+            let paths = ServingReportPaths {
+                progress_jsonl: graph_dir.join("deployed_quality_research_sample_progress.jsonl"),
+                terminal_json: graph_dir.join("deployed_quality_research_sample_terminal.json"),
+                deployed_quality_json: graph_dir
+                    .join("deployed_quality_research_sample_report.json"),
+            };
+            let witness_path = graph_dir.join("witness_replay_research_sample.json");
             let run = run_deployed_quality_once(
                 args,
                 &bundle,
@@ -1414,6 +1417,7 @@ fn deployed_quality_command_inner(args: &DeployedQualityArgs) -> Result<(), RunE
                 )));
             }
             let graph_dir = bundle.graph.parent().unwrap_or(bundle.root.as_path());
+            let binding_sample_positions = binding_sample_target(&bundle)?;
             let sample_paths = ServingReportPaths {
                 progress_jsonl: graph_dir.join("deployed_quality_sample_progress.jsonl"),
                 terminal_json: graph_dir.join("deployed_quality_sample_terminal.json"),
@@ -1424,7 +1428,7 @@ fn deployed_quality_command_inner(args: &DeployedQualityArgs) -> Result<(), RunE
                 args,
                 &bundle,
                 ServingEvalMode::Sample {
-                    positions: uor_r4_api::serving_eval::SAMPLE_TARGET,
+                    positions: binding_sample_positions,
                 },
                 workers,
                 &cross_surface_path,
@@ -1435,57 +1439,111 @@ fn deployed_quality_command_inner(args: &DeployedQualityArgs) -> Result<(), RunE
                 "binding-sample",
             )?;
             report_deployed_quality_result("binding-sample", &sample)?;
-            let decision = sample
-                .recorded
-                .report
-                .as_ref()
-                .and_then(|report| {
-                    (report.evaluation.mode == EvaluationMode::Sample)
-                        .then_some(&report.evaluation.verdict)
-                })
-                .and_then(|verdict| match verdict {
-                    QualityVerdict::Estimate { decision } => Some(decision.as_str()),
-                    _ => None,
-                })
-                .ok_or_else(|| {
-                    RunError::Command(
-                        "binding sample did not emit a typed sample decision; full census is refused"
-                            .to_owned(),
-                    )
-                })?;
-            if !decision.starts_with("PROCEED:") {
-                return Err(RunError::Command(format!(
-                    "binding sample verdict is {decision}; full census was not launched"
-                )));
-            }
-            let sample_row = match &sample.recorded.outcome {
-                uor_r4_api::serving_eval::ServingEvalOutcome::Row(row) => row,
-                uor_r4_api::serving_eval::ServingEvalOutcome::Skipped(_) => {
-                    return Err(RunError::Command(
-                        "binding sample was skipped; full census is refused".to_owned(),
-                    ));
-                }
-            };
+            let (sample_kind, sample_decision, sample_row) =
+                deployed_quality_sample_decision(&sample, "binding sample")?;
             let sample_generation_cid = sample_row.generation_cid.clone();
-            let projected_full_millis = projected_census_millis(
-                sample_row.elapsed_millis,
+            let mut gate_elapsed_millis = sample_row.elapsed_millis;
+            let mut gate_sample_n = sample_row.sample_n;
+            let mut gate_population_n = sample_row.population_n;
+            let mut authorizing_decision = sample_decision.to_owned();
+
+            match deployed_quality_next_phase(
+                sample_kind,
                 sample_row.sample_n,
                 sample_row.population_n,
-            )
-            .ok_or_else(|| {
-                RunError::Command("full-census wall-clock projection overflowed".to_owned())
-            })?;
+            ) {
+                DeployedQualityNextPhase::Census => {}
+                DeployedQualityNextPhase::Stop => {
+                    return Err(RunError::Command(format!(
+                        "binding sample verdict is {sample_decision}; full census was not launched"
+                    )));
+                }
+                DeployedQualityNextPhase::ExtendedSample { positions } => {
+                    let extended_paths = ServingReportPaths {
+                        progress_jsonl: graph_dir
+                            .join("deployed_quality_extended_sample_progress.jsonl"),
+                        terminal_json: graph_dir
+                            .join("deployed_quality_extended_sample_terminal.json"),
+                        deployed_quality_json: graph_dir
+                            .join("deployed_quality_extended_sample_report.json"),
+                    };
+                    let extended_witness = graph_dir.join("witness_replay_extended_sample.json");
+                    let extended = run_deployed_quality_once(
+                        args,
+                        &bundle,
+                        ServingEvalMode::Sample { positions },
+                        workers,
+                        &cross_surface_path,
+                        &cross_surface_evidence,
+                        extended_paths,
+                        extended_witness,
+                        Some(&sample_generation_cid),
+                        "extended-binding-sample",
+                    )?;
+                    report_deployed_quality_result("extended-binding-sample", &extended)?;
+                    let (extended_kind, extended_decision, extended_row) =
+                        deployed_quality_sample_decision(&extended, "extended binding sample")?;
+                    match deployed_quality_next_phase(
+                        extended_kind,
+                        extended_row.sample_n,
+                        extended_row.population_n,
+                    ) {
+                        DeployedQualityNextPhase::Census => {}
+                        DeployedQualityNextPhase::Stop => {
+                            return Err(RunError::Command(format!(
+                                "extended binding sample verdict is {extended_decision}; full census was not launched"
+                            )));
+                        }
+                        DeployedQualityNextPhase::ExtendedSample { .. } => {
+                            return Err(RunError::Command(format!(
+                                "extended binding sample selected fewer than {} positions; full census was not launched",
+                                uor_r4_api::serving_eval::EXTENDED_SAMPLE_TARGET
+                            )));
+                        }
+                    }
+                    if extended_row.generation_cid != sample_generation_cid {
+                        return Err(RunError::Command(
+                            "extended binding sample changed evidence generation; full census was not launched"
+                                .to_owned(),
+                        ));
+                    }
+                    if extended_kind == uor_r4_api::SampleDecisionKind::Inconclusive {
+                        let reachability_ceiling_ppm = deployed_quality_reachability_ceiling_ppm(
+                            extended_row,
+                        )
+                        .ok_or_else(|| {
+                            RunError::Command(
+                                "extended sample reachability ceiling overflowed".to_owned(),
+                            )
+                        })?;
+                        if reachability_ceiling_ppm < uor_r4_api::RF31_MIN_LANE_DELTA_PPM as u128 {
+                            return Err(RunError::Command(format!(
+                                "extended sample remains inconclusive but its reachability ceiling is only {reachability_ceiling_ppm} ppm; full census was not launched"
+                            )));
+                        }
+                    }
+                    gate_elapsed_millis = extended_row.elapsed_millis;
+                    gate_sample_n = extended_row.sample_n;
+                    gate_population_n = extended_row.population_n;
+                    authorizing_decision = extended_decision.to_owned();
+                }
+            }
+            let projected_full_millis =
+                projected_census_millis(gate_elapsed_millis, gate_sample_n, gate_population_n)
+                    .ok_or_else(|| {
+                        RunError::Command("full-census wall-clock projection overflowed".to_owned())
+                    })?;
             let contract_ceiling_millis = u128::from(3_600_000_u64);
             let configured_ceiling_millis = u128::from(args.eval_budget_secs)
                 .saturating_mul(1_000)
                 .min(contract_ceiling_millis);
             if projected_full_millis > configured_ceiling_millis {
                 return Err(RunError::Command(format!(
-                    "binding sample is {decision}, but the full census projects to {projected_full_millis} ms (> configured/one-hour launch ceiling {configured_ceiling_millis} ms); post a revised arithmetic/run contract before launch"
+                    "binding funnel is {authorizing_decision}, but the full census projects to {projected_full_millis} ms (> configured/one-hour launch ceiling {configured_ceiling_millis} ms); post a revised arithmetic/run contract before launch"
                 )));
             }
             println!(
-                "binding sample authorized the full census: {decision}; projected_full_millis={projected_full_millis}"
+                "binding funnel authorized the full census: {authorizing_decision}; projected_full_millis={projected_full_millis}"
             );
 
             let paths = ServingReportPaths::in_bundle(&bundle);
@@ -1507,6 +1565,114 @@ fn deployed_quality_command_inner(args: &DeployedQualityArgs) -> Result<(), RunE
             report_deployed_quality_result("full-census", &full)
         }
     }
+}
+
+fn deployed_quality_sample_decision<'a>(
+    run: &'a DeployedQualityRun,
+    label: &str,
+) -> Result<
+    (
+        uor_r4_api::SampleDecisionKind,
+        &'a str,
+        &'a uor_r4_api::serving_eval::ServingEvalRow,
+    ),
+    RunError,
+> {
+    let report = run.recorded.report.as_ref().ok_or_else(|| {
+        RunError::Command(format!(
+            "{label} did not emit a report; full census is refused"
+        ))
+    })?;
+    if report.evaluation.mode != uor_r4_api::EvaluationMode::Sample {
+        return Err(RunError::Command(format!(
+            "{label} did not emit a sample report; full census is refused"
+        )));
+    }
+    let uor_r4_api::QualityVerdict::Estimate { decision } = &report.evaluation.verdict else {
+        return Err(RunError::Command(format!(
+            "{label} did not emit a typed sample estimate; full census is refused"
+        )));
+    };
+    let kind = report.evaluation.verdict.sample_decision().ok_or_else(|| {
+        RunError::Command(format!(
+            "{label} emitted an invalid sample decision; full census is refused"
+        ))
+    })?;
+    let row = match &run.recorded.outcome {
+        uor_r4_api::serving_eval::ServingEvalOutcome::Row(row) => row.as_ref(),
+        uor_r4_api::serving_eval::ServingEvalOutcome::Skipped(_) => {
+            return Err(RunError::Command(format!(
+                "{label} was skipped; full census is refused"
+            )));
+        }
+    };
+    Ok((kind, decision, row))
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DeployedQualityNextPhase {
+    ExtendedSample { positions: usize },
+    Census,
+    Stop,
+}
+
+fn initial_non_census_target(population_positions: usize) -> Option<usize> {
+    let max_non_census = population_positions.checked_sub(1)?;
+    (max_non_census > 0).then_some(uor_r4_api::serving_eval::SAMPLE_TARGET.min(max_non_census))
+}
+
+fn binding_sample_target(
+    bundle: &uor_r4_api::serving_eval::ServingBundle,
+) -> Result<usize, RunError> {
+    let corpus_meta = read_regular_evidence(&bundle.corpus_meta)?;
+    let corpus_records = read_regular_evidence(&bundle.corpus_records)?;
+    let corpus = uor_r4_core::transformerless::compiler::load_corpus_bytes(
+        &corpus_meta,
+        &corpus_records,
+        None,
+    )
+    .ok_or_else(|| {
+        RunError::Command(
+            "corpus.meta/corpus.records are UNAVAILABLE for binding-sample sizing".into(),
+        )
+    })?;
+    let (_, held_out) = uor_r4_core::transformerless::compiler::split_positions(&corpus);
+    initial_non_census_target(held_out.len()).ok_or_else(|| {
+        RunError::Command(
+            "deployed-quality requires at least two held-out positions to run a non-census binding sample"
+                .into(),
+        )
+    })
+}
+
+fn deployed_quality_next_phase(
+    decision: uor_r4_api::SampleDecisionKind,
+    evaluated_positions: usize,
+    population_positions: usize,
+) -> DeployedQualityNextPhase {
+    match decision {
+        uor_r4_api::SampleDecisionKind::Proceed => DeployedQualityNextPhase::Census,
+        uor_r4_api::SampleDecisionKind::Stop => DeployedQualityNextPhase::Stop,
+        uor_r4_api::SampleDecisionKind::Inconclusive
+            if evaluated_positions < uor_r4_api::serving_eval::EXTENDED_SAMPLE_TARGET =>
+        {
+            let positions = uor_r4_api::serving_eval::EXTENDED_SAMPLE_TARGET
+                .min(population_positions.saturating_sub(1));
+            if positions > evaluated_positions {
+                DeployedQualityNextPhase::ExtendedSample { positions }
+            } else {
+                DeployedQualityNextPhase::Census
+            }
+        }
+        uor_r4_api::SampleDecisionKind::Inconclusive => DeployedQualityNextPhase::Census,
+    }
+}
+
+fn deployed_quality_reachability_ceiling_ppm(
+    row: &uor_r4_api::serving_eval::ServingEvalRow,
+) -> Option<u128> {
+    (row.sample_n > 0)
+        .then(|| u128::from(row.lane_reachable).saturating_mul(1_000_000) / row.sample_n as u128)
 }
 
 fn projected_census_millis(
@@ -1542,9 +1708,7 @@ fn run_deployed_quality_once(
     expected_generation_cid: Option<&str>,
     label: &str,
 ) -> Result<DeployedQualityRun, RunError> {
-    use uor_r4_api::serving_eval::{
-        self, ServingEvalBudgets, ServingEvalMode, ServingReportEvidence,
-    };
+    use uor_r4_api::serving_eval::{self, ServingEvalBudgets, ServingReportEvidence};
     use uor_r4_api::{
         produce_normative_witness_replay, NormativeWitnessReplayMaterial,
         NormativeWitnessReplaySpec, DEFAULT_NORMATIVE_WITNESS_SAMPLE,
@@ -1576,10 +1740,13 @@ fn run_deployed_quality_once(
         RunError::Command("corpus.meta/corpus.records do not form a completed corpus".into())
     })?;
     let (_, held_out) = uor_r4_graph_compiler::induction::split_positions(&corpus);
-    let selected: &[usize] = match mode {
-        ServingEvalMode::Sample { positions } => &held_out[..positions.min(held_out.len())],
-        ServingEvalMode::FullCensus => &held_out,
-    };
+    let selection = serving_eval::select_serving_eval_positions(&corpus.story, &held_out, mode)
+        .map_err(|error| {
+            RunError::Command(format!(
+                "canonical deployed-quality position selection: {error}"
+            ))
+        })?;
+    let selected = selection.positions;
     if selected.is_empty() {
         return Err(RunError::Command(
             "held-out evaluation population is empty; evidence is UNAVAILABLE".into(),
@@ -1748,11 +1915,23 @@ fn produce_cross_surface_evidence(
             "corpus.meta/corpus.records are UNAVAILABLE for cross-surface evidence".into(),
         )
     })?;
-    let (_, held_out) = uor_r4_graph_compiler::induction::split_positions(&corpus);
-    let positions: Vec<u64> = held_out
-        .iter()
-        .take(uor_r4_api::serving_eval::SAMPLE_TARGET)
-        .map(|&position| {
+    let (_, held_out) = uor_r4_core::transformerless::compiler::split_positions(&corpus);
+    let selection = uor_r4_api::serving_eval::select_serving_eval_positions(
+        &corpus.story,
+        &held_out,
+        uor_r4_api::serving_eval::ServingEvalMode::Sample {
+            positions: uor_r4_api::serving_eval::SAMPLE_TARGET,
+        },
+    )
+    .map_err(|error| {
+        RunError::Command(format!(
+            "canonical cross-surface position selection: {error}"
+        ))
+    })?;
+    let positions: Vec<u64> = selection
+        .positions
+        .into_iter()
+        .map(|position| {
             u64::try_from(position).map_err(|_| {
                 RunError::Command(
                     "held-out position exceeds the cross-surface evidence format".into(),
@@ -2467,6 +2646,47 @@ mod tests {
         assert_eq!(super::projected_census_millis(0, 6_000, 72_130), Some(13));
         assert_eq!(super::projected_census_millis(1, 0, 72_130), None);
         assert_eq!(super::projected_census_millis(1, 7, 6), None);
+    }
+
+    #[test]
+    fn deployed_quality_funnel_extends_only_an_inconclusive_first_stage() {
+        use uor_r4_api::SampleDecisionKind;
+
+        assert_eq!(super::initial_non_census_target(72_130), Some(6_000));
+        assert_eq!(super::initial_non_census_target(6_000), Some(5_999));
+        assert_eq!(super::initial_non_census_target(2), Some(1));
+        assert_eq!(super::initial_non_census_target(1), None);
+
+        assert_eq!(
+            super::deployed_quality_next_phase(SampleDecisionKind::Proceed, 6_000, 72_130),
+            super::DeployedQualityNextPhase::Census
+        );
+        assert_eq!(
+            super::deployed_quality_next_phase(SampleDecisionKind::Stop, 6_000, 72_130),
+            super::DeployedQualityNextPhase::Stop
+        );
+        assert_eq!(
+            super::deployed_quality_next_phase(SampleDecisionKind::Inconclusive, 6_000, 72_130,),
+            super::DeployedQualityNextPhase::ExtendedSample { positions: 18_000 }
+        );
+        assert_eq!(
+            super::deployed_quality_next_phase(SampleDecisionKind::Inconclusive, 6_000, 10_000,),
+            super::DeployedQualityNextPhase::ExtendedSample { positions: 9_999 },
+            "the extension stays non-census for a smaller population"
+        );
+        assert_eq!(
+            super::deployed_quality_next_phase(SampleDecisionKind::Inconclusive, 9_999, 10_000,),
+            super::DeployedQualityNextPhase::Census,
+            "the maximal non-census extension can authorize only the census"
+        );
+        assert_eq!(
+            super::deployed_quality_next_phase(
+                SampleDecisionKind::Inconclusive,
+                uor_r4_api::serving_eval::EXTENDED_SAMPLE_TARGET,
+                72_130,
+            ),
+            super::DeployedQualityNextPhase::Census
+        );
     }
 
     #[test]

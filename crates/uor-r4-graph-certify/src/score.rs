@@ -3833,6 +3833,22 @@ pub fn evaluate_gate_c_sweep(
     })
 }
 
+/// Immutable inputs shared by the silent and progress-reporting Gate C paths.
+///
+/// Keeping the evaluation inputs together prevents observability-only
+/// parameters from changing the scoring contract and gives the progress API a
+/// focused signature without suppressing Clippy's argument-count guard.
+#[derive(Clone, Copy)]
+pub struct GateCEvaluationInputs<'a> {
+    pub r4g1: &'a [u8],
+    pub artifact_container: &'a [u8],
+    pub artifacts: &'a compiler::Compiled,
+    pub store: &'a Store,
+    pub corpus: &'a Corpus,
+    pub held_out: &'a [Observation],
+    pub config: &'a ScoreConfig,
+}
+
 pub fn evaluate_gate_c(
     r4g1: &[u8],
     artifact_container: &[u8],
@@ -3844,13 +3860,15 @@ pub fn evaluate_gate_c(
 ) -> Option<GateCOutcome> {
     let no_progress = |_: GateCProgress| {};
     evaluate_gate_c_inner(
-        r4g1,
-        artifact_container,
-        artifacts,
-        store,
-        corpus,
-        held_out,
-        config,
+        GateCEvaluationInputs {
+            r4g1,
+            artifact_container,
+            artifacts,
+            store,
+            corpus,
+            held_out,
+            config,
+        },
         &no_progress,
     )
 }
@@ -3863,16 +3881,17 @@ pub fn evaluate_gate_c(
 /// before delivery, so `processed` is monotone within each phase. The callback
 /// must be [`Sync`] because the work itself remains parallel.
 pub fn evaluate_gate_c_with_progress(
-    r4g1: &[u8],
-    artifact_container: &[u8],
-    artifacts: &compiler::Compiled,
-    store: &Store,
-    corpus: &Corpus,
-    held_out: &[Observation],
-    config: &ScoreConfig,
+    inputs: GateCEvaluationInputs<'_>,
     progress: &(dyn Fn(GateCProgress) + Sync),
 ) -> Option<GateCOutcome> {
-    evaluate_gate_c_inner(
+    evaluate_gate_c_inner(inputs, progress)
+}
+
+fn evaluate_gate_c_inner<F: Fn(GateCProgress) + Sync + ?Sized>(
+    inputs: GateCEvaluationInputs<'_>,
+    progress: &F,
+) -> Option<GateCOutcome> {
+    let GateCEvaluationInputs {
         r4g1,
         artifact_container,
         artifacts,
@@ -3880,20 +3899,7 @@ pub fn evaluate_gate_c_with_progress(
         corpus,
         held_out,
         config,
-        progress,
-    )
-}
-
-fn evaluate_gate_c_inner<F: Fn(GateCProgress) + Sync + ?Sized>(
-    r4g1: &[u8],
-    artifact_container: &[u8],
-    artifacts: &compiler::Compiled,
-    store: &Store,
-    corpus: &Corpus,
-    held_out: &[Observation],
-    config: &ScoreConfig,
-    progress: &F,
-) -> Option<GateCOutcome> {
+    } = inputs;
     // #471: every whole-corpus pass below announces its own cost, and the
     // arm groups this run was told not to build are resolved up front so the
     // skip is one decision read in one place.

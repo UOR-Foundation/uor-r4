@@ -1312,6 +1312,23 @@ pub fn split_positions(corpus: &Corpus) -> (Vec<usize>, Vec<usize>) {
     (train, held_out)
 }
 
+/// Canonical token window for one corpus position, oldest first and bounded
+/// to its story and [`WINDOW`]. This lives with the portable corpus contract so
+/// offline compilation, native evaluation, witness replay, and WASM admission
+/// cannot drift into different serving inputs.
+pub fn context_window(corpus: &Corpus, position: usize) -> Vec<u32> {
+    let mut start = position;
+    while start > 0
+        && corpus.story[start - 1] == corpus.story[position]
+        && position + 1 - start < WINDOW
+    {
+        start -= 1;
+    }
+    (start..=position)
+        .map(|index| corpus.input[index])
+        .collect()
+}
+
 pub const ART_PATH: &str = "/tmp/tless_artifacts.bin";
 
 #[derive(Clone)]

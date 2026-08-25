@@ -34,8 +34,8 @@ use uor_r4_wasm_router::server::{
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 struct Rf31CandidateSnapshot {
-    ranked: Vec<(u32, i32, ServedCandidateSource)>,
-    winner: Option<(u32, i32, ServedCandidateSource)>,
+    ranked: Vec<(u32, i32, ServedCandidateSource, bool, bool)>,
+    winner: Option<(u32, i32, ServedCandidateSource, bool, bool)>,
     attribution: Option<(u32, u32, i32, bool, bool)>,
 }
 
@@ -493,11 +493,25 @@ fn rf31_snapshot(graph: &[u8], window: &[u32]) -> Rf31CandidateSnapshot {
         ranked: candidates
             .ranked()
             .iter()
-            .map(|candidate| (candidate.token, candidate.score.raw(), candidate.source))
+            .map(|candidate| {
+                (
+                    candidate.token,
+                    candidate.score.raw(),
+                    candidate.source,
+                    candidate.skmx_contributed,
+                    candidate.psib_contributed,
+                )
+            })
             .collect(),
-        winner: candidates
-            .winner()
-            .map(|candidate| (candidate.token, candidate.score.raw(), candidate.source)),
+        winner: candidates.winner().map(|candidate| {
+            (
+                candidate.token,
+                candidate.score.raw(),
+                candidate.source,
+                candidate.skmx_contributed,
+                candidate.psib_contributed,
+            )
+        }),
         attribution: candidates.attribution().map(|attribution| {
             (
                 attribution.base_token,
@@ -525,7 +539,7 @@ fn rf31_partner_not_in(
                 && snapshot
                     .ranked
                     .iter()
-                    .all(|(candidate, _, _)| candidate != token)
+                    .all(|(candidate, _, _, _, _)| candidate != token)
         })
         .expect("the synthetic vocabulary has an unused planted partner")
 }
@@ -557,14 +571,13 @@ fn rf31_absent_identity(w: &mut R4g1World) {
     let projection: Vec<_> = served
         .ranked
         .iter()
-        .map(|(token, score, _)| (*token, *score))
+        .map(|(token, score, _, _, _)| (*token, *score))
         .collect();
     assert_eq!(projection, w.rf31_legacy_candidates);
     assert!(
-        served
-            .ranked
-            .iter()
-            .all(|(_, _, source)| *source == ServedCandidateSource::Base),
+        served.ranked.iter().all(|(_, _, source, skmx, psib)| {
+            *source == ServedCandidateSource::Base && !*skmx && !*psib
+        }),
         "an artifact without SKMX/PSIB must expose only base candidates"
     );
     assert!(
@@ -609,6 +622,11 @@ fn rf31_planted_partner_wins(w: &mut R4g1World) {
         served.winner.map(|winner| winner.2),
         Some(ServedCandidateSource::Skipmix)
     );
+    assert_eq!(
+        served.winner.map(|winner| (winner.3, winner.4)),
+        Some((true, false)),
+        "the SKMX-only winner must bind its exact contribution source"
+    );
     let attribution = served.attribution.expect("skip-mix attribution");
     assert_eq!((attribution.0, attribution.1), (base, planted));
     assert!(attribution.2 > 0, "planted contribution must be positive");
@@ -646,6 +664,11 @@ fn rf31_psib_partner_wins(w: &mut R4g1World) {
     let planted = w.rf31_planted_token.expect("planted token");
     let base = w.rf31_expected_base_token.expect("base token");
     assert_eq!(served.winner.map(|winner| winner.0), Some(planted));
+    assert_eq!(
+        served.winner.map(|winner| (winner.2, winner.3, winner.4)),
+        Some((ServedCandidateSource::Skipmix, false, true)),
+        "the PSIB fallback winner must bind its exact contribution source"
+    );
     let attribution = served.attribution.expect("PSIB attribution");
     assert_eq!((attribution.0, attribution.1), (base, planted));
     assert!(attribution.2 > 0, "planted contribution must be positive");
@@ -685,7 +708,10 @@ fn rf31_compiler_window_is_bounded(w: &mut R4g1World) {
     let outside = w.rf31_excluded_token.expect("outside partner");
     assert_eq!(served.winner.map(|winner| winner.0), Some(in_window));
     assert!(
-        served.ranked.iter().all(|(token, _, _)| *token != outside),
+        served
+            .ranked
+            .iter()
+            .all(|(token, _, _, _, _)| *token != outside),
         "a partner reachable only outside the newest compiler window must be excluded"
     );
 }
