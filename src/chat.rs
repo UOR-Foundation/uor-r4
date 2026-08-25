@@ -866,7 +866,9 @@ fn commit_normative_chat_beam_prefix(
 /// bounded context solely so the canonical cross-surface producer can
 /// mechanically execute the same `normative_chat_step` for beam-first and
 /// sampled policies without claiming that it exercised prompt tokenization,
-/// terminal I/O, HTTP routing, or a browser wrapper.
+/// terminal I/O, HTTP routing, or a browser wrapper. Tokenizer bytes are still
+/// required to authenticate a nonzero `HEAD.tokenizer_cid`; this helper does
+/// not use them to encode the already-tokenized context.
 pub(crate) fn replayable_normative_chat_step_for_evidence(
     graph: &[u8],
     signature_artifact: &[u8],
@@ -5159,7 +5161,8 @@ pub(crate) mod tests {
             let view = uor_r4_graph_format::GraphView::parse(&unbound_graph)
                 .expect("cross-surface fixture graph parses");
             let mut builder =
-                uor_r4_graph_format::ArtifactBuilder::new(view.header().alignment_log2);
+                uor_r4_graph_format::ArtifactBuilder::new(view.header().alignment_log2)
+                    .with_flags(view.header().flags);
             for section in view.sections() {
                 if section.id == uor_r4_graph_format::SectionId::HEAD {
                     let mut head = section.payload.to_vec();
@@ -5172,6 +5175,16 @@ pub(crate) mod tests {
             let graph = builder
                 .build()
                 .expect("tokenizer-bound cross-surface fixture graph");
+            let bound_view = uor_r4_graph_format::GraphView::parse(&graph)
+                .expect("tokenizer-bound fixture parses");
+            assert_eq!(
+                bound_view
+                    .head()
+                    .expect("tokenizer-bound fixture HEAD")
+                    .tokenizer_cid()
+                    .0,
+                *blake3::hash(&tokenizer_bytes).as_bytes()
+            );
             let tokenizer = Tokenizer::from_bytes(&tokenizer_bytes).expect("fixture tokenizer");
             let context = encode_question(&tokenizer, &covered_question);
             assert_eq!(context.len(), 3, "fixture corpus encoding contract");
