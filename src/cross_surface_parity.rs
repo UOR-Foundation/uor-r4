@@ -401,6 +401,7 @@ fn record_cli_chat_rows(
     let (observed, observed_candidates) = replayable_normative_chat_step_for_evidence(
         spec.material.graph,
         spec.material.signature_artifact,
+        spec.material.tokenizer,
         spec.material.score_report,
         context,
         &session_signature,
@@ -424,6 +425,7 @@ fn record_cli_chat_rows(
     let (observed, observed_candidates) = replayable_normative_chat_step_for_evidence(
         spec.material.graph,
         spec.material.signature_artifact,
+        spec.material.tokenizer,
         spec.material.score_report,
         context,
         &session_signature,

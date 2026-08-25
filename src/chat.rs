@@ -870,6 +870,7 @@ fn commit_normative_chat_beam_prefix(
 pub(crate) fn replayable_normative_chat_step_for_evidence(
     graph: &[u8],
     signature_artifact: &[u8],
+    tokenizer: Option<&[u8]>,
     score_report: Option<&[u8]>,
     context_tokens: &[u32],
     session_signature: &[u8],
@@ -882,7 +883,7 @@ pub(crate) fn replayable_normative_chat_step_for_evidence(
         uor_r4_api::engine::R4Engine::load_accepting_quality(uor_r4_api::engine::EngineParts {
             graph,
             signature_artifact,
-            tokenizer: None,
+            tokenizer,
             score_report,
         })
         .map_err(|error| error.to_string())?;
@@ -4848,6 +4849,7 @@ pub(crate) mod tests {
                 &graph,
                 &teacher,
                 None,
+                None,
                 &context,
                 &session_signature,
                 Some(DEFAULT_SAMPLE_SEED),
@@ -4879,6 +4881,7 @@ pub(crate) mod tests {
             let (_, beam_chat_candidates) = replayable_normative_chat_step_for_evidence(
                 &graph,
                 &teacher,
+                None,
                 None,
                 &context,
                 &session_signature,
@@ -5151,9 +5154,25 @@ pub(crate) mod tests {
                 CanonicalCrossSurfaceSpec,
             };
 
-            let (graph, teacher, covered_question, _) = fixture();
-            let tokenizer =
-                Tokenizer::from_bytes(&fixture_tokenizer_bytes()).expect("fixture tokenizer");
+            let (unbound_graph, teacher, covered_question, _) = fixture();
+            let tokenizer_bytes = fixture_tokenizer_bytes();
+            let view = uor_r4_graph_format::GraphView::parse(&unbound_graph)
+                .expect("cross-surface fixture graph parses");
+            let mut builder =
+                uor_r4_graph_format::ArtifactBuilder::new(view.header().alignment_log2);
+            for section in view.sections() {
+                if section.id == uor_r4_graph_format::SectionId::HEAD {
+                    let mut head = section.payload.to_vec();
+                    head[32..64].copy_from_slice(blake3::hash(&tokenizer_bytes).as_bytes());
+                    builder.add_section(section.id, section.flags, &head);
+                } else {
+                    builder.add_section(section.id, section.flags, section.payload);
+                }
+            }
+            let graph = builder
+                .build()
+                .expect("tokenizer-bound cross-surface fixture graph");
+            let tokenizer = Tokenizer::from_bytes(&tokenizer_bytes).expect("fixture tokenizer");
             let context = encode_question(&tokenizer, &covered_question);
             assert_eq!(context.len(), 3, "fixture corpus encoding contract");
 
@@ -5173,7 +5192,6 @@ pub(crate) mod tests {
             }
 
             let positions = [2u64];
-            let tokenizer_bytes = fixture_tokenizer_bytes();
             let score_report = br#"{}"#;
             let spec = CanonicalCrossSurfaceSpec {
                 material: CanonicalCrossSurfaceMaterial {
