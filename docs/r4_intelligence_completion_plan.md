@@ -119,25 +119,34 @@ pinned source inputs through the deployed path (byte-reproducible rebuild, admit
 Gate C within bound). Downstream quality, geometry, and scale promotions are therefore
 authorized to proceed from this baseline.
 
-### S0 evidence-boundary correction — REOPENED (2026-08-24, #933)
+### S0 evidence-boundary and quality correction — REOPENED (2026-08-24, #933/#934)
 
-The PROMOTE entry above is retained as the decision recorded on 2026-08-20, but it
-is not the current completion verdict. A source-and-call-graph audit found that its
-production-quality premise crossed ADR-0001's scorer boundary: #833's source,
-corpus, attestation, and byte-determinism evidence remains established, while its
-Gate C and local `R4Engine` canaries do not establish strict production admission
-or token selection by the sole normative scorer. #821 is therefore reopened with
-foundational child #933.
+The PROMOTE entry above is retained as the decision recorded on 2026-08-20, but
+it is not the current completion verdict. The merged
+[#934 audit](canonical_quality_baseline_934.md) found no universal absolute 30%
+requirement: **29.7%** is scoped to pinned/legacy reports, while broad
+`relative_tla` admission requires the deployed scorer to meet the TLA comparator
+on the same positions. The broad-clean full census is reference Rule 1+2
+**24.393%** versus TLA **28.121%**, so strict production admission is not
+established.
 
-Likewise, #908's 29.702% top-1 and +28.45‰ paired effect remain valid
-teacher-free empirical evidence for the `R4Engine` reference/off-serving harness.
-#910 routed `R4Engine` and compiler emission through SKMX/PSIB but did not make
-`R4G1Runtime` consume those sections; it therefore did not establish RF-31 at
-`normative-runtime` / `deployed-serving` scope. RF-31 is NOT ESTABLISHED there
-until #933 produces exact absent/present reachability, unified production decode,
-CID-bound report admission, and the conditional full-census verdict. #933 is a
-prerequisite for #932 → #931 → #839; no later-stage result may silently substitute
-for this missing S0 evidence.
+A source-and-call-graph audit also found that the earlier production-quality
+premise crossed ADR-0001's scorer boundary. #833's source, corpus, attestation,
+and byte-determinism evidence remains established, while its Gate C and local
+`R4Engine` canaries do not establish strict production admission or token
+selection by the sole normative scorer. Likewise, #908's **29.702%** top-1 and
+**+28.45‰** paired effect remain valid teacher-free evidence for the `R4Engine`
+reference/off-serving harness; its promotion gate was a paired 95% lower bound
+of at least **+20‰**, not an absolute top-1 floor. #910 routed `R4Engine` and
+compiler emission through SKMX/PSIB but did not make `R4G1Runtime` consume those
+sections, so RF-31 remains **NOT ESTABLISHED** at `normative-runtime` /
+`deployed-serving` scope.
+
+#821 therefore remains reopened with foundational child #933, which owns exact
+absent/present reachability, unified production decode, CID-bound report
+admission, the bounded diagnostic, and the conditional full-census verdict.
+#933 is the prerequisite for #932 → #931 → #839; no later-stage result may
+silently substitute for this missing S0 evidence.
 
 ### S1 stage verdict — REVISE (2026-08-21)
 

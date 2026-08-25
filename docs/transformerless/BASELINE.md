@@ -68,15 +68,25 @@ formally committed. Full text: plan §2.
 | **Gate C: broad-corpus 360M (PINNED, #516)** | **24.30% / 11.94 bits** (best live arm 31.48% / 10.43) | fresh, 2026-08-09 | **broad** D3 (Simple-Wiki), SmolLM2-360M-Instruct teacher, 360,924 records / 2,994 stories, 72,864 held-out, EXCT-miss 25.7%, teacher floor 3.6015 bits, 64/0 witness replays; `docs/smollm2_teacher_baseline_320.md` #516. Distinct distribution from the stories15M home rows above — this is the canonical baseline for **broad-text** claims; stories15M is retained for the home distribution. |
 | **Gate C re-run at `aea30bae` (baseline audit)** | rule12 **36.55% / 8.3222**; TLA3 baseline 39.17% / 8.4985; EXCT-miss-slice generalization **1.81% / 16.89** (n=14,943) | fresh, 2026-08-18 | committed 500k/TLA7 fixtures, full census n=100,306, `positions_sampled: 0`, witness replay 64/64, EXCT resolves 85.1%; trend alarm PASS vs the 2026-07-30 pin (31.63%/9.1181). Same-machine live probes the same day: all three loadable local bundles (pre-#755 bytes) produce deterministic, prompt-invariant degenerate output through the R4G1 ask path — `docs/project_baseline_audit_2026_08_18.md` §13. |
 
-**Scope correction (2026-08-24, #933).** Gate C Rule 1+2 rows and the
-29.702% skip-mix row retained in the research ledger are compiler-side
-`GraphScorer` / `R4Engine` reference measurements. They are not evidence that
-the normative deployed selector, `R4G1Runtime`, served those tokens. RF-31 is
-therefore **NOT ESTABLISHED** at deployed-serving scope until the content-bound
-normative-runtime report described in
+**Current scope correction (#933/#934, 2026-08-24; historical rows above are
+unchanged).** The fixed top-1 tolerance of **29.7%** (`31.7% - 2pp`) belongs to
+the pinned/legacy quality profile; it is not a universal 30% requirement.
+Broad-corpus `relative_tla` reports compare the deployed scorer with TLA on the
+same positions. The attested `smollm2-360m-broad-clean` reference report is a
+full census of 72,130 held-out positions: Rule 1+2 **24.393%** versus TLA
+**28.121%**. Consequently strict production admission is not established by
+that report or by the bypassed local-load canary.
+
+Gate C Rule 1+2 and #908's **29.702%** skip-mix row are compiler-side
+`GraphScorer` / `R4Engine` reference measurements, not evidence that the sole
+normative deployed selector, `R4G1Runtime`, served those tokens. #908 remains
+valid teacher-free reference/off-serving evidence; its gate was a paired
+skip-mix delta whose 95% lower bound had to clear **+20‰**, not an absolute
+top-1 floor. See [the #934 audit](../canonical_quality_baseline_934.md), which
+owns remediation ordering. RF-31 remains **NOT ESTABLISHED** at deployed-serving
+scope until the content-bound normative-runtime report in
 [`normative_r4g1_quality_933.md`](../normative_r4g1_quality_933.md) receives an
-evidence-backed verdict. Historical numbers remain valid in their recorded
-reference/off-serving scope.
+evidence-backed verdict; #932's BDD parity harness remains downstream.
 
 **Canonical bits/token (issue #76, resolved 2026-07-22):** one definition — mean cross-entropy of
 the true next token under a scorer's predicted distribution, `(1/N) Σ −log2 P_scorer(v_i|c_i)`
