@@ -466,6 +466,7 @@ mod platform {
         TeacherExecutionConfig, TeacherExecutionObserver, TeacherExecutionPreparation,
         TeacherExecutionSnapshot,
     };
+    use crate::SourceUnavailable;
     use rayon::prelude::*;
     use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
     use std::sync::Mutex;
@@ -532,7 +533,7 @@ mod platform {
     }
 
     impl ExactExecutor {
-        pub(crate) fn new(config: TeacherExecutionConfig) -> Result<Self, String> {
+        pub(crate) fn new(config: TeacherExecutionConfig) -> Result<Self, SourceUnavailable> {
             let workers = config.resolved_workers();
             let pool = if workers == 1 {
                 None
@@ -542,7 +543,7 @@ mod platform {
                         .num_threads(workers)
                         .thread_name(|index| format!("r4-exact-teacher-{index}"))
                         .build()
-                        .map_err(|error| error.to_string())?,
+                        .map_err(|error| SourceUnavailable::new(error.to_string()))?,
                 )
             };
             Ok(Self {
@@ -710,9 +711,11 @@ mod platform {
             batch_width: usize,
             maximum_k: usize,
             maximum_rows: usize,
-        ) -> Result<TeacherExecutionPreparation, String> {
+        ) -> Result<TeacherExecutionPreparation, SourceUnavailable> {
             if batch_width == 0 {
-                return Err("exact executor prestart batch width must be nonzero".to_owned());
+                return Err(SourceUnavailable::new(
+                    "exact executor prestart batch width must be nonzero",
+                ));
             }
             let started = std::time::Instant::now();
             let workers_observed = if let Some(pool) = &self.pool {
@@ -724,10 +727,10 @@ mod platform {
                 1
             };
             if workers_observed != self.effective_workers {
-                return Err(format!(
+                return Err(SourceUnavailable::new(format!(
                     "exact executor prestart observed {workers_observed} of {} workers",
                     self.effective_workers
-                ));
+                )));
             }
 
             self.prepare_workspace(maximum_k, maximum_rows, batch_width);
@@ -759,7 +762,9 @@ mod platform {
                 })
             });
             if !backend_exercised {
-                return Err("exact executor prestart produced unexpected output bits".to_owned());
+                return Err(SourceUnavailable::new(
+                    "exact executor prestart produced unexpected output bits",
+                ));
             }
             Ok(TeacherExecutionPreparation {
                 elapsed_seconds: started.elapsed().as_secs_f64(),
@@ -1088,6 +1093,7 @@ mod platform {
 #[cfg(target_arch = "wasm32")]
 mod platform {
     use super::{TeacherExecutionConfig, TeacherExecutionObserver, TeacherExecutionSnapshot};
+    use crate::SourceUnavailable;
     use std::cell::Cell;
     use uor_matmul::PackedCode;
 
@@ -1098,7 +1104,7 @@ mod platform {
     }
 
     impl ExactExecutor {
-        pub(crate) fn new(config: TeacherExecutionConfig) -> Result<Self, String> {
+        pub(crate) fn new(config: TeacherExecutionConfig) -> Result<Self, SourceUnavailable> {
             let workers = config.resolved_workers();
             Ok(Self {
                 counters: Cell::new(TeacherExecutionSnapshot {

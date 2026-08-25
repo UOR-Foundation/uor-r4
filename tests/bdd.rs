@@ -6068,7 +6068,8 @@ fn load_parity_fixtures() -> Result<ParityFixtures, String> {
                 .to_owned(),
         );
     }
-    let current_production_generation = production_admission_component_cids(&bundle)?;
+    let current_production_generation =
+        production_admission_component_cids(&bundle).map_err(|error| error.reason)?;
     if current_production_generation != admitted_production_generation {
         return Err(
             "NOT_RUN / REFUSED: schema-2 production generation changed between semantic admission and teacher load"
@@ -6383,7 +6384,8 @@ fn load_r4g1(bundle: &Path, artifact_bytes: &[u8]) -> Result<R4g1State, String> 
 fn teacher_free_parity_preflight() -> Result<serde_json::Value, String> {
     let source = parity_source_dir()?;
     let bundle = parity_bundle_dir()?;
-    let production_admission = production_admission_component_cids(&bundle)?;
+    let production_admission =
+        production_admission_component_cids(&bundle).map_err(|error| error.reason)?;
     let tokenizer_path = bundle.join("tokenizer.bin");
     let artifact_path = bundle.join("tless_artifacts.bin");
     let store_path = bundle.join("tless_store.bin");

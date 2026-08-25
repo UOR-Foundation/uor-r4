@@ -100,7 +100,7 @@ pub const PRODUCTION_ADMISSION_COMPONENTS: [(&str, &str); 15] = [
 #[cfg(not(target_arch = "wasm32"))]
 pub fn production_admission_component_cids(
     bundle_dir: impl AsRef<std::path::Path>,
-) -> Result<std::collections::BTreeMap<String, String>, String> {
+) -> Result<std::collections::BTreeMap<String, String>, crate::SourceUnavailable> {
     use std::io::Read;
 
     let bundle_dir = bundle_dir.as_ref();
@@ -109,37 +109,37 @@ pub fn production_admission_component_cids(
         let path = bundle_dir.join(relative);
         let metadata = std::fs::symlink_metadata(&path).map_err(|error| {
             if error.kind() == std::io::ErrorKind::NotFound {
-                format!(
+                crate::SourceUnavailable::new(format!(
                     "UNAVAILABLE: required production component {} is absent: {error}",
                     path.display()
-                )
+                ))
             } else {
-                format!(
+                crate::SourceUnavailable::new(format!(
                     "FAILED: inspect required production component {}: {error}",
                     path.display()
-                )
+                ))
             }
         })?;
         if !metadata.file_type().is_file() {
-            return Err(format!(
+            return Err(crate::SourceUnavailable::new(format!(
                 "FAILED: required production component {} is not a regular non-symlink file",
                 path.display()
-            ));
+            )));
         }
         let mut file = std::fs::File::open(&path).map_err(|error| {
-            format!(
+            crate::SourceUnavailable::new(format!(
                 "FAILED: open required production component {}: {error}",
                 path.display()
-            )
+            ))
         })?;
         let mut hasher = blake3::Hasher::new();
         let mut buffer = [0u8; 64 * 1024];
         loop {
             let read = file.read(&mut buffer).map_err(|error| {
-                format!(
+                crate::SourceUnavailable::new(format!(
                     "FAILED: read required production component {}: {error}",
                     path.display()
-                )
+                ))
             })?;
             if read == 0 {
                 break;
@@ -438,6 +438,7 @@ pub(crate) fn validate_teacher_free_preflight(
         })?;
     let current_production =
         production_admission_component_cids(&bundle_dir).map_err(|reason| {
+            let reason = reason.reason;
             if reason.starts_with("UNAVAILABLE:") {
                 Error::Unavailable(reason)
             } else {
@@ -785,17 +786,26 @@ pub fn exact_probe_host_identity() -> ExactMulticoreProbeHost {
     let available_parallelism = std::thread::available_parallelism().map_or(1, usize::from);
     #[cfg(target_os = "macos")]
     {
-        fn sysctl(name: &str) -> Result<String, String> {
+        fn sysctl(name: &str) -> Result<String, crate::SourceUnavailable> {
             let output = std::process::Command::new("/usr/sbin/sysctl")
                 .args(["-n", name])
                 .output()
-                .map_err(|error| format!("sysctl {name}: {error}"))?;
+                .map_err(|error| {
+                    crate::SourceUnavailable::new(format!("sysctl {name}: {error}"))
+                })?;
             if !output.status.success() {
-                return Err(format!("sysctl {name} exited {}", output.status));
+                return Err(crate::SourceUnavailable::new(format!(
+                    "sysctl {name} exited {}",
+                    output.status
+                )));
             }
             String::from_utf8(output.stdout)
                 .map(|value| value.trim().to_owned())
-                .map_err(|error| format!("sysctl {name} returned non-UTF-8 output: {error}"))
+                .map_err(|error| {
+                    crate::SourceUnavailable::new(format!(
+                        "sysctl {name} returned non-UTF-8 output: {error}"
+                    ))
+                })
         }
 
         fn nonempty(name: &str, unavailable: &mut Vec<String>) -> Option<String> {
@@ -806,7 +816,7 @@ pub fn exact_probe_host_identity() -> ExactMulticoreProbeHost {
                     None
                 }
                 Err(reason) => {
-                    unavailable.push(reason);
+                    unavailable.push(reason.to_string());
                     None
                 }
             }
@@ -814,8 +824,9 @@ pub fn exact_probe_host_identity() -> ExactMulticoreProbeHost {
 
         fn positive_usize(name: &str, unavailable: &mut Vec<String>) -> Option<usize> {
             match sysctl(name).and_then(|raw| {
-                raw.parse::<usize>()
-                    .map_err(|error| format!("{name} returned {raw:?}: {error}"))
+                raw.parse::<usize>().map_err(|error| {
+                    crate::SourceUnavailable::new(format!("{name} returned {raw:?}: {error}"))
+                })
             }) {
                 Ok(value) if value > 0 => Some(value),
                 Ok(_) => {
@@ -823,7 +834,7 @@ pub fn exact_probe_host_identity() -> ExactMulticoreProbeHost {
                     None
                 }
                 Err(reason) => {
-                    unavailable.push(reason);
+                    unavailable.push(reason.to_string());
                     None
                 }
             }
@@ -1335,7 +1346,7 @@ impl ExactMulticoreProbeReport {
             resources: &ExactMulticoreProbeResources,
             elapsed_seconds: f64,
             expected_scope: &str,
-        ) -> Result<(), Error> {
+        ) -> Result<(), ExactMulticoreProbeValidationError> {
             if !elapsed_seconds.is_finite() || elapsed_seconds <= 0.0 {
                 return Err(Error::NumericEvidenceMismatch("resource_elapsed"));
             }
@@ -1848,21 +1859,23 @@ impl ExactMulticoreProbeReport {
     }
 
     #[cfg(not(target_arch = "wasm32"))]
-    fn report_body_cid(&self) -> std::io::Result<String> {
+    fn report_body_cid(&self) -> Result<String, crate::SourceUnavailable> {
         let mut body = self.clone();
         body.events = ExactMulticoreProbeEventsBinding::pending(
             self.events.file_name.clone(),
             self.binding_verdict.status,
         );
-        let mut bytes = serde_json::to_vec_pretty(&body)
-            .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?;
+        let mut bytes = serde_json::to_vec_pretty(&body)?;
         bytes.push(b'\n');
         Ok(format!("blake3:{}", blake3::hash(&bytes).to_hex()))
     }
 
     /// Atomically publish a flushed report in the destination directory.
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn write_atomic(&self, path: impl AsRef<std::path::Path>) -> std::io::Result<()> {
+    pub fn write_atomic(
+        &self,
+        path: impl AsRef<std::path::Path>,
+    ) -> Result<(), crate::SourceUnavailable> {
         let path = path.as_ref();
         let bytes = self.canonical_bytes()?;
         write_atomic_bytes(path, &bytes)
@@ -1894,7 +1907,9 @@ impl ExactMulticoreProbeReport {
             events_file_name.clone(),
             self.binding_verdict.status,
         );
-        let report_body_cid = self.report_body_cid()?;
+        let report_body_cid = self
+            .report_body_cid()
+            .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?;
         let prefix_bytes = std::fs::read(events_path)?;
         if !prefix_bytes.is_empty() && prefix_bytes.last() != Some(&b'\n') {
             return Err(std::io::Error::new(
@@ -1922,16 +1937,17 @@ impl ExactMulticoreProbeReport {
             self.binding_verdict.qualifies_full_run,
         )
         .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?;
-        let bytes = self.canonical_bytes()?;
+        let bytes = self
+            .canonical_bytes()
+            .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?;
         let cid = format!("blake3:{}", blake3::hash(&bytes).to_hex());
-        write_atomic_bytes(report_path, &bytes)?;
+        write_atomic_bytes(report_path, &bytes).map_err(std::io::Error::other)?;
         Ok(cid)
     }
 
     #[cfg(not(target_arch = "wasm32"))]
-    fn canonical_bytes(&self) -> std::io::Result<Vec<u8>> {
-        let mut bytes = serde_json::to_vec_pretty(self)
-            .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?;
+    fn canonical_bytes(&self) -> Result<Vec<u8>, crate::SourceUnavailable> {
+        let mut bytes = serde_json::to_vec_pretty(self)?;
         bytes.push(b'\n');
         Ok(bytes)
     }
@@ -2025,7 +2041,10 @@ fn finalized_events_binding(
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn write_atomic_bytes(path: &std::path::Path, bytes: &[u8]) -> std::io::Result<()> {
+fn write_atomic_bytes(
+    path: &std::path::Path,
+    bytes: &[u8],
+) -> Result<(), crate::SourceUnavailable> {
     use std::io::Write;
 
     let parent = normalized_report_parent(path);

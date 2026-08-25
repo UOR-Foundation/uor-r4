@@ -804,7 +804,7 @@ impl Llama {
     pub(crate) fn set_execution_config(
         &mut self,
         config: TeacherExecutionConfig,
-    ) -> Result<(), String> {
+    ) -> Result<(), SourceUnavailable> {
         self.exact_executor = ExactExecutor::new(config)?;
         Ok(())
     }
@@ -817,7 +817,7 @@ impl Llama {
     pub(crate) fn prestart_exact_execution(
         &self,
         batch_width: usize,
-    ) -> Result<TeacherExecutionPreparation, String> {
+    ) -> Result<TeacherExecutionPreparation, SourceUnavailable> {
         let started = std::time::Instant::now();
         let _forward_guard = self
             .forward_gate
@@ -1992,7 +1992,7 @@ pub fn exact_probe_expectation_shapes_from_config(
                 forward_plan,
             })
         })
-        .collect::<Result<Vec<_>, _>>()
+        .collect::<Result<Vec<_>, ExactForwardPlanError>>()
         .map_err(|error| SourceUnavailable::new(error.to_string()))?;
     let trace_shape = exact_probe_trace_shape_for_geometry(
         &cfg,
@@ -3202,9 +3202,7 @@ impl HuggingFaceLlamaOracle {
         &mut self,
         execution: TeacherExecutionConfig,
     ) -> Result<(), SourceUnavailable> {
-        self.model
-            .set_execution_config(execution)
-            .map_err(SourceUnavailable::new)
+        self.model.set_execution_config(execution)
     }
 
     /// Reset exact counters after excluded executor prestart while retaining
@@ -3222,7 +3220,7 @@ impl HuggingFaceLlamaOracle {
     pub fn prepare_exact_execution(
         &self,
         batch_width: usize,
-    ) -> Result<TeacherExecutionPreparation, String> {
+    ) -> Result<TeacherExecutionPreparation, SourceUnavailable> {
         self.model.prestart_exact_execution(batch_width)
     }
 

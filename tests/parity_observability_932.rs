@@ -890,7 +890,7 @@ fn bdd_source_keeps_one_time_compiled_cohorts_before_teacher_continuation() {
         .rfind("file_kappa(&teacher_free_preflight_path)?.0")
         .expect("preflight token is rehashed immediately before teacher load");
     let final_generation_rehash = automatic
-        .rfind("production_admission_component_cids(&bundle)?")
+        .rfind("production_admission_component_cids(&bundle)")
         .expect("complete schema-2 generation is rehashed before teacher load");
     let teacher_load = automatic
         .find("SmolLm2Oracle::load_with_sequence_length_and_execution(")
