@@ -7,16 +7,16 @@
 
 ## What is this?
 
-R⁴ asks whether language can be routed through learned Riemannian geometry on
-ordinary CPUs instead of depending on conventional transformer
+R⁴ asks whether language can be routed through factorable Riemannian geometry
+on ordinary CPUs instead of depending on conventional transformer
 self-attention and GPU-oriented matrix stacks.
 
 The active programme builds a **geometric causal decoder**. It starts from the
 repository's existing local source-model runtime, tokenizer, and language
-weights; routes every learned dense projection through the pinned
-`uor-matmul` backend; admits prior token states and persistent geometric
-memories into a learned R⁴ causal neighborhood; and progressively replaces
-every standard self-attention block while coherent free-running text survives.
+weights as a teacher and transitional behavioral control; compiles prior routes
+and persistent memories into fixed-zeta prime addresses; and aims to replace
+every standard self-attention block with bounded route lookup and local R⁴
+spin/torsion transport while coherent free-running text survives.
 
 Everything runs locally. The target product uses no Ollama, hosted OpenAI, or
 Anthropic inference, and nothing downloads unless explicitly requested.
@@ -48,15 +48,16 @@ work, aligned with the
 [Prism](https://github.com/UOR-Foundation/prism) and
 [uor-addr](https://github.com/UOR-Foundation/uor-addr).
 
-## The active architecture in one picture
+## The active target architecture in one picture
 
 ```mermaid
 flowchart LR
-    Q["Prompt + prior tokens"] --> D["Learned R⁴ causal mixer"]
-    M["Identity-scoped<br/>geometric memory"] --> D
+    Q["Prompt + ordered prior routes"] --> I["Compiled last-one · last-two · sentence-route indexes"]
+    M["Identity-scoped<br/>geometric memory"] --> I
+    I --> D["Bounded prime/divisor lookup<br/>+ local S³ torsion transport"]
     D --> S["Residual · norm · MLP · LM head<br/>dense projections via uor-matmul"]
     S --> T["Next-token logits"]
-    T --> D
+    T --> I
     T --> C["Commit completed turn<br/>to the manifold"]
     C --> M
 ```
@@ -68,11 +69,23 @@ kernel; bounded geometric support must be load-bearing under intervention.
 **Multiplication-free** is a separate, optional post-viability optimization; it
 is not allowed to block coherent generation.
 
-> **Status: architecture reset in progress.** No native geometric decoder has
-> yet established coherent product output. The immediate issue is
-> [#950](https://github.com/UOR-Foundation/uor-r4/issues/950): restore the
-> coherent local `uor-matmul` control and execute one learned R⁴ mixer layer
-> end to end. The exact sequence and stop rules are in the
+> **Status: bounded representation redesign in progress.** G0 established the
+> coherent local `uor-matmul` control and layer-29 seam. G1's learned mixer
+> returned `REDESIGN_REPRESENTATION`: support and memory moved, while semantic
+> operator/token transport did not. The immediate issue is
+> [#958](https://github.com/UOR-Foundation/uor-r4/issues/958): compile and
+> causally test fixed-zeta prime-route attention before any longer teacher run
+> or all-layer replacement. Its current source-free substrate implements the
+> algebra, incremental ordered-route identity, exact bounded I1/I2/IS tables,
+> hard tiny-canary limits, and worker instrumentation. Its frozen
+> current-substrate release canary passed with byte-identical one/four-worker
+> output, all four workers active, and a 1.498x measured compile-stage speedup;
+> see the [#958 measurement record](docs/prime_route_worker_canary_958.md). The
+> complete canonical manifest, divisor/adjacent-spin energy, phase-based
+> selection, layer-29 caller, and product probe are not yet established. The
+> canary must be re-established when those semantic inputs or workload shape
+> change. No native geometric decoder has yet established coherent product
+> output. The exact sequence and stop rules are in the
 > [Geometric Causal Decoder Roadmap](docs/geometric_causal_decoder_plan.md).
 >
 > Historical
@@ -292,10 +305,11 @@ whole method is measurement.
   signature-space novelty to the D4 policy — a measured substrate property
   (#811), same family as #784. See
   [Which track can actually produce coherent text](docs/RESEARCH.md#which-track-can-actually-produce-coherent-text--the-honest-current-answer)
-  for the full picture. The active issue #950 starts from the local source
-  components needed to establish a coherent control, then makes one R⁴ layer
-  causally load-bearing. Until that succeeds, this is a research engine, not a
-  chat model.
+  for the full picture. #950 established the coherent local control and
+  layer-29 seam; #951 returned `REDESIGN_REPRESENTATION`. The active #958
+  prime-route redesign has passed only its source-free worker subgate; its
+  complete manifest, causal attention, product behavior, and chat remain
+  unfinished. This is a research engine, not a chat model.
 - **Instruction following is gated, not solved.** Production `r4 ask` accepts
   only a schema-2 bundle whose exact graph, corpus partitions, tokenizer,
   compiler configuration, controls, cross-surface replay, and full-census

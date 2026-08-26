@@ -14,8 +14,10 @@ file current when conventions change.
 A local, CPU-first **geometric language-model programme**. The active product
 lane reuses the source-model tokenizer/residual/MLP/LM-head stack and pinned
 `uor-matmul` projections while progressively replacing causal self-attention
-with a learned R⁴ geometric mixer. The existing f64 router supplies
-identity-scoped geometric memory, retrieval, and turn persistence.
+with bounded fixed-zeta prime-route lookup and local R⁴ spin/torsion
+transport. The existing f64 router supplies identity-scoped geometric memory,
+retrieval, and turn persistence. The learned four-coordinate mixer is retained
+only as the negative G0/G1 comparator recorded by #950/#951.
 
 The multiplication-free TLA/R4G1 compiler, packed graph runtime, certifier,
 proof assets, and dashboard remain in the repository as working historical
@@ -86,10 +88,11 @@ PR (a bump can shift libm-sensitive teacher logprobs — see Gate E below).
 
 ## Execution-lane invariants (do not conflate)
 
-- **Active geometric decoder:** learned floating-point projections,
-  `uor-matmul`, allocation, and ordinary source-model residual/MLP/LM-head
-  components are allowed. Fixed inputs/checkpoints/decode settings must remain
-  deterministic, and library boundaries retain typed errors.
+- **Active geometric decoder:** compiler-side floating point, `uor-matmul`,
+  allocation, and ordinary source-model residual/MLP/LM-head components are
+  allowed during the bounded transition. Fixed inputs, route manifests,
+  transitional checkpoints, and decode settings must remain deterministic, and
+  library boundaries retain typed errors.
 - **Frozen TLA/R4G1 runtime:** XOR/AND/OR/shift/rotate/popcount/int
   add-sub/compare/table reads only. No multiply, divide, or float in its
   normative kernel; its steady-state prediction path remains allocation-free.
@@ -100,8 +103,9 @@ PR (a bump can shift libm-sensitive teacher logprobs — see Gate E below).
   support shown load-bearing by disabled/permuted interventions.
   P-4/table lowering is a later, separately triggered decision.
 - **Artifact determinism:** identical pinned compiler inputs still produce
-  identical historical artifact bytes. New learned decoder checkpoints must
-  bind their source, tokenizer, training configuration, and parameters.
+  identical historical artifact bytes. New route manifests and transitional
+  decoder checkpoints must bind their source, tokenizer, compiler or training
+  configuration, and semantic parameters.
 - **Errors**: library boundaries return `Result` with focused error enums;
   no `unwrap`/`expect`/panic on recoverable paths. No unsafe in the portable
   runtime or the format crate (`#![forbid(unsafe_code)]` there).
@@ -332,6 +336,21 @@ outcome against it afterwards:
     if positive:         <the next action>
     if negative:         <the next action, and it must differ>
     cost estimate:       <wall-clock, and what else it blocks>
+
+**A long run must be observable before it starts.** Anything expected to exceed
+15 minutes needs a finite work denominator, completed/remaining units,
+throughput, an ETA derived from that denominator, durable checkpoints, and a
+typed terminal report. A missing denominator, absent ETA, non-resumable
+checkpoint, or worker setting that has not passed a one-worker/four-worker
+semantic-equivalence, useful-worker utilization, and measured wall-time
+improvement canary prevents launch. For #958 the frozen current-substrate
+canary passed on 2026-08-26, but the complete-manifest stage remains open and
+any semantic-input or workload-shape change must re-establish the binding
+before causal-attention, product qualification, or larger work. Performance
+evidence comes from release builds; a debug run cannot authorize larger work.
+Eight hours is a hard kill ceiling, not an estimate. Reaching it stops the run
+and records `ABORTED`, `NOT_RUN`, or the last completed bounded result; never
+continue because the process may be nearly finished.
 
 **Cross-target checks are scoped certification.** A native workspace check does
 not build WASM. Run `cargo check --target wasm32-unknown-unknown -p

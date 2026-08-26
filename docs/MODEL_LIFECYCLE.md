@@ -2,9 +2,10 @@
 
 This document contains two lifecycles:
 
-1. the **active geometric-decoder lane**, which starts from a pinned local
-   source bundle, adds learned R⁴ mixer checkpoints, and promotes through
-   bounded product transcripts; and
+1. the **active geometric-decoder lane**, which compiles corpus observations
+   into fixed-zeta prime routes, semiprime/n-let context indexes, and R⁴
+   spin/torsion manifests before any bounded teacher comparison or product
+   promotion; and
 2. the **historical TLA/R4G1 lane**, a multi-hour CPU compile/score pipeline
    retained for its existing artifacts, measurements, and explicit research
    selectors.
@@ -12,22 +13,38 @@ This document contains two lifecycles:
 Current sequencing lives in the
 [Geometric Causal Decoder Roadmap](geometric_causal_decoder_plan.md).
 
-**Current status:** no geometric-decoder artifact or command exists yet. #950
-owns the first source-control transcript, tokenizer-bound memory adapter, and
-one-layer experimental checkpoint. The diagram below is the gated target
-lifecycle, not a runnable command sequence on current `main`.
+**Current status:** #950 established the source-control transcript,
+tokenizer-bound memory adapter, and layer-29 seam. #951's learned-mixer
+checkpoint is a retained negative comparator. A source-free fixed-zeta
+manifest and exact-index substrate now exists under #958, but no
+promoted/deployed prime-route attention artifact or product command exists.
+#958's frozen current-substrate release canary records byte-identical
+one/four-worker artifacts, all four workers active, and a 1.498x median
+compile-stage speedup. The complete manifest and attention/product
+qualification remain open; see the
+[measurement record](prime_route_worker_canary_958.md).
+The diagram below is the gated target lifecycle, not a runnable command
+sequence on current `main`.
 
 The geometric-decoder lifecycle is:
 
 ```text
 pinned source + tokenizer
         -> coherent local uor-matmul control
-        -> one-layer R⁴ mixer checkpoint
-        -> bounded teacher/student-prefix qualification
+corpus -> canonical prime registry + fixed zeta grid
+        -> semiprime/n-let I1/I2/sentence indexes + spin manifest
+        -> source-free causal/direct-lookup and product qualification
+        -> optional bounded teacher/student-prefix comparison
         -> progressive all-layer checkpoint
         -> CLI/HTTP product + persistent manifold memory
         -> measured optimization and release decision
 ```
+
+The canonical one-worker/four-worker equivalence, useful-worker occupancy, and
+measured four-worker wall-time improvement are a hard gate between manifest
+construction and causal-attention qualification. They are not deferred to the
+optional teacher comparison. The current-substrate result must be re-established
+if later work changes semantic inputs or the workload shape.
 
 Until #953 promotes that lane, the production claims and commands later in
 this document continue to describe the existing R4G1 product only.

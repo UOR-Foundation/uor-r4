@@ -20,14 +20,21 @@ durable references.
 > repository rule, the per-issue measurement records are appended, never rewritten;
 > only these live summaries are reconciled.
 
-> **Architecture decision, 2026-08-25 (#948).** The active question is no
-> longer how far the existing table/graph representation can be scaled. It is
-> whether a learned R⁴ causal mixer can replace source self-attention while
-> preserving coherent student-prefix generation, with persistent router memory
-> entering the same causal support. The source weights, tokenizer, causal path,
-> trace taps, and `uor-matmul` backend are the components of the proposed
-> control; #950 must establish their coherent local free-running composition.
-> R4G1/TLA and prior geometry mechanisms are comparators.
+> **Architecture decision, revised 2026-08-26 (#958).** The active question is
+> no longer how far the existing table/graph representation or the learned
+> four-coordinate mixer can be scaled. #950 established the coherent local
+> source control and layer-29 seam; #951 showed that the learned mixer moved
+> support and memory but not semantic operator/token transport. #958 therefore
+> restores the factorable mechanism: immutable zeta-grid phases, prime atoms,
+> semiprime/n-let context, ordered route indexes, and local R⁴ spin/torsion
+> transport. Source weights remain a bounded teacher/control, not the serving
+> geometry. No causal-attention/product qualification or long fit is authorized
+> before the complete manifest and its binding worker evidence pass. The frozen
+> current-substrate canary now records 32/32 exact artifact/kappa matches, all
+> four workers active, and a 1.498x median compile-stage speedup. That is a scoped
+> worker result, not evidence for the unfinished complete manifest, geometric
+> attention, or chat; see the
+> [append-only #958 record](prime_route_worker_canary_958.md).
 
 The current quality-baseline reconciliation is recorded by #933 and the
 [append-only #934 genealogy](canonical_quality_baseline_934.md). The historical
@@ -326,14 +333,18 @@ bundle that *does* load.
 only multiplication-free track with replicated pointwise signal, but the S3
 results establish that it is not currently a coherent generative engine. The
 active candidate is now a different composition of existing assets: the
-coherent source-model/`uor-matmul` control plus learned causal R⁴ mixing and
-persistent router memory. #950 established the coherent layer-29 seam. The
+coherent source-model/`uor-matmul` control plus fixed-zeta prime-route lookup,
+local spin/torsion transport, and persistent router memory. #950 established
+the coherent layer-29 seam. The
 bounded #951 fit then returned `REDESIGN_REPRESENTATION`: real geometry improved
 the frozen held-out loss by 4.4416% versus coordinate permutation, below the
 predeclared 5% gate. Support and persistent-memory probability became
 load-bearing, but the operator-alignment and sampled-token terms remained
-effectively flat. #958 now owns the one-layer representation redesign and
-natively blocks #952; closing #951 is not all-layer promotion. The retained
+effectively flat. #958 now owns the source-free factorable-route redesign
+defined by [ADR-0003](adr/0003-fixed-zeta-prime-route-attention.md) and
+natively blocks #952. Its bounded worker subgate has passed; the complete
+manifest, optional v63 operator adapter, causal attention, and product
+qualification remain open. Closing #951 is not all-layer promotion. The retained
 negative checkpoint and exact population are recorded in
 [`geometric_mixer_qualification_951.md`](geometric_mixer_qualification_951.md).
 The older pointwise signal remains useful as a comparator, not the product
