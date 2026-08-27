@@ -207,7 +207,7 @@ evidence.
 
 This append-only revision freezes one independently motivated
 agreement-attractor contrast before any H4 path cost or selection is opened.
-At this checkpoint the geometry-blind support preflight and all four selector
+At this checkpoint the selection-blind support preflight and all four selector
 arms are `NOT_RUN`; the identities below were produced only by canonical codec,
 artifact, and schema-2 manifest compilation.
 
@@ -279,3 +279,70 @@ cap termination, no short cycle, source/provider closure, and deterministic
 report bytes. Even a positive result would establish only this bounded
 source-free geometric agreement witness, not broad grammar, coherent language,
 semantics, correctness, attention in general, or reasoning.
+
+## Natural agreement revision — support hard stop
+
+The frozen support-only preflight was executed after the checkpoint above. Its
+support/work steps reproduced identically across the two matched prompts, but
+they failed the declared shape before any H4 path selection:
+
+- support preflight record:
+  `blake3:70375921e267b5ceff2198f879356cfb42dd6907accc0c2b720fc8b89b59b271`;
+- left/right support and work: identical;
+- truncation: none (`5` candidates below the ceiling of `8`);
+- H4 path costs, selector outputs, and all four generator arms: `NOT_RUN`; and
+- terminal: `REVISE_I1_GENERATOR_IN_PLACE`.
+
+The observed count-only support was:
+
+| Step | Rows | Entries | Candidate union | Per-candidate source counts `(I1,I2,IS,D,AS)` | Adjacent-spin rows hit | Keys/candidate | Declared H4 comparisons |
+|---:|---:|---:|---|---|---:|---:|---:|
+| prompt | 7 | 8 | `{athlete,generally,run,runs,still}` | `athlete=(0,0,0,0,1)`; `generally=(0,0,0,0,2)`; `run=(0,0,0,0,1)`; `runs=(0,0,0,0,1)`; `still=(2,1,0,2,2)` | 1 | 5 | 25 |
+| after frozen `still` append | 7 | 11 | `{athlete,generally,run,runs,still}` | `athlete=(0,0,0,0,1)`; `generally=(0,0,0,0,2)`; `run=(1,1,0,1,1)`; `runs=(1,1,0,1,1)`; `still=(0,0,0,0,2)` | 1 | 6 | 30 |
+
+This is an admission/indexing failure, not a geometric-ranking result. One
+adjacent-spin row admitted four extra lexical surfaces at the first step and
+retained three extra surfaces at the decisive step. Although the direct and
+divisor rows gave the frozen candidates their expected counts, the current
+union merges those rows with broad adjacent-spin fallback support before the
+candidate ceiling. Consequently the generator never reached its shared-prefix
+bridge or decisive agreement choice, and no statement can be made about the
+H4 path metric on this fixture.
+
+The single recommended next hypothesis is the smallest contract-preserving
+direct-row-first admission seam: make I1/I2/ordered-sentence rows plus divisor
+the primary tier, preserving the frozen direct and divisor counts, and consult
+adjacent-spin rows only when that primary tier is empty. That hypothesis must
+preserve this exact frozen fixture, give the tier policy a visible trace/policy
+identity, and rerun its support gate before any later H4 selection. It is
+recorded for the next #953 revision only; implementing or tuning it after this
+result was not authorized in this session. The original trigram/Markov
+generator remains dormant and is not the proposed mechanism.
+
+A future tiered trace must distinguish a row slot/key, whether it was
+consulted, whether a physical row existed, and how many entries were admitted.
+It cannot relabel the physically present adjacent-spin row as a miss or silently
+reinterpret the old seven-row/entry fields. Any revised work contract and query
+policy identity must be frozen before that repair is exercised.
+
+### Natural agreement revision verification
+
+Focused local checks exercised only the changed seam and directly implicated
+regressions:
+
+- the natural-agreement integration target passed its identity and negative
+  support-record tests; its four-arm witness was ignored with
+  `NOT_RUN_SUPPORT_PREFLIGHT_HARD_STOP`;
+- the existing #953 relabel regression, the #969 two-unit causal-path
+  regression, and all eight #958 attention regressions passed;
+- focused core compilation, the root WASM library check, formatting,
+  diff-whitespace, and claim wording passed; and
+- a focused strict-clippy attempt reached existing main-line lint debt outside
+  the changed paths. Repeating the same target while allowing only those five
+  pre-existing lint categories passed; no unrelated lint cleanup was included.
+
+Workspace-wide tests, corpus/model/teacher work, generation canaries, BDD,
+Gate C, kappa reproduction, audit, fuzz, formal proof, conformance, product QA,
+and release qualification were `NOT_RUN`. Repository-required checks remain
+transport acknowledgements while product QA is dormant; they are not test or
+release evidence.

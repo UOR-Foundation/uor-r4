@@ -75,6 +75,8 @@ const CONSTRUCTION_ARTIFACT_KAPPA: &str =
     "blake3:b222510ccc01ed3257c8b38b743ca771f5e60c87ebf12c565f92fadbbd00332d";
 const ATTENTION_MANIFEST_KAPPA: &str =
     "blake3:1c3baf432b9fdcf2f3d90014797a5cae5850c0acba2fda63e0d6b659d49562de";
+const SUPPORT_PREFLIGHT_RECORD_KAPPA: &str =
+    "blake3:70375921e267b5ceff2198f879356cfb42dd6907accc0c2b720fc8b89b59b271";
 
 // A post-run evidence binding, never an input to selection. `None` is frozen
 // in the pre-selection checkpoint; the observed record kappa may replace it
@@ -275,44 +277,114 @@ fn preflight_arm(bundle: &FrozenBundle, prompt: &[u8]) -> PreflightArm {
     }
 }
 
-fn assert_expected_preflight(arm: &PreflightArm) {
+fn preflight_matches_frozen_contract(arm: &PreflightArm) -> bool {
+    let Some(first) = arm.steps.first() else {
+        return false;
+    };
+    let Some(second) = arm.steps.get(1) else {
+        return false;
+    };
+    arm.steps.len() == 2
+        && first.observed_routes == 5
+        && first.rows_queried == 7
+        && first.candidate_entries == 3
+        && first.unique_candidates_before_ceiling == 1
+        && first.adjacent_spin_rows_hit == 0
+        && first.keys_per_candidate == 5
+        && first.declared_h4_comparisons == 5
+        && first.candidates
+            == vec![PreflightCandidate {
+                payload_bytes: b"still".to_vec(),
+                source_counts: [2, 1, 0, 2, 0],
+            }]
+        && second.observed_routes == 6
+        && second.rows_queried == 7
+        && second.candidate_entries == 6
+        && second.unique_candidates_before_ceiling == 2
+        && second.adjacent_spin_rows_hit == 0
+        && second.keys_per_candidate == 6
+        && second.declared_h4_comparisons == 12
+        && second.candidates
+            == vec![
+                PreflightCandidate {
+                    payload_bytes: b"run".to_vec(),
+                    source_counts: [1, 1, 0, 1, 0],
+                },
+                PreflightCandidate {
+                    payload_bytes: b"runs".to_vec(),
+                    source_counts: [1, 1, 0, 1, 0],
+                },
+            ]
+}
+
+fn assert_observed_preflight(arm: &PreflightArm) {
     assert_eq!(arm.steps.len(), 2);
     let first = &arm.steps[0];
     assert_eq!(first.observed_routes, 5);
     assert_eq!(first.rows_queried, 7);
-    assert_eq!(first.candidate_entries, 3);
-    assert_eq!(first.unique_candidates_before_ceiling, 1);
-    assert_eq!(first.candidates.len(), 1, "step 1 must not be truncated");
-    assert_eq!(first.adjacent_spin_rows_hit, 0);
+    assert_eq!(first.candidate_entries, 8);
+    assert_eq!(first.unique_candidates_before_ceiling, 5);
+    assert_eq!(first.candidate_ceiling, 8);
+    assert_eq!(first.adjacent_spin_rows_hit, 1);
     assert_eq!(first.keys_per_candidate, 5);
-    assert_eq!(first.declared_h4_comparisons, 5);
+    assert_eq!(first.declared_h4_comparisons, 25);
     assert_eq!(
         first.candidates,
-        vec![PreflightCandidate {
-            payload_bytes: b"still".to_vec(),
-            source_counts: [2, 1, 0, 2, 0],
-        }]
+        vec![
+            PreflightCandidate {
+                payload_bytes: b"athlete".to_vec(),
+                source_counts: [0, 0, 0, 0, 1],
+            },
+            PreflightCandidate {
+                payload_bytes: b"generally".to_vec(),
+                source_counts: [0, 0, 0, 0, 2],
+            },
+            PreflightCandidate {
+                payload_bytes: b"run".to_vec(),
+                source_counts: [0, 0, 0, 0, 1],
+            },
+            PreflightCandidate {
+                payload_bytes: b"runs".to_vec(),
+                source_counts: [0, 0, 0, 0, 1],
+            },
+            PreflightCandidate {
+                payload_bytes: b"still".to_vec(),
+                source_counts: [2, 1, 0, 2, 2],
+            },
+        ]
     );
 
     let second = &arm.steps[1];
     assert_eq!(second.observed_routes, 6);
     assert_eq!(second.rows_queried, 7);
-    assert_eq!(second.candidate_entries, 6);
-    assert_eq!(second.unique_candidates_before_ceiling, 2);
-    assert_eq!(second.candidates.len(), 2, "step 2 must not be truncated");
-    assert_eq!(second.adjacent_spin_rows_hit, 0);
+    assert_eq!(second.candidate_entries, 11);
+    assert_eq!(second.unique_candidates_before_ceiling, 5);
+    assert_eq!(second.candidate_ceiling, 8);
+    assert_eq!(second.adjacent_spin_rows_hit, 1);
     assert_eq!(second.keys_per_candidate, 6);
-    assert_eq!(second.declared_h4_comparisons, 12);
+    assert_eq!(second.declared_h4_comparisons, 30);
     assert_eq!(
         second.candidates,
         vec![
             PreflightCandidate {
+                payload_bytes: b"athlete".to_vec(),
+                source_counts: [0, 0, 0, 0, 1],
+            },
+            PreflightCandidate {
+                payload_bytes: b"generally".to_vec(),
+                source_counts: [0, 0, 0, 0, 2],
+            },
+            PreflightCandidate {
                 payload_bytes: b"run".to_vec(),
-                source_counts: [1, 1, 0, 1, 0],
+                source_counts: [1, 1, 0, 1, 1],
             },
             PreflightCandidate {
                 payload_bytes: b"runs".to_vec(),
-                source_counts: [1, 1, 0, 1, 0],
+                source_counts: [1, 1, 0, 1, 1],
+            },
+            PreflightCandidate {
+                payload_bytes: b"still".to_vec(),
+                source_counts: [0, 0, 0, 0, 2],
             },
         ]
     );
@@ -352,7 +424,7 @@ fn freeze_natural_agreement_contract_and_identities() {
 }
 
 #[test]
-fn natural_agreement_support_preflight_is_exact_and_selection_blind() {
+fn natural_agreement_support_preflight_records_admission_hard_stop() {
     let bundle = frozen_bundle();
     assert_eq!(fixture_kappa(), FIXTURE_KAPPA);
     assert_eq!(bundle.codec.codec_kappa(), CODEC_KAPPA);
@@ -365,10 +437,6 @@ fn natural_agreement_support_preflight_is_exact_and_selection_blind() {
 
     let left = preflight_arm(&bundle, LEFT_PROMPT);
     let right = preflight_arm(&bundle, RIGHT_PROMPT);
-    assert_expected_preflight(&left);
-    assert_expected_preflight(&right);
-    assert_eq!(left.steps, right.steps);
-
     let record = PreflightRecord {
         schema: 1,
         fixture_kappa: FIXTURE_KAPPA.to_owned(),
@@ -382,10 +450,13 @@ fn natural_agreement_support_preflight_is_exact_and_selection_blind() {
         right,
     };
     let bytes = serde_json::to_vec(&record).unwrap();
-    println!(
-        "support_preflight_kappa=blake3:{}",
-        blake3::hash(&bytes).to_hex()
-    );
+    let record_kappa = format!("blake3:{}", blake3::hash(&bytes).to_hex());
+    assert_eq!(record_kappa, SUPPORT_PREFLIGHT_RECORD_KAPPA);
+    assert!(!preflight_matches_frozen_contract(&record.left));
+    assert!(!preflight_matches_frozen_contract(&record.right));
+    assert_observed_preflight(&record.left);
+    assert_observed_preflight(&record.right);
+    assert_eq!(record.left.steps, record.right.steps);
 }
 
 fn emitted_payloads(report: &LocalGeometricGenerationReport) -> Vec<Vec<u8>> {
@@ -534,9 +605,22 @@ struct FourArmRecord<'a> {
 }
 
 #[test]
-#[ignore = "run only after the frozen contract and support preflight are published on #953"]
+#[ignore = "NOT_RUN_SUPPORT_PREFLIGHT_HARD_STOP"]
 fn natural_agreement_four_arm_witness() {
     let bundle = frozen_bundle();
+
+    // Fail closed before constructing the generator or opening any H4 path.
+    // An explicit ignored-test invocation cannot bypass the published support
+    // gate merely because the freeze and negative record now exist.
+    let left_preflight = preflight_arm(&bundle, LEFT_PROMPT);
+    let right_preflight = preflight_arm(&bundle, RIGHT_PROMPT);
+    assert!(
+        preflight_matches_frozen_contract(&left_preflight)
+            && preflight_matches_frozen_contract(&right_preflight)
+            && left_preflight.steps == right_preflight.steps,
+        "NOT_RUN_SUPPORT_PREFLIGHT_HARD_STOP"
+    );
+
     let artifact_bytes = bundle.artifact.canonical_bytes().unwrap();
     let generator = LocalGeometricGenerator::from_canonical_bytes(&artifact_bytes).unwrap();
 
