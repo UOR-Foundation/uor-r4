@@ -10,14 +10,9 @@ relationships now mirror the programme: #961 closed with reversible S0 state;
 #952 stopped at `REDESIGN_ORDERED_ROUTE_SUMMARY`; #967 repaired the ordered
 state but terminated `RETAIN_STATE_ONLY`; #970's corrected, target-free A1P
 gate produced the bounded paired-H4-derived exact R4-heatmap result
-`RETAIN_H4_STATE_ONLY_ADVANCE_MULTICHANNEL_A1Q` and landed through protected PR
-#972. #969 A1Q-L has now reached the bounded terminal
-`REDESIGN_NON_H4_ORDERED_TRANSPORT_REPRESENTATION` before selector
-implementation. Protected PR #975 carries that result; native GitHub state is
-authoritative for its delivery status. Unassigned child #974 A1Q-R is natively blocked by
-#969 and blocks both #953 and #973. #953 and #973 therefore remain blocked;
-#954 remains blocked by both #953 and #973. The downstream
-#954 → #955 → #962 → #963 → #964 → #965 chain is unchanged. Terminology lives in
+`RETAIN_H4_STATE_ONLY_ADVANCE_MULTICHANNEL_A1Q`. #970 must merge through the
+protected path before #969 becomes the next multichannel A1Q stage and blocks
+#953. #953–#955 and #962–#965 follow. Terminology lives in
 `docs/transformerless/GLOSSARY.md`. Keep this file current when conventions
 change.
 
@@ -30,13 +25,8 @@ ordered n-lets, fixed-zeta R4/S3 state, Hopf observation, torsion, exact
 `Z[phi]` radial shells, and the required structural/storage project bridge
 `E8 = H4 x H4`, realized in code and serialization by the golden/Galois-coupled
 icosian pair `H4 ⊕ phi H4`. Full recursive attention is a target, not an
-established property: #969's bounded Phase 0A did not qualify a non-H4 channel
-for current, previous, last-two, or sentence selection. #974 now owns the narrow
-ordered-transport repair/requalification. Only after an accepted local/sentence
-consumer and #953 decoded autoregressive loop exist may #973 separately qualify
-paragraph, conversation, or global influence. Hopf, H4, zeta, icosian, and
-SpiralCore states remain structural or control state unless the owning stage
-qualifies a typed term through matched causal evidence.
+established property: #969 must qualify any trajectory, harmonic, Hopf, H4,
+zeta, icosian, or SpiralCore term before it may influence semantic scoring.
 
 The intended destination is frontier-like useful local intelligence without
 transformers, MoE/sparse learned routing, or dense matrix intelligence. That is
@@ -191,58 +181,15 @@ PR (a bump can shift libm-sensitive teacher logprobs — see Gate E below).
   This is only a bounded heatmap-readout identifiability negative: fixed-zeta
   phases, ordered n-lets, exact `phi` radial transport, and typed geometry
   adapters remain structural, diagnostic, or control state. It does not
-  promote attention or generation. Protected PR #972 delivered that terminal
-  result; #970 is closed.
-- #969 owns only **A1Q-L bounded local recursive attention**. Its Phase 0A
-  capacity report reached the valid representation negative before selector
-  implementation. Each of the six available raw non-H4 fields—session
-  hypersphere, winding/window, projection energy, factor/count, cosine
-  resonance, and accumulated Hopf phase—formed one impure class and reported
-  order `0/15`, candidate sensitivity `0/6`, same-candidate change `0/30`,
-  sealed-validation coverage `6/6`, oracle ceiling `3/6`, and construction
-  transfer `0/6` decisions and `0/3` queries. The direct
-  session-plus-candidate-S3 pair formed two impure classes: order `0/15`,
-  candidate sensitivity `6/6`, same-candidate change `0/30`, coverage `6/6`,
-  oracle `4/6`, and transfer `0/6` decisions and `0/3` queries. Equal support
-  and work therefore did not rescue earlier-order transport.
-- The real transported-path channel is
-  `UNAVAILABLE_DIGEST_ONLY_NO_REAL_NON_DIGEST_PATH_STATE`. The zeta/n-let/`phi`
-  transition is `NOT_EXERCISED_NO_PUBLIC_TYPED_TRANSPORT_RULE`. Phase 0B's
-  selector, Gate 0 current/previous/last-two/decoded loop, and sentence fixture
-  are all `NOT_RUN_CHANNEL_CAPACITY_HARD_STOP`, not passes.
-- The only #969 terminals are
-  `PROMOTE_LOCAL_SENTENCE_CONSUMER_TO_I1`,
-  `REDESIGN_NON_H4_ORDERED_TRANSPORT_REPRESENTATION`,
-  `UNAVAILABLE_NO_INDEPENDENT_HOLDOUT`, and `INVALID_CONTRACT`. A valid
-  representation negative was observed. Its exact localized defect is that
-  every eligible non-H4, non-digest channel key has 0/15 earlier-order
-  sensitivity on the frozen matched split; no real non-digest transported-path
-  field is exposed, and pairing static candidate state with an aliased history
-  cannot recover the lost order. The separate ordered-H4 commitment remains
-  structural state. Protected PR #975 carries the terminal; native GitHub state
-  is authoritative for its delivery status. See the append-only
-  [#969 A1Q-L record](docs/recursive_geometric_attention_a1q_l_969.md).
-- Unassigned #974 A1Q-R is the narrow repair/requalification successor, a child
-  of #820 blocked by #969 and blocking both #953 and #973. #953 may begin only
-  after that repair chain accepts a local/sentence consumer, and then owns
-  bounded source-free library/CLI inference and generation using only that
-  consumer.
-  Paragraph, conversation, and global states may remain serialized and update
-  incrementally during #953, but they must not influence candidate selection.
-  #973 A1Q-H remains blocked by #969, #974, and #953; it alone qualifies
-  paragraph, conversation, and global recursive attention through the accepted
-  decoded autoregressive loop. Its positive terminal is
-  `PROMOTE_FULL_HIERARCHY_TO_C1`.
-- #954 is blocked by both accepted #953 and accepted #973. The downstream
-  #954 → #955 → #962 → #963 → #964 → #965 chain remains unchanged: correctness
-  precedes reasoning; #962 owns durable multi-turn CLI/HTTP chat, persistence,
-  isolation, and hive-memory; and #963–#965 own optimization, formal closure,
+  promote attention or generation. Only after protected #970 merge does #969
+  become the next multichannel A1Q stage and block #953. #953 then owns bounded
+  source-free library/CLI generation, followed by #954 correctness and #955
+  reasoning. #962 owns durable multi-turn CLI/HTTP chat, persistence,
+  isolation, and hive-memory; #963–#965 then own optimization, formal closure,
   and release.
-- Sequence strictly: lexical/address plumbing → A1Q-L capacity result → A1Q-R
-  ordered-transport repair/requalification → source-free grammatical
-  inference/generation → A1Q-H paragraph/
-  conversation/global attention through the decoded loop → correctness/
-  abstention → reasoning → optimization/purity/release.
+- Sequence strictly: lexical/address plumbing → recursive attention →
+  source-free grammatical inference/generation → correctness/abstention →
+  reasoning → optimization/purity/release.
 - Kappa is canonical identity/serialization, never the tokenizer or semantic
   distance. The pinned lexical codec is provenance-bound but opens no weights.
 - Preserve the project shorthand `E8 = H4 x H4`. Its concrete implementation
@@ -254,25 +201,21 @@ PR (a bump can shift libm-sensitive teacher logprobs — see Gate E below).
   witnesses without being valid ranking features. Hopf, H4, zeta, icosian,
   SpiralCore, trajectory, hypersphere, winding/window, projection-energy,
   shared-factor, and resonance terms remain storage fields, diagnostics, or
-  controls until their owning stage qualifies them with scope-isolated matched
-  evidence. #953 may consume only the local/sentence semantic terms accepted by
-  the #969 → #974 repair/requalification chain; #973 owns any later paragraph,
-  conversation, or global promotion.
+  controls until A1Q/#969 qualifies them with scope-isolated matched evidence.
+  #953 may consume only the semantic terms that A1Q qualifies.
 - An exact kappa miss must not collapse unseen global history to a suffix-only
   default, but global ordered-state behavior is tested on an independently
   frozen global-snapshot permutation rather than by mutating session history.
-- Full geometry must execute before token choice and change candidate ordering
-  while admitted support remains fixed against the equal-budget current-only,
-  existing-additive-summary,
+- Full geometry must execute before token choice and change admitted support or
+  ordering against the equal-budget current-only, existing-additive-summary,
   factor/count-only, deterministic-ordered-state-permutation,
   hierarchy-disabled, and exact-recall-only controls before generation is
   credited.
 - Teacher output may label or compare only after a source-free report freezes.
   It is never substituted for the product response.
-- Every selection emits a coverage witness for the scope authorized at that
-  stage. A full paragraph/conversation/global coverage claim belongs to #973,
-  not #969 or #953. Exact recall, grammatical generation, correctness, and
-  reasoning are separate gates.
+- Every hierarchy selection emits a global-context coverage witness. Exact
+  recall, grammatical generation, correctness, and reasoning are separate
+  gates.
 - Start with the smallest product artifact that can falsify the stage. A
   negative stops or redesigns it; it does not authorize a larger harness.
 - Do not add a graph section, proof lane, benchmark framework, BDD suite, or

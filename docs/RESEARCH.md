@@ -21,15 +21,10 @@ assumptions, or objectives rather than measured results.
 > GI sequence now records #961 closed, #952 A1.0 redirected through #967 A1R,
 > #967 terminal `RETAIN_STATE_ONLY`, and #970 A1P's bounded paired-H4-derived
 > exact R4-heatmap result
-> `RETAIN_H4_STATE_ONLY_ADVANCE_MULTICHANNEL_A1Q`. #970 is closed through
-> protected PR #972. #969 A1Q-L has now reached
-> `REDESIGN_NON_H4_ORDERED_TRANSPORT_REPRESENTATION` before selector
-> implementation. Selector, Gate 0, and sentence qualification are `NOT_RUN`;
-> protected PR #975 carries the terminal, and native GitHub state is
-> authoritative for delivery. Unassigned #974 A1Q-R is blocked by #969 and blocks #953/#973.
-> #953 and #973 remain blocked. #954 remains blocked by both #953 and #973; the
-> downstream #954 -> #955 -> #962 -> #963 -> #964 -> #965 chain is unchanged;
-> legacy
+> `RETAIN_H4_STATE_ONLY_ADVANCE_MULTICHANNEL_A1Q`. Protected #970 merge is the
+> eligibility boundary; only afterward does #969 become the A1Q multichannel
+> full recursive-attention qualification, followed by
+> #953–#955 and #962–#965; legacy
 > tracker #949 is closed as superseded, and #958 is retained directly beneath
 > #820 as GI-0 foundation. Two
 > current-summary corrections remain important: **#784** found
@@ -50,12 +45,10 @@ assumptions, or objectives rather than measured results.
 > geometry reversible (GI-1/#961), repairs ordered state (GI-2 A1R/#967),
 > tests candidate-relative identifiability and one construction-derived readout
 > without assuming a replacement or placement defect (GI-2 A1P/#970),
-> localizes the remaining non-H4 ordered-transport defect (GI-2 A1Q-L/#969),
-> repairs and requalifies that transport (A1Q-R/#974), adds the local
-> source-free decoded loop (GI-3/#953), and then qualifies
-> paragraph/conversation/global influence through that loop (A1Q-H/#973).
-> Correctness/abstention (GI-4/#954) remains
-> after both #953 and #973, followed by reasoning (GI-5/#955).
+> establishes recursive causal attention across
+> local/sentence/paragraph/conversation/global state with anti-recall evidence
+> (GI-2 A1Q/#969), then adds source-free grammatical inference/generation
+> (GI-3/#953), correctness/abstention (GI-4/#954), and reasoning (GI-5/#955).
 > Exact route identity must overlap with transported trajectory, hypersphere and
 > winding/window state, window energy, shared factors, resonance, and Hopf
 > accumulation so unseen global histories survive an exact-kappa miss. Source
@@ -75,10 +68,10 @@ assumptions, or objectives rather than measured results.
 > In its frozen fixture, current, previous, last-two, and the immutable global
 > snapshot intentionally remain equal; sentence, paragraph, and conversation
 > are the scopes expected to differ after repair. Global order requires a
-> separate matched global-snapshot permutation. #970 is closed through PR #972;
-> #969 now owns only the local/sentence qualification and natively blocks #953.
-> #953 owns the local source-free decoded loop. #973 later owns paragraph,
-> conversation, and global influence, while #962 owns product chat and persisted
+> separate matched global-snapshot permutation. After protected #970 merge,
+> #969 owns the later full attention qualification and natively blocks #953.
+> #953 owns
+> source-free inference/generation, while #962 owns product chat and persisted
 > identity-scoped hive memory. See the
 > [#952 A1.0 record](recursive_geometric_attention_a1_952.md).
 >
@@ -93,8 +86,7 @@ assumptions, or objectives rather than measured results.
 > The terminal verdict is `RETAIN_STATE_ONLY`, with no attention or generation
 > claim. `any_exercised_control_not_weaker = true` confirms that the verdict
 > follows from exercised full/control evidence, not the unavailable additive
-> scorer. #970's exact preflight follows below; #969 continues to block #953,
-> and #973 remains blocked by both #969 and #953.
+> scorer. #970's exact preflight follows below; #969 continues to block #953.
 > See the
 > [#967 A1R record](associative_ordered_route_summaries_a1r_967.md).
 >
@@ -134,73 +126,9 @@ assumptions, or objectives rather than measured results.
 > phases, ordered n-lets, exact `phi` radial transport, and typed
 > `sqrt(2) <-> 2i <-> [0,2]` adapters remain structural under
 > `STRUCTURAL_BINDING_ONLY_NO_ZETA_NLET_TO_PHI_EXPONENT_RULE` and are excluded
-> from the scorer. #970 is closed through protected PR #972. #969 is active and
-> #953 remains blocked by #969; #973 remains blocked by both #969 and #953. See the
+> from the scorer. #969 remains blocked until protected #970 merge and #953
+> remains blocked by #969. See the
 > [#970 A1P record](candidate_relative_identifiability_a1p_970.md).
-
-> **A1Q-L scope correction, 2026-08-27.** #969 now owns only bounded local
-> recursive geometric attention qualification: an individual non-H4
-> ordered-channel capacity preflight, exactly one frozen deterministic
-> select/abstain consumer if a channel transfers, the 2-8-unit Gate 0 decoded
-> composition loop, and current/previous/last-two/sentence causal
-> qualification. It does not own paragraph, conversation, or global attention.
-> Phase 0A must report per-channel earlier-order and candidate sensitivity,
-> same-candidate matched-history change, exact classes/collisions, construction
-> purity, sealed-validation coverage and transfer ceilings, equal support/work,
-> non-digest survival, and candidate/prime/geometry equivariance before any
-> scalar or omnibus combination is inspected.
->
-> The exact #969 terminals are
-> `PROMOTE_LOCAL_SENTENCE_CONSUMER_TO_I1`,
-> `REDESIGN_NON_H4_ORDERED_TRANSPORT_REPRESENTATION`,
-> `UNAVAILABLE_NO_INDEPENDENT_HOLDOUT`, and `INVALID_CONTRACT`. No #969 outcome
-> has been recorded in this living summary yet. #953 remains blocked by #969;
-> during #953, paragraph/conversation/global state may remain serialized and
-> incrementally updated but cannot influence selection. A1Q-H/#973 activates
-> only after accepted #969 and accepted #953, owns those three higher scopes,
-> and uses `PROMOTE_FULL_HIERARCHY_TO_C1` as its only positive terminal. #954
-> remains blocked by both #953 and #973.
-
-> **A1Q-L decision, 2026-08-27.** #969 exercised its individual non-H4
-> channel-capacity preflight and reached
-> `REDESIGN_NON_H4_ORDERED_TRANSPORT_REPRESENTATION` before selector
-> implementation. Each of the six available raw channels—session hypersphere,
-> winding/window, projection energy, factor/count, cosine resonance, and
-> accumulated Hopf phase—formed one impure class and reported order `0/15`,
-> candidate sensitivity `0/6`, same-candidate change `0/30`, sealed-validation
-> coverage `6/6`, no-class-splitting oracle ceiling `3/6`, and construction
-> transfer `0/6` candidate decisions and `0/3` queries.
->
-> The direct sentence-session-hypersphere plus candidate-current-S3 pair formed
-> two impure classes. It retained candidate sensitivity `6/6` but reported order
-> `0/15`, same-candidate change `0/30`, coverage `6/6`, oracle `4/6`, and
-> construction transfer `0/6` decisions and `0/3` queries. The real transported
-> path is `UNAVAILABLE_DIGEST_ONLY_NO_REAL_NON_DIGEST_PATH_STATE`; no real
-> non-digest path field is exposed on this contract, and transported-trajectory
-> kappa remains identity/provenance rather than semantic geometry. The separate
-> ordered-H4 commitment remains structural state. The zeta/n-let/`phi`
-> transition is
-> `NOT_EXERCISED_NO_PUBLIC_TYPED_TRANSPORT_RULE`.
->
-> No individual channel passed. Phase 0B's selector and controls, Gate 0
-> current/previous/last-two and decoded-composition rows, and the independent
-> sentence fixture are all `NOT_RUN_CHANNEL_CAPACITY_HARD_STOP`, not passes.
-> Support and work remained equal. Every eligible non-H4, non-digest channel
-> key has 0/15 earlier-order sensitivity on the frozen matched split; no real
-> non-digest transported-path field is exposed; and pairing static candidate
-> state with an aliased history cannot recover the lost order. The separate
-> ordered-H4 commitment remains structural state. Preserve the working codec,
-> natural support, exact payload inversion, H4 structural state, and incremental
-> hierarchy plumbing.
->
-> Protected PR #975 carries this terminal; native GitHub state is authoritative
-> for delivery. Unassigned #974 A1Q-R is the child repair/requalification stage,
-> blocked by #969 and blocking both #953 and #973. #953 and #973 remain blocked.
-> #954 remains blocked by both #953 and #973, and the downstream chain is
-> unchanged. This is a bounded representation-capacity negative, not attention,
-> generation, coherence, correctness, reasoning, optimization, formal closure,
-> or release evidence. See the append-only
-> [#969 A1Q-L record](recursive_geometric_attention_a1q_l_969.md).
 
 The current quality-baseline reconciliation is recorded by #933 and the
 [append-only #934 genealogy](canonical_quality_baseline_934.md). The historical
@@ -435,14 +363,9 @@ then applied its target-free paired-H4-derived exact R4-heatmap gate. Across 36
 decisions, 14 exercised classes covered 10/12 validation decisions with a
 10/12 oracle ceiling, transferred 0/6 queries, and contained eight incompatible
 classes, so the gate stopped before scalar design. The old six labels remained
-diagnostic/falsification-only. #970 is now closed through protected PR #972.
-#969 then found that no individual non-H4 channel had transferable earlier-order
-capacity and reached `REDESIGN_NON_H4_ORDERED_TRANSPORT_REPRESENTATION` before
-selector implementation. #974 now owns the ordered-transport
-repair/requalification and blocks #953/#973. GI-3/#953 cannot build the local
-decoded loop until that repair chain accepts a local/sentence consumer.
-Higher-scope qualification remains #973 work after the accepted repair chain
-and accepted #953.
+diagnostic/falsification-only. After protected #970 merge, #969 must still
+qualify full recursive attention under matched, scope-isolated controls before
+GI-3/#953 is allowed to generate.
 The final serving path has no source weights, transformer/self-attention, dense
 matrix intelligence, MoE, or sparse learned router. Compiler-side floating
 point remains allowed for witnessed chart construction; serving arithmetic is
@@ -535,20 +458,14 @@ retained them as state only after shortest Cayley distance tied distinct states
 on 6/6 queries. #970 then found that the paired-H4-derived exact R4-heatmap
 classes alias outcomes and that the construction-derived rule has a 0/6 strict
 transfer ceiling on the separate sealed validation fixture. It stopped without
-scalar search; #970 is closed through protected PR #972. #969 then reached its
-own representation-negative terminal, carried by protected PR #975.
-The completed #969 capacity probe found no passing individual channel and
-stopped before one frozen selector, Gate 0, or sentence qualification. #974 now
-owns the narrow ordered-transport repair/requalification and blocks #953/#973.
-#953 may use only a future repair-qualified local/sentence consumer in its
-source-free decoded loop.
-Structural presence does not qualify a field for ranking: the paired heatmap,
-fixed-zeta phases, ordered n-lets, exact `phi` radial transport, typed adapters,
-and unqualified Hopf, H4, icosian, SpiralCore, trajectory, and harmonic terms
-remain storage, diagnostics, or controls. Paragraph, conversation, and global
-states cannot influence #953 selection until #973 qualifies them through that
-real loop after the accepted repair chain and #953. Product chat and persisted
-hive memory remain GI-6/#962 responsibilities. The
+scalar search; protected #970 merge must land before #969 becomes next and
+establishes anti-recall attention before GI-3/#953 adds the
+source-free inference/generation engine. Structural presence does not qualify a
+field for ranking: the paired heatmap, fixed-zeta phases, ordered n-lets, exact
+`phi` radial transport, typed adapters, and unqualified Hopf, H4, icosian,
+SpiralCore, trajectory, and harmonic terms remain storage, diagnostics, or
+controls, and #953 may consume only terms qualified by A1Q. Product chat and
+persisted hive memory remain GI-6/#962 responsibilities. The
 retained #951 negative
 checkpoint and exact population remain in
 [`geometric_mixer_qualification_951.md`](geometric_mixer_qualification_951.md),
@@ -556,10 +473,9 @@ and the #958 boundary remains in
 [`prime_route_attention_qualification_958.md`](prime_route_attention_qualification_958.md).
 The older source-free table-native continuation/candidate and pointwise evidence
 remains useful to #953 as an offline substrate or comparator, not the product
-sequencing authority. #953 must still show that the accepted repair-qualified
-intervention changes candidate choice and decoded output relative to count-only,
-hierarchy-disabled, permuted, and exact-recall controls. (As of #831, the one
-normative scorer for the
+sequencing authority. #953 must still show that a #969-qualified intervention
+changes candidate choice relative to count-only, hierarchy-disabled, permuted,
+and exact-recall controls. (As of #831, the one normative scorer for the
 historical deployed
 inference — the R4G1Runtime scoring path — is designated in
 [ADR-0001](adr/0001-normative-r4g1-scorer.md), and the reference/certifier
@@ -989,30 +905,23 @@ whose only legitimate integration point is an honesty/claim-vocabulary bridge
 #961 is closed. #952 A1.0 has the terminal representation verdict
 `REDESIGN_ORDERED_ROUTE_SUMMARY`; #967 repaired the fold and terminated
 `RETAIN_STATE_ONLY`. #970 produced the bounded paired-H4-derived exact
-R4-heatmap readout-identifiability result without compiling a readout and is
-closed through protected PR #972. #969 A1Q-L then completed its non-H4
-ordered-channel capacity preflight and reached
-`REDESIGN_NON_H4_ORDERED_TRANSPORT_REPRESENTATION` before selector
-implementation. Protected PR #975 carries its terminal; native GitHub state is
-authoritative for delivery. Phase 0B, Gate 0, and sentence qualification were
-`NOT_RUN`.
-
-Unassigned A1Q-R/#974 is a child of #820, blocked by #969 and blocking both
-#953 and #973. It owns the narrow real non-digest ordered-transport repair and
-local/sentence requalification. #953 remains blocked and may later own the
-local provider-free decoded autoregressive loop using only an accepted
-repair-qualified consumer. Paragraph, conversation, and global states may be
-serialized and incrementally updated during #953 but cannot influence candidate
-selection.
-
-A1Q-H/#973 remains blocked by #969, #974, and #953. It alone owns paragraph,
-conversation, and global qualification through the real decoded loop; its
-positive terminal is
-`PROMOTE_FULL_HIERARCHY_TO_C1`. #954 is natively blocked by both #953 and #973.
-The #954 -> #955 -> #962 -> #963 -> #964 -> #965 chain remains unchanged. The
-table below is retained as the historical mechanism ledger; rows that still use
-“open” in their original prose are not the live backlog. GitHub native issue
-state wins.
+R4-heatmap readout-identifiability result without compiling a readout and now
+awaits protected merge. #969 remains blocked until that merge; afterward it
+becomes the separate full recursive-attention qualification and natively blocks
+#953, so the #970 negative cannot make generation eligible. #969 starts
+with a bounded 2–8 lexical-unit composition instrument and stops on identical
+matched continuations, an inert qualified-state intervention, decode failure, a
+period-1–4 cycle, nondeterministic termination, or changed support before opening
+its sealed scope fixtures. After #969 qualifies GI-2 attention, #953 owns
+source-free inference/generation using only qualified semantic terms and must
+exercise the qualified-geometry candidate-choice intervention against its
+declared controls. #954 consumes only that #969/#953 path; #955 invokes the
+accepted #969/#953/#954 consumer; #962 integrates #969-qualified attention and
+the accepted #953 generator into product chat with persisted identity-scoped
+hive memory. #963 retains measured cost; #964 binds the inserted #970 → #969
+stages in the serving contract; #965 qualifies only that release path. The table
+below is retained as the historical mechanism ledger; rows that still use “open”
+in their original prose are not the live backlog. GitHub native issue state wins.
 
 *Recently landed and closed (GitHub is the source of truth; this table tracks what is still open): **#743** — `R4Engine::load` failed closed with a typed `SourceUnavailable` decline on a teacher_cid pairing mismatch instead of panicking (PR #746); the root cause was data-pairing drift between two independently-sourced bundle files, not format/era drift as first hypothesized. **#502** — dropped the lexical weight (W=0) on the deployed content-query path (+0.022 MRR / +0.032 top-1, a simplification); the #421 rows are invariant under the weight, so the gate was moot the same way #490's was (below). **#488** — phase-timing instrument (DoD met); the at-scale run is now **#503**. **#457** — IPF Arm B landed NEGATIVE, consistency operator reaches only the unigram floor (below). **#486/#490** — the serving path compared a routing vector to a content vector; the content-vector query is now the deployed default (+0.1363 MRR), with the serde-default and blast-radius findings recorded on #490. **#487** — corrected #434's Spectral record (lexical, not geometry). **#493** — the VSA switch made honest; its `0.0000` is a scoring category error, not a wiring gap (below). **#458/#459** — interaction information and the estimation ladder, both landed NEGATIVE/count-limited. **#456** — reconstructability certificate + null arm (below).*
 

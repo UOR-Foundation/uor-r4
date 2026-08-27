@@ -36,17 +36,14 @@ spin/torsion changes move the state; and a bounded least-cost lookup chooses the
 next route. The route must remain reconstructable and causally falsifiable.
 
 The programme is sequenced by capability: lexically reversible geometry first,
-then bounded local/sentence recursive attention, then source-free
-inference/generation, then higher-scope attention through that real decoded
-loop, then measured correctness, and only then multi-step reasoning. Qualified
-local/sentence attention must exist before an output can be credited to
-geometric inference; paragraph, conversation, and global influence must earn a
-separate later qualification.
+then recursive attention, then source-free inference/generation, then measured
+correctness, and only then multi-step reasoning. Attention must exist before an
+output can be credited to geometric inference.
 
 Optimization, broad QA, formalization, and release certification follow a
 working decision-bearing product slice. They do not replace it.
 
-## Current truth at the #969 A1Q-L terminal carried by protected PR #975
+## Current truth after #967 A1R
 
 #958 is foundation evidence, not abandonment of geometric intelligence. It
 retained the following source-free mechanisms:
@@ -69,12 +66,7 @@ retrieval, cosine resonance, and accumulated Hopf phase—not only in an exact
 route key or final coordinate. That ancestor used Ollama for language and is not
 generation evidence. Its overlapping context fields are retained as structural
 state and as candidate controls; no field becomes a semantic scoring term until
-its scope-typed qualification supplies matched causal evidence. A1Q-L/#969
-tested current, previous, last-two, and sentence capacity but did not qualify a
-consumer. A1Q-R/#974 now owns the narrow ordered-transport repair and
-requalification. A1Q-H/#973 owns paragraph, conversation, and global scope only
-after the accepted local/sentence repair chain and accepted #953 decoded
-autoregressive loop exist.
+A1Q/#969 qualifies it with matched causal evidence.
 
 Its terminal outcome was `RETAIN_STORAGE_RECALL_ONLY`. That wording is a claim
 boundary: the core experiment is not connected to a lexical generation loop,
@@ -103,27 +95,15 @@ shortest Cayley distance collapsed the distinct states to energy 2 and tied on
 This establishes ordered state only, not full attention or generation.
 See the [#967 A1R record](associative_ordered_route_summaries_a1r_967.md).
 
-#970 closed through protected PR #972 at merge commit
-`e422fa2a3e4cd31ae7edc56182316a545db3af21` with the corrected terminal result
-`RETAIN_H4_STATE_ONLY_ADVANCE_MULTICHANNEL_A1Q`. Its exact paired-H4 signed R4
-heatmap remains structural, provenance, diagnostic, and control state; the
-result does not invalidate paired H4, fixed-zeta phases, ordered n-lets, golden
-radial transport, or typed geometry.
-
-#969 A1Q-L has reached the bounded terminal
-`REDESIGN_NON_H4_ORDERED_TRANSPORT_REPRESENTATION` before selector
-implementation. Protected PR #975 carries the result; native GitHub state is
-authoritative for its delivery status. Unassigned A1Q-R/#974 is a child of #820, blocked by
-#969 and blocking both #953 and #973. #953 and #973 therefore remain blocked.
-#953 still owns source-free inference and language generation, but may consume
-only a repair-qualified local/sentence consumer. Paragraph, conversation, and
-global states remain serialized and incrementally updated during #953, but
-cannot influence candidate admission, ranking, abstention, termination, or
-decoded output. A1Q-H/#973 later qualifies those higher scopes through the real
-decoded autoregressive loop. It remains blocked by #969, #974, and #953 and
-natively joins #953 in blocking #954. The downstream
-#954 -> #955 -> #962 -> #963 -> #964 -> #965 order is unchanged. #962 separately
-owns product chat integration and persisted, identity-scoped hive memory.
+#970 now has a corrected local paired-H4-derived R4-heatmap identifiability
+result of `RETAIN_H4_STATE_ONLY_ADVANCE_MULTICHANNEL_A1Q`, pending protected
+delivery. It follows protected #967 delivery but does not yet expose #969: #970
+remains active and #969 remains blocked until the corrected result merges. #969
+continues to own A1Q multichannel full recursive-attention qualification and
+natively blocks #953. #953 continues to
+own source-free inference and language generation, but may consume only the
+semantic scoring terms qualified by A1Q. #962 separately owns product chat
+integration and persisted, identity-scoped hive memory.
 
 ## Architecture invariants
 
@@ -236,7 +216,7 @@ The required landmarks are
 
 ```text
 (sin = +/-1, cos = 0) -> activation 1
-(sin = 0,    cos = +/-1) -> activation 0.
+(sin = 0,    cos = +1) -> activation 0.
 ```
 
 Chirality retains the `-1 / 0 / +1` orientation that `s^2` would erase.
@@ -331,14 +311,12 @@ retained golden-coupled `H4 ⊕ phi H4` per-leaf serialization as another
 Cartesian root system. Both constructions remain typed and versioned.
 
 Structural presence does not authorize the paired coordinate as a semantic
-ranking feature. #970's valid negative closes this exact paired-H4 heatmap
-readout search without invalidating the state itself. #969 does not create
-another H4 scalar/readout chain: paired H4 remains storage, reconstruction
-evidence, a diagnostic, or a matched control unless a distinct future contract
-independently qualifies a non-aliased semantic use. The optional six-prime
-SpiralCore chart retained by #958 is likewise a separate operator fixture and
-control; it neither satisfies the paired-H4/E8 storage requirement nor carries
-a semantic claim by itself.
+ranking feature. A1Q/#969 may qualify it only through candidate-relative,
+equal-budget factor-only and permuted-pair interventions on anti-recall inputs.
+Until then it remains storage, reconstruction evidence, a diagnostic, or a
+control. The optional six-prime SpiralCore chart retained by #958 is likewise a
+separate operator fixture and control; it neither satisfies the paired-H4/E8
+storage requirement nor carries a semantic claim by itself.
 
 ### 9. Least-cost certified chart selection
 
@@ -450,12 +428,8 @@ trajectory/harmonic structural summaries. The summaries include the transported
 path, session hypersphere vector, accumulated Hopf phase, winding/window state,
 and window projection energy. Each is updated incrementally from its prior state
 and the newly observed route. These fields preserve storage and diagnostic
-state; only the subset qualified for the active scope may constrain or rank
-candidates as semantic scoring terms. #969 did not qualify `R0`, `R1`, `R2`, or
-`RS`; #974 owns their ordered-transport repair/requalification. `RP`, `RC`, and
-`RG` remain serialized and incrementally updated but are selection-disabled
-through #953. Only A1Q-H/#973 may qualify those higher scopes, after the
-accepted local/sentence repair chain and #953 path exist.
+state; only the subset qualified by A1Q/#969 may constrain or rank lower-level
+candidates as semantic scoring terms.
 
 The candidate set is admitted from bounded exact rows plus shared prime factors,
 n-let overlap, adjacent spin sectors, window/trajectory overlap, and bounded
@@ -465,16 +439,13 @@ Admission bounds are explicit; least-energy ranking runs only over the admitted
 set.
 
 An exact kappa miss is not permission to collapse paragraph, conversation, or
-global state to a suffix-only default. Even while those scopes are
-selection-disabled, their overlapping summaries must remain serialized and
-incrementally distinguish histories whose transported trajectory, hypersphere
-state, winding window, projection energy, factor overlap, resonance, or Hopf
-phase differs. Distinct retained state is not semantic evidence; #973 must later
-show that a matched higher-scope intervention changes candidate choice and
-decoded output through the accepted #953 loop.
+global state to a suffix-only default. When an exact route is unseen, the
+overlapping summaries must still distinguish histories whose transported
+trajectory, hypersphere state, winding window, projection energy, factor
+overlap, resonance, or Hopf phase differs.
 
-The energy is an ordered, witnessed comparison over the scope-qualified subset
-of candidate terms such as:
+The energy is an ordered, witnessed comparison over the A1Q-qualified subset of
+candidate terms such as:
 
 - exact context and source breadth;
 - divisor and n-let overlap;
@@ -484,8 +455,7 @@ of candidate terms such as:
 - golden radial-shell cost;
 - transported-trajectory, hypersphere, winding/window, projection-energy,
   shared-factor, cosine-resonance, and accumulated-Hopf compatibility;
-- paragraph, conversation, and global constraint agreement only after #973
-  qualifies the named scope; and
+- paragraph, conversation, and global constraint agreement; and
 - compiled lexical/grammar continuation evidence.
 
 Required structural/storage representation and qualified semantic scoring are
@@ -496,11 +466,7 @@ even when present in every canonical envelope.
 No learned dense Q/K projection, softmax over a full prefix, all-corpus scan,
 MoE gate, or sparse learned router is permitted in the promoted serving path.
 
-### Future A1Q-H global context coverage witness
-
-The following witness becomes decision-bearing only in #973. #969 and #953 may
-serialize and update its inputs, but higher-scope rows cannot influence
-selection before `PROMOTE_FULL_HIERARCHY_TO_C1`.
+### Global context coverage witness
 
 Every selected route must carry a coverage witness that makes “global context”
 auditable. At minimum it records:
@@ -564,14 +530,12 @@ GI-1 does not generate text, add a CLI/chat caller, or claim attention. Its exit
 is deterministic lexical/address round-trip, complete hierarchy identity, and
 rebuildable paired-H4 state.
 
-### GI-2 / #952 → #967 A1R → #970 A1P → #969 A1Q-L — local recursive geometric attention
+### GI-2 / #952 → #967 A1R → #970 A1P → #969 A1Q — recursive geometric attention
 
-Status: **#952 A1.0 terminal negative; #967 A1R `RETAIN_STATE_ONLY`; #970 A1P
-closed through protected PR #972 with
-`RETAIN_H4_STATE_ONLY_ADVANCE_MULTICHANNEL_A1Q`; #969 A1Q-L reached
-`REDESIGN_NON_H4_ORDERED_TRANSPORT_REPRESENTATION` and is pending protected
-delivery; #974 A1Q-R is the unassigned repair/requalification successor and
-blocks #953/#973**.
+Status: **#952 A1.0 terminal negative; #967 A1R `RETAIN_STATE_ONLY`; corrected
+local #970 A1P `RETAIN_H4_STATE_ONLY_ADVANCE_MULTICHANNEL_A1Q` pending protected
+merge; #970 remains active and #969 remains blocked until then; #969 remains
+the next A1Q stage and blocker of #953**.
 
 The frozen A1.0 probe stopped before scorer implementation with
 `REDESIGN_ORDERED_ROUTE_SUMMARY`. Across three matched contrasts, all 21
@@ -686,9 +650,10 @@ The only valid #970 outcomes are:
   already-declared candidate-relative trajectory/harmonic channels after
   protected delivery.
 
-Under the frozen #970 contract, `UNAVAILABLE_NO_INDEPENDENT_HOLDOUT` or
-`INVALID_CONTRACT` would have left #970 open and #969 blocked. Both valid
-outcomes exposed only #969 after protected delivery; neither exposed #953.
+`UNAVAILABLE_NO_INDEPENDENT_HOLDOUT` or `INVALID_CONTRACT` leaves #970 open and
+#969 blocked. Both valid outcomes expose only #969 after protected delivery;
+neither exposes #953. Until this corrected result merges, #970 remains active
+and #969 remains blocked.
 
 The corrected local exact preflight selected the valid negative. Its independent
 structural census covered 14,400/14,400 ordered pairs, all 120 relative roots,
@@ -702,172 +667,47 @@ searched, no readout was compiled, and every downstream control was
 `NOT_RUN_IDENTIFIABILITY_HARD_STOP`. This is a readout-identifiability negative
 only. The byte-identical local report kappa is
 `blake3:5f9239150dea8c0c27c4dfa6ad2e4d0068bc3d18afc127b315c0ec358ceddb3f`;
-see the [#970 A1P record](candidate_relative_identifiability_a1p_970.md). The
-same result was delivered through protected PR #972, closed #970, and exposed
-#969 without exposing #953.
+see the [#970 A1P record](candidate_relative_identifiability_a1p_970.md). #970
+remains active and #969 blocked until protected merge.
 
-The frozen #969 contract began with Phase 0A, before any omnibus scalar,
-weighted combination, selector implementation, or evaluation output is opened. It binds a tiny,
-deterministic construction/validation split disjoint from #970 and from future
-#953/#973 fixtures. Candidate labels, natural support, transformations,
-exclusions, ceilings, controls, terminal decisions, and artifact identities are
-public before evidence collection.
-
-Phase 0A enumerates every proposed non-H4 channel separately:
-
-- a real non-digest transported-path state;
-- session hypersphere state;
-- winding/window state;
-- projection energy;
-- cosine resonance;
-- accumulated Hopf phase;
-- any candidate-relative transition derived from those channels; and
-- a zeta, n-let, or `phi`-derived term only when its typed transport rule is
-  public, causal, independently testable, and neither raw identity nor raw
-  magnitude.
-
-For each channel, the capacity report binds earlier-order sensitivity under
-same-length/same-multiset/same-suffix histories, candidate sensitivity,
-same-candidate change across matched histories, canonical serialized key classes and
-label collisions, construction purity, sealed-validation coverage and maximum
-transfer ceiling, equal support/work, and survival in non-digest state. The
-construction rule must determine candidate behavior rather than attach labels
-to unrelated histories. Candidate relabeling, prime-assignment permutation,
-and geometry permutation must be equivariant. No omnibus combination may be
-inspected until at least one individual channel passes.
-
-If every available channel is commutative, digest-only, candidate-invariant,
-label-aliased, or construction-nontransferable, #969 stops before scorer
-implementation as
-`REDESIGN_NON_H4_ORDERED_TRANSPORT_REPRESENTATION`. It does not sweep weights,
-signs, metrics, thresholds, or new H4 readouts. A narrow
-repair/requalification successor must be natively wired before #969 can close;
-#953 and #973 remain blocked.
-
-#### Observed #969 Phase 0A result
-
-The hard-stop branch above was reached. Each of the six available raw non-H4
-channels—session hypersphere, winding/window, projection energy, factor/count,
-cosine resonance, and accumulated Hopf phase—formed one construction-impure
-class. Each reported earlier-order sensitivity `0/15`, candidate sensitivity
-`0/6`, same-candidate change `0/30`, sealed-validation coverage `6/6`,
-no-class-splitting oracle ceiling `3/6`, and construction transfer `0/6`
-candidate decisions and `0/3` queries.
-
-The direct pair of sentence-session hypersphere state and candidate-current S3
-state formed two construction-impure classes. It retained candidate sensitivity
-`6/6`, but still reported earlier-order sensitivity `0/15`, same-candidate
-change `0/30`, coverage `6/6`, oracle ceiling `4/6`, and construction transfer
-`0/6` decisions and `0/3` queries. Candidate identity therefore survived, but
-candidate interaction with the aliased history did not recover earlier order.
-
-The transported-path channel is
-`UNAVAILABLE_DIGEST_ONLY_NO_REAL_NON_DIGEST_PATH_STATE`. The zeta/n-let/`phi`
-candidate-relative transition is
-`NOT_EXERCISED_NO_PUBLIC_TYPED_TRANSPORT_RULE`. With no passing individual
-channel, the Phase 0B selector, Gate 0 current/previous/last-two and decoded
-composition rows, and sentence fixture are all
-`NOT_RUN_CHANNEL_CAPACITY_HARD_STOP`. Equal support and work held throughout,
-so these rows localize representation capacity rather than unequal retrieval.
-
-The terminal is `REDESIGN_NON_H4_ORDERED_TRANSPORT_REPRESENTATION`, pending
-protected delivery. It does not claim #969 closed or merged. Every eligible
-non-H4, non-digest channel key has 0/15 earlier-order sensitivity on the frozen
-matched split; no real non-digest transported-path field is exposed; and
-pairing static candidate state with an aliased history cannot recover the lost
-order. The separate ordered-H4 commitment remains structural state. Preserve
-the working codec, natural support, exact payload inversion, H4 structural
-state, and incremental hierarchy plumbing.
-Unassigned #974 A1Q-R is the natively wired child repair/requalification stage,
-blocked by #969 and blocking both #953 and #973. See the append-only
-[#969 A1Q-L record](recursive_geometric_attention_a1q_l_969.md).
-
-Only a transferable Phase 0A channel authorizes Phase 0B. Phase 0B freezes
-exactly one deterministic construction-to-selector algorithm, including score
-ordering, ties, abstention, support/work budgets, and serialization. The
-selector uses exact integer or finite-table operations, is not tuned on sealed
-validation, and exposes only an API-neutral `select_or_abstain` result and
-minimal trace. Current-only, existing-additive, factor/count-only,
-deterministic active-channel permutation, hierarchy-disabled, exact-recall-only,
-candidate relabeling, prime-assignment permutation, and path ablations when
-applicable retain matched natural support, payloads, source partition, and
-work. Missing or unexercised controls are not passes.
-
-Only then may the frozen selector enter Gate 0, a bounded 2–8 lexical-unit
-end-to-end composition instrument:
+After the corrected #970 result is delivered through protected merge, #969 may
+begin with Gate 0, a bounded 2–8 lexical-unit end-to-end composition instrument:
 
 ```text
 bytes -> lexical routes -> admitted candidates -> frozen select/abstain
       -> payload decode -> incremental state update
 ```
 
-Gate 0 uses incompatible predeclared choices under the same natural candidate
-union and work. It stops if matched prompts emit identical continuations, the
-active channel is inert, support changes, exact payload decoding fails, a
-period-1–4 cycle appears, termination is nondeterministic, or targets, future
-routes, exact continuation rows, or provider output leak into selection. Each
-step reports `candidate_gap`, `rank_limit`, `decode_failure`,
-`state_update_failure`, `cycle`, or `deterministic_success`.
-
-The Gate 0 report must causally account for the current, previous, and ordered
-last-two inputs under matched support and work. A named local scope is not
-qualified merely because its state is distinct or present in the trace.
-
-Only after Gate 0 succeeds may the same selector, without retuning, exercise one
-independent sentence-state fixture. That fixture varies sentence history only,
-keeps current/previous/last-two state, natural support, payloads, and work
-matched, requires strict intended selection and exact decoding, and requires
-sentence-disabled and sentence-permuted controls to be weaker. #969 does not
-exercise paragraph, conversation, or global qualification.
+Gate 0 stops before expensive scope expansion if matched prompts emit identical
+continuations, the qualified-state intervention is inert, decoding fails, a
+period-1–4 cycle appears, termination is nondeterministic, or support changes.
+Its later sentence, paragraph, conversation, and global fixtures remain sealed
+and disjoint from #970. #969 then owns the full A1Q scorer and
+candidate-relative anti-recall qualification across those scope-isolating
+fixtures. Every selection carries the global-context coverage witness, with no
+future-route leakage, target injection, or external/unbounded corpus population
+scan.
 
 Anti-recall evidence is mandatory: exact-row hits are labeled separately;
 held-out histories cannot be exact stored continuations; real geometry shares
-payload and work budgets with every matched control. Only local/sentence terms
-that pass construction transfer, sealed validation, Gate 0, and sentence
-qualification become GI-2-qualified semantic scoring terms for #953.
+payload and work budgets with current-only, additive, factor/count-only,
+deterministic ordered-state permutation, hierarchy-disabled, and
+exact-recall-only controls. A1Q must separately isolate sentence, paragraph,
+conversation, and global causal evidence and exercise both selection and exact
+payload decoding. Only terms that beat their matched controls become
+GI-2-qualified semantic scoring terms.
 
-The exact #969 terminals are:
-
-- `PROMOTE_LOCAL_SENTENCE_CONSUMER_TO_I1` — construction transfer, sealed
-  validation, Gate 0, and sentence qualification all pass with the frozen
-  selector and matched controls. This exposes only a local/sentence consumer to
-  #953.
-- `REDESIGN_NON_H4_ORDERED_TRANSPORT_REPRESENTATION` — Phase 0A localizes a
-  capacity defect before scorer implementation and requires a narrow
-  repair/requalification successor. This is the observed #969 terminal,
-  carried by protected PR #975.
-- `UNAVAILABLE_NO_INDEPENDENT_HOLDOUT` — leave #969 open and publish the exact
-  unavailable evidence boundary.
-- `INVALID_CONTRACT` — leave #969 open and publish the exact invalidating
-  contract defect.
-
-No #969 terminal establishes paragraph, conversation, or global attention,
-general coherence, knowledge, correctness, reasoning, or performance advantage.
-The #967 and #970 negatives remain scoped evidence, not rejection of their
-working structural state. #974 now blocks #953 and #973 while owning the narrow
-repair/requalification. GI-2 does not emit or score grammatical product text.
-
-### A1Q-R / #974 — ordered-transport repair and local/sentence requalification
-
-#974 is an unassigned child of #820, natively blocked by #969 and blocking both
-#953 and #973. It repairs the localized non-H4 earlier-order defect and repeats
-the smallest bounded local/sentence qualification before any generation work.
-The repair must preserve natural candidate support, exact payload inversion,
-paired-H4 structural/control state, and incremental hierarchy updates. It may
-not use transported-trajectory kappa as semantic distance or revive another H4
-scalar search.
-
-A positive #974 result must establish real non-digest earlier-order transport,
-candidate-relative interaction that does not cancel the history, transferable
-construction classes, and the same matched support/work and equivariance
-contracts before a selector or decoded loop is promoted. #974 does not implement
-#953, #973, correctness, reasoning, chat, optimization, formal closure, or
-release QA.
+GI-2 closes only when #969 shows full recursive attention is causally
+load-bearing and records `PROMOTE_TO_I1`. The #967 representation repair did
+not make A1Q reachable because its scalar readout tied. The corrected local
+#970 result is a valid paired-heatmap readout-identifiability negative, but it
+does not expose #969 until protected merge. That eventual delivery exposes
+#969, not #953. GI-2 does not emit or score grammatical product text.
 
 ### GI-3 / #953 — source-free grammatical inference and generation
 
-After the #969 → #974 repair/requalification chain accepts a local/sentence
-consumer, compile explicit lexical class, agreement, punctuation,
+After #969 qualifies full GI-2 attention, compile explicit lexical class,
+agreement, punctuation,
 clause/sentence closure, and ordered continuation geometry. Expose one bounded
 route-native generation interface through the library and CLI, from input bytes
 and hierarchy state to decoded lexical output. Emit bounded autoregressive text
@@ -878,15 +718,10 @@ The generator consumes only GI-2-qualified semantic scoring terms; mandatory
 storage fields and unqualified Hopf, H4, zeta, icosian, or SpiralCore controls
 cannot influence ranking merely because they are serialized.
 
-During #953, paragraph, conversation, and global state remain canonically
-serialized and incrementally updated, but are selection-disabled. They may not
-affect candidate admission, ranking, abstention, termination, or emitted output
-until #973 qualifies them through this accepted decoded autoregressive loop.
-
 The existing source-free table-native R4G1/TLA continuation and candidate
 evidence may be reused as an offline substrate or comparator where appropriate;
 its replicated pointwise signal is not itself free-running generation. The
-#953 decision must show that the repair-qualified geometric intervention changes
+#953 decision must show that a #969-qualified geometric intervention changes
 candidate choice relative to count-only, hierarchy-disabled, permuted, and
 exact-recall controls under equal support and work.
 
@@ -903,38 +738,15 @@ decodable, non-cycling, prompt-responsive output—not merely one grammatical
 clause shared by different prompts. This is source-free grammatical
 inference/generation, not yet a claim that answers are correct.
 
-### A1Q-H / #973 — paragraph, conversation, and global recursive attention
-
-#973 is an unassigned child of #820, natively blocked by #969, #974, and #953.
-It reuses the accepted local/sentence consumer and real decoded
-autoregressive loop to isolate paragraph, conversation, and global state. It
-does not infer semantic value from an internal-state probe, distinct
-serialization, trace activity, candidate admission, or memory activity.
-
-Each higher scope receives an independent causal fixture with identical natural
-support, payloads, lower-scope state, and work across matched arms. A valid
-intervention must change the intended candidate choice and exact decoded output;
-disabled and deterministic-permutation controls must be weaker. No target,
-future route, exact stored continuation, source weight, or provider output may
-enter selection.
-
-The positive terminal is `PROMOTE_FULL_HIERARCHY_TO_C1`. It qualifies only the
-named paragraph, conversation, and global terms through the accepted #953 loop
-and joins accepted #953 in exposing #954. A negative, unavailable, or invalid
-#973 result keeps those scopes selection-disabled and keeps #954 blocked. It
-does not undo the accepted repair-qualified local/sentence consumer or #953
-generator.
-
 ### GI-4 / #954 — correctness and abstention
 
-After both #953 is accepted and #973 records
-`PROMOTE_FULL_HIERARCHY_TO_C1`, test whether the scope-qualified terms through
-the accepted generator understand the input well enough to choose a correct
-answer. #954 is natively blocked by both #953 and #973 and does not consume
-#952 as qualified attention. Use held-out questions with answerable,
-unanswerable, contradictory, and context-dependent cases. Score correctness,
-relevance, calibration/abstention, constraint coverage, and causal dependence
-on the required route levels.
+After source-free generation exists, test whether the accepted #969-qualified
+terms through the accepted #953 generator understand the input well enough to
+choose a correct answer. #954 does not consume #952 as qualified attention. Use
+held-out questions with answerable, unanswerable, contradictory, and
+context-dependent cases. Score correctness, relevance,
+calibration/abstention, constraint coverage, and causal dependence on the
+required route levels.
 
 An offline teacher may provide labels or a comparator only after the
 source-free arm has a frozen report. Teacher output is never substituted for
@@ -943,8 +755,8 @@ the product response.
 ### GI-5 / #955 — reasoning
 
 Reasoning begins only after correct one-step inference. Every step invokes the
-accepted local-attention/#953/#973/#954 consumer, not #952. Add bounded
-multi-step route composition with:
+accepted #969/#953/#954 consumer, not #952. Add bounded multi-step route
+composition with:
 
 - explicit goal and intermediate constraints;
 - branch creation and comparison;
@@ -958,16 +770,14 @@ intermediate constraints must change under the matched causal control.
 
 ### GI-6 / #962–#965 — product integration, serving purity, measured cost, and bounded release
 
-#962 integrates the #969 local/sentence consumer, #973-qualified higher scopes,
-and the accepted #953 generator into durable multi-turn CLI/HTTP chat,
-persistent conversation state, session and identity isolation, and load-bearing
-identity-scoped hive memory across turns and restarts. #963 retains measured
-optimization. #964 freezes a serving contract that binds the delivered
-#970 -> #969 -> #974 -> #953 -> #973 path; #965 activates release evidence only
-for that exact path. These issues do not inherit an attention claim from #952. The
-native downstream order remains
-#954 -> #955 -> #962 -> #963 -> #964 -> #965. Later issues retain optimization,
-serving-kernel/formal closure, and release ownership.
+#962 integrates #969-qualified attention and the accepted #953 generator into
+durable multi-turn CLI/HTTP chat, persistent conversation state, session and
+identity isolation, and load-bearing identity-scoped hive memory across turns
+and restarts. #963 retains measured optimization. #964 freezes a serving
+contract that binds the inserted #970 → #969 qualification stages and the
+accepted #953 generator; #965 activates release evidence only for that exact
+path. These issues do not inherit an attention claim from #952. Later issues
+retain optimization, serving-kernel/formal closure, and release ownership.
 Freeze one accepted path and remove any remaining transitional serving
 dependency. The final serving census must show:
 
@@ -1027,9 +837,7 @@ hours remains a hard kill ceiling, never an estimate.
   serialization contract is the golden/Galois-coupled icosian pair
   `H4 ⊕ phi H4` with fixed basis, glue, and inverse witness.
 - Required structural/storage representation is not a qualified semantic
-  scoring term. #969 did not qualify a local/sentence field; #974 owns that
-  repair/requalification. #973 may qualify paragraph/conversation/global fields
-  only through the accepted #953 decoded autoregressive loop.
+  scoring term. Only A1Q/#969 may qualify a stored geometric field for #953.
 - S3/R4 compute, Hopf S2/R3 observation, and an E8 action plane are distinct
   objects.
 - Exact recall, grammatical text, correct inference, and reasoning are separate
