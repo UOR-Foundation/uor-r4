@@ -35,6 +35,8 @@ pub const A1R_ASSOCIATIVE_ORDERED_SUMMARY_PROBE_DOMAIN: &str =
 pub const A1P_IDENTIFIABILITY_PROBE_SCHEMA: u32 = 2;
 pub const A1P_IDENTIFIABILITY_PROBE_DOMAIN: &str =
     "uor-r4.a1p-candidate-relative-identifiability-probe/2";
+pub const A1QL_CHANNEL_CAPACITY_PROBE_SCHEMA: u32 = 1;
+pub const A1QL_CHANNEL_CAPACITY_PROBE_DOMAIN: &str = "uor-r4.a1ql-non-h4-channel-capacity-probe/1";
 
 pub const REDESIGN_ROUTE_PLACEMENT: &str = "REDESIGN_ROUTE_PLACEMENT";
 pub const RETAIN_STATE_ONLY: &str = "RETAIN_STATE_ONLY";
@@ -43,6 +45,12 @@ pub const PROMOTE_TO_A1Q: &str = "PROMOTE_TO_A1Q";
 pub const RETAIN_H4_STATE_ONLY_ADVANCE_MULTICHANNEL_A1Q: &str =
     "RETAIN_H4_STATE_ONLY_ADVANCE_MULTICHANNEL_A1Q";
 pub const NOT_RUN_IDENTIFIABILITY_HARD_STOP: &str = "NOT_RUN_IDENTIFIABILITY_HARD_STOP";
+pub const PROMOTE_LOCAL_SENTENCE_CONSUMER_TO_I1: &str = "PROMOTE_LOCAL_SENTENCE_CONSUMER_TO_I1";
+pub const REDESIGN_NON_H4_ORDERED_TRANSPORT_REPRESENTATION: &str =
+    "REDESIGN_NON_H4_ORDERED_TRANSPORT_REPRESENTATION";
+pub const UNAVAILABLE_NO_INDEPENDENT_HOLDOUT: &str = "UNAVAILABLE_NO_INDEPENDENT_HOLDOUT";
+pub const INVALID_CONTRACT: &str = "INVALID_CONTRACT";
+pub const NOT_RUN_CHANNEL_CAPACITY_HARD_STOP: &str = "NOT_RUN_CHANNEL_CAPACITY_HARD_STOP";
 
 const ISSUE_URL: &str = "https://github.com/UOR-Foundation/uor-r4/issues/952";
 const S0_CONSUMER_CONTRACT_URL: &str =
@@ -58,6 +66,19 @@ const A1R_SUCCESSOR_URL: &str = "https://github.com/UOR-Foundation/uor-r4/issues
 const A1R_DECISION_CONTRACT_URL: &str =
     "https://github.com/UOR-Foundation/uor-r4/issues/967#issuecomment-5434971151";
 const A1P_ISSUE_URL: &str = "https://github.com/UOR-Foundation/uor-r4/issues/970";
+const A1QL_ISSUE_URL: &str = "https://github.com/UOR-Foundation/uor-r4/issues/969";
+const A1QL_CONSTRUCTION_FIXTURE_DOMAIN: &str = "uor-r4.a1ql-local-channel-capacity-construction/1";
+const A1QL_VALIDATION_FIXTURE_DOMAIN: &str = "uor-r4.a1ql-local-channel-capacity-validation/1";
+const A1QL_CONSTRUCTION_FIXTURE_ID: &str = "A1QL-CAPACITY-CONSTRUCTION-1";
+const A1QL_VALIDATION_FIXTURE_ID: &str = "A1QL-CAPACITY-VALIDATION-1";
+const A1QL_CONSTRUCTION_FIXTURE_KAPPA: &str =
+    "blake3:acf865c43e6d6ce3ba2a39e553047c2e19d535673e4a96b915f463423fda53d4";
+const A1QL_VALIDATION_FIXTURE_KAPPA: &str =
+    "blake3:17a2e2716b236912df83c52bfa5eb2f09652740232b821e982cffeca39e3d9ec";
+const A1QL_PUBLIC_CONTRACT_KAPPA: &str =
+    "blake3:f63dd5939745286b1c88e7a1da2dedad81493b038f0ef5dead4ecac29d479f55";
+const A1QL_CHANNEL_CAPACITY_REPORT_KAPPA: &str =
+    "blake3:da72cd766bdc2a938286a44de0be60a66242ed9691a02add025e1ea3609b7ae5";
 const FROZEN_A1_PARTITION_KAPPA: &str =
     "blake3:d008b82eda9b16b102cf4c7ffa4a47a40ad514b30f0763ed3f46c0ebae3e277b";
 const FROZEN_A1_CONSTRUCTION_ARTIFACT_KAPPA: &str =
@@ -1719,6 +1740,1373 @@ pub struct A1PClaimBoundary {
     pub digest_or_kappa_used_as_geometry: bool,
     pub opaque_table_offset_used_as_scalar: bool,
     pub candidate_support_or_admission_modified: bool,
+}
+
+/// Public, outcome-free identity envelope frozen before the #969 capacity
+/// census. The observations carry declared labels solely so the public fixture
+/// bytes are complete; this helper does not compile or inspect geometric state.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct A1QLPublicContractIdentities {
+    pub construction_fixture_kappa: String,
+    pub validation_fixture_kappa: String,
+    pub contract_kappa: String,
+    pub contract: A1QLChannelCapacityContract,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct A1QLChannelCapacityContract {
+    pub schema: u32,
+    pub domain: String,
+    pub issue_url: String,
+    pub construction_artifact_kappa: String,
+    pub attention_manifest_kappa: String,
+    pub frozen_partition_kappa: String,
+    pub construction_fixture: A1QLFixtureDeclaration,
+    pub validation_fixture: A1QLFixtureDeclaration,
+    pub role_order: Vec<String>,
+    pub current_token: String,
+    pub natural_candidates: Vec<String>,
+    pub construction_predecessors: Vec<A1PPredecessor>,
+    pub construction_rule: String,
+    pub candidate_labels: Vec<String>,
+    pub transformations: Vec<String>,
+    pub channels: Vec<A1QLChannelDeclaration>,
+    pub semantic_exclusions: Vec<String>,
+    pub support_and_work_ceiling: A1QLSupportAndWorkCeiling,
+    pub selector_controls_if_authorized: Vec<String>,
+    pub terminal_vocabulary: Vec<String>,
+    pub hard_stop_rule: String,
+    pub downstream_fixture_exclusions: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct A1QLFixtureDeclaration {
+    pub fixture_id: String,
+    pub domain: String,
+    pub split: String,
+    pub kappa: String,
+    pub observations: Vec<A1PFixtureObservation>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct A1QLChannelDeclaration {
+    pub channel: String,
+    pub state_rule: String,
+    pub candidate_relative: bool,
+    pub availability_rule: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct A1QLSupportAndWorkCeiling {
+    pub histories_per_split: usize,
+    pub candidate_decisions_per_split: usize,
+    pub natural_candidates_per_query: usize,
+    pub rows_per_query: usize,
+    pub row_reads_per_split: usize,
+    pub candidate_entry_ceiling_per_query: usize,
+    pub candidate_ceiling: usize,
+    pub exact_payload_inversions_per_split: usize,
+}
+
+/// Return the exact #969 public contract identities without compiling a
+/// channel, opening validation geometry, or assigning a selector output.
+pub fn a1ql_public_contract_identities(
+) -> Result<A1QLPublicContractIdentities, RecursiveGeometricAttentionError> {
+    let role_order = a1ql_role_order();
+    let natural_candidates = a1ql_natural_candidates();
+    let predecessors = a1ql_predecessors();
+    let construction_observations = a1ql_construction_observations();
+    let validation_observations = a1ql_validation_observations();
+    let construction_fixture_kappa = a1p_fixture_kappa(
+        A1QL_CONSTRUCTION_FIXTURE_DOMAIN,
+        A1QL_CONSTRUCTION_FIXTURE_ID,
+        "CONSTRUCTION",
+        &role_order,
+        &natural_candidates,
+        &predecessors,
+        &construction_observations,
+    )?;
+    let validation_fixture_kappa = a1p_fixture_kappa(
+        A1QL_VALIDATION_FIXTURE_DOMAIN,
+        A1QL_VALIDATION_FIXTURE_ID,
+        "SEALED_VALIDATION",
+        &role_order,
+        &natural_candidates,
+        &predecessors,
+        &validation_observations,
+    )?;
+    let contract = A1QLChannelCapacityContract {
+        schema: A1QL_CHANNEL_CAPACITY_PROBE_SCHEMA,
+        domain: "uor-r4.a1ql-channel-capacity-public-contract/1".to_owned(),
+        issue_url: A1QL_ISSUE_URL.to_owned(),
+        construction_artifact_kappa: FROZEN_A1_CONSTRUCTION_ARTIFACT_KAPPA.to_owned(),
+        attention_manifest_kappa: FROZEN_A1_ATTENTION_MANIFEST_KAPPA.to_owned(),
+        frozen_partition_kappa: FROZEN_A1_PARTITION_KAPPA.to_owned(),
+        construction_fixture: A1QLFixtureDeclaration {
+            fixture_id: A1QL_CONSTRUCTION_FIXTURE_ID.to_owned(),
+            domain: A1QL_CONSTRUCTION_FIXTURE_DOMAIN.to_owned(),
+            split: "CONSTRUCTION".to_owned(),
+            kappa: construction_fixture_kappa.clone(),
+            observations: construction_observations,
+        },
+        validation_fixture: A1QLFixtureDeclaration {
+            fixture_id: A1QL_VALIDATION_FIXTURE_ID.to_owned(),
+            domain: A1QL_VALIDATION_FIXTURE_DOMAIN.to_owned(),
+            split: "SEALED_VALIDATION".to_owned(),
+            kappa: validation_fixture_kappa.clone(),
+            observations: validation_observations,
+        },
+        role_order,
+        current_token: "qq".to_owned(),
+        natural_candidates,
+        construction_predecessors: predecessors,
+        construction_rule:
+            "DERIVE_S4_PERMUTATION_PARITY_FROM_HISTORY:EVEN_SELECT_ll;ODD_SELECT_rr"
+                .to_owned(),
+        candidate_labels: vec!["SELECT".to_owned(), "REJECT".to_owned()],
+        transformations: vec![
+            "CANDIDATE_RELABELING_EQUIVARIANCE".to_owned(),
+            "PRIME_ASSIGNMENT_PERMUTATION_EQUIVARIANCE".to_owned(),
+            "GEOMETRY_PERMUTATION_EQUIVARIANCE".to_owned(),
+        ],
+        channels: a1ql_channel_declarations(),
+        semantic_exclusions: vec![
+            "TRANSPORTED_TRAJECTORY_KAPPA_OR_ANY_DIGEST_IDENTITY".to_owned(),
+            "PAIRED_H4_OR_DERIVED_R4_HEATMAP_READOUT".to_owned(),
+            "RAW_TOKEN_ID_SPELLING_SEQUENTIAL_PRIME_OR_TABLE_INDEX".to_owned(),
+            "TARGET_ORIENTATION_FUTURE_ROUTE_EXACT_CONTINUATION_OR_PROVIDER_OUTPUT".to_owned(),
+            "ZETA_NLET_OR_PHI_TERM_WITHOUT_PUBLIC_TYPED_CAUSAL_TRANSPORT_RULE".to_owned(),
+            "OMNIBUS_WEIGHTED_COMBINATION_BEFORE_INDIVIDUAL_CHANNEL_PASS".to_owned(),
+        ],
+        support_and_work_ceiling: A1QLSupportAndWorkCeiling {
+            histories_per_split: 3,
+            candidate_decisions_per_split: 6,
+            natural_candidates_per_query: 2,
+            rows_per_query: ROWS_PER_QUERY_CEILING,
+            row_reads_per_split: 3 * ROWS_PER_QUERY_CEILING,
+            candidate_entry_ceiling_per_query: ROWS_PER_QUERY_CEILING * CANDIDATE_CEILING,
+            candidate_ceiling: CANDIDATE_CEILING,
+            exact_payload_inversions_per_split: 6,
+        },
+        selector_controls_if_authorized: vec![
+            "current-only".to_owned(),
+            "existing-additive-summary".to_owned(),
+            "factor-count-only".to_owned(),
+            "deterministic-active-channel-permutation".to_owned(),
+            "hierarchy-disabled".to_owned(),
+            "exact-recall-only".to_owned(),
+            "candidate-relabeling".to_owned(),
+            "prime-assignment-permutation".to_owned(),
+            "full-transported-path".to_owned(),
+            "last-only".to_owned(),
+            "no-last".to_owned(),
+            "shuffled-path".to_owned(),
+        ],
+        terminal_vocabulary: vec![
+            PROMOTE_LOCAL_SENTENCE_CONSUMER_TO_I1.to_owned(),
+            REDESIGN_NON_H4_ORDERED_TRANSPORT_REPRESENTATION.to_owned(),
+            UNAVAILABLE_NO_INDEPENDENT_HOLDOUT.to_owned(),
+            INVALID_CONTRACT.to_owned(),
+        ],
+        hard_stop_rule: "IF_NO_INDIVIDUAL_AVAILABLE_NON_H4_CHANNEL_HAS_EARLIER_ORDER_SENSITIVITY_AND_CANDIDATE_SENSITIVITY_AND_PURE_CONSTRUCTION_CLASSES_AND_NONZERO_SEALED_TRANSFER_THEN_STOP_BEFORE_SCORER"
+            .to_owned(),
+        downstream_fixture_exclusions: vec![
+            "ALL_A1P_970_CONSTRUCTION_AND_VALIDATION_HISTORIES".to_owned(),
+            "ALL_A1_952_AND_A1R_967_REGRESSION_HISTORIES".to_owned(),
+            "RESERVED_953_DECODED_AUTOREGRESSIVE_FIXTURES".to_owned(),
+            "RESERVED_973_PARAGRAPH_CONVERSATION_GLOBAL_FIXTURES".to_owned(),
+        ],
+    };
+    let contract_kappa = canonical_kappa(&canonical_json(&contract)?)?;
+    Ok(A1QLPublicContractIdentities {
+        construction_fixture_kappa,
+        validation_fixture_kappa,
+        contract_kappa,
+        contract,
+    })
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct A1QLChannelCapacityProbeReport {
+    pub schema: u32,
+    pub domain: String,
+    pub report_kappa: String,
+    pub body: A1QLChannelCapacityProbeBody,
+}
+
+impl A1QLChannelCapacityProbeReport {
+    pub fn canonical_bytes(&self) -> Result<Vec<u8>, RecursiveGeometricAttentionError> {
+        if self.schema != A1QL_CHANNEL_CAPACITY_PROBE_SCHEMA
+            || self.domain != A1QL_CHANNEL_CAPACITY_PROBE_DOMAIN
+        {
+            return Err(RecursiveGeometricAttentionError::InvalidProbe(
+                "A1Q-L report schema/domain is unsupported".to_owned(),
+            ));
+        }
+        if a1ql_report_identity_kappa(&self.body)? != self.report_kappa {
+            return Err(RecursiveGeometricAttentionError::InvalidProbe(
+                "A1Q-L report kappa does not reproduce".to_owned(),
+            ));
+        }
+        canonical_json(self)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct A1QLChannelCapacityProbeBody {
+    pub probe_status: String,
+    pub contract_status: String,
+    pub terminal_verdict: String,
+    pub localized_defect: String,
+    pub public_contract: A1QLPublicContractIdentities,
+    pub fixture_integrity: A1QLFixtureIntegrity,
+    pub support_and_work: Vec<A1QLSupportAndWork>,
+    pub channels: Vec<A1QLChannelCapacityResult>,
+    pub transformation_controls: Vec<A1QLControlStatus>,
+    pub conditional_selector_controls: Vec<A1QLControlStatus>,
+    pub gate_and_sentence_status: Vec<A1QLControlStatus>,
+    pub hard_stop_reasons: Vec<String>,
+    pub omnibus_weighted_combination_opened: bool,
+    pub scalar_functions_searched: usize,
+    pub selector_artifacts_compiled: usize,
+    pub validation_selector_outputs_opened: bool,
+    pub serving_boundary: A10ServingBoundary,
+    pub claim_boundary: A1QLClaimBoundary,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct A1QLFixtureIntegrity {
+    pub construction_kappa_reproduces: bool,
+    pub validation_kappa_reproduces: bool,
+    pub public_contract_kappa_reproduces: bool,
+    pub construction_rule_derived_from_histories: bool,
+    pub labels_attached_after_both_splits_prepared: bool,
+    pub construction_validation_disjoint: bool,
+    pub disjoint_from_a1_a1r_a1p: bool,
+    pub reserved_from_953_and_973: bool,
+    pub same_length_multiset_suffix: bool,
+    pub natural_candidate_union_predeclared: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct A1QLSupportAndWork {
+    pub split: String,
+    pub histories: usize,
+    pub candidate_decisions: usize,
+    pub natural_candidates: Vec<String>,
+    pub natural_candidate_union_exact: bool,
+    pub candidate_source_partition_equal: bool,
+    pub rows_per_query: usize,
+    pub row_reads: usize,
+    pub candidate_entries_examined: usize,
+    pub candidate_entry_ceiling_per_query: usize,
+    pub candidate_ceiling: usize,
+    pub maximum_admitted_candidates: usize,
+    pub exact_payload_inversions: usize,
+    pub exact_direct_rows_miss: bool,
+    pub target_injected: bool,
+    pub future_events_visible: bool,
+    pub support_and_work_contract_exact: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct A1QLRatio {
+    pub numerator: usize,
+    pub denominator: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct A1QLChannelCapacityResult {
+    pub channel: String,
+    pub status: String,
+    pub key_definition: String,
+    pub available: bool,
+    pub survives_in_non_digest_state: bool,
+    pub earlier_order_sensitivity: A1QLRatio,
+    pub candidate_sensitivity: A1QLRatio,
+    pub same_candidate_change: A1QLRatio,
+    pub exact_classes: Vec<A1QLExactClass>,
+    pub construction_class_count: usize,
+    pub construction_pure_class_count: usize,
+    pub construction_impure_class_count: usize,
+    pub construction_classes_pure: bool,
+    pub sealed_validation_coverage: A1QLRatio,
+    pub sealed_validation_no_class_splitting_oracle_ceiling: A1QLRatio,
+    pub sealed_validation_construction_transfer_decision_ceiling: A1QLRatio,
+    pub sealed_validation_construction_transfer_query_ceiling: A1QLRatio,
+    pub support_equal: bool,
+    pub work_equal: bool,
+    pub capacity_gate_pass: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct A1QLExactClass {
+    pub class_id: String,
+    pub exact_key_json: String,
+    pub members: Vec<A1PClassMember>,
+    pub construction_select: usize,
+    pub construction_reject: usize,
+    pub validation_select: usize,
+    pub validation_reject: usize,
+    pub construction_outcome_if_pure: Option<String>,
+    pub construction_impure: bool,
+    pub incompatible_outcomes_across_splits: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct A1QLControlStatus {
+    pub control: String,
+    pub status: String,
+    pub support_equal: Option<bool>,
+    pub selections: usize,
+    pub ties: usize,
+    pub abstentions: usize,
+    pub exact_hits: usize,
+    pub payload_decodes: usize,
+    pub row_reads: usize,
+    pub candidate_decisions: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct A1QLClaimBoundary {
+    pub channel_capacity_falsifier_only: bool,
+    pub codec_support_payload_h4_and_incremental_state_preserved: bool,
+    pub selector_frozen: bool,
+    pub gate_0_exercised: bool,
+    pub sentence_qualification_exercised: bool,
+    pub local_sentence_attention_established: bool,
+    pub paragraph_conversation_global_attention_established: bool,
+    pub inference_established: bool,
+    pub generation_established: bool,
+    pub correctness_established: bool,
+    pub reasoning_established: bool,
+    pub digest_or_kappa_used_as_geometry: bool,
+    pub h4_or_heatmap_used_as_new_readout: bool,
+    pub target_future_exact_continuation_or_provider_used: bool,
+    pub candidate_support_or_admission_modified: bool,
+}
+
+#[derive(Debug, Clone)]
+struct A1QLPreparedQuery {
+    split: String,
+    observation_id: String,
+    history: Vec<String>,
+    history_state: A10AttentionLevelNonDigest,
+    candidates: Vec<String>,
+    support_signature: Vec<(String, A10SourceCounts)>,
+    candidate_origin_signature: A1QLCandidateOriginSignature,
+    row_outcome_signature: Vec<(String, String, bool, usize)>,
+    budget_signature: (usize, usize, usize, usize, usize, usize, bool, bool),
+    rows_read: usize,
+    candidate_entries_examined: usize,
+    candidate_entry_ceiling: usize,
+    candidate_ceiling: usize,
+    exact_payload_inversions: usize,
+    exact_direct_rows_miss: bool,
+    target_injected: bool,
+    future_events_visible: bool,
+}
+
+type A1QLCandidateOriginRow = (String, String, Vec<u8>, A10SourceCounts, Vec<String>);
+type A1QLCandidateOriginSignature = Vec<A1QLCandidateOriginRow>;
+
+#[derive(Debug, Clone)]
+struct A1QLPreparedSplit {
+    split: String,
+    queries: Vec<A1QLPreparedQuery>,
+}
+
+#[derive(Debug, Clone)]
+struct A1QLClassEvent {
+    split: String,
+    observation_id: String,
+    candidate: String,
+    outcome: String,
+    history_state: A10AttentionLevelNonDigest,
+    candidate_s3_spin_q30: [i32; 4],
+}
+
+fn a1ql_prepare_split(
+    split: &str,
+    histories: &[A1PUnlabeledHistory],
+    codec: &CanonicalLexicalCodec,
+    construction_artifact: &CanonicalRouteArtifact,
+    attention: &GeometricAttentionArtifact,
+    child_manifest_addresses: &[GeometricAddress],
+) -> Result<A1QLPreparedSplit, RecursiveGeometricAttentionError> {
+    let mut queries = Vec::with_capacity(histories.len());
+    for unlabeled in histories {
+        let artifact = CanonicalRouteArtifact::ingest(
+            codec,
+            &evaluation_input(&unlabeled.observation_id, &unlabeled.history)?,
+        )?;
+        let trace = artifact.attention_consumer_trace()?;
+        let history_state = trace
+            .ordered_levels
+            .iter()
+            .find(|level| level.level == "sentence")
+            .map(non_digest_level)
+            .ok_or_else(|| {
+                RecursiveGeometricAttentionError::InvalidProbe(format!(
+                    "A1Q-L query {} is missing sentence state",
+                    unlabeled.observation_id
+                ))
+            })?;
+        let path = a1p_target_free_candidate_path(
+            codec,
+            construction_artifact,
+            attention,
+            child_manifest_addresses,
+            &unlabeled.history,
+        )?;
+        let mut candidates = Vec::with_capacity(path.candidates.len());
+        let mut exact_payload_inversions = 0usize;
+        for candidate in &path.candidates {
+            let token = std::str::from_utf8(&candidate.address_value.payload_bytes)
+                .map_err(|error| {
+                    RecursiveGeometricAttentionError::InvalidProbe(format!(
+                        "A1Q-L candidate payload is not UTF-8: {error}"
+                    ))
+                })?
+                .to_owned();
+            let candidate_address = lexical_address(codec, construction_artifact, &token)?;
+            let reproduced = construction_artifact
+                .lexical_route_value_for_address_from_validated_artifact(&candidate_address)?
+                .ok_or_else(|| {
+                    RecursiveGeometricAttentionError::InvalidProbe(format!(
+                        "A1Q-L candidate {token:?} did not invert from the frozen artifact"
+                    ))
+                })?;
+            let exact = candidate_address.canonical_kappa()?
+                == candidate.address_value.address_kappa
+                && reproduced.address_kappa == candidate.address_value.address_kappa
+                && reproduced.payload_cid == candidate.address_value.payload_cid
+                && reproduced.payload_bytes == candidate.address_value.payload_bytes;
+            exact_payload_inversions += usize::from(exact);
+            candidates.push(token);
+        }
+        candidates.sort();
+        queries.push(A1QLPreparedQuery {
+            split: split.to_owned(),
+            observation_id: unlabeled.observation_id.clone(),
+            history: unlabeled.history.clone(),
+            history_state,
+            candidates,
+            support_signature: candidate_support_signature(&path),
+            candidate_origin_signature: a1r_candidate_origin_signature(&path),
+            row_outcome_signature: a1r_row_source_outcome_signature(&path),
+            budget_signature: a1r_path_budget_signature(&path),
+            rows_read: path.rows.len(),
+            candidate_entries_examined: path.candidate_entries_examined,
+            candidate_entry_ceiling: path.candidate_entry_ceiling,
+            candidate_ceiling: path.retained_candidate_ceiling,
+            exact_payload_inversions,
+            exact_direct_rows_miss: path.exact_direct_rows_miss,
+            target_injected: path.target_injected,
+            future_events_visible: path.future_events_visible,
+        });
+    }
+    Ok(A1QLPreparedSplit {
+        split: split.to_owned(),
+        queries,
+    })
+}
+
+fn a1ql_support_and_work(split: &A1QLPreparedSplit) -> A1QLSupportAndWork {
+    let expected_candidates = a1ql_natural_candidates();
+    let histories = split.queries.len();
+    let candidate_decisions = split
+        .queries
+        .iter()
+        .map(|query| query.candidates.len())
+        .sum::<usize>();
+    let rows_per_query = split.queries.first().map_or(0, |query| query.rows_read);
+    let candidate_entries_examined = split
+        .queries
+        .iter()
+        .map(|query| query.candidate_entries_examined)
+        .sum();
+    let exact_payload_inversions = split
+        .queries
+        .iter()
+        .map(|query| query.exact_payload_inversions)
+        .sum();
+    let natural_candidate_union_exact = split
+        .queries
+        .iter()
+        .all(|query| query.candidates == expected_candidates);
+    let candidate_source_partition_equal = split.queries.first().is_some_and(|first| {
+        split
+            .queries
+            .iter()
+            .all(|query| query.support_signature == first.support_signature)
+    });
+    let maximum_admitted_candidates = split
+        .queries
+        .iter()
+        .map(|query| query.candidates.len())
+        .max()
+        .unwrap_or(0);
+    let contract_exact = histories == 3
+        && candidate_decisions == 6
+        && natural_candidate_union_exact
+        && candidate_source_partition_equal
+        && split
+            .queries
+            .iter()
+            .all(|query| query.rows_read == ROWS_PER_QUERY_CEILING)
+        && split.queries.iter().all(|query| {
+            query.candidate_entry_ceiling == ROWS_PER_QUERY_CEILING * CANDIDATE_CEILING
+        })
+        && split
+            .queries
+            .iter()
+            .all(|query| query.candidate_ceiling == CANDIDATE_CEILING)
+        && maximum_admitted_candidates == 2
+        && exact_payload_inversions == 6
+        && split
+            .queries
+            .iter()
+            .all(|query| query.exact_direct_rows_miss)
+        && split
+            .queries
+            .iter()
+            .all(|query| !query.target_injected && !query.future_events_visible);
+    A1QLSupportAndWork {
+        split: split.split.clone(),
+        histories,
+        candidate_decisions,
+        natural_candidates: expected_candidates,
+        natural_candidate_union_exact,
+        candidate_source_partition_equal,
+        rows_per_query,
+        row_reads: split.queries.iter().map(|query| query.rows_read).sum(),
+        candidate_entries_examined,
+        candidate_entry_ceiling_per_query: split
+            .queries
+            .first()
+            .map_or(0, |query| query.candidate_entry_ceiling),
+        candidate_ceiling: split
+            .queries
+            .first()
+            .map_or(0, |query| query.candidate_ceiling),
+        maximum_admitted_candidates,
+        exact_payload_inversions,
+        exact_direct_rows_miss: split
+            .queries
+            .iter()
+            .all(|query| query.exact_direct_rows_miss),
+        target_injected: split.queries.iter().any(|query| query.target_injected),
+        future_events_visible: split
+            .queries
+            .iter()
+            .any(|query| query.future_events_visible),
+        support_and_work_contract_exact: contract_exact,
+    }
+}
+
+fn a1ql_attach_outcomes(
+    split: &A1QLPreparedSplit,
+    observations: &[A1PFixtureObservation],
+    candidate_states: &BTreeMap<String, A1PAdditiveState>,
+) -> Result<Vec<A1QLClassEvent>, RecursiveGeometricAttentionError> {
+    let labels = observations
+        .iter()
+        .map(|observation| (observation.id.as_str(), observation.observed_next.as_str()))
+        .collect::<BTreeMap<_, _>>();
+    let mut events = Vec::new();
+    for query in &split.queries {
+        let observed_next = labels.get(query.observation_id.as_str()).ok_or_else(|| {
+            RecursiveGeometricAttentionError::InvalidProbe(format!(
+                "A1Q-L label ledger is missing {}",
+                query.observation_id
+            ))
+        })?;
+        for candidate in &query.candidates {
+            let candidate_state = candidate_states.get(candidate).ok_or_else(|| {
+                RecursiveGeometricAttentionError::InvalidProbe(format!(
+                    "A1Q-L candidate state is missing {candidate:?}"
+                ))
+            })?;
+            events.push(A1QLClassEvent {
+                split: query.split.clone(),
+                observation_id: query.observation_id.clone(),
+                candidate: candidate.clone(),
+                outcome: if candidate == observed_next {
+                    "SELECT".to_owned()
+                } else {
+                    "REJECT".to_owned()
+                },
+                history_state: query.history_state.clone(),
+                candidate_s3_spin_q30: candidate_state.s3_spin_q30,
+            });
+        }
+    }
+    Ok(events)
+}
+
+fn a1ql_exact_key_json<T: Serialize>(
+    value: &T,
+) -> Result<String, RecursiveGeometricAttentionError> {
+    String::from_utf8(canonical_json(value)?).map_err(|error| {
+        RecursiveGeometricAttentionError::Serialization(format!(
+            "A1Q-L exact key was not UTF-8 JSON: {error}"
+        ))
+    })
+}
+
+fn a1ql_history_key(
+    channel: &str,
+    state: &A10AttentionLevelNonDigest,
+) -> Result<Option<String>, RecursiveGeometricAttentionError> {
+    match channel {
+        "transported-path-state" | "zeta-nlet-phi-derived-transition" => Ok(None),
+        "session-hypersphere-state" | "session-candidate-transition" => {
+            a1ql_exact_key_json(&state.session_hypersphere_q30).map(Some)
+        }
+        "winding-window-state" => {
+            a1ql_exact_key_json(&(state.window_start, state.window_end, state.winding_turns))
+                .map(Some)
+        }
+        "projection-energy" => a1ql_exact_key_json(&state.projection_energy_q30).map(Some),
+        "factor-count" => {
+            let mut counts = state
+                .shared_prime_factors
+                .iter()
+                .map(|factor| factor.count)
+                .collect::<Vec<_>>();
+            counts.sort_unstable();
+            a1ql_exact_key_json(&counts).map(Some)
+        }
+        "cosine-resonance" => a1ql_exact_key_json(&state.cosine_resonance_q30).map(Some),
+        "accumulated-hopf-phase" => {
+            a1ql_exact_key_json(&state.accumulated_hopf_phase_q29).map(Some)
+        }
+        _ => Err(RecursiveGeometricAttentionError::InvalidProbe(format!(
+            "unsupported A1Q-L channel {channel:?}"
+        ))),
+    }
+}
+
+fn a1ql_event_key(
+    channel: &str,
+    event: &A1QLClassEvent,
+) -> Result<Option<String>, RecursiveGeometricAttentionError> {
+    if channel == "session-candidate-transition" {
+        return a1ql_exact_key_json(&(
+            event.history_state.session_hypersphere_q30,
+            event.candidate_s3_spin_q30,
+        ))
+        .map(Some);
+    }
+    a1ql_history_key(channel, &event.history_state)
+}
+
+fn a1ql_class_prefix(channel: &str) -> String {
+    channel
+        .chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric() {
+                character.to_ascii_uppercase()
+            } else {
+                '_'
+            }
+        })
+        .collect()
+}
+
+fn a1ql_channel_capacity(
+    declaration: &A1QLChannelDeclaration,
+    queries: &[&A1QLPreparedQuery],
+    events: &[A1QLClassEvent],
+    support_equal: bool,
+    work_equal: bool,
+) -> Result<A1QLChannelCapacityResult, RecursiveGeometricAttentionError> {
+    let available = !matches!(
+        declaration.channel.as_str(),
+        "transported-path-state" | "zeta-nlet-phi-derived-transition"
+    );
+    let survives_in_non_digest_state = available;
+
+    let history_keys = queries
+        .iter()
+        .map(|query| a1ql_history_key(&declaration.channel, &query.history_state))
+        .collect::<Result<Vec<_>, RecursiveGeometricAttentionError>>()?;
+    let earlier_order_denominator = queries
+        .len()
+        .saturating_mul(queries.len().saturating_sub(1))
+        / 2;
+    let mut earlier_order_numerator = 0usize;
+    for left in 0..history_keys.len() {
+        for right in left.saturating_add(1)..history_keys.len() {
+            if history_keys[left].is_some()
+                && history_keys[right].is_some()
+                && history_keys[left] != history_keys[right]
+            {
+                earlier_order_numerator = earlier_order_numerator.saturating_add(1);
+            }
+        }
+    }
+
+    let mut events_by_observation = BTreeMap::<&str, Vec<&A1QLClassEvent>>::new();
+    for event in events {
+        events_by_observation
+            .entry(event.observation_id.as_str())
+            .or_default()
+            .push(event);
+    }
+    let candidate_denominator = events_by_observation.len();
+    let mut candidate_numerator = 0usize;
+    for grouped in events_by_observation.values() {
+        if grouped.len() != 2 {
+            return Err(RecursiveGeometricAttentionError::InvalidProbe(
+                "A1Q-L candidate sensitivity requires exactly two candidates per history"
+                    .to_owned(),
+            ));
+        }
+        let left = a1ql_event_key(&declaration.channel, grouped[0])?;
+        let right = a1ql_event_key(&declaration.channel, grouped[1])?;
+        if left.is_some() && right.is_some() && left != right {
+            candidate_numerator = candidate_numerator.saturating_add(1);
+        }
+    }
+
+    let mut events_by_candidate = BTreeMap::<&str, Vec<&A1QLClassEvent>>::new();
+    for event in events {
+        events_by_candidate
+            .entry(event.candidate.as_str())
+            .or_default()
+            .push(event);
+    }
+    let mut same_candidate_denominator = 0usize;
+    let mut same_candidate_numerator = 0usize;
+    for grouped in events_by_candidate.values() {
+        same_candidate_denominator = same_candidate_denominator.saturating_add(
+            grouped
+                .len()
+                .saturating_mul(grouped.len().saturating_sub(1))
+                / 2,
+        );
+        for left in 0..grouped.len() {
+            for right in left.saturating_add(1)..grouped.len() {
+                let left_key = a1ql_event_key(&declaration.channel, grouped[left])?;
+                let right_key = a1ql_event_key(&declaration.channel, grouped[right])?;
+                if left_key.is_some() && right_key.is_some() && left_key != right_key {
+                    same_candidate_numerator = same_candidate_numerator.saturating_add(1);
+                }
+            }
+        }
+    }
+
+    let mut keyed_members = BTreeMap::<String, Vec<A1PClassMember>>::new();
+    for event in events {
+        if let Some(key) = a1ql_event_key(&declaration.channel, event)? {
+            keyed_members.entry(key).or_default().push(A1PClassMember {
+                split: event.split.clone(),
+                observation_id: event.observation_id.clone(),
+                candidate: event.candidate.clone(),
+                outcome: event.outcome.clone(),
+            });
+        }
+    }
+    for members in keyed_members.values_mut() {
+        members.sort_by(|left, right| {
+            (&left.split, &left.observation_id, &left.candidate).cmp(&(
+                &right.split,
+                &right.observation_id,
+                &right.candidate,
+            ))
+        });
+    }
+
+    let prefix = a1ql_class_prefix(&declaration.channel);
+    let mut classes = Vec::with_capacity(keyed_members.len());
+    for (index, (key, members)) in keyed_members.iter().enumerate() {
+        let construction_select = members
+            .iter()
+            .filter(|member| member.split == "CONSTRUCTION" && member.outcome == "SELECT")
+            .count();
+        let construction_reject = members
+            .iter()
+            .filter(|member| member.split == "CONSTRUCTION" && member.outcome == "REJECT")
+            .count();
+        let validation_select = members
+            .iter()
+            .filter(|member| member.split == "SEALED_VALIDATION" && member.outcome == "SELECT")
+            .count();
+        let validation_reject = members
+            .iter()
+            .filter(|member| member.split == "SEALED_VALIDATION" && member.outcome == "REJECT")
+            .count();
+        let construction_outcome_if_pure = match (construction_select, construction_reject) {
+            (select, 0) if select > 0 => Some("SELECT".to_owned()),
+            (0, reject) if reject > 0 => Some("REJECT".to_owned()),
+            _ => None,
+        };
+        classes.push(A1QLExactClass {
+            class_id: format!("{prefix}-{:02}", index.saturating_add(1)),
+            exact_key_json: key.clone(),
+            members: members.clone(),
+            construction_select,
+            construction_reject,
+            validation_select,
+            validation_reject,
+            construction_impure: construction_select > 0 && construction_reject > 0,
+            incompatible_outcomes_across_splits: construction_select + validation_select > 0
+                && construction_reject + validation_reject > 0,
+            construction_outcome_if_pure,
+        });
+    }
+
+    let construction_class_count = classes
+        .iter()
+        .filter(|class| class.construction_select + class.construction_reject > 0)
+        .count();
+    let construction_pure_class_count = classes
+        .iter()
+        .filter(|class| {
+            class.construction_select + class.construction_reject > 0
+                && class.construction_outcome_if_pure.is_some()
+        })
+        .count();
+    let construction_impure_class_count = classes
+        .iter()
+        .filter(|class| class.construction_impure)
+        .count();
+    let construction_classes_pure =
+        construction_class_count > 0 && construction_pure_class_count == construction_class_count;
+    let construction_keys = classes
+        .iter()
+        .filter(|class| class.construction_select + class.construction_reject > 0)
+        .map(|class| class.exact_key_json.as_str())
+        .collect::<BTreeSet<_>>();
+    let validation_members = classes
+        .iter()
+        .flat_map(|class| {
+            class
+                .members
+                .iter()
+                .filter(|member| member.split == "SEALED_VALIDATION")
+                .map(move |member| (class, member))
+        })
+        .collect::<Vec<_>>();
+    let validation_denominator = validation_members.len();
+    let validation_coverage_numerator = validation_members
+        .iter()
+        .filter(|(class, _)| construction_keys.contains(class.exact_key_json.as_str()))
+        .count();
+    let validation_oracle_numerator = classes
+        .iter()
+        .map(|class| class.validation_select.max(class.validation_reject))
+        .sum::<usize>();
+    let transfer_decision_numerator = validation_members
+        .iter()
+        .filter(|(class, member)| {
+            class
+                .construction_outcome_if_pure
+                .as_ref()
+                .is_some_and(|outcome| outcome == &member.outcome)
+        })
+        .count();
+
+    let pure_by_key = classes
+        .iter()
+        .filter_map(|class| {
+            class
+                .construction_outcome_if_pure
+                .as_ref()
+                .map(|outcome| (class.exact_key_json.as_str(), outcome.as_str()))
+        })
+        .collect::<BTreeMap<_, _>>();
+    let validation_observation_ids = events
+        .iter()
+        .filter(|event| event.split == "SEALED_VALIDATION")
+        .map(|event| event.observation_id.as_str())
+        .collect::<BTreeSet<_>>();
+    let mut transfer_query_numerator = 0usize;
+    for observation_id in &validation_observation_ids {
+        let grouped = events
+            .iter()
+            .filter(|event| {
+                event.split == "SEALED_VALIDATION"
+                    && event.observation_id.as_str() == *observation_id
+            })
+            .collect::<Vec<_>>();
+        let predictions = grouped
+            .iter()
+            .map(|event| {
+                let key = a1ql_event_key(&declaration.channel, event)?;
+                Ok(key.and_then(|key| pure_by_key.get(key.as_str()).copied()))
+            })
+            .collect::<Result<Vec<_>, RecursiveGeometricAttentionError>>()?;
+        if grouped.len() == 2
+            && predictions.iter().all(Option::is_some)
+            && predictions
+                .iter()
+                .zip(&grouped)
+                .all(|(prediction, event)| prediction.is_some_and(|value| value == event.outcome))
+            && predictions
+                .iter()
+                .filter(|prediction| prediction.is_some_and(|value| value == "SELECT"))
+                .count()
+                == 1
+        {
+            transfer_query_numerator = transfer_query_numerator.saturating_add(1);
+        }
+    }
+
+    let capacity_gate_pass = available
+        && earlier_order_numerator > 0
+        && candidate_numerator == candidate_denominator
+        && same_candidate_numerator > 0
+        && construction_classes_pure
+        && validation_coverage_numerator == validation_denominator
+        && transfer_query_numerator == validation_observation_ids.len()
+        && support_equal
+        && work_equal;
+    let status = if declaration.channel == "transported-path-state" {
+        "UNAVAILABLE_DIGEST_ONLY_NO_REAL_NON_DIGEST_PATH_STATE".to_owned()
+    } else if !available {
+        declaration.availability_rule.clone()
+    } else if capacity_gate_pass {
+        "EXERCISED_INDIVIDUAL_CHANNEL_CAPACITY_GATE_PASS".to_owned()
+    } else if declaration.channel == "session-candidate-transition" {
+        "EXERCISED_PAIR_NO_INTERACTION_CAPACITY_GATE_FAIL".to_owned()
+    } else {
+        "EXERCISED_INDIVIDUAL_CHANNEL_CAPACITY_GATE_FAIL".to_owned()
+    };
+    Ok(A1QLChannelCapacityResult {
+        channel: declaration.channel.clone(),
+        status,
+        key_definition: declaration.state_rule.clone(),
+        available,
+        survives_in_non_digest_state,
+        earlier_order_sensitivity: A1QLRatio {
+            numerator: earlier_order_numerator,
+            denominator: if available {
+                earlier_order_denominator
+            } else {
+                0
+            },
+        },
+        candidate_sensitivity: A1QLRatio {
+            numerator: candidate_numerator,
+            denominator: if available { candidate_denominator } else { 0 },
+        },
+        same_candidate_change: A1QLRatio {
+            numerator: same_candidate_numerator,
+            denominator: if available {
+                same_candidate_denominator
+            } else {
+                0
+            },
+        },
+        exact_classes: classes,
+        construction_class_count,
+        construction_pure_class_count,
+        construction_impure_class_count,
+        construction_classes_pure,
+        sealed_validation_coverage: A1QLRatio {
+            numerator: validation_coverage_numerator,
+            denominator: validation_denominator,
+        },
+        sealed_validation_no_class_splitting_oracle_ceiling: A1QLRatio {
+            numerator: validation_oracle_numerator,
+            denominator: validation_denominator,
+        },
+        sealed_validation_construction_transfer_decision_ceiling: A1QLRatio {
+            numerator: transfer_decision_numerator,
+            denominator: validation_denominator,
+        },
+        sealed_validation_construction_transfer_query_ceiling: A1QLRatio {
+            numerator: transfer_query_numerator,
+            denominator: if available {
+                validation_observation_ids.len()
+            } else {
+                0
+            },
+        },
+        support_equal,
+        work_equal,
+        capacity_gate_pass,
+    })
+}
+
+fn a1ql_not_run_control(control: &str, status: &str) -> A1QLControlStatus {
+    A1QLControlStatus {
+        control: control.to_owned(),
+        status: status.to_owned(),
+        support_equal: None,
+        selections: 0,
+        ties: 0,
+        abstentions: 0,
+        exact_hits: 0,
+        payload_decodes: 0,
+        row_reads: 0,
+        candidate_decisions: 0,
+    }
+}
+
+fn a1ql_histories_disjoint_from_predecessors(queries: &[&A1QLPreparedQuery]) -> bool {
+    let current = queries
+        .iter()
+        .map(|query| query.history.clone())
+        .collect::<BTreeSet<_>>();
+    let historical = a1p_inherited_observations()
+        .into_iter()
+        .chain(a1p_construction_observations())
+        .chain(a1p_validation_observations())
+        .map(|observation| observation.history)
+        .collect::<BTreeSet<_>>();
+    current.len() == queries.len() && current.is_disjoint(&historical)
+}
+
+fn a1ql_matched_history_shape(queries: &[&A1QLPreparedQuery]) -> bool {
+    let Some(first) = queries.first() else {
+        return false;
+    };
+    let mut reference = first.history.clone();
+    reference.sort();
+    queries.iter().all(|query| {
+        let mut sorted = query.history.clone();
+        sorted.sort();
+        query.history.len() == 5
+            && sorted == reference
+            && query.history.get(3).map(String::as_str) == Some("aa")
+            && query.history.get(4).map(String::as_str) == Some("qq")
+    })
+}
+
+fn a1ql_construction_rule_exact(
+    observations: &[A1PFixtureObservation],
+    role_order: &[String],
+) -> Result<bool, RecursiveGeometricAttentionError> {
+    let mut outcomes = BTreeSet::new();
+    for observation in observations {
+        let parity = a1p_derive_s4_parity(&observation.history, role_order, "qq")?;
+        if parity != observation.permutation_parity
+            || observation.observed_next != if parity == "EVEN" { "ll" } else { "rr" }
+        {
+            return Ok(false);
+        }
+        outcomes.insert(observation.observed_next.as_str());
+    }
+    Ok(outcomes == BTreeSet::from(["ll", "rr"]))
+}
+
+/// Execute the #969 Phase 0A individual non-H4 channel-capacity census.
+///
+/// Both target-free split structures are compiled before the public label
+/// ledgers are joined. Validation labels are then used only for exact-class
+/// purity, coverage, and mathematical ceilings. This function does not compile
+/// a scalar or selector and cannot execute Gate 0 or sentence qualification.
+pub fn run_a1ql_non_h4_channel_capacity_probe(
+) -> Result<A1QLChannelCapacityProbeReport, RecursiveGeometricAttentionError> {
+    let public_contract = a1ql_public_contract_identities()?;
+    if public_contract.construction_fixture_kappa != A1QL_CONSTRUCTION_FIXTURE_KAPPA
+        || public_contract.validation_fixture_kappa != A1QL_VALIDATION_FIXTURE_KAPPA
+        || public_contract.contract_kappa != A1QL_PUBLIC_CONTRACT_KAPPA
+    {
+        return Err(RecursiveGeometricAttentionError::InvalidProbe(
+            "INVALID_CONTRACT: #969 public fixture or contract identity drifted".to_owned(),
+        ));
+    }
+
+    let fixed_partition = frozen_partition();
+    validate_frozen_partition(&fixed_partition)?;
+    let partition_kappa = frozen_partition_kappa(&fixed_partition)?;
+    let registry_input = registration_input(&fixed_partition)?;
+    let codec = CanonicalLexicalCodec::compile(&registry_input)?;
+    let construction_input = construction_input(&fixed_partition)?;
+    let construction_artifact = CanonicalRouteArtifact::ingest(&codec, &construction_input)?;
+    let embedded_manifest = construction_artifact.embedded_spin_manifest()?;
+    let attention =
+        GeometricAttentionArtifact::compile_from_manifest_witnesses(&embedded_manifest)?;
+    if partition_kappa != FROZEN_A1_PARTITION_KAPPA
+        || construction_artifact.manifest_kappa() != FROZEN_A1_CONSTRUCTION_ARTIFACT_KAPPA
+        || embedded_manifest.manifest_kappa != FROZEN_A1_ATTENTION_MANIFEST_KAPPA
+    {
+        return Err(RecursiveGeometricAttentionError::InvalidProbe(
+            "INVALID_CONTRACT: inherited #952 artifact identities drifted".to_owned(),
+        ));
+    }
+
+    let construction_observations = a1ql_construction_observations();
+    let validation_observations = a1ql_validation_observations();
+    let construction_histories = a1p_unlabeled_histories(&construction_observations);
+    let validation_histories = a1p_unlabeled_histories(&validation_observations);
+
+    // Both populations are prepared without labels before either outcome
+    // ledger is joined below.
+    let construction_split = a1ql_prepare_split(
+        "CONSTRUCTION",
+        &construction_histories,
+        &codec,
+        &construction_artifact,
+        &attention,
+        &embedded_manifest.addresses,
+    )?;
+    let validation_split = a1ql_prepare_split(
+        "SEALED_VALIDATION",
+        &validation_histories,
+        &codec,
+        &construction_artifact,
+        &attention,
+        &embedded_manifest.addresses,
+    )?;
+    let construction_support = a1ql_support_and_work(&construction_split);
+    let validation_support = a1ql_support_and_work(&validation_split);
+    if !construction_support.support_and_work_contract_exact
+        || !validation_support.support_and_work_contract_exact
+    {
+        return Err(RecursiveGeometricAttentionError::InvalidProbe(
+            "INVALID_CONTRACT: #969 natural support, payload, or work ceiling drifted".to_owned(),
+        ));
+    }
+
+    let all_queries = construction_split
+        .queries
+        .iter()
+        .chain(&validation_split.queries)
+        .collect::<Vec<_>>();
+    let support_equal = all_queries.first().is_some_and(|first| {
+        all_queries.iter().all(|query| {
+            query.candidates == first.candidates
+                && query.support_signature == first.support_signature
+                && query.candidate_origin_signature == first.candidate_origin_signature
+                && query.row_outcome_signature == first.row_outcome_signature
+        })
+    });
+    let work_equal = all_queries.first().is_some_and(|first| {
+        all_queries.iter().all(|query| {
+            query.budget_signature == first.budget_signature
+                && query.exact_payload_inversions == first.exact_payload_inversions
+        })
+    });
+    if !support_equal || !work_equal {
+        return Err(RecursiveGeometricAttentionError::InvalidProbe(
+            "INVALID_CONTRACT: #969 matched histories changed support or work".to_owned(),
+        ));
+    }
+
+    let candidate_states = a1p_additive_leaf_states(&codec)?;
+    let mut events = a1ql_attach_outcomes(
+        &construction_split,
+        &construction_observations,
+        &candidate_states,
+    )?;
+    events.extend(a1ql_attach_outcomes(
+        &validation_split,
+        &validation_observations,
+        &candidate_states,
+    )?);
+    if events.len() != 12 {
+        return Err(RecursiveGeometricAttentionError::InvalidProbe(format!(
+            "INVALID_CONTRACT: expected 12 #969 candidate decisions, observed {}",
+            events.len()
+        )));
+    }
+
+    let channels = public_contract
+        .contract
+        .channels
+        .iter()
+        .map(|declaration| {
+            a1ql_channel_capacity(
+                declaration,
+                &all_queries,
+                &events,
+                support_equal,
+                work_equal,
+            )
+        })
+        .collect::<Result<Vec<_>, RecursiveGeometricAttentionError>>()?;
+    if channels.iter().any(|channel| channel.capacity_gate_pass) {
+        return Err(RecursiveGeometricAttentionError::InvalidProbe(
+            "INVALID_CONTRACT: Phase 0A unexpectedly authorized a selector; the selector contract must be frozen before validation selection"
+                .to_owned(),
+        ));
+    }
+
+    let mut hard_stop_reasons = Vec::new();
+    for channel in &channels {
+        if !channel.available {
+            hard_stop_reasons.push(format!("{}:{}", channel.channel, channel.status));
+            continue;
+        }
+        if channel.earlier_order_sensitivity.numerator == 0 {
+            hard_stop_reasons.push(format!("{}:NO_EARLIER_ORDER_SENSITIVITY", channel.channel));
+        }
+        if channel.candidate_sensitivity.numerator == 0 {
+            hard_stop_reasons.push(format!("{}:CANDIDATE_INVARIANT", channel.channel));
+        }
+        if !channel.construction_classes_pure {
+            hard_stop_reasons.push(format!("{}:IMPURE_CONSTRUCTION_CLASSES", channel.channel));
+        }
+        if channel
+            .sealed_validation_construction_transfer_query_ceiling
+            .numerator
+            == 0
+        {
+            hard_stop_reasons.push(format!("{}:ZERO_CONSTRUCTION_TRANSFER", channel.channel));
+        }
+    }
+    hard_stop_reasons.sort();
+    hard_stop_reasons.dedup();
+    if hard_stop_reasons.is_empty() {
+        return Err(RecursiveGeometricAttentionError::InvalidProbe(
+            "INVALID_CONTRACT: #969 hard-stop census produced no localized reason".to_owned(),
+        ));
+    }
+
+    let role_order = a1ql_role_order();
+    let construction_rule_derived_from_histories =
+        a1ql_construction_rule_exact(&construction_observations, &role_order)?
+            && a1ql_construction_rule_exact(&validation_observations, &role_order)?;
+    let body = A1QLChannelCapacityProbeBody {
+        probe_status: "EXERCISED_INDIVIDUAL_NON_H4_CHANNEL_CAPACITY_HARD_STOP".to_owned(),
+        contract_status: "VALID_PUBLIC_CONTRACT".to_owned(),
+        terminal_verdict: REDESIGN_NON_H4_ORDERED_TRANSPORT_REPRESENTATION.to_owned(),
+        localized_defect: "ELIGIBLE_NON_H4_NON_DIGEST_CHANNEL_KEYS_ON_THE_FROZEN_MATCHED_SPLIT_HAVE_ZERO_EARLIER_ORDER_SENSITIVITY;NO_REAL_NON_DIGEST_TRANSPORTED_PATH_FIELD_IS_EXPOSED;PAIRING_STATIC_CANDIDATE_STATE_WITH_AN_ALIASED_HISTORY_CANNOT_RECOVER_THE_LOST_ORDER"
+            .to_owned(),
+        fixture_integrity: A1QLFixtureIntegrity {
+            construction_kappa_reproduces: public_contract.construction_fixture_kappa
+                == A1QL_CONSTRUCTION_FIXTURE_KAPPA,
+            validation_kappa_reproduces: public_contract.validation_fixture_kappa
+                == A1QL_VALIDATION_FIXTURE_KAPPA,
+            public_contract_kappa_reproduces: public_contract.contract_kappa
+                == A1QL_PUBLIC_CONTRACT_KAPPA,
+            construction_rule_derived_from_histories,
+            labels_attached_after_both_splits_prepared: true,
+            construction_validation_disjoint: {
+                let construction = construction_split
+                    .queries
+                    .iter()
+                    .map(|query| &query.history)
+                    .collect::<BTreeSet<_>>();
+                let validation = validation_split
+                    .queries
+                    .iter()
+                    .map(|query| &query.history)
+                    .collect::<BTreeSet<_>>();
+                construction.is_disjoint(&validation)
+            },
+            disjoint_from_a1_a1r_a1p: a1ql_histories_disjoint_from_predecessors(&all_queries),
+            reserved_from_953_and_973: true,
+            same_length_multiset_suffix: a1ql_matched_history_shape(&all_queries),
+            natural_candidate_union_predeclared: all_queries
+                .iter()
+                .all(|query| query.candidates == a1ql_natural_candidates()),
+        },
+        public_contract,
+        support_and_work: vec![construction_support, validation_support],
+        channels,
+        // These equivariance controls are required before any channel can
+        // advance. Every base channel has already failed the binding
+        // sensitivity/purity/transfer gate, so no transformation map is opened
+        // post-outcome and the rows remain truthfully NOT_RUN rather than PASS.
+        transformation_controls: [
+            "candidate-relabeling-equivariance",
+            "prime-assignment-permutation-equivariance",
+            "geometry-permutation-equivariance",
+        ]
+        .into_iter()
+        .map(|control| a1ql_not_run_control(control, NOT_RUN_CHANNEL_CAPACITY_HARD_STOP))
+        .collect(),
+        conditional_selector_controls: [
+            "current-only",
+            "existing-additive-summary",
+            "factor-count-only",
+            "deterministic-active-channel-permutation",
+            "hierarchy-disabled",
+            "exact-recall-only",
+            "candidate-relabeling",
+            "prime-assignment-permutation",
+            "full-transported-path",
+            "last-only",
+            "no-last",
+            "shuffled-path",
+        ]
+        .into_iter()
+        .map(|control| a1ql_not_run_control(control, NOT_RUN_CHANNEL_CAPACITY_HARD_STOP))
+        .collect(),
+        gate_and_sentence_status: [
+            ("phase-0b-selector-freeze", NOT_RUN_CHANNEL_CAPACITY_HARD_STOP),
+            ("gate-0-current", NOT_RUN_CHANNEL_CAPACITY_HARD_STOP),
+            ("gate-0-previous", NOT_RUN_CHANNEL_CAPACITY_HARD_STOP),
+            ("gate-0-last-two", NOT_RUN_CHANNEL_CAPACITY_HARD_STOP),
+            ("gate-0-decoded-composition", NOT_RUN_CHANNEL_CAPACITY_HARD_STOP),
+            ("sentence-independent-fixture", NOT_RUN_CHANNEL_CAPACITY_HARD_STOP),
+            ("paragraph", "NOT_RUN_OUT_OF_SCOPE_A1Q_H_973"),
+            ("conversation", "NOT_RUN_OUT_OF_SCOPE_A1Q_H_973"),
+            ("global", "NOT_RUN_OUT_OF_SCOPE_A1Q_H_973"),
+            ("correctness", "NOT_RUN_OUT_OF_SCOPE_954"),
+            ("reasoning", "NOT_RUN_OUT_OF_SCOPE_955"),
+            ("chat-product-qa", "NOT_RUN_OUT_OF_SCOPE_962_965"),
+        ]
+        .into_iter()
+        .map(|(control, status)| a1ql_not_run_control(control, status))
+        .collect(),
+        hard_stop_reasons,
+        omnibus_weighted_combination_opened: false,
+        scalar_functions_searched: 0,
+        selector_artifacts_compiled: 0,
+        validation_selector_outputs_opened: false,
+        serving_boundary: A10ServingBoundary {
+            source_model_weights_opened: false,
+            teacher_forwards: 0,
+            transformer_calls: 0,
+            moe_calls: 0,
+            learned_router_calls: 0,
+            dense_intelligence_matrix_calls: 0,
+            ollama_calls: 0,
+            hosted_provider_calls: 0,
+        },
+        claim_boundary: A1QLClaimBoundary {
+            channel_capacity_falsifier_only: true,
+            codec_support_payload_h4_and_incremental_state_preserved: true,
+            selector_frozen: false,
+            gate_0_exercised: false,
+            sentence_qualification_exercised: false,
+            local_sentence_attention_established: false,
+            paragraph_conversation_global_attention_established: false,
+            inference_established: false,
+            generation_established: false,
+            correctness_established: false,
+            reasoning_established: false,
+            digest_or_kappa_used_as_geometry: false,
+            h4_or_heatmap_used_as_new_readout: false,
+            target_future_exact_continuation_or_provider_used: false,
+            candidate_support_or_admission_modified: false,
+        },
+    };
+    if !body
+        .fixture_integrity
+        .construction_rule_derived_from_histories
+        || !body.fixture_integrity.construction_validation_disjoint
+        || !body.fixture_integrity.disjoint_from_a1_a1r_a1p
+        || !body.fixture_integrity.same_length_multiset_suffix
+        || !body.fixture_integrity.natural_candidate_union_predeclared
+    {
+        return Err(RecursiveGeometricAttentionError::InvalidProbe(
+            "INVALID_CONTRACT: #969 fixture integrity did not reproduce".to_owned(),
+        ));
+    }
+    let report_kappa = a1ql_report_identity_kappa(&body)?;
+    let report = A1QLChannelCapacityProbeReport {
+        schema: A1QL_CHANNEL_CAPACITY_PROBE_SCHEMA,
+        domain: A1QL_CHANNEL_CAPACITY_PROBE_DOMAIN.to_owned(),
+        report_kappa,
+        body,
+    };
+    report.canonical_bytes()?;
+    if report.report_kappa != A1QL_CHANNEL_CAPACITY_REPORT_KAPPA {
+        return Err(RecursiveGeometricAttentionError::InvalidProbe(format!(
+            "INVALID_CONTRACT: #969 canonical report identity drifted to {}",
+            report.report_kappa
+        )));
+    }
+    Ok(report)
 }
 
 /// Execute the frozen #967 A1R representation and candidate-relative probe.
@@ -4383,6 +5771,25 @@ struct A1PReportIdentityWire<'a> {
     body: &'a A1PIdentifiabilityProbeBody,
 }
 
+#[derive(Serialize)]
+struct A1QLReportIdentityWire<'a> {
+    schema: u32,
+    domain: &'static str,
+    report_kappa: &'static str,
+    body: &'a A1QLChannelCapacityProbeBody,
+}
+
+fn a1ql_report_identity_kappa(
+    body: &A1QLChannelCapacityProbeBody,
+) -> Result<String, RecursiveGeometricAttentionError> {
+    canonical_kappa(&canonical_json(&A1QLReportIdentityWire {
+        schema: A1QL_CHANNEL_CAPACITY_PROBE_SCHEMA,
+        domain: A1QL_CHANNEL_CAPACITY_PROBE_DOMAIN,
+        report_kappa: "",
+        body,
+    })?)
+}
+
 #[derive(Debug, Clone)]
 struct A1PClassEvent {
     split: String,
@@ -5182,6 +6589,115 @@ fn a1p_observation(
         observed_next: observed_next.to_owned(),
         permutation_parity: permutation_parity.to_owned(),
     }
+}
+
+fn a1ql_role_order() -> Vec<String> {
+    ["aa", "bb", "cc", "dd"]
+        .into_iter()
+        .map(str::to_owned)
+        .collect()
+}
+
+fn a1ql_natural_candidates() -> Vec<String> {
+    ["ll", "rr"].into_iter().map(str::to_owned).collect()
+}
+
+fn a1ql_predecessors() -> Vec<A1PPredecessor> {
+    vec![
+        A1PPredecessor {
+            candidate: "ll".to_owned(),
+            predecessor: "uu".to_owned(),
+        },
+        A1PPredecessor {
+            candidate: "rr".to_owned(),
+            predecessor: "vv".to_owned(),
+        },
+    ]
+}
+
+fn a1ql_construction_observations() -> Vec<A1PFixtureObservation> {
+    vec![
+        a1p_observation("A1QL-C01", &["bb", "cc", "dd", "aa", "qq"], "rr", "ODD"),
+        a1p_observation("A1QL-C02", &["bb", "dd", "cc", "aa", "qq"], "ll", "EVEN"),
+        a1p_observation("A1QL-C03", &["cc", "bb", "dd", "aa", "qq"], "ll", "EVEN"),
+    ]
+}
+
+fn a1ql_validation_observations() -> Vec<A1PFixtureObservation> {
+    vec![
+        a1p_observation("A1QL-V01", &["cc", "dd", "bb", "aa", "qq"], "rr", "ODD"),
+        a1p_observation("A1QL-V02", &["dd", "bb", "cc", "aa", "qq"], "rr", "ODD"),
+        a1p_observation("A1QL-V03", &["dd", "cc", "bb", "aa", "qq"], "ll", "EVEN"),
+    ]
+}
+
+fn a1ql_channel_declarations() -> Vec<A1QLChannelDeclaration> {
+    [
+        (
+            "transported-path-state",
+            "REAL_NON_DIGEST_CAUSAL_TRANSPORTED_PATH_STATE",
+            false,
+            "AVAILABLE_ONLY_IF_ORDER_SURVIVES_OUTSIDE_TRANSPORTED_TRAJECTORY_KAPPA",
+        ),
+        (
+            "session-hypersphere-state",
+            "SENTENCE_SESSION_HYPERSPHERE_Q30",
+            false,
+            "AVAILABLE_NON_DIGEST",
+        ),
+        (
+            "winding-window-state",
+            "SENTENCE_WINDOW_START_END_AND_WINDING_TURNS",
+            false,
+            "AVAILABLE_NON_DIGEST",
+        ),
+        (
+            "projection-energy",
+            "SENTENCE_PROJECTION_ENERGY_Q30",
+            false,
+            "AVAILABLE_NON_DIGEST",
+        ),
+        (
+            "factor-count",
+            "SORTED_SENTENCE_SHARED_PRIME_FACTOR_MULTIPLICITIES",
+            false,
+            "AVAILABLE_NON_DIGEST_CONTROL",
+        ),
+        (
+            "cosine-resonance",
+            "SENTENCE_COSINE_RESONANCE_Q30",
+            false,
+            "AVAILABLE_NON_DIGEST",
+        ),
+        (
+            "accumulated-hopf-phase",
+            "SENTENCE_ACCUMULATED_HOPF_PHASE_Q29",
+            false,
+            "AVAILABLE_NON_DIGEST",
+        ),
+        (
+            "session-candidate-transition",
+            "EXACT_PAIR_OF_SENTENCE_SESSION_HYPERSPHERE_Q30_AND_CANDIDATE_CURRENT_S3_SPIN_Q30",
+            true,
+            "AVAILABLE_INDIVIDUAL_CANDIDATE_RELATIVE_TRANSITION",
+        ),
+        (
+            "zeta-nlet-phi-derived-transition",
+            "PUBLIC_TYPED_CAUSAL_TRANSPORT_RULE_REQUIRED",
+            true,
+            "NOT_EXERCISED_NO_PUBLIC_TYPED_TRANSPORT_RULE",
+        ),
+    ]
+    .into_iter()
+    .map(
+        |(channel, state_rule, candidate_relative, availability_rule)| A1QLChannelDeclaration {
+            channel: channel.to_owned(),
+            state_rule: state_rule.to_owned(),
+            candidate_relative,
+            availability_rule: availability_rule.to_owned(),
+        },
+    )
+    .collect()
 }
 
 fn a1p_inherited_observations() -> Vec<A1PFixtureObservation> {
