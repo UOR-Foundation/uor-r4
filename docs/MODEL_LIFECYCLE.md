@@ -1,56 +1,59 @@
 # Model lifecycle
 
-This document contains two lifecycles:
+> **Status:** living lifecycle map. The route-native target comes first; the
+> source-model, TLA, and R4G1 material below is a preserved runtime/reference
+> lifecycle. Architecture and sequencing authority lives in the
+> [Geometric Intelligence Programme](geometric_intelligence_programme.md).
 
-1. the **active geometric-decoder lane**, which compiles corpus observations
-   into fixed-zeta prime routes, semiprime/n-let context indexes, and R⁴
-   spin/torsion manifests before any bounded teacher comparison or product
-   promotion; and
-2. the **historical TLA/R4G1 lane**, a multi-hour CPU compile/score pipeline
-   retained for its existing artifacts, measurements, and explicit research
-   selectors.
+**Current truth:** #958 retained canonical prime-route/spin manifests,
+bounded indexes, controls, and deterministic worker evidence as a
+storage/recall foundation. It did not establish full geometric attention,
+source-free inference, or working source-free chat. #961 now owns reversible
+lexical geometry and the complete incremental state hierarchy; the rewritten
+#952 attention stage is blocked behind it.
 
-Current sequencing lives in the
-[Geometric Causal Decoder Roadmap](geometric_causal_decoder_plan.md).
+## Current route-native target lifecycle
 
-**Current status:** #950 established the source-control transcript,
-tokenizer-bound memory adapter, and layer-29 seam. #951's learned-mixer
-checkpoint is a retained negative comparator. A source-free fixed-zeta
-manifest and exact-index substrate now exists under #958, but no
-promoted/deployed prime-route attention artifact or product command exists.
-#958's frozen current-substrate release canary records byte-identical
-one/four-worker artifacts, all four workers active, and a 1.498x median
-compile-stage speedup. The complete manifest and attention/product
-qualification remain open; see the
-[measurement record](prime_route_worker_canary_958.md).
-The diagram below is the gated target lifecycle, not a runnable command
-sequence on current `main`.
-
-The geometric-decoder lifecycle is:
+This is the gated target, not a runnable product command sequence:
 
 ```text
-pinned source + tokenizer
-        -> coherent local uor-matmul control
-corpus -> canonical prime registry + fixed zeta grid
-        -> semiprime/n-let I1/I2/sentence indexes + spin manifest
-        -> source-free causal/direct-lookup and product qualification
-        -> optional bounded teacher/student-prefix comparison
-        -> progressive all-layer checkpoint
-        -> CLI/HTTP product + persistent manifold memory
-        -> measured optimization and release decision
+canonical text/corpus
+    -> pinned reversible lexical codec (#961)
+    -> registered prime atoms + payload identities
+    -> semiprime/n-let routes + fixed-zeta harmonic state
+    -> R4/S3 spin, S2/R3 Hopf observation, torsion, Z[phi] shells
+    -> witnessed paired-H4/E8 state
+    -> incremental local/sentence/paragraph/conversation/global state
+    -> complete recursive geometric attention (#952)
+    -> source-free grammatical inference/generation (#953)
+    -> correctness + typed abstention (#954)
+    -> bounded reasoning (#955)
+    -> product purity, measured cost, and release (#962-#965)
 ```
 
-The canonical one-worker/four-worker equivalence, useful-worker occupancy, and
-measured four-worker wall-time improvement are a hard gate between manifest
-construction and causal-attention qualification. They are not deferred to the
-optional teacher comparison. The current-substrate result must be re-established
-if later work changes semantic inputs or the workload shape.
+The manifest stores or references canonical lexical payloads, factorable route
+addresses, spin/harmonic state, transported trajectory summaries, recursive
+scope identities, and rebuild witnesses. Corpus observations populate routes;
+they do not become serving weights. Kappa binds canonical identity and
+provenance, while factor/spin/harmonic coordinates provide locality.
 
-Until #953 promotes that lane, the production claims and commands later in
-this document continue to describe the existing R4G1 product only.
+Long compilation or evaluation is not a lifecycle default. It begins only
+after the smallest decision-bearing probe, reachability arithmetic, finite
+denominator and ETA, checkpoint/reuse plan, and measured useful parallelism
+permit it. See the
+[evaluation policy](geometric_intelligence_evaluation.md).
+
+## Preserved TLA/R4G1 lifecycle
+
+The remaining commands document the existing source download, teacher
+observation, TLA compilation, R4G1 graph, serving, and certification surfaces.
+They remain useful components and research comparators. They are not the
+current intelligence sequence, and their successful execution does not imply
+route-native attention or chat.
 
 For a zero-setup path that needs none of this, see the
-[Quick start](../README.md#quick-start) in the README: the router and dashboard
+[current runnable surfaces](../README.md#what-you-can-run-today) in the README:
+the router and dashboard
 run with no model at all, and the Gate C harness runs on committed fixtures.
 
 **Skipping the pipeline entirely: install a released bundle.** Since v0.1

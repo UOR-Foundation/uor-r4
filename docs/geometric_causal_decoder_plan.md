@@ -1,6 +1,8 @@
 # Geometric Causal Decoder Roadmap
 
-- **Status:** Authoritative for current intelligence sequencing.
+- **Status:** Historical #948–#958 sequencing record. Superseded for forward
+  work by the
+  [Geometric Intelligence Programme](geometric_intelligence_programme.md).
 - **Adopted:** 2026-08-25 through GitHub programme root
   [#820](https://github.com/UOR-Foundation/uor-r4/issues/820) and roadmap reset
   [#948](https://github.com/UOR-Foundation/uor-r4/issues/948).
@@ -433,3 +435,38 @@ nulls, and publishes the post-viability lowering decision.
 The root #820 then records the exact promoted capability and remaining open
 limits. No general intelligence, general reasoning, teacher-equivalence, or
 multiplication-free claim follows automatically.
+
+## Post-#958 status appendix — 2026-08-26
+
+Apart from the supersession banner at the top, this roadmap remains unchanged
+above as the record of the programme contract that produced #950, #951, and
+#958. It no longer controls forward sequencing.
+
+#958 closed its bounded qualification as `RETAIN_STORAGE_RECALL_ONLY`. It
+established source-free algebra, the complete schema-2 manifest/rebuild
+witness, deterministic bounded candidate mechanics and controls, and the final
+worker canary. Its product probe and gated teacher comparison were `NOT_RUN`.
+That is retained foundation evidence, not abandonment of geometric
+intelligence and not promotion of product attention.
+
+The authoritative successor architecture is
+[`geometric_intelligence_programme.md`](geometric_intelligence_programme.md):
+
+1. GI-1/S0 builds pinned lexical ingestion, address/payload inversion,
+   canonical hierarchy serialization, independent attention-artifact identity,
+   the fixed load-bearing project bridge `E8 = H4 x H4`, concretely serialized
+   as the golden/Galois-coupled icosian pair `H4 ⊕ phi H4`, and API-neutral
+   incremental state without generating text.
+2. GI-2/#952 establishes recursive causal attention across local, sentence,
+   paragraph, conversation, and global routes. Exact identities combine with
+   transported trajectory, hypersphere/window, shared-factor, resonance, and
+   accumulated-Hopf summaries so unseen histories survive exact-kappa misses.
+3. GI-3/#953 adds source-free grammatical inference/generation and the product
+   callers only after attention passes.
+4. GI-4/#954 tests correctness and abstention; GI-5/#955 tests reasoning.
+5. A later GI-6 successor owns measured optimization, serving purity, and
+   bounded release.
+
+The #952–#955 issue bodies must be reconciled to those definitions before work.
+Testing and QA remain dormant unless a decision-bearing product/release
+contract explicitly activates them.

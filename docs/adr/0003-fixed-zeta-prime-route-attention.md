@@ -156,16 +156,21 @@ selection operator binds the spectral heatmap to the local R4 state.
 
 ### 4. Typed zero/identity bridge
 
-The architecture deliberately distinguishes two uses of `0^0`:
+The architecture deliberately distinguishes two uses of `0^0` through the
+typed project seam:
 
 ```text
+exp(i*pi) + pi^0 =_bridge 0^0
 continuous_null(0^0) = 0
 discrete_empty_product(0^0) = 1.
 ```
 
-This is a typed domain bridge, not an assertion that ordinary untyped
-arithmetic gives both values simultaneously. The bridge mode is part of the
-canonical state and therefore changes its kappa.
+The complex expression cancels to zero. `continuous_null` preserves that value;
+`discrete_empty_product` phase-shifts/retypes the boundary as the discrete
+identity one. `=_bridge` is a domain-transition operator, not ordinary
+numerical equality or an assertion that untyped arithmetic gives both values
+simultaneously. The bridge mode is part of the canonical state and therefore
+changes its kappa.
 
 The useful ternary landmarks remain
 
