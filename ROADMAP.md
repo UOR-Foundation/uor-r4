@@ -13,7 +13,7 @@ _Last reviewed: 2026-08-27 (#961 reversible S0 landed; #952 A1.0 stopped at
 `RETAIN_H4_STATE_ONLY_ADVANCE_MULTICHANNEL_A1Q` and landed through protected PR
 #972; #969 A1Q-L reached
 `REDESIGN_NON_H4_ORDERED_TRANSPORT_REPRESENTATION` before selector
-implementation and is pending protected delivery; unassigned #974 A1Q-R is
+implementation; protected PR #975 carries that result. Unassigned #974 A1Q-R is
 blocked by #969 and blocks #953/#973; #953 and #973 remain blocked; #954 remains
 blocked by #953 and #973; the downstream
 #954 → #955 → #962 → #963 → #964 → #965 chain remains unchanged)._
@@ -111,10 +111,10 @@ Native GitHub relationships are the source of truth:
    `STRUCTURAL_BINDING_ONLY_NO_ZETA_NLET_TO_PHI_EXPONENT_RULE` and are excluded
    from the scorer. Protected PR #972 delivered this result and closed #970;
    #969 subsequently reached its bounded representation-negative terminal,
-   pending protected delivery. See the
+   carried by protected PR #975. See the
    [A1P record](docs/candidate_relative_identifiability_a1p_970.md).
 5. **GI-2 A1Q-L / #969 — bounded local recursive geometric-attention
-   qualification (terminal pending protected delivery):** Phase 0A reached
+   qualification (terminal carried by protected PR #975):** Phase 0A reached
    `REDESIGN_NON_H4_ORDERED_TRANSPORT_REPRESENTATION` before selector
    implementation. Each of the six available raw non-H4 channels formed one
    impure class and reported order `0/15`, candidate `0/6`, same-candidate
@@ -177,8 +177,8 @@ is closed. #952's terminal negative evidence is preserved in
 [`docs/recursive_geometric_attention_a1_952.md`](docs/recursive_geometric_attention_a1_952.md).
 #967 is at terminal A1R delivery with `RETAIN_STATE_ONLY`. #970 reached its valid
 bounded paired-H4-derived heatmap-readout decision and closed through protected
-PR #972. #969 has reached its local representation-negative terminal, pending
-protected delivery; it is not yet claimed closed or merged. Unassigned #974 is
+PR #972. #969 has reached its local representation-negative terminal, carried
+by protected PR #975; native GitHub state is authoritative for delivery. Unassigned #974 is
 blocked by #969 and blocks both #953 and #973. #953 and #973 remain blocked;
 #954 remains blocked by both #953 and #973. The immediate chain is therefore
 #952 closed → #967 terminal delivery → #970 closed → #969 A1Q-L terminal
@@ -216,7 +216,7 @@ historical evidence and comparators.
   classes and a 0/6 strict transfer ceiling, retaining the heatmap and auxiliary
   channels as structural/control state while stopping before readout or
   placement. Protected PR #972 delivered that bounded result; #969 later
-  reached its local capacity-negative terminal pending protected delivery, and
+  reached its local capacity-negative terminal carried by protected PR #975, and
   #974 owns the next repair/requalification. See the
   [A1R record](docs/associative_ordered_route_summaries_a1r_967.md).
 
@@ -302,7 +302,7 @@ historical evidence and comparators.
   the bounded paired-H4-derived exact R4-heatmap readout non-identifiable on its
   frozen union and closed through protected PR #972. #969 then found no
   transferable non-H4 ordered channel and reached its representation-negative
-  terminal pending protected delivery. #974 owns the narrow repair and blocks
+  terminal carried by protected PR #975. #974 owns the narrow repair and blocks
   #953/#973; #973 later owns paragraph, conversation, and global qualification
   through the accepted decoded loop.
   Historical canaries and pointwise results remain scoped evidence, not a

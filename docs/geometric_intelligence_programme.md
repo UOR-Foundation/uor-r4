@@ -46,7 +46,7 @@ separate later qualification.
 Optimization, broad QA, formalization, and release certification follow a
 working decision-bearing product slice. They do not replace it.
 
-## Current truth at the #969 A1Q-L terminal pending protected delivery
+## Current truth at the #969 A1Q-L terminal carried by protected PR #975
 
 #958 is foundation evidence, not abandonment of geometric intelligence. It
 retained the following source-free mechanisms:
@@ -112,8 +112,8 @@ radial transport, or typed geometry.
 
 #969 A1Q-L has reached the bounded terminal
 `REDESIGN_NON_H4_ORDERED_TRANSPORT_REPRESENTATION` before selector
-implementation. The result is pending protected delivery; #969 is not yet
-claimed closed or merged. Unassigned A1Q-R/#974 is a child of #820, blocked by
+implementation. Protected PR #975 carries the result; native GitHub state is
+authoritative for its delivery status. Unassigned A1Q-R/#974 is a child of #820, blocked by
 #969 and blocking both #953 and #973. #953 and #973 therefore remain blocked.
 #953 still owns source-free inference and language generation, but may consume
 only a repair-qualified local/sentence consumer. Paragraph, conversation, and
@@ -835,7 +835,7 @@ The exact #969 terminals are:
 - `REDESIGN_NON_H4_ORDERED_TRANSPORT_REPRESENTATION` — Phase 0A localizes a
   capacity defect before scorer implementation and requires a narrow
   repair/requalification successor. This is the observed #969 terminal,
-  pending protected delivery.
+  carried by protected PR #975.
 - `UNAVAILABLE_NO_INDEPENDENT_HOLDOUT` — leave #969 open and publish the exact
   unavailable evidence boundary.
 - `INVALID_CONTRACT` — leave #969 open and publish the exact invalidating

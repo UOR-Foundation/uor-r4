@@ -27,8 +27,8 @@ heatmap remain structural/control state. #970 is closed after protected PR #972,
 and #969 A1Q-L has reached
 `REDESIGN_NON_H4_ORDERED_TRANSPORT_REPRESENTATION` at the individual-channel
 capacity gate. No channel authorized a selector; Gate 0 and sentence
-qualification were not run. The terminal remains pending protected delivery,
-so #969 is not yet claimed closed or merged. Unassigned #974 A1Q-R is the
+qualification were not run. Protected PR #975 carries the terminal; native
+GitHub state is authoritative for its delivery status. Unassigned #974 A1Q-R is the
 narrow repair/requalification child after #969 and natively blocks both #953
 and #973. #953 and #973 remain blocked. #954 remains natively blocked by both
 #953 and #973, and the downstream
@@ -338,7 +338,7 @@ The terminal decisions are exact:
 
 Both valid outcomes exposed only #969 after protected delivery. The observed
 negative is now closed through PR #972. #969 subsequently reached its own
-capacity-negative terminal, pending protected delivery. #974 blocks #953 and
+capacity-negative terminal, carried by protected PR #975. #974 blocks #953 and
 #973 while repairing/requalifying local ordered transport; #954 remains blocked
 by both #953 and #973.
 
@@ -440,8 +440,8 @@ local/sentence consumer that #953 may use.
 ### Observed A1Q-L/#969 Phase 0A result
 
 #969 reached `REDESIGN_NON_H4_ORDERED_TRANSPORT_REPRESENTATION` at the
-individual-channel capacity gate. The result is pending protected delivery; it
-does not establish that #969 is closed or merged.
+individual-channel capacity gate. Protected PR #975 carries the result; native
+GitHub state is authoritative for its delivery status.
 
 The six available raw non-H4 channels were `session-hypersphere-state`,
 `winding-window-state`, `projection-energy`, `factor-count`,
@@ -678,7 +678,7 @@ Use these outcomes literally:
   channel failed the Phase 0A capacity gate. Stop before selector implementation,
   preserve the working plumbing, wire one narrow repair/requalification
   successor, and keep #953 and #973 blocked. This is #969's observed terminal,
-  pending protected delivery; it does not claim #969 closed or merged.
+  carried by protected PR #975; native GitHub state determines delivery status.
 - `UNAVAILABLE_NO_INDEPENDENT_HOLDOUT` — the active qualification cannot form
   its required independent evidence. Leave it open, publish the exact blocker,
   and keep its downstream issues blocked.

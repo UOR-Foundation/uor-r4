@@ -13,8 +13,8 @@ gate produced the bounded paired-H4-derived exact R4-heatmap result
 `RETAIN_H4_STATE_ONLY_ADVANCE_MULTICHANNEL_A1Q` and landed through protected PR
 #972. #969 A1Q-L has now reached the bounded terminal
 `REDESIGN_NON_H4_ORDERED_TRANSPORT_REPRESENTATION` before selector
-implementation; that result is pending protected delivery, so #969 is not yet
-claimed closed or merged. Unassigned child #974 A1Q-R is natively blocked by
+implementation. Protected PR #975 carries that result; native GitHub state is
+authoritative for its delivery status. Unassigned child #974 A1Q-R is natively blocked by
 #969 and blocks both #953 and #973. #953 and #973 therefore remain blocked;
 #954 remains blocked by both #953 and #973. The downstream
 #954 → #955 → #962 → #963 → #964 → #965 chain is unchanged. Terminology lives in
@@ -219,8 +219,8 @@ PR (a bump can shift libm-sensitive teacher logprobs — see Gate E below).
   sensitivity on the frozen matched split; no real non-digest transported-path
   field is exposed, and pairing static candidate state with an aliased history
   cannot recover the lost order. The separate ordered-H4 commitment remains
-  structural state. The terminal is pending protected delivery;
-  do not report #969 closed or merged yet. See the append-only
+  structural state. Protected PR #975 carries the terminal; native GitHub state
+  is authoritative for its delivery status. See the append-only
   [#969 A1Q-L record](docs/recursive_geometric_attention_a1q_l_969.md).
 - Unassigned #974 A1Q-R is the narrow repair/requalification successor, a child
   of #820 blocked by #969 and blocking both #953 and #973. #953 may begin only

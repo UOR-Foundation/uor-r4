@@ -25,8 +25,8 @@ assumptions, or objectives rather than measured results.
 > protected PR #972. #969 A1Q-L has now reached
 > `REDESIGN_NON_H4_ORDERED_TRANSPORT_REPRESENTATION` before selector
 > implementation. Selector, Gate 0, and sentence qualification are `NOT_RUN`;
-> the terminal is pending protected delivery, so #969 is not yet claimed closed
-> or merged. Unassigned #974 A1Q-R is blocked by #969 and blocks #953/#973.
+> protected PR #975 carries the terminal, and native GitHub state is
+> authoritative for delivery. Unassigned #974 A1Q-R is blocked by #969 and blocks #953/#973.
 > #953 and #973 remain blocked. #954 remains blocked by both #953 and #973; the
 > downstream #954 -> #955 -> #962 -> #963 -> #964 -> #965 chain is unchanged;
 > legacy
@@ -193,8 +193,8 @@ assumptions, or objectives rather than measured results.
 > natural support, exact payload inversion, H4 structural state, and incremental
 > hierarchy plumbing.
 >
-> This terminal is pending protected delivery; #969 is not yet claimed closed
-> or merged. Unassigned #974 A1Q-R is the child repair/requalification stage,
+> Protected PR #975 carries this terminal; native GitHub state is authoritative
+> for delivery. Unassigned #974 A1Q-R is the child repair/requalification stage,
 > blocked by #969 and blocking both #953 and #973. #953 and #973 remain blocked.
 > #954 remains blocked by both #953 and #973, and the downstream chain is
 > unchanged. This is a bounded representation-capacity negative, not attention,
@@ -536,7 +536,7 @@ on 6/6 queries. #970 then found that the paired-H4-derived exact R4-heatmap
 classes alias outcomes and that the construction-derived rule has a 0/6 strict
 transfer ceiling on the separate sealed validation fixture. It stopped without
 scalar search; #970 is closed through protected PR #972. #969 then reached its
-own representation-negative terminal, pending protected delivery.
+own representation-negative terminal, carried by protected PR #975.
 The completed #969 capacity probe found no passing individual channel and
 stopped before one frozen selector, Gate 0, or sentence qualification. #974 now
 owns the narrow ordered-transport repair/requalification and blocks #953/#973.
@@ -993,8 +993,8 @@ R4-heatmap readout-identifiability result without compiling a readout and is
 closed through protected PR #972. #969 A1Q-L then completed its non-H4
 ordered-channel capacity preflight and reached
 `REDESIGN_NON_H4_ORDERED_TRANSPORT_REPRESENTATION` before selector
-implementation. Its terminal is pending protected delivery; #969 is not yet
-claimed closed or merged. Phase 0B, Gate 0, and sentence qualification were
+implementation. Protected PR #975 carries its terminal; native GitHub state is
+authoritative for delivery. Phase 0B, Gate 0, and sentence qualification were
 `NOT_RUN`.
 
 Unassigned A1Q-R/#974 is a child of #820, blocked by #969 and blocking both
