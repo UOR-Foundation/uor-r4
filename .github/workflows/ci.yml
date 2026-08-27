@@ -1,14 +1,12 @@
 name: ci
 
-# Development verification is dormant by default while the product mechanism
-# is being built. Pull-request and merge-group events publish no-op compatibility
-# statuses only because repository ruleset 19597522 still requires those names;
-# the ruleset itself must be disabled by a repository administrator. Real work
-# runs only after an explicit manual dispatch names a decision-bearing QA scope.
-# There is no scheduled/nightly compute.
+# Development verification is dormant while the product mechanism is being
+# built. There are no pull-request, merge-group, push, or scheduled triggers.
+# Work runs only after an explicit manual dispatch names a decision-bearing QA
+# scope. Repository ruleset 19597522 must be disabled by an administrator before
+# merging because its required statuses and merge queue intentionally have no
+# automatic workflow counterpart.
 on:
-  pull_request:
-  merge_group:
   workflow_dispatch:
     inputs:
       qa_scope:
@@ -100,49 +98,6 @@ jobs:
       - name: cargo test --workspace --lib
         if: steps.scope.outputs.code == 'true'
         run: cargo test --workspace --lib
-
-  # Temporary no-op ruleset compatibility. Delete these jobs and the
-  # pull_request/merge_group triggers after an administrator disables ruleset
-  # 19597522. They deliberately run no checkout, build, test, or QA command.
-  required-core-compat:
-    name: fmt / clippy / tests / no_std / κ
-    if: ${{ always() && (github.event_name == 'pull_request' || github.event_name == 'merge_group') }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: Dormant until product-ready QA
-        run: echo "Required development testing is dormant; ruleset 19597522 awaits admin disablement."
-
-  required-audit-compat:
-    name: cargo audit
-    if: ${{ always() && (github.event_name == 'pull_request' || github.event_name == 'merge_group') }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: Dormant until product-ready QA
-        run: echo "Required development testing is dormant; ruleset 19597522 awaits admin disablement."
-
-  required-fuzz-compat:
-    name: fuzz smoke (nightly libfuzzer)
-    if: ${{ always() && (github.event_name == 'pull_request' || github.event_name == 'merge_group') }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: Dormant until product-ready QA
-        run: echo "Required development testing is dormant; ruleset 19597522 awaits admin disablement."
-
-  required-wasm-compat:
-    name: wasm-pack build (dashboard facade, deploy.yml parity)
-    if: ${{ always() && (github.event_name == 'pull_request' || github.event_name == 'merge_group') }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: Dormant until product-ready QA
-        run: echo "Required development testing is dormant; ruleset 19597522 awaits admin disablement."
-
-  required-gate-c-compat:
-    name: Gate C trend alarm
-    if: ${{ always() && (github.event_name == 'pull_request' || github.event_name == 'merge_group') }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: Dormant until product-ready QA
-        run: echo "Required development testing is dormant; ruleset 19597522 awaits admin disablement."
 
   # Full certification is retained for an explicit product-release decision.
   gates:
