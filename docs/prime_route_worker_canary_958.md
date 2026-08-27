@@ -163,3 +163,75 @@ remain `NOT_YET_IMPLEMENTED`.
 Any change to the manifest's semantic inputs, provenance, canonical encoding,
 or representative workload shape invalidates reuse of this timing result until
 the exact-reference and worker canary passes again.
+
+## Schema-2 complete-manifest chronology
+
+The preceding chronology is retained verbatim as the evidence for the
+preliminary manifest. This appended chronology records the later schema-2
+complete-manifest qualification. Its identities and measurements supersede the
+preliminary manifest for current reuse; they do not retroactively alter any
+earlier report or verdict.
+
+### Immediate repeat rejection and prime-square correction
+
+The first schema-2 attempt stopped after 116 ms with
+`OPTIMIZE_BEFORE_LONG_RUN`. The compiler rejected the first adjacent repeated
+route prime because it incorrectly required both factors of every semiprime
+expert to be distinct. The fail-closed terminal evidence is
+[`prime_route_worker_canary_958_manifest_v2_repeat_rejected.json`](prime_route_worker_canary_958_manifest_v2_repeat_rejected.json),
+SHA-256
+`fc422dc60d929cccbc60b9f7bdbf75f47382fdfd6abcfbfbba2cf703b93f7bd8`.
+
+The correction retains `p^2` as the valid semiprime self-loop produced by an
+adjacent repeated route atom. It does not broaden the optional SpiralCore
+operator chart: its six distinct prime carriers still form exactly the 15
+`J(6,2)` unordered pairs, and those 15 operator fixtures remain square-free,
+distinct-edge semiprime experts.
+
+### Required reference-mismatch stop and audit
+
+After the prime-square correction, the canary completed its compilations but
+correctly stopped at `REFERENCE_ARTIFACT_MISMATCH`. The schema-2 manifest now
+bound the fixed quantization/profile record, semiprime-expert and ordered-n-let
+tables, and deterministic rebuild witnesses, so the previous preliminary
+artifact CID and kappa were no longer valid references. The fail-closed report
+is
+[`prime_route_worker_canary_958_manifest_v2_reference_mismatch.json`](prime_route_worker_canary_958_manifest_v2_reference_mismatch.json),
+SHA-256
+`b8dd996bd30f39153f961ca24bd424b329df2b3f6a28881f53f224d674bf6ed6`.
+
+The mismatch audit confirmed that the representative workload had not drifted:
+its CID remained
+`blake3:ce3d96826ffd7134495536d439795ad0e4b035122b41329afd2a6ec4a96cacc6`.
+The new artifact identity was therefore reviewed as an intended consequence of
+the added semantic bindings before the canary references were updated.
+
+### Final schema-2 pass
+
+[`prime_route_worker_canary_958_manifest_v2_final.json`](prime_route_worker_canary_958_manifest_v2_final.json)
+recorded `PASS` at both terminal and certifier levels:
+
+| Measurement | Result | Criterion |
+|---|---:|---:|
+| One-worker median | 661,192,500 ns | at least 500,000,000 ns |
+| Four-worker median | 445,318,333 ns | compared with one worker |
+| Median compile-stage speedup | 1.484x | at least 1.200x |
+| One-worker maximum deviation | 7 milli (0.7%) | at most 150 milli |
+| Four-worker maximum deviation | 3 milli (0.3%) | at most 150 milli |
+| Exact artifact and kappa matches | 32 / 32 | 32 / 32 required |
+| Four-worker use and peak-active matches | 16 / 16 | all must use and peak at 4 |
+| Terminal wall time | 7,761 ms | below 90,000 ms |
+
+All 32 compiles emitted the schema-2 artifact CID
+`blake3:973acbe598b15aa152532910ac593ab70ebd723a5e76ee16de4ef030a0285422`
+and manifest kappa
+`blake3:e8f1ed27755b36cfd8e3161b8c6cf46bcef3a2afeeafdd00c8a398b40e14aa4f`.
+The release binary CID was
+`blake3:57e493ed59a55aa5af9b31eed8ed1c0cc28135b84089c17b37ed0a3c7f0dc6c4`.
+The final report SHA-256 was
+`df8744c1f846753ff6eeda6de721b281e4c3c791323a8352e1c3a82dd6c017b5`.
+
+This pass closes the complete-manifest and worker-canary portion of #958 for
+the exact schema-2 inputs above. It does not establish semantic attention,
+no-Ollama product behavior, inference, reasoning, or teacher parity; those
+claims require their own bounded evidence.

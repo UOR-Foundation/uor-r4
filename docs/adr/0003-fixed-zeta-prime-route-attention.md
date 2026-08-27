@@ -1,6 +1,9 @@
 # ADR-0003: Use fixed-zeta prime routes for geometric attention
 
-- **Status:** Accepted for bounded G1R implementation; not product-promoted
+- **Status:** Retained as a source-free storage/recall substrate; geometric
+  attention and product behavior are not promoted
+  (`RETAIN_STORAGE_RECALL_ONLY`; see the
+  [qualification record](../prime_route_attention_qualification_958.md))
 - **Date:** 2026-08-26
 - **Decision owner:** representation redesign
   [#958](https://github.com/UOR-Foundation/uor-r4/issues/958)

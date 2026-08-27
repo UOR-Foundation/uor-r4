@@ -10,15 +10,18 @@ use uor_r4_core::prime_route_attention::{
     CANONICAL_MANIFEST_BODY_MAX_BYTES, CANONICAL_MANIFEST_MAX_BYTES, MANIFEST_MAX_ADDRESSES,
     MANIFEST_MAX_CANDIDATES_PER_ROW, MANIFEST_MAX_I1_ROWS, MANIFEST_MAX_I2_ROWS,
     MANIFEST_MAX_IS_ROWS, MANIFEST_MAX_RETAINED_CANDIDATE_ENTRIES, MANIFEST_MAX_TOTAL_ROWS,
-    PRIME_REGISTRY_DOMAIN, PRIME_REGISTRY_SCHEMA, TINY_CANARY_MAX_IDENTIFIER_BYTES,
-    TINY_CANARY_MAX_OCCURRENCES, TINY_CANARY_MAX_ROUTES_PER_SENTENCE, TINY_CANARY_MAX_SENTENCES,
+    PHASE_FRACTION_BITS, PHASE_INTERVAL, PRIME_REGISTRY_DOMAIN, PRIME_REGISTRY_SCHEMA,
+    PRIME_ROUTE_MANIFEST_DOMAIN, PRIME_ROUTE_MANIFEST_SCHEMA, QUANTIZATION_CHART_DOMAIN,
+    QUANTIZATION_CHART_SCHEMA, RADIAL_RING, S3_S2_FRACTION_BITS, SPIN_CHART,
+    TINY_CANARY_MAX_IDENTIFIER_BYTES, TINY_CANARY_MAX_OCCURRENCES,
+    TINY_CANARY_MAX_ROUTES_PER_SENTENCE, TINY_CANARY_MAX_SENTENCES,
     TINY_CANARY_MAX_TOTAL_IDENTIFIER_BYTES, TINY_CANARY_MAX_TOTAL_ROUTES,
     TINY_CANARY_MAX_TRANSITIONS, ZETA_GRID_KAPPA_REFERENCE, ZETA_GRID_REVISION,
 };
 use uor_r4_core::zeta_zeros::ZETA_ZEROS;
 
 const FIXTURE_MANIFEST_KAPPA_REFERENCE: &str =
-    "blake3:84b106d8c31df065518329e219a4ddb75ac8450c705bc1fc664f5e97f05a04aa";
+    "blake3:48de73271c002b7f550c8459087270d0f34ad5ec0ca1fcf2d116684ded84ac63";
 
 fn deterministic_label(seed: &str) -> String {
     format!("blake3:{}", blake3::hash(seed.as_bytes()).to_hex())
@@ -239,12 +242,47 @@ fn six_prime_carriers_form_fifteen_square_free_semiprime_experts() {
         }
     }
     assert_eq!(products.len(), 15);
-    assert!(SemiprimeExpert::new(primes[0], primes[0]).is_err());
+    let repeated = SemiprimeExpert::new(primes[0], primes[0]).unwrap();
+    assert_eq!(repeated.factors(), [primes[0], primes[0]]);
+    assert_eq!(repeated.product(), 25);
 
     let first = SemiprimeExpert::new(primes[0], primes[1]).unwrap();
     let second = SemiprimeExpert::new(primes[1], primes[2]).unwrap();
     assert_eq!(first.handoff(second), Some(primes[1]));
     assert_eq!(first.handoff(first), None);
+}
+
+#[test]
+fn adjacent_repeated_route_atoms_are_retained_as_prime_square_experts() {
+    let registry = PrimeRegistry::compile(&semantic_atoms("payload-repeat")).unwrap();
+    let a = address(&registry, "alpha", 0);
+    let b = address(&registry, "beta", 1);
+    let sentences = vec![RouteSentence {
+        sentence_id: "repeated-route".to_owned(),
+        routes: vec![a.clone(), a, b],
+    }];
+
+    let compiled = compile_custom(&registry, &sentences, provenance());
+    assert_eq!(
+        compiled
+            .manifest
+            .experts
+            .iter()
+            .map(|record| {
+                (
+                    [record.factors[0].value(), record.factors[1].value()],
+                    record.product,
+                    record.occurrence_count,
+                )
+            })
+            .collect::<Vec<_>>(),
+        vec![([5, 5], 25, 1), ([5, 7], 35, 1)]
+    );
+    let bytes = compiled.manifest.canonical_bytes().unwrap();
+    assert_eq!(
+        CompiledSpinManifest::decode_canonical(&bytes).unwrap(),
+        compiled.manifest
+    );
 }
 
 #[test]
@@ -486,6 +524,166 @@ fn canonical_manifest_is_worker_independent_and_strictly_round_trips() {
 }
 
 #[test]
+fn schema_two_manifest_explicitly_binds_profile_experts_nlets_and_rebuild_witnesses() {
+    let compiled = fixture(ZeroPowerBridge::ContinuousNull, 4, 8, "payload-v1");
+    let manifest = &compiled.manifest;
+    assert_eq!(manifest.schema, PRIME_ROUTE_MANIFEST_SCHEMA);
+    assert_eq!(PRIME_ROUTE_MANIFEST_SCHEMA, 2);
+    assert_eq!(
+        PRIME_ROUTE_MANIFEST_DOMAIN,
+        "uor-r4.prime-route-spin-manifest/2"
+    );
+
+    let profile = &manifest.quantization_chart;
+    assert_eq!(profile.schema, QUANTIZATION_CHART_SCHEMA);
+    assert_eq!(profile.domain, QUANTIZATION_CHART_DOMAIN);
+    assert_eq!(profile.phase_fraction_bits, PHASE_FRACTION_BITS);
+    assert_eq!(profile.phase_interval, PHASE_INTERVAL);
+    assert_eq!(profile.s3_fraction_bits, S3_S2_FRACTION_BITS);
+    assert_eq!(profile.s2_fraction_bits, S3_S2_FRACTION_BITS);
+    assert_eq!(profile.spin_chart, SPIN_CHART);
+    assert_eq!(profile.radial_ring, RADIAL_RING);
+    assert_eq!(profile.zeta_grid_revision, manifest.zeta_grid.revision);
+    assert_eq!(profile.zeta_channels, manifest.zeta_grid.channels);
+    assert_eq!(profile.zeta_grid_kappa, manifest.zeta_grid.grid_kappa);
+
+    let experts = manifest
+        .experts
+        .iter()
+        .map(|record| {
+            (
+                [record.factors[0].value(), record.factors[1].value()],
+                record.product,
+                record.occurrence_count,
+            )
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        experts,
+        vec![
+            ([5, 7], 35, 3),
+            ([7, 11], 77, 2),
+            ([7, 13], 91, 1),
+            ([7, 17], 119, 4),
+        ]
+    );
+    assert_eq!(
+        manifest
+            .experts
+            .iter()
+            .map(|record| usize::try_from(record.occurrence_count).unwrap())
+            .sum::<usize>(),
+        compiled.metadata.causal_transitions
+    );
+
+    let nlets = manifest
+        .nlets
+        .iter()
+        .map(|record| {
+            (
+                record.sentence_id.as_str(),
+                record
+                    .ordered_primes
+                    .iter()
+                    .map(|prime| prime.value())
+                    .collect::<Vec<_>>(),
+                record
+                    .factor_multiset
+                    .iter()
+                    .map(|prime| prime.value())
+                    .collect::<Vec<_>>(),
+            )
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        nlets,
+        vec![
+            ("sentence-1", vec![5, 7, 17], vec![5, 7, 17]),
+            ("sentence-2", vec![5, 7, 11], vec![5, 7, 11]),
+            ("sentence-3", vec![5, 7, 17], vec![5, 7, 17]),
+            ("sentence-4", vec![17, 7, 11], vec![7, 11, 17]),
+            ("sentence-5", vec![13, 7, 17], vec![7, 13, 17]),
+        ]
+    );
+    assert_eq!(
+        manifest
+            .rebuild_witnesses
+            .iter()
+            .map(|witness| (
+                witness.sentence_id.as_str(),
+                witness.address_indices.clone()
+            ))
+            .collect::<Vec<_>>(),
+        vec![
+            ("sentence-1", vec![0, 1, 4]),
+            ("sentence-2", vec![0, 1, 2]),
+            ("sentence-3", vec![0, 1, 4]),
+            ("sentence-4", vec![4, 1, 2]),
+            ("sentence-5", vec![3, 1, 4]),
+        ]
+    );
+
+    let bytes = manifest.canonical_bytes().unwrap();
+    let decoded = CompiledSpinManifest::decode_canonical(&bytes).unwrap();
+    assert_eq!(decoded.indexes, manifest.indexes);
+    assert_eq!(decoded.experts, manifest.experts);
+    assert_eq!(decoded.nlets, manifest.nlets);
+    assert_eq!(decoded.rebuild_witnesses, manifest.rebuild_witnesses);
+}
+
+#[test]
+fn ordered_nlet_and_manifest_kappas_are_sensitive_to_order_and_repetition() {
+    let registry = PrimeRegistry::compile(&semantic_atoms("payload-v1")).unwrap();
+    let a = address(&registry, "alpha", 0);
+    let b = address(&registry, "beta", 1);
+    let c = address(&registry, "gamma", 2);
+    let variants = [
+        vec![a.clone(), b.clone(), c.clone(), a.clone()],
+        vec![a.clone(), c.clone(), b.clone(), a.clone()],
+        vec![a.clone(), b.clone(), c, a, b],
+    ];
+    let compiled = variants
+        .iter()
+        .map(|routes| {
+            compile_custom(
+                &registry,
+                &[RouteSentence {
+                    sentence_id: "s".to_owned(),
+                    routes: routes.clone(),
+                }],
+                provenance(),
+            )
+        })
+        .collect::<Vec<_>>();
+    let manifest_kappas = compiled
+        .iter()
+        .map(|value| value.manifest.manifest_kappa.as_str())
+        .collect::<BTreeSet<_>>();
+    let nlet_kappas = compiled
+        .iter()
+        .map(|value| value.manifest.nlets[0].ordered_kappa.as_str())
+        .collect::<BTreeSet<_>>();
+    assert_eq!(manifest_kappas.len(), 3);
+    assert_eq!(nlet_kappas.len(), 3);
+    assert_eq!(
+        compiled[0].manifest.nlets[0].factor_multiset,
+        compiled[1].manifest.nlets[0].factor_multiset
+    );
+    assert_ne!(
+        compiled[0].manifest.nlets[0].ordered_primes,
+        compiled[1].manifest.nlets[0].ordered_primes
+    );
+    assert_eq!(
+        compiled[2].manifest.nlets[0]
+            .ordered_primes
+            .iter()
+            .map(|prime| prime.value())
+            .collect::<Vec<_>>(),
+        vec![5, 7, 17, 5, 7]
+    );
+}
+
+#[test]
 fn route_order_spin_torsion_and_provenance_independently_change_manifest_kappa() {
     let registry = PrimeRegistry::compile(&semantic_atoms("payload-v1")).unwrap();
     let sentences = fixture_sentences(&registry);
@@ -573,6 +771,89 @@ fn basis_label_evidence_and_prime_registry_tampering_are_rejected_after_rekappa(
     assert_decode_rejects(
         &serde_json::to_vec(&envelope).unwrap(),
         "canonical lowercase",
+    );
+}
+
+#[test]
+fn profile_expert_nlet_witness_order_and_index_tampering_fail_after_rekappa() {
+    let compiled = fixture(ZeroPowerBridge::ContinuousNull, 1, 8, "payload-v1");
+
+    let profile = tampered_manifest_bytes(&compiled, |value| {
+        value["body"]["quantization_chart"]["phase_fraction_bits"] =
+            serde_json::Value::from(u64::from(PHASE_FRACTION_BITS - 1));
+    });
+    assert_decode_rejects(&profile, "immutable fixed profile");
+
+    let expert = tampered_manifest_bytes(&compiled, |value| {
+        value["body"]["experts"][0]["product"] = serde_json::Value::from(385u64);
+    });
+    assert_decode_rejects(&expert, "semiprime-expert record is noncanonical");
+
+    let expert_count = tampered_manifest_bytes(&compiled, |value| {
+        let count = value["body"]["experts"][0]["occurrence_count"]
+            .as_u64()
+            .unwrap();
+        value["body"]["experts"][0]["occurrence_count"] = serde_json::Value::from(count + 1);
+    });
+    assert_decode_rejects(&expert_count, "do not cover every witnessed transition");
+
+    let nlet = tampered_manifest_bytes(&compiled, |value| {
+        value["body"]["nlets"][0]["ordered_primes"]
+            .as_array_mut()
+            .unwrap()
+            .swap(0, 1);
+    });
+    assert_decode_rejects(&nlet, "ordered n-lets do not reproduce");
+
+    let nlet_order = tampered_manifest_bytes(&compiled, |value| {
+        value["body"]["nlets"].as_array_mut().unwrap().swap(0, 1);
+    });
+    assert_decode_rejects(&nlet_order, "ordered n-let shape");
+
+    let witness_order = tampered_manifest_bytes(&compiled, |value| {
+        value["body"]["rebuild_witnesses"][0]["address_indices"]
+            .as_array_mut()
+            .unwrap()
+            .swap(0, 1);
+    });
+    assert_decode_rejects(&witness_order, "do not reproduce from the rebuild witness");
+
+    let index = tampered_manifest_bytes(&compiled, |value| {
+        let count = value["body"]["last_one"][0]["candidates"][0]["count"]
+            .as_u64()
+            .unwrap();
+        value["body"]["last_one"][0]["candidates"][0]["count"] = serde_json::Value::from(count + 1);
+    });
+    assert_decode_rejects(&index, "indexes do not reproduce from the rebuild witness");
+
+    let witness_index = tampered_manifest_bytes(&compiled, |value| {
+        value["body"]["rebuild_witnesses"][0]["address_indices"][0] =
+            serde_json::Value::from(u64::try_from(MANIFEST_MAX_ADDRESSES).unwrap());
+    });
+    assert_decode_rejects(&witness_index, "address index is out of range");
+}
+
+#[test]
+fn typed_manifest_canonicalization_rejects_rekappad_reconstruction_mismatch() {
+    let compiled = fixture(ZeroPowerBridge::ContinuousNull, 1, 8, "payload-v1");
+    let tampered_bytes = tampered_manifest_bytes(&compiled, |value| {
+        value["body"]["nlets"][0]["ordered_primes"]
+            .as_array_mut()
+            .unwrap()
+            .swap(0, 1);
+    });
+    let envelope = serde_json::from_slice::<serde_json::Value>(&tampered_bytes).unwrap();
+
+    let mut typed = compiled.manifest.clone();
+    typed.nlets[0].ordered_primes.swap(0, 1);
+    typed.manifest_kappa = envelope["manifest_kappa"].as_str().unwrap().to_owned();
+
+    let error = typed.canonical_bytes().unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("ordered n-lets do not reproduce from the rebuild witness"),
+        "unexpected typed-manifest error: {error}"
     );
 }
 

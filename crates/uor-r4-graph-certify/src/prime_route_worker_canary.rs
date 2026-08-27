@@ -30,9 +30,9 @@ pub const PRIME_ROUTE_MANIFEST_PROVENANCE_DOMAIN: &str = "uor-r4.prime-route-wor
 pub const CANARY_REFERENCE_WORKLOAD_CID: &str =
     "blake3:ce3d96826ffd7134495536d439795ad0e4b035122b41329afd2a6ec4a96cacc6";
 pub const CANARY_REFERENCE_CANONICAL_BYTES_CID: &str =
-    "blake3:d700b84d0b1ac83fab81ec81fa080365a98c44a8209cf1f3442825f2cfaa6841";
+    "blake3:973acbe598b15aa152532910ac593ab70ebd723a5e76ee16de4ef030a0285422";
 pub const CANARY_REFERENCE_MANIFEST_KAPPA: &str =
-    "blake3:21e7c4da52b09a192d0fef62ee9d46a137514e802b6c0cc99abee2974d594d75";
+    "blake3:e8f1ed27755b36cfd8e3161b8c6cf46bcef3a2afeeafdd00c8a398b40e14aa4f";
 
 pub const CANARY_SEMANTIC_ATOMS: usize = 32;
 pub const CANARY_SPIN_VARIANTS: usize = 4;

@@ -13,8 +13,8 @@ use serde::{Deserialize, Serialize};
 use crate::wrap_to_pi;
 use crate::zeta_zeros::ZETA_ZEROS;
 
-pub const PRIME_ROUTE_MANIFEST_SCHEMA: u32 = 1;
-pub const PRIME_ROUTE_MANIFEST_DOMAIN: &str = "uor-r4.prime-route-spin-manifest/1";
+pub const PRIME_ROUTE_MANIFEST_SCHEMA: u32 = 2;
+pub const PRIME_ROUTE_MANIFEST_DOMAIN: &str = "uor-r4.prime-route-spin-manifest/2";
 pub const PRIME_REGISTRY_SCHEMA: u32 = 1;
 pub const PRIME_REGISTRY_DOMAIN: &str = "uor-r4.prime-registry/1";
 pub const ORDERED_PRIME_ROUTE_SCHEMA: u32 = 1;
@@ -26,6 +26,13 @@ pub const ZETA_GRID_DOMAIN: &str = "uor-r4.fixed-zeta-grid/1";
 pub const ZETA_GRID_REVISION: &str = "uor-r4-core::zeta_zeros:v1";
 pub const ZETA_GRID_KAPPA_REFERENCE: &str =
     "blake3:512243ed9e2c1deef0691515caf02ca25e3d5c7990184cd804f6d65c1cc8d94c";
+pub const QUANTIZATION_CHART_SCHEMA: u32 = 1;
+pub const QUANTIZATION_CHART_DOMAIN: &str = "uor-r4.prime-route-quantization-chart/1";
+pub const PHASE_FRACTION_BITS: u8 = 29;
+pub const S3_S2_FRACTION_BITS: u8 = 30;
+pub const PHASE_INTERVAL: &str = "[-pi,pi)";
+pub const SPIN_CHART: &str = "unit-S3--Hopf-->unit-S2+fiber";
+pub const RADIAL_RING: &str = "Z[phi]";
 /// The source-free compiler is deliberately a tiny canary, not a corpus
 /// compiler. These ceilings are unconditional and cannot be raised by a
 /// caller through the public compile API.
@@ -48,12 +55,17 @@ pub const MANIFEST_MAX_IS_ROWS: usize = TINY_CANARY_MAX_TRANSITIONS;
 pub const MANIFEST_MAX_TOTAL_ROWS: usize = TINY_CANARY_MAX_OCCURRENCES;
 pub const MANIFEST_MAX_RETAINED_CANDIDATE_ENTRIES: usize = TINY_CANARY_MAX_OCCURRENCES;
 pub const MANIFEST_MAX_CANDIDATES_PER_ROW: u16 = 128;
-/// This first slice proves only exact I1/I2/IS lookup. Divisor-neighborhood
-/// expansion remains a later, separately tested attention-stage operation.
-pub const DIVISOR_FALLBACK_STATUS: &str = "NOT_YET_IMPLEMENTED";
-/// This first slice binds spin/torsion into exact keys. Adjacent-spin fallback
-/// remains a later, separately tested attention-stage operation.
-pub const ADJACENT_SPIN_FALLBACK_STATUS: &str = "NOT_YET_IMPLEMENTED";
+pub const MANIFEST_MAX_EXPERTS: usize = TINY_CANARY_MAX_TRANSITIONS;
+pub const MANIFEST_MAX_NLETS: usize = TINY_CANARY_MAX_SENTENCES;
+pub const MANIFEST_MAX_REBUILD_WITNESSES: usize = TINY_CANARY_MAX_SENTENCES;
+/// Implemented only in the separately bounded geometric-attention experiment;
+/// no product/runtime integration is established by this status.
+pub const DIVISOR_FALLBACK_STATUS: &str =
+    "IMPLEMENTED_GEOMETRIC_ATTENTION_EXPERIMENT_NOT_PRODUCT_INTEGRATED";
+/// Implemented only in the separately bounded geometric-attention experiment;
+/// no product/runtime integration is established by this status.
+pub const ADJACENT_SPIN_FALLBACK_STATUS: &str =
+    "IMPLEMENTED_GEOMETRIC_ATTENTION_EXPERIMENT_NOT_PRODUCT_INTEGRATED";
 
 const PHASE_SCALE: f64 = (1u64 << 29) as f64;
 const UNIT_SCALE: f64 = (1u64 << 30) as f64;
@@ -205,8 +217,9 @@ fn is_prime_u32(value: u32) -> bool {
     true
 }
 
-/// A square-free semiprime expert. Factor order is canonical and does not
-/// carry route direction; ordered route state does.
+/// A semiprime expert. Factor order is canonical and does not carry route
+/// direction; ordered route state does. Equal factors represent the valid
+/// prime-square semiprime produced by an adjacent repeated route atom.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SemiprimeExpert {
     low: PrimeAtom,
@@ -215,11 +228,6 @@ pub struct SemiprimeExpert {
 
 impl SemiprimeExpert {
     pub fn new(left: PrimeAtom, right: PrimeAtom) -> Result<Self, PrimeRouteError> {
-        if left == right {
-            return Err(PrimeRouteError::Invalid(
-                "a semiprime expert requires two distinct prime factors".to_owned(),
-            ));
-        }
         let (low, high) = if left < right {
             (left, right)
         } else {
@@ -693,6 +701,16 @@ impl PrimeRegistry {
             .binary_search_by(|binding| binding.semantic_atom_id.as_str().cmp(semantic_atom_id))
             .ok()
             .and_then(|index| self.bindings.get(index))
+    }
+
+    /// Revalidate the complete canonical registry, including every binding,
+    /// the sequential prime assignment, and the reproduced registry kappa.
+    ///
+    /// This narrow verifier is for artifacts that bind an already-compiled
+    /// registry. It prevents a valid six-binding prefix from hiding malformed
+    /// or unbound tail entries.
+    pub fn validate_canonical(&self) -> Result<(), PrimeRouteError> {
+        self.validate()
     }
 
     fn validate(&self) -> Result<(), PrimeRouteError> {
@@ -1233,6 +1251,90 @@ impl ZetaGridBinding {
     }
 }
 
+/// Immutable numeric and coordinate-chart contract for manifest geometry.
+///
+/// These fields make the artifact's integer interpretation explicit. A
+/// decoder must reject any profile other than this exact contract rather than
+/// interpreting the same integer bytes under a different scale or chart.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct QuantizationChartProfile {
+    pub schema: u32,
+    pub domain: String,
+    pub phase_fraction_bits: u8,
+    pub phase_interval: String,
+    pub s3_fraction_bits: u8,
+    pub s2_fraction_bits: u8,
+    pub spin_chart: String,
+    pub radial_ring: String,
+    pub zeta_grid_revision: String,
+    pub zeta_channels: u16,
+    pub zeta_grid_kappa: String,
+}
+
+impl QuantizationChartProfile {
+    pub fn fixed() -> Result<Self, PrimeRouteError> {
+        let zeta_grid = ZetaGridBinding::fixed()?;
+        Ok(Self::for_zeta_grid(&zeta_grid))
+    }
+
+    fn for_zeta_grid(zeta_grid: &ZetaGridBinding) -> Self {
+        Self {
+            schema: QUANTIZATION_CHART_SCHEMA,
+            domain: QUANTIZATION_CHART_DOMAIN.to_owned(),
+            phase_fraction_bits: PHASE_FRACTION_BITS,
+            phase_interval: PHASE_INTERVAL.to_owned(),
+            s3_fraction_bits: S3_S2_FRACTION_BITS,
+            s2_fraction_bits: S3_S2_FRACTION_BITS,
+            spin_chart: SPIN_CHART.to_owned(),
+            radial_ring: RADIAL_RING.to_owned(),
+            zeta_grid_revision: zeta_grid.revision.clone(),
+            zeta_channels: zeta_grid.channels,
+            zeta_grid_kappa: zeta_grid.grid_kappa.clone(),
+        }
+    }
+
+    fn validate(&self, zeta_grid: &ZetaGridBinding) -> Result<(), PrimeRouteError> {
+        validate_blake3_label(&self.zeta_grid_kappa, "quantization-chart zeta-grid kappa")?;
+        let fixed = Self::for_zeta_grid(zeta_grid);
+        if self != &fixed {
+            return Err(PrimeRouteError::Invalid(
+                "manifest quantization/chart profile is not the immutable fixed profile".to_owned(),
+            ));
+        }
+        Ok(())
+    }
+}
+
+/// One canonical, unordered semiprime expert observed on an adjacent route
+/// edge. Prime-square self-loops are retained rather than rejected. Direction
+/// remains in the ordered n-let and rebuild witness; this table aggregates
+/// equal factor pairs only.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct SemiprimeExpertRecord {
+    pub factors: [PrimeAtom; 2],
+    pub product: u64,
+    pub occurrence_count: u32,
+}
+
+/// One sentence's explicit ordered prime n-let. `factor_multiset` is the same
+/// population in canonical commutative order, so repetitions are retained in
+/// both views while `ordered_primes` retains direction.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct OrderedNletRecord {
+    pub sentence_id: String,
+    pub ordered_primes: Vec<PrimeAtom>,
+    pub factor_multiset: Vec<PrimeAtom>,
+    pub ordered_kappa: String,
+}
+
+/// Bounded source witness for deterministic index reconstruction. Indices
+/// address the manifest's strictly sorted `addresses` registry.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct SentenceRouteWitness {
+    pub sentence_id: String,
+    pub address_indices: Vec<u16>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ManifestProvenance {
     pub tokenizer_cid: String,
@@ -1260,17 +1362,24 @@ pub struct CompiledSpinManifest {
     pub schema: u32,
     pub manifest_kappa: String,
     pub zeta_grid: ZetaGridBinding,
+    pub quantization_chart: QuantizationChartProfile,
     pub bridge: ZeroPowerBridge,
     pub maximum_candidates: NonZeroU16,
     pub prime_registry: PrimeRegistry,
     pub addresses: Vec<GeometricAddress>,
+    pub experts: Vec<SemiprimeExpertRecord>,
+    pub nlets: Vec<OrderedNletRecord>,
+    pub rebuild_witnesses: Vec<SentenceRouteWitness>,
     pub indexes: RouteIndexes,
     pub provenance: ManifestProvenance,
 }
 
 impl CompiledSpinManifest {
     pub fn canonical_bytes(&self) -> Result<Vec<u8>, PrimeRouteError> {
-        validate_manifest(self)?;
+        // Typed callers receive the same reconstructive witness binding as the
+        // byte decoder. This function never participates in that validation,
+        // so the check cannot recurse through canonical encoding.
+        validate_decoded_manifest(self)?;
         let body = ManifestBodyWire::from_manifest(self);
         let body_bytes = canonical_json(&body)?;
         validate_canonical_manifest_body_size(body_bytes.len())?;
@@ -1371,6 +1480,124 @@ struct WorkPartition {
 struct PartitionBuild {
     partial: PartialIndexes,
     report: PrimeRouteWorkerReport,
+}
+
+fn build_rebuild_witnesses(
+    sentences: &[RouteSentence],
+    addresses: &[GeometricAddress],
+) -> Result<Vec<SentenceRouteWitness>, PrimeRouteError> {
+    let mut witnesses = Vec::with_capacity(sentences.len());
+    for sentence in sentences {
+        let address_indices = sentence
+            .routes
+            .iter()
+            .map(|address| {
+                let index = addresses.binary_search(address).map_err(|_| {
+                    PrimeRouteError::Invalid(
+                        "sentence route is absent from the sorted address registry".to_owned(),
+                    )
+                })?;
+                u16::try_from(index).map_err(|_| PrimeRouteError::ArithmeticOverflow)
+            })
+            .collect::<Result<Vec<_>, PrimeRouteError>>()?;
+        witnesses.push(SentenceRouteWitness {
+            sentence_id: sentence.sentence_id.clone(),
+            address_indices,
+        });
+    }
+    Ok(witnesses)
+}
+
+fn sentences_from_rebuild_witnesses(
+    addresses: &[GeometricAddress],
+    witnesses: &[SentenceRouteWitness],
+) -> Result<Vec<RouteSentence>, PrimeRouteError> {
+    witnesses
+        .iter()
+        .map(|witness| {
+            let routes = witness
+                .address_indices
+                .iter()
+                .map(|index| {
+                    addresses.get(usize::from(*index)).cloned().ok_or_else(|| {
+                        PrimeRouteError::Invalid(
+                            "rebuild witness address index is out of range".to_owned(),
+                        )
+                    })
+                })
+                .collect::<Result<Vec<_>, PrimeRouteError>>()?;
+            Ok(RouteSentence {
+                sentence_id: witness.sentence_id.clone(),
+                routes,
+            })
+        })
+        .collect()
+}
+
+fn records_from_rebuild_witnesses(
+    addresses: &[GeometricAddress],
+    witnesses: &[SentenceRouteWitness],
+) -> Result<(Vec<SemiprimeExpertRecord>, Vec<OrderedNletRecord>), PrimeRouteError> {
+    let sentences = sentences_from_rebuild_witnesses(addresses, witnesses)?;
+    records_from_sentences(&sentences)
+}
+
+fn records_from_sentences(
+    sentences: &[RouteSentence],
+) -> Result<(Vec<SemiprimeExpertRecord>, Vec<OrderedNletRecord>), PrimeRouteError> {
+    let mut expert_counts = BTreeMap::<SemiprimeExpert, u32>::new();
+    let mut nlets = Vec::with_capacity(sentences.len());
+    for sentence in sentences {
+        let ordered_primes = sentence
+            .routes
+            .iter()
+            .map(|address| address.atom)
+            .collect::<Vec<_>>();
+        for pair in ordered_primes.windows(2) {
+            let expert = SemiprimeExpert::new(pair[0], pair[1])?;
+            let count = expert_counts.entry(expert).or_default();
+            *count = count
+                .checked_add(1)
+                .ok_or(PrimeRouteError::ArithmeticOverflow)?;
+        }
+        let route = OrderedPrimeRoute::new(ordered_primes.clone())?;
+        nlets.push(OrderedNletRecord {
+            sentence_id: sentence.sentence_id.clone(),
+            ordered_primes,
+            factor_multiset: route.factors().to_vec(),
+            ordered_kappa: route.ordered_kappa()?,
+        });
+    }
+    let experts = expert_counts
+        .into_iter()
+        .map(|(expert, occurrence_count)| SemiprimeExpertRecord {
+            factors: expert.factors(),
+            product: expert.product(),
+            occurrence_count,
+        })
+        .collect();
+    Ok((experts, nlets))
+}
+
+fn indexes_from_rebuild_witnesses(
+    addresses: &[GeometricAddress],
+    witnesses: &[SentenceRouteWitness],
+    maximum_candidates: NonZeroU16,
+) -> Result<RouteIndexes, PrimeRouteError> {
+    let sentences = sentences_from_rebuild_witnesses(addresses, witnesses)?;
+    let sentence_indices = (0..sentences.len()).collect::<Vec<_>>();
+    let (partial, completed_transitions) = build_partial(&sentences, &sentence_indices)?;
+    let expected_transitions = sentences.iter().try_fold(0usize, |total, sentence| {
+        total
+            .checked_add(sentence.routes.len().saturating_sub(1))
+            .ok_or(PrimeRouteError::ArithmeticOverflow)
+    })?;
+    if completed_transitions != expected_transitions {
+        return Err(PrimeRouteError::Invalid(
+            "rebuild witness transition accounting is inconsistent".to_owned(),
+        ));
+    }
+    Ok(finalize_indexes(partial, maximum_candidates))
 }
 
 pub fn compile_spin_manifest(
@@ -1498,6 +1725,9 @@ pub fn compile_spin_manifest(
     }
     let mut sorted = sentences.to_vec();
     sorted.sort_by(|left, right| left.sentence_id.cmp(&right.sentence_id));
+    let addresses = address_set.into_iter().collect::<Vec<_>>();
+    let rebuild_witnesses = build_rebuild_witnesses(&sorted, &addresses)?;
+    let (experts, nlets) = records_from_sentences(&sorted)?;
 
     #[cfg(target_arch = "wasm32")]
     let used_workers = 1usize;
@@ -1565,15 +1795,19 @@ pub fn compile_spin_manifest(
     let merged = merge_partials(partials)?;
     let indexes = finalize_indexes(merged, maximum_candidates);
     let zeta_grid = ZetaGridBinding::fixed()?;
-    let addresses = address_set.into_iter().collect::<Vec<_>>();
+    let quantization_chart = QuantizationChartProfile::for_zeta_grid(&zeta_grid);
     let mut manifest = CompiledSpinManifest {
         schema: PRIME_ROUTE_MANIFEST_SCHEMA,
         manifest_kappa: String::new(),
         zeta_grid,
+        quantization_chart,
         bridge,
         maximum_candidates,
         prime_registry,
         addresses,
+        experts,
+        nlets,
+        rebuild_witnesses,
         indexes,
         provenance,
     };
@@ -2057,11 +2291,15 @@ struct ManifestBodyWire {
     schema: u32,
     domain: String,
     zeta_grid: ZetaGridBindingWire,
+    quantization_chart: QuantizationChartWire,
     bridge: u8,
     maximum_candidates: u16,
     prime_registry_kappa: String,
     prime_bindings: Vec<PrimeBindingWire>,
     addresses: Vec<AddressWire>,
+    experts: Vec<SemiprimeExpertRecordWire>,
+    nlets: Vec<OrderedNletRecordWire>,
+    rebuild_witnesses: Vec<SentenceRouteWitnessWire>,
     last_one: Vec<LastOneRowWire>,
     last_two: Vec<LastTwoRowWire>,
     sentence: Vec<SentenceRowWire>,
@@ -2070,6 +2308,12 @@ struct ManifestBodyWire {
 
 impl ManifestBodyWire {
     fn validate_shape(&self) -> Result<(), PrimeRouteError> {
+        if self.schema != PRIME_ROUTE_MANIFEST_SCHEMA || self.domain != PRIME_ROUTE_MANIFEST_DOMAIN
+        {
+            return Err(PrimeRouteError::Invalid(
+                "manifest body schema or domain is unsupported".to_owned(),
+            ));
+        }
         if self.maximum_candidates == 0 || self.maximum_candidates > MANIFEST_MAX_CANDIDATES_PER_ROW
         {
             return Err(PrimeRouteError::Invalid(format!(
@@ -2092,6 +2336,141 @@ impl ManifestBodyWire {
                 &binding.semantic_atom_id,
                 "stored prime-binding semantic atom ID",
             )?;
+        }
+        if self.experts.is_empty() || self.experts.len() > MANIFEST_MAX_EXPERTS {
+            return Err(PrimeRouteError::Invalid(
+                "manifest semiprime-expert population is empty or exceeds its ceiling".to_owned(),
+            ));
+        }
+        if self.nlets.is_empty()
+            || self.nlets.len() > MANIFEST_MAX_NLETS
+            || self.rebuild_witnesses.is_empty()
+            || self.rebuild_witnesses.len() > MANIFEST_MAX_REBUILD_WITNESSES
+            || self.nlets.len() != self.rebuild_witnesses.len()
+        {
+            return Err(PrimeRouteError::Invalid(
+                "manifest n-let/rebuild-witness population is empty, inconsistent, or exceeds its ceiling"
+                    .to_owned(),
+            ));
+        }
+
+        let mut previous_sentence_id: Option<&str> = None;
+        let mut witness_route_steps = 0usize;
+        let mut witness_transitions = 0usize;
+        let mut witness_occurrences = 0usize;
+        for witness in &self.rebuild_witnesses {
+            identifier_bytes = accumulate_identifier_bytes(
+                identifier_bytes,
+                &witness.sentence_id,
+                "stored rebuild-witness sentence ID",
+            )?;
+            if previous_sentence_id.is_some_and(|previous| previous >= witness.sentence_id.as_str())
+            {
+                return Err(PrimeRouteError::Invalid(
+                    "manifest rebuild witnesses are not in strict sentence-ID order".to_owned(),
+                ));
+            }
+            if witness.address_indices.is_empty()
+                || witness.address_indices.len() > TINY_CANARY_MAX_ROUTES_PER_SENTENCE
+            {
+                return Err(PrimeRouteError::Invalid(
+                    "manifest rebuild witness route population is empty or exceeds its ceiling"
+                        .to_owned(),
+                ));
+            }
+            if witness
+                .address_indices
+                .iter()
+                .any(|index| usize::from(*index) >= self.addresses.len())
+            {
+                return Err(PrimeRouteError::Invalid(
+                    "rebuild witness address index is out of range".to_owned(),
+                ));
+            }
+            witness_route_steps = witness_route_steps
+                .checked_add(witness.address_indices.len())
+                .ok_or(PrimeRouteError::ArithmeticOverflow)?;
+            let transitions = witness.address_indices.len() - 1;
+            witness_transitions = witness_transitions
+                .checked_add(transitions)
+                .ok_or(PrimeRouteError::ArithmeticOverflow)?;
+            let occurrences = transitions
+                .checked_mul(2)
+                .and_then(|base| base.checked_add(witness.address_indices.len().saturating_sub(2)))
+                .ok_or(PrimeRouteError::ArithmeticOverflow)?;
+            witness_occurrences = witness_occurrences
+                .checked_add(occurrences)
+                .ok_or(PrimeRouteError::ArithmeticOverflow)?;
+            previous_sentence_id = Some(&witness.sentence_id);
+        }
+        enforce_tiny_canary_limit(
+            TinyCanaryDimension::TotalRoutes,
+            witness_route_steps,
+            TINY_CANARY_MAX_TOTAL_ROUTES,
+        )?;
+        enforce_tiny_canary_limit(
+            TinyCanaryDimension::Transitions,
+            witness_transitions,
+            TINY_CANARY_MAX_TRANSITIONS,
+        )?;
+        enforce_tiny_canary_limit(
+            TinyCanaryDimension::Occurrences,
+            witness_occurrences,
+            TINY_CANARY_MAX_OCCURRENCES,
+        )?;
+        if witness_transitions == 0 {
+            return Err(PrimeRouteError::Invalid(
+                "manifest rebuild witnesses require at least one causal transition".to_owned(),
+            ));
+        }
+
+        let mut nlet_route_steps = 0usize;
+        for (nlet, witness) in self.nlets.iter().zip(&self.rebuild_witnesses) {
+            accumulate_identifier_bytes(0, &nlet.sentence_id, "stored n-let sentence ID")?;
+            if nlet.sentence_id != witness.sentence_id
+                || nlet.ordered_primes.is_empty()
+                || nlet.ordered_primes.len() > TINY_CANARY_MAX_ROUTES_PER_SENTENCE
+                || nlet.ordered_primes.len() != nlet.factor_multiset.len()
+                || nlet.ordered_primes.len() != witness.address_indices.len()
+            {
+                return Err(PrimeRouteError::Invalid(
+                    "manifest ordered n-let shape does not match its rebuild witness".to_owned(),
+                ));
+            }
+            nlet_route_steps = nlet_route_steps
+                .checked_add(nlet.ordered_primes.len())
+                .ok_or(PrimeRouteError::ArithmeticOverflow)?;
+            validate_blake3_label(&nlet.ordered_kappa, "stored ordered n-let kappa")?;
+        }
+        enforce_tiny_canary_limit(
+            TinyCanaryDimension::TotalRoutes,
+            nlet_route_steps,
+            TINY_CANARY_MAX_TOTAL_ROUTES,
+        )?;
+
+        let expert_occurrences = self.experts.iter().try_fold(0usize, |total, expert| {
+            if expert.occurrence_count == 0 {
+                return Err(PrimeRouteError::Invalid(
+                    "manifest semiprime experts require positive occurrence counts".to_owned(),
+                ));
+            }
+            total
+                .checked_add(
+                    usize::try_from(expert.occurrence_count)
+                        .map_err(|_| PrimeRouteError::ArithmeticOverflow)?,
+                )
+                .ok_or(PrimeRouteError::ArithmeticOverflow)
+        })?;
+        enforce_tiny_canary_limit(
+            TinyCanaryDimension::Transitions,
+            expert_occurrences,
+            TINY_CANARY_MAX_TRANSITIONS,
+        )?;
+        if expert_occurrences != witness_transitions {
+            return Err(PrimeRouteError::Invalid(
+                "manifest semiprime-expert occurrences do not cover every witnessed transition"
+                    .to_owned(),
+            ));
         }
         if self.last_one.is_empty()
             || self.last_one.len() > MANIFEST_MAX_I1_ROWS
@@ -2164,6 +2543,10 @@ impl ManifestBodyWire {
         }
 
         validate_blake3_label(&self.zeta_grid.grid_kappa, "stored zeta-grid kappa")?;
+        validate_blake3_label(
+            &self.quantization_chart.zeta_grid_kappa,
+            "stored quantization-chart zeta-grid kappa",
+        )?;
         validate_blake3_label(&self.prime_registry_kappa, "stored prime-registry kappa")?;
         for binding in &self.prime_bindings {
             validate_blake3_label(&binding.payload_cid, "stored prime-binding payload CID")?;
@@ -2207,6 +2590,7 @@ impl ManifestBodyWire {
                 channels: manifest.zeta_grid.channels,
                 grid_kappa: manifest.zeta_grid.grid_kappa.clone(),
             },
+            quantization_chart: QuantizationChartWire::from(&manifest.quantization_chart),
             bridge: manifest.bridge as u8,
             maximum_candidates: manifest.maximum_candidates.get(),
             prime_registry_kappa: manifest.prime_registry.registry_kappa.clone(),
@@ -2217,6 +2601,21 @@ impl ManifestBodyWire {
                 .map(PrimeBindingWire::from)
                 .collect(),
             addresses: manifest.addresses.iter().map(AddressWire::from).collect(),
+            experts: manifest
+                .experts
+                .iter()
+                .map(SemiprimeExpertRecordWire::from)
+                .collect(),
+            nlets: manifest
+                .nlets
+                .iter()
+                .map(OrderedNletRecordWire::from)
+                .collect(),
+            rebuild_witnesses: manifest
+                .rebuild_witnesses
+                .iter()
+                .map(SentenceRouteWitnessWire::from)
+                .collect(),
             last_one: manifest
                 .indexes
                 .last_one
@@ -2270,6 +2669,7 @@ impl ManifestBodyWire {
             channels: self.zeta_grid.channels,
             grid_kappa: self.zeta_grid.grid_kappa,
         };
+        let quantization_chart = self.quantization_chart.into_profile();
         let bridge = ZeroPowerBridge::from_tag(self.bridge)?;
         let maximum_candidates = NonZeroU16::new(self.maximum_candidates).ok_or_else(|| {
             PrimeRouteError::Invalid("manifest candidate bound is zero".to_owned())
@@ -2295,6 +2695,53 @@ impl ManifestBodyWire {
             .into_iter()
             .map(AddressWire::into_address)
             .collect::<Result<Vec<_>, PrimeRouteError>>()?;
+        let experts = self
+            .experts
+            .into_iter()
+            .map(|record| {
+                let low = PrimeAtom::new(record.low_prime)?;
+                let high = PrimeAtom::new(record.high_prime)?;
+                let expert = SemiprimeExpert::new(low, high)?;
+                if expert.factors() != [low, high] {
+                    return Err(PrimeRouteError::Invalid(
+                        "semiprime expert factors are not in strict canonical order".to_owned(),
+                    ));
+                }
+                Ok(SemiprimeExpertRecord {
+                    factors: [low, high],
+                    product: record.product,
+                    occurrence_count: record.occurrence_count,
+                })
+            })
+            .collect::<Result<Vec<_>, PrimeRouteError>>()?;
+        let nlets = self
+            .nlets
+            .into_iter()
+            .map(|record| {
+                Ok(OrderedNletRecord {
+                    sentence_id: record.sentence_id,
+                    ordered_primes: record
+                        .ordered_primes
+                        .into_iter()
+                        .map(PrimeAtom::new)
+                        .collect::<Result<Vec<_>, PrimeRouteError>>()?,
+                    factor_multiset: record
+                        .factor_multiset
+                        .into_iter()
+                        .map(PrimeAtom::new)
+                        .collect::<Result<Vec<_>, PrimeRouteError>>()?,
+                    ordered_kappa: record.ordered_kappa,
+                })
+            })
+            .collect::<Result<Vec<_>, PrimeRouteError>>()?;
+        let rebuild_witnesses = self
+            .rebuild_witnesses
+            .into_iter()
+            .map(|witness| SentenceRouteWitness {
+                sentence_id: witness.sentence_id,
+                address_indices: witness.address_indices,
+            })
+            .collect();
 
         let mut last_one = BTreeMap::new();
         for row in self.last_one {
@@ -2332,10 +2779,14 @@ impl ManifestBodyWire {
             schema: self.schema,
             manifest_kappa,
             zeta_grid,
+            quantization_chart,
             bridge,
             maximum_candidates,
             prime_registry,
             addresses,
+            experts,
+            nlets,
+            rebuild_witnesses,
             indexes: RouteIndexes {
                 last_one,
                 last_two,
@@ -2348,7 +2799,7 @@ impl ManifestBodyWire {
                 cost_profile_cid: self.provenance.cost_profile_cid,
             },
         };
-        validate_manifest(&manifest)?;
+        validate_decoded_manifest(&manifest)?;
         Ok(manifest)
     }
 }
@@ -2358,6 +2809,110 @@ struct ZetaGridBindingWire {
     revision: String,
     channels: u16,
     grid_kappa: String,
+}
+
+#[derive(Serialize, Deserialize)]
+struct QuantizationChartWire {
+    schema: u32,
+    domain: String,
+    phase_fraction_bits: u8,
+    phase_interval: String,
+    s3_fraction_bits: u8,
+    s2_fraction_bits: u8,
+    spin_chart: String,
+    radial_ring: String,
+    zeta_grid_revision: String,
+    zeta_channels: u16,
+    zeta_grid_kappa: String,
+}
+
+impl From<&QuantizationChartProfile> for QuantizationChartWire {
+    fn from(profile: &QuantizationChartProfile) -> Self {
+        Self {
+            schema: profile.schema,
+            domain: profile.domain.clone(),
+            phase_fraction_bits: profile.phase_fraction_bits,
+            phase_interval: profile.phase_interval.clone(),
+            s3_fraction_bits: profile.s3_fraction_bits,
+            s2_fraction_bits: profile.s2_fraction_bits,
+            spin_chart: profile.spin_chart.clone(),
+            radial_ring: profile.radial_ring.clone(),
+            zeta_grid_revision: profile.zeta_grid_revision.clone(),
+            zeta_channels: profile.zeta_channels,
+            zeta_grid_kappa: profile.zeta_grid_kappa.clone(),
+        }
+    }
+}
+
+impl QuantizationChartWire {
+    fn into_profile(self) -> QuantizationChartProfile {
+        QuantizationChartProfile {
+            schema: self.schema,
+            domain: self.domain,
+            phase_fraction_bits: self.phase_fraction_bits,
+            phase_interval: self.phase_interval,
+            s3_fraction_bits: self.s3_fraction_bits,
+            s2_fraction_bits: self.s2_fraction_bits,
+            spin_chart: self.spin_chart,
+            radial_ring: self.radial_ring,
+            zeta_grid_revision: self.zeta_grid_revision,
+            zeta_channels: self.zeta_channels,
+            zeta_grid_kappa: self.zeta_grid_kappa,
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+struct SemiprimeExpertRecordWire {
+    low_prime: u32,
+    high_prime: u32,
+    product: u64,
+    occurrence_count: u32,
+}
+
+impl From<&SemiprimeExpertRecord> for SemiprimeExpertRecordWire {
+    fn from(record: &SemiprimeExpertRecord) -> Self {
+        Self {
+            low_prime: record.factors[0].0,
+            high_prime: record.factors[1].0,
+            product: record.product,
+            occurrence_count: record.occurrence_count,
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+struct OrderedNletRecordWire {
+    sentence_id: String,
+    ordered_primes: Vec<u32>,
+    factor_multiset: Vec<u32>,
+    ordered_kappa: String,
+}
+
+impl From<&OrderedNletRecord> for OrderedNletRecordWire {
+    fn from(record: &OrderedNletRecord) -> Self {
+        Self {
+            sentence_id: record.sentence_id.clone(),
+            ordered_primes: record.ordered_primes.iter().map(|prime| prime.0).collect(),
+            factor_multiset: record.factor_multiset.iter().map(|prime| prime.0).collect(),
+            ordered_kappa: record.ordered_kappa.clone(),
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+struct SentenceRouteWitnessWire {
+    sentence_id: String,
+    address_indices: Vec<u16>,
+}
+
+impl From<&SentenceRouteWitness> for SentenceRouteWitnessWire {
+    fn from(witness: &SentenceRouteWitness) -> Self {
+        Self {
+            sentence_id: witness.sentence_id.clone(),
+            address_indices: witness.address_indices.clone(),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -2522,6 +3077,173 @@ fn validate_candidate_row(row: &CandidateRow) -> Result<(), PrimeRouteError> {
     Ok(())
 }
 
+fn validate_manifest_record_shapes(manifest: &CompiledSpinManifest) -> Result<(), PrimeRouteError> {
+    if manifest.experts.is_empty() || manifest.experts.len() > MANIFEST_MAX_EXPERTS {
+        return Err(PrimeRouteError::Invalid(
+            "manifest semiprime-expert population is empty or exceeds its ceiling".to_owned(),
+        ));
+    }
+    if manifest.nlets.is_empty()
+        || manifest.nlets.len() > MANIFEST_MAX_NLETS
+        || manifest.rebuild_witnesses.is_empty()
+        || manifest.rebuild_witnesses.len() > MANIFEST_MAX_REBUILD_WITNESSES
+        || manifest.nlets.len() != manifest.rebuild_witnesses.len()
+    {
+        return Err(PrimeRouteError::Invalid(
+            "manifest n-let/rebuild-witness population is empty, inconsistent, or exceeds its ceiling"
+                .to_owned(),
+        ));
+    }
+
+    let mut identifier_bytes =
+        manifest
+            .prime_registry
+            .bindings
+            .iter()
+            .try_fold(0usize, |total, binding| {
+                accumulate_identifier_bytes(
+                    total,
+                    &binding.semantic_atom_id,
+                    "prime binding semantic atom ID",
+                )
+            })?;
+    let mut previous_sentence_id: Option<&str> = None;
+    let mut route_steps = 0usize;
+    let mut transitions = 0usize;
+    let mut occurrences = 0usize;
+    let mut used_addresses = BTreeSet::new();
+    for witness in &manifest.rebuild_witnesses {
+        identifier_bytes = accumulate_identifier_bytes(
+            identifier_bytes,
+            &witness.sentence_id,
+            "rebuild-witness sentence ID",
+        )?;
+        if previous_sentence_id.is_some_and(|previous| previous >= witness.sentence_id.as_str()) {
+            return Err(PrimeRouteError::Invalid(
+                "manifest rebuild witnesses are not in strict sentence-ID order".to_owned(),
+            ));
+        }
+        if witness.address_indices.is_empty()
+            || witness.address_indices.len() > TINY_CANARY_MAX_ROUTES_PER_SENTENCE
+        {
+            return Err(PrimeRouteError::Invalid(
+                "manifest rebuild witness route population is empty or exceeds its ceiling"
+                    .to_owned(),
+            ));
+        }
+        for index in &witness.address_indices {
+            if usize::from(*index) >= manifest.addresses.len() {
+                return Err(PrimeRouteError::Invalid(
+                    "rebuild witness address index is out of range".to_owned(),
+                ));
+            }
+            used_addresses.insert(*index);
+        }
+        route_steps = route_steps
+            .checked_add(witness.address_indices.len())
+            .ok_or(PrimeRouteError::ArithmeticOverflow)?;
+        let sentence_transitions = witness.address_indices.len() - 1;
+        transitions = transitions
+            .checked_add(sentence_transitions)
+            .ok_or(PrimeRouteError::ArithmeticOverflow)?;
+        occurrences = occurrences
+            .checked_add(
+                sentence_transitions
+                    .checked_mul(2)
+                    .and_then(|base| {
+                        base.checked_add(witness.address_indices.len().saturating_sub(2))
+                    })
+                    .ok_or(PrimeRouteError::ArithmeticOverflow)?,
+            )
+            .ok_or(PrimeRouteError::ArithmeticOverflow)?;
+        previous_sentence_id = Some(&witness.sentence_id);
+    }
+    enforce_tiny_canary_limit(
+        TinyCanaryDimension::TotalRoutes,
+        route_steps,
+        TINY_CANARY_MAX_TOTAL_ROUTES,
+    )?;
+    enforce_tiny_canary_limit(
+        TinyCanaryDimension::Transitions,
+        transitions,
+        TINY_CANARY_MAX_TRANSITIONS,
+    )?;
+    enforce_tiny_canary_limit(
+        TinyCanaryDimension::Occurrences,
+        occurrences,
+        TINY_CANARY_MAX_OCCURRENCES,
+    )?;
+    if transitions == 0 {
+        return Err(PrimeRouteError::Invalid(
+            "manifest rebuild witnesses require at least one causal transition".to_owned(),
+        ));
+    }
+    if used_addresses.len() != manifest.addresses.len() {
+        return Err(PrimeRouteError::Invalid(
+            "manifest address registry contains an address absent from the rebuild witness"
+                .to_owned(),
+        ));
+    }
+
+    let mut nlet_route_steps = 0usize;
+    for (nlet, witness) in manifest.nlets.iter().zip(&manifest.rebuild_witnesses) {
+        accumulate_identifier_bytes(0, &nlet.sentence_id, "ordered n-let sentence ID")?;
+        validate_blake3_label(&nlet.ordered_kappa, "ordered n-let kappa")?;
+        if nlet.sentence_id != witness.sentence_id
+            || nlet.ordered_primes.is_empty()
+            || nlet.ordered_primes.len() > TINY_CANARY_MAX_ROUTES_PER_SENTENCE
+            || nlet.ordered_primes.len() != nlet.factor_multiset.len()
+            || nlet.ordered_primes.len() != witness.address_indices.len()
+            || nlet
+                .factor_multiset
+                .windows(2)
+                .any(|pair| pair[0] > pair[1])
+        {
+            return Err(PrimeRouteError::Invalid(
+                "manifest ordered n-let shape is noncanonical or does not match its rebuild witness"
+                    .to_owned(),
+            ));
+        }
+        nlet_route_steps = nlet_route_steps
+            .checked_add(nlet.ordered_primes.len())
+            .ok_or(PrimeRouteError::ArithmeticOverflow)?;
+    }
+    if nlet_route_steps != route_steps {
+        return Err(PrimeRouteError::Invalid(
+            "manifest ordered n-lets do not cover the rebuild-witness route population".to_owned(),
+        ));
+    }
+
+    let mut expert_occurrences = 0usize;
+    let mut previous_factors: Option<[PrimeAtom; 2]> = None;
+    for record in &manifest.experts {
+        let expert = SemiprimeExpert::new(record.factors[0], record.factors[1])?;
+        if expert.factors() != record.factors
+            || expert.product() != record.product
+            || record.occurrence_count == 0
+            || previous_factors.is_some_and(|previous| previous >= record.factors)
+        {
+            return Err(PrimeRouteError::Invalid(
+                "manifest semiprime-expert record is noncanonical".to_owned(),
+            ));
+        }
+        expert_occurrences = expert_occurrences
+            .checked_add(
+                usize::try_from(record.occurrence_count)
+                    .map_err(|_| PrimeRouteError::ArithmeticOverflow)?,
+            )
+            .ok_or(PrimeRouteError::ArithmeticOverflow)?;
+        previous_factors = Some(record.factors);
+    }
+    if expert_occurrences != transitions {
+        return Err(PrimeRouteError::Invalid(
+            "manifest semiprime-expert occurrences do not cover every witnessed transition"
+                .to_owned(),
+        ));
+    }
+    Ok(())
+}
+
 fn validate_manifest_body(manifest: &CompiledSpinManifest) -> Result<(), PrimeRouteError> {
     if manifest.schema != PRIME_ROUTE_MANIFEST_SCHEMA {
         return Err(PrimeRouteError::Invalid(
@@ -2529,8 +3251,10 @@ fn validate_manifest_body(manifest: &CompiledSpinManifest) -> Result<(), PrimeRo
         ));
     }
     manifest.zeta_grid.validate()?;
+    manifest.quantization_chart.validate(&manifest.zeta_grid)?;
     manifest.prime_registry.validate()?;
     manifest.provenance.validate()?;
+    validate_manifest_record_shapes(manifest)?;
     if manifest.maximum_candidates.get() > MANIFEST_MAX_CANDIDATES_PER_ROW {
         return Err(PrimeRouteError::Invalid(format!(
             "manifest candidate bound exceeds the hard cap of {MANIFEST_MAX_CANDIDATES_PER_ROW}"
@@ -2666,6 +3390,33 @@ fn validate_manifest_row(
 fn validate_manifest(manifest: &CompiledSpinManifest) -> Result<(), PrimeRouteError> {
     validate_manifest_body(manifest)?;
     validate_blake3_label(&manifest.manifest_kappa, "manifest kappa")?;
+    Ok(())
+}
+
+fn validate_decoded_manifest(manifest: &CompiledSpinManifest) -> Result<(), PrimeRouteError> {
+    validate_manifest(manifest)?;
+    let (expected_experts, expected_nlets) =
+        records_from_rebuild_witnesses(&manifest.addresses, &manifest.rebuild_witnesses)?;
+    if manifest.experts != expected_experts {
+        return Err(PrimeRouteError::Invalid(
+            "manifest semiprime experts do not reproduce from the rebuild witness".to_owned(),
+        ));
+    }
+    if manifest.nlets != expected_nlets {
+        return Err(PrimeRouteError::Invalid(
+            "manifest ordered n-lets do not reproduce from the rebuild witness".to_owned(),
+        ));
+    }
+    let expected_indexes = indexes_from_rebuild_witnesses(
+        &manifest.addresses,
+        &manifest.rebuild_witnesses,
+        manifest.maximum_candidates,
+    )?;
+    if manifest.indexes != expected_indexes {
+        return Err(PrimeRouteError::Invalid(
+            "manifest I1/I2/IS indexes do not reproduce from the rebuild witness".to_owned(),
+        ));
+    }
     Ok(())
 }
 
