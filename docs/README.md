@@ -1,136 +1,112 @@
-# UOR-R4 documentation map
+# R⁴ documentation
 
-This page is the entrypoint for documentation under `docs/`. The current
-project is the **route-native geometric-intelligence programme**: canonical
-lexical data receives factorable geometric addresses, spherical-harmonic spin
-state carries causal context, and a bounded recursive route hierarchy is
-intended to replace learned attention, inference, and reasoning machinery.
+This is the map for understanding the repository without having to reconstruct
+its history first.
 
-**Current product truth:** #958 established a source-free storage/recall and
-bounded-query foundation. It did **not** establish geometric attention, a
-source-free decoder, or working source-free chat. The dependency order is
-`#961 -> #952 -> #953 -> #954 -> #955`, followed by bounded product/release work
-in `#962-#965`. Do not use an older TLA/R4G1, graph-compiler, or hybrid
-source-model document to infer a later capability.
+R⁴ is currently pursuing one programme: a local, source-free language agent
+whose attention, inference, and reasoning are performed by geometric routing
+and lookup rather than a transformer, MoE, sparse learned router, or dense
+learned matrix engine in the serving path.
+
+The goal is real. Its success remains unproven. The current implementation is a
+storage/recall and route-query foundation, not a working geometric language
+model.
 
 ## Start here
 
+Choose the shortest path that matches what you need:
+
+- **Understand the project:** read the
+  [Geometric Intelligence Programme](geometric_intelligence_programme.md).
+- **Understand the current geometric mechanism:** read
+  [ADR-0004](adr/0004-geometric-intelligence-route-hierarchy.md), then use the
+  [glossary](transformerless/GLOSSARY.md) for unfamiliar terms.
+- **Contribute to the active build:** start from live issue
+  [#820](https://github.com/UOR-Foundation/uor-r4/issues/820) and take only the
+  first unblocked stage.
+- **Audit a result or claim:** use the [research ledger](RESEARCH.md), then open
+  the exact issue-numbered evidence record it names.
+- **Run the existing interface:** return to the root
+  [README](../README.md#try-the-project).
+
+If an older roadmap disagrees with the current programme or live GitHub
+dependency graph, the current programme and live dependency graph win.
+
+## Current authority
+
+These are the small set of living documents that define the present work:
+
 1. [Geometric Intelligence Programme](geometric_intelligence_programme.md) —
-   current purpose, complete mechanism set, sequencing, and claim boundaries.
-2. [ADR-0004: route hierarchy](adr/0004-geometric-intelligence-route-hierarchy.md)
-   — local, sentence, paragraph, conversation, and global causal state.
-3. [Geometric Intelligence Evaluation Policy](geometric_intelligence_evaluation.md)
-   — decision-bearing probes, matched controls, anti-recall evaluation, and
-   long-run limits.
-4. [Glossary](transformerless/GLOSSARY.md) and
-   [Formal Vocabulary](formal_vocabulary.md) — canonical terms, notation, and
-   permitted claim language.
-5. [Research ledger](RESEARCH.md) — measured outcomes and their exact scope.
+   goal, architecture, claim boundaries, and work order.
+2. [ADR-0003: fixed-zeta prime routes](adr/0003-fixed-zeta-prime-route-attention.md)
+   — the retained storage/recall substrate.
+3. [ADR-0004: recursive route hierarchy](adr/0004-geometric-intelligence-route-hierarchy.md)
+   — attention scopes, geometric transport, and reconstruction requirements.
+4. [Geometric Intelligence Evaluation](geometric_intelligence_evaluation.md) —
+   the minimal decision-bearing evidence policy.
+5. [Glossary](transformerless/GLOSSARY.md) and
+   [formal vocabulary](formal_vocabulary.md) — shared language and disciplined
+   claim types.
 
-## Status classes
+Living implementation documentation may explain a current component, but it
+does not independently promote a capability. Storage is not attention;
+attention is not inference; readable text is not correctness; correctness is
+not reasoning.
 
-Every living entrypoint should fit one of these classes. A document's own
-status banner wins when it is more specific.
-
-### Current authority
-
-These documents define what the project is building now.
-
-| Document | Authority |
-|---|---|
-| [Geometric Intelligence Programme](geometric_intelligence_programme.md) | Post-#958 architecture, work order, mechanisms, and product boundary. |
-| [ADR-0003](adr/0003-fixed-zeta-prime-route-attention.md) | Fixed-zeta prime-route foundation retained by #958. |
-| [ADR-0004](adr/0004-geometric-intelligence-route-hierarchy.md) | Recursive causal route scopes and the load-bearing paired-H4/E8 bridge. |
-| [Geometric Intelligence Evaluation Policy](geometric_intelligence_evaluation.md) | What may be evaluated, in what order, and at what cost. |
-| [Formal Vocabulary](formal_vocabulary.md) | Normative claim classes and notation. |
-| [Glossary](transformerless/GLOSSARY.md) | Structural terminology across current and preserved lanes. |
-
-If these disagree with an older plan, use the current programme and ADRs. Live
-GitHub dependencies still govern implementation eligibility.
-
-### Active implementation documentation
-
-These describe current code surfaces or the immediate route-native build, but
-do not independently authorize capability claims.
-
-| Document | Scope |
-|---|---|
-| [Model lifecycle](MODEL_LIFECYCLE.md) | Current target lifecycle first; preserved teacher/TLA/R4G1 commands afterward. |
-| [Configuration](CONFIGURATION.md) | Workspace option inventory spanning current foundation and preserved runtimes. |
-| [Compiler stage DAG](compiler_stage_dag.md) | Existing deterministic compiler scheduling reference. |
-| [Compiler concurrency](compiler_concurrency_config.md) | Existing worker/configuration reference; not proof that route-native product work is parallel. |
-| [Compiler memory budget](compiler_memory_budget.md) | Existing resource-control reference. |
-| [Prime-route #958 qualification](prime_route_attention_qualification_958.md) | Foundation implementation and terminal `RETAIN_STORAGE_RECALL_ONLY` boundary. |
-
-The current capability sequence is:
+## Programme at a glance
 
 ```text
-#961 lexical geometry/state plumbing
-    -> #952 complete recursive geometric attention
-    -> #953 source-free grammatical inference and generation
-    -> #954 correctness and typed abstention
-    -> #955 bounded reasoning
-    -> #962-#965 product integration, serving purity, cost, and release
+reversible lexical geometry
+  → recursive geometric attention
+  → coherent source-free generation
+  → correctness and abstention
+  → multi-step reasoning
+  → chat / CLI / WASM product integration
+  → measured optimization
+  → release QA
 ```
 
-Lexical serialization is prerequisite plumbing, not attention. Attention is
-not inference. Readable output is not correctness, and correctness is not
-reasoning.
+Only the first unblocked stage is active. Formalization, optimization, and
+large test programmes are supporting tools, not substitutes for reaching the
+next observable behavior.
 
-### Historical research and measurement records
+## Research record and archive
 
-These records are preserved evidence. Their positive and negative results
-remain valid only for their declared artifact, population, selector, and
-execution path; they do not define current sequencing.
+The repository contains years of useful positive, negative, and incomplete
+work. It is preserved because rigor and failed hypotheses matter, but it is
+not required reading for a newcomer.
 
-- [Geometric Causal Decoder Roadmap](geometric_causal_decoder_plan.md) —
-  historical #948-#958 sequence, superseded by the current programme.
-- [R4 Intelligence Completion Plan](r4_intelligence_completion_plan.md) —
-  historical S0-S7 programme.
-- [R4-native architecture](r4_native_architecture.md) — historical 2026-08
-  research/design record.
-- [Graph compiler implementation plan](r4_graph_compiler_implementation_plan.md)
-  — preserved historical engineering plan.
-- [Research ledger](RESEARCH.md) and issue-numbered Markdown/JSON records —
-  append-only measurement evidence.
-- [Prime-router geometric-context evidence](prime_router_geometric_context_evidence.md)
-  — ancestor trajectory evidence; it used Ollama for language and is not
-  source-free generation evidence.
+Use [RESEARCH.md](RESEARCH.md) as the archive index. It leads to:
 
-An issue-numbered result file is not a living roadmap unless a current
-authority document explicitly adopts it.
+- issue-numbered measurement records;
+- the earlier TLA and R4G1 table/graph compiler and integer runtime;
+- proof, conformance, certification, and performance work;
+- the original prime-router and geometric-context evidence;
+- superseded decoder and intelligence roadmaps; and
+- teacher-derived comparison and reproduction procedures.
 
-### Preserved runtime references
+Those documents report what a particular artifact established at a particular
+time. They do not silently become evidence for the current route-native engine.
+Historical commands may still run, but they are research reproductions unless
+the current programme explicitly adopts them.
 
-These documents still describe retained, testable components. They are not the
-route-native intelligence architecture and do not show that source-free chat
-works.
+## How to read claims
 
-| Document | Preserved scope |
-|---|---|
-| [Transformerless cross-compiler](transformerless/TRANSFORMERLESS.md) | TLA table compiler and historical multiplication-free runtime. |
-| [R4G1 wire format](transformerless/R4G1.md) | Packed graph container and parser/runtime contract. |
-| [Inference operation contract](inference_contract.md) | CPU-only integer hot-path rules for the preserved TLA/R4G1 runtime. |
-| [Local-only contract](transformerless/LOCAL_ONLY.md) | Provider boundary for the preserved transformerless serving lane. |
-| [Release pipeline](RELEASE_PIPELINE.md) | Existing R4G1/TLA bundle packaging and distribution. |
-| [Serving model discovery](SERVING_MODEL_DISCOVERY.md) | Historical audit of legacy loader/cascade surfaces. |
-| [Minimal client](minimal_client.md) | Existing terminal/API surface; not evidence of route-native answers. |
-| [Proof and certificate](transformerless/PROOF.md) | Scoped historical runtime witnesses and measurements. |
+- **Implemented** means the code or artifact exists.
+- **Observed** means a named bounded run produced the recorded result.
+- **Qualified** means the declared falsifier and threshold were met.
+- **Not run** and **unavailable** are never treated as success.
+- **Goal** or **hypothesis** is not a present capability.
 
-## Read by task
+For exact definitions, use the [formal vocabulary](formal_vocabulary.md).
 
-- **Understand the goal:** programme -> ADR-0004 -> glossary.
-- **Implement #961 or later:** programme stage -> applicable ADR -> evaluation
-  policy -> live GitHub dependency.
-- **Interpret a number:** research ledger -> named measurement record -> exact
-  artifact and denominator.
-- **Operate preserved tooling:** model lifecycle -> configuration -> relevant
-  runtime reference.
-- **Explain the project:** [ELI5](explainers/ELI5.md) or
-  [Undergraduate](explainers/UNDERGRADUATE.md), then the programme.
+## Documentation maintenance
 
-## Documentation rule
+Keep the root README approachable. Put architecture here under the current
+programme, and put exact measurements in the research ledger and their named
+records. Preserve historical evidence; add a clear superseded or historical
+banner when old present-tense language could confuse readers.
 
-New living documents should link to the programme rather than restating its
-mechanisms. Historical records remain intact; add a status/scope banner when
-their original present-tense wording could be mistaken for current authority.
+Prefer linking to one current authority over copying the same mechanism into
+many pages. If a measurement changes a claim, update the living summary and
+append the new evidence to the ledger.

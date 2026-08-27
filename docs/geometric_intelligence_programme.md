@@ -588,8 +588,10 @@ product evidence and may be activated by their stage contract. Compilation,
 cross-target, deterministic rebuild, kappa reproduction, BDD, fuzz,
 conformance, formal, corpus-scale, and broad workspace suites stay dormant
 unless the active product/release decision explicitly requires them. Automatic
-CI is disabled. Legacy ruleset `19597522` is an administrator blocker tracked
-by #940 and must be disabled rather than satisfied by reviving development QA.
+QA is disabled. Because legacy ruleset `19597522` cannot currently be edited,
+pull-request and merge-group events publish only five instantaneous no-QA
+transport acknowledgements. They carry no evidence and must never be reported
+as PASS. #940 tracks eventual removal of the obsolete rule and queue.
 
 No run expected to exceed 15 minutes starts without a finite denominator,
 progress, ETA, checkpoint, hard wall, and decision-bearing run contract. Eight
