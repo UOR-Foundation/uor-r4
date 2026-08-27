@@ -202,3 +202,80 @@ kappa reproduction, Gate C, audit, fuzz, formal proof, conformance, product QA,
 and release qualification were `NOT_RUN`. Protected queue checks are transport
 acknowledgements at this research stage and are not local or release-QA PASS
 evidence.
+
+## Natural agreement revision — pre-selection freeze
+
+This append-only revision freezes one independently motivated
+agreement-attractor contrast before any H4 path cost or selection is opened.
+At this checkpoint the geometry-blind support preflight and all four selector
+arms are `NOT_RUN`; the identities below were produced only by canonical codec,
+artifact, and schema-2 manifest compilation.
+
+One exact `ConversationInput` is shared by codec compilation and artifact
+ingestion. Its identity scope is `issue-953/natural-agreement-v1`, its sole turn
+is `turn-0001`, its global snapshot is the registration-only unit `near`, and
+its ordered construction sentences are:
+
+```text
+athletes generally still run
+one athlete generally still runs
+```
+
+The exact matched prompts, frozen expected continuations, and cap are:
+
+```text
+left:      one athlete near athletes generally
+expected:  still runs
+
+right:     athletes near one athlete generally
+expected:  still run
+
+continuation cap: 2
+controls: full_path | state_disabled
+failure terminal: REVISE_I1_GENERATOR_IN_PLACE
+```
+
+The two prompts contain the same five-unit multiset. Both must first admit and
+emit only `still`; after that append, the decisive query has the identical
+suffix `generally still` and candidate union `{run, runs}`. No lexical surface,
+registration set, observation order, scope ID, global snapshot, prompt,
+expected output, cap, rank, prime, spin sector, H4 coordinate, label, or support
+budget may change after selection is observed.
+
+The exact fixture contains eight distinct registered surfaces: seven
+construction lexemes plus global-only `near`. Each completed arm contains seven
+observed route occurrences: five prompt routes plus two emitted routes. This
+preserves the complete requested construction while making the registry/trace
+count distinction explicit.
+
+| Frozen object | Kappa |
+|---|---|
+| Natural agreement fixture | `blake3:0e018c9bcd43a29ed6f043665b2646c9579dd31d881d331f198fb89543184259` |
+| Canonical lexical codec | `blake3:6db64540ef344562903e01adac102f7bcc96c65908d162b1deca9b83550b35ed` |
+| Canonical vocabulary | `blake3:3b74f7ace425c039b4eab751b400f2603d92baf4ccfc9f4b8ac9409446291b58` |
+| Natural construction artifact | `blake3:b222510ccc01ed3257c8b38b743ca771f5e60c87ebf12c565f92fadbbd00332d` |
+| Embedded/compiled attention manifest | `blake3:1c3baf432b9fdcf2f3d90014797a5cae5850c0acba2fda63e0d6b659d49562de` |
+
+The frozen selection-blind preflight contract is:
+
+| Step | Rows | Entries | Candidate union | Per-candidate source counts `(I1,I2,IS,D,AS)` | Keys/candidate | Declared H4 comparisons |
+|---:|---:|---:|---|---|---:|---:|
+| prompt to `still` | 7 | 3 | `{still}` | `still=(2,1,0,2,0)` | 5 | 5 |
+| after frozen append `still` | 7 | 6 | `{run,runs}` | each `(1,1,0,1,0)` | 6 | 12 |
+
+Both prompts must have the same candidate counts, source counts, and work shape;
+no truncation or adjacent-spin contribution is allowed. The preflight uses a
+support-only API but projects only row source/hit/count/admission data and never
+inspects or logs row keys. The trace carries no measured candidate energy, H4
+state, path cost, or selected candidate. The declared H4 comparisons are count
+arithmetic only (`admitted candidates * observed routes`). Any mismatch
+stops this revision at `REVISE_I1_GENERATOR_IN_PLACE` before path selection.
+
+If and only if that preflight passes unchanged, the generator may run once in
+the four frozen arms, followed only by a complete replay for byte identity. A
+positive terminal requires both full-path expected continuations, prompt-inert
+disabled decisive behavior, matched support/work, exact inversion and append,
+cap termination, no short cycle, source/provider closure, and deterministic
+report bytes. Even a positive result would establish only this bounded
+source-free geometric agreement witness, not broad grammar, coherent language,
+semantics, correctness, attention in general, or reasoning.
