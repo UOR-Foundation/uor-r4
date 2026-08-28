@@ -37,10 +37,14 @@ assumptions, or objectives rather than measured results.
 > real placement selected 0/2 intended candidates while the same-artifact
 > placement-permuted and order-shuffled controls selected 2/2 and 1/2.
 > Generation and replay were `NOT_RUN`. That known population is no longer an
-> independent discovery population. Active A1Q-L2/#983 freezes
+> independent discovery population. A1Q-L2/#983 then froze
 > `ConstructionCausalReturnV1` on a separate three-family, six-decision
-> construction/validation population. #983 blocks parked, unassigned, untouched
-> #953; #953 continues to block #973 and #954; and #973 continues to block #954.
+> construction/validation population. Its usable construction classes were
+> pure but covered 0/6 held-out decisions; the sealed strict ceiling was also
+> 0/6. It stopped `UNAVAILABLE_ZERO_CONSTRUCTION_TRANSFER` before any deployed
+> selector or payload inversion. #983 remains open negative evidence and
+> blocks parked, unassigned, untouched #953; #953 continues to block #973 and
+> #954; and #973 continues to block #954.
 > Legacy
 > tracker #949 is closed as superseded, and #958 is retained directly beneath
 > #820 as GI-0 foundation. Two
@@ -246,11 +250,11 @@ assumptions, or objectives rather than measured results.
 > outcomes above remain unchanged evidence, but their former immediate in-place
 > next action is superseded. Because #953's labels, geometry, and two failed
 > representations are known, another design judged there would risk post-hoc
-> fixture tuning. #953 is now open, parked, unassigned, and untouched. Active
-> #983 is the child of #820 after closed #967/#970/#969 and the native blocker
+> fixture tuning. #953 is open, parked, unassigned, and untouched. #983 is the
+> child of #820 after closed #967/#970/#969 and the native blocker
 > before #953; #969 and #970 are its direct evidence-bearing predecessors.
 >
-> #983 freezes one `ConstructionCausalReturnV1` mechanism over exact observed
+> #983 froze one `ConstructionCausalReturnV1` mechanism over exact observed
 > prefix products and per-candidate hypothetical causal-return commutators. Its
 > fixed `R_min` class uses exact relation equality, shell, past-only lease age,
 > and multiplicity; only impure construction aliases promote to the complete
@@ -259,16 +263,20 @@ assumptions, or objectives rather than measured results.
 > #953 surface/witness, #970 population, candidate injection, or actual future
 > route.
 >
-> The label-free Gate 0 must establish same-frame reproduction, pure usable
+> The label-free Gate 0 required same-frame reproduction, pure usable
 > construction classes, both candidate actions covered on all six decisions, a
 > strict 6/6 real ceiling, operative anti-recall, zero padding aliases, equal
 > support/work, and a real ceiling above every causal derangement before the
-> selector may run once. A positive terminal is only
-> `PROCEED_TO_I1_WITH_CONSTRUCTION_TRANSFERRED_LOCAL_GEOMETRIC_ATTENTION` and
-> still leaves decoded generation `NOT_RUN`. Negative or unavailable evidence
-> stops before selection and does not authorize a second representation. Only a
-> positive protected result permits a later session to apply the algorithm
-> unchanged to #953 after a new label-free preflight. It does not establish
+> selector could run once. The observed construction coverage and sealed
+> strict ceiling were both 0/6, so the terminal is
+> `UNAVAILABLE_ZERO_CONSTRUCTION_TRANSFER`. No deployed selector, payload
+> inversion, or #953 generation ran. The raw census and sealed outcome are
+> recorded in
+> [`construction_causal_return_attention_983.md`](construction_causal_return_attention_983.md).
+> The predeclared positive terminal was
+> `PROCEED_TO_I1_WITH_CONSTRUCTION_TRANSFERRED_LOCAL_GEOMETRIC_ATTENTION`.
+> The negative result stops before selection and does not authorize a second
+> representation under the frozen contract. It does not establish
 > grammar, generation, correctness, knowledge, reasoning, higher-scope
 > attention, performance, product readiness, or release readiness.
 
@@ -514,10 +522,13 @@ decisive candidate for both prompt orders. The first frozen local
 candidate-placement preflight then reproduced its construction classes but
 selected 0/2 intended candidates under real placement while its same-artifact
 cyclic placement control selected 2/2; generator execution and replay were
-`NOT_RUN`. Active #983 now tests one independently frozen
-construction-transferred candidate-conditioned mechanism on a separate natural
-population. #953 is an untouched parked integration regression until that gate
-qualifies; #973 remains blocked. Dependable coherent text remains unestablished.
+`NOT_RUN`. #983 then tested one independently frozen construction-transferred
+candidate-conditioned mechanism on a separate natural population. Its pure
+construction classes transferred to 0/6 held-out decisions and stopped
+`UNAVAILABLE_ZERO_CONSTRUCTION_TRANSFER` before deployed selection or payload
+decode. #953 remains an untouched parked integration regression while #983
+holds the negative evidence and the next representation decision; #973 remains
+blocked. Dependable coherent text remains unestablished.
 The final serving path has no source weights, transformer/self-attention, dense
 matrix intelligence, MoE, or sparse learned router. Compiler-side floating
 point remains allowed for witnessed chart construction; serving arithmetic is
@@ -596,9 +607,9 @@ four-coordinate semantic path. #958 then retained the source-free factorable
 route, canonical manifest, bounded lookup, and worker foundation while honestly
 leaving product attention and generation `NOT_RUN`.
 
-The active candidate is now deliberately narrower than the full stored state.
+The #983 candidate was deliberately narrower than the full stored state.
 Natural schema-2 adjacency admits candidates; observed lexical routes compose
-an ordered unit-quaternion path on S3; and #983 evaluates exact past-only suffix
+an ordered unit-quaternion path on S3; and #983 evaluated exact past-only suffix
 transport independently for each already-admitted candidate through a frozen
 causal-return commutator. One construction-pure minimal relation class is used,
 with promotion only for impure construction aliases to the complete typed
@@ -612,9 +623,11 @@ on 6/6 queries. #970 then found that the paired-H4-derived exact R4-heatmap
 classes alias outcomes and that the construction-derived rule has a 0/6 strict
 transfer ceiling on the separate sealed validation fixture. It stopped without
 scalar search and closed through PR #972. #969 then built and smoke-tested the
-single local path mechanism. #983 now tests construction transfer on its
-independent three-family/six-decision population before the preserved #953
-decode/render/append plumbing may run again. #953's tiered admission is exact on
+single local path mechanism. #983's usable construction classes were pure but
+transferred to 0/6 decisions on its independent three-family/six-decision
+population. It stopped before deployed selection or payload inversion. A
+separately authorized successor representation must qualify before the
+preserved #953 decode/render/append plumbing may run again. #953's tiered admission is exact on
 the frozen agreement witness, while its current identity-derived candidate
 placement still collapses the required order-sensitive choice. Structural
 presence does not qualify the other stored fields for ranking. Product chat and
@@ -1069,12 +1082,13 @@ four-arm selector run chose `still run` for both full-path prompt orders. The
 first frozen `LocalSameObjectContextPlacementV1` preflight then selected 0/2
 intended candidates under real placement, while its same-artifact
 placement-permuted and order-shuffled controls selected 2/2 and 1/2; generator
-execution and replay were `NOT_RUN`. Active #983 freezes
+execution and replay were `NOT_RUN`. #983 then froze
 `ConstructionCausalReturnV1` on an independent three-family/six-decision
-population. Its label-free Gate 0 must reach a strict 6/6 construction-transfer
-ceiling, preserve operative anti-recall and equal support/work, and beat every
-causal derangement before one selector run is permitted. #983 blocks parked,
-unassigned, untouched #953; #953 remains blocked by #983 and continues to block
+population. Its usable construction classes were pure, but structural coverage
+and the sealed strict ceiling were both 0/6. It stopped
+`UNAVAILABLE_ZERO_CONSTRUCTION_TRANSFER` before deployed selection, payload
+inversion, or #953 generation. #983 remains open negative evidence and blocks
+parked, unassigned, untouched #953; #953 continues to block
 #973/#954; #973 continues to block #954. #955 invokes the eventual accepted
 #969/#983/#953/#973/#954 path; #962 integrates that path into product chat with
 persisted identity-scoped hive memory. #963 retains measured cost; #964 binds

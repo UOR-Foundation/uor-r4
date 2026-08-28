@@ -37,10 +37,12 @@ full-path prompt orders; state-disabled selected `still runs` for both. #953
 remains at the historical terminal `REVISE_I1_GENERATOR_IN_PLACE`, but its
 labels, geometry, and failed representations are now known. It is therefore a
 parked, unassigned integration regression, not an independent discovery
-population. Active #983 freezes `ConstructionCausalReturnV1` on a separate
-three-family, six-decision population before #953 may be touched again. #983
-blocks #953; #953 continues to block #973 and #954; and #973 continues to block
-#954.
+population. #983 then tested `ConstructionCausalReturnV1` on a separate
+three-family, six-decision population. Its usable construction classes were
+pure but reached 0/6 held-out decisions; the sealed strict ceiling was also
+0/6. It stopped `UNAVAILABLE_ZERO_CONSTRUCTION_TRANSFER` before a deployed
+selector or payload inversion. #983 remains open negative evidence and blocks
+#953; #953 continues to block #973 and #954; and #973 continues to block #954.
 
 A negative result remains evidence about its declared mechanism and
 distribution. It does not erase a separately established storage, identity,
@@ -55,10 +57,10 @@ The stages are ordered because each later claim depends on the earlier one:
    causal ordered R4/S3 path state, retained prefix memory, and deterministic
    exact path closure change one decoded choice under matched natural support
    and group-comparison budgets.
-2. **Construction-transferred local attention (#983)** — one independently
-   frozen candidate-hypothetical causal-return mechanism transfers pure
+2. **Construction-transfer gate (#983)** — one independently frozen
+   candidate-hypothetical causal-return mechanism had to transfer pure
    construction-derived classes to six held-out natural choices under equal
-   support/work and causal derangements.
+   support/work and causal derangements; the observed result was 0/6.
 3. **Inference/generation (#953)** — the real decoder drives the accepted local
    mechanism through one bounded provider-free autoregressive lexical loop on
    the evaluated library/CLI path.
@@ -413,7 +415,8 @@ evidence for #983; it no longer directly authorizes work on #953.
 
 ### A1Q-L2/#983 construction-transferred candidate-conditioned local attention
 
-#983 freezes exactly one past-only mechanism before implementation:
+The predeclared #983 contract froze exactly one past-only mechanism before
+implementation:
 
 ```text
 P_0        = identity
@@ -476,6 +479,24 @@ It establishes only bounded, source-free, construction-transferred local
 geometric attention on this population. Decoded generation and all #953 work
 are `NOT_RUN`; positive protected delivery authorizes a later session to apply
 the algorithm unchanged to #953 after a new label-free preflight.
+
+**Observed #983 result, 2026-08-28.** The frozen construction artifact formed
+21 `R_min` and 24 `R_full` classes from 24 construction rows. Every usable
+class was pure, but the real arm structurally covered 0/6 held-out decisions.
+After the separately sealed validation-label join was attached, the offline
+no-class-splitting lookup also reached 0/6, with six abstentions; every one of
+the eleven causal controls and the count-only comparator was likewise 0/6.
+The raw census and sealed outcome identities are respectively
+`blake3:5e970efe79c13d38e02eab6ff60642d3d449ce9dc571af6425b16d0d94858017`
+and
+`blake3:58fba09dba1b9245cb62a73bf8e3ac153242dc0730e3df7586446aa2820d4587`.
+The binding terminal is `UNAVAILABLE_ZERO_CONSTRUCTION_TRANSFER`. The hard
+gate stopped before any deployed selector or payload inversion; #953
+generation was `NOT_RUN`. This is a negative for this frozen representation
+and placement, not a general rejection of H4, paired-H4/E8, trigonometric,
+prime/semiprime, or alternative corpus-induced candidate-relative mechanisms.
+See
+[`construction_causal_return_attention_983.md`](construction_causal_return_attention_983.md).
 
 ### I1/#953 bounded decoded generation contract
 
@@ -706,8 +727,10 @@ set is invalid.
 
 For #983, every arm uses the same natural support and performs eight typed
 prefix slots, two candidate evaluations, two prototype/class slots per
-candidate, two payload inversions, and the same table-operation shape per
-decision. Occupancy-false padding is a typed identity no-op and may not alias an
+candidate, and the same table-operation shape per decision. The encoder
+declares two payload-inversion slots per decision, but Gate 0 performs none;
+payload inversion remains selector-only and was `NOT_RUN`. Occupancy-false
+padding is a typed identity no-op and may not alias an
 occupied identity result. Negative controls are state-disabled, last-only,
 order-shuffled history, causal-return/lease-disabled, construction
 content/current-pairing shuffle, candidate/prototype placement permutation,

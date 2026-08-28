@@ -25,10 +25,14 @@ seven construction prototypes in the online frame with zero class collisions,
 but real placement resolved the two decisive candidates as `run/runs` (0/2
 intended) while the placement-permuted control resolved `runs/run` (2/2).
 Decoded generation and replay were `NOT_RUN`. That known population is no
-longer an independent discovery population. Active A1Q-L2/#983 now freezes
-`ConstructionCausalReturnV1` on a separate three-family, six-decision
-construction/validation population before #953 may be touched again. #983
-blocks parked, unassigned #953; #953 continues to block #973 and #954)._
+longer an independent discovery population. A1Q-L2/#983 therefore tested one
+frozen `ConstructionCausalReturnV1` mechanism on a separate three-family,
+six-decision population. Its binding label-free census found pure construction
+classes but zero construction-to-validation transfer; the sealed outcome is
+`UNAVAILABLE_ZERO_CONSTRUCTION_TRANSFER` at 0/6. The deployed selector,
+payload inversion, decoded generation, and #953 were `NOT_RUN`. #983 remains
+open as negative evidence and blocks parked, unassigned #953; #953 continues
+to block #973 and #954)._
 
 > **Project priority:** build source-free geometric intelligence in which the
 > route is the data location. A pinned lexical codec supplies text boundaries;
@@ -56,13 +60,14 @@ blocks parked, unassigned #953; #953 continues to block #973 and #954)._
 > placement-permuted control outperformed real placement. The result retains
 > this direction only as an unqualified hypothesis; it does not activate
 > Poincare, Hopf, harmonic, or SpiralCore machinery or authorize a second
-> representation on that known population. #983 first tests one independently
+> representation on that known population. #983 tested one independently
 > frozen, past-only candidate-hypothetical causal-return relation on a fresh
-> natural population. The label-free Gate 0 must establish pure construction
-> classes, full 6/6 held-out transfer reachability, operative anti-recall,
-> padding separation, equal support/work, and a real ceiling above every causal
-> derangement before its selector may run once. #953 remains an untouched later
-> integration regression. Once #953 is accepted and every required #973 scope
+> natural population. The binding Gate 0 found 21 `R_min` and 24 `R_full`
+> construction classes, all usable classes pure, but zero structural transfer
+> and a 0/6 strict ceiling. It stopped `UNAVAILABLE_ZERO_CONSTRUCTION_TRANSFER`
+> before the deployed selector or payload inversion; #953 remained untouched.
+> A new mechanism or semantic-placement direction now requires a separate
+> maintainer decision and fresh independent contract. Once #953 is accepted and every required #973 scope
 > qualifies, a separately frozen higher-scope/corpus-scale offline induction
 > ladder may compile causal prefix-to-observed-next-route examples, multiscale
 > route summaries, versioned placement overlays that preserve immutable
@@ -199,6 +204,18 @@ Native GitHub relationships are the source of truth:
    `SELECT`/`REJECT` run execute. Its positive terminal is
    `PROCEED_TO_I1_WITH_CONSTRUCTION_TRANSFERRED_LOCAL_GEOMETRIC_ATTENTION`;
    decoded generation is not part of #983.
+
+   **Observed #983 result (2026-08-28):** the binding raw census
+   `blake3:5e970efe79c13d38e02eab6ff60642d3d449ce9dc571af6425b16d0d94858017`
+   compiled 21 `R_min` and 24 `R_full` classes, with two promoted minimum
+   classes covering 4/24 rows and every usable class pure. Construction-to-
+   validation structural coverage and the sealed strict ceiling were both
+   0/6; every negative and the fixed count-only comparator were also 0/6. The
+   outcome
+   `blake3:58fba09dba1b9245cb62a73bf8e3ac153242dc0730e3df7586446aa2820d4587`
+   therefore records `UNAVAILABLE_ZERO_CONSTRUCTION_TRANSFER`. The deployed
+   selector, payload inversion, decoded generation, and #953 were `NOT_RUN`.
+   See the [#983 evidence record](docs/construction_causal_return_attention_983.md).
 7. **GI-3 / #953 — bounded source-free geometric generation loop:** the
    accepted #969 path now drives reusable library/CLI plumbing from canonical
    prompt bytes through admission, exact inversion, rendering, append, and
@@ -223,7 +240,7 @@ Native GitHub relationships are the source of truth:
    but real placement chose `run/runs` (0/2 intended) while the cyclic
    placement-permuted control chose `runs/run` (2/2); generation therefore
    remained `NOT_RUN`. #953 is now a parked, unassigned, untouched integration
-   regression. Only a positive protected #983 result may be applied there in a
+   regression. Only a later positive protected successor under #983 may be applied there in a
    later session, unchanged and behind a new label-free preflight. Harmonic
    influence remains dormant in #953. See the
    [#953 record](docs/local_geometric_generation_953.md).
@@ -280,8 +297,9 @@ protected PR #972 with its bounded heatmap-readout negative. #969's
 mechanism-first prototype reached its positive bounded terminal. #953's loop
 plumbing and tiered admission remain preserved, but its known placement
 population is quarantined after 0/2 real versus 2/2 placement-permuted and
-decoded generation/replay `NOT_RUN`. Active #983 is the new child of #820 and
-native blocker of parked, unassigned #953. The live chain is closed #967/#970/
+decoded generation/replay `NOT_RUN`. #983 is the open negative-evidence child
+of #820 and native blocker of parked, unassigned #953 after its independent
+Gate 0 transferred on 0/6 decisions. The live chain is closed #967/#970/
 #969 → open #983 → parked #953 → blocked #973 → blocked #954 → #955 →
 #962–#965. #953 continues to block #973 and #954; #973 continues to block #954.
 Legacy tracker #949 is closed as
@@ -292,24 +310,24 @@ The old S5–S7 and F0 issues are closed not planned/not triggered. R4G1/TLA,
 XOR/popcount, W(3,3), proof, conformance, and release work remains preserved as
 historical evidence and comparators.
 
-## Active
+## Open decision
 
-- [~] **#983 A1Q-L2 construction-transferred candidate-conditioned geometric
-  attention** — one frozen `ConstructionCausalReturnV1` mechanism, one
-  independent three-family/six-decision population, one label-free Gate 0, and
-  at most one selector run. Gate 0 must establish a 6/6 strict real ceiling,
-  operative anti-recall, same-frame reproduction, pure construction-derived
-  classes, typed occupancy separation, equal support/work, and strict
-  superiority to every causal derangement. Failure stops before selection; a
-  positive establishes only bounded construction-transferred local geometric
-  attention. #953 generation is `NOT_RUN` in this issue.
+- [ ] **#983 A1Q-L2 construction-transferred candidate-conditioned geometric
+  attention** — negative Gate 0 evidence is preserved at
+  `UNAVAILABLE_ZERO_CONSTRUCTION_TRANSFER`: pure usable construction classes,
+  exact controls, and zero operative recall did not transfer to any of six
+  held-out decisions. The deployed selector, payload inversion, and #953 were
+  `NOT_RUN`. #983 remains open and unassigned pending a maintainer choice
+  between a fresh semantic-placement experiment and retaining exact geometry
+  as addressing/transport around a separate table-native value engine. No
+  successor experiment is authorized implicitly.
 
 ## Parked
 
 - [ ] **#953 bounded source-free geometric generation loop** — preserved at
   historical terminal `REVISE_I1_GENERATOR_IN_PLACE`, open and unassigned. Its
   fixture, placement overlay, decoded loop, and records remain untouched while
-  #983 is open. After a positive protected #983 result, a separate session may
+  #983 is open. After a later positive protected successor under #983, a separate session may
   apply that algorithm unchanged to #953's preserved fixture, beginning with a
   new label-free preflight. #953 continues to block #973 and #954.
 
@@ -433,9 +451,10 @@ historical evidence and comparators.
   active. Its first bounded construction-induced placement preflight then
   failed at a frozen-contract real-placement ceiling of 0/2 while the cyclic
   placement-permuted control reached 2/2; generation and replay were `NOT_RUN`.
-  Active #983 now tests `ConstructionCausalReturnV1` on an independent natural
-  population. #953 is an untouched parked integration regression until that
-  mechanism qualifies; #973 and #954 are still blocked.
+  #983 then tested `ConstructionCausalReturnV1` on an independent natural
+  population and stopped `UNAVAILABLE_ZERO_CONSTRUCTION_TRANSFER` at 0/6
+  before its deployed selector. #953 remains an untouched parked integration
+  regression; #973 and #954 are still blocked.
   Coherent product behavior, correctness, and reasoning remain unestablished.
   Historical canaries and pointwise results remain scoped evidence, not a
   claim that the current product works. See
