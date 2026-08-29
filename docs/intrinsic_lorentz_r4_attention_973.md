@@ -574,3 +574,55 @@ operations; the launcher independently applies `SIGALRM` to the test process at
 limit. A watchdog termination after D3 reveal is recovered on the next launch
 as `INVALID_INTRINSIC_LORENTZ_R4_POST_REVEAL_EVIDENCE`, never as a metric
 terminal and never by reopening D3.
+
+## Attempt 01 unavailable before reveal — 2026-08-29
+
+The first authorized execution preserved the complete construction fit, then
+stopped while verifying the newly published fit checkpoint. Its append-only
+terminal is:
+
+```text
+attempt:               01
+result file:           result.json
+result CID:            blake3:e180e240f3cfc490dbe04b2864184760e31355be940d33864bb165d182069a73
+terminal:              UNAVAILABLE_INTRINSIC_LORENTZ_R4_STOP_BEFORE_HELD_OUT
+stage:                 construction.fit.checkpoint_write
+elapsed seconds:       858.992150625
+held-out opened:       false
+D3 reveal marker:      absent
+declared checkpoint:   blake3:85b5251cff215c2480dac172cc351e09914493b40d58c59f007ca41c437b4bee
+read-back checkpoint:  blake3:38407af4e77147d5b1ad70a61d70eade5135cba92febedffeb6059b105e3fd66
+```
+
+The failure was in JSON floating-point round-trip identity: the default parser
+can reconstruct some fitted decimal values one ULP away from the value whose
+bytes were originally hashed. It was not an attention metric outcome.
+Construction validation remained unread, D3 remained sealed, and no loss,
+accuracy, decode, curvature, or control inference is permitted. The attempt-01
+result and checkpoint remain byte-for-byte in their original canonical paths;
+they are not moved, deleted, overwritten, or adopted by a later executable.
+
+## Attempt 02 append-only repair freeze — 2026-08-29
+
+Exactly one repaired execution is authorized at the separately addressed,
+code-fixed result path
+`result.attempt-02-checkpoint-float-roundtrip.json`. It enables exact JSON
+floating-point parsing and refits from the unchanged construction population;
+it does not reuse or copy attempt 01's checkpoint. The frozen manifest,
+16/4/8 data split, donor, intrinsic and flat mechanisms, arms, work budgets,
+softmax, thresholds, and terminal branches are unchanged.
+
+This amendment supersedes only the earlier single-result-file procedure. The
+partition ledger is append-only: every predeclared attempt result and checkpoint
+is independently no-clobber, while `d3-revealed.json` is one partition-global
+irreversible reveal marker. Therefore attempt 01 can remain durable while
+attempt 02 starts pre-reveal, but any D3 reveal blocks every later attempt on
+this partition. The existing partition-root process lock still serializes the
+entire execution. If attempt 02 stops before reveal, it is preserved and there
+is no attempt 03 without a new explicit evidence amendment. If it is
+interrupted after reveal, startup may only reconcile it to
+`INVALID_INTRINSIC_LORENTZ_R4_POST_REVEAL_EVIDENCE`; it may never reopen D3.
+
+Current status is `ATTEMPT_01_UNAVAILABLE_PRE_REVEAL` and
+`ATTEMPT_02_REPAIR_FROZEN_NOT_RUN`. Multi-resonance, recurrence, lowering,
+scale, #954, and all capability claims remain blocked.

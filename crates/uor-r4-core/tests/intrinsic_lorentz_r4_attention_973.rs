@@ -123,6 +123,7 @@ const VALIDATION_FAIL_TERMINAL: &str =
     "FAIL_INTRINSIC_LORENTZ_R4_CONSTRUCTION_VALIDATION_STOP_BEFORE_HELD_OUT";
 const UNAVAILABLE_TERMINAL: &str = "UNAVAILABLE_INTRINSIC_LORENTZ_R4_STOP_BEFORE_HELD_OUT";
 const POST_REVEAL_INVALID_TERMINAL: &str = "INVALID_INTRINSIC_LORENTZ_R4_POST_REVEAL_EVIDENCE";
+const ATTEMPT_TWO_RESULT_FILE: &str = "result.attempt-02-checkpoint-float-roundtrip.json";
 
 type TestResult<T = ()> = Result<T, Box<dyn Error>>;
 type Vector4 = [f64; R4_WIDTH];
@@ -1075,7 +1076,7 @@ fn run_intrinsic_lorentz_r4_full_decoder_decision(
             fit_checkpoint_cid: fit_checkpoint_cid.clone(),
             implementation_identity: implementation_identity.clone(),
         };
-        let marker_path = sidecar_path(output_path, ".d3-revealed.json");
+        let marker_path = partition_reveal_path(output_path)?;
         let marker_cid = match write_content_addressed_exclusive(&marker_path, &marker) {
             Ok(marker_cid) => marker_cid,
             Err(error) => {
@@ -1635,7 +1636,7 @@ fn canonical_result_path(manifest: &FrozenPartitionManifest) -> TestResult<PathB
         .ok_or("partition CID cannot name the canonical evidence ledger")?;
     Ok(Path::new(CANONICAL_EVIDENCE_ROOT)
         .join(partition_digest)
-        .join("result.json"))
+        .join(ATTEMPT_TWO_RESULT_FILE))
 }
 
 fn acquire_partition_run_lock(output_path: &Path) -> TestResult<PartitionRunLock> {
@@ -1665,6 +1666,13 @@ fn sidecar_path(result_path: &Path, suffix: &str) -> PathBuf {
     PathBuf::from(path)
 }
 
+fn partition_reveal_path(result_path: &Path) -> TestResult<PathBuf> {
+    let directory = result_path
+        .parent()
+        .ok_or("canonical result path has no evidence directory")?;
+    Ok(directory.join("d3-revealed.json"))
+}
+
 fn ensure_fresh_run_target(output_path: &Path) -> TestResult {
     if output_path.exists() {
         return Err(format!(
@@ -1673,7 +1681,7 @@ fn ensure_fresh_run_target(output_path: &Path) -> TestResult {
         )
         .into());
     }
-    let reveal_path = sidecar_path(output_path, ".d3-revealed.json");
+    let reveal_path = partition_reveal_path(output_path)?;
     if reveal_path.exists() {
         return Err(format!(
             "refusing to refit or rerun after durable D3 reveal marker: {}",
@@ -1689,7 +1697,7 @@ fn reconcile_interrupted_reveal(
     deadline: &ExperimentDeadline,
     manifest_envelope: &FrozenManifestEnvelope,
 ) -> TestResult<Option<String>> {
-    let reveal_path = sidecar_path(output_path, ".d3-revealed.json");
+    let reveal_path = partition_reveal_path(output_path)?;
     if !reveal_path.exists() {
         return Ok(None);
     }
@@ -4450,7 +4458,7 @@ fn write_failure(
     error: &(dyn Error + 'static),
     manifest_envelope: &FrozenManifestEnvelope,
 ) -> TestResult<String> {
-    let reveal_path = sidecar_path(canonical_output_path, ".d3-revealed.json");
+    let reveal_path = partition_reveal_path(canonical_output_path)?;
     let d3_reveal_marker_cid = if reveal_path.exists() {
         Some(canonical_json_file_cid(&reveal_path)?)
     } else {
@@ -4759,23 +4767,37 @@ fn temporary_evidence_path(label: &str) -> TestResult<PathBuf> {
 #[test]
 fn exclusive_evidence_files_refuse_overwrite_and_durable_reveal_refuses_rerun() -> TestResult {
     let directory = temporary_evidence_path("exclusive-guards")?;
-    let output_path = directory.join("result.json");
+    let attempt_one_path = directory.join("result.json");
+    let output_path = directory.join(ATTEMPT_TWO_RESULT_FILE);
     let run_lock = acquire_partition_run_lock(&output_path)?;
     assert!(acquire_partition_run_lock(&output_path).is_err());
+    write_content_addressed_exclusive(
+        &attempt_one_path,
+        &serde_json::json!({"attempt": 1, "terminal": UNAVAILABLE_TERMINAL}),
+    )?;
+    let attempt_one_bytes = fs::read(&attempt_one_path)?;
     ensure_fresh_run_target(&output_path)?;
-    write_content_addressed_exclusive(&output_path, &serde_json::json!({"first": true}))?;
+    write_content_addressed_exclusive(
+        &output_path,
+        &serde_json::json!({"attempt": 2, "first": true}),
+    )?;
     assert!(
         write_content_addressed_exclusive(&output_path, &serde_json::json!({"second": true}))
             .is_err()
     );
     assert!(ensure_fresh_run_target(&output_path).is_err());
+    assert_eq!(fs::read(&attempt_one_path)?, attempt_one_bytes);
 
     fs::remove_file(&output_path)?;
-    let reveal_path = sidecar_path(&output_path, ".d3-revealed.json");
+    let reveal_path = partition_reveal_path(&output_path)?;
     write_content_addressed_exclusive(&reveal_path, &serde_json::json!({"revealed": true}))?;
     assert!(ensure_fresh_run_target(&output_path).is_err());
+    let later_attempt_path = directory.join("result.attempt-03.json");
+    assert!(ensure_fresh_run_target(&later_attempt_path).is_err());
+    assert_eq!(fs::read(&attempt_one_path)?, attempt_one_bytes);
 
     fs::remove_file(reveal_path)?;
+    fs::remove_file(attempt_one_path)?;
     drop(run_lock);
     fs::remove_file(directory.join("run.lock"))?;
     fs::remove_dir(directory)?;
@@ -4873,7 +4895,7 @@ fn test_reveal_marker(manifest_envelope: &FrozenManifestEnvelope) -> D3RevealMar
 fn interrupted_reveal_is_reconciled_without_reopening_d3() -> TestResult {
     let directory = temporary_evidence_path("reveal-reconciliation")?;
     let output_path = directory.join("result.json");
-    let reveal_path = sidecar_path(&output_path, ".d3-revealed.json");
+    let reveal_path = partition_reveal_path(&output_path)?;
     let manifest_envelope = test_manifest_envelope();
     write_content_addressed_exclusive(&reveal_path, &test_reveal_marker(&manifest_envelope))?;
     let deadline = ExperimentDeadline::new();
@@ -4897,7 +4919,7 @@ fn interrupted_reveal_is_reconciled_without_reopening_d3() -> TestResult {
     fs::remove_file(reveal_path)?;
 
     let invalid_output_path = directory.join("invalid-result.json");
-    let invalid_reveal_path = sidecar_path(&invalid_output_path, ".d3-revealed.json");
+    let invalid_reveal_path = partition_reveal_path(&invalid_output_path)?;
     write_content_addressed_exclusive(
         &invalid_reveal_path,
         &test_reveal_marker(&manifest_envelope),
@@ -4946,7 +4968,7 @@ fn interrupted_reveal_is_reconciled_without_reopening_d3() -> TestResult {
 fn post_reveal_terminal_validation_rejects_tampering_and_pre_reveal_terminals() -> TestResult {
     let directory = temporary_evidence_path("post-reveal-binding")?;
     let output_path = directory.join("result.json");
-    let reveal_path = sidecar_path(&output_path, ".d3-revealed.json");
+    let reveal_path = partition_reveal_path(&output_path)?;
     let manifest_envelope = test_manifest_envelope();
     let reveal_cid =
         write_content_addressed_exclusive(&reveal_path, &test_reveal_marker(&manifest_envelope))?;
@@ -5040,5 +5062,16 @@ fn fit_checkpoint_round_trips_full_oracle_and_rejects_tampering() -> TestResult 
     fs::remove_file(checkpoint_path)?;
     fs::remove_file(tampered_path)?;
     fs::remove_dir(directory)?;
+    Ok(())
+}
+
+#[test]
+fn fit_checkpoint_json_float_parsing_is_bit_exact() -> TestResult {
+    let original = 0.101_468_630_291_144_97_f64;
+    let encoded = serde_json::to_vec(&original)?;
+    let decoded: f64 = serde_json::from_slice(&encoded)?;
+
+    assert_eq!(encoded, b"0.10146863029114497");
+    assert_eq!(decoded.to_bits(), original.to_bits());
     Ok(())
 }

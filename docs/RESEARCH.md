@@ -44,10 +44,12 @@ assumptions, or objectives rather than measured results.
 > **Measured evidence status:** HELM-D pinned-source provenance `PASS`;
 > ordinary-donor reproduction `PASS`; transported-R4 parity, destructive
 > control, and causal audit `PASS` on the bounded full-decoder run; upstream
-> checkpoint parity `NOT_RUN`; intrinsic R4 attention `NOT_RUN`;
-> multi-resonance replacement `NOT_RUN`; recurrent factorization/lowering
-> `NOT_RUN`. See the
-> [`HELM-D-R4` record](helm_d_r4_softmax_decoder_973.md).
+> checkpoint parity `NOT_RUN`; intrinsic R4 attempt 01
+> `UNAVAILABLE_PRE_REVEAL` from a checkpoint JSON round-trip defect, with D3
+> still sealed; append-only attempt 02 `FROZEN_NOT_RUN`; multi-resonance
+> replacement `NOT_RUN`; recurrent factorization/lowering `NOT_RUN`. See the
+> [`HELM-D-R4` record](helm_d_r4_softmax_decoder_973.md) and the
+> [intrinsic R4 record](intrinsic_lorentz_r4_attention_973.md).
 
 > **Prior forward decision after direct-attention V3
 > (2026-08-28).** Preserve exact R4/spin routes as identity, causal state, frame,

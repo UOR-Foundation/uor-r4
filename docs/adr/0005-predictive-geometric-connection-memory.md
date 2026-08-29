@@ -1,7 +1,8 @@
 # ADR-0005: HELM-D-R4 reference attention, intrinsic geometry, and recurrent lowering
 
 - **Status:** Accepted; V4 is terminal-negative, `HELM-D-R4` parity passes,
-  and intrinsic R4 attention is active
+  and intrinsic R4 attempt 02 is frozen after attempt 01 stopped unavailable
+  before D3 reveal
 - **Date:** 2026-08-28; direction updated 2026-08-29
 - **Owner:** #973 under programme root #820
 - **Supersedes for forward work:** another fixed componentwise prototype or
@@ -22,7 +23,9 @@
   `PASS_HELM_D_R4_GAUGE_SOFTMAX_FULL_DECODER_PARITY_ADVANCE_TO_INTRINSIC_R4`
   ([record](../helm_d_r4_softmax_decoder_973.md),
   [machine result](../helm_d_r4_softmax_decoder_result_973.json))
-- **Intrinsic R4 attention result:** `NOT_RUN`
+- **Intrinsic R4 attention result:** attempt 01 `UNAVAILABLE_PRE_REVEAL` from
+  checkpoint JSON round-trip identity; append-only attempt 02 `FROZEN_NOT_RUN`
+  ([record](../intrinsic_lorentz_r4_attention_973.md))
 - **Multi-resonance replacement result:** `NOT_RUN`
 - **Recurrent factorization/lowering result:** `NOT_RUN`
 

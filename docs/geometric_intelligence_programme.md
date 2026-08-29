@@ -107,8 +107,11 @@ The measured evidence ledger now records `PASS` for HELM-D pinned-source
 provenance, ordinary-donor deterministic reproduction, transported-R4 parity,
 the source-frame-permuted liveness control, and the zero-future-read audit. See
 [`helm_d_r4_softmax_decoder_973.md`](helm_d_r4_softmax_decoder_973.md).
-Upstream checkpoint parity, intrinsic R4 attention, resonance replacement, and
-bounded recurrence/lowering remain `NOT_RUN`.
+Upstream checkpoint parity remains `NOT_RUN`. Intrinsic R4 attempt 01 stopped
+`UNAVAILABLE_PRE_REVEAL` on a checkpoint JSON round-trip defect without opening
+D3; its append-only attempt 02 repair is `FROZEN_NOT_RUN`. Resonance replacement
+and bounded recurrence/lowering remain `NOT_RUN`. See the
+[intrinsic R4 record](intrinsic_lorentz_r4_attention_973.md).
 
 ## Current capability-first delivery decision — #953
 

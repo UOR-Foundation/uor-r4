@@ -69,7 +69,11 @@ target serving engine uses no Ollama, hosted model, or source-model weights.
 > **HELM-D-R4 measured evidence status:** pinned-source provenance `PASS`;
 > ordinary-donor reproduction `PASS`; transported-R4 parity and destructive
 > control `PASS`; upstream HELM-D checkpoint parity `NOT_RUN`; intrinsic R4
-> attention `NOT_RUN`; multi-resonance replacement and recurrence `NOT_RUN`.
+> attention attempt 01 `UNAVAILABLE_PRE_REVEAL` from a checkpoint JSON
+> round-trip defect, with D3 still sealed; the separately addressed append-only
+> attempt 02 repair is `FROZEN_NOT_RUN`. Multi-resonance replacement and
+> recurrence remain `NOT_RUN`. See the
+> [intrinsic R4 record](docs/intrinsic_lorentz_r4_attention_973.md).
 
 > **Retained bounded-global evidence (2026-08-28):** #973's independently frozen
 > `BoundedGlobalNoncommutingExactSpinR4V2` reached
