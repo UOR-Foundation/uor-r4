@@ -626,3 +626,68 @@ interrupted after reveal, startup may only reconcile it to
 Current status is `ATTEMPT_01_UNAVAILABLE_PRE_REVEAL` and
 `ATTEMPT_02_REPAIR_FROZEN_NOT_RUN`. Multi-resonance, recurrence, lowering,
 scale, #954, and all capability claims remain blocked.
+
+## Attempt 02 construction-stage terminal — 2026-08-29
+
+Attempt 02 completed from repair commit
+`a348d7ec31f75524906a39cc04327bbcbdd47a56`. The correctly rounded checkpoint
+readback passed, the fitted artifacts replayed exactly, and construction
+validation ran. The complete canonical result is preserved byte-for-byte in
+[`intrinsic_lorentz_r4_attention_result_973.json`](intrinsic_lorentz_r4_attention_result_973.json),
+and its compact evidence summary is
+[`intrinsic_lorentz_r4_attention_attempt_02_summary_973.json`](intrinsic_lorentz_r4_attention_attempt_02_summary_973.json).
+
+```text
+attempt:                    02
+result file:                result.attempt-02-checkpoint-float-roundtrip.json
+result bytes:               525754
+result file BLAKE3:         blake3:3f8ba48d9830eca0636df37eafa8af167475005970e77f5af6f3bec20d191518
+embedded result CID:        blake3:da2a63323d6211b8d581e5a4ed75d788eb919ff0f210d2e3beb8a749ee1bc64f
+fit checkpoint CID:         blake3:0372ae31b6464c4967c07b70f7d4bd3cea437c971c34e16ab1b8048630144dc2
+terminal:                    UNAVAILABLE_INTRINSIC_LORENTZ_R4_STOP_BEFORE_HELD_OUT
+elapsed seconds:             1800.35884825
+held-out opened:             false
+D3 reveal marker:            absent
+```
+
+The unavailable terminal is required by the frozen precedence rule. The
+Lorentz barycenter covariance diagnostic reached
+`9.121400701417315e-8` against the frozen `1e-8` ceiling. The other geometric
+health checks passed: hyperboloid residual `8.526512829121202e-14`, distance
+invariance delta `5.5261351050717167e-14`, softmax-sum delta
+`4.272442311048508e-8`, timelike denominator squared
+`1.000000000089752`, and exact HELM-D golden reproduction. Parameter replay,
+fit-report replay, work/shape, donor-trace identity, causal reads, and liveness
+also passed; the curved-versus-flat attention-weight delta was
+`0.988744561560452`.
+
+The construction-validation measurements are retained as diagnostics, not a
+held-out scientific terminal. On 32 construction-validation positions, donor,
+curved, and flat mean NLL were `2.6513639557648623`, `3.9044978436394797`, and
+`3.6955705255518287` nats. The curved arm therefore missed the frozen donor
+margin by `1.2531338878746174` and the flat margin by
+`0.20892731808765097`, far beyond the `0.05` ceiling. Its construction fit
+objective was also higher than flat (`415554.66305666673` versus
+`347686.69506399677`). These observations diagnose the next seam, but the
+failed covariance audit means they are not relabeled as the clean
+`FAIL_INTRINSIC_LORENTZ_R4_CONSTRUCTION_VALIDATION_STOP_BEFORE_HELD_OUT`
+terminal. D3 loss, accuracy, controls, and decode remain `NOT_RUN`.
+
+### Binding conclusion and next action
+
+The positive #1002 result remains intact: ordinary dense causal Q/K/V softmax
+attention is established on the bounded full decoder in coherent UOR R4/Spin
+frames. Attempt 02 does not establish intrinsic curvature-specific attention.
+It rejects neither ordinary attention nor R4 transport; it shows that this
+post-hoc `acosh^2` score, normalized Lorentz centroid, and coefficient-only fit
+is not ready for held-out use.
+
+There is no silent attempt 03 and no tolerance-only rerun. The next #973
+construction-only freeze must copy the pinned HELM-D semantic seam more
+faithfully: manifold-valued learned Q/K/V projections, the declared
+Lorentz-inner-product score with learned scale/bias, and a numerically stable
+equivariant Lorentz centroid, with an equal-capacity Euclidean arm. It must use
+fresh non-D3 construction validation, pass covariance without relaxing the
+frozen mathematical bound, and retain donor behavior before any D3 reveal.
+Multi-resonance, recurrence, exact lowering, scale, #954, correctness,
+reasoning, and product claims remain blocked.
