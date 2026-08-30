@@ -1,7 +1,8 @@
 # R4 softmax trace observability ladder (#1012)
 
 - **Status:** `IMPLEMENTED / MEASUREMENT_NOT_RUN`; construction-only
-  architecture, input census, harness, and strict command are frozen. No
+  architecture, input census, harness, and strict command are frozen. Attempt
+  01 stopped at its cheap control-construction gate before scoring, so no
   decision result has been measured yet.
 - **Owner:** #1012 under attention issue #973 and programme root #820.
 - **Predecessor:** #1011, merged through the protected queue at
@@ -147,17 +148,14 @@ weights rows by globally normalized raw covered Q16 mass; within each row, the
 covered teacher targets are renormalized over that row's unchanged candidate
 support. The reported covered CE uses the same raw-mass aggregation.
 
-The matched destructive control is a fixed donor-label substitution, not an
-adaptive search. Once per fold, all non-BOS training-row identities are sorted
-by canonical bundle document order and then position. The resulting list is
-cyclically shifted by the maximum training-document row count, producing a
-cross-document bijection. That mapping is content-addressed once and reused at
-every boundary. Each donor contributes its complete recorded top-32 token/Q16
-map; donor weights are aligned by token onto the target row's unchanged
-candidate support. Original, retained, and lost donor Q16 mass are disclosed.
-The harness never searches for another donor based on labels or support. A
-non-bijection, same-document donor, zero-overlap alignment, or unchanged label
-row fails closed before a result can be issued.
+The matched destructive control is one fixed left rotation of the teacher Q16
+labels across each training row's existing ordered candidate slots. It changes
+no candidate token, feature, base logit, support membership, or covered Q16
+mass. The row identities, rotation policy, and shift of one are
+content-addressed once per fold and reused at every boundary. There is no donor
+selection, support alignment, label search, or retry. A support with fewer than
+two slots, zero mass, an unchanged rotated label vector, or any mass difference
+fails closed before a result can be issued.
 
 Upstream capacity is reported separately from the 64-weight probe:
 
@@ -203,8 +201,8 @@ All gates below bind before the decision run:
 5. identical ordered candidate support and exactly 64 weights at each matched
    probe boundary;
 6. target-blind fit-CID invariance under held-label substitution;
-7. real labels versus the fixed, CID-bound cross-document donor-label control,
-   including donor retained/lost Q16 accounting and fail-closed zero overlap;
+7. real labels versus the fixed, CID-bound within-support label rotation,
+   including exact covered-Q16 mass preservation and fail-closed unchanged rows;
    and
 8. exact fold evidence and physical-work ledger replay across two complete
    execution passes.
@@ -232,13 +230,13 @@ is `INSUFFICIENT_SUPPORT_COVERAGE`; no boundary attribution is allowed.
   is not crossed.
 - **Full-trace liveness:** the current-step final-layer Q/K/V probe must improve
   covered CE by at least `0.10` nats against **both** the train-only exact suffix
-  baseline and its fixed donor-label control, with each improvement pointing in
+  baseline and its fixed within-support label-rotation control, with each improvement pointing in
   the required direction in at least three of four folds. Passing only one
   comparison does not establish the boundary.
 - **Positive branch:** open exactly one repair issue for the earliest boundary
   that loses a signal present immediately upstream.
 - **Negative branch:** if the current-step final-layer Q/K/V trace cannot beat
-  the train-only suffix/base and fixed donor-label control, stop this bounded
+  the train-only suffix/base and fixed label-rotation control, stop this bounded
   Q/K/V trace-distillation path and write an end-to-end cell-training
   specification with a new untouched holdout.
 - **Cost estimate:** minutes on CPU. No hours-long run is authorized.
@@ -268,10 +266,12 @@ is `INSUFFICIENT_SUPPORT_COVERAGE`; no boundary attribution is allowed.
 | Freeze folds, boundaries, capacity, controls, and decisions | `PASS` | this record and #1012 architecture comment |
 | Canonical input/liveness census | `PASS_PARTIAL` | 38 rows; 31 full/reduced unique rows; centered reduced rank 12 in every fold |
 | Implement read-only state diagnostic snapshot | `PASS` | exact 64-feature/base/residual/total-logit snapshot; plain, geometric, and transport-permuted mutation-invariance test |
-| Implement strict four-fold observability command | `PASS` | compiler-side harness, strict CLI, fixed CID-bound donor schedule, held-label fit-identity audit, structured result, aggregate replay, and two physical-pass work ledger |
+| Implement strict four-fold observability command | `PASS` | compiler-side harness, strict CLI, fixed CID-bound label rotation, held-label fit-identity audit, structured result, aggregate replay, and two physical-pass work ledger |
 | Run focused pre-hardening cheap gates | `PASS` | seven harness tests, core snapshot test, strict CLI test, formatting, clippy, claim wording, and diff integrity |
 | Rerun focused gates after P1 hardening | `PASS` | eleven harness tests, seven core state-student tests, strict CLI test, formatting, library/binary clippy with warnings denied, claim wording, and diff integrity |
-| Run real-bundle cheap intake and liveness gates | `NOT_RUN` | release-mode invocation is the next action |
+| Attempt 01 real-bundle control construction | `STOPPED_PRE_MEASUREMENT` | the fixed cross-document donor schedule produced a zero-overlap or unchanged row; command exited before any boundary score or result file |
+| Replace invalid donor control with one fixed within-support rotation | `PASS_PENDING_RECHECK` | one bounded construction repair; no adaptive donor search and no mechanism tuning |
+| Run real-bundle cheap intake and liveness gates | `NOT_RUN` | exactly one release-mode retry is authorized |
 | Run decision measurement and select one next action | `NOT_RUN` | forbidden until every cheap gate passes |
 
 ## Nonclaims

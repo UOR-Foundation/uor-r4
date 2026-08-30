@@ -180,10 +180,10 @@ pub struct FoldManifest {
 #[serde(deny_unknown_fields)]
 pub struct LabelControlMassAudit {
     pub rows: u64,
-    pub donor_recorded_mass_q16: u64,
-    pub retained_on_target_support_q16: u64,
-    pub lost_outside_target_support_q16: u64,
-    pub zero_overlap_rows: u64,
+    pub original_covered_mass_q16: u64,
+    pub permuted_covered_mass_q16: u64,
+    pub mass_preserved_exactly: bool,
+    pub invalid_support_rows: u64,
     pub unchanged_label_rows: u64,
 }
 
@@ -566,7 +566,7 @@ struct FeatureStandardization {
 }
 
 struct LabelControlPlan {
-    donor_by_target: BTreeMap<(String, usize), (String, usize)>,
+    row_identities: BTreeSet<(String, usize)>,
     mapping_cid: String,
 }
 
@@ -1033,7 +1033,7 @@ fn execute_all_folds(
     let diagnostic_count = DIAGNOSTIC_BOUNDARIES.len() as u64;
     let exact_recurrent_count = (EXACT_BOUNDARIES.len() - 1) as u64;
     // Each diagnostic is fit once against true labels and once against the
-    // fixed donor-label control. The held-label audit repeats both fits, but
+    // fixed within-support label rotation. The held-label audit repeats both fits, but
     // must reproduce the same training-only identity.
     let fits_per_fold = multiply(diagnostic_count, 4, "fits_per_fold")?;
     let probe_fits = multiply(fold_count, fits_per_fold, "probe_fits")?;
@@ -1485,103 +1485,89 @@ fn label_control_mass_audit(
     rows: &[Row],
     plan: &LabelControlPlan,
 ) -> Result<LabelControlMassAudit, R4SoftmaxTraceObservabilityError> {
-    let by_identity = rows
+    let identities = rows
         .iter()
-        .map(|row| ((row.document_id.clone(), row.position), row))
-        .collect::<BTreeMap<_, _>>();
-    if by_identity.len() != rows.len() || plan.donor_by_target.len() != rows.len() {
+        .map(|row| (row.document_id.clone(), row.position))
+        .collect::<BTreeSet<_>>();
+    if identities.len() != rows.len() || identities != plan.row_identities {
         return Err(R4SoftmaxTraceObservabilityError::Invalid(
-            "label-control mass audit identities are not bijective".to_owned(),
+            "label-control mass audit identities differ from the frozen plan".to_owned(),
         ));
     }
-    let mut donor_recorded_mass_q16 = 0_u64;
-    let mut retained_on_target_support_q16 = 0_u64;
-    let mut zero_overlap_rows = 0_u64;
+    let mut original_covered_mass_q16 = 0_u64;
+    let mut permuted_covered_mass_q16 = 0_u64;
+    let mut invalid_support_rows = 0_u64;
     let mut unchanged_label_rows = 0_u64;
     for row in rows {
-        let target = (row.document_id.clone(), row.position);
-        let donor_identity = plan.donor_by_target.get(&target).ok_or_else(|| {
-            R4SoftmaxTraceObservabilityError::Invalid(
-                "label-control mass audit target is unmapped".to_owned(),
-            )
-        })?;
-        let donor = by_identity.get(donor_identity).ok_or_else(|| {
-            R4SoftmaxTraceObservabilityError::Invalid(
-                "label-control mass audit donor is absent".to_owned(),
-            )
-        })?;
-        let recorded = donor
-            .teacher_top32_q16
-            .values()
-            .map(|weight| u64::from(*weight))
-            .sum::<u64>();
-        let aligned = row
-            .candidates
-            .iter()
-            .map(|candidate| {
-                u64::from(
-                    donor
-                        .teacher_top32_q16
-                        .get(&candidate.token)
-                        .copied()
-                        .unwrap_or(0),
-                )
-            })
-            .sum::<u64>();
-        let current = row
+        let original = row
             .candidates
             .iter()
             .map(|candidate| candidate.teacher_q16)
             .collect::<Vec<_>>();
-        let control = row
-            .candidates
+        if original.len() < 2 || original.iter().all(|weight| *weight == 0) {
+            invalid_support_rows += 1;
+            continue;
+        }
+        let mut permuted = original.clone();
+        permuted.rotate_left(1);
+        unchanged_label_rows += u64::from(permuted == original);
+        let original_mass = original
             .iter()
-            .map(|candidate| {
-                donor
-                    .teacher_top32_q16
-                    .get(&candidate.token)
-                    .copied()
-                    .unwrap_or(0)
-            })
-            .collect::<Vec<_>>();
-        zero_overlap_rows += u64::from(aligned == 0);
-        unchanged_label_rows += u64::from(control == current);
-        donor_recorded_mass_q16 =
-            donor_recorded_mass_q16
-                .checked_add(recorded)
-                .ok_or_else(|| {
-                    R4SoftmaxTraceObservabilityError::Invalid(
-                        "label-control recorded-mass ledger overflowed".to_owned(),
-                    )
-                })?;
-        retained_on_target_support_q16 = retained_on_target_support_q16
-            .checked_add(aligned)
+            .map(|weight| u64::from(*weight))
+            .sum::<u64>();
+        let permuted_mass = permuted
+            .iter()
+            .map(|weight| u64::from(*weight))
+            .sum::<u64>();
+        original_covered_mass_q16 = original_covered_mass_q16
+            .checked_add(original_mass)
             .ok_or_else(|| {
                 R4SoftmaxTraceObservabilityError::Invalid(
-                    "label-control retained-mass ledger overflowed".to_owned(),
+                    "label-control original-mass ledger overflowed".to_owned(),
+                )
+            })?;
+        permuted_covered_mass_q16 = permuted_covered_mass_q16
+            .checked_add(permuted_mass)
+            .ok_or_else(|| {
+                R4SoftmaxTraceObservabilityError::Invalid(
+                    "label-control permuted-mass ledger overflowed".to_owned(),
                 )
             })?;
     }
-    if zero_overlap_rows != 0 || unchanged_label_rows != 0 {
+    if invalid_support_rows != 0
+        || unchanged_label_rows != 0
+        || original_covered_mass_q16 != permuted_covered_mass_q16
+    {
         return Err(R4SoftmaxTraceObservabilityError::Invalid(
-            "fixed label-control mapping has zero-overlap or unchanged rows".to_owned(),
+            "fixed within-support label rotation is invalid, unchanged, or not mass-preserving"
+                .to_owned(),
         ));
     }
-    let lost_outside_target_support_q16 = donor_recorded_mass_q16
-        .checked_sub(retained_on_target_support_q16)
-        .ok_or_else(|| {
-            R4SoftmaxTraceObservabilityError::Invalid(
-                "label-control retained mass exceeds recorded donor mass".to_owned(),
-            )
-        })?;
     Ok(LabelControlMassAudit {
         rows: rows.len() as u64,
-        donor_recorded_mass_q16,
-        retained_on_target_support_q16,
-        lost_outside_target_support_q16,
-        zero_overlap_rows,
+        original_covered_mass_q16,
+        permuted_covered_mass_q16,
+        mass_preserved_exactly: true,
+        invalid_support_rows,
         unchanged_label_rows,
     })
+}
+
+fn rotate_control_labels(labels: &[u16]) -> Result<Vec<u16>, R4SoftmaxTraceObservabilityError> {
+    if labels.len() < 2 || labels.iter().all(|weight| *weight == 0) {
+        return Err(R4SoftmaxTraceObservabilityError::Invalid(
+            "fixed label rotation requires at least two supported slots and nonzero mass"
+                .to_owned(),
+        ));
+    }
+    let mut permuted = labels.to_vec();
+    permuted.rotate_left(1);
+    if permuted == labels {
+        return Err(R4SoftmaxTraceObservabilityError::Invalid(
+            "fixed label rotation leaves the row unchanged".to_owned(),
+        ));
+    }
+    Ok(permuted)
 }
 
 fn held_labels_cid(rows: &[Row]) -> Result<String, R4SoftmaxTraceObservabilityError> {
@@ -2321,7 +2307,7 @@ fn fit_probe(
         ));
     }
     let (fit_rows, changed_label_rows) = if let Some(plan) = label_control {
-        document_permuted_training_rows(rows, plan)?
+        slot_permuted_training_rows(rows, plan)?
     } else {
         (rows.to_vec(), 0)
     };
@@ -2373,70 +2359,57 @@ fn fit_probe(
     })
 }
 
-fn document_permuted_training_rows(
+fn slot_permuted_training_rows(
     rows: &[ProbeRow],
     plan: &LabelControlPlan,
 ) -> Result<(Vec<ProbeRow>, u64), R4SoftmaxTraceObservabilityError> {
-    let mut by_identity = BTreeMap::<(String, usize), &ProbeRow>::new();
-    for row in rows {
-        if by_identity
-            .insert((row.document_id.clone(), row.position), row)
-            .is_some()
-        {
-            return Err(R4SoftmaxTraceObservabilityError::Invalid(
-                "document-label control contains a duplicate training-row identity".to_owned(),
-            ));
-        }
-    }
-    if by_identity.len() != plan.donor_by_target.len()
-        || by_identity
-            .keys()
-            .any(|identity| !plan.donor_by_target.contains_key(identity))
-    {
+    let identities = rows
+        .iter()
+        .map(|row| (row.document_id.clone(), row.position))
+        .collect::<BTreeSet<_>>();
+    if identities.len() != rows.len() || identities != plan.row_identities {
         return Err(R4SoftmaxTraceObservabilityError::Invalid(
-            "document-label control plan and training rows differ".to_owned(),
+            "fixed label-rotation plan and training rows differ".to_owned(),
         ));
     }
     let mut permuted = rows.to_vec();
     let mut changed = 0_u64;
     for output in &mut permuted {
-        let target_identity = (output.document_id.clone(), output.position);
-        let donor_identity = plan.donor_by_target.get(&target_identity).ok_or_else(|| {
-            R4SoftmaxTraceObservabilityError::Invalid(
-                "document-label control target identity is absent from its frozen mapping"
-                    .to_owned(),
-            )
-        })?;
-        if donor_identity.0 == output.document_id {
+        let rotated = rotate_control_labels(&output.teacher_q16)?;
+        let original_mass = output
+            .teacher_q16
+            .iter()
+            .map(|weight| u64::from(*weight))
+            .sum::<u64>();
+        let rotated_mass = rotated.iter().map(|weight| u64::from(*weight)).sum::<u64>();
+        if original_mass != rotated_mass {
             return Err(R4SoftmaxTraceObservabilityError::Invalid(
-                "document-label control donor belongs to the target document".to_owned(),
+                "fixed label rotation changed covered Q16 mass".to_owned(),
             ));
         }
-        let donor = by_identity.get(donor_identity).ok_or_else(|| {
-            R4SoftmaxTraceObservabilityError::Invalid(
-                "document-label control donor identity is absent".to_owned(),
-            )
-        })?;
-        let aligned = output
+        output.teacher_q16 = rotated;
+        output.teacher_top32_q16 = output
             .tokens
             .iter()
-            .map(|token| donor.teacher_top32_q16.get(token).copied().unwrap_or(0))
-            .collect::<Vec<_>>();
-        if aligned.iter().all(|weight| *weight == 0) {
-            return Err(R4SoftmaxTraceObservabilityError::Invalid(format!(
-                "predeclared donor {}:{} has zero top-32 overlap with target {}:{} support",
-                donor.document_id, donor.position, output.document_id, output.position
-            )));
-        }
-        if aligned == output.teacher_q16 {
-            return Err(R4SoftmaxTraceObservabilityError::Invalid(format!(
-                "predeclared donor {}:{} leaves target {}:{} labels unchanged",
-                donor.document_id, donor.position, output.document_id, output.position
-            )));
-        }
-        output.teacher_top_token = donor.teacher_top_token;
-        output.teacher_top32_q16 = donor.teacher_top32_q16.clone();
-        output.teacher_q16 = aligned;
+            .copied()
+            .zip(output.teacher_q16.iter().copied())
+            .collect();
+        output.teacher_top_token = output
+            .tokens
+            .iter()
+            .copied()
+            .zip(output.teacher_q16.iter().copied())
+            .max_by(|(left_token, left_weight), (right_token, right_weight)| {
+                left_weight
+                    .cmp(right_weight)
+                    .then_with(|| right_token.cmp(left_token))
+            })
+            .map(|(token, _)| token)
+            .ok_or_else(|| {
+                R4SoftmaxTraceObservabilityError::Invalid(
+                    "fixed label rotation has no candidate token".to_owned(),
+                )
+            })?;
         changed += 1;
     }
     Ok((permuted, changed))
@@ -2465,54 +2438,28 @@ fn build_label_control_plan(
             "label-control identities are empty, singleton, or duplicated".to_owned(),
         ));
     }
-    let mut document_counts = BTreeMap::<String, usize>::new();
-    for (document_id, _) in &canonical {
-        *document_counts.entry(document_id.clone()).or_default() += 1;
-    }
-    if document_counts.len() != 3 {
+    let document_count = canonical
+        .iter()
+        .map(|(document_id, _)| document_id)
+        .collect::<BTreeSet<_>>()
+        .len();
+    if document_count != 3 {
         return Err(R4SoftmaxTraceObservabilityError::Invalid(
-            "label-control mapping requires exactly three training documents".to_owned(),
+            "label-control plan requires exactly three training documents".to_owned(),
         ));
     }
-    let shift = document_counts.values().copied().max().ok_or_else(|| {
-        R4SoftmaxTraceObservabilityError::Invalid(
-            "label-control mapping has no document rows".to_owned(),
-        )
-    })?;
-    if shift == 0 || shift >= canonical.len() {
-        return Err(R4SoftmaxTraceObservabilityError::Invalid(
-            "label-control cyclic shift is invalid".to_owned(),
-        ));
-    }
-    let mut donor_by_target = BTreeMap::new();
-    let mut donors = BTreeSet::new();
-    let mut mapping_rows = Vec::with_capacity(canonical.len());
-    for (index, target) in canonical.iter().enumerate() {
-        let donor = canonical[(index + shift) % canonical.len()].clone();
-        if donor.0 == target.0 || !donors.insert(donor.clone()) {
-            return Err(R4SoftmaxTraceObservabilityError::Invalid(
-                "maximum-document-row cyclic shift is not a cross-document bijection".to_owned(),
-            ));
-        }
-        donor_by_target.insert(target.clone(), donor);
-        mapping_rows.push((
-            target.clone(),
-            canonical[(index + shift) % canonical.len()].clone(),
-        ));
-    }
+    let row_identities = canonical.iter().cloned().collect::<BTreeSet<_>>();
     let mapping_cid = canonical_json_cid(&serde_json::json!({
         "schema": "uor-r4.r4-softmax-trace-observability-label-control-mapping/1",
-        "policy": "canonical-document-position-order/cyclic-shift-by-maximum-document-row-count",
-        "shift": shift,
-        "rows": mapping_rows.iter().map(|(target, donor)| serde_json::json!({
-            "target_document_id": target.0.as_str(),
-            "target_position": target.1,
-            "donor_document_id": donor.0.as_str(),
-            "donor_position": donor.1,
+        "policy": "within-row-candidate-slot-rotate-left-one",
+        "shift": 1,
+        "rows": canonical.iter().map(|identity| serde_json::json!({
+            "document_id": identity.0.as_str(),
+            "position": identity.1,
         })).collect::<Vec<_>>(),
     }))?;
     Ok(LabelControlPlan {
-        donor_by_target,
+        row_identities,
         mapping_cid,
     })
 }
@@ -3616,22 +3563,6 @@ fn validate_result(
             .collect::<Vec<_>>();
         let expected_training_positions = EXPECTED_POSITIONS - EXPECTED_DOCUMENT_POSITIONS[ordinal];
         let expected_training_events = expected_training_positions - 3;
-        let expected_recorded_control_mass = (expected_training_events as u64)
-            .checked_mul(u64::from(R4_SOFTMAX_TRACE_Q16_TOTAL))
-            .ok_or_else(|| {
-                R4SoftmaxTraceObservabilityError::Invalid(format!(
-                    "fold {ordinal} label-control mass ceiling overflowed"
-                ))
-            })?;
-        let recomposed_control_mass = fold
-            .manifest
-            .label_control_mass_audit
-            .retained_on_target_support_q16
-            .checked_add(
-                fold.manifest
-                    .label_control_mass_audit
-                    .lost_outside_target_support_q16,
-            );
         if fold.manifest.ordinal != ordinal
             || fold.manifest.held_out_document_id != EXPECTED_DOCUMENT_IDS[ordinal]
             || fold.manifest.held_out_document_trace_cid != EXPECTED_DOCUMENT_TRACE_CIDS[ordinal]
@@ -3665,20 +3596,21 @@ fn validate_result(
             || fold
                 .manifest
                 .label_control_mass_audit
-                .donor_recorded_mass_q16
-                != expected_recorded_control_mass
+                .original_covered_mass_q16
+                == 0
             || fold
                 .manifest
                 .label_control_mass_audit
-                .retained_on_target_support_q16
-                == 0
-            || recomposed_control_mass
-                != Some(
-                    fold.manifest
-                        .label_control_mass_audit
-                        .donor_recorded_mass_q16,
-                )
-            || fold.manifest.label_control_mass_audit.zero_overlap_rows != 0
+                .original_covered_mass_q16
+                != fold
+                    .manifest
+                    .label_control_mass_audit
+                    .permuted_covered_mass_q16
+            || !fold
+                .manifest
+                .label_control_mass_audit
+                .mass_preserved_exactly
+            || fold.manifest.label_control_mass_audit.invalid_support_rows != 0
             || fold.manifest.label_control_mass_audit.unchanged_label_rows != 0
             || !valid_blake3_cid(&fold.candidate_support_cid)
             || fold.diagnostic_boundaries.len() != DIAGNOSTIC_BOUNDARIES.len()
@@ -4320,7 +4252,7 @@ mod tests {
     }
 
     #[test]
-    fn document_label_permutation_is_boundary_independent_and_token_aligned() {
+    fn slot_label_rotation_is_boundary_independent_and_mass_preserving() {
         let rows = vec![
             probe_row("14", 1, [60_000, 5_000, 535], 0),
             probe_row("657", 1, [535, 60_000, 5_000], 3),
@@ -4331,13 +4263,13 @@ mod tests {
                 .map(|row| (row.document_id.clone(), row.position)),
         )
         .expect("mapping");
-        let (first, changed) = document_permuted_training_rows(&rows, &plan).expect("permutation");
+        let (first, changed) = slot_permuted_training_rows(&rows, &plan).expect("permutation");
         let mut changed_features = rows.clone();
         for row in &mut changed_features {
             row.features.reverse();
         }
         let (second, replay_changed) =
-            document_permuted_training_rows(&changed_features, &plan).expect("replay permutation");
+            slot_permuted_training_rows(&changed_features, &plan).expect("replay permutation");
         assert_eq!(changed, 3);
         assert_eq!(replay_changed, 3);
         assert_eq!(
@@ -4347,13 +4279,26 @@ mod tests {
                 .map(|row| &row.teacher_q16)
                 .collect::<Vec<_>>()
         );
-        assert_eq!(first[0].teacher_q16, rows[1].teacher_q16);
-        assert_eq!(first[1].teacher_q16, rows[2].teacher_q16);
-        assert_eq!(first[2].teacher_q16, rows[0].teacher_q16);
+        for (control, real) in first.iter().zip(&rows) {
+            let mut expected = real.teacher_q16.clone();
+            expected.rotate_left(1);
+            assert_eq!(control.teacher_q16, expected);
+            assert_eq!(
+                control
+                    .teacher_q16
+                    .iter()
+                    .map(|weight| u64::from(*weight))
+                    .sum::<u64>(),
+                real.teacher_q16
+                    .iter()
+                    .map(|weight| u64::from(*weight))
+                    .sum::<u64>()
+            );
+        }
     }
 
     #[test]
-    fn global_row_permutation_is_bijective_for_unequal_lengths_and_heterogeneous_supports() {
+    fn slot_rotation_handles_unequal_documents_and_heterogeneous_supports() {
         let document_weights = BTreeMap::from([
             (
                 "14",
@@ -4398,34 +4343,39 @@ mod tests {
                 .map(|row| (row.document_id.clone(), row.position)),
         )
         .expect("unequal-length mapping");
-        assert_eq!(plan.donor_by_target.len(), rows.len());
-        assert_eq!(
-            plan.donor_by_target.values().collect::<BTreeSet<_>>().len(),
-            rows.len()
-        );
-        assert!(plan
-            .donor_by_target
-            .iter()
-            .all(|(target, donor)| target.0 != donor.0));
+        assert_eq!(plan.row_identities.len(), rows.len());
         let (permuted, changed) =
-            document_permuted_training_rows(&rows, &plan).expect("aligned control");
+            slot_permuted_training_rows(&rows, &plan).expect("aligned control");
         assert_eq!(changed, rows.len() as u64);
         assert!(permuted
             .iter()
             .zip(&rows)
             .all(|(control, real)| control.tokens == real.tokens
                 && control.teacher_q16 != real.teacher_q16));
-        for control in &permuted {
-            let donor_identity = plan
-                .donor_by_target
-                .get(&(control.document_id.clone(), control.position))
-                .expect("mapped donor");
-            let donor = rows
-                .iter()
-                .find(|row| row.document_id == donor_identity.0 && row.position == donor_identity.1)
-                .expect("donor row");
-            assert_eq!(control.teacher_top32_q16, donor.teacher_top32_q16);
-            assert_eq!(control.teacher_top_token, donor.teacher_top_token);
+        for (control, real) in permuted.iter().zip(&rows) {
+            let mut expected = real.teacher_q16.clone();
+            expected.rotate_left(1);
+            assert_eq!(control.teacher_q16, expected);
+            assert_eq!(
+                control.teacher_top32_q16,
+                control
+                    .tokens
+                    .iter()
+                    .copied()
+                    .zip(control.teacher_q16.iter().copied())
+                    .collect()
+            );
+            assert_eq!(
+                control
+                    .teacher_q16
+                    .iter()
+                    .map(|weight| u64::from(*weight))
+                    .sum::<u64>(),
+                real.teacher_q16
+                    .iter()
+                    .map(|weight| u64::from(*weight))
+                    .sum::<u64>()
+            );
         }
     }
 
