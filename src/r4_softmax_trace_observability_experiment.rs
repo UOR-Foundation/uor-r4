@@ -4234,7 +4234,7 @@ mod tests {
                 u64::from_le_bytes(mask)
             })
             .collect::<Vec<_>>();
-        for lane in 0..PROBE_WIDTH {
+        for (lane, actual) in first.iter().enumerate() {
             let expected = input
                 .iter()
                 .enumerate()
@@ -4247,7 +4247,7 @@ mod tests {
                     sign * *value / (input.len() as f64).sqrt()
                 })
                 .sum::<f64>();
-            assert_eq!(first[lane].to_bits(), expected.to_bits(), "lane {lane}");
+            assert_eq!(actual.to_bits(), expected.to_bits(), "lane {lane}");
         }
     }
 
