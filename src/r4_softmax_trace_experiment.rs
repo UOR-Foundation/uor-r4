@@ -1396,9 +1396,7 @@ fn validate_loaded_trace_bundle(
         .map(|document| document.targets.len())
         .max()
         .ok_or_else(|| {
-            R4SoftmaxTraceExperimentError::Trace(
-                "construction trace manifest is empty".to_owned(),
-            )
+            R4SoftmaxTraceExperimentError::Trace("construction trace manifest is empty".to_owned())
         })?;
 
     for ((trace, document), audit) in bundle

@@ -849,7 +849,10 @@ struct R4SoftmaxTraceStateRevealArgs {
     #[arg(long, default_value = "docs/r4_softmax_trace_student_973_raw.json")]
     judge: PathBuf,
     /// Decision-bearing #1011 result output.
-    #[arg(long, default_value = "docs/r4_softmax_trace_state_student_1011_raw.json")]
+    #[arg(
+        long,
+        default_value = "docs/r4_softmax_trace_state_student_1011_raw.json"
+    )]
     result_output: PathBuf,
 }
 
@@ -4363,7 +4366,10 @@ mod tests {
         };
         assert_eq!(args.implementation_revision, revision);
         assert_eq!(args.trace_bundle, PathBuf::from("/tmp/construction.bin"));
-        assert_eq!(args.predecessor_freeze, PathBuf::from("/tmp/predecessor.json"));
+        assert_eq!(
+            args.predecessor_freeze,
+            PathBuf::from("/tmp/predecessor.json")
+        );
         assert_eq!(args.suffix_artifact, PathBuf::from("/tmp/suffix.bin"));
         assert_eq!(args.artifact_output, PathBuf::from("/tmp/state.bin"));
         assert_eq!(args.freeze_output, PathBuf::from("/tmp/state-freeze.json"));
