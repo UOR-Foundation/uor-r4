@@ -19,7 +19,7 @@ make an hours-long run the price of learning whether a mechanism is reachable.
 Experimental evaluations are dormant by default. Activate only the smallest
 probe whose possible outcomes cause different next actions.
 
-### Active decision — source-faithful intrinsic R4 attention/#973
+### Active decision — provider-free autonomous R4SoftmaxReferenceGeneratorV1 (HELM-D-R4)/#973
 
 PR #997 proved reachability but rejected its componentwise-Frechet placement:
 real 2,931/35,028 (8.367592%), unchanged #953 4,281/35,028 (12.221651%),
@@ -71,17 +71,24 @@ checkpoint parity remains `NOT_RUN`. `IntrinsicLorentzR4AttentionV1` attempt 02
 reached construction validation and stopped unavailable before D3 because its
 barycenter-covariance audit missed the frozen ceiling. Its diagnostic NLL also
 trailed donor and flat R4. Intrinsic attention is therefore not established;
-multi-resonance replacement and recurrence/lowering remain blocked.
+learned-manifold V2 then failed retention and matched parity. The 8/8-contract
+score/readout attempt stopped at its two-document preflight and rejected
+tangent readout (pooled normalized audit-MSE ratio `1.0643688804269025`). Ordinary dot-product/stable-
+softmax causal attention in coherent R4/Spin frames is now the accepted
+baseline. Intrinsic score/readout, multi-resonance replacement,
+recurrence/lowering, and D3 are parked or `NOT_RUN`.
 
-The next #973 construction-only freeze copies HELM-D's manifold-valued learned
-Q/K/V projections, declared Lorentz-inner-product score with learned
-scale/bias, and a stable equivariant centroid. That separately frozen arm must
-compare against the donor, gauge-equivalent
-R4-frame reference, and equal-budget Euclidean/plain controls. Only a positive
-intrinsic result activates fiber-preserving multi-resonance replacement; only a
-positive replacement activates bounded recurrent factorization. Softmax, dense
-all-prefix work, and source weights remain offline oracles. None of these alone
-closes #973 or unblocks #954.
+The next #973 gate is provider-free autonomous
+`R4SoftmaxReferenceGeneratorV1` (`HELM-D-R4`) generation using the credited
+HELM attention seam and UOR's pinned SmolLM2 `HuggingFaceLlamaOracle` for
+embeddings, RoPE, residual/RMSNorm, MLP, final normalization, and the
+language-model head. It must first produce replayable,
+coherent autonomous output through the CLI with explicit provider, weight,
+cache, causal-read, decoding, and work evidence. This reference remains
+transformer-compatible and `f32`/multiply/alloc/source-weight backed—not
+table-native, multiply-free, or transformerless. Web/WASM and release evidence
+remain ineligible until that CLI gate passes. None of this alone closes #973 or
+unblocks #954.
 
 ### Established product decision — B0/#989
 
@@ -137,8 +144,9 @@ target-free because the frozen swapped states commute. The independently
 frozen V2 repair then passed its bounded noncommuting decoded contract. PR #997
 then rejected the first natural document placement. Its first bounded
 gated-delta core later trailed plain delta. #973 continues to block #954 while
-it owns the direct geometric-attention reference, resonance/recurrent lowering,
-and final requalification.
+it owns the accepted ordinary-attention reference and the active provider-free
+autonomous generation gate. Intrinsic/readout, resonance/recurrent lowering,
+and final requalification are parked.
 
 A negative result remains evidence about its declared mechanism and
 distribution. It does not erase a separately established storage, identity,
@@ -895,10 +903,11 @@ unavailable before D3. Source-faithful
 [`HelmDLearnedManifoldR4ConstructionV2`](helm_d_learned_manifold_r4_construction_973.md)
 then completed a valid non-D3 construction-validation negative: learned Lorentz
 failed retention and matched parity while its controls established sensitivity
-only. The single current evaluation action is a separately frozen cheap 8/8
-score-by-readout construction audit within that learned-manifold seam. D3
-remains `NOT_RUN`; resonance and recurrent lowering remain blocked conditional
-successors.
+only. The 8/8-contract attempt stopped at its two-document preflight and
+rejected tangent readout. The single current evaluation action is provider-free
+autonomous `R4SoftmaxReferenceGeneratorV1` (`HELM-D-R4`) generation,
+CLI/evidence first. D3 remains `NOT_RUN`; intrinsic/readout,
+resonance, and recurrent lowering are parked.
 
 #973 owns paragraph, conversation, and bounded-global influence only after the
 one #989-matched #953 intervention qualifies the decoded loop.
@@ -955,9 +964,9 @@ harmonic. #973 will freeze its own terminal literal before running this
 contract.
 
 The now-positive bounded V2 subprobe cannot close #973. Paragraph and
-conversation are retained, but the direct geometric-attention reference,
-resonance/recurrent lowering, and final requalification still require their own
-frozen evidence or an explicit native scope revision.
+conversation are retained. The ordinary attention reference is now accepted;
+provider-free autonomous generation is active, while intrinsic/readout,
+resonance/recurrent lowering, and final requalification are parked.
 
 #### Observed bounded-global V1 target-free terminal (2026-08-28)
 
@@ -1015,10 +1024,12 @@ gauge-equivalent ordinary-softmax parity in transported R4/Spin frames remain
 qualified. Intrinsic V1 is unavailable before D3; source-faithful
 learned-manifold V2 is now a valid non-D3 construction-validation negative.
 Its controls established sensitivity, but learned Lorentz failed retention and
-matched parity. The current #973 decision is only a separately frozen cheap 8/8
-score-by-readout construction audit within that seam, followed conditionally
-by multi-resonance and recurrent lowering; D3 remains `NOT_RUN` and #954 remains
-blocked. See the
+matched parity. The 8/8-contract attempt stopped at its two-document preflight
+and rejected tangent readout.
+The current #973 decision is provider-free autonomous
+`R4SoftmaxReferenceGeneratorV1` (`HELM-D-R4`) generation; intrinsic/readout,
+multi-resonance, and recurrent lowering are
+parked. D3 remains `NOT_RUN` and #954 remains blocked. See the
 [#973 bounded-global record](bounded_global_exact_spin_attention_973.md).
 
 ## 4. Matched controls

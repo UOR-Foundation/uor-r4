@@ -54,7 +54,7 @@ correctness, and reasoning remain separate claims.
 Optimization, broad QA, formalization, and release certification follow a
 working decision-bearing product slice. They do not replace it.
 
-## Primary direction after the first natural #973 induction result
+## Primary direction after protected localization — 2026-08-30
 
 PR #997 separated causal geometric action from useful prediction. Its exact
 `2I x Z_M x Z_M` state and `C^-1*G` readout were operative, but the
@@ -83,7 +83,15 @@ frozen negative evidence and is not retuned.
 
 The repair is `HELM-D-R4`. Pin the official MIT HELM-D source at
 `7501deca8f413848bfef804be64ce874b72a3cd7` and audit its bounded dense-decoder
-architecture and operator semantics. The source-faithful HELM-D reference keeps its own declared
+architecture and operator semantics. The active
+`R4SoftmaxReferenceGeneratorV1` credits and adapts HELM's attention seam and
+provenance; it does not port HELM's remaining geometric decoder stack. UOR's
+existing pinned SmolLM2 `HuggingFaceLlamaOracle` supplies embeddings, RoPE,
+residual/RMSNorm, MLP, final normalization, and the language-model head. The
+released HELM generation/cache path is incomplete. Its checkpoint and full
+geometric decoder remain an optional external baseline behind a separate
+tokenizer and license gate, and are not directly an R4-block runtime; no
+vendoring or checkpoint-parity claim follows. The source-faithful HELM-D reference keeps its own declared
 Lorentz logits, learned scale, ordinary causal softmax, and normalized Lorentz
 centroid; do not describe the upstream implementation as computing an `arcosh`
 geodesic-distance square. The first UOR operator is deliberately simpler and
@@ -107,13 +115,19 @@ at
 Donor/gauge parity and all three destructive-control separations passed, but
 learned-Lorentz NLL `7.71061809923296` failed donor retention
 (`3.667626465210025`) and matched learned-Euclidean parity
-(`4.483153905078387`); the controls establish sensitivity only. #973 therefore
-advances only to a separately frozen cheap 8/8 score-by-readout construction
-audit within the learned-manifold seam. Only a positive intrinsic operator
-authorizes the multi-resonance sieve; only a positive sieve authorizes
-bounded recurrent factorization and later H4/Q29/integer tables. Softmax, source
-weights, dense all-prefix work, and the donor decoder are offline scientific
-oracles, not the serving architecture. This is the architecture in
+(`4.483153905078387`); the controls establish sensitivity only. The 8/8
+contract's score/readout attempt stopped at its two-document preflight and
+rejected tangent readout (pooled normalized audit-MSE ratio
+`1.0643688804269025`). Ordinary dot-product/stable-
+softmax causal attention in coherent R4/Spin frames is the accepted current
+baseline. #973 therefore advances only to provider-free autonomous
+`R4SoftmaxReferenceGeneratorV1` (`HELM-D-R4`) generation with the credited
+attention seam and UOR's pinned SmolLM2 `HuggingFaceLlamaOracle` decoder path,
+CLI/evidence first. Intrinsic/readout,
+multi-resonance replacement, bounded recurrence, and H4/Q29/integer lowering
+are parked. The reference is transformer-compatible and `f32`/multiply/alloc/
+source-weight backed, not the final serving architecture. The binding
+architecture is in
 [ADR-0005](adr/0005-predictive-geometric-connection-memory.md).
 
 The measured evidence ledger now records `PASS` for HELM-D pinned-source
@@ -128,9 +142,13 @@ audit. Learned-manifold V2 attempt 01 stopped unavailable before validation;
 attempt 02 is the valid non-D3 construction-validation negative above, with
 result CID
 `blake3:9144913380c6ebdeebb5848138bc8e6642c1e7020d8e7a097aa3cd73cb829020`.
+Localization attempt 01 returned
+`REJECT_TANGENT_READOUT_SELECT_SCORE_PREFLIGHT`, result CID
+`blake3:79792c1a6e38733fd3eb925e364c87308ce26e02bea951f338466ab93481b374`.
 D3 remains `NOT_RUN`. Resonance replacement and bounded recurrence/lowering
-remain `NOT_RUN`. See the [intrinsic R4 record](intrinsic_lorentz_r4_attention_973.md)
-and the [learned-manifold record](helm_d_learned_manifold_r4_construction_973.md).
+remain `NOT_RUN` and parked. See the [intrinsic R4 record](intrinsic_lorentz_r4_attention_973.md),
+the [learned-manifold record](helm_d_learned_manifold_r4_construction_973.md),
+and the [localization record](helm_d_score_centroid_localization_973.md).
 
 ## Current capability-first delivery decision — #953
 
@@ -174,10 +192,11 @@ unavailable before D3. Source-faithful
 [`HelmDLearnedManifoldR4ConstructionV2`](helm_d_learned_manifold_r4_construction_973.md)
 is now a valid non-D3 construction-validation negative: learned Lorentz failed
 retention and matched parity, while its controls established sensitivity only.
-The single active successor is a separately frozen cheap 8/8
-score-by-readout construction audit within that learned-manifold seam.
-Multi-resonance, recurrent factorization, final requalification, D3, and #954
-remain blocked.
+The 8/8-contract attempt stopped at its two-document preflight and rejected
+tangent readout. The single active successor is provider-free autonomous
+`R4SoftmaxReferenceGeneratorV1` (`HELM-D-R4`) generation.
+Intrinsic/readout, multi-resonance, recurrent factorization, and final
+requalification are parked; D3 remains `NOT_RUN` and #954 remains blocked.
 No new H4,
 SpiralCore, harmonic, algebraic, placement, transport, or scale qualifier is
 eligible outside its exposed issue.
@@ -282,8 +301,10 @@ construction-bound exact-descriptor selector at each of paragraph and
   [`HelmDLearnedManifoldR4ConstructionV2`](helm_d_learned_manifold_r4_construction_973.md)
   is now a valid non-D3 construction-validation negative. Its controls
   established sensitivity, but learned Lorentz failed retention and parity.
-  The only active rung is a separately frozen cheap 8/8 score-by-readout
-  construction audit within that learned-manifold seam. Calling a later
+  The 8/8-contract attempt stopped at its two-document preflight and rejected
+  tangent readout. The only active rung is provider-free autonomous
+  `R4SoftmaxReferenceGeneratorV1` (`HELM-D-R4`) generation; intrinsic,
+  resonance, recurrence, and lowering are parked. Calling a later
 #973 operator harmonic additionally requires an
 artifact-bound basis/mode contract. #962
 separately owns product chat integration and persisted, identity-scoped hive
@@ -1260,9 +1281,12 @@ noncommuting global mechanisms recorded below. Its first bounded-global V1
 relation remains negative history; V2 qualified one bounded-global selection
 mechanism. The first independently frozen document-scope corpus-induced
 placement subsequently passed target-free qualification but failed its held-out
-promotion comparisons. The bounded gated-delta core later trailed plain delta,
-leaving direct geometric attention, resonance/recurrent lowering, and final
-requalification open.
+promotion comparisons. The bounded gated-delta core later trailed plain delta.
+Ordinary dot-product/stable-softmax attention in coherent R4/Spin frames is now
+the accepted reference, and provider-free autonomous
+`R4SoftmaxReferenceGeneratorV1` (`HELM-D-R4`) generation is active;
+intrinsic/readout, resonance/recurrent lowering, and
+final requalification are parked.
 Product CLI/HTTP chat integration, restart-persistent conversation state, and
 identity-scoped hive-memory lifecycle remain #962 scope.
 
@@ -1651,10 +1675,12 @@ H4 connection against a working plain arm and a strong coherent-tangent
   covariance but failed held-out functional binding. #973 now pins the HELM-D
   architecture, freezes an ordinary decoder donor, and now passes full-decoder
   gauge-equivalent ordinary-softmax parity in exact R4/Spin frames on bounded
-  real causal language. No parity result alone may
-  advance to the D3 join. A later positive must first survive trained intrinsic
-  R4 distance/centroid attention, fiber-preserving multi-resonance replacement,
-  and bounded recurrent factorization under matched destructive controls.
+  real causal language. The later intrinsic attempts did not qualify: V1
+  stopped unavailable, learned-manifold V2 failed retention/parity, and the
+  8/8-contract attempt stopped at its two-document preflight and rejected
+  tangent readout. The maintainer accepts the
+  ordinary attention baseline and parks intrinsic, resonance, replacement,
+  recurrence, and lowering while autonomous reference generation is built.
 See ADR-0005 and the
 [#973 corpus-induced document placement record](corpus_induced_document_spin_placement_973.md).
 
@@ -1665,9 +1691,10 @@ now satisfy the bounded parity rung: numerical/behavioral parity, causal reads,
 transport work, replay, and a destructive frame control are recorded.
 Source-faithful learned-manifold V2 did not retain that effect or match its
 Euclidean control, although its destructive controls established sensitivity.
-The sole next step is a separately frozen cheap 8/8 score-by-readout
-construction audit within that seam; resonance, recurrence, D3, and scale
-remain blocked. The one
+The 8/8-contract attempt stopped at its two-document preflight and rejected
+tangent readout. The sole next step is provider-free autonomous
+`R4SoftmaxReferenceGeneratorV1` (`HELM-D-R4`) generation; intrinsic/readout,
+resonance, recurrence, and scale are parked, while D3 remains `NOT_RUN`. The one
 separation permitted inside #953 was a tiny construction-only, same-frame,
 candidate-conditioned context-placement overlay over already-admitted
 candidates followed by frozen label attachment. Its label-free,
@@ -1834,9 +1861,10 @@ hours remains a hard kill ceiling, never an estimate.
   independently frozen V2 repair retained one bounded noncommuting global
   mechanism. Its first document-scope corpus-induced placement passed
   target-free qualification but failed the held-out promotion gate. The first
-  bounded gated-delta core also trailed plain delta. #973 alone owns the direct
-  geometric-attention oracle, resonance/recurrent lowering, and final
-  requalification.
+  bounded gated-delta core also trailed plain delta. #973 owns the accepted
+  ordinary-attention reference and active autonomous-generation gate;
+  intrinsic/readout, resonance/recurrent lowering, and final requalification
+  are parked.
 - S3/R4 compute, Hopf S2/R3 observation, and an E8 action plane are distinct
   objects.
 - Exact recall, grammatical text, correct inference, and reasoning are separate

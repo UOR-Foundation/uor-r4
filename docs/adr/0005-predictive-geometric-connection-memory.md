@@ -1,11 +1,12 @@
-# ADR-0005: HELM-D-R4 reference attention, intrinsic geometry, and recurrent lowering
+# ADR-0005: HELM-D-R4 reference attention, autonomous generation, and parked intrinsic replacement
 
-- **Status:** Accepted; V4 is terminal-negative, `HELM-D-R4` parity remains
-  qualified, intrinsic R4 V1 attempt 02 stopped unavailable before D3, and
-  source-faithful learned-manifold V2 is a valid non-D3
-  construction-validation negative. The sole active successor is a separately
-  frozen cheap 8/8 score-by-readout construction audit within that seam
-- **Date:** 2026-08-28; direction updated 2026-08-29
+- **Status:** Accepted; ordinary dot-product/stable-softmax causal attention in
+  coherent R4/Spin frames is the current baseline. The localization attempt
+  stopped at its two-document preflight and rejected tangent readout.
+  Intrinsic/readout, resonance, softmax replacement,
+  recurrence, and lowering are parked. Provider-free autonomous
+  `R4SoftmaxReferenceGeneratorV1` (`HELM-D-R4`) generation is the sole active successor
+- **Date:** 2026-08-28; direction updated 2026-08-30
 - **Owner:** #973 under programme root #820
 - **Supersedes for forward work:** another fixed componentwise prototype or
   scale-only repair after the #997 negative
@@ -41,24 +42,40 @@
   sensitivity only
   ([record](../helm_d_learned_manifold_r4_construction_973.md),
   [machine result](../helm_d_learned_manifold_r4_construction_attempt_02_result_973.json),
-  [next localization](../helm_d_score_centroid_localization_973.md))
-- **Multi-resonance replacement result:** `NOT_RUN`
-- **Recurrent factorization/lowering result:** `NOT_RUN`
+  [localization preflight result](../helm_d_score_centroid_localization_973.md))
+- **Score/readout localization result:**
+  `REJECT_TANGENT_READOUT_SELECT_SCORE_PREFLIGHT`; tangent readout increased
+  normalized audit MSE on both documents, with pooled ratio
+  `1.0643688804269025`
+  ([record](../helm_d_score_centroid_localization_973.md),
+  [machine result](../helm_d_score_centroid_localization_attempt_01_result_973.json))
+- **Multi-resonance replacement result:** `NOT_RUN`, parked
+- **Recurrent factorization/lowering result:** `NOT_RUN`, parked
 
 ## Decision
 
-UOR-R4 will establish a complete bounded ordinary causal-attention reference in
-transported R4/Spin frames before training an intrinsic geometric attention
-operator or attempting to compress it. The positive reference mechanism is
-`HELM-D-R4`. The first intrinsic R4 distance/centroid attempt did not qualify;
-the source-faithful learned-manifold V2 copy then failed retention and matched
-parity on valid non-D3 construction validation. The sole active successor is a
-separately frozen cheap 8/8 score-by-readout construction audit within that
-learned-manifold seam.
+UOR-R4 accepts ordinary dot-product/stable-softmax causal attention in coherent
+R4/Spin frames as its current attention baseline. The first intrinsic R4
+distance/centroid attempt did not qualify; source-faithful learned-manifold V2
+failed retention and matched parity; and the 8/8-contract localization attempt
+stopped at its two-document preflight and rejected tangent readout. Those results are preserved. Intrinsic score/readout,
+resonance, softmax replacement, recurrence, and exact lowering are now parked.
+The sole active successor is provider-free autonomous
+`R4SoftmaxReferenceGeneratorV1` (`HELM-D-R4`) generation. It retains the
+credited HELM attention seam and uses UOR's existing pinned SmolLM2
+`HuggingFaceLlamaOracle` for embeddings, RoPE, residual/RMSNorm, MLP, final
+normalization, and the language-model head, CLI/evidence first. Web/WASM and
+release work begin only after coherent autonomous generation passes.
 Its architectural reference is the official MIT HELM-D source pinned at commit
 [`7501deca8f413848bfef804be64ce874b72a3cd7`](https://github.com/Graph-and-Geometric-Learning/helm/tree/7501deca8f413848bfef804be64ce874b72a3cd7).
+The active generator credits and adapts HELM's attention seam and provenance;
+it does not port HELM's remaining geometric decoder stack. The released HELM
+generation/cache path is incomplete. Its checkpoint and full geometric decoder
+remain an optional external baseline behind a separate tokenizer and license
+gate, and are not directly an R4-block runtime. This ADR does not authorize
+vendoring upstream code or claim upstream checkpoint parity.
 
-The sequence is strict:
+The current sequence is strict:
 
 1. bind and audit the pinned HELM-D dense-decoder architecture and exact source
    semantics;
@@ -68,13 +85,37 @@ The sequence is strict:
    each head into R4 blocks, binding exact cumulative Spin/H4 local frames,
    transporting K/V into the current query frame, and mapping the aggregate
    back before unchanged `W_o`;
-3. require numerical and behavioral parity on separately frozen real causal
-   language using next-token loss, top-1, and exact decoded output; and
-4. only after parity, qualify a trained intrinsic R4 attention arm; V1's
-   coefficient-only `acosh^2`/centroid construction stopped unavailable before
-   D3, so the next freeze copies HELM-D's learned manifold Q/K/V, declared
-   Lorentz-inner-product score, learned scale/bias, and stable equivariant
-   centroid against an equal-capacity Euclidean arm.
+3. preserve the qualified numerical/behavioral parity result and the subsequent
+   intrinsic/learned-manifold/localization negatives; and
+4. build the smallest provider-free autonomous
+   `R4SoftmaxReferenceGeneratorV1` around the credited HELM attention seam and
+   UOR's pinned SmolLM2 `HuggingFaceLlamaOracle` decoder path, prove coherent
+   replayable CLI generation, then consider web/WASM or release integration.
+
+### Active gate: provider-free autonomous reference generation
+
+The next implementation must be one bounded CLI/evidence path, not a web or
+release surface. `R4SoftmaxReferenceGeneratorV1` reuses the qualified
+transported R4/Spin attention and UOR's existing pinned SmolLM2
+`HuggingFaceLlamaOracle` supplies the local tokenizer, embeddings, RoPE,
+residual/RMSNorm, MLP, final normalization, and language-model head. All
+checkpoint and tokenizer bytes are local and content-bound. The released HELM
+cache/generation code is not assumed complete and is not the active decoder
+path; cache optimization remains deferred.
+
+Before outcomes, the owning issue must freeze prompts, deterministic decoding,
+token limit and stop rule, source/checkpoint/tokenizer identities, donor
+comparison, causal-read audit, and the exact coherence criterion. The evidence
+must include provider-call count zero, autonomous multi-token output with no
+teacher-forced continuation, next-token/logit comparison at every generated
+step, complete component provenance, exact replay, and a declared work ledger.
+Failure repairs only the UOR oracle integration or decode loop; it does not
+reactivate intrinsic score/readout or replace softmax.
+
+A positive establishes a provider-free, local, transformer-compatible
+`R4SoftmaxReferenceGeneratorV1` (`HELM-D-R4`) reference generator. It does not establish source-free, table-native,
+multiply-free, transformerless, correct, reasoning-capable, efficient, or
+release-ready intelligence.
 
 The source-faithful HELM-D reference retains its declared Lorentz implementation:
 the code at the pin forms the invariant Lorentz-inner-product distance surrogate
@@ -84,21 +125,23 @@ and aggregates by a normalized Lorentz centroid. It does not compute an
 The later intrinsic R4 arm may declare a negative squared R4 distance and a
 geometric weighted centroid as its own separately trained operator.
 
-These dense O(T^2) paths are offline scientific oracles, not the deployed
-architecture. Source weights are permitted only as the frozen donor. Numerical
-parity is not geometric advantage, transformerless inference, or a serving
-claim. Only a positive intrinsic R4 result authorizes replacement of softmax by
-the planned multi-resonance design; only a positive replacement authorizes
-`GeometricGatedDeltaRetentionR4V1` or a narrower recurrent factorization and
-later H4/Q29/ternary/integer-table lowering.
+These dense O(T^2) paths are reference architecture, not the final deployed
+architecture. The active provider-free generator uses the pinned SmolLM2
+`HuggingFaceLlamaOracle` source weights and transformer-compatible
+`f32`/multiply/alloc decoder components.
+Provider-free does not mean source-free, table-native, multiply-free, or
+transformerless. Numerical parity is not geometric advantage or a serving
+claim. Intrinsic score/readout, multi-resonance replacement,
+`GeometricGatedDeltaRetentionR4V1`, and H4/Q29/ternary/integer-table lowering
+remain parked research, not the active dependency chain.
 
 The deployed goal remains a local CPU engine with no Transformer, softmax
 all-pairs attention, mixture of experts, learned sparse expert router, Ollama,
 hosted provider, or source weights. Compiler-side fitting may use floating
 point, multiplication, allocation, and parallel reduction. None of that work is
-credited to the deployed kernel. Exact/table/ternary lowering is authorized
-only after the direct reference and its resonance/recurrent replacement
-qualify.
+credited to the deployed kernel. Exact/table/ternary lowering remains the
+destination, but it is not current work unless the maintainer reactivates the
+parked lane after autonomous reference generation.
 
 ## Why the direction changed
 
@@ -285,7 +328,7 @@ transport are a declared gauge representation whose expected positive is
 numerical and behavioral parity, not predictive advantage. Transport overhead
 is reported explicitly.
 
-### Trained intrinsic R4 successor
+### PARKED: trained intrinsic R4 successor
 
 Only after the gauge-equivalent reference qualifies may #973 vary the attention
 geometry. Its separately frozen intrinsic arm may use
@@ -314,10 +357,11 @@ learned-Lorentz NLL `7.71061809923296` failed donor retention
 (`4.483153905078387`). Donor/gauge parity, replay, causal work, and all three
 destructive-control separations passed, so the controls establish that the seam
 was exercised but not that the Lorentz operator was useful. D3 remains
-`NOT_RUN`. The sole next action is a separately frozen cheap 8/8
-score-by-readout construction audit within that learned-manifold seam.
+`NOT_RUN`. The 8/8-contract attempt subsequently stopped at its two-document
+preflight and rejected tangent readout. Score-only radius work is retained as a parked future
+contract, not the next action.
 
-### Multi-resonance replacement
+### PARKED: multi-resonance replacement
 
 After the trained intrinsic R4 softmax oracle qualifies, freeze its data, roles, transport, support,
 and outputs and vary only the weighting law. The target positive kernel is
@@ -467,9 +511,10 @@ advantage. V1's separately trained intrinsic R4 distance/centroid arm did not
 produce admissible evidence before D3. Its source-faithful learned-manifold V2
 successor then failed to retain the donor or match its Euclidean control on
 valid non-D3 construction validation, even though destructive controls
-established sensitivity. The separately frozen cheap 8/8 score-by-readout
-construction audit is the only active repair. Strict improvement remains the
-only geometry-specific advantage claim. Neither parity nor
+established sensitivity. The 8/8-contract score/readout attempt stopped at its
+two-document preflight and rejected tangent readout. No intrinsic repair is active. Strict
+improvement remains the only geometry-specific advantage claim if that lane is
+reactivated. Neither parity nor
 intrinsic success establishes correctness, reasoning, coherence, chat,
 efficiency, transformerless serving, or release readiness.
 
@@ -491,9 +536,10 @@ aggregation, recurrent banks, or connection transport. Its ignored corpus run
 remains `NOT_RUN`. It is parked because it cannot establish or falsify the full
 mechanism and is no longer in the active dependency chain.
 
-## Resonance, recurrence, and held-out promotion
+## PARKED: resonance, recurrence, and held-out promotion
 
-Only a qualified trained intrinsic R4 reference authorizes the resonance
+The following contract is retained for possible future reactivation; it is not
+current work. Only a qualified trained intrinsic R4 reference authorizes the resonance
 replacement. Freeze its construction split, parameters, support, transport,
 and evaluation before changing softmax. The multi-resonance arm must preserve
 the reference's direction on loss/top-1 and remain weaker under mode,
@@ -522,7 +568,16 @@ reasoning, general coherence, chat, performance advantage, exact runtime
 lowering, or product readiness.
 #954 stays blocked until the complete #973 hierarchy terminal is earned.
 
-## Outcome branches
+## Current outcome branch
+
+| Result | Required next action |
+|---|---|
+| Accepted ordinary R4/Spin softmax baseline plus tangent-readout localization rejection | Build provider-free autonomous `R4SoftmaxReferenceGeneratorV1` (`HELM-D-R4`) generation with the credited HELM attention seam and UOR's pinned SmolLM2 `HuggingFaceLlamaOracle` decoder path. Require coherent replayable CLI output before web/WASM or release work. Keep intrinsic/readout, resonance, softmax replacement, recurrence, and lowering parked. |
+
+## Historical intrinsic/replacement outcome branches — parked
+
+The table below preserves the pre-localization decision tree. It is not the
+active queue and requires an explicit maintainer reactivation.
 
 | Result | Required next action |
 |---|---|

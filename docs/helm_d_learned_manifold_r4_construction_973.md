@@ -511,3 +511,18 @@ repair to projection, score, centroid, or fitting. No new corpus volume, route
 family, dimension, E8 expansion,
 multi-resonance replacement, recurrence, exact lowering, D3 reveal, #954 work,
 generation, correctness, or reasoning claim is authorized.
+
+## Score/readout outcome and superseding direction — 2026-08-30
+
+Protected score-by-readout Attempt 01 returned
+`REJECT_TANGENT_READOUT_SELECT_SCORE_PREFLIGHT`: tangent aggregation was worse
+on both untouched-parameter preflight documents; the lower flat-score
+cross-entropy was diagnostic only. The maintainer has parked intrinsic
+score/readout, score-radius, resonance, recurrent, and softmax-replacement
+research. The accepted baseline is ordinary dot-product/stable-softmax causal
+attention in coherent R4/Spin frames. The active #973 gate is provider-free
+autonomous `R4SoftmaxReferenceGeneratorV1` (`HELM-D-R4`) generation with the
+credited HELM attention seam and UOR's pinned SmolLM2
+`HuggingFaceLlamaOracle` decoder path, CLI and replayable evidence first. It remains transformer-compatible,
+f32/source-weight-backed, and not source-free, table-native, multiply-free, or
+transformerless; web and release work wait for coherent generation.

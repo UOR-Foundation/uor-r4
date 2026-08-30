@@ -3,8 +3,9 @@
 - **Status:** Historical #948–#958 sequencing record. Superseded for forward
   work by the
   [Geometric Intelligence Programme](geometric_intelligence_programme.md).
-  The current direct-attention, multi-resonance, and recurrent-lowering
-  architecture is
+  The current accepted ordinary-attention baseline, provider-free autonomous
+  reference-generation gate, and parked intrinsic/replacement architecture are
+  in
   [ADR-0005](adr/0005-predictive-geometric-connection-memory.md); the body below
   is not its implementation plan.
 - **Adopted:** 2026-08-25 through GitHub programme root

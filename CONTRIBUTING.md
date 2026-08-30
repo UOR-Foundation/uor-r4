@@ -6,8 +6,8 @@ first change. The authoritative issue order lives in the
 [R4 Intelligence Completion Plan](docs/r4_intelligence_completion_plan.md),
 with architecture and claim boundaries in the
 [Geometric Intelligence Programme](docs/geometric_intelligence_programme.md).
-The active #973 dense geometric-attention reference, learned-manifold result,
-bounded localization successor, and downstream gate sequence are frozen in
+The accepted #973 attention reference, completed learned-manifold/localization
+results, parked intrinsic-replacement lane, and autonomous-generation gate are frozen in
 [ADR-0005](docs/adr/0005-predictive-geometric-connection-memory.md).
 This file is the short version.
 
@@ -122,9 +122,14 @@ The experiment must be able to change the next programme decision:
   flat. The subsequent source-faithful learned-manifold V2 run was valid but
   negative: learned-Lorentz NLL `7.710618` failed donor retention
   (`3.667626`) and matched Euclidean parity (`4.483154`), although all three
-  destructive controls separated. Work next only on the separately frozen
-  8/8 construction audit that crosses Lorentz/Euclidean score with
-  normalized-Lorentz/tangent value readout. See the
+  destructive controls separated. The 8/8-contract attempt stopped at its
+  two-document preflight and rejected tangent readout (pooled normalized audit-MSE ratio
+  `1.0643688804269025`). Work next only on provider-free autonomous
+  `R4SoftmaxReferenceGeneratorV1` (`HELM-D-R4`) generation using the credited
+  HELM attention seam and UOR's pinned SmolLM2 `HuggingFaceLlamaOracle` for
+  embeddings, RoPE, residual/RMSNorm, MLP, final normalization, and the
+  language-model head, with CLI/evidence first.
+  See the
   [#989 record](docs/source_free_table_baseline_989.md).
 - **Preserve the GI evidence lineage.** GI-1 makes lexical/address state
   reversible;
@@ -172,19 +177,19 @@ The experiment must be able to change the next programme decision:
   held-out function/control gates. #973's `HELM-D-R4` full-decoder softmax
   parity now passes. Intrinsic Lorentz V1 attempt 02 is unavailable before D3;
   the source-faithful learned-manifold V2 attempt is a valid non-D3
-  construction-validation negative. Its 8/8 score-by-readout localization is
-  active.
-  Resonance, recurrent factorization, exact lowering, and GI-4/#954 remain
-  blocked, with GI-5/#955 downstream.
+  construction-validation negative. Its 8/8-contract localization attempt
+  stopped at the two-document preflight and rejected tangent readout.
+  Provider-free autonomous `R4SoftmaxReferenceGeneratorV1` (`HELM-D-R4`)
+  generation is active. Intrinsic/readout, resonance, recurrent factorization,
+  and exact lowering are parked; GI-4/#954 remains blocked, with GI-5/#955
+  downstream.
 - **Exercise the accepted route path.** #953 geometry runs before token choice
-  and emits admitted support and its fixed-point radius trace. The current #973
-  localization must freeze its 8/8 construction split before outcomes, reuse
-  the same captured donor traces and identity value adapters across every arm,
-  share Q/K/temperature byte-for-byte within each score-paired readout, report
-  score cross-entropy and aggregate error separately, and vary only
-  Lorentz/Euclidean score and normalized-Lorentz/tangent value readout.
-  Transport overhead is measured explicitly; it is not hidden under an
-  equal-work claim.
+  and emits admitted support and its fixed-point radius trace. The completed
+  #973 localization kept its frozen split, trace identity, score-paired common
+  tensors, separate score/aggregate metrics, and exact work ledgers; it rejected
+  tangent readout. The active autonomous-generation gate must use actual causal
+  R4/Spin transport and report its provider, weight, decode, cache, and replay
+  provenance explicitly.
 - **Use the smallest falsifier.** `HELM-D-R4` first requires donor/reference
   parity, then splits every learned head into R4 blocks, encodes exact cumulative
   Spin/H4 frames, transports K/V to the query frame, applies unchanged ordinary
@@ -196,16 +201,18 @@ The experiment must be able to change the next programme decision:
   unavailable with D3 sealed; its curved NLL was diagnostically worse than donor
   and flat. Learned-manifold V2 later completed validly but failed donor
   retention and matched Euclidean parity while all destructive interventions
-  separated. Actual paired-E8 hierarchy/fiber/torsion binding remains
-  `NOT_IMPLEMENTED`. The smallest next falsifier is the fresh 8/8
-  donor-anchored score-by-readout construction audit; it must localize whether
-  the failed seam is score, normalized centroid, or both before another
-  full-decoder qualifier is authorized.
+  separated. The 8/8-contract attempt stopped at its two-document preflight,
+  rejected tangent readout, and retained score only as a future parked seam. Actual paired-E8 hierarchy/
+  fiber/torsion binding remains `NOT_IMPLEMENTED`. The smallest next falsifier
+  is provider-free autonomous `R4SoftmaxReferenceGeneratorV1` (`HELM-D-R4`)
+  generation with the credited HELM attention seam and UOR's pinned SmolLM2
+  `HuggingFaceLlamaOracle` decoder path.
   Pinned-source provenance, donor reproduction, and transported-R4 parity are
   recorded in `docs/helm_d_r4_softmax_decoder_973.md`; V1 and V2 outcomes are in
   `docs/intrinsic_lorentz_r4_attention_973.md` and
-  `docs/helm_d_learned_manifold_r4_construction_973.md`. Resonance, recurrence,
-  exact lowering, and #954 remain blocked.
+  `docs/helm_d_learned_manifold_r4_construction_973.md`, with localization in
+  `docs/helm_d_score_centroid_localization_973.md`. Intrinsic/readout,
+  resonance, recurrence, and exact lowering are parked; #954 remains blocked.
 - **Parallelize deterministic corpus work.** Partition by content identity,
   use all available local workers with canonical ordered reductions, and
   compare independent multithreaded rebuilds. Do not launch a long experiment
