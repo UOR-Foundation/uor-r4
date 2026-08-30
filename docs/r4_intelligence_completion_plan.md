@@ -13,14 +13,20 @@
   matched parity, while its controls established sensitivity only. The 8/8
   [score/readout localization](helm_d_score_centroid_localization_973.md)
   contract stopped at its two-document preflight and rejected tangent readout.
-  Ordinary dot-product/stable-softmax causal
-  attention in coherent R4/Spin frames is the accepted baseline. The sole
-  active step is provider-free autonomous `R4SoftmaxReferenceGeneratorV1`
-  (`HELM-D-R4`) generation with the credited attention seam and UOR's pinned
-  SmolLM2 `HuggingFaceLlamaOracle` decoder path, CLI/evidence first.
+  Ordinary dot-product/stable-softmax causal attention in coherent R4/Spin
+  frames is the accepted baseline. Provider-free autonomous
+  `R4SoftmaxReferenceGeneratorV1` (`HELM-D-R4`) native CLI generation now
+  passes at 4/5 frozen quality in both passes, 5/5 exact replay after deleting
+  timing, exact all-layer audits with zero future reads, and donor
+  reproduction. The sole active step is an explicit opt-in native
+  HTTP/dashboard bridge of that exact policy, with no default-engine change;
+  qualify latency only as needed for one real end-to-end prompt.
   Intrinsic/readout, resonance, softmax replacement,
   recurrence, and lowering are parked. D3 remains `NOT_RUN`; #954 remains
-  blocked.
+  blocked. No tag, release, hosted promotion, or static-WASM claim is
+  authorized. See the
+  [generation record](r4_softmax_reference_generation_973.md) and
+  [compact aggregate](r4_softmax_reference_generation_attempt_01_result_973.json).
   The intermediate
   [Geometric Causal Decoder Roadmap](geometric_causal_decoder_plan.md) records
   the superseded #948-#958 sequence.

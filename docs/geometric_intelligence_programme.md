@@ -83,12 +83,13 @@ frozen negative evidence and is not retuned.
 
 The repair is `HELM-D-R4`. Pin the official MIT HELM-D source at
 `7501deca8f413848bfef804be64ce874b72a3cd7` and audit its bounded dense-decoder
-architecture and operator semantics. The active
+architecture and operator semantics. The qualified
 `R4SoftmaxReferenceGeneratorV1` credits and adapts HELM's attention seam and
 provenance; it does not port HELM's remaining geometric decoder stack. UOR's
 existing pinned SmolLM2 `HuggingFaceLlamaOracle` supplies embeddings, RoPE,
 residual/RMSNorm, MLP, final normalization, and the language-model head. The
-released HELM generation/cache path is incomplete. Its checkpoint and full
+No HELM checkpoint or generation code executed in this gate. The released HELM
+generation/cache path is incomplete. Its checkpoint and full
 geometric decoder remain an optional external baseline behind a separate
 tokenizer and license gate, and are not directly an R4-block runtime; no
 vendoring or checkpoint-parity claim follows. The source-faithful HELM-D reference keeps its own declared
@@ -120,15 +121,20 @@ contract's score/readout attempt stopped at its two-document preflight and
 rejected tangent readout (pooled normalized audit-MSE ratio
 `1.0643688804269025`). Ordinary dot-product/stable-
 softmax causal attention in coherent R4/Spin frames is the accepted current
-baseline. #973 therefore advances only to provider-free autonomous
-`R4SoftmaxReferenceGeneratorV1` (`HELM-D-R4`) generation with the credited
+baseline. Provider-free autonomous `R4SoftmaxReferenceGeneratorV1`
+(`HELM-D-R4`) native CLI generation now passes with the credited
 attention seam and UOR's pinned SmolLM2 `HuggingFaceLlamaOracle` decoder path,
-CLI/evidence first. Intrinsic/readout,
+CLI/evidence path: 4/5 quality in both passes, 5/5 exact replay after timing
+removal, exact all-layer audits with zero future reads, and donor reproduction.
+#973 therefore advances only to an explicit opt-in native HTTP/dashboard bridge
+of that exact policy, with no default-engine change. Intrinsic/readout,
 multi-resonance replacement, bounded recurrence, and H4/Q29/integer lowering
 are parked. The reference is transformer-compatible and `f32`/multiply/alloc/
 source-weight backed, not the final serving architecture. The binding
 architecture is in
-[ADR-0005](adr/0005-predictive-geometric-connection-memory.md).
+[ADR-0005](adr/0005-predictive-geometric-connection-memory.md); the PASS is in
+the [generation record](r4_softmax_reference_generation_973.md) and
+[compact aggregate](r4_softmax_reference_generation_attempt_01_result_973.json).
 
 The measured evidence ledger now records `PASS` for HELM-D pinned-source
 provenance, ordinary-donor deterministic reproduction, transported-R4 parity,
@@ -193,8 +199,9 @@ unavailable before D3. Source-faithful
 is now a valid non-D3 construction-validation negative: learned Lorentz failed
 retention and matched parity, while its controls established sensitivity only.
 The 8/8-contract attempt stopped at its two-document preflight and rejected
-tangent readout. The single active successor is provider-free autonomous
-`R4SoftmaxReferenceGeneratorV1` (`HELM-D-R4`) generation.
+tangent readout. Provider-free autonomous `R4SoftmaxReferenceGeneratorV1`
+(`HELM-D-R4`) generation now passes. The single active successor is its
+explicit opt-in native HTTP/dashboard bridge, with no default-engine change.
 Intrinsic/readout, multi-resonance, recurrent factorization, and final
 requalification are parked; D3 remains `NOT_RUN` and #954 remains blocked.
 No new H4,
@@ -302,8 +309,9 @@ construction-bound exact-descriptor selector at each of paragraph and
   is now a valid non-D3 construction-validation negative. Its controls
   established sensitivity, but learned Lorentz failed retention and parity.
   The 8/8-contract attempt stopped at its two-document preflight and rejected
-  tangent readout. The only active rung is provider-free autonomous
-  `R4SoftmaxReferenceGeneratorV1` (`HELM-D-R4`) generation; intrinsic,
+  tangent readout. Provider-free autonomous `R4SoftmaxReferenceGeneratorV1`
+  (`HELM-D-R4`) generation now passes. The only active rung is its explicit
+  opt-in native HTTP/dashboard bridge; intrinsic,
   resonance, recurrence, and lowering are parked. Calling a later
 #973 operator harmonic additionally requires an
 artifact-bound basis/mode contract. #962
@@ -1284,7 +1292,8 @@ placement subsequently passed target-free qualification but failed its held-out
 promotion comparisons. The bounded gated-delta core later trailed plain delta.
 Ordinary dot-product/stable-softmax attention in coherent R4/Spin frames is now
 the accepted reference, and provider-free autonomous
-`R4SoftmaxReferenceGeneratorV1` (`HELM-D-R4`) generation is active;
+`R4SoftmaxReferenceGeneratorV1` (`HELM-D-R4`) generation now passes; its
+explicit opt-in native HTTP/dashboard bridge is active;
 intrinsic/readout, resonance/recurrent lowering, and
 final requalification are parked.
 Product CLI/HTTP chat integration, restart-persistent conversation state, and
@@ -1680,7 +1689,8 @@ H4 connection against a working plain arm and a strong coherent-tangent
   8/8-contract attempt stopped at its two-document preflight and rejected
   tangent readout. The maintainer accepts the
   ordinary attention baseline and parks intrinsic, resonance, replacement,
-  recurrence, and lowering while autonomous reference generation is built.
+  recurrence, and lowering. Autonomous reference generation now passes; its
+  opt-in native HTTP/dashboard bridge is active.
 See ADR-0005 and the
 [#973 corpus-induced document placement record](corpus_induced_document_spin_placement_973.md).
 
@@ -1692,8 +1702,9 @@ transport work, replay, and a destructive frame control are recorded.
 Source-faithful learned-manifold V2 did not retain that effect or match its
 Euclidean control, although its destructive controls established sensitivity.
 The 8/8-contract attempt stopped at its two-document preflight and rejected
-tangent readout. The sole next step is provider-free autonomous
-`R4SoftmaxReferenceGeneratorV1` (`HELM-D-R4`) generation; intrinsic/readout,
+tangent readout. Provider-free autonomous `R4SoftmaxReferenceGeneratorV1`
+(`HELM-D-R4`) generation now passes. The sole next step is its explicit opt-in
+native HTTP/dashboard bridge; intrinsic/readout,
 resonance, recurrence, and scale are parked, while D3 remains `NOT_RUN`. The one
 separation permitted inside #953 was a tiny construction-only, same-frame,
 candidate-conditioned context-placement overlay over already-admitted
@@ -1862,7 +1873,8 @@ hours remains a hard kill ceiling, never an estimate.
   mechanism. Its first document-scope corpus-induced placement passed
   target-free qualification but failed the held-out promotion gate. The first
   bounded gated-delta core also trailed plain delta. #973 owns the accepted
-  ordinary-attention reference and active autonomous-generation gate;
+  ordinary-attention reference, qualified autonomous-generation gate, and
+  active opt-in native bridge;
   intrinsic/readout, resonance/recurrent lowering, and final requalification
   are parked.
 - S3/R4 compute, Hopf S2/R3 observation, and an E8 action plane are distinct

@@ -124,11 +124,14 @@ The experiment must be able to change the next programme decision:
   (`3.667626`) and matched Euclidean parity (`4.483154`), although all three
   destructive controls separated. The 8/8-contract attempt stopped at its
   two-document preflight and rejected tangent readout (pooled normalized audit-MSE ratio
-  `1.0643688804269025`). Work next only on provider-free autonomous
-  `R4SoftmaxReferenceGeneratorV1` (`HELM-D-R4`) generation using the credited
+  `1.0643688804269025`). Provider-free autonomous
+  `R4SoftmaxReferenceGeneratorV1` (`HELM-D-R4`) generation now passes using the credited
   HELM attention seam and UOR's pinned SmolLM2 `HuggingFaceLlamaOracle` for
   embeddings, RoPE, residual/RMSNorm, MLP, final normalization, and the
-  language-model head, with CLI/evidence first.
+  language-model head: 4/5 quality in both passes, 5/5 exact replay after
+  deleting timing, exact all-layer audits with zero future reads, and donor
+  reproduction. Work next only on an explicit opt-in native HTTP/dashboard
+  bridge of that exact policy, without changing the default engine.
   See the
   [#989 record](docs/source_free_table_baseline_989.md).
 - **Preserve the GI evidence lineage.** GI-1 makes lexical/address state
@@ -180,16 +183,18 @@ The experiment must be able to change the next programme decision:
   construction-validation negative. Its 8/8-contract localization attempt
   stopped at the two-document preflight and rejected tangent readout.
   Provider-free autonomous `R4SoftmaxReferenceGeneratorV1` (`HELM-D-R4`)
-  generation is active. Intrinsic/readout, resonance, recurrent factorization,
+  generation now passes. Its explicit opt-in native HTTP/dashboard bridge is
+  active. Intrinsic/readout, resonance, recurrent factorization,
   and exact lowering are parked; GI-4/#954 remains blocked, with GI-5/#955
   downstream.
 - **Exercise the accepted route path.** #953 geometry runs before token choice
   and emits admitted support and its fixed-point radius trace. The completed
   #973 localization kept its frozen split, trace identity, score-paired common
   tensors, separate score/aggregate metrics, and exact work ledgers; it rejected
-  tangent readout. The active autonomous-generation gate must use actual causal
-  R4/Spin transport and report its provider, weight, decode, cache, and replay
-  provenance explicitly.
+  tangent readout. The qualified autonomous-generation gate used actual causal
+  R4/Spin transport and reports its provider, weight, decode, cache, and replay
+  provenance explicitly. The bridge must preserve that exact policy and
+  provenance.
 - **Use the smallest falsifier.** `HELM-D-R4` first requires donor/reference
   parity, then splits every learned head into R4 blocks, encodes exact cumulative
   Spin/H4 frames, transports K/V to the query frame, applies unchanged ordinary
@@ -204,15 +209,23 @@ The experiment must be able to change the next programme decision:
   separated. The 8/8-contract attempt stopped at its two-document preflight,
   rejected tangent readout, and retained score only as a future parked seam. Actual paired-E8 hierarchy/
   fiber/torsion binding remains `NOT_IMPLEMENTED`. The smallest next falsifier
-  is provider-free autonomous `R4SoftmaxReferenceGeneratorV1` (`HELM-D-R4`)
+  was provider-free autonomous `R4SoftmaxReferenceGeneratorV1` (`HELM-D-R4`)
   generation with the credited HELM attention seam and UOR's pinned SmolLM2
-  `HuggingFaceLlamaOracle` decoder path.
+  `HuggingFaceLlamaOracle` decoder path; that gate now passes. The smallest
+  current falsifier is one opt-in native HTTP/dashboard prompt through the
+  identical policy, with latency qualification only as required.
   Pinned-source provenance, donor reproduction, and transported-R4 parity are
   recorded in `docs/helm_d_r4_softmax_decoder_973.md`; V1 and V2 outcomes are in
   `docs/intrinsic_lorentz_r4_attention_973.md` and
   `docs/helm_d_learned_manifold_r4_construction_973.md`, with localization in
   `docs/helm_d_score_centroid_localization_973.md`. Intrinsic/readout,
   resonance, recurrence, and exact lowering are parked; #954 remains blocked.
+  The PASS does not establish geometry advantage, softmax removal,
+  source-free/table-native serving, correctness, reasoning, frontier quality,
+  release readiness, or a static-WASM decoder.
+  See the
+  [generation record](docs/r4_softmax_reference_generation_973.md) and
+  [compact aggregate](docs/r4_softmax_reference_generation_attempt_01_result_973.json).
 - **Parallelize deterministic corpus work.** Partition by content identity,
   use all available local workers with canonical ordered reductions, and
   compare independent multithreaded rebuilds. Do not launch a long experiment

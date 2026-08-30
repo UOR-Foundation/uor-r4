@@ -19,7 +19,7 @@ make an hours-long run the price of learning whether a mechanism is reachable.
 Experimental evaluations are dormant by default. Activate only the smallest
 probe whose possible outcomes cause different next actions.
 
-### Active decision — provider-free autonomous R4SoftmaxReferenceGeneratorV1 (HELM-D-R4)/#973
+### Active decision — opt-in native R4SoftmaxReferenceGeneratorV1 HTTP/dashboard bridge/#973
 
 PR #997 proved reachability but rejected its componentwise-Frechet placement:
 real 2,931/35,028 (8.367592%), unchanged #953 4,281/35,028 (12.221651%),
@@ -78,17 +78,23 @@ softmax causal attention in coherent R4/Spin frames is now the accepted
 baseline. Intrinsic score/readout, multi-resonance replacement,
 recurrence/lowering, and D3 are parked or `NOT_RUN`.
 
-The next #973 gate is provider-free autonomous
-`R4SoftmaxReferenceGeneratorV1` (`HELM-D-R4`) generation using the credited
+The provider-free autonomous `R4SoftmaxReferenceGeneratorV1` (`HELM-D-R4`)
+native CLI gate now passes using the credited
 HELM attention seam and UOR's pinned SmolLM2 `HuggingFaceLlamaOracle` for
 embeddings, RoPE, residual/RMSNorm, MLP, final normalization, and the
-language-model head. It must first produce replayable,
-coherent autonomous output through the CLI with explicit provider, weight,
-cache, causal-read, decoding, and work evidence. This reference remains
+language-model head. It produced 4/5 frozen quality in both passes, 5/5 exact
+replay after deleting timing, all 30 layers with exact causal/projection/R4
+audits and zero future reads, and reproduced the source donor for P1 through
+EOS and P2-P5 for all 32 retained tokens. Its terminal is
+`PASS_R4_SOFTMAX_REFERENCE_GENERATION_ADVANCE_NATIVE_PRODUCT_BRIDGE`. This reference remains
 transformer-compatible and `f32`/multiply/alloc/source-weight backed—not
-table-native, multiply-free, or transformerless. Web/WASM and release evidence
-remain ineligible until that CLI gate passes. None of this alone closes #973 or
-unblocks #954.
+table-native, multiply-free, or transformerless. The next gate is one explicit
+opt-in native HTTP/dashboard integration of the exact same policy, with no
+default-engine change. Optimize or qualify latency only as needed for one real
+end-to-end prompt. Tag, release, hosted promotion, and static-WASM evidence
+remain ineligible. None of this alone closes #973 or unblocks #954. See the
+[`generation record`](r4_softmax_reference_generation_973.md) and
+[`compact aggregate`](r4_softmax_reference_generation_attempt_01_result_973.json).
 
 ### Established product decision — B0/#989
 
@@ -144,8 +150,8 @@ target-free because the frozen swapped states commute. The independently
 frozen V2 repair then passed its bounded noncommuting decoded contract. PR #997
 then rejected the first natural document placement. Its first bounded
 gated-delta core later trailed plain delta. #973 continues to block #954 while
-it owns the accepted ordinary-attention reference and the active provider-free
-autonomous generation gate. Intrinsic/readout, resonance/recurrent lowering,
+it owns the accepted ordinary-attention reference, the qualified provider-free
+autonomous generation gate, and the active opt-in native bridge. Intrinsic/readout, resonance/recurrent lowering,
 and final requalification are parked.
 
 A negative result remains evidence about its declared mechanism and
@@ -904,9 +910,10 @@ unavailable before D3. Source-faithful
 then completed a valid non-D3 construction-validation negative: learned Lorentz
 failed retention and matched parity while its controls established sensitivity
 only. The 8/8-contract attempt stopped at its two-document preflight and
-rejected tangent readout. The single current evaluation action is provider-free
-autonomous `R4SoftmaxReferenceGeneratorV1` (`HELM-D-R4`) generation,
-CLI/evidence first. D3 remains `NOT_RUN`; intrinsic/readout,
+rejected tangent readout. Provider-free autonomous
+`R4SoftmaxReferenceGeneratorV1` (`HELM-D-R4`) generation now passes. The single
+current evaluation action is its explicit opt-in native HTTP/dashboard bridge,
+with no default-engine change. D3 remains `NOT_RUN`; intrinsic/readout,
 resonance, and recurrent lowering are parked.
 
 #973 owns paragraph, conversation, and bounded-global influence only after the
@@ -965,7 +972,8 @@ contract.
 
 The now-positive bounded V2 subprobe cannot close #973. Paragraph and
 conversation are retained. The ordinary attention reference is now accepted;
-provider-free autonomous generation is active, while intrinsic/readout,
+provider-free autonomous generation now passes and its opt-in native bridge is
+active, while intrinsic/readout,
 resonance/recurrent lowering, and final requalification are parked.
 
 #### Observed bounded-global V1 target-free terminal (2026-08-28)
@@ -1026,8 +1034,9 @@ learned-manifold V2 is now a valid non-D3 construction-validation negative.
 Its controls established sensitivity, but learned Lorentz failed retention and
 matched parity. The 8/8-contract attempt stopped at its two-document preflight
 and rejected tangent readout.
-The current #973 decision is provider-free autonomous
-`R4SoftmaxReferenceGeneratorV1` (`HELM-D-R4`) generation; intrinsic/readout,
+Provider-free autonomous `R4SoftmaxReferenceGeneratorV1` (`HELM-D-R4`)
+generation now passes. The current #973 decision is its explicit opt-in native
+HTTP/dashboard bridge; intrinsic/readout,
 multi-resonance, and recurrent lowering are
 parked. D3 remains `NOT_RUN` and #954 remains blocked. See the
 [#973 bounded-global record](bounded_global_exact_spin_attention_973.md).

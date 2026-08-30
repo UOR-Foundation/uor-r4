@@ -19,8 +19,9 @@ retention and matched Euclidean parity although all destructive controls
 separated. The 8/8-contract localization attempt stopped at its two-document
 preflight and rejected tangent readout. Ordinary
 dot-product/stable-softmax causal attention in coherent R4/Spin frames is the
-accepted baseline, and provider-free autonomous
-`R4SoftmaxReferenceGeneratorV1` (`HELM-D-R4`) generation is active. This router
+accepted baseline. Provider-free autonomous
+`R4SoftmaxReferenceGeneratorV1` (`HELM-D-R4`) native CLI generation now passes,
+and its explicit opt-in native HTTP/dashboard bridge is active. This router
 supplies substrate and
 visualization only; it is not the donor decoder or attention implementation. See
 [ADR-0005](../../docs/adr/0005-predictive-geometric-connection-memory.md) and the
@@ -31,6 +32,10 @@ The V2 result is recorded in
 [`docs/helm_d_learned_manifold_r4_construction_973.md`](../../docs/helm_d_learned_manifold_r4_construction_973.md).
 The localization result is recorded in
 [`docs/helm_d_score_centroid_localization_973.md`](../../docs/helm_d_score_centroid_localization_973.md).
+The generator PASS is recorded in
+[`docs/r4_softmax_reference_generation_973.md`](../../docs/r4_softmax_reference_generation_973.md)
+with its
+[`compact aggregate`](../../docs/r4_softmax_reference_generation_attempt_01_result_973.json).
 This router contributes no result to those records; intrinsic/readout,
 resonance, recurrence, and exact lowering are parked, while #954 and serving
 work remain blocked here.

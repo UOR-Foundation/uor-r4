@@ -164,14 +164,15 @@ substituted for one another.
   construction covariance but failed held-out functional binding at 13/24 for
   every main arm. These are retained historical comparators.
 - **`HELM-D-R4` / `R4SoftmaxReferenceGeneratorV1`** — #973's positive bounded
-  attention reference and active provider-free generator path. It pins the
+  attention reference and qualified provider-free native generator path. It pins the
   official MIT HELM-D source at
   `7501deca8f413848bfef804be64ce874b72a3cd7`, audits its full-decoder geometry,
   and credits/adapts HELM's attention seam and provenance. It does not port
   HELM's remaining geometric decoder stack: UOR's existing pinned SmolLM2
   `HuggingFaceLlamaOracle` supplies embeddings, RoPE, residual/RMSNorm, MLP,
-  final normalization, and the language-model head. Released HELM
-  generation/cache is incomplete. Its checkpoint and full geometric decoder
+  final normalization, and the language-model head. No HELM checkpoint or
+  generation code executed in this gate. Released HELM generation/cache is
+  incomplete. Its checkpoint and full geometric decoder
   remain an optional external baseline behind a separate tokenizer and license
   gate, and are not directly an R4-block runtime. The reference then freezes an ordinary
   decoder donor and preserves its learned Q/K/V,
@@ -189,12 +190,17 @@ substituted for one another.
   at its two-document preflight and rejected tangent readout. Intrinsic
   attention remains unestablished and parked.
   Ordinary dot-product/stable-softmax attention in coherent R4/Spin frames is
-  the accepted baseline; provider-free autonomous
-  `R4SoftmaxReferenceGeneratorV1` (`HELM-D-R4`) generation is active,
-  CLI/evidence first. It remains transformer-compatible
+  the accepted baseline. Provider-free autonomous
+  `R4SoftmaxReferenceGeneratorV1` (`HELM-D-R4`) native CLI generation passes at
+  4/5 frozen quality in both passes, 5/5 exact replay after deleting timing,
+  exact all-layer audits with zero future reads, and donor reproduction. Its
+  explicit opt-in native HTTP/dashboard bridge is active, with no default-
+  engine change. It remains Transformer-compatible
   and source-weight backed. Upstream checkpoint parity, resonance replacement,
   and recurrence/lowering evidence remain `NOT_RUN`.
-  See `helm_d_r4_softmax_decoder_973.md` and
+  See `helm_d_r4_softmax_decoder_973.md`,
+  `r4_softmax_reference_generation_973.md`, and
+  `r4_softmax_reference_generation_attempt_01_result_973.json`, plus
   `helm_d_learned_manifold_r4_construction_973.md`.
 - **H4 frame connection** — the exact object is the relative H4 group element;
   the current compiler-side f64 matrix represents its left-quaternion action
@@ -333,8 +339,9 @@ substituted for one another.
   real next-token and decoded-output parity, a source-faithful learned-manifold
   intrinsic R4 construction qualifier after V1 stopped unavailable before D3,
   the two-document tangent-readout preflight rejection within the 8/8
-  localization contract, and provider-free autonomous
-  `R4SoftmaxReferenceGeneratorV1` (`HELM-D-R4`) generation. Intrinsic/readout,
+  localization contract, qualified provider-free autonomous
+  `R4SoftmaxReferenceGeneratorV1` (`HELM-D-R4`) generation, and its explicit
+  opt-in native HTTP/dashboard bridge. Intrinsic/readout,
   fiber-preserving multi-resonance replacement,
   bounded recurrent factorization, and final requalification are parked
   (#973);
