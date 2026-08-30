@@ -1,8 +1,8 @@
 # R4 softmax trace state student (#1011)
 
-- **Status:** `IN_PROGRESS`; intake, architecture, implementation, and a
-  disposable end-to-end smoke are complete. The commit-bound authoritative
-  state-cell result has not yet been run.
+- **Status:** `COMPLETE`; authoritative result is negative at the frozen gate.
+  Preserve the implementation and evidence, but do not promote or scale this
+  state representation.
 - **Owner:** #1011 under attention issue #973 and programme root #820.
 - **Decision:**
   [ADR-0005](adr/0005-predictive-geometric-connection-memory.md).
@@ -249,7 +249,7 @@ All are required on the frozen nine-position set:
 | Run fail-closed intake and deterministic reload tests | `PASS` | malformed/truncated/trailing/tampered input rejection; exact nested CIDs |
 | Implement matched recurrent state arms | `PASS` | six core tests; exact 278-byte state and equal 120-value arm budgets |
 | Harden three-phase seal/reveal orchestration | `PASS` | five orchestration tests; strict CLI; recursive unknown-field, derived-cycle, matched-support, byte-count, and work-ledger checks |
-| Seal/reveal the bounded result | `NOT_RUN` | disposable smoke only; authoritative run waits for the implementation commit |
+| Seal/reveal the bounded result | `PASS_INTEGRITY / FAIL_PROMOTION` | authoritative CIDs and metrics below |
 
 ## Known risks
 
@@ -264,3 +264,85 @@ All are required on the frozen nine-position set:
   actual token.
 - The prior raw result contains held-out teacher distributions and is forbidden
   as a compiler or Phase-2 input.
+
+## Authoritative result — 2026-08-30
+
+Implementation revision
+`25569057f2d770dd2ffb0f10b6d2af0a985a6bd4` ran through three separate
+invocations. Phase 1 was posted to #1011 before Phase 2; the Phase-2 seal was
+posted before the frozen judge opened.
+
+- State artifact: 40,692 bytes,
+  `blake3:b617fc38e7bef1cdea76991f6e5e7cc653118451d63bcbd595f8ffd7e247ae7b`.
+- Construction freeze:
+  [`r4_softmax_trace_state_freeze_1011.json`](r4_softmax_trace_state_freeze_1011.json),
+  `blake3:67cf67bb46b94cf5644b8dde286e89adb7e49159b3749790dffb500d8047fedb`.
+- Source-free seal:
+  `blake3:64587526f7883ab046e884a28b6af7e9e89818c9ead2039f8c995de7fb483060`.
+- Structured result:
+  [`r4_softmax_trace_state_student_1011_raw.json`](r4_softmax_trace_state_student_1011_raw.json),
+  `blake3:dc04a8a8b21750799db2d451c8237d1e62cf90ffa74561fb54272b1e9704c824`.
+- Measured phase times: 9.663 seconds compile, 1.461 seconds seal, and
+  0.998 seconds reveal on this host.
+
+Every arm covered the identical `422,875` Q16 teacher mass on the same nine
+context positions:
+
+| Arm | Covered CE (nats) | Teacher top-1 | Actual-next top-1 |
+|---|---:|---:|---:|
+| Frozen suffix | 2.660721032 | 3/9 | 2/9 |
+| Plain recurrent | 2.660770919 | 3/9 | 2/9 |
+| Geometric recurrent | 2.660705367 | 3/9 | 2/9 |
+| Transport-permuted | 2.660729215 | 3/9 | 2/9 |
+
+The geometric arm's CE is `0.000015665` nats below the suffix and
+`0.000023848` below the permuted control. That is not a material effect: the
+frozen control threshold was `0.10` nats, no teacher or actual-next top-1
+decision changed, and the permuted control lost no top-1 decision. Although
+all nine context-bearing states and distributions differed from their
+permuted counterparts, those differences were not selection-bearing.
+
+All four autonomous continuations emitted the same token IDs:
+
+```text
+[281, 216, 28, 9291, 28, 9291, 28, 9291, 28, 9291, 28, 9291, 28, 9291, 28, 9291]
+```
+
+With the pinned tokenizer this decodes to:
+
+```text
+ in , Scotland, Scotland, Scotland, Scotland, Scotland, Scotland, Scotland
+```
+
+The period-two cycle therefore remains. Exact replay passed; every forbidden
+runtime counter was zero; the geometric held-out ledger was 57 observations
+and 56 transports; the permuted ledger added exactly 56 permutations. These
+are integrity prerequisites, not quality promotion.
+
+The terminal is
+`STOP_R4_SOFTMAX_TRACE_STATE_STUDENT_REPAIR_OR_RETIRE_REPRESENTATION`.
+This result falsifies the current 4D signed-reduction/token-derived state cell
+at the declared gate. It does not falsify ordinary R4/Spin softmax attention,
+which remains the established teacher/reference mechanism.
+
+## Next decision
+
+Do not add corpus scale, state dimensions, exact lowering, resonance, WASM, or
+release work. Run
+[#1012](https://github.com/UOR-Foundation/uor-r4/issues/1012), one
+construction-only, leave-one-document-out observability audit that measures
+the same teacher-relative candidate loss at four explicit boundaries:
+
+1. the full ordered final-layer Q/K/V trace blocks;
+2. the fixed 576-to-4 signed reduction;
+3. the token-derived role maps and recurrent state features; and
+4. the fitted residual readout/logit scale.
+
+If full trace features transfer but the 4D reduction does not, replace only the
+reduction with a structured per-head/multiscale geometric representation. If
+the reduction transfers but state features do not, repair context-conditioned
+key/value induction. If state features transfer but logits remain inert,
+repair readout calibration. If even full traces do not transfer, stop trace
+distillation and train the recurrent cell end-to-end under a new independently
+frozen holdout. The already-revealed document 13 cannot promote a repaired
+mechanism again.
