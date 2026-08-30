@@ -42,6 +42,10 @@ pub const MAX_NEW_TOKENS: usize = 128;
 pub const DEFAULT_WORKERS: usize = 4;
 pub const QUALIFICATION_REPORT_SCHEMA: &str = "uor-r4.r4-softmax-local-qualification/1";
 pub const PYTHON_PREFIX_LOGITS_SCHEMA: &str = "uor-r4.r4-softmax-python-prefix-logits/1";
+pub const ENABLED_ONLY_QUALIFICATION_REPORT_SCHEMA: &str =
+    "uor-r4.r4-softmax-local-enabled-qualification/1";
+pub const PYTHON_ENABLED_PREFIX_LOGITS_SCHEMA: &str =
+    "uor-r4.r4-softmax-python-enabled-prefix-logits/1";
 pub const PREFIX_PARITY_TOKENS: usize = 32;
 pub const SEEDED_SAMPLER_POLICY: &str =
     "r4-local-top-k-q32-splitmix64/1;temperature=0.8;top-k=40;rank=logit-desc-token-asc";
@@ -63,6 +67,9 @@ pub struct R4SoftmaxLocalQualificationConfig {
     pub python_prefix_logits: PathBuf,
     pub reveal_manifest: Option<PathBuf>,
     pub workers: NonZeroUsize,
+    /// Execute only the ordinary enabled path. This is the frozen #1017
+    /// quality-continuation gate; #1014 already closed the attention-off arm.
+    pub enabled_only: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -168,7 +175,7 @@ pub struct PythonPrefixLogitsReference {
     pub prefix_token_ids: Vec<u32>,
     pub maximum_absolute_logit_delta_limit: f64,
     pub enabled: PythonPrefixArmReference,
-    pub attention_off: PythonPrefixArmReference,
+    pub attention_off: Option<PythonPrefixArmReference>,
     pub result_cid: String,
 }
 
@@ -262,9 +269,12 @@ pub struct R4SoftmaxLocalQualificationReport {
     pub model_shape: ModelShape,
     pub evaluation_input: QualificationInputBinding,
     pub enabled: QualificationArmResult,
-    pub attention_off: QualificationArmResult,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub attention_off: Option<QualificationArmResult>,
     pub enabled_prefix_parity: PrefixParityEvidence,
-    pub attention_off_prefix_parity: PrefixParityEvidence,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub attention_off_prefix_parity: Option<PrefixParityEvidence>,
+    pub attention_off_executions: u64,
     pub qualification_passed: bool,
     pub source_read_audit: SourceReadAudit,
     pub execution: TeacherExecutionSnapshot,
@@ -856,7 +866,7 @@ pub fn run_r4_softmax_local_qualification(
                 "invalid Python prefix reference: {error}"
             ))
         })?;
-    validate_python_prefix_reference_envelope(&python_reference)?;
+    validate_python_prefix_reference_envelope(&python_reference, config.enabled_only)?;
 
     let tokenizer = HfBpeTokenizer::from_dir(&config.model)
         .map_err(|error| R4SoftmaxLocalGenerationError::Tokenizer(error.to_string()))?;
@@ -934,25 +944,43 @@ pub fn run_r4_softmax_local_qualification(
         maximum_token,
         CausalAttentionOutputPolicy::Enabled,
     )?;
-    let attention_off_execution = run_qualification_arm(
-        &oracle,
-        &python_reference.prefix_token_ids,
-        &shape,
-        maximum_token,
-        CausalAttentionOutputPolicy::ZeroPostWoBeforeResidual,
-    )?;
+    let attention_off_execution = if config.enabled_only {
+        None
+    } else {
+        Some(run_qualification_arm(
+            &oracle,
+            &python_reference.prefix_token_ids,
+            &shape,
+            maximum_token,
+            CausalAttentionOutputPolicy::ZeroPostWoBeforeResidual,
+        )?)
+    };
     let generation_seconds = qualification_started.elapsed().as_secs_f64();
     let enabled_prefix_parity = prefix_parity_evidence(
         CausalAttentionOutputPolicy::Enabled,
         python_reference.enabled,
         enabled_execution.prefix_logits,
     )?;
-    let attention_off_prefix_parity = prefix_parity_evidence(
-        CausalAttentionOutputPolicy::ZeroPostWoBeforeResidual,
+    let attention_off_prefix_parity = match (
         python_reference.attention_off,
-        attention_off_execution.prefix_logits,
-    )?;
-    let qualification_passed = enabled_prefix_parity.passed && attention_off_prefix_parity.passed;
+        attention_off_execution.as_ref(),
+    ) {
+        (Some(reference), Some(execution)) => Some(prefix_parity_evidence(
+            CausalAttentionOutputPolicy::ZeroPostWoBeforeResidual,
+            reference,
+            execution.prefix_logits.clone(),
+        )?),
+        (None, None) => None,
+        _ => {
+            return Err(R4SoftmaxLocalGenerationError::InvalidCheckpoint(
+                "Python and Rust qualification arm sets differ".to_owned(),
+            ));
+        }
+    };
+    let qualification_passed = enabled_prefix_parity.passed
+        && attention_off_prefix_parity
+            .as_ref()
+            .is_none_or(|parity| parity.passed);
 
     let after = checkpoint_tree_binding(&config.model)?;
     if before != after {
@@ -980,7 +1008,8 @@ pub fn run_r4_softmax_local_qualification(
         checkpoint_tree_file_reads: checkpoint_file_reads,
         tokenizer_loads: 1,
         oracle_loads: 1,
-        local_checkpoint_forward_steps: (PREFIX_PARITY_TOKENS as u64) * 2,
+        local_checkpoint_forward_steps: (PREFIX_PARITY_TOKENS as u64)
+            * if config.enabled_only { 1 } else { 2 },
         provider_calls: 0,
         ollama_calls: 0,
         prior_trace_reads: 0,
@@ -1040,19 +1069,29 @@ pub fn run_r4_softmax_local_qualification(
         sources_unchanged_across_execution: true,
     };
     let enabled = enabled_execution.result;
-    let attention_off = attention_off_execution.result;
+    let attention_off = attention_off_execution.map(|execution| execution.result);
     let decision_cid = qualification_decision_cid(
+        if config.enabled_only {
+            ENABLED_ONLY_QUALIFICATION_REPORT_SCHEMA
+        } else {
+            QUALIFICATION_REPORT_SCHEMA
+        },
         &checkpoint,
         &provenance,
         &evaluation_input,
         &enabled,
-        &attention_off,
+        attention_off.as_ref(),
         &enabled_prefix_parity,
-        &attention_off_prefix_parity,
+        attention_off_prefix_parity.as_ref(),
     )?;
     Ok(R4SoftmaxLocalQualificationReport {
-        schema: QUALIFICATION_REPORT_SCHEMA.to_owned(),
-        issue: 1014,
+        schema: if config.enabled_only {
+            ENABLED_ONLY_QUALIFICATION_REPORT_SCHEMA
+        } else {
+            QUALIFICATION_REPORT_SCHEMA
+        }
+        .to_owned(),
+        issue: if config.enabled_only { 1017 } else { 1014 },
         decision_cid,
         checkpoint,
         provenance,
@@ -1062,6 +1101,7 @@ pub fn run_r4_softmax_local_qualification(
         attention_off,
         enabled_prefix_parity,
         attention_off_prefix_parity,
+        attention_off_executions: if config.enabled_only { 0 } else { 1 },
         qualification_passed,
         source_read_audit,
         execution: oracle.execution_snapshot(),
@@ -1071,7 +1111,7 @@ pub fn run_r4_softmax_local_qualification(
             total_seconds: total_started.elapsed().as_secs_f64(),
         },
         nonclaims: vec![
-            "This 32-token exporter/loader gate does not substitute for the Python MPS full sealed-test NLL comparison.".to_owned(),
+            "This 32-token exporter/loader gate does not substitute for the Python MPS full sealed-test NLL evaluation.".to_owned(),
             "Passing parity establishes faithful Rust loading and R4 execution of the trained checkpoint, not geometric advantage.".to_owned(),
             "This floating-point checkpoint path is not the multiplication-free deployed runtime.".to_owned(),
         ],
@@ -1459,8 +1499,14 @@ fn verify_export_provenance(
 
 fn validate_python_prefix_reference_envelope(
     reference: &PythonPrefixLogitsReference,
+    enabled_only: bool,
 ) -> Result<(), R4SoftmaxLocalGenerationError> {
-    if reference.schema != PYTHON_PREFIX_LOGITS_SCHEMA {
+    let expected_schema = if enabled_only {
+        PYTHON_ENABLED_PREFIX_LOGITS_SCHEMA
+    } else {
+        PYTHON_PREFIX_LOGITS_SCHEMA
+    };
+    if reference.schema != expected_schema {
         return Err(R4SoftmaxLocalGenerationError::InvalidCheckpoint(format!(
             "unexpected Python prefix schema {}",
             reference.schema
@@ -1479,10 +1525,21 @@ fn validate_python_prefix_reference_envelope(
             reference.maximum_absolute_logit_delta_limit
         )));
     }
-    for (label, arm) in [
-        ("enabled", &reference.enabled),
-        ("attention_off", &reference.attention_off),
-    ] {
+    if enabled_only && reference.attention_off.is_some() {
+        return Err(R4SoftmaxLocalGenerationError::InvalidCheckpoint(
+            "enabled-only Python prefix must not carry an attention-off arm".to_owned(),
+        ));
+    }
+    if !enabled_only && reference.attention_off.is_none() {
+        return Err(R4SoftmaxLocalGenerationError::InvalidCheckpoint(
+            "two-arm Python prefix must carry an attention-off arm".to_owned(),
+        ));
+    }
+    let mut arms = vec![("enabled", &reference.enabled)];
+    if let Some(attention_off) = reference.attention_off.as_ref() {
+        arms.push(("attention_off", attention_off));
+    }
+    for (label, arm) in arms {
         if arm.logits.len() != 4096 || arm.logits.iter().any(|value| !value.is_finite()) {
             return Err(R4SoftmaxLocalGenerationError::InvalidCheckpoint(format!(
                 "Python {label} logits must be 4096 finite values"
@@ -1835,16 +1892,17 @@ fn prefix_parity_evidence(
 }
 
 fn qualification_decision_cid(
+    schema: &str,
     checkpoint: &LocalCheckpointBinding,
     provenance: &QualificationProvenance,
     input: &QualificationInputBinding,
     enabled: &QualificationArmResult,
-    attention_off: &QualificationArmResult,
+    attention_off: Option<&QualificationArmResult>,
     enabled_parity: &PrefixParityEvidence,
-    attention_off_parity: &PrefixParityEvidence,
+    attention_off_parity: Option<&PrefixParityEvidence>,
 ) -> Result<String, R4SoftmaxLocalGenerationError> {
     cid_serializable(&serde_json::json!({
-        "schema": QUALIFICATION_REPORT_SCHEMA,
+        "schema": schema,
         "checkpoint_tree_cid": checkpoint.checkpoint_tree_cid,
         "weights_cid": checkpoint.weights_cid,
         "provenance": provenance,
@@ -2088,10 +2146,10 @@ mod tests {
                 top1_token_id: 7,
                 logits: enabled,
             },
-            attention_off: PythonPrefixArmReference {
+            attention_off: Some(PythonPrefixArmReference {
                 top1_token_id: 8,
                 logits: attention_off,
-            },
+            }),
             result_cid: String::new(),
         };
         let mut unsigned = serde_json::to_value(&reference).expect("serialize fixture");
@@ -2112,9 +2170,16 @@ mod tests {
             "test fixture",
         )
         .expect("fixture CID reproduces");
-        validate_python_prefix_reference_envelope(&reference).expect("valid two-arm fixture");
+        validate_python_prefix_reference_envelope(&reference, false)
+            .expect("valid two-arm fixture");
+        let mut enabled_only = reference.clone();
+        enabled_only.schema = PYTHON_ENABLED_PREFIX_LOGITS_SCHEMA.to_owned();
+        enabled_only.attention_off = None;
+        validate_python_prefix_reference_envelope(&enabled_only, true)
+            .expect("valid enabled-only fixture");
+        assert!(validate_python_prefix_reference_envelope(&enabled_only, false).is_err());
         reference.enabled.top1_token_id = 9;
-        assert!(validate_python_prefix_reference_envelope(&reference).is_err());
+        assert!(validate_python_prefix_reference_envelope(&reference, false).is_err());
     }
 
     #[test]
