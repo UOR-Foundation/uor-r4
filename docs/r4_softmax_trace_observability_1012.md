@@ -1,9 +1,9 @@
 # R4 softmax trace observability ladder (#1012)
 
-- **Status:** `IMPLEMENTED / MEASUREMENT_NOT_RUN`; construction-only
-  architecture, input census, harness, and strict command are frozen. Attempt
-  01 stopped at its cheap control-construction gate before scoring, so no
-  decision result has been measured yet.
+- **Status:** `MEASURED / INSUFFICIENT_SUPPORT_COVERAGE`; attempt 02 completed
+  the frozen four-fold measurement and exact replay. The result cannot assign
+  signal loss to a boundary because one fold covered less than the required
+  50% of recorded primary teacher mass.
 - **Owner:** #1012 under attention issue #973 and programme root #820.
 - **Predecessor:** #1011, merged through the protected queue at
   `f193939bbb40d0fa8c6a3d4a5015ea6439ad7bf5`.
@@ -12,11 +12,47 @@
   45,205,493 bytes and 38 recorded positions in four documents.
 - **Scope boundary:** document `13` and every #1011 reveal field are burned.
   They are forbidden from fitting, calibration, model selection, or promotion.
+- **Implementation revision:**
+  `3ef7af9860baf55fbe43a9b5207c60fd3a737564`.
+- **Result CID:**
+  `blake3:11f890def300cdafd689ef7cbfcf28e46b693e669a46edfa7431c672582db4a2`.
 
-The contract below includes the pre-run P1 hardening completed after independent
-review. It changes no result because no decision measurement has run. The
-earlier implementation status remains `MEASUREMENT_NOT_RUN`; the hardened
-control, fit identity, and physical-work accounting bind the first run.
+The contract below was frozen before attempt 02 and includes the P1 hardening
+completed after independent review. Attempt 01 remains recorded in the ledger:
+it stopped before measurement when its original control construction failed.
+The single bounded repair replaced that invalid donor schedule with the fixed
+within-support rotation described below; attempt 02 is the authoritative run.
+
+## Authoritative result and direction
+
+Attempt 02 completed in 45.56 seconds with exact two-pass replay. Aggregate
+primary-support coverage was `0.6202622204224402`, but held document `5121`
+covered only `0.3469116829611222`; the predeclared per-fold 50% floor therefore
+forces `INSUFFICIENT_SUPPORT_COVERAGE` and forbids boundary attribution.
+
+On the 26 measured exact-prefix-novel events, the full current-step Q/K/V probe
+returned covered teacher CE `2.215410922655504`, versus
+`2.215064603216862` for the train-only suffix baseline. The signed improvement
+`suffix - full` was `-0.0003463194386417179` nats with the required direction
+in `0/4` folds. Both had `14/26` teacher-top-1 agreements and `6/26`
+actual-next top-1 correct. The fixed label-rotation control was materially
+destroyed: `control - full = 1.3807454322642605` nats in `4/4` folds. That
+establishes instrument sensitivity, not useful predictive gain over the suffix
+baseline.
+
+The input and execution audits passed: exact replay, zero source-model reads or
+forwards, zero document-13 reads, canonical bundle reload, and held-label
+fit-identity invariance. Those integrity results make the terminal usable, but
+they do not repair its insufficient support or promote the probe.
+
+The project will not expand this support or build another observability ladder.
+This bounded current-step final-layer Q/K/V trace-distillation path stops here.
+The next deliverable is direct end-to-end causal softmax attention training in
+R4 coordinates on a fresh untouched split, followed in the same issue by
+autonomous decoded generation under
+[#1014](https://github.com/UOR-Foundation/uor-r4/issues/1014). Comparison tests are acceptance checks for that
+implemented mechanism; they are not a new research campaign. This decision
+does not claim that all trace distillation or all attention is impossible.
 
 ## Outcome sought
 
@@ -211,7 +247,7 @@ The decision layer additionally requires at least 50% of recorded primary Q16
 teacher mass in aggregate and in every fold. Below that floor the only terminal
 is `INSUFFICIENT_SUPPORT_COVERAGE`; no boundary attribution is allowed.
 
-## Run contract
+## Frozen pre-run contract
 
 - **Metric to move:** exact-prefix-novel held-document covered teacher
   cross-entropy at each nested boundary; teacher top-1 is secondary. Report the
@@ -221,8 +257,8 @@ is `INSUFFICIENT_SUPPORT_COVERAGE`; no boundary attribution is allowed.
   reachable for unrecorded full-vocabulary logits or a new population.
 - **Instrument and launch verdict:** the eight cheap gates above must pass.
   The liveness census already passes exact-collision and reduced-rank checks;
-  real-bundle intake, control, replay, and liveness checks remain `NOT_RUN`
-  until the release-mode invocation.
+  at freeze time, real-bundle intake, control, replay, and liveness checks were
+  `NOT_RUN` pending the release-mode invocation.
 - **Materiality:** a downstream boundary is materially worse when its covered
   CE loses at least `0.10` nats against the immediately upstream live boundary
   and the direction appears in at least three of four folds. Exact paired rows,
@@ -261,7 +297,7 @@ is `INSUFFICIENT_SUPPORT_COVERAGE`; no boundary attribution is allowed.
 
 | Action | Status | Evidence |
 |---|---|---|
-| Deliver #1011 and refresh live parent/dependency state | `PASS` | PR #1013, merge `f193939b`; #1011 closed; #1012 active under #973 |
+| Deliver #1011 and refresh live parent/dependency state | `PASS` | PR #1013, merge `f193939b`; #1011 closed; #1012 activated under #973 |
 | Isolate a clean #1012 worktree from live `main` | `PASS` | branch `issue-1012-r4-softmax-trace-observability` |
 | Freeze folds, boundaries, capacity, controls, and decisions | `PASS` | this record and #1012 architecture comment |
 | Canonical input/liveness census | `PASS_PARTIAL` | 38 rows; 31 full/reduced unique rows; centered reduced rank 12 in every fold |
@@ -270,9 +306,11 @@ is `INSUFFICIENT_SUPPORT_COVERAGE`; no boundary attribution is allowed.
 | Run focused pre-hardening cheap gates | `PASS` | seven harness tests, core snapshot test, strict CLI test, formatting, clippy, claim wording, and diff integrity |
 | Rerun focused gates after P1 hardening | `PASS` | eleven harness tests, seven core state-student tests, strict CLI test, formatting, library/binary clippy with warnings denied, claim wording, and diff integrity |
 | Attempt 01 real-bundle control construction | `STOPPED_PRE_MEASUREMENT` | the fixed cross-document donor schedule produced a zero-overlap or unchanged row; command exited before any boundary score or result file |
-| Replace invalid donor control with one fixed within-support rotation | `PASS_PENDING_RECHECK` | one bounded construction repair; no adaptive donor search and no mechanism tuning |
-| Run real-bundle cheap intake and liveness gates | `NOT_RUN` | exactly one release-mode retry is authorized |
-| Run decision measurement and select one next action | `NOT_RUN` | forbidden until every cheap gate passes |
+| Replace invalid donor control with one fixed within-support rotation | `PASS` | one bounded construction repair; no adaptive donor search and no mechanism tuning |
+| Run real-bundle cheap intake and liveness gates | `PASS` | canonical input, leakage, control-liveness, fit-identity, and replay audits passed |
+| Run decision measurement and select one next action | `INSUFFICIENT_SUPPORT_COVERAGE` | aggregate primary coverage `0.6202622204224402`; minimum fold `0.3469116829611222`; exact replay; result CID `blake3:11f890def300cdafd689ef7cbfcf28e46b693e669a46edfa7431c672582db4a2` |
+| Continue the observability ladder or expand its support | `STOPPED` | no boundary attribution is licensed; the measured full probe also failed to improve on suffix on the covered rows (`-0.0003463194386417179` nats, `0/4`) |
+| Begin direct end-to-end causal softmax attention training in R4 coordinates | `NEXT` | [#1014](https://github.com/UOR-Foundation/uor-r4/issues/1014); use a fresh untouched split and require autonomous decoded generation in the same deliverable |
 
 ## Nonclaims
 
@@ -280,7 +318,10 @@ This record does not establish a geometric advantage, coherent source-free
 generation, reasoning, transformerless deployment, exact table lowering,
 runtime efficiency, hosted-chat readiness, or release readiness. The
 established ordinary R4/Spin causal-softmax reference remains the attention
-teacher; #1012 only localizes the failed student representation. The full
+teacher; #1012 did not localize a failed student boundary because its per-fold
+support gate failed. The full
 boundary includes current-step final-layer Q/K/V, not the recorded weighted
 attention aggregate or decoded head output, and one predeclared signed
 projection per boundary does not eliminate cross-boundary sketch variance.
+Stopping this bounded path does not establish that all trace distillation, all
+geometric representations, or attention itself is impossible.
