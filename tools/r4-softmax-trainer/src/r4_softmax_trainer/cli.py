@@ -18,6 +18,7 @@ from .continuation_data import (
     prepare_continuation_dataset,
 )
 from .data import download_source, load_dataset_manifest, prepare_dataset
+from .finalize import finalize_continuation
 from .paths import default_continuation_root, default_research_root
 from .provenance import verify_bound_manifest
 from .train import TrainConfig, reveal_sealed_test, run_overfit_smoke, train_main
@@ -107,6 +108,16 @@ def parser() -> argparse.ArgumentParser:
         "verify-continuation-training",
         help="verify #1017's nonsealed training view while confirmation remains denied",
     )
+    finalize = subcommands.add_parser(
+        "finalize-continuation",
+        help="bind the opened reveal, ten existing Rust generations, and human rubric once",
+    )
+    finalize.add_argument(
+        "--rubric",
+        type=_root,
+        required=True,
+        help="independently prepared exact five-record human rubric JSON",
+    )
     return command
 
 
@@ -118,6 +129,7 @@ def main() -> None:
         "admit-enabled-parity",
         "reveal-continuation",
         "verify-continuation-training",
+        "finalize-continuation",
     }
     root: Path = arguments.root or (
         default_continuation_root()
@@ -173,5 +185,8 @@ def main() -> None:
         return
     if arguments.command == "verify-continuation-training":
         _print_result(load_continuation_training_view_manifest(root))
+        return
+    if arguments.command == "finalize-continuation":
+        _print_result(finalize_continuation(root, arguments.rubric))
         return
     raise AssertionError(f"unhandled command: {arguments.command}")
