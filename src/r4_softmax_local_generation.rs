@@ -1070,6 +1070,12 @@ pub fn run_r4_softmax_local_qualification(
     };
     let enabled = enabled_execution.result;
     let attention_off = attention_off_execution.map(|execution| execution.result);
+    let decision_evidence = QualificationDecisionEvidence {
+        enabled: &enabled,
+        attention_off: attention_off.as_ref(),
+        enabled_parity: &enabled_prefix_parity,
+        attention_off_parity: attention_off_prefix_parity.as_ref(),
+    };
     let decision_cid = qualification_decision_cid(
         if config.enabled_only {
             ENABLED_ONLY_QUALIFICATION_REPORT_SCHEMA
@@ -1079,10 +1085,7 @@ pub fn run_r4_softmax_local_qualification(
         &checkpoint,
         &provenance,
         &evaluation_input,
-        &enabled,
-        attention_off.as_ref(),
-        &enabled_prefix_parity,
-        attention_off_prefix_parity.as_ref(),
+        &decision_evidence,
     )?;
     Ok(R4SoftmaxLocalQualificationReport {
         schema: if config.enabled_only {
@@ -1891,15 +1894,19 @@ fn prefix_parity_evidence(
     })
 }
 
+struct QualificationDecisionEvidence<'a> {
+    enabled: &'a QualificationArmResult,
+    attention_off: Option<&'a QualificationArmResult>,
+    enabled_parity: &'a PrefixParityEvidence,
+    attention_off_parity: Option<&'a PrefixParityEvidence>,
+}
+
 fn qualification_decision_cid(
     schema: &str,
     checkpoint: &LocalCheckpointBinding,
     provenance: &QualificationProvenance,
     input: &QualificationInputBinding,
-    enabled: &QualificationArmResult,
-    attention_off: Option<&QualificationArmResult>,
-    enabled_parity: &PrefixParityEvidence,
-    attention_off_parity: Option<&PrefixParityEvidence>,
+    evidence: &QualificationDecisionEvidence<'_>,
 ) -> Result<String, R4SoftmaxLocalGenerationError> {
     cid_serializable(&serde_json::json!({
         "schema": schema,
@@ -1910,10 +1917,10 @@ fn qualification_decision_cid(
         "python_prefix_logits_cid": input.python_prefix_logits_cid,
         "python_prefix_result_cid": input.python_prefix_result_cid,
         "prefix_token_ids": input.prefix_token_ids,
-        "enabled": enabled,
-        "attention_off": attention_off,
-        "enabled_parity": enabled_parity,
-        "attention_off_parity": attention_off_parity,
+        "enabled": evidence.enabled,
+        "attention_off": evidence.attention_off,
+        "enabled_parity": evidence.enabled_parity,
+        "attention_off_parity": evidence.attention_off_parity,
     }))
 }
 
@@ -2091,6 +2098,128 @@ mod tests {
             attention_off: false,
             seed: None,
         }
+    }
+
+    #[test]
+    fn qualification_decision_refactor_preserves_both_arm_mode_cids() {
+        let checkpoint = LocalCheckpointBinding {
+            model_path: "model".to_owned(),
+            checkpoint_tree_cid: raw_cid(b"tree"),
+            config_cid: raw_cid(b"config"),
+            tokenizer_cid: raw_cid(b"tokenizer"),
+            weights_cid: raw_cid(b"weights"),
+            weights_cid_scope: "model.safetensors".to_owned(),
+            files: Vec::new(),
+            tokenizer: TokenizerAdapter::default(),
+            bos_token_id: 0,
+            eos_token_id: 1,
+            exact_backend: ExactBackendReport {
+                arithmetic_owner: "uor-matmul".to_owned(),
+                std_runtime_detection_enabled: true,
+                target_arch: "test".to_owned(),
+                target_os: "test".to_owned(),
+                uor_matmul_revision: "test".to_owned(),
+                available_backends: vec!["test".to_owned()],
+                selected_backend: None,
+                selection_status: "not exposed".to_owned(),
+            },
+        };
+        let provenance = QualificationProvenance {
+            export_manifest_cid: raw_cid(b"export-manifest"),
+            export_tree_cid: raw_cid(b"export-tree"),
+            dataset_manifest_cid: raw_cid(b"dataset"),
+            training_view_manifest_cid: raw_cid(b"training-view"),
+            split_policy_cid: raw_cid(b"split"),
+            run_contract_cid: raw_cid(b"contract"),
+            training_result_cid: raw_cid(b"training-result"),
+            selected_checkpoint_cid: raw_cid(b"selected-checkpoint"),
+            config_cid: checkpoint.config_cid.clone(),
+            tokenizer_cid: checkpoint.tokenizer_cid.clone(),
+            weights_cid: checkpoint.weights_cid.clone(),
+            reveal_manifest_cid: Some(raw_cid(b"reveal-manifest")),
+            reveal_tree_cid: Some(raw_cid(b"reveal-tree")),
+        };
+        let input = QualificationInputBinding {
+            token_store_cid: raw_cid(b"token-store"),
+            python_prefix_logits_path: "prefix.json".to_owned(),
+            python_prefix_logits_cid: raw_cid(b"prefix-logits"),
+            python_prefix_result_cid: raw_cid(b"prefix-result"),
+            prefix_token_ids: vec![0, 1, 2],
+            sources_unchanged_across_execution: true,
+        };
+        let arm = QualificationArmResult {
+            attention_output_policy: "enabled".to_owned(),
+            policy_cid: raw_cid(b"policy"),
+            top1_token_id: 2,
+            output_cid: raw_cid(b"output"),
+            audit_cid: raw_cid(b"audit"),
+            audit: QualificationArmAudit {
+                sessions: 1,
+                positions_per_session: 3,
+                total_positions: 3,
+                selected_layer_count: 1,
+                all_layers_selected: true,
+                causal_audits_exact: 1,
+                projection_audits_exact: 1,
+                r4_audits_exact: 1,
+                output_policy_audits_exact: 1,
+                future_reads: 0,
+                output_policy_applications: 3,
+                enabled_applications: 3,
+                zeroed_applications: 0,
+                output_lanes: 12,
+                nonzero_lanes_before_policy: 12,
+                nonzero_lanes_after_policy: 12,
+                applications_by_layer: vec![3],
+                state_ledger_cid: raw_cid(b"ledger"),
+            },
+        };
+        let parity = PrefixParityEvidence {
+            attention_output_policy: "enabled".to_owned(),
+            python_top1_token_id: 2,
+            rust_top1_token_id: 2,
+            identical_top1: true,
+            maximum_absolute_logit_delta: 0.0,
+            maximum_absolute_logit_delta_limit: 0.005,
+            maximum_absolute_logit_delta_within_limit: true,
+            python_logits: vec![0.0, 1.0, 2.0],
+            rust_logits: vec![0.0, 1.0, 2.0],
+            passed: true,
+        };
+
+        let assert_mode =
+            |schema: &str,
+             attention_off: Option<&QualificationArmResult>,
+             attention_off_parity: Option<&PrefixParityEvidence>| {
+                let expected = cid_serializable(&serde_json::json!({
+                    "schema": schema,
+                    "checkpoint_tree_cid": checkpoint.checkpoint_tree_cid,
+                    "weights_cid": checkpoint.weights_cid,
+                    "provenance": provenance,
+                    "token_store_cid": input.token_store_cid,
+                    "python_prefix_logits_cid": input.python_prefix_logits_cid,
+                    "python_prefix_result_cid": input.python_prefix_result_cid,
+                    "prefix_token_ids": input.prefix_token_ids,
+                    "enabled": arm,
+                    "attention_off": attention_off,
+                    "enabled_parity": parity,
+                    "attention_off_parity": attention_off_parity,
+                }))
+                .expect("inline qualification decision CID");
+                let evidence = QualificationDecisionEvidence {
+                    enabled: &arm,
+                    attention_off,
+                    enabled_parity: &parity,
+                    attention_off_parity,
+                };
+                let observed =
+                    qualification_decision_cid(schema, &checkpoint, &provenance, &input, &evidence)
+                        .expect("refactored qualification decision CID");
+                assert_eq!(observed, expected);
+            };
+
+        assert_mode(ENABLED_ONLY_QUALIFICATION_REPORT_SCHEMA, None, None);
+        assert_mode(QUALIFICATION_REPORT_SCHEMA, Some(&arm), Some(&parity));
     }
 
     #[test]
