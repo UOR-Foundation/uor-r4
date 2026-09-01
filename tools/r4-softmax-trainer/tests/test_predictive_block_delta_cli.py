@@ -126,8 +126,6 @@ class PredictiveBlockDeltaCliTests(unittest.TestCase):
             str(frames),
             "--v1-result",
             str(v1_result),
-            "--maximum-updates",
-            "7",
         ]
         with (
             mock.patch.object(sys, "argv", arguments),
@@ -143,9 +141,17 @@ class PredictiveBlockDeltaCliTests(unittest.TestCase):
             revealed_v4_root=revealed.resolve(),
             frame_sidecar_path=frames.resolve(),
             v1_result_path=v1_result.resolve(),
-            maximum_updates=7,
         )
         print_result.assert_called_once_with(result)
+
+        with redirect_stderr(StringIO()), self.assertRaises(SystemExit):
+            cli.parser().parse_args(
+                [
+                    "preflight-predictive-block-delta-v2",
+                    "--maximum-updates",
+                    "255",
+                ]
+            )
 
 
 if __name__ == "__main__":

@@ -784,8 +784,8 @@ def _fit_from_record(
     if fit["intervention"] != expected_intervention:
         raise ValueError(f"cached {label} intervention differs")
     updates = _integer_field(fit["updates"], label=f"{label}.updates", minimum=1)
-    if updates > MAXIMUM_UPDATES:
-        raise ValueError(f"cached {label} exceeds the update ceiling")
+    if updates != MAXIMUM_UPDATES:
+        raise ValueError(f"cached {label} does not use the exact frozen dose")
     elapsed = _float_field(
         fit["elapsed_seconds"], label=f"{label}.elapsed_seconds", minimum=0.0
     )
@@ -1189,6 +1189,10 @@ def run_predictive_block_delta_v2_preflight(
 ) -> dict[str, Any]:
     """Run the independent-arm V2 correction without selecting or opening V5."""
 
+    if maximum_updates != MAXIMUM_UPDATES:
+        raise ValueError(
+            "predictive block-delta V2 requires exactly 256 updates per arm"
+        )
     root = root.resolve()
     result_path = root / RESULT_RELATIVE_PATH
     if result_path.exists() or result_path.is_symlink():
@@ -1203,9 +1207,6 @@ def run_predictive_block_delta_v2_preflight(
         raise ValueError("predictive block-delta V2 requires an explicit CPU8 process")
     if not 1 <= torch.get_num_interop_threads() <= 1_024:
         raise ValueError("predictive block-delta V2 interop thread count is invalid")
-    if not 1 <= maximum_updates <= MAXIMUM_UPDATES:
-        raise ValueError("predictive block-delta V2 updates exceed the frozen ceiling")
-
     def remaining_gate_seconds() -> float:
         remaining = HARD_WALL_SECONDS - (time.monotonic() - gate_started)
         if remaining <= 0.0:

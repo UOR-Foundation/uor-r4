@@ -90,7 +90,7 @@ def _fit(intervention: campaign.FitIntervention) -> dict:
     fitted_digit = "3" if intervention == "native" else "4"
     return {
         "intervention": intervention,
-        "updates": 1,
+        "updates": campaign.MAXIMUM_UPDATES,
         "elapsed_seconds": 0.5,
         "final_loss": 2.0,
         "final_gradient_norm": 1.0,
@@ -101,7 +101,7 @@ def _fit(intervention: campaign.FitIntervention) -> dict:
         "initial_binding_cid": initial,
         "fitted_binding_cid": "blake3:" + fitted_digit * 64,
         "batch_schedule_cid": campaign._batch_schedule_cid(
-            campaign.PROBE_DIRECTIONS, 1
+            campaign.PROBE_DIRECTIONS, campaign.MAXIMUM_UPDATES
         ),
     }
 
@@ -223,6 +223,14 @@ def _resign(value: dict) -> dict:
     return campaign._with_self_cid(unsigned, "result_cid")
 
 
+class _CheapModel:
+    def export_binding_artifact(self) -> bytes:
+        return b"byte-identical-binding"
+
+    def export_qualified_base_artifact(self) -> bytes:
+        return b"byte-identical-qualified-base"
+
+
 class PredictiveBlockDeltaCampaignV2Tests(unittest.TestCase):
     def test_public_freeze_constants(self) -> None:
         self.assertEqual((campaign.PAIR_START, campaign.PAIR_STOP), (32, 64))
@@ -305,12 +313,13 @@ class PredictiveBlockDeltaCampaignV2Tests(unittest.TestCase):
         )
         mutations.append(_resign(selector))
 
-        unmatched_fit = copy.deepcopy(valid)
-        unmatched_fit["fits"]["additive_no_overwrite"]["updates"] = 2
-        unmatched_fit["fits"]["additive_no_overwrite"]["batch_schedule_cid"] = (
-            campaign._batch_schedule_cid(campaign.PROBE_DIRECTIONS, 2)
-        )
-        mutations.append(_resign(unmatched_fit))
+        for updates in (1, 255):
+            unmatched_fit = copy.deepcopy(valid)
+            unmatched_fit["fits"]["additive_no_overwrite"]["updates"] = updates
+            unmatched_fit["fits"]["additive_no_overwrite"][
+                "batch_schedule_cid"
+            ] = campaign._batch_schedule_cid(campaign.PROBE_DIRECTIONS, updates)
+            mutations.append(_resign(unmatched_fit))
 
         unauthorized = copy.deepcopy(valid)
         unauthorized["production_v5"]["authorized"] = not valid["admitted"]
@@ -361,6 +370,102 @@ class PredictiveBlockDeltaCampaignV2Tests(unittest.TestCase):
                     self.right = Side(index * 2 + 1, "blake3:" + f"{index + 2:064x}")
 
             campaign._selector([Pair(index) for index in range(32, 64)])
+
+    def test_submaximum_runner_dose_fails_before_result_input_or_model_access(
+        self,
+    ) -> None:
+        for updates in (1, 255):
+            with (
+                self.subTest(updates=updates),
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                root = Path(directory)
+                loader = Mock(side_effect=AssertionError("inputs must not open"))
+                factory = Mock(side_effect=AssertionError("model must not construct"))
+                reader = Mock(side_effect=AssertionError("result must not open"))
+                with (
+                    patch.object(campaign, "load_frozen_v2_inputs", loader),
+                    patch.object(campaign, "_read_canonical_json", reader),
+                ):
+                    with self.assertRaisesRegex(ValueError, "exactly 256"):
+                        campaign.run_predictive_block_delta_v2_preflight(
+                            root=root,
+                            predecessor_root=root / "predecessor",
+                            revealed_v4_root=root / "V4",
+                            frame_sidecar_path=root / "H4.json",
+                            v1_result_path=root / "V1.json",
+                            maximum_updates=updates,
+                            model_factory=factory,
+                        )
+                loader.assert_not_called()
+                factory.assert_not_called()
+                reader.assert_not_called()
+                self.assertFalse((root / campaign.RESULT_RELATIVE_PATH).exists())
+
+    def test_exact_256_runner_dose_reaches_create_once_result_with_cheap_mocks(
+        self,
+    ) -> None:
+        full = _score(
+            "native",
+            gain=campaign.ABSOLUTE_GAIN_THRESHOLD + 0.02,
+            wins=52,
+        )
+        additive = _score("no_delta", gain=0.0, wins=0)
+        state_off = _score("state_off", gain=0.0, wins=0)
+        frozen = campaign.FrozenV2Inputs(
+            predecessor=None,
+            predecessor_artifact_path=Path("/not-opened"),
+            frames=None,  # type: ignore[arg-type]
+            pairs=(),
+            records={},
+        )
+
+        def fitted(*_args, **kwargs):
+            return _fit(kwargs["intervention"])
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            factory = Mock(side_effect=(_CheapModel(), _CheapModel()))
+            validator = Mock()
+            with (
+                patch.object(campaign, "load_frozen_v2_inputs", return_value=frozen),
+                patch.object(campaign.torch, "get_num_threads", return_value=8),
+                patch.object(
+                    campaign.torch, "get_num_interop_threads", return_value=8
+                ),
+                patch.object(campaign, "fit_independent_arm", side_effect=fitted) as fit,
+                patch.object(campaign, "fitted_mechanics", return_value=_mechanics()),
+                patch.object(
+                    campaign,
+                    "score_probe",
+                    side_effect=(full, additive, state_off),
+                ),
+                patch.object(
+                    campaign,
+                    "destroy_disposable_weights",
+                    return_value=campaign.TRAINABLE_PARAMETERS,
+                ),
+                patch.object(campaign, "_validate_cached_result", validator),
+            ):
+                result = campaign.run_predictive_block_delta_v2_preflight(
+                    root=root,
+                    predecessor_root=root / "predecessor",
+                    revealed_v4_root=root / "V4",
+                    frame_sidecar_path=root / "H4.json",
+                    v1_result_path=root / "V1.json",
+                    maximum_updates=campaign.MAXIMUM_UPDATES,
+                    model_factory=factory,
+                )
+            self.assertEqual(fit.call_count, 2)
+            self.assertEqual(
+                result["fits"]["full_delta"]["updates"], campaign.MAXIMUM_UPDATES
+            )
+            self.assertEqual(
+                result["fits"]["additive_no_overwrite"]["updates"],
+                campaign.MAXIMUM_UPDATES,
+            )
+            self.assertTrue((root / campaign.RESULT_RELATIVE_PATH).is_file())
+            validator.assert_called_once_with(result)
 
 
 if __name__ == "__main__":

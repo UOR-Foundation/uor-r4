@@ -861,15 +861,6 @@ def parser() -> argparse.ArgumentParser:
         default=default_predictive_block_delta_v1_result(),
         help="immutable create-once V1 result required by the V2 correction",
     )
-    predictive_delta_v2.add_argument(
-        "--maximum-updates",
-        type=_predictive_block_delta_updates,
-        default=PREDICTIVE_BLOCK_DELTA_MAXIMUM_UPDATES,
-        help=(
-            "optimizer ceiling for each independent arm, bounded to the frozen "
-            f"campaign maximum of {PREDICTIVE_BLOCK_DELTA_MAXIMUM_UPDATES}"
-        ),
-    )
     return command
 
 
@@ -1329,7 +1320,6 @@ def main() -> None:
                 revealed_v4_root=arguments.revealed_v4_root,
                 frame_sidecar_path=arguments.frame_sidecar,
                 v1_result_path=arguments.v1_result,
-                maximum_updates=arguments.maximum_updates,
             )
         )
         return
