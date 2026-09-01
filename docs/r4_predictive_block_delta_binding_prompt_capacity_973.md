@@ -254,3 +254,90 @@ multiplication-free runtime legality, product readiness, or release readiness.
 It defines one falsifiable attempt to put the missing causal context-to-token
 association into bounded R4 matrix state while keeping the qualified language
 model and strongest prior comparator fixed.
+
+## V1 execution result — 2026-09-01
+
+V1 executed once on CPU with eight PyTorch intra-op and eight inter-op threads.
+All `256` updates and all scoring completed in `64.6513` seconds. The exact
+create-once result is
+`blake3:004abd0ab27e63065c4961863123c8e086ff1b88ea12162de558a0bdaac8dac8`.
+The disposable `9,228` fitted values were destroyed and no fitted artifact was
+written. V5 remained uncreated and uninspected.
+
+All mechanics passed: causal-prefix, unobserved-future, state-off, replay, and
+forbidden-read deltas were zero; every trainable value received a finite
+nonzero gradient; the qualified V1 artifact was unchanged; and the largest
+all-frame connection/covariance error was below `1.8e-7` against the frozen
+`2e-5` ceiling.
+
+| Arm | gain, nats/token | own wins | own NLL | foreign NLL |
+|---|---:|---:|---:|---:|
+| Full predictive delta | `1.1097723` | `64/64` | `2.6302566` | `3.7400288` |
+| State-off qualified V1 | `0.0048169` | `38/64` | `3.5984988` | `3.6033157` |
+| Same fitted values, additive intervention | `1.1499870` | `38/64` | `18.4722066` | `19.6221937` |
+
+The frozen V1 verdict is `PREDICTIVE_BINDING_NOT_OBSERVABLE` because the sole
+`delta_over_additive` gate missed: full-delta gain minus additive gain was
+`-0.0402148`, below `0.0253416`. That verdict is not revised. It also must not
+be misreported as absence of native predictive-binding capacity: the native
+arm exceeded the absolute gain floor by `25.62x`, won every direction,
+improved own NLL over state-off by `0.9682423`, and was state-load-bearing.
+
+The additive comparison exposed a decision-metric pathology. Its slightly
+larger relative contrast was the difference between two catastrophically bad
+likelihoods: additive own NLL was `15.8419501` worse than full delta and
+`14.8737078` worse than state-off. Relative contrast alone therefore cannot
+decide whether the ablation remains a usable next-token model. V1 remains a
+procedural miss, while its native-capacity observation motivates the versioned
+control correction below.
+
+## V2 matched-control correction freeze — 2026-09-01
+
+V2 does not alter `R4PredictiveBlockDeltaBindingV1`, reinterpret V1, create V5,
+or inspect any V5 coordinate. It changes only the disposable control decision
+and uses the non-overlapping already revealed V4 pair indices `32..63`
+(`32` pairs / `64` directions / `1,024` targets). Their ordered identities are
+bound before fitting.
+
+Two models start from byte-identical binding values and the same immutable V1:
+
+1. full predictive delta, fitted with the native update; and
+2. additive/Hebbian no-overwrite, fitted independently with its own live
+   additive update.
+
+Each receives exactly the same optimizer, batch order, eight directions per
+batch, and at most `256` updates. Both receive complete gradient, replay,
+causality, unchanged-base, and equal-work checks. Both fitted value sets are
+destroyed after scoring. The complete V2 gate is CPU8-only, forbids CUDA, and
+has one `300`-second wall.
+
+Native capacity is admitted only if all integrity checks pass and:
+
+```text
+full gain                         >= ln(2) / 16 = 0.0433216988
+full own-vs-cross wins            >= 52 / 64
+full gain - state-off gain        >= ln(1.5) / 16 = 0.0253415693
+full own NLL                      <= state-off own NLL + 0.05
+```
+
+V5 authorization depends only on that native-capacity decision. Delta
+attribution is reported separately. The independently fitted additive arm is
+language-valid only if its own NLL is no more than `0.05` above state-off. If
+valid, full delta has prompt-specific superiority only when its own NLL is no
+worse and its gain exceeds additive gain by at least `0.0253415693`. If the
+additive arm is not language-valid, V2 records
+`ADDITIVE_CONTROL_NO_STABLE_CAPACITY`: delta overwrite is load-bearing for
+stability on the disposable slice, but prompt-specific delta superiority
+remains unclaimed.
+
+- **Native capacity miss:** reject this unchanged binding mechanism and keep
+  V5 closed.
+- **Native capacity pass:** authorize exactly one frozen V5 terminal campaign;
+  carry the additive verdict as a separate attribution result.
+- **Integrity failure or timeout:** `INVALID`/`UNAVAILABLE`; repair or report
+  the harness and do not interpret model scores.
+
+This V2 correction is frozen before implementation and before opening its
+disjoint V4 slice. It is still only a revealed-data expressivity gate. Even a
+pass would not establish held-out prompt capacity, geometry attribution,
+general attention, autonomous generation, or reasoning.
