@@ -471,6 +471,19 @@ attribution uses the same frozen gain, paired-improvement, and own-NLL rules
 against the independently fitted additive arm. Capacity remains independently
 decidable even if either attribution fails.
 
+The independently fitted additive arm is eligible for that attribution only
+if its own-prompt NLL is no more than `0.05` above exact state-off/V1
+own-prompt NLL. If it is not language-valid, the terminal records
+`ADDITIVE_CONTROL_NO_STABLE_CAPACITY` and leaves delta-overwrite superiority
+unclaimed; it does not turn a broken comparator into positive attribution.
+Capacity and geometry decisions remain independently decidable.
+
+Before selecting or opening V5, preparation must verify exact V2 result CID
+`blake3:623bbd63321c18ad7e4172b325b2d22518b6b10a33f755d3bbbbdcf9b9c51637`
+and its `production_v5` boundary: `authorized=true`, `created=false`, and
+`inspected=false`. The create-once V5 preparation is the sole transition that
+may change the latter two facts for the terminal campaign.
+
 The timing probe still chooses among CPU4 sequential, CPU8 sequential, and two
 CPU4 workers with ordered deterministic collection under Apple Accelerate.
 With three fitted arms, the expected fit window is revised to `30-50` minutes;
