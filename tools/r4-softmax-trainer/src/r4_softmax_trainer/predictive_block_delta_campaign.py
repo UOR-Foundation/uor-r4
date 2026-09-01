@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import math
 import os
+import re
 import struct
 import time
 from collections.abc import Callable, Mapping, Sequence
@@ -23,7 +24,11 @@ from blake3 import blake3
 from torch import Tensor
 from torch.nn import functional as F
 
-from .h4_spin_frame_sidecar import H4SpinFrameArtifactV1
+from .h4_spin_frame_sidecar import (
+    PRODUCT_TABLE_KAPPA,
+    ROOT_TABLE_KAPPA,
+    H4SpinFrameArtifactV1,
+)
 from .language_path_generalization_campaign import _exact_geometry
 from .layerwise_normalized_retained_readout_campaign import (
     PREDECESSOR_ARTIFACT_BYTES,
@@ -83,6 +88,12 @@ V4_GEOMETRIC_ARTIFACT_CID = (
 V4_POOLED_ARTIFACT_CID = (
     "blake3:4eeba8bb99d200e77558d89529a1e9f33d7c1ea6f4439ec3cae64c79d0b0f0d1"
 )
+H4_FRAME_ARTIFACT_CID = (
+    "blake3:f1f556d3c93a2e21593c4f48de13efd64705fec11f7660e0b6fac7ba49263099"
+)
+H4_FRAME_FILE_CID = (
+    "blake3:9df624162d14ba133fed34c560e4828961a4dc8d6a9438c731e8f8c209c16ad4"
+)
 V4_POPULATION_RELATIVE_PATH = "evaluation/sealed/prompt-population.json"
 V4_REVEAL_RELATIVE_PATH = "evaluation/reveal.json"
 
@@ -91,6 +102,8 @@ RESULT_SCHEMA = "uor-r4.predictive-block-delta-admission/1"
 VERDICT_ADMIT = "PREDICTIVE_BINDING_EXPRESSIVITY_ADMIT"
 VERDICT_REJECT = "PREDICTIVE_BINDING_NOT_OBSERVABLE"
 VERDICT_INVALID = "INVALID_PREDICTIVE_BINDING_PREFLIGHT"
+
+_CID_PATTERN = re.compile(r"blake3:[0-9a-f]{64}\Z")
 
 
 class _Audit(Protocol):
@@ -107,6 +120,9 @@ class _Output(Protocol):
 
 
 class _ProbeModel(Protocol):
+    frame_matrices: Tensor
+    frame_multiplication: Tensor
+
     def __call__(
         self,
         token_ids: Tensor,
@@ -130,6 +146,15 @@ class _ProbeModel(Protocol):
     def export_binding_artifact(self) -> bytes: ...
 
     def load_binding_artifact(self, artifact: bytes) -> None: ...
+
+    def _step_transport(
+        self,
+        leaves: Tensor,
+        *,
+        intervention: Literal[
+            "native", "transport_permuted", "no_delta", "state_off"
+        ],
+    ) -> Tensor: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -197,6 +222,11 @@ def load_frozen_probe_inputs(
 
     predecessor, artifact_path = _verify_predecessor(predecessor_root.resolve())
     frames = H4SpinFrameArtifactV1.load(frame_sidecar_path)
+    if (
+        frames.artifact_cid != H4_FRAME_ARTIFACT_CID
+        or frames.file_cid != H4_FRAME_FILE_CID
+    ):
+        raise ValueError("H4 spin-frame sidecar differs from the frozen campaign input")
     revealed_v4_root = revealed_v4_root.resolve()
     reveal_path = revealed_v4_root / V4_REVEAL_RELATIVE_PATH
     population_path = revealed_v4_root / V4_POPULATION_RELATIVE_PATH
@@ -459,6 +489,516 @@ def admission_decision(
     }
 
 
+def _exact_mapping(
+    value: object, *, keys: tuple[str, ...], label: str
+) -> Mapping[str, Any]:
+    if not isinstance(value, Mapping) or set(value) != set(keys):
+        raise ValueError(f"cached {label} fields differ from the result schema")
+    return value
+
+
+def _integer_field(value: object, *, label: str, minimum: int = 0) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
+        raise ValueError(f"cached {label} must be an integer >= {minimum}")
+    return value
+
+
+def _float_field(value: object, *, label: str, minimum: float | None = None) -> float:
+    if not isinstance(value, float) or not math.isfinite(value):
+        raise ValueError(f"cached {label} must be a finite float")
+    if minimum is not None and value < minimum:
+        raise ValueError(f"cached {label} must be >= {minimum}")
+    return value
+
+
+def _boolean_field(value: object, *, label: str) -> bool:
+    if not isinstance(value, bool):
+        raise ValueError(f"cached {label} must be a boolean")
+    return value
+
+
+def _cid_field(value: object, *, label: str) -> str:
+    if not isinstance(value, str) or not _CID_PATTERN.fullmatch(value):
+        raise ValueError(f"cached {label} must be a BLAKE3 CID")
+    return value
+
+
+def _probe_score_from_record(
+    value: object, *, expected_intervention: str, label: str
+) -> ProbeScore:
+    record = _exact_mapping(
+        value,
+        keys=(
+            "intervention",
+            "directions",
+            "targets",
+            "mean_gain_nats_per_token",
+            "wins",
+            "own_nll_nats_per_token",
+            "foreign_nll_nats_per_token",
+            "maximum_head_logits",
+            "forbidden_reads",
+            "work_signature",
+            "trace_cid",
+        ),
+        label=label,
+    )
+    if record["intervention"] != expected_intervention:
+        raise ValueError(f"cached {label} intervention differs")
+    directions = _integer_field(record["directions"], label=f"{label}.directions")
+    targets = _integer_field(record["targets"], label=f"{label}.targets")
+    wins = _integer_field(record["wins"], label=f"{label}.wins")
+    forbidden_reads = _integer_field(
+        record["forbidden_reads"], label=f"{label}.forbidden_reads"
+    )
+    if directions != PROBE_DIRECTIONS or targets != PROBE_TARGETS or wins > directions:
+        raise ValueError(f"cached {label} population counts differ")
+    gain = _float_field(
+        record["mean_gain_nats_per_token"], label=f"{label}.gain"
+    )
+    own_nll = _float_field(
+        record["own_nll_nats_per_token"],
+        label=f"{label}.own_nll",
+        minimum=0.0,
+    )
+    foreign_nll = _float_field(
+        record["foreign_nll_nats_per_token"],
+        label=f"{label}.foreign_nll",
+        minimum=0.0,
+    )
+    maximum_head = _float_field(
+        record["maximum_head_logits"],
+        label=f"{label}.maximum_head_logits",
+        minimum=0.0,
+    )
+    if not math.isclose(
+        gain, foreign_nll - own_nll, rel_tol=0.0, abs_tol=1.0e-12
+    ):
+        raise ValueError(f"cached {label} gain does not reproduce its NLLs")
+    work = record["work_signature"]
+    if (
+        not isinstance(work, (list, tuple))
+        or not work
+        or any(
+            isinstance(item, bool) or not isinstance(item, int) or item < 0
+            for item in work
+        )
+    ):
+        raise ValueError(f"cached {label} work signature is invalid")
+    return ProbeScore(
+        intervention=expected_intervention,
+        directions=directions,
+        targets=targets,
+        mean_gain_nats_per_token=gain,
+        wins=wins,
+        own_nll_nats_per_token=own_nll,
+        foreign_nll_nats_per_token=foreign_nll,
+        maximum_head_logits=maximum_head,
+        forbidden_reads=forbidden_reads,
+        work_signature=tuple(work),
+        trace_cid=_cid_field(record["trace_cid"], label=f"{label}.trace_cid"),
+    )
+
+
+def _validate_cached_result(value: Mapping[str, Any]) -> None:
+    """Reproduce every decision-bearing field without reopening V4."""
+
+    _verify_self_cid(value, "result_cid")
+    result = _exact_mapping(
+        value,
+        keys=(
+            "schema",
+            "issue",
+            "policy",
+            "model_policy",
+            "implementation",
+            "execution",
+            "inputs",
+            "dose",
+            "mechanics",
+            "fit",
+            "scores",
+            "decision",
+            "verdict",
+            "admitted",
+            "disposable_weights",
+            "production_v5",
+            "writer_process_id",
+            "result_cid",
+        ),
+        label="result",
+    )
+    result_issue = _integer_field(result["issue"], label="issue", minimum=1)
+    if (
+        result["schema"] != RESULT_SCHEMA
+        or result_issue != ISSUE
+        or result["policy"] != POLICY
+        or result["model_policy"] != MODEL_POLICY
+    ):
+        raise ValueError("cached predictive admission identity differs")
+    _integer_field(result["writer_process_id"], label="writer_process_id", minimum=1)
+    if result["implementation"] != trainer_implementation_contract():
+        raise ValueError("cached predictive implementation binding differs")
+    execution = _exact_mapping(
+        result["execution"],
+        keys=(
+            "device",
+            "torch_intraop_threads",
+            "torch_interop_threads",
+            "total_elapsed_seconds",
+        ),
+        label="execution",
+    )
+    intraop_threads = _integer_field(
+        execution["torch_intraop_threads"],
+        label="execution.torch_intraop_threads",
+        minimum=1,
+    )
+    interop_threads = _integer_field(
+        execution["torch_interop_threads"],
+        label="execution.torch_interop_threads",
+        minimum=1,
+    )
+    total_elapsed = _float_field(
+        execution["total_elapsed_seconds"],
+        label="execution.total_elapsed_seconds",
+        minimum=0.0,
+    )
+    if (
+        execution["device"] != "cpu"
+        or intraop_threads > 1_024
+        or interop_threads > 1_024
+        or total_elapsed > HARD_WALL_SECONDS
+    ):
+        raise ValueError("cached predictive execution contract differs")
+
+    inputs = _exact_mapping(
+        result["inputs"],
+        keys=("predecessor", "revealed_v4", "h4_spin_frames"),
+        label="inputs",
+    )
+    predecessor = _exact_mapping(
+        inputs["predecessor"],
+        keys=("policy", "result_cid", "artifact_cid", "artifact_bytes"),
+        label="inputs.predecessor",
+    )
+    _integer_field(
+        predecessor["artifact_bytes"],
+        label="inputs.predecessor.artifact_bytes",
+        minimum=1,
+    )
+    if dict(predecessor) != {
+        "policy": PREDECESSOR_POLICY,
+        "result_cid": PREDECESSOR_RESULT_CID,
+        "artifact_cid": PREDECESSOR_ARTIFACT_CID,
+        "artifact_bytes": PREDECESSOR_ARTIFACT_BYTES,
+    }:
+        raise ValueError("cached predecessor binding differs")
+    revealed = _exact_mapping(
+        inputs["revealed_v4"],
+        keys=(
+            "population_cid",
+            "commitment_cid",
+            "reveal_cid",
+            "pairs",
+            "directions",
+            "targets",
+        ),
+        label="inputs.revealed_v4",
+    )
+    for field in ("pairs", "directions", "targets"):
+        _integer_field(
+            revealed[field], label=f"inputs.revealed_v4.{field}", minimum=1
+        )
+    if dict(revealed) != {
+        "population_cid": V4_POPULATION_CID,
+        "commitment_cid": V4_COMMITMENT_CID,
+        "reveal_cid": V4_REVEAL_CID,
+        "pairs": PROBE_PAIRS,
+        "directions": PROBE_DIRECTIONS,
+        "targets": PROBE_TARGETS,
+    }:
+        raise ValueError("cached revealed-V4 binding differs")
+    frames = _exact_mapping(
+        inputs["h4_spin_frames"],
+        keys=(
+            "artifact_cid",
+            "file_cid",
+            "root_table_kappa",
+            "multiplication_table_kappa",
+        ),
+        label="inputs.h4_spin_frames",
+    )
+    artifact_cid = _cid_field(frames["artifact_cid"], label="H4 artifact CID")
+    file_cid = _cid_field(frames["file_cid"], label="H4 file CID")
+    if (
+        artifact_cid != H4_FRAME_ARTIFACT_CID
+        or file_cid != H4_FRAME_FILE_CID
+        or frames["root_table_kappa"] != ROOT_TABLE_KAPPA
+        or frames["multiplication_table_kappa"] != PRODUCT_TABLE_KAPPA
+    ):
+        raise ValueError("cached H4 registry binding differs")
+
+    dose = _exact_mapping(
+        result["dose"],
+        keys=(
+            "pairs",
+            "directions",
+            "targets",
+            "maximum_updates",
+            "completed_updates",
+            "cuda",
+        ),
+        label="dose",
+    )
+    pairs = _integer_field(dose["pairs"], label="dose.pairs", minimum=1)
+    directions = _integer_field(
+        dose["directions"], label="dose.directions", minimum=1
+    )
+    targets = _integer_field(dose["targets"], label="dose.targets", minimum=1)
+    maximum_updates = _integer_field(
+        dose["maximum_updates"], label="dose.maximum_updates", minimum=1
+    )
+    completed_updates = _integer_field(
+        dose["completed_updates"], label="dose.completed_updates", minimum=1
+    )
+    if (
+        pairs != PROBE_PAIRS
+        or directions != PROBE_DIRECTIONS
+        or targets != PROBE_TARGETS
+        or maximum_updates != MAXIMUM_UPDATES
+        or completed_updates > MAXIMUM_UPDATES
+        or dose["cuda"] != "FORBIDDEN"
+    ):
+        raise ValueError("cached predictive dose differs")
+
+    fit = _exact_mapping(
+        result["fit"],
+        keys=(
+            "updates",
+            "elapsed_seconds",
+            "final_loss",
+            "final_gradient_norm",
+            "gradient_values_seen",
+            "gradient_values_required",
+            "all_trainable_values_received_finite_nonzero_gradient",
+            "qualified_base_unchanged",
+        ),
+        label="fit",
+    )
+    updates = _integer_field(fit["updates"], label="fit.updates", minimum=1)
+    gradient_seen = _integer_field(
+        fit["gradient_values_seen"], label="fit.gradient_values_seen"
+    )
+    gradient_required = _integer_field(
+        fit["gradient_values_required"], label="fit.gradient_values_required"
+    )
+    all_gradients = _boolean_field(
+        fit["all_trainable_values_received_finite_nonzero_gradient"],
+        label="fit.all_gradients",
+    )
+    base_unchanged = _boolean_field(
+        fit["qualified_base_unchanged"], label="fit.qualified_base_unchanged"
+    )
+    _float_field(fit["elapsed_seconds"], label="fit.elapsed_seconds", minimum=0.0)
+    _float_field(fit["final_loss"], label="fit.final_loss", minimum=0.0)
+    _float_field(
+        fit["final_gradient_norm"], label="fit.final_gradient_norm", minimum=0.0
+    )
+    if (
+        updates != completed_updates
+        or updates > MAXIMUM_UPDATES
+        or gradient_required != TRAINABLE_PARAMETERS
+        or gradient_seen > gradient_required
+        or all_gradients != (gradient_seen == gradient_required)
+    ):
+        raise ValueError("cached predictive fit ledger differs")
+
+    mechanics = _exact_mapping(
+        result["mechanics"],
+        keys=(
+            "all_frame_identity_maximum_delta",
+            "all_frame_step_connection_maximum_delta",
+            "transported_matrix_read_covariance_maximum_delta",
+            "strict_causal_prefix_maximum_logits_delta",
+            "unobserved_target_mutation_maximum_prefix_delta",
+            "state_off_v1_maximum_logits_delta",
+            "artifact_replay_maximum_logits_delta",
+            "transport_permutation_head_effect",
+            "binding_observable_maximum_head_logits",
+            "equal_geometric_plain_intervention_work",
+            "forbidden_reads",
+            "passed",
+            "gradient_values_seen",
+            "gradient_values_required",
+            "all_trainable_values_received_finite_nonzero_gradient",
+            "qualified_base_unchanged",
+        ),
+        label="mechanics",
+    )
+    identity_delta = _float_field(
+        mechanics["all_frame_identity_maximum_delta"],
+        label="mechanics.all_frame_identity_delta",
+        minimum=0.0,
+    )
+    connection_delta = _float_field(
+        mechanics["all_frame_step_connection_maximum_delta"],
+        label="mechanics.all_frame_step_connection_delta",
+        minimum=0.0,
+    )
+    covariance_delta = _float_field(
+        mechanics["transported_matrix_read_covariance_maximum_delta"],
+        label="mechanics.transported_matrix_read_covariance_delta",
+        minimum=0.0,
+    )
+    causal_delta = _float_field(
+        mechanics["strict_causal_prefix_maximum_logits_delta"],
+        label="mechanics.causal_delta",
+        minimum=0.0,
+    )
+    counterfactual_delta = _float_field(
+        mechanics["unobserved_target_mutation_maximum_prefix_delta"],
+        label="mechanics.counterfactual_delta",
+        minimum=0.0,
+    )
+    state_off_delta = _float_field(
+        mechanics["state_off_v1_maximum_logits_delta"],
+        label="mechanics.state_off_delta",
+        minimum=0.0,
+    )
+    replay_delta = _float_field(
+        mechanics["artifact_replay_maximum_logits_delta"],
+        label="mechanics.replay_delta",
+        minimum=0.0,
+    )
+    transport_effect = _float_field(
+        mechanics["transport_permutation_head_effect"],
+        label="mechanics.transport_effect",
+        minimum=0.0,
+    )
+    observable = _float_field(
+        mechanics["binding_observable_maximum_head_logits"],
+        label="mechanics.binding_observable",
+        minimum=0.0,
+    )
+    equal_work = _boolean_field(
+        mechanics["equal_geometric_plain_intervention_work"],
+        label="mechanics.equal_work",
+    )
+    forbidden_reads = _integer_field(
+        mechanics["forbidden_reads"], label="mechanics.forbidden_reads"
+    )
+    mechanics_passed = _boolean_field(
+        mechanics["passed"], label="mechanics.passed"
+    )
+    mechanics_gradient_seen = _integer_field(
+        mechanics["gradient_values_seen"], label="mechanics.gradient_values_seen"
+    )
+    mechanics_gradient_required = _integer_field(
+        mechanics["gradient_values_required"],
+        label="mechanics.gradient_values_required",
+    )
+    mechanics_all_gradients = _boolean_field(
+        mechanics["all_trainable_values_received_finite_nonzero_gradient"],
+        label="mechanics.all_gradients",
+    )
+    mechanics_base_unchanged = _boolean_field(
+        mechanics["qualified_base_unchanged"],
+        label="mechanics.qualified_base_unchanged",
+    )
+    if (
+        mechanics_gradient_seen != gradient_seen
+        or mechanics_gradient_required != gradient_required
+        or mechanics_all_gradients is not all_gradients
+        or mechanics_base_unchanged is not base_unchanged
+    ):
+        raise ValueError("cached mechanics/fit binding differs")
+    reproduced_mechanics = bool(
+        identity_delta <= 2e-5
+        and connection_delta <= 2e-5
+        and covariance_delta <= 2e-5
+        and causal_delta <= 2e-5
+        and counterfactual_delta <= 2e-5
+        and state_off_delta == 0.0
+        and replay_delta == 0.0
+        and transport_effect > 0.0
+        and observable > 0.0
+        and equal_work
+        and forbidden_reads == 0
+        and all_gradients
+        and base_unchanged
+    )
+    if mechanics_passed != reproduced_mechanics:
+        raise ValueError("cached mechanics verdict does not reproduce")
+
+    scores = _exact_mapping(
+        result["scores"],
+        keys=("full_delta", "additive_no_overwrite", "state_off"),
+        label="scores",
+    )
+    native = _probe_score_from_record(
+        scores["full_delta"], expected_intervention="native", label="scores.full_delta"
+    )
+    additive = _probe_score_from_record(
+        scores["additive_no_overwrite"],
+        expected_intervention="no_delta",
+        label="scores.additive_no_overwrite",
+    )
+    state_off = _probe_score_from_record(
+        scores["state_off"],
+        expected_intervention="state_off",
+        label="scores.state_off",
+    )
+    expected_decision = admission_decision(
+        native=native,
+        additive=additive,
+        state_off=state_off,
+        mechanics=mechanics,
+    )
+    if result["decision"] != expected_decision:
+        raise ValueError("cached admission decision does not reproduce")
+    admitted = _boolean_field(result["admitted"], label="admitted")
+    if result["verdict"] != expected_decision["verdict"] or admitted != expected_decision[
+        "admitted"
+    ]:
+        raise ValueError("cached top-level admission verdict differs")
+
+    disposal = _exact_mapping(
+        result["disposable_weights"],
+        keys=("status", "values"),
+        label="disposable_weights",
+    )
+    destroyed_values = _integer_field(
+        disposal["values"], label="disposable_weights.values", minimum=1
+    )
+    if (
+        disposal["status"] != "DESTROYED_IN_MEMORY_NO_ARTIFACT"
+        or destroyed_values != TRAINABLE_PARAMETERS
+    ):
+        raise ValueError("cached disposable-weight destruction differs")
+    production = _exact_mapping(
+        result["production_v5"],
+        keys=("authorized", "created", "inspected", "selector"),
+        label="production_v5",
+    )
+    production_authorized = _boolean_field(
+        production["authorized"], label="production_v5.authorized"
+    )
+    production_created = _boolean_field(
+        production["created"], label="production_v5.created"
+    )
+    production_inspected = _boolean_field(
+        production["inspected"], label="production_v5.inspected"
+    )
+    if (
+        production_authorized is not admitted
+        or production_created is not False
+        or production_inspected is not False
+        or production["selector"] != "NOT_IMPLEMENTED_IN_PREFLIGHT_MODULE"
+    ):
+        raise ValueError("cached V5 authorization boundary differs")
+
+
 def destroy_disposable_weights(model: _ProbeModel) -> int:
     """Zero every fitted value before the disposable model leaves scope."""
 
@@ -554,6 +1094,66 @@ def fit_disposable_probe(
     }
 
 
+def transport_mechanics(model: _ProbeModel, *, device: torch.device) -> dict[str, float]:
+    """Check the registered connection and R4 matrix/read covariance on all frames."""
+
+    frames = getattr(model, "frame_matrices", None)
+    products = getattr(model, "frame_multiplication", None)
+    if (
+        not isinstance(frames, Tensor)
+        or not isinstance(products, Tensor)
+        or tuple(frames.shape) != (120, 4, 4)
+        or tuple(products.shape) != (120, 120)
+        or frames.device != device
+        or products.device != device
+        or products.dtype != torch.long
+        or not torch.isfinite(frames).all().item()
+    ):
+        raise ValueError("predictive model does not expose the registered H4 frame table")
+
+    identity = torch.eye(4, device=device, dtype=frames.dtype)
+    all_frame_identity = torch.matmul(frames.transpose(-1, -2), frames)
+    identity_delta = float(
+        (all_frame_identity - identity.unsqueeze(0)).abs().max().cpu()
+    )
+
+    source_indices = torch.arange(120, device=device).repeat_interleave(120)
+    leaves = torch.arange(120, device=device).repeat(120)
+    destination_indices = products[source_indices, leaves]
+    relative = torch.matmul(
+        frames.index_select(0, destination_indices).transpose(-1, -2),
+        frames.index_select(0, source_indices),
+    )
+    step = model._step_transport(leaves, intervention="native")
+    if tuple(step.shape) != (120 * 120, 4, 4) or not torch.isfinite(step).all().item():
+        raise ValueError("predictive native step transport contract differs")
+    connection_delta = float((relative - step).abs().max().cpu())
+
+    transports = model._step_transport(
+        torch.arange(120, device=device), intervention="native"
+    )
+    matrix = (
+        torch.arange(1, 17, device=device, dtype=frames.dtype).view(4, 4) / 17.0
+    )
+    read = torch.tensor(
+        [0.25, -0.5, 0.75, -1.0], device=device, dtype=frames.dtype
+    )
+    transported_matrix = torch.matmul(
+        torch.matmul(transports, matrix), transports.transpose(-1, -2)
+    )
+    transported_read = torch.matmul(transports, read.view(4, 1))
+    observed = torch.matmul(transported_matrix, transported_read)
+    expected = torch.matmul(
+        transports, torch.matmul(matrix, read.view(4, 1))
+    )
+    covariance_delta = float((observed - expected).abs().max().cpu())
+    return {
+        "all_frame_identity_maximum_delta": identity_delta,
+        "all_frame_step_connection_maximum_delta": connection_delta,
+        "transported_matrix_read_covariance_maximum_delta": covariance_delta,
+    }
+
+
 def basic_mechanics(
     native: _ProbeModel,
     plain: _ProbeModel,
@@ -568,6 +1168,7 @@ def basic_mechanics(
     inputs, _targets = _batch(directions[:2], device=device)
     native.eval()
     plain.eval()
+    transport_checks = transport_mechanics(native, device=device)
     artifact = native.export_binding_artifact()
     plain.load_binding_artifact(artifact)
     replay = replay_factory()
@@ -613,6 +1214,7 @@ def basic_mechanics(
         == plain_output.audit.work_signature()
     )
     mechanics = {
+        **transport_checks,
         "strict_causal_prefix_maximum_logits_delta": causal_delta,
         "unobserved_target_mutation_maximum_prefix_delta": counterfactual_delta,
         "state_off_v1_maximum_logits_delta": state_off_delta,
@@ -626,7 +1228,10 @@ def basic_mechanics(
         ),
     }
     mechanics["passed"] = bool(
-        causal_delta <= 2e-5
+        transport_checks["all_frame_identity_maximum_delta"] <= 2e-5
+        and transport_checks["all_frame_step_connection_maximum_delta"] <= 2e-5
+        and transport_checks["transported_matrix_read_covariance_maximum_delta"] <= 2e-5
+        and causal_delta <= 2e-5
         and counterfactual_delta <= 2e-5
         and state_off_delta == 0.0
         and replay_delta == 0.0
@@ -665,9 +1270,7 @@ def run_predictive_block_delta_preflight(
     result_path = root / RESULT_RELATIVE_PATH
     if result_path.exists() or result_path.is_symlink():
         result = _read_canonical_json(result_path)
-        _verify_self_cid(result, "result_cid")
-        if result.get("schema") != RESULT_SCHEMA or result.get("policy") != POLICY:
-            raise ValueError("cached predictive admission result differs")
+        _validate_cached_result(result)
         return result
     frozen = load_frozen_probe_inputs(
         predecessor_root=predecessor_root,
@@ -675,9 +1278,22 @@ def run_predictive_block_delta_preflight(
         frame_sidecar_path=frame_sidecar_path,
     )
     selected_device = torch.device(device)
+    if selected_device.type != "cpu":
+        raise ValueError("predictive block-delta preflight is frozen to CPU execution")
     torch.manual_seed(INITIALIZATION_SEED)
+    gate_started = time.monotonic()
+
+    def remaining_gate_seconds() -> float:
+        remaining = HARD_WALL_SECONDS - (time.monotonic() - gate_started)
+        if remaining <= 0.0:
+            raise TimeoutError(
+                "disposable predictive gate exceeded its five-minute hard wall"
+            )
+        return remaining
+
     native = model_factory(frozen, "geometric", selected_device)
     plain = model_factory(frozen, "plain", selected_device)
+    remaining_gate_seconds()
     mechanics = basic_mechanics(
         native,
         plain,
@@ -685,11 +1301,13 @@ def run_predictive_block_delta_preflight(
         replay_factory=lambda: model_factory(frozen, "geometric", selected_device),
         device=selected_device,
     )
+    remaining = remaining_gate_seconds()
     fit = fit_disposable_probe(
         native,
         frozen.pairs,
         device=selected_device,
         maximum_updates=maximum_updates,
+        hard_wall_seconds=remaining,
     )
     mechanics = {
         **mechanics,
@@ -708,12 +1326,15 @@ def run_predictive_block_delta_preflight(
     native_score = score_probe(
         native, frozen.pairs, intervention="native", device=selected_device
     )
+    remaining_gate_seconds()
     additive_score = score_probe(
         native, frozen.pairs, intervention="no_delta", device=selected_device
     )
+    remaining_gate_seconds()
     state_off_score = score_probe(
         native, frozen.pairs, intervention="state_off", device=selected_device
     )
+    remaining_gate_seconds()
     decision = admission_decision(
         native=native_score,
         additive=additive_score,
@@ -722,6 +1343,9 @@ def run_predictive_block_delta_preflight(
     )
     destroyed = destroy_disposable_weights(native)
     destroy_disposable_weights(plain)
+    total_elapsed_seconds = time.monotonic() - gate_started
+    if total_elapsed_seconds > HARD_WALL_SECONDS:
+        raise TimeoutError("disposable predictive gate exceeded its five-minute hard wall")
     implementation = trainer_implementation_contract()
     result = _with_self_cid(
         {
@@ -730,6 +1354,12 @@ def run_predictive_block_delta_preflight(
             "policy": POLICY,
             "model_policy": MODEL_POLICY,
             "implementation": implementation,
+            "execution": {
+                "device": str(selected_device),
+                "torch_intraop_threads": torch.get_num_threads(),
+                "torch_interop_threads": torch.get_num_interop_threads(),
+                "total_elapsed_seconds": total_elapsed_seconds,
+            },
             "inputs": dict(frozen.records),
             "dose": {
                 "pairs": PROBE_PAIRS,
@@ -763,6 +1393,7 @@ def run_predictive_block_delta_preflight(
         },
         "result_cid",
     )
+    _validate_cached_result(result)
     result_path.parent.mkdir(parents=True, exist_ok=True)
     descriptor = os.open(result_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     try:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import math
 import tempfile
 import unittest
@@ -43,6 +44,141 @@ class _DisposableModel:
 
     def trainable_parameters(self):
         return tuple(self.values)
+
+
+class _TransportModel:
+    def __init__(self) -> None:
+        order = 120
+        angles = torch.arange(order, dtype=torch.float32) * (2.0 * math.pi / order)
+        self.frame_matrices = torch.eye(4).repeat(order, 1, 1)
+        self.frame_matrices[:, 0, 0] = torch.cos(angles)
+        self.frame_matrices[:, 0, 1] = -torch.sin(angles)
+        self.frame_matrices[:, 1, 0] = torch.sin(angles)
+        self.frame_matrices[:, 1, 1] = torch.cos(angles)
+        self.frame_multiplication = torch.tensor(
+            [
+                [(left + right) % order for right in range(order)]
+                for left in range(order)
+            ],
+            dtype=torch.long,
+        )
+
+    def _step_transport(self, leaves, *, intervention):
+        if intervention != "native":
+            raise AssertionError("test transport accepts only native")
+        return self.frame_matrices.index_select(0, leaves).transpose(-1, -2)
+
+
+def _valid_cached_result() -> dict:
+    mechanics = {
+        "all_frame_identity_maximum_delta": 0.0,
+        "all_frame_step_connection_maximum_delta": 0.0,
+        "transported_matrix_read_covariance_maximum_delta": 0.0,
+        "strict_causal_prefix_maximum_logits_delta": 0.0,
+        "unobserved_target_mutation_maximum_prefix_delta": 0.0,
+        "state_off_v1_maximum_logits_delta": 0.0,
+        "artifact_replay_maximum_logits_delta": 0.0,
+        "transport_permutation_head_effect": 0.1,
+        "binding_observable_maximum_head_logits": 0.1,
+        "equal_geometric_plain_intervention_work": True,
+        "forbidden_reads": 0,
+        "passed": True,
+        "gradient_values_seen": campaign.TRAINABLE_PARAMETERS,
+        "gradient_values_required": campaign.TRAINABLE_PARAMETERS,
+        "all_trainable_values_received_finite_nonzero_gradient": True,
+        "qualified_base_unchanged": True,
+    }
+    native = _score("native", gain=0.0, wins=0)
+    additive = _score("no_delta", gain=0.0, wins=0)
+    state_off = _score("state_off", gain=0.0, wins=0)
+    decision = campaign.admission_decision(
+        native=native,
+        additive=additive,
+        state_off=state_off,
+        mechanics=mechanics,
+    )
+    return campaign._with_self_cid(
+        {
+            "schema": campaign.RESULT_SCHEMA,
+            "issue": campaign.ISSUE,
+            "policy": campaign.POLICY,
+            "model_policy": campaign.MODEL_POLICY,
+            "implementation": campaign.trainer_implementation_contract(),
+            "execution": {
+                "device": "cpu",
+                "torch_intraop_threads": torch.get_num_threads(),
+                "torch_interop_threads": torch.get_num_interop_threads(),
+                "total_elapsed_seconds": 2.0,
+            },
+            "inputs": {
+                "predecessor": {
+                    "policy": campaign.PREDECESSOR_POLICY,
+                    "result_cid": campaign.PREDECESSOR_RESULT_CID,
+                    "artifact_cid": campaign.PREDECESSOR_ARTIFACT_CID,
+                    "artifact_bytes": campaign.PREDECESSOR_ARTIFACT_BYTES,
+                },
+                "revealed_v4": {
+                    "population_cid": campaign.V4_POPULATION_CID,
+                    "commitment_cid": campaign.V4_COMMITMENT_CID,
+                    "reveal_cid": campaign.V4_REVEAL_CID,
+                    "pairs": campaign.PROBE_PAIRS,
+                    "directions": campaign.PROBE_DIRECTIONS,
+                    "targets": campaign.PROBE_TARGETS,
+                },
+                "h4_spin_frames": {
+                    "artifact_cid": campaign.H4_FRAME_ARTIFACT_CID,
+                    "file_cid": campaign.H4_FRAME_FILE_CID,
+                    "root_table_kappa": campaign.ROOT_TABLE_KAPPA,
+                    "multiplication_table_kappa": campaign.PRODUCT_TABLE_KAPPA,
+                },
+            },
+            "dose": {
+                "pairs": campaign.PROBE_PAIRS,
+                "directions": campaign.PROBE_DIRECTIONS,
+                "targets": campaign.PROBE_TARGETS,
+                "maximum_updates": campaign.MAXIMUM_UPDATES,
+                "completed_updates": 1,
+                "cuda": "FORBIDDEN",
+            },
+            "mechanics": mechanics,
+            "fit": {
+                "updates": 1,
+                "elapsed_seconds": 1.0,
+                "final_loss": 2.0,
+                "final_gradient_norm": 1.0,
+                "gradient_values_seen": campaign.TRAINABLE_PARAMETERS,
+                "gradient_values_required": campaign.TRAINABLE_PARAMETERS,
+                "all_trainable_values_received_finite_nonzero_gradient": True,
+                "qualified_base_unchanged": True,
+            },
+            "scores": {
+                "full_delta": native.record(),
+                "additive_no_overwrite": additive.record(),
+                "state_off": state_off.record(),
+            },
+            "decision": decision,
+            "verdict": decision["verdict"],
+            "admitted": decision["admitted"],
+            "disposable_weights": {
+                "status": "DESTROYED_IN_MEMORY_NO_ARTIFACT",
+                "values": campaign.TRAINABLE_PARAMETERS,
+            },
+            "production_v5": {
+                "authorized": decision["admitted"],
+                "created": False,
+                "inspected": False,
+                "selector": "NOT_IMPLEMENTED_IN_PREFLIGHT_MODULE",
+            },
+            "writer_process_id": 1,
+        },
+        "result_cid",
+    )
+
+
+def _resign(value: dict) -> dict:
+    unsigned = copy.deepcopy(value)
+    unsigned.pop("result_cid", None)
+    return campaign._with_self_cid(unsigned, "result_cid")
 
 
 class PredictiveBlockDeltaCampaignTests(unittest.TestCase):
@@ -109,21 +245,29 @@ class PredictiveBlockDeltaCampaignTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "count differs"):
             campaign.destroy_disposable_weights(model)
 
+    def test_all_frame_connection_and_matrix_read_covariance(self) -> None:
+        model = _TransportModel()
+        checks = campaign.transport_mechanics(model, device=torch.device("cpu"))
+        self.assertLessEqual(checks["all_frame_identity_maximum_delta"], 2e-5)
+        self.assertLessEqual(
+            checks["all_frame_step_connection_maximum_delta"], 2e-5
+        )
+        self.assertLessEqual(
+            checks["transported_matrix_read_covariance_maximum_delta"], 2e-5
+        )
+
+        model._step_transport = lambda leaves, *, intervention: (  # type: ignore[method-assign]
+            model.frame_matrices.index_select(0, leaves)
+        )
+        broken = campaign.transport_mechanics(model, device=torch.device("cpu"))
+        self.assertGreater(broken["all_frame_step_connection_maximum_delta"], 0.1)
+
     def test_cached_result_is_verified_without_reopening_v4(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             result_path = root / campaign.RESULT_RELATIVE_PATH
             result_path.parent.mkdir(parents=True)
-            result = campaign._with_self_cid(
-                {
-                    "schema": campaign.RESULT_SCHEMA,
-                    "issue": campaign.ISSUE,
-                    "policy": campaign.POLICY,
-                    "admitted": False,
-                    "verdict": campaign.VERDICT_REJECT,
-                },
-                "result_cid",
-            )
+            result = _valid_cached_result()
             result_path.write_bytes(campaign.canonical_json_bytes(result))
             loader = Mock(side_effect=AssertionError("V4 must not reopen"))
             with patch.object(campaign, "load_frozen_probe_inputs", loader):
@@ -133,8 +277,73 @@ class PredictiveBlockDeltaCampaignTests(unittest.TestCase):
                     revealed_v4_root=root / "revealed-v4",
                     frame_sidecar_path=root / "h4-spin-frame.json",
                 )
-            self.assertEqual(observed, result)
+            self.assertEqual(
+                campaign.canonical_json_bytes(observed),
+                campaign.canonical_json_bytes(result),
+            )
             loader.assert_not_called()
+
+    def test_truncated_and_self_consistent_tampered_results_fail_closed(self) -> None:
+        valid = _valid_cached_result()
+        cases: list[tuple[str, dict]] = []
+
+        truncated = copy.deepcopy(valid)
+        truncated.pop("scores")
+        cases.append(("truncated", _resign(truncated)))
+
+        planted = copy.deepcopy(valid)
+        planted["implementation"] = {"files": [], "tree_cid": "blake3:" + "c" * 64}
+        cases.append(("planted implementation", _resign(planted)))
+
+        score_tamper = copy.deepcopy(valid)
+        score_tamper["scores"]["full_delta"]["mean_gain_nats_per_token"] = 0.1
+        score_tamper["scores"]["full_delta"]["foreign_nll_nats_per_token"] = 2.1
+        score_tamper["scores"]["full_delta"]["wins"] = 64
+        cases.append(("stale decision", _resign(score_tamper)))
+
+        fit_tamper = copy.deepcopy(valid)
+        fit_tamper["fit"]["gradient_values_seen"] = 1
+        cases.append(("fit ledger", _resign(fit_tamper)))
+
+        production_tamper = copy.deepcopy(valid)
+        production_tamper["production_v5"]["authorized"] = True
+        cases.append(("production authorization", _resign(production_tamper)))
+
+        execution_tamper = copy.deepcopy(valid)
+        execution_tamper["execution"]["torch_intraop_threads"] = 0
+        cases.append(("execution threads", _resign(execution_tamper)))
+
+        wall_tamper = copy.deepcopy(valid)
+        wall_tamper["execution"]["total_elapsed_seconds"] = (
+            campaign.HARD_WALL_SECONDS + 0.1
+        )
+        cases.append(("whole-gate wall", _resign(wall_tamper)))
+
+        h4_tamper = copy.deepcopy(valid)
+        h4_tamper["inputs"]["h4_spin_frames"]["artifact_cid"] = (
+            "blake3:" + "d" * 64
+        )
+        cases.append(("planted H4 CID", _resign(h4_tamper)))
+
+        for label, result in cases:
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                result_path = root / campaign.RESULT_RELATIVE_PATH
+                result_path.parent.mkdir(parents=True)
+                result_path.write_bytes(campaign.canonical_json_bytes(result))
+                loader = Mock(side_effect=AssertionError("V4 must not reopen"))
+                factory = Mock(side_effect=AssertionError("model must not construct"))
+                with patch.object(campaign, "load_frozen_probe_inputs", loader):
+                    with self.assertRaises(ValueError):
+                        campaign.run_predictive_block_delta_preflight(
+                            root=root,
+                            predecessor_root=root / "predecessor",
+                            revealed_v4_root=root / "revealed-v4",
+                            frame_sidecar_path=root / "h4-spin-frame.json",
+                            model_factory=factory,
+                        )
+                loader.assert_not_called()
+                factory.assert_not_called()
 
     def test_corrupt_cached_result_fails_before_any_model_construction(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
