@@ -17,6 +17,8 @@ from r4_softmax_trainer.paths import (
     default_predictive_block_delta_predecessor,
     default_predictive_block_delta_revealed_v4_root,
     default_predictive_block_delta_root,
+    default_predictive_block_delta_v1_result,
+    default_predictive_block_delta_v2_root,
 )
 from r4_softmax_trainer.predictive_block_delta_campaign import MAXIMUM_UPDATES
 
@@ -92,6 +94,58 @@ class PredictiveBlockDeltaCliTests(unittest.TestCase):
                         str(invalid),
                     ]
                 )
+
+    def test_v2_uses_a_separate_root_and_dispatches_the_historical_v1_binding(
+        self,
+    ) -> None:
+        root = Path("/tmp/predictive-v2-root")
+        predecessor = Path("/tmp/predictive-v2-predecessor")
+        revealed = Path("/tmp/predictive-v2-v4")
+        frames = Path("/tmp/predictive-v2-frames.json")
+        v1_result = Path("/tmp/predictive-v1-result.json")
+        result = {"verdict": "TEST_ONLY_V2"}
+        defaults = cli.parser().parse_args(
+            ["preflight-predictive-block-delta-v2"]
+        )
+        self.assertEqual(
+            default_predictive_block_delta_v2_root().name,
+            "issue-973-predictive-block-delta-v2",
+        )
+        self.assertEqual(defaults.v1_result, default_predictive_block_delta_v1_result())
+
+        arguments = [
+            "r4-softmax-trainer",
+            "--root",
+            str(root),
+            "preflight-predictive-block-delta-v2",
+            "--predecessor-root",
+            str(predecessor),
+            "--revealed-v4-root",
+            str(revealed),
+            "--frame-sidecar",
+            str(frames),
+            "--v1-result",
+            str(v1_result),
+            "--maximum-updates",
+            "7",
+        ]
+        with (
+            mock.patch.object(sys, "argv", arguments),
+            mock.patch.object(
+                cli, "run_predictive_block_delta_v2_preflight", return_value=result
+            ) as run,
+            mock.patch.object(cli, "_print_result") as print_result,
+        ):
+            cli.main()
+        run.assert_called_once_with(
+            root=root.resolve(),
+            predecessor_root=predecessor.resolve(),
+            revealed_v4_root=revealed.resolve(),
+            frame_sidecar_path=frames.resolve(),
+            v1_result_path=v1_result.resolve(),
+            maximum_updates=7,
+        )
+        print_result.assert_called_once_with(result)
 
 
 if __name__ == "__main__":

@@ -90,6 +90,9 @@ from .predictive_block_delta_campaign import (
     MAXIMUM_UPDATES as PREDICTIVE_BLOCK_DELTA_MAXIMUM_UPDATES,
     run_predictive_block_delta_preflight,
 )
+from .predictive_block_delta_campaign_v2 import (
+    run_predictive_block_delta_v2_preflight,
+)
 from .paths import (
     default_attended_relation_adapter_root,
     default_capacity_root,
@@ -133,6 +136,8 @@ from .paths import (
     default_predictive_block_delta_predecessor,
     default_predictive_block_delta_revealed_v4_root,
     default_predictive_block_delta_root,
+    default_predictive_block_delta_v1_result,
+    default_predictive_block_delta_v2_root,
     default_research_root,
     default_source_relation_head_root,
     default_source_span_pointer_root,
@@ -825,6 +830,46 @@ def parser() -> argparse.ArgumentParser:
             f"of {PREDICTIVE_BLOCK_DELTA_MAXIMUM_UPDATES}"
         ),
     )
+    predictive_delta_v2 = subcommands.add_parser(
+        "preflight-predictive-block-delta-v2",
+        help=(
+            "run #973's frozen independent native/additive correction on "
+            "revealed V4 pairs 32 through 63"
+        ),
+    )
+    predictive_delta_v2.add_argument(
+        "--predecessor-root",
+        type=_root,
+        default=default_predictive_block_delta_predecessor(),
+        help="immutable qualified retained-language-path root",
+    )
+    predictive_delta_v2.add_argument(
+        "--revealed-v4-root",
+        type=_root,
+        default=default_predictive_block_delta_revealed_v4_root(),
+        help="completed learned-associative root containing the revealed V4 population",
+    )
+    predictive_delta_v2.add_argument(
+        "--frame-sidecar",
+        type=_root,
+        default=default_predictive_block_delta_frame_sidecar(),
+        help="canonical JSON emitted by r4-h4-spin-frame-export",
+    )
+    predictive_delta_v2.add_argument(
+        "--v1-result",
+        type=_root,
+        default=default_predictive_block_delta_v1_result(),
+        help="immutable create-once V1 result required by the V2 correction",
+    )
+    predictive_delta_v2.add_argument(
+        "--maximum-updates",
+        type=_predictive_block_delta_updates,
+        default=PREDICTIVE_BLOCK_DELTA_MAXIMUM_UPDATES,
+        help=(
+            "optimizer ceiling for each independent arm, bounded to the frozen "
+            f"campaign maximum of {PREDICTIVE_BLOCK_DELTA_MAXIMUM_UPDATES}"
+        ),
+    )
     return command
 
 
@@ -908,6 +953,7 @@ def main() -> None:
         "verify-learned-associative-readout",
     }
     predictive_block_delta_commands = {"preflight-predictive-block-delta"}
+    predictive_block_delta_v2_commands = {"preflight-predictive-block-delta-v2"}
     if arguments.root:
         root = arguments.root
     elif arguments.command in capacity_commands:
@@ -944,6 +990,8 @@ def main() -> None:
         root = default_learned_associative_readout_root()
     elif arguments.command in predictive_block_delta_commands:
         root = default_predictive_block_delta_root()
+    elif arguments.command in predictive_block_delta_v2_commands:
+        root = default_predictive_block_delta_v2_root()
     else:
         root = default_research_root()
     if arguments.command == "download":
@@ -1269,6 +1317,18 @@ def main() -> None:
                 predecessor_root=arguments.predecessor_root,
                 revealed_v4_root=arguments.revealed_v4_root,
                 frame_sidecar_path=arguments.frame_sidecar,
+                maximum_updates=arguments.maximum_updates,
+            )
+        )
+        return
+    if arguments.command == "preflight-predictive-block-delta-v2":
+        _print_result(
+            run_predictive_block_delta_v2_preflight(
+                root=root,
+                predecessor_root=arguments.predecessor_root,
+                revealed_v4_root=arguments.revealed_v4_root,
+                frame_sidecar_path=arguments.frame_sidecar,
+                v1_result_path=arguments.v1_result,
                 maximum_updates=arguments.maximum_updates,
             )
         )

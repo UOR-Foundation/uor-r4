@@ -311,3 +311,19 @@ def default_predictive_block_delta_frame_sidecar() -> Path:
         / "geometry"
         / "h4-spin-frames.json"
     )
+
+
+def default_predictive_block_delta_v1_result() -> Path:
+    """Return the immutable historical V1 disposable result."""
+
+    return (
+        default_predictive_block_delta_root()
+        / "preflight"
+        / "predictive-block-delta-admission.json"
+    )
+
+
+def default_predictive_block_delta_v2_root() -> Path:
+    """Return #973's independent-arm V2 correction root."""
+
+    return model_store_root() / "research" / "issue-973-predictive-block-delta-v2"

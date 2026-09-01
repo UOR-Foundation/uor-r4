@@ -188,6 +188,10 @@ class PredictiveBlockDeltaCampaignTests(unittest.TestCase):
         self.assertEqual(campaign.PROBE_TARGETS, 1_024)
         self.assertEqual(campaign.MAXIMUM_UPDATES, 256)
         self.assertEqual(campaign.TRAINABLE_PARAMETERS, 9_228)
+        self.assertEqual(
+            campaign.V1_IMPLEMENTATION_TREE_CID,
+            "blake3:317aa564eb2041c37768186d81691666a19ce01c168e4ab74a0b966d761212d2",
+        )
         self.assertAlmostEqual(
             campaign.ABSOLUTE_GAIN_THRESHOLD,
             math.log(2.0) / 16,
@@ -270,7 +274,19 @@ class PredictiveBlockDeltaCampaignTests(unittest.TestCase):
             result = _valid_cached_result()
             result_path.write_bytes(campaign.canonical_json_bytes(result))
             loader = Mock(side_effect=AssertionError("V4 must not reopen"))
-            with patch.object(campaign, "load_frozen_probe_inputs", loader):
+            with (
+                patch.object(campaign, "load_frozen_probe_inputs", loader),
+                patch.object(
+                    campaign,
+                    "V1_IMPLEMENTATION_TREE_CID",
+                    result["implementation"]["tree_cid"],
+                ),
+                patch.object(
+                    campaign,
+                    "trainer_implementation_contract",
+                    side_effect=AssertionError("historical result must not read current tree"),
+                ),
+            ):
                 observed = campaign.run_predictive_block_delta_preflight(
                     root=root,
                     predecessor_root=root / "predecessor",
@@ -333,7 +349,14 @@ class PredictiveBlockDeltaCampaignTests(unittest.TestCase):
                 result_path.write_bytes(campaign.canonical_json_bytes(result))
                 loader = Mock(side_effect=AssertionError("V4 must not reopen"))
                 factory = Mock(side_effect=AssertionError("model must not construct"))
-                with patch.object(campaign, "load_frozen_probe_inputs", loader):
+                with (
+                    patch.object(campaign, "load_frozen_probe_inputs", loader),
+                    patch.object(
+                        campaign,
+                        "V1_IMPLEMENTATION_TREE_CID",
+                        valid["implementation"]["tree_cid"],
+                    ),
+                ):
                     with self.assertRaises(ValueError):
                         campaign.run_predictive_block_delta_preflight(
                             root=root,

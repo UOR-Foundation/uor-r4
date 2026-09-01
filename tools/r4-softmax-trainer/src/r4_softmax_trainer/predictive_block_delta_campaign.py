@@ -50,6 +50,7 @@ from .provenance import (
     cid_bytes,
     cid_file,
     trainer_implementation_contract,
+    tree_cid,
 )
 
 ISSUE = 973
@@ -93,6 +94,9 @@ H4_FRAME_ARTIFACT_CID = (
 )
 H4_FRAME_FILE_CID = (
     "blake3:9df624162d14ba133fed34c560e4828961a4dc8d6a9438c731e8f8c209c16ad4"
+)
+V1_IMPLEMENTATION_TREE_CID = (
+    "blake3:317aa564eb2041c37768186d81691666a19ce01c168e4ab74a0b966d761212d2"
 )
 V4_POPULATION_RELATIVE_PATH = "evaluation/sealed/prompt-population.json"
 V4_REVEAL_RELATIVE_PATH = "evaluation/reveal.json"
@@ -523,6 +527,41 @@ def _cid_field(value: object, *, label: str) -> str:
     return value
 
 
+def _validate_historical_implementation(value: object) -> None:
+    implementation = _exact_mapping(
+        value, keys=("files", "tree_cid"), label="implementation"
+    )
+    files = implementation["files"]
+    if not isinstance(files, list) or not files:
+        raise ValueError("cached implementation file ledger is invalid")
+    paths: list[str] = []
+    for offset, item in enumerate(files):
+        record = _exact_mapping(
+            item,
+            keys=("bytes", "cid", "path"),
+            label=f"implementation.files[{offset}]",
+        )
+        if not isinstance(record["path"], str) or not record["path"]:
+            raise ValueError("cached implementation path is invalid")
+        _integer_field(
+            record["bytes"],
+            label=f"implementation.files[{offset}].bytes",
+            minimum=1,
+        )
+        _cid_field(record["cid"], label=f"implementation.files[{offset}].cid")
+        paths.append(record["path"])
+    if paths != sorted(set(paths)):
+        raise ValueError("cached implementation paths are not unique and sorted")
+    observed_tree = _cid_field(
+        implementation["tree_cid"], label="implementation.tree_cid"
+    )
+    if (
+        observed_tree != V1_IMPLEMENTATION_TREE_CID
+        or tree_cid(list(files)) != observed_tree
+    ):
+        raise ValueError("cached predictive implementation binding differs")
+
+
 def _probe_score_from_record(
     value: object, *, expected_intervention: str, label: str
 ) -> ProbeScore:
@@ -637,8 +676,7 @@ def _validate_cached_result(value: Mapping[str, Any]) -> None:
     ):
         raise ValueError("cached predictive admission identity differs")
     _integer_field(result["writer_process_id"], label="writer_process_id", minimum=1)
-    if result["implementation"] != trainer_implementation_contract():
-        raise ValueError("cached predictive implementation binding differs")
+    _validate_historical_implementation(result["implementation"])
     execution = _exact_mapping(
         result["execution"],
         keys=(
