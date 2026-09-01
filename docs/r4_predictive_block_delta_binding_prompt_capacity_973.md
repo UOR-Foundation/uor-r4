@@ -387,3 +387,92 @@ revealed-slice overfit as attention evidence.
 This is positive evidence for bounded causal associative memory. It is not yet
 held-out prompt capacity, geometric attribution, general attention,
 autonomous generation, reasoning, or deployed integer/table runtime evidence.
+
+## V5 terminal executable correction — 2026-09-01
+
+This correction is frozen after the V2 admission and before any V5 population,
+fresh-language slice, terminal optimizer, or terminal fitted artifact is
+created or opened. It does not change the mechanism, the V5 coordinates, or
+the terminal capacity and geometry thresholds above. It makes the already
+declared terminal campaign executable and repairs the overwrite comparator in
+light of V2's independently fitted additive result.
+
+### Exact training law
+
+The geometric, plain, and additive arms start from byte-identical predictive
+binding values initialized with seed `9,739` over the same immutable qualified
+V1 artifact. Each arm independently minimizes ordinary next-token cross
+entropy over all `120` decisions in each of the same `43,680` construction
+windows, in the existing deterministic order. Each receives exactly `2,730`
+updates at batch size `16` with AdamW: warmup `100`, peak learning rate
+`3e-4`, cosine decay to `3e-5`, betas `(0.9, 0.95)`, epsilon `1e-8`, weight
+decay `0.1`, and gradient clipping at `1.0`. No terminal arm may reuse either
+V2's disposable values or any post-reveal gradient.
+
+The three independently fitted terminal arms are:
+
+1. canonical H4 transport with the full delta update;
+2. identity transport and identity token/candidate anchors with the full delta
+   update; and
+3. canonical H4 transport with the additive/Hebbian no-overwrite update.
+
+The fitted geometric arm is additionally rescored under transport permutation,
+state-off, order-shuffled state construction, and the same-fitted-value
+additive intervention. The last is auxiliary ablation evidence only. Because
+V2 showed that the additive law can fit a stable memory, overwrite attribution
+is decided against arm 3's independently fitted equal-budget result, not
+against weights optimized for another update law.
+
+### Exact unopened populations
+
+V5 selection is the V4 matching policy continued strictly after source story
+ordinal `409,546`, with all stories from these exact prior population CIDs
+excluded:
+
+```text
+V1 blake3:c11a7c935139ca169460b90c01392d7c9e0929e4c10710e76e6c8f74cbdf0340
+V2 blake3:258f143eedbbb7067dc512db929a42166ad8a492fc059542409f419a3b46942e
+V3 blake3:165be397b73041afd39aa65ae796400ea539399f8586729ad19a168c4daa9e93
+V4 blake3:cc9a1c40fe753e269ea31edd804c32b2a0c208ef20fceb1167636d6f28d7da11
+```
+
+The canonical sorted union contains exactly `2,048` story CIDs and has CID
+`blake3:494e55036f52cc06561186b954930fa7e777a99457fc8da857e61f1450b9f70d`.
+The selector stops at exactly `256` pairs. Its content-derived population and
+commitment CIDs are published after create-once preparation and before any fit.
+
+The fresh-language slice remains exactly token offsets
+`[156,282,226, 156,532,212)` from the source token stream: `249,986` tokens,
+`2,066` windows, capacity ordinals `765,248..766,489`, source ordinals
+`849,803..851,190`, and exactly `1,242` story CIDs. Preparation verifies the
+whole source train-index CID
+`blake3:0032889e32b38801476223c5bed7e401d77b61afbbd6cf9afddaceee18e2136e`.
+Its slice and story-set CIDs are likewise content-derived outputs published in
+the joint create-once commitment before fitting. Both unopened populations are
+regular files stored mode `000`; training reads construction data only.
+
+### Derived state and order checks
+
+State-off must reproduce immutable V1 logits and scores exactly. The existing
+capacity requirements against V1 already make state load-bearing; the result
+also records and requires the redundant derived check
+`geometric gain - state-off gain >= 0.0253415693` with no worse geometric own
+NLL. No new scientific threshold is added.
+
+Order shuffle remains an audit, not an outcome gate. A target-blind
+within-sequence permutation is content-bound before reveal; it must preserve
+the token multiset, execute equal work with zero forbidden reads, replay
+deterministically, and publish its score and head-trace effect. No score-drop
+direction or magnitude is required after seeing the population.
+
+Geometry attribution keeps the frozen comparison against the independently
+fitted plain arm and transport-permuted intervention. Delta-overwrite
+attribution uses the same frozen gain, paired-improvement, and own-NLL rules
+against the independently fitted additive arm. Capacity remains independently
+decidable even if either attribution fails.
+
+The timing probe still chooses among CPU4 sequential, CPU8 sequential, and two
+CPU4 workers with ordered deterministic collection under Apple Accelerate.
+With three fitted arms, the expected fit window is revised to `30-50` minutes;
+the predeclared hard fit wall remains `3,600` seconds before scoring and
+independent verification. CUDA remains forbidden.
