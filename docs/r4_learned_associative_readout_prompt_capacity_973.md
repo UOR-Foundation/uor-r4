@@ -1,30 +1,41 @@
-# R4 learned candidate-leaf associative-readout prompt-capacity freeze (#973)
+# R4 learned candidate-leaf associative-readout prompt-capacity contract and result (#973)
 
 - **Issue:** [#973](https://github.com/UOR-Foundation/uor-r4/issues/973)
 - **Authoritative public freeze:**
   [issue comment 5498390609](https://github.com/UOR-Foundation/uor-r4/issues/973#issuecomment-5498390609)
+- **Authoritative public outcome:**
+  [issue comment 5499617619](https://github.com/UOR-Foundation/uor-r4/issues/973#issuecomment-5499617619)
 - **Live base:** `92aadcf01623792a03b9d7bb03c4c0df96afbda4`
 - **Branch:** `issue-973-learned-associative-readout`
 - **Mechanism policy:** `R4LearnedCandidateLeafAssociativeReadoutV1`
 - **Campaign policy:** `R4LearnedAssociativeReadoutPromptCapacityV1`
-- **Status:** `FROZEN_ARCHITECTURE / POPULATIONS_NOT_CREATED / NOT_RUN`
+- **Status:** `COMPLETED` / `LEARNED_ASSOCIATIVE_READOUT_NO_CAPACITY` /
+  `INDEPENDENT_VERIFICATION_PASS`
 - **Qualified predecessor:** `R4RetainedLanguagePathV1`, artifact CID
   `blake3:d1417b325e7a545057cd38e9f1a723933a3682801877433d20e98774a5e9172d`
-- **Outcome:** `NOT_RUN`
+- **Outcome:** result
+  `blake3:cedba37738ee249457bb589f716ee75afb16a0c4937c2a22ae9f917dd3eb97c1`;
+  independent verification
+  `blake3:443d711ce9a228e26e2eb2eebb55c582848424e2677c3473d41deaf8afd69ec7`
 
-## Decision and boundary
+> **Record structure:** the architecture and decision contract through
+> **Nonclaims** is the preserved pre-run freeze. The
+> [verified outcome amendment](#verified-outcome-amendment--2026-09-01) is the
+> current empirical status and binding next decision.
 
-The parameter-free retained-readout ladder ended at
+## Decision and boundary (historical pre-run freeze)
+
+The parameter-free retained-readout ladder had ended at
 `LAYERWISE_NORMALIZED_RETAINED_READOUT_PROMPT_CAPACITY_PARTIAL`. This record
-freezes the one authorized learned successor before implementation, V4
-population creation, optimization, or outcome access. It adds candidate-relative
+froze the one authorized learned successor before implementation, V4
+population creation, optimization, or outcome access. It added candidate-relative
 learned query capacity over the qualified retained value field while preserving
 the accepted V1 recurrence and language path.
 
-This document is a public architecture, data-boundary, and decision freeze. It
-contains no V4 population contents, trained candidate artifact, reveal, score,
-result, or verification claim. A commitment, successful mechanics probe, or
-create-once seal will not by itself be a model result.
+This pre-run portion is the public architecture, data-boundary, and decision
+freeze. It intentionally contains no V4 population contents, trained candidate
+artifact, reveal, score, result, or verification claim. The outcome amendment
+below records those later artifacts without rewriting this frozen contract.
 
 ## Exact frozen mechanism
 
@@ -211,3 +222,127 @@ readiness, #973 closure, or #954 unblocking.
 
 A future negative would falsify only this exact frozen query-table/readout law.
 At the present freeze, every empirical outcome remains `NOT_RUN`.
+
+## Verified outcome amendment — 2026-09-01
+
+This append-only amendment records the one completed run without rewriting the
+pre-implementation freeze above. The authoritative outcome is
+[issue comment 5499617619](https://github.com/UOR-Foundation/uor-r4/issues/973#issuecomment-5499617619).
+The terminal is:
+
+`LEARNED_ASSOCIATIVE_READOUT_NO_CAPACITY`
+
+**Empirical Criterion.** The completed campaign rejects this exact learned
+query-to-frozen-value-field readout law. It does not reject the qualified
+retained decoder, the ordinary causal-softmax reference, or the broader
+geometric-attention programme.
+
+### Immutable lifecycle ledger
+
+The create-once population seal, execution decision, fitted heads, reveal,
+score, result, and independent verification are bound by these identities:
+
+| Record | CID |
+|---|---|
+| preparation | `blake3:25d0a2bdb9caf93b97c1244c19e5646bee40d724ddd77431ac97de99cb82f7c3` |
+| joint population commitment | `blake3:bc490bc0c4354ae08b00978dc6657200afb1638409f191c714693f0886981f58` |
+| V4 prompt population | `blake3:cc9a1c40fe753e269ea31edd804c32b2a0c208ef20fceb1167636d6f28d7da11` |
+| fresh-heldout continuation | `blake3:77dfa0744c140e5affe9be233244e616c940dbff469f786deadeb87768e3c752` |
+| execution probe | `blake3:deb8e179f41d4f56dd7ec92148ff930837b6456bf76aed5e91297d0a2b060f02` |
+| selected CPU4 plan | `blake3:6b7b3cdc9ea178c6fb63f4b7acd095f6c4a73e7e149cf35854f8610a49699a06` |
+| started envelope | `blake3:379dc4d888098da084c4bc330058c68f784452d44223c13ca23578eeadbbdc3f` |
+| run contract | `blake3:cb0c191bb3f6fba22a777cb16741f49699961bb4ef4e708a52311f9d358a3f47` |
+| geometric arm result | `blake3:3983416d7936c3fc02bab19f711cfab69adaf3607077df7f3407515a8057eb60` |
+| geometric head artifact | `blake3:85a33965a7cd9ee952948ed6e6c5a925585edb9496377baa56a22ffaca40175f` |
+| pooled arm result | `blake3:ca6f713a22a67b6a5749c9ebef374abeeb9d22a232d0ab4f77043ae09c69a08f` |
+| pooled head artifact | `blake3:4eeba8bb99d200e77558d89529a1e9f33d7c1ea6f4439ec3cae64c79d0b0f0d1` |
+| reveal | `blake3:0fcbeffa06ed2ef7496a5ead77ff9a81320c44a4e4aec2d29082f86c0b8634a9` |
+| canonical scoring evidence | `blake3:3912a87c4da17c4a50aeb096b21168b991bc5f9908a268d090a6a4d0977c6153` |
+| terminal result | `blake3:cedba37738ee249457bb589f716ee75afb16a0c4937c2a22ae9f917dd3eb97c1` |
+| independent verification | `blake3:443d711ce9a228e26e2eb2eebb55c582848424e2677c3473d41deaf8afd69ec7` |
+
+The joint seal contained `256` V4 pairs, `512` directions, and `8,192`
+continuation decisions plus the separately fixed `249,986`-token / `2,066`-
+window / `247,920`-decision fresh continuation. It excluded all `1,536` prior
+V1+V2+V3 story CIDs and had zero V4/fresh story overlap.
+
+The training-only probe selected `cpu-accelerate-4t-sequential`: Apple
+Accelerate, four CPU threads, one shared feature pass, and two disjoint heads,
+losses, optimizer states, checkpoints, and final artifacts. The run performed
+the frozen `2,730` steps once. CUDA, a sweep, threshold change, outcome-driven
+retry, and post-reveal optimization were not used.
+
+### Prompt-capacity and attribution outcome
+
+| Arm | Mean own-minus-crossed gain (nats/token) | Wins / 512 | Own NLL | Decision |
+|---|---:|---:|---:|---|
+| frozen V1 | `0.00642365` | `308` | `3.71279883` | comparator |
+| geometric exact leaf | `0.00637679` | `299` | `3.71038302` | `PROMPT_CONDITIONING_CAPACITY_FAIL` |
+| pooled equal-budget | `0.01026323` | `324` | `3.68289051` | `PROMPT_CONDITIONING_PARTIAL` |
+| fixed-leaf deranged | `0.00666565` | `306` | `3.71127426` | attribution control |
+
+The frozen capacity floors were absolute gain `>= 0.04332169878499658`, gain
+over V1 `>= 0.025341569256760274`, at least `308/512` wins, and own NLL no
+worse than V1. The geometric arm passed only own-NLL nonregression. The pooled
+arm passed wins, own-NLL nonregression, and any-gain-over-V1, but missed both
+capacity-effect floors. Therefore neither arm earned
+`ASSOCIATIVE_CAPACITY_PASS`.
+
+The separate terminal is `GEOMETRY_ATTRIBUTION_FAIL`:
+
+- geometric-minus-pooled gain was `-0.00388645`, with `209/512` paired
+  directional improvements;
+- geometric-minus-deranged gain was `-0.00028887`, with `251/512` paired
+  directional improvements; and
+- each comparison required gain `>= 0.025341569256760274`, at least `308/512`
+  improvements, and geometric own NLL no worse than the control.
+
+### Fresh-language and state-load-bearing outcome
+
+Both learned arms passed every frozen fresh-language and state-load-bearing
+gate on `247,920` decisions:
+
+| Arm | NLL | Delta from V1 | Top-1 | Delta from V1 |
+|---|---:|---:|---:|---:|
+| frozen V1 | `3.90363602` | — | `29.6285%` | — |
+| geometric exact leaf | `3.90141233` | `-0.00222368` | `29.6342%` | `+0.00565 pp` |
+| pooled equal-budget | `3.87375622` | `-0.02987979` | `30.0428%` | `+0.41425 pp` |
+
+State-off NLL was `4.23919176`. Relative to state-off, the geometric arm had a
+`0.33777943`-nat advantage and `16,795` additional correct decisions; the
+pooled arm had a `0.36543554`-nat advantage and `17,808` additional correct
+decisions. These exceed the frozen `0.10`-nat and `2,480`-decision floors.
+Thus the retained state is load-bearing, and the pooled readout preserves a
+real ordinary next-token control signal. That result is not geometric
+attribution or prompt-specific associative capacity.
+
+### Mechanics, timing, and verification
+
+All ten final mechanics gates passed: selected-probe mechanics, exact head
+artifact replay, zero arm/prompt/fresh forbidden reads, exact frozen-base
+binding, exact prompt replay, reveal/artifact binding, population binding, and
+zero post-reveal optimizer steps. Artifact replay maximum logit delta was zero.
+
+The durable timing ledger was `1,105.58889358` seconds for fitting plus
+`281.65394608` seconds for canonical scoring, or `1,387.24283967` seconds
+total (`23.12` minutes), below the `7,200`-second hard wall. Independent fresh-
+process verification reproduced evidence, mechanics, and the terminal decision
+exactly; writer PID `22421` differed from verifier PID `23048`, and the verifier
+created no optimizer, took zero optimizer steps, and scored zero training
+batches.
+
+### Binding action and nonclaims
+
+The predeclared negative branch is binding. Do not tune or retry this query
+table, add another candidate readout over the same frozen V1 value field, or run
+generation from either head. Preserve the pooled fresh-language result as the
+matched non-geometric control. The next #973 architecture must change the
+retained **value write/binding law** so prompt-specific key-value information is
+present before readout, then compare it with this pooled result and explicit
+geometry-destroying controls under a new, separately frozen contract.
+
+Generation, reasoning, exact/table/`no_std` lowering, geometry-native lowering,
+coherent text generation, correctness, intrinsic Spin/H4 superiority, a
+transformerless general model, browser readiness, release readiness, #973
+closure, and #954 unblocking remain `NOT_RUN`, `NOT_ESTABLISHED`, or otherwise
+unauthorized at this rung.
