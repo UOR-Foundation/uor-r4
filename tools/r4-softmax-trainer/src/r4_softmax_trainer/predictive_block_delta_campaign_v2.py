@@ -82,7 +82,13 @@ from .prompt_conditioning_v4 import (
     PromptConditioningPair,
     load_revealed_prompt_conditioning_population,
 )
-from .provenance import canonical_json_bytes, cid_bytes, cid_file, trainer_implementation_contract
+from .provenance import (
+    canonical_json_bytes,
+    cid_bytes,
+    cid_file,
+    trainer_implementation_contract,
+    tree_cid,
+)
 
 
 ISSUE = 973
@@ -106,6 +112,9 @@ V1_RESULT_CID = (
     "blake3:004abd0ab27e63065c4961863123c8e086ff1b88ea12162de558a0bdaac8dac8"
 )
 V1_VERDICT = "PREDICTIVE_BINDING_NOT_OBSERVABLE"
+V2_IMPLEMENTATION_TREE_CID = (
+    "blake3:603791e7b74a682855507797a6ab3533e36f963914fc2d307549e97e87bde366"
+)
 
 NATIVE_ADMIT = "PREDICTIVE_BINDING_NATIVE_CAPACITY_ADMIT"
 NATIVE_MISS = "PREDICTIVE_BINDING_NATIVE_CAPACITY_MISS"
@@ -867,6 +876,44 @@ _MECHANICS_KEYS = (
 )
 
 
+def _validate_historical_v2_implementation(value: object) -> None:
+    """Validate the stored V2 tree while allowing later campaign modules."""
+
+    implementation = _exact_mapping(
+        value, keys=("files", "tree_cid"), label="V2 implementation"
+    )
+    files = implementation["files"]
+    if not isinstance(files, list) or not files:
+        raise ValueError("cached V2 implementation file ledger is invalid")
+    paths: list[str] = []
+    for offset, item in enumerate(files):
+        record = _exact_mapping(
+            item,
+            keys=("bytes", "cid", "path"),
+            label=f"V2 implementation.files[{offset}]",
+        )
+        if not isinstance(record["path"], str) or not record["path"]:
+            raise ValueError("cached V2 implementation path is invalid")
+        _integer_field(
+            record["bytes"],
+            label=f"V2 implementation.files[{offset}].bytes",
+            minimum=1,
+        )
+        _cid_field(
+            record["cid"], label=f"V2 implementation.files[{offset}].cid"
+        )
+        paths.append(record["path"])
+    observed = _cid_field(
+        implementation["tree_cid"], label="V2 implementation.tree_cid"
+    )
+    if paths != sorted(set(paths)) or tree_cid(list(files)) != observed:
+        raise ValueError("cached predictive V2 implementation binding differs")
+    if observed == V2_IMPLEMENTATION_TREE_CID:
+        return
+    if implementation != trainer_implementation_contract():
+        raise ValueError("cached predictive V2 implementation binding differs")
+
+
 def _validate_cached_result(value: Mapping[str, Any]) -> None:
     """Fail closed while reproducing all V2 decision-bearing fields."""
 
@@ -905,8 +952,7 @@ def _validate_cached_result(value: Mapping[str, Any]) -> None:
         raise ValueError("cached predictive V2 identity differs")
     _integer_field(result["issue"], label="issue", minimum=1)
     _integer_field(result["writer_process_id"], label="writer_process_id", minimum=1)
-    if result["implementation"] != trainer_implementation_contract():
-        raise ValueError("cached predictive V2 implementation binding differs")
+    _validate_historical_v2_implementation(result["implementation"])
 
     execution = _exact_mapping(
         result["execution"],

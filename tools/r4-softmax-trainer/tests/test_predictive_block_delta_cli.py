@@ -19,6 +19,9 @@ from r4_softmax_trainer.paths import (
     default_predictive_block_delta_root,
     default_predictive_block_delta_v1_result,
     default_predictive_block_delta_v2_root,
+    default_predictive_block_delta_terminal_prior_populations,
+    default_predictive_block_delta_terminal_root,
+    default_predictive_block_delta_terminal_v2_result,
 )
 from r4_softmax_trainer.predictive_block_delta_campaign import MAXIMUM_UPDATES
 
@@ -152,6 +155,46 @@ class PredictiveBlockDeltaCliTests(unittest.TestCase):
                     "255",
                 ]
             )
+
+    def test_terminal_commands_bind_v5_defaults_and_dispatch_without_opening_data(
+        self,
+    ) -> None:
+        defaults = cli.parser().parse_args(
+            ["prepare-predictive-block-delta-terminal"]
+        )
+        prior = default_predictive_block_delta_terminal_prior_populations()
+        self.assertEqual(
+            default_predictive_block_delta_terminal_root().name,
+            "issue-973-predictive-block-delta-v5",
+        )
+        self.assertEqual(defaults.v2_result, default_predictive_block_delta_terminal_v2_result())
+        self.assertEqual(
+            (defaults.v1_population, defaults.v2_population, defaults.v3_population, defaults.v4_population),
+            prior,
+        )
+
+        root = Path("/tmp/predictive-v5-root")
+        result = {"verdict": "TEST_ONLY_V5"}
+        with (
+            mock.patch.object(
+                sys,
+                "argv",
+                [
+                    "r4-softmax-trainer",
+                    "--root",
+                    str(root),
+                    "run-predictive-block-delta-terminal",
+                    "--resume",
+                ],
+            ),
+            mock.patch.object(
+                cli, "run_predictive_block_delta_terminal", return_value=result
+            ) as run,
+            mock.patch.object(cli, "_print_result") as print_result,
+        ):
+            cli.main()
+        run.assert_called_once_with(root.resolve(), resume=True)
+        print_result.assert_called_once_with(result)
 
 
 if __name__ == "__main__":

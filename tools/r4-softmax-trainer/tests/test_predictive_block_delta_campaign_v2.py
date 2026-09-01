@@ -122,13 +122,24 @@ def _valid_cached_result() -> tuple[dict, str]:
     attribution = campaign.additive_attribution_decision(
         full=full, additive=additive, state_off=state_off
     )
+    implementation_files = [
+        {
+            "path": "src/r4_softmax_trainer/predictive_block_delta_campaign_v2.py",
+            "bytes": 1,
+            "cid": "blake3:" + "9" * 64,
+        }
+    ]
+    implementation = {
+        "files": implementation_files,
+        "tree_cid": campaign.tree_cid(implementation_files),
+    }
     result = campaign._with_self_cid(
         {
             "schema": campaign.RESULT_SCHEMA,
             "issue": campaign.ISSUE,
             "policy": campaign.POLICY,
             "model_policy": campaign.MODEL_POLICY,
-            "implementation": campaign.trainer_implementation_contract(),
+            "implementation": implementation,
             "execution": {
                 "device": "cpu",
                 "torch_intraop_threads": campaign.CPU_THREADS,
@@ -240,6 +251,10 @@ class PredictiveBlockDeltaCampaignV2Tests(unittest.TestCase):
         self.assertEqual(campaign.MAXIMUM_UPDATES, 256)
         self.assertEqual(campaign.CPU_THREADS, 8)
         self.assertEqual(
+            campaign.V2_IMPLEMENTATION_TREE_CID,
+            "blake3:603791e7b74a682855507797a6ab3533e36f963914fc2d307549e97e87bde366",
+        )
+        self.assertEqual(
             campaign.SELECTOR_CID,
             "blake3:285be20c9c41267dbf925ea7d24d198b41a9014653ff62b1bdb64c8e2ee4fd5a",
         )
@@ -297,8 +312,44 @@ class PredictiveBlockDeltaCampaignV2Tests(unittest.TestCase):
 
     def test_strict_cached_result_reproduces_both_decisions(self) -> None:
         result, selector_cid = _valid_cached_result()
-        with patch.object(campaign, "SELECTOR_CID", selector_cid):
+        with (
+            patch.object(campaign, "SELECTOR_CID", selector_cid),
+            patch.object(
+                campaign,
+                "V2_IMPLEMENTATION_TREE_CID",
+                result["implementation"]["tree_cid"],
+            ),
+        ):
             campaign._validate_cached_result(result)
+
+    def test_historical_v2_tree_ignores_later_package_files_but_tampering_fails(self) -> None:
+        result, selector_cid = _valid_cached_result()
+        historical_tree = result["implementation"]["tree_cid"]
+        with (
+            patch.object(campaign, "SELECTOR_CID", selector_cid),
+            patch.object(campaign, "V2_IMPLEMENTATION_TREE_CID", historical_tree),
+            patch.object(
+                campaign,
+                "trainer_implementation_contract",
+                side_effect=AssertionError("current post-V2 tree must not be consulted"),
+            ),
+        ):
+            campaign._validate_cached_result(result)
+
+        tampered = copy.deepcopy(result)
+        tampered["implementation"]["files"][0]["bytes"] = 2
+        tampered = _resign(tampered)
+        with (
+            patch.object(campaign, "SELECTOR_CID", selector_cid),
+            patch.object(campaign, "V2_IMPLEMENTATION_TREE_CID", historical_tree),
+            self.assertRaises(ValueError),
+        ):
+            campaign._validate_cached_result(tampered)
+
+    def test_structural_v2_validator_accepts_current_tree_for_clean_root_runs(self) -> None:
+        campaign._validate_historical_v2_implementation(
+            campaign.trainer_implementation_contract()
+        )
 
     def test_tampered_selector_fit_and_authorization_fail_closed(self) -> None:
         valid, selector_cid = _valid_cached_result()
@@ -325,7 +376,14 @@ class PredictiveBlockDeltaCampaignV2Tests(unittest.TestCase):
         unauthorized["production_v5"]["authorized"] = not valid["admitted"]
         mutations.append(_resign(unauthorized))
 
-        with patch.object(campaign, "SELECTOR_CID", selector_cid):
+        with (
+            patch.object(campaign, "SELECTOR_CID", selector_cid),
+            patch.object(
+                campaign,
+                "V2_IMPLEMENTATION_TREE_CID",
+                valid["implementation"]["tree_cid"],
+            ),
+        ):
             for mutation in mutations:
                 with self.subTest(mutation=mutation["result_cid"]):
                     with self.assertRaises(ValueError):
@@ -341,6 +399,11 @@ class PredictiveBlockDeltaCampaignV2Tests(unittest.TestCase):
             loader = Mock(side_effect=AssertionError("frozen inputs must not reopen"))
             with (
                 patch.object(campaign, "SELECTOR_CID", selector_cid),
+                patch.object(
+                    campaign,
+                    "V2_IMPLEMENTATION_TREE_CID",
+                    result["implementation"]["tree_cid"],
+                ),
                 patch.object(campaign, "load_frozen_v2_inputs", loader),
             ):
                 observed = campaign.run_predictive_block_delta_v2_preflight(
