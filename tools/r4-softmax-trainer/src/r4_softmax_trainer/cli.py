@@ -58,6 +58,7 @@ from .language_path_generalization_campaign import (
     run_language_path_generalization,
 )
 from .language_path_generalization_data import prepare_language_path_data
+from .language_path_generation import run_language_path_generation
 from .paired_query_binding_campaign import (
     prepare_paired_query_binding_data,
     run_paired_query_binding_preflight,
@@ -503,6 +504,13 @@ def parser() -> argparse.ArgumentParser:
         action="store_true",
         help="resume the same frozen trajectory from its latest checkpoints",
     )
+    subcommands.add_parser(
+        "generate-language-path",
+        help=(
+            "run or verify #973's create-once retained-only five-prompt "
+            "autonomous generation smoke"
+        ),
+    )
     return command
 
 
@@ -815,5 +823,8 @@ def main() -> None:
         _print_result(
             run_language_path_generalization(root, resume=arguments.resume)
         )
+        return
+    if arguments.command == "generate-language-path":
+        _print_result(run_language_path_generation(root))
         return
     raise AssertionError(f"unhandled command: {arguments.command}")

@@ -96,6 +96,8 @@ uv run --offline --project "$TRAINER" r4-softmax-trainer \
   --root "$ROOT" probe-language-path
 uv run --offline --project "$TRAINER" r4-softmax-trainer \
   --root "$ROOT" run-language-path
+uv run --offline --project "$TRAINER" r4-softmax-trainer \
+  --root "$ROOT" generate-language-path
 ```
 
 Preparation is create-once. The probe measures deterministic four-thread and
@@ -104,9 +106,15 @@ deterministic MPS, then binds the fastest admitted aggregate plan. CUDA is
 forbidden. `run-language-path --resume` may only continue the byte-identical
 same trajectory after interruption; it is not a scientific retry.
 
-Only the terminal result can say whether retained attention generalizes and is
-competitive with ordinary attention. Before that result, generation, H4
-superiority, reasoning, exact lowering, and release readiness remain `NOT_RUN`.
+The frozen fit completed at `RETAINED_LANGUAGE_PATH_PASS`: the retained arm
+generalized, remained load-bearing under its state-off intervention, and was
+competitive with the matched ordinary decoder. `generate-language-path` is
+the separately frozen positive branch. It reads only the copied tokenizer and
+geometry plus the immutable retained result/artifact, executes five public
+prompts for at most 64 selected tokens, and records an exact fresh-load replay
+without training or opening train, validation, source, or sealed data. Its
+create-once result is a local autonomous-decoding smoke, not a coherence,
+reasoning, H4-superiority, lowering, browser, or release claim.
 
 ## Current measured boundary
 
