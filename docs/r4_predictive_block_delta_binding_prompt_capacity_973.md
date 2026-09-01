@@ -5,7 +5,7 @@
 - **Programme root:** #820
 - **Mechanism:** `R4PredictiveBlockDeltaBindingV1`
 - **Campaign:** `R4PredictiveBlockDeltaPromptCapacityV1`
-- **Evidence status:** `FROZEN_BEFORE_IMPLEMENTATION_OR_V5_POPULATION_CREATION`
+- **Evidence status:** `FREEZE_CORRECTED_BEFORE_IMPLEMENTATION_OR_V5_POPULATION_CREATION`
 - **Current result:** `NOT_RUN`
 - **Generation:** `NOT_AUTHORIZED`
 
@@ -131,8 +131,11 @@ matrices and work.
 3. **Transport-permuted:** evaluate the fitted geometric arm with the frozen
    identity-fixing, non-homomorphic H4 connection permutation while preserving
    canonical token value and candidate anchors.
-4. **No-delta:** evaluate the fitted geometric arm with the key-specific delta
-   term multiplied by zero after it is computed; transported decay still runs.
+4. **No-delta-overwrite:** evaluate the fitted geometric arm with the matched
+   additive/Hebbian update `rho * S_bar + eta * v outer k`. Both `v` and the
+   full residual `v - (rho * S_bar) k` are computed before the frozen selector,
+   so this removes only key-specific replacement while preserving a live write,
+   transported decay, parameters, and work.
 5. **State-off:** execute the full geometric arm and multiply only its final
    logit addition by zero. This must reproduce qualified V1 logits exactly.
 6. **Order-shuffled:** rebuild state under one pre-bound within-sequence order
@@ -188,7 +191,7 @@ requires all of:
 ```text
 own-minus-foreign prompt gain >= ln(2) / 16 = 0.0433216988
 own-prompt wins              >= 52 / 64
-gain lost under no-delta      >= ln(1.5) / 16 = 0.0253415693
+gain lost without delta overwrite >= ln(1.5) / 16 = 0.0253415693
 gain lost under state-off     >= ln(1.5) / 16 = 0.0253415693
 ```
 
@@ -220,7 +223,7 @@ Geometry is attributed separately only if the geometric arm beats both the
 independently fitted plain arm and the transport-permuted intervention by at
 least `0.0253415693` gain, at least `308/512` paired improvements, and no worse
 own-prompt NLL. Key-specific delta overwrite is attributed under the same
-rules against no-delta.
+rules against the live additive no-delta-overwrite intervention.
 
 - **Capacity positive, geometry positive:** preserve this cell and freeze one
   bounded autonomous generation rung before any lowering work.
