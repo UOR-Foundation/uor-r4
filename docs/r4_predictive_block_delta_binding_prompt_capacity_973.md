@@ -4,9 +4,9 @@
 - **Issue:** #973
 - **Programme root:** #820
 - **Mechanism:** `R4PredictiveBlockDeltaBindingV1`
-- **Campaign:** `R4PredictiveBlockDeltaPromptCapacityV1`
-- **Evidence status:** `FREEZE_CORRECTED_BEFORE_IMPLEMENTATION_OR_V5_POPULATION_CREATION`
-- **Current result:** `NOT_RUN`
+- **Campaign:** `R4PredictiveBlockDeltaPromptCapacityV2`
+- **Evidence status:** `V2_NATIVE_CAPACITY_ADMIT_V5_AUTHORIZED`
+- **Current result:** `PREDICTIVE_BINDING_NATIVE_CAPACITY_ADMIT`
 - **Generation:** `NOT_AUTHORIZED`
 
 ## Result first
@@ -344,3 +344,46 @@ This V2 correction is frozen before implementation and before opening its
 disjoint V4 slice. It is still only a revealed-data expressivity gate. Even a
 pass would not establish held-out prompt capacity, geometry attribution,
 general attention, autonomous generation, or reasoning.
+
+## V2 execution result — 2026-09-01
+
+V2 executed once on CPU with eight PyTorch intra-op and eight inter-op threads.
+Both independently initialized arms completed exactly `256` updates; fitting,
+scoring, mechanics, destruction, and create-once result writing completed in
+`123.8098` seconds. The exact result is
+`blake3:623bbd63321c18ad7e4172b325b2d22518b6b10a33f755d3bbbbdcf9b9c51637`,
+bound to implementation-tree CID
+`blake3:603791e7b74a682855507797a6ab3533e36f963914fc2d307549e97e87bde366`.
+All `9,228` disposable fitted values in each arm were destroyed and no fitted
+artifact was written. V5 remained uncreated and uninspected during V2.
+
+All mechanics and integrity gates passed. Both arms received finite nonzero
+gradients for every trainable value, used the same initial binding CID and
+batch-schedule CID, left the qualified base byte-identical, and replayed
+exactly. Causal-prefix, unobserved-target, state-off, and forbidden-read deltas
+were zero. The transport-permutation head effect was `30.3544`; the largest
+transported covariance error was below `1.8e-7`.
+
+| Arm | gain, nats/token | own wins | own NLL | foreign NLL |
+|---|---:|---:|---:|---:|
+| Independently fitted full delta | `1.1600515` | `64/64` | `2.8868984` | `4.0469499` |
+| Independently fitted additive | `1.5442248` | `64/64` | `2.9562780` | `4.5005028` |
+| State-off qualified V1 | `0.0079665` | `37/64` | `3.8638364` | `3.8718029` |
+
+The native arm exceeded state-off gain by `1.1520850` nats/token, improved
+state-off own NLL by `0.9769380`, and passed every frozen native-capacity gate.
+The terminal V2 verdict is therefore
+`PREDICTIVE_BINDING_NATIVE_CAPACITY_ADMIT`, and exactly one frozen V5 campaign
+is authorized.
+
+The additive arm was also language-valid. Full delta had `0.0693796` lower own
+NLL, but its relative prompt gain was `0.3841733` lower, so the separately
+frozen attribution verdict is
+`DELTA_PROMPT_SPECIFIC_SUPERIORITY_NOT_ESTABLISHED`. This does not revoke the
+native-capacity admission. It means V5 must distinguish held-out predictive
+capacity from geometry and overwrite attribution instead of treating a
+revealed-slice overfit as attention evidence.
+
+This is positive evidence for bounded causal associative memory. It is not yet
+held-out prompt capacity, geometric attribution, general attention,
+autonomous generation, reasoning, or deployed integer/table runtime evidence.
