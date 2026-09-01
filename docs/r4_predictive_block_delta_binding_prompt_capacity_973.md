@@ -442,7 +442,8 @@ The selector stops at exactly `256` pairs. Its content-derived population and
 commitment CIDs are published after create-once preparation and before any fit.
 
 The first executable-freeze draft listed union CID `blake3:494e5503...` from
-an incorrect prior-only calculation. Before V5 creation, two independent
+a prior-only calculation that omitted the canonical serializer's mandatory
+final LF byte. Before V5 creation, two independent
 read-only reproductions over the four exact population files found `512`
 unique story CIDs in each, zero pairwise overlap, and the `2,048`-entry
 canonical sorted-list CID above. The code and public contract were corrected;
