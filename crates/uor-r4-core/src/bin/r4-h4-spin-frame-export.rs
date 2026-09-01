@@ -82,7 +82,10 @@ fn write_atomically(destination: &Path, bytes: &[u8]) -> std::io::Result<()> {
             ));
         }
     }
-    if !std::fs::symlink_metadata(parent)?.file_type().is_dir() {
+    // Follow parent-directory symlinks (for example macOS `/tmp` ->
+    // `/private/tmp`) while retaining the final-component symlink rejection
+    // above for the destination itself.
+    if !std::fs::metadata(parent)?.file_type().is_dir() {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
             "output parent is not a directory",
@@ -123,6 +126,15 @@ fn write_atomically(destination: &Path, bytes: &[u8]) -> std::io::Result<()> {
 mod tests {
     use super::*;
 
+    #[cfg(unix)]
+    fn unique_test_directory() -> PathBuf {
+        let sequence = TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+        std::env::temp_dir().join(format!(
+            "uor-r4-h4-spin-frame-export-test-{}-{sequence}",
+            std::process::id()
+        ))
+    }
+
     #[test]
     fn explicit_output_or_help_is_required() {
         assert_eq!(parse_arguments([OsString::from("--help")]).unwrap(), None);
@@ -132,5 +144,34 @@ mod tests {
         );
         assert!(parse_arguments(Vec::<OsString>::new()).is_err());
         assert!(parse_arguments([OsString::from("-")]).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn follows_parent_symlink_but_rejects_destination_symlink() {
+        use std::os::unix::fs::symlink;
+
+        let root = unique_test_directory();
+        let actual_parent = root.join("actual-parent");
+        let linked_parent = root.join("linked-parent");
+        std::fs::create_dir_all(&actual_parent).unwrap();
+        symlink(&actual_parent, &linked_parent).unwrap();
+
+        let through_parent_link = linked_parent.join("frames.json");
+        write_atomically(&through_parent_link, b"canonical frames").unwrap();
+        assert_eq!(
+            std::fs::read(actual_parent.join("frames.json")).unwrap(),
+            b"canonical frames"
+        );
+
+        let actual_destination = actual_parent.join("existing.json");
+        std::fs::write(&actual_destination, b"keep me").unwrap();
+        let linked_destination = actual_parent.join("linked-output.json");
+        symlink(&actual_destination, &linked_destination).unwrap();
+        let error = write_atomically(&linked_destination, b"replacement").unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
+        assert_eq!(std::fs::read(actual_destination).unwrap(), b"keep me");
+
+        std::fs::remove_dir_all(root).unwrap();
     }
 }
