@@ -442,8 +442,10 @@ language metrics and fewer construction collisions. The direct retained-state
 readout then improved prompt and fresh-language metrics but missed both frozen
 gain floors. Its sole layerwise-normalized successor also improved prompt and
 fresh-language metrics but missed the same absolute and incremental gain
-floors. The parameter-free readout ladder is closed; #973 must next freshly
-freeze a learned associative binding/readout;
+floors. The parameter-free readout ladder is closed; #973's learned associative
+architecture, data boundary, and decisions are frozen, while its populations
+remain uncreated. Next prepare and jointly seal V4 prompts with fresh heldout,
+then run only the focused preflight;
 new route families, intrinsic/readout alternatives, resonance-based softmax
 replacement, unqualified scale, and exact deployment remain parked. D3 remains
 `NOT_RUN`; #954 and

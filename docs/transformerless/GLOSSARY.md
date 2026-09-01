@@ -234,12 +234,13 @@ substituted for one another.
   `blake3:35396bd6e64fc2c0bc7d86a84cc9e212ed913ce28e5353f5f2b8212b4cf2c532`.
   The valid miss ends the parameter-free readout ladder.
 - **Learned associative binding/readout** — #973's sole active successor after
-  the parameter-free ladder ended. It must be a new independently frozen
-  learned candidate-relative binding from the preserved retained state to
-  logits, compared with matched ordinary/non-geometric and state-off controls.
-  Its architecture and budget are not yet frozen; implementation, fitting,
-  generation, reasoning, and lowering are `NOT_RUN`. The phrase does not name
-  an already-qualified mechanism.
+  the parameter-free ladder ended. Its independently frozen candidate-relative
+  binding maps preserved retained state to logits, compared with matched
+  ordinary/non-geometric and state-off controls. Architecture, data boundary,
+  budget, and decisions are frozen; populations remain uncreated. Next prepare
+  and jointly seal V4 prompts with fresh heldout, then run only the focused
+  preflight. Fitting, generation, reasoning, and lowering are `NOT_RUN`. The
+  phrase does not name an already-qualified mechanism.
 - **`DirectCausalGeometricAttentionR4V1`** — #973's offline gold-standard
   reference for the literal attention function: learned Q/K/V/O roles, local
   S3 tangent projection, causal H4-frame transport of every prior key and

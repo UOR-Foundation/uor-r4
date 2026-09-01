@@ -1229,8 +1229,10 @@ attention. #973 now establishes bounded geometric retained attention and
 autonomous local retained decoding, but its first five-prompt smoke drifts from
 every prompt. Its direct and layerwise-normalized parameter-free readouts both
 improved prompt and fresh-language metrics but missed their frozen capacity
-floors, so that ladder is closed. #973 must next freshly freeze learned
-associative binding/readout. The remaining language-capability gap is
+floors, so that ladder is closed. #973's learned associative architecture, data
+boundary, and decisions are frozen, while its populations remain uncreated.
+Next prepare and jointly seal V4 prompts with fresh heldout, then run only the
+focused preflight. The remaining language-capability gap is
 prompt-responsive coherent generation, not whether retained attention can
 affect held-out language predictions. Correctness and reasoning remain
 downstream and unestablished; #954 grounded correctness remains blocked while

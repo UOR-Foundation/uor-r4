@@ -39,14 +39,26 @@ incremental `0.0253415693` prompt-gain floors failed. Terminal:
 Fresh-process verification passed all 13 comparisons at
 `blake3:3f316541dbab8061ed5ba891bf6a47ef22c55bca21fba01f6f97dbb3cb8497aa`.
 
-The parameter-free ladder is closed. The next probe is not another scalar or
-normalization variant: #973 must independently freeze one learned associative
-binding/readout over the preserved retained state, with matched non-geometric,
-state-off, causal, replay, and forbidden-read controls. Until that contract is
-frozen, it is `NOT_IMPLEMENTED` and `NOT_RUN`. The layerwise candidate receives
-no retry, generation, widening, or lowering; its generation, reasoning, and
-exact/geometry-native lowering statuses are `NOT_RUN`. #954 stays blocked and
-C1-SB6 is not authorized.
+The parameter-free ladder is closed. #973 has now independently frozen
+`R4LearnedCandidateLeafAssociativeReadoutV1` under
+`R4LearnedAssociativeReadoutPromptCapacityV1`. It reads the preserved V1
+strict-prior retained value at each candidate's exact-H4 leaf through a learned
+candidate-query table. The matched equal-parameter learned control reads the
+occupied-address mean; a fixed-leaf derangement destroys candidate/address
+binding without changing head work. Head-off, full-state-off, causal, replay,
+fixed-work, and forbidden-read controls remain binding.
+
+The status is `FROZEN_ARCHITECTURE / POPULATIONS_NOT_CREATED / NOT_RUN`.
+`R4RetainedPromptSwapContrastV4` must begin strictly after revealed V3, exclude
+the bound V1+V2+V3 story union, and be sealed with its fresh-language slice in
+one create-once mode-`000` directory. Both learned artifact CIDs must be fixed
+before the one reveal; no optimization may occur afterward. Capacity and
+geometry attribution are separate empirical criteria, with divergent actions
+already frozen. See the
+[learned associative freeze](r4_learned_associative_readout_prompt_capacity_973.md).
+The layerwise candidate receives no retry, generation, widening, or lowering;
+its generation, reasoning, and exact/geometry-native lowering statuses are
+`NOT_RUN`. #954 stays blocked and C1-SB6 is not authorized.
 
 ### Prior #973 evidence retained
 
@@ -1093,8 +1105,10 @@ so #1019 is optional/paused. #1017 remains the working source-backed
 `r4 generate` path; #973's retained language path qualified, its paired-H4
 capacity successor failed, its direct retained readout is a directional
 `PARTIAL`, and the independently frozen layerwise-normalized readout is also
-terminal `PARTIAL`. The parameter-free readout ladder is closed; the next
-independent freeze is only a learned associative binding/readout.
+terminal `PARTIAL`. The parameter-free readout ladder is closed. Its only
+successor is now the frozen `R4LearnedCandidateLeafAssociativeReadoutV1`;
+populations, fitted artifacts, reveal, and outcome remain not created or
+`NOT_RUN`.
 CUDA and external GPU execution are out of scope. D3 remains `NOT_RUN`;
 intrinsic/readout alternatives,
 resonance-based softmax replacement, whole-decoder recurrent lowering, and
@@ -1608,7 +1622,10 @@ verification CID
 `blake3:3f316541dbab8061ed5ba891bf6a47ef22c55bca21fba01f6f97dbb3cb8497aa`.
 
 The exact decision caused by this valid miss is to end parameter-free readout
-variants and independently freeze a learned associative binding/readout next.
+variants. That successor has now been frozen as
+`R4LearnedCandidateLeafAssociativeReadoutV1`; its architecture and independent
+data boundary are fixed, while population creation, fitting, reveal, scoring,
+and verification remain not created or `NOT_RUN`.
 Do not retry, tune `g`, add a third normalization placement, generate from this
 candidate, widen it, or lower it. Candidate generation, reasoning, and
 exact/geometry-native lowering are `NOT_RUN`; #954 remains blocked.

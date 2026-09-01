@@ -148,8 +148,10 @@ logging and measured `4.485223 s/step`, slower than the signed
 fast-path negative, not a model result. #1019 tuning/full-run work stops and
 remains optional/paused; #1017 remains the working source-backed generator while
 #973 has ended the parameter-free readout ladder after the partial direct and
-layerwise-normalized results and must next freshly freeze a learned associative
-binding/readout. CUDA and external
+layerwise-normalized results. Its learned associative architecture, data
+boundary, and decisions are frozen, while populations remain uncreated; next
+prepare and jointly seal V4 prompts with fresh heldout, then run only the
+focused preflight. CUDA and external
 GPU execution are out of scope. See the
 [#1017 record](r4_softmax_quality_capacity_continuation_1017.md),
 [#1019 frozen contract](r4_softmax_parameter_capacity_1019.md), and
@@ -216,16 +218,19 @@ Choose the shortest path that matches what you need:
   [#954 record](r4_grounded_correctness_954.md). C1-SB5 paired-query binding is
   the latest frozen negative (`56/56` fit, `14/28` sealed) and is retired without
   retry. No C1-SB6 is authorized; #954's final source-free terminal remains
-  blocked while #973 freshly freezes the learned associative binding/readout
-  successor to its completed parameter-free readout ladder.
+  blocked while #973 prepares and jointly seals the already-frozen learned
+  associative V4 prompt and fresh-heldout populations, before its focused
+  preflight.
 - **Improve the optional capacity rung:** start from live
   [#1019](https://github.com/UOR-Foundation/uor-r4/issues/1019) under #973 and
   programme root #820. Its population/smoke/random-export parity gates passed,
   but MPS admission stopped `UNAVAILABLE_HARDWARE_BUDGET` for the frozen
   eight-hour offline implementation. Its fused-AdamW/deferred-logging fast path
   was slower (`4.485223` versus signed `3.491307 s/step`), so the `NOT_RUN`
-  campaign is optional/paused. #1017 remains usable through `r4 generate`; #973
-  must next freshly freeze learned associative binding/readout. CUDA and
+  campaign is optional/paused. #1017 remains usable through `r4 generate`; #973's
+  learned associative architecture, data boundary, and decisions are frozen,
+  while populations remain uncreated. Next prepare and jointly seal V4 prompts
+  with fresh heldout, then run only the focused preflight. CUDA and
   external GPU execution are out of scope.
 - **Audit a result or claim:** use the [research ledger](RESEARCH.md), then open
   the exact issue-numbered evidence record it names.
@@ -310,8 +315,10 @@ These are the small set of living documents that define the present work:
    MPS admission stopped `UNAVAILABLE_HARDWARE_BUDGET` for the frozen eight-hour
    offline implementation, and the full campaign remains `NOT_RUN`. Its fused-
    AdamW/deferred-logging fast path was slower, so #1019 is optional/paused and
-   #1017 remains the working source-backed `r4 generate` path. #973 must next
-   freshly freeze learned associative binding/readout. CUDA and
+   #1017 remains the working source-backed `r4 generate` path. #973's learned
+   associative architecture, data boundary, and decisions are frozen, while
+   populations remain uncreated. Next prepare and jointly seal V4 prompts with
+   fresh heldout, then run only the focused preflight. CUDA and
    external GPU execution are out of scope.
    The bounded
    [multi-resonance reuse audit](multi_resonance_attention_sieve_audit_973.md)

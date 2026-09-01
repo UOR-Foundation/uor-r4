@@ -20,8 +20,10 @@
   lowering, or gain tuning. Attention remains established at the qualified
   scope; coherence, reasoning, H4 superiority, exact lowering, browser
   readiness, and release do not follow. This valid miss ends the parameter-free
-  readout ladder. #973 must next freshly freeze a learned associative
-  binding/readout. #973 remains open, #954 remains blocked, and no C1-SB6 is
+  readout ladder. #973's learned associative architecture, data boundary, and
+  decisions are frozen, while its populations remain uncreated. Next prepare
+  and jointly seal V4 prompts with fresh heldout, then run only the focused
+  preflight. #973 remains open, #954 remains blocked, and no C1-SB6 is
   authorized.
   [ADR-0005](adr/0005-predictive-geometric-connection-memory.md) retains the
   accepted-attention, autonomous-reference-generation, and parked-replacement

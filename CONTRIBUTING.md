@@ -267,8 +267,10 @@ The experiment must be able to change the next programme decision:
   trace-state, intrinsic/readout, resonance, full-model recurrent-lowering, and
   exact-deployment lanes remain negative or parked. Do not scale or tune the
   rejected paired candidate, the partial direct readout, or the partial
-  layerwise-normalized readout. The parameter-free ladder is closed; #973 must
-  next freshly freeze a learned associative binding/readout. #973 still
+  layerwise-normalized readout. The parameter-free ladder is closed; #973's
+  learned associative architecture, data boundary, and decisions are frozen,
+  while its populations remain uncreated. Next prepare and jointly seal V4
+  prompts with fresh heldout, then run only the focused preflight. #973 still
   blocks GI-4/#954's final source-free terminal, with GI-5/#955 downstream of
   positive correctness.
 - **Exercise the accepted route path.** #953 geometry runs before token choice

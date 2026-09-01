@@ -54,7 +54,7 @@ correctness, and reasoning remain separate claims.
 Optimization, broad QA, formalization, and release certification follow a
 working decision-bearing product slice. They do not replace it.
 
-## Current #973 decision — parameter-free ladder ended at PARTIAL
+## Current #973 decision — learned candidate-leaf freeze active
 
 Qualified `R4RetainedLanguagePathV1` remains the source-free retained-attention
 baseline. The last authorized parameter-free successor,
@@ -78,14 +78,19 @@ The candidate still missed the frozen absolute `0.0433216988` and incremental
 independent verification CID
 `blake3:3f316541dbab8061ed5ba891bf6a47ef22c55bca21fba01f6f97dbb3cb8497aa`.
 
-The predeclared falsifier now ends parameter-free readout work. No gain tuning,
+The predeclared falsifier ended parameter-free readout work. No gain tuning,
 third normalization, retry, generation, widening, or lowering is authorized.
-The sole fresh #973 successor is an independently frozen learned associative
-binding/readout over the preserved V1 retained-attention substrate. Its exact
-architecture and budget are not yet frozen. Generation, reasoning, and
-exact/geometry-native lowering for the layerwise candidate are `NOT_RUN`.
-#973 stays open and #954 remains blocked. See the
-[layerwise terminal record](r4_layerwise_normalized_retained_readout_prompt_capacity_973.md).
+The sole #973 successor is now frozen as
+`R4LearnedCandidateLeafAssociativeReadoutV1` under campaign
+`R4LearnedAssociativeReadoutPromptCapacityV1`. It preserves qualified V1 and
+adds one learned candidate-query table over exact-H4 candidate-leaf value reads,
+matched against an independently learned equal-parameter address-blind pooled
+readout plus fixed-leaf-deranged, head-off, and full-state-off controls. Its
+status is `FROZEN_ARCHITECTURE / POPULATIONS_NOT_CREATED / NOT_RUN`; no V4
+population, learned artifact, reveal, or outcome exists. Generation, reasoning,
+and exact/geometry-native lowering remain `NOT_RUN`. #973 stays open and #954
+remains blocked. See the [layerwise terminal record](r4_layerwise_normalized_retained_readout_prompt_capacity_973.md)
+and [learned associative freeze](r4_learned_associative_readout_prompt_capacity_973.md).
 
 ## Primary direction after protected localization — 2026-08-30
 
@@ -2108,8 +2113,9 @@ hours remains a hard kill ceiling, never an estimate.
   The independently frozen layerwise-normalized readout also completed
   `PARTIAL`: it passed every fresh-language and mechanics gate but missed both
   prompt-capacity effect-size floors. The parameter-free readout ladder is now
-  closed; #973 next owns only a freshly frozen learned associative
-  binding/readout.
+  closed. #973's only active successor is the frozen
+  `R4LearnedCandidateLeafAssociativeReadoutV1` architecture; its V4 population,
+  learned artifacts, reveal, and outcome are not created or `NOT_RUN`.
   Intrinsic attention
   replacement, new state dimensions, corpus scale, resonance/recurrent
   lowering, and final requalification remain parked.
@@ -2186,10 +2192,15 @@ Independent fresh-process verification passed all 13 comparisons at
 This valid miss executes the predeclared falsifier: end the entire
 parameter-free readout ladder. There is no scalar gain change, third
 normalization placement, retry, generation, widening, or lowering. The sole
-active #973 successor is a freshly frozen learned associative binding/readout
-over the preserved qualified V1 retained-attention substrate. For the
-layerwise candidate, generation, reasoning, and exact/geometry-native lowering
-are `NOT_RUN`. #973 remains open and #954 remains blocked; correctness,
+active #973 successor has now been frozen as
+`R4LearnedCandidateLeafAssociativeReadoutV1` over the preserved qualified V1
+retained-attention substrate, with an equal-parameter address-blind learned
+control and a fixed-leaf geometry-destroying intervention. Its architecture and
+data boundary are frozen; populations, artifacts, reveal, and outcomes remain
+not created or `NOT_RUN`. See the
+[learned associative freeze](r4_learned_associative_readout_prompt_capacity_973.md).
+For the layerwise candidate, generation, reasoning, and exact/geometry-native
+lowering are `NOT_RUN`. #973 remains open and #954 remains blocked; correctness,
 reasoning, C1-SB6, browser, and release work are not authorized by this result.
 
 ## Historical preservation

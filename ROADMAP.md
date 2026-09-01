@@ -29,14 +29,18 @@ and `blake3:3f316541dbab8061ed5ba891bf6a47ef22c55bca21fba01f6f97dbb3cb8497aa`.
 Generation, reasoning, lowering, and geometry-native lowering remain `NOT_RUN`;
 coherence, H4 superiority, exact/table runtime, browser, and release claims do
 not follow. This valid miss ends the parameter-free readout ladder. #973's sole
-successor is a freshly frozen learned associative binding/readout. #973 stays
-open; #954 stays blocked; no C1-SB6 is authorized.
+successor now has frozen architecture, data boundary, and decisions, while its
+populations remain uncreated. Next prepare and jointly seal V4 prompts with
+fresh heldout, then run only the focused preflight. #973 stays open; #954 stays
+blocked; no C1-SB6 is authorized.
 
 _Last reviewed: 2026-09-01 (#973 retained language-path generalization and
 autonomous local decoding passed; paired-H4 addressing failed, and the direct
 and layerwise-normalized readout seams each completed PARTIAL; the parameter-free
-ladder is closed and learned associative binding/readout is next; prompt-responsive
-coherence and H4 specificity remain unestablished; #961 reversible S0 landed;
+ladder is closed, learned associative architecture/data/decisions are frozen,
+and population preparation plus joint sealing precede focused preflight;
+prompt-responsive coherence and H4 specificity remain unestablished; #961
+reversible S0 landed;
 #952 A1.0 stopped at
 `REDESIGN_ORDERED_ROUTE_SUMMARY`; #967 A1R terminated `RETAIN_STATE_ONLY`;
 #970 A1P produced the bounded paired-H4-derived exact R4-heatmap result
@@ -329,7 +333,8 @@ quality-capacity negative; **Qualified retained baseline:**
 `R4RetainedLanguagePathV1`; **Rejected capacity seam:** paired-H4 addressing;
 **PARTIAL readout seams:** direct and layerwise-normalized retained readouts each
 improved prompt gain and fresh language but missed both frozen gain margins;
-**Current #973 action:** freshly freeze one learned associative binding/readout;
+**Current #973 action:** prepare and jointly seal the frozen learned-associative
+V4 prompt and fresh-heldout populations, then run only its focused preflight;
 **Closed without a full run:** #1019's frozen
 12-layer, 13,130,784-parameter capacity campaign after its MPS hardware-budget
 stop; **Observed #954 negatives:** the fixed 384-step MPS grounding SFT
