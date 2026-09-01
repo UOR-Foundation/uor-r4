@@ -297,7 +297,10 @@ V2 does not alter `R4PredictiveBlockDeltaBindingV1`, reinterpret V1, create V5,
 or inspect any V5 coordinate. It changes only the disposable control decision
 and uses the non-overlapping already revealed V4 pair indices `32..63`
 (`32` pairs / `64` directions / `1,024` targets). Their ordered identities are
-bound before fitting.
+bound before fitting by selector CID
+`blake3:285be20c9c41267dbf925ea7d24d198b41a9014653ff62b1bdb64c8e2ee4fd5a`
+against V4 population CID
+`blake3:cc9a1c40fe753e269ea31edd804c32b2a0c208ef20fceb1167636d6f28d7da11`.
 
 Two models start from byte-identical binding values and the same immutable V1:
 
