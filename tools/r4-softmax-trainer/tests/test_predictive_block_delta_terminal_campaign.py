@@ -5,8 +5,10 @@ from __future__ import annotations
 import unittest
 import tempfile
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
+import torch
 from blake3 import blake3
 
 from r4_softmax_trainer import predictive_block_delta_terminal_campaign as campaign
@@ -71,7 +73,232 @@ def _plan_record(plan: campaign.ExecutionPlan, seconds: float) -> dict:
     return {"plan": plan.identity(), "arms": arms}
 
 
+class _SyntheticLanguageAudit:
+    forbidden_reads = 0
+
+    def __init__(self, batch_size: int, *, drift: int = 0) -> None:
+        self.batch_size = batch_size
+        self.drift = drift
+
+    def work_signature(self) -> tuple[int, ...]:
+        return (
+            self.batch_size,
+            self.batch_size * campaign.CONTEXT,
+            2,
+            4,
+            120,
+            self.batch_size * 7 + self.drift,
+        )
+
+
+class _SyntheticLanguageModel:
+    def __init__(self, *, drift_on_tail: bool = False) -> None:
+        self.drift_on_tail = drift_on_tail
+
+    def eval(self) -> _SyntheticLanguageModel:
+        return self
+
+    def __call__(self, token_ids: torch.Tensor, *, intervention: str) -> object:
+        batch_size, time = token_ids.shape
+        drift = int(self.drift_on_tail and batch_size == 1)
+        return SimpleNamespace(
+            logits=torch.zeros((batch_size, time, 8), dtype=torch.float32),
+            audit=_SyntheticLanguageAudit(batch_size, drift=drift),
+        )
+
+
 class PredictiveBlockDeltaTerminalTests(unittest.TestCase):
+    def test_original_unavailable_cache_remains_readable(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            first = campaign._write_unavailable(
+                root,
+                reason={"ok": False, "error": {"type": "ValueError", "reason": "first"}},
+                phase="SCORING",
+            )
+            cached = campaign._write_unavailable(
+                root,
+                reason="must not replace the frozen failure",
+                phase="FIT",
+            )
+        self.assertEqual(cached, first)
+
+    def test_cached_scoring_recovery_failure_is_provenance_checked(self) -> None:
+        recovery = {
+            "recovery_cid": "blake3:" + "1" * 64,
+            "scoring_implementation": {"tree_cid": "blake3:" + "2" * 64},
+        }
+        reason = {
+            "ok": False,
+            "error": {"type": "ValueError", "reason": "scoring failed"},
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            first = campaign._write_scoring_recovery_unavailable(
+                root,
+                recovery=recovery,
+                reason=reason,
+            )
+            self.assertEqual(
+                campaign._write_scoring_recovery_unavailable(
+                    root,
+                    recovery=recovery,
+                    reason=reason,
+                ),
+                first,
+            )
+            different_recovery = {
+                **recovery,
+                "recovery_cid": "blake3:" + "3" * 64,
+            }
+            with self.assertRaisesRegex(
+                ValueError,
+                "cached V5 scoring-recovery unavailable differs",
+            ):
+                campaign._write_scoring_recovery_unavailable(
+                    root,
+                    recovery=different_recovery,
+                    reason=reason,
+                )
+
+    def test_historical_implementation_requires_the_exact_frozen_envelope(
+        self,
+    ) -> None:
+        files = [
+            {
+                "bytes": 1,
+                "cid": "blake3:" + "1" * 64,
+                "path": "src/example.py",
+            }
+        ]
+        historical = {"files": files, "tree_cid": campaign.tree_cid(files)}
+        current = {
+            "files": [
+                {
+                    "bytes": 1,
+                    "cid": "blake3:" + "2" * 64,
+                    "path": "src/current.py",
+                }
+            ]
+        }
+        current["tree_cid"] = campaign.tree_cid(current["files"])
+        with (
+            patch.object(
+                campaign,
+                "FROZEN_V5_FIT_IMPLEMENTATION_TREE_CID",
+                historical["tree_cid"],
+            ),
+            patch.object(
+                campaign,
+                "trainer_implementation_contract",
+                return_value=current,
+            ),
+        ):
+            self.assertEqual(
+                campaign._validate_bound_implementation(
+                    historical,
+                    envelope_cid="frozen-envelope",
+                    frozen_envelope_cid="frozen-envelope",
+                ),
+                historical,
+            )
+            with self.assertRaisesRegex(ValueError, "neither current nor frozen"):
+                campaign._validate_bound_implementation(
+                    historical,
+                    envelope_cid="different-envelope",
+                    frozen_envelope_cid="frozen-envelope",
+                )
+            tampered = {"files": [{**files[0], "bytes": 2}], "tree_cid": historical["tree_cid"]}
+            with self.assertRaisesRegex(ValueError, "does not reproduce"):
+                campaign._validate_bound_implementation(
+                    tampered,
+                    envelope_cid="frozen-envelope",
+                    frozen_envelope_cid="frozen-envelope",
+                )
+
+    def test_completed_fit_batch_does_not_rewrite_the_wall_ledger(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for arm in campaign.ARMS:
+                path = root / "arms" / arm / "result.json"
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("complete", encoding="utf-8")
+            with (
+                patch.object(campaign, "_load_fit_budget", return_value=123.5),
+                patch.object(
+                    campaign,
+                    "_load_arm_result",
+                    side_effect=lambda _root, arm: {"arm": arm},
+                ),
+                patch.object(
+                    campaign,
+                    "_write_fit_budget",
+                    side_effect=AssertionError("fit ledger rewritten"),
+                ),
+            ):
+                result = campaign._run_fit_batch(
+                    root,
+                    campaign.ELIGIBLE_PLANS[2],
+                    campaign.ARMS,
+                    resume=True,
+                    wall_seconds=campaign.HARD_WALL_SECONDS,
+                )
+        self.assertTrue(result["ok"])
+        self.assertTrue(result["cached"])
+        self.assertEqual(result["aggregate_wall_seconds"], 123.5)
+
+    def test_language_scoring_aggregates_a_short_tail_batch(self) -> None:
+        windows = SimpleNamespace(
+            windows=[[0] * (campaign.CONTEXT + 1) for _ in range(5)]
+        )
+        with (
+            patch.object(campaign, "FRESH_HELDOUT_WINDOWS", 5),
+            patch.object(
+                campaign,
+                "FRESH_HELDOUT_DECISIONS",
+                5 * campaign.CONTEXT,
+            ),
+            patch.object(campaign, "BATCH_SIZE", 4),
+            patch.object(campaign, "VOCAB_SIZE", 8),
+        ):
+            result = campaign._evaluate_language(
+                _SyntheticLanguageModel(),
+                windows,
+                mode="geometric",
+                device=torch.device("cpu"),
+            )
+
+        self.assertEqual(result["rows"], 5 * campaign.CONTEXT)
+        self.assertEqual(
+            result["work_signature"],
+            [5, 5 * campaign.CONTEXT, 2, 4, 120, 35],
+        )
+
+    def test_language_scoring_rejects_real_tail_work_drift(self) -> None:
+        windows = SimpleNamespace(
+            windows=[[0] * (campaign.CONTEXT + 1) for _ in range(5)]
+        )
+        with (
+            patch.object(campaign, "FRESH_HELDOUT_WINDOWS", 5),
+            patch.object(
+                campaign,
+                "FRESH_HELDOUT_DECISIONS",
+                5 * campaign.CONTEXT,
+            ),
+            patch.object(campaign, "BATCH_SIZE", 4),
+            patch.object(campaign, "VOCAB_SIZE", 8),
+            self.assertRaisesRegex(
+                ValueError,
+                "geometric V5 language work changed between batches",
+            ),
+        ):
+            campaign._evaluate_language(
+                _SyntheticLanguageModel(drift_on_tail=True),
+                windows,
+                mode="geometric",
+                device=torch.device("cpu"),
+            )
+
     def test_frozen_v5_boundaries_and_prior_union(self) -> None:
         self.assertEqual(
             prompt_conditioning_v5.PRIOR_REVEALED_LAST_SOURCE_STORY_ORDINAL,

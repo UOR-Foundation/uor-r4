@@ -78,7 +78,10 @@ from .layerwise_normalized_retained_readout_campaign import (
     PREDECESSOR_RESULT_CID,
     _verify_predecessor,
 )
-from .learned_associative_readout import R4LearnedCandidateLeafAssociativeReadoutV1
+from .learned_associative_readout import (
+    LearnedAssociativeReadoutAudit,
+    R4LearnedCandidateLeafAssociativeReadoutV1,
+)
 from .predictive_block_delta_binding import (
     INITIALIZATION_SEED,
     TRAINABLE_PARAMETER_COUNT,
@@ -116,6 +119,7 @@ from .provenance import (
     canonical_json_bytes,
     cid_bytes,
     cid_file,
+    tree_cid,
     trainer_implementation_contract,
 )
 
@@ -161,6 +165,12 @@ SCORING_RELATIVE_PATH = "run/predictive-block-delta-v5-scoring-evidence.json"
 RESULT_RELATIVE_PATH = "run/predictive-block-delta-v5-result.json"
 VERIFICATION_RELATIVE_PATH = "run/predictive-block-delta-v5-independent-verification.json"
 UNAVAILABLE_RELATIVE_PATH = "run/predictive-block-delta-v5-unavailable.json"
+SCORING_RECOVERY_RELATIVE_PATH = (
+    "run/predictive-block-delta-v5-scoring-recovery.json"
+)
+SCORING_RECOVERY_UNAVAILABLE_RELATIVE_PATH = (
+    "run/predictive-block-delta-v5-scoring-recovery-unavailable.json"
+)
 
 PREPARATION_SCHEMA = "uor-r4.predictive-block-delta-v5-preparation/1"
 COMMITMENT_SCHEMA = "uor-r4.predictive-block-delta-v5-commitment/1"
@@ -173,6 +183,41 @@ ARM_RESULT_SCHEMA = "uor-r4.predictive-block-delta-v5-arm-result/1"
 SCORING_SCHEMA = "uor-r4.predictive-block-delta-v5-scoring-evidence/1"
 RESULT_SCHEMA = "uor-r4.predictive-block-delta-v5-result/1"
 VERIFICATION_SCHEMA = "uor-r4.predictive-block-delta-v5-verification/1"
+SCORING_RECOVERY_SCHEMA = "uor-r4.predictive-block-delta-v5-scoring-recovery/1"
+
+# The first V5 scoring attempt exposed a batch-tail accounting defect only
+# after all arms and the reveal had been frozen.  These exact identities allow
+# the corrected scorer to consume that immutable fit without relabelling any
+# other historical implementation as current.
+FROZEN_V5_FIT_IMPLEMENTATION_TREE_CID = (
+    "blake3:000a3ae8a69ba9185ff66ee58ff891b3eb22ab857195d71d38441e277cceca24"
+)
+FROZEN_V5_PREPARATION_CID = (
+    "blake3:1e65392c729ca349b2a9a61f4bfb503e5cb32392f42f69d7f4b836ea7692d10a"
+)
+FROZEN_V5_COMMITMENT_CID = (
+    "blake3:8e9c02068bb1dfef956907b1b614ddb0c4fcf902262fc934f8b098f5fd7cf0c4"
+)
+FROZEN_V5_PROBE_CID = (
+    "blake3:7adc13f30955b8843674d5a9b410500046fdd5376422979ff8f69f547c32aa08"
+)
+FROZEN_V5_STARTED_CID = (
+    "blake3:c4c1dacb4e99a955c1d4777064cda0191aeecab7543e8e76a23a5b01d5c758a6"
+)
+FROZEN_V5_REVEAL_CID = (
+    "blake3:6773e5ec1be496a5d1edae29f810d3b13a05b3953757b31ea22f909471ae5800"
+)
+FROZEN_V5_UNAVAILABLE_CID = (
+    "blake3:a819ed7f2b558d80053362c6c229642835b1317ff367d576aeb6ab23a592536a"
+)
+FROZEN_V5_FIT_BUDGET_CID = (
+    "blake3:cb5a1f1640ea08882542423721719c31b0044ee679ec06ba51a589f3c400ea3d"
+)
+FROZEN_V5_ARM_RESULT_CIDS = {
+    "geometric": "blake3:c8b62dba59c23a93d04aa60cebfffe5c366bb4ce6b8ee48b64088bef4db77b60",
+    "plain": "blake3:0c91f859e2d05e77dc81e8f17ae5c40e72d23d7bdb7c64fd1f03a7e727cbfc87",
+    "additive": "blake3:e32101f0ff89e3b4099e9f23645873e2fb80d22478cce9f5bb52a8ec3debe155",
+}
 
 PROMPT_GAIN_THRESHOLD = ABSOLUTE_GAIN_THRESHOLD
 INCREMENTAL_GAIN_THRESHOLD = INTERVENTION_LOSS_THRESHOLD
@@ -219,6 +264,58 @@ def _verify_self_cid(value: Mapping[str, Any], field: str) -> None:
     observed = unsigned.pop(field, None)
     if observed != cid_bytes(canonical_json_bytes(unsigned)):
         raise ValueError(f"{field} does not reproduce")
+
+
+def _validate_bound_implementation(
+    value: object,
+    *,
+    envelope_cid: object,
+    frozen_envelope_cid: str,
+) -> dict[str, Any]:
+    """Accept current code or the one exact pre-reveal V5 fit implementation."""
+
+    if not isinstance(value, Mapping) or set(value) != {"files", "tree_cid"}:
+        raise ValueError("V5 implementation binding is malformed")
+    files = value.get("files")
+    observed = value.get("tree_cid")
+    if (
+        not isinstance(files, list)
+        or not files
+        or not isinstance(observed, str)
+        or not observed.startswith("blake3:")
+        or len(observed) != 71
+    ):
+        raise ValueError("V5 implementation binding is malformed")
+    paths: list[str] = []
+    for record in files:
+        if not isinstance(record, Mapping) or set(record) != {"bytes", "cid", "path"}:
+            raise ValueError("V5 implementation file ledger is malformed")
+        size = record.get("bytes")
+        cid = record.get("cid")
+        path = record.get("path")
+        if (
+            isinstance(size, bool)
+            or not isinstance(size, int)
+            or size < 1
+            or not isinstance(cid, str)
+            or not cid.startswith("blake3:")
+            or len(cid) != 71
+            or not isinstance(path, str)
+            or not path
+        ):
+            raise ValueError("V5 implementation file ledger is malformed")
+        paths.append(path)
+    implementation = {"files": [dict(record) for record in files], "tree_cid": observed}
+    if paths != sorted(set(paths)) or tree_cid(implementation["files"]) != observed:
+        raise ValueError("V5 implementation tree CID does not reproduce")
+    if implementation == trainer_implementation_contract():
+        return implementation
+    if (
+        envelope_cid == frozen_envelope_cid
+        and observed == FROZEN_V5_FIT_IMPLEMENTATION_TREE_CID
+    ):
+        return implementation
+    raise ValueError("V5 implementation binding is neither current nor frozen")
 
 
 def _read_json(path: Path) -> dict[str, Any]:
@@ -575,6 +672,11 @@ def load_predictive_block_delta_terminal_preparation(root: Path) -> TerminalPrep
     commitment = _read_json(root / COMMITMENT_RELATIVE_PATH)
     _verify_self_cid(manifest, "preparation_cid")
     _verify_self_cid(commitment, "commitment_cid")
+    _validate_bound_implementation(
+        manifest.get("implementation"),
+        envelope_cid=manifest.get("preparation_cid"),
+        frozen_envelope_cid=FROZEN_V5_PREPARATION_CID,
+    )
     population_record = commitment.get("population")
     heldout_record = commitment.get("fresh_heldout")
     if (
@@ -582,7 +684,6 @@ def load_predictive_block_delta_terminal_preparation(root: Path) -> TerminalPrep
         or manifest.get("issue") != ISSUE
         or manifest.get("policy") != POLICY
         or manifest.get("model_policy") != MODEL_POLICY
-        or manifest.get("implementation") != trainer_implementation_contract()
         or manifest.get("commitment_cid") != commitment.get("commitment_cid")
         or commitment.get("schema") != COMMITMENT_SCHEMA
         or commitment.get("issue") != ISSUE
@@ -1246,6 +1347,11 @@ def _probe_predictive_block_delta_terminal(
     if path.exists():
         result = _read_json(path)
         _verify_self_cid(result, "probe_cid")
+        _validate_bound_implementation(
+            result.get("implementation"),
+            envelope_cid=result.get("probe_cid"),
+            frozen_envelope_cid=FROZEN_V5_PROBE_CID,
+        )
         selection = select_execution_plan(result.get("selection", {}).get("plans", []))
         expected_verdict = (
             "PREDICTIVE_V5_EXECUTION_ADMITTED"
@@ -1260,7 +1366,7 @@ def _probe_predictive_block_delta_terminal(
             != preparation.manifest["preparation_cid"]
             or result.get("commitment_cid")
             != preparation.commitment["commitment_cid"]
-            or result.get("implementation") != trainer_implementation_contract()
+            or result.get("implementation") != preparation.manifest["implementation"]
             or selection != result.get("selection")
             or result.get("eligible") is not selection["available"]
             or result.get("verdict") != expected_verdict
@@ -1728,11 +1834,21 @@ def _run_fit_batch(
     resume: bool,
     wall_seconds: float,
 ) -> dict[str, Any]:
+    historical_elapsed = _load_fit_budget(root, plan)
+    pending = [arm for arm in arms if not _arm_result_path(root, arm).exists()]
+    if not pending:
+        return {
+            "ok": True,
+            "arms": {
+                arm: {"ok": True, "result": _load_arm_result(root, arm), "cached": True}
+                for arm in arms
+            },
+            "aggregate_wall_seconds": historical_elapsed,
+            "cached": True,
+        }
     context = mp.get_context("spawn")
     outcomes: dict[str, Any] = {}
-    historical_elapsed = _load_fit_budget(root, plan)
     _write_fit_budget(root, plan, historical_elapsed)
-    pending = [arm for arm in arms if not _arm_result_path(root, arm).exists()]
     if not resume and any(_checkpoint_path(root, arm).exists() for arm in pending):
         raise RuntimeError("V5 checkpoints require explicit --resume")
     if plan.concurrent_arms:
@@ -2288,7 +2404,9 @@ def _evaluate_language(
     top1 = 0
     rows = 0
     forbidden_reads = 0
-    signature: tuple[int, ...] | None = None
+    reference_signature: tuple[int, ...] | None = None
+    aggregate_signature: tuple[int, ...] | None = None
+    structural_positions: frozenset[int] | None = None
     trace = blake3()
     logits_trace = blake3()
     for start in range(0, FRESH_HELDOUT_WINDOWS, BATCH_SIZE):
@@ -2306,10 +2424,44 @@ def _evaluate_language(
         ):
             raise ValueError(f"{mode} V5 language output contract differs")
         work = tuple(int(value) for value in audit.work_signature())
-        if signature is None:
-            signature = work
-        elif signature != work:
-            raise ValueError(f"{mode} V5 language work changed between batches")
+        current_structural_positions = {2, 3, 4}
+        if isinstance(audit, LearnedAssociativeReadoutAudit):
+            current_structural_positions.add(13)
+        current_structural = frozenset(current_structural_positions)
+        if len(work) <= max(current_structural) or work[0] != count:
+            raise ValueError(f"{mode} V5 language output contract differs")
+        if reference_signature is None:
+            reference_signature = work
+            aggregate_signature = work
+            structural_positions = current_structural
+        else:
+            if (
+                aggregate_signature is None
+                or structural_positions != current_structural
+                or len(reference_signature) != len(work)
+            ):
+                raise ValueError(f"{mode} V5 language work changed between batches")
+            reference_batch = reference_signature[0]
+            observed_batch = work[0]
+            for index, (reference, observed) in enumerate(
+                zip(reference_signature, work, strict=True)
+            ):
+                if index in structural_positions:
+                    matches = reference == observed
+                else:
+                    matches = (
+                        reference * observed_batch == observed * reference_batch
+                    )
+                if not matches:
+                    raise ValueError(
+                        f"{mode} V5 language work changed between batches"
+                    )
+            aggregate_signature = tuple(
+                previous if index in structural_positions else previous + observed
+                for index, (previous, observed) in enumerate(
+                    zip(aggregate_signature, work, strict=True)
+                )
+            )
         targets = batch[:, 1:]
         batch_loss = float(
             F.cross_entropy(
@@ -2329,7 +2481,7 @@ def _evaluate_language(
             logits.detach().float().contiguous().cpu().numpy().tobytes()
         )
         trace.update(predictions.detach().cpu().to(torch.int16).numpy().tobytes())
-    if rows != FRESH_HELDOUT_DECISIONS or signature is None:
+    if rows != FRESH_HELDOUT_DECISIONS or aggregate_signature is None:
         raise RuntimeError("V5 fresh-language scorer coverage differs")
     return {
         "mode": mode,
@@ -2338,7 +2490,7 @@ def _evaluate_language(
         "top1_correct": top1,
         "top1_rate": top1 / rows,
         "forbidden_reads": forbidden_reads,
-        "work_signature": list(signature),
+        "work_signature": list(aggregate_signature),
         "logits_trace_cid": f"blake3:{logits_trace.hexdigest()}",
         "prediction_trace_cid": f"blake3:{trace.hexdigest()}",
     }
@@ -2766,6 +2918,11 @@ def _scoring_worker(root: str, queue: Any) -> None:
         campaign_root = Path(root)
         preparation = load_predictive_block_delta_terminal_preparation(campaign_root)
         arm_results = {arm: _load_arm_result(campaign_root, arm) for arm in ARMS}
+        recovery = (
+            prepare_predictive_block_delta_scoring_recovery(campaign_root)
+            if (campaign_root / SCORING_RECOVERY_RELATIVE_PATH).exists()
+            else None
+        )
         evidence = _score_campaign(preparation, arm_results)
         record = _with_cid(
             {
@@ -2779,6 +2936,11 @@ def _scoring_worker(root: str, queue: Any) -> None:
                 "arm_result_cids": {
                     arm: arm_results[arm]["arm_result_cid"] for arm in ARMS
                 },
+                "recovery_cid": (
+                    recovery["recovery_cid"] if recovery is not None else None
+                ),
+                "fit_implementation": preparation.manifest["implementation"],
+                "scoring_implementation": trainer_implementation_contract(),
                 "scorer_process_id": os.getpid(),
                 "optimizer_created": False,
                 "optimizer_steps": 0,
@@ -2982,6 +3144,11 @@ def _load_scoring_evidence(root: Path) -> dict[str, Any]:
     arm_results = {arm: _load_arm_result(root, arm) for arm in ARMS}
     reveal = _read_json(root / REVEAL_RELATIVE_PATH)
     _verify_self_cid(reveal, "reveal_cid")
+    recovery = (
+        prepare_predictive_block_delta_scoring_recovery(root)
+        if (root / SCORING_RECOVERY_RELATIVE_PATH).exists()
+        else None
+    )
     expected_reveal = _expected_reveal(preparation, arm_results)
     scorer_process_id = record.get("scorer_process_id")
     elapsed = record.get("elapsed_seconds")
@@ -2995,6 +3162,12 @@ def _load_scoring_evidence(root: Path) -> dict[str, Any]:
         or reveal != expected_reveal
         or record.get("arm_result_cids")
         != {arm: arm_results[arm]["arm_result_cid"] for arm in ARMS}
+        or record.get("recovery_cid")
+        != (recovery["recovery_cid"] if recovery is not None else None)
+        or record.get("fit_implementation")
+        != preparation.manifest["implementation"]
+        or record.get("scoring_implementation")
+        != trainer_implementation_contract()
         or isinstance(scorer_process_id, bool)
         or not isinstance(scorer_process_id, int)
         or scorer_process_id < 1
@@ -3064,6 +3237,180 @@ def _write_unavailable(root: Path, *, reason: Any, phase: str) -> dict[str, Any]
     return result
 
 
+def _expected_scoring_recovery(
+    root: Path, *, require_outputs_absent: bool = True
+) -> dict[str, Any]:
+    preparation = load_predictive_block_delta_terminal_preparation(root)
+    probe = probe_predictive_block_delta_terminal(root)
+    started = _read_json(root / STARTED_RELATIVE_PATH)
+    _verify_self_cid(started, "started_cid")
+    _validate_bound_implementation(
+        started.get("implementation"),
+        envelope_cid=started.get("started_cid"),
+        frozen_envelope_cid=FROZEN_V5_STARTED_CID,
+    )
+    arm_results = {arm: _load_arm_result(root, arm) for arm in ARMS}
+    reveal = _read_json(root / REVEAL_RELATIVE_PATH)
+    _verify_self_cid(reveal, "reveal_cid")
+    unavailable = _read_json(root / UNAVAILABLE_RELATIVE_PATH)
+    _verify_self_cid(unavailable, "unavailable_cid")
+    fit_budget = _read_json(root / FIT_BUDGET_RELATIVE_PATH)
+    _verify_self_cid(fit_budget, "fit_budget_cid")
+    plan = _selected_plan(probe)
+    error = unavailable.get("reason", {}).get("error", {})
+    expected_arm_cids = {
+        arm: arm_results[arm]["arm_result_cid"] for arm in ARMS
+    }
+    if (
+        preparation.manifest.get("preparation_cid") != FROZEN_V5_PREPARATION_CID
+        or preparation.commitment.get("commitment_cid") != FROZEN_V5_COMMITMENT_CID
+        or probe.get("probe_cid") != FROZEN_V5_PROBE_CID
+        or started.get("started_cid") != FROZEN_V5_STARTED_CID
+        or reveal.get("reveal_cid") != FROZEN_V5_REVEAL_CID
+        or reveal != _expected_reveal(preparation, arm_results)
+        or unavailable.get("unavailable_cid") != FROZEN_V5_UNAVAILABLE_CID
+        or unavailable.get("phase") != "SCORING"
+        or unavailable.get("verdict") != "UNAVAILABLE_PREDICTIVE_V5_COMPUTE"
+        or unavailable.get("scientific_result") != "NOT_RUN"
+        or error.get("type") != "ValueError"
+        or error.get("reason")
+        != "geometric V5 language work changed between batches"
+        or expected_arm_cids != FROZEN_V5_ARM_RESULT_CIDS
+        or fit_budget.get("fit_budget_cid") != FROZEN_V5_FIT_BUDGET_CID
+        or fit_budget.get("plan_cid") != plan.identity()["plan_cid"]
+        or float(fit_budget.get("consumed_seconds", -1.0))
+        != _load_fit_budget(root, plan)
+        or preparation.manifest["implementation"].get("tree_cid")
+        != FROZEN_V5_FIT_IMPLEMENTATION_TREE_CID
+        or (
+            require_outputs_absent
+            and (
+                (root / SCORING_RELATIVE_PATH).exists()
+                or (root / RESULT_RELATIVE_PATH).exists()
+            )
+        )
+        or any(_checkpoint_path(root, arm).exists() for arm in ARMS)
+    ):
+        raise ValueError("V5 scoring recovery does not match the frozen failed attempt")
+    scoring_implementation = trainer_implementation_contract()
+    if scoring_implementation["tree_cid"] == FROZEN_V5_FIT_IMPLEMENTATION_TREE_CID:
+        raise ValueError("V5 scoring recovery requires a distinct corrected implementation")
+    return _with_cid(
+        {
+            "schema": SCORING_RECOVERY_SCHEMA,
+            "issue": ISSUE,
+            "policy": POLICY,
+            "phase": "SCORING_ONLY_RECOVERY",
+            "preparation_cid": FROZEN_V5_PREPARATION_CID,
+            "commitment_cid": FROZEN_V5_COMMITMENT_CID,
+            "probe_cid": FROZEN_V5_PROBE_CID,
+            "started_cid": FROZEN_V5_STARTED_CID,
+            "reveal_cid": FROZEN_V5_REVEAL_CID,
+            "unavailable_cid": FROZEN_V5_UNAVAILABLE_CID,
+            "unavailable_phase": "SCORING",
+            "unavailable_verdict": "UNAVAILABLE_PREDICTIVE_V5_COMPUTE",
+            "unavailable_scientific_result": "NOT_RUN",
+            "failure": {
+                "type": "ValueError",
+                "reason": "geometric V5 language work changed between batches",
+            },
+            "fit_implementation": preparation.manifest["implementation"],
+            "scoring_implementation": scoring_implementation,
+            "arm_result_cids": expected_arm_cids,
+            "artifacts": {
+                arm: dict(arm_results[arm]["artifact"]) for arm in ARMS
+            },
+            "fit_budget": {
+                "cid": fit_budget["fit_budget_cid"],
+                "consumed_seconds": fit_budget["consumed_seconds"],
+            },
+            "completed_steps_per_arm": OPTIMIZER_STEPS,
+            "post_reveal_optimizer_steps": 0,
+            "optimizer_created": False,
+            "optimizer_steps": 0,
+            "transition": "PRESERVE_FROZEN_ARMS_AND_REVEAL_RETRY_SCORING_ONLY",
+            "repair": {
+                "preserve_windows": FRESH_HELDOUT_WINDOWS,
+                "full_batches": FRESH_HELDOUT_WINDOWS // BATCH_SIZE,
+                "tail_rows": FRESH_HELDOUT_WINDOWS % BATCH_SIZE,
+                "work_rule": "EXACT_PER_ROW_PROPORTIONALITY_AND_TOTAL_AGGREGATION",
+            },
+        },
+        "recovery_cid",
+    )
+
+
+def prepare_predictive_block_delta_scoring_recovery(root: Path) -> dict[str, Any]:
+    """Bind the one scoring-only recovery without changing fit or reveal state."""
+
+    root = root.resolve()
+    path = root / SCORING_RECOVERY_RELATIVE_PATH
+    if path.exists():
+        value = _read_json(path)
+        _verify_self_cid(value, "recovery_cid")
+        if value != _expected_scoring_recovery(
+            root, require_outputs_absent=False
+        ):
+            raise ValueError("cached V5 scoring recovery differs")
+        return value
+    value = _expected_scoring_recovery(root)
+    _write_exclusive_json(path, value)
+    return value
+
+
+def _write_scoring_recovery_unavailable(
+    root: Path, *, recovery: Mapping[str, Any], reason: Any
+) -> dict[str, Any]:
+    path = root / SCORING_RECOVERY_UNAVAILABLE_RELATIVE_PATH
+    if path.exists():
+        value = _read_json(path)
+        _verify_self_cid(value, "unavailable_cid")
+        recorded_reason = value.get("reason")
+        recorded_error = (
+            recorded_reason.get("error")
+            if isinstance(recorded_reason, Mapping)
+            else None
+        )
+        if (
+            value.get("schema")
+            != "uor-r4.predictive-block-delta-v5-recovery-unavailable/1"
+            or value.get("issue") != ISSUE
+            or value.get("policy") != POLICY
+            or value.get("phase") != "SCORING_RECOVERY"
+            or value.get("verdict") != "UNAVAILABLE_PREDICTIVE_V5_COMPUTE"
+            or value.get("scientific_result") != "NOT_RUN"
+            or value.get("recovery_cid") != recovery.get("recovery_cid")
+            or value.get("supersedes_unavailable_cid")
+            != FROZEN_V5_UNAVAILABLE_CID
+            or value.get("scoring_implementation")
+            != recovery.get("scoring_implementation")
+            or not isinstance(recorded_reason, Mapping)
+            or recorded_reason.get("ok") is not False
+            or not isinstance(recorded_error, Mapping)
+            or not isinstance(recorded_error.get("type"), str)
+            or not isinstance(recorded_error.get("reason"), str)
+        ):
+            raise ValueError("cached V5 scoring-recovery unavailable differs")
+        return value
+    value = _with_cid(
+        {
+            "schema": "uor-r4.predictive-block-delta-v5-recovery-unavailable/1",
+            "issue": ISSUE,
+            "policy": POLICY,
+            "phase": "SCORING_RECOVERY",
+            "reason": reason,
+            "verdict": "UNAVAILABLE_PREDICTIVE_V5_COMPUTE",
+            "scientific_result": "NOT_RUN",
+            "recovery_cid": recovery["recovery_cid"],
+            "supersedes_unavailable_cid": FROZEN_V5_UNAVAILABLE_CID,
+            "scoring_implementation": recovery["scoring_implementation"],
+        },
+        "unavailable_cid",
+    )
+    _write_exclusive_json(path, value)
+    return value
+
+
 def _load_terminal_result(root: Path) -> dict[str, Any]:
     result = _read_json(root / RESULT_RELATIVE_PATH)
     _verify_self_cid(result, "result_cid")
@@ -3077,6 +3424,11 @@ def _load_terminal_result(root: Path) -> dict[str, Any]:
     arm_results = {arm: _load_arm_result(root, arm) for arm in ARMS}
     reveal = _read_json(root / REVEAL_RELATIVE_PATH)
     _verify_self_cid(reveal, "reveal_cid")
+    recovery = (
+        prepare_predictive_block_delta_scoring_recovery(root)
+        if (root / SCORING_RECOVERY_RELATIVE_PATH).exists()
+        else None
+    )
     scoring = _load_scoring_evidence(root)
     writer_process_id = result.get("writer_process_id")
     aggregate_wall = result.get("aggregate_fit_wall_seconds")
@@ -3091,6 +3443,12 @@ def _load_terminal_result(root: Path) -> dict[str, Any]:
         or result.get("probe_cid") != probe.get("probe_cid")
         or result.get("started_cid") != started.get("started_cid")
         or result.get("implementation") != preparation.manifest["implementation"]
+        or result.get("scoring_implementation")
+        != scoring.get("scoring_implementation")
+        or result.get("recovery_cid")
+        != (recovery["recovery_cid"] if recovery is not None else None)
+        or result.get("supersedes_unavailable_cid")
+        != (FROZEN_V5_UNAVAILABLE_CID if recovery is not None else None)
         or result.get("plan") != plan.identity()
         or isinstance(writer_process_id, bool)
         or not isinstance(writer_process_id, int)
@@ -3171,6 +3529,11 @@ def run_predictive_block_delta_terminal(
     if started_path.exists():
         started = _read_json(started_path)
         _verify_self_cid(started, "started_cid")
+        _validate_bound_implementation(
+            started.get("implementation"),
+            envelope_cid=started.get("started_cid"),
+            frozen_envelope_cid=FROZEN_V5_STARTED_CID,
+        )
         writer_process_id = started.get("writer_process_id")
         if (
             started.get("schema") != STARTED_SCHEMA
@@ -3180,7 +3543,7 @@ def run_predictive_block_delta_terminal(
             != preparation.manifest["preparation_cid"]
             or started.get("probe_cid") != probe["probe_cid"]
             or started.get("plan") != plan.identity()
-            or started.get("implementation") != trainer_implementation_contract()
+            or started.get("implementation") != preparation.manifest["implementation"]
             or started.get("training") != preparation.manifest["training"]
             or started.get("v5_reads_before_artifact_freeze") != 0
             or started.get("hard_wall_seconds_before_scoring")
@@ -3213,6 +3576,16 @@ def run_predictive_block_delta_terminal(
         )
         _write_exclusive_json(started_path, started)
 
+    recovery: dict[str, Any] | None = None
+    if (root / UNAVAILABLE_RELATIVE_PATH).exists():
+        if not resume:
+            raise RuntimeError("V5 scoring-only recovery requires explicit --resume")
+        recovery = prepare_predictive_block_delta_scoring_recovery(root)
+        if (root / SCORING_RECOVERY_UNAVAILABLE_RELATIVE_PATH).exists():
+            return _write_scoring_recovery_unavailable(
+                root, recovery=recovery, reason={}
+            )
+
     fit = _run_fit_batch(
         root,
         plan,
@@ -3233,6 +3606,10 @@ def run_predictive_block_delta_terminal(
     reveal = _reveal_terminal_population(preparation, arm_results)
     scoring = _spawn_scoring(root)
     if scoring.get("ok") is not True:
+        if recovery is not None:
+            return _write_scoring_recovery_unavailable(
+                root, recovery=recovery, reason=scoring
+            )
         return _write_unavailable(root, reason=scoring, phase="SCORING")
     scoring_record = scoring["record"]
     evidence = scoring_record["evidence"]
@@ -3248,6 +3625,13 @@ def run_predictive_block_delta_terminal(
             "started_cid": started["started_cid"],
             "writer_process_id": os.getpid(),
             "implementation": preparation.manifest["implementation"],
+            "scoring_implementation": scoring_record["scoring_implementation"],
+            "recovery_cid": (
+                recovery["recovery_cid"] if recovery is not None else None
+            ),
+            "supersedes_unavailable_cid": (
+                FROZEN_V5_UNAVAILABLE_CID if recovery is not None else None
+            ),
             "plan": plan.identity(),
             "aggregate_fit_wall_seconds": aggregate_wall,
             "hard_wall_seconds_before_scoring": HARD_WALL_SECONDS,
@@ -3295,6 +3679,9 @@ def verify_predictive_block_delta_terminal(root: Path) -> dict[str, Any]:
             or value.get("policy") != POLICY
             or value.get("result_cid") != result.get("result_cid")
             or value.get("scoring_cid") != scoring.get("scoring_cid")
+            or value.get("recovery_cid") != result.get("recovery_cid")
+            or value.get("scoring_implementation_tree_cid")
+            != scoring["scoring_implementation"]["tree_cid"]
             or value.get("run_writer_process_id")
             != result.get("writer_process_id")
             or value.get("scoring_writer_process_id")
@@ -3330,6 +3717,10 @@ def verify_predictive_block_delta_terminal(root: Path) -> dict[str, Any]:
             "policy": POLICY,
             "result_cid": result["result_cid"],
             "scoring_cid": scoring["scoring_cid"],
+            "recovery_cid": result.get("recovery_cid"),
+            "scoring_implementation_tree_cid": scoring[
+                "scoring_implementation"
+            ]["tree_cid"],
             "run_writer_process_id": result["writer_process_id"],
             "scoring_writer_process_id": scoring["scorer_process_id"],
             "verifier_process_id": os.getpid(),
@@ -3351,6 +3742,7 @@ __all__ = [
     "TerminalPreparation",
     "load_predictive_block_delta_terminal_preparation",
     "prepare_predictive_block_delta_terminal",
+    "prepare_predictive_block_delta_scoring_recovery",
     "probe_predictive_block_delta_terminal",
     "run_predictive_block_delta_terminal",
     "select_execution_plan",
