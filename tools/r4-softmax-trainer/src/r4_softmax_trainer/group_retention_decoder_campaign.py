@@ -190,13 +190,18 @@ def _with_cid(value: Mapping[str, Any], field: str) -> dict[str, Any]:
 
 
 def prepare_group_retention_decoder_data(
-    root: Path, *, predecessor: Path
+    root: Path,
+    *,
+    predecessor: Path,
+    _manifest_name: str = PREPARATION_MANIFEST_NAME,
+    _schema: str = PREPARATION_SCHEMA,
+    _policy: str = POLICY,
 ) -> dict[str, Any]:
     """Freeze the independent construction slices and inherited geometry."""
     root = root.resolve()
     predecessor = predecessor.resolve()
     managed = [
-        root / PREPARATION_MANIFEST_NAME,
+        root / _manifest_name,
         root / "construction",
         root / "geometry",
         root / "preflight",
@@ -251,11 +256,11 @@ def prepare_group_retention_decoder_data(
         "model_heldout_reads": 0,
     }
     manifest = write_bound_manifest(
-        root / PREPARATION_MANIFEST_NAME,
+        root / _manifest_name,
         {
-            "schema": PREPARATION_SCHEMA,
+            "schema": _schema,
             "issue": ISSUE,
-            "policy": POLICY,
+            "policy": _policy,
             "predecessor": dict(data.predecessor),
             "geometry": {
                 "artifact_cid": geometry.artifact_cid,
@@ -280,9 +285,13 @@ def prepare_group_retention_decoder_data(
 
 def _load_prepared(
     root: Path,
+    *,
+    manifest_name: str = PREPARATION_MANIFEST_NAME,
+    schema: str = PREPARATION_SCHEMA,
+    policy: str = POLICY,
 ) -> tuple[dict[str, Any], GroupGeometryBundle, Tensor, Tensor]:
     root = root.resolve()
-    manifest = verify_bound_manifest(root / PREPARATION_MANIFEST_NAME, artifact_root=root)
+    manifest = verify_bound_manifest(root / manifest_name, artifact_root=root)
     geometry = load_group_geometry_artifacts(root / GEOMETRY_RELATIVE_PATH)
     coverage = manifest.get("geometry", {}).get("generated_state_coverage")
     expected_predecessor = {
@@ -326,9 +335,9 @@ def _load_prepared(
         == cid_bytes(canonical_json_bytes(selection))
     )
     if (
-        manifest.get("schema") != PREPARATION_SCHEMA
+        manifest.get("schema") != schema
         or manifest.get("issue") != ISSUE
-        or manifest.get("policy") != POLICY
+        or manifest.get("policy") != policy
         or manifest.get("predecessor") != expected_predecessor
         or artifact_paths != expected_artifacts
         or not selection_valid
@@ -636,13 +645,25 @@ def _execute_preflight(
     telemetry: DeviceTelemetry,
     config: DecoderPreflightConfig,
     initial_exports: Mapping[str, bytes],
+    wall_ceiling_seconds: float | None = None,
+    timing_is_admission_gate: bool = True,
+    started_monotonic: float | None = None,
+    fitted_relative_paths: tuple[str, str] = (
+        EXACT_FITTED_RELATIVE_PATH,
+        SCRAMBLED_FITTED_RELATIVE_PATH,
+    ),
 ) -> dict[str, Any]:
     """Run the sole mechanical/timing instrument and two-arm construction fit."""
     config.validate()
     recommended_memory = telemetry.recommended_memory()
     if recommended_memory <= 0:
-        raise RuntimeError("MPS recommended-memory query is unavailable")
-    started = time.monotonic()
+        raise RuntimeError("device memory recommendation is unavailable")
+    started = time.monotonic() if started_monotonic is None else started_monotonic
+    wall_ceiling = (
+        config.wall_ceiling_seconds
+        if wall_ceiling_seconds is None
+        else wall_ceiling_seconds
+    )
 
     small = train_sequences[:2, :9].to(device)
     stationary_model = R4GroupAddressedRetentionDecoderV1(
@@ -749,7 +770,8 @@ def _execute_preflight(
 
     mean_step_seconds = statistics.fmean(timing_seconds)
     projected_seconds = config.eta_safety_factor * mean_step_seconds * config.eta_total_steps
-    timing_pass = projected_seconds <= config.wall_ceiling_seconds
+    projection_within_ceiling = projected_seconds <= wall_ceiling
+    timing_pass = projection_within_ceiling if timing_is_admission_gate else True
     memory_pass = peak_memory < recommended_memory
     mechanical_pass = bool(
         parity_pass
@@ -775,7 +797,11 @@ def _execute_preflight(
             "global_mean_step_seconds": mean_step_seconds,
             "eta_safety_factor": config.eta_safety_factor,
             "projected_512_step_seconds": projected_seconds,
-            "ceiling_seconds": config.wall_ceiling_seconds,
+            "ceiling_seconds": wall_ceiling,
+            "admission_role": (
+                "BINDING" if timing_is_admission_gate else "TELEMETRY_ONLY"
+            ),
+            "projection_within_ceiling": projection_within_ceiling,
             "passed": timing_pass,
         },
         "memory": {
@@ -814,7 +840,7 @@ def _execute_preflight(
         wall_mechanical["hard_wall"] = {
             "phase": phase,
             "elapsed_seconds": elapsed,
-            "ceiling_seconds": config.wall_ceiling_seconds,
+            "ceiling_seconds": wall_ceiling,
             "passed": False,
         }
         wall_mechanical["passed"] = False
@@ -841,7 +867,7 @@ def _execute_preflight(
             "retained_decoder_pass": False,
             "h4_specific_pass": False,
             "elapsed_seconds": elapsed,
-            "wall_ceiling_seconds": config.wall_ceiling_seconds,
+            "wall_ceiling_seconds": wall_ceiling,
             "wall_passed": False,
             "passed": False,
         }
@@ -850,7 +876,7 @@ def _execute_preflight(
         phase: str, error: _ScientificModelFailure
     ) -> dict[str, Any]:
         elapsed = time.monotonic() - started
-        if elapsed >= config.wall_ceiling_seconds:
+        if elapsed >= wall_ceiling:
             return wall_stop(phase)
         all_steps_completed = all(
             value == config.optimizer_steps_per_arm
@@ -879,7 +905,7 @@ def _execute_preflight(
             "retained_decoder_pass": False,
             "h4_specific_pass": False,
             "elapsed_seconds": elapsed,
-            "wall_ceiling_seconds": config.wall_ceiling_seconds,
+            "wall_ceiling_seconds": wall_ceiling,
             "wall_passed": True,
             "passed": False,
         }
@@ -892,15 +918,16 @@ def _execute_preflight(
         except _ScientificModelFailure as error:
             return None, scientific_failure(phase, error)
 
-    if time.monotonic() - started >= config.wall_ceiling_seconds:
+    if time.monotonic() - started >= wall_ceiling:
         return wall_stop("before_optimization")
-    # Keep the fixed 32-story construction partitions resident for all 512
-    # optimizer steps; repeated host-to-MPS transfers have no decision value.
+    # Keep the fixed 32-story construction partitions resident on the selected
+    # device for all 512 optimizer steps; repeated transfers have no decision
+    # value.
     train_sequences = train_sequences.to(device)
     validation_sequences = validation_sequences.to(device)
 
     for arm in TRAINED_ARMS:
-        if time.monotonic() - started >= config.wall_ceiling_seconds:
+        if time.monotonic() - started >= wall_ceiling:
             return wall_stop(f"before_{arm}")
         model = R4GroupAddressedRetentionDecoderV1(config.model, arms[arm]).to(device)
         model.load_learned_artifact(initial_exports[arm])
@@ -926,12 +953,12 @@ def _execute_preflight(
         )
         if terminal is not None:
             return terminal
-        if time.monotonic() - started >= config.wall_ceiling_seconds:
+        if time.monotonic() - started >= wall_ceiling:
             return wall_stop(f"{arm}_initial_evaluation")
         optimizer = _optimizer(model, config)
         model.train()
         for step in range(config.optimizer_steps_per_arm):
-            if time.monotonic() - started >= config.wall_ceiling_seconds:
+            if time.monotonic() - started >= wall_ceiling:
                 return wall_stop(f"{arm}_optimization")
             batch_index = step % (STORIES_PER_PARTITION // config.batch_size)
             base = batch_index * config.batch_size
@@ -943,7 +970,7 @@ def _execute_preflight(
             if terminal is not None:
                 return terminal
             completed_steps[arm] = step + 1
-            if time.monotonic() - started >= config.wall_ceiling_seconds:
+            if time.monotonic() - started >= wall_ceiling:
                 return wall_stop(f"{arm}_optimization")
         telemetry.synchronize()
         final_train, terminal = admitted_call(
@@ -982,7 +1009,7 @@ def _execute_preflight(
         fitted_exports[arm] = model.export_learned_artifact()
         del model, optimizer
         _release(telemetry)
-        if time.monotonic() - started >= config.wall_ceiling_seconds:
+        if time.monotonic() - started >= wall_ceiling:
             return wall_stop(f"{arm}_final_evaluation")
 
     replay_pair, terminal = admitted_call(
@@ -1000,7 +1027,7 @@ def _execute_preflight(
         return terminal
     replay, exact_state_off = replay_pair
     _release(telemetry)
-    if time.monotonic() - started >= config.wall_ceiling_seconds:
+    if time.monotonic() - started >= wall_ceiling:
         return wall_stop("state_intervention_and_replay")
     exact_validation = metrics["exact_h4"]["final_validation"]
     scrambled_validation = metrics["scrambled_h4"]["final_validation"]
@@ -1034,22 +1061,22 @@ def _execute_preflight(
         and h4_top1_delta >= config.required_h4_top1_delta
     )
     emitted_exact_cid = cid_bytes(fitted_exports["exact_h4"])
-    if time.monotonic() - started >= config.wall_ceiling_seconds:
+    if time.monotonic() - started >= wall_ceiling:
         return wall_stop("before_artifact_write")
     artifacts = {
         "exact_h4": _save_learned_artifact(
-            root, EXACT_FITTED_RELATIVE_PATH, fitted_exports["exact_h4"]
+            root, fitted_relative_paths[0], fitted_exports["exact_h4"]
         ),
         "scrambled_h4": _save_learned_artifact(
             root,
-            SCRAMBLED_FITTED_RELATIVE_PATH,
+            fitted_relative_paths[1],
             fitted_exports["scrambled_h4"],
         ),
     }
     if artifacts["exact_h4"]["cid"] != emitted_exact_cid:
         raise RuntimeError("persisted exact-H4 bytes differ from the replayed artifact")
     elapsed = time.monotonic() - started
-    if elapsed > config.wall_ceiling_seconds:
+    if elapsed > wall_ceiling:
         return wall_stop("artifact_write", artifacts=artifacts)
     return {
         "available": True,
@@ -1089,7 +1116,7 @@ def _execute_preflight(
         "retained_decoder_pass": retained_decoder_pass,
         "h4_specific_pass": h4_specific_pass,
         "elapsed_seconds": elapsed,
-        "wall_ceiling_seconds": config.wall_ceiling_seconds,
+        "wall_ceiling_seconds": wall_ceiling,
         "wall_passed": True,
         "passed": retained_decoder_pass,
     }

@@ -314,3 +314,17 @@ successor may retain every scientific choice while using the independently
 measured-fast deterministic Apple CPU/Accelerate four-thread execution plan.
 The predecessor's raw envelopes and source-disposition record remain
 unchanged.
+
+## Fuller-decoder CPU-recovery follow-up — 2026-09-01
+
+The separately frozen
+[`R4GroupAddressedRetentionDecoderV1CpuRecovery`](r4_group_addressed_retention_decoder_cpu_recovery_973.md)
+subsequently completed all 512 construction steps in `438.117083` seconds. On
+the disjoint construction-validation partition, state-off lost `0.967227` nats
+and 182 of 4,096 top-1 decisions. The exact complete-decoder recipe did not
+satisfy its frozen generalization criterion because trained exact-H4 validation
+CE was `0.604243` nats worse than initialization. Formal H4 specificity remained
+`NOT_EVALUATED`; diagnostically, scrambled transport CE was `0.033049` nats
+better while exact H4 led top-1 by only four decisions, below threshold. This
+is bounded retained-attention component evidence, not a complete language-model
+or H4-advantage result.

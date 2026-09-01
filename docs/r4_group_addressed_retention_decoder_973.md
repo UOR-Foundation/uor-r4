@@ -300,10 +300,26 @@ and H4 specificity `NOT_EVALUATED`.
 This is an execution-budget result, not a retained-decoder negative. It does
 not activate the scientific retirement branch above and supplies no evidence
 against geometric attention. A post-terminal backend audit measured the same
-deterministic step at about `0.820` seconds on Apple Accelerate with four CPU
-performance threads, versus about `1.258` seconds on deterministic MPS;
+deterministic step at about `0.820` seconds on Apple Accelerate with four
+configured PyTorch/Accelerate threads, versus about `1.258` seconds on
+deterministic MPS;
 eight CPU threads and two concurrent workers were both slower. Those
 diagnostics are not part of the scientific result. The next authorized action
 is a separately named resource-only successor: identical population, model,
 initialization, optimizer dose, controls, and scientific thresholds, but the
 measured-fast deterministic four-thread CPU/Accelerate execution plan.
+
+## CPU-recovery follow-up — 2026-09-01
+
+The separately frozen
+[`R4GroupAddressedRetentionDecoderV1CpuRecovery`](r4_group_addressed_retention_decoder_cpu_recovery_973.md)
+used the identical population, model, initialization, optimizer dose, controls,
+and scientific thresholds with the measured-fast deterministic four-thread
+CPU/Accelerate execution plan. It completed all 512 steps in `438.117083`
+seconds. On the disjoint construction-validation partition, state-off lost
+`0.967227` nats and `182/4096` state-on top-1 decisions. The whole-model
+validation CE worsened by `0.604243` nats, so the exact complete-decoder recipe
+did not satisfy its frozen generalization criterion. Formal H4 specificity
+remained `NOT_EVALUATED`; diagnostically, scrambled transport CE was `0.033049`
+nats better while exact H4 led top-1 by only four decisions, below threshold.
+The recovery record is authoritative for that scientific result.
