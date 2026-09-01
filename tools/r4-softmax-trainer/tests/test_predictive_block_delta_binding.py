@@ -130,6 +130,44 @@ class PredictiveBlockDeltaBindingTests(unittest.TestCase):
         self.assertEqual(len(signatures), 1)
         self.assertFalse(torch.equal(native.logits, no_delta.logits))
         self.assertFalse(torch.equal(native.logits, permuted.logits))
+        self.assertTrue(
+            torch.equal(native.final_state.frame_indices, permuted.final_state.frame_indices)
+        )
+
+    def test_transport_control_permutes_only_each_new_leaf_action(self) -> None:
+        model = _model()
+        previous = torch.arange(120, dtype=torch.long).repeat_interleave(120)
+        leaves = torch.arange(120, dtype=torch.long).repeat(120)
+        current = model.frame_multiplication[previous, leaves]
+        previous_frames = model.frame_matrices.index_select(0, previous)
+        current_frames = model.frame_matrices.index_select(0, current)
+        endpoint_transport = torch.matmul(
+            current_frames.transpose(-1, -2), previous_frames
+        )
+        step_transport = model._step_transport(leaves, intervention="native")
+        self.assertTrue(
+            torch.allclose(endpoint_transport, step_transport, atol=3e-6, rtol=3e-5)
+        )
+
+        previous = torch.tensor([1], dtype=torch.long)
+        leaf = torch.tensor([1], dtype=torch.long)
+        current = model.frame_multiplication[previous, leaf]
+        expected = model.frame_matrices.index_select(
+            0, model.transport_permutation.index_select(0, leaf)
+        ).transpose(-1, -2)
+        observed = model._step_transport(leaf, intervention="transport_permuted")
+        old_endpoint_permutation = torch.matmul(
+            model.frame_matrices.index_select(
+                0, model.transport_permutation.index_select(0, current)
+            ).transpose(-1, -2),
+            model.frame_matrices.index_select(
+                0, model.transport_permutation.index_select(0, previous)
+            ),
+        )
+        self.assertTrue(torch.equal(observed, expected))
+        self.assertFalse(
+            torch.allclose(observed, old_endpoint_permutation, atol=3e-6, rtol=3e-5)
+        )
 
     def test_stationary_direct_incremental_causality_and_observability(self) -> None:
         model = _model()

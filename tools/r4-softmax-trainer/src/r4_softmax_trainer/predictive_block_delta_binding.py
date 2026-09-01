@@ -438,6 +438,29 @@ class R4PredictiveBlockDeltaBindingV1(R4RetainedLanguagePathV1):
         )
         return ordered.index_select(1, self.candidate_score_positions) * LOGIT_SCALE
 
+    def _step_transport(
+        self,
+        leaves: Tensor,
+        *,
+        intervention: Intervention,
+    ) -> Tensor:
+        """Return the local connection action for this token step.
+
+        The canonical cumulative frame is deliberately not permuted by the
+        destructive control.  Only the newly traversed leaf action is replaced
+        by ``pi(leaf)``; value, query, and candidate anchors continue to use the
+        true cumulative frame.  This is the continuous R4 realization of the
+        registered transport-only scrambled-H4 control.
+        """
+
+        transport_leaves = leaves
+        if intervention == "transport_permuted":
+            if self.binding_arm != "geometric":
+                raise ValueError("transport-permuted intervention requires geometric arm")
+            transport_leaves = self.transport_permutation.index_select(0, leaves)
+        step_frames = self._frames_for_arm(transport_leaves)
+        return step_frames.transpose(-1, -2)
+
     def _binding_step(
         self,
         token_ids: Tensor,
@@ -450,29 +473,8 @@ class R4PredictiveBlockDeltaBindingV1(R4RetainedLanguagePathV1):
         current_indices = self.frame_multiplication[
             state.frame_indices, leaves
         ]
-        previous_frames = self._frames_for_arm(state.frame_indices)
         current_frames = self._frames_for_arm(current_indices)
-
-        if intervention == "transport_permuted":
-            if self.binding_arm != "geometric":
-                raise ValueError("transport-permuted intervention requires geometric arm")
-            permuted_previous = self.transport_permutation.index_select(
-                0, state.frame_indices
-            )
-            permuted_current = self.transport_permutation.index_select(
-                0, current_indices
-            )
-            connection_previous = self.frame_matrices.index_select(
-                0, permuted_previous
-            )
-            connection_current = self.frame_matrices.index_select(0, permuted_current)
-        else:
-            connection_previous = previous_frames
-            connection_current = current_frames
-
-        transport = torch.matmul(
-            connection_current.transpose(-1, -2), connection_previous
-        )
+        transport = self._step_transport(leaves, intervention=intervention)
         inverse_transport = transport.transpose(-1, -2)
         transported = torch.matmul(
             transport[:, None, None], state.matrices
