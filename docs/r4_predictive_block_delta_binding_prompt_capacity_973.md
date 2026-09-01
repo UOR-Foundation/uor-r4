@@ -437,9 +437,16 @@ V4 blake3:cc9a1c40fe753e269ea31edd804c32b2a0c208ef20fceb1167636d6f28d7da11
 ```
 
 The canonical sorted union contains exactly `2,048` story CIDs and has CID
-`blake3:494e55036f52cc06561186b954930fa7e777a99457fc8da857e61f1450b9f70d`.
+`blake3:c926c19deaae20a17b05fc3c5eddc099324d9b531bbfd83ac992a5ef02ede092`.
 The selector stops at exactly `256` pairs. Its content-derived population and
 commitment CIDs are published after create-once preparation and before any fit.
+
+The first executable-freeze draft listed union CID `blake3:494e5503...` from
+an incorrect prior-only calculation. Before V5 creation, two independent
+read-only reproductions over the four exact population files found `512`
+unique story CIDs in each, zero pairwise overlap, and the `2,048`-entry
+canonical sorted-list CID above. The code and public contract were corrected;
+the erroneous CID was never used to select or seal V5.
 
 The fresh-language slice remains exactly token offsets
 `[156,282,226, 156,532,212)` from the source token stream: `249,986` tokens,
