@@ -883,14 +883,13 @@ def main() -> None:
         _print_result(run_language_path_generation(root))
         return
     if arguments.command == "prepare-paired-h4-prompt-capacity":
-        _print_result(
-            prepare_paired_h4_prompt_capacity(
-                root=root,
-                predecessor_root=arguments.predecessor_root,
-                source_train_path=arguments.source_train,
-                raw_source_path=arguments.raw_source,
-            )
+        prepared = prepare_paired_h4_prompt_capacity(
+            root=root,
+            predecessor_root=arguments.predecessor_root,
+            source_train_path=arguments.source_train,
+            raw_source_path=arguments.raw_source,
         )
+        _print_result(prepared.manifest)
         return
     if arguments.command == "probe-paired-h4-prompt-capacity":
         _print_result(probe_paired_h4_prompt_capacity(root))
