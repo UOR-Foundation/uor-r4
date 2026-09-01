@@ -283,3 +283,31 @@ def default_learned_associative_readout_v3_population() -> Path:
         / "sealed"
         / "population.json"
     )
+
+
+def default_predictive_block_delta_root() -> Path:
+    """Return #973's disposable predictive block-delta campaign root."""
+
+    return model_store_root() / "research" / "issue-973-predictive-block-delta-v1"
+
+
+def default_predictive_block_delta_predecessor() -> Path:
+    """Return the immutable qualified retained-language predecessor."""
+
+    return default_language_path_root()
+
+
+def default_predictive_block_delta_revealed_v4_root() -> Path:
+    """Return the completed, already revealed V4 comparator root."""
+
+    return default_learned_associative_readout_root()
+
+
+def default_predictive_block_delta_frame_sidecar() -> Path:
+    """Return the canonical Rust-exported H4 sidecar inside the new root."""
+
+    return (
+        default_predictive_block_delta_root()
+        / "geometry"
+        / "h4-spin-frames.json"
+    )

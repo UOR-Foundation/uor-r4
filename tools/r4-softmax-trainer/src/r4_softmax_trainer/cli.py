@@ -86,6 +86,10 @@ from .paired_query_binding_campaign import (
     prepare_paired_query_binding_data,
     run_paired_query_binding_preflight,
 )
+from .predictive_block_delta_campaign import (
+    MAXIMUM_UPDATES as PREDICTIVE_BLOCK_DELTA_MAXIMUM_UPDATES,
+    run_predictive_block_delta_preflight,
+)
 from .paths import (
     default_attended_relation_adapter_root,
     default_capacity_root,
@@ -125,6 +129,10 @@ from .paths import (
     default_paired_h4_prompt_capacity_root,
     default_paired_h4_prompt_capacity_source_train,
     default_paired_query_binding_root,
+    default_predictive_block_delta_frame_sidecar,
+    default_predictive_block_delta_predecessor,
+    default_predictive_block_delta_revealed_v4_root,
+    default_predictive_block_delta_root,
     default_research_root,
     default_source_relation_head_root,
     default_source_span_pointer_root,
@@ -141,6 +149,19 @@ from .train import TrainConfig, reveal_sealed_test, run_overfit_smoke, train_mai
 
 def _root(value: str) -> Path:
     return Path(value).expanduser().resolve()
+
+
+def _predictive_block_delta_updates(value: str) -> int:
+    try:
+        updates = int(value)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError("maximum updates must be an integer") from error
+    if not 1 <= updates <= PREDICTIVE_BLOCK_DELTA_MAXIMUM_UPDATES:
+        raise argparse.ArgumentTypeError(
+            "maximum updates must be between 1 and "
+            f"{PREDICTIVE_BLOCK_DELTA_MAXIMUM_UPDATES}"
+        )
+    return updates
 
 
 def _print_result(value: dict[str, Any]) -> None:
@@ -770,6 +791,40 @@ def parser() -> argparse.ArgumentParser:
         "verify-learned-associative-readout",
         help="fresh-process exact re-score of terminal V4 and heldout evidence",
     )
+    predictive_delta = subcommands.add_parser(
+        "preflight-predictive-block-delta",
+        help=(
+            "run #973's sole disposable predictive block-delta expressivity gate "
+            "against the already revealed V4 population"
+        ),
+    )
+    predictive_delta.add_argument(
+        "--predecessor-root",
+        type=_root,
+        default=default_predictive_block_delta_predecessor(),
+        help="immutable qualified retained-language-path root",
+    )
+    predictive_delta.add_argument(
+        "--revealed-v4-root",
+        type=_root,
+        default=default_predictive_block_delta_revealed_v4_root(),
+        help="completed learned-associative root containing the revealed V4 population",
+    )
+    predictive_delta.add_argument(
+        "--frame-sidecar",
+        type=_root,
+        default=default_predictive_block_delta_frame_sidecar(),
+        help="canonical JSON emitted by r4-h4-spin-frame-export",
+    )
+    predictive_delta.add_argument(
+        "--maximum-updates",
+        type=_predictive_block_delta_updates,
+        default=PREDICTIVE_BLOCK_DELTA_MAXIMUM_UPDATES,
+        help=(
+            "disposable optimizer ceiling, bounded to the frozen campaign maximum "
+            f"of {PREDICTIVE_BLOCK_DELTA_MAXIMUM_UPDATES}"
+        ),
+    )
     return command
 
 
@@ -852,6 +907,7 @@ def main() -> None:
         "run-learned-associative-readout",
         "verify-learned-associative-readout",
     }
+    predictive_block_delta_commands = {"preflight-predictive-block-delta"}
     if arguments.root:
         root = arguments.root
     elif arguments.command in capacity_commands:
@@ -886,6 +942,8 @@ def main() -> None:
         root = default_layerwise_normalized_readout_root()
     elif arguments.command in learned_associative_readout_commands:
         root = default_learned_associative_readout_root()
+    elif arguments.command in predictive_block_delta_commands:
+        root = default_predictive_block_delta_root()
     else:
         root = default_research_root()
     if arguments.command == "download":
@@ -1203,5 +1261,16 @@ def main() -> None:
         return
     if arguments.command == "verify-learned-associative-readout":
         _print_result(verify_learned_associative_readout_result(root))
+        return
+    if arguments.command == "preflight-predictive-block-delta":
+        _print_result(
+            run_predictive_block_delta_preflight(
+                root=root,
+                predecessor_root=arguments.predecessor_root,
+                revealed_v4_root=arguments.revealed_v4_root,
+                frame_sidecar_path=arguments.frame_sidecar,
+                maximum_updates=arguments.maximum_updates,
+            )
+        )
         return
     raise AssertionError(f"unhandled command: {arguments.command}")
