@@ -70,3 +70,7 @@ def default_group_retention_root() -> Path:
 
 def default_group_retention_source_root() -> Path:
     return model_store_root() / "research" / "issue-1017"
+
+
+def default_group_retention_decoder_root() -> Path:
+    return model_store_root() / "research" / "issue-973-group-retention-decoder-v1"
