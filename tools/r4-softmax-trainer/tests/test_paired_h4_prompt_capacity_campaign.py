@@ -30,6 +30,12 @@ def _metric(*, ce: float, top1_rate: float) -> dict[str, object]:
 
 class FrozenContractTests(unittest.TestCase):
     def test_population_training_and_fresh_heldout_arithmetic(self) -> None:
+        self.assertEqual(
+            subject.EXPECTED_PROMPT_POPULATION_CID,
+            "blake3:c11a7c935139ca169460b90c01392d7c9e0929e4c10710e76e6c8f74cbdf0340",
+        )
+        self.assertEqual(subject.EXPECTED_PROMPT_LAST_SOURCE_STORY_ORDINAL, 153_977)
+        self.assertEqual(subject.EXPECTED_PROMPT_ELIGIBLE_STORIES, 4_200)
         self.assertEqual(subject.OPTIMIZER_STEPS, 2_730)
         self.assertEqual(subject.TRAIN_WINDOWS, 43_680)
         self.assertEqual(subject.TRAIN_DECISIONS, 5_241_600)

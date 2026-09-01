@@ -134,10 +134,10 @@ PREDECESSOR_RESULT_RELATIVE_PATH = "run/language-path-result.json"
 PREDECESSOR_ARTIFACT_RELATIVE_PATH = "arms/retained/model.safetensors"
 
 EXPECTED_PROMPT_POPULATION_CID = (
-    "blake3:9e041283383713a2ce48037774adb1022f6137d63dedfa4c587bdbee9e9f47c1"
+    "blake3:c11a7c935139ca169460b90c01392d7c9e0929e4c10710e76e6c8f74cbdf0340"
 )
-EXPECTED_PROMPT_LAST_SOURCE_STORY_ORDINAL = 153_162
-EXPECTED_PROMPT_ELIGIBLE_STORIES = 3_964
+EXPECTED_PROMPT_LAST_SOURCE_STORY_ORDINAL = 153_977
+EXPECTED_PROMPT_ELIGIBLE_STORIES = 4_200
 
 FRESH_HELDOUT_SOURCE_OFFSET_TOKENS = 155_281_967
 FRESH_HELDOUT_TOKENS = 249_986
@@ -514,7 +514,10 @@ def prepare_paired_h4_prompt_capacity(
         or population.eligible_stories_examined != EXPECTED_PROMPT_ELIGIBLE_STORIES
     ):
         raise ValueError(
-            "prompt-conditioning population differs from the independent freeze"
+            "prompt-conditioning population differs from the independent freeze: "
+            f"cid={population.population_cid}, "
+            f"last_source_story_ordinal={population.last_source_story_ordinal}, "
+            f"eligible_stories_examined={population.eligible_stories_examined}"
         )
     collision_census = structural_collision_census(predecessor)
     implementation = trainer_implementation_contract()
