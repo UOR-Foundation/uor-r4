@@ -160,3 +160,37 @@ perform no training and use the explicitly adapted artifact loader. Preserve
 generation, general English, reasoning, chat readiness, H4 superiority, softmax
 removal and integer/table lowering remain deferred or unestablished. #973 stays
 open and #954 blocked.
+
+
+## Published preparation
+
+Source and contract freeze: `b3d8dc60`. All **12 focused methods passed**:
+three adapter/state/reconstruction checks, one whole-trainer AST comparison,
+three data/exclusion/access checks, and five decision/interface/world-accounting
+checks. Independent source review found no blocking issue. These checks used
+synthetic inputs; no fitted artifact or historical development payload was read.
+
+The [preparation envelope](r4_zoology_joint_query_1069_preparation.json) binds
+**238 implementation files**, the original construction/vocabulary bytes,
+the complete retained baseline and work ledger, and the declared owner residual.
+Actual preparation audited all 10,240 construction and 1,280 new development
+labels. Fresh development has 768 distinct base/swapped/absent worlds, zero
+world/input overlap with construction or either historical development
+population, all 64 held-out owner-object pairs, and balanced target locations
+and relevant slots. Each historical development population has 1,280 rows and
+768 worlds; the per-history audit records distinguish #1063 and #1067.
+The inherited top-level `historical_development_rows` and
+`historical_development_canonical_worlds` fields refer to the original #1063
+population, not the union; use the per-history records for the two exclusions.
+
+- Preparation: `blake3:e2709d32436f7979aeda795f2ec735d99932cdd1037e7e17321d72a7009ad7e1`
+- Implementation: `blake3:e5436a8c0d8e2e92312721f54164b05269c5a6138a52f54e4574bb3fa7de1e2d`
+- Dataset manifest: `blake3:3597f258750242bd1b9482e234b4ed939375d4a32c08c37a76d1a500cfe9e490`
+- Dataset tree: `blake3:f85ed814f31be179fbe85d6bc08caedb323c742adba0b0a1660ffff330714119`
+- Fresh development: `blake3:cbee180e7e37fe302d9cffd198d7af91ed42ed9851bbbf91e7ee4814d0e0a9b1`
+- Unchanged construction: `blake3:d767fafdf544f01db99d9acb317c76df55e9f9d28f99785d2a6ae62b663731a2`
+
+The frozen behavior counts are owner at least 150/2,048, overall at least
+3,735/8,192, and object at least 447/2,048. Construction must separately reach
+8,111/8,192 before any fresh development model decision. These identities and
+criteria are published before the first optimizer update.
