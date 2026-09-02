@@ -1,6 +1,7 @@
 # Coherent R4 inference of the preserved associative-attention model (#1059)
 
-- **Status:** implementation in progress; fitted-model inference NOT_RUN.
+- **Initial status at contract freeze:** implementation in progress; fitted-model inference NOT_RUN.
+- **Current outcome:** `R4_INTEGRATION_PRESERVED`; complete result and replay appended below.
 - **Authority:** [#1059](https://github.com/UOR-Foundation/uor-r4/issues/1059), native child of #973.
 
 Parent: #973. Prerequisites: completed #1050 and #1057. The user has authorized the next inference-only integration described in #973's latest delivery. Preserve the established ordinary/R4 and retained-attention positives and both learned artifacts; there is no new fit or third continuation window.
@@ -78,3 +79,91 @@ Primary inference, conditional transport control, and fresh-process replay are
 above remain unchanged. Future-read accounting refers specifically to per-query
 transported support; QKV projection and pointwise frame encoding are vectorized
 across the input. Full token coverage does not imply all 120 H4 frames are reached.
+
+## Completed inference and independent replay — 2026-09-02
+
+**Terminal: `R4_INTEGRATION_PRESERVED`.** The implementation frozen at
+`800e7d52` ran unchanged. The first and only primary run passed every declared
+criterion; the conditional transport control ran and met its separately frozen
+strong-sensitivity criterion. A fresh process reproduced the complete inference
+evidence, including output/attention digests, metrics, work, and reached frames.
+
+| Measure | Plain source | Coherent R4 | Inconsistent source transport |
+| --- | ---: | ---: | ---: |
+| Correct / query decisions | 11,900 / 12,000 | 11,900 / 12,000 | 2,307 / 12,000 |
+| Recall | 99.1666666667% | 99.1666666667% | 19.225% |
+| Mean NLL (nats) | 0.051246106465657554 | 0.051246097564697266 | 7.164478190104167 |
+| Top-1 changes versus plain | 0 | 0 | 9,681 |
+
+R4/plain maximum selected-logit difference was `2.002716064453125e-05`
+against the unchanged `0.005` engineering envelope. Maximum attention-weight
+difference was `8.940696716308594e-07` against `1e-5`; mean-NLL absolute
+difference was `8.900960288271698e-09` against `1e-5`. All 12,000 predictions
+were identical, including the same 100 incorrect decisions. Historical #1050
+correct-count reproduction passed; new canonical-order digests were used as
+predeclared. No historical shuffled-order logit identity is claimed.
+
+The destructive control lost `79.94166666666666` percentage points, exceeding
+the predeclared 50-point sensitivity threshold. Its 12,000 decisions, causal
+support, zero future attention weights, and all work counters matched coherent
+R4 except the intervention's changed-frame counters. This is evidence of
+sensitivity to deliberately inconsistent transport, not of geometric superiority.
+
+All 8,192 token leaves were available; inference reached exactly 24 frame
+indices, recorded in the raw result. The native sidecar validates all 120 H4
+matrices. Zero per-query future-source transport reads were recorded; input-wide
+pointwise QKV/frame encoding is not counted as a query reading a future source.
+The stock dense plain path materialized future score slots and masked them; its
+physical future-position-read count remains unknown rather than zero.
+
+Learned tensor state and tied-head identity were unchanged before/after every
+arm. Optimizer updates, training tensor values loaded, checkpoint reads, model
+label arguments, and #1057 model reads were zero. The exact source artifact and
+all implementation/native-frame bindings revalidated after each process.
+
+The run took `13.778159 s`, replay `13.707552 s`,
+combined `27.485712 s` against 900 s. Peak observed RSS
+was `1980219392` bytes (`1.844223 GiB`)
+against 4 GiB. Execution used one CPU process, four Apple Accelerate intra-op
+threads and one inter-op thread; Python 3.12.14 / PyTorch 2.7.1. Timing covers
+the campaign and replay, not earlier build/export/setup, and is not an isolated
+plain-versus-R4 speed comparison.
+
+### Durable evidence
+
+- [Frozen preparation](r4_zoology_coherent_inference_1059_preparation.json):
+  `blake3:bed7eae03c7f3bfa7e2b5ff3786f87d878f42c9eb5d8465b5e37322073cdd588`.
+- [Raw result](r4_zoology_coherent_inference_1059_result.json):
+  `blake3:bdf5a440562bf31a6c0d6d53cef0454270638b87508f0a758aaf9eb3a0031f7d`.
+- Inference evidence CID: `blake3:0b0d6f61ccd1e97402fa67f60e1eaf5eb6ec4daf0583814e0270902177f69727`.
+- [Fresh-process replay](r4_zoology_coherent_inference_1059_replay.json):
+  `blake3:458f6f8817203e57089580d851971d7d32234c5d9e4edf96967984097bd7f181`.
+
+The three JSON files are exact copies of the create-once local records. Source
+weights/data remain in the preserved `.uor-models/research/issue-1050-zoology-release-reproduction`
+artifact store; no weights or training corpus are committed in this delivery.
+The source Zoology test population previously guided stopping and remains open
+development evidence, not an independently sealed generalization result.
+
+### Decision and next action
+
+Preserve the adapter and both learned artifacts. This completes the requested
+#1050 inference integration without a fit or checkpoint selection. The next
+recommended separately scoped step is to apply this adapter unchanged to #1057's
+final block-40 model on its original exact-data population, comparing all 8,192
+query decisions against its retained 8,071-correct reference with a newly declared
+inference control. Its original unrun control status stays historical.
+
+Defer geometry expansion. In this coherent adapter, source encoding, transport,
+and output decoding cancel as coordinate changes in exact arithmetic. Additional
+reachable frames therefore do not by themselves add learned capacity. A later
+expansion needs a named representation, memory, update-law, or score change and
+a matched capacity comparison. No new training, English-context fit, generation,
+#954 correctness, reasoning, exact/table lowering, or product-readiness claim
+follows from this result.
+
+Eight focused synthetic checks (including native export), the native exporter
+build/export, scoped formatting, claim wording, and independent code review
+passed before inference. Broad workspace/BDD/WASM/fuzz/audit/conformance tests
+remained dormant as declared; required queue jobs acknowledge delivery and are
+not additional model or product QA evidence.
