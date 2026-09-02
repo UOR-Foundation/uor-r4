@@ -49,3 +49,27 @@ Commit and publish the implementation, preparation and run binding before the fi
 - [ ] Matched inference, control status, resources/work and fresh-process replay recorded.
 - [ ] Original artifacts and historical modules remain unchanged; zero optimizer updates.
 - [ ] Current direction updated; protected PR merged; issue and parent outcome recorded.
+
+## Pre-inference freeze — 2026-09-02
+
+The implementation at `42d5eb34` and exact predecessor bindings are complete.
+Six new focused checks passed: three development/root/domain/binding checks and
+three preservation/control/accounting checks. Scoped Ruff formatting/lint,
+claim wording, diff hygiene, and independent source review passed. Existing
+#1059 adapter/scorer/native evidence was reused; no inherited tests, native
+build/export, fitted model forward, or training ran during preparation.
+
+The [frozen preparation](r4_zoology_exact_coherent_inference_1061_preparation.json)
+binds 188 implementation files, including all 153 original #1059 files and
+all 54 #1057 trainer records (overlap deduplicated), the three #1059 evidence
+documents, and the new package/tests. The source model and dataset identities
+revalidated unchanged. The model and data roots remain distinct.
+
+- Preparation CID: `blake3:c8e97664f7feab8c83ad15d298620da675bc3f156a9b0dcfcfa98ac69fad6c35`.
+- Implementation tree CID: `blake3:d9272cbf0fd01535cb6b1aa6c6baaee3bdc59a312b0ea66674ccf307328431e6`.
+- Source model CID: `blake3:69af5586eccfceab4214e9f13524eeea578eb3facaea4fdedec89f0b5d217445`.
+- Native frame bundle CID: `blake3:94762441a43b03f596a66131ec34af15bba3afbc2bbc5d28ab7dfdabd9b6d68c`.
+
+Primary comparison, conditional transport control, and fresh-process replay are
+`NOT_RUN` at this freeze. The original thresholds and 900-second combined /
+4 GiB / four CPU-thread policy remain unchanged.
