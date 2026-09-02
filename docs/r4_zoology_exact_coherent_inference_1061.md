@@ -73,3 +73,114 @@ revalidated unchanged. The model and data roots remain distinct.
 Primary comparison, conditional transport control, and fresh-process replay are
 `NOT_RUN` at this freeze. The original thresholds and 900-second combined /
 4 GiB / four CPU-thread policy remain unchanged.
+
+## Completed exact-data inference and replay — 2026-09-02
+
+**Terminal: `EXACT_DATA_R4_PRESERVED`.** The implementation frozen at
+`42d5eb34`, with preparation committed at `6d75643f`, ran without modification.
+The sole matched primary and its conditional transport control passed their
+separately declared criteria. Fresh-process replay reproduced the complete
+inference evidence exactly.
+
+| Measure | Plain | Coherent R4 | Inconsistent source transport |
+| --- | ---: | ---: | ---: |
+| Correct / query decisions | 8,071 / 8,192 | 8,071 / 8,192 | 1,009 / 8,192 |
+| Recall | 98.52294921875% | 98.52294921875% | 12.31689453125% |
+| Mean NLL (nats) | 0.0914115384221077 | 0.0914115309715271 | 8.528378009796143 |
+| Top-1 changes versus plain | 0 | 0 | 7,156 |
+
+Every one of the 8,192 original/R4 predictions was identical, including the
+same 121 incorrect decisions. Plain reproduced the exact historical
+8,071-correct count. Maximum selected-logit difference was
+`2.5272369384765625e-05` against `0.005`; maximum
+attention-weight difference was `2.2351741790771484e-06`
+against `1e-5`; mean-NLL absolute difference was
+`7.450580596923828e-09` against `1e-5`. All frozen
+preservation criteria passed. There was no new 99% training threshold.
+
+The new inconsistent-transport control lost `86.2060546875`
+percentage points, exceeding its separately frozen 50-point sensitivity
+criterion. Complete decisions, zero future attention weights, causal transport
+support, and matched work all passed. This establishes sensitivity to
+inconsistent transport on the previously observed exact-data development
+population. It does not establish H4 superiority or new sealed generalization.
+
+### Exact state, work, and access boundaries
+
+The original final block-40 model retained all learned tensor bytes and the tied
+head. Model-state CID remained `blake3:f2a67ec0cc7ac44f586b815da43efabcc81d444b1bab9954b5536c37cb96ff90`.
+V4096/T120, eight query positions per row, learned positions, normalization,
+residuals, QKV/output biases and softmax stayed unchanged. There were no
+optimizer updates or checkpoint/optimizer/evaluation-RNG reads. The loader
+opened only three development tensor values in their original #1053 container;
+training tensor values and historical physical-binding-control tensors were
+not loaded. No original source artifact or historical implementation was
+rewritten. Labels reached only the scorer.
+
+Both native and control arms admitted `14,868,480` causal
+attention pairs, transported `237,895,680` key blocks and
+the same number of value blocks, across two 512-row batches and two layers.
+The control shifted `14,866,432` source-frame
+positions, of which `11,217,652` changed actual
+frame matrices. Plain separately materialized `29,491,200`
+score slots, including `14,622,720` future
+slots masked to zero attention. Its physical future-source read count remains
+unknown. Native/control per-query transport read no future source; QKV and
+pointwise frame encoding remain vectorized across the input.
+
+The unchanged native map covers 8,192 token IDs and therefore all 4,096 model
+tokens. Inference reached 24 H4 frames. No frame expansion, slicing/redefinition,
+native exporter run, or frame-mechanics rerun occurred. The retained plain
+logits occupied `134,217,728` bytes during the
+conditional comparison.
+
+Canonical rows 0..1023 and new output digests were used as frozen. The original
+shuffled-development logit digest was not reproduced or relabeled. The original
+#1057 `CONTINUATION_MISS` and physical binding-control `NOT_RUN_PRIMARY_MISS`
+remain unchanged; this issue's transport control is a different intervention.
+
+### Resources and durable evidence
+
+The primary/control run took `15.959983 s`; replay took
+`17.834691 s`; combined time was
+`33.794678 s` against 900 s. Maximum observed RSS was
+`2,588,475,392` bytes
+(`2.410706 GiB`) against 4 GiB.
+Both processes used Python 3.12.14 / PyTorch 2.7.1, one CPU process, four Apple
+Accelerate intra-op threads and one inter-op thread. This measures the campaign
+and replay, not isolated plain/R4 speed or preparation/review wall time.
+
+- [Preparation](r4_zoology_exact_coherent_inference_1061_preparation.json):
+  `blake3:c8e97664f7feab8c83ad15d298620da675bc3f156a9b0dcfcfa98ac69fad6c35`.
+- [Raw result](r4_zoology_exact_coherent_inference_1061_result.json):
+  `blake3:ac2ec4d533ac47d25f8eb9dfd7a41147147d73c0e2d9531352d9f9fb2eb84e58`.
+- Inference evidence CID: `blake3:a14e0e6fe0f915acc9f81b446a0ee6da7d3e97723f60c269125de55120399802`.
+- [Fresh-process replay](r4_zoology_exact_coherent_inference_1061_replay.json):
+  `blake3:af6c239ec2d0e11f26f50f74150c992dea345ec21257141fcec1096a573e708e`.
+
+The committed JSON files are exact copies of the create-once local records.
+The six new focused checks, scoped formatting/claim wording/diff checks and
+independent prereveal review passed. Historical #1059 mechanics evidence was
+reused. Broad QA remained dormant; required queue jobs are delivery
+acknowledgements rather than test evidence.
+
+### Decision and next recommendation
+
+Preserve both the #1050 reference and #1057 exact-data model, with their now
+working coherent R4 inference path. This completes the #1061 inference transfer
+without training, model selection or a geometry change.
+
+The next recommended scientific step is a separately frozen small English
+supplied-context binding curriculum under #973 using this working attention
+architecture and adapter. Hold the question fixed while supplied facts change;
+include distractors and swapped/missing-history controls so the answer must
+follow its own supplied context. Freeze lexical encoding, learning dose and
+disjoint construction/development populations before fitting. The retained
+MQAR checkpoint is not an English model, so zero-shot English failure must not
+be used as an attention-existence verdict. This later task needs its own
+bounded learning/serialization contract; no fit or English probe runs here.
+
+Geometry expansion remains deferred. More coherent frame labels alone change
+coordinates, not capacity. No English generation, correctness, reasoning,
+softmax removal, exact/table-native lowering, product chat or release claim
+follows; #973 remains open and #954 stays blocked.
