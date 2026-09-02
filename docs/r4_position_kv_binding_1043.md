@@ -1,6 +1,6 @@
 # Position-preserving R4 causal key/value binding (#1043)
 
-- **Status:** frozen pre-implementation contract
+- **Status:** terminal `INVALID_POSITION_KV_BINDING`; preserved without retry
 - **Parent:** #973
 - **Programme root:** #820
 - **Policy:** `R4PositionPreservingCausalKVBindingV1`
@@ -505,3 +505,113 @@ thread, `478.2424625585554` seconds at four threads, and
 frozen fastest eligible plan.  Preflight recorded `terminal_payload_reads = 0`;
 no run-start, optimizer, fitted artifact, reveal, scoring, or terminal-result
 artifact existed at this boundary.
+
+## One permitted fit and terminal result — 2026-09-02
+
+The sole production fit, reveal, and scoring attempt completed under the frozen
+four-thread Apple Accelerate plan.  A fresh-process verifier then reproduced
+the complete create-once evidence chain and terminal result exactly.
+
+| evidence | value |
+|---|---|
+| completed optimizer steps | `2,730 / 2,730` |
+| fit elapsed | `168.61726004094817` seconds |
+| scoring elapsed | `193.01016108389013` seconds |
+| total elapsed | `361.6274211248383` seconds |
+| final artifact | `1,010,800` bytes |
+| final artifact CID | `blake3:e34c211687076662740bced155b58352d325c79c0543d0f9948b9412b120527c` |
+| fit CID | `blake3:14fc7011738eb11076eacce76fbfae071d75c7ea51556bd03e86dea73ec550ff` |
+| reveal CID | `blake3:bf946e306fe765ed5e5017265dce817012bcc0127bccc0344637762cfdf40d9b` |
+| scoring CID | `blake3:a0a98969f03bad0a13b2fb65984890c41d810f2c1249f3263e419faa23b56488` |
+| result CID | `blake3:96a382d2f6118fbd2883fbee8b383764de0d6098efbf82bf863412c6996d80d0` |
+| terminal | `INVALID_POSITION_KV_BINDING` |
+
+Exact work, causal isolation, artifact replay, and coherent-R4
+full/incremental parity passed.  Provider, teacher, future, and forbidden reads
+were all zero.  Artifact bytes and replay logits were identical.  The sole
+failed mechanics predicate was the coherent-R4/plain maximum logit delta:
+
+| parity predicate | observed | frozen limit | result |
+|---|---:|---:|---|
+| R4/plain attention-weight maximum delta | `1.6689300537109375e-06` | `2e-6` | pass |
+| R4/plain logit maximum delta | `2.193450927734375e-05` | `2e-5` | **fail** |
+| R4/plain top-1 | identical on `257,136` decisions | identical | pass |
+| R4 full/incremental logit maximum delta | `1.239776611328125e-05` | `2e-5` | pass |
+| R4 full/incremental top-1 | identical | identical | pass |
+
+The frozen decision order makes any failed mechanics predicate terminally
+invalid before the scientific branches are interpreted.  The historical
+result remains invalid; it is not retroactively widened or reclassified.
+
+### Numerical root-cause audit
+
+The coherent R4 equations and indices are correct.  The sidecar's maximum f32
+orthogonality residual is `9.1763788e-09` (`2.5145e-17` when evaluated from the
+f64 source).  The plain path performs one 12-lane f32 contraction.  The R4 path
+performs frame composition, separate query/key lifts, transported block
+contractions, value transport, and reconstruction.  Those algebraically equal
+operations have a different f32 association order.  Their small rounding
+difference passes the attention criterion and is then amplified by the second
+normalization/residual block and the 4,096-way tied output projection.
+
+The terminal maximum is exactly `23 * 2^-20`; the frozen limit lies at about
+`20.97 * 2^-20`.  Targeted fitted-model diagnostics found no incorrect
+transport: directly lifting a key into the current frame produced the same
+`3.8146973e-06` score discrepancy as the explicit source transport.  A naive
+f64 internal variant did not restore parity against the differently rounded
+plain-f32 reference.  This is expected forward-error amplification, not a
+causal, cache, masking, frame, or transport defect.
+
+Changing the observed threshold would be post-reveal tuning.  Changing the
+contraction implementation would change the frozen implementation identity.
+Either action is forbidden for this campaign, so the production root, single
+reveal, artifact, scoring envelope, and invalid result remain immutable.
+
+### Decision-value audit and bounded construction diagnostic
+
+A separate scoring-only parity repair would not change the project action.
+Without modifying the artifact, a read-only score of the already-open
+construction populations produced:
+
+| construction population | final top-1 | final NLL |
+|---|---:|---:|
+| MQAR | `30 / 87,360` (`0.03434%`) | `7.907718394352839` |
+| English with supplied history | `578 / 8,190` (`7.05739%`) | `3.364303203671261` |
+| English no-history abstention | `2,730 / 2,730` (`100%`) | `0.03913288011655703` |
+
+These construction-only observations are a design diagnostic, not a
+reinterpretation of the invalid sealed terminal metrics.  They show that the
+frozen optimization recipe learned the easy no-history abstention and
+preserved/improved ordinary language, but did not fit associative retrieval on
+its own training population.  A parity-only rescore cannot change those
+weights and therefore has no decision value.  No recovery run, second reveal,
+optimizer, generation, recurrence compression, lowering, correctness, or
+reasoning work is authorized from #1043.
+
+## Direction after #1043
+
+The result does not invalidate ordinary causal softmax attention, its coherent
+R4 gauge realization, or the qualified retained-language baseline.  It rejects
+this exact one-epoch mixed optimization recipe as a route to supplied-context
+binding and leaves #954 blocked.
+
+The next research contract should be a new issue, not an adjustment to #1043.
+Before sealing another terminal population it should require a cheap,
+construction-only capability ladder:
+
+1. make causal KEY, VALUE, QUERY, and abstention roles explicit in the input
+   representation while preserving one exact K/V slot per position;
+2. establish near-exact MQAR fitting and assignment-disjoint development
+   transfer under an associative-first curriculum;
+3. add natural-English binding and then language replay only after the prior
+   rung passes, measuring gradient conflict instead of forcing all objectives
+   through one clipped mixed update from step one;
+4. keep one fitted weight set and ordinary stable-softmax attention, then
+   execute its R4 realization with a predeclared ULP/forward-error parity
+   contract derived before fitted-scale evaluation; and
+5. freeze a new unseen terminal population only after the open development
+   mechanism works.
+
+That sequence diagnoses representation and optimization before another sealed
+campaign.  It does not add recurrence, resonance replacement, generation, or
+more corpus volume until position-preserving binding itself works.
