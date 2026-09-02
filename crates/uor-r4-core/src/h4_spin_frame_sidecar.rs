@@ -11,12 +11,12 @@ use serde::{Deserialize, Serialize};
 
 use crate::bounded_global_exact_spin_attention::ExactSpinState;
 use crate::canonical_lexical_ingestion::{
-    CanonicalLexicalError, OpaqueH4TableIndex, validate_h4_binary_icosahedral_closure,
+    validate_h4_binary_icosahedral_closure, CanonicalLexicalError, OpaqueH4TableIndex,
 };
-use crate::helm_d_r4_attention::{HelmDR4AttentionError, canonical_registered_h4_spin_frames};
+use crate::helm_d_r4_attention::{canonical_registered_h4_spin_frames, HelmDR4AttentionError};
 use crate::r4_group_addressed_retention::{
-    R4_GROUP_MAX_TOKEN_ID, R4_GROUP_SCRAMBLE_POLICY, R4GroupGeometryArtifactV1,
-    R4GroupGeometryError,
+    R4GroupGeometryArtifactV1, R4GroupGeometryError, R4_GROUP_MAX_TOKEN_ID,
+    R4_GROUP_SCRAMBLE_POLICY,
 };
 
 pub const H4_SPIN_FRAME_SIDECAR_SCHEMA: u32 = 1;
