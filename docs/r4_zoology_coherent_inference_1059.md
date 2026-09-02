@@ -116,8 +116,8 @@ pointwise QKV/frame encoding is not counted as a query reading a future source.
 The stock dense plain path materialized future score slots and masked them; its
 physical future-position-read count remains unknown rather than zero.
 
-Learned tensor state and tied-head identity were unchanged before/after every
-arm. Optimizer updates, training tensor values loaded, checkpoint reads, model
+Learned tensor state and tied-head identity were unchanged before/after
+inference. Optimizer updates, training tensor values loaded, checkpoint reads, model
 label arguments, and #1057 model reads were zero. The exact source artifact and
 all implementation/native-frame bindings revalidated after each process.
 

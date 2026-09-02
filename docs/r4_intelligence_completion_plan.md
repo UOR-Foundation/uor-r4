@@ -11,7 +11,7 @@
   `79.9417` percentage-point loss at equal causal support and work. Learned
   weights and tied head stayed unchanged; zero optimizer updates ran. Exact
   fresh-process replay passed. The combined CPU run and replay took `27.49 s`
-  with peak RSS `1.845 GiB` on four Apple Accelerate threads.
+  with peak RSS `1.844 GiB` on four Apple Accelerate threads.
 
   This establishes preserved learned associative behavior and transport-path
   sensitivity on the retained open Zoology population. It does not establish H4
