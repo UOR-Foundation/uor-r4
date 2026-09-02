@@ -14,32 +14,23 @@ local hardware. The project is testing whether language context, inference,
 and reasoning can emerge from routes through a canonical geometric memory. The
 target serving engine uses no Ollama, hosted model, or source-model weights.
 
-> **Latest copied-attention control result (2026-09-02):** #1049 executed the
-> credited ICLR24 Zoology one-head, width-64 causal-softmax cell carried forward
-> unchanged from #1047. C0 again passed literal-source loader/model goldens,
-> initialization replay, causal-prefix/query-only parity, and the disposable
-> 32-row `128/128` overfit. The all-core 8-thread CPU plan completed scaled C1
-> in `195.201318 s`.
->
-> C1 nearly memorized construction at `32,758/32,768` (`99.969482%`), but
-> assignment-disjoint development peaked at `999/4,096` (`24.389648%`) and
-> finished at `980/4,096` (`23.925781%`). The verdict is
-> `SCALED_SOURCE_CALIBRATION_MISS`; C2 and binding permutation are
-> `NOT_RUN_C1_MISS`. A read-only diagnosis found `4,089/4,096` predictions
-> inside the row's four admitted values, while key-specific binding remained at
-> the four-choice chance boundary. Result CID is
-> `blake3:9b36540d81d0967a3f7e2ccabed80900d31c904b6c747d9ba0d539b325b13373`.
-> This is positive copied causal-attention mechanics at C0 and a negative
-> scaled binding result at C1—not an R4/geometric-attention verdict.
->
-> The exact released positive used 100,000 construction rows, batch 512, and
-> the best of four frozen learning rates; #1049 used 8,192, batch 64, and one
-> rate. [#1050](https://github.com/UOR-Foundation/uor-r4/issues/1050) freezes
-> one executable-source reproduction; only its pass can return the programme
-> to C2. Modulo-256
-> remains the intended substrate for discrete roles, wheel/table operations,
-> and later lowering, not continuous softmax normalization. See the
-> [#1049 record](docs/r4_zoology_mqar_measured_wall_1049.md).
+> **Latest transfer result (2026-09-02):** #1053 completed its one frozen run
+> on the exact #1045 bytes: `984/8,192 = 12.01171875%` assignment-disjoint
+> development top-1, NLL `6.7966416`, at epoch 64. Terminal
+> `STOCK_CELL_TRANSFER_MISS`; the conditional binding control was not run.
+> Four CPU threads with Apple Accelerate were measured fastest; primary wall
+> was `324.061369 s`. Fresh-process verification reproduced the final result.
+> This is a bounded population/training-recipe miss, not an attention failure:
+> its cosine schedule ended after 1,024 updates, versus 3,920 updates at
+> #1050's positive stop. The next recommendation is one separately frozen
+> optimizer-clock correction on unchanged data/model, with the source's
+> 196-update schedule cadence and a 3,920-update cap. Matching updates is not
+> matching query dose or work (eight versus four K/V pairs). No retry or R4
+> change was made. See the [#1053 record](docs/r4_zoology_exact_transfer_1053.md).
+> #1050's ordinary causal-softmax attention remains established at
+> `99.1666667%` held-out-row recall; it does not establish geometric advantage,
+> generation, reasoning, or exact lowering. See the
+> [#1050 record](docs/r4_zoology_release_reproduction_1050.md).
 
 > **Predecessor open role-tagged associative result (2026-09-02):** #1045
 > completed the full 64-epoch R1 cap and stopped at
@@ -67,8 +58,9 @@ target serving engine uses no Ollama, hosted model, or source-model weights.
 > but it was not a stock Zoology replication: the role embedding, inherited
 > decoder, population loader, projection path, and other mechanics materially
 > differ. #1047 subsequently integrated the released ICLR24 Zoology
-> causal-softmax cell and loader, and #1049 executed its scaled source-native
-> calibration under the measured CPU wall, as reported above. Modulo-256 remains relevant to discrete role identities,
+> causal-softmax cell and loader. #1049's reduced calibration missed, while
+> #1050's released-configuration reproduction passed, as reported above.
+> Modulo-256 remains relevant to discrete role identities,
 > tables, and later lowering; it is not a substitute for continuous probability
 > normalization. See the
 > [#1045 record](docs/r4_role_tagged_associative_curriculum_1045.md).
