@@ -158,3 +158,155 @@ binds 211 implementation files, including all 199 predecessor records:
 - Retained model: `blake3:a4eb5ef76c387ca6ebe9f185b1a5ad023c81291ce4cc9000bb5d23248aaef282`
 
 The preparation and this section were published before construction inference.
+
+## Executed result (2026-09-02)
+
+Terminal: `CONSTRUCTION_DIAGNOSTIC_COMPLETE`; descriptive follow-up selector:
+`QUESTION_READOUT`. The old construction score reproduced in all 13 recorded
+fields, including every selected vocabulary logit, prediction, attention
+digest, and both NLL reductions. Accuracy remains `2,396/8,192 = 29.2480%`;
+this diagnostic performs no learning and does not revise #1063's negative.
+
+The [raw result](r4_zoology_english_diagnostic_1065_result.json) and
+[fresh-process replay](r4_zoology_english_diagnostic_1065_replay.json) record
+identical complete evidence. Run/replay PIDs were `9725` and `9734`. Recorded
+execution times were `1.770481625 s` and `1.663344875 s`, or
+`3.433826875 s` combined. Peak RSS was `832,045,056 bytes = 0.774902344 GiB`,
+below the frozen 2-GiB ceiling. Runtime was Python 3.12.14, PyTorch 2.7.1,
+CPU Apple Accelerate, eight threads and one inter-op thread.
+
+### Actual answer categories
+
+| Predicted category | Count across 8,192 supported rows |
+| --- | ---: |
+| Correct target | 2,396 |
+| Same-owner, wrong-object fact | 1,443 |
+| Same-object, wrong-owner fact | 1,425 |
+| Unrelated fact location | 1,641 |
+| `unknown` | 1,287 |
+| Location absent from the history | 0 |
+| Other vocabulary output | 0 |
+
+Thus `6,905/8,192 = 84.2896%` of answers selected a location present in the
+history; the remaining `15.7104%` answered `unknown`. This shows a restricted
+output pattern on this population, not reliable owner-object binding or
+general lexical understanding.
+
+For q0, where each confound has exactly one opportunity, the 2,253 in-history
+errors divide into same-owner `841/2,253 = 37.3280%`, same-object
+`834/2,253 = 37.0173%`, and unrelated `578/2,253 = 25.6547%`. Neither
+attribute-confound category has a majority. An additional 641 q0 answers are
+`unknown`, constituting `641/2,894 = 22.1493%` of all q0 errors. In the crossed
+q1 strata, the missing same-object confound for same-owner questions and the
+missing same-owner confound for same-object questions both have zero eligible
+rows/facts and unavailable rates. The two unrelated facts are counted as two
+opportunities, not one.
+
+The crossed q0 strata still contain structure: in same-owner question groups,
+the same-owner confound contributes `601/1,138 = 52.8120%` of in-history
+errors; in same-object groups, the same-object confound contributes
+`585/1,115 = 52.4664%`. These type-specific concentrations balance in the
+predeclared pooled q0 selector. Absence of a universal owner/object majority
+does not mean absence of attribute effects.
+
+### Displayed positions
+
+Displayed positions below are numbered 1–4 for readability; raw JSON uses
+zero-based slots. Each slot has exactly 2,048 target exposures.
+
+| Displayed fact | Selections among 6,905 in-history answers | Selection share | Correct when target is there |
+| --- | ---: | ---: | ---: |
+| 1 | 1,917 | 27.7625% | 680 / 2,048 |
+| 2 | 1,704 | 24.6778% | 599 / 2,048 |
+| 3 | 1,773 | 25.6770% | 592 / 2,048 |
+| 4 | 1,511 | 21.8827% | 525 / 2,048 |
+
+There is a modest positional association; there is no displayed-slot majority.
+The selector therefore does not prioritize a single-position explanation.
+
+### Responses to the question and the facts
+
+| Matched comparison | Pairs | Answer changed | Both answers correct |
+| --- | ---: | ---: | ---: |
+| Question changes; facts fixed | 4,096 | 122 (2.9785%) | 20 (0.4883%) |
+| Object changes in question; owner fixed | 2,048 | 33 (1.6113%) | 6 (0.2930%) |
+| Owner changes in question; object fixed | 2,048 | 89 (4.3457%) | 14 (0.6836%) |
+| Queried locations exchanged; question fixed | 4,096 | 1,134 (27.6855%) | 247 (6.0303%) |
+
+The dominant observation is `3,974/4,096 = 97.0215%` question-pair top-1
+invariance despite different correct answers. Raw logits are not completely
+constant: their full-vocabulary mean absolute change is `0.013731617`, maximum
+`0.253464222`. However, the fixed-target question contrast is positive in
+2,040 pairs and negative in 2,056, with mean `0.0000143708894` and median
+`-0.0000784397125`. The change has no consistently helpful target direction
+under this summary. It is not merely a strong correct-direction signal hidden
+under an unchanged winner.
+
+Location exchanges cause larger changes, with full-vocabulary mean absolute
+difference `0.032178366` and maximum `1.790657043`, yet only 247 pairs have both
+answers correct. Their target contrast is positive in 2,053 and negative in
+2,043. Question and location contrast means are algebraically related by the
+quartet design and are **not independent corroborating measurements**.
+
+The fixed first quartet illustrates the behavior. Its history places Leon's
+key in the basket, Liam's key in the cabinet, Mila's coin in the locker, and
+Liam's toy in the trunk. Asking about Liam's key or toy, before or after
+exchanging their cabinet/trunk assignments, yields `basket` in all four rows.
+The required answers are respectively `cabinet`, `trunk`, `trunk`, `cabinet`.
+
+### Interpretation and next recommendation
+
+The predeclared `QUESTION_READOUT` branch follows because neither the position
+nor attribute-confound majority flag fires, while question invariance does.
+This is a behavioral localization, not proof of an internal bottleneck. It does
+not distinguish absent query information from information lost or outweighed
+later in the computation.
+
+The next recommendation is one controlled **readout-placement learning
+experiment**: move the selected answer readout from the constant colon at
+position 40 to the queried object word at position 37. Keep the ordinary
+two-layer attention cell, lexical construction rows, labels, seed, optimizer
+and fixed dose matched. That exposes one query attribute directly at the
+readout, with the queried owner already in its causal prefix, resembling the
+direct query-key access in the successful MQAR cell. This is a concrete
+hypothesis to test, not a demonstrated repair. It requires a separate frozen
+contract; this issue performs zero such training. Any new transfer claim must
+use a separately frozen, previously unexamined development population rather
+than treating #1063's disclosed development rows as fresh evidence.
+
+The sole change would be the supervised answer position `40 -> 37` in a fresh
+seed-123 fit, not an inference-time move of the already-trained weights.
+Position 37's literal next input token is `?`; its proposed output target is
+an explicit supervised answer label. Report both question types separately:
+direct object access may assist object discrimination while owner distinction
+must still be learned. If the fixed construction fit succeeds, evaluate the
+single final artifact on the new frozen development population. If it still
+misses, reject readout placement as sufficient and retain that result without
+extra dose. This proposal changes neither geometry nor the ordinary attention
+cell.
+
+Preserve the original artifact and all previous attention positives. Geometry
+expansion remains deferred until the language query/readout path learns this
+binding task. Broad generalization, geometric superiority, reasoning, chat
+readiness and integer/table lowering remain unestablished.
+
+### Retained identities
+
+- Result: `blake3:65b23631b10fe62b215411932cd9fe45f76b43d6b8503d0f2e74dc3d256c9b61`
+- Evidence: `blake3:45ee741e2262afbe9e7909efbd8f3139f924fedea462a96b08af577fc54bb988`
+- Replay: `blake3:7222a680c300552ab097ce184500c90c0e44ede8248c4c3f752aa09f4232c0ca`
+- Supported tensor population: `blake3:eb9b8000be8e0ced9877e13c49ef243cf0b4492021cb80bab6247cd3c3ce2be5`
+- Unchanged model state: `blake3:79f2d4fcb3b185cc6e65a3bf403585bc3cba2416000c128feac82c3dde32804a`
+
+The local evidence directory is
+`/Users/casey.allard/uor-r4/.uor-models/research/issue-1065-zoology-english-diagnostic`.
+The original #1063 model, checkpoint and data remain in their source directory.
+Optimizer updates, new development model decisions, development payload reads,
+checkpoint/optimizer/RNG-state reads, native frame payload reads, new data rows
+and geometry changes are all zero for this diagnostic. No generation ran.
+
+Independent evidence review recomputed the three new canonical envelopes,
+evidence hash, all 13 source-score comparisons, 219 permitted file records,
+category denominators, paired summaries, state/runtime/resource bindings and
+the predeclared focus. No blocking findings remained. The reviewer ran no
+fitted model or additional diagnostic pass.
