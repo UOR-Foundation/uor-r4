@@ -468,3 +468,40 @@ The permitted test boundary includes the three matching model/data/campaign
 files plus one focused CLI lifecycle-registration test.  No production model,
 population size, optimizer setting, seed, fit count, or language threshold was
 changed by this amendment.
+
+## Frozen preparation and preflight — 2026-09-02
+
+The implementation was committed and pushed at `1d4ff2a7` before the production
+campaign root was created.  The environment was synchronized once from the
+committed `uv.lock`; no trainer module, dependency lock input, or environment
+was changed between preparation and preflight.
+
+- production root:
+  `/Users/casey.allard/uor-r4/.uor-models/research/issue-1043-position-kv-binding`
+- preparation CID:
+  `blake3:667684442ecdfa9f8bedc4ed82cc0bf13d8603130b95fcc77069fe75801ecc6f`
+- implementation tree CID:
+  `blake3:b8388e64b93fd0d88a5b138013a68cb1e54ec3cac33cb26576395c7fd2188e74`
+- data-manifest CID:
+  `blake3:8b5ace868fa9c81ea2f7ab8066cb29a04f14bbda19b9475b2974a8c8b7475f0d`
+- preflight CID:
+  `blake3:d96fdfba040d6769754e376f4ce4b4af740a996b305ae06952afcaa7eff7d551`
+- selected CPU plan: `cpu-accelerate-4t`, one process, four Apple Accelerate
+  threads, plan CID
+  `blake3:4b7678db9954d18a4bf3728504fd80bcf380d5b9b52d120dc3008216bb4ce548`
+
+Preflight passed.  The direct serialization oracle recovered all 8,192 MQAR
+decisions and all 512 English decisions with zero ambiguous, missing, or
+overlength records.  The measured coherent-R4 versus plain maximum attention
+weight delta was `5.364418029785156e-07`, the maximum logit delta was
+`1.5735626220703125e-05`, and top-1 was identical.  The measured coherent-R4
+full versus incremental maximum logit delta was `1.2874603271484375e-05`, with
+identical top-1.  Every future/forbidden/provider/teacher read counter was zero.
+
+The measured total projections, including fit, reveal/load, all terminal arms,
+parity, replay, and result creation, were `764.1552486672299` seconds at one
+thread, `478.2424625585554` seconds at four threads, and
+`641.1463332443964` seconds at eight threads.  Four threads was therefore the
+frozen fastest eligible plan.  Preflight recorded `terminal_payload_reads = 0`;
+no run-start, optimizer, fitted artifact, reveal, scoring, or terminal-result
+artifact existed at this boundary.
