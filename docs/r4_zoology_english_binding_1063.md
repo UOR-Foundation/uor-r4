@@ -178,3 +178,119 @@ The [raw preparation envelope](r4_zoology_english_binding_1063_preparation.json)
 contains the complete file inventory, lexical/data audit, fixed decisions and
 learning/resource policy. Preparation validates development semantics; the
 optimizer receives no development rows or decisions.
+
+## Fixed-dose result and exact replay (2026-09-02)
+
+The complete frozen fit finished with `FIT_COMPLETE`; the scientific terminal
+is **`ENGLISH_BINDING_CONSTRUCTION_MISS`**. The optimizer made exactly 3,920
+updates and 2,007,040 single-answer presentations, comprising 1,846,452
+supported and 160,588 unknown presentations. It received zero development
+decisions. The final artifact was retained without a checkpoint substitution,
+extra dose or new seed.
+
+| Final-artifact measurement | Observed | Frozen requirement |
+| --- | ---: | ---: |
+| Construction supported answers | 2,396 / 8,192 = 29.2480% | 8,111 / 8,192 |
+| Development supported answers | 218 / 1,024 = 21.2891% | 973 / 1,024 |
+| Complete four-answer groups | 0 / 256 | 231 / 256 |
+| Complete same-owner groups | 0 / 128 | 116 / 128 |
+| Complete same-object groups | 0 / 128 | 116 / 128 |
+| Development unknown answers | 37 / 256 = 14.4531% | 244 / 256 |
+
+Construction supported NLL was `1.6081310920417309`. Development supported
+NLL was `1.6934579554363154`, unknown NLL `1.5795006966218352`, and pooled NLL
+`1.6706665277481079`. The pooled 255/1,280 accuracy is not a substitute for the
+separate supported and unknown results above.
+
+The question/history contrasts localize the visible behavioral failure:
+changing the question while retaining the same facts changed the prediction
+in only `12/512 = 2.34375%` of comparisons. Changing the paired location
+assignments with a fixed question changed it in `106/512 = 20.703125%`.
+Changed predictions are diagnostic counts, not necessarily correct answers;
+none of the 256 groups had all four answers correct. The swapped history
+retained the old answer 109/512 times, and the missing-binding history retained
+the original answer 57/256 times. The raw result retains all grouped target
+and prediction IDs and the complete quartet correctness-pattern histogram.
+
+The first frozen example illustrates the problem without selecting a favorable
+case. Its facts include `omar put the shoe in the pouch.` and
+`omar put the coin in the crate.`, plus `nora put the shoe in the cabinet.` and
+an unrelated distractor. Asking about Omar's shoe should produce `pouch`;
+asking about his coin should produce `crate`. The model produced `cabinet`
+for both, and kept doing so after their locations were swapped and after
+Omar's shoe binding was removed. It did not reliably use the requested pair.
+
+Because the language criteria missed, coherent R4 inference and its
+inconsistent-transport control are **`NOT_RUN_ENGLISH_BINDING_MISS`**. This is
+the predeclared conditional action. The previous #1059/#1061 preservation and
+transport-sensitivity results remain intact; #1057's original
+`NOT_RUN_PRIMARY_MISS` control remains historical. No geometry expansion,
+generation, table/integer lowering or further learning ran.
+
+The eight-update admission passed at mean `0.07179862499981482 s/update`, with
+`411.09527624909447 s` projected remaining including the evaluation allowance.
+Actual fit time was `247.1106636249997 s`; final scoring took
+`1.1293503750002856 s` and fresh-process replay `1.1256050000001778 s`.
+The combined measured time was `249.36561916699975 s`, with maximum peak RSS
+`521,437,184 bytes = 0.485626220703125 GiB`. Execution used one CPU process,
+eight Apple Accelerate threads and one inter-op thread. No hardware or runtime
+limit explains this terminal.
+
+Exact fresh-process replay passed for the complete final-artifact evidence,
+including predictions, full-vocabulary logit and attention digests, metrics,
+conditional decisions and examples. Scoring/replay made zero optimizer
+updates, preserved learned tensor identity and produced zero future attention
+weights. Replay did not load optimizer/checkpoint RNG state or prior models.
+
+- Fit CID: `blake3:7c857e5b8a1506cdab8db7d858428cb78639e10fb419b51396192d3e8aa90a79`.
+- Final artifact (1,217,024 bytes): `blake3:a4eb5ef76c387ca6ebe9f185b1a5ad023c81291ce4cc9000bb5d23248aaef282`.
+- Learned tensor state: `blake3:79f2d4fcb3b185cc6e65a3bf403585bc3cba2416000c128feac82c3dde32804a`.
+- Result CID: `blake3:aaca100c5c2b8abfb126937523c5cce44bb7e6ca2eb8d48260f42e9281606e0f`.
+- Exact evidence CID: `blake3:50a8cedfaad543dbc6e974d3eb56c9fabad7dc93d7ccf1c3a19cb64e27927ecb`.
+- Replay CID: `blake3:dd5984c22d507faa1e2cea0f9b0c8051fbd3ec923cf53c896768e62708295e02`.
+
+Raw committed records: [fit](r4_zoology_english_binding_1063_fit.json),
+[result](r4_zoology_english_binding_1063_result.json), and
+[replay](r4_zoology_english_binding_1063_replay.json). The local evidence root is
+`/Users/casey.allard/uor-r4/.uor-models/research/issue-1063-zoology-english-binding`;
+it retains the exact data, final model, optimizer/RNG/sampler checkpoint and
+execution logs. Code/data/decision bindings did not change after preparation.
+
+## Interpretation and next action
+
+The miss is already present on construction examples. It therefore cannot be
+explained solely by held-out combinations, and it is not a test of whether
+ordinary causal attention or coherent R4 transport exists. This fixed lexical
+recipe did not learn the needed owner-object binding.
+
+The source comparison identifies additional computations introduced by the
+English surface. Accepted MQAR puts a single query-key token directly at the
+supervised readout position, with adjacent key/value facts. Here the question
+owner is at position 35, object at 37 and readout at the constant colon at 40;
+each fact separates its owner, object and location. In evaluation mode, the
+first-layer query at 40 begins from the same colon-plus-position embedding in
+every row. The model must gather the question, compose both lexical attributes
+and associate the separated fact fields before copying the location. The
+source results did not establish learning of those added compositions. This
+is a code-level distinction, not proof that two layers cannot perform them.
+
+The supported phase also has 1,204,224 supervised queries, versus 8,000,000 in
+#1050's passing source run. Equal optimizer updates do not equate supervision
+or task difficulty. No conclusion about sufficient training dose or an
+architectural capacity ceiling follows from this one run.
+
+The next recommendation is one separately frozen, construction-only
+behavioral diagnostic on the retained final artifact, with zero training:
+classify selected locations as target, same-owner distractor, same-object
+distractor, unrelated fact or outside-history/unknown; then stratify the
+question and location-swap responses by question type and fact slot. That can
+distinguish weak use of owner, object or question information from a fixed
+position preference before selecting a narrowly targeted learning/readout
+change. The current construction log contains aggregates/digests only, so this
+diagnostic requires a new bounded inference contract; it has not been run or
+silently added to #1063. Additional geometry is deferred.
+
+For precision, the contract's balance wording refers to question-pair types,
+location targets and relevant fact slots. Individual owner/object occurrence
+counts are recorded in the preparation audit; they are not claimed identical.
+#973 remains open and #954 remains blocked.
