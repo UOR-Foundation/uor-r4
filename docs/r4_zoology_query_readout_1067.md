@@ -184,3 +184,164 @@ construction and vocabulary CIDs remain exactly those of #1063.
 These bindings and the decision contract were published before the first
 training update. The fresh development population had zero model decisions
 at publication.
+
+
+## Measured result (2026-09-02; after the frozen fit)
+
+**Terminal: `QUERY_OBJECT_READOUT_CONSTRUCTION_MISS`, with a substantial partial
+improvement.** The single admitted fit completed all 3,920 updates. Its final
+artifact scored **3,735/8,192 = 45.5933%**, compared with the retained
+2,396/8,192 = 29.2480%: **1,339 additional correct answers, +16.3452 percentage
+points**. Construction NLL fell from 1.6081310920 to 1.3790687658 nats
+(delta −0.2290623263). The frozen 8,111-correct construction criterion was
+missed. No additional updates or alternative checkpoints were evaluated.
+
+Raw evidence: [fit and complete work ledger](r4_zoology_query_readout_1067_fit.json),
+[result and all diagnostics](r4_zoology_query_readout_1067_result.json), and
+[independent-process replay](r4_zoology_query_readout_1067_replay.json).
+
+### What changed behaviorally
+
+Each question pair holds all four displayed facts fixed and changes one query
+attribute. Same-owner pairs change the object; same-object pairs change the
+owner. A changed answer alone is not a correct binding, so both-correct counts
+are reported beside responsiveness.
+
+| Construction measurement | Colon readout, #1063/#1065 | Query-object readout, #1067 |
+| --- | ---: | ---: |
+| Supported answers correct / 8,192 | 2,396 (29.2480%) | 3,735 (45.5933%) |
+| Object-changing question pairs: changed / 2,048 | 33 (1.6113%) | 1,413 (68.9941%) |
+| Object-changing question pairs: both correct / 2,048 | 6 (0.2930%) | 447 (21.8262%) |
+| Owner-changing question pairs: changed / 2,048 | 89 (4.3457%) | 193 (9.4238%) |
+| Owner-changing question pairs: both correct / 2,048 | 14 (0.6836%) | 47 (2.2949%) |
+| All question pairs: both correct / 4,096 | 20 (0.4883%) | 494 (12.0605%) |
+| All question pairs: invariant / 4,096 | 3,974 (97.0215%) | 2,490 (60.7910%) |
+| Fixed-question location-swap pairs: both correct / 4,096 | 247 (6.0303%) | 1,216 (29.6875%) |
+
+Correct individual answers increased in both question types: same-owner from
+1,213 to 2,029 of 4,096; same-object from 1,183 to 1,706 of 4,096. Nevertheless,
+owner changes still leave 1,855/2,048 = 90.5762% of predictions unchanged.
+The mean fixed-target question-logit contrast is 1.8402354482 for object
+changes and 0.0283599555 for owner changes. These are descriptive logits,
+not calibrated capability scores. The quartet design makes the corresponding
+mean question and location-swap contrasts algebraically linked; they are not
+independent corroboration.
+
+The frozen descriptive focus is now **`OWNER_DISAMBIGUATION`**. Among the
+4,096 q0 rows, where both attribute confounds are equally available, there
+are 2,306 errors, including 2,131 in-history errors. Of those in-history errors,
+1,439 (67.5270%) choose the same object with the wrong owner, 386 choose the
+same owner with the wrong object, and 306 choose the unrelated fact. The other
+175 errors answer unknown. This asymmetry supports the next design choice;
+it does not identify an internal causal failure.
+
+Across all 8,192 supported answers, output categories are target 3,735,
+same-owner confound 733, same-object confound 2,285, unrelated fact 1,109,
+and unknown 330. No answer selects an absent location or another vocabulary
+ID. Thus 7,862/8,192 = 95.9717% select a location actually in the history.
+
+**Position bias remains material.** The four displayed slots receive 960,
+3,158, 1,063 and 2,681 in-history selections, respectively, despite exactly
+2,048 target exposures per slot. No single slot exceeds the diagnostic's
+50% flag, but human-numbered slots **2 and 4 together account for
+5,839/7,862 = 74.2686%** of in-history outputs. The false single-slot flag
+therefore does not establish position independence. Correct answers by target
+slot are 413, 1,486, 485 and 1,351 of 2,048 each.
+
+A fixed first-quartet example makes the partial gain concrete. The history is
+“leon put the key in the basket. liam put the key in the cabinet. mila put the
+coin in the locker. liam put the toy in the trunk.” The new model answers
+Liam's key with **locker** (wrong) and Liam's toy with **trunk** (correct).
+After swapping the locations of Liam's key and toy, it still answers the key
+with locker, but correctly changes the toy answer to **cabinet**. The retained
+colon-readout baseline answered basket in all four cases. This is one fixed
+illustration of the aggregate result, not a selected capability demonstration.
+
+### Work, access and exact replay
+
+The fit used 2,352 supported-phase and 1,568 mixed-phase updates at batch 512:
+2,007,040 presentations, comprising exactly **1,846,452 supported and 160,588
+unknown** presentations. This matches #1063's complete work ledger. Full
+41-token forward tensors, seed, sampler/dropout random sequence and source
+training implementation remained matched. The same eight-thread Apple
+Accelerate CPU configuration used Python 3.12.14 and PyTorch 2.7.1.
+
+The first eight updates passed admission: mean step 0.081619 seconds,
+projected remaining total 459.12 seconds, and peak RSS 490,897,408 bytes.
+Actual fit time was 286.5381 seconds; final evaluation 1.8947 seconds and replay
+1.8782 seconds. The combined **290.3110 seconds (4.84 minutes)** and peak
+**833,601,536 bytes (0.7764 GiB)** stayed within the 1,800-second/4-GiB caps.
+Fit peak RSS was 519,667,712 bytes (0.4840 GiB).
+
+The evaluation process was 11644 and the replay process 11650. Replay reports
+`exact_replay: true`, `fresh_process: true` and zero optimizer updates. It
+reproduces the entire evidence envelope, including full-head selected logits,
+predictions, attention, construction diagnostics, comparison, access counts
+and decision. Learned state is identical before and after evaluation, and
+future-position attention is zero. This is evaluation replay of the retained
+final artifact, not an independently repeated training run.
+
+Fresh development is **`NOT_RUN_CONSTRUCTION_MISS`, zero model decisions**.
+Its generated labels and exclusions were audited during prefit preparation;
+the tensor was not opened for fitting or model scoring. Historical development
+payload reads, prior-model/checkpoint reads, evaluation optimizer/checkpoint/RNG
+reads, native-frame reads and geometry changes are zero. Training included
+unknown targets, but this supported-only construction evaluation does not
+establish absent-binding accuracy. Fresh transfer remains unmeasured.
+R4 is **`NOT_RUN_SEPARATE_INFERENCE_STEP`**. Generation was not run.
+
+The eight named focused checks passed before source freeze. Independent review
+of source and preparation preceded fitting; a separate evidence review found
+no discrepancy in the measured envelopes, work ledger, replay, access counts
+or claim boundaries. Broad workspace tests, BDD,
+WASM, fuzz, audit and release QA remain `NOT_RUN`; required queue statuses
+acknowledge transport only.
+
+| Retained identity | CID |
+| --- | --- |
+| Fit | `blake3:ec2dea07ef3b2eaf3d6532830c0434c33935f72df982b16929ecc6fc48be08e8` |
+| Model file | `blake3:9386849d191b038803ae30b267f2fbf654cb077f48d5f3ddc92137c60875dd98` |
+| Learned state | `blake3:feeabb398a0ca2f799bcd4274c607dc8527f39619ac3cca39be8727a27f1e005` |
+| Result | `blake3:c6dfcb3a856963ab4493c3d26bf729f6d9cad70147316ef2b9b62e87c3116369` |
+| Complete evidence | `blake3:e1ae84b84d6ebedaf6a49afd43378c0975ec6fe1597ee246b00cc60e2191fb79` |
+| Replay | `blake3:98c799c7844e36d68b56c6948824c1dacb53fb36e9f38bc7c052ec6fe0873fac` |
+
+### Decision and next recommendation
+
+The predeclared action is **`RETAIN_GAINS_AND_REDESIGN_JOINT_QUERY_BINDING`**.
+Placement alone is insufficient at the matched dose, but the 16.3452-point
+accuracy gain and improved object-dependent selection are retained evidence.
+This result is specific to one matched seed, learning dose, construction
+population and explicit answer-readout interface. It does not establish a
+seed-robust improvement, fresh-combination transfer, or general English.
+
+The next recommendation is **one separately frozen joint-query encoding fit**:
+keep supervised position 37 and add the owner token embedding from position 35
+to the queried-object embedding at position 37, before the unchanged source
+embedding dropout and attention trunk. In symbols, use
+`x37 = E(token37) + P37 + E(token35)`; other positions are unchanged. This gives
+both query attributes a direct path while retaining the object component.
+The owner was already in the causal prefix, so this proposal changes its
+accessibility rather than repairing a demonstrated absence.
+
+Use fresh initialization, the same four-fact construction rows/labels, seed,
+optimizer, full tensor shapes, 3,920-update dose and resource caps. The proposed
+fixed residual introduces no parameters, input labels or additional random
+draws. Compare with this retained #1067 model and report both question types,
+correct matched changes and displayed-position behavior separately. Freeze the
+exact source, decision criteria and a new unscored development population
+before that separate fit. Owner-changing both-correct improvement is the
+proposed primary decision, with preservation of overall accuracy and
+object-changing both-correct behavior required alongside it; freeze numerical
+effect thresholds in that next contract. The next issue must decide whether
+joint access is sufficient at the fixed dose before a broader curriculum or
+model change. This is an
+explicit lexical-query interface, not unrestricted next-token generation.
+No further fit was performed in #1067.
+
+The earlier #1063 held-out negative and #1065 diagnostic remain unchanged.
+The #1059 11,900/12,000 = 99.1667% preservation and #1061 identical ordinary/
+coherent-R4 8,071/8,192 = 98.5229% result remain intact, including the latter's
+86.2061-percentage-point loss under transport control. More geometry remains
+deferred. #973 stays open and #954 stays blocked; general English, reasoning,
+chat readiness, H4 superiority and softmax removal remain unestablished.
