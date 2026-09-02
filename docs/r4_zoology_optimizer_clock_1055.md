@@ -95,3 +95,38 @@ No R4 code, new corpus, generation, reasoning, W8/lowering, product, or release
 work runs here. Scope ends with one terminal result, concise current-summary
 updates, this append-only record, protected PR delivery, and child/#973 closure
 comments. Queue acknowledgements are transport only, not test evidence.
+
+## Resource-only pause after preflight (2026-09-02)
+
+The implementation is frozen at `47ebdabc`. The 15 focused clock/lifecycle
+tests passed in `0.982 s`; code formatting, scoped baseline Python lint, claim
+wording, and diff integrity also passed. The inherited source-cell C0 was
+reused without a new reproduction or overfit campaign.
+
+Preparation CID is
+`blake3:935363a19038bb9573cda29c29179f98b4b2a80f4d2e0ac9b64b46ae399f5916`;
+implementation/dependency CID is
+`blake3:bf45a18a2b4ed1aee607220f8d0331c32254bb43e94c2e1d7bece70d33634de3`.
+The `46.456571 s` CPU preflight produced CID
+`blake3:a0f88c9328505f56860a3e2cfdb947be83fb5d5877d9acac2e9ab3f4ff92ffd5`.
+It measured two eight-batch training units per Apple Accelerate/OpenMP plan:
+
+| Threads | Training units (s) | Development units (s) | Stable | Peak RSS (bytes) | Safety-adjusted full projection (s) |
+| ---: | --- | --- | :---: | ---: | ---: |
+| 1 | 3.376828 / 3.319727 | 0.467915 / 0.457117 | yes | 1,162,067,968 | 2,080.005000 |
+| 4 | 2.378479 / 5.017547 | 0.320396 / 0.518029 | no | 1,197,031,424 | 3,086.198205 |
+| 8 | 6.401626 / 10.149635 | 0.703424 / 0.637655 | no | 958,251,008 | 6,234.236962 |
+
+All three plans fit memory but exceeded the frozen `1,800 s` projection
+ceiling; four and eight threads also failed timing stability. Their repeated
+loss sequences were deterministic within each plan. No plan was admitted
+(`selected=null`, `passed=false`): this is `NOT_RUN_PREFLIGHT`, not an
+attention or model negative.
+
+Primary optimizer updates, primary development evaluations, and binding-control
+evaluations are all **zero**. Disposable timing work is not a primary fit.
+No fitted #1055 artifact exists, so artifact replay is unavailable. The issue
+remains open and execution pending. The next proposed action is to resolve
+the active Studio/browser workload and obtain direction for timing-only
+remeasurement; no new attempt or model change is recorded here. The existing
+#1050, HELM-D-R4, and #1014 attention evidence remains unchanged.
