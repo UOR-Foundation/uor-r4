@@ -266,6 +266,29 @@ def _bind_predecessor(predecessor_root: Path) -> dict[str, Any]:
     }
 
 
+def _source_attribution_record() -> dict[str, Any]:
+    """Wrap #1047's credited source inventory without inheriting its run policy."""
+
+    credited = zoology_source_attribution()
+    return {
+        "credited_inventory": credited,
+        "credited_inventory_cid": credited["attribution_cid"],
+        "reuse_scope": "UPSTREAM_FILE_CIDS_AND_LICENSE_ONLY",
+        "current_execution": "EXACT_FIGURE2_T64_CONFIGURATION_AND_DATALOADER_SEMANTICS",
+        "current_integration_exceptions": [
+            "CPU placement instead of the source's CUDA-only fit line",
+            "query-only tied-head projection equivalent under ignore_index",
+        ],
+        "not_inherited_from_1047": [
+            "8,192/1,024 reduced population",
+            "batch 64",
+            "BLAKE3-seeded independent epoch shuffle",
+            "two-consecutive train/development qualification",
+            "C2 and binding-permuted controls",
+        ],
+    }
+
+
 def _selected(labels: Tensor) -> tuple[Tensor, Tensor]:
     if labels.ndim != 2:
         raise ValueError("released labels must be [rows,time]")
@@ -382,7 +405,7 @@ def prepare_release_reproduction(
     path = root / PREPARATION_RELATIVE_PATH
     implementation = _implementation_contract()
     predecessor = _bind_predecessor(predecessor_root)
-    attribution = zoology_source_attribution()
+    attribution = _source_attribution_record()
     if path.exists():
         preparation = _read_json(path, cid_field="preparation_cid")
         if (
