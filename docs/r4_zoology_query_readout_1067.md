@@ -158,3 +158,29 @@ Preparation, results and replay are immutable. A fit may resume only the same
 bound checkpoint within the original cumulative budget. Verification performs
 no training and compares full final evidence, including prediction/logit/
 attention identities, construction diagnostics and any admitted development.
+
+## Published preparation
+
+Executable and contract freeze: `24a8f3cd`. Eight focused checks passed (three
+data, one whole-trainer equivalence, four campaign/serialization checks).
+Independent source review found no remaining blocking issue. No fitted model
+was initialized or executed by those checks or review.
+
+The [preparation envelope](r4_zoology_query_readout_1067_preparation.json) binds
+223 implementation files, including the unchanged predecessor closure. The
+actual preparation audit verified all 10,240 original construction labels,
+all 1,280 fresh development labels, 768 fresh variant worlds, zero historical
+or construction world/input overlap, all 64 held-out owner-object pairs,
+balanced supported target locations and relevant fact slots. The copied
+construction and vocabulary CIDs remain exactly those of #1063.
+
+- Preparation: `blake3:b6df21b50fe67696910e8e01ae2aa590c9e9b6aebf15b090cc11b98edc5a82d3`
+- Implementation: `blake3:9d368e194b2fad64aebadaf87ca71b4927134b13c33bb949c0e7cc0ca6e81b48`
+- Dataset manifest: `blake3:da7be1fba1bb02d3891f4c08840cdd368828b28a2e0a19119f08ca8aa44a5f28`
+- Dataset tree: `blake3:0ce48d3f9266377013543af1eae00fe445b40b90ca29ed73085e732c08725bd5`
+- Fresh development: `blake3:5f20f7f5f9e079e73886bd885cb88dc0948effc73a58d2a111f387ae5604b780`
+- Unchanged construction: `blake3:d767fafdf544f01db99d9acb317c76df55e9f9d28f99785d2a6ae62b663731a2`
+
+These bindings and the decision contract were published before the first
+training update. The fresh development population had zero model decisions
+at publication.
