@@ -156,3 +156,25 @@ authorization to overwrite or tune this frozen campaign.
 The implementation, exact dataset, predecessor evidence and native frames are
 bound in the preparation envelope. The following append-only entries will
 record the preparation identity, actual dose/outcome and protected delivery.
+
+## Preparation published before fitting (2026-09-02)
+
+Implementation freeze: `25ab0ab2`. Independent source review approved the
+serialized-data boundary, fixed learning clock, admission/resume behavior,
+conditional R4 comparison and exact replay. The review's fitted-artifact
+rehash finding was fixed before the freeze and covered by the fifth decision
+check. No optimizer update or fitted-model evaluation had run at publication.
+
+- Preparation: `blake3:c926e16516ef0f1d8242dc0af39a04be46cb082bb6c76590bc73f2717e027ca8`.
+- Implementation closure (199 files): `blake3:da90e0ecb9a7fe82d9eaccc3f0c38ae597036d5de5e68539b13746c21388fbef`.
+- Dataset tree: `blake3:173e2275b014f87fc5ebb06a443e3aba6d44f8c2017c42574d6070e71352d144`.
+- Dataset manifest: `blake3:fbf3c3d6b5694dea16b2d5c1f5e4fb5d198b339b36a80b0dab91d4714ce04d7d`.
+- Construction bytes (3,768,792): `blake3:d767fafdf544f01db99d9acb317c76df55e9f9d28f99785d2a6ae62b663731a2`.
+- Development bytes (471,496): `blake3:5e43c75f4728cde1d5ed776e5c2afd0873baade00602915555ff6dc5ba156890`.
+- Vocabulary bytes (65,283): `blake3:aa001c3a4369ad2f8bb3596a316270bd72b736f927158ee04403116b430c649d`.
+- Unchanged native frame bundle: `blake3:94762441a43b03f596a66131ec34af15bba3afbc2bbc5d28ab7dfdabd9b6d68c`.
+
+The [raw preparation envelope](r4_zoology_english_binding_1063_preparation.json)
+contains the complete file inventory, lexical/data audit, fixed decisions and
+learning/resource policy. Preparation validates development semantics; the
+optimizer receives no development rows or decisions.
