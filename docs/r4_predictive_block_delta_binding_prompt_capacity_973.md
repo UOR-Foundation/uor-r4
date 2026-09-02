@@ -4,15 +4,21 @@
 - **Issue:** #973
 - **Programme root:** #820
 - **Mechanism:** `R4PredictiveBlockDeltaBindingV1`
-- **Campaign:** `R4PredictiveBlockDeltaPromptCapacityV2`
-- **Evidence status:** `V2_NATIVE_CAPACITY_ADMIT_V5_AUTHORIZED`
-- **Current result:** `PREDICTIVE_BINDING_NATIVE_CAPACITY_ADMIT`
-- **Generation:** `NOT_AUTHORIZED`
+- **Campaign:** `R4PredictiveBlockDeltaPromptCapacityV5`
+- **Evidence status:** `V5_VERIFIED_TERMINAL`
+- **Current result:** `PREDICTIVE_BINDING_NO_TERMINAL_CAPACITY`
+- **Next action:** `STOP_WITHOUT_GENERATION`
+- **Generation:** `NOT_RUN`
 
 ## Result first
 
-The next #973 experiment changes the retained **write and binding law**. It
-does not add another readout over the failed 120-slot value field.
+The terminal V5 experiment changed the retained **write and binding law**. It
+did not add another readout over the failed 120-slot value field. The run is
+complete and independently verified, but the geometric arm's prompt gain was
+`0.03896945868086732`, below the frozen `0.04332169878499658` capacity floor.
+The terminal verdict is therefore
+`PREDICTIVE_BINDING_NO_TERMINAL_CAPACITY`, and the predeclared action is
+`STOP_WITHOUT_GENERATION`.
 
 The completed learned-associative experiment showed that the qualified V1
 field can help language modeling when pooled, but does not place enough
@@ -45,8 +51,9 @@ is the token that is subsequently observed. The value and candidate scorer
 remain anchored to their immutable token H4 leaves so the geometry cannot
 cancel into a pure change of basis.
 
-No V5 prompt or fresh-language target is created or inspected until the code,
-mechanics checks, and revealed-data expressivity gate below pass unchanged.
+The following architecture and contract are retained as the pre-reveal record.
+V5 prompt and fresh-language targets were created and opened only through the
+frozen preparation, commitment, and reveal transition described below.
 
 ## Frozen architecture
 
@@ -497,3 +504,100 @@ CPU4 workers with ordered deterministic collection under Apple Accelerate.
 With three fitted arms, the expected fit window is revised to `30-50` minutes;
 the predeclared hard fit wall remains `3,600` seconds before scoring and
 independent verification. CUDA remains forbidden.
+
+## V5 terminal execution result — 2026-09-01
+
+The sole frozen V5 campaign completed all three independent fits at exactly
+`2,730` optimizer steps per arm. The terminal result is
+`PREDICTIVE_BINDING_NO_TERMINAL_CAPACITY`, with predeclared next action
+`STOP_WITHOUT_GENERATION`.
+
+The geometric arm improved prompt-relative behavior substantially over the
+immutable controls, but missed the one gate that decides terminal capacity:
+
+| Prompt arm | gain, nats/token | own wins | own NLL |
+|---|---:|---:|---:|
+| Geometric delta | `0.03896945868086732` | `375/512` | `3.5419674206289073` |
+| Qualified V1 / state-off | `0.005190052751459007` | `295/512` | `3.6142577020455064` |
+| Frozen pooled head | `0.009168421948743344` | `314/512` | `3.580036127979838` |
+| Independently fitted plain delta | `0.015039646930972594` | `309/512` | `3.518444197495228` |
+| Independently fitted additive | `0.04548192190964073` | `368/512` | `3.5523845836341934` |
+| Transport-permuted geometric | `0.007159131815569708` | `269/512` | `3.646037837855147` |
+
+The geometric arm beat V1 gain `0.005190052751459007` and pooled gain
+`0.009168421948743344`, cleared the `308/512` directional-win floor, had no
+worse own NLL than either immutable comparator, and passed the state
+load-bearing checks. Its absolute gain nevertheless missed the frozen
+`0.04332169878499658` floor by `0.00435224010412926`. Capacity is therefore
+negative even though several component metrics improved.
+
+Geometry attribution is also not established. Geometric gain exceeded the
+independently fitted plain arm by `0.023929811749894725`, just below the frozen
+`0.025341569256760274` floor, and geometric own NLL
+`3.5419674206289073` was worse than plain `3.518444197495228`. The destructive
+transport-permuted comparison did separate by `0.03181032686529761` and met
+its paired and own-NLL gates, but both geometry comparators were required.
+
+Delta-overwrite attribution is not established either. The independently
+fitted additive arm was language-valid; geometric delta trailed it by
+`-0.006512463228773413` gain and improved only `234/512` paired directions.
+This result retires this V5 predictive write/binding law. It does not retire
+the broader attention programme, and it does not imply that ordinary causal
+softmax attention failed.
+
+Fresh-language retention passed. Across all `247,920` decisions, geometric CE
+and top-1 were `3.84055165318221` and `0.30979348176831234`, compared with the
+better immutable pooled comparator's `3.85444653890486` and
+`0.3014924169086802`. All integrity gates passed: forbidden reads were zero,
+post-reveal optimizer steps were zero, fitted artifacts and scores replayed
+exactly, the immutable base remained unchanged, and the independent verifier
+reproduced the evidence exactly.
+
+### Frozen execution identities
+
+The construction-only probe selected two concurrent CPU workers with four
+threads each under Apple Accelerate; CUDA remained forbidden. The complete fit
+consumed `2849.632959582843` seconds, below the frozen `3,600`-second wall.
+
+| Boundary | Content identity |
+|---|---|
+| Preparation | `blake3:1e65392c729ca349b2a9a61f4bfb503e5cb32392f42f69d7f4b836ea7692d10a` |
+| Commitment | `blake3:8e9c02068bb1dfef956907b1b614ddb0c4fcf902262fc934f8b098f5fd7cf0c4` |
+| Population | `blake3:120719d0984b33a63904b5d72cc8b5e831b77df2eceb2f2c75b9c75750cacd10` |
+| Probe / selected plan | `blake3:7adc13f30955b8843674d5a9b410500046fdd5376422979ff8f69f547c32aa08` / `blake3:639d59ad78299f6bf87919506fdba080b81ed0ed315c7dbc5185fc346e166d48` |
+| Started / fit budget | `blake3:c4c1dacb4e99a955c1d4777064cda0191aeecab7543e8e76a23a5b01d5c758a6` / `blake3:cb5a1f1640ea08882542423721719c31b0044ee679ec06ba51a589f3c400ea3d` |
+| Geometric arm / artifact | `blake3:c8b62dba59c23a93d04aa60cebfffe5c366bb4ce6b8ee48b64088bef4db77b60` / `blake3:8e7c153a9270ce533ffd195ab6e879fd26278a8be6db46299b4c0aa0033bf0a0` |
+| Plain arm / artifact | `blake3:0c91f859e2d05e77dc81e8f17ae5c40e72d23d7bdb7c64fd1f03a7e727cbfc87` / `blake3:2b304e97accad753931715ec02078a4eabcf81d03b218e62600ea98008b0ba12` |
+| Additive arm / artifact | `blake3:e32101f0ff89e3b4099e9f23645873e2fb80d22478cce9f5bb52a8ec3debe155` / `blake3:3f70f66e619e7ed00cbbde28f55d97cfe50ed9d29652a35012cc190af02fc77b` |
+| Reveal | `blake3:6773e5ec1be496a5d1edae29f810d3b13a05b3953757b31ea22f909471ae5800` |
+| Fit / scoring implementation trees | `blake3:000a3ae8a69ba9185ff66ee58ff891b3eb22ab857195d71d38441e277cceca24` / `blake3:34ef52bae5ed4401e382e1886f2a136fc797f1c9db69bc9fc50fde4c4cd41945` |
+
+### Scoring-only recovery provenance
+
+The first scoring process stopped before producing scientific evidence when
+its work-ledger check incorrectly required the final two-row tail batch to
+have the same raw counters as each full sixteen-row batch. The original
+unavailable record remains preserved at
+`blake3:a819ed7f2b558d80053362c6c229642835b1317ff367d576aeb6ab23a592536a`
+with scientific status `NOT_RUN`.
+
+The bounded repair checked exact per-row proportionality and aggregated work
+over all `2,066` windows. Recovery CID
+`blake3:7b76e36e44798bebf184ece08fdd8a2065bdd370106b5d64d5fae4c59dc6d88b`
+bound the already frozen fitted artifacts and authorized scoring only. It
+created no optimizer, performed no retraining, and executed zero post-reveal
+optimizer steps.
+
+The verified evidence chain is:
+
+```text
+scoring CID      blake3:44f8941d24a99fc230710fd700e7a7b13cee87587bfbe4e13bf7b095222e2ee6
+result CID       blake3:6c67544d675eafcb8eb9c0dabb93617e3f6c3295af812e8acbb687107c010a74
+verification CID blake3:567cf336eb05c3ec562aef7135f6fb35b580d02c758b0e79f2508cae57065f5d
+exact replay     true
+```
+
+Coherent generation, reasoning, and integer/table lowering remain `NOT_RUN`.
+Release readiness is not established. Per the frozen decision contract, no
+generation rung, corpus expansion, readout retry, or lowering follows from
+this V5 result.
