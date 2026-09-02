@@ -165,3 +165,36 @@ all predictions identical and an 86.2061-point transport-control loss.
 More geometry, native-frame work, generation, general English, H4 superiority,
 softmax removal, reasoning and chat readiness remain deferred or unestablished.
 #973 stays open and #954 blocked.
+
+
+## Published preparation
+
+Source freeze: `98ea9564`. All **15 focused methods passed** in 8.451 seconds:
+three rotation/ledger checks, one whole-trainer AST check, three data/exclusion/
+access checks, two reference-binding checks, and six comparison/reveal/world-
+accounting checks. Ruff and claim wording passed. Independent source reviews
+found no blockers. No fitted model had been scored or trained.
+
+The [preparation envelope](r4_zoology_cyclic_facts_1071_preparation.json) binds
+254 implementation files, original construction/vocabulary bytes and the plain
+#1067 comparison artifact. Preparation hashes that artifact without loading model
+tensors. Its complete published baseline and exact dose are retained.
+
+The audited new population has 1,280 rows and 768 distinct base/swapped/absent
+worlds, 64 held-out owner-object pairs, and balanced slots/locations/question
+types. Each of the three historical populations has 1,280 rows and 768 worlds;
+their union contains 3,840 inputs and 2,304 worlds. Including construction,
+exclusion covers 14,080 distinct inputs and 8,448 canonical worlds. Every
+new-development overlap count is zero. The default validation path does not
+open or regenerate development.
+
+- Preparation: `blake3:92ffef681fe6bd4cfc6532bd811496b6e9c4d052b978c172d3a5ca9bcef8ef05`
+- Implementation: `blake3:4693fca24e67aa4bab43ddfc71ee144cb3771c7fca32abea5cb55cdb4356b761`
+- Dataset manifest: `blake3:6eeb4831d9558dbbb0ac1235b314fb47e1412a561aad429d2af56acd81dc0a54`
+- Dataset tree: `blake3:4856c4365443f562803880a14013569c8ce7c944eda4a174d4b1d8f50f97da1c`
+- Fresh development: `blake3:31dca3ff6327c75bd5208758dcd748661002c8bb109346d8c2d4a3b414c02ed9`
+- Retained reference model: `blake3:9386849d191b038803ae30b267f2fbf654cb077f48d5f3ddc92137c60875dd98`
+
+These identities, the capped 205-pair gains, each-slot 50% floor, family/overall
+preservation and both development-admission gates are published before the
+first optimizer update.
