@@ -40,6 +40,17 @@ def _loader_trajectory(*, consume_test: bool) -> tuple[list[int], list[int]]:
 
 
 class ZoologyReleaseTests(unittest.TestCase):
+    def test_tensor_container_bytes_are_deterministic(self) -> None:
+        left = {
+            "z": torch.tensor([3, 4], dtype=torch.long),
+            "a": torch.tensor([1, 2], dtype=torch.long),
+        }
+        right = {"a": left["a"], "z": left["z"]}
+        self.assertEqual(
+            release._canonical_safetensors(left),
+            release._canonical_safetensors(right),
+        )
+
     def test_locked_source_learning_rates_bind_decimal_and_float_hex(self) -> None:
         contract = release._learning_rate_contract()
         self.assertEqual(

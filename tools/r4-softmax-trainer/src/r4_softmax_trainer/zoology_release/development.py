@@ -183,6 +183,15 @@ def _tensor_mapping_cid(tensors: Mapping[str, Tensor]) -> str:
     return f"blake3:{digest.hexdigest()}"
 
 
+def _canonical_safetensors(tensors: Mapping[str, Tensor]) -> bytes:
+    """Emit deterministic tensor bytes; provenance lives in the JSON envelope."""
+
+    ordered = {
+        name: tensors[name].detach().cpu().contiguous() for name in sorted(tensors)
+    }
+    return save_safetensors(ordered)
+
+
 def _implementation_contract() -> dict[str, Any]:
     trainer_root = Path(__file__).resolve().parents[3]
     package_root = Path(__file__).resolve().parent
@@ -346,7 +355,7 @@ def _build_dataset_payload() -> tuple[bytes, dict[str, Any]]:
             }
         ).decode("utf-8"),
     }
-    payload = save_safetensors(tensors, metadata=metadata)
+    payload = _canonical_safetensors(tensors)
     return payload, {
         **metadata,
         "tensor_shapes": {k: list(v.shape) for k, v in tensors.items()},
@@ -839,15 +848,7 @@ def _artifact_payload(model: ZoologyFigure2Model, *, learning_rate: float) -> by
         for name, tensor in sorted(model.state_dict().items())
         if name != "lm_head.weight"
     }
-    metadata = {
-        "schema": "uor-r4.zoology-release-model/1",
-        "issue": str(ISSUE),
-        "policy": POLICY,
-        "learning_rate": repr(learning_rate),
-        "config": canonical_json_bytes(asdict(model.config)).decode("utf-8"),
-        "tied_omission": "lm_head.weight",
-    }
-    return save_safetensors(tensors, metadata=metadata)
+    return _canonical_safetensors(tensors)
 
 
 def _save_checkpoint(
@@ -1036,9 +1037,14 @@ def _run_arm(
             "maximum_epochs": MAXIMUM_EPOCHS,
         },
         "artifact": {
+            "schema": "uor-r4.zoology-release-model/1",
             "path": str(artifact_path.relative_to(root)),
             "bytes": len(artifact_payload),
             "cid": cid_bytes(artifact_payload),
+            "source_commit": SOURCE_COMMIT,
+            "learning_rate": learning_rate,
+            "config": asdict(model.config),
+            "tied_omission": "lm_head.weight",
             "state_cid": control_development._tensor_mapping_cid(
                 {
                     name: tensor
