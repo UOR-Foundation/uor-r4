@@ -142,3 +142,19 @@ uv sync --frozen --offline
 Each run/verify command is a separate process. Existing preparation, started
 markers, results and replay files are immutable; these commands intentionally
 refuse to overwrite them. The checked-in JSON evidence accompanies this record.
+
+## Published preparation
+
+The executable and contract were frozen at `58bd1559`. All 11 named focused
+checks passed (six direct-binding/access, three analysis, two campaign), and
+independent source review found no blocking issue. No fitted inference was
+performed by those checks or that review.
+
+The [preparation envelope](r4_zoology_english_diagnostic_1065_preparation.json)
+binds 211 implementation files, including all 199 predecessor records:
+
+- Preparation: `blake3:5679f721fa60c16601a4d3a8ca46397055b89d7769dfae1ca099a1e3f3fbe5a9`
+- Implementation: `blake3:d22cde07d38be3e3042039a93c6cdc06c5f4c772c7ba5490905889215f24827b`
+- Retained model: `blake3:a4eb5ef76c387ca6ebe9f185b1a5ad023c81291ce4cc9000bb5d23248aaef282`
+
+The preparation and this section were published before construction inference.
