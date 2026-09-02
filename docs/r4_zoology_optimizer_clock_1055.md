@@ -1,6 +1,9 @@
 # Exact-byte attention transfer: optimizer-clock correction (#1055)
 
-- **Status:** `NOT_RUN` — frozen pre-run contract.
+- **Current status:** `CLOCK_MATCHED_TRANSFER_MISS`; development improved from
+  `12.01171875%` to `68.2861328125%`, but missed strict `>99%`. Fresh-process
+  verification passed. The original pre-run contract and resource history
+  remain below; terminal evidence and the next recommendation are appended.
 - **Authority:** [issue #1055](https://github.com/UOR-Foundation/uor-r4/issues/1055), under #973.
 - **Project value:** give the already-working copied attention cell a
   source-comparable optimizer clock on our exact data before coherent-R4
@@ -130,3 +133,152 @@ remains open and execution pending. The next proposed action is to resolve
 the active Studio/browser workload and obtain direction for timing-only
 remeasurement; no new attempt or model change is recorded here. The existing
 #1050, HELM-D-R4, and #1014 attention evidence remains unchanged.
+
+## Authorized timing retry and first primary start (2026-09-02)
+
+After the user stopped the competing workload and authorized timing-only
+remeasurement, a separate `issue-1055-zoology-optimizer-clock-attempt-2`
+evidence directory retained the retry. The preparation and implementation
+CIDs are unchanged from attempt 1. No source, model, data, budget, or test
+contract changed, and no code/test rerun was performed; the original 15
+focused checks remain the implementation evidence.
+
+The `23.849352 s` retry admitted a stable eight-thread Apple Accelerate CPU
+plan. Its preflight CID is
+`blake3:9f184ae09fea32d6a797303a3770ad10f5603ec4ac86bd2010bfc063ce39cdf6`.
+
+| Threads | Eight-batch training units (s) | Stable | Peak RSS (bytes) | Full projection (s) |
+| ---: | --- | :---: | ---: | ---: |
+| 1 | 3.019445 / 3.027039 | yes | 1,211,580,416 | 1,865.098308 — over budget |
+| 4 | 2.199384 / 2.100942 | yes | 1,211,432,960 | 1,353.474036 |
+| 8 | 2.117389 / 2.122450 | yes | 1,211,580,416 | 1,306.500579 — selected |
+
+The measured-fastest eligible plan uses eight intra-op threads, one inter-op
+thread, one training process, and batch 512; each plan's repeated timing-unit
+loss sequence was deterministic. The first and only primary fit has started
+under the unchanged 3,920-update cap. The directory's “attempt-2” denotes the
+timing retry, not a second model fit. Primary verdict, conditional binding
+control, final artifact, and fresh-process artifact replay are still pending;
+admission is not an attention result. The refused attempt-1 evidence above is
+preserved.
+
+## Completed primary result (2026-09-02)
+
+Correcting the optimizer clock retained a substantial learning improvement:
+development rose from #1053's `984/8,192 = 12.01171875%` to
+`5,594/8,192 = 68.2861328125%`, a gain of `56.2744140625` percentage points.
+NLL fell from `6.79664158821106` to `2.6761019229888916` nats. The frozen
+strict `>99%` criterion was not met, so the terminal remains
+`CLOCK_MATCHED_TRANSFER_MISS`. The binding-permuted control is
+`NOT_RUN_PRIMARY_MISS`, with zero control inference decisions; the retained
+gain is not a passed binding-control or geometric-attribution result.
+
+This was one primary fit, completing 20 blocks and 3,920 updates without
+retraining or selecting a different checkpoint. It consumed 16,056,320
+training queries and 163,840 primary-development queries. Final-block online
+training accuracy was `754,401/802,816 = 93.96935287786989%`, with NLL
+`0.29081812645403704`; these are during-update metrics, not a post-fit
+training reevaluation. The complete development curve is preserved here
+(NLL rounded to six decimals; each block scores 8,192 queries):
+
+| Block | Updates | Correct | Top-1 (%) | NLL |
+| ---: | ---: | ---: | ---: | ---: |
+| 1 | 196 | 477 | 5.822754 | 7.200712 |
+| 2 | 392 | 898 | 10.961914 | 6.831665 |
+| 3 | 588 | 985 | 12.023926 | 6.809559 |
+| 4 | 784 | 975 | 11.901855 | 6.898668 |
+| 5 | 980 | 998 | 12.182617 | 6.952888 |
+| 6 | 1,176 | 974 | 11.889648 | 7.017067 |
+| 7 | 1,372 | 972 | 11.865234 | 7.120267 |
+| 8 | 1,568 | 976 | 11.914063 | 7.262002 |
+| 9 | 1,764 | 964 | 11.767578 | 7.364768 |
+| 10 | 1,960 | 972 | 11.865234 | 7.513181 |
+| 11 | 2,156 | 978 | 11.938477 | 7.641114 |
+| 12 | 2,352 | 951 | 11.608887 | 7.806085 |
+| 13 | 2,548 | 964 | 11.767578 | 7.909654 |
+| 14 | 2,744 | 1,344 | 16.406250 | 7.409531 |
+| 15 | 2,940 | 2,787 | 34.020996 | 5.794369 |
+| 16 | 3,136 | 2,930 | 35.766602 | 5.840742 |
+| 17 | 3,332 | 2,953 | 36.047363 | 5.898982 |
+| 18 | 3,528 | 4,516 | 55.126953 | 3.897963 |
+| 19 | 3,724 | 5,229 | 63.830566 | 3.064048 |
+| 20 | 3,920 | 5,594 | 68.286133 | 2.676102 |
+
+The primary took `1,078.9267852089833 s`; total run wall was
+`1,079.2978823750746 s` (about 18 minutes). Peak primary RSS was
+`1,151,451,136` bytes. Execution used the admitted eight-intra-op-thread
+Apple Accelerate CPU plan, one inter-op thread and one training process;
+CUDA/MPS were not used. The initial refused timing attempt did not train a
+primary model. Its authorized timing retry did not change the source,
+preparation, model, or training contract.
+
+### Identities, read ledger, and verification
+
+| Evidence | Identity |
+| --- | --- |
+| Credited Zoology source | `de4e258784224e09909c257ff3ea040f089ed660` |
+| Implementation commit | `47ebdabc` |
+| Bound #1053 result | `blake3:e2d1deb55a4612015ba924a94051beacd517f3c062c714c4972ba954f57621a1` |
+| Primary dataset file | `blake3:96f154042f0fd920c7f6f3b1b650a6ce20f11c401f9ae0c81734f47ae231b7f1` |
+| Primary tensor bytes | `blake3:baef4fd29bedddc5c9cd826b78101c5c412db0e883241e04e478e4e3baf1d8b1` |
+| Bound control file; inference not run | `blake3:34dad69bfbeda87ea7e4d5d7af2fd8434dc5ab33cc055df4a0965f0b7b96b693` |
+| Implementation/dependencies | `blake3:bf45a18a2b4ed1aee607220f8d0331c32254bb43e94c2e1d7bece70d33634de3` |
+| Implementation tree | `blake3:c32c8f87d14cc0522ff17655ce919bc95dd3a85bdf11f2fec9376f28bfd42f0b` |
+| Preparation | `blake3:935363a19038bb9573cda29c29179f98b4b2a80f4d2e0ac9b64b46ae399f5916` |
+| Admitted preflight | `blake3:9f184ae09fea32d6a797303a3770ad10f5603ec4ac86bd2010bfc063ce39cdf6` |
+| Primary run | `blake3:3cabea73e6388daf7512a4a061f0ef1c239a5b478e33a39178d00001c5ba4d81` |
+| Model artifact, 1,217,024 bytes | `blake3:2a225b691ffde7b40afd41ac888c5a4449a6b3ba48c2773a2108e1e407d6f8b4` |
+| Model state | `blake3:4743114d1fa6a68d8ef856d4e6306415a75187879acc6b479ea6f75cf68c7d80` |
+| Final development logits | `blake3:feef01968e9e6a05a5d1cb267119f4a2f2fbf6ded4fafdc4dea9086368e8f4a9` |
+| Result | `blake3:3cb810f09a118cfb70752643f5d9e60d0e42780dc6e47dc4f99224cbd69af0ee` |
+
+Preparation read three predecessor JSON envelopes and the existing primary
+tensor payload once. New/copied corpus payloads, control tensor payloads,
+role payloads, fitted predecessor weights, English/natural payloads, sealed
+inputs, teacher/provider calls, and future-value/geometry/role model reads
+were zero. The unchanged source-cell C0 evidence was reused, with zero new
+C0 training updates. The original 15 focused checks and formatting/scoped
+lint/claim/diff checks remain valid; they were not rerun for the timing retry.
+
+Fresh-process verification passed: it validated source/preparation/preflight,
+artifact and work bindings, reproduced final logits/top-1/NLL and the result
+CID, and confirmed no control execution. Verification added 8,192 development
+inference decisions and zero optimizer updates, separate from the 163,840
+primary-development queries. Independent read-only checkpoint audit also
+passed: every AdamW counter is 3,920, the 20-block histories match, scheduler
+state is block 20 with `T_max=64`, and all 20 exported tensors match the
+checkpoint exactly. The tied embedding/head, evaluation RNG, and valid
+245-cycle sampler ending at cursor 8,192 also matched. This audit performed
+no inference, tests, or retraining.
+Broad workspace/release QA remains `NOT_RUN`; queue acknowledgements are
+transport only.
+
+### Interpretation and approved project-directed next action
+
+The correction produced strong transfer learning without meeting this
+population's frozen qualification target. It does not falsify ordinary
+attention, identify a unique remaining defect, or establish geometric
+advantage. The run reused the same 8,192 unique training rows; the increased
+quantity was repeated exposure and optimizer updates, not new data. The final
+four development scores rose from about 36% to 55%, 64%, and 68%. The preset
+cap stopped the run; convergence was not established, so 68% is not a measured
+capacity ceiling. Benefit from adding unique data remains unmeasured.
+#1050's `99.1666667%` source positive and the existing HELM-D-R4/#1014 attention
+results remain intact.
+
+The user approved one **separately contracted continuation of this exact
+saved checkpoint** to check whether the observed learning continues: at most
+20 additional 196-update blocks, or 3,920 additional updates, retaining the
+strict `>99%` stop. Preserve the data, model, learning-rate policy, optimizer,
+sampler, and RNG state; do not repeat training from scratch or add a parameter
+grid. Freeze the new contract before execution. This does not silently extend
+#1055, change its frozen `CLOCK_MATCHED_TRANSFER_MISS`, or imply its unrun
+binding control passed. No continuation has launched within #1055.
+
+The project-directed integration goal remains coherent R4 execution. The
+already-qualified #1050 artifact/population offers an available inference-only
+integration option: substitute inner Q/K/V transport/aggregation while keeping
+learned weights, positions, norms/residuals and softmax. It remains a fallback
+or next integration option, not a required first step before the approved
+continuation. Neither option establishes geometric superiority, softmax
+removal, generation, reasoning, or exact lowering without its own evidence.
