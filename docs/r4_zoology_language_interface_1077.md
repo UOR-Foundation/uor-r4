@@ -223,3 +223,143 @@ Matched same-object questions retain identical fact inputs and query token bags
 while requiring distinct answers. Actual preparation review is the final
 pre-fit launch gate; the fixed calibration and retained-step admission then
 govern the single fit.
+
+
+## Observed result (2026-09-02)
+
+**`LANGUAGE_INTERFACE_HELDOUT_PASSED`.** The learned soft reader selected every
+supervised role correctly and produced every correct answer in both construction
+views and all four development views, including both withheld wording
+combinations. This is **25,600 primary answers and 358,400 role decisions**.
+All matched-owner pairs and all complete binding groups passed. The canonical
+frozen-core semantic oracle was independently perfect in each view.
+
+| Population | View / wording | Supported correct | UNKNOWN correct | Role pointers correct | Both-answer syntax pairs | Complete five-answer groups |
+|---|---|---:|---:|---:|---:|---:|
+| construction | 0 / seen | 8,192/8,192 | 2,048/2,048 | 143,360/143,360 | 2,048/2,048 | 2,048/2,048 |
+| construction | 1 / seen | 8,192/8,192 | 2,048/2,048 | 143,360/143,360 | 2,048/2,048 | 2,048/2,048 |
+| development | 0 / seen | 1,024/1,024 | 256/256 | 17,920/17,920 | 256/256 | 256/256 |
+| development | 1 / seen | 1,024/1,024 | 256/256 | 17,920/17,920 | 256/256 | 256/256 |
+| development | 2 / withheld | 1,024/1,024 | 256/256 | 17,920/17,920 | 256/256 | 256/256 |
+| development | 3 / withheld | 1,024/1,024 | 256/256 | 17,920/17,920 | 256/256 | 256/256 |
+
+Each construction view preserves all 1,024 supported quartets per question
+family; each development view preserves all 128 per family. Owner, object and
+location pointer accuracy are individually 100%, as well as 100% overall.
+Inference still uses the entire soft role distribution, not these argmax
+positions. The largest full-head difference from the canonical hard-field
+oracle is **0.06234240531921387** (development view 3); that comparison is
+reported descriptively. The new learned interface is not an exact numerical
+replacement for the old role lookup, despite all answers agreeing. A future
+R4 comparison must use this learned ordinary interface as its reference.
+
+### Measured contextual owner contrast
+
+These actual construction examples share the same four facts:
+
+```text
+jude, not mara, put the map in the basket.
+jude, not mara, put the box in the crate.
+noah, not otto, put the map in the trunk.
+hugo, not leon, put the fork in the closet.
+```
+
+| Question | Reader/core answer |
+|---|---|
+| where is the map owned by jude, not noah? answer: | basket |
+| where is the map owned by noah, not jude? answer: | trunk |
+
+The question token bags are identical. The name placement around the owner and
+negation cues changes which answer is correct. All 4,096 such construction
+pairs and all 1,024 development pairs receive both correct answers. These
+paired counts cover related views of observed worlds, not independent samples.
+
+### Value dependence survives soft role reading
+
+Both construction value-cycle views have the same result: **0/8,192** answers
+retain the original supported target and **8,192/8,192** select the reassigned
+value. All **2,048/2,048 UNKNOWN** answers remain correct. Role attention and
+binding attention are bit-identical to their primary view, and work matches.
+All four projected fact values are cycled; null remains unchanged. Both control
+views pass every frozen condition before development is opened.
+
+Each primary/control row computes all 15 role distributions (the question
+location output is unused), including grammar/punctuation/distractor tokens,
+and all five binding scores. Supervised role accounting is 14 per row. Across
+one full evaluation there are 46,080 learned-interface rows and 230,400 binding
+score slots including 46,080 null pairs. The canonical oracle accounts for an
+additional 25,600 frozen-core rows and receives no learned-reader output.
+
+### Fit, exact replay and retained identities
+
+The sole reader fit completed all **512 updates**, **65,536 row presentations**
+and **917,504 role-label presentations**. It used no answer loss, core loads,
+core updates or development tensors. Mean role loss over the final 64 steps
+was **0.000038592415478433395**. The fitted capsule contains only the 141,571
+reader parameters, in 566,692 bytes; the original 286,976-parameter core stays
+separately bound and unchanged.
+
+Synthetic plan comparison selected **four CPU threads**: median role-step time
+**0.0366473545 seconds** versus **0.0463809790 seconds** with eight. Loss and
+gradient differences were exactly zero across the two synthetic plans. Both
+plans had one inter-op thread and zero optimizer updates. The first eight
+actual steps were retained; their 0.0377422710-second median admitted the rest
+with a conservative remaining estimate of 98.0442092 seconds.
+
+The fit took **25.369492875 seconds**, evaluation
+**12.174103708 seconds**, and fresh-process replay
+**12.376539750 seconds**: **49.920136833 seconds**
+cumulative against 900 seconds. Peak RSS across phases was
+**1,564,622,848 bytes**
+(**1.457168579102 GiB**)
+against 4 GiB. These are experiment costs, not a serving-throughput benchmark.
+
+The one fresh process reproduced the complete evaluation evidence exactly,
+including predictions, role positions, full-head/attention digests, all grouped
+metrics, controls and state identities. Public envelopes are exact copies of
+the retained files:
+
+- [Preparation](r4_zoology_language_interface_1077_preparation.json): `blake3:0395b826049dbeed351a647960c7b66cc4d65fc19b65eb3c522fcdd807aaad69`.
+- [Fit](r4_zoology_language_interface_1077_fit.json): `blake3:7c5a46f0b044ee3a9da3aa2126b4fb31f3088e239a5fd6b9f4e276334a97770d`.
+- Reader file: `blake3:c11d21817bff818fa242f653279e9e0c12d21641ff63df3a5f7a6680bcc732a7`; reader state: `blake3:7c659422df2e65a0ce24c08738dc9f08dca99775de1702251097a0fc6483404e`.
+- [Result](r4_zoology_language_interface_1077_result.json): `blake3:294fe7f488237c196525a3470f48c3b55f5a14232e23c3243b88f579da85e1c1`.
+- Complete deterministic evidence: `blake3:cc8b771dd5e8e22d34218558f570e99d5d59efd4d28405a4d200b6d835dcbdbb`.
+- [Replay](r4_zoology_language_interface_1077_replay.json): `blake3:8e5b1f11be99835ec3dddd197357da462353e6bb9c7f5b8f603e1db766d0770f`.
+
+The reader/core state CIDs, core tying, parameter counts, eval/no-grad state,
+source and data identities remain unchanged through evaluation and replay.
+No replacement fit, changed population, R4 forward or geometry modification
+occurred. Sixteen focused synthetic checks, Ruff, claim wording and independent
+source/preparation reviews passed. Broad workspace, BDD, WASM, fuzz, audit and
+old mechanics campaigns remain `NOT_RUN`.
+
+### Decision and next step
+
+**Retain the learned interface and current geometry.** The next separately
+frozen experiment is unchanged-R4 qualification of this complete learned
+ordinary path: compare its soft role mixtures, compound Q/K/V attention,
+full fact-plus-null aggregation and full-head outputs against coherent R4,
+then apply a matched broken-transport control. Keep both the reader and binding
+core fixed. The reference must be the new learned interface; the earlier
+position-37 hard-field oracle is only the retained semantic anchor. No such
+R4 run or additional fit occurs in #1077.
+
+This establishes supervised local owner disambiguation and successful soft
+role reading across the declared clause combinations. Clause boundaries are
+provided, the question form is seen, all vocabulary is known, object/location
+lexica are disjoint and the underlying worlds were already observed. It does
+not establish general English parsing, learned segmentation, new semantic-world
+generalization, open-ended generation, correctness, reasoning, chat, geometric
+advantage or softmax removal. #973 stays open and #954 remains blocked.
+
+
+## Delivery review (2026-09-02)
+
+Independent review verified all four public/local envelopes, all 295 frozen
+implementation files, dataset bytes and raw core/reader tensor-state identities.
+It recomputed the answer, role, group, syntax-pair and control counts without
+model execution. All 66 primary criteria and both controls agree with the
+retained evidence. Record and six current mirrors have been reviewed for scope
+and the next-reference boundary. Source remains exactly at the published
+pre-fit freeze. Protected delivery and native tracker/milestone completion are
+recorded on issue #1077.
