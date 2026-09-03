@@ -148,7 +148,7 @@ def sandbox_profile(repo: Path, python: Path, bindings: Path, assets: dict,
     allowed_trees = [str(repo / "tools/r4-softmax-trainer/src"),
                      str(python.parent.parent), str(python.resolve().parent.parent)]
     exact = [str(bindings.resolve()), str(repo / "tools/r4-softmax-trainer/pyproject.toml"),
-             str(repo / "tools/r4-softmax-trainer/uv.lock")] + [item["path"] for item in assets.values()]
+             str(repo / "tools/r4-softmax-trainer/uv.lock")] + [assets[name]["path"] for name in sorted(assets)]
     # The uv major/minor alias is a separate readlink target; allowing only the
     # fully resolved runtime loses it. These are literal links, not new trees.
     exact += [item["path"] for item in interpreter_links(python)]
