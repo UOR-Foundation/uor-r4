@@ -161,3 +161,26 @@ Source, preparation and outcome entries will be appended here as they occur.
 Only the focused adapter, provenance and decision checks named in this contract
 are active. Broad workspace/BDD/wasm/fuzz/audit/teacher QA remains dormant;
 protected queue acknowledgements are transport status, not test evidence.
+
+### Source freeze and prepared admission
+
+Source frozen at `91aecda179209041decacef9488d5e8ec2681299`. Twelve focused checks passed in
+0.089 seconds; Ruff and claim wording passed. Independent source review found
+no remaining blocker. No learned-model forward preceded this preparation.
+
+The [exact preparation](r4_zoology_language_r4_1079_preparation.json) has CID
+`blake3:d9c8ad8448365b2039276fdeda6b70da53ef63fde24e02dd1dd8dea437b546a4`.
+Its 307-file implementation closure has CID
+`blake3:a94432fb7e764247521a9fbd42ee8f99472bb6f2e800e895f380806b0bbf1462`.
+All six views reach 24 of the 120 registered native frames. Both controls change
+an actual source matrix in every supported row: all twelve reachability ceilings
+are 100%, above the frozen 50% criterion. This is opportunity, not a model result.
+
+| View | Changed token-source matrices | Changed fact-source matrices |
+|---|---:|---:|
+| construction 0 | 471,638 | 39,322 |
+| construction 1 | 461,246 | 39,905 |
+| development 0 | 59,105 | 5,112 |
+| development 1 | 57,605 | 5,120 |
+| development 2 | 57,925 | 5,120 |
+| development 3 | 63,045 | 4,866 |
