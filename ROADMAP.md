@@ -138,7 +138,7 @@ artifact, loader and separate matched comparison; #1102 subsequently recorded
 the bounded `NATIVE_REFERENCE_PRESERVED` result and consumed both admitted
 envelopes. The current [#1105 ADR](docs/adr/0006-native-four-fact-workbench-service.md)
 and [machine contract](docs/r4_service_contract_1105.json) specify only the
-next service boundary while independent review is underway. #1084 remains open
+next service boundary, independently accepted and awaiting protected delivery. #1084 remains open
 and unassigned for a later, separately admitted implementation child. The
 earlier preparation stop, #1096 runtime-only readiness and retained-evidence
 accounting remain preserved; consumed envelopes are not rerun. Parallel integration,

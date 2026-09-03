@@ -132,8 +132,8 @@ target serving engine uses no Ollama, hosted model, or source-model weights.
 
 **Current programme (adopted 2026-09-03):** the
 [current map](docs/integration/current-state.md) names the retained #1102 native
-reference and the pending [#1105 service/API specification](docs/adr/0006-native-four-fact-workbench-service.md).
-After independent acceptance and protected delivery of that contract-only
+reference and the accepted [#1105 service/API specification](docs/adr/0006-native-four-fact-workbench-service.md), awaiting protected delivery.
+After protected delivery of that contract-only
 child, #1084 remains the open, unassigned owner for a separately activated
 `r4-workbench` implementation child. Start the next
 task with [CONTINUE.md](docs/integration/CONTINUE.md). The capability goal includes

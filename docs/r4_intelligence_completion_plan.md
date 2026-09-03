@@ -123,11 +123,11 @@ open and #954 blocked. Use the [current map](integration/current-state.md).
   and [adoption record](integration/workflow-adoption.md). The
   [#1086 native-reference specification](r4_native_reference_1086.md) froze the
   native contract, and #1102 later recorded the bounded
-  `NATIVE_REFERENCE_PRESERVED` result. The proposed
+  `NATIVE_REFERENCE_PRESERVED` result. The accepted
   [#1105 service ADR](adr/0006-native-four-fact-workbench-service.md) and
   [machine contract](r4_service_contract_1105.json) are the current
-  contract-only child while independent review is underway. After acceptance
-  and protected delivery close #1105, #1084 remains open and unassigned for a
+  contract-only child, awaiting protected delivery. After protected delivery
+  closes #1105, #1084 remains open and unassigned for a
   separately activated `r4-workbench` implementation child. #1094 and #1102
   envelopes are consumed and are not rerun; #973 stays open and #954 blocked.
   [CONTINUE.md](integration/CONTINUE.md) is the reusable one-task handoff.
