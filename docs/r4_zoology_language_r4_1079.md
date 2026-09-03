@@ -184,3 +184,105 @@ are 100%, above the frozen 50% criterion. This is opportunity, not a model resul
 | development 1 | 57,605 | 5,120 |
 | development 2 | 57,925 | 5,120 |
 | development 3 | 63,045 | 4,866 |
+
+### Sole campaign and independent-process replay
+
+The actual-preparation audit reproduced the complete binding before the first
+learned forward. See [admission](https://github.com/UOR-Foundation/uor-r4/issues/1079#issuecomment-5519288015)
+and the [published run contract](https://github.com/UOR-Foundation/uor-r4/issues/1079#issuecomment-5519272309).
+One campaign and one fresh-process replay completed without retry or source changes.
+
+Terminal: **`LANGUAGE_R4_PRESERVED_CONTROL_WEAK`**. Both coordinate stages
+preserve the retained learned ordinary execution. The fact-transport control
+is strongly sensitive in every view. The token-transport control is valid and
+changes behavior in every view, but misses the frozen 50-point supported-loss
+criterion in three of six views. Preserve these findings separately.
+
+All six ordinary learned-path records reproduce exactly. All **156/156 primary
+criteria pass**, with **25,600/25,600 identical and correct answers**: 20,480
+supported and 5,120 unknown. All **358,400 supervised role decisions** remain
+correct; all **384,000 computed role vectors** meet tolerance. Reader role
+attention is bit-identical, and all counterfactual groups and same-bag syntax
+pairs remain complete.
+
+| Largest difference across all six views and all three strata | Observed | Frozen ceiling |
+|---|---:|---:|
+| Full-vocabulary logits | 8.8214874267578125e-06 | 0.005 |
+| Binding attention | 4.76837158203125e-07 | 1e-5 |
+| Computed role vectors | 8.9406967163085938e-08 | 1e-5 |
+| Mean NLL, nats | 1.3947101251687855e-09 | 1e-5 |
+
+Both controls preserve the declared work and exact reader attention; all actual
+corruption counts match the preflight. Fact control also preserves coherent
+role vectors exactly. The table reports supported accuracy losses from the
+100% coherent baseline; unknown correct counts are descriptive.
+
+| View | Token control loss, pp | Token unknown correct | Fact control loss, pp | Fact unknown correct |
+|---|---:|---:|---:|---:|
+| construction 0 | 28.72314453 | 84/2048 | 91.05224609 | 1465/2048 |
+| construction 1 | 51.5625 | 241/2048 | 90.4296875 | 1433/2048 |
+| development 0 | 30.17578125 | 7/256 | 93.26171875 | 197/256 |
+| development 1 | 52.44140625 | 33/256 | 85.64453125 | 166/256 |
+| development 2 | 52.63671875 | 0/256 | 84.1796875 | 182/256 |
+| development 3 | 37.01171875 | 98/256 | 87.98828125 | 166/256 |
+
+The token control meets the strong-sensitivity criterion in construction view 1
+and development views 1/2 (**3/6**); its range is **28.72314453125 to
+52.63671875 pp**. The fact control passes **6/6**, ranging from
+**84.1796875 to 93.26171875 pp**. Thus all twelve controls are valid, nine meet
+the strong criterion, and the complete two-control strong-attribution verdict
+is false. The terminal does not revoke primary preservation or the strong
+fact-control result.
+
+The 100% structural opportunity ceiling only meant that some source matrix
+changed in each row. It did not measure how much learned role-attention mass
+fell on those changed tokens, nor how the transported values moved. That is a
+possible explanation for the weaker token intervention, **not a measured cause**.
+The next separately frozen step is a small construction-only token-stage
+exposure diagnostic on the existing two renderings (28.7 versus 51.6 points of
+supported loss). For each of the 14 used roles, measure attention mass on changed
+frames, weighted individual-value displacement and net pooled-vector displacement;
+compare with recorded changed-versus-retained supported and unknown answers. Keep the reader,
+core, inputs and current control fixed. Do not select a replacement control to
+make this revealed result pass. Its purpose is to distinguish weak exposure of
+high-weight values from robustness after a substantial perturbation. Retain the
+working R4 path while resolving that interpretation. The proposed causal output
+prototype remains a later step; no generation or geometry expansion follows
+from this issue.
+
+The campaign took **27.850287 s**, and fresh-process replay
+took **29.191895 s**, **57.042183 s** combined
+under the 900-second cap. Peak RSS was **2,380,644,352 bytes (2.217148 GiB)**
+under 4 GiB. CPU execution retained four intra-op threads, one inter-op thread,
+one worker and batch 256. The two processes were **29619** and
+**29637**. Complete evidence replay is exact, including primary
+metrics, all control outputs/counts and the weak-control terminal.
+
+Reader/core states remain respectively
+`blake3:7c659422df2e65a0ce24c08738dc9f08dca99775de1702251097a0fc6483404e` and
+`blake3:abbdbcaafc2d9eb36543ce75fbb0101b6788119d80a6ed9c017bb9d06fbeac59`.
+All 428,547 parameters remain frozen, tying and eval/no-grad mode hold, and
+source/data/frame/implementation bindings are unchanged. New optimizer updates,
+new parameters, population generation, hard-field oracle forwards, geometry
+changes and native exports are all zero. Broad QA remains `NOT_RUN`.
+
+Evidence identities:
+
+- [Result](r4_zoology_language_r4_1079_result.json): `blake3:dee107190172afcb7637d52469662ecab217847271e4bbdb0721514fcfbdc3a5`.
+- Full replayed evidence: `blake3:663320fe263cc945aae412ef27c6fa1b6a35fb33f391908d29e20d65cd50df10`.
+- [Fresh-process replay](r4_zoology_language_r4_1079_replay.json): `blake3:eaa17433d5cd150a2a0c52adab6104bda4c4dae26221944fcde112ef841ca597`.
+
+This supports two-stage soft-mixture coordinate preservation on already-observed
+controlled-language data, with strong fact-transport sensitivity and bounded
+token-control sensitivity. General English, free generation, geometry advantage
+and deployment remain unestablished. #973 stays open and #954 remains blocked.
+
+### Final evidence review
+
+Independent evidence review verified result/replay envelopes, distinct process
+identities, phase markers, unchanged source/artifact/data/frame hashes, all
+156 primary criteria and the valid-but-weaker token-control verdict. Twelve
+focused mechanism/provenance/decision checks, Ruff and the documentation wording
+check passed. Six current mirrors preserve the historical records and now point
+to the construction-only exposure diagnostic. The protected PR transports this
+reviewed evidence; its acknowledgement checks do not constitute additional QA.
