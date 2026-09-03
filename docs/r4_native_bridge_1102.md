@@ -110,3 +110,13 @@ unfinished. No successor issue or second task is activated.
 cache, then resume #1102's unconsumed offline build and independent concrete
 source/binary/runtime/input/output release review. The frozen comparison still
 must not begin before that release is accepted.
+
+## Later checkpoint — native comparison completed
+
+The cache restoration, one successful offline build, separately admitted
+comparison and independent outcome acceptance are appended in
+[r4_native_bridge_1102_execution.md](r4_native_bridge_1102_execution.md).
+The later result is `NATIVE_REFERENCE_PRESERVED`, within its exact known-input
+scope. This earlier preparation record and its failed offline queries remain
+historical evidence. Both envelopes are now consumed; the current action is
+protected PR #1104 delivery, then the separately activated #1084 interface ADR.
