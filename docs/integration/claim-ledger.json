@@ -1,7 +1,7 @@
 {
   "schema": "uor-r4.claim-ledger/1",
   "repository": "UOR-Foundation/uor-r4",
-  "source_revision": "c1c45fa098d24f4ceae3c8fc207f0ecd07d62e20",
+  "source_revision": "4200a6656f4409f6209190c50832fd54ac0ce0aa",
   "vocabulary": {
     "source": "formal_vocabulary",
     "role": "Statement class from the normative vocabulary.",
@@ -71,15 +71,24 @@
     },
     "specification_1085": {
       "path": "docs/integration/clause-segmentation-1085.md",
-      "url": "https://github.com/UOR-Foundation/uor-r4/blob/issue-1085-clause-segmentation/docs/integration/clause-segmentation-1085.md",
+      "url": "https://github.com/UOR-Foundation/uor-r4/blob/4200a6656f4409f6209190c50832fd54ac0ce0aa/docs/integration/clause-segmentation-1085.md",
       "sha256": "85f928fec94fa0f6793cff4c35e1fc8c9cba691739d34db272465766c7c9dab1",
-      "evidence_status": "SPECIFICATION"
+      "evidence_status": "SPECIFICATION",
+      "revision": "4200a6656f4409f6209190c50832fd54ac0ce0aa"
     },
     "source_audit_1085": {
       "path": "docs/integration/clause-segmentation-1085-sources.md",
-      "url": "https://github.com/UOR-Foundation/uor-r4/blob/issue-1085-clause-segmentation/docs/integration/clause-segmentation-1085-sources.md",
+      "url": "https://github.com/UOR-Foundation/uor-r4/blob/4200a6656f4409f6209190c50832fd54ac0ce0aa/docs/integration/clause-segmentation-1085-sources.md",
       "sha256": "83f6533c7296f5b3c1edefd4f182eafac83edc71f2de9cb67203504ca62880e4",
-      "evidence_status": "SOURCE_INSPECTED"
+      "evidence_status": "SOURCE_INSPECTED",
+      "revision": "4200a6656f4409f6209190c50832fd54ac0ce0aa"
+    },
+    "review_1085": {
+      "path": "docs/integration/clause-segmentation-1085-review.md",
+      "url": "https://github.com/UOR-Foundation/uor-r4/blob/4200a6656f4409f6209190c50832fd54ac0ce0aa/docs/integration/clause-segmentation-1085-review.md",
+      "revision": "4200a6656f4409f6209190c50832fd54ac0ce0aa",
+      "sha256": "02444b2ba2f3fb311bfb4bf7a4c52bb1bf813358cbce2e5dc4f4941f46fd90c4",
+      "evidence_status": "INDEPENDENT_SPECIFICATION_REVIEW"
     }
   },
   "artifacts_1079": {
@@ -402,7 +411,8 @@
         "source_audit_1085",
         "preparation_1079",
         "result_1079",
-        "record_1082"
+        "record_1082",
+        "review_1085"
       ],
       "limits": [
         "This delivered specification is neither measured adapter behavior nor a mathematical proof.",
@@ -420,7 +430,7 @@
       "proof_artifacts": []
     }
   ],
-  "previous_source_revision": "e627252e525201815169ffd8364184953a46018d",
+  "previous_source_revision": "c1c45fa098d24f4ceae3c8fc207f0ecd07d62e20",
   "artifacts_1082": {
     "implementation_cid": "blake3:1451084b66531dbe5eb0cb1d3b3e60e5f0aa3f4bd59fffbf582a18d4dfc9380e",
     "preparation_cid": "blake3:c8a4a56de77767cbbe8fd31edc83251b42a6f729e182d065caa47d981f248741",
