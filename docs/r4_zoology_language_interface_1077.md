@@ -201,3 +201,25 @@ PR and close only #1077. Preserve earlier records. General English, learned
 segmentation, unseen vocabulary, open-ended generation, correctness, reasoning,
 chat, geometry advantage and softmax removal remain outside this experiment.
 #973 stays open and #954 remains blocked.
+
+
+## Published pre-fit preparation (2026-09-02)
+
+Source freeze: `f52afce506897f8b477b1ebafd37f47272699410`. Sixteen focused checks passed in 0.107 seconds;
+Ruff, claim wording and independent source/contract review passed. The sole
+preparation generated and audited the bound renderings without constructing or
+fitting a candidate. Calibration, fit, evaluation and replay remain unrun.
+
+- [Preparation](r4_zoology_language_interface_1077_preparation.json): `blake3:0395b826049dbeed351a647960c7b66cc4d65fc19b65eb3c522fcdd807aaad69`.
+- Implementation, 295 files: `blake3:baa22e6e908dbf3a7c694679f386815736ca65db444e98ce823d1b5a26dfdb83`.
+- Data manifest: `blake3:dc349b9931556cb45604295382766c78d173d26a2dca8491deacefae49fbd0d1`.
+- Data tree: `blake3:b8b51eccc1fb4b472a5a4c80b8d4f34acac462bba02272df26bad1f918888143`.
+
+Actual audits confirm 20,480 construction rows and 5,120 development rows,
+with 14 role labels each. Seen/held-out clause combinations and actual/negated
+owner-object partitions remain separated as declared. There is zero exact input
+overlap across construction/development and zero new semantic worlds.
+Matched same-object questions retain identical fact inputs and query token bags
+while requiring distinct answers. Actual preparation review is the final
+pre-fit launch gate; the fixed calibration and retained-step admission then
+govern the single fit.
