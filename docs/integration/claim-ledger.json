@@ -1,7 +1,7 @@
 {
   "schema": "uor-r4.claim-ledger/1",
   "repository": "UOR-Foundation/uor-r4",
-  "source_revision": "d56d952d360ec167343903c7ff3f6149218410f1",
+  "source_revision": "ccabce9f0619b6154cf347a1b2641715e18d230a",
   "vocabulary": {
     "source": "formal_vocabulary",
     "role": "Statement class from the normative vocabulary.",
@@ -460,6 +460,41 @@
       "revision": "d56d952d360ec167343903c7ff3f6149218410f1",
       "sha256": "d1f82d45df39f232b6a30c022e75e1015a6e25cd36895daf01241c66dbca9d23",
       "evidence_status": "SPECIFICATION_METADATA_RECONCILED"
+    },
+    "prebuild_1102": {
+      "path": "docs/r4_native_bridge_1102_prebuild.json",
+      "url": "https://github.com/UOR-Foundation/uor-r4/blob/ccabce9f0619b6154cf347a1b2641715e18d230a/docs/r4_native_bridge_1102_prebuild.json",
+      "revision": "ccabce9f0619b6154cf347a1b2641715e18d230a",
+      "sha256": "72e041fc56efc92b79bca57d9e7f52d253ad9cde2313a2cdc39ff4f03f3e35b8",
+      "evidence_status": "PREBUILD_DEPENDENCY_UNAVAILABLE"
+    },
+    "record_1102": {
+      "path": "docs/r4_native_bridge_1102.md",
+      "url": "https://github.com/UOR-Foundation/uor-r4/blob/ccabce9f0619b6154cf347a1b2641715e18d230a/docs/r4_native_bridge_1102.md",
+      "revision": "ccabce9f0619b6154cf347a1b2641715e18d230a",
+      "sha256": "65c7928a2a97a2106eba8ae552f9ce6ad6baa90b08da83ea56e3be3d2421a97d",
+      "evidence_status": "DRAFT_NOT_MERGED"
+    },
+    "code_review_1102": {
+      "path": "docs/r4_native_bridge_1102_code_review.md",
+      "url": "https://github.com/UOR-Foundation/uor-r4/blob/ccabce9f0619b6154cf347a1b2641715e18d230a/docs/r4_native_bridge_1102_code_review.md",
+      "revision": "ccabce9f0619b6154cf347a1b2641715e18d230a",
+      "sha256": "92c6ee34f3e2166d219449fc5e1e2a10f19e20086cbd42479f9b04740d4f7410",
+      "evidence_status": "DRAFT_SOURCE_REVIEW_ONLY"
+    },
+    "harness_review_1102": {
+      "path": "docs/r4_native_bridge_1102_harness_review.md",
+      "url": "https://github.com/UOR-Foundation/uor-r4/blob/ccabce9f0619b6154cf347a1b2641715e18d230a/docs/r4_native_bridge_1102_harness_review.md",
+      "revision": "ccabce9f0619b6154cf347a1b2641715e18d230a",
+      "sha256": "6aa790e66eab4b45223248a448cee35d112ef6dfd8766fdccf98e04407ed8387",
+      "evidence_status": "DRAFT_SOURCE_REVIEW_ONLY"
+    },
+    "input_audit_1102": {
+      "path": "docs/r4_native_bridge_1102_input_audit.md",
+      "url": "https://github.com/UOR-Foundation/uor-r4/blob/ccabce9f0619b6154cf347a1b2641715e18d230a/docs/r4_native_bridge_1102_input_audit.md",
+      "revision": "ccabce9f0619b6154cf347a1b2641715e18d230a",
+      "sha256": "85295b6f4d483b781fa5a491752afd403eb4280aa1bbabf0d6a6dc35829a3117",
+      "evidence_status": "INPUT_IDENTITY_ONLY"
     }
   },
   "artifacts_1079": {
@@ -572,8 +607,8 @@
         "The #1082 construction-only diagnostic now measures role-selective exposure and pooling displacement; it does not establish a downstream causal explanation. The #1079 strong-sensitivity miss remains unchanged and does not falsify primary preservation or establish geometric superiority."
       ],
       "next_action": {
-        "status": "PARKED_SEPARATE_ACTIVATION",
-        "scope": "Separately activate #1102: implement the accepted #1086 native reference boundary and bind exact export/input/runtime release for independent review before any model work. The frozen bridge uses original 320 authoring rows and 16 refusals, B=1 both arms, fixed numerical/discrete/replay criteria and one bounded envelope. #1094 remains complete with its envelope consumed; #973 open and #954 blocked. #1086 performed zero native execution.",
+        "status": "PARKED_PREBUILD_DEPENDENCY",
+        "scope": "Resume the existing #1102 draft after exact Cargo.lock-matching archives are restored locally; then run the unconsumed offline build and obtain independent concrete release review before any export/model work. No native result or merge is approved.",
         "issue_urls": [
           "https://github.com/UOR-Foundation/uor-r4/issues/1102"
         ]
@@ -740,8 +775,8 @@
         "Numerical bound and replay checks are not a universal floating-point refinement proof."
       ],
       "next_action": {
-        "status": "PARKED_SEPARATE_ACTIVATION",
-        "scope": "Separately activate #1102: implement the accepted #1086 native reference boundary and bind exact export/input/runtime release for independent review before any model work. The frozen bridge uses original 320 authoring rows and 16 refusals, B=1 both arms, fixed numerical/discrete/replay criteria and one bounded envelope. #1094 remains complete with its envelope consumed; #973 open and #954 blocked. #1086 performed zero native execution.",
+        "status": "PARKED_PREBUILD_DEPENDENCY",
+        "scope": "Resume the existing #1102 draft after exact Cargo.lock-matching archives are restored locally; then run the unconsumed offline build and obtain independent concrete release review before any export/model work. No native result or merge is approved.",
         "issue_urls": [
           "https://github.com/UOR-Foundation/uor-r4/issues/1102"
         ]
@@ -792,8 +827,8 @@
         "#973 higher-context and #954 final source-free correctness terminals remain unmet."
       ],
       "next_action": {
-        "status": "PARKED_SEPARATE_ACTIVATION",
-        "scope": "Separately activate #1102: implement the accepted #1086 native reference boundary and bind exact export/input/runtime release for independent review before any model work. The frozen bridge uses original 320 authoring rows and 16 refusals, B=1 both arms, fixed numerical/discrete/replay criteria and one bounded envelope. #1094 remains complete with its envelope consumed; #973 open and #954 blocked. #1086 performed zero native execution.",
+        "status": "PARKED_PREBUILD_DEPENDENCY",
+        "scope": "Resume the existing #1102 draft after exact Cargo.lock-matching archives are restored locally; then run the unconsumed offline build and obtain independent concrete release review before any export/model work. No native result or merge is approved.",
         "issue_urls": [
           "https://github.com/UOR-Foundation/uor-r4/issues/1102"
         ]
@@ -857,8 +892,8 @@
         "Recorded worker RSS zero indicates no worker resource receipt; it is not a successful worker measurement."
       ],
       "next_action": {
-        "status": "PARKED_SEPARATE_ACTIVATION",
-        "scope": "Separately activate #1102: implement the accepted #1086 native reference boundary and bind exact export/input/runtime release for independent review before any model work. The frozen bridge uses original 320 authoring rows and 16 refusals, B=1 both arms, fixed numerical/discrete/replay criteria and one bounded envelope. #1094 remains complete with its envelope consumed; #973 open and #954 blocked. #1086 performed zero native execution.",
+        "status": "PARKED_PREBUILD_DEPENDENCY",
+        "scope": "Resume the existing #1102 draft after exact Cargo.lock-matching archives are restored locally; then run the unconsumed offline build and obtain independent concrete release review before any export/model work. No native result or merge is approved.",
         "issue_urls": [
           "https://github.com/UOR-Foundation/uor-r4/issues/1102"
         ]
@@ -937,8 +972,8 @@
         "#1079 weak-control and #1082 descriptive results are unchanged; #973 remains open and #954 blocked."
       ],
       "next_action": {
-        "status": "PARKED_SEPARATE_ACTIVATION",
-        "scope": "Separately activate #1102: implement the accepted #1086 native reference boundary and bind exact export/input/runtime release for independent review before any model work. The frozen bridge uses original 320 authoring rows and 16 refusals, B=1 both arms, fixed numerical/discrete/replay criteria and one bounded envelope. #1094 remains complete with its envelope consumed; #973 open and #954 blocked. #1086 performed zero native execution.",
+        "status": "PARKED_PREBUILD_DEPENDENCY",
+        "scope": "Resume the existing #1102 draft after exact Cargo.lock-matching archives are restored locally; then run the unconsumed offline build and obtain independent concrete release review before any export/model work. No native result or merge is approved.",
         "issue_urls": [
           "https://github.com/UOR-Foundation/uor-r4/issues/1102"
         ]
@@ -992,8 +1027,8 @@
         "Supplied segmentation remains the qualified model entry; #1094 and #973 remain open and #954 blocked."
       ],
       "next_action": {
-        "status": "PARKED_SEPARATE_ACTIVATION",
-        "scope": "Separately activate #1102: implement the accepted #1086 native reference boundary and bind exact export/input/runtime release for independent review before any model work. The frozen bridge uses original 320 authoring rows and 16 refusals, B=1 both arms, fixed numerical/discrete/replay criteria and one bounded envelope. #1094 remains complete with its envelope consumed; #973 open and #954 blocked. #1086 performed zero native execution.",
+        "status": "PARKED_PREBUILD_DEPENDENCY",
+        "scope": "Resume the existing #1102 draft after exact Cargo.lock-matching archives are restored locally; then run the unconsumed offline build and obtain independent concrete release review before any export/model work. No native result or merge is approved.",
         "issue_urls": [
           "https://github.com/UOR-Foundation/uor-r4/issues/1102"
         ]
@@ -1069,8 +1104,8 @@
         "Supplied clauses remain the qualified model entry. #1079 weak-control and #1082 descriptive findings are unchanged; #1094/#973 stay open and #954 blocked."
       ],
       "next_action": {
-        "status": "PARKED_SEPARATE_ACTIVATION",
-        "scope": "Separately activate #1102: implement the accepted #1086 native reference boundary and bind exact export/input/runtime release for independent review before any model work. The frozen bridge uses original 320 authoring rows and 16 refusals, B=1 both arms, fixed numerical/discrete/replay criteria and one bounded envelope. #1094 remains complete with its envelope consumed; #973 open and #954 blocked. #1086 performed zero native execution.",
+        "status": "PARKED_PREBUILD_DEPENDENCY",
+        "scope": "Resume the existing #1102 draft after exact Cargo.lock-matching archives are restored locally; then run the unconsumed offline build and obtain independent concrete release review before any export/model work. No native result or merge is approved.",
         "issue_urls": [
           "https://github.com/UOR-Foundation/uor-r4/issues/1102"
         ]
@@ -1160,8 +1195,8 @@
         "The 120-second historical charge is a conservative policy debit; the resource snapshot excludes its own write/exit tail. Storage peak is a reconstructed bound, not an instantaneous measurement."
       ],
       "next_action": {
-        "status": "PARKED_SEPARATE_ACTIVATION",
-        "scope": "Separately activate #1102: implement the accepted #1086 native reference boundary and bind exact export/input/runtime release for independent review before any model work. The frozen bridge uses original 320 authoring rows and 16 refusals, B=1 both arms, fixed numerical/discrete/replay criteria and one bounded envelope. #1094 remains complete with its envelope consumed; #973 open and #954 blocked. #1086 performed zero native execution.",
+        "status": "PARKED_PREBUILD_DEPENDENCY",
+        "scope": "Resume the existing #1102 draft after exact Cargo.lock-matching archives are restored locally; then run the unconsumed offline build and obtain independent concrete release review before any export/model work. No native result or merge is approved.",
         "issue_urls": [
           "https://github.com/UOR-Foundation/uor-r4/issues/1102"
         ]
@@ -1173,7 +1208,7 @@
       "statement": "The exact native R4LearnedReferenceV1 artifact and implementation preserve the accepted Python raw-text reader/core/R4 behavior on the frozen known authoring fixtures under the specified numerical and discrete criteria.",
       "role": "Empirical Criterion",
       "evidence_status": "Unproven",
-      "outcome": "SPECIFIED_NOT_RUN",
+      "outcome": "DRAFT_IMPLEMENTATION_PREBUILD_UNAVAILABLE",
       "scope": {
         "operation": "answer_four_fact_raw_text/v1",
         "artifact_components": 21,
@@ -1200,7 +1235,9 @@
         "specification_status": "NATIVE_REFERENCE_CONTRACT_SPECIFIED",
         "independent_specification_review": "ACCEPTED",
         "native_behavior": "NOT_RUN",
-        "mathematical_proof": "NONE_SUPPLIED"
+        "mathematical_proof": "NONE_SUPPLIED",
+        "implementation_1102": "SOURCE_REVIEWED_NOT_BUILT",
+        "execution_release": "NOT_ADMITTED"
       },
       "evidence_refs": [
         "specification_1086",
@@ -1212,16 +1249,22 @@
         "specification_review_1086",
         "metadata_validation_1086",
         "comparison_record_1094",
-        "comparison_result_1094"
+        "comparison_result_1094",
+        "prebuild_1102",
+        "record_1102",
+        "code_review_1102",
+        "harness_review_1102",
+        "input_audit_1102"
       ],
       "limits": [
         "Static inventory/identity/schema reconciliation is design evidence, not export correctness, measured native behavior or a universal floating-point refinement proof.",
         "All prior negative/unavailable/weak-control/descriptive records remain. No new parsing, worlds, context, generation, reasoning, coding, geometric advantage or final-kernel claim follows.",
-        "The #1086 contract is not an execution release; its successor requires separate activation and independent release review."
+        "The #1086 contract is not an execution release; its successor requires separate activation and independent release review.",
+        "The #1102 candidate is a draft: offline dependency metadata failed before building; no compiler/type acceptance, export, loader result or model behavior has been measured. Both execution envelopes remain unconsumed."
       ],
       "next_action": {
-        "status": "PARKED_SEPARATE_ACTIVATION",
-        "scope": "Separately activate #1102: implement the accepted #1086 native reference boundary and bind exact export/input/runtime release for independent review before any model work. The frozen bridge uses original 320 authoring rows and 16 refusals, B=1 both arms, fixed numerical/discrete/replay criteria and one bounded envelope. #1094 remains complete with its envelope consumed; #973 open and #954 blocked. #1086 performed zero native execution.",
+        "status": "PARKED_PREBUILD_DEPENDENCY",
+        "scope": "Resume the existing #1102 draft after exact Cargo.lock-matching archives are restored locally; then run the unconsumed offline build and obtain independent concrete release review before any export/model work. No native result or merge is approved.",
         "issue_urls": [
           "https://github.com/UOR-Foundation/uor-r4/issues/1102"
         ]
@@ -1229,7 +1272,7 @@
       "proof_artifacts": []
     }
   ],
-  "previous_source_revision": "2974e4a6509f7ee83a7db708099ba301a7ed5f4f",
+  "previous_source_revision": "d56d952d360ec167343903c7ff3f6149218410f1",
   "artifacts_1082": {
     "implementation_cid": "blake3:1451084b66531dbe5eb0cb1d3b3e60e5f0aa3f4bd59fffbf582a18d4dfc9380e",
     "preparation_cid": "blake3:c8a4a56de77767cbbe8fd31edc83251b42a6f729e182d065caa47d981f248741",
@@ -1314,5 +1357,23 @@
     "next_state": "PARKED_UNASSIGNED",
     "closure_condition": "Specification DoD accepted; close #1086 only after verified protected delivery. No native capability promotion.",
     "history": "Earlier latest_* checkpoints retain original results and scheduling. #1094 is closed through protected PR #1101; its bounded measured preservation remains unchanged."
+  },
+  "latest_native_preparation": {
+    "issue": 1102,
+    "status": "PREBUILD_DEPENDENCY_UNAVAILABLE",
+    "implementation_revision": "087303635b9674de02339bc057fca67e19bcd318",
+    "evidence_revision": "ccabce9f0619b6154cf347a1b2641715e18d230a",
+    "release": "NOT_ADMITTED",
+    "delivery": "DRAFT_PR_NOT_MERGED",
+    "issue_state": "OPEN_PARKED",
+    "native_build": "NOT_RUN",
+    "exports": 0,
+    "model_loads": 0,
+    "forwards": 0,
+    "comparison": "NOT_RUN",
+    "replay": "NOT_RUN",
+    "build_envelope_consumed": false,
+    "comparison_envelope_consumed": false,
+    "next_action": "Resume the existing #1102 draft after exact Cargo.lock-matching archives are restored locally; then run the unconsumed offline build and obtain independent concrete release review before any export/model work. No native result or merge is approved."
   }
 }

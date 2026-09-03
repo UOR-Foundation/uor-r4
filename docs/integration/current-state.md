@@ -1,6 +1,6 @@
 # Current programme map and correctness handoff
 
-**Planning reconciliation: 2026-09-03, #1086 records `NATIVE_REFERENCE_CONTRACT_SPECIFIED`; #1094 is closed through protected PR #1101.** Original audit baseline:
+**Planning reconciliation: 2026-09-03, #1102 has a draft native implementation with `PREBUILD_DEPENDENCY_UNAVAILABLE`; no native build or execution is admitted.** Original audit baseline:
 `UOR-Foundation/uor-r4@e627252e525201815169ffd8364184953a46018d`.
 This map supersedes earlier “current” and “next” sequencing prose, not its
 measurements. Refresh native GitHub before selecting work. The
@@ -9,27 +9,29 @@ measurements. Refresh native GitHub before selecting work. The
 paper lanes adopted through [#1081](https://github.com/UOR-Foundation/uor-r4/issues/1081); the
 [claim ledger](claim-ledger.json) preserves their different evidence states.
 
-## Current specification and next action
+## Current preparation and next action
 
-The [#1086 native-reference specification](../r4_native_reference_1086.md) records
-**`NATIVE_REFERENCE_CONTRACT_SPECIFIED`** at protected baseline
-`eade29f4b78435e9857936786426bb34e596b301`. The
-[machine contract](../r4_native_reference_1086_contract.json),
-[operator audit](../r4_native_reference_1086_operator_audit.md) and
-[original-source audit](../r4_native_reference_1086_sources.md) define exact
-artifact/state identities, the byte-oriented loader and operator boundary, and a
-separate matched reference/native comparison with its resource envelope.
-Export, native implementation, model loads, forwards, evaluation and replay are
-**`NOT_RUN`**. This specification is neither an execution release nor a native
-capability result. QA remains dormant; only named specification checks apply.
+[#1102 native bridge preparation](../r4_native_bridge_1102.md) records
+**`PREBUILD_DEPENDENCY_UNAVAILABLE`**. Candidate source implements the opt-in
+core/API boundary, direct export, scalar reference and bounded comparison
+harness. Independent reviews support draft preservation only. The offline
+Cargo dependency metadata check cannot find the pinned `aho-corasick 1.1.4`
+archive. Native build, export, loader calls, comparison and replay are
+**`NOT_RUN`**. There is no native binary or behavior qualification; both
+execution envelopes remain unconsumed and no merge is approved.
 
-The next action is separate activation of parked
-[#1102 — Implement and qualify the frozen native learned-reference bridge](https://github.com/UOR-Foundation/uor-r4/issues/1102),
-a child of #1086, unassigned until active.
-It must use the frozen contract and bind the missing implementation/input/runtime
-identities before any authorized model run. #1087 requires its own final-lowering
-contract and #1083 typed UOR integration; neither follows automatically from this
-specification. #973 stays open and #954 remains blocked.
+#1102 remains open and parked with its draft PR. **Next:** restore the exact
+Cargo.lock-matching archives locally, then resume that draft's offline build
+and independent concrete source/binary/runtime/input/output release review.
+Do not restart from the older specification handoff or launch the comparison
+before that release is accepted.
+
+The [#1086 contract](../r4_native_reference_1086_contract.json), delivered at
+`93613bf82782ca78406fe2739dcc8d9e1d0f2b9e`, is unchanged. It still freezes the
+original 320 authoring rows and 16 refusals, B=1 both arms, all four complete
+f32 tensors, exact discrete checks, fresh replay and the single bounded
+resource envelope. #1084 service wiring, #1083 typed integration and #1087
+final lowering remain separate. #973 stays open and #954 blocked.
 
 ### Retained empirical baseline
 
@@ -168,7 +170,7 @@ transport acknowledgements do not complete their parent capability.
 | [#1096 runtime readiness](https://github.com/UOR-Foundation/uor-r4/issues/1096), child of #1094 | Delivered `ISOLATED_RUNTIME_READY` at `6f21fc5f4c40b9620c9fec5e95a39097f812ae73`; sole zero-forward attempt and independent review complete | Four harmless probes denied; no model load/output/replay, raw-text qualification or universal isolation claim. |
 | [#1083 UOR integration](https://github.com/UOR-Foundation/uor-r4/issues/1083) | Typed identity/arithmetic ADR and review of one selected adapter boundary | Content hashes, structural identities, codec identities and derivation keys remain distinct; arithmetic needs a declared domain and error/cost contract. |
 | [#1086 native reference specification](https://github.com/UOR-Foundation/uor-r4/issues/1086) | [Contract specified](../r4_native_reference_1086.md) as `NATIVE_REFERENCE_CONTRACT_SPECIFIED`; export, native implementation, loads, forwards, evaluation and replay `NOT_RUN` | Exact artifact/state/operator identities and a separate empirical comparison are defined; no native capability or execution release follows from the specification. |
-| [#1102 native implementation/export/comparison](https://github.com/UOR-Foundation/uor-r4/issues/1102), child of #1086; parked, unassigned until active | Separately activate the frozen native-reference contract and bind implementation/input/runtime identities before an authorized run | Retain only the bounded reader/core, vocabulary/query and four-fact context. Native behavior and final integer/table serving require separate qualification. |
+| [#1102 native implementation/export/comparison](https://github.com/UOR-Foundation/uor-r4/issues/1102), child of #1086; open and parked | [Draft source; offline dependency unavailable](../r4_native_bridge_1102.md). Restore exact cached archives before the unconsumed build and independent release review | Retain only the bounded reader/core, vocabulary/query and four-fact context. Native behavior and final integer/table serving require separate qualification. |
 | [#1087 final serving representation](https://github.com/UOR-Foundation/uor-r4/issues/1087), with #1083 typed UOR prerequisite | Separate lowering contract with operation/error/resource obligations after the native-reference boundary is qualified | Specification or dense research-reference success does not establish the final integer/table kernel; a lowering candidate needs its own frozen contract. |
 | [#1084 product interface](https://github.com/UOR-Foundation/uor-r4/issues/1084) | API/asset-ownership ADR and minimal same-origin shell with one honest supported operation | This can proceed in parallel without completing #962 or presenting bounded binding as general chat. |
 | [#1088 coding/workspace](https://github.com/UOR-Foundation/uor-r4/issues/1088), blocked by #1084 and #955 | Minimal executable task/patch/result schema; separate harness and later model evaluations | UI actions and external teacher output are separate from the native model's coding competence. |

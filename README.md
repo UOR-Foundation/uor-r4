@@ -1,6 +1,19 @@
 # R⁴ — Geometric Intelligence on Local Hardware
 
-**Current native-reference specification (2026-09-03):**
+**Current native bridge preparation (2026-09-03):**
+[#1102](docs/r4_native_bridge_1102.md) is `PREBUILD_DEPENDENCY_UNAVAILABLE`. The opt-in
+native implementation and harness are written and independently source-reviewed
+for draft preservation only. Cargo's offline dependency metadata check is
+blocked by the missing pinned `aho-corasick 1.1.4` archive. Native build, export,
+loader calls, model loads, comparison and replay remain **`NOT_RUN`**; both
+execution envelopes are unconsumed and no release or merge is approved.
+#1102 remains open and parked. Next: restore exact lockfile-matching dependency
+archives, then resume its offline build and independent concrete release review.
+The #1086 contract, #1094 measured Python qualification, #1079 weak control and
+#1082 descriptive limits remain unchanged. #973 stays open and #954 blocked.
+The earlier checkpoint text below is historical for scheduling.
+
+**Prior native-reference specification (2026-09-03):**
 [#1086](docs/r4_native_reference_1086.md) records
 `NATIVE_REFERENCE_CONTRACT_SPECIFIED`. The
 [machine contract](docs/r4_native_reference_1086_contract.json),
