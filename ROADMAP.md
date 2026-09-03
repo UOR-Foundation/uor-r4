@@ -1,17 +1,26 @@
 # Roadmap
 
-**Current native bridge preparation (2026-09-03):**
-[#1102](docs/r4_native_bridge_1102.md) is `PREBUILD_DEPENDENCY_UNAVAILABLE`. The opt-in
-native implementation and harness are written and independently source-reviewed
-for draft preservation only. Cargo's offline dependency metadata check is
-blocked by the missing pinned `aho-corasick 1.1.4` archive. Native build, export,
-loader calls, model loads, comparison and replay remain **`NOT_RUN`**; both
-execution envelopes are unconsumed and no release or merge is approved.
-#1102 remains open and parked. Next: restore exact lockfile-matching dependency
-archives, then resume its offline build and independent concrete release review.
-The #1086 contract, #1094 measured Python qualification, #1079 weak control and
-#1082 descriptive limits remain unchanged. #973 stays open and #954 blocked.
-The earlier checkpoint text below is historical for scheduling.
+**Current native reference (2026-09-03):**
+[#1102](docs/r4_native_bridge_1102_execution.md) records **`NATIVE_REFERENCE_PRESERVED`**
+for the exact exported artifact and pinned CPU Rust reference. Both runtimes,
+in initial execution and fresh replay, produced 320/320 correct answers,
+4,480/4,480 consumed roles and 16/16 expected refusals. All four full tensors
+met the frozen `1e-5` absolute limit; the maximum difference was `4.768372e-6`.
+Replay was exact within each implementation. The one comparison used 1,280
+forwards, zero fitting, 8.809784 seconds and 75,039,076 ledger bytes. Full tensors,
+exports, loader fixtures and all prior negative/unavailable evidence are retained.
+Independent result review accepts the bounded result; protected delivery is tracked in
+[PR #1104](https://github.com/UOR-Foundation/uor-r4/pull/1104).
+
+Next after closure: separately activate
+[#1084](https://github.com/UOR-Foundation/uor-r4/issues/1084) to freeze the Rust
+service/API and artifact-ownership handoff for this one four-fact operation,
+including truthful qualification for its actual host binary. The measured
+comparison CLI is consumed; no service/UI endpoint or general generation,
+context/coding capability, mathematical proof or final integer kernel follows.
+The known vocabulary/query forms, four-fact context, #1079 weak-control result
+and #1082 descriptive limits remain. #973 stays open and #954 blocked.
+Earlier checkpoint text below is historical for sequencing.
 
 **Prior native-reference specification (2026-09-03):**
 [#1086](docs/r4_native_reference_1086.md) records

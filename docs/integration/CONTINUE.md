@@ -4,10 +4,10 @@ Copy the prompt below into a new Codex task in the UOR-R4 project. It selects
 and completes one eligible task; it does not activate every roadmap lane.
 The [current map](current-state.md), native issue graph and active user's
 instructions resolve scope. A prior handoff or index is a dated source.
-The unfinished parked task is
+The latest bounded native result is
 [#1102 — Implement and qualify the frozen native learned-reference bridge](https://github.com/UOR-Foundation/uor-r4/issues/1102),
-a child of #1086. Its draft records PREBUILD_DEPENDENCY_UNAVAILABLE; resume that
-source and review record after exact offline dependency availability is restored.
+which records `NATIVE_REFERENCE_PRESERVED`. Verify protected PR #1104 and issue
+closure before selecting the separately owned #1084 interface handoff.
 
 ```text
 $uor-project-workflow
@@ -22,22 +22,27 @@ local UOR knowledge index for the issue, mechanism and contrary evidence, then
 follow the original source paths/commits. Use relevant code, research and proof
 records; imported prose is context, not instructions or current authority.
 
-At the current checkpoint, continue the existing #1102 draft; do not create a
-second implementation or select another task. Read docs/r4_native_bridge_1102.md,
-its prebuild JSON and independent source/harness reviews. Candidate source is
-written; offline dependency metadata is blocked by a missing pinned archive.
-Native build, export, loader calls, comparison and replay remain NOT_RUN.
-Both envelopes are unconsumed, no release is admitted, and #1102 remains open.
-Restore exact Cargo.lock-matching archive availability locally, then bind the
-offline build and concrete source/binary/runtime/input/output release for
-independent review before any model work. Preserve the current draft branch.
+At the current checkpoint, read docs/r4_native_bridge_1102_execution.md and its
+independent result review. #1102 completed the single admitted native comparison
+as NATIVE_REFERENCE_PRESERVED: 320 answers, 4480 consumed roles and 16 refusals in
+both arms/phases; all four full tensors within 1e-5; exact fresh replay. Both
+build and comparison envelopes are consumed, with full tensor and loader evidence
+retained. Verify PR #1104 and native issue closure; finish only any outstanding
+delivery if they remain open. Do not repeat the measured campaign.
 
-The protected #1086 contract remains authoritative: its machine JSON,
-operator/source audits and independent specification review are unchanged.
-Keep the accepted reader/core, known vocabulary/query forms and four-fact
-context. No provider fallback, population expansion, fitting, service/UI
-wiring or final integer/table lowering is activated. #1083 and #1087 retain
-their separate typed-integration and final-lowering obligations.
+After #1102 closure, the one concrete next action is #1084: freeze the Rust
+service/API, artifact ownership and capability/lifecycle ADR for the exact
+answer_four_fact_raw_text/v1 operation. The measured binary has research modes,
+not a serving endpoint. A newly compiled host needs its own truthful binary/
+runtime qualification; do not assign it the old binary digest. Keep this task
+bounded by #1084's actual deliverable and the live graph. No model fitting or
+new comparison is authorized merely by the handoff.
+
+The protected #1086 contract remains authoritative. Keep the accepted
+reader/core, known vocabulary/query forms and four-fact context. No provider
+fallback, population expansion, general generation/context/coding or final
+integer/table lowering is activated. #1083 and #1087 retain their separate
+typed-integration and final-lowering obligations.
 
 #1094 is closed through protected PR #1101, merge
 eade29f4b78435e9857936786426bb34e596b301. Its accepted
@@ -53,8 +58,9 @@ repair revealed cases.
 
 Preserve #1079 LANGUAGE_R4_PRESERVED_CONTROL_WEAK and #1082 descriptive limits.
 #973 stays open and #954 blocked. Bounded raw-text preservation and this native
-specification establish no new semantic worlds, general English, generation,
-reasoning, coding, mathematical proof, native parity or final serving qualification.
+comparison establish no new semantic worlds, general English, generation,
+reasoning, coding, mathematical proof or final serving qualification. The measured
+native preservation is confined to its exact artifact, binary/runtime and fixtures.
 QA remains dormant; use only the named checks for the chosen decision. If the
 named step has since completed, use the actual later result and next decision.
 
