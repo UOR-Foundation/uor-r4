@@ -1,5 +1,10 @@
 # Independent retained-assembly review — #1094
 
+**Current checkpoint: exact assembled envelope accepted by the separate release
+receipt described below; comparison and replay remain `NOT_RUN`.** The initial
+implementation decision and its subsequent exact-envelope review are retained
+as distinct steps.
+
 2026-09-03. **`IMPLEMENTATION_ACCEPTED_FOR_METADATA_ASSEMBLY`.**
 The independent `/root/retained_admission_audit` reviewer accepts the source
 below for committed, metadata-only assembly of the retained evidence. This
@@ -109,3 +114,76 @@ The original unavailable preparation, accepted #1096 runtime-only result,
 #1079 weak control and #1082 descriptive limits remain unchanged. #1094 and
 #973 remain open and #954 blocked. This review permits metadata assembly only;
 the exact assembled envelope must receive its own independent release decision.
+
+## Exact-envelope review after committed assembly
+
+The root assembled metadata from committed source
+`07ec3f0d39d08ac5bf9c2ba7a6b864229e007867`. The independent reviewer then used a
+separate standard-library script to inspect original metadata, Git blobs,
+actual source bytes, profile bytes and the sealed directory's own `lstat`.
+No retained-module validator, runtime/asset hash, worker, adapter, model or
+withheld payload was executed or opened during this review.
+
+**Decision — `ACCEPTED_FOR_RETAINED_EVIDENCE_COMPARISON`.** No blocking defect was
+found in this exact envelope. The reviewer created the separate, exclusive
+`release.json` below. It conditionally admits the exact future comparison and
+fresh-process replay through the reviewed consumer. It does not unseal inputs,
+launch the command or report an empirical comparison result. The immutable
+assembly keeps its original `release: NOT_ADMITTED` field; the separate release
+receipt supplies the subsequent decision.
+
+| Original object in `/Users/casey.allard/.codex/uor/issue-1094-retained-assembly01` | Bytes | SHA256 |
+|---|---:|---|
+| `retained-preparation.json` | 115,900 | `48fae2d391e347e89a290b12a8af97cf8266c5913a21e71f21c1bef74ef54c62` |
+| `bindings.json` | 58,978 | `23977918c1685148f6cbc61ebab87507e2ce153e40d9b15c2634a4d68e0c2353` |
+| `worker.sb` | 7,641 | `88e57a18f1c7946fa8538699d8b6acc45645840d991bef3f07ccd7109c8f9189` |
+| Independent `release.json` | 3,305 | `5787e4a64113800c5fc82cd1d32d564d9c6e3a344e74ca102a754fe82dccee23` |
+
+The reviewer independently established:
+
+- All **170 coordinator** source files matched the exact committed closure
+  and actual bytes. All **169 worker** files matched the accepted source
+  `79c674c8f6179a68878a12ee86e664f1435c3ebf`, actual bytes and original binding.
+  Apart from the coordinator, inherited computational files were unchanged;
+  the only added package source was `retained.py`.
+- All **19 historical references** matched their pinned Git objects. Original
+  authoring, unavailable stop, lower-bound timing, policy debit and separate
+  #1096 ledger were preserved. Public selection/population metadata matched
+  their original records; the commitments were not opened as payloads.
+- The exact clean environment matched the accepted worker source tree and
+  fixed settings. The profile matched an independent metadata reconstruction.
+  Its complete delta had two added and four removed distinct line entries,
+  with repeated occurrences counted. The new binding literal and ancestor
+  metadata replaced old binding/readiness literals; no runtime tree or new
+  corpus/reference/history/result content grant was added.
+- The **18 runtime-file, two interpreter-alias and five asset identities**
+  matched accepted metadata. Their current runtime/model bytes were not hashed
+  by the reviewer. Those fresh checks remain mandatory under the execution and
+  replay clocks and cannot be inferred from this metadata review.
+- The original withheld directory retained its device, inode, owner, group and
+  **mode `000`**. Only its own metadata was read. The four assembly files were
+  unique regular files, and no admission, execution, replay, stop or completion
+  marker existed.
+
+The original assembly output was 182,568 bytes. Adding the 3,305-byte release
+gives **185,873 bytes** in this output directory, and **3,651,274 bytes** with the
+3,465,401-byte historical ledger. The remaining 128-MiB allowance is therefore
+130,566,454 bytes before later receipts or active oracle output. Delivery
+copies remain a separately identified storage footprint and do not erase this
+campaign accounting.
+
+This release binds every field consumed by `verify_release`: assembly,
+binding, profile, coordinator/worker closures, environment, runtime identity,
+profile delta, population/selection commitments, 120-second policy debit and
+original retained bytes. It also records this committed implementation review,
+the metadata-only verification boundary and the no-retry/failure rules. Future
+fresh source/runtime checks or a changed identity may still refuse execution.
+An admitted-attempt marker consumes this envelope, and any stopped receipt
+overrides completion.
+
+No new preparation, runtime-readiness attempt, model load/forward, optimizer
+update, withheld hash/read, comparison or replay occurred. This is reviewed
+implementation and provenance evidence, with no new mathematical proof or
+raw-text model-preservation result. #1094 and #973 remain open, #954 remains
+blocked, and the one next action is the separately requested frozen comparison
+through this exact reviewed release.
