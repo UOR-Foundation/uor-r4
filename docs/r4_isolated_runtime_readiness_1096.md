@@ -1,7 +1,12 @@
 # Isolated runtime readiness — #1096
 
-**2026-09-03: contract and implementation awaiting independent review; readiness
-execution is `NOT_RUN`.** This is the separate child of open #1094, based on
+**2026-09-03: `ISOLATED_RUNTIME_READY` in one independently admitted attempt.**
+The actual worker started in 2.058100333 seconds, verified bound runtime and
+source/artifact identities, refused four harmless probes and reported zero model
+loads/forwards/updates. Model behavior, comparison and replay remain `NOT_RUN`.
+Independent result review passed; closure requires protected delivery.
+
+The following preserves the pre-execution contract. This is the separate child of open #1094, based on
 `df2c4cb8ef47e35b6d4083d4b8da135c7676fc19`. It does not execute the adapter
 comparison, prepare another population, or release withheld inputs.
 
@@ -129,3 +134,78 @@ installation, model download or code-graph rebuild is needed before this decisio
 Preserve the mixed original checkout, original #1094 receipts and corpus,
 mode-000 withheld directory, source caches, all unique evidence and user files.
 No deletion is authorized by this task.
+
+## Observed readiness and retained evidence
+
+The [independent pre-execution review](r4_isolated_runtime_readiness_1096_preexecution_review.md)
+approved source `79c674c8f6179a68878a12ee86e664f1435c3ebf` and only the second
+identity freeze at `/Users/casey.allard/.codex/uor/issue-1096-readiness-freeze02`.
+Its manifest SHA256 is
+`4acd2b7ec00ac8874573e2d6e52e5087b376bc0ebcd52aedd4464aa28979c644`;
+profile SHA256 is `d508d3ec50b78e3bbd3cb1fe9468788f457f4e47f713f9a793f03079df48416e`.
+The first freeze was retained unattempted after static review found unstable
+asset ordering on binding reload. The source was corrected before admission.
+This was not a runtime retry. The [published amendment](https://github.com/UOR-Foundation/uor-r4/issues/1096#issuecomment-5525355337)
+bound the replacement and review before the sole invocation.
+
+[Exact original receipts](r4_isolated_runtime_readiness_1096_evidence/receipt-index.json)
+retain both freezes, all four harmless sentinels, the exclusive start receipt,
+review, raw stdout/stderr, result and resource receipt. No model/corpus payload
+is copied. The [result](r4_isolated_runtime_readiness_1096_evidence/admitted-freeze02/result.json)
+has SHA256 `439aa149d6f128844490c4a9002bfe2ffb52fdeeaad067e8e3cb16447b24b930`
+and CID `blake3:9e62fa112632d3fac636008000086bed0827ea933f0df49b367f86c99461f147`.
+The [raw worker stream](r4_isolated_runtime_readiness_1096_evidence/admitted-freeze02/worker.stdout.jsonl)
+has SHA256 `cbe9436ab15bf207c362b7863685c524ec95f8f20b2402f3294920289af6561c`;
+stderr is empty. The actual command is retained in the result, including the
+sandbox profile, pinned interpreter, `--readiness-only`, bindings and manifest.
+
+| Frozen criterion | Observation |
+|---|---|
+| Actual worker starts and finishes | Exactly `ready` / `done`; `ARTIFACTS_READY`; exit zero |
+| Manifest, profile, source and accepted assets | Exact verified identities; 169 bound source files and five assets |
+| Interpreter/runtime | Both symlinks, 18 installed runtime files, Python 3.12.14 / Torch 2.7.1 verified |
+| Compute settings | Apple M1 CPU/Accelerate, four intra-op / one inter-op thread, deterministic algorithms |
+| Harmless corpus/reference/history/results stand-ins | All four raise `PermissionError` |
+| Model states | Initial and final states null |
+| Model loads / row forwards / batch forwards / optimizer updates | 0 / 0 / 0 / 0 |
+| Parent elapsed / fixed ceiling | 2.058100333 seconds / 60 seconds |
+| Conservative combined peak RSS / fixed ceiling | 704,806,912 bytes (672.15625 MiB) / 3 GiB |
+| Worker peak RSS | 426,901,504 bytes; process receipt, not model memory |
+| Withheld access, corpus preparation, fit, model comparison and replay | `NOT_RUN` |
+
+This is measured readiness for one pinned worker, policy and machine. It is not
+mathematical proof or a universal isolation guarantee. The tested denied paths
+contain harmless stand-ins; real withheld contents were never opened. Success
+of the combined symlink/ancestor-metadata correction does not identify which
+omitted permission caused the original failure. The empirical comparison must
+still establish any raw-text model-output preservation.
+
+The original #1094 stop, binding and profile hashes remain unchanged. Its
+`UNAVAILABLE_REFERENCE_REPLAY` terminal is preserved, together with #1079's
+weak-control and #1082's descriptive evidence. The mode-000 withheld directory
+remains sealed. No original or unique evidence, source cache, runtime, model or
+user material was deleted.
+
+## Handoff and delivery
+
+The [independent result review](r4_isolated_runtime_readiness_1096_result_review.md)
+checks these raw receipts against the frozen criterion without replay. Only
+changed-Python syntax, claim wording, evidence/document references and diff
+whitespace supplement the declared readiness decision. No broad QA is activated.
+Protected queue statuses establish transport only.
+
+After protected delivery, close #1096's readiness scope. The one next action is
+for **#1094** to freeze a separate preparation contract using these exact
+source/profile/runtime bindings, account for its prior consumed budget and
+obtain independent release review before any withheld access or comparison.
+No preparation or release is authorized by this readiness result. #1094 remains
+open and parked/unassigned until active; #973 remains open and #954 blocked.
+
+Final local storage review counted 165,740 bytes in the two original freeze
+folders and 173,274 bytes in the public evidence copy/index: 339,014 bytes
+combined, including the superseded authoring freeze. The source-audit,
+contract and independent-review documents are small additional delivery files;
+the complete retained task record remains below 1 MiB and the 16 MiB cap.
+Available storage was 51,987,124 KiB (about 49.6 GiB). The isolated checkout
+is retained for exact-source review; its Git objects are shared. No new build
+cache, model installation or download was created, and nothing was deleted.
