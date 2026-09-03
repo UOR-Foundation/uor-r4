@@ -1,9 +1,9 @@
 # Isolated runtime readiness — #1096
 
 **2026-09-03: `ISOLATED_RUNTIME_READY` in one independently admitted attempt.**
-The actual worker started in 2.058100333 seconds, verified bound runtime and
-source/artifact identities, refused four harmless probes and reported zero model
-loads/forwards/updates. Model behavior, comparison and replay remain `NOT_RUN`.
+The readiness attempt completed in 2.058100333 seconds; the actual worker
+verified bound runtime and source/artifact identities, refused four harmless
+probes and reported zero model loads/forwards/updates. Model behavior, comparison and replay remain `NOT_RUN`.
 Independent result review passed; closure requires protected delivery.
 
 The following preserves the pre-execution contract. This is the separate child of open #1094, based on
