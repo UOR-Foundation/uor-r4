@@ -185,3 +185,22 @@ From `tools/r4-softmax-trainer` in the frozen offline environment:
 Publish the immutable preparation and source commit before the first update.
 Append outcomes and reconcile the current mirrors and native trackers after
 exact fresh-process full-evidence replay. Close only #1073 after protected merge.
+
+
+## Published preparation (2026-09-02; zero fitted updates)
+
+Source freeze: `041d52cfaaffd944b4717e32e148063185569ae3`. The
+[preparation envelope](r4_zoology_compound_binding_1073_preparation.json) binds:
+
+- preparation: `blake3:360b6c6bb63f4040d0baff06c9e56b3038111587bdf234681e6f4d1cdc89d038`.
+- 270-file implementation: `blake3:28519bb41f02590b6a358dda935f4a3cfd0afead1a1e87777385c3e270533495`.
+- dataset manifest: `blake3:574d667e61b70e32c39b26d43547d5aeb29e92f16260fa840ddd4eda30c4e694`.
+- dataset tree: `blake3:c150f19e02caaa7537e2fd244ebd3dae27f6e561c8869b69c91b93351044a6da`.
+- construction.safetensors: `blake3:d767fafdf544f01db99d9acb317c76df55e9f9d28f99785d2a6ae62b663731a2`.
+- development.safetensors: `blake3:0e343a7448098ea2a22d850d4d9fb31d75c55090807f4b2f00fa20531a422335`.
+- vocabulary.json: `blake3:aa001c3a4369ad2f8bb3596a316270bd72b736f927158ee04403116b430c649d`.
+
+The five excluded populations contain 15,360 unique input rows and 9,216
+canonical worlds. Fresh development overlaps neither set. Original construction
+and vocabulary bytes match #1063. Preparation audits the 256 new groups and
+768 new worlds; fitting/default validation will not open or regenerate them.
