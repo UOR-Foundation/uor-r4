@@ -334,7 +334,8 @@ preservation tolerances and resource ceiling before scoring. No further fit
 or geometry expansion is warranted by this result.
 
 A preservation pass would carry the demonstrated binding behavior into R4;
-a miss would localize a transport/adapter defect before broader language work.
+a miss would identify a transport/adapter preservation failure to resolve
+before broader language work.
 The older #1059 and #1061 results remain scoped to their respective models.
 They do not substitute for preserving this new compound-binding model.
 #973 stays open and #954 remains blocked.
