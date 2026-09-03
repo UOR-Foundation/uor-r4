@@ -1,5 +1,22 @@
 # Frozen raw-text adapter comparison — #1094
 
+**Latest result (2026-09-03): `UNAVAILABLE_REFERENCE_REPLAY`.** The sole authoring
+preparation recovered all 320 valid inputs exactly and matched all 16 typed
+refusals, with zero failures. The OS then denied execution of the pinned Python
+interpreter before it started. Model loads/forwards are zero; worker readiness,
+effective isolation, withheld comparison and replay are `NOT_RUN`. Supplied
+segmentation remains the qualified model entry. #1094 remains open, blocked by
+the separate [#1096 readiness repair](https://github.com/UOR-Foundation/uor-r4/issues/1096).
+There was no retry, withheld release or post-stop source/profile modification.
+
+The [retained evidence manifest](r4_text_clause_adapter_1094_evidence/manifest.json)
+binds exact original receipts, and the [independent terminal review](r4_text_clause_adapter_1094_review.md)
+confirms this boundary. The source implementation is committed at
+`ff925481fcb290e8f91442a28a1b43b51b28dd26`. No raw-text model preservation,
+general-language result or mathematical proof is claimed.
+
+## Earlier preparation checkpoint
+
 **2026-09-03 — preparation and independent source review in progress. Model
 execution and withheld evaluation are `NOT_RUN`.** This record appends to the
 accepted [#1085 specification](integration/clause-segmentation-1085.md); it does
@@ -136,3 +153,59 @@ comparison/refusal/replay, claim-wording and evidence-integrity checks are
 active. Protected-queue acknowledgements are transport, not scientific tests.
 Storage review preserves the original mixed checkout, unique model/corpus and
 diagnostic evidence, sealed files and user material.
+
+## Observed preparation and terminal
+
+The named command used the existing qualified interpreter and this committed
+package, with `PYTHONDONTWRITEBYTECODE=1`, `PYTHONUNBUFFERED=1` and an explicit
+source `PYTHONPATH`:
+
+```sh
+/Users/casey.allard/.codex/worktrees/r4-language-r4/uor-r4/tools/r4-softmax-trainer/.venv/bin/python \
+  -m r4_softmax_trainer.text_clause_adapter prepare \
+  --repo /Users/casey.allard/.codex/worktrees/r4-text-clause-adapter/uor-r4 \
+  --corpus /Users/casey.allard/.codex/uor/issue-1094-curator \
+  --output /Users/casey.allard/.codex/uor/issue-1094-comparison \
+  --python /Users/casey.allard/.codex/worktrees/r4-language-r4/uor-r4/tools/r4-softmax-trainer/.venv/bin/python
+```
+
+| Named evidence | Observed result |
+|---|---|
+| Authoring acceptance, IDs/lengths, raw/derived identities and token/clause spans | 320/320 exact; 20 per each of sixteen form/profile cells |
+| Authoring refusals | 16/16 exact; one per frozen refusal family |
+| Byte-buffer and external-role schema probes | Both refused with the exact required schema/tag |
+| Independent authoring reference integrity | Four original semantic groups, expanded to 64 group/surface combinations; all five rows retained |
+| Isolated worker startup | `sandbox-exec: execvp() ... failed: Operation not permitted`; no Python readiness event |
+| Model loads, logical forwards, optimizer updates | 0 / 0 / 0 |
+| Withheld valid/refusal/boundary rows, soft tensors, answer/role accuracy, fresh-process replay | `NOT_RUN` |
+
+The [authoring receipt](r4_text_clause_adapter_1094_evidence/authoring-input-preflight.json)
+was persisted before the failed launch. Its SHA256 is
+`f79df8623038961d899ba727d99bb69b39754b1878d10bbed9da0bfe03e5ee82`.
+The [stop receipt](r4_text_clause_adapter_1094_evidence/prepare-stopped.json), SHA256
+`87bd3082ce9b4da5e5227a3b82f6515773cf5f113de689ff6251a2a45340fad5`,
+records `UNAVAILABLE_REFERENCE_REPLAY`. No successful preparation envelope,
+execution-start, replay, result or completion receipt exists.
+
+The binding names Apple M1 / MacBookPro17,1, eight logical CPUs and 16 GiB memory.
+The coordinator recorded approximately 0.2603 seconds and 65,601,536 bytes peak
+RSS. Python/Torch/Accelerate settings were declared but were not verified in the
+worker because execution was denied. The recorded worker RSS zero means no
+worker measurement arrived; it is not successful worker resource evidence.
+Final budgeted corpus/receipt bytes are 3,465,401, including the last resource
+receipt. The seven retained original preparation files total 66,523 bytes.
+
+**Decision.** Keep supplied segmentation and preserve the unobserved withheld
+population. #1096 must identify the actual launch denial and independently
+qualify the minimal runtime access policy with zero forwards and harmless denied
+path probes. Do not infer the cause from the single execvp message or broaden
+the home-directory allowlist. Only a separately reviewed preparation can later
+reopen #1094's comparison. #1086 may specify export for the supplied-clause
+reference, but cannot advertise raw-text qualification. #973 remains open and
+#954 blocked; #1079/#1082 findings remain unchanged.
+
+The only executed decision checks were static Python syntax/source integrity,
+claim wording, independent receipt verification and this authoring/readiness
+preflight. Broad QA and model evaluation remain dormant. All model assets,
+corpus files, sealed withheld inputs, original receipts and mixed-checkout user
+changes are retained. No storage cleanup was performed.

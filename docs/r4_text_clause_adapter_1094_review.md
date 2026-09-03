@@ -159,3 +159,63 @@ by this reviewer.
 No material source blocker remains within the frozen decision contract.
 Preflight acceptance must bind these source bytes to the committed revision and
 the actual preparation receipt before the curator releases withheld files.
+
+## Independent terminal review of the sole preparation
+
+Final disposition: `UNAVAILABLE_REFERENCE_REPLAY`; comparison release is
+`NOT_ADMITTED`. The sole declared preparation used committed source
+`ff925481fcb290e8f91442a28a1b43b51b28dd26`. Its 168 source-closure entries match
+the source bytes, including all eight final candidate digests above. The stop
+receipt's preflight identity matches the retained preflight file; its attempted
+worker binding matches `bindings.json`; and its partial-progress array exactly
+matches the retained progress log.
+
+The model-free authoring preflight recorded `AUTHORING_INPUT_EXACT`: 320/320
+valid rows, 20 in each of sixteen form/profile cells, and 16/16 refusal rows,
+one per frozen refusal family. Both byte-type and externally supplied roles
+schema probes returned the prescribed unsupported-schema result. There were
+zero preflight failures, model loads and model forwards. These observations
+support the input behavior on the declared authoring population only.
+
+The next recorded event is the coordinator's attempted worker launch. The OS
+returned `sandbox-exec: execvp()` failure with `Operation not permitted` for the
+pinned `.venv/bin/python`, before Python started. No worker readiness, denied
+reference sentinel, runtime mapping, model load or terminal state receipt was
+produced. The progress event named `worker-started` records the subprocess
+attempt; it does not establish a running Python worker. Therefore the profile
+did not establish usable process isolation, and the intended runtime recorded
+in the bindings remains unverified in that isolated process.
+
+The stop's last resource snapshot records approximately 0.2603 seconds, zero
+logical forwards, a 65,601,536-byte coordinator peak RSS, zero worker peak RSS,
+and 3,465,122 accounted new bytes before writing the resource receipt itself.
+The 279-byte resource receipt is additional retained evidence. This is a
+readiness failure, not a resource-cap failure. The bindings name Apple M1,
+`MacBookPro17,1`, eight CPUs and 17,179,869,184 bytes of memory; these identity
+fields are not a throughput measurement.
+
+The reviewer inspected only the six preparation/evidence files listed below
+and the already reviewed source closure. No generated withheld raw or reference
+file was opened, no model was executed, and no retry or profile change was
+performed. There is no `ACCEPTED_FOR_FROZEN_COMPARISON` release receipt from this
+review. Adapter-versus-oracle preservation, role/answer accuracy, fresh-process
+model replay and full R4 behavior are `NOT_RUN`. No mathematical proof or general
+language/coding capability follows; the earlier accepted results and their
+limitations remain unchanged.
+
+| Retained preparation artifact | Bytes | SHA256 |
+|---|---:|---|
+| `authoring-input-preflight.json` | 3032 | `f79df8623038961d899ba727d99bb69b39754b1878d10bbed9da0bfe03e5ee82` |
+| `bindings.json` | 58987 | `baeb56a632c0e75c0574d9bad503e7849cf434039490e1fe92e3b8f0114b1f0b` |
+| `prepare-stopped.json` | 1262 | `87bd3082ce9b4da5e5227a3b82f6515773cf5f113de689ff6251a2a45340fad5` |
+| `preparation-progress.jsonl` | 581 | `8d3dd2b0ddf75af91f3ba7d75098a232ebe188703ea24eef90fbc639e92e3883` |
+| `prepare-stopped-resources.json` | 279 | `02f907640d6830e17c136e06078a54390ee4173862043926bee7f8f7670eaf18` |
+| `worker.sb` | 1519 | `914b72856e0822c981b1295b8e96048fa43f35b8c1dedeea58f51321a781a72d` |
+
+All six originals remain under
+`/Users/casey.allard/.codex/uor/issue-1094-comparison`. Preserve them, the frozen
+population commitments and the sealed withheld evidence. The concrete next
+action is a separate, zero-forward readiness repair that diagnoses the denied
+pinned interpreter launch and demonstrates the intended reference-read denial
+before any new comparison is considered. That action must have its own issue
+and decision contract; it is not a retry within this completed preparation.
