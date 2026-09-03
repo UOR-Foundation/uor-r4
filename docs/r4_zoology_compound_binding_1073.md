@@ -204,3 +204,137 @@ The five excluded populations contain 15,360 unique input rows and 9,216
 canonical worlds. Fresh development overlaps neither set. Original construction
 and vocabulary bytes match #1063. Preparation audits the 256 new groups and
 768 new worlds; fitting/default validation will not open or regenerate them.
+
+## Outcome (2026-09-02): compound binding and fresh transfer passed
+
+The single final candidate returned **`COMPOUND_BINDING_FRESH_PASSED`**.
+All frozen construction, order, value-control and fresh-development criteria
+passed. Publication preceded fitting in commit `9e4675a0` and
+[issue comment 5518436017](https://github.com/UOR-Foundation/uor-r4/issues/1073#issuecomment-5518436017).
+Independent preparation review validated the published identities with guards
+rejecting development, model and checkpoint payload reads before launch.
+
+| Measurement | Result in each of the four orders |
+|---|---:|
+| Supported construction | **8,192/8,192 = 100%** |
+| Missing-binding construction | **2,048/2,048 = 100%** |
+| Complete construction quartets, owner-changing | **1,024/1,024** |
+| Complete construction quartets, object-changing | **1,024/1,024** |
+| Supported fresh development | **1,024/1,024 = 100%** |
+| Missing-binding fresh development | **256/256 = 100%** |
+| Complete development groups | **256/256**, including **128/128 per family** |
+
+Canonical supported NLL was **0.0005899063353**; aggregate development NLL
+was **0.0007402848845**. Every construction slot reached 100%, and all
+2,048 paired questions in each family were both correct. The recorded #1067
+supported reference remains 3,735 / 3,354 / 3,487 / 3,347 correct by order.
+Its history remains intact; #1073 is the qualified structured-binding
+candidate for the next preservation step.
+
+Across all 10,240 construction rows, every prediction was identical under
+four cyclic orders. Maximum absolute full-head logit differences from
+canonical were **0 / 5.7220458984375e-6 / 4.76837158203125e-6 /
+4.76837158203125e-6**, below the frozen 1e-4 threshold. Maximum aligned
+attention difference was 2.384185791015625e-7. Thus top-1 was exact across
+orders; floating logits were tolerance-equivalent, not byte-identical.
+
+The value intervention passed in every order. Cycling only four projected
+fact values reduced original supported correctness **8,192 → 0** and produced
+the reassigned location on **8,192/8,192** questions. All 2,048 unknown answers
+remained correct with zero changed predictions. Actual attention tensors were
+exactly identical to the corresponding unmodified order. This is causal
+evidence that decoded supported answers follow the attached location values
+under fixed queries, keys and attention.
+
+Mean canonical null attention was **0.5463976382 on supported questions** and
+**0.9125146940 on unknown questions**. Success therefore does not establish
+winner-take-all selection of a fact or an argmax-null absence rule. The learned
+weighted mixture and output decoder matter; a geometric adapter must preserve
+the entire four-fact-plus-null mixture.
+
+Construction and control qualification admitted the already frozen fresh
+population. Each order scored all 1,280 rows; the four views total 5,120 model
+decisions, not 5,120 independent examples. Every same-history question change
+and same-question location swap changed the supported answer correctly.
+None of the absent cases retained the former location. The first frozen
+example quartet answers Ada's comb/hat as **trunk/pouch**, then **pouch/trunk**
+after the location swap, and **unknown** after the owner-object binding is
+removed. These are selected supervised readouts at token 37, not generated
+sentences.
+
+The fresh result concerns the **64 held-out owner-object combinations in
+familiar grammar and vocabulary**. It does not establish arbitrary English
+parsing, reasoning, free generation or chat readiness. The supplied role
+interface and architecture changed together; this does not isolate a geometric
+advantage or support geometry expansion.
+
+## Actual dose, resources and replay
+
+The final artifact completed exactly **3,920 optimizer updates** and
+**2,007,040 presentations = 1,846,495 supported + 160,545 unknown**.
+The 78 full mixed traversals account for 159,744 unknown presentations;
+the final eight batches contain **801 unknown and 3,295 supported**.
+No old model, development or model frame was read during fitting. There was
+one seed, one fit and one final candidate, with no extra dose or intermediate
+evaluation.
+
+First-eight-update admission passed: measured mean step time
+0.02177829175 seconds, projected remaining total 166.49585 seconds including
+the 60-second evaluation allowance. Actual times were:
+
+- Fit: **49.903205583 seconds**.
+- Final evaluation, including conditional control/development: **7.145526833 seconds**.
+- Exact fresh-process full-evidence replay: **6.750702708 seconds**.
+- Cumulative: **63.799435374 seconds**, peak **1,421,606,912 bytes =
+  1.323974609375 GiB**, within 1,800 seconds / 4 GiB.
+
+The evaluator process was **23350** and replay process **23385**. The full
+evidence CID reproduced exactly, including all logits/attention/prediction
+identities, diagnostics, controls, examples and development metrics. Learned
+state was identical before/after evaluation and bound to the exported model.
+Evaluation/replay performed zero optimizer updates, checkpoint/optimizer/RNG
+payload reads, reference model loads, historical development payload reads,
+label arguments to model forwarding, geometry changes or native-frame reads.
+R4 remains `NOT_RUN_SEPARATE_INFERENCE_STEP`.
+
+The reviewed source passes 18 focused checks; the whole-trainer AST comparison
+confirms only the declared model/metadata changes. Broad workspace, BDD, WASM,
+fuzz, audit and release QA were not run. The protected queue's statuses concern
+transport only and are not additional scientific evidence.
+
+Independent final review verified eight self-bound evidence envelopes, all 270
+frozen implementation files, the published preparation, model bytes and the
+learned-state identity reconstructed directly from Safetensors bytes. It
+recomputed the dose, every decision criterion and resource totals, with no
+additional model scoring. No blocking evidence finding remained.
+
+| Immutable evidence | CID |
+|---|---|
+| [Fit](r4_zoology_compound_binding_1073_fit.json) | `blake3:9c6bc25f9bcfa8279fbba6acf15d0bf1279653652c46222473fcc23fb95daf84` |
+| Model, 1,148,672 bytes | `blake3:9c055cc6ea09548bf960e37288276535b30515b94a50a96aa929b5e55afea3c4` |
+| Learned state | `blake3:abbdbcaafc2d9eb36543ce75fbb0101b6788119d80a6ed9c017bb9d06fbeac59` |
+| [Result](r4_zoology_compound_binding_1073_result.json) | `blake3:1f3c5bee5ebd0e8e34f9f1a5fa03d514b397928638fd66deaf64b8abf7946041` |
+| Complete evidence | `blake3:6ffc6c755401c601b0ff29adf139bd00dce93e4c0a650699b7e2dc126118121d` |
+| [Fresh-process replay](r4_zoology_compound_binding_1073_replay.json) | `blake3:9500d279e228eb3fff646a537fcbbbf861aafc216cd7e7ad750444381c4a17f2` |
+
+Retained local root:
+`/Users/casey.allard/uor-r4/.uor-models/research/issue-1073-zoology-compound-binding`.
+Source/optimizer/RNG checkpoint, weights, data and raw envelopes remain there.
+
+## Next decision
+
+Proceed to one separately frozen **unchanged-R4 inference-preservation**
+experiment on this exact learned artifact. Adapt the existing coherent R4
+mapping to the rectangular four-fact-plus-null attention interface and compare
+ordinary attention, coherent R4 transport and a predeclared broken-transport
+control on the same supported, absent and fresh-combination decisions. Preserve
+the complete softmax weighted mixture, null entry, full vocabulary decoder,
+learned parameters and causal role interface. Freeze the adapter, controls,
+preservation tolerances and resource ceiling before scoring. No further fit
+or geometry expansion is warranted by this result.
+
+A preservation pass would carry the demonstrated binding behavior into R4;
+a miss would localize a transport/adapter defect before broader language work.
+The older #1059 and #1061 results remain scoped to their respective models.
+They do not substitute for preserving this new compound-binding model.
+#973 stays open and #954 remains blocked.
