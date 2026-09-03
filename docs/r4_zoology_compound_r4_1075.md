@@ -192,3 +192,24 @@ From `tools/r4-softmax-trainer` in the frozen offline environment:
 
 Append the observed result, reconcile six current mirrors and native trackers,
 and close only #1075 after protected delivery. #973 stays open and #954 blocked.
+
+
+## Published pre-inference preparation (2026-09-02)
+
+Source freeze: `d18e00705b1c6523f52c3fb9cacf029e548f2631`. Fourteen focused checks passed
+(0.064 seconds), along with Ruff, claim wording, and independent source/record
+review. There have been zero fitted-model forwards in this issue.
+
+The [immutable preparation](r4_zoology_compound_r4_1075_preparation.json) binds:
+
+- Preparation: `blake3:f034f6af62f0f1e6f1f7be33a93f728bfd2582b1ea10025ec1c1f5ae1835240b`.
+- 282-file implementation: `blake3:af31d67ed421af579bbdd10b370285898d1f0fbb50ac07c2ad2dd69e5ce30331`.
+- Source result: `blake3:1f3c5bee5ebd0e8e34f9f1a5fa03d514b397928638fd66deaf64b8abf7946041`.
+- Source model: `blake3:9c055cc6ea09548bf960e37288276535b30515b94a50a96aa929b5e55afea3c4`.
+- Source data manifest: `blake3:574d667e61b70e32c39b26d43547d5aeb29e92f16260fa840ddd4eda30c4e694`.
+- Unchanged native frame bundle: `blake3:94762441a43b03f596a66131ec34af15bba3afbc2bbc5d28ab7dfdabd9b6d68c`.
+
+The actual preparation reproduces the eight-view frame preflight and every
+source/data/frame binding. Preparation reads already observed inputs and hashes
+the fitted file without instantiating its model. The primary, conditional
+control and fresh-process replay remain unrun at this publication.
