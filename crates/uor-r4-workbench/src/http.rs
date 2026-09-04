@@ -243,16 +243,16 @@ pub fn parse_request(
     }
 
     enforce_origin(method, headers.origin, expected_authority)?;
-    let kind = classify_target(target, verified_static_paths)?;
-    if method != kind.allowed_method() {
-        return Err(HttpAdmissionError::method_not_allowed(kind.allow_header()));
-    }
     if method == HttpMethod::Post && !headers.content_type.is_some_and(is_json_content_type) {
         return Err(HttpAdmissionError::new(
             ServiceErrorTag::UnsupportedMediaType,
             415,
             "POST requires application/json with optional charset=utf-8",
         ));
+    }
+    let kind = classify_target(target, verified_static_paths)?;
+    if method != kind.allowed_method() {
+        return Err(HttpAdmissionError::method_not_allowed(kind.allow_header()));
     }
 
     Ok(HttpRequest {
@@ -832,15 +832,15 @@ mod tests {
         );
         let error =
             parse_request(post_to_get_without_media.as_bytes(), AUTHORITY, &assets).unwrap_err();
-        assert_eq!(error.tag, ServiceErrorTag::MethodNotAllowed);
-        assert_eq!(error.allow, Some("GET"));
+        assert_eq!(error.tag, ServiceErrorTag::UnsupportedMediaType);
+        assert_eq!(error.allow, None);
 
         let unknown_without_media = format!(
             "POST /uor/v1/workbench/not-a-route HTTP/1.1\r\nHost: {AUTHORITY}\r\nOrigin: http://{AUTHORITY}\r\nContent-Length: 0\r\n\r\n"
         );
         assert_tag(
             parse_request(unknown_without_media.as_bytes(), AUTHORITY, &assets),
-            ServiceErrorTag::NotFound,
+            ServiceErrorTag::UnsupportedMediaType,
         );
     }
 

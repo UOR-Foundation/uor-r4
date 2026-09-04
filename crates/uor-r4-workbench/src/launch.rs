@@ -65,6 +65,13 @@ impl VerifiedExecutable {
         use std::os::unix::process::CommandExt;
 
         let source_fd = self.file.as_raw_fd();
+        // Safety: getdtablesize has no arguments and only reads the current
+        // process descriptor-table limit. Capture it before fork so the
+        // pre-exec closure needs only async-signal-safe descriptor operations.
+        let descriptor_limit = unsafe { libc::getdtablesize() };
+        if descriptor_limit <= INHERITED_EXECUTABLE_FD {
+            return Err("descriptor-table limit cannot preserve executable fd 3".into());
+        }
         let executable = format!("/dev/fd/{source_fd}");
         let mut command = Command::new(executable);
         command
@@ -83,6 +90,19 @@ impl VerifiedExecutable {
                     && libc::dup2(source_fd, INHERITED_EXECUTABLE_FD) < 0
                 {
                     return Err(std::io::Error::last_os_error());
+                }
+                // The child keeps only stdio and the verified executable at
+                // fd 3. Mark every other possible descriptor close-on-exec so
+                // caller descriptors, listener sockets and credentials cannot
+                // cross the exec boundary even if the parent inherited them
+                // without CLOEXEC.
+                for descriptor in (INHERITED_EXECUTABLE_FD + 1)..descriptor_limit {
+                    if libc::fcntl(descriptor, libc::F_SETFD, libc::FD_CLOEXEC) < 0 {
+                        let error = std::io::Error::last_os_error();
+                        if error.raw_os_error() != Some(libc::EBADF) {
+                            return Err(error);
+                        }
+                    }
                 }
                 if libc::fcntl(INHERITED_EXECUTABLE_FD, libc::F_SETFD, 0) < 0 {
                     return Err(std::io::Error::last_os_error());

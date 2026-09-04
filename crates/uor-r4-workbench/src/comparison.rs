@@ -286,9 +286,9 @@ fn run_inner(
         )?;
     }
 
-    if read_frame(&mut stdin)?.is_some() {
-        return Err("private comparison row cap exceeded".into());
-    }
+    // `row_cap` is an exact finite population, so completion cannot depend on
+    // the sender closing stdin. Emit `done` immediately after the final result;
+    // any later bytes are outside this one-execution protocol.
     if work.logical_forwards != release.forward_cap || work.refusal_rows != release.refusal_cap {
         return Err("private comparison population counts do not match release".into());
     }

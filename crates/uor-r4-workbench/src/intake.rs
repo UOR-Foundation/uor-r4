@@ -337,22 +337,10 @@ pub fn validate_local_configuration(
     validate_expected_binding(&configuration.expected_binding, frozen_accepted_binding)?;
     validate_identity_shape(&configuration.asset_manifest, ASSET_MANIFEST_BYTES)?;
 
-    // Pair coherence is part of the root configuration schema. A coherent
-    // optional evidence lane is evaluated after root configuration and assets
-    // are accepted so missing, malformed, or mismatched adopted evidence leaves
-    // discovery available instead of preventing the listener from starting.
-    match (
-        &configuration.host_acceptance,
-        &configuration.trusted_host_acceptance_sha256,
-    ) {
-        (None, None) | (Some(_), Some(_)) => {}
-        _ => {
-            return Err(IntakeError::new(
-                IntakeErrorKind::InvalidSchema,
-                "host acceptance path and trusted digest must both be null or present",
-            ));
-        }
-    }
+    // Host-acceptance coherence belongs to the optional evidence lane below.
+    // Missing, incomplete, malformed, or mismatched evidence leaves discovery
+    // available with UNAVAILABLE_NATIVE_QUALIFICATION instead of rejecting the
+    // root configuration and preventing the listener from starting.
     Ok(())
 }
 

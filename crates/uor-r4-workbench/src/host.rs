@@ -678,8 +678,8 @@ fn operation_availability(model: &ModelSnapshot) -> (bool, Option<ServiceError>)
 
 fn admit_load(body: &[u8], application: &Application) -> Result<Vec<u8>, PublicError> {
     let request: LoadRequest = parse_body(body)?;
-    require_request_instance_shape(&request.instance_id)?;
     require_schema(&request.schema, crate::wire::LOAD_SCHEMA)?;
+    require_request_instance_shape(&request.instance_id)?;
     require_instance(&request.instance_id, application)?;
     require_model(&request.model_id)?;
 
@@ -703,11 +703,11 @@ fn admit_load(body: &[u8], application: &Application) -> Result<Vec<u8>, PublicE
 
 fn admit_unload(body: &[u8], application: &Application) -> Result<Vec<u8>, PublicError> {
     let request: UnloadRequest = parse_body(body)?;
-    require_request_instance_shape(&request.instance_id)?;
-    require_uint53_shape(request.expected_generation)?;
     require_schema(&request.schema, crate::wire::UNLOAD_SCHEMA)?;
+    require_request_instance_shape(&request.instance_id)?;
     require_instance(&request.instance_id, application)?;
     require_model(&request.model_id)?;
+    require_uint53_shape(request.expected_generation)?;
     let deadline_at = Instant::now() + UNLOAD_DEADLINE;
     let response = {
         let mut state = lock_lifecycle(&application.state);
@@ -729,9 +729,8 @@ fn admit_unload(body: &[u8], application: &Application) -> Result<Vec<u8>, Publi
 
 fn admit_answer(body: &[u8], application: &Application) -> Result<Vec<u8>, PublicError> {
     let request: AnswerRequest = parse_body(body)?;
-    require_request_instance_shape(&request.instance_id)?;
-    require_uint53_shape(request.expected_generation)?;
     require_schema(&request.schema, crate::wire::REQUEST_SCHEMA)?;
+    require_request_instance_shape(&request.instance_id)?;
     require_instance(&request.instance_id, application)?;
     require_model(&request.model_id)?;
     if request.operation != OPERATION_ID {
@@ -746,6 +745,7 @@ fn admit_answer(body: &[u8], application: &Application) -> Result<Vec<u8>, Publi
             "Raw input schema is not supported.",
         ));
     }
+    require_uint53_shape(request.expected_generation)?;
 
     let deadline_at = Instant::now() + ANSWER_DEADLINE;
     let response = {
@@ -805,8 +805,8 @@ fn admit_cancel(
     application: &Application,
 ) -> Result<Vec<u8>, PublicError> {
     let request: CancelRequest = parse_body(body)?;
-    require_request_instance_shape(&request.instance_id)?;
     require_schema(&request.schema, crate::wire::CANCEL_SCHEMA)?;
+    require_request_instance_shape(&request.instance_id)?;
     require_instance(&request.instance_id, application)?;
     let response = {
         let mut state = lock_lifecycle(&application.state);
