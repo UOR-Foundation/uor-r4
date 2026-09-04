@@ -64,10 +64,10 @@ reciprocal, at which point the implementation rejects the nonfinite result.
 Neither observed prompt approached that case.
 
 At batch one, each layer and token evaluates twelve R4 blocks. Its declared
-logical work is 384 frame-coordinate products, 168 closed-form quaternion
-products, twelve reciprocals, and 48 residual subtractions. The dense
-comparator executes 18,432 learned-weight products per layer and token across its
-`48 -> 128`, `48 -> 128`, and `128 -> 48` projections. These are analytical
+logical work is 384 frame-coordinate products, 168 closed-form scalar products
+for the quaternion cube, twelve reciprocals, and 48 residual subtractions. The
+dense comparator executes 18,432 learned-weight products per layer and token
+across its `48 -> 128`, `48 -> 128`, and `128 -> 48` projections. These are analytical
 operation counts, not latency or hardware-energy measurements.
 
 ## Donor boundary
