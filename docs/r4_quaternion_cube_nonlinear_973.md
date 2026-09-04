@@ -1,7 +1,7 @@
 # #973 finite-indexed R4 nonlinear block
 
-**Date:** 2026-09-04  
-**Status:** `PRE_EXECUTION_OPERATOR_FIXED`
+**Date:** 2026-09-04
+**Status:** `FINITE_INDEXED_R4_NONLINEAR_EXECUTED_LANGUAGE_UTILITY_UNESTABLISHED`
 
 ## Implemented decision
 
@@ -40,7 +40,8 @@ epsilon or fitted threshold. All twelve blocks are evaluated from the same
 normalized input and the same current frame. The operator adds no learned
 parameters or persistent state. Dense MLP tensors remain in the accepted
 artifact so the two runtime arms stay byte-compatible, but this candidate
-does not read or execute them.
+does not invoke or compute with them in its predictive forward path. Artifact
+validation and export still read and serialize every retained tensor.
 
 ## Why this operator
 
@@ -50,17 +51,22 @@ is odd and homogeneous over real scalars, and its residual obeys
 operator. They are not claims about f32 equality, trained behavior, language
 quality, or the surrounding learned decoder.
 
-The current H4 element selects one of 120 frame-conjugated nonlinear maps on
-continuous R4 blocks. “Finite” here means a finite indexed operator bank with
-fixed work and fixed state; it does not mean that hidden values are quantized.
+The current H4 element selects from 120 frame-index entries on continuous R4
+blocks. Because the cube is odd, antipodal frames `F` and `-F` produce the same
+conjugated map, so this bank has at most 60 distinct operators. “Finite” here
+means a finite indexed operator bank with fixed work and fixed state; it does
+not mean that hidden values are quantized.
 The implementation is transitional f32 compiler-side arithmetic. Integer/table
 lowering, zero-multiply serving, and allocation-free execution remain later
-work.
+work. The direct quotient is also not total over every possible finite
+subnormal input: a nonzero block's squared norm can underflow before the
+reciprocal, at which point the implementation rejects the nonfinite result.
+Neither observed prompt approached that case.
 
 At batch one, each layer and token evaluates twelve R4 blocks. Its declared
 logical work is 384 frame-coordinate products, 168 closed-form quaternion
 products, twelve reciprocals, and 48 residual subtractions. The dense
-comparator reads 18,432 learned matrix weights per layer and token across its
+comparator executes 18,432 learned-weight products per layer and token across its
 `48 -> 128`, `48 -> 128`, and `128 -> 48` projections. These are analytical
 operation counts, not latency or hardware-energy measurements.
 
@@ -109,8 +115,87 @@ dense-MLP calls, operator blocks, maximum f32 block-norm error, and maximum
 residual-bound ratio. Do not fit, tune, inspect held-out data, add a third arm,
 or launch a scale campaign in this task.
 
-Passing this comparison means only that the finite-indexed nonlinear R4 path
-executes end to end and bypasses dense SwiGLU while preserving the accepted
-bounded sparse reader. Language usefulness, trainability, H4 advantage,
-reasoning, coding, table-native execution, and architectural alpha remain
-unverified hypotheses.
+## Measured result
+
+The candidate completed both prompts. The accepted dense-SwiGLU sparse outputs
+were read from the preserved #1122 artifacts and were not rerun. Asset CIDs and
+prompt token IDs matched, and sparse candidate-selection traces matched exactly
+for every forced prompt token. After generation began, both candidate runs
+diverged on the first sampled token.
+
+| Prompt | Dense-SwiGLU sparse continuation | Quaternion-cube continuation | Common generated prefix |
+|---|---|---|---:|
+| `A purple turtle found a clock in the garden` | `, there was a time, there was a little girl named I saw a little` | ` Sue face heistol and�,\u0003 was� to<\|unk\|> She� up “` | 0 |
+| `Albert Einstein was born in` | ` his friend, and Lily were very sad. He said, "So and` | `` jack hisleton thenaug you` always'ter very�\n all bor.`` | 0 |
+
+The visibly degraded no-fit continuations are an honest observation, not a
+language-quality score. The accepted artifact was fitted jointly with its
+dense SwiGLU weights; this intervention disables 36,864 such weights without
+refitting the surrounding representation.
+
+Across 53 processed tokens, the candidate executed 1,272 R4 block evaluations,
+40,704 H4 frame-coordinate products, 17,808 quaternion-cube scalar products,
+1,272 reciprocals, and 5,088 residual subtractions. It executed zero dense-MLP
+calls and zero dense-MLP weight products; the corresponding dense comparator
+would analytically execute 1,953,792 MLP weight products across those
+layer-token calls.
+The largest observed f32 block-norm error was
+`7.152557373046875e-07`; the largest observed ratio
+`||delta|| / (2 ||normalized block||)` was `1.0`.
+
+Both runs kept the recurrent state at 2,304 f32 values / 9,216 bytes, stayed
+within nine attention sources, and reported zero complete-prefix scans,
+unselected K/V reads, provider calls, teacher calls, future reads, and
+forbidden reads. The focused causal/mechanism check reported:
+
+```text
+Ran 4 tests in 0.190s
+OK
+```
+
+Preserved raw artifacts:
+
+- turtle candidate SHA-256:
+  `2fd4e8a9945b0913c417badc97fb7cb9c7bec682c48bc533a1f0baea0ed418da`
+- Einstein candidate SHA-256:
+  `dd7de4ffd4da84b181e7559af327d7a6b1757a73938a3fabb6c8c6d49c690f1b`
+- comparison summary SHA-256:
+  `502bccf9482ba06f6582507243e884e4a97a5eddc6ee7eae43a64fb45ea5a5c3`
+
+They remain outside Git under
+`.uor-models/research/issue-973-quaternion-cube-r4-v1/comparison/`.
+Independent review corrected the descriptive bank cardinality from 120 maps to
+120 frame-index entries with at most 60 distinct maps. The canonical files were
+regenerated once after that metadata-only source correction; their numerical
+fields and continuations remained exact. The pre-correction bytes remain in
+the `pre-review-overstated-frame-count/` child directory.
+Review also narrowed the retained-weight claim to the predictive forward path:
+artifact validation and export read and serialize every retained tensor, while
+candidate prediction performs zero dense-MLP calls or weight products. The raw
+records were refreshed after that field-name correction; their only changes
+were the old and new model-field keys. The immediately preceding bytes remain
+in `pre-review-forward-path-claim/`.
+
+## Evidence boundary and next action
+
+- **Mathematical result:** over real quaternions the declared cube map is odd,
+  real-scale equivariant, block-norm preserving, and has the stated residual
+  bound. No formal proof artifact was produced.
+- **Measured behavior:** the focused test and two direct executions establish
+  the reported f32 bounds, deterministic audit counts, dense-MLP bypass,
+  unchanged prompt-stage sparse selection, bounded state, and causal access
+  counters for this implementation and these inputs.
+- **Unverified hypotheses:** that this finite-indexed operator can be fitted to
+  useful language, that H4 frame selection helps, or that it supports reasoning,
+  coding, table-native serving, or architectural-alpha behavior. Trainability
+  at the exact zero branch and numerical hardening for extreme subnormal inputs
+  also remain unmeasured.
+
+This completes the nonlinear geometric mechanical checkpoint. It does not
+erase any prior negative result and does not qualify the observed text as
+useful. #973 remains open because the bounded architecture still needs learned
+language behavior.
+
+The one next action is to specify a bounded development-data fit of this exact
+sparse-plus-quaternion-cube architecture against the retained dense-SwiGLU
+comparator before increasing model or data scale.
