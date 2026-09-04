@@ -1,7 +1,7 @@
 # #973 sparse geometric recurrent attention
 
-**Date:** 2026-09-04  
-**Status:** `SPARSE_GEOMETRIC_MECHANISM_EXECUTED_LANGUAGE_UTILITY_UNESTABLISHED`  
+**Date:** 2026-09-04
+**Status:** `SPARSE_GEOMETRIC_MECHANISM_EXECUTED_LANGUAGE_UTILITY_UNESTABLISHED`
 **Implementation revision:** `e93822e944d1a8edfbc314153abc4585f2dcafc5`
 
 ## Result
