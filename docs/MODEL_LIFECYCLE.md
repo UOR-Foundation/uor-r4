@@ -23,8 +23,12 @@ propagates bounded lexical matches through exact operand IDs. Its offline
 initializer remaps learned prime-addressed codes by exact word identity when
 expanding the dictionary; the donor CID and new parameters are artifact-bound.
 Serving needs only the resulting artifact. It does not load a donor/provider.
-Literal-only first answers still use the earlier selector and remain the next
-geometric binding repair.
+Accepted `af337c28` retains the earlier literal selector. The optional
+[literal extension](native_geometric_literal_selection_1139.md) enables the same
+role component before a derived value exists, but its fitted candidates fail
+preservation and are not promoted. Literal-only offline frames cannot supply
+a preceding answer. Protecting working computed roles and learning literal
+admission against word answers is the next repair.
 
 ## Historical and retained reference lifecycles
 

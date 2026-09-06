@@ -1,0 +1,1261 @@
+{
+  "schema": "uor-r4.literal-selection-result/1",
+  "decision": "RETAIN_AF337C28_LITERAL_EXTENSION_FAILS_PRESERVATION",
+  "base_main": "e201384e6897b1d149da22274ab79b9f6f6faa14",
+  "source_files": [
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-typed-value/uor-r4/crates/uor-r4-core/src/native_geometric/typed_routing.rs",
+      "bytes": 15612,
+      "sha256": "8bd65272f82ad5d743833fef81fc731204a2b9c1e81807bf524c462d6a7e1cd0"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-typed-value/uor-r4/crates/uor-r4-core/src/native_geometric/typed_routing_training.rs",
+      "bytes": 25645,
+      "sha256": "f7cb69d880f674a9b5b7a45f652f729b56c542d15af2e4940bec394f84be4bba"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-typed-value/uor-r4/crates/uor-r4-core/src/native_geometric/source_routing_training.rs",
+      "bytes": 18034,
+      "sha256": "6132e6c71225ac0ede5ad6c167730ce1b2ec12cdbf04e53b7187df0c0bbd6fb9"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-typed-value/uor-r4/crates/uor-r4-core/src/native_geometric/value_runtime_tests.rs",
+      "bytes": 38665,
+      "sha256": "006f943128cb05d0673ffe1dd7be157ad6f0e728e7dfcb37fb72fbe9196789ea"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-typed-value/uor-r4/crates/uor-r4-core/examples/native_geometric_value_probe/typed_routing.rs",
+      "bytes": 26588,
+      "sha256": "b63167ed627ee76670d155a4e5ca2865c5170455bc3fd97b78cc6cb12551869e"
+    }
+  ],
+  "accepted": "blake3:af337c28ade71ae4ef01a888c8f3ddb9b240096ff2155d79d37de0773d6ece1a",
+  "artifacts": [
+    {
+      "model": {
+        "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-angular/model.json",
+        "bytes": 11157195,
+        "sha256": "a03869634886fb741512d015d5fbfd0362cb94fbabb7814e996e4a3ccfe26000"
+      },
+      "fit": {
+        "artifact": "blake3:923f0d8b44afd8ead69b8181d8cf3322a295a8bdc640027dc0baef41239046a0",
+        "block_bytes": 56556,
+        "config": {
+          "learned_features": 768,
+          "max_seconds": 30,
+          "mode": "angular",
+          "passes": 4,
+          "proposals": 12,
+          "seed": 1139
+        },
+        "construction_ms": 188,
+        "dictionary_words": 65,
+        "effective_query_classes": 59,
+        "feature_universe": 601,
+        "features": 601,
+        "fit": {
+          "accepted": [
+            49,
+            1,
+            1
+          ],
+          "final_correct": 122,
+          "final_hinge": 0,
+          "initial_correct": 78,
+          "initial_hinge": 248,
+          "proposals": 61001,
+          "stopped_at_time_limit": false
+        },
+        "frames": 122,
+        "incompatible_feature_classes": 0,
+        "parent": "blake3:bb79456b2dd7187005a3501d437fdc17215429bd4fff0671c31a44583d2918c7",
+        "scope": "Joint typed operator/operand labels over actual generated intermediates or explicit literal-only input frames; source values and numeric query words are not encoded as geometric scoring features. Construction fit is not generated transfer."
+      }
+    },
+    {
+      "model": {
+        "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-prefix-angular/model.json",
+        "bytes": 11158269,
+        "sha256": "5657bcb6f555919f923bce3fc64e2e39d3880a1fa429295af0becc3e59928b99"
+      },
+      "fit": {
+        "artifact": "blake3:51788aeff1352fd07d41b8be13c85ab3a7e46d334ab19fbb4be67a6092e0d882",
+        "block_bytes": 57630,
+        "config": {
+          "learned_features": 768,
+          "max_seconds": 30,
+          "mode": "angular",
+          "passes": 4,
+          "proposals": 12,
+          "seed": 1139
+        },
+        "construction_ms": 182,
+        "dictionary_words": 65,
+        "effective_query_classes": 60,
+        "feature_universe": 602,
+        "features": 602,
+        "fit": {
+          "accepted": [
+            4,
+            0,
+            0
+          ],
+          "final_correct": 129,
+          "final_hinge": 0,
+          "initial_correct": 122,
+          "initial_hinge": 28,
+          "proposals": 61115,
+          "stopped_at_time_limit": false
+        },
+        "frames": 129,
+        "incompatible_feature_classes": 0,
+        "parent": "blake3:bb79456b2dd7187005a3501d437fdc17215429bd4fff0671c31a44583d2918c7",
+        "scope": "Joint typed operator/operand labels over actual generated intermediates or explicit literal-only input frames; source values and numeric query words are not encoded as geometric scoring features. Construction fit is not generated transfer."
+      }
+    },
+    {
+      "model": {
+        "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-prefix-equality/model.json",
+        "bytes": 11158234,
+        "sha256": "ab10b87c2da202a4c728cde667e4e4b57ce90bc3287c1f2a64176c3c6b222ba7"
+      },
+      "fit": {
+        "artifact": "blake3:3f31e998c13c9ace439b72cab59c90090ccd2365a39435a915144799f3e2bfd5",
+        "block_bytes": 57595,
+        "config": {
+          "learned_features": 768,
+          "max_seconds": 30,
+          "mode": "equality",
+          "passes": 4,
+          "proposals": 12,
+          "seed": 1139
+        },
+        "construction_ms": 183,
+        "dictionary_words": 65,
+        "effective_query_classes": 60,
+        "feature_universe": 602,
+        "features": 602,
+        "fit": {
+          "accepted": [
+            53,
+            0,
+            34
+          ],
+          "final_correct": 129,
+          "final_hinge": 6,
+          "initial_correct": 10,
+          "initial_hinge": 299,
+          "proposals": 61222,
+          "stopped_at_time_limit": false
+        },
+        "frames": 129,
+        "incompatible_feature_classes": 0,
+        "parent": "blake3:bb79456b2dd7187005a3501d437fdc17215429bd4fff0671c31a44583d2918c7",
+        "scope": "Joint typed operator/operand labels over actual generated intermediates or explicit literal-only input frames; source values and numeric query words are not encoded as geometric scoring features. Construction fit is not generated transfer."
+      }
+    }
+  ],
+  "inputs": [
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-source.json",
+      "bytes": 331063,
+      "sha256": "395562273f46a11ea9faa8c785e3637e43a17c8148f934c5a72ac27fd6dac4b3"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-prefix-source.json",
+      "bytes": 405963,
+      "sha256": "47896d4e2676167655fae454dd94754d76d8b8dceb66474d9ff74aab610e1103"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-projection.json",
+      "bytes": 2514,
+      "sha256": "8ec306e2a402f48fd814455a64193d974d286eb977f8a89ddb7ba89c666624c0"
+    }
+  ],
+  "reports": [
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-construction.json",
+      "bytes": 1796735,
+      "sha256": "302acbcf6923dc0ac9e97dbf178dc091cb9304aa4303ad85bd8dd4576945a48f",
+      "artifact": "blake3:923f0d8b44afd8ead69b8181d8cf3322a295a8bdc640027dc0baef41239046a0",
+      "exact": 56,
+      "total": 122,
+      "elapsed_ms": 149,
+      "failure_count": 66,
+      "first_failures": [
+        {
+          "id": "roles-fit/0/0",
+          "initial_generation_failed": "initial generated response failed: roles-fit/0/0:  Unknown.\n",
+          "used_intermediate": false
+        },
+        {
+          "id": "roles-fit/0/1",
+          "initial_generation_failed": "initial generated response failed: roles-fit/0/1:  Unknown.\n",
+          "used_intermediate": false
+        },
+        {
+          "id": "roles-fit/0/2",
+          "initial_generation_failed": "initial generated response failed: roles-fit/0/2:  Unknown.\n",
+          "used_intermediate": false
+        },
+        {
+          "id": "roles-fit/0/3",
+          "initial_generation_failed": "initial generated response failed: roles-fit/0/3:  Unknown.\n",
+          "used_intermediate": false
+        },
+        {
+          "id": "roles-fit/0/4",
+          "initial_generation_failed": "initial generated response failed: roles-fit/0/4:  Unknown.\n",
+          "used_intermediate": false
+        },
+        {
+          "id": "roles-fit/0/5",
+          "initial_generation_failed": "initial generated response failed: roles-fit/0/5:  Unknown.\n",
+          "used_intermediate": false
+        },
+        {
+          "id": "roles-fit/0/6",
+          "initial_generation_failed": "initial generated response failed: roles-fit/0/6:  Unknown.\n",
+          "used_intermediate": false
+        },
+        {
+          "id": "roles-fit/1/0",
+          "initial_generation_failed": "initial generated response failed: roles-fit/1/0:  Unknown.\n",
+          "used_intermediate": false
+        }
+      ],
+      "work_scope": "All nested work counters are retained in the bound report. Totals are overlapping categories, not a machine instruction census."
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-prefix-construction.json",
+      "bytes": 4986440,
+      "sha256": "c6918eb730aa8b62e685907778a113bc71c7adbd7f2700a00658aa66afc35591",
+      "artifact": "blake3:51788aeff1352fd07d41b8be13c85ab3a7e46d334ab19fbb4be67a6092e0d882",
+      "exact": 121,
+      "total": 129,
+      "elapsed_ms": 281,
+      "failure_count": 8,
+      "first_failures": [
+        {
+          "id": "literal-fit/0/false/3",
+          "expected": " Unknown.\n",
+          "text": " Unknown. The conversation does not give a:. The conversation does not give a:. The88. The conversation does not give a: The. 100.",
+          "used_intermediate": false
+        },
+        {
+          "id": "literal-fit/0/true/3",
+          "expected": " Unknown.\n",
+          "text": " coins.\n",
+          "used_intermediate": false
+        },
+        {
+          "id": "literal-fit/1/false/3",
+          "expected": " Unknown.\n",
+          "text": " Unknown. The conversation does not give a:. The conversation does not give a:. The conversation does not give a:. The conversation does not give a",
+          "used_intermediate": false
+        },
+        {
+          "id": "literal-fit/1/true/3",
+          "expected": " Unknown.\n",
+          "text": " coins.\n",
+          "used_intermediate": false
+        },
+        {
+          "id": "literal-fit/2/false/3",
+          "expected": " Unknown.\n",
+          "text": " Unknown. The conversation does not give a:. The conversation does not give a:. The conversation does not give a:. The conversation does not give a",
+          "used_intermediate": false
+        },
+        {
+          "id": "literal-fit/2/true/3",
+          "expected": " Unknown.\n",
+          "text": " coins.\n",
+          "used_intermediate": false
+        },
+        {
+          "id": "literal-fit/3/false/3",
+          "expected": " Unknown.\n",
+          "text": " Unknown. The conversation does not give a coins.\n",
+          "used_intermediate": false
+        },
+        {
+          "id": "literal-fit/3/true/3",
+          "expected": " Unknown.\n",
+          "text": " coins.\n",
+          "used_intermediate": false
+        }
+      ],
+      "work_scope": "All nested work counters are retained in the bound report. Totals are overlapping categories, not a machine instruction census."
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-prefix-open.json",
+      "bytes": 446096,
+      "sha256": "17cf2a8c70300b9c84461a51840c06225376c581396393af04a4ab39517818fc",
+      "artifact": "blake3:51788aeff1352fd07d41b8be13c85ab3a7e46d334ab19fbb4be67a6092e0d882",
+      "exact": 12,
+      "total": 16,
+      "elapsed_ms": 25,
+      "failure_count": 4,
+      "first_failures": [
+        {
+          "id": "literal-open/0/false/3",
+          "expected": " Unknown.\n",
+          "text": " Unknown. The conversation does not give a:. The conversation does not give a:. The88. The conversation does not give a: The. 100.",
+          "used_intermediate": false
+        },
+        {
+          "id": "literal-open/0/true/3",
+          "expected": " Unknown.\n",
+          "text": " coins.\n",
+          "used_intermediate": false
+        },
+        {
+          "id": "literal-open/1/false/3",
+          "expected": " Unknown.\n",
+          "text": " Unknown. The conversation does not give a:. The conversation does not give a:. The conversation does not give a:. The conversation does not give a",
+          "used_intermediate": false
+        },
+        {
+          "id": "literal-open/1/true/3",
+          "expected": " Unknown.\n",
+          "text": " coins.\n",
+          "used_intermediate": false
+        }
+      ],
+      "work_scope": "All nested work counters are retained in the bound report. Totals are overlapping categories, not a machine instruction census."
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-transfer.json",
+      "bytes": 446369,
+      "sha256": "384319745baf4ee5342da3cab5a51727a6e5e99819f038915caacce5d881ff9e",
+      "artifact": "blake3:51788aeff1352fd07d41b8be13c85ab3a7e46d334ab19fbb4be67a6092e0d882",
+      "exact": 12,
+      "total": 16,
+      "elapsed_ms": 25,
+      "failure_count": 4,
+      "first_failures": [
+        {
+          "id": "literal-transfer/0/false/3",
+          "expected": " Unknown.\n",
+          "text": " Unknown. The conversation does not give a:. The 101. The conversation does not give a: The. 146. The2121 The. The conversation does",
+          "used_intermediate": false
+        },
+        {
+          "id": "literal-transfer/0/true/3",
+          "expected": " Unknown.\n",
+          "text": " coins.\n",
+          "used_intermediate": false
+        },
+        {
+          "id": "literal-transfer/1/false/3",
+          "expected": " Unknown.\n",
+          "text": " Unknown. The conversation does not give a:. The conversation does not give a:. The conversation does not give a:. The 101. The conversation does",
+          "used_intermediate": false
+        },
+        {
+          "id": "literal-transfer/1/true/3",
+          "expected": " Unknown.\n",
+          "text": " coins.\n",
+          "used_intermediate": false
+        }
+      ],
+      "work_scope": "All nested work counters are retained in the bound report. Totals are overlapping categories, not a machine instruction census.",
+      "typed_work_sum": {
+        "code_reads": 15040,
+        "comparisons": 89056,
+        "context_tokens_read": 1024,
+        "emission_queries": 7520,
+        "logical_bytes_read": 1652650,
+        "operator_executions": 0,
+        "payload_gathers": 0,
+        "predictions": 16,
+        "sources_examined": 1920,
+        "table_reads": 31840
+      }
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-chain-transfer.json",
+      "bytes": 912108,
+      "sha256": "2f6006e27adcf64c14f38d34539436c1d3632b68314e5103484bccde04ccea40",
+      "artifact": "blake3:51788aeff1352fd07d41b8be13c85ab3a7e46d334ab19fbb4be67a6092e0d882",
+      "exact": 16,
+      "total": 16,
+      "elapsed_ms": 56,
+      "failure_count": 0,
+      "first_failures": [],
+      "work_scope": "All nested work counters are retained in the bound report. Totals are overlapping categories, not a machine instruction census.",
+      "typed_work_sum": {
+        "code_reads": 77360,
+        "comparisons": 475008,
+        "context_tokens_read": 2432,
+        "emission_queries": 41320,
+        "logical_bytes_read": 8579104,
+        "operator_executions": 0,
+        "payload_gathers": 0,
+        "predictions": 48,
+        "sources_examined": 21480,
+        "table_reads": 167832
+      }
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-old-transfer.json",
+      "bytes": 911478,
+      "sha256": "477d9d73764d00aa9aa15a35179b4dffc49501db4b0f83391d4cc3e1b7f4732a",
+      "artifact": "blake3:51788aeff1352fd07d41b8be13c85ab3a7e46d334ab19fbb4be67a6092e0d882",
+      "exact": 12,
+      "total": 16,
+      "elapsed_ms": 57,
+      "failure_count": 4,
+      "first_failures": [
+        {
+          "id": "independent-transfer/1/false/1",
+          "expected": "7.\n",
+          "text": "9.\n",
+          "used_intermediate": true
+        },
+        {
+          "id": "independent-transfer/1/false/3",
+          "expected": "10.\n",
+          "text": "9.\n",
+          "used_intermediate": true
+        },
+        {
+          "id": "independent-transfer/1/true/1",
+          "expected": "7.\n",
+          "text": "9.\n",
+          "used_intermediate": true
+        },
+        {
+          "id": "independent-transfer/1/true/3",
+          "expected": "10.\n",
+          "text": "9.\n",
+          "used_intermediate": true
+        }
+      ],
+      "work_scope": "All nested work counters are retained in the bound report. Totals are overlapping categories, not a machine instruction census."
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-parent-transfer.json",
+      "bytes": 446598,
+      "sha256": "281c209a6f516dd85a2a569b3fc67076287fd32c814c984134ac04bdaa5f0eb8",
+      "artifact": "blake3:af337c28ade71ae4ef01a888c8f3ddb9b240096ff2155d79d37de0773d6ece1a",
+      "exact": 7,
+      "total": 16,
+      "elapsed_ms": 26,
+      "failure_count": 9,
+      "first_failures": [
+        {
+          "id": "literal-transfer/0/false/0",
+          "expected": "-7.\n",
+          "text": "19.\n",
+          "used_intermediate": false
+        },
+        {
+          "id": "literal-transfer/0/false/3",
+          "expected": " Unknown.\n",
+          "text": " Unknown. The conversation does not give a:. The 101. The conversation does not give a: The. 146. The2121 The. The conversation does",
+          "used_intermediate": false
+        },
+        {
+          "id": "literal-transfer/0/true/1",
+          "expected": "19.\n",
+          "text": "-7.\n",
+          "used_intermediate": false
+        },
+        {
+          "id": "literal-transfer/0/true/2",
+          "expected": "12.\n",
+          "text": "320.\n",
+          "used_intermediate": false
+        },
+        {
+          "id": "literal-transfer/0/true/3",
+          "expected": " Unknown.\n",
+          "text": " coins.\n",
+          "used_intermediate": false
+        },
+        {
+          "id": "literal-transfer/1/false/0",
+          "expected": "25.\n",
+          "text": "6.\n",
+          "used_intermediate": false
+        },
+        {
+          "id": "literal-transfer/1/false/3",
+          "expected": " Unknown.\n",
+          "text": " Unknown. The conversation does not give a:. The conversation does not give a:. The conversation does not give a:. The 101. The conversation does",
+          "used_intermediate": false
+        },
+        {
+          "id": "literal-transfer/1/true/1",
+          "expected": "6.\n",
+          "text": "25.\n",
+          "used_intermediate": false
+        }
+      ],
+      "work_scope": "All nested work counters are retained in the bound report. Totals are overlapping categories, not a machine instruction census."
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-parent-chain.json",
+      "bytes": 457987,
+      "sha256": "3965fad9d3d91a068541a61be944b871278a79a6bed4cfc8f429f5518c5f890c",
+      "artifact": "blake3:af337c28ade71ae4ef01a888c8f3ddb9b240096ff2155d79d37de0773d6ece1a",
+      "exact": 8,
+      "total": 16,
+      "elapsed_ms": 36,
+      "failure_count": 8,
+      "first_failures": [
+        {
+          "id": "literal-chain-transfer/0/false/0",
+          "initial_generation_failed": "initial generated response failed: literal-chain-transfer/0/false/0: 19.\n",
+          "used_intermediate": false
+        },
+        {
+          "id": "literal-chain-transfer/0/false/1",
+          "initial_generation_failed": "initial generated response failed: literal-chain-transfer/0/false/1: 19.\n",
+          "used_intermediate": false
+        },
+        {
+          "id": "literal-chain-transfer/0/false/2",
+          "initial_generation_failed": "initial generated response failed: literal-chain-transfer/0/false/2: 19.\n",
+          "used_intermediate": false
+        },
+        {
+          "id": "literal-chain-transfer/0/false/3",
+          "initial_generation_failed": "initial generated response failed: literal-chain-transfer/0/false/3: 19.\n",
+          "used_intermediate": false
+        },
+        {
+          "id": "literal-chain-transfer/0/true/0",
+          "initial_generation_failed": "initial generated response failed: literal-chain-transfer/0/true/0: 5.\n",
+          "used_intermediate": false
+        },
+        {
+          "id": "literal-chain-transfer/0/true/1",
+          "initial_generation_failed": "initial generated response failed: literal-chain-transfer/0/true/1: 5.\n",
+          "used_intermediate": false
+        },
+        {
+          "id": "literal-chain-transfer/0/true/2",
+          "initial_generation_failed": "initial generated response failed: literal-chain-transfer/0/true/2: 5.\n",
+          "used_intermediate": false
+        },
+        {
+          "id": "literal-chain-transfer/0/true/3",
+          "initial_generation_failed": "initial generated response failed: literal-chain-transfer/0/true/3: 5.\n",
+          "used_intermediate": false
+        }
+      ],
+      "work_scope": "All nested work counters are retained in the bound report. Totals are overlapping categories, not a machine instruction census."
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-equality-transfer.json",
+      "bytes": 446369,
+      "sha256": "4eaacbd3f533e59cb61c6946ba2d460988c20e36453e377997cbd1be6aae3a83",
+      "artifact": "blake3:3f31e998c13c9ace439b72cab59c90090ccd2365a39435a915144799f3e2bfd5",
+      "exact": 12,
+      "total": 16,
+      "elapsed_ms": 25,
+      "failure_count": 4,
+      "first_failures": [
+        {
+          "id": "literal-transfer/0/false/3",
+          "expected": " Unknown.\n",
+          "text": " Unknown. The conversation does not give a:. The 101. The conversation does not give a: The. 146. The2121 The. The conversation does",
+          "used_intermediate": false
+        },
+        {
+          "id": "literal-transfer/0/true/3",
+          "expected": " Unknown.\n",
+          "text": " coins.\n",
+          "used_intermediate": false
+        },
+        {
+          "id": "literal-transfer/1/false/3",
+          "expected": " Unknown.\n",
+          "text": " Unknown. The conversation does not give a:. The conversation does not give a:. The conversation does not give a:. The 101. The conversation does",
+          "used_intermediate": false
+        },
+        {
+          "id": "literal-transfer/1/true/3",
+          "expected": " Unknown.\n",
+          "text": " coins.\n",
+          "used_intermediate": false
+        }
+      ],
+      "work_scope": "All nested work counters are retained in the bound report. Totals are overlapping categories, not a machine instruction census."
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-equality-chain.json",
+      "bytes": 912108,
+      "sha256": "dc9f3adb36f07b92b2b2967782fcde808ed6b6d16d9f3007c9b297dcd6bb60a5",
+      "artifact": "blake3:3f31e998c13c9ace439b72cab59c90090ccd2365a39435a915144799f3e2bfd5",
+      "exact": 16,
+      "total": 16,
+      "elapsed_ms": 56,
+      "failure_count": 0,
+      "first_failures": [],
+      "work_scope": "All nested work counters are retained in the bound report. Totals are overlapping categories, not a machine instruction census."
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-equality-old.json",
+      "bytes": 911010,
+      "sha256": "32a7f37654f8d937862f8042ff0fbcb21dbfe3f6063281f262db71af681dda09",
+      "artifact": "blake3:3f31e998c13c9ace439b72cab59c90090ccd2365a39435a915144799f3e2bfd5",
+      "exact": 14,
+      "total": 16,
+      "elapsed_ms": 56,
+      "failure_count": 2,
+      "first_failures": [
+        {
+          "id": "independent-transfer/1/false/1",
+          "expected": "7.\n",
+          "text": "10.\n",
+          "used_intermediate": false
+        },
+        {
+          "id": "independent-transfer/1/true/1",
+          "expected": "7.\n",
+          "text": "7.\n",
+          "used_intermediate": false
+        }
+      ],
+      "work_scope": "All nested work counters are retained in the bound report. Totals are overlapping categories, not a machine instruction census."
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-preservation/development.json",
+      "bytes": 2307685,
+      "sha256": "a95e503c56d18d64ead5df6fa4ee229185963b5a53a24fd551f9853791a90ca9",
+      "artifact": "blake3:51788aeff1352fd07d41b8be13c85ab3a7e46d334ab19fbb4be67a6092e0d882",
+      "exact": 48,
+      "total": 48,
+      "elapsed_ms": 49,
+      "failure_count": 0,
+      "first_failures": [],
+      "work_scope": "All nested work counters are retained in the bound report. Totals are overlapping categories, not a machine instruction census."
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-preservation/preservation.json",
+      "bytes": 1505864,
+      "sha256": "c736b1585363dceb4e3f8f9124a0e7b654a09a7629f2f78040b4cae80a199b07",
+      "artifact": "blake3:51788aeff1352fd07d41b8be13c85ab3a7e46d334ab19fbb4be67a6092e0d882",
+      "exact": 60,
+      "total": 62,
+      "failure_count": 2,
+      "first_failures": [
+        {
+          "id": "word-copy/development/context-3/name-8",
+          "expected": "left\n}\n",
+          "text": "73);\n}\n"
+        },
+        {
+          "id": "word-copy/development/context-3/name-9",
+          "expected": "right\n}\n",
+          "text": "73);\n}\n"
+        }
+      ],
+      "work_scope": "All nested work counters are retained in the bound report. Totals are overlapping categories, not a machine instruction census."
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-preservation/prior.json",
+      "bytes": 347890,
+      "sha256": "e59e4e33e1fa8a6d43b7dd3bb657abcae0f813175b6d9e5bde6ca296cec92a69",
+      "artifact": "blake3:51788aeff1352fd07d41b8be13c85ab3a7e46d334ab19fbb4be67a6092e0d882",
+      "exact": 23,
+      "total": 24,
+      "failure_count": 1,
+      "first_failures": [
+        {
+          "id": "role-read/first-use/0/5/3",
+          "expected": "sovek\n}\n",
+          "text": "11);\n}\n"
+        }
+      ],
+      "work_scope": "All nested work counters are retained in the bound report. Totals are overlapping categories, not a machine instruction census."
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-preservation/exposed-names.json",
+      "bytes": 1362327,
+      "sha256": "86c3e3826969a9cd4cf4f402baa57390acbe36defdebf521a4b879e67d74fa6f",
+      "artifact": "blake3:51788aeff1352fd07d41b8be13c85ab3a7e46d334ab19fbb4be67a6092e0d882",
+      "exact": 28,
+      "total": 28,
+      "elapsed_ms": 28,
+      "failure_count": 0,
+      "first_failures": [],
+      "work_scope": "All nested work counters are retained in the bound report. Totals are overlapping categories, not a machine instruction census."
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-preservation/sessions.json",
+      "bytes": 37117,
+      "sha256": "f554a59818eea36737877348f93fb8f5423b3bf4a19fa14b8d78cfbd6577b993",
+      "artifact": "blake3:51788aeff1352fd07d41b8be13c85ab3a7e46d334ab19fbb4be67a6092e0d882",
+      "exact": 5,
+      "total": 5,
+      "work_scope": "All nested work counters are retained in the bound report. Totals are overlapping categories, not a machine instruction census."
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-long-context.json",
+      "bytes": 1453176,
+      "sha256": "9a762a51751844ccb800fef634bcd17966eebf8b5b3b9ce27a237e6e137fdc15",
+      "artifact": "blake3:51788aeff1352fd07d41b8be13c85ab3a7e46d334ab19fbb4be67a6092e0d882",
+      "exact": 28,
+      "total": 28,
+      "elapsed_ms": 74,
+      "failure_count": 0,
+      "first_failures": [],
+      "work_scope": "All nested work counters are retained in the bound report. Totals are overlapping categories, not a machine instruction census."
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-prior-numeric.json",
+      "bytes": 272236,
+      "sha256": "c237cb25d7fa15d39ecdea67a574bc3d473decef1c04a9530d23c17a635b9e69",
+      "artifact": "blake3:51788aeff1352fd07d41b8be13c85ab3a7e46d334ab19fbb4be67a6092e0d882",
+      "exact": 6,
+      "total": 6,
+      "elapsed_ms": 13,
+      "failure_count": 0,
+      "first_failures": [],
+      "work_scope": "All nested work counters are retained in the bound report. Totals are overlapping categories, not a machine instruction census."
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-prior-roles.json",
+      "bytes": 688704,
+      "sha256": "7ae07ba353d1da3e3e986cae5079cffef479f07ec5dac353ae830235fc6fe7f6",
+      "artifact": "blake3:51788aeff1352fd07d41b8be13c85ab3a7e46d334ab19fbb4be67a6092e0d882",
+      "exact": 12,
+      "total": 12,
+      "elapsed_ms": 50,
+      "failure_count": 0,
+      "first_failures": [],
+      "work_scope": "All nested work counters are retained in the bound report. Totals are overlapping categories, not a machine instruction census."
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-prior-exposed.json",
+      "bytes": 688860,
+      "sha256": "ea3c3c2ea8e1708b0e5e18fbe486455df05c2ed57cf17b22fe09edff2c2f556a",
+      "artifact": "blake3:51788aeff1352fd07d41b8be13c85ab3a7e46d334ab19fbb4be67a6092e0d882",
+      "exact": 12,
+      "total": 12,
+      "elapsed_ms": 51,
+      "failure_count": 0,
+      "first_failures": [],
+      "work_scope": "All nested work counters are retained in the bound report. Totals are overlapping categories, not a machine instruction census."
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-prior-aliases.json",
+      "bytes": 688665,
+      "sha256": "cb8fd23590ef3672c0a65476a62a68baa9ba3bc875c88336003581754bb924cb",
+      "artifact": "blake3:51788aeff1352fd07d41b8be13c85ab3a7e46d334ab19fbb4be67a6092e0d882",
+      "exact": 12,
+      "total": 12,
+      "elapsed_ms": 50,
+      "failure_count": 0,
+      "first_failures": [],
+      "work_scope": "All nested work counters are retained in the bound report. Totals are overlapping categories, not a machine instruction census."
+    }
+  ],
+  "case_preservation": {
+    "angular_lost": [
+      "independent-transfer/1/false/1",
+      "independent-transfer/1/false/3"
+    ],
+    "angular_newly_correct": [
+      "independent-transfer/1/true/0",
+      "independent-transfer/1/true/2"
+    ],
+    "equality_lost": [
+      "independent-transfer/1/false/1"
+    ],
+    "identifier_copy_regressions": 3
+  },
+  "boundaries": {
+    "serving_provider": false,
+    "serving_dense_transformer": false,
+    "serving_matmul": false,
+    "angular_advantage": "NOT_ESTABLISHED",
+    "full_equality_preservation": "NOT_RUN_AFTER_CASE_REGRESSION",
+    "new_general_rust_reasoning": "NOT_RUN",
+    "abstention_rendering": "FAIL",
+    "broad_release_qa": "NOT_RUN",
+    "full_model_laptop_advantage": "NOT_ESTABLISHED"
+  },
+  "checks": [
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-final-focused.stdout.log",
+      "bytes": 910,
+      "sha256": "daf9dfa7239b2de093ee27c2a8efc4f68ea1409ed5d1eb83586b27233a847695"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-allocation.stdout.log",
+      "bytes": 316,
+      "sha256": "8cc5fe5164cbbad1c28bfe6a46263e63a6ab57652e211519b858f480e951d770"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-kernel.stdout.log",
+      "bytes": 189,
+      "sha256": "bd2647a391188817cf5a21011168f04590412a52b142fdcc82489725cec7b4d0"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-cli.stdout.log",
+      "bytes": 16774,
+      "sha256": "7309537c552be04488a86909959cdb10c2bfb1354ae776ce65d1ea506fcff951"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-fmt.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-policy.log",
+      "bytes": 73,
+      "sha256": "58dd9c24c33ba5ff6519ed3f5bea924d8fd10d93bcfaba529e2d8b0101be6ae7"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-claims.log",
+      "bytes": 83,
+      "sha256": "78d71cb97c00d606a9a909d89a2f4f4e3b4be6b84af390f20c9fc50ec449922f"
+    }
+  ],
+  "resources": {
+    "projection": {
+      "at": "2026-09-06T22:21:36.794Z",
+      "authority": "typed-admission-allowance-authorization.json",
+      "scope": "Continue same geometric role selector into literal-only first answers, actual complete generation, matched control and preservation. No external model work.",
+      "before": {
+        "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+        "at": "2026-09-06T22:21:36.794Z",
+        "inherited_precleanup_bytes": 2747199488,
+        "obsolete_target_growth_credit": 671379456,
+        "current_target_bytes": 2486534144,
+        "predecessor_artifact_root_bytes": 145760256,
+        "current_artifact_root_bytes": 1264066560,
+        "predecessor_worktree_bytes": 9875456,
+        "current_worktree_bytes": 8937472,
+        "stopped_successor_worktree_bytes": 460877824,
+        "source_metadata_reserve_bytes": 5242880,
+        "current_sampled_known_storage_bytes": 6457114624,
+        "storage_limit_bytes": 7063207936,
+        "remaining_storage_bytes": 606093312,
+        "stop_margin_bytes": 134217728,
+        "available_growth_before_stop_bytes": 250687488,
+        "model_ledger": {
+          "cumulative_ms": 2604356,
+          "limit_ms": 2730000
+        },
+        "model_remaining_ms": 125644,
+        "model_process_limit": 1,
+        "model_process_rss_target_bytes": 4294967296,
+        "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+      },
+      "model_increment_ms": 240000,
+      "model_cycle_ms": 360000,
+      "model_projection_ms": 210000,
+      "engineering_cycle_ms": 900000,
+      "engineering_projection_ms": 650000,
+      "growth_projection_bytes": 201326592,
+      "storage_increment_bytes": 0,
+      "model_processes": 1,
+      "rss_bytes": 4294967296,
+      "revisions": [
+        {
+          "at": "2026-09-06T22:47:39.866Z",
+          "prior_model_cycle_ms": 300000,
+          "model_cycle_ms": 360000,
+          "remaining_projection_ms": 175000,
+          "reason": "Identified truncation and prefix-frame mismatch corrected. Complete matched control, new transfer and prior preservation within already extended cumulative ceiling; no additional cumulative/storage allowance."
+        }
+      ]
+    },
+    "final": {
+      "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+      "at": "2026-09-06T22:56:06.278Z",
+      "inherited_precleanup_bytes": 2747199488,
+      "obsolete_target_growth_credit": 671379456,
+      "current_target_bytes": 2486837248,
+      "predecessor_artifact_root_bytes": 145760256,
+      "current_artifact_root_bytes": 1321054208,
+      "predecessor_worktree_bytes": 9875456,
+      "current_worktree_bytes": 8937472,
+      "stopped_successor_worktree_bytes": 460877824,
+      "source_metadata_reserve_bytes": 5242880,
+      "current_sampled_known_storage_bytes": 6514405376,
+      "storage_limit_bytes": 7063207936,
+      "remaining_storage_bytes": 548802560,
+      "stop_margin_bytes": 134217728,
+      "available_growth_before_stop_bytes": 193396736,
+      "model_ledger": {
+        "cumulative_ms": 2921586,
+        "limit_ms": 2970000
+      },
+      "model_remaining_ms": 48414,
+      "model_process_limit": 1,
+      "model_process_rss_target_bytes": 4294967296,
+      "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+    },
+    "model_ms": 317230,
+    "engineering_ms": 663529,
+    "peak_sampled_known_bytes": 6514409472,
+    "peak_sampled_child_rss_bytes": 878379008,
+    "new_storage_allowance": 0,
+    "deleted_material": [],
+    "external_model_compute": 0
+  },
+  "full_command_receipts": {
+    "model": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/commands.jsonl",
+    "engineering": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/engineering-commands.jsonl",
+    "selector": "label starts with literal-; append-only rows retain complete commands and resource snapshots"
+  },
+  "commands": [
+    {
+      "label": "literal-source",
+      "elapsed_ms": 6699,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false,
+      "stdout": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-source.stdout.log",
+      "stderr": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-source.stderr.log"
+    },
+    {
+      "label": "literal-fit",
+      "elapsed_ms": 19330,
+      "code": 1,
+      "stopped": null,
+      "engineering_only": false,
+      "stdout": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-fit.stdout.log",
+      "stderr": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-fit.stderr.log"
+    },
+    {
+      "label": "literal-focused",
+      "elapsed_ms": 1887,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false,
+      "stdout": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-focused.stdout.log",
+      "stderr": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-focused.stderr.log"
+    },
+    {
+      "label": "literal-collision-diagnostic",
+      "elapsed_ms": 18574,
+      "code": 1,
+      "stopped": null,
+      "engineering_only": false,
+      "stdout": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-collision-diagnostic.stdout.log",
+      "stderr": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-collision-diagnostic.stderr.log"
+    },
+    {
+      "label": "literal-full-fit",
+      "elapsed_ms": 43242,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false,
+      "stdout": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-full-fit.stdout.log",
+      "stderr": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-full-fit.stderr.log"
+    },
+    {
+      "label": "literal-full-open",
+      "elapsed_ms": 6428,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false,
+      "stdout": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-full-open.stdout.log",
+      "stderr": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-full-open.stderr.log"
+    },
+    {
+      "label": "literal-full-construction",
+      "elapsed_ms": 6472,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false,
+      "stdout": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-full-construction.stdout.log",
+      "stderr": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-full-construction.stderr.log"
+    },
+    {
+      "label": "literal-final-focused",
+      "elapsed_ms": 1509,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false,
+      "stdout": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-final-focused.stdout.log",
+      "stderr": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-final-focused.stderr.log"
+    },
+    {
+      "label": "literal-prefix-source",
+      "elapsed_ms": 6512,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false,
+      "stdout": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-prefix-source.stdout.log",
+      "stderr": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-prefix-source.stderr.log"
+    },
+    {
+      "label": "literal-prefix-fit",
+      "elapsed_ms": 42656,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false,
+      "stdout": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-prefix-fit.stdout.log",
+      "stderr": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-prefix-fit.stderr.log"
+    },
+    {
+      "label": "literal-prefix-construction",
+      "elapsed_ms": 6584,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false,
+      "stdout": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-prefix-construction.stdout.log",
+      "stderr": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-prefix-construction.stderr.log"
+    },
+    {
+      "label": "literal-prefix-open",
+      "elapsed_ms": 6348,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false,
+      "stdout": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-prefix-open.stdout.log",
+      "stderr": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-prefix-open.stderr.log"
+    },
+    {
+      "label": "literal-transfer",
+      "elapsed_ms": 6283,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false,
+      "stdout": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-transfer.stdout.log",
+      "stderr": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-transfer.stderr.log"
+    },
+    {
+      "label": "literal-chain-transfer",
+      "elapsed_ms": 6349,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false,
+      "stdout": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-chain-transfer.stdout.log",
+      "stderr": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-chain-transfer.stderr.log"
+    },
+    {
+      "label": "literal-old-transfer",
+      "elapsed_ms": 6360,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false,
+      "stdout": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-old-transfer.stdout.log",
+      "stderr": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-old-transfer.stderr.log"
+    },
+    {
+      "label": "literal-parent-transfer",
+      "elapsed_ms": 6316,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false,
+      "stdout": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-parent-transfer.stdout.log",
+      "stderr": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-parent-transfer.stderr.log"
+    },
+    {
+      "label": "literal-parent-chain",
+      "elapsed_ms": 6278,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false,
+      "stdout": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-parent-chain.stdout.log",
+      "stderr": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-parent-chain.stderr.log"
+    },
+    {
+      "label": "literal-equality-fit",
+      "elapsed_ms": 42702,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false,
+      "stdout": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-equality-fit.stdout.log",
+      "stderr": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-equality-fit.stderr.log"
+    },
+    {
+      "label": "literal-equality-transfer",
+      "elapsed_ms": 6319,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false,
+      "stdout": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-equality-transfer.stdout.log",
+      "stderr": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-equality-transfer.stderr.log"
+    },
+    {
+      "label": "literal-equality-chain",
+      "elapsed_ms": 6407,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false,
+      "stdout": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-equality-chain.stdout.log",
+      "stderr": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-equality-chain.stderr.log"
+    },
+    {
+      "label": "literal-equality-old",
+      "elapsed_ms": 6357,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false,
+      "stdout": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-equality-old.stdout.log",
+      "stderr": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-equality-old.stderr.log"
+    },
+    {
+      "label": "literal-preservation",
+      "elapsed_ms": 6458,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false,
+      "stdout": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-preservation.stdout.log",
+      "stderr": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-preservation.stderr.log"
+    },
+    {
+      "label": "literal-long-context",
+      "elapsed_ms": 6349,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false,
+      "stdout": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-long-context.stdout.log",
+      "stderr": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-long-context.stderr.log"
+    },
+    {
+      "label": "literal-prior-numeric",
+      "elapsed_ms": 6309,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false,
+      "stdout": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-prior-numeric.stdout.log",
+      "stderr": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-prior-numeric.stderr.log"
+    },
+    {
+      "label": "literal-prior-roles",
+      "elapsed_ms": 6356,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false,
+      "stdout": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-prior-roles.stdout.log",
+      "stderr": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-prior-roles.stderr.log"
+    },
+    {
+      "label": "literal-prior-exposed",
+      "elapsed_ms": 6338,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false,
+      "stdout": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-prior-exposed.stdout.log",
+      "stderr": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-prior-exposed.stderr.log"
+    },
+    {
+      "label": "literal-prior-aliases",
+      "elapsed_ms": 6338,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false,
+      "stdout": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-prior-aliases.stdout.log",
+      "stderr": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-prior-aliases.stderr.log"
+    },
+    {
+      "label": "literal-allocation",
+      "elapsed_ms": 12859,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false,
+      "stdout": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-allocation.stdout.log",
+      "stderr": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-allocation.stderr.log"
+    },
+    {
+      "label": "literal-kernel",
+      "elapsed_ms": 9,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false,
+      "stdout": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-kernel.stdout.log",
+      "stderr": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-kernel.stderr.log"
+    },
+    {
+      "label": "literal-cli",
+      "elapsed_ms": 6602,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false,
+      "stdout": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-cli.stdout.log",
+      "stderr": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-cli.stderr.log"
+    },
+    {
+      "label": "literal-core-build",
+      "elapsed_ms": 135954,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": true,
+      "stdout": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-core-build.log"
+    },
+    {
+      "label": "literal-tests-build",
+      "elapsed_ms": 22910,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": true,
+      "stdout": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-tests-build.log"
+    },
+    {
+      "label": "literal-collision-build",
+      "elapsed_ms": 134995,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": true,
+      "stdout": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-collision-build.log"
+    },
+    {
+      "label": "literal-full-vocabulary-build",
+      "elapsed_ms": 325048,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": true,
+      "stdout": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-full-vocabulary-build.log"
+    },
+    {
+      "label": "literal-final-tests-build",
+      "elapsed_ms": 22578,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": true,
+      "stdout": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-final-tests-build.log"
+    },
+    {
+      "label": "literal-allocation-build",
+      "elapsed_ms": 6529,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": true,
+      "stdout": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-allocation-build.log"
+    },
+    {
+      "label": "literal-prefix-probe-build",
+      "elapsed_ms": 11851,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": true,
+      "stdout": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-prefix-probe-build.log"
+    },
+    {
+      "label": "literal-fmt",
+      "elapsed_ms": 3314,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": true,
+      "stdout": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-fmt.log"
+    },
+    {
+      "label": "literal-policy",
+      "elapsed_ms": 138,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": true,
+      "stdout": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-policy.log"
+    },
+    {
+      "label": "literal-claims",
+      "elapsed_ms": 212,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": true,
+      "stdout": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-claims.log"
+    }
+  ]
+}

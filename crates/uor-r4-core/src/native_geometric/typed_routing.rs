@@ -17,6 +17,8 @@ pub(super) struct TypedRouting {
     pub local_query: bool,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub operand_provenance: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub literal_answers: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub initialization_artifact: Option<String>,
 }
@@ -247,11 +249,17 @@ pub(super) fn context(
         work.routing.sources_examined += 1;
         derived += usize::from(source.derived);
     }
-    // Structural scope: initial literal-only decisions retain their parent.
-    if derived == 0 {
+    // The same learned block may cover literal-only answers when artifact-bound.
+    let literal = derived == 0
+        && !values.sources.is_empty()
+        && model
+            .typed_roles
+            .as_ref()
+            .is_some_and(|b| b.literal_answers);
+    if derived == 0 && !literal {
         return None;
     }
-    let depths = if derived >= 2 {
+    let depths = if derived >= 2 || literal {
         model.typed_roles.as_ref().map(|roles| {
             block = roles;
             lineage_depths(values, work)

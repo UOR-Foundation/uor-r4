@@ -205,10 +205,15 @@ with its 9/12 and 8/12 predecessors preserved. Derivation depth, canonical Copy
 identity and a local query boundary support this bounded result. The [operand-provenance continuation](../native_geometric_operand_provenance_1139.md)
 now distinguishes independent equal-depth results:12/16 full changed-name/order
 trajectories versus 3/16 parent and 12/16 exact-code. Four fail at the initial
-literal answer; all 12 reached selections pass. Next extend the same geometric
-operand/operator path to literal-only first answers using the exposed failures
-and preserve its learned parameters. Then carry successful complete selection
-into generated Rust. General named-role binding remains unqualified.
+literal answer; all12 reached selections pass. The subsequent
+[literal extension](../native_geometric_literal_selection_1139.md) improves new
+complete transfers8/16 to16/16 but fails preservation: shared fitting regresses
+computed-result and identifier-copy cases. Keep `af337c28` accepted. Next protect
+its computed-result routing while learning bounded literal numeric admission
+against existing word-answer alternatives. Reuse NoOperation, exact state and
+operators; investigate query-identity coupling and require case-level
+preservation before generated Rust expansion. General named-role binding
+remains unqualified.
 No additional cache campaign is active. Follow current-state.md for artifacts
 and cumulative resources; a new issue does not reset the spent amount.
 The full handoff remains unmet.

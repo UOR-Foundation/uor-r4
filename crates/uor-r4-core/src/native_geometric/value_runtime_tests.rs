@@ -415,6 +415,7 @@ fn native_typed_routing_case_fold_changes_metadata_only() {
         canonical_copy_aliases: false,
         local_query: false,
         operand_provenance: false,
+        literal_answers: false,
         initialization_artifact: None,
         dictionary: vec![WordCopyAddress {
             bytes,
@@ -543,6 +544,39 @@ fn native_typed_routing_case_fold_changes_metadata_only() {
     );
     assert_eq!(expanded.router.landmarks, block.router.landmarks);
     assert_eq!(expanded.router.biases, block.router.biases);
+    let mut extended = model.clone();
+    extended.typed_routing = Some(block.clone());
+    extended.typed_roles = Some(block);
+    assert!(super::typed_routing::context(
+        &extended,
+        values,
+        Control::Full,
+        &mut Default::default()
+    )
+    .is_none());
+    extended.typed_roles.as_mut().unwrap().literal_answers = true;
+    let context =
+        super::typed_routing::context(&extended, values, Control::Full, &mut Default::default())
+            .unwrap();
+    assert_eq!(
+        context.depths.unwrap()[..values.sources.len()],
+        vec![0; values.sources.len()]
+    );
+    assert!(super::typed_routing::context(
+        &extended,
+        values,
+        Control::GeometryDisabled,
+        &mut Default::default()
+    )
+    .is_none());
+    values.sources.clear();
+    assert!(super::typed_routing::context(
+        &extended,
+        values,
+        Control::Full,
+        &mut Default::default()
+    )
+    .is_none());
 }
 
 #[test]
@@ -996,4 +1030,28 @@ fn native_typed_provenance_preserves_names_aliases_and_unknown_ancestry() {
     {
         assert_eq!(missing[i], [16; 16], "{}", r.id);
     }
+}
+
+#[test]
+fn native_typed_literal_frame_rejects_a_supplied_intermediate() {
+    let model = mechanical_model(ValueAction::Add);
+    let example = TypedRoutingExample {
+        id: "invalid-literal".into(),
+        literal_only: true,
+        initial_prompt: "13 4 sum".into(),
+        initial_response: "17".into(),
+        continuation: None,
+        refresh: Vec::new(),
+        target_intermediate: 0,
+        query: "copy".into(),
+        response: "17".into(),
+        action: Some(ValueAction::Copy),
+        operands: Some([17, 17]),
+    };
+    let result = model.evaluate_typed_routing(&[example], false).unwrap();
+    assert_eq!(result["exact"], 0);
+    assert!(result["cases"][0]["initial_generation_failed"]
+        .as_str()
+        .unwrap()
+        .contains("cannot supply a preceding response"));
 }
