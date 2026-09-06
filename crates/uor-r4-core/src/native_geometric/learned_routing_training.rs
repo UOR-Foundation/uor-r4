@@ -36,7 +36,7 @@ impl Default for RoutingFitConfig {
     }
 }
 impl RoutingFitConfig {
-    fn validate(&self) -> Result<()> {
+    pub(super) fn validate(&self) -> Result<()> {
         if !(1..=8192).contains(&self.max_positions)
             || !(1..=64).contains(&self.learned_tokens)
             || !(1..=4).contains(&self.passes)
@@ -70,7 +70,7 @@ struct Example {
     target: u32,
 }
 
-fn ranks(model: &Model) -> Vec<u16> {
+pub(super) fn ranks(model: &Model) -> Vec<u16> {
     let mut cosines: Vec<_> = model
         .geometry
         .anchors
@@ -97,7 +97,8 @@ fn ranks(model: &Model) -> Vec<u16> {
 impl RoutingBlock {
     pub(super) fn validate(&self, model: &Model) -> Result<()> {
         self.fit_config.validate()?;
-        if self.schema != SCHEMA
+        if !((self.schema == SCHEMA && self.joint.is_none())
+            || (self.schema == super::recurrent_routing::SCHEMA && self.joint.is_some()))
             || self.mode != self.fit_config.mode
             || self.heads.len() != HEADS
             || self.angular_rank != ranks(model)
@@ -118,6 +119,9 @@ impl RoutingBlock {
             }
         }
         let vocab = model.prior_scores.len();
+        if let Some(joint) = &self.joint {
+            joint.validate(vocab)?;
+        }
         for head in &self.heads {
             for codes in [&head.queries, &head.keys, &head.values] {
                 if codes.len() != vocab || codes.iter().any(|&v| usize::from(v) >= ROOTS) {
@@ -242,13 +246,13 @@ impl Counts {
     }
 }
 
-fn next_random(seed: &mut u64) -> u64 {
+pub(super) fn next_random(seed: &mut u64) -> u64 {
     *seed ^= *seed << 13;
     *seed ^= *seed >> 7;
     *seed ^= *seed << 17;
     *seed
 }
-fn field(head: &mut Head, kind: usize) -> &mut Vec<u16> {
+pub(super) fn field(head: &mut Head, kind: usize) -> &mut Vec<u16> {
     match kind {
         0 => &mut head.queries,
         1 => &mut head.keys,
@@ -418,6 +422,7 @@ impl Model {
             angular_rank,
             training: receipts,
             fit_config: config,
+            joint: None,
         };
         block.validate(self)?;
         report.block_bytes = serde_json::to_vec(&block)

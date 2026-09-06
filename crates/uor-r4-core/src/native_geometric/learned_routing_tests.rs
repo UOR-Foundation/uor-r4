@@ -1,6 +1,6 @@
 use super::*;
 
-fn fixture() -> (Model, Vec<Document>) {
+pub(super) fn fixture() -> (Model, Vec<Document>) {
     let docs:Vec<_>=(0..8).map(|i| Document{id:format!("routing-fit-{i}"),text:format!(
         "Alice saved {} gems. Bob saved {} gems. Alice gave Bob one gem. Bob has {} gems.\nfn add(a:i32,b:i32)->i32{{a+b}}\n",
         i+2,i+3,i+4)}).collect();

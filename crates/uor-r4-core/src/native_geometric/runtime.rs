@@ -596,9 +596,11 @@ impl Session {
             }
         }
         if let (Some(block), Some(decision)) = (&model.learned_routing, self.routing_decision) {
-            for (head, selected) in block.heads.iter().zip(decision.heads) {
-                for token in &head.emissions[usize::from(selected.output)].postings {
-                    self.offer(model, *token, rows, &gates);
+            if block.joint.is_none() {
+                for (head, selected) in block.heads.iter().zip(decision.heads) {
+                    for token in &head.emissions[usize::from(selected.output)].postings {
+                        self.offer(model, *token, rows, &gates);
+                    }
                 }
             }
         }
@@ -718,10 +720,38 @@ impl Session {
                 self.offer_memory(model, candidate);
             }
         }
-        let best = *self
+        let mut best = *self
             .candidates
             .first()
             .ok_or_else(|| Error("artifact offers no output candidates".into()))?;
+        if let (Some(joint), Some(decision)) = (
+            model
+                .learned_routing
+                .as_ref()
+                .and_then(|b| b.joint.as_ref()),
+            self.routing_decision,
+        ) {
+            // The joint decision sees the actual assembled parent winner,
+            // including typed/copy/entry/EOS competition. It does not alter the
+            // frozen parent parameters or unconditionally force an entry token.
+            let flags = self.recurrent_flags();
+            let keys = super::recurrent_routing::features(
+                model,
+                decision,
+                best.token,
+                flags,
+                &mut self.work.learned_routing,
+            );
+            let (action, score, base_score) =
+                joint.choose(keys, best.token, &mut self.work.learned_routing);
+            if action != BOS {
+                best = Candidate {
+                    token: action,
+                    score: best.score + score - base_score,
+                };
+                self.offer_memory(model, best);
+            }
+        }
         if let Some(state) = &mut self.memory {
             state.select_response(model, best, &mut self.work);
         }
@@ -743,6 +773,33 @@ impl Session {
             candidate_count: self.candidates.len(),
             geometric_rows,
         })
+    }
+
+    pub(super) fn recurrent_flags(&self) -> u32 {
+        u32::from(
+            self.response_entry
+                .as_ref()
+                .is_some_and(|s| s.boundary.is_some()),
+        ) | (u32::from(self.response_entry.as_ref().is_some_and(|s| s.active)) << 1)
+            | (u32::from(
+                self.word_copy
+                    .as_ref()
+                    .is_some_and(|s| matches!(s.progress, WordCopyProgress::Complete)),
+            ) << 2)
+    }
+
+    pub(super) fn recurrent_context(&self) -> ([u32; super::learned_routing::WINDOW], usize) {
+        let mut context = [BOS; super::learned_routing::WINDOW];
+        let count = self.length.min(context.len());
+        let mut cursor = self.cursor;
+        for token in context.iter_mut().take(count) {
+            if cursor == 0 {
+                cursor = self.ring.len();
+            }
+            cursor -= 1;
+            *token = self.ring[cursor];
+        }
+        (context, count)
     }
 
     fn offer_memory(&mut self, model: &Model, candidate: Candidate) {

@@ -1,6 +1,25 @@
 # Research: what is measured, what is closed, what is open
 
-## Latest native result — 2026-09-05
+## Latest native result — 2026-09-06
+
+[#1139 dependent reads and shared output](native_geometric_learned_routing_1139.md#dependent-read-result--2026-09-06)
+are implemented and exercised, with a generation/preservation negative. On the
+same 735 authored OPEN positions, parent gets 45 correct, recurrent angular
+120 and exact-code selection 144. Angular gets 53 with its intermediate
+connection disabled and 118 with selected actions disabled. All eight target
+continuations fail, and preservation is 6/62 angular versus 0/62 exact-code.
+Both generated Rust continuations fail compilation. Retain parent `067adbf0`.
+The connection affects prediction but does not establish useful composition or
+geometric advantage. Next reuse exact retained words/relations as routed sources
+with exact payload operators; the recent-token-only source pool is an explicit
+limitation, not the sole established cause of all failures. No wider fit, beam,
+directional metric or new memory subsystem is justified by this result alone.
+A first-decision check confirms identical new-block inputs for three prompts
+requiring different answers; those distinctions are absent from this feature
+map. The [evidence](evidence/native_geometric_recurrent_routing_1139.json) preserves
+the failed first fit, correction, complete costs and replay boundaries.
+
+## First learned routing result — prior checkpoint, 2026-09-05
 
 [#1139's first learned H4 routing block](native_geometric_learned_routing_1139.md)
 is implemented and exercised but remains development only. On 735 authored

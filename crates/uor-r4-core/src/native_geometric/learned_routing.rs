@@ -101,9 +101,11 @@ pub(super) struct RoutingBlock {
     pub angular_rank: Vec<u16>,
     pub training: Vec<super::DocumentReceipt>,
     pub fit_config: super::RoutingFitConfig,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub joint: Option<super::recurrent_routing::JointOutput>,
 }
 
-fn product(model: &Model, a: u16, b: u16, work: &mut RoutingWork) -> u16 {
+pub(super) fn product(model: &Model, a: u16, b: u16, work: &mut RoutingWork) -> u16 {
     work.table_reads = work.table_reads.saturating_add(2);
     work.logical_bytes_read = work
         .logical_bytes_read
@@ -121,15 +123,38 @@ impl Head {
         control: Control,
         work: &mut RoutingWork,
     ) -> RoutingHeadDecision {
+        self.route_after(model, ranks, mode, context, None, control, work)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn route_after(
+        &self,
+        model: &Model,
+        ranks: &[u16],
+        mode: RoutingMode,
+        context: &[u32],
+        incoming: Option<u16>,
+        control: Control,
+        work: &mut RoutingWork,
+    ) -> RoutingHeadDecision {
         let last = context.first().copied().unwrap_or(super::BOS);
         let previous = context.get(1).copied().unwrap_or(super::BOS);
         work.codes(2);
-        let query = product(
+        let mut query = product(
             model,
             self.queries[previous as usize],
             self.queries[last as usize],
             work,
         );
+        if let Some(state) = incoming {
+            // Order matters: the first selected result acts on the next query.
+            let carried = if control == Control::LearnedRoutingChainDisabled {
+                model.geometry.identity
+            } else {
+                state
+            };
+            query = product(model, carried, query, work);
+        }
         let mut selected = last;
         let mut selected_key = self.keys[last as usize];
         work.codes(1);
@@ -199,8 +224,18 @@ impl RoutingBlock {
             .logical_bytes_read
             .saturating_add((context.len() as u64) << 2);
         let mut result = RoutingDecision::default();
-        for (slot, head) in result.heads.iter_mut().zip(&self.heads) {
-            *slot = head.route(model, &self.angular_rank, self.mode, context, control, work);
+        for (index, head) in self.heads.iter().enumerate() {
+            let incoming =
+                (self.joint.is_some() && index > 0).then(|| result.heads[index - 1].output);
+            result.heads[index] = head.route_after(
+                model,
+                &self.angular_rank,
+                self.mode,
+                context,
+                incoming,
+                control,
+                work,
+            );
         }
         result
     }
@@ -212,6 +247,9 @@ impl RoutingBlock {
         token: u32,
         work: &mut RoutingWork,
     ) -> i64 {
+        if self.joint.is_some() {
+            return 0;
+        }
         let mut score = 0;
         for (head, selected) in self.heads.iter().zip(decision.heads) {
             let row = &head.emissions[usize::from(selected.output)];

@@ -171,11 +171,70 @@ state. Broader conversation, export/forget and product integration remain #962.
 **Current implementation checkpoint:** the first two-channel learned H4 block
 is [implemented and measured](../native_geometric_learned_routing_1139.md), with
 improved small-population token prediction but failed generation/preservation
-and no angular advantage over exact-code selection. Its next build step trains
-response dispatch and stopping with routed prediction against final output,
-including ordinary prose/Rust and preserved memory behavior. Keep the selector
-comparison before expanding context or abstraction. The full handoff below
-remains unmet; this checkpoint does not replace its criteria.
+and no angular advantage over exact-code selection. The **two dependent reads
+with shared output** revision below has also executed with a generation and
+preservation negative. Follow the latest result in current-state.md. The next
+implementation connects routing to exact retained sources and their operators;
+the full handoff remains unmet.
+
+#### Immediate recurrent attention revision — owner adoption 2026-09-05
+
+The first selected value changes the query for the second read. Retain both
+signed H4 outputs and their exact source references until the output decision;
+do not sum two independent token predictors and call that composition. Learn
+placement and selected operators against the assembled output decision,
+including Base, emitted lexical/byte tokens and EOS. Existing typed arithmetic,
+relation storage and committed copying remain reusable causal mechanisms.
+
+1. **First build, now executed as a development negative:** reuse the existing H4 tables, two reads and eight-source
+   limit. Transport the first result into the second query and train a shared
+   sparse output decision after the existing response components. Include
+   ordinary text and complete prompt/response targets, including EOS. Report
+   teacher-forced assembled-token optimization separately from free generation.
+   Preserve the prior schema and accepted parent; the revision must earn adoption.
+2. Compare angular and exact-code selection with the same dependent state,
+   readout capacity, initialization and fitting budget. Disable the intermediate
+   transport and selected action separately. Require actual continuations,
+   short dependent-task behavior and preserved memory/termination; route traces
+   and lower fit loss alone do not pass the handoff.
+3. **Immediate revision after that result:** replace the new block's exclusive
+   access to eight recent raw tokens with access to existing bounded retained
+   words/relations. Reuse `role_read::features`, exact occurrence/reference
+   lifetimes and committed copying. Keep the accepted role-reader as the working
+   source/NoRead comparator; train the new geometric selector against source
+   choice, rather than repeating the accepted reader fit. Retain the selected
+   exact payload alongside its geometric code so unseen names/values need not
+   be memorized by the output classifier. Check changed names/values and existing
+   response preservation before adding another hop. Then let a selected relation
+   or derived value condition the next read. This is a source-access correction,
+   not a new memory subsystem or a claim of general language capability.
+4. Follow the observed limitation: learn a small shared directional cost over
+   signed relative state if angular ties erase a needed distinction; retain at
+   most two paths only if a greedy first read demonstrably loses the needed
+   route. These are conditional successors, not already implemented features.
+5. Integrate richer operators or multiscale access when a concrete task needs
+   them. SpiralCore's existing finite signed-operator composition is reusable,
+   but its eight-dimensional action needs a declared bridge. W33 ordered panel
+   actions suggest non-backtracking state; its fixed placement negative remains.
+   NEMESIS supplies faithful representation/transition criteria, and UOR supplies
+   exact identity and concrete implemented reductions. Neither known-address
+   traversal nor an ontology interface solves learned relevance by itself.
+
+Least angular distance alone cannot supply a reasoning objective. Each useful
+hop must reveal information or transform state so that a later read/output
+changes. Shared learned routing costs may combine task relevance and measured
+work; no globally optimal path or semantic metric is assumed. Avoid whole-context
+answer tables and hidden dense projections. Preserve exact members alongside
+lossy geometric summaries and name every discarded distinction.
+
+Count encoding, query construction, key scans, alternative paths, selected
+gathers/operators, joint readout, output dispatch and memory maintenance, plus
+loading, fitting, compilation, state/artifact bytes and whole-response timing.
+Keep #1139 active through this revision; #1140 remains the subsequent broader
+typed multi-operation qualification. This adoption changes the implementation
+direction, not any earlier measured result or final-heldout status.
+
+#### Connected block handoff
 
 Implement one small jointly trained angular routing block inside the existing
 native language path. Learn token/ordered-n-let codes and contextual placement

@@ -266,6 +266,10 @@ fn native_kernel_source_has_no_forbidden_arithmetic_or_float_types() {
             "native learned routing runtime",
             include_str!("../src/native_geometric/learned_routing.rs"),
         ),
+        (
+            "native recurrent routing output",
+            include_str!("../src/native_geometric/recurrent_routing.rs"),
+        ),
         ("native completion seed", seed),
         ("native numeral codec", numeral),
         ("native whole-word codec", lexemes),
@@ -290,6 +294,15 @@ fn native_kernel_source_has_no_forbidden_arithmetic_or_float_types() {
 
 #[test]
 fn native_learned_routing_selection_and_transformation_are_allocation_free() {
+    routing_allocation(false);
+}
+
+#[test]
+fn native_recurrent_routing_joint_output_is_allocation_free() {
+    routing_allocation(true);
+}
+
+fn routing_allocation(recurrent: bool) {
     use uor_r4_core::native_geometric::{RoutingFitConfig, RoutingMode};
     let docs = [Document {
         id: "routing-allocation".into(),
@@ -304,20 +317,30 @@ fn native_learned_routing_selection_and_transformation_are_allocation_free() {
     )
     .unwrap();
     trainer.train_documents(&docs).unwrap();
-    let (model, _) = trainer
-        .compile()
-        .unwrap()
-        .fit_routing_block(
-            &docs,
-            RoutingFitConfig {
-                max_positions: 32,
-                learned_tokens: 2,
-                passes: 1,
-                mode: RoutingMode::Angular,
-                ..RoutingFitConfig::default()
-            },
-        )
-        .unwrap();
+    let parent = trainer.compile().unwrap();
+    let config = RoutingFitConfig {
+        max_positions: 32,
+        learned_tokens: 2,
+        passes: 1,
+        mode: RoutingMode::Angular,
+        ..RoutingFitConfig::default()
+    };
+    let model = if recurrent {
+        parent
+            .fit_recurrent_routing(
+                &docs,
+                &[uor_r4_core::native_geometric::ValueExample {
+                    id: "routing-allocation-response".into(),
+                    prompt: "Alice saved".into(),
+                    response: " red.".into(),
+                }],
+                config,
+            )
+            .unwrap()
+            .0
+    } else {
+        parent.fit_routing_block(&docs, config).unwrap().0
+    };
     let tokens = model.encode(&docs[0].text).unwrap();
     let mut session = model.session(Control::Full).unwrap();
     ALLOCATIONS.with(|n| n.set(0));
