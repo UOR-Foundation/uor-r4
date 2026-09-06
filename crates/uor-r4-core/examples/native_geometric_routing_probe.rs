@@ -140,6 +140,19 @@ fn token_exposure(model: &Model, documents: &[Document]) -> Result<Value> {
 
 fn main() -> Result<()> {
     let args: Vec<_> = std::env::args().skip(1).collect();
+    if args.len() == 5 && matches!(args[2].as_str(), "--dependent" | "--dependent-equality") {
+        return dependent(
+            &args[0],
+            &args[1],
+            &args[3],
+            &args[4],
+            if args[2] == "--dependent-equality" {
+                RoutingMode::Equality
+            } else {
+                RoutingMode::Angular
+            },
+        );
+    }
     if args.len() == 5 && matches!(args[2].as_str(), "--sources" | "--sources-role-only") {
         return source_routing(
             &args[0],
@@ -576,5 +589,242 @@ fn source_routing(
         &output.join("result.json"),
         &json!({"schema":"uor-r4.source-routing-comparison/1","arms":arms,"elapsed_ms":start.elapsed().as_millis(),"decision":"DEVELOPMENT_PENDING_REVIEW"}),
     )?;
+    Ok(())
+}
+
+fn dependent_cases(
+    prefix: &str,
+    names: &[(&str, &str, &str, &str)],
+) -> Vec<uor_r4_core::native_geometric::DependentReadExample> {
+    use uor_r4_core::native_geometric::DependentReadExample;
+    let mut out = Vec::new();
+    for (i, &(owner, middle, value, other)) in names.iter().enumerate() {
+        for (j, facts, question, response, via) in [
+            (
+                0,
+                format!("{owner} in {middle}. {middle} in {value}."),
+                format!("Where is the location of {owner}?"),
+                format!(" {value}.\n"),
+                Some(owner),
+            ),
+            (
+                1,
+                format!("{owner} in {middle}. {middle} in {value}."),
+                format!("Where is {owner}?"),
+                format!(" {middle}.\n"),
+                None,
+            ),
+            (
+                2,
+                format!("{middle} in {value}. {owner} in {middle}."),
+                format!("Where is the location of {owner}?"),
+                format!(" {value}.\n"),
+                Some(owner),
+            ),
+            (
+                3,
+                format!("{owner} in {middle}. {middle} in {value}. Now {middle} in {other}."),
+                format!("Where is the location of {owner}?"),
+                format!(" {other}.\n"),
+                Some(owner),
+            ),
+            (
+                4,
+                format!("{owner} in {middle}."),
+                format!("Where is the location of {owner}?"),
+                " Unknown.\n".into(),
+                Some(owner),
+            ),
+            (
+                5,
+                format!("{owner} in {middle}. {middle} in {value}. {middle} in {other}."),
+                format!("Where is the location of {owner}?"),
+                " Unknown.\n".into(),
+                Some(owner),
+            ),
+            (6, format!("{owner} in {middle}. {middle} in {value}."), "Where is the location of absent?".into(), " Unknown.\n".into(), None),
+            (7, format!("{owner} in {middle}. {middle} in {value}. {other} in {value}x. Now {owner} in {other}."), format!("Where is the location of {owner}?"), format!(" {value}x.\n"), Some(owner)),
+            (8, format!("{owner} in {middle}. {middle} in {value}. {owner} in {other}."), format!("Where is the location of {owner}?"), " Unknown.\n".into(), Some(owner)),
+            (9, format!("{owner} in {middle}. {middle} in {value}. {other} in {value}x."), format!("Where is the location of {owner}?"), format!(" {value}.\n"), Some(owner)),
+            (10, format!("{owner} in {other}. {middle} in {value}. {other} in {value}x."), format!("Where is the location of {owner}?"), format!(" {value}x.\n"), Some(owner)),
+        ] {
+            out.push(DependentReadExample {
+                example: ValueExample {
+                    id: format!("dependent/{prefix}/{i}/{j}"),
+                    prompt: format!("{facts} Question: {question} Answer:"),
+                    response,
+                },
+                via: via.map(str::to_owned),
+            });
+        }
+        // Existing Rust completion is exercised, not repaired or replaced here.
+        out.push(DependentReadExample {example:ValueExample {
+            id:format!("dependent/{prefix}/{i}/rust"),
+            prompt:format!("// {owner} in {middle}. {middle} in {value}.\nfn choose({owner}: i32, {middle}: i32, {value}: i32) -> i32 {{\n    // location of {owner}\n    "),
+            response:format!("{value}\n}}\n")},via:Some(owner.into())});
+    }
+    out
+}
+
+fn dependent(
+    parent_path: &str,
+    output_path: &str,
+    development_path: &str,
+    prior_path: &str,
+    mode: RoutingMode,
+) -> Result<()> {
+    use uor_r4_core::native_geometric::{DependentReadExample, SourceRoutingConfig};
+    let output = Path::new(output_path);
+    fs::create_dir(output)?;
+    let parent = Model::from_bytes(&fs::read(parent_path)?)?;
+    let dev: Value = serde_json::from_slice(&fs::read(development_path)?)?;
+    let prior: Value = serde_json::from_slice(&fs::read(prior_path)?)?;
+    let mut fit: Vec<DependentReadExample> = response_examples(&dev, "fit")?
+        .into_iter()
+        .map(|example| DependentReadExample { example, via: None })
+        .collect();
+    fit.extend(dependent_cases(
+        "fit",
+        &[
+            ("crate", "ada", "Rome", "Dover"),
+            ("chest", "bob", "Perth", "Cairo"),
+            ("parcel", "cyra", "Lima", "Oslo"),
+            ("sack", "dana", "Kyoto", "Paris"),
+        ],
+    ));
+    let first = dependent_cases(
+        "development",
+        &[
+            ("casket", "elvin", "Bremen", "Zurich"),
+            ("basket", "freya", "Turin", "Lagos"),
+            ("locker", "galen", "Bath", "Bern"),
+            ("satchel", "hilda", "Ghent", "Basel"),
+        ],
+    );
+    let preservation = response_examples(&dev, "development")?;
+    let prior = response_examples(&prior, "development")?;
+    write(
+        &output.join("source.json"),
+        &json!({"scope":"Open authored two-link owner/value development, familiar writer grammar, changed owner/intermediate names; Bath is reused from the inherited fit. Construction labels name first owner/operator only; serving takes raw text. No sealed or general-language qualification.","fit":fit,"development":first,"preservation":preservation,"prior":prior}),
+    )?;
+    let first_docs: Vec<_> = first.iter().map(|d| d.example.clone()).collect();
+    // Bind actual retained memory before fitting; this distinguishes absent links
+    // from a bad geometric selection without a second diagnostic framework.
+    let mut inputs = Vec::new();
+    for d in &first {
+        let mut session = parent.session(Control::Full)?;
+        session.observe(&parent, BOS)?;
+        for token in parent.encode(&d.example.prompt)? {
+            session.observe(&parent, token)?;
+        }
+        session.begin_response(&parent)?;
+        let checkpoint: Value = serde_json::from_slice(&session.checkpoint()?)?;
+        inputs.push(json!({"id":d.example.id,"checkpoint":checkpoint}));
+    }
+    write(&output.join("retained-inputs.json"), &inputs)?;
+    write(
+        &output.join("parent-development.json"),
+        &complete_responses(&parent, &first_docs, Control::Full)?,
+    )?;
+    let (model, report) = parent.fit_dependent_read(
+        &fit,
+        SourceRoutingConfig {
+            mode,
+            learned_features: 128,
+            passes: 2,
+            proposals: 8,
+            max_seconds: 30,
+            role_context_only: true,
+            ..Default::default()
+        },
+    )?;
+    write(&output.join("fit.json"), &report)?;
+    let bytes = model.to_bytes()?;
+    use std::io::Write;
+    fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(output.join("model.json"))?
+        .write_all(&bytes)?;
+    let loaded = Model::from_bytes(&bytes)?;
+    let mut counts = Vec::new();
+    for (label, cases, control) in [
+        ("development", &first_docs, Control::Full),
+        ("preservation", &preservation, Control::Full),
+        ("prior", &prior, Control::Full),
+        (
+            "defer-control",
+            &first_docs,
+            Control::LearnedRoutingSelectionDisabled,
+        ),
+        (
+            "chain-disabled",
+            &first_docs,
+            Control::LearnedRoutingChainDisabled,
+        ),
+        (
+            "codes-disabled",
+            &first_docs,
+            Control::LearnedRoutingTransformDisabled,
+        ),
+    ] {
+        let result = complete_responses(&loaded, cases, control)?;
+        counts.push(json!({"label":label,"exact":result["exact"],"total":cases.len(),"elapsed_ms":result["elapsed_ms"]}));
+        write(&output.join(format!("{label}.json")), &result)?;
+    }
+    let mut replay = Vec::new();
+    for d in first_docs
+        .iter()
+        .filter(|d| !d.id.ends_with("rust"))
+        .take(3)
+    {
+        let mut session = loaded.session(Control::Full)?;
+        session.observe(&loaded, BOS)?;
+        for token in loaded.encode(&d.prompt)? {
+            session.observe(&loaded, token)?;
+        }
+        session.begin_response(&loaded)?;
+        let before = session.checkpoint()?;
+        let first_token = session.predict(&loaded)?;
+        let selected = session.word_copy_decision();
+        let mut mismatch = loaded.restore_session(&before)?;
+        mismatch.predict(&loaded)?;
+        mismatch.observe(&loaded, u32::from(b'?') + 2)?;
+        let mismatched: Value = serde_json::from_slice(&mismatch.checkpoint()?)?;
+        if !mismatched["word_copy"]["read_commit"].is_null() {
+            return Err("unobserved dependent copy committed".into());
+        }
+        session.observe(&loaded, first_token.token)?;
+        if selected.is_some_and(|d| d.dependency.is_some_and(|ids| ids[1] != 0)) {
+            let mut tampered: Value = serde_json::from_slice(&session.checkpoint()?)?;
+            tampered["word_copy"]["read_commit"]["dependency"] = json!([1, 999]);
+            if loaded
+                .restore_session(&serde_json::to_vec(&tampered)?)
+                .is_ok()
+            {
+                return Err("tampered dependency accepted".into());
+            }
+        }
+        let mut restored = loaded.restore_session(&session.checkpoint()?)?;
+        for _ in 0..16 {
+            let p = session.predict(&loaded)?;
+            if p != restored.predict(&loaded)?
+                || session.word_copy_decision() != restored.word_copy_decision()
+            {
+                return Err("dependent restore differs".into());
+            }
+            session.observe(&loaded, p.token)?;
+            restored.observe(&loaded, p.token)?;
+            if p.token == uor_r4_core::native_geometric::EOS {
+                break;
+            }
+        }
+        replay.push(json!({"id":d.id,"first_decision":selected,"restored":true,"mismatch_did_not_commit":true,"dependency_tamper_checked":selected.is_some_and(|d| d.dependency.is_some_and(|ids| ids[1]!=0))}));
+    }
+    write(
+        &output.join("result.json"),
+        &json!({"artifact":loaded.artifact_cid(),"artifact_bytes":bytes.len(),"counts":counts,"replay":replay,"decision":"DEVELOPMENT_PENDING_REVIEW"}),
+    )?;
+    println!("{}", json!({"fit":report,"counts":counts}));
     Ok(())
 }

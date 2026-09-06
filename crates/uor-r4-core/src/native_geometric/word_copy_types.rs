@@ -101,6 +101,9 @@ pub enum WordCopyAction {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct WordCopyDecision {
+    /// First and final current relation IDs for a dependent read.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dependency: Option<[u64; 2]>,
     pub token: u32,
     pub score: i64,
     pub word_index: u8,

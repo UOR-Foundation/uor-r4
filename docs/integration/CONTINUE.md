@@ -21,20 +21,17 @@ learned geometric operators through bounded routing/state/integer-table lookup,
 not a dense transformer concealed behind lookup. Preserve existing Python/dense
 references as evidence, with no new Python model dependency.
 
-Follow the immediate build sequence in project-track.md. #1137 and #1138 have
-merged through protected PRs #1142/#1143/#1144. #1139's first admission step
-preserves 112 prior and 28 longer-context answers AND writes and earlier behavior. Its
-selected sparse artifact is 067adbf0, in relation-admission-models/sparse.json.
-Geometric admission does not establish a speed advantage; the full #1139 handoff
-remains unmet and #1140 stays dependent. PR #1147 delivered the first learned
-independent-read block as a generation/preservation negative. Follow the adopted
-two-dependent-read/shared-output revision in project-track.md and the latest
-executed result in current-state.md. Further NoWrite caching is secondary; do not
-repeat the completed shortcut or revive the old score-bound proposal as the
-main model task. Maintain one task and one agent. Preserve user material and negative
-results; necessary storage increases are preauthorized and must be recorded.
-Refresh the latest routing checkpoint and cumulative model/storage ledgers,
-then establish a complete build/evaluation projection before new execution.
+Follow the immediate build sequence in project-track.md. #1137 and #1138 are
+complete at their bounded scope. #1139 now includes a learned H4 source selector
+and a dependent source read, with the current artifact and measured boundaries
+in current-state.md. Earlier recent-token/shared-output negatives remain
+preserved. Do not repeat completed routing or NoWrite admission work. The next
+change repairs observed revision-owner binding and spurious question-text writes
+in the existing learned writer, preserving one-read and dependent-read behavior.
+#1140 remains subsequent broader typed composition. Maintain one task and one
+agent. Preserve user material and negative results; necessary storage increases
+are preauthorized and recorded. Refresh the latest checkpoint and cumulative
+model/storage ledger, then project the complete next build and evaluation.
 
 Evolve the actual native model under #973, using existing correct components.
 Develop conversation/memory and coding/reasoning on that same path. Select

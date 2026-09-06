@@ -44,6 +44,9 @@ fn roles_include_query_identity(value: &bool) -> bool {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct ReadCommit {
+    /// First and final current relation IDs for a dependent read.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dependency: Option<[u64; 2]>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub relation_id: Option<u64>,
     pub source: Option<u8>,
@@ -265,7 +268,11 @@ pub(super) fn offer(
     control: Control,
     work: &mut WordCopyWork,
 ) -> Option<Candidate> {
-    let (source, action_index) = if let Some(choice) =
+    let dependent = super::dependent_read::choose(model, values, control, work);
+    let dependency = dependent.and_then(|(_, _, ids)| ids);
+    let (source, action_index) = if let Some((source, action, _)) = dependent {
+        (source, action)
+    } else if let Some(choice) =
         super::relation::read_choice(model, values, &mut work.persistent_read)
     {
         choice
@@ -292,6 +299,7 @@ pub(super) fn offer(
         WordCopyAction::Read
     };
     copy.pending = Some(WordCopyDecision {
+        dependency,
         token,
         score,
         word_index: source,

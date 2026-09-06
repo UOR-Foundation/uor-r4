@@ -36,7 +36,7 @@ impl Default for SourceRoutingConfig {
     }
 }
 impl SourceRoutingConfig {
-    fn validate(&self) -> Result<()> {
+    pub(super) fn validate(&self) -> Result<()> {
         if !(1..=256).contains(&self.learned_features)
             || !(1..=8).contains(&self.passes)
             || !(1..=120).contains(&self.proposals)
@@ -88,14 +88,14 @@ impl SourceRouting {
         Ok(())
     }
 }
-struct Alternative {
-    features: Vec<ValueFeature>,
-    codes: Vec<usize>,
-    action: usize,
-    correct: bool,
+pub(super) struct Alternative {
+    pub features: Vec<ValueFeature>,
+    pub codes: Vec<usize>,
+    pub action: usize,
+    pub correct: bool,
 }
-struct Frame {
-    alternatives: Vec<Alternative>,
+pub(super) struct Frame {
+    pub alternatives: Vec<Alternative>,
 }
 #[derive(Clone, Copy, Debug)]
 struct Objective {
@@ -342,67 +342,7 @@ impl Model {
             training: receipts,
             config: config.clone(),
         };
-        for frame in &mut frames {
-            for a in &mut frame.alternatives {
-                a.codes = a
-                    .features
-                    .iter()
-                    .filter_map(|f| block.codes.binary_search_by_key(f, |c| c.feature).ok())
-                    .collect();
-            }
-        }
-        let initial = objective(self, &block, &frames);
-        let mut best = initial;
-        let mut proposals = 0;
-        let mut accepted = [0_usize; 3];
-        let mut stopped = false;
-        'passes: for _ in 0..config.passes {
-            for kind in [2, 0, 1] {
-                let count = if kind == 0 {
-                    block.codes.len()
-                } else {
-                    read.actions.len()
-                };
-                for index in 0..count {
-                    for lane in 0..if kind == 2 { 1 } else { LANES } {
-                        let mut value = match kind {
-                            0 => block.codes[index].roots[lane] as i16,
-                            1 => block.landmarks[index][lane] as i16,
-                            _ => block.biases[index],
-                        };
-                        let candidates: Vec<i16> = match kind {
-                            0 => std::iter::once(self.geometry.identity as i16)
-                                .chain((0..config.proposals).map(|_| {
-                                    (super::learned_routing_training::next_random(&mut rng) % 120)
-                                        as i16
-                                }))
-                                .collect(),
-                            1 => (0..120).collect(),
-                            _ => (-32..=32).collect(),
-                        };
-                        for candidate in candidates {
-                            if start.elapsed().as_secs() >= config.max_seconds {
-                                stopped = true;
-                                set(&mut block, kind, index, lane, value);
-                                break 'passes;
-                            }
-                            if candidate == value {
-                                continue;
-                            }
-                            set(&mut block, kind, index, lane, candidate);
-                            let score = objective(self, &block, &frames);
-                            proposals += 1;
-                            if score.improves(best) {
-                                value = candidate;
-                                best = score;
-                                accepted[usize::from(kind)] += 1;
-                            }
-                        }
-                        set(&mut block, kind, index, lane, value);
-                    }
-                }
-            }
-        }
+        let learned = learn(self, &mut block, &mut frames, start);
         let block_bytes = serde_json::to_vec(&block)
             .map_err(|e| Error(e.to_string()))?
             .len();
@@ -410,7 +350,86 @@ impl Model {
         model.source_routing = Some(block);
         model.refresh_identity()?;
         model.validate()?;
-        let report = serde_json::json!({"schema":"uor-r4.source-routing-fit/1","parent":self.artifact_cid(),"artifact":model.artifact_cid(),"config":config,"documents":docs.len(),"frames":frames.len(),"skipped_upstream":skipped,"preserved_persistent_dispatch":persistent,"unreachable_targets":unreachable,"feature_universe":frequency.len(),"features":vocabulary.len(),"initial_correct":initial.correct,"final_correct":best.correct,"initial_hinge":initial.hinge,"final_hinge":best.hinge,"proposals":proposals,"accepted":accepted,"stopped_at_time_limit":stopped,"elapsed_ms":start.elapsed().as_millis(),"block_bytes":block_bytes,"scope":"Source/action labels from supplied construction responses; accepted reader weights select feature vocabulary only. Ordered two-channel H4 composition and action landmarks learned with hard serving decisions. Persistent-reader dispatch and numeric eligibility are unchanged. Construction selection is not generation/transfer."});
+        let mut report = serde_json::json!({"schema":"uor-r4.source-routing-fit/1","parent":self.artifact_cid(),"artifact":model.artifact_cid(),"config":config,"documents":docs.len(),"frames":frames.len(),"skipped_upstream":skipped,"preserved_persistent_dispatch":persistent,"unreachable_targets":unreachable,"feature_universe":frequency.len(),"features":vocabulary.len(),"elapsed_ms":start.elapsed().as_millis(),"block_bytes":block_bytes,"scope":"Source/action labels from supplied construction responses; accepted reader weights select feature vocabulary only. Ordered two-channel H4 composition and action landmarks learned with hard serving decisions. Persistent-reader dispatch and numeric eligibility are unchanged. Construction selection is not generation/transfer."});
+        if let (Some(r), Some(l)) = (report.as_object_mut(), learned.as_object()) {
+            r.extend(l.clone());
+        }
         Ok((model, report))
     }
+}
+
+pub(super) fn learn(
+    model: &Model,
+    block: &mut SourceRouting,
+    frames: &mut [Frame],
+    start: Instant,
+) -> serde_json::Value {
+    let config = block.config.clone();
+    let mut rng = config.seed;
+    for _ in 0..block.landmarks.len() * LANES {
+        super::learned_routing_training::next_random(&mut rng);
+    }
+    for frame in frames.iter_mut() {
+        for a in &mut frame.alternatives {
+            a.codes = a
+                .features
+                .iter()
+                .filter_map(|f| block.codes.binary_search_by_key(f, |c| c.feature).ok())
+                .collect();
+        }
+    }
+    let initial = objective(model, block, frames);
+    let mut best = initial;
+    let mut proposals = 0;
+    let mut accepted = [0_usize; 3];
+    let mut stopped = false;
+    'passes: for _ in 0..config.passes {
+        for kind in [2, 0, 1] {
+            let count = if kind == 0 {
+                block.codes.len()
+            } else {
+                block.landmarks.len()
+            };
+            for index in 0..count {
+                for lane in 0..if kind == 2 { 1 } else { LANES } {
+                    let mut value = match kind {
+                        0 => block.codes[index].roots[lane] as i16,
+                        1 => block.landmarks[index][lane] as i16,
+                        _ => block.biases[index],
+                    };
+                    let candidates: Vec<i16> = match kind {
+                        0 => std::iter::once(model.geometry.identity as i16)
+                            .chain((0..config.proposals).map(|_| {
+                                (super::learned_routing_training::next_random(&mut rng) % 120)
+                                    as i16
+                            }))
+                            .collect(),
+                        1 => (0..120).collect(),
+                        _ => (-32..=32).collect(),
+                    };
+                    for candidate in candidates {
+                        if start.elapsed().as_secs() >= config.max_seconds {
+                            stopped = true;
+                            set(block, kind, index, lane, value);
+                            break 'passes;
+                        }
+                        if candidate == value {
+                            continue;
+                        }
+                        set(block, kind, index, lane, candidate);
+                        let score = objective(model, block, frames);
+                        proposals += 1;
+                        if score.improves(best) {
+                            value = candidate;
+                            best = score;
+                            accepted[usize::from(kind)] += 1;
+                        }
+                    }
+                    set(block, kind, index, lane, value);
+                }
+            }
+        }
+    }
+
+    serde_json::json!({"initial_correct":initial.correct,"final_correct":best.correct,"initial_hinge":initial.hinge,"final_hinge":best.hinge,"proposals":proposals,"accepted":accepted,"stopped_at_time_limit":stopped})
 }

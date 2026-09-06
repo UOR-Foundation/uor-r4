@@ -1,5 +1,25 @@
 # Research: what is measured, what is closed, what is open
 
+## Dependent source result — current checkpoint, 2026-09-06
+
+The [native dependent-source read](native_geometric_dependent_source_1139.md)
+connects a learned H4 first-source/operator choice to one exact dependent owner
+lookup and committed copy. Angular `8070c006` gets **40/48** complete changed-name
+answers versus exact-code **32/48** and parent **20/48**, preserving **62/62**
+earlier responses and **24/24** transfer. Intermediate lookup disabled gets
+20/48; both variants use the same bounded search schedule. Four first-edge pairs
+change the final value correctly and four dependent Rust completion texts are
+exact, compiling unchanged and passing 12 semantic assertions. The final artifact
+also preserves 28/28 longer-context answers/writes and 5/5 persistent-session
+turns; its actual dependent copy path measures zero allocations.
+This is authored OPEN evidence, not general composition or frontier
+qualification. The eight remaining development failures expose revision-owner
+binding in the unchanged writer; spurious writes from question text are also
+observed. Repair that writer while preserving this reader. Full artifacts,
+controls, checks and resource limits are in the record and
+[current state](integration/current-state.md).
+
+
 ## Latest native result — 2026-09-06
 
 [#1139 retained-source routing](native_geometric_source_routing_1139.md) now
