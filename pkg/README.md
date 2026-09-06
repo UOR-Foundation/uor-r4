@@ -54,8 +54,13 @@ answers/writes after selection. Its NoWrite regression is now
 [repaired](docs/native_geometric_writer_admission_1139.md): exact skips are
 21,799/21,907 and writer row comparisons fall from 226,101,330 to 539,448 on the
 same long-context prompts, with unchanged answers, writes and learned parameters.
-The next step is learned admission of typed operators and use of committed
-derived values. This exact-cache result is not broad language qualification.
+Learned typed selection and [competing-intermediate use](docs/native_geometric_typed_roles_1139.md)
+now produce 12/12 complete authored operand/refresh transfers versus 2/12 for the
+matched exact-code fit, with previous failures and preservation checks recorded.
+The model selects exact derived values using learned H4 metadata, canonical Copy
+identity and an explicit query boundary. Independent computations at equal depth,
+general prose/syntax/reasoning and frontier capability remain unqualified. Follow
+the current-state pointer for artifacts, costs and the next implementation.
 
 ```sh
 cargo build --release --bin r4
