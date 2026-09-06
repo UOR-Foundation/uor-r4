@@ -1530,7 +1530,18 @@
     "local_initial_mechanical_units": "3 PASS before additive-score correction",
     "corrected_allocation": "2 PASS",
     "corrected_kernel_source": "1 PASS",
-    "final_units": "PENDING_PROTECTED_CI",
+    "final_units": {
+      "status": "PASS",
+      "run_id": 34012685323,
+      "rust_commit": "c36720f9a1f593c8c136f003b13c754ee56fa8d6",
+      "native_units": 124,
+      "context_tests": 3,
+      "allocation_tests": 8,
+      "cli_tests": 20,
+      "failures": 0,
+      "ignored": 0,
+      "scope": "All named native PR steps passed at unchanged Rust source. Four other required status names are compatibility acknowledgements, not executed audit/fuzz/WASM/Gate C tests. Documentation update and merge queue use protected current-head checks."
+    },
     "sealed_evaluation": "NOT_RUN",
     "new_relation_transfer": "NOT_RUN_AFTER_PRESERVATION_FAILURE",
     "exact_physical_traffic": "NOT_RUN"
@@ -1645,6 +1656,64 @@
         "stopped": null
       }
     ],
-    "timing_scope": "Single warm whole-work samples; CLI wall includes startup/loading/validation/encoding/generation/output. No isolated load timer or speedup claim. RSS is periodic child-process sampling, not exact peak."
+    "timing_scope": "Single warm whole-work samples; CLI wall includes startup/loading/validation/encoding/generation/output. No isolated load timer or speedup claim. RSS is periodic child-process sampling, not exact peak.",
+    "final_model_ms": 35844,
+    "final_cumulative_model": {
+      "cumulative_ms": 1446496,
+      "limit_ms": 1800000
+    },
+    "final_snapshot": {
+      "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+      "at": "2026-09-06T05:05:42.924Z",
+      "inherited_precleanup_bytes": 2747199488,
+      "obsolete_target_growth_credit": 671379456,
+      "current_target_bytes": 2418176000,
+      "predecessor_artifact_root_bytes": 145760256,
+      "current_artifact_root_bytes": 774430720,
+      "predecessor_worktree_bytes": 9875456,
+      "current_worktree_bytes": 8937472,
+      "stopped_successor_worktree_bytes": 460877824,
+      "source_metadata_reserve_bytes": 5242880,
+      "current_sampled_known_storage_bytes": 5899120640,
+      "storage_limit_bytes": 6459228160,
+      "remaining_storage_bytes": 560107520,
+      "stop_margin_bytes": 134217728,
+      "available_growth_before_stop_bytes": 204701696,
+      "model_ledger": {
+        "cumulative_ms": 1446496,
+        "limit_ms": 1800000
+      },
+      "model_remaining_ms": 353504,
+      "model_process_limit": 1,
+      "model_process_rss_target_bytes": 4294967296,
+      "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+    }
+  },
+  "source_access_check": {
+    "scope": "Three OPEN prompts, one first-response decision each, no fitting. Existing release Rust library c36720f9. Public state-derived flags reproduce the joint feature flags; disabled same-artifact prompt replay supplies the exact parent token before any response commits.",
+    "source": {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/recurrent-routing-source-access.rs",
+      "bytes": 2054,
+      "sha256": "323f96f107aebcb1c58852a70086fe114a68ab63c0c89629d5c5449e740bd0c8"
+    },
+    "source_text": "use uor_r4_core::native_geometric::{Control, Model, WordCopyProgress, BOS};\nfn main() -> Result<(), Box<dyn std::error::Error>> {\n    let path = std::env::args().nth(1).ok_or(\"model path required\")?;\n    let model = Model::from_bytes(&std::fs::read(path)?)?;\n    println!(\"artifact={}\", model.artifact_cid());\n    let mut signatures = Vec::new();\n    for (id, prompt, target) in [\n        (\"two-operations\", \"Start with five. Add two, then double the result. Answer:\", \"14\"),\n        (\"relation\", \"The red box belongs to Alice. Alice lives in Rome. Where does the owner of the red box live? Answer:\", \"Rome\"),\n        (\"copy\", \"the orb is red. the cube is green. Now the orb is blue. Question: What color is the orb? Answer:\", \"blue\"),\n    ] {\n        let tokens = model.encode(prompt)?;\n        let tail = tokens.iter().rev().take(8).copied().collect::<Vec<_>>();\n        let mut full = model.session(Control::Full)?;\n        let mut disabled = model.session(Control::LearnedRoutingDisabled)?;\n        for session in [&mut full, &mut disabled] {\n            session.observe(&model, BOS)?;\n            for &token in &tokens { session.observe(&model, token)?; }\n            session.begin_response(&model)?;\n        }\n        let state = full.state();\n        let flags = u32::from(state.response_entry.as_ref().is_some_and(|s| s.boundary_seen.is_some()))\n            | (u32::from(state.response_entry.as_ref().is_some_and(|s| s.active)) << 1)\n            | (u32::from(state.word_copy.as_ref().is_some_and(|s| matches!(s.progress, WordCopyProgress::Complete))) << 2);\n        let base = disabled.predict(&model)?;\n        let prediction = full.predict(&model)?;\n        let route = full.routing_decision();\n        println!(\"id={id} target={target:?} tail_newest_first={tail:?} parent_token={} flags={flags} prediction={} route={route:?}\", base.token, prediction.token);\n        signatures.push((tail, route, base.token, flags));\n    }\n    println!(\"all_routing_and_joint_output_inputs_equal={}\", signatures.windows(2).all(|w| w[0] == w[1]));\n    Ok(())\n}\n",
+    "binary": {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/recurrent-routing-source-access",
+      "bytes": 2096656,
+      "sha256": "72e00b4cba7eaccbc7d77c79a43d26b38759b5a0e5a7faa09482f51e2ca53293"
+    },
+    "library": {
+      "path": "/tmp/r4-native-geometric-target/release/deps/libuor_r4_core-8a23db6976b12a66.rlib",
+      "bytes": 53127544,
+      "sha256": "bbfb07a5ea5970b079e2cf35cc383adfe5c845158c0f3818b06ce151dde938c1"
+    },
+    "output": "artifact=blake3:cd39e57d2a70e441d1f225faa60c4873bdd037012a229d0b200dbd152a694b20\nid=two-operations target=\"14\" tail_newest_first=[594, 116, 103, 121, 117, 112, 67, 34] parent_token=432 flags=1 prediction=78 route=Some(RoutingDecision { heads: [RoutingHeadDecision { query: 33, source_offset: 0, source_token: 594, selected_key: 10, selected_value: 26, operator: 119, output: 61 }, RoutingHeadDecision { query: 48, source_offset: 3, source_token: 121, selected_key: 69, selected_value: 35, operator: 119, output: 25 }] })\nid=relation target=\"Rome\" tail_newest_first=[594, 116, 103, 121, 117, 112, 67, 34] parent_token=432 flags=1 prediction=78 route=Some(RoutingDecision { heads: [RoutingHeadDecision { query: 33, source_offset: 0, source_token: 594, selected_key: 10, selected_value: 26, operator: 119, output: 61 }, RoutingHeadDecision { query: 48, source_offset: 3, source_token: 121, selected_key: 69, selected_value: 35, operator: 119, output: 25 }] })\nid=copy target=\"blue\" tail_newest_first=[594, 116, 103, 121, 117, 112, 67, 34] parent_token=432 flags=1 prediction=78 route=Some(RoutingDecision { heads: [RoutingHeadDecision { query: 33, source_offset: 0, source_token: 594, selected_key: 10, selected_value: 26, operator: 119, output: 61 }, RoutingHeadDecision { query: 48, source_offset: 3, source_token: 121, selected_key: 69, selected_value: 35, operator: 119, output: 25 }] })\nall_routing_and_joint_output_inputs_equal=true\n",
+    "all_new_block_inputs_equal": true,
+    "expected_responses": [
+      "14",
+      "Rome",
+      "blue"
+    ],
+    "conclusion": "The current first-token feature map aliases these three distinct tasks. Altering only scores or routing parameters on identical inputs cannot separate them. This does not explain every model failure or establish sufficiency of the proposed source adapter."
   }
 }

@@ -20,6 +20,12 @@ exact-code selection 0/62. Both generated Rust continuations fail compilation.
 The unchanged parent still answers 62/62; disabling the new block reproduces
 all complete Generation objects except the declared control label.
 
+A subsequent three-prompt first-decision check finds identical eight-token
+inputs, both complete routes, parent winner and all joint-output flags for
+arithmetic, relation and color questions requiring `14`, `Rome` and `blue`.
+The current feature map cannot distinguish these tasks at the first emitted
+token. Score tuning over the same inputs cannot repair that collision.
+
 **Next: connect learned routing to exact retained source references and payload
 operators, before tuning another metric or adding route depth.** Reuse the
 existing role-aware query features, word occurrences, relation references and
@@ -37,12 +43,13 @@ Artifacts are under `.uor-models/native-typed-value-2026-09-05/recurrent-routing
 Corrected angular is `cd39e57d`, exact-code selection `503f9241`; neither is
 promoted. The first conditional attempt and its replay-label error are preserved.
 Corrected allocation and kernel-source checks pass, as do artifact reload and
-actual CLI reproduction at their stated scopes. Local mechanical unit tests
-precede the additive-score correction; protected CI must exercise final units.
-Model use through CLI/code checks is 32.720/120 seconds this cycle, cumulative
-1,443.372/1,800 seconds, leaving 356.628. Engineering through the corrected
-kernel check is 1,128.504/1,200 seconds. The storage sample is 5,896,949,760 bytes
-with about 197 MiB before the existing tighter stop. No storage increase,
+actual CLI reproduction at their stated scopes. Protected CI passes 124 native unit,
+3 context, 8 allocation and 20 CLI tests at unchanged Rust source `c36720f9`.
+PR #1148 owns current-head documentation and merge-queue status.
+Model use including the first-decision check is 35.844/120 seconds this cycle,
+cumulative 1,446.496/1,800 seconds, leaving 353.504. Engineering through the corrected
+kernel check is 1,128.504/1,200 seconds. The storage sample is 5,899,120,640 bytes
+with about 195 MiB before the existing tighter stop. No storage increase,
 deletion or paid compute was needed. Refresh final receipts before new work.
 
 ## First learned routing block — prior checkpoint, 2026-09-05 local date

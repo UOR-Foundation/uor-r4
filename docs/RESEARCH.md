@@ -14,7 +14,9 @@ geometric advantage. Next reuse exact retained words/relations as routed sources
 with exact payload operators; the recent-token-only source pool is an explicit
 limitation, not the sole established cause of all failures. No wider fit, beam,
 directional metric or new memory subsystem is justified by this result alone.
-The [evidence](evidence/native_geometric_recurrent_routing_1139.json) preserves
+A first-decision check confirms identical new-block inputs for three prompts
+requiring different answers; those distinctions are absent from this feature
+map. The [evidence](evidence/native_geometric_recurrent_routing_1139.json) preserves
 the failed first fit, correction, complete costs and replay boundaries.
 
 ## First learned routing result — prior checkpoint, 2026-09-05

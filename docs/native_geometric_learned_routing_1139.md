@@ -453,3 +453,36 @@ the accepted reader or repeat its completed handoff. Add a second
 dependent source read only after the first is useful. A wider beam, another
 metric, repeated score tuning or a replacement memory framework is not justified
 by the present negative alone. #1139 remains open and #1140 stays subsequent.
+
+### Source-access localization — same artifact, 2026-09-06
+
+A small Rust host linked to the unchanged release library executes just the
+first response decision for the existing arithmetic, relation and color prompts.
+All three have the identical newest-first eight-token sequence
+`[594,116,103,121,117,112,67,34]`, parent token 432 and flags 1.
+Their complete two-head decisions are identical: first query 33, source offset
+0, output 61; second query 48, source offset 3, output 25. Thus every input
+to the five-feature shared output is identical, although required first outputs
+for `14`, `Rome` and `blue` differ. All predict token 78.
+
+This is a concrete first-token feature collision, not merely a suspicion from
+identical final text. Reweighting that same input or changing routing parameters
+while retaining the same source/query interface cannot distinguish these three
+prompts. It does not establish that the proposed source-access correction is
+sufficient, nor diagnose every preservation/language failure. The source and
+exact output are embedded in the evidence, with library/executable hashes and
+local files retained. No training or new benchmark framework was added.
+
+The complete supplemental projection was 15 seconds engineering, 10 seconds
+model work and 16 MiB storage within the existing cycle. Actual link work is
+0.574 seconds and model command wall 3.124 seconds. Cycle model use becomes
+35.844 seconds; cumulative 1,446.496/1,800 leaves 353.504. Storage becomes
+5,899,120,640 bytes, still below the existing tighter stop. The final-source
+native fitting/artifact/runtime CI step passed in run 34012685323 at Rust
+commit c36720f9; this supplemental host changes no product source.
+
+The complete native CI job in run 34012685323 subsequently passed: 124 native
+unit tests (including all three recurrent tests), 3 context tests, 8 allocation
+tests and 20 CLI tests, with zero failures or ignored tests. Its four other
+required status names acknowledged compatibility only; no audit, fuzz, WASM
+or Gate C execution is inferred. Rust source remains c36720f9.
