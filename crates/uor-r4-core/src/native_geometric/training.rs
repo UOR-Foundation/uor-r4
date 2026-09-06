@@ -178,6 +178,7 @@ impl Trainer {
             dependent_read: None,
             typed_routing: None,
             typed_roles: None,
+            typed_literals: None,
             source_routing: None,
             learned_routing: None,
             schema: SCHEMA.into(),
@@ -512,6 +513,34 @@ impl Model {
     }
     pub(super) fn validate(&self) -> Result<()> {
         self.config.validate()?;
+        if let Some(block) = &self.typed_literals {
+            if !block.literal_answers
+                || self
+                    .typed_roles
+                    .as_ref()
+                    .is_none_or(|r| r.literal_answers || !r.local_query)
+            {
+                return Err(Error(
+                    "literal routing requires protected local computed roles".into(),
+                ));
+            }
+            let mut parent = self.clone();
+            parent.typed_literals = None;
+            parent.refresh_identity()?;
+            if parent.artifact_cid != block.router.parent_artifact {
+                return Err(Error("literal routing parent differs".into()));
+            }
+            parent.validate()?;
+            block.validate(self, true)?;
+            let mut duplicate = self.clone();
+            duplicate.refresh_identity()?;
+            if duplicate.artifact_cid != self.artifact_cid
+                || duplicate.uor_model_address != self.uor_model_address
+            {
+                return Err(Error("literal routing identity differs".into()));
+            }
+            return Ok(());
+        }
         if let Some(block) = &self.typed_roles {
             let mut parent = self.clone();
             parent.typed_roles = None;

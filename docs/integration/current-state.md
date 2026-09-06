@@ -1,6 +1,39 @@
 # Current native geometric AI work
 
-## Literal geometric selection improves numerics but fails preservation — #1139 / #1140, 2026-09-06
+## Protected computed roles and literal admission — #1139 / #1140, 2026-09-06
+
+**Retain `c29ab982` at bounded literal-admission scope.** The
+[result](../native_geometric_literal_admission_1139.md) and
+[evidence](../evidence/native_geometric_literal_admission_1139.json) bind execution.
+A separate53,653-byte literal table learns Copy/Add/NoOperation while retaining
+all inherited `af337c28` fields verbatim. Structural state eligibility selects
+which table runs; operator/operand and numeric admission are learned. Serving
+continues through integer/table operations without matmul or LLM correction.
+
+New complete three-turn transfer improves12/16 to16/16, new literal answers8/16
+to12/16, and new identifier answers stay8/8. Exact-code matches these new scores:
+no new angular advantage. The exposed earlier independent-result set improves
+12/16 to16/16 with no lost correct cases. Prior62/62 and24/24 sets are restored,
+with all listed dependent, memory, numeric and role checks preserved. Eight
+new identifier-return functions execute24 assertions; this is bounded copying
+in familiar Rust forms. Seven focused tests and actual zero-allocation,
+checkpoint, parent-equality and artifact checks pass; the rebuilt CLI returns
+the identifier rather than a number for the distractor prompt.
+
+**Next: select a supported word answer or coherent abstention after numeric
+NoOperation.** Four new abstention texts still fail;103/103 routing targets
+therefore yield95/103 full construction responses. Reuse existing answer-entry
+and retained-word mechanisms, preserving the new numeric/identifier behavior.
+Do not turn NoOperation into a universal canned answer. General prose, syntax,
+reasoning, mixed arithmetic-to-prose conversation, frontier capability and
+whole-model efficiency remain unqualified. #1139/#1140 remain open.
+
+This cycle charges246.540s model work; cumulative use is3168.126/3210s, leaving
+41.874s. A pre-recorded+240s cumulative extension and280s final cycle ceiling
+cover the run. No storage allowance increase, deletions or external model
+compute. Exact engineering, storage/RSS and all commands are in the evidence.
+
+## Previous checkpoint: literal geometric selection improves numerics but fails preservation — #1139 / #1140, 2026-09-06
 
 **Keep `af337c28` as the accepted artifact.** The optional literal-state
 extension is [implemented and measured](../native_geometric_literal_selection_1139.md),

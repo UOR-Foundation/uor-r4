@@ -24,6 +24,7 @@ pub(super) struct TypedRouting {
 }
 
 pub(super) struct TypedContext {
+    pub literal_component: bool,
     pub addresses: [u32; 16],
     pub depths: Option<[u8; 16]>,
     pub origins: Option<[u64; 16]>,
@@ -249,18 +250,23 @@ pub(super) fn context(
         work.routing.sources_examined += 1;
         derived += usize::from(source.derived);
     }
-    // The same learned block may cover literal-only answers when artifact-bound.
+    let literal_component = derived == 0 && model.typed_literals.is_some();
+    let roles = if literal_component {
+        &model.typed_literals
+    } else {
+        &model.typed_roles
+    };
+    // Old shared artifacts retain their behavior; dedicated literal parameters
+    // never replace the accepted computed-result component.
+
     let literal = derived == 0
         && !values.sources.is_empty()
-        && model
-            .typed_roles
-            .as_ref()
-            .is_some_and(|b| b.literal_answers);
+        && roles.as_ref().is_some_and(|b| b.literal_answers);
     if derived == 0 && !literal {
         return None;
     }
     let depths = if derived >= 2 || literal {
-        model.typed_roles.as_ref().map(|roles| {
+        roles.as_ref().map(|roles| {
             block = roles;
             lineage_depths(values, work)
         })
@@ -270,6 +276,7 @@ pub(super) fn context(
     let origins =
         (depths.is_some() && block.canonical_copy_aliases).then(|| copy_origins(values, work));
     Some(TypedContext {
+        literal_component,
         addresses: addresses(block, values, work),
         depths,
         origins,
@@ -463,7 +470,9 @@ pub(super) fn score(
     control: Control,
     work: &mut ValueWork,
 ) -> i64 {
-    let Some(block) = (if context.depths.is_some() {
+    let Some(block) = (if context.literal_component {
+        &model.typed_literals
+    } else if context.depths.is_some() {
         &model.typed_roles
     } else {
         &model.typed_routing

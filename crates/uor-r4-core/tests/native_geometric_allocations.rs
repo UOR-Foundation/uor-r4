@@ -1339,6 +1339,28 @@ fn native_independent_artifact_is_allocation_free() {
         checkpoint
     );
     let mut wire: serde_json::Value = serde_json::from_slice(&model.to_bytes().unwrap()).unwrap();
+    if wire.get("typed_literals").is_some() {
+        let parent_bytes = std::fs::read(std::env::var("R4_LITERAL_PARENT").unwrap()).unwrap();
+        let mut parent: serde_json::Value = serde_json::from_slice(&parent_bytes).unwrap();
+        assert_eq!(
+            wire["typed_literals"]["router"]["parent_artifact"],
+            parent["artifact_cid"]
+        );
+        let mut protected = wire.clone();
+        protected.as_object_mut().unwrap().remove("typed_literals");
+        for key in ["artifact_cid", "uor_model_address"] {
+            protected.as_object_mut().unwrap().remove(key);
+            parent.as_object_mut().unwrap().remove(key);
+        }
+        assert_eq!(
+            protected, parent,
+            "every inherited model field must remain unchanged"
+        );
+        let mut invalid = wire.clone();
+        invalid["typed_literals"]["literal_answers"] = serde_json::json!(false);
+        assert!(Model::from_bytes(&serde_json::to_vec(&invalid).unwrap()).is_err());
+        println!("literal admission: entire parent unchanged; literal flag mutation rejected");
+    }
     wire["typed_roles"]
         .as_object_mut()
         .unwrap()

@@ -296,6 +296,61 @@ impl Model {
     ) -> Result<(Self, serde_json::Value)> {
         self.fit_typed_role_extension(docs, config, false)
     }
+    /// Fit only literal-state routing; preserve the entire accepted parent.
+    pub fn fit_literal_admission(
+        &self,
+        docs: &[TypedRoutingExample],
+        config: SourceRoutingConfig,
+        donor: &Self,
+    ) -> Result<(Self, serde_json::Value)> {
+        self.validate()?;
+        donor.validate()?;
+        if self.typed_literals.is_some()
+            || docs.iter().any(|d| !d.literal_only)
+            || self
+                .typed_roles
+                .as_ref()
+                .is_none_or(|r| r.literal_answers || !r.local_query)
+        {
+            return Err(Error(
+                "literal admission requires literal frames and protected computed roles".into(),
+            ));
+        }
+        let initial = donor
+            .typed_roles
+            .as_ref()
+            .filter(|r| r.literal_answers)
+            .ok_or_else(|| Error("literal initialization absent".into()))?;
+        let mut training_parent = self.clone();
+        training_parent.typed_roles = None;
+        training_parent.refresh_identity()?;
+        let (mut trained, mut report) = training_parent.fit_typed(
+            docs,
+            config,
+            true,
+            true,
+            true,
+            true,
+            true,
+            Some((initial, donor.artifact_cid())),
+        )?;
+        let mut block = trained
+            .typed_roles
+            .take()
+            .ok_or_else(|| Error("literal fit component absent".into()))?;
+        block.router.parent_artifact = self.artifact_cid.clone();
+        let mut model = self.clone();
+        model.typed_literals = Some(block);
+        model.refresh_identity()?;
+        model.validate()?;
+        report["component_training_parent"] = report["parent"].clone();
+        report["parent"] = serde_json::json!(self.artifact_cid());
+        report["artifact"] = serde_json::json!(model.artifact_cid());
+        report["computed_role_parameters_unchanged"] = serde_json::json!(
+            model.typed_roles == self.typed_roles && model.typed_routing == self.typed_routing
+        );
+        Ok((model, report))
+    }
     pub fn fit_typed_literal_answers(
         &self,
         docs: &[TypedRoutingExample],
@@ -341,11 +396,13 @@ impl Model {
     ) -> Result<(Self, serde_json::Value)> {
         config.validate()?;
         self.validate()?;
-        if (if roles {
-            self.typed_roles.is_some() || self.typed_routing.is_none()
-        } else {
-            self.typed_routing.is_some()
-        }) || docs.is_empty()
+        if self.typed_literals.is_some()
+            || (if roles {
+                self.typed_roles.is_some() || self.typed_routing.is_none()
+            } else {
+                self.typed_routing.is_some()
+            })
+            || docs.is_empty()
             || docs.len() > 256
             || docs.iter().any(|d| {
                 (d.literal_only && !literal_answers)

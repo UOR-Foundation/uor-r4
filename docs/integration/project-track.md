@@ -208,12 +208,15 @@ trajectories versus 3/16 parent and 12/16 exact-code. Four fail at the initial
 literal answer; all12 reached selections pass. The subsequent
 [literal extension](../native_geometric_literal_selection_1139.md) improves new
 complete transfers8/16 to16/16 but fails preservation: shared fitting regresses
-computed-result and identifier-copy cases. Keep `af337c28` accepted. Next protect
-its computed-result routing while learning bounded literal numeric admission
-against existing word-answer alternatives. Reuse NoOperation, exact state and
-operators; investigate query-identity coupling and require case-level
-preservation before generated Rust expansion. General named-role binding
-remains unqualified.
+computed-result and identifier-copy cases. The subsequent
+[protected literal admission](../native_geometric_literal_admission_1139.md)
+retains `c29ab982`: inherited computed roles are unchanged, exposed complete
+transfer improves12/16 to16/16, new complete transfer12/16 to16/16, and all prior
+preservation is restored. Eight new identifier-return functions pass24 executed
+assertions. Four abstention texts still fail. Next connect numeric NoOperation
+to the correct supported-word or abstention answer path, preserving these
+successes before broader Rust reasoning. General named-role binding remains
+unqualified.
 No additional cache campaign is active. Follow current-state.md for artifacts
 and cumulative resources; a new issue does not reset the spent amount.
 The full handoff remains unmet.
