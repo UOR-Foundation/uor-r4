@@ -6,7 +6,7 @@ mod fixture {
     include!("../../tests/support/native_word_copy_fixture.rs");
 }
 
-fn fitted() -> &'static Model {
+pub(super) fn fitted() -> &'static Model {
     static MODEL: std::sync::OnceLock<Model> = std::sync::OnceLock::new();
     MODEL.get_or_init(|| {
         let mut docs = Vec::new();

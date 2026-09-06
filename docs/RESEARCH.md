@@ -2,6 +2,26 @@
 
 ## Latest native result — 2026-09-06
 
+[#1139 retained-source routing](native_geometric_source_routing_1139.md) now
+selects an exact recent-word source and Copy/NoRead action through two learned
+signed H4 states. Its role-context revision fits 320/320 reachable construction
+choices and preserves 62/62 earlier responses, 24/24 earlier transfer and 24/24
+changed-name cases; matched exact-code selection gets 36/62, 10/24 and 10/24.
+Disabling the learned codes gets 4/24 changed-name cases. The original fit and
+its 61/62, 21/24, 21/24 negative remain recorded. A first-source control identified
+interference from inherited word-path/zeta features; those states are preserved
+elsewhere while learned H4 binding uses role context.
+
+Final angular `55e602a0` also preserves 28/28 relation answers/writes and 5/5
+restored persistent-session turns. A fresh Rust identifier copies, compiles and
+passes three semantic checks. General two-link and two-operation prompts still
+return Unknown. This is bounded OPEN geometric source-selection evidence,
+with no full-model speedup, sealed language qualification or frontier claim.
+Retain it for the next dependent-source development, preserving comparator
+`067adbf0`. See the [current state](integration/current-state.md) for the next step.
+
+## Dependent-read result — prior checkpoint, 2026-09-06
+
 [#1139 dependent reads and shared output](native_geometric_learned_routing_1139.md#dependent-read-result--2026-09-06)
 are implemented and exercised, with a generation/preservation negative. On the
 same 735 authored OPEN positions, parent gets 45 correct, recurrent angular

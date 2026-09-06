@@ -173,8 +173,11 @@ is [implemented and measured](../native_geometric_learned_routing_1139.md), with
 improved small-population token prediction but failed generation/preservation
 and no angular advantage over exact-code selection. The **two dependent reads
 with shared output** revision below has also executed with a generation and
-preservation negative. Follow the latest result in current-state.md. The next
-implementation connects routing to exact retained sources and their operators;
+preservation negative. The subsequent [retained-source revision](../native_geometric_source_routing_1139.md)
+now connects learned angular selection to exact word references and copying,
+with 62/62 prior responses and 24/24 changed-name transfer at its bounded OPEN
+scope. Follow current-state.md for artifacts and complete limits. The next
+implementation connects the selected exact entity to a second relation read;
 the full handoff remains unmet.
 
 #### Immediate recurrent attention revision — owner adoption 2026-09-05
@@ -197,7 +200,7 @@ relation storage and committed copying remain reusable causal mechanisms.
    transport and selected action separately. Require actual continuations,
    short dependent-task behavior and preserved memory/termination; route traces
    and lower fit loss alone do not pass the handoff.
-3. **Immediate revision after that result:** replace the new block's exclusive
+3. **Source-access revision, now executed at recent-word scope:** replace the new block's exclusive
    access to eight recent raw tokens with access to existing bounded retained
    words/relations. Reuse `role_read::features`, exact occurrence/reference
    lifetimes and committed copying. Keep the accepted role-reader as the working
@@ -205,8 +208,14 @@ relation storage and committed copying remain reusable causal mechanisms.
    choice, rather than repeating the accepted reader fit. Retain the selected
    exact payload alongside its geometric code so unseen names/values need not
    be memorized by the output classifier. Check changed names/values and existing
-   response preservation before adding another hop. Then let a selected relation
-   or derived value condition the next read. This is a source-access correction,
+   response preservation before adding another hop. The role-context H4 fit now
+   passes that bounded preservation/transfer check and retains existing relation
+   and session behavior. **Next:** let a selected exact entity/reference condition
+   one second relation read, retain both references, and copy the final value
+   through the existing causal operator. Learn selection/operator choices on
+   short two-link prose/Rust examples, with matched angular/exact-code and
+   intermediate-reference-disabled comparisons; preserve the working one-read
+   cases. This is a source-access correction,
    not a new memory subsystem or a claim of general language capability.
 4. Follow the observed limitation: learn a small shared directional cost over
    signed relative state if angular ties erase a needed distinction; retain at

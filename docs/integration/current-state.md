@@ -1,5 +1,54 @@
 # Current native geometric AI work
 
+## Geometric retained-source routing — #1139, 2026-09-06
+
+**Retain angular `55e602a0` for the next source-routing development step;
+keep `067adbf0` as the frozen working comparator.** The
+[source-routing record](../native_geometric_source_routing_1139.md) and
+[evidence](../evidence/native_geometric_source_routing_1139.json) bind this result.
+Two learned signed H4 states now select an existing exact recent-word reference
+and Copy/NoRead action; the causal operator emits that reference's bytes.
+It fits source choice without refitting the accepted reader or memorizing answer
+strings in a token classifier. Persistent relation reads keep their old priority.
+
+Initial angular selection preserves 61/62 responses and gets 21/24 changed-name
+cases. A causal first-selection control repairs a retained-but-rejected Talven
+source by suppressing inherited word-path/zeta scoring features. The localized
+`role_context_only` fit retains learned H4 composition but keeps those inherited
+features out of this binding decision. It reaches 320/320 construction choices,
+62/62 earlier responses, 24/24 earlier transfer and 24/24 changed-name cases.
+Matched exact-code selection reaches 152/320 construction, 36/62 preservation
+and 10/24 on each transfer population; disabling learned codes gets 4/24 fresh.
+Both fits complete the same two-pass search schedule. This is one bounded OPEN
+development result, not general angular superiority or sealed qualification.
+
+The final angular artifact also preserves 28/28 longer-context relation answers
+and writes, and 5/5 persistent-session turns with restore/isolation checks.
+Actual CLI generation copies the unseen Rust identifier `packet_input`; the
+exact generated function compiles and passes three semantic inputs without
+repair. Both the owner-of-the-box question and two arithmetic operations still
+return `Unknown`. Source access is useful; dependent reasoning is not qualified.
+
+New routing costs on 24 fresh responses are 18,298 comparisons, 10,994 table
+reads and 348,904 logical operand bytes. Existing word-reader row comparisons
+fall from 141,490 to 10,710. Same-byte whole-response samples remain about
+23.4–23.6 ms; no whole-model speedup is established. The full artifact is
+10,797,015 bytes and retains the frozen comparator. Startup validation still
+uses floating point; changed serving uses integer/table operations.
+
+**Next within #1139:** let a selected exact entity/reference condition one
+second relation read, retaining both references and using the existing committed
+copy operator for the final value. Train the source and operator choices on
+short two-link prose/Rust cases and preserve this working one-read behavior.
+Do not add another recent-token output classifier, metric sweep, memory store
+or broad corpus campaign. #1140's broader multi-operation handoff remains
+subsequent. Final held-out evaluation remains NOT_RUN.
+
+Artifacts are under `.uor-models/native-typed-value-2026-09-05/source-routing-*`.
+The initial and revised artifacts, including both exact-code negatives, remain
+preserved. Final local/CI checks and cumulative resources are recorded in the
+linked evidence and protected PR; refresh the shared ledger before new work.
+
 ## Dependent geometric reads — #1139, 2026-09-06
 
 **Implemented and exercised; generation/preservation negative. Keep accepted

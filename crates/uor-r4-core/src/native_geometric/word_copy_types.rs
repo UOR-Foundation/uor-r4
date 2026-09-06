@@ -54,6 +54,8 @@ fn copy_suffix_disabled(value: &bool) -> bool {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct WordCopyWork {
+    #[serde(default, skip_serializing_if = "RoutingWork::is_empty")]
+    pub routing: RoutingWork,
     #[serde(
         default,
         skip_serializing_if = "super::value_types::ValueWork::is_empty"
