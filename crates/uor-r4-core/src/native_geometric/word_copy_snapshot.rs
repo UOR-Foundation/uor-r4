@@ -108,7 +108,12 @@ impl Session {
                 .ok_or_else(|| invalid("read selection absent"))?;
             let source =
                 (decision.word_index != super::role_read::NO_SOURCE).then_some(decision.word_index);
-            if commit.relation_id != source.and_then(|i| super::relation::source_version(values, i))
+            if commit.dependency != source.and(decision.dependency)
+                || commit.dependency.is_some_and(|ids| {
+                    !super::dependent_read::valid(values, ids, &mut Default::default())
+                })
+                || commit.relation_id
+                    != source.and_then(|i| super::relation::source_version(values, i))
                 || source != commit.source
                 || saved.origin != source
                 || decision.source_end != commit.source_end

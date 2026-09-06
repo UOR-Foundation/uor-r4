@@ -1,6 +1,46 @@
 # Current native geometric AI work
 
-## Geometric retained-source routing — #1139, 2026-09-06
+## Geometric dependent source read — #1139, 2026-09-06
+
+**Retain angular `8070c006` for the next development step, with `55e602a0`
+and `067adbf0` preserved as frozen comparators.** The
+[dependent-source record](../native_geometric_dependent_source_1139.md) and
+[evidence](../evidence/native_geometric_dependent_source_1139.json) bind the scope.
+A learned signed-H4 source/operator choice now follows one exact relation value
+as the owner key of a second record, then copies that record's bytes. Both
+current version IDs persist through observed copying and restoration. There is
+no second similarity scorer, grammar parser, new memory store or runtime matrix
+operation. Startup validation still uses floating point.
+
+On 48 authored OPEN changed-name cases, angular answers **40/48**, exact-code
+selection **32/48**, and the parent **20/48**. Disabling the intermediate lookup
+returns **20/48**; disabling routing codes returns **16/48** (that control also
+changes the inherited recent-source selector). Both fits preserve **62/62**
+earlier responses and **24/24** earlier transfer. Angular succeeds on all four
+matched first-edge pairs and all four dependent Rust completion texts; the
+unchanged generated functions compile and pass 12 semantic assertions. It also
+preserves 28/28 longer-context answers/writes and 5/5 persistent-session turns.
+The actual dependent ingest/select/copy path measures zero allocations. The
+same two-pass search has 356 reachable construction frames out of 528 documents:
+160 bypassed upstream and 12 unreachable through the frozen writer. Angular fits
+356/356; exact-code fits 350/356. No run reaches its fit time cap.
+
+The eight development failures all involve failed revision ingestion. Retained
+snapshots show some `Now … in …` text writing under `Now` or marking the wrong
+relation conflicted; question text can create spurious `Question` records.
+The broader owner-of-box question still returns `Unknown`. These are
+limitations of the unchanged learned writer, not lost second-read
+payloads. The first attempt and its corrected unreachable-target accounting
+remain separately preserved. No sealed general-language, broader operator,
+frontier capability or whole-model speedup is established.
+
+**Next within #1139:** repair learned revision-owner binding and NoWrite on
+question text in the current writer. Preserve the new dependent reader, exact
+identity/version semantics and previous one-read behavior. Use the observed
+revision failures and a small fresh-name check before expanding depth or corpus.
+#1140 remains subsequent broader typed composition, not completed by these cases.
+
+## Previous retained-source baseline — #1139, 2026-09-06
 
 **Retain angular `55e602a0` for the next source-routing development step;
 keep `067adbf0` as the frozen working comparator.** The
@@ -36,7 +76,7 @@ fall from 141,490 to 10,710. Same-byte whole-response samples remain about
 10,797,015 bytes and retains the frozen comparator. Startup validation still
 uses floating point; changed serving uses integer/table operations.
 
-**Next within #1139:** let a selected exact entity/reference condition one
+**Historical successor, now executed above:** let a selected exact entity/reference condition one
 second relation read, retaining both references and using the existing committed
 copy operator for the final value. Train the source and operator choices on
 short two-link prose/Rust cases and preserve this working one-read behavior.

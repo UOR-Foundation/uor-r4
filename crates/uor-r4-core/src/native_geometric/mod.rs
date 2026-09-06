@@ -10,6 +10,11 @@
 pub use relation::RelationWork;
 pub use relation_admission::RelationAdmissionMode;
 pub use relation_training::{RelationExample, RelationLabel};
+mod dependent_read;
+mod dependent_read_training;
+pub use dependent_read_training::DependentReadExample;
+#[cfg(test)]
+mod dependent_read_tests;
 mod source_routing;
 #[cfg(test)]
 mod source_routing_tests;
@@ -305,6 +310,8 @@ pub struct TrainingProgress {
 #[serde(try_from = "ModelWire")]
 pub struct Model {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    dependent_read: Option<dependent_read::DependentRead>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     source_routing: Option<source_routing::SourceRouting>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     learned_routing: Option<learned_routing::RoutingBlock>,
@@ -335,6 +342,8 @@ pub struct Model {
 #[serde(deny_unknown_fields)]
 struct ModelWire {
     #[serde(default)]
+    dependent_read: Option<dependent_read::DependentRead>,
+    #[serde(default)]
     source_routing: Option<source_routing::SourceRouting>,
     #[serde(default)]
     learned_routing: Option<learned_routing::RoutingBlock>,
@@ -364,6 +373,7 @@ impl TryFrom<ModelWire> for Model {
     type Error = Error;
     fn try_from(wire: ModelWire) -> Result<Self> {
         let model = Self {
+            dependent_read: wire.dependent_read,
             source_routing: wire.source_routing,
             learned_routing: wire.learned_routing,
             schema: wire.schema,

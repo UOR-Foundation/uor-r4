@@ -174,6 +174,7 @@ impl Trainer {
         let (lexical_pieces, receipts) = build_codec(&config, construction)?;
         let token_count = LEXICAL_BASE as usize + lexical_pieces.len();
         let mut template = Model {
+            dependent_read: None,
             source_routing: None,
             learned_routing: None,
             schema: SCHEMA.into(),
@@ -508,6 +509,24 @@ impl Model {
     }
     pub(super) fn validate(&self) -> Result<()> {
         self.config.validate()?;
+        if let Some(block) = &self.dependent_read {
+            let mut parent = self.clone();
+            parent.dependent_read = None;
+            parent.refresh_identity()?;
+            if parent.artifact_cid != block.router.parent_artifact {
+                return Err(Error("dependent read parent differs".into()));
+            }
+            parent.validate()?;
+            block.validate(self)?;
+            let mut duplicate = self.clone();
+            duplicate.refresh_identity()?;
+            if duplicate.artifact_cid != self.artifact_cid
+                || duplicate.uor_model_address != self.uor_model_address
+            {
+                return Err(Error("dependent read identity differs".into()));
+            }
+            return Ok(());
+        }
         // The routing residual is fitted last. Inherited response heads remain
         // bound to the exact model on which they were trained, including all
         // of their original nested provenance checks.

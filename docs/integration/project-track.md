@@ -176,9 +176,13 @@ with shared output** revision below has also executed with a generation and
 preservation negative. The subsequent [retained-source revision](../native_geometric_source_routing_1139.md)
 now connects learned angular selection to exact word references and copying,
 with 62/62 prior responses and 24/24 changed-name transfer at its bounded OPEN
-scope. Follow current-state.md for artifacts and complete limits. The next
-implementation connects the selected exact entity to a second relation read;
-the full handoff remains unmet.
+scope. The [dependent-source read](../native_geometric_dependent_source_1139.md)
+now follows a geometrically selected exact relation into a second owner lookup:
+40/48 new complete answers versus 32/48 exact-code and 20/48 parent, preserving
+62/62 prior answers and 24/24 transfer. Eight revision-ingestion failures remain.
+Follow current-state.md for artifacts and complete limits. The next implementation
+repairs the current writer's revision-owner binding and NoWrite on question text,
+with this dependent reader preserved. The full handoff remains unmet.
 
 #### Immediate recurrent attention revision — owner adoption 2026-09-05
 

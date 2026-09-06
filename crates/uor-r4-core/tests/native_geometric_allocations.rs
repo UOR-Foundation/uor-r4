@@ -274,6 +274,10 @@ fn native_kernel_source_has_no_forbidden_arithmetic_or_float_types() {
             "native retained-source routing",
             include_str!("../src/native_geometric/source_routing.rs"),
         ),
+        (
+            "native dependent read",
+            include_str!("../src/native_geometric/dependent_read.rs"),
+        ),
         ("native completion seed", seed),
         ("native numeral codec", numeral),
         ("native whole-word codec", lexemes),
@@ -1124,4 +1128,47 @@ fn source_routing_observe_select_and_copy_are_allocation_free() {
     assert_eq!(ALLOCATIONS.with(Cell::get), 0);
     assert_eq!(BYTES.with(Cell::get), 0);
     assert!(s.work.word_copy.routing.predictions > 0);
+}
+
+/// Actual retained artifact exercise. The large local learned artifact is not a
+/// repository fixture; CI's small-fixture census does not claim this execution.
+#[test]
+#[ignore = "requires R4_DEPENDENT_READ_MODEL retained development artifact"]
+fn native_dependent_artifact_copy_is_allocation_free() {
+    let path = std::env::var("R4_DEPENDENT_READ_MODEL").expect("named model path");
+    let model =
+        uor_r4_core::native_geometric::Model::from_bytes(&std::fs::read(path).unwrap()).unwrap();
+    let tokens = model
+        .encode(
+            "casket in elvin. elvin in Bremen. Question: Where is the location of casket? Answer:",
+        )
+        .unwrap();
+    let mut session = model.session(Control::Full).unwrap();
+    let mut selected = false;
+    ALLOCATIONS.with(|v| v.set(0));
+    BYTES.with(|v| v.set(0));
+    MEASURING.with(|v| v.set(true));
+    let result = (|| {
+        session.observe(&model, BOS)?;
+        for &token in &tokens {
+            session.observe(&model, token)?;
+        }
+        session.begin_response(&model)?;
+        for _ in 0..32 {
+            let p = session.predict(&model)?;
+            selected |= session
+                .word_copy_decision()
+                .is_some_and(|d| d.dependency.is_some_and(|ids| ids[1] != 0));
+            session.observe(&model, p.token)?;
+            if p.token == EOS {
+                break;
+            }
+        }
+        Ok::<_, uor_r4_core::native_geometric::Error>(())
+    })();
+    MEASURING.with(|v| v.set(false));
+    result.unwrap();
+    assert!(selected, "dependent path was not exercised");
+    assert_eq!((ALLOCATIONS.with(Cell::get), BYTES.with(Cell::get)), (0, 0));
+    println!("dependent exact two-link ingest/select/observe/copy: allocations=0 bytes=0");
 }

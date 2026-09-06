@@ -429,7 +429,9 @@ impl WordCopyState {
         if let Some(commit) = self.read_commit.filter(|c| c.source.is_some()) {
             work.word_record_reads = work.word_record_reads.saturating_add(1);
             work.selector.metadata_reads = work.selector.metadata_reads.saturating_add(3);
-            let valid = commit
+            let valid = commit.dependency.is_none_or(|ids| {
+                super::dependent_read::valid(values, ids, &mut work.persistent_read)
+            }) && commit
                 .source
                 .and_then(|i| super::relation::source(values, i))
                 .is_some_and(|w| {
@@ -562,6 +564,7 @@ impl WordCopyState {
         let word = super::relation::source(values, index)?;
         work.word_record_reads = work.word_record_reads.saturating_add(1);
         self.pending = Some(WordCopyDecision {
+            dependency: self.read_commit.and_then(|c| c.dependency),
             token,
             score,
             word_index: index,
@@ -638,6 +641,10 @@ impl WordCopyState {
             decision.token == token
                 && decision.at_seen.checked_add(1) == Some(values.seen)
                 && decision.step.checked_add(1) == Some(entry.steps)
+                && (decision.action == WordCopyAction::NoRead
+                    || decision.dependency.is_none_or(|ids| {
+                        super::dependent_read::valid(values, ids, &mut work.persistent_read)
+                    }))
         });
         if let Some(decision) = matched {
             work.selector.commits = work.selector.commits.saturating_add(1);
@@ -654,6 +661,7 @@ impl WordCopyState {
                     WordCopyAction::Prepare | WordCopyAction::NoRead | WordCopyAction::Read
                 ) {
                     self.read_commit = Some(super::role_read::ReadCommit {
+                        dependency: source.and(decision.dependency),
                         relation_id: source
                             .and_then(|i| super::relation::source_version(values, i)),
                         source,

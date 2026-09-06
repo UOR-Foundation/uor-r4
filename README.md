@@ -43,8 +43,12 @@ remains preserved. The subsequent [retained-source revision](docs/native_geometr
 uses learned angular selection and exact byte copying, preserving 62 earlier
 responses and answering 24 earlier plus 24 changed-name cases correctly. Its
 matched exact-code control gets 10/24 changed-name cases. This is bounded source
-selection, with no whole-model speedup or broad language claim. The next step
-connects a selected exact entity to a dependent relation read.
+selection, with no whole-model speedup or broad language claim. The subsequent
+[dependent-source read](docs/native_geometric_dependent_source_1139.md) learns
+which exact relation to follow and copies its final value: 40/48 authored new
+answers versus 32/48 exact-code and 20/48 parent, preserving 62/62 earlier answers
+and 24/24 transfer. Eight revision-ingestion failures remain; the next change
+repairs the existing writer's owner binding and NoWrite on question text.
 
 ```sh
 cargo build --release --bin r4
