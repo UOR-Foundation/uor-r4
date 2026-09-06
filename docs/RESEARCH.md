@@ -1,6 +1,17 @@
 # Research: what is measured, what is closed, what is open
 
-## Competing derived values — current checkpoint, 2026-09-06
+## Independent-result provenance — current checkpoint, 2026-09-06
+
+The [operand-provenance record](native_geometric_operand_provenance_1139.md)
+retains `af337c28`:58/58 construction,8/8 reachable development and 12/16 complete
+changed-name/computation-order transfers versus 3/16 parent. Exact-code also
+gets 12/16; this is no new angular-distance advantage. All 12 reached selections
+pass; four first-literal responses fail. Exact ancestry-propagated cue matches
+and word-identity remapping of existing learned parameters solve the bounded
+selection seam. Two random fits lose18 old updated-total cases and remain
+negative. Prior checks are preserved; initial literal binding is next.
+
+## Competing derived values — previous checkpoint, 2026-09-06
 
 The [typed-role record](native_geometric_typed_roles_1139.md) retains `43c54db3`
 at bounded causal-depth scope: 12/12 complete new four-turn operand/refresh
@@ -11,7 +22,7 @@ negatives. Removal gives 0/12 full operator/provenance successes but 2/12 matchi
 texts through recomputation. Existing conversation, memory and familiar Rust
 checks pass; no general named-role, prose, syntax, reasoning or frontier claim.
 The [current state](integration/current-state.md) carries cumulative resources
-and the next equal-depth operand/owner-binding implementation.
+and the later operand-provenance implementation.
 
 ## NoWrite reuse — previous checkpoint, 2026-09-06
 
@@ -2354,7 +2365,7 @@ are token-identical to suffix-only (2-token) rollouts** — generation, like sco
 cycles** (vs 110‰ under teacher prefixes); and **no step of any trajectory abstained** —
 the #811 always-servable finding at trajectory scale. Sampled mode and judge metrics are
 UNAVAILABLE in run-1 (no pinned identities). No coherence is claimed and no corrective
-mechanism is prescribed; #840's improvement bar is frozen (median +≥2 steps, at0 −≥100‰,
+mechanism is prescribed; #840's improvement bar is frozen (median +≥2 steps, at 0 −≥100‰,
 ≤3 rounds else GENERATION-NOT-ESTABLISHED) and S3 stage closure remains gated on the
 #822/#823 stage verdicts *(both recorded REVISE on 2026-08-21 — not promotions, so the
 gate holds; #840 is additionally held for the approved S1 redesign direction, per the
@@ -2406,9 +2417,9 @@ cause). **Empirical Criterion. Status: Empirical.** It reproduces #841 exactly (
 **0/100 state-starvation** cases (survived 0 · single-step-at-0 59 · candidate-gap 16 ·
 rank-limit 25). Two representation-independent bounds cap any trajectory-state mechanism
 against the frozen §6 bar: **step-0 invariance** (diverged-at-0 is a step-0 metric,
-unreachable by state — reachable at0-drop 0‰ vs the 100‰ bar; and the 590‰ > 500‰ step-0
+unreachable by state — reachable at 0-drop 0‰ vs the 100‰ bar; and the 590‰ > 500‰ step-0
 fraction pins the median at 0) and the **teacher-prefix upper bound** (the drift-free
-reference is itself at median 0 / at0 590‰, clearing neither prong). The disposition is
+reference is itself at median 0 / at 0 590‰, clearing neither prong). The disposition is
 therefore **`NOT TRIGGERED`** (no runtime/format/compiler change) and, for the stage,
 **`GENERATION-NOT-ESTABLISHED`** — consistent with #840 and meeting the programme global
 falsifier (no bounded correction or state reduces the frozen free-running gap → the

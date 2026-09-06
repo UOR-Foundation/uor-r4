@@ -1277,3 +1277,72 @@ fn native_typed_role_artifact_is_allocation_free() {
         .is_err());
     println!("actual competing typed roles: four committed values correct; allocations=0 bytes=0; boundary restore and rejection checks PASS");
 }
+
+#[test]
+#[ignore = "requires R4_INDEPENDENT_MODEL retained operand-provenance artifact"]
+fn native_independent_artifact_is_allocation_free() {
+    use uor_r4_core::native_geometric::Model;
+    let model =
+        Model::from_bytes(&std::fs::read(std::env::var("R4_INDEPENDENT_MODEL").unwrap()).unwrap())
+            .unwrap();
+    let prompts = [
+        "User: suri has 13 coins. orin has 4 coins.\nUser: What is the sum of suri's and orin's coins?\nAssistant:",
+        "User: mira has 5 coins. neri has 9 coins.\nUser: What is the sum of mira's and neri's coins?\nAssistant:",
+        "User: Repeat the total for mira and neri.\nAssistant:",
+    ].map(|p|model.encode(p).unwrap());
+    let expected = ["17.\n", "14.\n", "14.\n"];
+    let mut outputs = [[0; 32]; 3];
+    let mut lengths = [0; 3];
+    let mut ended = [false; 3];
+    let mut s = model.session(Control::Full).unwrap();
+    ALLOCATIONS.with(|v| v.set(0));
+    BYTES.with(|v| v.set(0));
+    MEASURING.with(|v| v.set(true));
+    let result = (|| {
+        s.observe(&model, BOS)?;
+        for (i, prompt) in prompts.iter().enumerate() {
+            for &t in prompt {
+                s.observe(&model, t)?;
+            }
+            s.begin_response(&model)?;
+            for _ in 0..32 {
+                let token = s.predict(&model)?.token;
+                s.observe(&model, token)?;
+                if token == EOS {
+                    ended[i] = true;
+                    break;
+                }
+                outputs[i][lengths[i]] = token;
+                lengths[i] += 1;
+            }
+            s.end_response(&model)?;
+        }
+        Ok::<_, uor_r4_core::native_geometric::Error>(())
+    })();
+    MEASURING.with(|v| v.set(false));
+    result.unwrap();
+    assert_eq!((ALLOCATIONS.with(Cell::get), BYTES.with(Cell::get)), (0, 0));
+    for i in 0..3 {
+        assert!(ended[i]);
+        assert_eq!(
+            model.decode(&outputs[i][..lengths[i]]).unwrap(),
+            expected[i].as_bytes()
+        );
+    }
+    let checkpoint = s.checkpoint().unwrap();
+    assert_eq!(
+        model
+            .restore_session(&checkpoint)
+            .unwrap()
+            .checkpoint()
+            .unwrap(),
+        checkpoint
+    );
+    let mut wire: serde_json::Value = serde_json::from_slice(&model.to_bytes().unwrap()).unwrap();
+    wire["typed_roles"]
+        .as_object_mut()
+        .unwrap()
+        .remove("operand_provenance");
+    assert!(Model::from_bytes(&serde_json::to_vec(&wire).unwrap()).is_err());
+    println!("actual independent sums and named Copy: all bytes and EOS correct; allocations=0 bytes=0; checkpoint roundtrip and unbound flag rejection PASS");
+}

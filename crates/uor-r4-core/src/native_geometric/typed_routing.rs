@@ -15,12 +15,17 @@ pub(super) struct TypedRouting {
     pub canonical_copy_aliases: bool,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub local_query: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub operand_provenance: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub initialization_artifact: Option<String>,
 }
 
 pub(super) struct TypedContext {
     pub addresses: [u32; 16],
     pub depths: Option<[u8; 16]>,
     pub origins: Option<[u64; 16]>,
+    pub provenance: Option<[[u8; 16]; 16]>,
 }
 
 // NATIVE_GEOMETRIC_INTEGER_KERNEL_BEGIN
@@ -129,6 +134,101 @@ pub(super) fn alias_self_add(
     pair[0] != u64::MAX && pair[0] == pair[1]
 }
 
+/// Query-to-literal cue matches transported through exact Copy/Add ancestry.
+/// Four cue-position bits are unioned across parents; bit 4 denotes unavailable
+/// ancestry. Numeric payloads and word identities are never used as distances.
+/// Scratch is fixed at 256 bytes. No record or query is mutated.
+pub(super) fn operand_provenance(values: &ValueState, work: &mut ValueWork) -> [[u8; 16]; 16] {
+    let mut out = [[16; 16]; 16];
+    let Some(words) = &values.lexemes else {
+        return out;
+    };
+    let mut known = [false; 16];
+    for (i, source) in values.sources.iter().enumerate() {
+        work.routing.sources_examined += 1;
+        if source.derived {
+            continue;
+        }
+        known[i] = true;
+        out[i] = [0; 16];
+        let Some(cues) = source.lexical else {
+            out[i] = [16; 16];
+            continue;
+        };
+        for (q, query) in words.queries[..words.query_len].iter().enumerate() {
+            work.routing.context_tokens_read += 1;
+            work.routing.comparisons += 1;
+            work.routing.logical_bytes_read += 16;
+            if values.query_boundary.is_some_and(|start| query.end < start) {
+                continue;
+            }
+            for (c, cue) in cues.iter().enumerate() {
+                work.lexical_comparisons += 1;
+                work.routing.logical_bytes_read += 2;
+                if cue.len == 0 || cue.len != query.len {
+                    continue;
+                }
+                let mut equal = true;
+                for j in 0..usize::from(cue.len) {
+                    work.lexical_byte_comparisons += 1;
+                    work.routing.logical_bytes_read += 2;
+                    if cue.bytes[j].to_ascii_lowercase() != query.bytes[j].to_ascii_lowercase() {
+                        equal = false;
+                        break;
+                    }
+                }
+                if equal {
+                    out[i][q] |= 1 << c;
+                }
+            }
+        }
+    }
+    for _ in 0..VALUES {
+        let mut changed = false;
+        for (i, source) in values.sources.iter().enumerate() {
+            work.routing.sources_examined += 1;
+            if known[i] {
+                continue;
+            }
+            let Some(d) = source.derivation else {
+                continue;
+            };
+            let mut parents = [None; 2];
+            for (j, r) in values.sources.iter().enumerate() {
+                work.routing.sources_examined += 1;
+                for k in 0..2 {
+                    work.routing.comparisons += 1;
+                    work.routing.logical_bytes_read += 16;
+                    if r.id == d.operand_ids[k] && r.id < source.id && known[j] {
+                        parents[k] = Some(j);
+                    }
+                }
+            }
+            let Some(a) = parents[0] else {
+                continue;
+            };
+            let b = if d.action == ValueAction::Copy {
+                a
+            } else {
+                let Some(b) = parents[1] else {
+                    continue;
+                };
+                b
+            };
+            for q in 0..16 {
+                work.routing.logical_bytes_read += 2;
+                out[i][q] = out[a][q] | out[b][q];
+            }
+            known[i] = true;
+            changed = true;
+        }
+        if !changed {
+            break;
+        }
+    }
+    out
+}
+
 pub(super) fn context(
     model: &Model,
     values: &ValueState,
@@ -165,6 +265,9 @@ pub(super) fn context(
         addresses: addresses(block, values, work),
         depths,
         origins,
+        provenance: block
+            .operand_provenance
+            .then(|| operand_provenance(values, work)),
     })
 }
 
@@ -303,6 +406,46 @@ pub(super) fn features_with_depths(
     (out, n)
 }
 
+pub(super) fn features_with_provenance(
+    values: &ValueState,
+    operands: Option<(ValueRecord, ValueRecord)>,
+    addr: &[u32; 16],
+    depths: Option<&[u8; 16]>,
+    provenance: Option<&[[u8; 16]; 16]>,
+    work: &mut ValueWork,
+) -> ([ValueFeature; 52], usize) {
+    let (base, mut n) = features_with_depths(values, operands, addr, depths, work);
+    let mut out = [ValueFeature::default(); 52];
+    out[..n].copy_from_slice(&base[..n]);
+    if let Some(provenance) = provenance {
+        let mut pair = [[0_u8; 16]; 2];
+        if let Some((a, b)) = operands {
+            for (i, r) in values.sources.iter().enumerate() {
+                work.routing.sources_examined += 1;
+                work.routing.comparisons += 2;
+                work.routing.logical_bytes_read += 24;
+                if r.id == a.id {
+                    pair[0] = provenance[i];
+                    work.routing.logical_bytes_read += 16;
+                }
+                if r.id == b.id {
+                    pair[1] = provenance[i];
+                    work.routing.logical_bytes_read += 16;
+                }
+            }
+        }
+        for q in 0..16 {
+            out[n] = ValueFeature {
+                kind: 5,
+                a: q as u64,
+                b: u64::from(pair[0][q]) | (u64::from(pair[1][q]) << 5),
+            };
+            n += 1;
+        }
+    }
+    (out, n)
+}
+
 pub(super) fn score(
     model: &Model,
     values: &ValueState,
@@ -319,11 +462,12 @@ pub(super) fn score(
     }) else {
         return 0;
     };
-    let (f, n) = features_with_depths(
+    let (f, n) = features_with_provenance(
         values,
         operands,
         &context.addresses,
         context.depths.as_ref(),
+        context.provenance.as_ref(),
         work,
     );
     let state = block

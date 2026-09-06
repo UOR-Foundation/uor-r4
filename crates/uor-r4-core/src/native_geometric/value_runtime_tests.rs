@@ -414,6 +414,8 @@ fn native_typed_routing_case_fold_changes_metadata_only() {
         fold_ascii_case: true,
         canonical_copy_aliases: false,
         local_query: false,
+        operand_provenance: false,
+        initialization_artifact: None,
         dictionary: vec![WordCopyAddress {
             bytes,
             len: 4,
@@ -464,6 +466,83 @@ fn native_typed_routing_case_fold_changes_metadata_only() {
             if spelling == b"copy" { 2 } else { 0 }
         );
     }
+    // Expanding the prime dictionary must carry the code by exact word identity,
+    // including position/word features; a new word cannot inherit prime 2's code.
+    use super::source_routing::SourceCode;
+    block.router.landmarks = vec![[8, 9]; 3];
+    block.router.biases = vec![1, 2, 3];
+    block.router.codes = vec![
+        SourceCode {
+            feature: ValueFeature {
+                kind: 2,
+                a: 2,
+                b: 0,
+            },
+            roots: [11, 12],
+        },
+        SourceCode {
+            feature: ValueFeature {
+                kind: 3,
+                a: 7,
+                b: 2,
+            },
+            roots: [13, 14],
+        },
+    ];
+    let mut expanded = block.clone();
+    expanded.dictionary[0].prime = 3;
+    let mut add = expanded.dictionary[0].clone();
+    add.bytes = [0; 32];
+    add.bytes[..3].copy_from_slice(b"add");
+    add.len = 3;
+    add.prime = 2;
+    expanded.dictionary.insert(0, add);
+    expanded.router.codes = vec![
+        SourceCode {
+            feature: ValueFeature {
+                kind: 2,
+                a: 2,
+                b: 0,
+            },
+            roots: [0; 2],
+        },
+        SourceCode {
+            feature: ValueFeature {
+                kind: 2,
+                a: 3,
+                b: 0,
+            },
+            roots: [0; 2],
+        },
+        SourceCode {
+            feature: ValueFeature {
+                kind: 3,
+                a: 7,
+                b: 3,
+            },
+            roots: [0; 2],
+        },
+        SourceCode {
+            feature: ValueFeature {
+                kind: 5,
+                a: 0,
+                b: 2,
+            },
+            roots: [0; 2],
+        },
+    ];
+    super::typed_routing_training::initialize_roles(&mut expanded, &block);
+    assert_eq!(
+        expanded
+            .router
+            .codes
+            .iter()
+            .map(|c| c.roots)
+            .collect::<Vec<_>>(),
+        vec![[0; 2], [11, 12], [13, 14], [0; 2]]
+    );
+    assert_eq!(expanded.router.landmarks, block.router.landmarks);
+    assert_eq!(expanded.router.biases, block.router.biases);
 }
 
 #[test]
@@ -824,4 +903,97 @@ fn native_typed_roles_alias_admission_uses_identity_not_numeric_equality() {
         Some(&reversed),
         &mut Default::default()
     ));
+}
+
+#[test]
+fn native_typed_provenance_preserves_names_aliases_and_unknown_ancestry() {
+    use super::typed_routing::{features_with_provenance, lineage_depths, operand_provenance};
+    use super::value_lexemes::{LexemeState, WordAtom};
+    fn word(text: &str) -> WordAtom {
+        let mut w = WordAtom {
+            len: text.len() as u8,
+            end: 10,
+            ..Default::default()
+        };
+        w.bytes[..text.len()].copy_from_slice(text.as_bytes());
+        w
+    }
+    let model = mechanical_model(ValueAction::Add);
+    let mut s = prefix(&model, "13 4 total:", Control::Full);
+    let v = s.values.as_mut().unwrap();
+    v.sources = (0..4)
+        .map(|i| {
+            let mut cues = [WordAtom::default(); 4];
+            cues[1] = word(if i < 2 { "LUMA" } else { "tavi" });
+            ValueRecord {
+                id: i,
+                value: 7,
+                lexical: Some(cues),
+                ..Default::default()
+            }
+        })
+        .collect();
+    for (id, action, ids) in [
+        (4, ValueAction::Add, [0, 1]),
+        (5, ValueAction::Add, [2, 3]),
+        (6, ValueAction::Copy, [4, 4]),
+    ] {
+        v.sources.push(ValueRecord {
+            id,
+            value: 14,
+            derived: true,
+            derivation: Some(ValueDerivation {
+                action,
+                operand_ids: ids,
+                operand_values: [7; 2],
+            }),
+            ..Default::default()
+        });
+    }
+    let mut words = LexemeState {
+        query_len: 1,
+        ..Default::default()
+    };
+    words.queries[0] = word("luma");
+    v.lexemes = Some(words);
+    v.query_boundary = Some(10);
+    let mut work = ValueWork::default();
+    let p = operand_provenance(v, &mut work);
+    assert_eq!((p[4][0], p[5][0], p[6][0]), (2, 0, 2));
+    assert!(work.lexical_byte_comparisons > 0 && work.routing.logical_bytes_read > 0);
+    let depths = lineage_depths(v, &mut work);
+    let f = |r| {
+        features_with_provenance(
+            v,
+            Some((r, r)),
+            &[0; 16],
+            Some(&depths),
+            Some(&p),
+            &mut Default::default(),
+        )
+    };
+    assert_ne!(f(v.sources[4]), f(v.sources[5]));
+    assert_eq!(f(v.sources[4]), f(v.sources[6]));
+    for r in &mut v.sources {
+        r.value = -999;
+    }
+    assert_eq!(operand_provenance(v, &mut work), p);
+    v.sources.reverse();
+    let reversed = operand_provenance(v, &mut work);
+    for (i, r) in v.sources.iter().enumerate() {
+        assert_eq!(reversed[i], p[r.id as usize]);
+    }
+    v.query_boundary = Some(11);
+    assert_eq!(operand_provenance(v, &mut work)[0], [0; 16]);
+    v.query_boundary = Some(10);
+    v.sources.retain(|r| r.id != 0);
+    let missing = operand_provenance(v, &mut work);
+    for (i, r) in v
+        .sources
+        .iter()
+        .enumerate()
+        .filter(|(_, r)| r.id == 4 || r.id == 6)
+    {
+        assert_eq!(missing[i], [16; 16], "{}", r.id);
+    }
 }

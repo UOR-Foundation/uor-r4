@@ -41,11 +41,26 @@ fn typed_zero(n: &usize) -> bool {
 
 impl TypedRouting {
     pub(super) fn validate(&self, model: &Model, roles: bool) -> Result<()> {
-        self.router
-            .validate_shape(model, 3, if roles { 5 } else { 4 })?;
+        self.router.validate_shape(
+            model,
+            3,
+            if self.operand_provenance {
+                6
+            } else if roles {
+                5
+            } else {
+                4
+            },
+        )?;
         let primes = crate::corpus_induced_spin_placement::first_primes(self.dictionary.len())
             .map_err(|e| Error(e.to_string()))?;
-        if (roles && model.typed_routing.is_none())
+        if self.initialization_artifact.as_ref().is_some_and(|cid| {
+            !self.operand_provenance
+                || cid.len() != 71
+                || !cid.starts_with("blake3:")
+                || !cid[7..].bytes().all(|b| b.is_ascii_hexdigit())
+        }) || (self.operand_provenance && (!roles || !self.local_query || !self.fold_ascii_case))
+            || (roles && model.typed_routing.is_none())
             || model.values.is_none()
             || self.dictionary.is_empty()
             || self.dictionary.len() > 256
@@ -73,6 +88,46 @@ impl TypedRouting {
             return Err(Error("invalid geometric typed routing artifact".into()));
         }
         Ok(())
+    }
+}
+
+/// Offline continuation: preserve learned word identity when the sorted prime
+/// dictionary grows. New features remain identity; no initialization lookup
+/// occurs during serving.
+pub(super) fn initialize_roles(block: &mut TypedRouting, old: &TypedRouting) {
+    block.router.landmarks.clone_from(&old.router.landmarks);
+    block.router.biases.clone_from(&old.router.biases);
+    for code in &mut block.router.codes {
+        let mut feature = code.feature;
+        let prime = match feature.kind {
+            2 => Some(&mut feature.a),
+            3 => Some(&mut feature.b),
+            _ => None,
+        };
+        if let Some(prime) = prime {
+            let Some(word) = block
+                .dictionary
+                .iter()
+                .find(|w| u64::from(w.prime) == *prime)
+            else {
+                continue;
+            };
+            let Some(previous) = old
+                .dictionary
+                .iter()
+                .find(|w| w.bytes == word.bytes && w.len == word.len)
+            else {
+                continue;
+            };
+            *prime = u64::from(previous.prime);
+        }
+        if let Ok(i) = old
+            .router
+            .codes
+            .binary_search_by_key(&feature, |c| c.feature)
+        {
+            code.roots = old.router.codes[i].roots;
+        }
     }
 }
 
@@ -186,21 +241,44 @@ impl Model {
         config: SourceRoutingConfig,
         fold_ascii_case: bool,
     ) -> Result<(Self, serde_json::Value)> {
-        self.fit_typed(docs, config, fold_ascii_case, false, false)
+        self.fit_typed(docs, config, fold_ascii_case, false, false, false, None)
     }
     pub fn fit_typed_roles(
         &self,
         docs: &[TypedRoutingExample],
         config: SourceRoutingConfig,
     ) -> Result<(Self, serde_json::Value)> {
-        self.fit_typed(docs, config, true, true, false)
+        self.fit_typed(docs, config, true, true, false, false, None)
     }
     pub fn fit_typed_roles_local(
         &self,
         docs: &[TypedRoutingExample],
         config: SourceRoutingConfig,
     ) -> Result<(Self, serde_json::Value)> {
-        self.fit_typed(docs, config, true, true, true)
+        self.fit_typed(docs, config, true, true, true, false, None)
+    }
+    pub fn fit_typed_roles_provenance(
+        &self,
+        docs: &[TypedRoutingExample],
+        config: SourceRoutingConfig,
+    ) -> Result<(Self, serde_json::Value)> {
+        if let Some(block) = &self.typed_roles {
+            self.validate()?;
+            let mut parent = self.clone();
+            parent.typed_roles = None;
+            parent.refresh_identity()?;
+            parent.fit_typed(
+                docs,
+                config,
+                true,
+                true,
+                true,
+                true,
+                Some((block, self.artifact_cid())),
+            )
+        } else {
+            self.fit_typed(docs, config, true, true, true, true, None)
+        }
     }
     fn fit_typed(
         &self,
@@ -209,6 +287,8 @@ impl Model {
         fold_ascii_case: bool,
         roles: bool,
         local_query: bool,
+        operand_provenance: bool,
+        initialization: Option<(&TypedRouting, &str)>,
     ) -> Result<(Self, serde_json::Value)> {
         config.validate()?;
         self.validate()?;
@@ -277,6 +357,8 @@ impl Model {
             fold_ascii_case,
             canonical_copy_aliases: local_query,
             local_query,
+            operand_provenance,
+            initialization_artifact: initialization.map(|(_, cid)| cid.to_owned()),
             dictionary,
             router: SourceRouting {
                 schema: "uor-r4.geometric-source-routing/1".into(),
@@ -311,12 +393,15 @@ impl Model {
             }
             let depths =
                 roles.then(|| typed_routing::lineage_depths(values, &mut Default::default()));
+            let provenance = operand_provenance
+                .then(|| typed_routing::operand_provenance(values, &mut Default::default()));
             let addr = typed_routing::addresses(&block, values, &mut Default::default());
-            let (f, n) = typed_routing::features_with_depths(
+            let (f, n) = typed_routing::features_with_provenance(
                 values,
                 None,
                 &addr,
                 depths.as_ref(),
+                provenance.as_ref(),
                 &mut Default::default(),
             );
             let mut alternatives = vec![Alternative {
@@ -335,11 +420,12 @@ impl Model {
                             || (action == ValueAction::Add && [b.value, a.value] == pair))
                             && (a.id == first.write_id || b.id == first.write_id)
                     });
-                let (f, n) = typed_routing::features_with_depths(
+                let (f, n) = typed_routing::features_with_provenance(
                     values,
                     Some((a, b)),
                     &addr,
                     depths.as_ref(),
+                    provenance.as_ref(),
                     &mut Default::default(),
                 );
                 alternatives.push(Alternative {
@@ -370,8 +456,8 @@ impl Model {
         }
         let mut vocab: Vec<_> = frequency.iter().map(|(f, n)| (*f, *n)).collect();
         vocab.sort_by(|a, b| {
-            (a.0.kind >= 2 && a.0.kind != 4)
-                .cmp(&(b.0.kind >= 2 && b.0.kind != 4))
+            (a.0.kind >= 2 && a.0.kind != 4 && a.0.kind != 5)
+                .cmp(&(b.0.kind >= 2 && b.0.kind != 4 && b.0.kind != 5))
                 .then(b.1.cmp(&a.1))
                 .then(a.0.cmp(&b.0))
         });
@@ -384,6 +470,9 @@ impl Model {
                 roots: [self.geometry.identity; 2],
             })
             .collect();
+        if let Some((old, _)) = initialization {
+            initialize_roles(&mut block, old);
+        }
         // Exact effective-feature collisions are inspected before the fit.
         let mut signatures = BTreeMap::<Vec<(usize, Vec<ValueFeature>)>, BTreeSet<usize>>::new();
         for frame in &frames {

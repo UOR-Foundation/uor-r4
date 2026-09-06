@@ -192,8 +192,8 @@ preserves prior behavior but gets 0/6 new follow-ups after 3/3 correct first sum
 The exact intermediate and new operand were retained; that sparse selector chose
 the wrong operation/operand or abstained. The subsequent
 [learned typed selector](../native_geometric_typed_routing_1139.md) now generates
-6/6 new authored numeric/wording transfers versus3/6 for its matched exact-code
-fit, with0/6 after intermediate removal and all prior checks preserved. Its
+6/6 new authored numeric/wording transfers versus 3/6 for its matched exact-code
+fit, with 0/6 after intermediate removal and all prior checks preserved. Its
 case-sensitive predecessor remains a3/6 transfer negative. This is learned
 signed-H4 query/operator/operand choice through actual intermediate state,
 not broad language or reasoning qualification. That checkpoint selected role-sensitive
@@ -202,10 +202,13 @@ same learner, exact records and operators. The subsequent
 [competing-intermediate revision](../native_geometric_typed_roles_1139.md) now
 gets 12/12 complete changed-operand/refresh transfers versus 2/12 exact-code,
 with its 9/12 and 8/12 predecessors preserved. Derivation depth, canonical Copy
-identity and a local query boundary support this bounded result. Next distinguish
-independent results at equal depth through exact operand/owner provenance, then
-use the same demonstrated selection in generated Rust. General named-role
-binding remains unqualified.
+identity and a local query boundary support this bounded result. The [operand-provenance continuation](../native_geometric_operand_provenance_1139.md)
+now distinguishes independent equal-depth results:12/16 full changed-name/order
+trajectories versus 3/16 parent and 12/16 exact-code. Four fail at the initial
+literal answer; all 12 reached selections pass. Next extend the same geometric
+operand/operator path to literal-only first answers using the exposed failures
+and preserve its learned parameters. Then carry successful complete selection
+into generated Rust. General named-role binding remains unqualified.
 No additional cache campaign is active. Follow current-state.md for artifacts
 and cumulative resources; a new issue does not reset the spent amount.
 The full handoff remains unmet.
