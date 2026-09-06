@@ -168,6 +168,15 @@ state. Broader conversation, export/forget and product integration remain #962.
 
 ### Step 3: learn semantic placement and routed computation
 
+**Current implementation checkpoint:** the first two-channel learned H4 block
+is [implemented and measured](../native_geometric_learned_routing_1139.md), with
+improved small-population token prediction but failed generation/preservation
+and no angular advantage over exact-code selection. Its next build step trains
+response dispatch and stopping with routed prediction against final output,
+including ordinary prose/Rust and preserved memory behavior. Keep the selector
+comparison before expanding context or abstraction. The full handoff below
+remains unmet; this checkpoint does not replace its criteria.
+
 Implement one small jointly trained angular routing block inside the existing
 native language path. Learn token/ordered-n-let codes and contextual placement
 within fixed geometric structure, source admission and a selected state
