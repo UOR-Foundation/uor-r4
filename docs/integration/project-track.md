@@ -189,11 +189,17 @@ keeps that writer fixed and reduces long-context writer row comparisons from
 next build returned to operator/operand admission before execution and committed
 derived-value use. The [selected-execution result](../native_geometric_typed_admission_1139.md)
 preserves prior behavior but gets 0/6 new follow-ups after 3/3 correct first sums.
-The exact intermediate and new operand are retained; the current sparse selector
-chooses the wrong operation/operand or abstains. Next learn query-conditioned
-geometric selection over those typed references, adapting the existing signed-H4
-source learner's joint candidate/action objective to causally generated states.
-This new angular typed selector is not implemented by the execution repair.
+The exact intermediate and new operand were retained; that sparse selector chose
+the wrong operation/operand or abstained. The subsequent
+[learned typed selector](../native_geometric_typed_routing_1139.md) now generates
+6/6 new authored numeric/wording transfers versus3/6 for its matched exact-code
+fit, with0/6 after intermediate removal and all prior checks preserved. Its
+case-sensitive predecessor remains a3/6 transfer negative. This is learned
+signed-H4 query/operator/operand choice through actual intermediate state,
+not broad language or reasoning qualification. Next test and learn role-sensitive
+choice between competing derived results while changing their order, using the
+same learner, exact records and operators. Current relative-recency features do
+not establish role binding independent of order.
 No additional cache campaign is active. Follow current-state.md for artifacts
 and cumulative resources; a new issue does not reset the spent amount.
 The full handoff remains unmet.

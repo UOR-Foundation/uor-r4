@@ -371,6 +371,86 @@ fn native_value_selected_execution_runs_one_of_256_scored_choices() {
 }
 
 #[test]
+fn native_typed_routing_preserves_role_information_without_encoding_values() {
+    let model = mechanical_model(ValueAction::Add);
+    let session = prefix(&model, "13 4 total:", Control::Full);
+    let values = session.values.as_ref().unwrap();
+    let mut a = values.sources[0];
+    let b = values.sources[1];
+    let mut addr = [0; 16];
+    addr[0] = 2;
+    addr[1] = 3;
+    let first =
+        super::typed_routing::features(values, Some((a, b)), &addr, &mut Default::default());
+    a.value = 999;
+    assert_eq!(
+        first,
+        super::typed_routing::features(values, Some((a, b)), &addr, &mut Default::default())
+    );
+    a.derived = true;
+    assert_ne!(
+        first,
+        super::typed_routing::features(values, Some((a, b)), &addr, &mut Default::default())
+    );
+    a.derived = false;
+    addr.swap(0, 1);
+    assert_ne!(
+        first,
+        super::typed_routing::features(values, Some((a, b)), &addr, &mut Default::default())
+    );
+}
+
+#[test]
+fn native_typed_routing_case_fold_changes_metadata_only() {
+    use super::source_routing::SourceRouting;
+    use super::typed_routing::TypedRouting;
+    use super::word_copy_types::WordCopyAddress;
+    let model = mechanical_model(ValueAction::Add);
+    let mut session = prefix(&model, "13 4 total:", Control::Full);
+    let values = session.values.as_mut().unwrap();
+    let mut bytes = [0; 32];
+    bytes[..4].copy_from_slice(b"copy");
+    let mut block = TypedRouting {
+        fold_ascii_case: true,
+        dictionary: vec![WordCopyAddress {
+            bytes,
+            len: 4,
+            prime: 2,
+        }],
+        router: SourceRouting {
+            schema: String::new(),
+            parent_artifact: String::new(),
+            codes: Vec::new(),
+            landmarks: Vec::new(),
+            biases: Vec::new(),
+            ranks: Vec::new(),
+            training: Vec::new(),
+            config: SourceRoutingConfig::default(),
+        },
+    };
+    for spelling in [b"copy", b"Copy", b"COPY"] {
+        let mut words = super::value_lexemes::LexemeState {
+            query_len: 1,
+            ..Default::default()
+        };
+        words.queries[0].len = 4;
+        words.queries[0].bytes[..4].copy_from_slice(spelling);
+        values.lexemes = Some(words);
+        block.fold_ascii_case = true;
+        assert_eq!(
+            super::typed_routing::addresses(&block, values, &mut Default::default())[0],
+            2
+        );
+        assert_eq!(values.lexemes, Some(words));
+        block.fold_ascii_case = false;
+        assert_eq!(
+            super::typed_routing::addresses(&block, values, &mut Default::default())[0],
+            if spelling == b"copy" { 2 } else { 0 }
+        );
+    }
+}
+
+#[test]
 fn native_value_selected_execution_preserves_overflow_fallback_order() {
     let model = mechanical_model(ValueAction::Add);
     let mut session = prefix(&model, "9223372036854775807 1 -2 total:", Control::Full);

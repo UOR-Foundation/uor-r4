@@ -1,6 +1,42 @@
 # Current native geometric AI work
 
-## Selected execution passes; learned composition fails — #1139, 2026-09-06
+## Learned geometric typed selection passes its bounded transfer — #1139, 2026-09-06
+
+**Retain `bb79456b` over exact parent `2600b95b`.** The
+[result](../native_geometric_typed_routing_1139.md#executed-result--2026-09-06)
+and [evidence](../evidence/native_geometric_typed_routing_1139.json) bind scope.
+A learned signed-H4 query/operand selector now chooses Copy, Add or NoOperation
+before the existing exact execution and derived-value commit. Its optional
+case-folded query metadata component is13,865 serialized bytes; no serving LLM,
+dense attention, matrix multiplication or floating-point projection is added.
+
+Angular generates42/42 construction,6/6 exposed development and6/6 new authored
+numeric/wording transfers, versus3/6 new transfers for the matched exact-code
+fit. Removing the intermediate yields0/6. An earlier exact-case version failed
+3/6 transfer and remains preserved; its repaired cases are explicitly exposed.
+The new checks use small authored cases after design selection, not sealed general
+language.19+12 ->31 now supports repeat ->31 and add5 ->36, using its own result.
+
+All48/48 dependent,62/62 earlier,24/24 prior-transfer,28/28 exposed-name,28/28
+long-context and5/5 persistent checks pass. Seven focused tests, the kernel
+source check, actual typed zero-allocation check, CLI revision and four unchanged
+generated Rust functions with12 semantic assertions pass. No new general Rust
+reasoning, syntax, prose, frontier capability or whole-model speed is established.
+
+**Next: role-sensitive selection among competing intermediate results.** Vary
+which derived result is requested and their order, inspect role features, and
+learn the same joint choice against the observed failure. The current recency-
+based metadata is insufficient evidence of general binding. Reuse exact state,
+operators and the existing learner; no new cache/store campaign. Full #1139 and
+#1140 remain open at their broader acceptance scope.
+
+This cycle uses162.033 seconds of local model work and686.095 seconds of monitored
+engineering work. Cumulative model use is2033.039/2130 seconds, with96.961 seconds
+remaining. Recorded extensions are+240 model seconds and+128MiB storage under the
+owner's standing authorization. All material is preserved; paid external compute
+is zero. Source and delivery state are recorded through the protected PR.
+
+## Previous checkpoint: selected execution passes; learned composition fails — #1139, 2026-09-06
 
 **Retain `2600b95b` with the checked selected-execution runtime.** The
 [result](../native_geometric_typed_admission_1139.md#executed-result--2026-09-06)
@@ -28,7 +64,7 @@ exact execution/commit path, train the joint candidate/action decision on
 causally generated intermediate states, and inspect actual query features before
 fit to avoid the earlier indistinguishable-input failure. The six exposed
 negatives are development data; new wording/composition evaluation follows
-selection. This learning change is not implemented yet. No new store or cache
+selection. This was the next change at that checkpoint; it is now implemented above. No new store or cache
 campaign is warranted by these retained-but-misselected values.
 
 The owner now authorizes necessary project-resource extensions. Record explicit

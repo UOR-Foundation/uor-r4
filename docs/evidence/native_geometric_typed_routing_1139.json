@@ -1,0 +1,925 @@
+{
+  "schema": "uor-r4.typed-routing-evidence/1",
+  "decision": "RETAIN_CASE_FOLDED_ANGULAR_TYPED_SELECTION_AT_BOUNDED_COMPOSITION_SCOPE",
+  "source_base": "14a4c85e360f1c3738b1a4364048e83a1c622783",
+  "artifact_root": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05",
+  "artifact": "blake3:bb79456b2dd7187005a3501d437fdc17215429bd4fff0671c31a44583d2918c7",
+  "parent": "blake3:2600b95bbb160dd70a14b7ae05306e3b6b9607377919db0414fc529519eb9635",
+  "angular_fit": {
+    "artifact": "blake3:bb79456b2dd7187005a3501d437fdc17215429bd4fff0671c31a44583d2918c7",
+    "block_bytes": 13865,
+    "config": {
+      "learned_features": 128,
+      "max_seconds": 30,
+      "mode": "angular",
+      "passes": 4,
+      "proposals": 12,
+      "seed": 1139
+    },
+    "construction_ms": 61,
+    "dictionary_words": 25,
+    "effective_query_classes": 7,
+    "feature_universe": 109,
+    "features": 109,
+    "fit": {
+      "accepted": [
+        12,
+        0,
+        4
+      ],
+      "final_correct": 42,
+      "final_hinge": 0,
+      "initial_correct": 6,
+      "initial_hinge": 108,
+      "proposals": 14027,
+      "stopped_at_time_limit": false
+    },
+    "frames": 42,
+    "incompatible_feature_classes": 0,
+    "parent": "blake3:2600b95bbb160dd70a14b7ae05306e3b6b9607377919db0414fc529519eb9635",
+    "scope": "Joint typed operator/operand labels over actual generated intermediates; source values and numeric query words are not encoded as geometric scoring features. Construction fit is not generated transfer."
+  },
+  "equality_fit": {
+    "artifact": "blake3:a66209fffb60f693b3f5ff859e34aa050f713754ca97692a52fd6b8cbf93dd75",
+    "block_bytes": 13869,
+    "config": {
+      "learned_features": 128,
+      "max_seconds": 30,
+      "mode": "equality",
+      "passes": 4,
+      "proposals": 12,
+      "seed": 1139
+    },
+    "construction_ms": 60,
+    "dictionary_words": 25,
+    "effective_query_classes": 7,
+    "feature_universe": 109,
+    "features": 109,
+    "fit": {
+      "accepted": [
+        5,
+        0,
+        0
+      ],
+      "final_correct": 24,
+      "final_hinge": 18,
+      "initial_correct": 6,
+      "initial_hinge": 42,
+      "proposals": 14007,
+      "stopped_at_time_limit": false
+    },
+    "frames": 42,
+    "incompatible_feature_classes": 0,
+    "parent": "blake3:2600b95bbb160dd70a14b7ae05306e3b6b9607377919db0414fc529519eb9635",
+    "scope": "Joint typed operator/operand labels over actual generated intermediates; source values and numeric query words are not encoded as geometric scoring features. Construction fit is not generated transfer."
+  },
+  "results": {
+    "construction_generated": [
+      42,
+      42
+    ],
+    "exposed_development": [
+      6,
+      6
+    ],
+    "exposed_v1_failure_repair": [
+      6,
+      6
+    ],
+    "new_first_use_angular": [
+      6,
+      6
+    ],
+    "new_first_use_equality": [
+      3,
+      6
+    ],
+    "intermediate_removal": [
+      0,
+      6
+    ],
+    "dependent": [
+      48,
+      48
+    ],
+    "earlier": [
+      62,
+      62
+    ],
+    "prior_transfer": [
+      24,
+      24
+    ],
+    "exposed_names": [
+      28,
+      28
+    ],
+    "long_context": [
+      28,
+      28
+    ],
+    "persistent_turns": [
+      5,
+      5
+    ]
+  },
+  "v1_negative": {
+    "angular_first_use": [
+      3,
+      6
+    ],
+    "equality_first_use": [
+      3,
+      6
+    ],
+    "decision": "NOT_ADOPTED",
+    "cause": "Case-sensitive query dictionary omitted lowercase instruction identity. V2 case-folds metadata only; V1 transfer now exposed, not held-out."
+  },
+  "transfer_scope": "Six authored new numeric/wording cases after design selection. Not sealed general language; no sweep or seed robustness claim.",
+  "examples": [
+    {
+      "id": "case-reserved/0/0",
+      "query": "User: There are 5 new coins. Please repeat the previous total without adding the new coins.\nAssistant:",
+      "expected": "31.\n",
+      "text": "31.\n",
+      "used_intermediate": true,
+      "terminated": true
+    },
+    {
+      "id": "case-reserved/0/1",
+      "query": "User: There are 5 new coins. Please add the new coins to the previous total.\nAssistant:",
+      "expected": "36.\n",
+      "text": "36.\n",
+      "used_intermediate": true,
+      "terminated": true
+    },
+    {
+      "id": "case-reserved/1/0",
+      "query": "User: There are 6 new coins. Please repeat the previous total without adding the new coins.\nAssistant:",
+      "expected": "31.\n",
+      "text": "31.\n",
+      "used_intermediate": true,
+      "terminated": true
+    },
+    {
+      "id": "case-reserved/1/1",
+      "query": "User: There are 6 new coins. Please add the new coins to the previous total.\nAssistant:",
+      "expected": "37.\n",
+      "text": "37.\n",
+      "used_intermediate": true,
+      "terminated": true
+    },
+    {
+      "id": "case-reserved/2/0",
+      "query": "User: There are 3 new coins. Please repeat the previous total without adding the new coins.\nAssistant:",
+      "expected": "11.\n",
+      "text": "11.\n",
+      "used_intermediate": true,
+      "terminated": true
+    },
+    {
+      "id": "case-reserved/2/1",
+      "query": "User: There are 3 new coins. Please add the new coins to the previous total.\nAssistant:",
+      "expected": "14.\n",
+      "text": "14.\n",
+      "used_intermediate": true,
+      "terminated": true
+    }
+  ],
+  "cost": {
+    "scope": "Totals for six complete two-response sessions; includes regenerating each first sum. New routing logical bytes are not physical DRAM traffic or complete instruction counts. No whole-model speed claim.",
+    "typed_values": {
+      "operator_executions": 12,
+      "additions": 9,
+      "proposals": 120,
+      "selection_passes": 12
+    },
+    "new_routing": {
+      "code_reads": 6120,
+      "comparisons": 27456,
+      "context_tokens_read": 96,
+      "emission_queries": 3264,
+      "logical_bytes_read": 523692,
+      "operator_executions": 0,
+      "payload_gathers": 0,
+      "predictions": 6,
+      "sources_examined": 420,
+      "table_reads": 13362
+    }
+  },
+  "checks": {
+    "focused_tests": 7,
+    "kernel_source_check": "PASS",
+    "actual_typed_allocation_count": 0,
+    "actual_typed_allocated_bytes": 0,
+    "generated_rust_bodies_unchanged": 4,
+    "generated_rust_semantic_assertions": 12,
+    "cli_revision_text": " Zurich.\n",
+    "artifact_reload_identity": "PASS"
+  },
+  "resources": {
+    "cycle_model_ms": 162033,
+    "cycle_engineering_ms": 686095,
+    "cumulative_model_ms": 2033039,
+    "model_limit_ms": 2130000,
+    "model_increment_ms": 240000,
+    "storage_increment_bytes": 134217728,
+    "cycle_model_limit_ms": 240000,
+    "engineering_limit_ms": 900000,
+    "maximum_sampled_known_bytes": 6329102336,
+    "effective_storage_ceiling_bytes": 6506475520,
+    "sampled_model_rss_max_bytes": 853278720,
+    "paid_external_compute": 0,
+    "deletions": 0,
+    "sampling_limit": "Periodic known-root and child-process samples, not exact transient peaks."
+  },
+  "commands": [
+    {
+      "label": "typed-routing-prepare",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "typed-routing",
+        "prepare",
+        "typed-routing-source.json"
+      ],
+      "elapsed_ms": 168,
+      "code": 0,
+      "engineering_only": false,
+      "stopped": null
+    },
+    {
+      "label": "typed-routing-angular-fit",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "typed-routing",
+        "fit",
+        "writer-admission-periodic-model.json",
+        "typed-routing-source.json",
+        "typed-routing-angular",
+        "angular"
+      ],
+      "elapsed_ms": 15754,
+      "code": 0,
+      "engineering_only": false,
+      "stopped": null
+    },
+    {
+      "label": "typed-routing-equality-fit",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "typed-routing",
+        "fit",
+        "writer-admission-periodic-model.json",
+        "typed-routing-source.json",
+        "typed-routing-equality",
+        "equality"
+      ],
+      "elapsed_ms": 16414,
+      "code": 0,
+      "engineering_only": false,
+      "stopped": null
+    },
+    {
+      "label": "typed-routing-angular-development",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "typed-routing",
+        "evaluate",
+        "typed-routing-angular/model.json",
+        "typed-routing-source.json",
+        "development",
+        "typed-routing-angular-development.json",
+        "full"
+      ],
+      "elapsed_ms": 5455,
+      "code": 0,
+      "engineering_only": false,
+      "stopped": null
+    },
+    {
+      "label": "typed-routing-equality-development",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "typed-routing",
+        "evaluate",
+        "typed-routing-equality/model.json",
+        "typed-routing-source.json",
+        "development",
+        "typed-routing-equality-development.json",
+        "full"
+      ],
+      "elapsed_ms": 5496,
+      "code": 0,
+      "engineering_only": false,
+      "stopped": null
+    },
+    {
+      "label": "typed-routing-preservation",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "writer-binding",
+        "preserve",
+        "typed-routing-angular/model.json",
+        "writer-binding-continuation-source.json",
+        "typed-routing-preservation"
+      ],
+      "elapsed_ms": 5613,
+      "code": 0,
+      "engineering_only": false,
+      "stopped": null
+    },
+    {
+      "label": "typed-routing-removal",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "typed-routing",
+        "evaluate",
+        "typed-routing-angular/model.json",
+        "typed-routing-source.json",
+        "development",
+        "typed-routing-removal.json",
+        "remove-intermediate"
+      ],
+      "elapsed_ms": 5426,
+      "code": 0,
+      "engineering_only": false,
+      "stopped": null
+    },
+    {
+      "label": "typed-routing-angular-construction-output",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "typed-routing",
+        "evaluate",
+        "typed-routing-angular/model.json",
+        "typed-routing-source.json",
+        "fit",
+        "typed-routing-angular-construction-output.json",
+        "full"
+      ],
+      "elapsed_ms": 5496,
+      "code": 0,
+      "engineering_only": false,
+      "stopped": null
+    },
+    {
+      "label": "typed-routing-angular-first-use",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "typed-routing",
+        "evaluate",
+        "typed-routing-angular/model.json",
+        "typed-routing-source.json",
+        "first_use",
+        "typed-routing-angular-first-use.json",
+        "full"
+      ],
+      "elapsed_ms": 5467,
+      "code": 0,
+      "engineering_only": false,
+      "stopped": null
+    },
+    {
+      "label": "typed-routing-equality-first-use",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "typed-routing",
+        "evaluate",
+        "typed-routing-equality/model.json",
+        "typed-routing-source.json",
+        "first_use",
+        "typed-routing-equality-first-use.json",
+        "full"
+      ],
+      "elapsed_ms": 5467,
+      "code": 0,
+      "engineering_only": false,
+      "stopped": null
+    },
+    {
+      "label": "typed-routing-case-source",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "typed-routing",
+        "case-source",
+        "typed-routing-source.json",
+        "typed-routing-case-source.json"
+      ],
+      "elapsed_ms": 194,
+      "code": 0,
+      "engineering_only": false,
+      "stopped": null
+    },
+    {
+      "label": "typed-routing-case-angular-fit",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "typed-routing",
+        "fit",
+        "writer-admission-periodic-model.json",
+        "typed-routing-case-source.json",
+        "typed-routing-case-angular",
+        "angular-folded"
+      ],
+      "elapsed_ms": 16094,
+      "code": 0,
+      "engineering_only": false,
+      "stopped": null
+    },
+    {
+      "label": "typed-routing-case-equality-fit",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "typed-routing",
+        "fit",
+        "writer-admission-periodic-model.json",
+        "typed-routing-case-source.json",
+        "typed-routing-case-equality",
+        "equality-folded"
+      ],
+      "elapsed_ms": 16031,
+      "code": 0,
+      "engineering_only": false,
+      "stopped": null
+    },
+    {
+      "label": "typed-routing-case-development",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "typed-routing",
+        "evaluate",
+        "typed-routing-case-angular/model.json",
+        "typed-routing-case-source.json",
+        "development",
+        "typed-routing-case-development.json",
+        "full"
+      ],
+      "elapsed_ms": 5498,
+      "code": 0,
+      "engineering_only": false,
+      "stopped": null
+    },
+    {
+      "label": "typed-routing-case-exposed",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "typed-routing",
+        "evaluate",
+        "typed-routing-case-angular/model.json",
+        "typed-routing-case-source.json",
+        "exposed_first_use",
+        "typed-routing-case-exposed.json",
+        "full"
+      ],
+      "elapsed_ms": 5470,
+      "code": 0,
+      "engineering_only": false,
+      "stopped": null
+    },
+    {
+      "label": "typed-routing-case-construction",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "typed-routing",
+        "evaluate",
+        "typed-routing-case-angular/model.json",
+        "typed-routing-case-source.json",
+        "fit",
+        "typed-routing-case-construction.json",
+        "full"
+      ],
+      "elapsed_ms": 5565,
+      "code": 0,
+      "engineering_only": false,
+      "stopped": null
+    },
+    {
+      "label": "typed-routing-case-first-use",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "typed-routing",
+        "evaluate",
+        "typed-routing-case-angular/model.json",
+        "typed-routing-case-source.json",
+        "first_use",
+        "typed-routing-case-first-use.json",
+        "full"
+      ],
+      "elapsed_ms": 5512,
+      "code": 0,
+      "engineering_only": false,
+      "stopped": null
+    },
+    {
+      "label": "typed-routing-case-equality-first-use",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "typed-routing",
+        "evaluate",
+        "typed-routing-case-equality/model.json",
+        "typed-routing-case-source.json",
+        "first_use",
+        "typed-routing-case-equality-first-use.json",
+        "full"
+      ],
+      "elapsed_ms": 5520,
+      "code": 0,
+      "engineering_only": false,
+      "stopped": null
+    },
+    {
+      "label": "typed-routing-case-preservation",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "writer-binding",
+        "preserve",
+        "typed-routing-case-angular/model.json",
+        "writer-binding-continuation-source.json",
+        "typed-routing-case-preservation"
+      ],
+      "elapsed_ms": 6002,
+      "code": 0,
+      "engineering_only": false,
+      "stopped": null
+    },
+    {
+      "label": "typed-routing-case-long",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "evaluate-relations",
+        "typed-routing-case-angular/model.json",
+        "relation-admission-source.json",
+        "first_use",
+        "typed-routing-case-long.json"
+      ],
+      "elapsed_ms": 5891,
+      "code": 0,
+      "engineering_only": false,
+      "stopped": null
+    },
+    {
+      "label": "typed-routing-case-removal",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "typed-routing",
+        "evaluate",
+        "typed-routing-case-angular/model.json",
+        "typed-routing-case-source.json",
+        "first_use",
+        "typed-routing-case-removal.json",
+        "remove-intermediate"
+      ],
+      "elapsed_ms": 5809,
+      "code": 0,
+      "engineering_only": false,
+      "stopped": null
+    },
+    {
+      "label": "typed-routing-unit-check",
+      "command": "/tmp/r4-native-geometric-target/debug/deps/uor_r4_core-8d8deefa7a2a5da5",
+      "args": [
+        "native_typed_routing",
+        "--nocapture"
+      ],
+      "elapsed_ms": 1178,
+      "code": 0,
+      "engineering_only": false,
+      "stopped": null
+    },
+    {
+      "label": "typed-routing-counter-check",
+      "command": "/tmp/r4-native-geometric-target/debug/deps/uor_r4_core-8d8deefa7a2a5da5",
+      "args": [
+        "native_evaluation_adds_every_nested_work_counter",
+        "--nocapture"
+      ],
+      "elapsed_ms": 8,
+      "code": 0,
+      "engineering_only": false,
+      "stopped": null
+    },
+    {
+      "label": "typed-routing-execution-check",
+      "command": "/tmp/r4-native-geometric-target/debug/deps/uor_r4_core-8d8deefa7a2a5da5",
+      "args": [
+        "native_value_selected_execution",
+        "--nocapture"
+      ],
+      "elapsed_ms": 924,
+      "code": 0,
+      "engineering_only": false,
+      "stopped": null
+    },
+    {
+      "label": "typed-routing-cli",
+      "command": "/tmp/r4-native-geometric-target/release/r4",
+      "args": [
+        "geometric",
+        "generate",
+        "--model",
+        "typed-routing-case-angular/model.json",
+        "--prompt",
+        "casket in elvin. elvin in Bremen. Now elvin in Zurich. Question: Where is the location of casket? Answer:",
+        "--max-tokens",
+        "32",
+        "--json"
+      ],
+      "elapsed_ms": 5788,
+      "code": 0,
+      "engineering_only": false,
+      "stopped": null
+    },
+    {
+      "label": "typed-routing-kernel-check",
+      "command": "/tmp/r4-native-geometric-target/release/deps/native_geometric_allocations-68a49c874fa101f2",
+      "args": [
+        "native_kernel_source_has_no_forbidden_arithmetic_or_float_types",
+        "--exact",
+        "--nocapture"
+      ],
+      "elapsed_ms": 155,
+      "code": 0,
+      "engineering_only": false,
+      "stopped": null
+    },
+    {
+      "label": "typed-routing-allocation-check",
+      "command": "env",
+      "args": [
+        "R4_TYPED_ROUTING_MODEL=typed-routing-case-angular/model.json",
+        "/tmp/r4-native-geometric-target/release/deps/native_geometric_allocations-68a49c874fa101f2",
+        "native_typed_artifact_routing_is_allocation_free",
+        "--exact",
+        "--ignored",
+        "--nocapture"
+      ],
+      "elapsed_ms": 5561,
+      "code": 0,
+      "engineering_only": false,
+      "stopped": null
+    },
+    {
+      "label": "typed-routing-rust-execution",
+      "command": "./typed-routing-generated",
+      "args": [],
+      "elapsed_ms": 77,
+      "code": 0,
+      "engineering_only": false,
+      "stopped": null
+    },
+    {
+      "label": "typed-routing-unit-build",
+      "command": "env",
+      "args": [
+        "CARGO_TARGET_DIR=/tmp/r4-native-geometric-target",
+        "CARGO_INCREMENTAL=0",
+        "CARGO_BUILD_JOBS=1",
+        "CARGO_PROFILE_DEV_DEBUG=0",
+        "CARGO_PROFILE_TEST_DEBUG=0",
+        "/Users/casey.allard/.cargo/bin/cargo",
+        "test",
+        "--offline",
+        "-p",
+        "uor-r4-core",
+        "--lib",
+        "native_typed_routing",
+        "--config",
+        "profile.test.package.uor-r4-core.opt-level=0",
+        "--no-run"
+      ],
+      "elapsed_ms": 20534,
+      "code": 0,
+      "engineering_only": true,
+      "stopped": null
+    },
+    {
+      "label": "typed-routing-release",
+      "command": "env",
+      "args": [
+        "CARGO_TARGET_DIR=/tmp/r4-native-geometric-target",
+        "CARGO_INCREMENTAL=0",
+        "CARGO_BUILD_JOBS=1",
+        "CARGO_PROFILE_DEV_DEBUG=0",
+        "CARGO_PROFILE_TEST_DEBUG=0",
+        "/Users/casey.allard/.cargo/bin/cargo",
+        "build",
+        "--release",
+        "--offline",
+        "-p",
+        "uor-r4-core",
+        "--example",
+        "native_geometric_value_probe",
+        "-p",
+        "uor-r4-wasm-router",
+        "--bin",
+        "r4"
+      ],
+      "elapsed_ms": 310374,
+      "code": 0,
+      "engineering_only": true,
+      "stopped": null
+    },
+    {
+      "label": "typed-routing-case-release",
+      "command": "env",
+      "args": [
+        "CARGO_TARGET_DIR=/tmp/r4-native-geometric-target",
+        "CARGO_INCREMENTAL=0",
+        "CARGO_BUILD_JOBS=1",
+        "CARGO_PROFILE_DEV_DEBUG=0",
+        "CARGO_PROFILE_TEST_DEBUG=0",
+        "/Users/casey.allard/.cargo/bin/cargo",
+        "build",
+        "--release",
+        "--offline",
+        "-p",
+        "uor-r4-core",
+        "--example",
+        "native_geometric_value_probe",
+        "-p",
+        "uor-r4-wasm-router",
+        "--bin",
+        "r4"
+      ],
+      "elapsed_ms": 326667,
+      "code": 0,
+      "engineering_only": true,
+      "stopped": null
+    },
+    {
+      "label": "typed-routing-final-unit-build",
+      "command": "env",
+      "args": [
+        "CARGO_TARGET_DIR=/tmp/r4-native-geometric-target",
+        "CARGO_INCREMENTAL=0",
+        "CARGO_BUILD_JOBS=1",
+        "CARGO_PROFILE_DEV_DEBUG=0",
+        "CARGO_PROFILE_TEST_DEBUG=0",
+        "/Users/casey.allard/.cargo/bin/cargo",
+        "test",
+        "--offline",
+        "-p",
+        "uor-r4-core",
+        "--lib",
+        "native_typed_routing",
+        "--config",
+        "profile.test.package.uor-r4-core.opt-level=0",
+        "--no-run"
+      ],
+      "elapsed_ms": 23186,
+      "code": 0,
+      "engineering_only": true,
+      "stopped": null
+    },
+    {
+      "label": "typed-routing-allocation-build",
+      "command": "env",
+      "args": [
+        "CARGO_TARGET_DIR=/tmp/r4-native-geometric-target",
+        "CARGO_INCREMENTAL=0",
+        "CARGO_BUILD_JOBS=1",
+        "CARGO_PROFILE_DEV_DEBUG=0",
+        "CARGO_PROFILE_TEST_DEBUG=0",
+        "/Users/casey.allard/.cargo/bin/cargo",
+        "test",
+        "--release",
+        "--offline",
+        "-p",
+        "uor-r4-core",
+        "-p",
+        "uor-r4-wasm-router",
+        "--test",
+        "native_geometric_allocations",
+        "--no-run"
+      ],
+      "elapsed_ms": 5224,
+      "code": 0,
+      "engineering_only": true,
+      "stopped": null
+    },
+    {
+      "label": "typed-routing-rust-compile",
+      "command": "/Users/casey.allard/.cargo/bin/rustc",
+      "args": [
+        "--edition=2021",
+        "typed-routing-generated.rs",
+        "-o",
+        "typed-routing-generated"
+      ],
+      "elapsed_ms": 110,
+      "code": 0,
+      "engineering_only": true,
+      "stopped": null
+    }
+  ],
+  "source_sha256": {
+    "crates/uor-r4-core/src/native_geometric/learned_routing_training.rs": "58553ac81135950af1810786da65ae8450963e2b27bc6b84aee03f6c3fad206a",
+    "crates/uor-r4-core/src/native_geometric/completion_runtime.rs": "036cdd7efa717aeb27518ae75fc7604823bb0c8b15897b4d000fbd74d67d3053",
+    "crates/uor-r4-core/src/native_geometric/runtime.rs": "d956b891b654ab385680dfb56fc391cf4227af6fcefd48622ac9eb1f1eeb54bb",
+    "crates/uor-r4-core/src/native_geometric/role_read_training.rs": "5cadf639c522d4ce2df45f62e00ef70ef5733627da64129568a8363ffcf63808",
+    "crates/uor-r4-core/src/native_geometric/word_copy_runtime.rs": "f2c1425cb58b4d8d3c20ab7d877fbc9153938ffbf15a6a1a018b5afa1f4a8c08",
+    "crates/uor-r4-core/src/native_geometric/response_runtime.rs": "79548be47acc125a6025ae946bb07a5a12ef06ac805766a0233711f8360dabd9",
+    "crates/uor-r4-core/src/native_geometric/recurrent_routing_tests.rs": "a4c78c5faf33be5f80d69a54203cdad810700d4c8da20a93f975bac16a693926",
+    "crates/uor-r4-core/src/native_geometric/recurrent_routing.rs": "d663c4ebbbf828d98d52fbcbf20e1e39005f17ada6e26a6b3244c105e898681d",
+    "crates/uor-r4-core/src/native_geometric/source_routing_training.rs": "831a6d70e97f4e3bea1f13facf41133419729b9d2cce16d71897df336167e1df",
+    "crates/uor-r4-core/src/native_geometric/relation_admission.rs": "c831aa567460389cd0930d70d503cf917eab58436caab5341db29d3957b0e24d",
+    "crates/uor-r4-core/src/native_geometric/value_training.rs": "0b056cc7bc210e1201f84f09eae925752954db291aa0d4a095f64a595589602d",
+    "crates/uor-r4-core/src/native_geometric/dependent_read.rs": "4885e6b1e2518c934e9cd8d2701b7b1295dac5aed60f65c4086bc0a44115f3d3",
+    "crates/uor-r4-core/src/native_geometric/completion_types.rs": "f27c88bf1d8f359ff1e40a56fd241144f7b032a55e379fc5f2e1bb06694446ca",
+    "crates/uor-r4-core/src/native_geometric/response_entry_runtime_tests.rs": "01c624d9d2e72d6d847e1a68e5df4361acf7de89539d3fb760afc8c1a25d0a43",
+    "crates/uor-r4-core/src/native_geometric/memory_training.rs": "304d76de48a42c3d8ee0b4c626210cd95131a600c01f82c1c4ed34609484eb7d",
+    "crates/uor-r4-core/src/native_geometric/response_runtime_tests.rs": "b9b26a58ac3026e6307ecfa49de92027b23fc48d380f53f76c1f79ddcda3bea6",
+    "crates/uor-r4-core/src/native_geometric/value_snapshot.rs": "c22f17bb4f19e1a3c96c3cd774b85434f5063891c7c061757776d5477a3d91c6",
+    "crates/uor-r4-core/src/native_geometric/response_entry_types.rs": "770a37fddfbf98bb8f3f35ba7a87fad556eb816791e0fe8d708fd042ae9617e3",
+    "crates/uor-r4-core/src/native_geometric/value_runtime.rs": "1cf48ad54c7e18a7dbc9452ae85db38f736f35c88960919751815096831d8761",
+    "crates/uor-r4-core/src/native_geometric/typed_routing_training.rs": "fe8a46a0d787d0c6e1037eb3ff288b57eba655ed0fe22dc96d4ca219c62fcd54",
+    "crates/uor-r4-core/src/native_geometric/word_copy_tests.rs": "2a48dc255b240f0ec3e4f339ed401b2760398c9f8ff2e842f50d73209cc76e98",
+    "crates/uor-r4-core/src/native_geometric/relation_tests.rs": "55584fa1a5e986dd7679b061771057c7c8d642178aa30ba4e32e377eece5d350",
+    "crates/uor-r4-core/src/native_geometric/learned_routing.rs": "e6810d1e9ec40ebebd1da8fe724f9edfcbfe44ff97c7b8543549c6f6a70ce0b8",
+    "crates/uor-r4-core/src/native_geometric/numeral.rs": "2c0012a595d87e653051b067d586d98e93fe1394f9651d75725144cf0ef330fb",
+    "crates/uor-r4-core/src/native_geometric/value_runtime_tests.rs": "5f7de876ddfb5d0e2907129c934664dba2e4e65ec5c3543448fc311a331029ea",
+    "crates/uor-r4-core/src/native_geometric/mixture.rs": "cf89e5a634ea48fc027f4e08fadea2af42e2be396d6501f4f34ac4fba704a581",
+    "crates/uor-r4-core/src/native_geometric/memory_types.rs": "64b235ebb196b95a7e7125f8083893a0ea7b86b78dc3a97ebc831b6fd433a998",
+    "crates/uor-r4-core/src/native_geometric/value_lexemes.rs": "dc79fa8e1c4f0fadb14af0d8153155b4e874a3178f8d33042b3515460467f5e9",
+    "crates/uor-r4-core/src/native_geometric/relation.rs": "9c33cb38d1512fa4550bc3294a6e11896a1e3aba650c20bc46012d6142555ab5",
+    "crates/uor-r4-core/src/native_geometric/typed_routing.rs": "6a63f3894ffb8cd33c8a9bb311ae506055af5212c5331ce194db864815f149ad",
+    "crates/uor-r4-core/src/native_geometric/dependent_read_training.rs": "2ea2596612201b2f37f48b1e2ee4afa1946e501941c787a919e302cafc67b711",
+    "crates/uor-r4-core/src/native_geometric/training.rs": "97fba60a8f2adb5a50fa3f34784385f1eb48c93ec71ac80c57c99df8b82ac7bc",
+    "crates/uor-r4-core/src/native_geometric/response_snapshot_tests.rs": "b0035296cb47ed804afa2be292b8fed3d540268c8062b8a38673e37a6a36631d",
+    "crates/uor-r4-core/src/native_geometric/relation_training.rs": "4b24ff3f4d02a2309cd7570cd0c623c5d521f91fe152eedfe0fd83fefd59b9cb",
+    "crates/uor-r4-core/src/native_geometric/completion_runtime_tests.rs": "00a6678f7c4f9db1cdd78598e4e63e2219ef3ccb86dcd07b716b07b2df4f3a68",
+    "crates/uor-r4-core/src/native_geometric/recurrent_routing_training.rs": "8e41d7781677349ee2f33935dcdbdf7b751e8c84f10416fe6f1af112b8129b6b",
+    "crates/uor-r4-core/src/native_geometric/mod.rs": "9049b3d605d3819052e3b0367827facf61db57e59d87e995c95b42cf57966322",
+    "crates/uor-r4-core/src/native_geometric/snapshot.rs": "bee614505d2df39f2b8ebdecedfe12a63c578c6dc8e330f594556ffc301411cd",
+    "crates/uor-r4-core/src/native_geometric/value_snapshot_tests.rs": "49a0cdd1ea033e32209594e4eaf2973c8e7c4a094ead42444b34a6dd7753babe",
+    "crates/uor-r4-core/src/native_geometric/response_entry_snapshot.rs": "20776a856bc9ef2bfcd62dc92e55b2d889219902fa211543ccdea880ea8d7f52",
+    "crates/uor-r4-core/src/native_geometric/response_entry_training_tests.rs": "ab388e1e8ce45b34989cfd9f0182ef3e3a5faf0c7cbdee07d68cd9946e5ccc2a",
+    "crates/uor-r4-core/src/native_geometric/memory_runtime_tests.rs": "ccb1293f2e66ef78e7d0f047b4f512d132d0e4edbb307b9907b8b7421268e6a8",
+    "crates/uor-r4-core/src/native_geometric/response_entry_training.rs": "722560a989f02345959c56742161d5a76cbcc334bc8149db7a86ccd0f4294494",
+    "crates/uor-r4-core/src/native_geometric/tests.rs": "11da699221ff0982b5ea0302b4ede6b890d0e73546333fc05602f6f903c91c49",
+    "crates/uor-r4-core/src/native_geometric/word_copy_types.rs": "805cfe15d5d5a5502b9e312ace03d122f2ddf91ea73884cf7e03472d9453f5d1",
+    "crates/uor-r4-core/src/native_geometric/completion_snapshot_tests.rs": "b11acf8d489c9c9fa15f428f1b3fd0d56b91180e624142e6ba6d77459695090c",
+    "crates/uor-r4-core/src/native_geometric/value_types.rs": "fbdb3c0635d1efa0400a85fea2d8eafde357859505f6a0d7b8d19b4bb146209d",
+    "crates/uor-r4-core/src/native_geometric/role_read_tests.rs": "eb1d2164ac806e370adeb8f3f6f41977874743ab8a601e85990ed073eecd20d5",
+    "crates/uor-r4-core/src/native_geometric/learned_routing_tests.rs": "6474ccae0aea4315a1a7e26f8707857e3003f5351163f3e69f694836ebdc6fb6",
+    "crates/uor-r4-core/src/native_geometric/memory_runtime.rs": "ba649539cf17774041cec34b4fa5b77a495293004766d36cb9ffccf1956ceb68",
+    "crates/uor-r4-core/src/native_geometric/word_copy_snapshot.rs": "e0d3dc5d8f690e7485a1a252ec98d8048017366553807f19537747434ddb5447",
+    "crates/uor-r4-core/src/native_geometric/response_entry_runtime.rs": "1e87be5b00185fde35fb5e4781bb5facc0f849d6b0a8aca7838751bbaf39469e",
+    "crates/uor-r4-core/src/native_geometric/completion_training.rs": "c674dfac58c9d135ac6f15f5b493aa0078149ec501b7655c0874dd4eac8bc27e",
+    "crates/uor-r4-core/src/native_geometric/role_read.rs": "aaaca896674a9f7f82b6da5bbc3fe89fc340384b9e98cddda178afb89c660601",
+    "crates/uor-r4-core/src/native_geometric/completion_snapshot.rs": "0701775ec18cc2c2efe4d9c916cba51cbc49100f6bf07f4921812278d0729edf",
+    "crates/uor-r4-core/src/native_geometric/word_copy_training.rs": "916bb0848cc71a9caaa3178060ff0bb8d4893d625608b4033d4fe81dcbe6781b",
+    "crates/uor-r4-core/src/native_geometric/source_routing_tests.rs": "f19c78f1fd6e684ce8d8e2e758701ea54dde8bba8759d2fa49b00889fb45a526",
+    "crates/uor-r4-core/src/native_geometric/anchors.rs": "eb653f80cb3160ad083cc16d10952218454bbaefeb9bdd02b38e92c34a32ba8a",
+    "crates/uor-r4-core/src/native_geometric/source_routing.rs": "7201fce3f0267e27a37aadcfdb39a4a526219b16787b7b730b460703a6904460",
+    "crates/uor-r4-core/src/native_geometric/dependent_read_tests.rs": "2e7a322f52888a0064e0cbe7027e8dc40129655befd8bc3d49e49dc69bd2ca0c"
+  },
+  "retained_reports_sha256": {
+    "typed-routing-angular-construction-output.json": "99acfb81e30f8e8e241ef71bdefad0a99d0b07d743e1b8a9e57f32b8b7a8c962",
+    "typed-routing-angular-development.json": "e502b7dad574c9c4994a4f57bcbbf79db963d18b82d2d66adf32d82eb0d3f31f",
+    "typed-routing-angular-first-use.json": "659141ff56108f176bace15e737b32e1333c98ec2d4f39b54ea4393243f26152",
+    "typed-routing-angular/fit.json": "be5cd14c29fdfaadbc34c85887af7fc68ec226b3fd986715fa920431c84763a8",
+    "typed-routing-angular/model.json": "42d55b688395e955f1a62de0bfa2997a64764a3569deae5a25a3d61cd9e67ad8",
+    "typed-routing-case-angular/fit.json": "6b80b6b4d444a5404b035eec5c8eabec1fd9d595ecd1368347bf1ee9b6df5dcc",
+    "typed-routing-case-angular/model.json": "9f877725abf3ef8c02c882fdc2b9ee4fc405d256ad765730e3a43414ee608e77",
+    "typed-routing-case-construction.json": "ec6774457d4c450b42c796473c5e7aeb6716205c8cd272980438c526c6b8c117",
+    "typed-routing-case-design-selection.json": "21ffef3fe4e0d237f4e10d02e5082436a59305b450f1a834f07e48d385687532",
+    "typed-routing-case-development.json": "bec373177c808c0ad6ab37fa817e16799326ff8105140f80f6411515eac83d47",
+    "typed-routing-case-equality-first-use.json": "5d99c6d74c231841e1baac7298060edc249855996d5682a11ba94e3c93cd4468",
+    "typed-routing-case-equality/fit.json": "e8599e8c1615aef64ec7eec8f529203b6f9b3bbbb5ff99cf6ee7290f6dbad55f",
+    "typed-routing-case-equality/model.json": "f08c0e7da0749270c607833c407182f859a0e2a82b95a07d82cc0c76fc67ac35",
+    "typed-routing-case-exposed.json": "a945e11fcdb02fa79c42d0c691933d00b446255f953be38bb6abc66c32366cd6",
+    "typed-routing-case-first-use.json": "7a82d19270bb2aed4d751381cc886fa931170c0affc132f7e890cf9718fccb68",
+    "typed-routing-case-long.json": "0804d3fae47ccd16bf76fc8c944b08af196cbc1edad646f5b30cc409e92f90e0",
+    "typed-routing-case-preservation/development.json": "4ba0a1aad73b37876adfddb91876df773e3008df9d5bc268b44c77ea6db0205d",
+    "typed-routing-case-preservation/exposed-names.json": "ce7d527bfe9387c23ef026dc8b6488490ac04a7b6488c447dd532810762efe42",
+    "typed-routing-case-preservation/preservation.json": "68f39dccbebf393798922b9214fb4e84efe91f57a56ec7e21ed058bd2367674e",
+    "typed-routing-case-preservation/prior.json": "c701064244c0d04ef6f2763cea3365748d213883a30edb3c99edc69511d57a42",
+    "typed-routing-case-preservation/sessions.json": "8619a9f1856451831518145742cdc8967d96c6c5bdd4e4124907c2d57c37a9dc",
+    "typed-routing-case-removal.json": "f9ab98ca61695c2a1ec3e3177a02dd745ad085e741d6e4dc5340bab9a7b7133c",
+    "typed-routing-case-source.json": "a2478621e8aa7d0ece07a678dc2508f33c5e76adfe4ed91826754386da0c2afe",
+    "typed-routing-design-selection.json": "b70abde5c5a4fae69a9af7241cc0b0265410f9d71e7174d06159cd4e44dd5691",
+    "typed-routing-equality-development.json": "64880b5a9df803fe08966a705e7ad543c109a5091a436be49e38095505796c8b",
+    "typed-routing-equality-first-use.json": "573467de832cf6e687cdc4bcec949330bcea043c8bcf705fae0031c6a7b3fa3b",
+    "typed-routing-equality/fit.json": "485502683e974e1802d2025d8a7df5006d5d887066fc939320e0dcdb0858b27d",
+    "typed-routing-equality/model.json": "42e576b7e9be3550f45db6146c96bf6e098900d7e4c57d60630274ece8f72e47",
+    "typed-routing-issue1139-before.json": "31a3ce8ec7d7fc65645989b7f24adcf561c2a6fd78fb58da8eef71eb08f150e0",
+    "typed-routing-issue1140-before.json": "1ab24c4f73d36f6215989bff071f84ba82caf654bd5fa1f15d076d74e9de667a",
+    "typed-routing-preservation/development.json": "c4cd68d613d398bd9559e4cd8cf8dc47adae89651c1efe2fc3b47a6ab73061b9",
+    "typed-routing-preservation/exposed-names.json": "b2d4c92ecf4dbab4bb85ed999f6c19997287db018a4d294211e84c5c65aaedb5",
+    "typed-routing-preservation/preservation.json": "f41b19f66e7317ae075b789e78288da428e308e1e7e907a6f11eb29bb56568ee",
+    "typed-routing-preservation/prior.json": "f3df293a2aafd972b23e6f9600f841f236b50d55e031e7053ab375b2760ce4ec",
+    "typed-routing-preservation/sessions.json": "804cf8c5b3c7e616c05a00570e3fcff1cc498fb03222efc160d0aec835e5c2dd",
+    "typed-routing-projection.json": "9b1126e28685b5fa96c747514cccbcad2a2c3965f9c30211655a72374e53aeec",
+    "typed-routing-removal.json": "cc2c21cdc47929b886183e6bd45a020c462c806386f8093e84fb2061ca97fd85",
+    "typed-routing-source.json": "e4bbb44e3a4d2430f14428dd47ae9412c3b334cc5716bfa501d694085bf95db4",
+    "typed-routing-storage-before.json": "cb22b08f50d346de0f7b91ac1665b9dc037db633ff3ae695798070420dde061e"
+  },
+  "boundaries": [
+    "No serving provider, LLM answer correction, dense transformer or matrix multiplication introduced. Offline labels only.",
+    "Exact Copy/Add operations pre-exist; learned geometric selection is new.",
+    "One derived-source eligibility gate, 16 query words, <=256 proposals, recency-based operand features. Multiple-intermediate role binding is unqualified.",
+    "Syntax, broad prose, general reasoning, frontier capability and laptop whole-model speed remain unqualified."
+  ],
+  "next": "Use two competing derived results and changed operand order to test and learn role-sensitive selection through this same path; retain causal provenance, held-out selection discipline and existing behavior."
+}
