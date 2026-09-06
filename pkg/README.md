@@ -39,8 +39,12 @@ now learns token placement, source selection and table-based transport on this
 path. Its dependent-read revision lets one selected value change the next
 query and trains a shared output decision. Both revisions fail useful generation
 and preservation; angular advantage is unestablished. The accepted artifact
-remains unchanged. The next change connects routing to existing exact retained
-sources and payload operators; adding more route depth is conditional on need.
+remains preserved. The subsequent [retained-source revision](docs/native_geometric_source_routing_1139.md)
+uses learned angular selection and exact byte copying, preserving 62 earlier
+responses and answering 24 earlier plus 24 changed-name cases correctly. Its
+matched exact-code control gets 10/24 changed-name cases. This is bounded source
+selection, with no whole-model speedup or broad language claim. The next step
+connects a selected exact entity to a dependent relation read.
 
 ```sh
 cargo build --release --bin r4
