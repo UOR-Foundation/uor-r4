@@ -248,6 +248,7 @@ fn native_writer_cue_identity_is_exact_and_does_not_change_reader_addresses() {
         training: vec![],
         epochs: 1,
         reuse_admission: false,
+        admission: None,
     });
     let words = [
         atom("Now", 0),

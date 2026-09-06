@@ -183,11 +183,13 @@ now follows a geometrically selected exact relation into a second owner lookup:
 The [writer repair](../native_geometric_writer_binding_1139.md) now gets 48/48
 answers and exact writes, preserves the earlier response, transfer, long-context
 and persistent-session results, and passes 28/28 replacement reserved-name
-cases. Its cue namespace invalidates effective reuse of the old exact NoWrite
-cache, increasing long-context writer row comparisons from 580,944 to
-226,101,330. Recompile that existing bounded admission metadata against the
-frozen new writer before expanding learned read/operator/derived-write
-composition. Follow current-state.md for artifacts and complete limits.
+cases. The subsequent [NoWrite repair](../native_geometric_writer_admission_1139.md)
+keeps that writer fixed and reduces long-context writer row comparisons from
+226,101,330 to 539,448, preserving all measured answers and writes. The immediate
+next build returns to learned operator/operand admission before execution,
+committed derived values and their use in a subsequent decision. No additional
+cache campaign is active. Follow current-state.md for artifacts and the nearly
+exhausted cumulative model allowance; a new issue does not reset it.
 The full handoff remains unmet.
 
 #### Immediate recurrent attention revision — owner adoption 2026-09-05

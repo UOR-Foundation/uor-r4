@@ -1,6 +1,36 @@
 # Current native geometric AI work
 
-## Learned writer binding — #1139, 2026-09-06
+## Corrected-writer NoWrite reuse — #1139, 2026-09-06
+
+**Retain `2600b95b`; the NoWrite compute regression is repaired.** The
+[record](../native_geometric_writer_admission_1139.md) and
+[evidence](../evidence/native_geometric_writer_admission_1139.json) bind scope.
+The unchanged `8dbf1367` writer now uses its own exact cache. Compilation retains
+140 observed certified negatives plus one independently certified phase of an
+exactly periodic construction window, within a fixed 256-entry bound. No writer,
+reader, tokenizer or payload/version parameter is refit.
+
+On the same 28 long-context prompts, exact skips are **21,799/21,907** and writer
+row comparisons fall **226,101,330 → 539,448**. Complete answers, writes, token
+IDs, geometric state and copy/entry traces are unchanged. All **48/48** dependent,
+**62/62** prior, **24/24** transfer, **28/28** exposed-name, **28/28** long-context
+and **5/5** persistent-session checks pass. Four unchanged generated Rust
+functions recompile and pass twelve assertions; eight focused tests pass.
+The initial 64-entry and 140-entry partial repairs remain preserved. The
+140-entry allocation census is zero with identical serving code; a dedicated
+final-artifact allocation rerun and final CLI invocation are NOT_RUN.
+
+**Immediate next: selected typed operator execution and derived-value use.**
+Reuse existing exact operators, learn admission/operand choice before execution,
+commit one derived value, and use it in a subsequent decision. Further cache
+tuning is secondary. This repair establishes exact reuse, not new geometric
+semantic advantage, general language or frontier capability. Full #1139/#1140
+handoffs remain unmet. Cumulative model use is **1796.744/1800 seconds**; only
+**3.256 seconds** remain. Prepare the complete next build/fit/evaluation
+projection and obtain only any genuinely missing cumulative-budget allowance.
+Necessary incremental storage remains preauthorized; all material is preserved.
+
+## Learned writer binding — previous checkpoint, #1139, 2026-09-06
 
 **Retain `8dbf1367` as a functional development improvement; preserve `8070c006`
 as the reader/cost comparator.** The [writer record](../native_geometric_writer_binding_1139.md)
@@ -19,14 +49,11 @@ free. The broader owner-of-box question still returns Unknown. Three earlier
 attempts and an accidentally opened evaluation set are preserved as development
 evidence, not relabeled as final qualification.
 
-**Immediate next: restore exact NoWrite reuse for this writer.** Its new cue
-namespace makes all 21,907 long-context admission queries fall through. Writer
-row comparisons rise from 580,944 to 226,101,330 despite correct equal writes and
-answers. Recompile the existing bounded admission metadata against the frozen
-new writer; preserve exact safety guards and measure restored avoided work.
-Only then expand learned read/operator/derived-write composition. This is a
-functional checkpoint with a measured compute regression, not a serving-speed
-or frontier-capability promotion. Full #1139/#1140 handoffs remain unmet.
+**Historical successor, now executed above:** restore exact NoWrite reuse.
+At this checkpoint the new cue namespace made all 21,907 long-context admission
+queries fall through, raising writer row comparisons from 580,944 to
+226,101,330. The later cache repair preserves the functional improvement and
+removes that regression; this earlier measurement remains valid for `8dbf1367`.
 
 ## Geometric dependent source read — #1139, 2026-09-06
 

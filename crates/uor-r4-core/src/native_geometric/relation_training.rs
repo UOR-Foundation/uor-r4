@@ -308,6 +308,7 @@ impl Model {
                 training: Vec::new(),
                 epochs,
                 reuse_admission: false,
+                admission: None,
             });
         }
         let role_context = if let Some(writer) = &template.relation_writer {
@@ -557,6 +558,9 @@ pub(super) struct WriterRevision {
     pub training: Vec<DocumentReceipt>,
     pub epochs: usize,
     pub reuse_admission: bool,
+    /// Exact NoWrite metadata compiled in this writer's cue namespace.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub admission: Option<super::relation_admission::Admission>,
 }
 
 fn writer_dictionary(
@@ -670,6 +674,9 @@ impl WriterRevision {
             return Err(Error(
                 "writer cue geometry or NoWrite compatibility differs".into(),
             ));
+        }
+        if let Some(gate) = &self.admission {
+            gate.validate(model)?;
         }
         Ok(())
     }

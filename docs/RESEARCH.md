@@ -1,6 +1,20 @@
 # Research: what is measured, what is closed, what is open
 
-## Writer binding — current checkpoint, 2026-09-06
+## NoWrite reuse — current checkpoint, 2026-09-06
+
+The [corrected-writer cache](native_geometric_writer_admission_1139.md) retains
+`2600b95b`. All learned parameters remain fixed; construction contributes 140
+certified NoWrite signatures and one exactly certified periodic phase. On the
+same 28 long-context prompts, skips are 21,799/21,907 and writer row comparisons
+fall 226,101,330 → 539,448, with identical text, tokens, state and copy/entry
+traces. All 48 dependent, 62 earlier, 24 transfer, 28 exposed-name, 28 long-context
+and five session checks pass. The record preserves both partial repairs and
+separates the 140-entry allocation check from the final artifact's NOT_RUN
+allocation/CLI reruns. This qualifies exact reuse, not general geometric
+semantic advantage. Next: selected typed operator execution and derived-value
+use, subject to the remaining cumulative allowance in current-state.md.
+
+## Writer binding — previous checkpoint, 2026-09-06
 
 The [writer repair](native_geometric_writer_binding_1139.md) retains `8dbf1367`
 as a functional development artifact, preserving `8070c006` as the reader/cost
@@ -13,8 +27,7 @@ remain unchanged. The broader owner-of-box question still returns Unknown.
 
 This is not an efficiency promotion: old NoWrite signatures no longer hit the
 new cue namespace. Long-context writer row comparisons rise from 580,944 to
-226,101,330. Recompile existing bounded exact admission metadata for the new
-writer before expanding composition. Earlier failures and the accidentally
+226,101,330. That successor is now completed in the cache repair above. Earlier failures and the accidentally
 opened first reserve remain explicitly OPEN evidence. The record and
 [current state](integration/current-state.md) preserve full limits and costs.
 

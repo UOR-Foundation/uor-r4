@@ -578,6 +578,11 @@ pub(super) fn verify(args: &[String]) -> ProbeResult<()> {
         return Err("verify-relations MODEL NEW_REPORT".into());
     }
     let model = Model::from_bytes(&fs::read(&args[0])?)?;
+    verify_model(model, Path::new(&args[1]))
+}
+
+// Reuse a validated artifact in combined preservation runs.
+pub(super) fn verify_model(model: Model, report_path: &Path) -> ProbeResult<()> {
     let mut live = model.session(Control::Full)?;
     live.observe(&model, 0)?;
     let padding = "quiet sky. ".repeat(96);
@@ -615,10 +620,10 @@ pub(super) fn verify(args: &[String]) -> ProbeResult<()> {
         .count();
     let exact = rows.iter().filter(|r| r["exact"] == true).count();
     let report = json!({"schema":"uor-r4.relation-session-check/1","artifact":model.artifact_cid(),"turns":rows,"exact_turns":exact,"total_turns":5,"isolated_response":isolated_text,"isolated_restore_work":isolated_restore_work,"isolated_no_shared_records":isolated_text==" Unknown.\n","preserved_versions":preserved_old_values,"retained_relation_state":history,"restore_and_forged_commit_checks":"PASS","complete_work":live.work,"scope":"One native session reads, revises, retains an unrelated association, records a contradiction, and re-reads the unrelated association after repeated raw-window eviction. Restore is checked after actual first-token commitment; a new session has no shared relation state. Snapshot consistency is not source authentication."});
-    write_json(Path::new(&args[1]), &report)?;
+    write_json(report_path, &report)?;
     println!(
         "{}",
-        json!({"exact_turns":exact,"total_turns":5,"isolated":isolated_text,"report":args[1]})
+        json!({"exact_turns":exact,"total_turns":5,"isolated":isolated_text,"report":report_path})
     );
     Ok(())
 }
