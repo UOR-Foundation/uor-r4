@@ -174,6 +174,7 @@ impl Trainer {
         let (lexical_pieces, receipts) = build_codec(&config, construction)?;
         let token_count = LEXICAL_BASE as usize + lexical_pieces.len();
         let mut template = Model {
+            relation_writer: None,
             dependent_read: None,
             source_routing: None,
             learned_routing: None,
@@ -509,6 +510,24 @@ impl Model {
     }
     pub(super) fn validate(&self) -> Result<()> {
         self.config.validate()?;
+        if let Some(writer) = &self.relation_writer {
+            let mut parent = self.clone();
+            parent.relation_writer = None;
+            parent.refresh_identity()?;
+            if parent.artifact_cid != writer.parent {
+                return Err(Error("writer revision parent differs".into()));
+            }
+            parent.validate()?;
+            writer.validate(self)?;
+            let mut duplicate = self.clone();
+            duplicate.refresh_identity()?;
+            if duplicate.artifact_cid != self.artifact_cid
+                || duplicate.uor_model_address != self.uor_model_address
+            {
+                return Err(Error("writer revision identity differs".into()));
+            }
+            return Ok(());
+        }
         if let Some(block) = &self.dependent_read {
             let mut parent = self.clone();
             parent.dependent_read = None;

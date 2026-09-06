@@ -147,13 +147,33 @@ pub(super) fn source_version(values: &ValueState, index: u8) -> Option<u64> {
 
 // NATIVE_GEOMETRIC_INTEGER_KERNEL_BEGIN
 pub(super) fn addresses(model: &Model, words: &[WordAtom], work: &mut ValueWork) -> [u32; 16] {
-    let mut out = [0; 16];
     let Some(read) = super::role_read::head(model) else {
-        return out;
+        return [0; 16];
     };
+    dictionary_addresses(&read.dictionary, words, work)
+}
+
+pub(super) fn writer_addresses(
+    model: &Model,
+    words: &[WordAtom],
+    work: &mut ValueWork,
+) -> [u32; 16] {
+    if let Some(writer) = &model.relation_writer {
+        dictionary_addresses(&writer.dictionary, words, work)
+    } else {
+        addresses(model, words, work)
+    }
+}
+
+fn dictionary_addresses(
+    dictionary: &[super::word_copy_types::WordCopyAddress],
+    words: &[WordAtom],
+    work: &mut ValueWork,
+) -> [u32; 16] {
+    let mut out = [0; 16];
     for (i, w) in words.iter().take(16).enumerate() {
         work.relations.record_reads = work.relations.record_reads.saturating_add(1);
-        let found = read.dictionary.binary_search_by(|d| {
+        let found = dictionary.binary_search_by(|d| {
             work.relations.dictionary_comparisons =
                 work.relations.dictionary_comparisons.saturating_add(1);
             for j in 0..usize::from(w.len.min(d.len)) {
@@ -166,7 +186,7 @@ pub(super) fn addresses(model: &Model, words: &[WordAtom], work: &mut ValueWork)
             }
             d.len.cmp(&w.len)
         });
-        out[i] = found.map_or(0, |j| read.dictionary[j].prime);
+        out[i] = found.map_or(0, |j| dictionary[j].prime);
     }
     out
 }
@@ -179,9 +199,15 @@ pub(super) fn write_features(
     value: usize,
     work: &mut ValueWork,
 ) -> ([ValueFeature; RELATION_FEATURES], usize) {
-    let context = head(model)
-        .filter(|h| h.schema == "uor-r4.exact-relation/2")
-        .map(|h| h.role_context.as_slice());
+    let context = model
+        .relation_writer
+        .as_ref()
+        .map(|w| w.role_context.as_slice())
+        .or_else(|| {
+            head(model)
+                .filter(|h| h.schema == "uor-r4.exact-relation/2")
+                .map(|h| h.role_context.as_slice())
+        });
     write_features_with_context(model, words, addr, owner, value, context, work)
 }
 
@@ -323,10 +349,14 @@ pub(super) fn write_choice(
 ) -> Option<(usize, usize, u8)> {
     let h = head(model)?;
     let words = &words[..words.len().min(8)];
-    let addr = addresses(model, words, work);
-    if h.admission
+    let addr = writer_addresses(model, words, work);
+    if model
+        .relation_writer
         .as_ref()
-        .is_some_and(|gate| super::relation_admission::skip(model, gate, words.len(), &addr, work))
+        .is_none_or(|w| w.reuse_admission)
+        && h.admission.as_ref().is_some_and(|gate| {
+            super::relation_admission::skip(model, gate, words.len(), &addr, work)
+        })
     {
         return None;
     }
@@ -349,7 +379,11 @@ pub(super) fn write_choice_from_addresses(
             }
             let (f, n) = write_features(model, words, addr, owner, value, work);
             for action in 1..=3 {
-                let s = score(&h.writer, &f[..n], action, work);
+                let rows = model
+                    .relation_writer
+                    .as_ref()
+                    .map_or(h.writer.as_slice(), |w| w.rows.as_slice());
+                let s = score(rows, &f[..n], action, work);
                 work.relations.candidates = work.relations.candidates.saturating_add(1);
                 if s > best_score {
                     best_score = s;

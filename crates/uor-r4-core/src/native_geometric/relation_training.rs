@@ -115,7 +115,7 @@ fn writer_frame(
 ) -> Result<Frame> {
     let words = &words.recent[..words.recent_len.min(8)];
     let mut work = ValueWork::default();
-    let addr = addresses(model, words, &mut work);
+    let addr = writer_addresses(model, words, &mut work);
     let mut alternatives = vec![Alternative {
         keys: Vec::new(),
         correct: label.is_none(),
@@ -212,8 +212,15 @@ impl RelationModel {
 fn compile_role_context(model: &Model) -> Result<Vec<TokenGeometry>> {
     let role = super::role_read::head(model)
         .ok_or_else(|| Error("relation role parent missing".into()))?;
-    let mut rows = Vec::with_capacity(role.dictionary.len());
-    for word in &role.dictionary {
+    compile_context(model, &role.dictionary)
+}
+
+fn compile_context(
+    model: &Model,
+    dictionary: &[super::word_copy_types::WordCopyAddress],
+) -> Result<Vec<TokenGeometry>> {
+    let mut rows = Vec::with_capacity(dictionary.len());
+    for word in dictionary {
         let text = std::str::from_utf8(&word.bytes[..usize::from(word.len)])
             .map_err(|e| Error(e.to_string()))?;
         let mut row = TokenGeometry {
@@ -244,7 +251,7 @@ impl Model {
         documents: &[RelationExample],
         epochs: usize,
     ) -> Result<(Model, serde_json::Value)> {
-        self.fit_relations_mode(documents, epochs, false)
+        self.fit_relations_mode(documents, epochs, false, false)
     }
 
     /// Learn participant-independent role context while preserving exact values.
@@ -253,7 +260,16 @@ impl Model {
         documents: &[RelationExample],
         epochs: usize,
     ) -> Result<(Model, serde_json::Value)> {
-        self.fit_relations_mode(documents, epochs, true)
+        self.fit_relations_mode(documents, epochs, true, false)
+    }
+
+    /// Replace only the writer; all reader/operator parameters remain frozen.
+    pub fn refit_relation_writer(
+        &self,
+        documents: &[RelationExample],
+        epochs: usize,
+    ) -> Result<(Model, serde_json::Value)> {
+        self.fit_relations_mode(documents, epochs, true, true)
     }
 
     fn fit_relations_mode(
@@ -261,9 +277,12 @@ impl Model {
         documents: &[RelationExample],
         epochs: usize,
         role_paths: bool,
+        writer_only: bool,
     ) -> Result<(Model, serde_json::Value)> {
         self.validate()?;
-        if head(self).is_some()
+        if self.relation_writer.is_some()
+            || (writer_only && head(self).is_none_or(|h| h.schema != "uor-r4.exact-relation/2"))
+            || (!writer_only && head(self).is_some())
             || super::role_read::head(self).is_none()
             || documents.is_empty()
             || documents.len() > 256
@@ -276,7 +295,24 @@ impl Model {
         {
             return Err(Error("invalid relation fitting source/config".into()));
         }
-        let role_context = if role_paths {
+        let mut template = self.clone();
+        if writer_only {
+            let dictionary = writer_dictionary(self, documents)?;
+            let role_context = compile_context(self, &dictionary)?;
+            template.relation_writer = Some(WriterRevision {
+                schema: "uor-r4.relation-writer/1".into(),
+                parent: self.artifact_cid.clone(),
+                dictionary,
+                role_context,
+                rows: Vec::new(),
+                training: Vec::new(),
+                epochs,
+                reuse_admission: false,
+            });
+        }
+        let role_context = if let Some(writer) = &template.relation_writer {
+            writer.role_context.clone()
+        } else if role_paths {
             compile_role_context(self)?
         } else {
             Vec::new()
@@ -356,7 +392,7 @@ impl Model {
                         return Err(Error("multiple labels at one relation boundary".into()));
                     }
                     let label = labels.first().map(|(_, l)| *l);
-                    frames.insert(writer_frame(self, &words, label, context)?);
+                    frames.insert(writer_frame(&template, &words, label, context)?);
                     if let Some((i, l)) = labels.first() {
                         consumed.insert(*i);
                         let o = words
@@ -391,6 +427,30 @@ impl Model {
             return Err(Error("relation frame bound exceeded".into()));
         }
         let (writer, write_correct) = fit(&frames, epochs)?;
+        if writer_only {
+            let writer_head = template
+                .relation_writer
+                .as_mut()
+                .ok_or_else(|| Error("writer absent".into()))?;
+            writer_head.rows = writer;
+            writer_head.training = receipts;
+            let reuse = head(&template)
+                .and_then(|h| h.admission.as_ref())
+                .is_some_and(|g| g.compatible_writer(&template));
+            template
+                .relation_writer
+                .as_mut()
+                .ok_or_else(|| Error("writer absent".into()))?
+                .reuse_admission = reuse;
+            template.refresh_identity()?;
+            template.validate()?;
+            let h = template
+                .relation_writer
+                .as_ref()
+                .ok_or_else(|| Error("writer absent".into()))?;
+            let report = serde_json::json!({"schema":"uor-r4.writer-refit/1", "parent":self.artifact_cid(), "artifact":template.artifact_cid(), "documents":documents.len(), "writer_frames":frames.len(), "writer_correct":write_correct, "writer_rows":h.rows.len(), "dictionary":h.dictionary.len(), "epochs":epochs, "reuse_admission":reuse, "reader_parameters_unchanged":self.dependent_read==template.dependent_read && self.source_routing==template.source_routing && self.response_entry==template.response_entry});
+            return Ok((template, report));
+        }
         let mut reads = Vec::new();
         for (values, d) in &examples {
             let words = values
@@ -481,5 +541,136 @@ impl Model {
         report["operator_schema"] = serde_json::json!(h.schema);
         report["role_context_rows"] = serde_json::json!(h.role_context.len());
         Ok((model, report))
+    }
+}
+
+/// A replacement writer, with the complete previous model retained for lineage.
+/// Serving executes only this writer's rows, never both writer scorers.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct WriterRevision {
+    pub schema: String,
+    pub parent: String,
+    pub dictionary: Vec<super::word_copy_types::WordCopyAddress>,
+    pub role_context: Vec<TokenGeometry>,
+    pub rows: Vec<ValueRow>,
+    pub training: Vec<DocumentReceipt>,
+    pub epochs: usize,
+    pub reuse_admission: bool,
+}
+
+fn writer_dictionary(
+    _model: &Model,
+    documents: &[RelationExample],
+) -> Result<Vec<super::word_copy_types::WordCopyAddress>> {
+    let examples: Vec<_> = documents
+        .iter()
+        .map(|d| ValueExample {
+            id: d.id.clone(),
+            prompt: d.prompt.clone(),
+            response: d.response.clone(),
+        })
+        .collect();
+    let (words, omitted, _) = super::word_copy_training::dictionary(&examples)?;
+    if omitted != 0 {
+        return Err(Error(
+            "writer cue dictionary would omit construction words".into(),
+        ));
+    }
+    // Supervised payload identities must not become new contextual cues.
+    // They remain exact bytes in the relation records, including unseen names.
+    let mut payloads = BTreeSet::new();
+    for d in documents {
+        for label in &d.writes {
+            for end in [label.owner_end_byte, label.value_end_byte] {
+                let end = usize::try_from(end).map_err(|e| Error(e.to_string()))?;
+                let prefix = d
+                    .prompt
+                    .as_bytes()
+                    .get(..=end)
+                    .ok_or_else(|| Error("writer label outside prompt".into()))?;
+                let start = prefix
+                    .iter()
+                    .rposition(|b| !b.is_ascii_alphanumeric() && *b != b'_')
+                    .map_or(0, |i| i + 1);
+                payloads.insert(prefix[start..].to_vec());
+            }
+        }
+    }
+    // This vocabulary belongs to the writer. Inherited reader names must not
+    // acquire a different write role merely because they were seen elsewhere.
+    let mut dictionary = Vec::new();
+    let primes = crate::corpus_induced_spin_placement::first_primes(256)
+        .map_err(|e| Error(e.to_string()))?;
+    for mut word in words {
+        if payloads.contains(&word.bytes[..usize::from(word.len)]) {
+            continue;
+        }
+        if dictionary.len() >= 256 {
+            return Err(Error("writer cue dictionary bound exceeded".into()));
+        }
+        word.prime = primes[dictionary.len()] as u32;
+        dictionary.push(word);
+    }
+    dictionary.sort_by(|a, b| a.bytes[..usize::from(a.len)].cmp(&b.bytes[..usize::from(b.len)]));
+    Ok(dictionary)
+}
+
+impl WriterRevision {
+    pub(super) fn validate(&self, model: &Model) -> Result<()> {
+        let valid_word = |d: &super::word_copy_types::WordCopyAddress| {
+            d.len > 0
+                && d.len <= 32
+                && d.bytes[..usize::from(d.len)]
+                    .iter()
+                    .all(|b| b.is_ascii_alphanumeric() || *b == b'_')
+                && d.bytes[usize::from(d.len)..].iter().all(|b| *b == 0)
+        };
+        if self.schema != "uor-r4.relation-writer/1"
+            || !(1..=64).contains(&self.epochs)
+            || self.dictionary.is_empty()
+            || self.dictionary.len() > 256
+            || self.dictionary.iter().any(|d| !valid_word(d))
+            || !self
+                .dictionary
+                .windows(2)
+                .all(|p| p[0].bytes[..usize::from(p[0].len)] < p[1].bytes[..usize::from(p[1].len)])
+            || self.rows.is_empty()
+            || self.rows.len() > RELATION_ROWS
+            || !self.rows.windows(2).all(|p| p[0].feature < p[1].feature)
+            || self.rows.iter().any(|r| {
+                !(-1000000..=1000000).contains(&r.weight)
+                    || (r.feature.kind & 31) >= 20
+                    || !(1..=3).contains(&(r.feature.kind >> 5))
+            })
+            || self.training.is_empty()
+            || self.training.len() > 256
+            || self.training.iter().any(|d| d.id.is_empty())
+            || self
+                .training
+                .iter()
+                .map(|d| &d.id)
+                .collect::<BTreeSet<_>>()
+                .len()
+                != self.training.len()
+        {
+            return Err(Error("invalid writer revision bounds or rows".into()));
+        }
+        let mut assigned: Vec<_> = self.dictionary.iter().map(|d| u64::from(d.prime)).collect();
+        assigned.sort_unstable();
+        if assigned
+            != crate::corpus_induced_spin_placement::first_primes(self.dictionary.len())
+                .map_err(|e| Error(e.to_string()))?
+            || self.role_context != compile_context(model, &self.dictionary)?
+            || (self.reuse_admission
+                && head(model)
+                    .and_then(|h| h.admission.as_ref())
+                    .is_none_or(|g| !g.compatible_writer(model)))
+        {
+            return Err(Error(
+                "writer cue geometry or NoWrite compatibility differs".into(),
+            ));
+        }
+        Ok(())
     }
 }

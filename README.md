@@ -47,8 +47,12 @@ selection, with no whole-model speedup or broad language claim. The subsequent
 [dependent-source read](docs/native_geometric_dependent_source_1139.md) learns
 which exact relation to follow and copies its final value: 40/48 authored new
 answers versus 32/48 exact-code and 20/48 parent, preserving 62/62 earlier answers
-and 24/24 transfer. Eight revision-ingestion failures remain; the next change
-repairs the existing writer's owner binding and NoWrite on question text.
+and 24/24 transfer. The subsequent [writer repair](docs/native_geometric_writer_binding_1139.md)
+reaches 48/48 answers and exact writes, preserves those earlier results plus
+28 long-context cases and five persistent turns, and gets 28/28 reserved-name
+answers/writes after selection. Its new cue namespace loses effective NoWrite
+cache reuse, sharply increasing writer scoring work. The next step recompiles
+that existing admission metadata before expanding operator composition.
 
 ```sh
 cargo build --release --bin r4

@@ -1,6 +1,24 @@
 # Research: what is measured, what is closed, what is open
 
-## Dependent source result — current checkpoint, 2026-09-06
+## Writer binding — current checkpoint, 2026-09-06
+
+The [writer repair](native_geometric_writer_binding_1139.md) retains `8dbf1367`
+as a functional development artifact, preserving `8070c006` as the reader/cost
+comparator. It gets 48/48 dependent answers and exact writes, preserves 62/62
+earlier answers, 24/24 transfer, 28/28 long-context answers/writes and 5/5
+persistent turns, and passes 28/28 replacement reserved-name cases after design
+selection. The writer learns sparse integer weights over 23 construction cues
+and existing signed-H4/zeta context, while exact payloads and reader parameters
+remain unchanged. The broader owner-of-box question still returns Unknown.
+
+This is not an efficiency promotion: old NoWrite signatures no longer hit the
+new cue namespace. Long-context writer row comparisons rise from 580,944 to
+226,101,330. Recompile existing bounded exact admission metadata for the new
+writer before expanding composition. Earlier failures and the accidentally
+opened first reserve remain explicitly OPEN evidence. The record and
+[current state](integration/current-state.md) preserve full limits and costs.
+
+## Dependent source result — previous checkpoint, 2026-09-06
 
 The [native dependent-source read](native_geometric_dependent_source_1139.md)
 connects a learned H4 first-source/operator choice to one exact dependent owner
@@ -15,7 +33,7 @@ turns; its actual dependent copy path measures zero allocations.
 This is authored OPEN evidence, not general composition or frontier
 qualification. The eight remaining development failures expose revision-owner
 binding in the unchanged writer; spurious writes from question text are also
-observed. Repair that writer while preserving this reader. Full artifacts,
+observed. That writer repair is now recorded above. Full artifacts,
 controls, checks and resource limits are in the record and
 [current state](integration/current-state.md).
 

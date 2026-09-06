@@ -1,5 +1,33 @@
 # Current native geometric AI work
 
+## Learned writer binding — #1139, 2026-09-06
+
+**Retain `8dbf1367` as a functional development improvement; preserve `8070c006`
+as the reader/cost comparator.** The [writer record](../native_geometric_writer_binding_1139.md)
+and [evidence](../evidence/native_geometric_writer_binding_1139.json) bind the scope.
+A construction-only cue vocabulary and the existing sparse integer writer
+learner now select exact owner/value/action writes without importing payload
+spelling as a cue. Tokenization, reader parameters, exact records, version
+semantics and copying remain fixed; no runtime matrix operation is added.
+
+The final continuation artifact gets **48/48** dependent answers and exact writes,
+**62/62** earlier answers, **24/24** transfer, **28/28** long-context answers/writes
+and **5/5** persistent-session turns. A replacement reserved-name set gets
+**28/28** answers/writes after selection. Four unchanged generated Rust functions
+compile and pass 12 semantic assertions; actual-artifact copying is allocation
+free. The broader owner-of-box question still returns Unknown. Three earlier
+attempts and an accidentally opened evaluation set are preserved as development
+evidence, not relabeled as final qualification.
+
+**Immediate next: restore exact NoWrite reuse for this writer.** Its new cue
+namespace makes all 21,907 long-context admission queries fall through. Writer
+row comparisons rise from 580,944 to 226,101,330 despite correct equal writes and
+answers. Recompile the existing bounded admission metadata against the frozen
+new writer; preserve exact safety guards and measure restored avoided work.
+Only then expand learned read/operator/derived-write composition. This is a
+functional checkpoint with a measured compute regression, not a serving-speed
+or frontier-capability promotion. Full #1139/#1140 handoffs remain unmet.
+
 ## Geometric dependent source read — #1139, 2026-09-06
 
 **Retain angular `8070c006` for the next development step, with `55e602a0`
@@ -34,7 +62,7 @@ payloads. The first attempt and its corrected unreachable-target accounting
 remain separately preserved. No sealed general-language, broader operator,
 frontier capability or whole-model speedup is established.
 
-**Next within #1139:** repair learned revision-owner binding and NoWrite on
+**Historical successor, now executed above:** repair learned revision-owner binding and NoWrite on
 question text in the current writer. Preserve the new dependent reader, exact
 identity/version semantics and previous one-read behavior. Use the observed
 revision failures and a small fresh-name check before expanding depth or corpus.
