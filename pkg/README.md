@@ -50,9 +50,12 @@ answers versus 32/48 exact-code and 20/48 parent, preserving 62/62 earlier answe
 and 24/24 transfer. The subsequent [writer repair](docs/native_geometric_writer_binding_1139.md)
 reaches 48/48 answers and exact writes, preserves those earlier results plus
 28 long-context cases and five persistent turns, and gets 28/28 reserved-name
-answers/writes after selection. Its new cue namespace loses effective NoWrite
-cache reuse, sharply increasing writer scoring work. The next step recompiles
-that existing admission metadata before expanding operator composition.
+answers/writes after selection. Its NoWrite regression is now
+[repaired](docs/native_geometric_writer_admission_1139.md): exact skips are
+21,799/21,907 and writer row comparisons fall from 226,101,330 to 539,448 on the
+same long-context prompts, with unchanged answers, writes and learned parameters.
+The next step is learned admission of typed operators and use of committed
+derived values. This exact-cache result is not broad language qualification.
 
 ```sh
 cargo build --release --bin r4
