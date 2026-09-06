@@ -270,6 +270,10 @@ fn native_kernel_source_has_no_forbidden_arithmetic_or_float_types() {
             "native recurrent routing output",
             include_str!("../src/native_geometric/recurrent_routing.rs"),
         ),
+        (
+            "native retained-source routing",
+            include_str!("../src/native_geometric/source_routing.rs"),
+        ),
         ("native completion seed", seed),
         ("native numeral codec", numeral),
         ("native whole-word codec", lexemes),
@@ -1057,4 +1061,67 @@ fn native_observe_predict_stays_allocation_free_through_evictions() {
         }
     }
     assert_eq!(measured_decisions, 8 * 10 * 1024);
+}
+
+#[test]
+fn source_routing_observe_select_and_copy_are_allocation_free() {
+    use uor_r4_core::native_geometric::SourceRoutingConfig;
+    let docs = [
+        ValueExample {
+            id: "source-allocation-copy".into(),
+            prompt: "holder in alpha. Where is holder? Answer:".into(),
+            response: " alpha.\n".into(),
+        },
+        ValueExample {
+            id: "source-allocation-none".into(),
+            prompt: "alpha in city. Where is missing? Answer:".into(),
+            response: " Unknown.\n".into(),
+        },
+    ];
+    let (parent, _) = copy_fixture::fitted_composed()
+        .fit_role_read(
+            &docs,
+            ResponseEntryFitConfig {
+                epochs: 8,
+                ..ResponseEntryFitConfig::default()
+            },
+        )
+        .unwrap();
+    let (model, _) = parent
+        .fit_source_routing(
+            &docs,
+            SourceRoutingConfig {
+                learned_features: 8,
+                passes: 1,
+                proposals: 2,
+                role_context_only: true,
+                ..SourceRoutingConfig::default()
+            },
+        )
+        .unwrap();
+    let tokens = model.encode(&docs[0].prompt).unwrap();
+    let mut s = model.session(Control::Full).unwrap();
+    ALLOCATIONS.with(|n| n.set(0));
+    BYTES.with(|n| n.set(0));
+    MEASURING.with(|n| n.set(true));
+    let result = (|| {
+        s.observe(&model, BOS)?;
+        for &t in &tokens {
+            s.observe(&model, t)?;
+        }
+        s.begin_response(&model)?;
+        for _ in 0..24 {
+            let p = s.predict(&model)?;
+            s.observe(&model, p.token)?;
+            if p.token == EOS {
+                break;
+            }
+        }
+        Ok::<_, uor_r4_core::native_geometric::Error>(())
+    })();
+    MEASURING.with(|n| n.set(false));
+    result.unwrap();
+    assert_eq!(ALLOCATIONS.with(Cell::get), 0);
+    assert_eq!(BYTES.with(Cell::get), 0);
+    assert!(s.work.word_copy.routing.predictions > 0);
 }

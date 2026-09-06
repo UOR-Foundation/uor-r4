@@ -1,0 +1,1165 @@
+{
+  "schema": "uor-r4.geometric-source-routing-evidence/1",
+  "decision": "RETAIN_ROLE_CONTEXT_ANGULAR_FOR_DEPENDENT_SOURCE_DEVELOPMENT",
+  "scope": "OPEN construction and reused/new-name known-grammar development. No sealed or broad language qualification; no whole-model speedup.",
+  "accepted_for_next_development": "blake3:55e602a026238f12c8e9026569c1d1e06239a83efa3ff0ca23b48d4e5242c001",
+  "frozen_comparator": "blake3:067adbf0a14d931d2ad98ca28a06a92aa1b963d0587183bf70b8085ffb7a4df6",
+  "fits": [
+    {
+      "attempt": "source-routing-comparison",
+      "accepted": [
+        47,
+        4,
+        5
+      ],
+      "artifact": "blake3:6b8695dd88e45f3553d7a6e3c57ade98142a50c24c4cce45713a5de4bd16912e",
+      "block_bytes": 68667,
+      "config": {
+        "learned_features": 64,
+        "max_seconds": 30,
+        "mode": "angular",
+        "passes": 2,
+        "proposals": 8,
+        "seed": 1139
+      },
+      "documents": 480,
+      "elapsed_ms": 3678,
+      "feature_universe": 1987,
+      "features": 64,
+      "final_correct": 319,
+      "final_hinge": 48,
+      "frames": 320,
+      "initial_correct": 0,
+      "initial_hinge": 600,
+      "parent": "blake3:067adbf0a14d931d2ad98ca28a06a92aa1b963d0587183bf70b8085ffb7a4df6",
+      "preserved_persistent_dispatch": 0,
+      "proposals": 3869,
+      "schema": "uor-r4.source-routing-fit/1",
+      "scope": "Source/action labels from supplied construction responses; accepted reader weights select feature vocabulary only. Ordered two-channel H4 composition and action landmarks learned with hard serving decisions. Persistent-reader dispatch and numeric eligibility are unchanged. Construction selection is not generation/transfer.",
+      "skipped_upstream": 160,
+      "stopped_at_time_limit": false,
+      "unreachable_targets": []
+    },
+    {
+      "attempt": "source-routing-comparison",
+      "accepted": [
+        30,
+        7,
+        1
+      ],
+      "artifact": "blake3:a11e771d315e5ff6fe10d3f4c5175587fe92180344e66718394346320c64daad",
+      "block_bytes": 68668,
+      "config": {
+        "learned_features": 64,
+        "max_seconds": 30,
+        "mode": "equality",
+        "passes": 2,
+        "proposals": 8,
+        "seed": 1139
+      },
+      "documents": 480,
+      "elapsed_ms": 3661,
+      "feature_universe": 1987,
+      "features": 64,
+      "final_correct": 191,
+      "final_hinge": 664,
+      "frames": 320,
+      "initial_correct": 0,
+      "initial_hinge": 320,
+      "parent": "blake3:067adbf0a14d931d2ad98ca28a06a92aa1b963d0587183bf70b8085ffb7a4df6",
+      "preserved_persistent_dispatch": 0,
+      "proposals": 3863,
+      "schema": "uor-r4.source-routing-fit/1",
+      "scope": "Source/action labels from supplied construction responses; accepted reader weights select feature vocabulary only. Ordered two-channel H4 composition and action landmarks learned with hard serving decisions. Persistent-reader dispatch and numeric eligibility are unchanged. Construction selection is not generation/transfer.",
+      "skipped_upstream": 160,
+      "stopped_at_time_limit": false,
+      "unreachable_targets": []
+    },
+    {
+      "attempt": "source-routing-role-comparison",
+      "accepted": [
+        22,
+        2,
+        7
+      ],
+      "artifact": "blake3:55e602a026238f12c8e9026569c1d1e06239a83efa3ff0ca23b48d4e5242c001",
+      "block_bytes": 68714,
+      "config": {
+        "learned_features": 64,
+        "max_seconds": 30,
+        "mode": "angular",
+        "passes": 2,
+        "proposals": 8,
+        "role_context_only": true,
+        "seed": 1139
+      },
+      "documents": 480,
+      "elapsed_ms": 3758,
+      "feature_universe": 1738,
+      "features": 64,
+      "final_correct": 320,
+      "final_hinge": 0,
+      "frames": 320,
+      "initial_correct": 0,
+      "initial_hinge": 600,
+      "parent": "blake3:067adbf0a14d931d2ad98ca28a06a92aa1b963d0587183bf70b8085ffb7a4df6",
+      "preserved_persistent_dispatch": 0,
+      "proposals": 3861,
+      "schema": "uor-r4.source-routing-fit/1",
+      "scope": "Source/action labels from supplied construction responses; accepted reader weights select feature vocabulary only. Ordered two-channel H4 composition and action landmarks learned with hard serving decisions. Persistent-reader dispatch and numeric eligibility are unchanged. Construction selection is not generation/transfer.",
+      "skipped_upstream": 160,
+      "stopped_at_time_limit": false,
+      "unreachable_targets": []
+    },
+    {
+      "attempt": "source-routing-role-comparison",
+      "accepted": [
+        6,
+        0,
+        1
+      ],
+      "artifact": "blake3:1b38e1a4cac211d896e10c5d670d6f4c58f180685b02857c556352bfc71df42e",
+      "block_bytes": 68719,
+      "config": {
+        "learned_features": 64,
+        "max_seconds": 30,
+        "mode": "equality",
+        "passes": 2,
+        "proposals": 8,
+        "role_context_only": true,
+        "seed": 1139
+      },
+      "documents": 480,
+      "elapsed_ms": 3697,
+      "feature_universe": 1738,
+      "features": 64,
+      "final_correct": 152,
+      "final_hinge": 428,
+      "frames": 320,
+      "initial_correct": 0,
+      "initial_hinge": 320,
+      "parent": "blake3:067adbf0a14d931d2ad98ca28a06a92aa1b963d0587183bf70b8085ffb7a4df6",
+      "preserved_persistent_dispatch": 0,
+      "proposals": 3844,
+      "schema": "uor-r4.source-routing-fit/1",
+      "scope": "Source/action labels from supplied construction responses; accepted reader weights select feature vocabulary only. Ordered two-channel H4 composition and action landmarks learned with hard serving decisions. Persistent-reader dispatch and numeric eligibility are unchanged. Construction selection is not generation/transfer.",
+      "skipped_upstream": 160,
+      "stopped_at_time_limit": false,
+      "unreachable_targets": []
+    }
+  ],
+  "populations": [
+    {
+      "attempt": "source-routing-comparison",
+      "name": "parent-preservation",
+      "exact": 62,
+      "total": 62,
+      "elapsed_ms": 74.320875,
+      "failure_count": 0,
+      "failure_examples": []
+    },
+    {
+      "attempt": "source-routing-comparison",
+      "name": "parent-prior",
+      "exact": 24,
+      "total": 24,
+      "elapsed_ms": 22.706332999999997,
+      "failure_count": 0,
+      "failure_examples": []
+    },
+    {
+      "attempt": "source-routing-comparison",
+      "name": "parent-fresh",
+      "exact": 24,
+      "total": 24,
+      "elapsed_ms": 22.815542,
+      "failure_count": 0,
+      "failure_examples": []
+    },
+    {
+      "attempt": "source-routing-comparison",
+      "name": "angular-preservation",
+      "exact": 61,
+      "total": 62,
+      "elapsed_ms": 73.167834,
+      "failure_count": 1,
+      "failure_examples": [
+        {
+          "id": "fact/fresh/1/2/0",
+          "expected": " Pune.\n",
+          "actual": "Pune.\n"
+        }
+      ]
+    },
+    {
+      "attempt": "source-routing-comparison",
+      "name": "angular-prior",
+      "exact": 21,
+      "total": 24,
+      "elapsed_ms": 22.214875,
+      "failure_count": 3,
+      "failure_examples": [
+        {
+          "id": "role-read/first-use/0/0/3",
+          "expected": " Talven.\n",
+          "actual": " Unknown.\n"
+        },
+        {
+          "id": "role-read/first-use/0/2/3",
+          "expected": " Talven.\n",
+          "actual": " Unknown.\n"
+        }
+      ]
+    },
+    {
+      "attempt": "source-routing-comparison",
+      "name": "angular-fresh",
+      "exact": 21,
+      "total": 24,
+      "elapsed_ms": 22.157584,
+      "failure_count": 3,
+      "failure_examples": [
+        {
+          "id": "source-routing/fresh/role-read/first-use/0/0/3",
+          "expected": " Talven.\n",
+          "actual": " Unknown.\n"
+        },
+        {
+          "id": "source-routing/fresh/role-read/first-use/0/2/3",
+          "expected": " Talven.\n",
+          "actual": " Unknown.\n"
+        }
+      ]
+    },
+    {
+      "attempt": "source-routing-comparison",
+      "name": "equality-preservation",
+      "exact": 46,
+      "total": 62,
+      "elapsed_ms": 89.30925,
+      "failure_count": 16,
+      "failure_examples": [
+        {
+          "id": "word-copy/development/context-0/name-1",
+          "expected": "count\n}\n",
+          "actual": "i32\n}\n"
+        },
+        {
+          "id": "word-copy/development/context-1/name-4",
+          "expected": "amount\n}\n",
+          "actual": "i32\n}\n"
+        }
+      ]
+    },
+    {
+      "attempt": "source-routing-comparison",
+      "name": "equality-prior",
+      "exact": 11,
+      "total": 24,
+      "elapsed_ms": 23.412125,
+      "failure_count": 13,
+      "failure_examples": [
+        {
+          "id": "role-read/first-use/0/0/0",
+          "expected": " Lodov.\n",
+          "actual": " Where.\n"
+        },
+        {
+          "id": "role-read/first-use/0/0/1",
+          "expected": " Merok.\n",
+          "actual": " Which.\n"
+        }
+      ]
+    },
+    {
+      "attempt": "source-routing-comparison",
+      "name": "equality-fresh",
+      "exact": 9,
+      "total": 24,
+      "elapsed_ms": 22.8685,
+      "failure_count": 15,
+      "failure_examples": [
+        {
+          "id": "source-routing/fresh/role-read/first-use/0/0/0",
+          "expected": " Brelan.\n",
+          "actual": " Where.\n"
+        },
+        {
+          "id": "source-routing/fresh/role-read/first-use/0/0/1",
+          "expected": " Cusven.\n",
+          "actual": " Which.\n"
+        }
+      ]
+    },
+    {
+      "attempt": "source-routing-comparison",
+      "name": "codes-disabled-fresh",
+      "exact": 4,
+      "total": 24,
+      "elapsed_ms": 36.80175,
+      "failure_count": 20,
+      "failure_examples": [
+        {
+          "id": "source-routing/fresh/role-read/first-use/0/0/0",
+          "expected": " Brelan.\n",
+          "actual": " Unknown.\n"
+        },
+        {
+          "id": "source-routing/fresh/role-read/first-use/0/0/1",
+          "expected": " Cusven.\n",
+          "actual": " Unknown.\n"
+        }
+      ]
+    },
+    {
+      "attempt": "source-routing-role-comparison",
+      "name": "parent-preservation",
+      "exact": 62,
+      "total": 62,
+      "elapsed_ms": 75.774709,
+      "failure_count": 0,
+      "failure_examples": []
+    },
+    {
+      "attempt": "source-routing-role-comparison",
+      "name": "parent-prior",
+      "exact": 24,
+      "total": 24,
+      "elapsed_ms": 23.118541999999998,
+      "failure_count": 0,
+      "failure_examples": []
+    },
+    {
+      "attempt": "source-routing-role-comparison",
+      "name": "parent-fresh",
+      "exact": 24,
+      "total": 24,
+      "elapsed_ms": 23.388040999999998,
+      "failure_count": 0,
+      "failure_examples": []
+    },
+    {
+      "attempt": "source-routing-role-comparison",
+      "name": "angular-preservation",
+      "exact": 62,
+      "total": 62,
+      "elapsed_ms": 79.706375,
+      "failure_count": 0,
+      "failure_examples": []
+    },
+    {
+      "attempt": "source-routing-role-comparison",
+      "name": "angular-prior",
+      "exact": 24,
+      "total": 24,
+      "elapsed_ms": 23.666667,
+      "failure_count": 0,
+      "failure_examples": []
+    },
+    {
+      "attempt": "source-routing-role-comparison",
+      "name": "angular-fresh",
+      "exact": 24,
+      "total": 24,
+      "elapsed_ms": 23.566958999999997,
+      "failure_count": 0,
+      "failure_examples": []
+    },
+    {
+      "attempt": "source-routing-role-comparison",
+      "name": "equality-preservation",
+      "exact": 36,
+      "total": 62,
+      "elapsed_ms": 111.2465,
+      "failure_count": 26,
+      "failure_examples": [
+        {
+          "id": "typed-value/development/rust/no_write/100000",
+          "expected": "value\n}\n",
+          "actual": " Unknown.\n"
+        },
+        {
+          "id": "typed-value/development/rust/no_write/100001",
+          "expected": "value\n}\n",
+          "actual": " Unknown.\n"
+        }
+      ]
+    },
+    {
+      "attempt": "source-routing-role-comparison",
+      "name": "equality-prior",
+      "exact": 10,
+      "total": 24,
+      "elapsed_ms": 22.541792,
+      "failure_count": 14,
+      "failure_examples": [
+        {
+          "id": "role-read/first-use/0/0/0",
+          "expected": " Lodov.\n",
+          "actual": " Unknown.\n"
+        },
+        {
+          "id": "role-read/first-use/0/0/1",
+          "expected": " Merok.\n",
+          "actual": " Unknown.\n"
+        }
+      ]
+    },
+    {
+      "attempt": "source-routing-role-comparison",
+      "name": "equality-fresh",
+      "exact": 10,
+      "total": 24,
+      "elapsed_ms": 23.553500000000003,
+      "failure_count": 14,
+      "failure_examples": [
+        {
+          "id": "source-routing/fresh/role-read/first-use/0/0/0",
+          "expected": " Brelan.\n",
+          "actual": " Unknown.\n"
+        },
+        {
+          "id": "source-routing/fresh/role-read/first-use/0/0/1",
+          "expected": " Cusven.\n",
+          "actual": " Unknown.\n"
+        }
+      ]
+    },
+    {
+      "attempt": "source-routing-role-comparison",
+      "name": "codes-disabled-fresh",
+      "exact": 4,
+      "total": 24,
+      "elapsed_ms": 39.673041999999995,
+      "failure_count": 20,
+      "failure_examples": [
+        {
+          "id": "source-routing/fresh/role-read/first-use/0/0/0",
+          "expected": " Brelan.\n",
+          "actual": " Unknown.\n"
+        },
+        {
+          "id": "source-routing/fresh/role-read/first-use/0/0/1",
+          "expected": " Cusven.\n",
+          "actual": " Unknown.\n"
+        }
+      ]
+    }
+  ],
+  "compatibility": {
+    "relation_answers": 28,
+    "relation_writes": 28,
+    "total": 28,
+    "session_turns": 5,
+    "session_total": 5,
+    "restore": "PASS",
+    "isolation": true,
+    "rust": {
+      "artifact": "blake3:55e602a026238f12c8e9026569c1d1e06239a83efa3ff0ca23b48d4e5242c001",
+      "text": "packet_input\n}\n",
+      "compiled_source_identical": true,
+      "compile": "PASS",
+      "semantics": "PASS",
+      "inputs": [
+        -7,
+        0,
+        83
+      ],
+      "scope": "Final CLI exact source matches the already compiled/executed source byte for byte; no regeneration or text repair."
+    },
+    "parent_replay": {
+      "complete_objects_except_control_label": 62,
+      "total": 62
+    }
+  },
+  "remaining_failures": [
+    {
+      "case": "source-routing-two-hop",
+      "actual": " Unknown.\n",
+      "expected": "Rome"
+    },
+    {
+      "case": "source-routing-two-operations",
+      "actual": " Unknown.\n",
+      "expected": "14"
+    }
+  ],
+  "complete_fresh_work": {
+    "parent": {
+      "observed_tokens": 1613,
+      "memory_composition_comparisons": 1090425,
+      "word_copy": {
+        "bound_rejections": 0,
+        "byte_reads": 181,
+        "dictionary_byte_comparisons": 9798,
+        "dictionary_comparisons": 5288,
+        "dictionary_lookups": 661,
+        "dispatch_checks": 213,
+        "equality_byte_comparisons": 4155,
+        "forced_dispatches": 117,
+        "persistent_read": {
+          "additions": 0,
+          "cue_comparisons": 0,
+          "derived_writes": 0,
+          "emission_commits": 0,
+          "emission_mismatches": 0,
+          "feature_comparisons": 0,
+          "feature_lookups": 0,
+          "h4_reads": 0,
+          "input_bytes": 0,
+          "literal_writes": 0,
+          "numeral_steps": 0,
+          "overflow_rejections": 0,
+          "phase_updates": 0,
+          "proposals": 0,
+          "record_evictions": 0,
+          "relations": {
+            "abstentions": 0,
+            "candidates": 0,
+            "conflicts": 0,
+            "dictionary_byte_comparisons": 4338,
+            "dictionary_comparisons": 2200,
+            "directory_reads": 384,
+            "directory_writes": 0,
+            "feature_queries": 0,
+            "feature_writes": 0,
+            "no_writes": 0,
+            "phase_subtractions": 0,
+            "reads": 0,
+            "record_evictions": 0,
+            "record_reads": 321,
+            "record_writes": 0,
+            "revisions": 0,
+            "row_comparisons": 0,
+            "score_lookups": 0,
+            "source_presence_checks": 247,
+            "word_boundaries": 0
+          }
+        },
+        "selector": {
+          "anchors": 0,
+          "base_steps": 0,
+          "candidate_comparisons": 8462,
+          "candidate_drops": 0,
+          "candidate_evaluations": 970,
+          "candidate_writes": 527,
+          "commits": 197,
+          "feature_queries": 11323,
+          "h4_reads": 1196,
+          "matched_rows": 10410,
+          "metadata_reads": 8635,
+          "mismatches": 0,
+          "observations": 1613,
+          "orientation_reads": 323,
+          "phase_subtractions": 4784,
+          "posting_offers": 2866,
+          "row_comparisons": 141490,
+          "score_comparisons": 17918,
+          "score_lookups": 16818,
+          "state_copies": 10382,
+          "step_limits": 0,
+          "stops": 20
+        },
+        "word_candidates": 275,
+        "word_record_reads": 21827
+      },
+      "relation_writer": {
+        "abstentions": 0,
+        "admission_exact_comparisons": 4031,
+        "admission_fallbacks": 277,
+        "admission_metadata_bytes": 10202,
+        "admission_queries": 282,
+        "admission_signature_writes": 2538,
+        "candidates": 7602,
+        "conflicts": 10,
+        "dictionary_byte_comparisons": 25164,
+        "dictionary_comparisons": 12672,
+        "directory_reads": 1654,
+        "directory_writes": 52,
+        "feature_queries": 144438,
+        "feature_writes": 48146,
+        "no_writes": 230,
+        "phase_subtractions": 10136,
+        "reads": 0,
+        "record_evictions": 0,
+        "record_reads": 1624,
+        "record_writes": 52,
+        "revisions": 6,
+        "role_path_comparisons": 50064,
+        "role_path_probes": 6258,
+        "role_path_steps": 4330,
+        "role_phase_additions": 34640,
+        "row_comparisons": 1877694,
+        "score_lookups": 131106,
+        "source_presence_checks": 0,
+        "word_boundaries": 282,
+        "admission_skips": 5
+      }
+    },
+    "angular": {
+      "observed_tokens": 1613,
+      "memory_composition_comparisons": 1090425,
+      "word_copy": {
+        "bound_rejections": 0,
+        "byte_reads": 181,
+        "dictionary_byte_comparisons": 9798,
+        "dictionary_comparisons": 5288,
+        "dictionary_lookups": 661,
+        "dispatch_checks": 213,
+        "equality_byte_comparisons": 4155,
+        "forced_dispatches": 117,
+        "persistent_read": {
+          "additions": 0,
+          "cue_comparisons": 0,
+          "derived_writes": 0,
+          "emission_commits": 0,
+          "emission_mismatches": 0,
+          "feature_comparisons": 0,
+          "feature_lookups": 0,
+          "h4_reads": 0,
+          "input_bytes": 0,
+          "literal_writes": 0,
+          "numeral_steps": 0,
+          "overflow_rejections": 0,
+          "phase_updates": 0,
+          "proposals": 0,
+          "record_evictions": 0,
+          "relations": {
+            "abstentions": 0,
+            "candidates": 0,
+            "conflicts": 0,
+            "dictionary_byte_comparisons": 4338,
+            "dictionary_comparisons": 2200,
+            "directory_reads": 384,
+            "directory_writes": 0,
+            "feature_queries": 0,
+            "feature_writes": 0,
+            "no_writes": 0,
+            "phase_subtractions": 0,
+            "reads": 0,
+            "record_evictions": 0,
+            "record_reads": 321,
+            "record_writes": 0,
+            "revisions": 0,
+            "row_comparisons": 0,
+            "score_lookups": 0,
+            "source_presence_checks": 247,
+            "word_boundaries": 0
+          }
+        },
+        "routing": {
+          "code_reads": 2340,
+          "comparisons": 18298,
+          "context_tokens_read": 0,
+          "emission_queries": 2532,
+          "logical_bytes_read": 348904,
+          "operator_executions": 0,
+          "payload_gathers": 0,
+          "predictions": 24,
+          "sources_examined": 299,
+          "table_reads": 10994
+        },
+        "selector": {
+          "anchors": 0,
+          "base_steps": 0,
+          "candidate_comparisons": 7888,
+          "candidate_drops": 0,
+          "candidate_evaluations": 396,
+          "candidate_writes": 396,
+          "commits": 197,
+          "feature_queries": 1263,
+          "h4_reads": 144,
+          "matched_rows": 1254,
+          "metadata_reads": 5599,
+          "mismatches": 0,
+          "observations": 1613,
+          "orientation_reads": 72,
+          "phase_subtractions": 576,
+          "posting_offers": 2866,
+          "row_comparisons": 10710,
+          "score_comparisons": 17918,
+          "score_lookups": 7662,
+          "state_copies": 7872,
+          "step_limits": 0,
+          "stops": 20
+        },
+        "word_candidates": 275,
+        "word_record_reads": 21827
+      },
+      "relation_writer": {
+        "abstentions": 0,
+        "admission_exact_comparisons": 4031,
+        "admission_fallbacks": 277,
+        "admission_metadata_bytes": 10202,
+        "admission_queries": 282,
+        "admission_signature_writes": 2538,
+        "candidates": 7602,
+        "conflicts": 10,
+        "dictionary_byte_comparisons": 25164,
+        "dictionary_comparisons": 12672,
+        "directory_reads": 1654,
+        "directory_writes": 52,
+        "feature_queries": 144438,
+        "feature_writes": 48146,
+        "no_writes": 230,
+        "phase_subtractions": 10136,
+        "reads": 0,
+        "record_evictions": 0,
+        "record_reads": 1624,
+        "record_writes": 52,
+        "revisions": 6,
+        "role_path_comparisons": 50064,
+        "role_path_probes": 6258,
+        "role_path_steps": 4330,
+        "role_phase_additions": 34640,
+        "row_comparisons": 1877694,
+        "score_lookups": 131106,
+        "source_presence_checks": 0,
+        "word_boundaries": 282,
+        "admission_skips": 5
+      }
+    }
+  },
+  "resources": {
+    "model_cycle_ms": 67516,
+    "model_cycle_limit_ms": 120000,
+    "cumulative_model": {
+      "cumulative_ms": 1514012,
+      "limit_ms": 1800000
+    },
+    "engineering_cycle_ms": 1162737,
+    "engineering_cycle_limit_ms": 1200000,
+    "peak_sampled_model_child_rss": 840744960,
+    "latest_storage": {
+      "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+      "at": "2026-09-06T14:44:20.070Z",
+      "inherited_precleanup_bytes": 2747199488,
+      "obsolete_target_growth_credit": 671379456,
+      "current_target_bytes": 2427072512,
+      "predecessor_artifact_root_bytes": 145760256,
+      "current_artifact_root_bytes": 836251648,
+      "predecessor_worktree_bytes": 9875456,
+      "current_worktree_bytes": 8937472,
+      "stopped_successor_worktree_bytes": 460877824,
+      "source_metadata_reserve_bytes": 5242880,
+      "current_sampled_known_storage_bytes": 5969838080,
+      "storage_limit_bytes": 6459228160,
+      "remaining_storage_bytes": 489390080,
+      "stop_margin_bytes": 134217728,
+      "available_growth_before_stop_bytes": 133984256,
+      "model_ledger": {
+        "cumulative_ms": 1514012,
+        "limit_ms": 1800000
+      },
+      "model_remaining_ms": 285988,
+      "model_process_limit": 1,
+      "model_process_rss_target_bytes": 4294967296,
+      "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+    },
+    "no_deletion": true,
+    "no_paid_compute": true,
+    "no_storage_increase": true
+  },
+  "commands": [
+    {
+      "label": "source-routing-comparison",
+      "elapsed_ms": 21112,
+      "exit_code": 0,
+      "stopped": null
+    },
+    {
+      "label": "source-routing-cli-talven",
+      "elapsed_ms": 3270,
+      "exit_code": 0,
+      "stopped": null
+    },
+    {
+      "label": "source-routing-cli-talven-stored-disabled",
+      "elapsed_ms": 2824,
+      "exit_code": 0,
+      "stopped": null
+    },
+    {
+      "label": "source-routing-cli-rust",
+      "elapsed_ms": 2832,
+      "exit_code": 0,
+      "stopped": null
+    },
+    {
+      "label": "source-routing-rust-compile",
+      "elapsed_ms": 191,
+      "exit_code": 0,
+      "stopped": null
+    },
+    {
+      "label": "source-routing-rust-execute",
+      "elapsed_ms": 139,
+      "exit_code": 0,
+      "stopped": null
+    },
+    {
+      "label": "source-routing-role-comparison",
+      "elapsed_ms": 21674,
+      "exit_code": 0,
+      "stopped": null
+    },
+    {
+      "label": "source-routing-role-cli",
+      "elapsed_ms": 3346,
+      "exit_code": 0,
+      "stopped": null
+    },
+    {
+      "label": "source-routing-relations",
+      "elapsed_ms": 3057,
+      "exit_code": 0,
+      "stopped": null
+    },
+    {
+      "label": "source-routing-sessions",
+      "elapsed_ms": 3058,
+      "exit_code": 0,
+      "stopped": null
+    },
+    {
+      "label": "source-routing-two-hop",
+      "elapsed_ms": 3059,
+      "exit_code": 0,
+      "stopped": null
+    },
+    {
+      "label": "source-routing-two-operations",
+      "elapsed_ms": 2954,
+      "exit_code": 0,
+      "stopped": null
+    },
+    {
+      "label": "source-routing-format",
+      "elapsed_ms": 3411,
+      "exit_code": 0,
+      "stopped": null
+    },
+    {
+      "label": "source-routing-unit",
+      "elapsed_ms": 110058,
+      "exit_code": 0,
+      "stopped": null
+    },
+    {
+      "label": "source-routing-format-final",
+      "elapsed_ms": 3206,
+      "exit_code": 0,
+      "stopped": null
+    },
+    {
+      "label": "source-routing-release",
+      "elapsed_ms": 299955,
+      "exit_code": 0,
+      "stopped": null
+    },
+    {
+      "label": "source-routing-allocation",
+      "elapsed_ms": 138199,
+      "exit_code": 0,
+      "stopped": null
+    },
+    {
+      "label": "source-routing-kernel",
+      "elapsed_ms": 259,
+      "exit_code": 0,
+      "stopped": null
+    },
+    {
+      "label": "source-routing-role-format",
+      "elapsed_ms": 3624,
+      "exit_code": 0,
+      "stopped": null
+    },
+    {
+      "label": "source-routing-role-release",
+      "elapsed_ms": 319788,
+      "exit_code": 0,
+      "stopped": null
+    },
+    {
+      "label": "source-routing-final-format",
+      "elapsed_ms": 3561,
+      "exit_code": 0,
+      "stopped": null
+    },
+    {
+      "label": "source-routing-value-probe",
+      "elapsed_ms": 129669,
+      "exit_code": 0,
+      "stopped": null
+    },
+    {
+      "label": "source-routing-final-allocation",
+      "elapsed_ms": 147131,
+      "exit_code": 0,
+      "stopped": null
+    },
+    {
+      "label": "source-routing-final-kernel",
+      "elapsed_ms": 267,
+      "exit_code": 0,
+      "stopped": null
+    },
+    {
+      "label": "source-routing-fmt-check",
+      "elapsed_ms": 3247,
+      "exit_code": 0,
+      "stopped": null
+    },
+    {
+      "label": "source-routing-policy",
+      "elapsed_ms": 121,
+      "exit_code": 0,
+      "stopped": null
+    },
+    {
+      "label": "source-routing-claims",
+      "elapsed_ms": 241,
+      "exit_code": 0,
+      "stopped": null
+    }
+  ],
+  "files": [
+    [
+      "source-routing-comparison/angular-model.json",
+      10796968,
+      "61dd7a5c80709bab1f9f80c623ba92662317ceda80c02feda0940e26a2751a38"
+    ],
+    [
+      "source-routing-comparison/equality-model.json",
+      10796969,
+      "934a553bdd122fc048aaaf9ca5873175b0225d5ee07dff5f2f393e13fe496eee"
+    ],
+    [
+      "source-routing-comparison/source.json",
+      117981,
+      "f3c8fe818213bd2c0311c2574748b94d14830d035a706a0b550ec2c1cb3153d8"
+    ],
+    [
+      "source-routing-comparison/result.json",
+      958,
+      "7f6849757f9cd1c478b373aa5d86c2c521a40cd2a0ba1642f1dace321f32354b"
+    ],
+    [
+      "source-routing-comparison/parent-replay.json",
+      64,
+      "7ada6a83c8a9c8420c2228db9d5997415fdf3a2ec2c15b9ff9ffe9c124d53aa2"
+    ],
+    [
+      "source-routing-comparison/angular-fresh-work.json",
+      5856,
+      "6ddea567d5a3cce87656c24f9b4141aa76429a33164a3eb066f415850d7b750c"
+    ],
+    [
+      "source-routing-comparison/parent-fresh-work.json",
+      5537,
+      "25275396f67ad6fefe2946b806f33d45437f3a9361d3e89f1a4bcbd3119a5b1a"
+    ],
+    [
+      "source-routing-role-comparison/angular-model.json",
+      10797015,
+      "67cbe141117628dc8fae54cc7661c5b9c4669655c0482c3e666df8983f2523f8"
+    ],
+    [
+      "source-routing-role-comparison/equality-model.json",
+      10797020,
+      "9365a0423a0641f3a26bd49afc5c93f779d36712b4d640aa58543d502e2cf3d5"
+    ],
+    [
+      "source-routing-role-comparison/source.json",
+      117981,
+      "f3c8fe818213bd2c0311c2574748b94d14830d035a706a0b550ec2c1cb3153d8"
+    ],
+    [
+      "source-routing-role-comparison/result.json",
+      979,
+      "d2c77410d30b49b7b259f30fe0a3b233be4ca9327a0ede53d32afbe3e627e978"
+    ],
+    [
+      "source-routing-role-comparison/parent-replay.json",
+      64,
+      "7ada6a83c8a9c8420c2228db9d5997415fdf3a2ec2c15b9ff9ffe9c124d53aa2"
+    ],
+    [
+      "source-routing-role-comparison/angular-fresh-work.json",
+      5850,
+      "4273311a1a14ac295dac6bc0cc998c77a199e8eae167564e36d3f54e78bf855f"
+    ],
+    [
+      "source-routing-role-comparison/parent-fresh-work.json",
+      5537,
+      "25275396f67ad6fefe2946b806f33d45437f3a9361d3e89f1a4bcbd3119a5b1a"
+    ],
+    [
+      "source-routing-source-binding.json",
+      2431,
+      "72b2d62a66e1d047c32d406d42a2b180bfdf7232856451b103e502af6d76191a"
+    ],
+    [
+      "source-routing-role-source-binding.json",
+      2377,
+      "2c398d8bcb6772366450fe9c8ae9e98534d942aac03863261949c1ba3c366bb1"
+    ],
+    [
+      "source-routing-cli-replay.json",
+      236,
+      "3176fe34eb046821b2a988ec83eb2e354f84975e5e7f2d5ffbc9405b86c7672f"
+    ],
+    [
+      "source-routing-rust-source.json",
+      306,
+      "183c9337c90daa9a03617db18c5e6ea7397e94cd74c797468d98feb5e448b168"
+    ],
+    [
+      "source-routing-generated.rs",
+      170,
+      "2a378b9387a1d2fd8d9d000f80f390a8003cbc43f223f085a1f73e4786ad30ee"
+    ],
+    [
+      "source-routing-role-rust-result.json",
+      373,
+      "4a341a13a3aa42475a8b34878070250e58ae3938b0cfe42f3d6fbcc2c42d0818"
+    ],
+    [
+      "source-routing-relations.json",
+      1442344,
+      "2070ff553385c07643a268352604616af1812fc88505b008b59e486e964e07a7"
+    ],
+    [
+      "source-routing-sessions.json",
+      36749,
+      "743982d0c752012f91613906a3ce79e9b2330207f38d4d4a0c4e8b634afc2114"
+    ],
+    [
+      "source-routing-projection.json",
+      2570,
+      "2edb2d358d8fc722f4e5cf508b1b3f9816fc954a8de7f167eb4caff53064f29a"
+    ],
+    [
+      "source-routing-revision-projection.json",
+      561,
+      "4b607b0d638fa6c6afd69ad878af203b06f1a4ccf8a405768bba9d70f436437f"
+    ],
+    [
+      "source-routing-comparison/parent-preservation.json",
+      1434427,
+      "05c0511647b92a3cf74d68591b7cb94240c01c1ad770f1efcfbd03bb8ef2fe40"
+    ],
+    [
+      "source-routing-comparison/parent-prior.json",
+      317106,
+      "921c57891c672be607cda7e8613021cda9b0b32fa380bb644f7dfc7011838870"
+    ],
+    [
+      "source-routing-comparison/parent-fresh.json",
+      325642,
+      "df609a99ab8ed4a05a1fa84d0ede6d70732e5a1b649d6eee240109415ddf7b7c"
+    ],
+    [
+      "source-routing-comparison/angular-preservation.json",
+      1449351,
+      "d4d9731ef1456df730ffff4a813e6110be2f10aff3ef0c097079e7655010174d"
+    ],
+    [
+      "source-routing-comparison/angular-prior.json",
+      318664,
+      "21d817160bbf138b98ea7d7af4fa69179721672158e5467a6dc3e1e4d03a2ded"
+    ],
+    [
+      "source-routing-comparison/angular-fresh.json",
+      327216,
+      "0bcc2a04523509c1f93370d79785fb8b3a97acf18c266a0a7ee9aed70d49aa00"
+    ],
+    [
+      "source-routing-comparison/equality-preservation.json",
+      1441962,
+      "7e358778517e88c043a34baf65405d5ae453c790592bfaafd4f63099691b2855"
+    ],
+    [
+      "source-routing-comparison/equality-prior.json",
+      311896,
+      "94447aa7e5abf64e522266754cd33895f8d4f3f43db435e3d5ee1e0f77e71b53"
+    ],
+    [
+      "source-routing-comparison/equality-fresh.json",
+      315083,
+      "38cb397a8a0227f80107a67390ecbb231053e765aef85a11a53251c45ca5a6ce"
+    ],
+    [
+      "source-routing-comparison/codes-disabled-fresh.json",
+      278109,
+      "315d44b1f102c7573d3979c5ac99a2a823db341ed5cd244f3189adc39a27e545"
+    ],
+    [
+      "source-routing-role-comparison/parent-preservation.json",
+      1434427,
+      "75a8d0079fde14b89a0aef7e50b2f73c3c8e7233f55dc7c4f38cf0e6c6ec60e7"
+    ],
+    [
+      "source-routing-role-comparison/parent-prior.json",
+      317106,
+      "55dc31c526b0aa62b3a7d4dcd5aae9c1921820be4b264990ddee8c70f2321a3d"
+    ],
+    [
+      "source-routing-role-comparison/parent-fresh.json",
+      325651,
+      "aceb33a7c1def108a3456efead3b9f2ac2dfe5400618be05a591319e09088321"
+    ],
+    [
+      "source-routing-role-comparison/angular-preservation.json",
+      1449680,
+      "9e9f0c818db9cc2cae29de41ea00af12898230b987cffdc0eef685e159d558b3"
+    ],
+    [
+      "source-routing-role-comparison/angular-prior.json",
+      326708,
+      "548155a276ecf1bdf3b273da05fa162d20208a8dd759c6a5933f5efafd585a44"
+    ],
+    [
+      "source-routing-role-comparison/angular-fresh.json",
+      335262,
+      "c5ab600fdf068052785bbbbef46078899e4b629e1f2700b3cdd4c53f9f05d9a2"
+    ],
+    [
+      "source-routing-role-comparison/equality-preservation.json",
+      1416291,
+      "a90dceeba07fa12e7ae6580bd17b796403291c532da4a2f299927a33c036a623"
+    ],
+    [
+      "source-routing-role-comparison/equality-prior.json",
+      285522,
+      "f0332e7c996d75ac4b583619049b9f889e9ef8486b8bcbbdec06c811472d6371"
+    ],
+    [
+      "source-routing-role-comparison/equality-fresh.json",
+      287692,
+      "47d89fde9910a438af3cda97113fd8eb73bebe9251ce6addd69a53594c9cba98"
+    ],
+    [
+      "source-routing-role-comparison/codes-disabled-fresh.json",
+      278013,
+      "00cd88e3c97891fe4ea2410b1b4eddb86327958fb64f5ef90ccb8a74f1cd55b6"
+    ]
+  ],
+  "checks": {
+    "initial_units": "2 PASS before role-context revision",
+    "final_allocation": "PASS",
+    "final_kernel_source": "PASS",
+    "artifact_reload": "PASS all four fits",
+    "protected_ci": "PENDING",
+    "final_heldout": "NOT_RUN",
+    "formatting": "PASS",
+    "architecture_policy": "PASS",
+    "claim_wording": "PASS"
+  },
+  "file_columns": [
+    "path_relative_to_local_source_routing_root",
+    "bytes",
+    "sha256"
+  ]
+}

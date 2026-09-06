@@ -140,6 +140,15 @@ fn token_exposure(model: &Model, documents: &[Document]) -> Result<Value> {
 
 fn main() -> Result<()> {
     let args: Vec<_> = std::env::args().skip(1).collect();
+    if args.len() == 5 && matches!(args[2].as_str(), "--sources" | "--sources-role-only") {
+        return source_routing(
+            &args[0],
+            &args[1],
+            &args[3],
+            &args[4],
+            args[2] == "--sources-role-only",
+        );
+    }
     if args.len() == 4 && args[2] == "--recurrent" {
         return recurrent(&args[0], &args[1], &args[3]);
     }
@@ -428,6 +437,144 @@ fn recurrent(parent_path: &str, output_path: &str, preservation_source: &str) ->
         "source_cid":blake3::hash(&serde_json::to_vec(&source)?).to_hex().to_string(),
         "arms":arms,"elapsed_ms":started.elapsed().as_millis(),
         "decision":"DEVELOPMENT_ONLY_PENDING_BEHAVIOR_REVIEW"}),
+    )?;
+    Ok(())
+}
+
+fn source_routing(
+    parent_path: &str,
+    output_path: &str,
+    development_path: &str,
+    first_use_path: &str,
+    role_context_only: bool,
+) -> Result<()> {
+    use uor_r4_core::native_geometric::{SourceRoutingConfig, ValueExample};
+    let output = Path::new(output_path);
+    fs::create_dir(output)?;
+    let start = Instant::now();
+    let parent = Model::from_bytes(&fs::read(parent_path)?)?;
+    let dev: Value = serde_json::from_slice(&fs::read(development_path)?)?;
+    let first: Value = serde_json::from_slice(&fs::read(first_use_path)?)?;
+    let fit = response_examples(&dev, "fit")?;
+    let preservation = response_examples(&dev, "development")?;
+    let prior = response_examples(&first, "development")?;
+    let changes = [
+        ("velra", "firden"),
+        ("tovin", "ashwinx"),
+        ("neril", "oakmar"),
+        ("sovek", "elmoss"),
+        ("Lodov", "Brelan"),
+        ("Merok", "Cusven"),
+        ("Vesul", "Darnoc"),
+    ];
+    for (_, name) in changes {
+        if fit
+            .iter()
+            .any(|d| d.prompt.contains(name) || d.response.contains(name))
+        {
+            return Err("fresh name already in fit".into());
+        }
+    }
+    let fresh: Vec<_> = prior
+        .iter()
+        .filter_map(|d| {
+            let mut prompt = d.prompt.clone();
+            let mut response = d.response.clone();
+            for (old, new) in changes {
+                prompt = prompt.replace(old, new);
+                response = response.replace(old, new);
+            }
+            (prompt != d.prompt).then(|| ValueExample {
+                id: format!("source-routing/fresh/{}", d.id),
+                prompt,
+                response,
+            })
+        })
+        .collect();
+    write(
+        &output.join("source.json"),
+        &json!({"scope":"480 existing construction cases; reused OPEN preservation/first-use evaluation; additional exact name/value substitutions absent from fit. Known grammar, not sealed general language evaluation.","fit":fit,"preservation":preservation,"prior_first_use":prior,"fresh":fresh,"substitutions":changes}),
+    )?;
+    let baseline = complete_responses(&parent, &preservation, Control::Full)?;
+    write(&output.join("parent-preservation.json"), &baseline)?;
+    write(
+        &output.join("parent-prior.json"),
+        &complete_responses(&parent, &prior, Control::Full)?,
+    )?;
+    write(
+        &output.join("parent-fresh.json"),
+        &complete_responses(&parent, &fresh, Control::Full)?,
+    )?;
+    let mut arms = Vec::new();
+    for (name, mode) in [
+        ("angular", RoutingMode::Angular),
+        ("equality", RoutingMode::Equality),
+    ] {
+        let (model, report) = parent.fit_source_routing(
+            &fit,
+            SourceRoutingConfig {
+                mode,
+                role_context_only,
+                ..SourceRoutingConfig::default()
+            },
+        )?;
+        write(&output.join(format!("{name}-fit.json")), &report)?;
+        let bytes = model.to_bytes()?;
+        use std::io::Write;
+        fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(output.join(format!("{name}-model.json")))?
+            .write_all(&bytes)?;
+        let loaded = Model::from_bytes(&bytes)?;
+        for (label, cases) in [
+            ("preservation", &preservation),
+            ("prior", &prior),
+            ("fresh", &fresh),
+        ] {
+            let measured = complete_responses(&loaded, cases, Control::Full)?;
+            write(&output.join(format!("{name}-{label}.json")), &measured)?;
+            arms.push(json!({"name":name,"population":label,"exact":measured["exact"],"total":cases.len(),"elapsed_ms":measured["elapsed_ms"]}));
+        }
+        let replay = loaded.generate(&prior[0].prompt, 64, Control::Full)?;
+        if replay != model.generate(&prior[0].prompt, 64, Control::Full)? {
+            return Err("source artifact reload mismatch".into());
+        }
+        if name == "angular" {
+            let disabled =
+                complete_responses(&loaded, &preservation, Control::LearnedRoutingDisabled)?;
+            let same = disabled["rows"]
+                .as_array()
+                .ok_or("rows")?
+                .iter()
+                .zip(baseline["rows"].as_array().ok_or("parent rows")?)
+                .filter(|(a, b)| {
+                    let mut g = a["generation"].clone();
+                    g["state"]["control"] = json!("full");
+                    g == b["generation"]
+                })
+                .count();
+            write(&output.join("disabled-preservation.json"), &disabled)?;
+            write(
+                &output.join("parent-replay.json"),
+                &json!({"complete_objects_except_control_label":same,"total":preservation.len()}),
+            )?;
+            if same != preservation.len() {
+                return Err("source-disabled parent replay differs".into());
+            }
+            write(
+                &output.join("codes-disabled-fresh.json"),
+                &complete_responses(&loaded, &fresh, Control::LearnedRoutingTransformDisabled)?,
+            )?;
+        }
+        println!(
+            "{}",
+            json!({"completed":name,"elapsed_ms":start.elapsed().as_millis()})
+        );
+    }
+    write(
+        &output.join("result.json"),
+        &json!({"schema":"uor-r4.source-routing-comparison/1","arms":arms,"elapsed_ms":start.elapsed().as_millis(),"decision":"DEVELOPMENT_PENDING_REVIEW"}),
     )?;
     Ok(())
 }

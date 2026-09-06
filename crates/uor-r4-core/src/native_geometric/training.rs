@@ -174,6 +174,7 @@ impl Trainer {
         let (lexical_pieces, receipts) = build_codec(&config, construction)?;
         let token_count = LEXICAL_BASE as usize + lexical_pieces.len();
         let mut template = Model {
+            source_routing: None,
             learned_routing: None,
             schema: SCHEMA.into(),
             artifact_cid: String::new(),
@@ -510,11 +511,26 @@ impl Model {
         // The routing residual is fitted last. Inherited response heads remain
         // bound to the exact model on which they were trained, including all
         // of their original nested provenance checks.
-        let inherited = if let Some(block) = &self.learned_routing {
+        if self.source_routing.is_some() && self.learned_routing.is_some() {
+            return Err(Error(
+                "source and residual routing cannot be stacked in this version".into(),
+            ));
+        }
+        let parent_id = self
+            .learned_routing
+            .as_ref()
+            .map(|b| b.parent_artifact.as_str())
+            .or_else(|| {
+                self.source_routing
+                    .as_ref()
+                    .map(|b| b.parent_artifact.as_str())
+            });
+        let inherited = if let Some(parent_id) = parent_id {
             let mut parent = self.clone();
             parent.learned_routing = None;
+            parent.source_routing = None;
             parent.refresh_identity()?;
-            if parent.artifact_cid != block.parent_artifact {
+            if parent.artifact_cid != parent_id {
                 return Err(Error(
                     "learned routing frozen parent identity differs".into(),
                 ));
@@ -568,6 +584,9 @@ impl Model {
             return Err(Error("native artifact prime, H4, orientation or fixed-zeta tables differ from the named construction".into()));
         }
         if let Some(block) = &self.learned_routing {
+            block.validate(self)?;
+        }
+        if let Some(block) = &self.source_routing {
             block.validate(self)?;
         }
         let mut ids = BTreeSet::new();
@@ -803,6 +822,7 @@ impl Model {
 
 fn add_work(total: &mut Work, work: Work) {
     total.learned_routing.add(work.learned_routing);
+    total.word_copy.routing.add(work.word_copy.routing);
     add_completion_work(&mut total.word_copy.selector, work.word_copy.selector);
     total.word_copy.dictionary_lookups += work.word_copy.dictionary_lookups;
     total.word_copy.dictionary_comparisons += work.word_copy.dictionary_comparisons;

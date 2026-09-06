@@ -10,6 +10,11 @@
 pub use relation::RelationWork;
 pub use relation_admission::RelationAdmissionMode;
 pub use relation_training::{RelationExample, RelationLabel};
+mod source_routing;
+#[cfg(test)]
+mod source_routing_tests;
+mod source_routing_training;
+pub use source_routing_training::SourceRoutingConfig;
 mod anchors;
 mod learned_routing;
 #[cfg(test)]
@@ -300,6 +305,8 @@ pub struct TrainingProgress {
 #[serde(try_from = "ModelWire")]
 pub struct Model {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    source_routing: Option<source_routing::SourceRouting>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     learned_routing: Option<learned_routing::RoutingBlock>,
     schema: String,
     artifact_cid: String,
@@ -328,6 +335,8 @@ pub struct Model {
 #[serde(deny_unknown_fields)]
 struct ModelWire {
     #[serde(default)]
+    source_routing: Option<source_routing::SourceRouting>,
+    #[serde(default)]
     learned_routing: Option<learned_routing::RoutingBlock>,
     schema: String,
     artifact_cid: String,
@@ -355,6 +364,7 @@ impl TryFrom<ModelWire> for Model {
     type Error = Error;
     fn try_from(wire: ModelWire) -> Result<Self> {
         let model = Self {
+            source_routing: wire.source_routing,
             learned_routing: wire.learned_routing,
             schema: wire.schema,
             artifact_cid: wire.artifact_cid,

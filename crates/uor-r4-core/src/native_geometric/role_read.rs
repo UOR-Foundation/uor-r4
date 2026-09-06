@@ -200,6 +200,9 @@ pub(super) fn choose(
     control: Control,
     work: &mut WordCopyWork,
 ) -> Option<(u8, usize, i64)> {
+    if model.source_routing.is_some() && control != Control::LearnedRoutingDisabled {
+        return super::source_routing::choose(model, values, control, work);
+    }
     let read = head(model)?;
     let words = values.lexemes.as_ref()?;
     let ctx = context(model, values, control, work);
