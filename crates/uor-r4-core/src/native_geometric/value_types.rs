@@ -27,6 +27,14 @@ pub struct ValueWork {
     pub literal_writes: u64,
     pub record_evictions: u64,
     pub proposals: u64,
+    /// Exact Copy/Add calls, including rejected overflow attempts.
+    #[serde(default, skip_serializing_if = "is_zero_u64")]
+    pub operator_executions: u64,
+    #[serde(default, skip_serializing_if = "is_zero_u64")]
+    pub selection_comparisons: u64,
+    /// Scoring passes, including reselection after an invalid exact operation.
+    #[serde(default, skip_serializing_if = "is_zero_u64")]
+    pub selection_passes: u64,
     pub additions: u64,
     pub overflow_rejections: u64,
     pub feature_lookups: u64,

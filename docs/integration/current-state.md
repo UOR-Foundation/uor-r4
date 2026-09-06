@@ -1,5 +1,26 @@
 # Current native geometric AI work
 
+## Prepared generated-composition decision — #1139, 2026-09-06
+
+**Retain `2600b95b`; new behavior is NOT_RUN.** Following the owner's capability
+and direction check, the next decision is learned use of an intermediate result
+in a complete generated answer. The [prepared change](../native_geometric_typed_admission_1139.md)
+adds a six-branch actual-artifact diagnostic: generate a sum, then either recall
+it or add a new value. Matched removal of the one derived record checks causal
+dependence; exact emitted bytes, EOS, source availability and operator choice
+remain separate observations. There is no supplied intermediate answer or LLM
+repair. This is OPEN development, not general prose or reasoning qualification.
+
+Supporting Rust code scores the existing typed candidates before executing the
+selected Copy/Add operation, preserving overflow fallback and exact commits.
+It uses the existing sparse scorer; a new learned angular typed selector is
+not implemented by this change. Compilation is complete for the runtime/probe/
+CLI; local behavioral execution remains pending. The concrete complete cycle
+projects 45 seconds of model work plus 15 seconds reserve and requests a
+60-second cumulative extension. The ledger remains 1796.744/1800 seconds.
+The capability result must choose the next learning change; further cache work
+is secondary and the full #1139/#1140 handoffs remain unmet.
+
 ## Corrected-writer NoWrite reuse — #1139, 2026-09-06
 
 **Retain `2600b95b`; the NoWrite compute regression is repaired.** The
