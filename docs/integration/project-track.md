@@ -180,9 +180,15 @@ scope. The [dependent-source read](../native_geometric_dependent_source_1139.md)
 now follows a geometrically selected exact relation into a second owner lookup:
 40/48 new complete answers versus 32/48 exact-code and 20/48 parent, preserving
 62/62 prior answers and 24/24 transfer. Eight revision-ingestion failures remain.
-Follow current-state.md for artifacts and complete limits. The next implementation
-repairs the current writer's revision-owner binding and NoWrite on question text,
-with this dependent reader preserved. The full handoff remains unmet.
+The [writer repair](../native_geometric_writer_binding_1139.md) now gets 48/48
+answers and exact writes, preserves the earlier response, transfer, long-context
+and persistent-session results, and passes 28/28 replacement reserved-name
+cases. Its cue namespace invalidates effective reuse of the old exact NoWrite
+cache, increasing long-context writer row comparisons from 580,944 to
+226,101,330. Recompile that existing bounded admission metadata against the
+frozen new writer before expanding learned read/operator/derived-write
+composition. Follow current-state.md for artifacts and complete limits.
+The full handoff remains unmet.
 
 #### Immediate recurrent attention revision — owner adoption 2026-09-05
 

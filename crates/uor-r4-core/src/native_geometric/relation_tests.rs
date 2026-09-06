@@ -218,3 +218,50 @@ fn native_relation_role_path_keeps_context_order_and_direction() {
     );
     assert_eq!(root(&back[..k]), usize::from(g.inverses[root(&f[..n])]));
 }
+
+#[test]
+fn native_writer_cue_identity_is_exact_and_does_not_change_reader_addresses() {
+    use super::relation_training::WriterRevision;
+    use super::word_copy_types::WordCopyAddress;
+    let docs = [Document {
+        id: "writer-cue".into(),
+        text: "Now Question now".into(),
+    }];
+    let mut trainer = Trainer::new(Config::default(), &docs).unwrap();
+    trainer.train_documents(&docs).unwrap();
+    let mut model = trainer.compile().unwrap();
+    let word = |text: &str, prime| {
+        let mut bytes = [0; 32];
+        bytes[..text.len()].copy_from_slice(text.as_bytes());
+        WordCopyAddress {
+            bytes,
+            len: text.len() as u8,
+            prime,
+        }
+    };
+    model.relation_writer = Some(WriterRevision {
+        schema: "uor-r4.relation-writer/1".into(),
+        parent: String::new(),
+        dictionary: vec![word("Now", 2), word("Question", 3), word("now", 5)],
+        role_context: vec![],
+        rows: vec![],
+        training: vec![],
+        epochs: 1,
+        reuse_admission: false,
+    });
+    let words = [
+        atom("Now", 0),
+        atom("Question", 8),
+        atom("newname", 16),
+        atom("now", 24),
+    ];
+    let mut work = ValueWork::default();
+    assert_eq!(
+        &writer_addresses(&model, &words, &mut work)[..4],
+        &[2, 3, 0, 5]
+    );
+    assert_eq!(&addresses(&model, &words, &mut work)[..4], &[0, 0, 0, 0]);
+    assert!(work.relations.dictionary_byte_comparisons > 0);
+    // Exact word payloads, including unknown names and case, remain untouched.
+    assert_eq!(words[2], atom("newname", 16));
+}

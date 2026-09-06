@@ -25,6 +25,8 @@ mod relation_memory;
 mod role_read;
 #[path = "native_geometric_value_probe/wording.rs"]
 mod wording;
+#[path = "native_geometric_value_probe/writer_binding.rs"]
+mod writer_binding;
 const SOURCE_SCHEMA: &str = "uor-r4.native-typed-value-source/1";
 const LEXEME_SOURCE_SCHEMA: &str = "uor-r4.native-typed-value-source/2";
 const WORD_COPY_SOURCE_SCHEMA: &str = "uor-r4.native-typed-value-source/3";
@@ -969,6 +971,9 @@ fn evaluate_binding(
 }
 
 fn main() -> ProbeResult<()> {
+    if std::env::args().nth(1).as_deref() == Some("writer-binding") {
+        return writer_binding::run(&std::env::args().skip(2).collect::<Vec<_>>());
+    }
     if std::env::args().nth(1).as_deref() == Some("verify-relations") {
         return relation_memory::verify(&std::env::args().skip(2).collect::<Vec<_>>());
     }

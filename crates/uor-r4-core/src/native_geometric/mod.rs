@@ -310,6 +310,8 @@ pub struct TrainingProgress {
 #[serde(try_from = "ModelWire")]
 pub struct Model {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    relation_writer: Option<relation_training::WriterRevision>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     dependent_read: Option<dependent_read::DependentRead>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     source_routing: Option<source_routing::SourceRouting>,
@@ -342,6 +344,8 @@ pub struct Model {
 #[serde(deny_unknown_fields)]
 struct ModelWire {
     #[serde(default)]
+    relation_writer: Option<relation_training::WriterRevision>,
+    #[serde(default)]
     dependent_read: Option<dependent_read::DependentRead>,
     #[serde(default)]
     source_routing: Option<source_routing::SourceRouting>,
@@ -373,6 +377,7 @@ impl TryFrom<ModelWire> for Model {
     type Error = Error;
     fn try_from(wire: ModelWire) -> Result<Self> {
         let model = Self {
+            relation_writer: wire.relation_writer,
             dependent_read: wire.dependent_read,
             source_routing: wire.source_routing,
             learned_routing: wire.learned_routing,

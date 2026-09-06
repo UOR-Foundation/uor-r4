@@ -203,6 +203,20 @@ fn admission_mut(model: &mut Model) -> Result<&mut Option<Admission>> {
 }
 
 impl Admission {
+    pub(super) fn compatible_writer(&self, model: &Model) -> bool {
+        self.entries.iter().all(|e| {
+            let mut addr = [0; 16];
+            addr[..8].copy_from_slice(&e.exact.primes);
+            write_choice_from_addresses(
+                model,
+                &[WordAtom::default(); 8][..usize::from(e.exact.len)],
+                &addr,
+                &mut ValueWork::default(),
+            )
+            .is_none()
+        })
+    }
+
     pub(super) fn validate(&self, model: &Model) -> Result<()> {
         if self.schema != "uor-r4.relation-admission/1"
             || self.entries.is_empty()
