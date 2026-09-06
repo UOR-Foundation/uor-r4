@@ -36,8 +36,11 @@ language and coding behavior is under development.
 
 An experimental [learned H4 routing block](docs/native_geometric_learned_routing_1139.md)
 now learns token placement, source selection and table-based transport on this
-path. Its small token-prediction gain does not yet yield useful generation or
-preserve all prior responses, so the accepted artifact remains unchanged.
+path. Its dependent-read revision lets one selected value change the next
+query and trains a shared output decision. Both revisions fail useful generation
+and preservation; angular advantage is unestablished. The accepted artifact
+remains unchanged. The next change connects routing to existing exact retained
+sources and payload operators; adding more route depth is conditional on need.
 
 ```sh
 cargo build --release --bin r4
