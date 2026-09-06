@@ -176,6 +176,7 @@ impl Trainer {
         let mut template = Model {
             relation_writer: None,
             dependent_read: None,
+            typed_routing: None,
             source_routing: None,
             learned_routing: None,
             schema: SCHEMA.into(),
@@ -510,6 +511,24 @@ impl Model {
     }
     pub(super) fn validate(&self) -> Result<()> {
         self.config.validate()?;
+        if let Some(block) = &self.typed_routing {
+            let mut parent = self.clone();
+            parent.typed_routing = None;
+            parent.refresh_identity()?;
+            if parent.artifact_cid != block.router.parent_artifact {
+                return Err(Error("typed routing parent differs".into()));
+            }
+            parent.validate()?;
+            block.validate(self)?;
+            let mut duplicate = self.clone();
+            duplicate.refresh_identity()?;
+            if duplicate.artifact_cid != self.artifact_cid
+                || duplicate.uor_model_address != self.uor_model_address
+            {
+                return Err(Error("typed routing identity differs".into()));
+            }
+            return Ok(());
+        }
         if let Some(writer) = &self.relation_writer {
             let mut parent = self.clone();
             parent.relation_writer = None;
@@ -873,6 +892,7 @@ fn add_work(total: &mut Work, work: Work) {
     total.values.literal_writes += work.values.literal_writes;
     total.values.record_evictions += work.values.record_evictions;
     total.values.proposals += work.values.proposals;
+    total.values.routing.add(work.values.routing);
     total.values.operator_executions += work.values.operator_executions;
     total.values.selection_comparisons += work.values.selection_comparisons;
     total.values.selection_passes += work.values.selection_passes;
@@ -964,6 +984,10 @@ mod work_tests {
         // so the independent JSON oracle covers every current counter.
         let seed = Work {
             values: ValueWork {
+                routing: RoutingWork {
+                    predictions: 1,
+                    ..RoutingWork::default()
+                },
                 operator_executions: 1,
                 selection_comparisons: 1,
                 selection_passes: 1,

@@ -52,22 +52,34 @@ impl SourceRouting {
         self.config.validate()?;
         let read = role_read::head(model)
             .ok_or_else(|| Error("source routing requires retained-word reader".into()))?;
+        self.validate_shape(
+            model,
+            read.actions.len(),
+            if self.config.role_context_only {
+                20
+            } else {
+                30
+            },
+        )
+    }
+    pub(super) fn validate_shape(
+        &self,
+        model: &Model,
+        actions: usize,
+        feature_kinds: u8,
+    ) -> Result<()> {
+        self.config.validate()?;
         if self.schema != "uor-r4.geometric-source-routing/1"
             || self.codes.is_empty()
             || self.codes.len() > self.config.learned_features
             || self.codes.windows(2).any(|p| p[0].feature >= p[1].feature)
-            || self.codes.iter().any(|c| {
-                c.feature.kind
-                    >= if self.config.role_context_only {
-                        20
-                    } else {
-                        30
-                    }
-                    || c.roots.iter().any(|&r| r >= 120)
-            })
-            || self.landmarks.len() != read.actions.len()
+            || self
+                .codes
+                .iter()
+                .any(|c| c.feature.kind >= feature_kinds || c.roots.iter().any(|&r| r >= 120))
+            || self.landmarks.len() != actions
             || self.landmarks.iter().flatten().any(|&r| r >= 120)
-            || self.biases.len() != read.actions.len()
+            || self.biases.len() != actions
             || self.biases.iter().any(|b| !(-32..=32).contains(b))
             || self.ranks != super::learned_routing_training::ranks(model)
             || self.training.is_empty()

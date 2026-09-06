@@ -278,6 +278,10 @@ fn native_kernel_source_has_no_forbidden_arithmetic_or_float_types() {
             "native dependent read",
             include_str!("../src/native_geometric/dependent_read.rs"),
         ),
+        (
+            "native typed routing",
+            include_str!("../src/native_geometric/typed_routing.rs"),
+        ),
         ("native completion seed", seed),
         ("native numeral codec", numeral),
         ("native whole-word codec", lexemes),
@@ -1171,4 +1175,43 @@ fn native_dependent_artifact_copy_is_allocation_free() {
     assert!(selected, "dependent path was not exercised");
     assert_eq!((ALLOCATIONS.with(Cell::get), BYTES.with(Cell::get)), (0, 0));
     println!("dependent exact two-link ingest/select/observe/copy: allocations=0 bytes=0");
+}
+
+#[test]
+#[ignore = "requires R4_TYPED_ROUTING_MODEL learned development artifact"]
+fn native_typed_artifact_routing_is_allocation_free() {
+    let path = std::env::var("R4_TYPED_ROUTING_MODEL").expect("named model path");
+    let model =
+        uor_r4_core::native_geometric::Model::from_bytes(&std::fs::read(path).unwrap()).unwrap();
+    let first=model.encode("User: suri has 13 coins. orin has 4 coins.\nUser: What is the sum of suri's and orin's coins?\nAssistant:").unwrap();
+    let second = model
+        .encode("User: There are 5 new coins. Add the new coins to the previous total.\nAssistant:")
+        .unwrap();
+    let mut session = model.session(Control::Full).unwrap();
+    ALLOCATIONS.with(|v| v.set(0));
+    BYTES.with(|v| v.set(0));
+    MEASURING.with(|v| v.set(true));
+    let result = (|| {
+        session.observe(&model, BOS)?;
+        for prompt in [&first, &second] {
+            for &token in prompt {
+                session.observe(&model, token)?;
+            }
+            session.begin_response(&model)?;
+            for _ in 0..32 {
+                let token = session.predict(&model)?.token;
+                session.observe(&model, token)?;
+                if token == EOS {
+                    break;
+                }
+            }
+            session.end_response(&model)?;
+        }
+        Ok::<_, uor_r4_core::native_geometric::Error>(())
+    })();
+    MEASURING.with(|v| v.set(false));
+    result.unwrap();
+    assert!(session.work.values.routing.predictions > 0);
+    assert_eq!((ALLOCATIONS.with(Cell::get), BYTES.with(Cell::get)), (0, 0));
+    println!("actual typed geometric routing/commit: allocations=0 bytes=0");
 }

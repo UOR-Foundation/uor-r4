@@ -23,6 +23,8 @@ type ProbeResult<T> = Result<T, Box<dyn Error>>;
 mod relation_memory;
 #[path = "native_geometric_value_probe/role_read.rs"]
 mod role_read;
+#[path = "native_geometric_value_probe/typed_routing.rs"]
+mod typed_routing_probe;
 #[path = "native_geometric_value_probe/wording.rs"]
 mod wording;
 #[path = "native_geometric_value_probe/writer_binding.rs"]
@@ -971,6 +973,9 @@ fn evaluate_binding(
 }
 
 fn main() -> ProbeResult<()> {
+    if std::env::args().nth(1).as_deref() == Some("typed-routing") {
+        return typed_routing_probe::run(&std::env::args().skip(2).collect::<Vec<_>>());
+    }
     if std::env::args().nth(1).as_deref() == Some("writer-binding") {
         return writer_binding::run(&std::env::args().skip(2).collect::<Vec<_>>());
     }

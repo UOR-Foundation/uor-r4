@@ -18,6 +18,8 @@ pub enum ValueAction {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct ValueWork {
+    #[serde(default, skip_serializing_if = "RoutingWork::is_empty")]
+    pub routing: RoutingWork,
     #[serde(
         default,
         skip_serializing_if = "super::relation::RelationWork::is_empty"

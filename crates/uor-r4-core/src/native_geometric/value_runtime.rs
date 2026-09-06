@@ -330,6 +330,14 @@ impl ValueState {
         // causes another pass, below the last rejected (score, proposal-order)
         // choice. This preserves first-valid ties without a score buffer.
         let mut ceiling: Option<(i64, usize)> = None;
+        let routed = super::typed_routing::context(model, self, control, work);
+        let no_op = routed
+            .as_ref()
+            .map(|addr| {
+                work.routing.predictions += 1;
+                super::typed_routing::score(model, self, None, 2, addr, control, work)
+            })
+            .unwrap_or(0);
         let (action, a, b, value, best) = loop {
             work.selection_passes = work.selection_passes.saturating_add(1);
             let mut selected = None;
@@ -339,15 +347,28 @@ impl ValueState {
                     continue;
                 };
                 work.proposals = work.proposals.saturating_add(1);
-                let (features, len) = self.features(model, action, a, b, control, work);
                 let mut score = 0_i64;
-                for feature in &features[..len] {
-                    work.feature_lookups = work.feature_lookups.saturating_add(1);
-                    if let Ok(index) = head.rows.binary_search_by(|row| {
-                        work.feature_comparisons = work.feature_comparisons.saturating_add(1);
-                        row.feature.cmp(feature)
-                    }) {
-                        score += i64::from(head.rows[index].weight);
+                if let Some(addr) = &routed {
+                    let action_index = if action == ValueAction::Copy { 0 } else { 1 };
+                    score = super::typed_routing::score(
+                        model,
+                        self,
+                        Some((a, b)),
+                        action_index,
+                        addr,
+                        control,
+                        work,
+                    ) - no_op;
+                } else {
+                    let (features, len) = self.features(model, action, a, b, control, work);
+                    for feature in &features[..len] {
+                        work.feature_lookups = work.feature_lookups.saturating_add(1);
+                        if let Ok(index) = head.rows.binary_search_by(|row| {
+                            work.feature_comparisons = work.feature_comparisons.saturating_add(1);
+                            row.feature.cmp(feature)
+                        }) {
+                            score += i64::from(head.rows[index].weight);
+                        }
                     }
                 }
                 if let Some((limit, rejected)) = ceiling {
