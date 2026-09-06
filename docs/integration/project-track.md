@@ -186,10 +186,16 @@ and persistent-session results, and passes 28/28 replacement reserved-name
 cases. The subsequent [NoWrite repair](../native_geometric_writer_admission_1139.md)
 keeps that writer fixed and reduces long-context writer row comparisons from
 226,101,330 to 539,448, preserving all measured answers and writes. The immediate
-next build returns to learned operator/operand admission before execution,
-committed derived values and their use in a subsequent decision. No additional
-cache campaign is active. Follow current-state.md for artifacts and the nearly
-exhausted cumulative model allowance; a new issue does not reset it.
+next build returned to operator/operand admission before execution and committed
+derived-value use. The [selected-execution result](../native_geometric_typed_admission_1139.md)
+preserves prior behavior but gets 0/6 new follow-ups after 3/3 correct first sums.
+The exact intermediate and new operand are retained; the current sparse selector
+chooses the wrong operation/operand or abstains. Next learn query-conditioned
+geometric selection over those typed references, adapting the existing signed-H4
+source learner's joint candidate/action objective to causally generated states.
+This new angular typed selector is not implemented by the execution repair.
+No additional cache campaign is active. Follow current-state.md for artifacts
+and cumulative resources; a new issue does not reset the spent amount.
 The full handoff remains unmet.
 
 #### Immediate recurrent attention revision — owner adoption 2026-09-05
@@ -441,6 +447,14 @@ cost. Save useful checkpoints and stop cleanly at the configured limits. Before
 lengthy work, use a representative timing sample or existing measurements to
 select a feasible run; do not build an elaborate supervision system for a short
 experiment.
+
+**Owner authorization, 2026-09-06:** necessary project allowance extensions are
+preauthorized. Record the concrete complete projection, reason, increment and
+updated cumulative limit before using each extension. Do not repeatedly ask the
+owner to approve the same class of necessary resource increase. Continue the
+budget-friendly cadence, preserve all material, and distinguish local resource
+allowances from paid external purchases. This is not a requirement to spend the
+remaining allowance or expand a task whose result already resolves its question.
 
 ## Verification and preservation
 

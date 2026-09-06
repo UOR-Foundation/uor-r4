@@ -873,6 +873,9 @@ fn add_work(total: &mut Work, work: Work) {
     total.values.literal_writes += work.values.literal_writes;
     total.values.record_evictions += work.values.record_evictions;
     total.values.proposals += work.values.proposals;
+    total.values.operator_executions += work.values.operator_executions;
+    total.values.selection_comparisons += work.values.selection_comparisons;
+    total.values.selection_passes += work.values.selection_passes;
     total.values.additions += work.values.additions;
     total.values.overflow_rejections += work.values.overflow_rejections;
     total.values.feature_lookups += work.values.feature_lookups;
@@ -961,6 +964,9 @@ mod work_tests {
         // so the independent JSON oracle covers every current counter.
         let seed = Work {
             values: ValueWork {
+                operator_executions: 1,
+                selection_comparisons: 1,
+                selection_passes: 1,
                 lexical_comparisons: 1,
                 lexical_byte_comparisons: 1,
                 lexical_writes: 1,

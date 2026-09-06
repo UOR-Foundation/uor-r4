@@ -349,3 +349,233 @@ fn native_value_document_boundaries_do_not_join_numerals() {
         .collect();
     assert_eq!(values, vec![1, 2]);
 }
+
+#[test]
+fn native_value_selected_execution_runs_one_of_256_scored_choices() {
+    let model = mechanical_model(ValueAction::Add);
+    let mut session = prefix(
+        &model,
+        "1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 total:",
+        Control::Full,
+    );
+    session.predict(&model).unwrap();
+    let d = session.value_decision().unwrap();
+    assert_eq!(d.value, 3);
+    assert_eq!(d.operands.map(|v| v.value), [2, 1]);
+    assert_eq!(session.work.values.proposals, 256);
+    assert_eq!(session.work.values.operator_executions, 1);
+    assert_eq!(session.work.values.additions, 1);
+    assert_eq!(session.work.values.selection_comparisons, 256);
+    assert_eq!(session.work.values.selection_passes, 1);
+    assert_eq!(session.work.values.derived_writes, 0);
+}
+
+#[test]
+fn native_value_selected_execution_preserves_overflow_fallback_order() {
+    let model = mechanical_model(ValueAction::Add);
+    let mut session = prefix(&model, "9223372036854775807 1 -2 total:", Control::Full);
+    session.predict(&model).unwrap();
+    let d = session.value_decision().unwrap();
+    assert_eq!(d.value, i64::MAX - 2);
+    assert_eq!(d.operands.map(|v| v.value), [-2, i64::MAX]);
+    assert_eq!(session.work.values.operator_executions, 2);
+    assert_eq!(session.work.values.overflow_rejections, 1);
+    assert_eq!(session.work.values.selection_passes, 2);
+    assert_eq!(session.work.values.proposals, 18);
+}
+
+#[test]
+fn native_value_selected_execution_abstention_does_no_arithmetic() {
+    let mut model = mechanical_model(ValueAction::Add);
+    for row in &mut model.values.as_mut().unwrap().rows {
+        row.weight = 0;
+    }
+    model.refresh_identity().unwrap();
+    let mut session = prefix(&model, "13 4 total:", Control::Full);
+    session.predict(&model).unwrap();
+    assert!(session.value_decision().is_none());
+    assert_eq!(session.work.values.proposals, 4);
+    assert_eq!(session.work.values.operator_executions, 0);
+    assert_eq!(session.work.values.additions, 0);
+}
+
+#[test]
+fn native_value_selected_execution_reuses_only_committed_derived_values() {
+    // Mechanical role weights isolate causal state reuse, not language learning.
+    let mut model = mechanical_model(ValueAction::Add);
+    model.values.as_mut().unwrap().rows.extend([
+        ValueRow {
+            feature: ValueFeature {
+                kind: 1,
+                a: 1,
+                b: 256,
+            },
+            weight: 16384,
+        },
+        ValueRow {
+            feature: ValueFeature {
+                kind: 2,
+                a: 1,
+                b: 1,
+            },
+            weight: 8192,
+        },
+    ]);
+    model
+        .values
+        .as_mut()
+        .unwrap()
+        .rows
+        .sort_by_key(|r| r.feature);
+    model.refresh_identity().unwrap();
+    for committed in [false, true] {
+        let mut session = prefix(&model, "left = 13; right = 4; total:", Control::Full);
+        session.predict(&model).unwrap();
+        assert_eq!(session.value_decision().unwrap().value, 17);
+        if committed {
+            for _ in 0..2 {
+                let token = session.predict(&model).unwrap().token;
+                session.observe(&model, token).unwrap();
+            }
+        }
+        session.end_response(&model).unwrap();
+        for token in model.encode("next = 5; total:").unwrap() {
+            session.observe(&model, token).unwrap();
+        }
+        session.begin_response(&model).unwrap();
+        let saved = session.checkpoint().unwrap();
+        let mut restored = model.restore_session(&saved).unwrap();
+        session.predict(&model).unwrap();
+        restored.predict(&model).unwrap();
+        assert_eq!(session.value_decision(), restored.value_decision());
+        let decision = session.value_decision().unwrap();
+        assert_eq!(decision.value, if committed { 22 } else { 9 });
+        assert_eq!(decision.operands[0].derived, committed);
+        assert_eq!(decision.operands[1].value, 5);
+        let mut emitted = Vec::new();
+        for _ in 0..if committed { 2 } else { 1 } {
+            let token = session.predict(&model).unwrap().token;
+            emitted.push(token);
+            session.observe(&model, token).unwrap();
+        }
+        assert_eq!(
+            model.decode(&emitted).unwrap(),
+            if committed {
+                b"22".as_slice()
+            } else {
+                b"9".as_slice()
+            }
+        );
+        let last = session.values.as_ref().unwrap().records.last().unwrap();
+        assert_eq!(last.value, decision.value);
+        assert_eq!(
+            last.derivation.unwrap().operand_ids,
+            decision.operands.map(|v| v.id)
+        );
+    }
+}
+
+#[test]
+#[ignore = "requires an admitted local model allowance and R4_TYPED_ADMISSION_MODEL artifact"]
+fn native_value_selected_execution_learned_chain_diagnostic() {
+    // OPEN evaluation only: this records the frozen learned model's behavior,
+    // separately from the deliberately weighted causal tests above.
+    fn generate(model: &Model, session: &mut Session) -> (Option<ValueDecision>, Vec<u8>, bool) {
+        let mut decision = None;
+        let mut tokens = Vec::new();
+        for _ in 0..32 {
+            let token = session.predict(model).unwrap().token;
+            if let Some(d) = session.value_decision().filter(|d| d.cursor == 0) {
+                decision = Some(d);
+            }
+            session.observe(model, token).unwrap();
+            if token == EOS {
+                return (decision, model.decode(&tokens).unwrap(), true);
+            }
+            tokens.push(token);
+        }
+        (decision, model.decode(&tokens).unwrap(), false)
+    }
+
+    let path = std::env::var("R4_TYPED_ADMISSION_MODEL").unwrap();
+    let model = Model::from_bytes(&std::fs::read(path).unwrap()).unwrap();
+    let mut exact_chains = 0;
+    // The first two worlds change one input under identical query wording.
+    // Each world's follow-ups share state and delta but require Copy versus Add.
+    for (a, b, delta) in [(13, 4, 5), (14, 4, 5), (-3, 8, 4)] {
+        let prompt = format!("User: suri has {a} coins. orin has {b} coins.\nUser: What is the sum of suri's and orin's coins?\nAssistant:");
+        let mut session = prefix(&model, &prompt, Control::Full);
+        let (first, first_bytes, first_eos) = generate(&model, &mut session);
+        session.end_response(&model).unwrap();
+        let first_expected = format!("{}.\n", a + b);
+        let first_correct = first.is_some_and(|d| d.value == a + b && d.action == ValueAction::Add)
+            && first_bytes == first_expected.as_bytes()
+            && first_eos;
+        let saved = session.checkpoint().unwrap();
+        for action in [ValueAction::Copy, ValueAction::Add] {
+            let question = match action {
+                ValueAction::Copy => "Repeat the previous total without adding the new coins.",
+                ValueAction::Add => "Add the new coins to the previous total.",
+            };
+            let query = format!("User: There are {delta} new coins. {question}\nAssistant:");
+            let expected = a + b + if action == ValueAction::Add { delta } else { 0 };
+            let expected_text = format!("{expected}.\n");
+            let mut full_correct = false;
+            let mut control_changes_output = false;
+            let mut full_bytes = Vec::new();
+            for remove_intermediate in [false, true] {
+                let mut branch = model.restore_session(&saved).unwrap();
+                // Evaluator-only deletion of the one actual derived record.
+                // Keep transcript/geometric state and all other records intact.
+                // No supplied value, answer injection or serving rule is added.
+                let removed = if remove_intermediate {
+                    first.is_some_and(|d| {
+                        let values = branch.values.as_mut().unwrap();
+                        let before = values.records.len();
+                        values.records.retain(|r| r.id != d.write_id);
+                        before != values.records.len()
+                    })
+                } else {
+                    false
+                };
+                for token in model.encode(&query).unwrap() {
+                    branch.observe(&model, token).unwrap();
+                }
+                branch.begin_response(&model).unwrap();
+                let source_records = branch.values.as_ref().unwrap().sources.clone();
+                let (second, bytes, eos) = generate(&model, &mut branch);
+                let uses_intermediate = first.zip(second).is_some_and(|(x, y)| {
+                    y.operands.iter().any(|v| v.derived && v.id == x.write_id)
+                });
+                let second_correct = second
+                    .is_some_and(|d| d.value == expected && d.action == action)
+                    && bytes == expected_text.as_bytes()
+                    && eos;
+                if remove_intermediate {
+                    control_changes_output = removed && bytes != full_bytes;
+                } else {
+                    full_correct = first_correct && second_correct && uses_intermediate;
+                    full_bytes = bytes.clone();
+                }
+                println!(
+                    "{}",
+                    serde_json::json!({"artifact_cid":model.artifact_cid,
+                    "operands":[a,b,delta],"prompt":prompt,"query":query,"required_action":action,
+                    "first":first,"second":second,"first_expected":first_expected,
+                    "first_text":String::from_utf8_lossy(&first_bytes),
+                    "expected":expected_text,"second_text":String::from_utf8_lossy(&bytes),
+                    "first_correct":first_correct,"second_correct":second_correct,"terminated":eos,
+                    "source_records":source_records,"uses_intermediate":uses_intermediate,
+                    "remove_intermediate_control":remove_intermediate,"record_removed":removed,
+                    "work":branch.work,"shared_prefix_work":session.work,
+                    "scope":"OPEN frozen learned artifact, untrained follow-up wording; no refit or supplied derived value. Branch work includes shared prefix work; subtract it before summing physical work."})
+                );
+            }
+            exact_chains += usize::from(full_correct && control_changes_output);
+        }
+    }
+    assert_eq!(
+        exact_chains, 6,
+        "learned generated composition remains unqualified; inspect reachability, selection, emission and intermediate control separately"
+    );
+}
