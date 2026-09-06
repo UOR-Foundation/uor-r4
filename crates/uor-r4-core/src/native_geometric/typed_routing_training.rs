@@ -19,6 +19,9 @@ pub struct TypedRoutingTurn {
 #[serde(deny_unknown_fields)]
 pub struct TypedRoutingExample {
     pub id: String,
+    /// Offline frame with no preceding response or supplied intermediate.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub literal_only: bool,
     pub initial_prompt: String,
     pub initial_response: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -54,12 +57,14 @@ impl TypedRouting {
         )?;
         let primes = crate::corpus_induced_spin_placement::first_primes(self.dictionary.len())
             .map_err(|e| Error(e.to_string()))?;
-        if self.initialization_artifact.as_ref().is_some_and(|cid| {
-            !self.operand_provenance
-                || cid.len() != 71
-                || !cid.starts_with("blake3:")
-                || !cid[7..].bytes().all(|b| b.is_ascii_hexdigit())
-        }) || (self.operand_provenance && (!roles || !self.local_query || !self.fold_ascii_case))
+        if (self.literal_answers && !self.operand_provenance)
+            || self.initialization_artifact.as_ref().is_some_and(|cid| {
+                !self.operand_provenance
+                    || cid.len() != 71
+                    || !cid.starts_with("blake3:")
+                    || !cid[7..].bytes().all(|b| b.is_ascii_hexdigit())
+            })
+            || (self.operand_provenance && (!roles || !self.local_query || !self.fold_ascii_case))
             || (roles && model.typed_routing.is_none())
             || model.values.is_none()
             || self.dictionary.is_empty()
@@ -152,42 +157,60 @@ fn initial(
     model: &Model,
     d: &TypedRoutingExample,
     local_query: bool,
-) -> Result<(Session, ValueDecision)> {
+) -> Result<(Session, Option<ValueDecision>)> {
     let mut s = model.session(Control::Full)?;
     s.observe(model, BOS)?;
-    for t in model.encode(&d.initial_prompt)? {
-        s.observe(model, t)?;
+    if d.literal_only
+        && (!d.initial_prompt.is_empty()
+            || !d.initial_response.is_empty()
+            || d.continuation.is_some()
+            || !d.refresh.is_empty()
+            || d.target_intermediate != 0)
+    {
+        return Err(Error(
+            "literal frame cannot supply a preceding response".into(),
+        ));
     }
-    s.begin_response(model)?;
-    let (bytes, decision, eos) = generate(model, &mut s)?;
-    if bytes != d.initial_response.as_bytes() || !eos {
-        return Err(Error(format!(
-            "initial generated response failed: {}: {}",
-            d.id,
-            String::from_utf8_lossy(&bytes)
-        )));
-    }
-    let mut first =
-        decision.ok_or_else(|| Error("initial response has no committed typed decision".into()))?;
-    s.end_response(model)?;
-    for (i, turn) in d.continuation.iter().chain(d.refresh.iter()).enumerate() {
-        for t in model.encode(&turn.prompt)? {
+    let mut first = None;
+    if !d.literal_only {
+        for t in model.encode(&d.initial_prompt)? {
             s.observe(model, t)?;
         }
         s.begin_response(model)?;
         let (bytes, decision, eos) = generate(model, &mut s)?;
-        if bytes != turn.response.as_bytes() || !eos {
+        if bytes != d.initial_response.as_bytes() || !eos {
             return Err(Error(format!(
-                "generated intermediate failed: {} turn{}: {}",
+                "initial generated response failed: {}: {}",
                 d.id,
-                i,
                 String::from_utf8_lossy(&bytes)
             )));
         }
-        if i == 0 && d.target_intermediate == 1 {
-            first = decision.ok_or_else(|| Error("continuation has no typed decision".into()))?;
-        }
+        first = Some(
+            decision
+                .ok_or_else(|| Error("initial response has no committed typed decision".into()))?,
+        );
         s.end_response(model)?;
+        for (i, turn) in d.continuation.iter().chain(d.refresh.iter()).enumerate() {
+            for t in model.encode(&turn.prompt)? {
+                s.observe(model, t)?;
+            }
+            s.begin_response(model)?;
+            let (bytes, decision, eos) = generate(model, &mut s)?;
+            if bytes != turn.response.as_bytes() || !eos {
+                return Err(Error(format!(
+                    "generated intermediate failed: {} turn{}: {}",
+                    d.id,
+                    i,
+                    String::from_utf8_lossy(&bytes)
+                )));
+            }
+            if i == 0 && d.target_intermediate == 1 {
+                first = Some(
+                    decision.ok_or_else(|| Error("continuation has no typed decision".into()))?,
+                );
+            }
+            s.end_response(model)?;
+        }
     }
     if local_query {
         if let Some(v) = &mut s.values {
@@ -241,26 +264,50 @@ impl Model {
         config: SourceRoutingConfig,
         fold_ascii_case: bool,
     ) -> Result<(Self, serde_json::Value)> {
-        self.fit_typed(docs, config, fold_ascii_case, false, false, false, None)
+        self.fit_typed(
+            docs,
+            config,
+            fold_ascii_case,
+            false,
+            false,
+            false,
+            false,
+            None,
+        )
     }
     pub fn fit_typed_roles(
         &self,
         docs: &[TypedRoutingExample],
         config: SourceRoutingConfig,
     ) -> Result<(Self, serde_json::Value)> {
-        self.fit_typed(docs, config, true, true, false, false, None)
+        self.fit_typed(docs, config, true, true, false, false, false, None)
     }
     pub fn fit_typed_roles_local(
         &self,
         docs: &[TypedRoutingExample],
         config: SourceRoutingConfig,
     ) -> Result<(Self, serde_json::Value)> {
-        self.fit_typed(docs, config, true, true, true, false, None)
+        self.fit_typed(docs, config, true, true, true, false, false, None)
     }
     pub fn fit_typed_roles_provenance(
         &self,
         docs: &[TypedRoutingExample],
         config: SourceRoutingConfig,
+    ) -> Result<(Self, serde_json::Value)> {
+        self.fit_typed_role_extension(docs, config, false)
+    }
+    pub fn fit_typed_literal_answers(
+        &self,
+        docs: &[TypedRoutingExample],
+        config: SourceRoutingConfig,
+    ) -> Result<(Self, serde_json::Value)> {
+        self.fit_typed_role_extension(docs, config, true)
+    }
+    fn fit_typed_role_extension(
+        &self,
+        docs: &[TypedRoutingExample],
+        config: SourceRoutingConfig,
+        literal_answers: bool,
     ) -> Result<(Self, serde_json::Value)> {
         if let Some(block) = &self.typed_roles {
             self.validate()?;
@@ -274,10 +321,11 @@ impl Model {
                 true,
                 true,
                 true,
+                literal_answers,
                 Some((block, self.artifact_cid())),
             )
         } else {
-            self.fit_typed(docs, config, true, true, true, true, None)
+            self.fit_typed(docs, config, true, true, true, true, literal_answers, None)
         }
     }
     fn fit_typed(
@@ -288,6 +336,7 @@ impl Model {
         roles: bool,
         local_query: bool,
         operand_provenance: bool,
+        literal_answers: bool,
         initialization: Option<(&TypedRouting, &str)>,
     ) -> Result<(Self, serde_json::Value)> {
         config.validate()?;
@@ -299,7 +348,8 @@ impl Model {
         }) || docs.is_empty()
             || docs.len() > 256
             || docs.iter().any(|d| {
-                d.id.is_empty()
+                (d.literal_only && !literal_answers)
+                    || d.id.is_empty()
                     || d.initial_prompt.len() + d.query.len() > 4096
                     || d.response.len() > 128
                     || d.initial_response.len() > 128
@@ -358,6 +408,7 @@ impl Model {
             canonical_copy_aliases: local_query,
             local_query,
             operand_provenance,
+            literal_answers,
             initialization_artifact: initialization.map(|(_, cid)| cid.to_owned()),
             dictionary,
             router: SourceRouting {
@@ -386,7 +437,7 @@ impl Model {
                 .values
                 .as_ref()
                 .ok_or_else(|| Error("typed state absent".into()))?;
-            if roles && values.sources.iter().filter(|r| r.derived).count() < 2 {
+            if roles && !d.literal_only && values.sources.iter().filter(|r| r.derived).count() < 2 {
                 return Err(Error(
                     "typed role frame has fewer than two derived sources".into(),
                 ));
@@ -418,7 +469,9 @@ impl Model {
                     && d.operands.is_some_and(|pair| {
                         ([a.value, b.value] == pair
                             || (action == ValueAction::Add && [b.value, a.value] == pair))
-                            && (a.id == first.write_id || b.id == first.write_id)
+                            && first.map_or(!a.derived && !b.derived, |first| {
+                                a.id == first.write_id || b.id == first.write_id
+                            })
                     });
                 let (f, n) = typed_routing::features_with_provenance(
                     values,
@@ -474,8 +527,9 @@ impl Model {
             initialize_roles(&mut block, old);
         }
         // Exact effective-feature collisions are inspected before the fit.
-        let mut signatures = BTreeMap::<Vec<(usize, Vec<ValueFeature>)>, BTreeSet<usize>>::new();
-        for frame in &frames {
+        let mut signatures =
+            BTreeMap::<Vec<(usize, Vec<ValueFeature>)>, (usize, BTreeSet<usize>)>::new();
+        for (frame_index, frame) in frames.iter().enumerate() {
             let signature = frame
                 .alternatives
                 .iter()
@@ -504,10 +558,15 @@ impl Model {
                 .collect::<BTreeSet<_>>();
             let joint = signatures
                 .entry(signature)
-                .or_insert_with(|| correct.clone());
-            *joint = joint.intersection(&correct).copied().collect();
-            if joint.is_empty() {
-                return Err(Error("typed effective feature collision before fit".into()));
+                .or_insert_with(|| (frame_index, correct.clone()));
+            joint.1 = joint.1.intersection(&correct).copied().collect();
+            if joint.1.is_empty() {
+                let full_equal = frames[joint.0]
+                    .alternatives
+                    .iter()
+                    .zip(&frame.alternatives)
+                    .all(|(a, b)| a.action == b.action && a.features == b.features);
+                return Err(Error(format!("typed effective feature collision before fit: {} / {}; full_features_equal={full_equal}; retained={}/{}", docs[joint.0].id, docs[frame_index].id, vocab.len(), frequency.len())));
             }
         }
         let construction_ms = started.elapsed().as_millis();
@@ -527,7 +586,7 @@ impl Model {
         let artifact = model.artifact_cid().to_owned();
         Ok((
             model,
-            serde_json::json!({"parent":self.artifact_cid(),"artifact":artifact,"frames":frames.len(),"effective_query_classes":signatures.len(),"incompatible_feature_classes":0,"feature_universe":frequency.len(),"features":vocab.len(),"dictionary_words":dictionary_words,"block_bytes":block_bytes,"construction_ms":construction_ms,"fit":fit,"config":config,"scope":"Joint typed operator/operand labels over actual generated intermediates; source values and numeric query words are not encoded as geometric scoring features. Construction fit is not generated transfer."}),
+            serde_json::json!({"parent":self.artifact_cid(),"artifact":artifact,"frames":frames.len(),"effective_query_classes":signatures.len(),"incompatible_feature_classes":0,"feature_universe":frequency.len(),"features":vocab.len(),"dictionary_words":dictionary_words,"block_bytes":block_bytes,"construction_ms":construction_ms,"fit":fit,"config":config,"scope":"Joint typed operator/operand labels over actual generated intermediates or explicit literal-only input frames; source values and numeric query words are not encoded as geometric scoring features. Construction fit is not generated transfer."}),
         ))
     }
 
@@ -554,7 +613,7 @@ impl Model {
                 }
             };
             if remove_intermediate {
-                if let Some(v) = &mut s.values {
+                if let (Some(v), Some(first)) = (&mut s.values, first) {
                     let target = copy_origin(v, first.write_id);
                     let removed: Vec<u64> = v
                         .sources
@@ -571,7 +630,10 @@ impl Model {
             let used = decision.is_some_and(|x| {
                 s.values.as_ref().is_some_and(|v| {
                     x.operands.iter().any(|r| {
-                        r.derived && copy_origin(v, r.id) == copy_origin(v, first.write_id)
+                        r.derived
+                            && first.is_some_and(|first| {
+                                copy_origin(v, r.id) == copy_origin(v, first.write_id)
+                            })
                     })
                 })
             });
@@ -579,7 +641,15 @@ impl Model {
             let exact = bytes == d.response.as_bytes()
                 && eos
                 && action == d.action
-                && (d.action.is_none() || used);
+                && (d.action.is_none()
+                    || used
+                    || (d.literal_only
+                        && decision.is_some_and(|x| {
+                            d.operands.is_some_and(|p| {
+                                let pair = x.operands.map(|r| r.value);
+                                pair == p || (x.action == ValueAction::Add && pair == [p[1], p[0]])
+                            })
+                        })));
             cases.push(serde_json::json!({"id":d.id,"query":d.query,"expected":d.response,"text":String::from_utf8_lossy(&bytes),"expected_action":d.action,"exact":exact,"used_intermediate":used,"terminated":eos,"decision":decision,"first_decision":first,"captured":captured,"work":s.work}));
         }
         Ok(

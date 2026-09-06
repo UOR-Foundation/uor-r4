@@ -37,7 +37,8 @@ impl Default for SourceRoutingConfig {
 }
 impl SourceRoutingConfig {
     pub(super) fn validate(&self) -> Result<()> {
-        if !(1..=256).contains(&self.learned_features)
+        // Literal and derived-value routing share a bounded feature vocabulary.
+        if !(1..=768).contains(&self.learned_features)
             || !(1..=8).contains(&self.passes)
             || !(1..=120).contains(&self.proposals)
             || !(1..=120).contains(&self.max_seconds)

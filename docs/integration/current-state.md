@@ -1,6 +1,43 @@
 # Current native geometric AI work
 
-## Independent computed-result selection — #1139 / #1140, 2026-09-06
+## Literal geometric selection improves numerics but fails preservation — #1139 / #1140, 2026-09-06
+
+**Keep `af337c28` as the accepted artifact.** The optional literal-state
+extension is [implemented and measured](../native_geometric_literal_selection_1139.md),
+with [bound evidence](../evidence/native_geometric_literal_selection_1139.json).
+Angular `51788aef` and matched exact-code `3f31e998` improve new complete
+three-turn transfers from8/16 to16/16 and new literal answers from7/16 to12/16.
+The four remaining literal failures are abstention text. Neither candidate is
+promoted: both lose a previously correct computed-result case. Angular also
+loses three identifier-copy responses, dropping prior sets to60/62 and23/24.
+Its old independent-transfer aggregate stays12/16 but masks two lost cases.
+There is no new angular advantage over the exact-code control.
+
+The same learned H4 role component can now select literal operands with an
+artifact-bound opt-in flag. Full vocabulary retention corrects a diagnosed
+256-of601 feature truncation collision. Adding seven actual construction first
+prompts corrects a missing-prefix training mismatch. The revised fit reaches
+129/129 routing labels but121/129 generated construction responses; fit is not
+end-to-end acceptance. Both earlier failures remain preserved. Native serving
+continues to use integer/table operations with no matmul, dense transformer or
+LLM correction. The real CLI, seven focused tests, kernel source check and an
+actual three-turn zero-allocation/checkpoint check pass.
+
+**Next: protect computed-result routing while learning literal numeric admission
+against word-answer alternatives.** Reuse existing NoOperation, exact state and
+operators, with a bounded literal-state correction rather than shared refitting
+that changes working response roles. Check new lexical identity coupling and
+individual preservation cases. Do not expand generated Rust until the new
+numeric path stops taking over identifier answers. General syntax, prose,
+reasoning, frontier capability and whole-model efficiency remain unqualified.
+
+This cycle charges317.230s local model work; cumulative use is2921.586/2970s,
+leaving48.414s. It used the pre-recorded+240s cumulative extension and a360s
+cycle ceiling. No additional storage allowance, deletions or external model
+compute. The linked evidence carries exact engineering totals, storage/RSS,
+commands and preserved artifacts; all earlier resource charges remain included.
+
+## Previous checkpoint: independent computed-result selection — #1139 / #1140, 2026-09-06
 
 **Retain `af337c28` at bounded operand-provenance scope.** The
 [result](../native_geometric_operand_provenance_1139.md) and

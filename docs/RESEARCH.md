@@ -1,6 +1,17 @@
 # Research: what is measured, what is closed, what is open
 
-## Independent-result provenance — current checkpoint, 2026-09-06
+## Literal selection — executed preservation negative, 2026-09-06
+
+The [literal extension](native_geometric_literal_selection_1139.md) improves
+new three-turn generation8/16 to16/16 and literal answers7/16 to12/16, with the
+same results for angular and exact-code. Four abstention texts fail. Shared
+fitting also regresses computed-result and identifier-copy cases; neither new
+artifact is promoted and `af337c28` remains accepted. Truncation and missing
+first-prefix training were corrected, with their failures preserved. The next
+change protects working computed roles while learning literal admission against
+word-answer alternatives. The record binds complete costs and limitations.
+
+## Independent-result provenance — retained checkpoint, 2026-09-06
 
 The [operand-provenance record](native_geometric_operand_provenance_1139.md)
 retains `af337c28`:58/58 construction,8/8 reachable development and 12/16 complete
@@ -9,7 +20,7 @@ gets 12/16; this is no new angular-distance advantage. All 12 reached selections
 pass; four first-literal responses fail. Exact ancestry-propagated cue matches
 and word-identity remapping of existing learned parameters solve the bounded
 selection seam. Two random fits lose18 old updated-total cases and remain
-negative. Prior checks are preserved; initial literal binding is next.
+negative. Its prior checks remain the preservation baseline for the later literal extension.
 
 ## Competing derived values — previous checkpoint, 2026-09-06
 

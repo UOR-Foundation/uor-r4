@@ -62,8 +62,11 @@ identity and an explicit query boundary. The subsequent
 [operand-provenance continuation](docs/native_geometric_operand_provenance_1139.md)
 gets 12/16 complete independent-result name/order transfers, versus 3/16 parent
 and 12/16 exact-code. Four fail before selection, at the first literal answer;
-that is the next binding repair. General prose/syntax/reasoning and frontier
-capability remain unqualified. Follow
+the [literal extension](docs/native_geometric_literal_selection_1139.md) now
+improves new complete transfers8/16 to16/16 but regresses computed-result and
+identifier-copy cases. The earlier artifact remains accepted; the next repair
+protects working roles while learning literal admission against word answers.
+General prose/syntax/reasoning and frontier capability remain unqualified. Follow
 the current-state pointer for artifacts, costs and the next implementation.
 
 ```sh
