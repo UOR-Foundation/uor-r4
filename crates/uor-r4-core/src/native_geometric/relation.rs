@@ -350,13 +350,18 @@ pub(super) fn write_choice(
     let h = head(model)?;
     let words = &words[..words.len().min(8)];
     let addr = writer_addresses(model, words, work);
-    if model
-        .relation_writer
-        .as_ref()
-        .is_none_or(|w| w.reuse_admission)
-        && h.admission.as_ref().is_some_and(|gate| {
-            super::relation_admission::skip(model, gate, words.len(), &addr, work)
-        })
+    // A writer-scoped cache supersedes inherited metadata. Never consult both.
+    let gate = match &model.relation_writer {
+        Some(writer) => writer.admission.as_ref().or_else(|| {
+            writer
+                .reuse_admission
+                .then_some(h.admission.as_ref())
+                .flatten()
+        }),
+        None => h.admission.as_ref(),
+    };
+    if gate
+        .is_some_and(|gate| super::relation_admission::skip(model, gate, words.len(), &addr, work))
     {
         return None;
     }

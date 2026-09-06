@@ -166,3 +166,12 @@ policy and claim checks accompany protected delivery. The machine-readable
 [evidence](evidence/native_geometric_writer_binding_1139.json) records exact
 resources and commands. CI/merge status belongs to the protected PR and live
 GitHub; compatibility acknowledgements are not broad QA evidence.
+
+
+## Subsequent NoWrite repair — 2026-09-06
+
+The [writer-scoped cache repair](native_geometric_writer_admission_1139.md) now
+retains `2600b95b` with this writer's parameters unchanged. It restores
+21,799/21,907 exact skips and reduces the same long-context writer comparisons
+from 226,101,330 to 539,448. The measurements above remain the history of the
+uncached writer artifact; they are not overwritten by its successor.

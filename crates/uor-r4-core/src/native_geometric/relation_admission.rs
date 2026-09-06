@@ -8,6 +8,15 @@ use std::cmp::Ordering;
 use std::collections::BTreeMap;
 
 const CAPACITY: usize = 64;
+const WRITER_CAPACITY: usize = 256;
+
+fn capacity(model: &Model) -> usize {
+    if model.relation_writer.is_some() {
+        WRITER_CAPACITY
+    } else {
+        CAPACITY
+    }
+}
 const BUCKET_LIMIT: usize = 8;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -65,6 +74,10 @@ fn route(model: &Model, s: &Signature, work: &mut ValueWork) -> Route {
     let Some(h) = head(model) else {
         return Route::default();
     };
+    let context = model
+        .relation_writer
+        .as_ref()
+        .map_or(h.role_context.as_slice(), |w| w.role_context.as_slice());
     let mut root = model.geometry.identity;
     let mut phases = [0_u16; PHASE_CHANNELS];
     for prime in s.primes[..usize::from(s.len)].iter().rev() {
@@ -72,14 +85,14 @@ fn route(model: &Model, s: &Signature, work: &mut ValueWork) -> Route {
         if *prime == 0 {
             continue;
         }
-        if let Ok(i) = h.role_context.binary_search_by(|g| {
+        if let Ok(i) = context.binary_search_by(|g| {
             work.relations.role_path_comparisons =
                 work.relations.role_path_comparisons.saturating_add(1);
             work.relations.admission_metadata_bytes =
                 work.relations.admission_metadata_bytes.saturating_add(4);
             g.prime.cmp(prime)
         }) {
-            let g = &h.role_context[i];
+            let g = &context[i];
             root = model.geometry.products
                 [model.geometry.row_bases[usize::from(root)] + usize::from(g.leaf)];
             work.h4_reads += 2;
@@ -192,6 +205,9 @@ pub(super) fn skip(
 // NATIVE_GEOMETRIC_INTEGER_KERNEL_END
 
 fn admission_mut(model: &mut Model) -> Result<&mut Option<Admission>> {
+    if let Some(writer) = &mut model.relation_writer {
+        return Ok(&mut writer.admission);
+    }
     Ok(&mut model
         .response_entry
         .as_mut()
@@ -203,6 +219,16 @@ fn admission_mut(model: &mut Model) -> Result<&mut Option<Admission>> {
 }
 
 impl Admission {
+    fn bound_parent(&self, model: &Model) -> Result<Model> {
+        let mut parent = model.clone();
+        *admission_mut(&mut parent)? = None;
+        parent.refresh_identity()?;
+        if self.parent != parent.artifact_cid() {
+            return Err(Error("admission parent differs".into()));
+        }
+        Ok(parent)
+    }
+
     pub(super) fn compatible_writer(&self, model: &Model) -> bool {
         self.entries.iter().all(|e| {
             let mut addr = [0; 16];
@@ -220,19 +246,14 @@ impl Admission {
     pub(super) fn validate(&self, model: &Model) -> Result<()> {
         if self.schema != "uor-r4.relation-admission/1"
             || self.entries.is_empty()
-            || self.entries.len() > CAPACITY
+            || self.entries.len() > capacity(model)
             || self.training.is_empty()
             || self.training.len() > 256
             || head(model).is_none_or(|h| h.schema != "uor-r4.exact-relation/2")
         {
             return Err(Error("invalid relation admission bounds/schema".into()));
         }
-        let mut parent = model.clone();
-        *admission_mut(&mut parent)? = None;
-        parent.refresh_identity()?;
-        if self.parent != parent.artifact_cid() {
-            return Err(Error("admission parent differs".into()));
-        }
+        let parent = self.bound_parent(model)?;
         let mut sorted = self.entries.clone();
         sort_entries(&mut sorted, self.mode);
         if sorted != self.entries {
@@ -278,6 +299,30 @@ fn sort_entries(entries: &mut [Entry], mode: RelationAdmissionMode) {
     });
 }
 
+// Propose other phases only for an exactly repeated full construction window.
+// These are not observed frequency counts and grant no NoWrite permission;
+// every proposal must still pass the unchanged writer below.
+fn periodic_phases(counts: &mut BTreeMap<Signature, usize>) -> usize {
+    let observed: Vec<_> = counts.keys().cloned().collect();
+    let before = counts.len();
+    for s in observed {
+        if s.len != 8 {
+            continue;
+        }
+        let Some(period) =
+            (1..=4).find(|&p| 8 % p == 0 && (0..8).all(|i| s.primes[i] == s.primes[i % p]))
+        else {
+            continue;
+        };
+        for shift in 1..period {
+            let mut next = s.clone();
+            next.primes.rotate_left(shift);
+            counts.entry(next).or_insert(0);
+        }
+    }
+    counts.len() - before
+}
+
 impl Model {
     /// Compile frequent, exactly reproducible NoWrite decisions of the learned
     /// /2 writer. No writer refit, answer labels, or approximate negative gate.
@@ -287,7 +332,10 @@ impl Model {
     ) -> Result<(Model, serde_json::Value)> {
         let h = head(self).ok_or_else(|| Error("relation model absent".into()))?;
         if h.schema != "uor-r4.exact-relation/2"
-            || h.admission.is_some()
+            || self
+                .relation_writer
+                .as_ref()
+                .map_or(h.admission.is_some(), |w| w.admission.is_some())
             || documents.is_empty()
             || documents.len() > 256
             || documents.iter().map(|d| d.prompt.len()).sum::<usize>() > 1024 * 1024
@@ -331,7 +379,7 @@ impl Model {
                     }
                     last = Some(words.recent[0].byte_end);
                     let n = words.recent_len.min(8);
-                    let addr = super::relation::addresses(
+                    let addr = super::relation::writer_addresses(
                         self,
                         &words.recent[..n],
                         &mut ValueWork::default(),
@@ -344,6 +392,11 @@ impl Model {
             }
         }
         let distinct = counts.len();
+        let periodic_proposals = if self.relation_writer.is_some() {
+            periodic_phases(&mut counts)
+        } else {
+            0
+        };
         let mut eligible = Vec::new();
         let mut certification_work = ValueWork::default();
         for (s, count) in counts {
@@ -362,7 +415,7 @@ impl Model {
         }
         eligible.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
         let eligible_count = eligible.len();
-        eligible.truncate(CAPACITY);
+        eligible.truncate(capacity(self));
         let covered: usize = eligible.iter().map(|(_, n)| n).sum();
         let mut entries: Vec<_> = eligible
             .into_iter()
@@ -371,12 +424,19 @@ impl Model {
                 exact,
             })
             .collect();
-        sort_entries(&mut entries, RelationAdmissionMode::Geometric);
+        // Retain the previously selected sparse exact lookup for replacement
+        // writers. Legacy geometric compilation and its controls stay available.
+        let mode = if self.relation_writer.is_some() {
+            RelationAdmissionMode::Sparse
+        } else {
+            RelationAdmissionMode::Geometric
+        };
+        sort_entries(&mut entries, mode);
         let count = entries.len();
         let gate = Admission {
             schema: "uor-r4.relation-admission/1".into(),
             parent: self.artifact_cid().into(),
-            mode: RelationAdmissionMode::Geometric,
+            mode,
             entries,
             training,
         };
@@ -386,7 +446,7 @@ impl Model {
         model.validate()?;
         Ok((
             model,
-            serde_json::json!({"boundaries":boundaries,"distinct_signatures":distinct,"eligible_no_write_signatures":eligible_count,"entries":count,"construction_selected_boundaries":covered,"certification_work":certification_work,"entry_layout_bytes":std::mem::size_of::<Entry>(),"persistent_state_bytes_added":0,"bucket_limit":BUCKET_LIMIT,"scope":"Frequency-selected exact negatives from existing learned /2 writer; no new predictive fit. Geometry shortlist with full prime signature guard. Unknown or crowded routes fall back to unchanged writer."}),
+            serde_json::json!({"mode":mode,"parent":self.artifact_cid(),"boundaries":boundaries,"distinct_signatures":distinct,"periodic_phase_proposals":periodic_proposals,"eligible_no_write_signatures":eligible_count,"entries":count,"capacity":capacity(self),"construction_selected_boundaries":covered,"certification_work":certification_work,"entry_layout_bytes":std::mem::size_of::<Entry>(),"persistent_state_bytes_added":0,"bucket_limit":BUCKET_LIMIT,"scope":"Frequency-selected exact negatives from existing learned /2 writer; no new predictive fit. Full exact prime signature guard; geometric mode adds a shortlist. Unmatched signatures and crowded geometric routes fall back to unchanged writer."}),
         ))
     }
 
@@ -414,6 +474,81 @@ impl Model {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn native_relation_admission_periodic_phases_preserve_observed_counts() {
+        let a = Signature {
+            len: 8,
+            primes: [79, 73, 79, 73, 79, 73, 79, 73],
+        };
+        let b = Signature {
+            len: 8,
+            primes: [73, 79, 73, 79, 73, 79, 73, 79],
+        };
+        let nonperiodic = Signature {
+            len: 8,
+            primes: [1, 2, 3, 4, 5, 6, 7, 8],
+        };
+        let mut counts = BTreeMap::from([(a.clone(), 112), (nonperiodic.clone(), 3)]);
+        assert_eq!(periodic_phases(&mut counts), 1);
+        assert_eq!(counts.get(&a), Some(&112));
+        assert_eq!(counts.get(&b), Some(&0));
+        assert_eq!(counts.get(&nonperiodic), Some(&3));
+        assert_eq!(periodic_phases(&mut counts), 0);
+    }
+
+    #[test]
+    fn native_relation_admission_binds_replacement_writer_and_roundtrips() {
+        let docs = [Document {
+            id: "cache-parent".into(),
+            text: "in now not".into(),
+        }];
+        let mut trainer = Trainer::new(Config::default(), &docs).unwrap();
+        trainer.train_documents(&docs).unwrap();
+        let mut model = trainer.compile().unwrap();
+        // Only the parent-binding boundary is under test; this synthetic writer
+        // deliberately has no predictive rows and is not a qualified artifact.
+        model.relation_writer = Some(super::super::relation_training::WriterRevision {
+            schema: "uor-r4.relation-writer/1".into(),
+            parent: model.artifact_cid().into(),
+            dictionary: vec![],
+            role_context: vec![],
+            rows: vec![],
+            training: vec![],
+            epochs: 1,
+            reuse_admission: false,
+            admission: None,
+        });
+        model.refresh_identity().unwrap();
+        let original = model.to_bytes().unwrap();
+        assert!(
+            !serde_json::from_slice::<serde_json::Value>(&original).unwrap()["relation_writer"]
+                .as_object()
+                .unwrap()
+                .contains_key("admission")
+        );
+        let gate = Admission {
+            schema: "uor-r4.relation-admission/1".into(),
+            parent: model.artifact_cid().into(),
+            mode: RelationAdmissionMode::Sparse,
+            entries: vec![],
+            training: vec![],
+        };
+        *admission_mut(&mut model).unwrap() = Some(gate.clone());
+        model.refresh_identity().unwrap();
+        assert_eq!(
+            gate.bound_parent(&model).unwrap().to_bytes().unwrap(),
+            original
+        );
+        let decoded: Admission =
+            serde_json::from_slice(&serde_json::to_vec(&gate).unwrap()).unwrap();
+        assert_eq!(decoded, gate);
+        // Rebinding a cache to changed writer metadata must fail even when the
+        // outer model identity is regenerated. Removing it recovers the parent.
+        model.relation_writer.as_mut().unwrap().epochs = 2;
+        model.refresh_identity().unwrap();
+        assert!(gate.bound_parent(&model).is_err());
+    }
 
     #[test]
     fn native_relation_admission_exact_guard_and_crowded_fallback() {

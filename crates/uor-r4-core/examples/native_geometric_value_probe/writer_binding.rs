@@ -108,6 +108,65 @@ pub(super) fn run(args: &[String]) -> ProbeResult<()> {
         .first()
         .map(String::as_str)
         .ok_or("writer-binding mode absent")?;
+    if mode == "admission" || mode == "admission-verify" {
+        if args.len() != if mode == "admission-verify" { 7 } else { 5 } {
+            return Err("writer-binding admission MODEL SOURCE NEW_MODEL NEW_REPORT".into());
+        }
+        let model = Model::from_bytes(&fs::read(&args[1])?)?;
+        let source: Value = serde_json::from_slice(&fs::read(&args[2])?)?;
+        let fit: Vec<RelationExample> = serde_json::from_value(source["fit"].clone())?;
+        let (cached, compilation) = model.compile_relation_admission(&fit)?;
+        let bytes = cached.to_bytes()?;
+        let mut parent: Value = serde_json::from_slice(&model.to_bytes()?)?;
+        let mut stripped: Value = serde_json::from_slice(&bytes)?;
+        let admission = stripped["relation_writer"]
+            .as_object_mut()
+            .ok_or("replacement writer absent")?
+            .remove("admission")
+            .ok_or("replacement writer cache absent")?;
+        for key in ["artifact_cid", "uor_model_address"] {
+            parent
+                .as_object_mut()
+                .ok_or("parent object absent")?
+                .remove(key);
+            stripped
+                .as_object_mut()
+                .ok_or("candidate object absent")?
+                .remove(key);
+        }
+        if parent != stripped || admission["parent"] != model.artifact_cid() {
+            return Err("NoWrite compilation changed parent parameters or binding".into());
+        }
+        write_new(Path::new(&args[3]), &bytes)?;
+        let report = json!({"parent":model.artifact_cid(),"artifact":cached.artifact_cid(),
+            "compilation":compilation,"parameters_unchanged":true,"serialized_bytes":bytes.len(),
+            "scope":"Construction prompts only; writer-scoped exact NoWrite metadata. All learned parameters, tokenizer, reader and inherited cache unchanged. No fitting or new reserve."});
+        write_json(Path::new(&args[4]), &report)?;
+        println!("{}", report);
+        if mode == "admission-verify" {
+            let out = Path::new(&args[6]);
+            fs::create_dir(out)?;
+            for (field, label) in [("development", "development"), ("fresh", "exposed-names")] {
+                let docs: Vec<RelationExample> = serde_json::from_value(source[field].clone())?;
+                write_json(
+                    &out.join(format!("{label}.json")),
+                    &evaluate(&cached, &docs)?,
+                )?;
+            }
+            for label in ["preservation", "prior"] {
+                let docs: Vec<ValueExample> = serde_json::from_value(source[label].clone())?;
+                write_json(
+                    &out.join(format!("{label}.json")),
+                    &responses(&cached, &docs)?,
+                )?;
+            }
+            let long: Value = serde_json::from_slice(&fs::read(&args[5])?)?;
+            let docs: Vec<RelationExample> = serde_json::from_value(long["first_use"].clone())?;
+            write_json(&out.join("long.json"), &evaluate(&cached, &docs)?)?;
+            relation_memory::verify_model(cached, &out.join("sessions.json"))?;
+        }
+        return Ok(());
+    }
     if mode == "continue-source" {
         if args.len() != 3 {
             return Err("writer-binding continue-source SOURCE NEW_SOURCE".into());
@@ -282,9 +341,11 @@ pub(super) fn run(args: &[String]) -> ProbeResult<()> {
         println!("{report}");
         return Ok(());
     }
-    if mode == "evaluate" || mode == "fresh" {
+    if mode == "evaluate" || mode == "preserve" || mode == "fresh" {
         if args.len() != 4 {
-            return Err("writer-binding evaluate|fresh MODEL SOURCE NEW_OUTPUT_DIR".into());
+            return Err(
+                "writer-binding evaluate|preserve|fresh MODEL SOURCE NEW_OUTPUT_DIR".into(),
+            );
         }
         let model = Model::from_bytes(&fs::read(&args[1])?)?;
         let source: Value = serde_json::from_slice(&fs::read(&args[2])?)?;
@@ -302,7 +363,7 @@ pub(super) fn run(args: &[String]) -> ProbeResult<()> {
             "{}",
             json!({"split":split,"exact":result["exact"],"writes_exact":result["writes_exact"],"total":result["total"]})
         );
-        if mode == "evaluate" {
+        if mode == "evaluate" || mode == "preserve" {
             for label in ["preservation", "prior"] {
                 let docs: Vec<ValueExample> = serde_json::from_value(source[label].clone())?;
                 let r = responses(&model, &docs)?;
@@ -312,6 +373,18 @@ pub(super) fn run(args: &[String]) -> ProbeResult<()> {
                     json!({"split":label,"exact":r["exact"],"total":r["total"]})
                 );
             }
+        }
+        if mode == "preserve" {
+            let docs: Vec<RelationExample> = serde_json::from_value(source["fresh"].clone())?;
+            let result = evaluate(&model, &docs)?;
+            write_json(&out.join("exposed-names.json"), &result)?;
+            println!(
+                "{}",
+                json!({"split":"exposed-names","exact":result["exact"],"writes_exact":result["writes_exact"],"total":result["total"]})
+            );
+        }
+        if mode == "preserve" {
+            relation_memory::verify_model(model, &out.join("sessions.json"))?;
         }
         return Ok(());
     }
