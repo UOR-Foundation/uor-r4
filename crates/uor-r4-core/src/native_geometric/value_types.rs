@@ -29,6 +29,8 @@ pub struct ValueWork {
     pub literal_writes: u64,
     pub record_evictions: u64,
     pub proposals: u64,
+    #[serde(default, skip_serializing_if = "is_zero_u64")]
+    pub alias_self_add_rejections: u64,
     /// Exact Copy/Add calls, including rejected overflow attempts.
     #[serde(default, skip_serializing_if = "is_zero_u64")]
     pub operator_executions: u64,
@@ -159,6 +161,8 @@ pub(super) struct ValueState {
     pub active: bool,
     pub consumed: bool,
     pub started_at: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub query_boundary: Option<u64>,
     pub queries: [ValueEntry; QUERY],
     pub query_len: usize,
     pub emission: Option<ValueEmission>,
@@ -188,6 +192,11 @@ impl ValueState {
             active: false,
             consumed: false,
             started_at: 0,
+            query_boundary: model
+                .typed_roles
+                .as_ref()
+                .filter(|b| b.local_query)
+                .map(|_| 0),
             queries: [ValueEntry::default(); QUERY],
             query_len: 0,
             emission: None,

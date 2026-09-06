@@ -12,6 +12,13 @@ geometric operators through bounded state, routing and integer/table lookup.
 Working generation or session persistence does not establish either required
 alpha capability group: conversation/memory and coding/reasoning.
 
+The optional [typed-role selector](native_geometric_typed_roles_1139.md) uses
+`Session::end_response` to mark the start boundary for the next query's metadata.
+Continue to call the explicit begin/end response API around each generated turn;
+a raw concatenated transcript does not supply the same boundary contract.
+Exact retained values and derivations remain available across that boundary.
+Artifacts enabling this behavior require the boundary in restored checkpoints.
+
 ## Historical and retained reference lifecycles
 
 The material below preserves source-model, TLA, R4G1 and earlier geometric

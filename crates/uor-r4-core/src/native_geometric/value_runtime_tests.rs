@@ -412,6 +412,8 @@ fn native_typed_routing_case_fold_changes_metadata_only() {
     bytes[..4].copy_from_slice(b"copy");
     let mut block = TypedRouting {
         fold_ascii_case: true,
+        canonical_copy_aliases: false,
+        local_query: false,
         dictionary: vec![WordCopyAddress {
             bytes,
             len: 4,
@@ -442,12 +444,45 @@ fn native_typed_routing_case_fold_changes_metadata_only() {
             2
         );
         assert_eq!(values.lexemes, Some(words));
+        block.local_query = true;
+        values.query_boundary = Some(1);
+        assert_eq!(
+            super::typed_routing::addresses(&block, values, &mut Default::default())[0],
+            0
+        );
+        values.lexemes.as_mut().unwrap().queries[0].end = 1;
+        assert_eq!(
+            super::typed_routing::addresses(&block, values, &mut Default::default())[0],
+            2
+        );
+        values.lexemes = Some(words);
+        values.query_boundary = None;
+        block.local_query = false;
         block.fold_ascii_case = false;
         assert_eq!(
             super::typed_routing::addresses(&block, values, &mut Default::default())[0],
             if spelling == b"copy" { 2 } else { 0 }
         );
     }
+}
+
+#[test]
+fn native_typed_roles_query_boundary_tracks_end_and_roundtrips() {
+    let model = mechanical_model(ValueAction::Add);
+    let mut session = prefix(&model, "13 4 total:", Control::Full);
+    let v = session.values.as_mut().unwrap();
+    v.query_boundary = Some(0);
+    let end = v.seen;
+    v.end();
+    assert_eq!(v.query_boundary, Some(end));
+    let saved = serde_json::to_vec(v).unwrap();
+    let restored: ValueState = serde_json::from_slice(&saved).unwrap();
+    assert_eq!(restored.query_boundary, Some(end));
+    // Old state has no boundary field and remains boundary-free.
+    let mut wire = serde_json::to_value(&restored).unwrap();
+    wire.as_object_mut().unwrap().remove("query_boundary");
+    let old: ValueState = serde_json::from_value(wire).unwrap();
+    assert_eq!(old.query_boundary, None);
 }
 
 #[test]
@@ -658,4 +693,135 @@ fn native_value_selected_execution_learned_chain_diagnostic() {
         exact_chains, 6,
         "learned generated composition remains unqualified; inspect reachability, selection, emission and intermediate control separately"
     );
+}
+
+#[test]
+fn native_typed_roles_lineage_is_order_and_copy_invariant() {
+    let model = mechanical_model(ValueAction::Add);
+    let mut session = prefix(&model, "13 4 total:", Control::Full);
+    let v = session.values.as_mut().unwrap();
+    let literal = |id, value| ValueRecord {
+        id,
+        value,
+        ..Default::default()
+    };
+    let derived = |id, value, action, ids, nums| ValueRecord {
+        id,
+        value,
+        derived: true,
+        derivation: Some(ValueDerivation {
+            action,
+            operand_ids: ids,
+            operand_values: nums,
+        }),
+        ..Default::default()
+    };
+    v.sources = vec![
+        literal(0, 13),
+        literal(1, 4),
+        derived(2, 17, ValueAction::Add, [0, 1], [13, 4]),
+        literal(3, 5),
+        derived(4, 22, ValueAction::Add, [2, 3], [17, 5]),
+        derived(5, 17, ValueAction::Copy, [2, 2], [17, 17]),
+    ];
+    let d = super::typed_routing::lineage_depths(v, &mut Default::default());
+    assert_eq!(&d[..6], &[0, 0, 1, 0, 2, 1]);
+    let a = v.sources[2];
+    let b = v.sources[4];
+    let features = super::typed_routing::features_with_depths(
+        v,
+        Some((a, b)),
+        &[0; 16],
+        Some(&d),
+        &mut Default::default(),
+    );
+    v.sources.reverse();
+    let reversed = super::typed_routing::lineage_depths(v, &mut Default::default());
+    assert_eq!(&reversed[..6], &[1, 2, 0, 1, 0, 0]);
+    assert_eq!(
+        features,
+        super::typed_routing::features_with_depths(
+            v,
+            Some((a, b)),
+            &[0; 16],
+            Some(&reversed),
+            &mut Default::default()
+        )
+    );
+    // Numeric values are payloads, not lineage metadata.
+    for r in &mut v.sources {
+        r.value = -999;
+    }
+    assert_eq!(
+        reversed,
+        super::typed_routing::lineage_depths(v, &mut Default::default())
+    );
+    // Missing ancestors are explicit unknown, never silently depth zero.
+    v.sources.retain(|r| r.id != 0);
+    let missing = super::typed_routing::lineage_depths(v, &mut Default::default());
+    for (i, r) in v.sources.iter().enumerate() {
+        if r.derived {
+            assert_eq!(missing[i], 255);
+        }
+    }
+}
+
+#[test]
+fn native_typed_roles_alias_admission_uses_identity_not_numeric_equality() {
+    let model = mechanical_model(ValueAction::Add);
+    let mut session = prefix(&model, "13 4 total:", Control::Full);
+    let v = session.values.as_mut().unwrap();
+    let original = ValueRecord {
+        id: 2,
+        value: 17,
+        derived: true,
+        derivation: Some(ValueDerivation {
+            action: ValueAction::Add,
+            operand_ids: [0, 1],
+            operand_values: [13, 4],
+        }),
+        ..Default::default()
+    };
+    let alias = ValueRecord {
+        id: 3,
+        derivation: Some(ValueDerivation {
+            action: ValueAction::Copy,
+            operand_ids: [2, 2],
+            operand_values: [17, 17],
+        }),
+        ..original
+    };
+    let other = ValueRecord { id: 4, ..original };
+    v.sources.extend([original, alias, other]);
+    let origins = super::typed_routing::copy_origins(v, &mut Default::default());
+    assert!(super::typed_routing::alias_self_add(
+        v,
+        original,
+        alias,
+        Some(&origins),
+        &mut Default::default()
+    ));
+    assert!(!super::typed_routing::alias_self_add(
+        v,
+        original,
+        other,
+        Some(&origins),
+        &mut Default::default()
+    ));
+    assert!(!super::typed_routing::alias_self_add(
+        v,
+        original,
+        alias,
+        None,
+        &mut Default::default()
+    ));
+    v.sources.reverse();
+    let reversed = super::typed_routing::copy_origins(v, &mut Default::default());
+    assert!(super::typed_routing::alias_self_add(
+        v,
+        alias,
+        original,
+        Some(&reversed),
+        &mut Default::default()
+    ));
 }

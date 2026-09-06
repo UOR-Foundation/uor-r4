@@ -1215,3 +1215,65 @@ fn native_typed_artifact_routing_is_allocation_free() {
     assert_eq!((ALLOCATIONS.with(Cell::get), BYTES.with(Cell::get)), (0, 0));
     println!("actual typed geometric routing/commit: allocations=0 bytes=0");
 }
+
+#[test]
+#[ignore = "requires R4_TYPED_ROLES_MODEL retained role selection artifact"]
+fn native_typed_role_artifact_is_allocation_free() {
+    let path = std::env::var("R4_TYPED_ROLES_MODEL").expect("named model path");
+    let model =
+        uor_r4_core::native_geometric::Model::from_bytes(&std::fs::read(path).unwrap()).unwrap();
+    let prompts=[
+        "User: suri has 13 coins. orin has 4 coins.\nUser: What is the sum of suri's and orin's coins?\nAssistant:",
+        "User: There are 5 new coins. Add the new coins to the previous total.\nAssistant:",
+        "User: Repeat the original total.\nAssistant:",
+        "User: There are 2 extra coins. Add the extra coins to the updated total.\nAssistant:",
+    ].map(|p|model.encode(p).unwrap());
+    let mut s = model.session(Control::Full).unwrap();
+    let mut answers = [None; 4];
+    ALLOCATIONS.with(|v| v.set(0));
+    BYTES.with(|v| v.set(0));
+    MEASURING.with(|v| v.set(true));
+    let result = (|| {
+        s.observe(&model, BOS)?;
+        for (i, prompt) in prompts.iter().enumerate() {
+            for &token in prompt {
+                s.observe(&model, token)?;
+            }
+            s.begin_response(&model)?;
+            for _ in 0..32 {
+                let token = s.predict(&model)?.token;
+                if let Some(d) = s.value_decision().filter(|d| d.cursor == 0) {
+                    answers[i] = Some(d.value);
+                }
+                s.observe(&model, token)?;
+                if token == EOS {
+                    break;
+                }
+            }
+            s.end_response(&model)?;
+        }
+        Ok::<_, uor_r4_core::native_geometric::Error>(())
+    })();
+    MEASURING.with(|v| v.set(false));
+    result.unwrap();
+    assert_eq!(answers, [Some(17), Some(22), Some(17), Some(24)]);
+    assert!(s.work.values.alias_self_add_rejections > 0);
+    assert_eq!((ALLOCATIONS.with(Cell::get), BYTES.with(Cell::get)), (0, 0));
+    let checkpoint = s.checkpoint().unwrap();
+    let restored = model.restore_session(&checkpoint).unwrap();
+    assert_eq!(restored.checkpoint().unwrap(), checkpoint);
+    let mut forged: serde_json::Value = serde_json::from_slice(&checkpoint).unwrap();
+    assert!(forged["values"]["query_boundary"].is_number());
+    forged["values"]
+        .as_object_mut()
+        .unwrap()
+        .remove("query_boundary");
+    assert!(model
+        .restore_session(&serde_json::to_vec(&forged).unwrap())
+        .is_err());
+    forged["values"]["query_boundary"] = serde_json::json!(u64::MAX);
+    assert!(model
+        .restore_session(&serde_json::to_vec(&forged).unwrap())
+        .is_err());
+    println!("actual competing typed roles: four committed values correct; allocations=0 bytes=0; boundary restore and rejection checks PASS");
+}
