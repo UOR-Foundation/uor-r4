@@ -11,32 +11,161 @@ pub(super) struct TypedRouting {
     pub dictionary: Vec<WordCopyAddress>,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub fold_ascii_case: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub canonical_copy_aliases: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub local_query: bool,
+}
+
+pub(super) struct TypedContext {
+    pub addresses: [u32; 16],
+    pub depths: Option<[u8; 16]>,
+    pub origins: Option<[u64; 16]>,
 }
 
 // NATIVE_GEOMETRIC_INTEGER_KERNEL_BEGIN
+/// Depth of exact Add computation, preserving depth across Copy aliases.
+/// Unknown/evicted ancestry remains 255. Fixed-capacity relaxation does not
+/// assume source order and terminates after at most VALUES passes.
+pub(super) fn lineage_depths(values: &ValueState, work: &mut ValueWork) -> [u8; 16] {
+    let mut depth = [255; 16];
+    for (i, r) in values.sources.iter().enumerate() {
+        work.routing.sources_examined += 1;
+        if !r.derived {
+            depth[i] = 0;
+        }
+    }
+    for _ in 0..VALUES {
+        let mut changed = false;
+        for (i, r) in values.sources.iter().enumerate() {
+            work.routing.sources_examined += 1;
+            if depth[i] != 255 {
+                continue;
+            }
+            let Some(d) = r.derivation else {
+                continue;
+            };
+            let mut parents = [255; 2];
+            for (j, source) in values.sources.iter().enumerate() {
+                work.routing.sources_examined += 1;
+                for k in 0..2 {
+                    work.routing.comparisons += 1;
+                    work.routing.logical_bytes_read += 16;
+                    if source.id == d.operand_ids[k] && source.id < r.id {
+                        parents[k] = depth[j];
+                    }
+                }
+            }
+            let value = if d.action == ValueAction::Copy {
+                parents[0]
+            } else if parents[0] != 255 && parents[1] != 255 {
+                parents[0].max(parents[1]) + 1
+            } else {
+                255
+            };
+            if value != 255 {
+                depth[i] = value;
+                changed = true;
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+    depth
+}
+
+pub(super) fn copy_origins(values: &ValueState, work: &mut ValueWork) -> [u64; 16] {
+    let mut out = [u64::MAX; 16];
+    for (i, record) in values.sources.iter().enumerate() {
+        let mut id = record.id;
+        for _ in 0..VALUES {
+            let found = values.sources.iter().find(|r| {
+                work.routing.sources_examined += 1;
+                work.routing.comparisons += 1;
+                work.routing.logical_bytes_read += 16;
+                r.id == id
+            });
+            let Some(d) = found
+                .and_then(|r| r.derivation)
+                .filter(|d| d.action == ValueAction::Copy)
+            else {
+                break;
+            };
+            if d.operand_ids[0] >= id {
+                break;
+            }
+            id = d.operand_ids[0];
+        }
+        out[i] = id;
+    }
+    out
+}
+
+/// Same operation support as the original i != j candidate contract: observing
+/// a Copy must not manufacture a reflexive Add edge for one computation.
+pub(super) fn alias_self_add(
+    values: &ValueState,
+    a: ValueRecord,
+    b: ValueRecord,
+    origins: Option<&[u64; 16]>,
+    work: &mut ValueWork,
+) -> bool {
+    let Some(origins) = origins else {
+        return false;
+    };
+    let mut pair = [u64::MAX; 2];
+    for (i, r) in values.sources.iter().enumerate() {
+        work.routing.sources_examined += 1;
+        work.routing.comparisons += 2;
+        work.routing.logical_bytes_read += 32;
+        if r.id == a.id {
+            pair[0] = origins[i];
+        }
+        if r.id == b.id {
+            pair[1] = origins[i];
+        }
+    }
+    pair[0] != u64::MAX && pair[0] == pair[1]
+}
+
 pub(super) fn context(
     model: &Model,
     values: &ValueState,
     control: Control,
     work: &mut ValueWork,
-) -> Option<[u32; 16]> {
-    let block = model.typed_routing.as_ref()?;
+) -> Option<TypedContext> {
+    let mut block = model.typed_routing.as_ref()?;
     if matches!(
         control,
         Control::LearnedRoutingDisabled | Control::GeometryDisabled | Control::H4Disabled
     ) {
         return None;
     }
-    let mut derived = false;
+    let mut derived = 0;
     for source in &values.sources {
         work.routing.sources_examined += 1;
-        derived |= source.derived;
+        derived += usize::from(source.derived);
     }
     // Structural scope: initial literal-only decisions retain their parent.
-    if !derived {
+    if derived == 0 {
         return None;
     }
-    Some(addresses(block, values, work))
+    let depths = if derived >= 2 {
+        model.typed_roles.as_ref().map(|roles| {
+            block = roles;
+            lineage_depths(values, work)
+        })
+    } else {
+        None
+    };
+    let origins =
+        (depths.is_some() && block.canonical_copy_aliases).then(|| copy_origins(values, work));
+    Some(TypedContext {
+        addresses: addresses(block, values, work),
+        depths,
+        origins,
+    })
 }
 
 pub(super) fn addresses(
@@ -50,6 +179,13 @@ pub(super) fn addresses(
     };
     for (i, word) in words.queries[..words.query_len].iter().enumerate() {
         work.routing.context_tokens_read += 1;
+        if block.local_query {
+            work.routing.comparisons += 1;
+            work.routing.logical_bytes_read += 16;
+            if values.query_boundary.is_some_and(|start| word.end < start) {
+                continue;
+            }
+        }
         let found = block.dictionary.binary_search_by(|d| {
             work.routing.comparisons += 1;
             for j in 0..usize::from(word.len.min(d.len)) {
@@ -72,10 +208,21 @@ pub(super) fn addresses(
     out
 }
 
+#[cfg(test)]
 pub(super) fn features(
     values: &ValueState,
     operands: Option<(ValueRecord, ValueRecord)>,
     addr: &[u32; 16],
+    work: &mut ValueWork,
+) -> ([ValueFeature; 36], usize) {
+    features_with_depths(values, operands, addr, None, work)
+}
+
+pub(super) fn features_with_depths(
+    values: &ValueState,
+    operands: Option<(ValueRecord, ValueRecord)>,
+    addr: &[u32; 16],
+    depths: Option<&[u8; 16]>,
     work: &mut ValueWork,
 ) -> ([ValueFeature; 36], usize) {
     let mut out = [ValueFeature::default(); 36];
@@ -107,6 +254,34 @@ pub(super) fn features(
         b: rank_b as u64,
     };
     let mut n = 2;
+    if let Some(depths) = depths {
+        let mut pair = [255_u64; 2];
+        if let Some((a, b)) = operands {
+            for (i, r) in values.sources.iter().enumerate() {
+                work.routing.sources_examined += 1;
+                work.routing.comparisons += 2;
+                if r.id == a.id {
+                    pair[0] = u64::from(depths[i]);
+                }
+                if r.id == b.id {
+                    pair[1] = u64::from(depths[i]);
+                }
+            }
+            // Retain recency for literals only; derived candidates use lineage.
+            if a.derived {
+                out[1].a = VALUES as u64;
+            }
+            if b.derived {
+                out[1].b = VALUES as u64;
+            }
+        }
+        out[n] = ValueFeature {
+            kind: 4,
+            a: pair[0],
+            b: pair[1],
+        };
+        n += 1;
+    }
     // Ordered exact word identities, not distances computed from hash bits.
     for (position, &prime) in addr.iter().enumerate() {
         if prime == 0 {
@@ -133,14 +308,24 @@ pub(super) fn score(
     values: &ValueState,
     operands: Option<(ValueRecord, ValueRecord)>,
     action: usize,
-    addr: &[u32; 16],
+    context: &TypedContext,
     control: Control,
     work: &mut ValueWork,
 ) -> i64 {
-    let Some(block) = &model.typed_routing else {
+    let Some(block) = (if context.depths.is_some() {
+        &model.typed_roles
+    } else {
+        &model.typed_routing
+    }) else {
         return 0;
     };
-    let (f, n) = features(values, operands, addr, work);
+    let (f, n) = features_with_depths(
+        values,
+        operands,
+        &context.addresses,
+        context.depths.as_ref(),
+        work,
+    );
     let state = block
         .router
         .encode(model, &f[..n], control, &mut work.routing);

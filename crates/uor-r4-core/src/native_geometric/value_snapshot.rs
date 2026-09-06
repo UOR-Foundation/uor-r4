@@ -103,7 +103,10 @@ impl Session {
             .values
             .as_ref()
             .is_some_and(|head| head.schema == LEXEME_VALUE_SCHEMA);
-        if saved.seen != observed
+        if saved.query_boundary.is_some()
+            != model.typed_roles.as_ref().is_some_and(|b| b.local_query)
+            || saved.query_boundary.is_some_and(|start| start > observed)
+            || saved.seen != observed
             || saved.lexemes.is_some() != lexical
             || saved.recent_len != observed.min(32) as usize
             || saved.recent_cursor != (observed & 31) as usize

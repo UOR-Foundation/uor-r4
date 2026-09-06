@@ -177,6 +177,7 @@ impl Trainer {
             relation_writer: None,
             dependent_read: None,
             typed_routing: None,
+            typed_roles: None,
             source_routing: None,
             learned_routing: None,
             schema: SCHEMA.into(),
@@ -511,6 +512,24 @@ impl Model {
     }
     pub(super) fn validate(&self) -> Result<()> {
         self.config.validate()?;
+        if let Some(block) = &self.typed_roles {
+            let mut parent = self.clone();
+            parent.typed_roles = None;
+            parent.refresh_identity()?;
+            if parent.artifact_cid != block.router.parent_artifact {
+                return Err(Error("typed routing parent differs".into()));
+            }
+            parent.validate()?;
+            block.validate(self, true)?;
+            let mut duplicate = self.clone();
+            duplicate.refresh_identity()?;
+            if duplicate.artifact_cid != self.artifact_cid
+                || duplicate.uor_model_address != self.uor_model_address
+            {
+                return Err(Error("typed routing identity differs".into()));
+            }
+            return Ok(());
+        }
         if let Some(block) = &self.typed_routing {
             let mut parent = self.clone();
             parent.typed_routing = None;
@@ -519,7 +538,7 @@ impl Model {
                 return Err(Error("typed routing parent differs".into()));
             }
             parent.validate()?;
-            block.validate(self)?;
+            block.validate(self, false)?;
             let mut duplicate = self.clone();
             duplicate.refresh_identity()?;
             if duplicate.artifact_cid != self.artifact_cid
@@ -892,6 +911,7 @@ fn add_work(total: &mut Work, work: Work) {
     total.values.literal_writes += work.values.literal_writes;
     total.values.record_evictions += work.values.record_evictions;
     total.values.proposals += work.values.proposals;
+    total.values.alias_self_add_rejections += work.values.alias_self_add_rejections;
     total.values.routing.add(work.values.routing);
     total.values.operator_executions += work.values.operator_executions;
     total.values.selection_comparisons += work.values.selection_comparisons;
@@ -988,6 +1008,7 @@ mod work_tests {
                     predictions: 1,
                     ..RoutingWork::default()
                 },
+                alias_self_add_rejections: 1,
                 operator_executions: 1,
                 selection_comparisons: 1,
                 selection_passes: 1,

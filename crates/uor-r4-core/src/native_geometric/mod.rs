@@ -22,7 +22,7 @@ mod source_routing_training;
 pub use source_routing_training::SourceRoutingConfig;
 mod typed_routing;
 mod typed_routing_training;
-pub use typed_routing_training::TypedRoutingExample;
+pub use typed_routing_training::{TypedRoutingExample, TypedRoutingTurn};
 mod anchors;
 mod learned_routing;
 #[cfg(test)]
@@ -315,6 +315,8 @@ pub struct Model {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     typed_routing: Option<typed_routing::TypedRouting>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    typed_roles: Option<typed_routing::TypedRouting>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     relation_writer: Option<relation_training::WriterRevision>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     dependent_read: Option<dependent_read::DependentRead>,
@@ -350,6 +352,8 @@ pub struct Model {
 struct ModelWire {
     #[serde(default)]
     typed_routing: Option<typed_routing::TypedRouting>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    typed_roles: Option<typed_routing::TypedRouting>,
     #[serde(default)]
     relation_writer: Option<relation_training::WriterRevision>,
     #[serde(default)]
@@ -385,6 +389,7 @@ impl TryFrom<ModelWire> for Model {
     fn try_from(wire: ModelWire) -> Result<Self> {
         let model = Self {
             typed_routing: wire.typed_routing,
+            typed_roles: wire.typed_roles,
             relation_writer: wire.relation_writer,
             dependent_read: wire.dependent_read,
             source_routing: wire.source_routing,

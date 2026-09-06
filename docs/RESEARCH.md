@@ -1,6 +1,19 @@
 # Research: what is measured, what is closed, what is open
 
-## NoWrite reuse — current checkpoint, 2026-09-06
+## Competing derived values — current checkpoint, 2026-09-06
+
+The [typed-role record](native_geometric_typed_roles_1139.md) retains `43c54db3`
+at bounded causal-depth scope: 12/12 complete new four-turn operand/refresh
+transfers versus 2/12 for the matched exact-code fit. Exact derivation depth,
+Copy-alias admission and query metadata cut at explicit response boundaries
+address the observed failures. Earlier 9/12 and 8/12 transfers remain exposed
+negatives. Removal gives 0/12 full operator/provenance successes but 2/12 matching
+texts through recomputation. Existing conversation, memory and familiar Rust
+checks pass; no general named-role, prose, syntax, reasoning or frontier claim.
+The [current state](integration/current-state.md) carries cumulative resources
+and the next equal-depth operand/owner-binding implementation.
+
+## NoWrite reuse — previous checkpoint, 2026-09-06
 
 The [corrected-writer cache](native_geometric_writer_admission_1139.md) retains
 `2600b95b`. All learned parameters remain fixed; construction contributes 140

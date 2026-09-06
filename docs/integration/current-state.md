@@ -1,6 +1,45 @@
 # Current native geometric AI work
 
-## Learned geometric typed selection passes its bounded transfer — #1139, 2026-09-06
+## Competing intermediate selection passes — #1139 / #1140, 2026-09-06
+
+**Retain `43c54db3` over exact parent `bb79456b`.** The
+[result](../native_geometric_typed_roles_1139.md#executed-decision--retain-43c54db3-at-bounded-causal-depth-scope)
+and [evidence](../evidence/native_geometric_typed_roles_1139.json) bind scope.
+The learned H4 selector now uses exact derivation depth, canonical Copy identity
+for alias admission, and an explicit response boundary for query metadata. The
+13,609-byte optional role component applies with two or more derived sources;
+exact values and operators remain unchanged. No serving matrix multiplication,
+floating projection, dense transformer or LLM/provider correction is added.
+
+Angular fits/generates 42/42 construction and gets 12/12 development and 12/12
+new complete four-turn operand/refresh transfers. The matched exact-code fit
+gets 2/12 complete transfers, including eight failed generated refresh turns.
+After 20+3 ->23 and +7 ->30, refreshing updated ->30 still permits original
+->23 or original+2 ->25. Both refresh directions pass. Previous 9/12 and 8/12
+transfer failures remain exposed negatives. This is small authored evidence,
+not sealed general-language or general semantic-role qualification.
+
+The intermediate-removal control has 0/12 full operator/provenance successes,
+but **2/12 answer texts remain correct through recomputation**. Full-path
+provenance passes 12/12. All 48 dependent, 62 earlier, 24 prior-transfer, 28
+exposed-name, 28 long-context, five persistent and six prior numeric cases pass.
+Ten focused tests, integer-kernel and actual zero-allocation checks pass, as do
+checkpoint boundary restoration/rejection, CLI revision and four unchanged
+Rust functions with 12 semantic assertions. New general Rust reasoning is not
+established by preservation of those functions.
+
+**Next: equal-depth independent computations, selected through exact operand/
+owner provenance under changed names and order.** Reuse this selector and state;
+causal depth alone cannot distinguish arbitrary named results. Carry a successful
+selection into generated Rust and execute it. Full #1139/#1140 remain open.
+
+This cycle uses 283.472 seconds model work and 1397.998 seconds monitored
+engineering work. Cumulative model use is 2316.511/2370 seconds; 53.489 remain.
+Recorded revisions extend the cycle ceilings to 330/1500 seconds under standing
+owner authorization. Storage fits its existing allowance; all artifacts and
+user material are preserved. No paid external compute occurred.
+
+## Previous checkpoint: learned geometric typed selection passes its bounded transfer — #1139, 2026-09-06
 
 **Retain `bb79456b` over exact parent `2600b95b`.** The
 [result](../native_geometric_typed_routing_1139.md#executed-result--2026-09-06)

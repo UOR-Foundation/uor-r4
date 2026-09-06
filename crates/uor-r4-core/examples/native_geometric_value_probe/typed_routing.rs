@@ -1,6 +1,6 @@
 use super::*;
 use uor_r4_core::native_geometric::{
-    RoutingMode, SourceRoutingConfig, TypedRoutingExample, ValueAction,
+    RoutingMode, SourceRoutingConfig, TypedRoutingExample, TypedRoutingTurn, ValueAction,
 };
 
 fn example(
@@ -16,15 +16,176 @@ fn example(
     } else {
         a + b
     };
-    TypedRoutingExample {id,
+    TypedRoutingExample {id, continuation: None, refresh: Vec::new(), target_intermediate: 0,
         initial_prompt:format!("User: suri has {a} coins. orin has {b} coins.\nUser: What is the sum of suri's and orin's coins?\nAssistant:"),
         initial_response:format!("{}.\n",a+b),query:format!("User: There are {delta} new coins. {question}\nAssistant:"),
         response:if action.is_some(){format!("{value}.\n")}else{" Unknown.\n".into()},
         action,operands:action.map(|op|if op==ValueAction::Copy{[a+b,a+b]}else{[a+b,delta]}),
     }
 }
+fn role_example(
+    id: String,
+    a: i64,
+    b: i64,
+    delta: i64,
+    extra: i64,
+    kind: usize,
+    refresh: bool,
+) -> TypedRoutingExample {
+    let questions = [
+        "Repeat the original total.",
+        "Repeat the updated total.",
+        "Copy the total before the new coins.",
+        "Copy the total after the new coins.",
+        "Add the extra coins to the original total.",
+        "Add the extra coins to the updated total.",
+        "Where is the location of suri?",
+    ];
+    let target = usize::from(kind == 1 || kind == 3 || kind == 5);
+    let value = a + b + if target == 1 { delta } else { 0 };
+    let action = if kind == 6 {
+        None
+    } else if kind >= 4 {
+        Some(ValueAction::Add)
+    } else {
+        Some(ValueAction::Copy)
+    };
+    let mut d = example(id, a, b, delta, questions[kind], action);
+    d.continuation=Some(TypedRoutingTurn {prompt:format!("User: There are {delta} new coins. Add the new coins to the previous total.\nAssistant:"),response:format!("{}.\n",a+b+delta)});
+    d.target_intermediate = target;
+    d.query = if kind == 4 || kind == 5 {
+        format!(
+            "User: There are {extra} extra coins. {}\nAssistant:",
+            questions[kind]
+        )
+    } else {
+        format!("User: {}\nAssistant:", questions[kind])
+    };
+    d.operands = action.map(|op| {
+        if op == ValueAction::Copy {
+            [value, value]
+        } else {
+            [value, extra]
+        }
+    });
+    d.response = if action.is_none() {
+        " Unknown.\n".into()
+    } else {
+        format!(
+            "{}.\n",
+            value
+                + if action == Some(ValueAction::Add) {
+                    extra
+                } else {
+                    0
+                }
+        )
+    };
+    if refresh {
+        d.refresh.push(TypedRoutingTurn {
+            prompt: "User: Repeat the original total.\nAssistant:".into(),
+            response: format!("{}.\n", a + b),
+        });
+    }
+    d
+}
+
 pub(super) fn run(args: &[String]) -> ProbeResult<()> {
     match args.first().map(String::as_str) {
+        Some("canonical-roles") if args.len()==3 => {
+            let model=Model::from_bytes(&fs::read(&args[1])?)?;
+            let candidate=model.canonicalize_typed_role_aliases()?;
+            write_new(Path::new(&args[2]),&candidate.to_bytes()?)?;
+            println!("{}",json!({"before":model.artifact_cid(),"artifact":candidate.artifact_cid(),"change":"Exact Copy aliases cannot introduce a reflexive Add candidate; learned parameters unchanged."}));
+        }
+        Some("alias-source") if args.len()==3 => {
+            let mut source:Value=serde_json::from_slice(&fs::read(&args[1])?)?;
+            source["exposed_first_use"]=source["first_use"].clone();
+            let mut reserved=Vec::new();
+            for (i,(a,b,d,e)) in [(11,7,4,3),(16,5,8,4),(-5,13,6,2)].into_iter().enumerate() {
+                for kind in [0,1,4,5] {
+                    let mut case=role_example(format!("roles-alias-transfer/{i}/{kind}"),a,b,d,e,kind,true);
+                    if i != 1 {case.refresh[0]=TypedRoutingTurn {prompt:"User: Repeat the updated total.\nAssistant:".into(),response:format!("{}.\n",a+b+d)};}
+                    reserved.push(case);
+                }
+            }
+            source["first_use"]=serde_json::to_value(reserved)?;
+            source["scope"]=json!("Alias-admission revision: construction and development unchanged; old9/12 transfer remains an exposed negative. Twelve new operands/refresh cases after selection; refreshes original or updated. No refit or broad language qualification.");
+            write_json(Path::new(&args[2]),&source)?;
+        }
+        Some("query-source") if args.len()==3 => {
+            let mut source:Value=serde_json::from_slice(&fs::read(&args[1])?)?;
+            source["exposed_alias_first_use"]=source["first_use"].clone();
+            let mut reserved=Vec::new();
+            for (i,(a,b,d,e)) in [(20,3,7,2),(9,8,4,6),(-6,16,5,3)].into_iter().enumerate() {
+                for kind in [0,1,4,5] {
+                    let mut case=role_example(format!("roles-query-transfer/{i}/{kind}"),a,b,d,e,kind,true);
+                    if i != 1 {case.refresh[0]=TypedRoutingTurn {prompt:"User: Repeat the updated total.\nAssistant:".into(),response:format!("{}.\n",a+b+d)};}
+                    reserved.push(case);
+                }
+            }
+            source["first_use"]=serde_json::to_value(reserved)?;
+            source["scope"]=json!("Explicit query-boundary revision: same construction; prior9/12 and8/12 transfers remain exposed negatives. Twelve new operand/refresh cases after selection. No supplied intermediates or sealed-language claim.");
+            write_json(Path::new(&args[2]),&source)?;
+        }
+        Some("roles-source") if args.len()==2 => {
+            let mut fit=Vec::new();
+            for (i,(a,b,d,e)) in [(13,4,5,2),(8,7,6,3),(-3,8,4,5),(21,3,7,4),(10,6,2,7),(4,9,3,6)].into_iter().enumerate() {
+                for kind in 0..7 {fit.push(role_example(format!("roles-fit/{i}/{kind}"),a,b,d,e,kind,false));}
+            }
+            let mut development=Vec::new();
+            for (i,(a,b,d,e)) in [(13,4,5,2),(14,4,6,3),(-3,8,4,5)].into_iter().enumerate() {
+                for kind in [0,1,4,5] {development.push(role_example(format!("roles-open/{i}/{kind}"),a,b,d,e,kind,false));}
+            }
+            let mut first_use=Vec::new();
+            for (i,(a,b,d,e)) in [(19,12,5,4),(23,8,6,2),(-4,15,3,7)].into_iter().enumerate() {
+                for kind in [0,1,4,5] {first_use.push(role_example(format!("roles-transfer/{i}/{kind}"),a,b,d,e,kind,true));}
+            }
+            write_json(Path::new(&args[1]),&json!({"schema":"uor-r4.typed-roles-source/1","fit":fit,"development":development,"first_use":first_use,"scope":"42 construction cases, 12 OPEN development, 12 after-selection transfers with changed operands and an actually generated original-total refresh that reverses derived recency. No intermediate insertion. Small authored scope, not general language."}))?;
+        }
+        Some("roles-fit"|"roles-fit-local") if args.len()==5 => {
+            let mode=match args[4].as_str(){"angular"=>RoutingMode::Angular,"equality"=>RoutingMode::Equality,_=>return Err("typed role fit mode".into())};
+            let model=Model::from_bytes(&fs::read(&args[1])?)?;
+            let source:Value=serde_json::from_slice(&fs::read(&args[2])?)?;
+            let docs:Vec<TypedRoutingExample>=serde_json::from_value(source["fit"].clone())?;
+            let config=SourceRoutingConfig{learned_features:192,passes:4,proposals:12,max_seconds:30,mode,..SourceRoutingConfig::default()};
+            let (candidate,report)=if args[0]=="roles-fit-local" {model.fit_typed_roles_local(&docs,config)?} else {model.fit_typed_roles(&docs,config)?};
+            let out=Path::new(&args[3]);fs::create_dir(out)?;
+            write_new(&out.join("model.json"),&candidate.to_bytes()?)?;
+            write_json(&out.join("fit.json"),&report)?;println!("{report}");
+        }
+        Some("competition") if args.len()==3 => {
+            let model=Model::from_bytes(&fs::read(&args[1])?)?;
+            let mut cases=Vec::new();
+            for (a,b,delta) in [(13,4,5),(14,4,6),(-3,8,4)] {
+                for (question,wanted) in [("Repeat the original total.",a+b),("Repeat the updated total.",a+b+delta),("Repeat the previous total.",a+b+delta),("Copy the total before the new coins.",a+b)] {
+                    let mut session=model.session(Control::Full)?;
+                    session.observe(&model,uor_r4_core::native_geometric::BOS)?;
+                    let mut turns=Vec::new();
+                    let first=format!("User: suri has {a} coins. orin has {b} coins.\nUser: What is the sum of suri's and orin's coins?\nAssistant:");
+                    let second=format!("User: There are {delta} new coins. Add the new coins to the previous total.\nAssistant:");
+                    let third=format!("User: {question}\nAssistant:");
+                    for (prompt,expected) in [(first,a+b),(second,a+b+delta),(third,wanted)] {
+                        for token in model.encode(&prompt)? {session.observe(&model,token)?;}
+                        session.begin_response(&model)?;
+                        let mut tokens=Vec::new();let mut decision=None;let mut eos=false;
+                        for _ in 0..32 {
+                            let token=session.predict(&model)?.token;
+                            if let Some(d)=session.value_decision().filter(|d|d.cursor==0){decision=Some(d);}
+                            session.observe(&model,token)?;
+                            if token==uor_r4_core::native_geometric::EOS {eos=true;break;}
+                            tokens.push(token);
+                        }
+                        let text=String::from_utf8(model.decode(&tokens)?)?;
+                        turns.push(json!({"prompt":prompt,"expected":format!("{expected}.\n"),"exact":text==format!("{expected}.\n")&&eos,"text":text,"eos":eos,"decision":decision}));
+                        session.end_response(&model)?;
+                    }
+                    cases.push(json!({"turns":turns,"work":session.work}));
+                }
+            }
+            let report=json!({"artifact":model.artifact_cid(),"scope":"OPEN actual three-turn generation, original versus updated total. No expected intermediate is inserted.","cases":cases});
+            write_json(Path::new(&args[2]),&report)?;
+        }
         Some("prepare") if args.len()==2 => {
             let phrases=[
                 ("Repeat the previous total without adding the new coins.",Some(ValueAction::Copy)),
@@ -80,7 +241,7 @@ pub(super) fn run(args: &[String]) -> ProbeResult<()> {
         Some("evaluate") if args.len()==6=>{
             let model=Model::from_bytes(&fs::read(&args[1])?)?;
             let source:Value=serde_json::from_slice(&fs::read(&args[2])?)?;
-            if !["fit","development","first_use","exposed_first_use"].contains(&args[3].as_str()){return Err("typed evaluation split".into());}
+            if !["fit","development","first_use","exposed_first_use","exposed_alias_first_use"].contains(&args[3].as_str()){return Err("typed evaluation split".into());}
             let docs:Vec<TypedRoutingExample>=serde_json::from_value(source[&args[3]].clone())?;
             let remove=match args[5].as_str(){"full"=>false,"remove-intermediate"=>true,_=>return Err("typed control".into())};
             let report=model.evaluate_typed_routing(&docs,remove)?;

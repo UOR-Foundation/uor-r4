@@ -1,0 +1,879 @@
+{
+  "schema": "uor-r4.typed-roles-evidence/1",
+  "decision": "RETAIN_LOCAL_QUERY_CANONICAL_ALIAS_ANGULAR_AT_BOUNDED_CAUSAL_DEPTH_SCOPE",
+  "source_parent": "eb7bfbb8deee0d2c70a18dc7dbf3299b57b448e4",
+  "artifact_root": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05",
+  "artifact": "blake3:43c54db3c7addcca7eaf82e975969968d031fba7ef6ba7b0e0628dc5b9779b76",
+  "parent": "blake3:bb79456b2dd7187005a3501d437fdc17215429bd4fff0671c31a44583d2918c7",
+  "angular_fit": {
+    "artifact": "blake3:43c54db3c7addcca7eaf82e975969968d031fba7ef6ba7b0e0628dc5b9779b76",
+    "block_bytes": 13609,
+    "config": {
+      "learned_features": 192,
+      "max_seconds": 30,
+      "mode": "angular",
+      "passes": 4,
+      "proposals": 12,
+      "seed": 1139
+    },
+    "construction_ms": 100,
+    "dictionary_words": 22,
+    "effective_query_classes": 7,
+    "feature_universe": 105,
+    "features": 105,
+    "fit": {
+      "accepted": [
+        15,
+        0,
+        4
+      ],
+      "final_correct": 42,
+      "final_hinge": 0,
+      "initial_correct": 6,
+      "initial_hinge": 120,
+      "proposals": 13653,
+      "stopped_at_time_limit": false
+    },
+    "frames": 42,
+    "incompatible_feature_classes": 0,
+    "parent": "blake3:bb79456b2dd7187005a3501d437fdc17215429bd4fff0671c31a44583d2918c7",
+    "scope": "Joint typed operator/operand labels over actual generated intermediates; source values and numeric query words are not encoded as geometric scoring features. Construction fit is not generated transfer."
+  },
+  "equality_fit": {
+    "artifact": "blake3:ca7d7f98dccd7c204b1b9c645a8f03c9825e4d7745500272d7863225fb38e818",
+    "block_bytes": 13609,
+    "config": {
+      "learned_features": 192,
+      "max_seconds": 30,
+      "mode": "equality",
+      "passes": 4,
+      "proposals": 12,
+      "seed": 1139
+    },
+    "construction_ms": 100,
+    "dictionary_words": 22,
+    "effective_query_classes": 7,
+    "feature_universe": 105,
+    "features": 105,
+    "fit": {
+      "accepted": [
+        11,
+        0,
+        7
+      ],
+      "final_correct": 25,
+      "final_hinge": 30,
+      "initial_correct": 6,
+      "initial_hinge": 42,
+      "proposals": 13634,
+      "stopped_at_time_limit": false
+    },
+    "frames": 42,
+    "incompatible_feature_classes": 0,
+    "parent": "blake3:bb79456b2dd7187005a3501d437fdc17215429bd4fff0671c31a44583d2918c7",
+    "scope": "Joint typed operator/operand labels over actual generated intermediates; source values and numeric query words are not encoded as geometric scoring features. Construction fit is not generated transfer."
+  },
+  "results": {
+    "parent_development": [
+      3,
+      12
+    ],
+    "construction_generated": [
+      42,
+      42
+    ],
+    "development": [
+      12,
+      12
+    ],
+    "exposed_alias_failure_repair": [
+      12,
+      12
+    ],
+    "new_transfer_angular": [
+      12,
+      12
+    ],
+    "new_transfer_equality": [
+      2,
+      12
+    ],
+    "equality_prefix_failures": 8,
+    "removal_full_criterion": [
+      0,
+      12
+    ],
+    "removal_matching_texts": [
+      2,
+      12
+    ],
+    "dependent": [
+      48,
+      48
+    ],
+    "earlier": [
+      62,
+      62
+    ],
+    "prior_transfer": [
+      24,
+      24
+    ],
+    "exposed_names": [
+      28,
+      28
+    ],
+    "long_context": [
+      28,
+      28
+    ],
+    "persistent_turns": [
+      5,
+      5
+    ],
+    "earlier_numeric_transfer": [
+      6,
+      6
+    ]
+  },
+  "negative_history": [
+    {
+      "artifact": "blake3:4f1ffd80c0299e9c790a38b4d17d09bd822693de04cb2de387330c029cb27c2f",
+      "transfer": [
+        9,
+        12
+      ],
+      "cause": "Copy aliases created reflexive Add candidates; no promotion."
+    },
+    {
+      "artifact": "blake3:94fc7f8f3328282ef907ae9e1f35a07a5dde436ae96a16b52bbc718538bde58d",
+      "transfer": [
+        8,
+        12
+      ],
+      "cause": "Recent-word query crossed response boundaries; no promotion."
+    }
+  ],
+  "scope": "Small authored cases. Same42 construction records across boundary refit. Earlier9/12 and8/12 transfers explicitly exposed;12 new operands/refresh cases opened after design selection. No sealed/general-language or multi-seed claim.",
+  "examples": [
+    {
+      "id": "roles-query-transfer/0/0",
+      "query": "User: Repeat the original total.\nAssistant:",
+      "text": "23.\n",
+      "expected": "23.\n",
+      "used_intermediate": true
+    },
+    {
+      "id": "roles-query-transfer/0/1",
+      "query": "User: Repeat the updated total.\nAssistant:",
+      "text": "30.\n",
+      "expected": "30.\n",
+      "used_intermediate": true
+    },
+    {
+      "id": "roles-query-transfer/0/4",
+      "query": "User: There are 2 extra coins. Add the extra coins to the original total.\nAssistant:",
+      "text": "25.\n",
+      "expected": "25.\n",
+      "used_intermediate": true
+    },
+    {
+      "id": "roles-query-transfer/0/5",
+      "query": "User: There are 2 extra coins. Add the extra coins to the updated total.\nAssistant:",
+      "text": "32.\n",
+      "expected": "32.\n",
+      "used_intermediate": true
+    },
+    {
+      "id": "roles-query-transfer/1/0",
+      "query": "User: Repeat the original total.\nAssistant:",
+      "text": "17.\n",
+      "expected": "17.\n",
+      "used_intermediate": true
+    },
+    {
+      "id": "roles-query-transfer/1/1",
+      "query": "User: Repeat the updated total.\nAssistant:",
+      "text": "21.\n",
+      "expected": "21.\n",
+      "used_intermediate": true
+    },
+    {
+      "id": "roles-query-transfer/1/4",
+      "query": "User: There are 6 extra coins. Add the extra coins to the original total.\nAssistant:",
+      "text": "23.\n",
+      "expected": "23.\n",
+      "used_intermediate": true
+    },
+    {
+      "id": "roles-query-transfer/1/5",
+      "query": "User: There are 6 extra coins. Add the extra coins to the updated total.\nAssistant:",
+      "text": "27.\n",
+      "expected": "27.\n",
+      "used_intermediate": true
+    },
+    {
+      "id": "roles-query-transfer/2/0",
+      "query": "User: Repeat the original total.\nAssistant:",
+      "text": "10.\n",
+      "expected": "10.\n",
+      "used_intermediate": true
+    },
+    {
+      "id": "roles-query-transfer/2/1",
+      "query": "User: Repeat the updated total.\nAssistant:",
+      "text": "15.\n",
+      "expected": "15.\n",
+      "used_intermediate": true
+    },
+    {
+      "id": "roles-query-transfer/2/4",
+      "query": "User: There are 3 extra coins. Add the extra coins to the original total.\nAssistant:",
+      "text": "13.\n",
+      "expected": "13.\n",
+      "used_intermediate": true
+    },
+    {
+      "id": "roles-query-transfer/2/5",
+      "query": "User: There are 3 extra coins. Add the extra coins to the updated total.\nAssistant:",
+      "text": "18.\n",
+      "expected": "18.\n",
+      "used_intermediate": true
+    }
+  ],
+  "complete_work_sum": {
+    "anchor_table_reads": 2504,
+    "candidate_evaluations": 33382,
+    "candidate_offers": 88072,
+    "completion": {
+      "anchors": 48,
+      "base_steps": 0,
+      "candidate_comparisons": 12992,
+      "candidate_drops": 0,
+      "candidate_evaluations": 864,
+      "candidate_writes": 864,
+      "commits": 144,
+      "feature_queries": 2304,
+      "h4_reads": 288,
+      "matched_rows": 2288,
+      "metadata_reads": 528,
+      "mismatches": 0,
+      "observations": 2264,
+      "orientation_reads": 144,
+      "phase_subtractions": 1152,
+      "posting_offers": 5152,
+      "row_comparisons": 20736,
+      "score_comparisons": 25728,
+      "score_lookups": 13728,
+      "state_copies": 7416,
+      "step_limits": 0,
+      "stops": 48
+    },
+    "evictions": 0,
+    "feature_queries": 6240,
+    "h4_table_reads": 2264,
+    "matched_rows": 5360,
+    "memory_candidates": 19698,
+    "memory_composed_candidates": 10836,
+    "memory_composition_comparisons": 2747932,
+    "memory_composition_duplicate_features": 107098,
+    "memory_composition_feature_moves": 580737,
+    "memory_composition_feature_offers": 354564,
+    "memory_cue_reads": 39656,
+    "memory_h4_reads": 140150,
+    "memory_index_reads": 57528,
+    "memory_index_writes": 35744,
+    "memory_phase_updates": 490864,
+    "memory_score_lookups": 247466,
+    "memory_stale_rejections": 0,
+    "mixture_gate_reads": 240,
+    "observed_tokens": 2264,
+    "orientation_table_reads": 240,
+    "phase_additions": 18112,
+    "radial_square_reads": 27168,
+    "response_entry": {
+      "anchors": 48,
+      "base_steps": 0,
+      "candidate_comparisons": 0,
+      "candidate_drops": 0,
+      "candidate_evaluations": 0,
+      "candidate_writes": 0,
+      "commits": 0,
+      "feature_queries": 0,
+      "h4_reads": 0,
+      "matched_rows": 0,
+      "metadata_reads": 48,
+      "mismatches": 0,
+      "observations": 2264,
+      "orientation_reads": 0,
+      "phase_subtractions": 0,
+      "posting_offers": 0,
+      "row_comparisons": 0,
+      "score_comparisons": 0,
+      "score_lookups": 0,
+      "state_copies": 7320,
+      "step_limits": 0,
+      "stops": 0
+    },
+    "score_lookups": 764105,
+    "values": {
+      "additions": 30,
+      "alias_self_add_rejections": 24,
+      "cue_comparisons": 3072,
+      "derived_writes": 48,
+      "emission_commits": 96,
+      "emission_mismatches": 0,
+      "feature_comparisons": 37440,
+      "feature_lookups": 2880,
+      "h4_reads": 22328,
+      "input_bytes": 3460,
+      "lexical_byte_comparisons": 8668,
+      "lexical_comparisons": 6144,
+      "lexical_writes": 600,
+      "literal_writes": 42,
+      "numeral_steps": 18240,
+      "operator_executions": 48,
+      "overflow_rejections": 0,
+      "phase_updates": 18880,
+      "proposals": 1050,
+      "record_evictions": 0,
+      "relations": {
+        "abstentions": 0,
+        "admission_exact_comparisons": 12378,
+        "admission_fallbacks": 600,
+        "admission_metadata_bytes": 33312,
+        "admission_queries": 600,
+        "admission_signature_writes": 5400,
+        "candidates": 23184,
+        "conflicts": 0,
+        "dictionary_byte_comparisons": 34978,
+        "dictionary_comparisons": 26784,
+        "directory_reads": 0,
+        "directory_writes": 0,
+        "feature_queries": 440496,
+        "feature_writes": 146832,
+        "no_writes": 600,
+        "phase_subtractions": 30912,
+        "reads": 0,
+        "record_evictions": 0,
+        "record_reads": 4464,
+        "record_writes": 0,
+        "revisions": 0,
+        "role_path_comparisons": 135072,
+        "role_path_probes": 22512,
+        "role_path_steps": 4140,
+        "role_phase_additions": 33120,
+        "row_comparisons": 5726448,
+        "score_lookups": 434376,
+        "source_presence_checks": 0,
+        "word_boundaries": 600
+      },
+      "routing": {
+        "code_reads": 47184,
+        "comparisons": 221890,
+        "context_tokens_read": 576,
+        "emission_queries": 23694,
+        "logical_bytes_read": 3990420,
+        "operator_executions": 0,
+        "payload_gathers": 0,
+        "predictions": 36,
+        "sources_examined": 15712,
+        "table_reads": 105522
+      },
+      "selection_comparisons": 1026,
+      "selection_passes": 48
+    },
+    "word_copy": {
+      "bound_rejections": 0,
+      "byte_reads": 0,
+      "dictionary_byte_comparisons": 0,
+      "dictionary_comparisons": 0,
+      "dictionary_lookups": 0,
+      "dispatch_checks": 240,
+      "equality_byte_comparisons": 0,
+      "forced_dispatches": 0,
+      "selector": {
+        "anchors": 0,
+        "base_steps": 0,
+        "candidate_comparisons": 0,
+        "candidate_drops": 0,
+        "candidate_evaluations": 0,
+        "candidate_writes": 0,
+        "commits": 0,
+        "feature_queries": 0,
+        "h4_reads": 0,
+        "matched_rows": 0,
+        "metadata_reads": 0,
+        "mismatches": 0,
+        "observations": 2264,
+        "orientation_reads": 0,
+        "phase_subtractions": 0,
+        "posting_offers": 0,
+        "row_comparisons": 0,
+        "score_comparisons": 0,
+        "score_lookups": 0,
+        "state_copies": 0,
+        "step_limits": 0,
+        "stops": 0
+      },
+      "word_candidates": 0,
+      "word_record_reads": 0
+    }
+  },
+  "cost_scope": "Complete four-turn sessions; includes initial sums, update, actual refresh, final output. Logical byte counters cover instrumented loads, not physical DRAM traffic or a complete instruction census. No whole-model speedup claim.",
+  "checks": {
+    "focused_tests": 10,
+    "kernel_source": "PASS",
+    "actual_serving_allocations": 0,
+    "actual_serving_allocated_bytes": 0,
+    "actual_checkpoint_roundtrip_and_boundary_rejections": "PASS",
+    "unchanged_generated_rust_functions": 4,
+    "rust_semantic_assertions": 12,
+    "cli_revision_text": " Zurich.\n",
+    "format_policy_wording": "PASS",
+    "broad_release_QA": "NOT_RUN"
+  },
+  "resources": {
+    "cycle_model_ms": 283472,
+    "cycle_engineering_ms": 1397998,
+    "cumulative_model_ms": 2316511,
+    "model_limit_ms": 2370000,
+    "cycle_model_limit_ms": 330000,
+    "engineering_limit_ms": 1500000,
+    "model_increment_ms": 240000,
+    "storage_increment_bytes": 0,
+    "peak_sampled_known_bytes": 6425583616,
+    "storage_ceiling_bytes": 6506475520,
+    "peak_model_child_rss_bytes": 878673920,
+    "paid_external_compute": 0,
+    "deletions": 0,
+    "scope": "Cumulative monitored wall time including preparation, fits, controls, tests and retries; engineering includes one failed missing-import compile. Periodic storage/RSS samples are not exact transient peaks."
+  },
+  "command_receipts": [
+    {
+      "label": "typed-roles-parent-competition",
+      "elapsed_ms": 5753,
+      "code": 0,
+      "engineering": false
+    },
+    {
+      "label": "typed-roles-metadata-tests",
+      "elapsed_ms": 1168,
+      "code": 0,
+      "engineering": false
+    },
+    {
+      "label": "typed-roles-prepare",
+      "elapsed_ms": 228,
+      "code": 0,
+      "engineering": false
+    },
+    {
+      "label": "typed-roles-parent-development",
+      "elapsed_ms": 5684,
+      "code": 0,
+      "engineering": false
+    },
+    {
+      "label": "typed-roles-angular-fit",
+      "elapsed_ms": 18831,
+      "code": 0,
+      "engineering": false
+    },
+    {
+      "label": "typed-roles-equality-fit",
+      "elapsed_ms": 18868,
+      "code": 0,
+      "engineering": false
+    },
+    {
+      "label": "typed-roles-development",
+      "elapsed_ms": 6488,
+      "code": 0,
+      "engineering": false
+    },
+    {
+      "label": "typed-roles-construction",
+      "elapsed_ms": 6303,
+      "code": 0,
+      "engineering": false
+    },
+    {
+      "label": "typed-roles-equality-development",
+      "elapsed_ms": 6190,
+      "code": 0,
+      "engineering": false
+    },
+    {
+      "label": "typed-roles-first-use",
+      "elapsed_ms": 6201,
+      "code": 0,
+      "engineering": false
+    },
+    {
+      "label": "typed-roles-equality-first-use",
+      "elapsed_ms": 6178,
+      "code": 0,
+      "engineering": false
+    },
+    {
+      "label": "typed-roles-removal",
+      "elapsed_ms": 6177,
+      "code": 0,
+      "engineering": false
+    },
+    {
+      "label": "typed-roles-alias-tests",
+      "elapsed_ms": 1241,
+      "code": 0,
+      "engineering": false
+    },
+    {
+      "label": "typed-roles-counter-test",
+      "elapsed_ms": 7,
+      "code": 0,
+      "engineering": false
+    },
+    {
+      "label": "typed-roles-execution-tests",
+      "elapsed_ms": 935,
+      "code": 0,
+      "engineering": false
+    },
+    {
+      "label": "typed-roles-alias-artifact",
+      "elapsed_ms": 19098,
+      "code": 0,
+      "engineering": false
+    },
+    {
+      "label": "typed-roles-alias-equality-artifact",
+      "elapsed_ms": 18664,
+      "code": 0,
+      "engineering": false
+    },
+    {
+      "label": "typed-roles-alias-source",
+      "elapsed_ms": 7,
+      "code": 0,
+      "engineering": false
+    },
+    {
+      "label": "typed-roles-alias-exposed",
+      "elapsed_ms": 6159,
+      "code": 0,
+      "engineering": false
+    },
+    {
+      "label": "typed-roles-alias-development",
+      "elapsed_ms": 6152,
+      "code": 0,
+      "engineering": false
+    },
+    {
+      "label": "typed-roles-alias-first-use",
+      "elapsed_ms": 6303,
+      "code": 0,
+      "engineering": false
+    },
+    {
+      "label": "typed-roles-alias-equality-first-use",
+      "elapsed_ms": 6164,
+      "code": 0,
+      "engineering": false
+    },
+    {
+      "label": "typed-roles-alias-removal",
+      "elapsed_ms": 6165,
+      "code": 0,
+      "engineering": false
+    },
+    {
+      "label": "typed-roles-preservation",
+      "elapsed_ms": 6318,
+      "code": 0,
+      "engineering": false
+    },
+    {
+      "label": "typed-roles-prior-composition",
+      "elapsed_ms": 6139,
+      "code": 0,
+      "engineering": false
+    },
+    {
+      "label": "typed-roles-query-tests",
+      "elapsed_ms": 1369,
+      "code": 0,
+      "engineering": false
+    },
+    {
+      "label": "typed-roles-query-source",
+      "elapsed_ms": 167,
+      "code": 0,
+      "engineering": false
+    },
+    {
+      "label": "typed-roles-query-angular-fit",
+      "elapsed_ms": 18702,
+      "code": 0,
+      "engineering": false
+    },
+    {
+      "label": "typed-roles-query-equality-fit",
+      "elapsed_ms": 18853,
+      "code": 0,
+      "engineering": false
+    },
+    {
+      "label": "typed-roles-query-development",
+      "elapsed_ms": 6282,
+      "code": 0,
+      "engineering": false
+    },
+    {
+      "label": "typed-roles-query-exposed",
+      "elapsed_ms": 6288,
+      "code": 0,
+      "engineering": false
+    },
+    {
+      "label": "typed-roles-query-first-use",
+      "elapsed_ms": 6254,
+      "code": 0,
+      "engineering": false
+    },
+    {
+      "label": "typed-roles-query-equality-first-use",
+      "elapsed_ms": 6174,
+      "code": 0,
+      "engineering": false
+    },
+    {
+      "label": "typed-roles-query-removal",
+      "elapsed_ms": 6203,
+      "code": 0,
+      "engineering": false
+    },
+    {
+      "label": "typed-roles-query-construction",
+      "elapsed_ms": 6258,
+      "code": 0,
+      "engineering": false
+    },
+    {
+      "label": "typed-roles-query-preservation",
+      "elapsed_ms": 6320,
+      "code": 0,
+      "engineering": false
+    },
+    {
+      "label": "typed-roles-query-prior-composition",
+      "elapsed_ms": 6781,
+      "code": 0,
+      "engineering": false
+    },
+    {
+      "label": "typed-roles-query-long",
+      "elapsed_ms": 6597,
+      "code": 0,
+      "engineering": false
+    },
+    {
+      "label": "typed-roles-query-allocation",
+      "elapsed_ms": 6727,
+      "code": 0,
+      "engineering": false
+    },
+    {
+      "label": "typed-roles-query-kernel",
+      "elapsed_ms": 9,
+      "code": 0,
+      "engineering": false
+    },
+    {
+      "label": "typed-roles-query-cli",
+      "elapsed_ms": 6726,
+      "code": 0,
+      "engineering": false
+    },
+    {
+      "label": "typed-roles-rust-execution",
+      "elapsed_ms": 121,
+      "code": 0,
+      "engineering": false
+    },
+    {
+      "label": "typed-roles-final-unit-tests",
+      "elapsed_ms": 1345,
+      "code": 0,
+      "engineering": false
+    },
+    {
+      "label": "typed-roles-final-counter",
+      "elapsed_ms": 7,
+      "code": 0,
+      "engineering": false
+    },
+    {
+      "label": "typed-roles-final-execution",
+      "elapsed_ms": 868,
+      "code": 0,
+      "engineering": false
+    },
+    {
+      "label": "typed-roles-diagnostic-build",
+      "elapsed_ms": 325185,
+      "code": 0,
+      "engineering": true
+    },
+    {
+      "label": "typed-roles-unit-build",
+      "elapsed_ms": 10548,
+      "code": 101,
+      "engineering": true
+    },
+    {
+      "label": "typed-roles-unit-build-fixed",
+      "elapsed_ms": 19312,
+      "code": 0,
+      "engineering": true
+    },
+    {
+      "label": "typed-roles-release",
+      "elapsed_ms": 309019,
+      "code": 0,
+      "engineering": true
+    },
+    {
+      "label": "typed-roles-allocation-build",
+      "elapsed_ms": 5131,
+      "code": 0,
+      "engineering": true
+    },
+    {
+      "label": "typed-roles-final-unit-build",
+      "elapsed_ms": 20113,
+      "code": 0,
+      "engineering": true
+    },
+    {
+      "label": "typed-roles-alias-unit-build",
+      "elapsed_ms": 19372,
+      "code": 0,
+      "engineering": true
+    },
+    {
+      "label": "typed-roles-alias-release",
+      "elapsed_ms": 309620,
+      "code": 0,
+      "engineering": true
+    },
+    {
+      "label": "typed-roles-final-allocation-build",
+      "elapsed_ms": 5062,
+      "code": 0,
+      "engineering": true
+    },
+    {
+      "label": "typed-roles-query-unit-build",
+      "elapsed_ms": 19680,
+      "code": 0,
+      "engineering": true
+    },
+    {
+      "label": "typed-roles-query-release",
+      "elapsed_ms": 326077,
+      "code": 0,
+      "engineering": true
+    },
+    {
+      "label": "typed-roles-query-allocation-build",
+      "elapsed_ms": 6107,
+      "code": 0,
+      "engineering": true
+    },
+    {
+      "label": "typed-roles-final-check-build",
+      "elapsed_ms": 22644,
+      "code": 0,
+      "engineering": true
+    },
+    {
+      "label": "typed-roles-rust-compile",
+      "elapsed_ms": 128,
+      "code": 0,
+      "engineering": true
+    }
+  ],
+  "command_log_paths": [
+    "commands.jsonl",
+    "engineering-commands.jsonl"
+  ],
+  "source_sha256": {
+    "crates/uor-r4-core/examples/native_geometric_value_probe/typed_routing.rs": "38bca5df6ce2e574d9f16a6bc543ff768ead8c7d822de64cda10b7f63f9e0049",
+    "crates/uor-r4-core/src/native_geometric/mod.rs": "0c025deab21c11f76125a7cb4eca12d9040071f37065eb7c7157f4e1ac0802a0",
+    "crates/uor-r4-core/src/native_geometric/training.rs": "396a838b65bb5174935633c071ca6709eccec894fd4f11bbcc4d24a08132d580",
+    "crates/uor-r4-core/src/native_geometric/typed_routing.rs": "8abe64d5bedee0afe9cde5403c8f87ea0aaa9edca8f774d530ce3aa144960140",
+    "crates/uor-r4-core/src/native_geometric/typed_routing_training.rs": "4c7491f131e4ac2d96d186b947939a5784dacaeae15979d1d1655c3901b74b6b",
+    "crates/uor-r4-core/src/native_geometric/value_runtime.rs": "ec1c4ffc0dccf9b8f14851ca2d502f7d5246dc99bb9d84c32c8dfb0034da700c",
+    "crates/uor-r4-core/src/native_geometric/value_runtime_tests.rs": "def482a9c3f1fa98893374812593cade3a4e4fa81078db39474a7a8ba3228fee",
+    "crates/uor-r4-core/src/native_geometric/value_snapshot.rs": "c2a698c8eff01737014f130d7074a71bebe32aa27180288f711952cda7e467f8",
+    "crates/uor-r4-core/src/native_geometric/value_types.rs": "b4fe6f8000bcca7054fd39ed55c7dfa2157d9e565fdfce8a45a41ecc5eb553a1",
+    "crates/uor-r4-core/tests/native_geometric_allocations.rs": "3c9e97fafa635929048e4fec4ef0d4f932402c67e660c981c3fcbfe693b5db06"
+  },
+  "local_reports_sha256": {
+    "typed-roles-alias-development.json": "c136e5755f32659aa86ebb1e26c5340ffa3c4cea134fd38d080ef0f5cdd8a313",
+    "typed-roles-alias-equality-first-use.json": "1f1b48c1578516f62101c0466a97c246144b24e6e18221bff0296caab641c5db",
+    "typed-roles-alias-exposed.json": "ff50377d1b8c0e2b46e65b5cf1b15ce4f42f6173f4068f79c5b44db38b11461c",
+    "typed-roles-alias-first-use.json": "d23de6836b507b4fbfaf1940ac16f27c54c207196e71089cccdacd2d64a2777b",
+    "typed-roles-alias-projection.json": "c4dfa52af92810c4caa6892bede2f5acd04916f22298470e69fa4d28ed11ddd0",
+    "typed-roles-alias-removal.json": "47a7408c9f673b5fe8c02b71dd67f96df2b9913d3864590288296c2e999282bb",
+    "typed-roles-alias-selection.json": "a0d211c8637f9fca58ab890a2cec0ae10cb9d4317316993da588d3588ba5dabd",
+    "typed-roles-alias-source.json": "79217a5d9bc19f480f67580e6cb810cede12bb24ebeb330e144c98ac419aa2bd",
+    "typed-roles-angular/fit.json": "4e447f5c7a44dd90f82fd6e6f4b051b19f8adf0ebac81072f02aa9d84096b191",
+    "typed-roles-angular/model.json": "b0b2f5cce8a42e69a99bc2a6753a9d20836f2b2ad1ad412ca02a389766d52a2b",
+    "typed-roles-canonical-equality-model.json": "dcfed4d353d0bcd3caccfd44b96514bc62d436a83fb30f82d85c382db6840b8c",
+    "typed-roles-canonical-model.json": "b470f4577254c249e5fb60f603ef6b2ef60a20c6492c74c062f492320c98cd87",
+    "typed-roles-construction.json": "fe3bc6fd384541afc3c8e0349510b8834f744ca065b98bc87351402502f9a319",
+    "typed-roles-design-selection.json": "bc8c9b3d41cefc042ba0775411d824c11d90ac35ba9168bbf3d4a45b36dd7d74",
+    "typed-roles-development.json": "9aef2b52a1180a159ef33602f63e7ad0ea9410c3a38e8ef2095b221e54fa09a9",
+    "typed-roles-equality/fit.json": "23426005c40509820c1ee3be9b4cdec3f38100504a0e850cb7e40fd02ab7353a",
+    "typed-roles-equality/model.json": "3f6bacb0e6ba5dac56f17cd2a1d1ce9f50a5faa5ddbb07e13450124b5afd262b",
+    "typed-roles-equality-development.json": "4c3cfceff2222be18366bb97d6d4be07cacf04a033e4f0252fe1b2c9872aa1d8",
+    "typed-roles-equality-first-use.json": "488f08fb53c3ebf895ce460ea6de35d2423cbefc4f16b8e146a620d0dd3c1357",
+    "typed-roles-first-use.json": "6ff19299784e71eb9a3e5ca2c8f307a094af02654107eaa8dd02e86b03caa714",
+    "typed-roles-mid-resource.json": "e124912fe5b47e4981b9695826b39e48b7ec95e6e3899d96b356b1abf290b1fc",
+    "typed-roles-parent-competition.json": "b0d26ceb0bbe80651208f16a23c825ce9d250c9757d7da3028d03e12c17d30f3",
+    "typed-roles-parent-development.json": "6e11536fbe21adfc158a72be331bf6ee3efa68de7a7448679ccf2f534147b3d4",
+    "typed-roles-preservation/development.json": "d6d9041fc9249e93147b209e877a288ed2eb8d83452e8daa07903af4e19e58b0",
+    "typed-roles-preservation/exposed-names.json": "0d29b362fb3723c2c3e289dbb83a22793018bfdc461aefb582821f0d08ee2757",
+    "typed-roles-preservation/preservation.json": "0ea33cadf046a4f070e1b0fe73b2841502575a2d8baf5a3f27dfedcfd5783969",
+    "typed-roles-preservation/prior.json": "3ad1af1a647499739d87ecb1af806f2bed3ea19cc18a0f0c2666c1b1a7c1f284",
+    "typed-roles-preservation/sessions.json": "c93e0f58f11d11c55018c0ec314bd7d91ad024bbeebadce17afe700732cc0ec7",
+    "typed-roles-prior-composition.json": "4828b93cea09b2ef4d96901c6dd55dec2508d7a2dd20d7e7a179fb94e9aeabd0",
+    "typed-roles-projection.json": "ecf5a97e1e1d6b8260ee61b2c25de802925ae5fb6ae875c777fe986bc8edf121",
+    "typed-roles-query-angular/fit.json": "ab34aeb2d7de53bf62e252676d27921d0742cb1b5dbaf44387796f98942fadb3",
+    "typed-roles-query-angular/model.json": "170715bee68900e7977600ec545badb897645ff8c05b2881792054bedd78ba82",
+    "typed-roles-query-construction.json": "5ddda6d5e6a7913e9ac95aec117c487914ad74227b2ed3d29d74fa4dfc3b623c",
+    "typed-roles-query-development.json": "c9183cbe8ddb535963730e1bc28f61abe15c0981c6c21b543490bfb1539eb612",
+    "typed-roles-query-equality/fit.json": "9bb0925053b93a7c0167b935d6fc9951eea0715472188743a4c81ecbdb413f6f",
+    "typed-roles-query-equality/model.json": "e34e1c5a03889e9818d2a8f600ecf6fbba901470ff13f1ae66ed335347674d1e",
+    "typed-roles-query-equality-first-use.json": "49aa12ae8d39b37a00e72a91e4ba2769b4bd63d6f5a9d4d7467582668f3bd119",
+    "typed-roles-query-exposed.json": "c79780255b9f4098e454a87f64300d95b1709f89275f3c6578011db974a9a662",
+    "typed-roles-query-first-use.json": "14bbd69bb0f28d16cd72b2c0a0af44e3f5247ebdd18e9361dcaec851732d7ac1",
+    "typed-roles-query-long.json": "36a93132823ba2c6d7a2dd746264ef2e3f578a27ce7c9b74f112af1d81d054c9",
+    "typed-roles-query-preservation/development.json": "7b1c4f230ac10e581fbbeb343c0f0b98c1e45e8a761e9c2ea64562e6a8bdf22b",
+    "typed-roles-query-preservation/exposed-names.json": "0cedf39f55ba4674509482c600bb9c314c172f39cdb64682ab8db634d9ca77e4",
+    "typed-roles-query-preservation/preservation.json": "d773232f2414a6e68c0d304e82f971581c09de3b6e2465a24a82e29cec3545a4",
+    "typed-roles-query-preservation/prior.json": "33ccdcc726e5b64b65545fd583598bea612210e2b37d17bd3a94a61d0d7f808c",
+    "typed-roles-query-preservation/sessions.json": "1f7df6d8da30996c3d241d72acbb4a04bb41d2da47b11704d7f57aae65062301",
+    "typed-roles-query-prior-composition.json": "69385aca9cd48fe1ab6d737ffd35759deb92a51a06ec93eefc8dd3f81b99ea77",
+    "typed-roles-query-projection.json": "db5fbfdcc31f0b1159e648ae1443cde8965fd8b9c3f1ec9596977de6a18740c6",
+    "typed-roles-query-removal.json": "279272882733a337e9ec3ef348befca922ee0efc2f72c08febb5118e4669b139",
+    "typed-roles-query-selection.json": "a0c284f230dfe37336eb58b736ad22fbcc68975c86d9f762bf0a20f5cafaa98d",
+    "typed-roles-query-source.json": "9e30c886c9aa4fd16b2fcbd8a819a3530b2093f89232ccdb68c5b22129efabc2",
+    "typed-roles-removal.json": "3d61b946635188f559247b52ce866199b8662a6d9144a36fc3e78b824b22afac",
+    "typed-roles-source.json": "108987c8d9276f9630a61370e42bf3b91d95f9a090ca55b9b149a00650993ec7"
+  },
+  "next": "Test and learn distinctions between independent computations at equal depth, grounded in exact operand/owner provenance; reuse this selector and state instead of adding more depth-specific special cases. General Rust reasoning, syntax, prose and frontier capability remain unqualified."
+}

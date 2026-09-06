@@ -171,6 +171,9 @@ impl ValueState {
         }
     }
     pub(super) fn end(&mut self) {
+        if self.query_boundary.is_some() {
+            self.query_boundary = Some(self.seen);
+        }
         self.active = false;
         self.pending = None;
         self.emission = None;
@@ -347,6 +350,18 @@ impl ValueState {
                     continue;
                 };
                 work.proposals = work.proposals.saturating_add(1);
+                if action == ValueAction::Add
+                    && super::typed_routing::alias_self_add(
+                        self,
+                        a,
+                        b,
+                        routed.as_ref().and_then(|c| c.origins.as_ref()),
+                        work,
+                    )
+                {
+                    work.alias_self_add_rejections += 1;
+                    continue;
+                }
                 let mut score = 0_i64;
                 if let Some(addr) = &routed {
                     let action_index = if action == ValueAction::Copy { 0 } else { 1 };

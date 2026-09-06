@@ -196,10 +196,16 @@ the wrong operation/operand or abstained. The subsequent
 fit, with0/6 after intermediate removal and all prior checks preserved. Its
 case-sensitive predecessor remains a3/6 transfer negative. This is learned
 signed-H4 query/operator/operand choice through actual intermediate state,
-not broad language or reasoning qualification. Next test and learn role-sensitive
+not broad language or reasoning qualification. That checkpoint selected role-sensitive
 choice between competing derived results while changing their order, using the
-same learner, exact records and operators. Current relative-recency features do
-not establish role binding independent of order.
+same learner, exact records and operators. The subsequent
+[competing-intermediate revision](../native_geometric_typed_roles_1139.md) now
+gets 12/12 complete changed-operand/refresh transfers versus 2/12 exact-code,
+with its 9/12 and 8/12 predecessors preserved. Derivation depth, canonical Copy
+identity and a local query boundary support this bounded result. Next distinguish
+independent results at equal depth through exact operand/owner provenance, then
+use the same demonstrated selection in generated Rust. General named-role
+binding remains unqualified.
 No additional cache campaign is active. Follow current-state.md for artifacts
 and cumulative resources; a new issue does not reset the spent amount.
 The full handoff remains unmet.
@@ -339,8 +345,9 @@ programme or inherited capability claims. No dependency pin changes here.
 Learn which operands and operators are required before executing them. Start
 with existing copy, exact arithmetic and bounded relation traversal. Commit
 intermediate values that causally influence later choices and output through
-the same native model. The current numeric path computes admitted additions
-before selection; learned admission should remove unnecessary proposals.
+the same native model. Selected execution and bounded causal-depth selection
+are now implemented; the current record names their measured scope. Extend
+learned operand/owner binding without redoing those completed mechanisms.
 
 Demonstrate at least two supported operations with an intermediate state, both
 in grounded conversation and generated Rust under changed operands, names or
