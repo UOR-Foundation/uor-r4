@@ -2,6 +2,20 @@
 
 ## Latest native result — 2026-09-05
 
+[#1139's first learned H4 routing block](native_geometric_learned_routing_1139.md)
+is implemented and exercised but remains development only. On 735 authored
+OPEN prose/Rust next-token positions: parent 45 correct, learned angular 182,
+matched exact-code selector 223, fixed placement 177. The corpus substantially
+uses byte fallback; all eight target continuations fail. Both fitted selectors
+retain only 38/62 earlier correct responses. They retain 28/28 relation writes,
+but angular answers 16/28 and exact-code selection 28/28. The unchanged parent
+reproduces 62/62 complete generations. Keep parent `067adbf0`; angular
+superiority and the complete #1139 handoff remain unmet. Next integrate learned
+routing with response dispatch and stopping against actual final output.
+All prior evidence remains at its original scope.
+
+## Prior native admission result — 2026-09-05
+
 [#1139 exact NoWrite admission](native_geometric_relation_admission_1139.md)
 preserves 112/112 prior and 28/28 longer-context answers and exact writes.
 Both useful arms preserve 62+24 earlier responses, eight binding outputs and

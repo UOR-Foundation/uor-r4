@@ -11,6 +11,12 @@ pub use relation::RelationWork;
 pub use relation_admission::RelationAdmissionMode;
 pub use relation_training::{RelationExample, RelationLabel};
 mod anchors;
+mod learned_routing;
+#[cfg(test)]
+mod learned_routing_tests;
+mod learned_routing_training;
+pub use learned_routing::{RoutingDecision, RoutingHeadDecision, RoutingMode, RoutingWork};
+pub use learned_routing_training::{RoutingFitConfig, RoutingFitReport};
 mod completion_runtime;
 mod completion_training;
 mod completion_types;
@@ -165,6 +171,9 @@ pub enum Control {
     WordCopyDisabled,
     WordCopyGeometryDisabled,
     WordCopyDispatchDisabled,
+    LearnedRoutingDisabled,
+    LearnedRoutingSelectionDisabled,
+    LearnedRoutingTransformDisabled,
 }
 
 /// Explicit feature addresses, never content digests. Kinds 0/1 are full
@@ -211,6 +220,9 @@ impl Feature {
             | Control::ResponseEntryGeometryDisabled
             | Control::WordCopyDisabled
             | Control::WordCopyGeometryDisabled
+            | Control::LearnedRoutingDisabled
+            | Control::LearnedRoutingSelectionDisabled
+            | Control::LearnedRoutingTransformDisabled
             | Control::WordCopyDispatchDisabled => true,
             Control::GeometryDisabled => self.kind < 2,
             Control::ZetaDisabled => !(8..=15).contains(&self.kind) && self.kind != 5,
@@ -280,6 +292,8 @@ pub struct TrainingProgress {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(try_from = "ModelWire")]
 pub struct Model {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    learned_routing: Option<learned_routing::RoutingBlock>,
     schema: String,
     artifact_cid: String,
     uor_model_address: String,
@@ -306,6 +320,8 @@ pub struct Model {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ModelWire {
+    #[serde(default)]
+    learned_routing: Option<learned_routing::RoutingBlock>,
     schema: String,
     artifact_cid: String,
     uor_model_address: String,
@@ -332,6 +348,7 @@ impl TryFrom<ModelWire> for Model {
     type Error = Error;
     fn try_from(wire: ModelWire) -> Result<Self> {
         let model = Self {
+            learned_routing: wire.learned_routing,
             schema: wire.schema,
             artifact_cid: wire.artifact_cid,
             uor_model_address: wire.uor_model_address,
@@ -357,6 +374,8 @@ impl TryFrom<ModelWire> for Model {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct Work {
+    #[serde(default, skip_serializing_if = "RoutingWork::is_empty")]
+    pub learned_routing: RoutingWork,
     #[serde(default, skip_serializing_if = "WordCopyWork::is_empty")]
     pub word_copy: WordCopyWork,
     #[serde(default, skip_serializing_if = "CompletionWork::is_empty")]

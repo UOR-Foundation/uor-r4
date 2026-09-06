@@ -89,7 +89,7 @@ fn build_codec(
     Ok((pieces, receipts))
 }
 
-fn exact_sign([a, b]: [i64; 2]) -> i8 {
+pub(super) fn exact_sign([a, b]: [i64; 2]) -> i8 {
     let p = i128::from(a) * 2 + i128::from(b);
     let q = i128::from(b);
     if q == 0 {
@@ -174,6 +174,7 @@ impl Trainer {
         let (lexical_pieces, receipts) = build_codec(&config, construction)?;
         let token_count = LEXICAL_BASE as usize + lexical_pieces.len();
         let mut template = Model {
+            learned_routing: None,
             schema: SCHEMA.into(),
             artifact_cid: String::new(),
             uor_model_address: String::new(),
@@ -506,18 +507,35 @@ impl Model {
     }
     pub(super) fn validate(&self) -> Result<()> {
         self.config.validate()?;
+        // The routing residual is fitted last. Inherited response heads remain
+        // bound to the exact model on which they were trained, including all
+        // of their original nested provenance checks.
+        let inherited = if let Some(block) = &self.learned_routing {
+            let mut parent = self.clone();
+            parent.learned_routing = None;
+            parent.refresh_identity()?;
+            if parent.artifact_cid != block.parent_artifact {
+                return Err(Error(
+                    "learned routing frozen parent identity differs".into(),
+                ));
+            }
+            Some(parent)
+        } else {
+            None
+        };
+        let parent = inherited.as_ref().unwrap_or(self);
         if let Some(values) = &self.values {
             values.validate()?;
         }
         if let Some(completion) = &self.completion {
-            completion.validate(self)?;
+            completion.validate(parent)?;
         }
         if let Some(entry) = &self.response_entry {
-            entry.validate(self)?;
+            entry.validate(parent)?;
         }
-        self.readout.validate(self)?;
+        self.readout.validate(parent)?;
         if let Some(memory) = &self.memory_read {
-            memory.validate(self)?;
+            memory.validate(parent)?;
         }
         if self.schema != SCHEMA
             || self.lexical_pieces.is_empty()
@@ -548,6 +566,9 @@ impl Model {
         }
         if geometry(self.prior_scores.len(), self.config.context_tokens)? != self.geometry {
             return Err(Error("native artifact prime, H4, orientation or fixed-zeta tables differ from the named construction".into()));
+        }
+        if let Some(block) = &self.learned_routing {
+            block.validate(self)?;
         }
         let mut ids = BTreeSet::new();
         if self.construction.is_empty()
@@ -731,6 +752,11 @@ impl Model {
                     .chain(self.word_copy_training())
                     .chain(self.role_read_training())
                     .chain(self.relation_training())
+                    .chain(
+                        self.learned_routing
+                            .iter()
+                            .flat_map(|block| &block.training),
+                    )
                     .any(|known| known.id == candidate.id || known.text_cid == candidate.text_cid)
             {
                 return Err(Error(format!(
@@ -776,6 +802,7 @@ impl Model {
 }
 
 fn add_work(total: &mut Work, work: Work) {
+    total.learned_routing.add(work.learned_routing);
     add_completion_work(&mut total.word_copy.selector, work.word_copy.selector);
     total.word_copy.dictionary_lookups += work.word_copy.dictionary_lookups;
     total.word_copy.dictionary_comparisons += work.word_copy.dictionary_comparisons;

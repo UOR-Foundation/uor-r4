@@ -1,6 +1,45 @@
 # Current native geometric AI work
 
-## Geo-transformer direction — owner clarification after #1145
+## First learned routing block — #1139, 2026-09-05 local date
+
+**Implemented and exercised; development only. Retain accepted parent
+`067adbf0`.** The [new record](../native_geometric_learned_routing_1139.md)
+describes two learned H4 channels in `Model::predict`: ordered contextual query,
+bounded source selection, selected value transport, query-conditioned action
+and sparse token readout. Rust fitting executes the actual discrete route.
+Prediction uses integer/table operations and passes its allocation/source checks.
+The existing geometry, typed values, relation store and committed copy path remain.
+
+On 735 authored OPEN prose/Rust next-token positions, parent gets 45 correct,
+learned angular 182, exact-code selection 223 and fixed placement 177. Both
+source selection and the learned action affect accuracy, but angular advantage
+is not established. Much of this population uses byte fallback. All eight
+target continuations fail. Both fitted selectors retain only 38/62 older exact
+responses; parent reproduces all 62 complete Generation objects. Both preserve
+28/28 relation writes/restored states, while angular returns 16/28 answers and
+exact-code selection 28/28. No fitted block is promoted.
+
+**Next within #1139: train complete response dispatch and stopping together
+with routed prediction against actual final output.** The old response-entry
+head can force `Unknown` by adding a positive margin above Base; disabling it
+removes that prefix but leaves incoherent generation. The new independent
+conditional scores also disrupt EOS. Use ordinary prose/Rust continuations
+and the known memory cases to train/check this integration before increasing
+context or adding another abstraction stage. Keep the matched selector
+comparison. #1139 stays open and #1140 stays subsequent; cache growth is secondary.
+
+Artifacts and all attempts remain under
+`.uor-models/native-typed-value-2026-09-05/learned-routing-*`; angular is
+`09f9991c`, exact-code selection `c6d3739d`, fixed placement `f7702f02`.
+Four focused unit tests, allocation/source checks, artifact/session replay and
+the actual CLI pass at their stated mechanical scopes. A parent-binding reload
+bug was corrected without changing learned parameters; the failed attempt is
+retained and charged. Model work is 46.768/120 seconds this cycle, cumulative
+1,410.652/1,800 seconds, leaving 389.348. The post-evaluation storage sample is
+5,852,442,624 bytes with 251,379,712 before the existing tighter stop. No storage
+increase or deletion was needed. Refresh receipts before the next projection.
+
+## Prior geo-transformer direction — owner clarification after #1145
 
 **Next implementation: #1139's jointly learned geometric routing block.**
 The [canonical plan](project-track.md#immediate-build-sequence) now connects
@@ -9,7 +48,8 @@ transformations to raw-text language and composition. More NoWrite caching or
 residual score-bound optimization is secondary. #1140 remains the subsequent
 multi-operation qualification; short composition tasks supply a learning/check
 signal during #1139. This supersedes the then-next scheduling below, not any
-measurement. The new block is **NOT_IMPLEMENTED / NOT_RUN**.
+measurement. At that checkpoint the block was **NOT_IMPLEMENTED / NOT_RUN**;
+the implementation and measured limits are recorded above.
 
 PR #1145 merged through protected delivery at `219f572fd8e9fda1e6ca3254dddbc1f2715d92f0`.
 Sparse artifact `067adbf0` remains the selected bounded execution improvement;

@@ -262,6 +262,10 @@ fn native_kernel_source_has_no_forbidden_arithmetic_or_float_types() {
         ("native completion runtime", completion),
         ("native response-entry runtime", response_entry),
         ("native retained-word copy runtime", word_copy),
+        (
+            "native learned routing runtime",
+            include_str!("../src/native_geometric/learned_routing.rs"),
+        ),
         ("native completion seed", seed),
         ("native numeral codec", numeral),
         ("native whole-word codec", lexemes),
@@ -282,6 +286,58 @@ fn native_kernel_source_has_no_forbidden_arithmetic_or_float_types() {
             "{name}: no kernel allowances are permitted"
         );
     }
+}
+
+#[test]
+fn native_learned_routing_selection_and_transformation_are_allocation_free() {
+    use uor_r4_core::native_geometric::{RoutingFitConfig, RoutingMode};
+    let docs = [Document {
+        id: "routing-allocation".into(),
+        text: "Alice saved red. Bob saved blue. Alice gave Bob red.".into(),
+    }];
+    let mut trainer = Trainer::new(
+        Config {
+            context_tokens: 16,
+            ..Config::default()
+        },
+        &docs,
+    )
+    .unwrap();
+    trainer.train_documents(&docs).unwrap();
+    let (model, _) = trainer
+        .compile()
+        .unwrap()
+        .fit_routing_block(
+            &docs,
+            RoutingFitConfig {
+                max_positions: 32,
+                learned_tokens: 2,
+                passes: 1,
+                mode: RoutingMode::Angular,
+                ..RoutingFitConfig::default()
+            },
+        )
+        .unwrap();
+    let tokens = model.encode(&docs[0].text).unwrap();
+    let mut session = model.session(Control::Full).unwrap();
+    ALLOCATIONS.with(|n| n.set(0));
+    BYTES.with(|n| n.set(0));
+    MEASURING.with(|v| v.set(true));
+    let result = (|| {
+        for _ in 0..3 {
+            for &token in &tokens {
+                session.observe(&model, token)?;
+                session.predict(&model)?;
+            }
+        }
+        Ok::<_, uor_r4_core::native_geometric::Error>(())
+    })();
+    MEASURING.with(|v| v.set(false));
+    result.unwrap();
+    assert_eq!(ALLOCATIONS.with(Cell::get), 0);
+    assert_eq!(BYTES.with(Cell::get), 0);
+    assert!(session.work.learned_routing.payload_gathers > 0);
+    assert!(session.work.learned_routing.operator_executions > 0);
 }
 
 #[test]
