@@ -1,9 +1,9 @@
 # Generated composition check and selected typed execution — #1139, 2026-09-06
 
-Status: implementation prepared; compilation/check status is recorded below.
-Model execution and behavioral acceptance are NOT_RUN pending the additional
-local-model allowance. This record does not supersede accepted artifact
-`2600b95b` or qualify broader #1140 composition.
+Status: selected execution and preservation pass; learned follow-up composition
+fails **0/6**. Retain artifact `2600b95b` with the checked runtime change, without
+promoting broader #1140 composition. The initial preparation below is preserved;
+the executed result and resource reconciliation follow it.
 
 ## Capability decision after owner direction check
 
@@ -103,7 +103,7 @@ mechanism choice when the evidence calls for it.
   where applicable. Keep existing preservation and new diagnostic outcomes
   separate; no general-language or frontier claim follows automatically.
 
-## Resource proposal
+## Initial resource proposal — superseded by execution below
 
 The inherited ledger is still 1796.744/1800 seconds. Request an additional
 **60 seconds of cumulative local model execution**, increasing the ceiling to
@@ -128,7 +128,7 @@ explicit authorization for the additional cumulative allowance. Deliver admitted
 results through a protected PR, retaining `2600b95b` until actual checks justify
 acceptance.
 
-## Prepared build evidence
+## Prepared build evidence — historical pre-execution checkpoint
 
 The release library, existing preservation probe and native `r4` CLI compiled
 offline in 314.115 seconds. The focused unit test binary and release allocation
@@ -140,3 +140,89 @@ seconds. Total monitored build work is 382.586/600 seconds; latest measured
 storage growth headroom is 155.5 MiB. Compilation is not execution: local
 mechanical tests, preservation, composition and allocation reruns remain
 NOT_RUN until the cumulative model allowance is extended. No new fit is proposed.
+
+## Executed result — 2026-09-06
+
+The actual-artifact diagnostic completed with **3/3 exact first sums and 0/6
+correct follow-up chains**. It exited 101 on its explicit six-chain acceptance
+assertion; this is a model behavior negative, not an unavailable run or a reason
+to weaken the assertion. All twelve Full/control observations are preserved.
+
+| Inputs | First generated answer | Repeat previous total: expected / generated | Add new value: expected / generated |
+| --- | --- | --- | --- |
+| 13, 4; new 5 | `17.\n` | `17.\n` / `21.\n` | `22.\n` / ` Unknown.\n` |
+| 14, 4; new 5 | `18.\n` | `18.\n` / `22.\n` | `23.\n` / ` Unknown.\n` |
+| -3, 8; new 4 | `5.\n` | `5.\n` / `13.\n` | `9.\n` / ` Unknown.\n` |
+
+Every second decision captures the two original literals, the actual derived
+sum and the new literal. Each repeat instruction incorrectly selects Add over
+the derived sum and the old second operand. Removing only the derived record
+changes those answers to ` the.\n`. Each add instruction selects no typed
+operation and returns ` Unknown.\n` with or without the intermediate. The
+successful first sums and retained records exclude absent intermediate storage
+as the cause on these cases. They localize the failure to instruction-sensitive
+operator/operand selection and its admission to the assembled output. They do
+not prove that the current feature map can learn the required distinction.
+
+The same frozen artifact through preserved pre-change and rebuilt executables
+matches complete generation/state/trace and expected-write results on **48/48**
+dependent, **62/62** earlier, **24/24** transfer and **28/28** exposed-name cases,
+plus **5/5** persistent turns with restore/isolation. The 28 longer-context
+Generation objects also match the historical combined verifier except work;
+both reports certify exact writes. Their outer report schemas differ, so this
+does not claim whole-report equality.
+
+Across the 62 earlier cases, typed additions fall **236 → 16**, with **24**
+selected Copy/Add executions. Feature comparisons remain **272,116** and the new
+selector counts 360 ranking comparisons. Across 24 transfer cases, additions
+fall 8 → 0. These small arithmetic savings are not whole-model speedup evidence.
+The overflow path's repeated scoring remains counted and bounded.
+
+Four focused selected-execution/causal-state tests, the response-cache test and
+the complete nested-counter aggregation test pass. Numeric ingest/emission/
+eviction and actual-artifact dependent copying both pass allocation checks;
+the actual-artifact measured path has zero allocations/bytes. Native CLI revision
+generation returns ` Zurich.\n`. The four new generated Rust function texts
+exactly match the retained semantic-check source; recompilation and all twelve
+semantic assertions pass. These preserve familiar coding behavior, not new
+general syntax or multi-operation Rust reasoning.
+
+## Decision and next learning change
+
+Admit the selected-execution implementation at its preservation scope. Keep the
+six follow-ups as exposed negative evidence. **Next: learn query-conditioned
+operator and operand choice over literal and derived typed references**, reusing
+the existing signed-H4 source-routing learner and exact execution/commit path.
+Use causally generated intermediate states during construction. Fit the joint
+candidate/action decision, not independent token NLL terms; retain source IDs
+until the selected operation executes and its bytes are committed.
+
+Before fitting, inspect the actual candidate-relative query/derived features at
+this boundary to avoid repeating the earlier indistinguishable-input failure.
+Compare learned angular choice with the same-capacity exact-code/sparse control
+and keep the assembled output decision visible. Preserve existing responses,
+introduce construction wording variation and reserve a small new composition
+check after design selection. The mechanism and its fit are **NOT_IMPLEMENTED**
+here. Do not add a new store, parser, cache campaign or wider corpus to address
+these already reachable but misselected values. General language remains open.
+
+## Actual resources and standing owner authorization
+
+The owner authorized necessary project allowance extensions on 2026-09-06:
+“yes you may extend any allowances necessary for our project's goal”. Record
+each justified increment and its complete projection; do not request this same
+resource authorization again. Preserve cumulative accounting and material.
+
+This cycle recorded +60 seconds, then +30 seconds because the unoptimized
+actual-artifact diagnostic took **45.682 seconds**, exceeding its 10-second
+projection. The negative was not repeated. Total model work is **74.262 seconds**;
+cumulative use is **1871.006/1890 seconds**, leaving **18.994 seconds**. Monitored
+build work remains **382.586/600 seconds**. No new storage allowance was needed;
+known retained storage is 6,222,413,824 bytes with 149,843,968 bytes growth room
+before the tighter stop. No paid external compute or deletion occurred.
+
+The compact [evidence](evidence/native_geometric_typed_admission_1139.json)
+binds commands, results and scope. Full logs, paired preservation reports,
+control records and allowance receipts remain under the existing artifact root
+with prefix `typed-admission-`. CI's actual native checks are separate from its
+four compatibility acknowledgement statuses; protected delivery is PR #1153.

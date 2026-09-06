@@ -1,25 +1,43 @@
 # Current native geometric AI work
 
-## Prepared generated-composition decision — #1139, 2026-09-06
+## Selected execution passes; learned composition fails — #1139, 2026-09-06
 
-**Retain `2600b95b`; new behavior is NOT_RUN.** Following the owner's capability
-and direction check, the next decision is learned use of an intermediate result
-in a complete generated answer. The [prepared change](../native_geometric_typed_admission_1139.md)
-adds a six-branch actual-artifact diagnostic: generate a sum, then either recall
-it or add a new value. Matched removal of the one derived record checks causal
-dependence; exact emitted bytes, EOS, source availability and operator choice
-remain separate observations. There is no supplied intermediate answer or LLM
-repair. This is OPEN development, not general prose or reasoning qualification.
+**Retain `2600b95b` with the checked selected-execution runtime.** The
+[result](../native_geometric_typed_admission_1139.md#executed-result--2026-09-06)
+and [evidence](../evidence/native_geometric_typed_admission_1139.json) preserve
+**3/3 exact initial sums but 0/6 correct follow-ups**. All required literals and
+actual derived sums remain captured. Repeat instructions wrongly add an old
+operand to the sum; removing the derived record changes that output. Add-new-
+value instructions abstain. This is a valid OPEN operator/operand selection
+negative, not missing storage, unavailable execution or general language evidence.
 
-Supporting Rust code scores the existing typed candidates before executing the
-selected Copy/Add operation, preserving overflow fallback and exact commits.
-It uses the existing sparse scorer; a new learned angular typed selector is
-not implemented by this change. Compilation is complete for the runtime/probe/
-CLI; local behavioral execution remains pending. The concrete complete cycle
-projects 45 seconds of model work plus 15 seconds reserve and requests a
-60-second cumulative extension. The ledger remains 1796.744/1800 seconds.
-The capability result must choose the next learning change; further cache work
-is secondary and the full #1139/#1140 handoffs remain unmet.
+The runtime now scores the existing typed candidates before executing selected
+Copy/Add, preserving overflow fallback and exact commit semantics. Its existing
+sparse scorer is unchanged; no newly learned angular typed selector is claimed.
+Same-artifact pre-change/rebuilt executions preserve 48/48 dependent, 62/62
+prior, 24/24 transfer, 28/28 exposed-name and 5/5 persistent cases. The 28 longer-
+context answers/writes also pass with identical generation objects except work.
+Six focused causal/cache/counter tests, numeric and actual-artifact allocation
+checks, the CLI revision answer and four unchanged generated Rust functions with
+12 semantic assertions pass. On the 62-case set, additions fall 236 to 16;
+feature comparisons remain 272,116. No whole-model speedup is established.
+
+**Next: learn query-conditioned geometric operator/operand choice over literal
+and derived references.** Reuse the signed-H4 source-routing learner and existing
+exact execution/commit path, train the joint candidate/action decision on
+causally generated intermediate states, and inspect actual query features before
+fit to avoid the earlier indistinguishable-input failure. The six exposed
+negatives are development data; new wording/composition evaluation follows
+selection. This learning change is not implemented yet. No new store or cache
+campaign is warranted by these retained-but-misselected values.
+
+The owner now authorizes necessary project-resource extensions. Record explicit
+projections and increments without asking for the same authorization again.
+This evaluation used 74.262 seconds after recorded +60 and +30 second increments;
+cumulative model use is 1871.006/1890 seconds. The diagnostic's unoptimized build
+exceeded its initial time projection; its negative was not rerun. Storage stayed
+within the existing allowance, material is preserved and paid external compute
+is zero. Protected delivery is PR #1153; the full #1139/#1140 handoffs remain unmet.
 
 ## Corrected-writer NoWrite reuse — #1139, 2026-09-06
 
