@@ -1,12 +1,23 @@
 # Research: what is measured, what is closed, what is open
 
-## Literal selection — executed preservation negative, 2026-09-06
+## Protected literal admission — current bounded checkpoint, 2026-09-06
+
+The [admission repair](native_geometric_literal_admission_1139.md) retains
+`c29ab982`, with the entire accepted parent unchanged and a separate bounded
+literal table. New complete transfer improves12/16 to16/16; new identifier
+answers stay8/8 and their functions pass24 executed assertions. Earlier
+preservation is restored, including the62/62 and24/24 sets. Exact-code matches
+new transfer scores, so there is no additional angular advantage. Four
+abstention texts still fail; supported-word versus abstention answer routing is
+next. The preceding shared-fit candidates remain unpromoted historical evidence.
+
+## Literal selection — previous preservation negative, 2026-09-06
 
 The [literal extension](native_geometric_literal_selection_1139.md) improves
 new three-turn generation8/16 to16/16 and literal answers7/16 to12/16, with the
 same results for angular and exact-code. Four abstention texts fail. Shared
 fitting also regresses computed-result and identifier-copy cases; neither new
-artifact is promoted and `af337c28` remains accepted. Truncation and missing
+artifact was promoted; `af337c28` remained the accepted parent for the later repair. Truncation and missing
 first-prefix training were corrected, with their failures preserved. The next
 change protects working computed roles while learning literal admission against
 word-answer alternatives. The record binds complete costs and limitations.

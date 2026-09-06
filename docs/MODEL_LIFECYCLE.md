@@ -27,8 +27,10 @@ Accepted `af337c28` retains the earlier literal selector. The optional
 [literal extension](native_geometric_literal_selection_1139.md) enables the same
 role component before a derived value exists, but its fitted candidates fail
 preservation and are not promoted. Literal-only offline frames cannot supply
-a preceding answer. Protecting working computed roles and learning literal
-admission against word answers is the next repair.
+a preceding answer. The [protected admission repair](native_geometric_literal_admission_1139.md)
+now adds optional `typed_literals` while preserving its entire accepted parent.
+It restores prior behavior and is retained at bounded numeric/identifier scope;
+answer routing after NoOperation remains incomplete.
 
 ## Historical and retained reference lifecycles
 

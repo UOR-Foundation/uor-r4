@@ -569,6 +569,18 @@ fn native_typed_routing_case_fold_changes_metadata_only() {
         &mut Default::default()
     )
     .is_none());
+    extended.typed_literals = extended.typed_roles.clone();
+    extended.typed_roles.as_mut().unwrap().literal_answers = false;
+    let literal =
+        super::typed_routing::context(&extended, values, Control::Full, &mut Default::default())
+            .unwrap();
+    assert!(literal.literal_component);
+    values.sources[0].derived = true;
+    let computed =
+        super::typed_routing::context(&extended, values, Control::Full, &mut Default::default())
+            .unwrap();
+    assert!(!computed.literal_component);
+    assert!(computed.depths.is_none());
     values.sources.clear();
     assert!(super::typed_routing::context(
         &extended,

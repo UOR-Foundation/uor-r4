@@ -204,6 +204,31 @@ fn literal_example(
 
 pub(super) fn run(args: &[String]) -> ProbeResult<()> {
     match args.first().map(String::as_str) {
+        Some("admission-source") if args.len()==4 => {
+            let prior:Value=serde_json::from_slice(&fs::read(&args[1])?)?;
+            let old:Source=serde_json::from_slice(&fs::read(&args[2])?)?;
+            let all:Vec<TypedRoutingExample>=serde_json::from_value(prior["fit"].clone())?;
+            let mut fit:Vec<_>=all.into_iter().filter(|d|d.literal_only).collect();
+            for c in old.fit.iter().filter(|c|c.id.starts_with("word-copy/fit/")) {
+                fit.push(TypedRoutingExample{id:format!("literal-admission/{}",c.id),literal_only:true,initial_prompt:String::new(),initial_response:String::new(),continuation:None,refresh:Vec::new(),target_intermediate:0,query:c.prompt.clone(),response:c.response.clone(),action:None,operands:None});
+            }
+            let mut first_use=Vec::new();let mut transfer=Vec::new();let mut identifiers=Vec::new();
+            for (i,(names,numbers)) in [(["leni","varo"],[17,-5]),(["rona","peli"],[-6,28])].into_iter().enumerate(){for reverse in [false,true]{for kind in 0..4{first_use.push(literal_example(format!("admission-new-literal/{i}/{reverse}/{kind}"),names,numbers,reverse,kind));}}}
+            for (i,(names,numbers)) in [(["leni","varo","kesa","tanu"],[17,-5,8,3,6]),(["rona","peli","sena","jora"],[-6,28,5,-9,7])].into_iter().enumerate(){for reverse in [false,true]{for kind in 0..4{transfer.push(independent_example(format!("admission-new-chain/{i}/{reverse}/{kind}"),names,numbers,reverse,kind));}}}
+            for context in 0..4 {let id=format!("word-copy/fit/context-{context}/name-0");let template=old.fit.iter().find(|c|c.id==id).ok_or("missing construction identifier template")?;
+                for name in ["zorin","navi"] {identifiers.push(TypedRoutingExample{id:format!("admission-new-identifier/{context}/{name}"),literal_only:true,initial_prompt:String::new(),initial_response:String::new(),continuation:None,refresh:Vec::new(),target_intermediate:0,query:template.prompt.replace("item",name).replace("11","-17").replace("301","907"),response:template.response.replace("item",name),action:None,operands:None});}}
+            write_json(Path::new(&args[3]),&json!({"schema":"uor-r4.literal-admission-source/1","fit":fit,"development":prior["development"],"exposed_first_use":prior["first_use"],"exposed_chain":prior["transfer"],"first_use":first_use,"transfer":transfer,"identifiers":identifiers,"scope":"71 prior literal construction frames plus32 original word-copy construction frames labeled NoOperation; protected computed roles unchanged. Prior transfers exposed. New16 literal,16 complete chain and8 identifier tasks opened after design selection. No serving target injection."}))?;
+        }
+        Some("admission-fit") if args.len()==6 => {
+            let model=Model::from_bytes(&fs::read(&args[1])?)?;
+            let donor=Model::from_bytes(&fs::read(&args[2])?)?;
+            let source:Value=serde_json::from_slice(&fs::read(&args[3])?)?;
+            let docs:Vec<TypedRoutingExample>=serde_json::from_value(source["fit"].clone())?;
+            let mode=match args[5].as_str(){"angular"=>RoutingMode::Angular,"equality"=>RoutingMode::Equality,_=>return Err("literal admission mode".into())};
+            let config=SourceRoutingConfig{learned_features:768,passes:4,proposals:12,max_seconds:30,mode,..SourceRoutingConfig::default()};
+            let (candidate,report)=model.fit_literal_admission(&docs,config,&donor)?;
+            let out=Path::new(&args[4]);fs::create_dir(out)?;write_new(&out.join("model.json"),&candidate.to_bytes()?)?;write_json(&out.join("fit.json"),&report)?;println!("{report}");
+        }
         Some("literal-source") if args.len()==5 => {
             let model=Model::from_bytes(&fs::read(&args[1])?)?;
             let prior:Value=serde_json::from_slice(&fs::read(&args[2])?)?;
@@ -407,7 +432,7 @@ pub(super) fn run(args: &[String]) -> ProbeResult<()> {
         Some("evaluate") if args.len()==6=>{
             let model=Model::from_bytes(&fs::read(&args[1])?)?;
             let source:Value=serde_json::from_slice(&fs::read(&args[2])?)?;
-            if !["fit","development","first_use","exposed_first_use","exposed_alias_first_use","transfer"].contains(&args[3].as_str()){return Err("typed evaluation split".into());}
+            if !["fit","development","first_use","exposed_first_use","exposed_alias_first_use","transfer","identifiers","exposed_chain"].contains(&args[3].as_str()){return Err("typed evaluation split".into());}
             let docs:Vec<TypedRoutingExample>=serde_json::from_value(source[&args[3]].clone())?;
             let remove=match args[5].as_str(){"full"=>false,"remove-intermediate"=>true,_=>return Err("typed control".into())};
             let report=model.evaluate_typed_routing(&docs,remove)?;

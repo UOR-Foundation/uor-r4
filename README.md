@@ -64,8 +64,11 @@ gets 12/16 complete independent-result name/order transfers, versus 3/16 parent
 and 12/16 exact-code. Four fail before selection, at the first literal answer;
 the [literal extension](docs/native_geometric_literal_selection_1139.md) now
 improves new complete transfers8/16 to16/16 but regresses computed-result and
-identifier-copy cases. The earlier artifact remains accepted; the next repair
-protects working roles while learning literal admission against word answers.
+identifier-copy cases. The [protected admission repair](docs/native_geometric_literal_admission_1139.md)
+now retains a separate literal table with inherited computed roles unchanged:
+all prior preservation is restored, new complete transfer is16/16, and eight
+identifier-return functions execute24 assertions. Four abstention texts still
+fail; routing to an appropriate word answer or abstention is next.
 General prose/syntax/reasoning and frontier capability remain unqualified. Follow
 the current-state pointer for artifacts, costs and the next implementation.
 
