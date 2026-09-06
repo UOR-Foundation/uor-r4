@@ -233,3 +233,223 @@ after evaluation is 5,852,442,624 bytes against the unchanged 6,459,228,160 cap,
 with 251,379,712 bytes before the tighter existing stop. No storage increase,
 deletion, external model or paid compute was needed. Samples are not exact
 transient peaks or unique-extent measurements.
+
+## Recurrent revision /2 — owner adoption and first build, 2026-09-06
+
+The owner adopted the [dependent-attention plan](integration/project-track.md#immediate-recurrent-attention-revision--owner-adoption-2026-09-05)
+after the preceding independent-read result. This section appends a new
+mechanism and measurement; it does not replace the /1 negative above.
+
+### Implemented representation and output path
+
+`learned-h4-routing/2` uses the same two heads, learned token Q/K/V codes,
+query-conditioned actions, signed H4 product/inverse tables and eight newest
+token sources. The first transported output left-acts on the second contextual
+query before its source selection. Both decisions retain selected token IDs,
+source offsets, keys, values, actions and signed output roots. Repeated predict
+recomputes the bounded chain without committing state; observe remains the
+causal session transition. The intermediate result lives within one prediction,
+not in a new persistent derived-value store.
+
+The joint output reads five factorized features: first output, second output,
+ordered relative output `second * inverse(first)`, the assembled parent's
+winning token, and three existing response-state flags (boundary present,
+entry active, copy complete). It learns Base versus Emit(token), with EOS as
+an ordinary learned output choice. Base retains the complete parent's winner;
+Emit competes after typed, completion, entry and copy decisions and passes
+through their existing selected/observed commitment rules. BOS is only the
+internal Base action and cannot be emitted. Immutable committed-copy bytes
+retain their existing early dispatch.
+
+This removes /1's independent residual scores from ordinary candidate scoring.
+It does not remove the inherited predictor's work. The model still executes
+its prime/zeta/R4 features, learned occurrence/role heads, exact relations and
+typed arithmetic. No new dense projection, transformer, provider or serving
+matrix product is introduced. Startup validation remains a distinct host path.
+
+The two-token initial query is still compressed to 120 states. Each read can
+select only one of eight recent tokens; earlier values are accessible only to
+the inherited components, not these new heads. Exact source metadata survives
+in the decision, but only the five named features affect the shared output.
+Unselected payloads, fine orientation distinctions tied by scalar angular rank,
+and distinctions colliding in the finite products can still be lost. This is
+not multiscale abstraction or general typed multi-operation reasoning.
+
+### Learning, comparison and complete cost
+
+The Rust fitter mixes authored raw prose/Rust with complete prompt/response
+examples, including sampled EOS positions. It reserves half the 1,024-position
+budget for responses, takes every sixteenth construction example from the
+existing 480-row memory fit source, and adds 24 language/dependent-task examples.
+The earlier 62-case development set and eight generation prompts remain OPEN
+evaluation. They are not fitted, newly independent or sealed.
+
+Hard coordinate proposals change Q/K/V placement and actions in both heads.
+Each proposal fits a shared additive classifier with four deterministic
+perceptron passes, then evaluates the exported bounded integer Base/Emit/EOS
+choice. The offline classifier uses observed target classes; serving receives
+only the sparse compiled postings and scores. Selection prefers more correct output tokens,
+then lower normalized action NLL. The denominator contains actual bounded
+serving candidates; an unavailable target incurs the declared 20-nat floor
+relative to the maximum candidate logit. This fitting criterion is not a
+whole-sequence generation loss.
+
+Parent teacher-forced histories are cached once for proposal efficiency.
+Changed dispatch can change pending commitments, so the final candidate also
+runs actual teacher forcing and reports both correct tokens and agreement
+with cached-history output. That check measures the approximation instead of
+assuming cached parent state equals candidate state. Free generated training
+responses and OPEN development outputs are reported separately.
+
+Angular and exact-code arms have the same initialization, 12 adjustable token
+codes, one pass, three proposals per coordinate, two heads and readout capacity.
+Each fit has a 30-second safety ceiling; unequal incomplete searches cannot
+establish matched selector advantage. The intermediate-disabled control replaces
+the carried first output with identity while retaining the transport operation
+and source scans. Action-disabled and whole-block-disabled controls remain.
+
+Each non-copy prediction adds two bounded reads, one extra inter-read product
+and one relative-output product. Five row searches collect at most eight
+postings each, plus Base/EOS, into 42 fixed stack slots. Every offered action is
+deduplicated and scored against the same five rows and action priors. Report
+row/token comparisons, table reads, logical operand bytes, gathers and actions
+alongside the parent's encoding, feature/candidate work, writes and output.
+Counters describe algorithmic work, not CPU instructions or physical traffic.
+Artifact size, compilation, fitting, loading and complete timings remain part
+of the measurement. No heap growth is intended in prediction.
+
+The complete pre-execution projection is retained locally as
+`recurrent-routing-projection.json`: 110/120 seconds model work,
+1,000/1,200 seconds engineering and 224 MiB retained storage growth. It starts
+from cumulative 1,410.652/1,800 seconds and 240 MiB before the tighter storage
+stop, with one process, a 4 GiB RSS target and the 128 MiB margin. No new storage
+authorization, deletion or paid compute is needed by that projection.
+
+The first local attempt instead fitted conditional count rows. It reached
+561/796 cached-history correct tokens but only 534/796 on actual candidate
+teacher forcing, with 766/796 cached/actual output agreement. It preserved
+0/62 development responses. Its later replay assertion compared `Full` with
+`LearnedRoutingDisabled` without accounting for the declared `state.control`
+label and stopped before the equality arm. This is a preserved model negative
+plus a separate harness error; it is not a matched selector result.
+
+The correction replaces count residuals with directly fitted additive scores.
+`additive_scores: true` binds that interpretation in the artifact. Missing/false
+retains the first conditional artifact's original arithmetic and identity.
+The corrected replay retains the raw disabled report and compares every
+Generation field after normalizing only `generation.state.control`. It does
+not erase the intervention label or normalize work, outputs, scores or traces.
+All first-attempt source files, model, outputs and its 9.183-second charge remain.
+The correction projection fits within the original cycle: 510 seconds remaining
+engineering, 95 seconds model work and 160 MiB storage; no fresh allocation.
+
+### Dependent-read result — 2026-09-06
+
+**Decision: `RETAIN_PARENT_REVISE_SOURCE_ACCESS`.** Both corrected fits complete
+all 936 proposals. The shared output improves fitting but fails generated
+language and preservation. Keep `067adbf0`; neither new artifact is promoted.
+[Compact evidence](evidence/native_geometric_recurrent_routing_1139.json) binds
+the source, artifacts, comparisons, work and local receipts. The source remains
+OPEN development: 24 raw documents and 54 construction responses; 796 sampled
+positions include 284 response positions, with 71 committed-copy positions
+excluded from fitting because their serving dispatch bypasses this block.
+
+| Arm | OPEN prose /435 | OPEN Rust /300 | Earlier responses /62 | Target continuations /8 |
+|---|---:|---:|---:|---:|
+| Accepted parent | 6 | 39 | 62 | 0 |
+| Recurrent angular | 47 | 73 | 6 | 0 |
+| Recurrent exact-code | 64 | 80 | 0 | 0 |
+| Angular, intermediate connection disabled | 29 | 24 | NOT_RUN | 0 |
+| Angular, selected action disabled | 47 | 71 | NOT_RUN | 0 |
+| Whole new block disabled | 6 | 39 | 62 | 0 |
+
+Angular cached-history fitting rises from 539 to 594/796 correct, with actual
+candidate teacher forcing at 576/796 and cached/actual output agreement at
+776/796. Exact-code fitting rises from 342 to 549, actual at 542 and agreement
+789/796. Fit response generation is only 15/54 angular and 22/54 exact-code.
+The objective prioritizes correct actions before NLL: exact-code NLL worsens
+from 2.618 to 2.795 while correct actions increase. Neither this objective nor
+cached-parent histories are a free-generation optimization guarantee.
+
+The first-to-second connection affects token prediction: disabling it reduces
+angular correct tokens from 120 to 53. Disabling the learned action reduces
+120 to 118. These are sensitivity results; exact-code selection still reaches
+144 and neither arm produces useful complete outputs. In particular:
+
+- `Start with five. Add two, then double the result. Answer:` produces `Lima`
+  in both arms, as does the owner-of-the-red-box question whose target is Rome.
+- The Rust `sum` prefix produces ` left naeerls` angular and ` value > 0 }`
+  exact-code. Appending each exact generated continuation to its prefix and an
+  assertion caller fails `rustc --edition=2021`; semantics remain
+  `NOT_RUN_COMPILE_FAILED`. No generated text was repaired.
+- An older exact numeric copy changes from `73.\n` to `26.\n` under angular.
+  The accepted parent reproduces all 62 earlier answers. Disabled-block replay
+  matches all fields of all 62 Generation objects after normalizing only the
+  declared control label, with raw reports retained.
+
+The actual `r4 geometric generate` result matches the complete saved angular
+Generation on the Rust prefix, including bytes, token IDs, work and state. The
+CLI's four additional metadata fields are kept separate, and artifact identity
+is checked. The old conditional artifact also reproduces its original complete
+Generation after the correction, confirming the default-false interpretation
+at this one-prompt scope. Large JSON integers are compared losslessly.
+
+Corrected angular artifact `cd39e57d2a70e441d1f225faa60c4873bdd037012a229d0b200dbd152a694b20`
+is 10,911,432 bytes; exact-code `503f9241ef2365f535b1b64f11098c5766470477d73c3b3d01bfeda6dea717cb`
+is 10,894,855 bytes. Block sizes are 183,130 and 166,553 bytes. The prior parent
+is 10,728,283 bytes. Training scratch is offline; serving adds immutable rows,
+fixed stack candidates and no new persistent value store. No online parameter
+update or index-building phase is introduced. Snapshot format is unchanged.
+
+Across all 735 teacher-forced positions, each arm examines 11,312 source keys,
+gathers 1,470 payloads and executes 1,470 selected operators. Angular additionally
+records 79,631 emission queries, 702,975 comparisons, 169,807 table reads and
+2,511,630 logical operand bytes. Exact-code records 79,903 queries, 694,848
+comparisons, 124,327 reads and 2,345,910 bytes. The connection-disabled control
+retains the same source/gather/operator work; complete readout costs vary with
+the selected states. The inherited predictor still performs 2,200,949 base
+score lookups plus 629,273 memory score lookups, with its full state/update work
+included in the evidence. This is an added development block, not elimination
+of the inherited predictor's work.
+
+Single warm whole-next-token samples are 87.918 ms parent, 93.090 ms angular
+and 91.388 ms exact-code. The 62 complete response samples take 74.772,
+95.157 and 106.915 ms respectively, with different failed output lengths.
+Corrected CLI command wall is 3.166 seconds including loading, validation,
+encoding, generation and JSON output. Individual load/encoding phase timers
+and physical-memory traffic were not measured. No speedup follows from these
+single samples. Startup geometry validation still uses floating point; the
+changed prediction kernel uses integer/table operations and no matrix products.
+
+Final corrected release, two routing allocation tests and the forbidden
+arithmetic/float source scan pass. Three focused unit tests passed before the
+additive-score correction; final units are assigned to the protected native CI
+job. The comparison and CLI exercise the corrected artifact and output path.
+New relation-transfer evaluation stops after the preservation failure; it is
+not inferred from the older unchanged-writer result. Final held-out evaluation
+is `NOT_RUN`.
+
+Total cycle model work through failed attempt, correction, CLI/replay and
+generated-code compilation is 32.720/120 seconds. Cumulative use is
+1,443.372/1,800 seconds, leaving 356.628. Engineering through the corrected
+kernel check is 1,128.504/1,200 seconds; final checks/delivery are appended to
+the existing engineering receipts. Highest sampled model child RSS is
+817,659,904 bytes. The last model-command storage sample is 5,896,962,048 bytes,
+leaving 206,860,288 before the tighter existing stop. The 128 MiB margin and
+6,459,228,160-byte cap remain unchanged; no storage increase or deletion.
+
+**Next intervention:** reuse the existing exact word/relation references and
+candidate-relative role features as sources for learned routing, with selected
+copy/value operators. The new block currently compresses a two-token query to
+one H4 root and scans eight recent raw tokens, often bytes. Earlier facts can
+survive elsewhere in the model yet remain inaccessible to these reads. Its
+shared classifier also emits learned answer tokens rather than consuming an
+exact source pointer. Those are explicit information/access limitations; the
+experiment does not isolate them as the only causes of poor language behavior.
+Use the accepted role-reader as the working source/NoRead comparator; train the
+new geometric selector over that existing bounded population, retain exact
+payload identity, and test changed names/values plus preservation. Do not refit
+the accepted reader or repeat its completed handoff. Add a second
+dependent source read only after the first is useful. A wider beam, another
+metric, repeated score tuning or a replacement memory framework is not justified
+by the present negative alone. #1139 remains open and #1140 stays subsequent.

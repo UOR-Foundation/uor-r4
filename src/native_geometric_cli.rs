@@ -265,6 +265,10 @@ enum ControlArg {
     WordCopyDisabled,
     WordCopyGeometryDisabled,
     WordCopyDispatchDisabled,
+    LearnedRoutingDisabled,
+    LearnedRoutingSelectionDisabled,
+    LearnedRoutingTransformDisabled,
+    LearnedRoutingChainDisabled,
 }
 impl From<ControlArg> for Control {
     fn from(value: ControlArg) -> Self {
@@ -288,6 +292,10 @@ impl From<ControlArg> for Control {
             ControlArg::WordCopyDisabled => Self::WordCopyDisabled,
             ControlArg::WordCopyGeometryDisabled => Self::WordCopyGeometryDisabled,
             ControlArg::WordCopyDispatchDisabled => Self::WordCopyDispatchDisabled,
+            ControlArg::LearnedRoutingDisabled => Self::LearnedRoutingDisabled,
+            ControlArg::LearnedRoutingSelectionDisabled => Self::LearnedRoutingSelectionDisabled,
+            ControlArg::LearnedRoutingTransformDisabled => Self::LearnedRoutingTransformDisabled,
+            ControlArg::LearnedRoutingChainDisabled => Self::LearnedRoutingChainDisabled,
         }
     }
 }

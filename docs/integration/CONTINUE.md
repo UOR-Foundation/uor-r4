@@ -26,12 +26,14 @@ merged through protected PRs #1142/#1143/#1144. #1139's first admission step
 preserves 112 prior and 28 longer-context answers AND writes and earlier behavior. Its
 selected sparse artifact is 067adbf0, in relation-admission-models/sparse.json.
 Geometric admission does not establish a speed advantage; the full #1139 handoff
-remains unmet and #1140 stays dependent. The admission record and current-state
-name the exact cost, source and next conservative score-bound proposal. Do not
-repeat the completed NoWrite shortcut implementation or call that proposal
-qualified. Maintain one task and one agent. Preserve user material and negative
+remains unmet and #1140 stays dependent. PR #1147 delivered the first learned
+independent-read block as a generation/preservation negative. Follow the adopted
+two-dependent-read/shared-output revision in project-track.md and the latest
+executed result in current-state.md. Further NoWrite caching is secondary; do not
+repeat the completed shortcut or revive the old score-bound proposal as the
+main model task. Maintain one task and one agent. Preserve user material and negative
 results; necessary storage increases are preauthorized and must be recorded.
-Refresh relation-admission-checkpoint.json and cumulative model/storage ledgers,
+Refresh the latest routing checkpoint and cumulative model/storage ledgers,
 then establish a complete build/evaluation projection before new execution.
 
 Evolve the actual native model under #973, using existing correct components.

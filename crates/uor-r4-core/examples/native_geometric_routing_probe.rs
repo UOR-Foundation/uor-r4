@@ -4,7 +4,9 @@
 use serde::Serialize;
 use serde_json::{json, Value};
 use std::{error::Error, fs, path::Path, time::Instant};
-use uor_r4_core::native_geometric::{Control, Document, Model, RoutingFitConfig, RoutingMode, BOS};
+use uor_r4_core::native_geometric::{
+    Control, Document, Model, RoutingFitConfig, RoutingMode, ValueExample, BOS,
+};
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
 
@@ -138,6 +140,9 @@ fn token_exposure(model: &Model, documents: &[Document]) -> Result<Value> {
 
 fn main() -> Result<()> {
     let args: Vec<_> = std::env::args().skip(1).collect();
+    if args.len() == 4 && args[2] == "--recurrent" {
+        return recurrent(&args[0], &args[1], &args[3]);
+    }
     if args.len() != 2 {
         return Err(
             "usage: native_geometric_routing_probe PARENT_MODEL NEW_OUTPUT_DIRECTORY".into(),
@@ -230,6 +235,199 @@ fn main() -> Result<()> {
         "source_cid":source_cid,"parent_cid":parent.artifact_cid(),"parent_read_and_validate_ms":parent_read_and_validate_ms,"parent":parent_result,"arms":arms,
         "elapsed_ms":start.elapsed().as_millis(),"rust_compile_and_execute":"NOT_RUN; exact generated text is reported",
         "decision":"DEVELOPMENT_ONLY; inspect quality, controls and whole-path cost before adoption"}),
+    )?;
+    Ok(())
+}
+
+fn response_examples(value: &Value, key: &str) -> Result<Vec<ValueExample>> {
+    value[key]
+        .as_array()
+        .ok_or("missing response examples")?
+        .iter()
+        .map(|row| {
+            Ok(ValueExample {
+                id: row["id"].as_str().ok_or("missing id")?.into(),
+                prompt: row["prompt"].as_str().ok_or("missing prompt")?.into(),
+                response: row["response"].as_str().ok_or("missing response")?.into(),
+            })
+        })
+        .collect()
+}
+
+fn complete_responses(model: &Model, cases: &[ValueExample], control: Control) -> Result<Value> {
+    let started = Instant::now();
+    let mut rows = Vec::new();
+    let mut exact = 0;
+    for case in cases {
+        let generation = model.generate(&case.prompt, 64, control)?;
+        let equal = generation.text == case.response;
+        exact += usize::from(equal);
+        rows.push(
+            json!({"id":case.id,"prompt":case.prompt,"expected":case.response,
+            "exact":equal,"generation":generation}),
+        );
+    }
+    Ok(json!({"exact":exact,"total":cases.len(),"rows":rows,
+        "elapsed_ms":started.elapsed().as_secs_f64()*1000.0}))
+}
+
+fn recurrent(parent_path: &str, output_path: &str, preservation_source: &str) -> Result<()> {
+    let output = Path::new(output_path);
+    fs::create_dir(output)?;
+    let started = Instant::now();
+    let parent = Model::from_bytes(&fs::read(parent_path)?)?;
+    let prior_source: Value = serde_json::from_slice(&fs::read(preservation_source)?)?;
+    let preservation = response_examples(&prior_source, "development")?;
+    // Construction examples only. Earlier OPEN development remains evaluation.
+    let mut responses: Vec<_> = response_examples(&prior_source, "fit")?
+        .into_iter()
+        .step_by(16)
+        .collect();
+    let (fit, prose, rust) = source();
+    for (i,(prompt,response)) in [
+        ("A traveler follows a", " path."),
+        ("A map records the paths between", " towns."),
+        ("Memory retains information from earlier", " events."),
+        ("A sequence preserves", " order."),
+        ("The river flows through the", " village."),
+        ("A tree has a root and", " branches."),
+        ("A local model reads text and predicts the next", " token."),
+        ("The program stores a value under a", " name."),
+        ("fn add(left: i32, right: i32) -> i32 {", " left + right }"),
+        ("fn twice(value: i32) -> i32 {", " value + value }"),
+        ("fn count(values: &[i32]) -> usize {", " values.len() }"),
+        ("fn positive(value: i32) -> bool {", " value > 0 }"),
+        ("fn main() { let left = 3; let right = 4; let sum =", " left + right; }"),
+        ("fn next(value: Option<i32>) -> Option<i32> {", " value.map(|number| number + 1) }"),
+        ("fn first(values: &[i32]) -> Option<i32> {", " values.first().copied() }"),
+        ("fn largest(left: i32, right: i32) -> i32 {", " if left > right { left } else { right } }"),
+        ("Start with three. Add four, then double the result. Answer:", "14"),
+        ("Start with two. Add three, then double the result. Answer:", "10"),
+        ("Start with four. Add two, then double the result. Answer:", "12"),
+        ("Start with six. Add two, then double the result. Answer:", "16"),
+        ("The red box belongs to Alice. Alice lives in Paris. Where does the owner of the red box live? Answer:", "Paris"),
+        ("The blue box belongs to Bob. Bob lives in Lima. Where does the owner of the blue box live? Answer:", "Lima"),
+        ("let first = 2; let second = first + 3; let third = second + 2; // third =", "7"),
+        ("let first = 4; let second = first + 1; let third = second + 3; // third =", "8"),
+    ].into_iter().enumerate() {
+        responses.push(ValueExample { id:format!("routing-v2/fit/response/{i}"),
+            prompt:prompt.into(),response:response.into() });
+    }
+    let source = json!({"schema":"uor-r4.recurrent-routing-source/1",
+        "scope":"Authored OPEN development. Construction-only prior memory examples plus raw text and response targets. Prior 62-case development and eight continuation prompts are reused OPEN evaluation, never sealed or used for fitting this revision.",
+        "fit_documents":fit,"fit_responses":responses,"prose":prose,"rust":rust,
+        "preservation":preservation,"prompts":PROMPTS});
+    write(&output.join("source.json"), &source)?;
+    write(
+        &output.join("parent.json"),
+        &evaluate(&parent, Control::Full, &prose, &rust)?,
+    )?;
+    let parent_preservation = complete_responses(&parent, &preservation, Control::Full)?;
+    write(
+        &output.join("parent-preservation.json"),
+        &parent_preservation,
+    )?;
+    let mut arms = Vec::new();
+    for (name, mode) in [
+        ("angular", RoutingMode::Angular),
+        ("equality", RoutingMode::Equality),
+    ] {
+        let config = RoutingFitConfig {
+            max_positions: 1024,
+            learned_tokens: 12,
+            passes: 1,
+            max_seconds: 30,
+            mode,
+            ..RoutingFitConfig::default()
+        };
+        let (model, report) = parent.fit_recurrent_routing(&fit, &responses, config)?;
+        write(&output.join(format!("{name}-fit.json")), &report)?;
+        let bytes = model.to_bytes()?;
+        use std::io::Write;
+        fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(output.join(format!("{name}-model.json")))?
+            .write_all(&bytes)?;
+        let loaded = Model::from_bytes(&bytes)?;
+        let full = evaluate(&loaded, Control::Full, &prose, &rust)?;
+        write(&output.join(format!("{name}-full.json")), &full)?;
+        let kept = complete_responses(&loaded, &preservation, Control::Full)?;
+        write(&output.join(format!("{name}-preservation.json")), &kept)?;
+        let fitted_responses = complete_responses(&loaded, &responses, Control::Full)?;
+        write(
+            &output.join(format!("{name}-fit-responses.json")),
+            &fitted_responses,
+        )?;
+        if name == "angular" {
+            for (label, control) in [
+                ("chain-disabled", Control::LearnedRoutingChainDisabled),
+                (
+                    "transform-disabled",
+                    Control::LearnedRoutingTransformDisabled,
+                ),
+                ("disabled", Control::LearnedRoutingDisabled),
+            ] {
+                write(
+                    &output.join(format!("angular-{label}.json")),
+                    &evaluate(&loaded, control, &prose, &rust)?,
+                )?;
+            }
+            let disabled =
+                complete_responses(&loaded, &preservation, Control::LearnedRoutingDisabled)?;
+            write(
+                &output.join("angular-disabled-preservation.json"),
+                &disabled,
+            )?;
+            // Compare each complete Generation object with integer-safe Rust Values.
+            let exact_parent_objects = disabled["rows"]
+                .as_array()
+                .ok_or("rows")?
+                .iter()
+                .zip(
+                    parent_preservation["rows"]
+                        .as_array()
+                        .ok_or("parent rows")?,
+                )
+                .filter(|(a, b)| {
+                    let mut generation = a["generation"].clone();
+                    if generation["state"]["control"] != json!("learned_routing_disabled") {
+                        return false;
+                    }
+                    generation["state"]["control"] = json!("full");
+                    generation == b["generation"]
+                })
+                .count();
+            write(
+                &output.join("parent-replay.json"),
+                &json!({"exact_except_declared_control_label":exact_parent_objects,
+                "normalized_field":"generation.state.control", "total":preservation.len()}),
+            )?;
+            if exact_parent_objects != preservation.len() {
+                return Err("disabled parent replay mismatch".into());
+            }
+            if model.generate(PROMPTS[1].1, 24, Control::Full)?
+                != loaded.generate(PROMPTS[1].1, 24, Control::Full)?
+            {
+                return Err("recurrent artifact replay mismatch".into());
+            }
+        }
+        arms.push(
+            json!({"name":name,"artifact_cid":loaded.artifact_cid(),"artifact_bytes":bytes.len(),
+            "fit":report,"preserved":kept["exact"],"fit_responses_exact":fitted_responses["exact"],
+            "prose_correct":full["prose"]["correct"],"rust_correct":full["rust"]["correct"]}),
+        );
+        println!(
+            "{}",
+            json!({"completed":name,"elapsed_ms":started.elapsed().as_millis()})
+        );
+    }
+    write(
+        &output.join("result.json"),
+        &json!({"schema":"uor-r4.recurrent-routing-result/1",
+        "source_cid":blake3::hash(&serde_json::to_vec(&source)?).to_hex().to_string(),
+        "arms":arms,"elapsed_ms":started.elapsed().as_millis(),
+        "decision":"DEVELOPMENT_ONLY_PENDING_BEHAVIOR_REVIEW"}),
     )?;
     Ok(())
 }

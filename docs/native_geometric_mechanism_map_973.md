@@ -566,3 +566,25 @@ The H4/zeta partition shortlists exact prime-signature guards, with capped
 fallback. The same-entry sparse comparison is retained as an execution
 optimization; learned geometric routing advantage remains unestablished. Exact
 relation contents and the inherited prime/zeta/R4 model are unchanged.
+
+## Learned independent and recurrent H4 reads — #1139
+
+[The routing record](native_geometric_learned_routing_1139.md) retains both
+versions. `/1` learns two independent token-code/source/action channels and
+adds independent residual scores. `/2` makes the first selected output act on
+the second query and retains both signed decisions until a shared output
+decision after the inherited predictor. The current-state pointer owns the
+latest measured result and artifact decision.
+
+| Mechanism | Learned or retained information | Boundary |
+|---|---|---|
+| Two dependent reads in `learned_routing.rs` | Learned token Q/K/V codes and query-conditioned actions; exact selected token/offset/key/value/action and signed H4 outputs | Eight recent token sources, two-token initial query, finite 120-state products; no new persistent intermediate-value store |
+| Shared `recurrent_routing.rs` output | First root, second root, ordered relative root, parent winner token and existing response-state flags; learned Base/Emit/EOS scores | Five factorized features, eight postings per row, at most 42 stack candidates; exact source metadata is traced but not an additional output feature |
+| `recurrent_routing_training.rs` | Joint hard-coordinate placement/action search and four-pass additive output fitting, using complete response supervision including EOS | Parent teacher-forced histories are cached; actual candidate teacher forcing measures the approximation, and free generation is separate |
+
+The original prime/zeta/H4 features, exact relations, typed values and committed
+copy operators still execute. This is a versioned development block, not
+replacement of the entire model or a geometric-superiority claim. The
+[adopted plan](integration/project-track.md#immediate-recurrent-attention-revision--owner-adoption-2026-09-05)
+keeps directional-cost learning, bounded alternative paths, richer signed
+operators and multiscale access conditional on an observed need.

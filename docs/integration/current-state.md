@@ -1,6 +1,51 @@
 # Current native geometric AI work
 
-## First learned routing block — #1139, 2026-09-05 local date
+## Dependent geometric reads — #1139, 2026-09-06
+
+**Implemented and exercised; generation/preservation negative. Keep accepted
+parent `067adbf0`.** The [routing record](../native_geometric_learned_routing_1139.md#dependent-read-result--2026-09-06)
+and [compact evidence](../evidence/native_geometric_recurrent_routing_1139.json)
+bind the two dependent H4 reads and shared Base/Emit/EOS output. The first
+selected value changes the second query. Both signed results survive until
+output, but each read still sees only eight recent raw tokens, and each initial
+query compresses the last two tokens. Exact retained words/relations are not
+sources for this new block; their older mechanisms still execute separately.
+
+On the same 735 authored OPEN positions, parent gets 45 correct, recurrent
+angular 120 and recurrent exact-code selection 144. Angular falls to 53 with
+the intermediate connection disabled and 118 with selected actions disabled.
+This establishes sensitivity, not angular advantage or useful composition.
+All eight continuations fail; angular preserves 6/62 earlier responses and
+exact-code selection 0/62. Both generated Rust continuations fail compilation.
+The unchanged parent still answers 62/62; disabling the new block reproduces
+all complete Generation objects except the declared control label.
+
+**Next: connect learned routing to exact retained source references and payload
+operators, before tuning another metric or adding route depth.** Reuse the
+existing role-aware query features, word occurrences, relation references and
+committed-copy interface. Keep exact payload identity through selection; H4
+summaries choose access and transport, not replacement answer strings. Use the accepted role-reader as the working source/NoRead comparator; train
+the new geometric selector over that existing bounded population and check
+new names/values plus old preservation. Do not rebuild or refit the accepted
+reader simply to repeat its completed handoff. Only then add a second dependent read
+of a selected relation or an intermediate value. This addresses an explicit
+source-access limitation; it is not a claim that source access alone solves
+language learning. No broad tokenizer/corpus/compiler rewrite or new harness
+is needed to start. #1139 remains active; #1140 remains subsequent.
+
+Artifacts are under `.uor-models/native-typed-value-2026-09-05/recurrent-routing-*`.
+Corrected angular is `cd39e57d`, exact-code selection `503f9241`; neither is
+promoted. The first conditional attempt and its replay-label error are preserved.
+Corrected allocation and kernel-source checks pass, as do artifact reload and
+actual CLI reproduction at their stated scopes. Local mechanical unit tests
+precede the additive-score correction; protected CI must exercise final units.
+Model use through CLI/code checks is 32.720/120 seconds this cycle, cumulative
+1,443.372/1,800 seconds, leaving 356.628. Engineering through the corrected
+kernel check is 1,128.504/1,200 seconds. The storage sample is 5,896,949,760 bytes
+with about 197 MiB before the existing tighter stop. No storage increase,
+deletion or paid compute was needed. Refresh final receipts before new work.
+
+## First learned routing block — prior checkpoint, 2026-09-05 local date
 
 **Implemented and exercised; development only. Retain accepted parent
 `067adbf0`.** The [new record](../native_geometric_learned_routing_1139.md)
@@ -19,7 +64,7 @@ responses; parent reproduces all 62 complete Generation objects. Both preserve
 28/28 relation writes/restored states, while angular returns 16/28 answers and
 exact-code selection 28/28. No fitted block is promoted.
 
-**Next within #1139: train complete response dispatch and stopping together
+**Then-next within #1139: train complete response dispatch and stopping together
 with routed prediction against actual final output.** The old response-entry
 head can force `Unknown` by adding a positive margin above Base; disabling it
 removes that prefix but leaves incoherent generation. The new independent

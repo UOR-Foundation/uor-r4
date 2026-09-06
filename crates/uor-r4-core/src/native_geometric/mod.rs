@@ -15,8 +15,13 @@ mod learned_routing;
 #[cfg(test)]
 mod learned_routing_tests;
 mod learned_routing_training;
+mod recurrent_routing;
+#[cfg(test)]
+mod recurrent_routing_tests;
+mod recurrent_routing_training;
 pub use learned_routing::{RoutingDecision, RoutingHeadDecision, RoutingMode, RoutingWork};
 pub use learned_routing_training::{RoutingFitConfig, RoutingFitReport};
+pub use recurrent_routing_training::RecurrentRoutingFitReport;
 mod completion_runtime;
 mod completion_training;
 mod completion_types;
@@ -174,6 +179,7 @@ pub enum Control {
     LearnedRoutingDisabled,
     LearnedRoutingSelectionDisabled,
     LearnedRoutingTransformDisabled,
+    LearnedRoutingChainDisabled,
 }
 
 /// Explicit feature addresses, never content digests. Kinds 0/1 are full
@@ -223,6 +229,7 @@ impl Feature {
             | Control::LearnedRoutingDisabled
             | Control::LearnedRoutingSelectionDisabled
             | Control::LearnedRoutingTransformDisabled
+            | Control::LearnedRoutingChainDisabled
             | Control::WordCopyDispatchDisabled => true,
             Control::GeometryDisabled => self.kind < 2,
             Control::ZetaDisabled => !(8..=15).contains(&self.kind) && self.kind != 5,
