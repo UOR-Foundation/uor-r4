@@ -90,8 +90,102 @@ fn role_example(
     d
 }
 
+fn independent_example(
+    id: String,
+    names: [&str; 4],
+    numbers: [i64; 5],
+    reverse: bool,
+    kind: usize,
+) -> TypedRoutingExample {
+    let [a, b, c, d, e] = numbers;
+    let [first, second, third, fourth] = names;
+    let prompt = |x: &str, y: &str, a: i64, b: i64| {
+        format!("User: {x} has {a} coins. {y} has {b} coins.\nUser: What is the sum of {x}'s and {y}'s coins?\nAssistant:")
+    };
+    let (initial_prompt, initial_value, next_prompt, next_value) = if reverse {
+        (
+            prompt(third, fourth, c, d),
+            c + d,
+            prompt(first, second, a, b),
+            a + b,
+        )
+    } else {
+        (
+            prompt(first, second, a, b),
+            a + b,
+            prompt(third, fourth, c, d),
+            c + d,
+        )
+    };
+    let target = kind & 1;
+    let (x, y, value) = if target == 0 {
+        (first, second, a + b)
+    } else {
+        (third, fourth, c + d)
+    };
+    let action = if kind < 2 {
+        ValueAction::Copy
+    } else {
+        ValueAction::Add
+    };
+    TypedRoutingExample {
+        id,
+        initial_prompt,
+        initial_response: format!("{initial_value}.\n"),
+        continuation: Some(TypedRoutingTurn {
+            prompt: next_prompt,
+            response: format!("{next_value}.\n"),
+        }),
+        refresh: Vec::new(),
+        target_intermediate: if reverse { 1 - target } else { target },
+        query: if action == ValueAction::Copy {
+            format!("User: Repeat the total for {x} and {y}.\nAssistant:")
+        } else {
+            format!("User: There are {e} extra coins. Add the extra coins to the total for {x} and {y}.\nAssistant:")
+        },
+        response: format!(
+            "{}.\n",
+            value + if action == ValueAction::Add { e } else { 0 }
+        ),
+        action: Some(action),
+        operands: Some(if action == ValueAction::Copy {
+            [value, value]
+        } else {
+            [value, e]
+        }),
+    }
+}
+
 pub(super) fn run(args: &[String]) -> ProbeResult<()> {
     match args.first().map(String::as_str) {
+        Some("independent-reachable-source") if args.len()==3 => {
+            let mut source:Value=serde_json::from_slice(&fs::read(&args[1])?)?;
+            for split in ["fit","development"] {
+                let rows:Vec<TypedRoutingExample>=serde_json::from_value(source[split].clone())?;
+                let (blocked,admitted):(Vec<_>,Vec<_>)=rows.into_iter().partition(|d|d.id.starts_with("independent-")&&d.id.contains("/true/"));
+                source[format!("exposed_prefix_failures_{split}")]=serde_json::to_value(blocked)?;
+                source[split]=serde_json::to_value(admitted)?;
+            }
+            source["scope"]=json!("58 reachable construction (42 prior roles +16 named independent);8 reachable OPEN development. Reversed computation-prefix failures are exposed and preserved, not repaired or counted as selector errors. Original16 first-use name/number/order trajectories remain unchanged and may fail before selection. No broad language or first-answer qualification.");
+            write_json(Path::new(&args[2]),&source)?;
+        }
+        Some("independent-chain-source") if args.len()==3 => {
+            let old:Value=serde_json::from_slice(&fs::read(&args[1])?)?;
+            let mut fit:Vec<TypedRoutingExample>=serde_json::from_value(old["fit"].clone())?;
+            for (i,nums) in [[13,4,5,9,2],[14,4,6,9,3],[-3,8,4,9,6],[21,3,7,11,4]].into_iter().enumerate() {
+                for reverse in [false,true] {for kind in 0..4 {fit.push(independent_example(format!("independent-fit/{i}/{reverse}/{kind}"),["suri","orin","mira","neri"],nums,reverse,kind));}}
+            }
+            let mut development=Vec::new();
+            for (i,nums) in [[13,4,5,9,2],[8,7,2,9,4]].into_iter().enumerate() {
+                for reverse in [false,true] {for kind in 0..4 {development.push(independent_example(format!("independent-open/{i}/{reverse}/{kind}"),["suri","orin","mira","neri"],nums,reverse,kind));}}
+            }
+            let mut first_use=Vec::new();
+            for (i,(names,nums)) in [(["luma","tavi","bela","zori"],[20,3,6,9,4]),(["vexa","dori","kira","fenn"],[-6,16,2,5,3])].into_iter().enumerate() {
+                for reverse in [false,true] {for kind in 0..4 {first_use.push(independent_example(format!("independent-transfer/{i}/{reverse}/{kind}"),names,nums,reverse,kind));}}
+            }
+            write_json(Path::new(&args[2]),&json!({"schema":"uor-r4.independent-source/2","fit":fit,"development":development,"first_use":first_use,"scope":"74 construction including42 prior dependent roles;16 open development;16 predeclared changed name/number/computation-order transfers opened after selection. Both intermediate responses generated. No broad language qualification."}))?;
+        }
+
         Some("canonical-roles") if args.len()==3 => {
             let model=Model::from_bytes(&fs::read(&args[1])?)?;
             let candidate=model.canonicalize_typed_role_aliases()?;
@@ -143,29 +237,29 @@ pub(super) fn run(args: &[String]) -> ProbeResult<()> {
             }
             write_json(Path::new(&args[1]),&json!({"schema":"uor-r4.typed-roles-source/1","fit":fit,"development":development,"first_use":first_use,"scope":"42 construction cases, 12 OPEN development, 12 after-selection transfers with changed operands and an actually generated original-total refresh that reverses derived recency. No intermediate insertion. Small authored scope, not general language."}))?;
         }
-        Some("roles-fit"|"roles-fit-local") if args.len()==5 => {
+        Some("roles-fit"|"roles-fit-local"|"roles-fit-provenance") if args.len()==5 => {
             let mode=match args[4].as_str(){"angular"=>RoutingMode::Angular,"equality"=>RoutingMode::Equality,_=>return Err("typed role fit mode".into())};
             let model=Model::from_bytes(&fs::read(&args[1])?)?;
             let source:Value=serde_json::from_slice(&fs::read(&args[2])?)?;
             let docs:Vec<TypedRoutingExample>=serde_json::from_value(source["fit"].clone())?;
-            let config=SourceRoutingConfig{learned_features:192,passes:4,proposals:12,max_seconds:30,mode,..SourceRoutingConfig::default()};
-            let (candidate,report)=if args[0]=="roles-fit-local" {model.fit_typed_roles_local(&docs,config)?} else {model.fit_typed_roles(&docs,config)?};
+            let config=SourceRoutingConfig{learned_features:if args[0]=="roles-fit-provenance" {256} else {192},passes:4,proposals:12,max_seconds:30,mode,..SourceRoutingConfig::default()};
+            let (candidate,report)=if args[0]=="roles-fit-provenance" {model.fit_typed_roles_provenance(&docs,config)?} else if args[0]=="roles-fit-local" {model.fit_typed_roles_local(&docs,config)?} else {model.fit_typed_roles(&docs,config)?};
             let out=Path::new(&args[3]);fs::create_dir(out)?;
             write_new(&out.join("model.json"),&candidate.to_bytes()?)?;
             write_json(&out.join("fit.json"),&report)?;println!("{report}");
         }
-        Some("competition") if args.len()==3 => {
+        Some("competition" | "independent") if args.len()==3 => {
             let model=Model::from_bytes(&fs::read(&args[1])?)?;
             let mut cases=Vec::new();
             for (a,b,delta) in [(13,4,5),(14,4,6),(-3,8,4)] {
-                for (question,wanted) in [("Repeat the original total.",a+b),("Repeat the updated total.",a+b+delta),("Repeat the previous total.",a+b+delta),("Copy the total before the new coins.",a+b)] {
+                for (question,wanted) in if args[0]=="independent" {[("Repeat the total for suri and orin.",a+b),("Repeat the total for mira and neri.",delta+9),("Copy the total for suri and orin.",a+b),("Copy the total for mira and neri.",delta+9)]} else {[("Repeat the original total.",a+b),("Repeat the updated total.",a+b+delta),("Repeat the previous total.",a+b+delta),("Copy the total before the new coins.",a+b)]} {
                     let mut session=model.session(Control::Full)?;
                     session.observe(&model,uor_r4_core::native_geometric::BOS)?;
                     let mut turns=Vec::new();
                     let first=format!("User: suri has {a} coins. orin has {b} coins.\nUser: What is the sum of suri's and orin's coins?\nAssistant:");
-                    let second=format!("User: There are {delta} new coins. Add the new coins to the previous total.\nAssistant:");
+                    let second=if args[0]=="independent" {format!("User: mira has {delta} coins. neri has 9 coins.\nUser: What is the sum of mira's and neri's coins?\nAssistant:")} else {format!("User: There are {delta} new coins. Add the new coins to the previous total.\nAssistant:")};
                     let third=format!("User: {question}\nAssistant:");
-                    for (prompt,expected) in [(first,a+b),(second,a+b+delta),(third,wanted)] {
+                    for (prompt,expected) in [(first,a+b),(second,if args[0]=="independent" {delta+9} else {a+b+delta}),(third,wanted)] {
                         for token in model.encode(&prompt)? {session.observe(&model,token)?;}
                         session.begin_response(&model)?;
                         let mut tokens=Vec::new();let mut decision=None;let mut eos=false;
@@ -183,7 +277,7 @@ pub(super) fn run(args: &[String]) -> ProbeResult<()> {
                     cases.push(json!({"turns":turns,"work":session.work}));
                 }
             }
-            let report=json!({"artifact":model.artifact_cid(),"scope":"OPEN actual three-turn generation, original versus updated total. No expected intermediate is inserted.","cases":cases});
+            let report=json!({"artifact":model.artifact_cid(),"scope":format!("OPEN actual three-turn {} generation. No expected intermediate is inserted.",args[0]),"cases":cases});
             write_json(Path::new(&args[2]),&report)?;
         }
         Some("prepare") if args.len()==2 => {

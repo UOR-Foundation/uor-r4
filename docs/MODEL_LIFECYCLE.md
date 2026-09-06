@@ -18,6 +18,13 @@ Continue to call the explicit begin/end response API around each generated turn;
 a raw concatenated transcript does not supply the same boundary contract.
 Exact retained values and derivations remain available across that boundary.
 Artifacts enabling this behavior require the boundary in restored checkpoints.
+The [operand-provenance continuation](native_geometric_operand_provenance_1139.md)
+propagates bounded lexical matches through exact operand IDs. Its offline
+initializer remaps learned prime-addressed codes by exact word identity when
+expanding the dictionary; the donor CID and new parameters are artifact-bound.
+Serving needs only the resulting artifact. It does not load a donor/provider.
+Literal-only first answers still use the earlier selector and remain the next
+geometric binding repair.
 
 ## Historical and retained reference lifecycles
 

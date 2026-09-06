@@ -1,43 +1,45 @@
 # Current native geometric AI work
 
-## Competing intermediate selection passes — #1139 / #1140, 2026-09-06
+## Independent computed-result selection — #1139 / #1140, 2026-09-06
 
-**Retain `43c54db3` over exact parent `bb79456b`.** The
-[result](../native_geometric_typed_roles_1139.md#executed-decision--retain-43c54db3-at-bounded-causal-depth-scope)
-and [evidence](../evidence/native_geometric_typed_roles_1139.json) bind scope.
-The learned H4 selector now uses exact derivation depth, canonical Copy identity
-for alias admission, and an explicit response boundary for query metadata. The
-13,609-byte optional role component applies with two or more derived sources;
-exact values and operators remain unchanged. No serving matrix multiplication,
-floating projection, dense transformer or LLM/provider correction is added.
+**Retain `af337c28` at bounded operand-provenance scope.** The
+[result](../native_geometric_operand_provenance_1139.md) and
+[evidence](../evidence/native_geometric_operand_provenance_1139.json) bind the
+selected artifact, negative attempts and complete resource accounting.
+Continuing the working role parameters by exact word-identity remapping gives
+58/58 construction generation,8/8 reachable development and 12/16 predeclared
+name/number/computation-order transfers, versus 3/16 for `43c54db3`.
+The matched exact-code continuation also gets 12/16; no angular-distance
+advantage over that control is established here.
 
-Angular fits/generates 42/42 construction and gets 12/12 development and 12/12
-new complete four-turn operand/refresh transfers. The matched exact-code fit
-gets 2/12 complete transfers, including eight failed generated refresh turns.
-After 20+3 ->23 and +7 ->30, refreshing updated ->30 still permits original
-->23 or original+2 ->25. Both refresh directions pass. Previous 9/12 and 8/12
-transfer failures remain exposed negatives. This is small authored evidence,
-not sealed general-language or general semantic-role qualification.
+All 12 trajectories that generate their required intermediates select the named
+result correctly, including changed names and reversed computation order.
+Four failures occur at the first literal answer, before the new selector runs.
+The21,758-byte role component adds query/cue matches propagated through exact
+operand IDs. It preserves numeric payloads, signed-H4 learned selection,
+canonical Copy identity, query boundaries and selected integer execution.
+No serving matmul, dense transformer or LLM/provider correction is added.
 
-The intermediate-removal control has 0/12 full operator/provenance successes,
-but **2/12 answer texts remain correct through recomputation**. Full-path
-provenance passes 12/12. All 48 dependent, 62 earlier, 24 prior-transfer, 28
-exposed-name, 28 long-context, five persistent and six prior numeric cases pass.
-Ten focused tests, integer-kernel and actual zero-allocation checks pass, as do
-checkpoint boundary restoration/rejection, CLI revision and four unchanged
-Rust functions with 12 semantic assertions. New general Rust reasoning is not
-established by preservation of those functions.
+Prior conversation, memory, numeric/role and familiar generated Rust behavior
+is preserved at the scopes in the record. Removing the requested intermediate
+gives 0/8 full provenance successes but2/8 correct texts through recomputation.
+Two random-initialization candidates lose18 prior updated-total cases; neither
+is accepted. Reversed literal-order and first-name-pair failures remain exposed.
 
-**Next: equal-depth independent computations, selected through exact operand/
-owner provenance under changed names and order.** Reuse this selector and state;
-causal depth alone cannot distinguish arbitrary named results. Carry a successful
-selection into generated Rust and execute it. Full #1139/#1140 remain open.
+**Next: geometric selection for literal-only first answers.** Extend the same
+query/cue operand/operator mechanism to the older sparse initial-answer path;
+start with the exposed failures, preserve this learned continuation, and test
+complete unseen-name/order trajectories before generated Rust expansion.
+General syntax/prose/reasoning, frontier capability and whole-model laptop
+performance remain unqualified. #1139/#1140 remain open.
 
-This cycle uses 283.472 seconds model work and 1397.998 seconds monitored
-engineering work. Cumulative model use is 2316.511/2370 seconds; 53.489 remain.
-Recorded revisions extend the cycle ceilings to 330/1500 seconds under standing
-owner authorization. Storage fits its existing allowance; all artifacts and
-user material are preserved. No paid external compute occurred.
+This cycle charges 287.845s model work and approximately 14 minutes of monitored
+engineering within360/900s cycle ceilings. Cumulative model use is 2604.356/2730s,
+leaving 125.644s. Standing authorization extended the model ceiling by 360s and
+storage by 192 MiB before execution. Peak sampled known storage6,484,525,056
+bytes remains below the effective6,707,802,112-byte ceiling. No deletions or
+external model compute. Exact engineering totals, checks and retained artifact
+paths are in the linked evidence; all earlier charges remain carried forward.
 
 ## Previous checkpoint: learned geometric typed selection passes its bounded transfer — #1139, 2026-09-06
 
@@ -46,20 +48,20 @@ user material are preserved. No paid external compute occurred.
 and [evidence](../evidence/native_geometric_typed_routing_1139.json) bind scope.
 A learned signed-H4 query/operand selector now chooses Copy, Add or NoOperation
 before the existing exact execution and derived-value commit. Its optional
-case-folded query metadata component is13,865 serialized bytes; no serving LLM,
+case-folded query metadata component is 13,865 serialized bytes; no serving LLM,
 dense attention, matrix multiplication or floating-point projection is added.
 
-Angular generates42/42 construction,6/6 exposed development and6/6 new authored
-numeric/wording transfers, versus3/6 new transfers for the matched exact-code
+Angular generates 42/42 construction,6/6 exposed development and 6/6 new authored
+numeric/wording transfers, versus 3/6 new transfers for the matched exact-code
 fit. Removing the intermediate yields0/6. An earlier exact-case version failed
 3/6 transfer and remains preserved; its repaired cases are explicitly exposed.
 The new checks use small authored cases after design selection, not sealed general
 language.19+12 ->31 now supports repeat ->31 and add5 ->36, using its own result.
 
-All48/48 dependent,62/62 earlier,24/24 prior-transfer,28/28 exposed-name,28/28
-long-context and5/5 persistent checks pass. Seven focused tests, the kernel
+All 48/48 dependent,62/62 earlier,24/24 prior-transfer,28/28 exposed-name,28/28
+long-context and 5/5 persistent checks pass. Seven focused tests, the kernel
 source check, actual typed zero-allocation check, CLI revision and four unchanged
-generated Rust functions with12 semantic assertions pass. No new general Rust
+generated Rust functions with 12 semantic assertions pass. No new general Rust
 reasoning, syntax, prose, frontier capability or whole-model speed is established.
 
 **Next: role-sensitive selection among competing intermediate results.** Vary
@@ -69,8 +71,8 @@ based metadata is insufficient evidence of general binding. Reuse exact state,
 operators and the existing learner; no new cache/store campaign. Full #1139 and
 #1140 remain open at their broader acceptance scope.
 
-This cycle uses162.033 seconds of local model work and686.095 seconds of monitored
-engineering work. Cumulative model use is2033.039/2130 seconds, with96.961 seconds
+This cycle uses 162.033 seconds of local model work and 686.095 seconds of monitored
+engineering work. Cumulative model use is 2033.039/2130 seconds, with 96.961 seconds
 remaining. Recorded extensions are+240 model seconds and+128MiB storage under the
 owner's standing authorization. All material is preserved; paid external compute
 is zero. Source and delivery state are recorded through the protected PR.
