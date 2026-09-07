@@ -49,6 +49,8 @@ mod typed_routing_probe;
 mod wording;
 #[path = "native_geometric_value_probe/writer_binding.rs"]
 mod writer_binding;
+#[path = "native_geometric_value_probe/writer_refinement.rs"]
+mod writer_refinement;
 const SOURCE_SCHEMA: &str = "uor-r4.native-typed-value-source/1";
 const LEXEME_SOURCE_SCHEMA: &str = "uor-r4.native-typed-value-source/2";
 const WORD_COPY_SOURCE_SCHEMA: &str = "uor-r4.native-typed-value-source/3";
@@ -993,6 +995,9 @@ fn evaluate_binding(
 }
 
 fn main() -> ProbeResult<()> {
+    if std::env::args().nth(1).as_deref() == Some("writer-refinement") {
+        return writer_refinement::run(&std::env::args().skip(2).collect::<Vec<_>>());
+    }
     if std::env::args().nth(1).as_deref() == Some("contextual-start") {
         return contextual_start::run(&std::env::args().skip(2).collect::<Vec<_>>());
     }

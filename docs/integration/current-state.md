@@ -1,5 +1,63 @@
 # Current native geometric AI work
 
+## Contextual writer boundaries — bounded positive, 2026-09-07
+
+**Retain `79710468` at contextual writer scope.** The
+[result](../native_geometric_writer_refinement_1139.md) and
+[evidence](../evidence/native_geometric_writer_refinement_1139.json) record
+warm refinement of the retained `50dc0d23` writer. Learned endpoint-edge
+separator/adjacency features distinguish source gaps previously erased by the
+masked lexical/role representation. The 23-word dictionary, signed-H4 role
+geometry, candidate support and all other parent parameters remain fixed.
+The full parent reconstructs byte-identically. No parser, hard sentence-admission
+rule, serving matrix product or transformer is added.
+
+All 232 construction writer labels and 32 new construction answers pass. Open
+answers/writes improve 8/12 to 12/12; prior phrases improve 74/76 to 76/76,
+including both previously missing `quiet river` writes. Cached and uncached
+outputs and writes match on all 320 compared cases. The 247-entry NoWrite cache
+includes complete endpoint-gap metadata; periodic proposals are disabled for
+this law. Selection precedes 12/12 fresh evicted phrases and 4/4 fresh short
+boundary objects. The four short cases retain their raw source; they do not
+qualify object persistence after eviction.
+
+All 663 retained answers, earlier span panels, 28/28 long-window and 48/48
+dependent reads, forward/reverse sessions and selected preservation pass.
+Preserve the coefficient-only `990ccbce` negative: it repaired the writes but
+regressed eight object-span answers. Diagnosis found two preexisting false
+cross-boundary writes in the parent; removing one exposed the other. The new
+eight construction and four fresh boundary cases directly record zero writes;
+the old eight span cases establish restored outputs. No isolated boundary-
+feature ablation was measured.
+
+A matched diagnostic also establishes **41 preexisting reader failures among
+200 historical writer anchors**: both parent and candidate reach 159/200 against
+the old response targets, with all 200 actual outputs and writes unchanged.
+Keep those failures visible. This is a writer repair, not general correctness,
+arbitrary punctuation understanding or broad language qualification.
+
+The actual artifact passes malformed parent/dictionary/cache rejection,
+every-step checkpoint restoration and zero-allocation ingestion/emission.
+The root CLI emits ` quiet river.\n` with EOS and also loads the earlier
+coefficient-only artifact. Load is 15.840 seconds; short ingestion is
+0.018–0.240 ms, evicted ingestion 3.955 ms and maximum predict/observe 0.250 ms
+in the recorded scope. No speed or energy advantage is established.
+Studio/WASM/HTTP integration remains `NOT_RUN`.
+
+**Next: implement a shared causal Add→Add transition.** The second operator must
+consume the actual first committed result and retain its write ID as an operand
+dependency. Refresh the source view from committed state through a bounded
+learned transition, then compose the emitted answer. Independent copied text
+plus arithmetic is insufficient. #1139, #1140 and #973 remain open.
+
+This cycle charges 292.555 model seconds. Cumulative use is
+5,163.298/5,250 seconds, leaving 86.702 seconds. The necessary 300-second and
+128 MiB extensions were recorded before use; the correction required no further
+increase. Broad storage is capped at 8,204,058,624 bytes with the 128 MiB stop
+margin and all prior charges preserved. No unique material was deleted or paid
+external compute used. Project the complete successor before execution and use
+the standing authorization for any necessary extension.
+
 ## Contextual phrase starts — bounded positive, 2026-09-07
 
 **Retain `50dc0d23` at contextual phrase-start scope.** The

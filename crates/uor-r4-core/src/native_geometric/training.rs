@@ -174,6 +174,7 @@ impl Trainer {
         let (lexical_pieces, receipts) = build_codec(&config, construction)?;
         let token_count = LEXICAL_BASE as usize + lexical_pieces.len();
         let mut template = Model {
+            relation_writer_refinement: None,
             relation_writer: None,
             dependent_read: None,
             typed_routing: None,
@@ -554,6 +555,11 @@ impl Model {
     }
     pub(super) fn validate(&self) -> Result<()> {
         self.config.validate()?;
+        // Restore the complete accepted model before peeling its earlier layers.
+        // A writer refinement changes the active writer beneath those layers.
+        if let Some(witness) = &self.relation_writer_refinement {
+            return witness.validate(self);
+        }
         if self.relation_start_context.is_some() && self.relation_start.is_none() {
             return Err(Error(
                 "relation start context has no learned selector".into(),

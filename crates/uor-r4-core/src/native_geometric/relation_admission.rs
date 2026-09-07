@@ -1,6 +1,6 @@
 //! Offline compilation of learned NoWrite decisions with exact serving guards.
 //! Geometry is a shortlist, never permission to merge unequal writer inputs.
-use super::relation::{head, write_choice_from_addresses};
+use super::relation::{boundary_context, boundary_metadata, head, write_choice_from_metadata};
 use super::value_lexemes::{LexemeState, WordAtom};
 use super::value_types::{ValueEntry, ValueWork};
 use super::*;
@@ -32,6 +32,8 @@ pub enum RelationAdmissionMode {
 struct Signature {
     len: u8,
     primes: [u32; 8],
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    boundaries: Option<[u16; 8]>,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -59,7 +61,13 @@ pub(super) struct Admission {
 }
 
 // NATIVE_GEOMETRIC_INTEGER_KERNEL_BEGIN
-fn signature(len: usize, addr: &[u32; 16], work: &mut ValueWork) -> Signature {
+fn signature(
+    model: &Model,
+    words: &[WordAtom],
+    addr: &[u32; 16],
+    work: &mut ValueWork,
+) -> Signature {
+    let len = words.len();
     let mut primes = [0; 8];
     primes[..len].copy_from_slice(&addr[..len]);
     work.relations.admission_signature_writes =
@@ -67,6 +75,11 @@ fn signature(len: usize, addr: &[u32; 16], work: &mut ValueWork) -> Signature {
     Signature {
         len: len as u8,
         primes,
+        boundaries: boundary_context(model).then(|| {
+            work.relations.admission_signature_writes =
+                work.relations.admission_signature_writes.saturating_add(8);
+            boundary_metadata(words, work)
+        }),
     }
 }
 
@@ -135,6 +148,28 @@ fn exact_cmp(a: &Signature, b: &Signature, work: &mut ValueWork) -> Ordering {
             return c;
         }
     }
+    if a.boundaries.is_some() || b.boundaries.is_some() {
+        work.relations.admission_exact_comparisons =
+            work.relations.admission_exact_comparisons.saturating_add(1);
+        work.relations.admission_metadata_bytes =
+            work.relations.admission_metadata_bytes.saturating_add(1);
+        let c = a.boundaries.is_some().cmp(&b.boundaries.is_some());
+        if !c.is_eq() {
+            return c;
+        }
+        if let Some((a, b)) = a.boundaries.as_ref().zip(b.boundaries.as_ref()) {
+            for (a, b) in a.iter().zip(b) {
+                work.relations.admission_exact_comparisons =
+                    work.relations.admission_exact_comparisons.saturating_add(1);
+                work.relations.admission_metadata_bytes =
+                    work.relations.admission_metadata_bytes.saturating_add(2);
+                let c = a.cmp(b);
+                if !c.is_eq() {
+                    return c;
+                }
+            }
+        }
+    }
     Ordering::Equal
 }
 
@@ -163,12 +198,12 @@ fn route_cmp(a: Route, b: Route, work: &mut ValueWork) -> Ordering {
 pub(super) fn skip(
     model: &Model,
     gate: &Admission,
-    len: usize,
+    words: &[WordAtom],
     addr: &[u32; 16],
     work: &mut ValueWork,
 ) -> bool {
     work.relations.admission_queries = work.relations.admission_queries.saturating_add(1);
-    let s = signature(len, addr, work);
+    let s = signature(model, words, addr, work);
     let found = if gate.mode == RelationAdmissionMode::Sparse {
         gate.entries
             .binary_search_by(|e| exact_cmp(&e.exact, &s, work))
@@ -231,12 +266,16 @@ impl Admission {
 
     pub(super) fn compatible_writer(&self, model: &Model) -> bool {
         self.entries.iter().all(|e| {
+            if e.exact.boundaries.is_some() != boundary_context(model) {
+                return false;
+            }
             let mut addr = [0; 16];
             addr[..8].copy_from_slice(&e.exact.primes);
-            write_choice_from_addresses(
+            write_choice_from_metadata(
                 model,
                 &[WordAtom::default(); 8][..usize::from(e.exact.len)],
                 &addr,
+                e.exact.boundaries.as_ref(),
                 &mut ValueWork::default(),
             )
             .is_none()
@@ -265,14 +304,24 @@ impl Admission {
             if !(2..=8).contains(&n)
                 || e.exact.primes[n..].iter().any(|p| *p != 0)
                 || !keys.insert(&e.exact)
+                || e.exact.boundaries.is_some() != boundary_context(model)
+                || e.exact.boundaries.is_some_and(|b| {
+                    b.iter().any(|&v| v > 512) || b[n.saturating_sub(1)..].iter().any(|&v| v != 0)
+                })
             {
                 return Err(Error("invalid admission exact signature".into()));
             }
             let mut addr = [0; 16];
             addr[..8].copy_from_slice(&e.exact.primes);
             let words = [WordAtom::default(); 8];
-            if write_choice_from_addresses(&parent, &words[..n], &addr, &mut ValueWork::default())
-                .is_some()
+            if write_choice_from_metadata(
+                &parent,
+                &words[..n],
+                &addr,
+                e.exact.boundaries.as_ref(),
+                &mut ValueWork::default(),
+            )
+            .is_some()
             {
                 return Err(Error("admission signature is not NoWrite".into()));
             }
@@ -306,7 +355,7 @@ fn periodic_phases(counts: &mut BTreeMap<Signature, usize>) -> usize {
     let observed: Vec<_> = counts.keys().cloned().collect();
     let before = counts.len();
     for s in observed {
-        if s.len != 8 {
+        if s.len != 8 || s.boundaries.is_some() {
             continue;
         }
         let Some(period) =
@@ -352,8 +401,8 @@ impl Model {
             }));
             let mut words = LexemeState::default();
             let mut last = None;
-            // /2 writer consumes only length and dictionary addresses; payload
-            // pose/endpoints are deliberately absent from its masked features.
+            // /2 discards payload/global poses. The optional boundary law also
+            // consumes exact source gap descriptors derived from byte endpoints.
             for (sequence, token) in self.encode(&d.prompt)?.into_iter().enumerate() {
                 let single;
                 let bytes = if token < LEXICAL_BASE {
@@ -386,13 +435,18 @@ impl Model {
                     );
                     boundaries += 1;
                     *counts
-                        .entry(signature(n, &addr, &mut ValueWork::default()))
+                        .entry(signature(
+                            self,
+                            &words.recent[..n],
+                            &addr,
+                            &mut ValueWork::default(),
+                        ))
                         .or_default() += 1;
                 }
             }
         }
         let distinct = counts.len();
-        let periodic_proposals = if self.relation_writer.is_some() {
+        let periodic_proposals = if self.relation_writer.is_some() && !boundary_context(self) {
             periodic_phases(&mut counts)
         } else {
             0
@@ -402,10 +456,11 @@ impl Model {
         for (s, count) in counts {
             let mut addr = [0; 16];
             addr[..8].copy_from_slice(&s.primes);
-            if write_choice_from_addresses(
+            if write_choice_from_metadata(
                 self,
                 &vec![WordAtom::default(); usize::from(s.len)],
                 &addr,
+                s.boundaries.as_ref(),
                 &mut certification_work,
             )
             .is_none()
@@ -446,7 +501,7 @@ impl Model {
         model.validate()?;
         Ok((
             model,
-            serde_json::json!({"mode":mode,"parent":self.artifact_cid(),"boundaries":boundaries,"distinct_signatures":distinct,"periodic_phase_proposals":periodic_proposals,"eligible_no_write_signatures":eligible_count,"entries":count,"capacity":capacity(self),"construction_selected_boundaries":covered,"certification_work":certification_work,"entry_layout_bytes":std::mem::size_of::<Entry>(),"persistent_state_bytes_added":0,"bucket_limit":BUCKET_LIMIT,"scope":"Frequency-selected exact negatives from existing learned /2 writer; no new predictive fit. Full exact prime signature guard; geometric mode adds a shortlist. Unmatched signatures and crowded geometric routes fall back to unchanged writer."}),
+            serde_json::json!({"mode":mode,"parent":self.artifact_cid(),"boundaries":boundaries,"distinct_signatures":distinct,"periodic_phase_proposals":periodic_proposals,"periodic_boundary_proposals_disabled":boundary_context(self),"signature_boundary_context":boundary_context(self),"eligible_no_write_signatures":eligible_count,"entries":count,"capacity":capacity(self),"construction_selected_boundaries":covered,"certification_work":certification_work,"entry_layout_bytes":std::mem::size_of::<Entry>(),"persistent_state_bytes_added":0,"bucket_limit":BUCKET_LIMIT,"scope":"Frequency-selected exact negatives from existing learned /2 writer; no new predictive fit. Full exact prime signature and, when enabled, last-separator/adjacency descriptor guard; geometric mode adds a shortlist. Boundary-aware compilation uses only observed windows and disables periodic proposals. Unmatched signatures and crowded geometric routes fall back to unchanged writer."}),
         ))
     }
 
@@ -476,18 +531,167 @@ mod tests {
     use super::*;
 
     #[test]
+    fn native_relation_boundary_alias_and_exact_cache_guard() {
+        use super::super::relation::{write_features_with_context, write_features_with_metadata};
+        use super::super::relation_training::WriterRevision;
+        use super::super::writer_refinement::WriterRefinement;
+        let docs = [Document {
+            id: "boundary-feature".into(),
+            text: "in now not".into(),
+        }];
+        let mut trainer = Trainer::new(Config::default(), &docs).unwrap();
+        trainer.train_documents(&docs).unwrap();
+        let mut model = trainer.compile().unwrap();
+        let words = |text: &str| {
+            let mut state = LexemeState::default();
+            for byte in text.bytes() {
+                state.feed(byte, ValueEntry::default(), &mut ValueWork::default());
+            }
+            state.finish(&mut ValueWork::default());
+            state
+        };
+        let valid = words("notes say quiet holds ranvi.");
+        let crossed = words("ada carries stone holds.\nUser:");
+        let valid_words = &valid.recent[..valid.recent_len];
+        let crossed_words = &crossed.recent[..crossed.recent_len];
+        assert_eq!(valid_words.len(), 5);
+        assert_eq!(crossed_words.len(), 5);
+        // Frozen dictionary: holds has a prime; the other context words are
+        // unknown, and both selected payload positions are role-masked.
+        let mut addr = [0; 16];
+        addr[1] = 37;
+        let features = |model: &Model, words: &[WordAtom]| {
+            write_features_with_context(
+                model,
+                words,
+                &addr,
+                0,
+                2,
+                Some(&[]),
+                &mut ValueWork::default(),
+            )
+        };
+        let old = features(&model, valid_words);
+        assert_eq!(old, features(&model, crossed_words));
+        let previous = WriterRevision {
+            schema: "uor-r4.relation-writer/1".into(),
+            parent: String::new(),
+            dictionary: vec![],
+            role_context: vec![],
+            rows: vec![],
+            training: vec![],
+            epochs: 1,
+            reuse_admission: false,
+            admission: None,
+        };
+        model.relation_writer_refinement = Some(WriterRefinement {
+            schema: "uor-r4.relation-writer-refinement/1".into(),
+            parent_artifact: String::new(),
+            previous,
+            max_seconds: 10,
+            boundary_context: true,
+        });
+        let revised = features(&model, valid_words);
+        let cross_revised = features(&model, crossed_words);
+        assert_eq!(revised.1, old.1 + 2);
+        assert_eq!(&revised.0[..old.1], &old.0[..old.1]);
+        assert_eq!(&cross_revised.0[..old.1], &old.0[..old.1]);
+        assert_ne!(revised, cross_revised);
+        let metadata = boundary_metadata(crossed_words, &mut ValueWork::default());
+        assert_eq!(metadata[0], u16::from(b'\n') + 257);
+        assert_eq!(
+            boundary_metadata(valid_words, &mut ValueWork::default())[0],
+            33
+        );
+        let wider = words("notes say quiet holds  ranvi");
+        assert_eq!(
+            boundary_metadata(&wider.recent[..wider.recent_len], &mut ValueWork::default())[0],
+            289
+        );
+        let newline = words("notes say quiet holds\nranvi");
+        assert_eq!(
+            boundary_metadata(
+                &newline.recent[..newline.recent_len],
+                &mut ValueWork::default()
+            )[0],
+            11
+        );
+        // Offline certification can discard poses/endpoints only after retaining
+        // the complete feature metadata. Replaying dummy words alone would alias.
+        assert_eq!(
+            cross_revised,
+            write_features_with_metadata(
+                &model,
+                &[WordAtom::default(); 5],
+                &addr,
+                0,
+                2,
+                Some(&[]),
+                Some(&metadata),
+                &mut ValueWork::default()
+            )
+        );
+        let exact = signature(&model, crossed_words, &addr, &mut ValueWork::default());
+        let mut gate = Admission {
+            schema: "test-only".into(),
+            parent: String::new(),
+            mode: RelationAdmissionMode::Sparse,
+            entries: vec![Entry {
+                route: Route::default(),
+                exact: exact.clone(),
+            }],
+            training: vec![],
+        };
+        assert!(skip(
+            &model,
+            &gate,
+            crossed_words,
+            &addr,
+            &mut ValueWork::default()
+        ));
+        assert!(!skip(
+            &model,
+            &gate,
+            valid_words,
+            &addr,
+            &mut ValueWork::default()
+        ));
+        let good = signature(&model, valid_words, &addr, &mut ValueWork::default());
+        assert_eq!(good.primes, exact.primes);
+        assert_eq!(
+            exact_cmp(&good, &exact, &mut ValueWork::default()),
+            good.cmp(&exact)
+        );
+        gate.entries[0].exact.boundaries = None;
+        assert!(!gate.compatible_writer(&model));
+        let wire = serde_json::to_value(&gate.entries[0].exact).unwrap();
+        assert!(wire.get("boundaries").is_none());
+        let periodic = Signature {
+            len: 8,
+            primes: [37; 8],
+            boundaries: Some([33, 33, 33, 33, 33, 33, 33, 0]),
+        };
+        let mut counts = BTreeMap::from([(periodic, 2)]);
+        assert_eq!(periodic_phases(&mut counts), 0);
+        assert_eq!(counts.len(), 1);
+    }
+
+    #[test]
     fn native_relation_admission_periodic_phases_preserve_observed_counts() {
         let a = Signature {
             len: 8,
             primes: [79, 73, 79, 73, 79, 73, 79, 73],
+            boundaries: None,
         };
         let b = Signature {
             len: 8,
             primes: [73, 79, 73, 79, 73, 79, 73, 79],
+            boundaries: None,
         };
         let nonperiodic = Signature {
             len: 8,
             primes: [1, 2, 3, 4, 5, 6, 7, 8],
+            boundaries: None,
         };
         let mut counts = BTreeMap::from([(a.clone(), 112), (nonperiodic.clone(), 3)]);
         assert_eq!(periodic_phases(&mut counts), 1);
@@ -565,6 +769,7 @@ mod tests {
                 exact: Signature {
                     len: 2,
                     primes: [i, 0, 0, 0, 0, 0, 0, 0],
+                    boundaries: None,
                 },
             })
             .collect();
@@ -577,19 +782,49 @@ mod tests {
         };
         let mut addr = [0; 16];
         addr[0] = 4;
-        assert!(skip(&model, &gate, 2, &addr, &mut ValueWork::default()));
+        assert!(skip(
+            &model,
+            &gate,
+            &[WordAtom::default(); 2],
+            &addr,
+            &mut ValueWork::default()
+        ));
         addr[1] = 99; // Same coarse route; an unequal exact member cannot skip.
-        assert!(!skip(&model, &gate, 2, &addr, &mut ValueWork::default()));
+        assert!(!skip(
+            &model,
+            &gate,
+            &[WordAtom::default(); 2],
+            &addr,
+            &mut ValueWork::default()
+        ));
         addr[1] = 0;
         gate.mode = RelationAdmissionMode::Collapsed;
         let mut work = ValueWork::default();
-        assert!(!skip(&model, &gate, 2, &addr, &mut work));
+        assert!(!skip(
+            &model,
+            &gate,
+            &[WordAtom::default(); 2],
+            &addr,
+            &mut work
+        ));
         assert_eq!(work.relations.admission_crowded_fallbacks, 1);
         assert_eq!(work.relations.admission_exact_comparisons, 0);
         entries.pop();
         gate.entries = entries;
-        assert!(skip(&model, &gate, 2, &addr, &mut ValueWork::default()));
-        assert!(!skip(&model, &gate, 3, &addr, &mut ValueWork::default()));
+        assert!(skip(
+            &model,
+            &gate,
+            &[WordAtom::default(); 2],
+            &addr,
+            &mut ValueWork::default()
+        ));
+        assert!(!skip(
+            &model,
+            &gate,
+            &[WordAtom::default(); 3],
+            &addr,
+            &mut ValueWork::default()
+        ));
         let mut max_work = ValueWork::default();
         max_work.relations.admission_queries = u64::MAX;
         max_work.relations.admission_signature_writes = u64::MAX;
@@ -597,7 +832,13 @@ mod tests {
         max_work.relations.admission_exact_comparisons = u64::MAX;
         max_work.relations.admission_metadata_bytes = u64::MAX;
         max_work.relations.admission_skips = u64::MAX;
-        assert!(skip(&model, &gate, 2, &addr, &mut max_work));
+        assert!(skip(
+            &model,
+            &gate,
+            &[WordAtom::default(); 2],
+            &addr,
+            &mut max_work
+        ));
         assert_eq!(max_work.relations.admission_metadata_bytes, u64::MAX);
         assert_eq!(max_work.relations.admission_queries, u64::MAX);
     }

@@ -66,6 +66,10 @@ impl Default for RelationState {
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RelationWork {
+    #[serde(default, skip_serializing_if = "relation_count_zero")]
+    pub boundary_metadata_bytes: u64,
+    #[serde(default, skip_serializing_if = "relation_count_zero")]
+    pub boundary_metadata_writes: u64,
     #[serde(default, skip_serializing_if = "RoutingWork::is_empty")]
     pub span_routing: RoutingWork,
     #[serde(default, skip_serializing_if = "relation_count_zero")]
@@ -203,26 +207,6 @@ fn dictionary_addresses(
     out
 }
 
-pub(super) fn write_features(
-    model: &Model,
-    words: &[WordAtom],
-    addr: &[u32; 16],
-    owner: usize,
-    value: usize,
-    work: &mut ValueWork,
-) -> ([ValueFeature; RELATION_FEATURES], usize) {
-    let context = model
-        .relation_writer
-        .as_ref()
-        .map(|w| w.role_context.as_slice())
-        .or_else(|| {
-            head(model)
-                .filter(|h| h.schema == "uor-r4.exact-relation/2")
-                .map(|h| h.role_context.as_slice())
-        });
-    write_features_with_context(model, words, addr, owner, value, context, work)
-}
-
 pub(super) fn write_features_with_context(
     model: &Model,
     words: &[WordAtom],
@@ -230,6 +214,73 @@ pub(super) fn write_features_with_context(
     owner: usize,
     value: usize,
     context: Option<&[TokenGeometry]>,
+    work: &mut ValueWork,
+) -> ([ValueFeature; RELATION_FEATURES], usize) {
+    let boundaries = boundary_context(model).then(|| boundary_metadata(words, work));
+    write_features_with_metadata(
+        model,
+        words,
+        addr,
+        owner,
+        value,
+        context,
+        boundaries.as_ref(),
+        work,
+    )
+}
+
+/// Descriptor zero is unavailable; 1..=256 is the exact single separator byte
+/// plus one; 257..=512 retains the last separator byte across a wider gap.
+/// These are learned feature identities, not a hard sentence-boundary rule.
+pub(super) fn boundary_metadata(words: &[WordAtom], work: &mut ValueWork) -> [u16; 8] {
+    let mut out = [0; 8];
+    work.relations.boundary_metadata_writes =
+        work.relations.boundary_metadata_writes.saturating_add(8);
+    for (index, pair) in words[..words.len().min(8)].windows(2).enumerate() {
+        work.relations.record_reads = work.relations.record_reads.saturating_add(2);
+        let (newer, older) = (&pair[0], &pair[1]);
+        work.relations.boundary_metadata_bytes =
+            work.relations.boundary_metadata_bytes.saturating_add(2);
+        if newer.len == 0 || older.len == 0 {
+            continue;
+        }
+        work.relations.boundary_metadata_bytes =
+            work.relations.boundary_metadata_bytes.saturating_add(2);
+        let Some(separator) = newer.leading_gap else {
+            continue;
+        };
+        work.relations.boundary_metadata_bytes =
+            work.relations.boundary_metadata_bytes.saturating_add(16);
+        let gap = newer
+            .byte_end
+            .checked_sub(u64::from(newer.len))
+            .and_then(|before_start| before_start.checked_sub(older.byte_end));
+        out[index] = match gap {
+            Some(1) => u16::from(separator) + 1,
+            Some(n) if n > 1 => u16::from(separator) + 257,
+            _ => 0,
+        };
+        work.relations.boundary_metadata_writes =
+            work.relations.boundary_metadata_writes.saturating_add(1);
+    }
+    out
+}
+
+pub(super) fn boundary_context(model: &Model) -> bool {
+    model
+        .relation_writer_refinement
+        .as_ref()
+        .is_some_and(|w| w.boundary_context)
+}
+
+pub(super) fn write_features_with_metadata(
+    model: &Model,
+    words: &[WordAtom],
+    addr: &[u32; 16],
+    owner: usize,
+    value: usize,
+    context: Option<&[TokenGeometry]>,
+    boundaries: Option<&[u16; 8]>,
     work: &mut ValueWork,
 ) -> ([ValueFeature; RELATION_FEATURES], usize) {
     let mut out = [ValueFeature::default(); RELATION_FEATURES];
@@ -325,6 +376,17 @@ pub(super) fn write_features_with_context(
     for (channel, phase) in phases.into_iter().enumerate() {
         add(12, channel as u64, u64::from(phase >> 12));
     }
+    if let Some(boundaries) = boundaries {
+        let direction = u64::from(owner < value);
+        // Newest first: the later endpoint's incoming gap and the first gap
+        // after the earlier endpoint. Interior lexical role geometry is fixed.
+        add(13, u64::from(boundaries[owner.min(value)]), direction);
+        add(
+            14,
+            u64::from(boundaries[owner.max(value).saturating_sub(1)]),
+            direction,
+        );
+    }
     work.relations.feature_writes = work.relations.feature_writes.saturating_add(n as u64);
     (out, n)
 }
@@ -372,9 +434,7 @@ pub(super) fn write_choice(
         }),
         None => h.admission.as_ref(),
     };
-    if gate
-        .is_some_and(|gate| super::relation_admission::skip(model, gate, words.len(), &addr, work))
-    {
+    if gate.is_some_and(|gate| super::relation_admission::skip(model, gate, words, &addr, work)) {
         return None;
     }
     write_choice_from_addresses(model, words, &addr, work)
@@ -386,7 +446,25 @@ pub(super) fn write_choice_from_addresses(
     addr: &[u32; 16],
     work: &mut ValueWork,
 ) -> Option<(usize, usize, u8)> {
+    let boundaries = boundary_context(model).then(|| boundary_metadata(words, work));
+    write_choice_from_metadata(model, words, addr, boundaries.as_ref(), work)
+}
+
+/// Cache certification supplies its exact captured metadata explicitly. Dummy
+/// words establish only length; they must never reconstruct source boundaries.
+pub(super) fn write_choice_from_metadata(
+    model: &Model,
+    words: &[WordAtom],
+    addr: &[u32; 16],
+    boundaries: Option<&[u16; 8]>,
+    work: &mut ValueWork,
+) -> Option<(usize, usize, u8)> {
     let h = head(model)?;
+    let context = model
+        .relation_writer
+        .as_ref()
+        .map(|w| w.role_context.as_slice())
+        .or_else(|| (h.schema == "uor-r4.exact-relation/2").then_some(h.role_context.as_slice()));
     let mut best = None;
     let mut best_score = 0;
     for owner in 0..words.len() {
@@ -394,7 +472,9 @@ pub(super) fn write_choice_from_addresses(
             if owner == value || (owner != 0 && value != 0) {
                 continue;
             }
-            let (f, n) = write_features(model, words, addr, owner, value, work);
+            let (f, n) = write_features_with_metadata(
+                model, words, addr, owner, value, context, boundaries, work,
+            );
             for action in 1..=3 {
                 let rows = model
                     .relation_writer

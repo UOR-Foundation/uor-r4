@@ -9,6 +9,22 @@ implemented operations, measured behavior and proposed integration. The native
 model was d59070c2 at the review date; no model experiment was
 rerun for that review.
 
+## Contextual writer boundaries — bounded positive, 2026-09-07
+
+The [result](native_geometric_writer_refinement_1139.md) and
+[evidence](evidence/native_geometric_writer_refinement_1139.json) select
+`79710468`. It refines the existing writer with learned separator/adjacency
+features and a complete exact NoWrite cache signature. All 232 construction
+writer labels, 32 new answers, twelve open answers and 76 prior phrases pass.
+After selection, twelve evicted phrases and four short boundary-object cases
+pass with exact writes. All 663 retained answers and selected preservation pass.
+The coefficient-only `990ccbce` negative and its eight span regressions remain
+preserved. A matched diagnostic identifies 41 preexisting reader failures among
+200 historical writer anchors; all 200 actual outputs and writes remain unchanged.
+This is bounded contextual writing, not general correctness, object persistence
+outside the raw window, arbitrary punctuation understanding or an energy result.
+Shared causal state transitions and compositional emission are the next model work.
+
 ## Contextual phrase starts — bounded positive after transfer corrections, 2026-09-07
 
 The [result](native_geometric_contextual_start_1139.md) and
