@@ -1,5 +1,37 @@
 # Current native geometric AI work
 
+## Learned relation starts — transfer negative, 2026-09-07
+
+**Keep `321e990f` as the retained model.** The implemented
+[learned start selector](../native_geometric_relation_start_1140.md) produces
+candidate `bb6b8ba4`: construction improves 2/8 to 8/8 and open development
+2/8 to 6/8. All 663 retained construction answers, earlier forward/reverse
+sessions, long-window/dependent reads and selected preservation pass. Complete
+parent parameters are unchanged. Selection requires all eight open answers;
+it failed, so fresh cases and post-selection diagnostics remain `NOT_RUN`.
+The candidate and its exact failures are preserved, not promoted.
+
+The twenty-code, two-lane H4 fit changed only predecessor-shape codes. In
+`A ledger says Pearl Cove holds tesvi`, both `says` and `Pearl` follow
+lowercase words. Their learned states tie and the longer candidate wins,
+producing ` says Pearl Cove.\n`. Construction offered no contrast to reject
+that shortcut. This is a learned representation-use failure, with the correct
+value still admitted; it is not missing value storage or evidence against the
+whole geometric architecture.
+
+**Next: break the predecessor-only shortcut with construction contrasts.**
+Use newly authored multiword introductions and candidate starts sharing the
+same predecessor shape, including lowercase-value contrasts. Reuse the existing
+ordered first/next/predecessor pair features and H4 learner before adding a new
+mechanism. Keep current open failures available for development; do not relabel
+them as fresh. The authored fresh panel remains unexecuted. Wider separators
+remain a separate representation limitation. See the result/evidence for actual
+checks and cumulative resources. The cycle used 60.167 seconds of model work;
+cumulative use is 4,387.536/4,410 seconds, leaving 22.464 seconds with no
+ceiling increase. A complete repeat of this 60-second cycle does not fit that
+balance; project the full next work and sufficient authorized resources before
+execution. No external compute or cleanup occurred.
+
 ## Reverse relation endpoints — 2026-09-07
 
 **Retain `321e990f` at bounded reverse-value scope.** The

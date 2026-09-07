@@ -1,0 +1,978 @@
+{
+  "schema": "uor-r4.learned-relation-start-evidence/1",
+  "at": "2026-09-07T14:49:52.347Z",
+  "base_commit": "3dd7180206b31a91998e9052e02eeed334655c3d",
+  "decision": "PRESERVE_CANDIDATE_TRANSFER_NEGATIVE_KEEP_321E990F",
+  "selection": {
+    "artifact": "blake3:bb6b8ba41f65b0c9d5c7ddf453e765a52b5ea8b169e50141ead05b3b5cefad79",
+    "construction": 8,
+    "development": 6,
+    "fresh": "NOT_RUN_AT_SELECTION",
+    "parent": "blake3:321e990f218899aa2668c2530caed5589c614cc58d1bb1de0b7145a64aee9563",
+    "parent_parameters_equal": true,
+    "preservation": true,
+    "selected_before_fresh": false
+  },
+  "model": {
+    "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/relation-start-angular/model.json",
+    "bytes": 11634162,
+    "sha256": "3d6c1c1f535e989885969b19415aa81c855c4f27517836d5eb994609cb530d4d"
+  },
+  "parent": {
+    "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/reverse-span-angular/model.json",
+    "bytes": 11631560,
+    "sha256": "e094a0b511bba8747cee49867997e908940a85c9147b0537ecbdc1e297ea56ab"
+  },
+  "source": [
+    {
+      "path": "crates/uor-r4-core/src/native_geometric/mod.rs",
+      "bytes": 22875,
+      "sha256": "36814ee5686991b1f40ada7e2d49dedef35a3489f2843783e9144e99f4773535"
+    },
+    {
+      "path": "crates/uor-r4-core/src/native_geometric/relation.rs",
+      "bytes": 26126,
+      "sha256": "4dd3ecbf7c8f83268d9c25c27cfab006d7287868fa18f3c9b5c60de9aee660f1"
+    },
+    {
+      "path": "crates/uor-r4-core/src/native_geometric/relation_span.rs",
+      "bytes": 22568,
+      "sha256": "1b30657e8cd51386ecd07d0a446672e5dac22c84966c2cd9c0ed083e5a2180ea"
+    },
+    {
+      "path": "crates/uor-r4-core/src/native_geometric/relation_start.rs",
+      "bytes": 7425,
+      "sha256": "8bea833c5f343c1524474cde277df18dff998f8b0f19ae55574de6e9efa7c957"
+    },
+    {
+      "path": "crates/uor-r4-core/src/native_geometric/relation_start_training.rs",
+      "bytes": 9428,
+      "sha256": "dcf5ce709e51899da4a088e9188421702a23ce471d7668a17e11c29139b5e56d"
+    },
+    {
+      "path": "crates/uor-r4-core/src/native_geometric/training.rs",
+      "bytes": 59162,
+      "sha256": "110aae5db74b9b6a9cbfcfad66edf0c32ed6056c9b3bb4416eee0ac58cc902df"
+    },
+    {
+      "path": "crates/uor-r4-core/src/native_geometric/source_routing.rs",
+      "bytes": 7145,
+      "sha256": "21d301a9547dd89b299029101882b8914a9a4879607e72c00b9b66fad062189d"
+    },
+    {
+      "path": "crates/uor-r4-core/examples/native_geometric_value_probe.rs",
+      "bytes": 73150,
+      "sha256": "3776952000606c5516e3973aad1312d8209f14cd6e4543fda09a927f74c60a08"
+    },
+    {
+      "path": "crates/uor-r4-core/examples/native_geometric_value_probe/reverse_span.rs",
+      "bytes": 10623,
+      "sha256": "e9c341c1bd66065c15f024d089272eed7c8e4904a11d5c9d179a6090db9c4c60"
+    },
+    {
+      "path": "crates/uor-r4-core/examples/native_geometric_value_probe/relation_start.rs",
+      "bytes": 6921,
+      "sha256": "e19eafbf57d753c5de6dd4e8785bac7eddaab2d00be29e112823c3a71e790b66"
+    },
+    {
+      "path": "crates/uor-r4-core/tests/native_geometric_allocations.rs",
+      "bytes": 95198,
+      "sha256": "ca14c16ea25a9f003b1271b81f66be974e911a46772a94b8690a6de756b40894"
+    }
+  ],
+  "fit": {
+    "accepted": [
+      2,
+      0,
+      0
+    ],
+    "artifact": "blake3:bb6b8ba41f65b0c9d5c7ddf453e765a52b5ea8b169e50141ead05b3b5cefad79",
+    "documents": 8,
+    "elapsed_ms": 14764,
+    "feature_count": 20,
+    "final_correct": 8,
+    "final_hinge": 0,
+    "frames": 8,
+    "initial_correct": 4,
+    "initial_hinge": 6,
+    "learning_ms": 0,
+    "parent": "blake3:321e990f218899aa2668c2530caed5589c614cc58d1bb1de0b7145a64aee9563",
+    "preparation_ms": 1,
+    "proposals": 3118,
+    "scope": "Single-action signed-H4 scoring of unchanged admitted reverse starts plus singleton endpoint, longest-first ties. Seven ordered features: ASCII first/inside-next/predecessor shapes, predecessor gap class, first-next and predecessor-first shape pairs, singleton flag. No exact vocabulary or response labels at inference, no additional admission, no general phrase parsing claim.",
+    "stopped_at_time_limit": false
+  },
+  "comparison": {
+    "parent-construction": {
+      "artifact": "blake3:321e990f218899aa2668c2530caed5589c614cc58d1bb1de0b7145a64aee9563",
+      "cases": [
+        {
+          "exact": false,
+          "expected": " Amber Meadow.\n",
+          "generation": {
+            "stop": "end_of_document",
+            "text": " Notes say Amber Meadow.\n"
+          },
+          "id": "start-fit/0/0",
+          "prompt": "Notes say Amber Meadow holds telra. Where is telra? Answer:"
+        },
+        {
+          "exact": true,
+          "expected": " Amber Meadow.\n",
+          "generation": {
+            "stop": "end_of_document",
+            "text": " Amber Meadow.\n"
+          },
+          "id": "start-fit/0/1",
+          "prompt": "Amber Meadow holds telra. Where is telra? Answer:"
+        },
+        {
+          "exact": false,
+          "expected": " Amber.\n",
+          "generation": {
+            "stop": "end_of_document",
+            "text": " Notes say Amber.\n"
+          },
+          "id": "start-fit/0/2",
+          "prompt": "Notes say Amber holds telra. Where is telra? Answer:"
+        },
+        {
+          "exact": false,
+          "expected": " Amber.\n",
+          "generation": {
+            "stop": "end_of_document",
+            "text": " Amber holds telra.\n"
+          },
+          "id": "start-fit/0/3",
+          "prompt": "Amber holds telra. Where is telra? Answer:"
+        },
+        {
+          "exact": false,
+          "expected": " Dawn River Bend.\n",
+          "generation": {
+            "stop": "end_of_document",
+            "text": " Log tells Dawn River Bend.\n"
+          },
+          "id": "start-fit/1/0",
+          "prompt": "Log tells Dawn River Bend holds mevin. Where is mevin? Answer:"
+        },
+        {
+          "exact": true,
+          "expected": " Dawn River Bend.\n",
+          "generation": {
+            "stop": "end_of_document",
+            "text": " Dawn River Bend.\n"
+          },
+          "id": "start-fit/1/1",
+          "prompt": "Dawn River Bend holds mevin. Where is mevin? Answer:"
+        },
+        {
+          "exact": false,
+          "expected": " Dawn.\n",
+          "generation": {
+            "stop": "end_of_document",
+            "text": " Log tells Dawn.\n"
+          },
+          "id": "start-fit/1/2",
+          "prompt": "Log tells Dawn holds mevin. Where is mevin? Answer:"
+        },
+        {
+          "exact": false,
+          "expected": " Dawn.\n",
+          "generation": {
+            "stop": "end_of_document",
+            "text": " Dawn holds mevin.\n"
+          },
+          "id": "start-fit/1/3",
+          "prompt": "Dawn holds mevin. Where is mevin? Answer:"
+        }
+      ],
+      "exact": 2,
+      "report_scope": "Lean preservation receipt: case identities, available complete inputs and expected labels, actual text/termination/actions/writes, verdicts and aggregate counts retained. Captured state, decisions, work and token traces omitted. Session verification remains unchanged.",
+      "total": 8
+    },
+    "parent-development": {
+      "artifact": "blake3:321e990f218899aa2668c2530caed5589c614cc58d1bb1de0b7145a64aee9563",
+      "cases": [
+        {
+          "exact": false,
+          "expected": " Pearl Cove.\n",
+          "generation": {
+            "stop": "end_of_document",
+            "text": " A ledger says Pearl Cove.\n"
+          },
+          "id": "start-open/0/0",
+          "prompt": "A ledger says Pearl Cove holds tesvi. Where is tesvi? Answer:"
+        },
+        {
+          "exact": true,
+          "expected": " Pearl Cove.\n",
+          "generation": {
+            "stop": "end_of_document",
+            "text": " Pearl Cove.\n"
+          },
+          "id": "start-open/0/1",
+          "prompt": "Pearl Cove holds tesvi. Where is tesvi? Answer:"
+        },
+        {
+          "exact": false,
+          "expected": " Pearl.\n",
+          "generation": {
+            "stop": "end_of_document",
+            "text": " A ledger says Pearl.\n"
+          },
+          "id": "start-open/0/2",
+          "prompt": "A ledger says Pearl holds tesvi. Where is tesvi? Answer:"
+        },
+        {
+          "exact": false,
+          "expected": " Pearl.\n",
+          "generation": {
+            "stop": "end_of_document",
+            "text": " Pearl holds tesvi.\n"
+          },
+          "id": "start-open/0/3",
+          "prompt": "Pearl holds tesvi. Where is tesvi? Answer:"
+        },
+        {
+          "exact": false,
+          "expected": " Cobalt Field.\n",
+          "generation": {
+            "stop": "end_of_document",
+            "text": " Report notes Cobalt Field.\n"
+          },
+          "id": "start-open/1/0",
+          "prompt": "Report notes Cobalt Field holds vorin. Where is vorin? Answer:"
+        },
+        {
+          "exact": true,
+          "expected": " Cobalt Field.\n",
+          "generation": {
+            "stop": "end_of_document",
+            "text": " Cobalt Field.\n"
+          },
+          "id": "start-open/1/1",
+          "prompt": "Cobalt Field holds vorin. Where is vorin? Answer:"
+        },
+        {
+          "exact": false,
+          "expected": " Cobalt.\n",
+          "generation": {
+            "stop": "end_of_document",
+            "text": " Report notes Cobalt.\n"
+          },
+          "id": "start-open/1/2",
+          "prompt": "Report notes Cobalt holds vorin. Where is vorin? Answer:"
+        },
+        {
+          "exact": false,
+          "expected": " Cobalt.\n",
+          "generation": {
+            "stop": "end_of_document",
+            "text": " Cobalt holds vorin.\n"
+          },
+          "id": "start-open/1/3",
+          "prompt": "Cobalt holds vorin. Where is vorin? Answer:"
+        }
+      ],
+      "exact": 2,
+      "report_scope": "Lean preservation receipt: case identities, available complete inputs and expected labels, actual text/termination/actions/writes, verdicts and aggregate counts retained. Captured state, decisions, work and token traces omitted. Session verification remains unchanged.",
+      "total": 8
+    },
+    "construction": {
+      "artifact": "blake3:bb6b8ba41f65b0c9d5c7ddf453e765a52b5ea8b169e50141ead05b3b5cefad79",
+      "cases": [
+        {
+          "exact": true,
+          "expected": " Amber Meadow.\n",
+          "generation": {
+            "stop": "end_of_document",
+            "text": " Amber Meadow.\n"
+          },
+          "id": "start-fit/0/0",
+          "prompt": "Notes say Amber Meadow holds telra. Where is telra? Answer:"
+        },
+        {
+          "exact": true,
+          "expected": " Amber Meadow.\n",
+          "generation": {
+            "stop": "end_of_document",
+            "text": " Amber Meadow.\n"
+          },
+          "id": "start-fit/0/1",
+          "prompt": "Amber Meadow holds telra. Where is telra? Answer:"
+        },
+        {
+          "exact": true,
+          "expected": " Amber.\n",
+          "generation": {
+            "stop": "end_of_document",
+            "text": " Amber.\n"
+          },
+          "id": "start-fit/0/2",
+          "prompt": "Notes say Amber holds telra. Where is telra? Answer:"
+        },
+        {
+          "exact": true,
+          "expected": " Amber.\n",
+          "generation": {
+            "stop": "end_of_document",
+            "text": " Amber.\n"
+          },
+          "id": "start-fit/0/3",
+          "prompt": "Amber holds telra. Where is telra? Answer:"
+        },
+        {
+          "exact": true,
+          "expected": " Dawn River Bend.\n",
+          "generation": {
+            "stop": "end_of_document",
+            "text": " Dawn River Bend.\n"
+          },
+          "id": "start-fit/1/0",
+          "prompt": "Log tells Dawn River Bend holds mevin. Where is mevin? Answer:"
+        },
+        {
+          "exact": true,
+          "expected": " Dawn River Bend.\n",
+          "generation": {
+            "stop": "end_of_document",
+            "text": " Dawn River Bend.\n"
+          },
+          "id": "start-fit/1/1",
+          "prompt": "Dawn River Bend holds mevin. Where is mevin? Answer:"
+        },
+        {
+          "exact": true,
+          "expected": " Dawn.\n",
+          "generation": {
+            "stop": "end_of_document",
+            "text": " Dawn.\n"
+          },
+          "id": "start-fit/1/2",
+          "prompt": "Log tells Dawn holds mevin. Where is mevin? Answer:"
+        },
+        {
+          "exact": true,
+          "expected": " Dawn.\n",
+          "generation": {
+            "stop": "end_of_document",
+            "text": " Dawn.\n"
+          },
+          "id": "start-fit/1/3",
+          "prompt": "Dawn holds mevin. Where is mevin? Answer:"
+        }
+      ],
+      "exact": 8,
+      "report_scope": "Lean preservation receipt: case identities, available complete inputs and expected labels, actual text/termination/actions/writes, verdicts and aggregate counts retained. Captured state, decisions, work and token traces omitted. Session verification remains unchanged.",
+      "total": 8
+    },
+    "development": {
+      "artifact": "blake3:bb6b8ba41f65b0c9d5c7ddf453e765a52b5ea8b169e50141ead05b3b5cefad79",
+      "cases": [
+        {
+          "exact": false,
+          "expected": " Pearl Cove.\n",
+          "generation": {
+            "stop": "end_of_document",
+            "text": " says Pearl Cove.\n"
+          },
+          "id": "start-open/0/0",
+          "prompt": "A ledger says Pearl Cove holds tesvi. Where is tesvi? Answer:"
+        },
+        {
+          "exact": true,
+          "expected": " Pearl Cove.\n",
+          "generation": {
+            "stop": "end_of_document",
+            "text": " Pearl Cove.\n"
+          },
+          "id": "start-open/0/1",
+          "prompt": "Pearl Cove holds tesvi. Where is tesvi? Answer:"
+        },
+        {
+          "exact": false,
+          "expected": " Pearl.\n",
+          "generation": {
+            "stop": "end_of_document",
+            "text": " says Pearl.\n"
+          },
+          "id": "start-open/0/2",
+          "prompt": "A ledger says Pearl holds tesvi. Where is tesvi? Answer:"
+        },
+        {
+          "exact": true,
+          "expected": " Pearl.\n",
+          "generation": {
+            "stop": "end_of_document",
+            "text": " Pearl.\n"
+          },
+          "id": "start-open/0/3",
+          "prompt": "Pearl holds tesvi. Where is tesvi? Answer:"
+        },
+        {
+          "exact": true,
+          "expected": " Cobalt Field.\n",
+          "generation": {
+            "stop": "end_of_document",
+            "text": " Cobalt Field.\n"
+          },
+          "id": "start-open/1/0",
+          "prompt": "Report notes Cobalt Field holds vorin. Where is vorin? Answer:"
+        },
+        {
+          "exact": true,
+          "expected": " Cobalt Field.\n",
+          "generation": {
+            "stop": "end_of_document",
+            "text": " Cobalt Field.\n"
+          },
+          "id": "start-open/1/1",
+          "prompt": "Cobalt Field holds vorin. Where is vorin? Answer:"
+        },
+        {
+          "exact": true,
+          "expected": " Cobalt.\n",
+          "generation": {
+            "stop": "end_of_document",
+            "text": " Cobalt.\n"
+          },
+          "id": "start-open/1/2",
+          "prompt": "Report notes Cobalt holds vorin. Where is vorin? Answer:"
+        },
+        {
+          "exact": true,
+          "expected": " Cobalt.\n",
+          "generation": {
+            "stop": "end_of_document",
+            "text": " Cobalt.\n"
+          },
+          "id": "start-open/1/3",
+          "prompt": "Cobalt holds vorin. Where is vorin? Answer:"
+        }
+      ],
+      "exact": 6,
+      "report_scope": "Lean preservation receipt: case identities, available complete inputs and expected labels, actual text/termination/actions/writes, verdicts and aggregate counts retained. Captured state, decisions, work and token traces omitted. Session verification remains unchanged.",
+      "total": 8
+    }
+  },
+  "preservation": {
+    "aliases.json": {
+      "elapsed_ms": 51,
+      "exact": 12,
+      "remove_intermediate_control": false,
+      "total": 12
+    },
+    "chains.json": {
+      "elapsed_ms": 59,
+      "exact": 16,
+      "remove_intermediate_control": false,
+      "total": 16
+    },
+    "computed-construction.json": {
+      "elapsed_ms": 192,
+      "exact": 58,
+      "remove_intermediate_control": false,
+      "total": 58
+    },
+    "dependent.json": {
+      "elapsed_ms": 59,
+      "exact": 48,
+      "exact_scope": "Complete bytes and EOS; writes counted separately.",
+      "total": 48,
+      "writes_exact": 48
+    },
+    "exposed-literals.json": {
+      "elapsed_ms": 18,
+      "exact": 16,
+      "remove_intermediate_control": false,
+      "total": 16
+    },
+    "exposed-roles.json": {
+      "elapsed_ms": 53,
+      "exact": 12,
+      "remove_intermediate_control": false,
+      "total": 12
+    },
+    "forward-construction.json": {
+      "exact": 6,
+      "isolation_pass": true,
+      "total": 6,
+      "writes_exact": true
+    },
+    "forward-open.json": {
+      "exact": 6,
+      "isolation_pass": true,
+      "total": 6,
+      "writes_exact": true
+    },
+    "forward-prior-fresh.json": {
+      "exact": 6,
+      "isolation_pass": true,
+      "total": 6,
+      "writes_exact": true
+    },
+    "identifiers.json": {
+      "elapsed_ms": 9,
+      "exact": 8,
+      "remove_intermediate_control": false,
+      "total": 8
+    },
+    "literal-construction.json": {
+      "elapsed_ms": 119,
+      "exact": 103,
+      "remove_intermediate_control": false,
+      "total": 103
+    },
+    "long.json": {
+      "elapsed_ms": 72,
+      "exact": 28,
+      "exact_scope": "Complete bytes and EOS; writes counted separately.",
+      "total": 28,
+      "writes_exact": 28
+    },
+    "names.json": {
+      "elapsed_ms": 34,
+      "exact": 28,
+      "exact_scope": "Complete bytes and EOS; writes counted separately.",
+      "total": 28,
+      "writes_exact": 28
+    },
+    "numeric.json": {
+      "elapsed_ms": 13,
+      "exact": 6,
+      "remove_intermediate_control": false,
+      "total": 6
+    },
+    "preservation.json": {
+      "exact": 62,
+      "total": 62
+    },
+    "prior-chains.json": {
+      "elapsed_ms": 57,
+      "exact": 16,
+      "remove_intermediate_control": false,
+      "total": 16
+    },
+    "prior-fresh.json": {
+      "elapsed_ms": 17,
+      "exact": 16,
+      "remove_intermediate_control": false,
+      "total": 16
+    },
+    "prior-span-construction.json": {
+      "exact": 14,
+      "total": 14
+    },
+    "prior-span-development.json": {
+      "exact": 6,
+      "total": 6
+    },
+    "prior-span-fresh.json": {
+      "exact": 9,
+      "total": 9
+    },
+    "prior.json": {
+      "exact": 24,
+      "total": 24
+    },
+    "retained-construction.json": {
+      "exact": 663,
+      "total": 663
+    },
+    "reverse-construction.json": {
+      "exact": 6,
+      "isolation": true,
+      "total": 6,
+      "trailing_tokens": 1056,
+      "version_counts_exact": true
+    },
+    "reverse-open.json": {
+      "exact": 6,
+      "isolation": true,
+      "total": 6,
+      "trailing_tokens": 1056,
+      "version_counts_exact": true
+    },
+    "reverse-prior-fresh.json": {
+      "exact": 6,
+      "isolation": true,
+      "total": 6,
+      "trailing_tokens": 1056,
+      "version_counts_exact": true
+    },
+    "reverse-short.json": {
+      "exact": 3,
+      "total": 3
+    },
+    "roles.json": {
+      "elapsed_ms": 51,
+      "exact": 12,
+      "remove_intermediate_control": false,
+      "total": 12
+    },
+    "sessions.json": {
+      "exact_turns": 5,
+      "isolated_no_shared_records": true,
+      "isolated_response": " Unknown.\n",
+      "preserved_versions": 4,
+      "restore_and_forged_commit_checks": "PASS",
+      "schema": "uor-r4.relation-session-check/1",
+      "total_turns": 5
+    }
+  },
+  "diagnosis": {
+    "identity": 119,
+    "nonidentity_codes": [
+      {
+        "feature": {
+          "kind": 2,
+          "a": 1,
+          "b": 0
+        },
+        "roots": [
+          24,
+          119
+        ]
+      },
+      {
+        "feature": {
+          "kind": 2,
+          "a": 2,
+          "b": 0
+        },
+        "roots": [
+          119,
+          77
+        ]
+      }
+    ],
+    "basis": "Saved parameters plus shared encode/score source. Only predecessor shape changes state. Both says and Pearl follow lowercase words; exact learned-state tie chooses longer start. This is not an additional model run or a general identifiability theorem.",
+    "new_fresh": "NOT_RUN_SELECTION_FAILED",
+    "post_selection_diagnostics": "NOT_RUN_SELECTION_FAILED"
+  },
+  "checks": {
+    "release_probe_and_test_binaries": "PASS",
+    "focused_start_tests": 2,
+    "focused_span_tests": 5,
+    "integer_source_guard": "PASS; scoped source-token scan, not transitive or machine-code proof",
+    "architecture_policy": "PASS; no model behavior evaluated",
+    "actual_artifact": "PASS: invalid H4 root and frozen-parent rejection, opened construction short/evicted/singleton exact outputs, every-step checkpoint prediction equality, zero measured allocations during ingestion and predict/observe",
+    "timing": {
+      "samples": 41,
+      "median_ns": 458,
+      "max_ns": 156959,
+      "scope": "Uncached predict+observe including first selection; excludes loading, encoding, ingestion and checkpoints. Shape scorer runs during ingestion, so this is not its latency measurement. Energy unmeasured."
+    },
+    "root_cli": "NOT_RUN_FOR_CANDIDATE",
+    "studio": "NOT_RUN",
+    "broad_release_qa": "NOT_RUN",
+    "format": "PASS",
+    "claim_wording": "PASS",
+    "warning": "Existing unused NUMERIC_PROMPT fixture warning; successful compilation"
+  },
+  "resources": {
+    "projection": {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/relation-start-projection.json",
+      "bytes": 2749,
+      "sha256": "3ea1ac50cd298ce7f5da68c602238adad12c4aa1a2bceb879c1d4844ed9eabe2"
+    },
+    "cycle_model_ms": 60167,
+    "cycle_engineering_ms": 276856,
+    "current_cumulative": {
+      "cumulative_ms": 4387536,
+      "limit_ms": 4410000
+    },
+    "remaining_model_ms": 22464,
+    "final_sampled_growth_bytes": 14761984,
+    "peak_sampled_growth_bytes": 20692992,
+    "peak_sampled_model_rss_bytes": 986791936,
+    "commands": [
+      {
+        "label": "relation-start-evaluate",
+        "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+        "args": [
+          "relation-start",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/reverse-span-angular/model.json",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/relation-start-angular"
+        ],
+        "elapsed_ms": 44874,
+        "exit_code": 0,
+        "stopped": null,
+        "engineering_only": false,
+        "peak_sampled_known_bytes": 7531196416,
+        "peak_process_rss_sample_bytes": 986791936
+      },
+      {
+        "label": "relation-start-artifact-check",
+        "command": "/usr/bin/env",
+        "args": [
+          "R4_RELATION_START_MODEL=/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/relation-start-angular/model.json",
+          "/tmp/r4-native-geometric-target/release/deps/native_geometric_allocations-6c7ff1216c7e1931",
+          "native_relation_start_checkpoint_and_allocation",
+          "--ignored",
+          "--exact",
+          "--nocapture"
+        ],
+        "elapsed_ms": 15293,
+        "exit_code": 0,
+        "stopped": null,
+        "engineering_only": false,
+        "peak_sampled_known_bytes": 7531204608,
+        "peak_process_rss_sample_bytes": 744570880
+      },
+      {
+        "label": "relation-start-build",
+        "command": "/bin/zsh",
+        "args": [
+          "-c",
+          "set -e\nexport CARGO_TARGET_DIR=/tmp/r4-native-geometric-target CARGO_INCREMENTAL=0 CARGO_BUILD_JOBS=1\n/Users/casey.allard/.cargo/bin/cargo fmt --all\n/Users/casey.allard/.cargo/bin/cargo build --release --offline -p uor-r4-core --example native_geometric_value_probe\n/Users/casey.allard/.cargo/bin/cargo test --release --offline -p uor-r4-core --lib --test native_geometric_allocations --no-run\n/tmp/r4-native-geometric-target/release/deps/uor_r4_core-ab236c9b0d8b158f relation_start --nocapture\n/tmp/r4-native-geometric-target/release/deps/uor_r4_core-ab236c9b0d8b158f relation_span::tests --nocapture\n/tmp/r4-native-geometric-target/release/deps/native_geometric_allocations-6c7ff1216c7e1931 native_kernel_source_has_no_forbidden_arithmetic_or_float_types --exact --nocapture\n/tmp/r4-native-geometric-target/release/r4-policy-check .\n"
+        ],
+        "elapsed_ms": 267395,
+        "exit_code": 0,
+        "stopped": null,
+        "engineering_only": true,
+        "peak_sampled_known_bytes": 7537143808,
+        "peak_process_rss_sample_bytes": null
+      },
+      {
+        "label": "relation-start-artifact-test-build",
+        "command": "/bin/zsh",
+        "args": [
+          "-c",
+          "set -e\nexport CARGO_TARGET_DIR=/tmp/r4-native-geometric-target CARGO_INCREMENTAL=0 CARGO_BUILD_JOBS=1\n/Users/casey.allard/.cargo/bin/cargo test --release --offline -p uor-r4-core --test native_geometric_allocations --no-run\n"
+        ],
+        "elapsed_ms": 5691,
+        "exit_code": 0,
+        "stopped": null,
+        "engineering_only": true,
+        "peak_sampled_known_bytes": 7532236800,
+        "peak_process_rss_sample_bytes": null
+      },
+      {
+        "label": "relation-start-final-checks",
+        "command": "/bin/zsh",
+        "args": [
+          "-c",
+          "set -e\n/Users/casey.allard/.cargo/bin/cargo fmt --all --check\npython3 scripts/check_claim_wording.py\ngit diff --check\n"
+        ],
+        "elapsed_ms": 3770,
+        "exit_code": 0,
+        "stopped": null,
+        "engineering_only": true,
+        "peak_sampled_known_bytes": 7531212800,
+        "peak_process_rss_sample_bytes": null
+      }
+    ],
+    "cleanup": "NONE",
+    "external_compute": "NONE",
+    "ceiling_increase": "NONE",
+    "scope": "Cumulative command-wall accounting includes load/validation, learning, evaluation and artifact checks. Engineering commands charged separately; interactive review/docs wall time is not model execution. Storage/RSS are sampled conservative accounting, not exact peaks."
+  },
+  "receipts": [
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/relation-start-angular/construction.json",
+      "bytes": 2554,
+      "sha256": "c467600c6bea8ab7a09723a9cfc7961fd9c75ec882f3d4812acd22a4ec9d0cb9"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/relation-start-angular/development.json",
+      "bytes": 2570,
+      "sha256": "8162a81e8304c169cb81eaee89c6af7a85b184463ab21812523b37cbe5500951"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/relation-start-angular/fit.json",
+      "bytes": 19770,
+      "sha256": "45e56d971fefbf2675d75d1fa62d7ce5f43acc4de4a352b480bd406aa93e13b4"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/relation-start-angular/parent-construction.json",
+      "bytes": 2624,
+      "sha256": "b5061d04464d0202266851e9a08d1f70df6eb18accbdab77c7d0a61df2b65ae1"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/relation-start-angular/parent-development.json",
+      "bytes": 2642,
+      "sha256": "1478a48af081d553450bb886ea2abeb9c88e043c07aca94aa72b88c21d3a7b37"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/relation-start-angular/selection.json",
+      "bytes": 347,
+      "sha256": "60b2d90a59ee2ca7dfd54402a018e3a6bd7da9ab271c50d57b18c4df2d2f6467"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/relation-start-angular/source.json",
+      "bytes": 2540,
+      "sha256": "f4f645a387c9101871596dd0b9cc5b70b821018311f1b9713cc817b61133ddcb"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/relation-start-angular/preservation/aliases.json",
+      "bytes": 15252,
+      "sha256": "1d77db60b505da0cdc845160a79782db1edfd63c43cc214c0bc0b1eca65ad39a"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/relation-start-angular/preservation/chains.json",
+      "bytes": 18506,
+      "sha256": "7039692bf5616556b398852765181963e75b67ffc2d08cdc6de0791a06b93e96"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/relation-start-angular/preservation/computed-construction.json",
+      "bytes": 61339,
+      "sha256": "f62fa333d63a48bc61f77865721cfabd86d59e8396f054c705301fc84bb6371a"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/relation-start-angular/preservation/dependent.json",
+      "bytes": 45899,
+      "sha256": "1facea7805e443c23c29c761fe71840b151b4c3bb972568db3d6a47b396a6a6b"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/relation-start-angular/preservation/exposed-literals.json",
+      "bytes": 14928,
+      "sha256": "ac6f22235ddb1ee4a1e3e18a5db77d428382a74084546eece85c8ba2b8117c1c"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/relation-start-angular/preservation/exposed-roles.json",
+      "bytes": 15136,
+      "sha256": "410b08305d5072d486516c691aa0b34da0290018ce3ba8e72023a9875b1b64f7"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/relation-start-angular/preservation/forward-construction.json",
+      "bytes": 159840,
+      "sha256": "92d898a23ab2f4a1765e8bc5c34ab999ceaaa353c141ddfbc6cceb791b1b6594"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/relation-start-angular/preservation/forward-open.json",
+      "bytes": 159878,
+      "sha256": "a9cc0be0377aaf5ef5ce9c02a09608a0c237351458bce57a1765626466769ed0"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/relation-start-angular/preservation/forward-prior-fresh.json",
+      "bytes": 160240,
+      "sha256": "452324f6026e1f91a7c8f62b9e46fcbd953e92118782a27804c6571cef8f32e8"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/relation-start-angular/preservation/identifiers.json",
+      "bytes": 7263,
+      "sha256": "e6f656900e2aaa1dfa8b937d12a68812a3163e350e938737f5d81e34966927f7"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/relation-start-angular/preservation/literal-construction.json",
+      "bytes": 93929,
+      "sha256": "2e4b41326beb76ffcd90f5d56428d84c834e26547653e67373afe47151f9ec68"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/relation-start-angular/preservation/long.json",
+      "bytes": 147372,
+      "sha256": "a5608fdc5746d76b096df5eb3883df4cffe62d51400c9c9931f20dfc6dd45542"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/relation-start-angular/preservation/names.json",
+      "bytes": 27972,
+      "sha256": "3e6aa8e657ae2e65b4da933d9452e5d05d1bdc5ce441f0ec800453911d7d9781"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/relation-start-angular/preservation/numeric.json",
+      "bytes": 6094,
+      "sha256": "fcba6046bd4ee2393b6086d2906c6ca8ace224e08ccbed5ca4739b114ae54c85"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/relation-start-angular/preservation/preservation.json",
+      "bytes": 21669,
+      "sha256": "6e9471ca121c5b6e66f1c5afb7b2d4e417a67eb5c0473262027fafef420479b2"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/relation-start-angular/preservation/prior-chains.json",
+      "bytes": 18496,
+      "sha256": "e44385d6b1b3dd27669500cb68bdc73123bd2331d9b80b8e3037a2bfba166406"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/relation-start-angular/preservation/prior-fresh.json",
+      "bytes": 14552,
+      "sha256": "f16470b491815d1b2693d5d4c8d183e635637776305b97ae65fcd3e88743ebfd"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/relation-start-angular/preservation/prior-span-construction.json",
+      "bytes": 4445,
+      "sha256": "6ba29ce8c400c7dd1c47d3175926e32cbc1c928f054716f7ce3fd915aa948e4c"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/relation-start-angular/preservation/prior-span-development.json",
+      "bytes": 2175,
+      "sha256": "433bd40f62ca7559a285e8f92320c074ca78009ee2fe6ade94790acfaca83e45"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/relation-start-angular/preservation/prior-span-fresh.json",
+      "bytes": 3102,
+      "sha256": "3bac3372da8ea829bfe867280927bd14c2c579714a20a7853fa51fb29a94fbf8"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/relation-start-angular/preservation/prior.json",
+      "bytes": 7457,
+      "sha256": "28ea1826d6920415e20a9a04f9a2791b6f910fed275ad3bb16afbd3f49c623e4"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/relation-start-angular/preservation/retained-construction.json",
+      "bytes": 214913,
+      "sha256": "2e8a9ed6cde68c734c99386231d2478caddeaa275828aac69503e8adc940aab6"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/relation-start-angular/preservation/reverse-construction.json",
+      "bytes": 412677,
+      "sha256": "751d728d3bf4906419a411b972441954f1aacc7336e98535cbf9adfdc0c7fffe"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/relation-start-angular/preservation/reverse-open.json",
+      "bytes": 435793,
+      "sha256": "7138e0314c7b05d9da97a98c9c1121ca108ccba740349d6ffd0ea0575d951513"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/relation-start-angular/preservation/reverse-prior-fresh.json",
+      "bytes": 413304,
+      "sha256": "4ad67b2e67766a5b019c2089a1ce03ebf4b9d5b114293f31905c39563c99c555"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/relation-start-angular/preservation/reverse-short.json",
+      "bytes": 559,
+      "sha256": "7e9ed91a4d52b277dc6110bb8f38005a9dbbabd607fa8ad2b4c0cfd0d48166c7"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/relation-start-angular/preservation/roles.json",
+      "bytes": 15264,
+      "sha256": "db1f5520a3879f0d2276bb10a9696d3d381f98bb4cb923e099d4820438b990a5"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/relation-start-angular/preservation/sessions.json",
+      "bytes": 58938,
+      "sha256": "89273d5cdc892cd690f75fc811a73a25cbe7abbca8614ffed6ef1504f98a1999"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/relation-start-build.log",
+      "bytes": 2339,
+      "sha256": "edc8d3045a7afa5956caeeb32757c30f15b9a9a0af809d292e045af694ebeedc"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/relation-start-artifact-test-build.log",
+      "bytes": 706,
+      "sha256": "796c8541cfb3cdc3a8fe8eba42ea531cd5b67afaf4f2afe4daa68800be875923"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/relation-start-artifact-check.stdout.log",
+      "bytes": 435,
+      "sha256": "7fb50d70dea300f988e35a27c95b6d567d8985c9f56d30a3ae7ed873d004f563"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/relation-start-final-checks.log",
+      "bytes": 83,
+      "sha256": "78d71cb97c00d606a9a909d89a2f4f4e3b4be6b84af390f20c9fc50ec449922f"
+    }
+  ],
+  "limitations": [
+    "Candidate not promoted; retained parent remains 321e990f.",
+    "Construction and open results use authored familiar templates; not general language or reasoning.",
+    "No new angular-versus-equality comparison; no geometric advantage or energy claim.",
+    "Shape feature vocabulary does not supply general semantic parsing; lowercase and wider gaps unqualified.",
+    "Parent is the complete control; query-side ablations do not disable full-control persistent ingestion."
+  ],
+  "next": "New construction contrasts must reject predecessor-only selection using existing ordered candidate features; preserve opened failures and unexecuted fresh panel. A complete repeat does not fit the remaining 22.464-second model allocation or roughly 15MiB growth balance; no silent ceiling increase."
+}

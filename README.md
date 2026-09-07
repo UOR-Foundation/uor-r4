@@ -129,7 +129,10 @@ behavior. The [reverse endpoint continuation](docs/native_geometric_reverse_span
 now retains `321e990f`, reusing the selected terminal word to bound the phrase.
 Construction improves 3/6 to 6/6, open and fresh turns pass 6/6 each, and short
 reads pass 3/3 with selected preservation intact. Unfamiliar introductions and
-wider gaps still fail; learned phrase starts are the next direction.
+wider gaps still fail. The [learned phrase-start candidate](docs/native_geometric_relation_start_1140.md)
+improves new construction 2/8 to 8/8 and open answers 2/8 to 6/8, preserving
+prior outputs, but is not promoted: predecessor-only learned codes still include
+an introductory word in two cases. Fresh evaluation was not executed.
 General prose/syntax/reasoning and frontier capability remain unqualified. Follow
 the current-state pointer for artifacts, costs and the next implementation.
 

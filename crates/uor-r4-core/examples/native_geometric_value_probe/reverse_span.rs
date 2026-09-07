@@ -24,7 +24,12 @@ fn emit(s: &mut Session, m: &Model) -> ProbeResult<String> {
     }
     Err("reverse span did not terminate".into())
 }
-fn panel(m: &Model, names: [&str; 2], values: [&str; 3], prefix: &str) -> ProbeResult<Value> {
+pub(super) fn panel(
+    m: &Model,
+    names: [&str; 2],
+    values: [&str; 3],
+    prefix: &str,
+) -> ProbeResult<Value> {
     let [a, b] = names;
     let [first, changed, other] = values;
     let mut s = m.session(Control::Full)?;
@@ -98,7 +103,7 @@ fn panel(m: &Model, names: [&str; 2], values: [&str; 3], prefix: &str) -> ProbeR
 fn accepted(j: &Value) -> bool {
     j["exact"] == j["total"] && j["version_counts_exact"] == true && j["isolation"] == true
 }
-fn short(m: &Model) -> ProbeResult<Value> {
+pub(super) fn short(m: &Model) -> ProbeResult<Value> {
     let mut rows = Vec::new();
     for (input, owner, value) in [
         ("Orin Grove holds nelra.", "nelra", "Orin Grove"),
@@ -158,6 +163,50 @@ pub(super) fn run(args: &[String]) -> ProbeResult<()> {
         "Record: ",
     )?;
     write_json(&out.join("development.json"), &development)?;
+    let preserved = preserve(&model, root, out)?;
+    let short = short(&model)?;
+    write_json(&out.join("short.json"), &short)?;
+    let selected = accepted(&construction)
+        && accepted(&development)
+        && preserved
+        && short["exact"] == short["total"];
+    write_json(
+        &out.join("selection.json"),
+        &json!({"artifact":model.artifact_cid(),"parent":parent.artifact_cid(),"parent_parameters_equal":true,"fit":"NOT_RUN_NO_FIT_REQUIRED","selected_before_fresh":selected,"preservation":preserved,"construction":construction["exact"],"development":development["exact"],"fresh":"NOT_RUN_AT_SELECTION"}),
+    )?;
+    let fresh = panel(
+        &model,
+        ["belvi", "norvi"],
+        ["Quiet River Bend", "Silver River Bend", "Violet Quay"],
+        "",
+    )?;
+    write_json(&out.join("fresh.json"), &fresh)?;
+    let mut boundaries = Vec::new();
+    for (text, expected) in [
+        ("Records show Orin Grove holds nelra.", " Orin Grove.\n"),
+        ("Orin  Grove holds nelra.", " Orin  Grove.\n"),
+    ] {
+        let mut s = model.session(Control::Full)?;
+        s.observe(&model, 0)?;
+        ingest(&mut s, &model, text)?;
+        ingest(&mut s, &model, &"quiet sky. ".repeat(96))?;
+        ingest(&mut s, &model, "Where is nelra? Answer:")?;
+        let actual = emit(&mut s, &model)?;
+        boundaries
+            .push(json!({"input":text,"expected":expected,"text":actual,"exact":actual==expected}));
+    }
+    write_json(
+        &out.join("boundaries.json"),
+        &json!({"cases":boundaries,"scope":"Post-selection diagnostics only: unseen plain intro and two-space gap; no fitting or tuning"}),
+    )?;
+    println!(
+        "{}",
+        json!({"artifact":model.artifact_cid(),"parent":before["exact"],"construction":construction["exact"],"development":development["exact"],"preservation":preserved,"selected":selected,"fresh":fresh["exact"]})
+    );
+    Ok(())
+}
+
+pub(super) fn preserve(model: &Model, root: &Path, out: &Path) -> ProbeResult<bool> {
     let preserve = out.join("preservation");
     fs::create_dir(&preserve)?;
     source_noread::preserve_model_lean(model.clone(), root, &preserve)?;
@@ -235,44 +284,5 @@ pub(super) fn run(args: &[String]) -> ProbeResult<()> {
                 j["exact_turns"] == j["total_turns"] && j["isolated_no_shared_records"] == true;
         }
     }
-    let short = short(&model)?;
-    write_json(&out.join("short.json"), &short)?;
-    let selected = accepted(&construction)
-        && accepted(&development)
-        && preserved
-        && short["exact"] == short["total"];
-    write_json(
-        &out.join("selection.json"),
-        &json!({"artifact":model.artifact_cid(),"parent":parent.artifact_cid(),"parent_parameters_equal":true,"fit":"NOT_RUN_NO_FIT_REQUIRED","selected_before_fresh":selected,"preservation":preserved,"construction":construction["exact"],"development":development["exact"],"fresh":"NOT_RUN_AT_SELECTION"}),
-    )?;
-    let fresh = panel(
-        &model,
-        ["belvi", "norvi"],
-        ["Quiet River Bend", "Silver River Bend", "Violet Quay"],
-        "",
-    )?;
-    write_json(&out.join("fresh.json"), &fresh)?;
-    let mut boundaries = Vec::new();
-    for (text, expected) in [
-        ("Records show Orin Grove holds nelra.", " Orin Grove.\n"),
-        ("Orin  Grove holds nelra.", " Orin  Grove.\n"),
-    ] {
-        let mut s = model.session(Control::Full)?;
-        s.observe(&model, 0)?;
-        ingest(&mut s, &model, text)?;
-        ingest(&mut s, &model, &"quiet sky. ".repeat(96))?;
-        ingest(&mut s, &model, "Where is nelra? Answer:")?;
-        let actual = emit(&mut s, &model)?;
-        boundaries
-            .push(json!({"input":text,"expected":expected,"text":actual,"exact":actual==expected}));
-    }
-    write_json(
-        &out.join("boundaries.json"),
-        &json!({"cases":boundaries,"scope":"Post-selection diagnostics only: unseen plain intro and two-space gap; no fitting or tuning"}),
-    )?;
-    println!(
-        "{}",
-        json!({"artifact":model.artifact_cid(),"parent":before["exact"],"construction":construction["exact"],"development":development["exact"],"preservation":preserved,"selected":selected,"fresh":fresh["exact"]})
-    );
-    Ok(())
+    Ok(preserved)
 }

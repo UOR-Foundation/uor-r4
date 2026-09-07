@@ -7,6 +7,24 @@ implemented operations, measured behavior and proposed integration. The native
 model was d59070c2 at the review date; no model experiment was
 rerun for that review.
 
+## Learned relation starts — construction fit, open transfer negative, 2026-09-07
+
+The [result](native_geometric_relation_start_1140.md) implements shared signed-H4
+ranking over unchanged admitted reverse starts plus the singleton endpoint.
+Candidate `bb6b8ba4` binds the complete `321e990f` parent. Construction
+improves 2/8 to 8/8 and open answers 2/8 to 6/8; all selected prior preservation
+passes. The two failures retain `says` before the intended value. Only
+predecessor-shape codes changed during fitting, so a longer candidate sharing
+that shape wins the exact score tie. The current construction lacks a contrast
+that would reject this shortcut, although ordered pair features are available.
+
+Selection failed; the fresh panel and subsequent diagnostics were not executed.
+Keep `321e990f` active and preserve this candidate as a bounded negative.
+This result does not establish general phrase understanding, an advantage of
+angular scoring over another scorer, energy savings or frontier capability.
+The next change is contrastive construction for the existing operator, with a
+complete resource projection. See current-state for the cumulative balance.
+
 ## Reverse relation endpoints — bounded positive, 2026-09-07
 
 The [result](native_geometric_reverse_spans_1140.md) retains `321e990f` over
