@@ -81,7 +81,7 @@ identity and an explicit query boundary. The subsequent
 gets 12/16 complete independent-result name/order transfers, versus 3/16 parent
 and 12/16 exact-code. Four fail before selection, at the first literal answer;
 the [literal extension](docs/native_geometric_literal_selection_1139.md) now
-improves new complete transfers8/16 to16/16 but regresses computed-result and
+improves new complete transfers8/16 to 16/16 but regresses computed-result and
 identifier-copy cases. The [protected admission repair](docs/native_geometric_literal_admission_1139.md)
 now retains a separate literal table with inherited computed roles unchanged:
 all prior preservation is restored, new complete transfer is16/16, and eight
@@ -104,8 +104,14 @@ assertions. The subsequent [literal operand continuation](docs/native_geometric_
 repairs that binding through missing exact-provenance codes: construction improves
 571/631 to 630/631 with no lost correct answer, and fresh name/value/order answers
 improve 8/16 to 16/16 versus 8/16 matched equality. All prior preservation passes;
-32 repaired Rust continuations execute their assertions. The remaining observed
-boundary is order-sensitive supported-source/NoRead selection.
+32 repaired Rust continuations execute their assertions. The subsequent
+[retained source context](docs/native_geometric_source_context_1139.md) repairs
+that source boundary: four exact predecessors stay with each word candidate.
+Construction improves 654/663 to 663/663 and fresh owner/query/order answers improve
+24/32 to 32/32, versus 24/32 with context disabled. The same learned H4 selector
+reuses the recovered owner identity; all prior preservation passes. The next
+architecture step is reusable contextual transition/emission conditioned on
+selected exact values and committed operator results.
 General prose/syntax/reasoning and frontier capability remain unqualified. Follow
 the current-state pointer for artifacts, costs and the next implementation.
 
