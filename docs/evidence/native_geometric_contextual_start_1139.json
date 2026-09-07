@@ -1,0 +1,5414 @@
+{
+  "schema": "uor-r4.contextual-phrase-start-evidence/1",
+  "at": "2026-09-07T16:43:43.838Z",
+  "base_commit": "dcc37fa016560ce98cfea4ab1a1a5f8e9542e477",
+  "decision": "RETAIN_50DC0D23_BOUNDED_CONTEXTUAL_PHRASE_START",
+  "model": {
+    "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-title-contrasts/model.json",
+    "bytes": 11645070,
+    "sha256": "021947a9ea4398077e9d2255a07e83aac641f549d19e86b3b957952ed3270146"
+  },
+  "artifact_cid": "blake3:50dc0d23175183272e557a47f6ad8cb5f538f30b5185f1b372c0c3bc010b8918",
+  "parent": {
+    "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/reverse-span-angular/model.json",
+    "bytes": 11631560,
+    "sha256": "e094a0b511bba8747cee49867997e908940a85c9147b0537ecbdc1e297ea56ab"
+  },
+  "selection": {
+    "artifact": "blake3:50dc0d23175183272e557a47f6ad8cb5f538f30b5185f1b372c0c3bc010b8918",
+    "artifact_roundtrip_equal": true,
+    "construction": 50,
+    "construction_total": 50,
+    "context_disabled_construction": 38,
+    "context_disabled_development": 7,
+    "control_scope": "Context-disabled retains the registry, candidate features and work; contextual H4 feature roots are set to identity while learned shape roots remain.",
+    "development": 12,
+    "development_total": 12,
+    "elapsed_ms": 89964,
+    "eligibility": {
+      "added_open_feedback_construction": 20,
+      "construction_extension": "Twelve explicit OPEN-feedback construction contrasts follow the cross-owner artifact's residual singleton log tells/report notes and prior A ledger says errors. New owners and payloads use the unchanged runtime feature law; these are construction, not fresh evaluation.",
+      "excluded_ids": [
+        "context-start-fit/2/0",
+        "context-start-fit/2/1"
+      ],
+      "first_open_feedback_construction": 12,
+      "original_supplied": 32,
+      "prior_attempt": "contextual-start-angular",
+      "prior_error": "no completed reverse write in context-start-fit/2/0",
+      "reason": "The preceding contextual-start-angular attempt stopped with no completed reverse write in context-start-fit/2/0. Inspection of that attempt's parent-construction evidence established no parent record for both multiword quiet river cases /2/0 and /2/1, while the singleton cases /2/2 and /2/3 had records. This is explicit observed upstream writer eligibility, not filtering by learned correctness. The same two unsupported cases remain visible in complete 52-case comparisons, original32 subsets and upstream diagnostics. No additional case is excluded.",
+      "scope": "Selection covers supported construction 50/50, unchanged OPEN 12/12 and prior preservation including the prior-start challenge8; it does not establish success on all 52 supplied cases or all original32 cases. Admission and runtime are unchanged.",
+      "supplied": 52,
+      "supported_fit": 50,
+      "title_construction_extension": "Eight explicit OPEN-feedback construction contrasts follow artifact af997b17's remaining prior Report notes Cobalt Field/Cobalt errors. Record notes/helvi/Copper Shore/Copper and Memo notes/darvi/Quartz Hill/Quartz vary title-case introductory words under distinct single owners. Report is not added to fitting. These exercise shared unknown-title-before-notes behavior under the unchanged cross-owner registry rule; they are construction, not fresh evaluation.",
+      "title_open_feedback_construction": 8,
+      "upstream_diagnostics": 2
+    },
+    "fresh": "NOT_RUN_AT_SELECTION",
+    "original_construction": 30,
+    "original_construction_total": 32,
+    "parent": "blake3:321e990f218899aa2668c2530caed5589c614cc58d1bb1de0b7145a64aee9563",
+    "parent_parameters_equal": true,
+    "preservation": true,
+    "selected_before_fresh": true,
+    "supplied_construction": 50,
+    "supplied_construction_total": 52
+  },
+  "report": {
+    "artifact": "blake3:50dc0d23175183272e557a47f6ad8cb5f538f30b5185f1b372c0c3bc010b8918",
+    "construction": 50,
+    "construction_total": 50,
+    "context_disabled_construction": 38,
+    "context_disabled_development": 7,
+    "context_disabled_original_construction": 21,
+    "context_disabled_supplied_construction": 38,
+    "development": 12,
+    "development_total": 12,
+    "elapsed_ms": 89996,
+    "eligibility": {
+      "added_open_feedback_construction": 20,
+      "construction_extension": "Twelve explicit OPEN-feedback construction contrasts follow the cross-owner artifact's residual singleton log tells/report notes and prior A ledger says errors. New owners and payloads use the unchanged runtime feature law; these are construction, not fresh evaluation.",
+      "excluded_ids": [
+        "context-start-fit/2/0",
+        "context-start-fit/2/1"
+      ],
+      "first_open_feedback_construction": 12,
+      "original_supplied": 32,
+      "prior_attempt": "contextual-start-angular",
+      "prior_error": "no completed reverse write in context-start-fit/2/0",
+      "reason": "The preceding contextual-start-angular attempt stopped with no completed reverse write in context-start-fit/2/0. Inspection of that attempt's parent-construction evidence established no parent record for both multiword quiet river cases /2/0 and /2/1, while the singleton cases /2/2 and /2/3 had records. This is explicit observed upstream writer eligibility, not filtering by learned correctness. The same two unsupported cases remain visible in complete 52-case comparisons, original32 subsets and upstream diagnostics. No additional case is excluded.",
+      "scope": "Selection covers supported construction 50/50, unchanged OPEN 12/12 and prior preservation including the prior-start challenge8; it does not establish success on all 52 supplied cases or all original32 cases. Admission and runtime are unchanged.",
+      "supplied": 52,
+      "supported_fit": 50,
+      "title_construction_extension": "Eight explicit OPEN-feedback construction contrasts follow artifact af997b17's remaining prior Report notes Cobalt Field/Cobalt errors. Record notes/helvi/Copper Shore/Copper and Memo notes/darvi/Quartz Hill/Quartz vary title-case introductory words under distinct single owners. Report is not added to fitting. These exercise shared unknown-title-before-notes behavior under the unchanged cross-owner registry rule; they are construction, not fresh evaluation.",
+      "title_open_feedback_construction": 8,
+      "upstream_diagnostics": 2
+    },
+    "fresh": 12,
+    "fresh_status": null,
+    "fresh_total": 12,
+    "original_construction": 30,
+    "original_construction_total": 32,
+    "parent": "blake3:321e990f218899aa2668c2530caed5589c614cc58d1bb1de0b7145a64aee9563",
+    "parent_construction": 12,
+    "parent_construction_total": 52,
+    "parent_development": 3,
+    "parent_original_construction": 7,
+    "parent_supported_construction": 12,
+    "parent_supported_construction_total": 50,
+    "preservation": true,
+    "selected": true,
+    "supplied_construction": 50,
+    "supplied_construction_total": 52
+  },
+  "fit": {
+    "accepted": [
+      33,
+      0,
+      0
+    ],
+    "artifact": "blake3:50dc0d23175183272e557a47f6ad8cb5f538f30b5185f1b372c0c3bc010b8918",
+    "documents": 50,
+    "elapsed_ms": 14986,
+    "feature_count": 100,
+    "final_correct": 50,
+    "final_hinge": 1,
+    "frames": 50,
+    "initial_correct": 25,
+    "initial_hinge": 37,
+    "learning_ms": 41,
+    "parent": "blake3:321e990f218899aa2668c2530caed5589c614cc58d1bb1de0b7145a64aee9563",
+    "preparation_ms": 10,
+    "proposals": 10783,
+    "registry_policy": "Prompt-only words occurring under at least two distinct exact writer-owner byte identities actually selected by the frozen parent. Multiple template variants for one owner count once. Existing scanner and 256-word cap, lexicographic first-prime assignment in an operator-local namespace. Document IDs and response labels do not determine membership; payload identities retained for only one owner collapse to unknown context.",
+    "scope": "Single-action signed-H4 scoring of unchanged reverse starts and singleton endpoint. Seven shape features plus ordered predecessor/first/inside-next exact prime addresses, predecessor-first and first-next pairs, writer action with predecessor, observed writer predecessor with candidate predecessor and first. Zero denotes unknown or absent exact identity. Learned selection does not widen admission, change the endpoint or author payload bytes. No-refit control replaces only lexical code roots with H4 identity while retaining all feature keys, registry, shape roots, landmark, bias and fit configuration for matched lookup work. No general phrase parsing or reasoning claim.",
+    "stopped_at_time_limit": false
+  },
+  "registry": [
+    {
+      "word": "Answer",
+      "prime": 2
+    },
+    {
+      "word": "Where",
+      "prime": 3
+    },
+    {
+      "word": "holds",
+      "prime": 5
+    },
+    {
+      "word": "is",
+      "prime": 7
+    },
+    {
+      "word": "log",
+      "prime": 11
+    },
+    {
+      "word": "notes",
+      "prime": 13
+    },
+    {
+      "word": "report",
+      "prime": 17
+    },
+    {
+      "word": "say",
+      "prime": 19
+    },
+    {
+      "word": "says",
+      "prime": 23
+    },
+    {
+      "word": "tells",
+      "prime": 29
+    }
+  ],
+  "learned_nonidentity_codes": [
+    {
+      "feature": {
+        "kind": 0,
+        "a": 1,
+        "b": 0
+      },
+      "roots": [
+        119,
+        71
+      ]
+    },
+    {
+      "feature": {
+        "kind": 1,
+        "a": 0,
+        "b": 0
+      },
+      "roots": [
+        119,
+        63
+      ]
+    },
+    {
+      "feature": {
+        "kind": 1,
+        "a": 1,
+        "b": 0
+      },
+      "roots": [
+        51,
+        112
+      ]
+    },
+    {
+      "feature": {
+        "kind": 2,
+        "a": 0,
+        "b": 0
+      },
+      "roots": [
+        85,
+        119
+      ]
+    },
+    {
+      "feature": {
+        "kind": 2,
+        "a": 1,
+        "b": 0
+      },
+      "roots": [
+        112,
+        119
+      ]
+    },
+    {
+      "feature": {
+        "kind": 4,
+        "a": 1,
+        "b": 0
+      },
+      "roots": [
+        119,
+        80
+      ]
+    },
+    {
+      "feature": {
+        "kind": 4,
+        "a": 2,
+        "b": 2
+      },
+      "roots": [
+        103,
+        119
+      ]
+    },
+    {
+      "feature": {
+        "kind": 5,
+        "a": 0,
+        "b": 1
+      },
+      "roots": [
+        119,
+        77
+      ]
+    },
+    {
+      "feature": {
+        "kind": 5,
+        "a": 1,
+        "b": 2
+      },
+      "roots": [
+        39,
+        119
+      ]
+    },
+    {
+      "feature": {
+        "kind": 7,
+        "a": 13,
+        "b": 0
+      },
+      "roots": [
+        73,
+        119
+      ]
+    },
+    {
+      "feature": {
+        "kind": 7,
+        "a": 19,
+        "b": 0
+      },
+      "roots": [
+        93,
+        53
+      ]
+    },
+    {
+      "feature": {
+        "kind": 7,
+        "a": 23,
+        "b": 0
+      },
+      "roots": [
+        4,
+        119
+      ]
+    },
+    {
+      "feature": {
+        "kind": 7,
+        "a": 29,
+        "b": 0
+      },
+      "roots": [
+        62,
+        119
+      ]
+    },
+    {
+      "feature": {
+        "kind": 8,
+        "a": 13,
+        "b": 0
+      },
+      "roots": [
+        26,
+        27
+      ]
+    },
+    {
+      "feature": {
+        "kind": 10,
+        "a": 0,
+        "b": 13
+      },
+      "roots": [
+        116,
+        119
+      ]
+    },
+    {
+      "feature": {
+        "kind": 10,
+        "a": 0,
+        "b": 23
+      },
+      "roots": [
+        4,
+        119
+      ]
+    },
+    {
+      "feature": {
+        "kind": 10,
+        "a": 23,
+        "b": 0
+      },
+      "roots": [
+        119,
+        5
+      ]
+    },
+    {
+      "feature": {
+        "kind": 10,
+        "a": 23,
+        "b": 13
+      },
+      "roots": [
+        73,
+        119
+      ]
+    }
+  ],
+  "source": {
+    "base": "dcc37fa016560ce98cfea4ab1a1a5f8e9542e477",
+    "at": "2026-09-07T16:33:30.316Z",
+    "sources": [
+      {
+        "path": "crates/uor-r4-core/src/native_geometric/mod.rs",
+        "bytes": 23175,
+        "sha256": "c1d18523b4a62cf5df939c0737ffcb96f4d5b6f546b756ffeb363b3f6248141f"
+      },
+      {
+        "path": "crates/uor-r4-core/src/native_geometric/training.rs",
+        "bytes": 59467,
+        "sha256": "310a8313bee7aa0c60d916991cf93303763be87973f8f55581f5a2a61f91916b"
+      },
+      {
+        "path": "crates/uor-r4-core/src/native_geometric/relation_start.rs",
+        "bytes": 13596,
+        "sha256": "2263988662cac3934e78e7fe3d8fba10e2a0de2b41527fa889be55c22f425bd1"
+      },
+      {
+        "path": "crates/uor-r4-core/src/native_geometric/relation_start_training.rs",
+        "bytes": 20131,
+        "sha256": "2fcc1c64ff3c33a0adbdcf3e1e21f58f4adee08b3938176a025a4fff9ac20bf5"
+      },
+      {
+        "path": "crates/uor-r4-core/src/native_geometric/relation_span.rs",
+        "bytes": 22587,
+        "sha256": "07f77aaaf9fe6422a41e3c25e3e5ba424bf475fb87ebb6050a132ac2e5ba006b"
+      },
+      {
+        "path": "crates/uor-r4-core/src/native_geometric/source_span.rs",
+        "bytes": 11576,
+        "sha256": "cb8b630bfc930eea8e4a71915e4e3914390b67b6f406191f5c7049e38a9d0942"
+      },
+      {
+        "path": "crates/uor-r4-core/src/native_geometric/source_span_training.rs",
+        "bytes": 10674,
+        "sha256": "ebf7b79e6122ba31f4c4e1bd953c3722f5f257e959b780947269d406889bf62f"
+      },
+      {
+        "path": "crates/uor-r4-core/src/native_geometric/source_routing.rs",
+        "bytes": 7145,
+        "sha256": "21d301a9547dd89b299029101882b8914a9a4879607e72c00b9b66fad062189d"
+      },
+      {
+        "path": "crates/uor-r4-core/src/native_geometric/source_routing_training.rs",
+        "bytes": 30709,
+        "sha256": "81265c2802a0b7cb96038a61bad8acd603e3addb05f0f24af28e566199833f9d"
+      },
+      {
+        "path": "crates/uor-r4-core/src/native_geometric/relation.rs",
+        "bytes": 26126,
+        "sha256": "4dd3ecbf7c8f83268d9c25c27cfab006d7287868fa18f3c9b5c60de9aee660f1"
+      },
+      {
+        "path": "crates/uor-r4-core/src/native_geometric/value_lexemes.rs",
+        "bytes": 21068,
+        "sha256": "b3a29df5e8764dea29e5df73d563b8600e60782f38e4ba66b7e8d69a26a1196d"
+      },
+      {
+        "path": "crates/uor-r4-core/src/native_geometric/word_copy_runtime.rs",
+        "bytes": 37886,
+        "sha256": "5a4cc0260c2ad4d2b714c836842a7b4fa446d00879a2ea43874a14755db6b27c"
+      },
+      {
+        "path": "crates/uor-r4-core/examples/native_geometric_value_probe.rs",
+        "bytes": 73396,
+        "sha256": "10bbaf4fb7bddeddcee28d21d88cbeec6b0a6ee4fe70498b73164ad497497426"
+      },
+      {
+        "path": "crates/uor-r4-core/examples/native_geometric_value_probe/contextual_start.rs",
+        "bytes": 18993,
+        "sha256": "ee34bdeb65c38c140e30f74ac1c5b320723513edb3c499f7b272e64958bc2b32"
+      },
+      {
+        "path": "crates/uor-r4-core/tests/native_geometric_allocations.rs",
+        "bytes": 96727,
+        "sha256": "4df01a76688337775c82e23a384d402c5421a19abf11d87387eec672cd18e292"
+      }
+    ]
+  },
+  "source_archive": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-source-v5",
+  "earlier_source_archives": [
+    "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-source-v2",
+    "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-source-v3",
+    "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-source-v4"
+  ],
+  "comparison": {
+    "parent_open": {
+      "artifact": "blake3:321e990f218899aa2668c2530caed5589c614cc58d1bb1de0b7145a64aee9563",
+      "exact": 3,
+      "total": 12,
+      "cases": [
+        {
+          "id": "context-start-open/0/0",
+          "prompt": "notes say soft clay holds nerri. Where is nerri? Answer:",
+          "expected": " soft clay.\n",
+          "exact": false,
+          "text": " notes say soft clay.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 1055000
+        },
+        {
+          "id": "context-start-open/0/1",
+          "prompt": "soft clay holds nerri. Where is nerri? Answer:",
+          "expected": " soft clay.\n",
+          "exact": true,
+          "text": " soft clay.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 723125
+        },
+        {
+          "id": "context-start-open/0/2",
+          "prompt": "notes say soft holds nerri. Where is nerri? Answer:",
+          "expected": " soft.\n",
+          "exact": false,
+          "text": " notes say soft.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 814833
+        },
+        {
+          "id": "context-start-open/0/3",
+          "prompt": "soft holds nerri. Where is nerri? Answer:",
+          "expected": " soft.\n",
+          "exact": false,
+          "text": " soft holds nerri.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 815291
+        },
+        {
+          "id": "context-start-open/1/0",
+          "prompt": "report notes notes cove holds kalri. Where is kalri? Answer:",
+          "expected": " notes cove.\n",
+          "exact": false,
+          "text": " report notes notes cove.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 884875
+        },
+        {
+          "id": "context-start-open/1/1",
+          "prompt": "notes cove holds kalri. Where is kalri? Answer:",
+          "expected": " notes cove.\n",
+          "exact": true,
+          "text": " notes cove.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 749959
+        },
+        {
+          "id": "context-start-open/1/2",
+          "prompt": "report notes notes holds kalri. Where is kalri? Answer:",
+          "expected": " notes.\n",
+          "exact": false,
+          "text": " report notes notes.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 881250
+        },
+        {
+          "id": "context-start-open/1/3",
+          "prompt": "notes holds kalri. Where is kalri? Answer:",
+          "expected": " notes.\n",
+          "exact": false,
+          "text": " notes holds kalri.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 869625
+        },
+        {
+          "id": "context-start-open/2/0",
+          "prompt": "log tells Silver Valley holds jovri. Where is jovri? Answer:",
+          "expected": " Silver Valley.\n",
+          "exact": false,
+          "text": " log tells Silver Valley.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 990041
+        },
+        {
+          "id": "context-start-open/2/1",
+          "prompt": "Silver Valley holds jovri. Where is jovri? Answer:",
+          "expected": " Silver Valley.\n",
+          "exact": true,
+          "text": " Silver Valley.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 1002084
+        },
+        {
+          "id": "context-start-open/2/2",
+          "prompt": "log tells Silver holds jovri. Where is jovri? Answer:",
+          "expected": " Silver.\n",
+          "exact": false,
+          "text": " log tells Silver.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 976667
+        },
+        {
+          "id": "context-start-open/2/3",
+          "prompt": "Silver holds jovri. Where is jovri? Answer:",
+          "expected": " Silver.\n",
+          "exact": false,
+          "text": " Silver holds jovri.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 717583
+        }
+      ]
+    },
+    "full_open": {
+      "artifact": "blake3:50dc0d23175183272e557a47f6ad8cb5f538f30b5185f1b372c0c3bc010b8918",
+      "exact": 12,
+      "total": 12,
+      "cases": [
+        {
+          "id": "context-start-open/0/0",
+          "prompt": "notes say soft clay holds nerri. Where is nerri? Answer:",
+          "expected": " soft clay.\n",
+          "exact": true,
+          "text": " soft clay.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 959041
+        },
+        {
+          "id": "context-start-open/0/1",
+          "prompt": "soft clay holds nerri. Where is nerri? Answer:",
+          "expected": " soft clay.\n",
+          "exact": true,
+          "text": " soft clay.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 696208
+        },
+        {
+          "id": "context-start-open/0/2",
+          "prompt": "notes say soft holds nerri. Where is nerri? Answer:",
+          "expected": " soft.\n",
+          "exact": true,
+          "text": " soft.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 768708
+        },
+        {
+          "id": "context-start-open/0/3",
+          "prompt": "soft holds nerri. Where is nerri? Answer:",
+          "expected": " soft.\n",
+          "exact": true,
+          "text": " soft.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 658583
+        },
+        {
+          "id": "context-start-open/1/0",
+          "prompt": "report notes notes cove holds kalri. Where is kalri? Answer:",
+          "expected": " notes cove.\n",
+          "exact": true,
+          "text": " notes cove.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 875250
+        },
+        {
+          "id": "context-start-open/1/1",
+          "prompt": "notes cove holds kalri. Where is kalri? Answer:",
+          "expected": " notes cove.\n",
+          "exact": true,
+          "text": " notes cove.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 751791
+        },
+        {
+          "id": "context-start-open/1/2",
+          "prompt": "report notes notes holds kalri. Where is kalri? Answer:",
+          "expected": " notes.\n",
+          "exact": true,
+          "text": " notes.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 828125
+        },
+        {
+          "id": "context-start-open/1/3",
+          "prompt": "notes holds kalri. Where is kalri? Answer:",
+          "expected": " notes.\n",
+          "exact": true,
+          "text": " notes.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 694209
+        },
+        {
+          "id": "context-start-open/2/0",
+          "prompt": "log tells Silver Valley holds jovri. Where is jovri? Answer:",
+          "expected": " Silver Valley.\n",
+          "exact": true,
+          "text": " Silver Valley.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 875458
+        },
+        {
+          "id": "context-start-open/2/1",
+          "prompt": "Silver Valley holds jovri. Where is jovri? Answer:",
+          "expected": " Silver Valley.\n",
+          "exact": true,
+          "text": " Silver Valley.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 787250
+        },
+        {
+          "id": "context-start-open/2/2",
+          "prompt": "log tells Silver holds jovri. Where is jovri? Answer:",
+          "expected": " Silver.\n",
+          "exact": true,
+          "text": " Silver.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 849750
+        },
+        {
+          "id": "context-start-open/2/3",
+          "prompt": "Silver holds jovri. Where is jovri? Answer:",
+          "expected": " Silver.\n",
+          "exact": true,
+          "text": " Silver.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 787541
+        }
+      ]
+    },
+    "context_disabled_open": {
+      "artifact": "blake3:08a97f6508e85c9d26cb9e17e66daefcdea731a0970185d0a3d196509584a2c3",
+      "exact": 7,
+      "total": 12,
+      "cases": [
+        {
+          "id": "context-start-open/0/0",
+          "prompt": "notes say soft clay holds nerri. Where is nerri? Answer:",
+          "expected": " soft clay.\n",
+          "exact": false,
+          "text": " notes say soft clay.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 971334
+        },
+        {
+          "id": "context-start-open/0/1",
+          "prompt": "soft clay holds nerri. Where is nerri? Answer:",
+          "expected": " soft clay.\n",
+          "exact": true,
+          "text": " soft clay.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 714542
+        },
+        {
+          "id": "context-start-open/0/2",
+          "prompt": "notes say soft holds nerri. Where is nerri? Answer:",
+          "expected": " soft.\n",
+          "exact": false,
+          "text": " notes say soft.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 799709
+        },
+        {
+          "id": "context-start-open/0/3",
+          "prompt": "soft holds nerri. Where is nerri? Answer:",
+          "expected": " soft.\n",
+          "exact": true,
+          "text": " soft.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 666708
+        },
+        {
+          "id": "context-start-open/1/0",
+          "prompt": "report notes notes cove holds kalri. Where is kalri? Answer:",
+          "expected": " notes cove.\n",
+          "exact": false,
+          "text": " report notes notes cove.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 888292
+        },
+        {
+          "id": "context-start-open/1/1",
+          "prompt": "notes cove holds kalri. Where is kalri? Answer:",
+          "expected": " notes cove.\n",
+          "exact": true,
+          "text": " notes cove.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 750083
+        },
+        {
+          "id": "context-start-open/1/2",
+          "prompt": "report notes notes holds kalri. Where is kalri? Answer:",
+          "expected": " notes.\n",
+          "exact": false,
+          "text": " report notes notes.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 868583
+        },
+        {
+          "id": "context-start-open/1/3",
+          "prompt": "notes holds kalri. Where is kalri? Answer:",
+          "expected": " notes.\n",
+          "exact": true,
+          "text": " notes.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 703000
+        },
+        {
+          "id": "context-start-open/2/0",
+          "prompt": "log tells Silver Valley holds jovri. Where is jovri? Answer:",
+          "expected": " Silver Valley.\n",
+          "exact": false,
+          "text": " log tells Silver Valley.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 836459
+        },
+        {
+          "id": "context-start-open/2/1",
+          "prompt": "Silver Valley holds jovri. Where is jovri? Answer:",
+          "expected": " Silver Valley.\n",
+          "exact": true,
+          "text": " Silver Valley.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 931875
+        },
+        {
+          "id": "context-start-open/2/2",
+          "prompt": "log tells Silver holds jovri. Where is jovri? Answer:",
+          "expected": " Silver.\n",
+          "exact": true,
+          "text": " Silver.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 936666
+        },
+        {
+          "id": "context-start-open/2/3",
+          "prompt": "Silver holds jovri. Where is jovri? Answer:",
+          "expected": " Silver.\n",
+          "exact": true,
+          "text": " Silver.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 722291
+        }
+      ]
+    },
+    "fresh_after_selection": {
+      "artifact": "blake3:50dc0d23175183272e557a47f6ad8cb5f538f30b5185f1b372c0c3bc010b8918",
+      "exact": 12,
+      "total": 12,
+      "cases": [
+        {
+          "id": "context-start-fresh/0/0",
+          "prompt": "notes say pale dune holds revni. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. Where is revni? Answer:",
+          "expected": " pale dune.\n",
+          "exact": true,
+          "text": " pale dune.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 1105875
+        },
+        {
+          "id": "context-start-fresh/0/1",
+          "prompt": "pale dune holds revni. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. Where is revni? Answer:",
+          "expected": " pale dune.\n",
+          "exact": true,
+          "text": " pale dune.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 1120875
+        },
+        {
+          "id": "context-start-fresh/0/2",
+          "prompt": "notes say pale holds revni. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. Where is revni? Answer:",
+          "expected": " pale.\n",
+          "exact": true,
+          "text": " pale.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 1279708
+        },
+        {
+          "id": "context-start-fresh/0/3",
+          "prompt": "pale holds revni. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. Where is revni? Answer:",
+          "expected": " pale.\n",
+          "exact": true,
+          "text": " pale.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 864292
+        },
+        {
+          "id": "context-start-fresh/1/0",
+          "prompt": "report notes says inlet holds sorli. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. Where is sorli? Answer:",
+          "expected": " says inlet.\n",
+          "exact": true,
+          "text": " says inlet.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 1078709
+        },
+        {
+          "id": "context-start-fresh/1/1",
+          "prompt": "says inlet holds sorli. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. Where is sorli? Answer:",
+          "expected": " says inlet.\n",
+          "exact": true,
+          "text": " says inlet.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 1100875
+        },
+        {
+          "id": "context-start-fresh/1/2",
+          "prompt": "report notes says holds sorli. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. Where is sorli? Answer:",
+          "expected": " says.\n",
+          "exact": true,
+          "text": " says.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 995167
+        },
+        {
+          "id": "context-start-fresh/1/3",
+          "prompt": "says holds sorli. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. Where is sorli? Answer:",
+          "expected": " says.\n",
+          "exact": true,
+          "text": " says.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 933291
+        },
+        {
+          "id": "context-start-fresh/2/0",
+          "prompt": "log tells Violet Harbor holds talvi. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. Where is talvi? Answer:",
+          "expected": " Violet Harbor.\n",
+          "exact": true,
+          "text": " Violet Harbor.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 979375
+        },
+        {
+          "id": "context-start-fresh/2/1",
+          "prompt": "Violet Harbor holds talvi. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. Where is talvi? Answer:",
+          "expected": " Violet Harbor.\n",
+          "exact": true,
+          "text": " Violet Harbor.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 901916
+        },
+        {
+          "id": "context-start-fresh/2/2",
+          "prompt": "log tells Violet holds talvi. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. Where is talvi? Answer:",
+          "expected": " Violet.\n",
+          "exact": true,
+          "text": " Violet.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 1063583
+        },
+        {
+          "id": "context-start-fresh/2/3",
+          "prompt": "Violet holds talvi. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. quiet sky. Where is talvi? Answer:",
+          "expected": " Violet.\n",
+          "exact": true,
+          "text": " Violet.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 923375
+        }
+      ]
+    },
+    "prior_start_challenge": {
+      "artifact": "blake3:50dc0d23175183272e557a47f6ad8cb5f538f30b5185f1b372c0c3bc010b8918",
+      "exact": 8,
+      "total": 8,
+      "cases": [
+        {
+          "id": "start-open/0/0",
+          "prompt": "A ledger says Pearl Cove holds tesvi. Where is tesvi? Answer:",
+          "expected": " Pearl Cove.\n",
+          "exact": true,
+          "text": " Pearl Cove.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 1108333
+        },
+        {
+          "id": "start-open/0/1",
+          "prompt": "Pearl Cove holds tesvi. Where is tesvi? Answer:",
+          "expected": " Pearl Cove.\n",
+          "exact": true,
+          "text": " Pearl Cove.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 774375
+        },
+        {
+          "id": "start-open/0/2",
+          "prompt": "A ledger says Pearl holds tesvi. Where is tesvi? Answer:",
+          "expected": " Pearl.\n",
+          "exact": true,
+          "text": " Pearl.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 830167
+        },
+        {
+          "id": "start-open/0/3",
+          "prompt": "Pearl holds tesvi. Where is tesvi? Answer:",
+          "expected": " Pearl.\n",
+          "exact": true,
+          "text": " Pearl.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 635209
+        },
+        {
+          "id": "start-open/1/0",
+          "prompt": "Report notes Cobalt Field holds vorin. Where is vorin? Answer:",
+          "expected": " Cobalt Field.\n",
+          "exact": true,
+          "text": " Cobalt Field.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 841291
+        },
+        {
+          "id": "start-open/1/1",
+          "prompt": "Cobalt Field holds vorin. Where is vorin? Answer:",
+          "expected": " Cobalt Field.\n",
+          "exact": true,
+          "text": " Cobalt Field.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 802916
+        },
+        {
+          "id": "start-open/1/2",
+          "prompt": "Report notes Cobalt holds vorin. Where is vorin? Answer:",
+          "expected": " Cobalt.\n",
+          "exact": true,
+          "text": " Cobalt.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 771667
+        },
+        {
+          "id": "start-open/1/3",
+          "prompt": "Cobalt holds vorin. Where is vorin? Answer:",
+          "expected": " Cobalt.\n",
+          "exact": true,
+          "text": " Cobalt.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 629417
+        }
+      ]
+    }
+  },
+  "preservation": {
+    "aliases.json": {
+      "artifact": "blake3:50dc0d23175183272e557a47f6ad8cb5f538f30b5185f1b372c0c3bc010b8918",
+      "elapsed_ms": 60,
+      "exact": 12,
+      "remove_intermediate_control": false,
+      "report_scope": "Lean preservation receipt: case identities, available complete inputs and expected labels, actual text/termination/actions/writes, verdicts and aggregate counts retained. Captured state, decisions, work and token traces omitted. Session verification remains unchanged.",
+      "total": 12
+    },
+    "chains.json": {
+      "artifact": "blake3:50dc0d23175183272e557a47f6ad8cb5f538f30b5185f1b372c0c3bc010b8918",
+      "elapsed_ms": 60,
+      "exact": 16,
+      "remove_intermediate_control": false,
+      "report_scope": "Lean preservation receipt: case identities, available complete inputs and expected labels, actual text/termination/actions/writes, verdicts and aggregate counts retained. Captured state, decisions, work and token traces omitted. Session verification remains unchanged.",
+      "total": 16
+    },
+    "computed-construction.json": {
+      "artifact": "blake3:50dc0d23175183272e557a47f6ad8cb5f538f30b5185f1b372c0c3bc010b8918",
+      "elapsed_ms": 196,
+      "exact": 58,
+      "remove_intermediate_control": false,
+      "report_scope": "Lean preservation receipt: case identities, available complete inputs and expected labels, actual text/termination/actions/writes, verdicts and aggregate counts retained. Captured state, decisions, work and token traces omitted. Session verification remains unchanged.",
+      "total": 58
+    },
+    "dependent.json": {
+      "artifact": "blake3:50dc0d23175183272e557a47f6ad8cb5f538f30b5185f1b372c0c3bc010b8918",
+      "elapsed_ms": 69,
+      "exact": 48,
+      "exact_scope": "Complete bytes and EOS; writes counted separately.",
+      "report_scope": "Lean preservation receipt: case identities, available complete inputs and expected labels, actual text/termination/actions/writes, verdicts and aggregate counts retained. Captured state, decisions, work and token traces omitted. Session verification remains unchanged.",
+      "total": 48,
+      "writes_exact": 48
+    },
+    "exposed-literals.json": {
+      "artifact": "blake3:50dc0d23175183272e557a47f6ad8cb5f538f30b5185f1b372c0c3bc010b8918",
+      "elapsed_ms": 18,
+      "exact": 16,
+      "remove_intermediate_control": false,
+      "report_scope": "Lean preservation receipt: case identities, available complete inputs and expected labels, actual text/termination/actions/writes, verdicts and aggregate counts retained. Captured state, decisions, work and token traces omitted. Session verification remains unchanged.",
+      "total": 16
+    },
+    "exposed-roles.json": {
+      "artifact": "blake3:50dc0d23175183272e557a47f6ad8cb5f538f30b5185f1b372c0c3bc010b8918",
+      "elapsed_ms": 112,
+      "exact": 12,
+      "remove_intermediate_control": false,
+      "report_scope": "Lean preservation receipt: case identities, available complete inputs and expected labels, actual text/termination/actions/writes, verdicts and aggregate counts retained. Captured state, decisions, work and token traces omitted. Session verification remains unchanged.",
+      "total": 12
+    },
+    "forward-construction.json": {
+      "artifact": "blake3:50dc0d23175183272e557a47f6ad8cb5f538f30b5185f1b372c0c3bc010b8918",
+      "exact": 6,
+      "isolated": " Unknown.\n",
+      "isolation_pass": true,
+      "total": 6,
+      "writes_exact": true
+    },
+    "forward-open.json": {
+      "artifact": "blake3:50dc0d23175183272e557a47f6ad8cb5f538f30b5185f1b372c0c3bc010b8918",
+      "exact": 6,
+      "isolated": " Unknown.\n",
+      "isolation_pass": true,
+      "total": 6,
+      "writes_exact": true
+    },
+    "forward-prior-fresh.json": {
+      "artifact": "blake3:50dc0d23175183272e557a47f6ad8cb5f538f30b5185f1b372c0c3bc010b8918",
+      "exact": 6,
+      "isolated": " Unknown.\n",
+      "isolation_pass": true,
+      "total": 6,
+      "writes_exact": true
+    },
+    "identifiers.json": {
+      "artifact": "blake3:50dc0d23175183272e557a47f6ad8cb5f538f30b5185f1b372c0c3bc010b8918",
+      "elapsed_ms": 10,
+      "exact": 8,
+      "remove_intermediate_control": false,
+      "report_scope": "Lean preservation receipt: case identities, available complete inputs and expected labels, actual text/termination/actions/writes, verdicts and aggregate counts retained. Captured state, decisions, work and token traces omitted. Session verification remains unchanged.",
+      "total": 8
+    },
+    "literal-construction.json": {
+      "artifact": "blake3:50dc0d23175183272e557a47f6ad8cb5f538f30b5185f1b372c0c3bc010b8918",
+      "elapsed_ms": 123,
+      "exact": 103,
+      "remove_intermediate_control": false,
+      "report_scope": "Lean preservation receipt: case identities, available complete inputs and expected labels, actual text/termination/actions/writes, verdicts and aggregate counts retained. Captured state, decisions, work and token traces omitted. Session verification remains unchanged.",
+      "total": 103
+    },
+    "long.json": {
+      "artifact": "blake3:50dc0d23175183272e557a47f6ad8cb5f538f30b5185f1b372c0c3bc010b8918",
+      "elapsed_ms": 81,
+      "exact": 28,
+      "exact_scope": "Complete bytes and EOS; writes counted separately.",
+      "report_scope": "Lean preservation receipt: case identities, available complete inputs and expected labels, actual text/termination/actions/writes, verdicts and aggregate counts retained. Captured state, decisions, work and token traces omitted. Session verification remains unchanged.",
+      "total": 28,
+      "writes_exact": 28
+    },
+    "names.json": {
+      "artifact": "blake3:50dc0d23175183272e557a47f6ad8cb5f538f30b5185f1b372c0c3bc010b8918",
+      "elapsed_ms": 40,
+      "exact": 28,
+      "exact_scope": "Complete bytes and EOS; writes counted separately.",
+      "report_scope": "Lean preservation receipt: case identities, available complete inputs and expected labels, actual text/termination/actions/writes, verdicts and aggregate counts retained. Captured state, decisions, work and token traces omitted. Session verification remains unchanged.",
+      "total": 28,
+      "writes_exact": 28
+    },
+    "numeric.json": {
+      "artifact": "blake3:50dc0d23175183272e557a47f6ad8cb5f538f30b5185f1b372c0c3bc010b8918",
+      "elapsed_ms": 14,
+      "exact": 6,
+      "remove_intermediate_control": false,
+      "report_scope": "Lean preservation receipt: case identities, available complete inputs and expected labels, actual text/termination/actions/writes, verdicts and aggregate counts retained. Captured state, decisions, work and token traces omitted. Session verification remains unchanged.",
+      "total": 6
+    },
+    "preservation.json": {
+      "artifact": "blake3:50dc0d23175183272e557a47f6ad8cb5f538f30b5185f1b372c0c3bc010b8918",
+      "exact": 62,
+      "report_scope": "Lean preservation receipt: case identities, available complete inputs and expected labels, actual text/termination/actions/writes, verdicts and aggregate counts retained. Captured state, decisions, work and token traces omitted. Session verification remains unchanged.",
+      "total": 62
+    },
+    "prior-chains.json": {
+      "artifact": "blake3:50dc0d23175183272e557a47f6ad8cb5f538f30b5185f1b372c0c3bc010b8918",
+      "elapsed_ms": 61,
+      "exact": 16,
+      "remove_intermediate_control": false,
+      "report_scope": "Lean preservation receipt: case identities, available complete inputs and expected labels, actual text/termination/actions/writes, verdicts and aggregate counts retained. Captured state, decisions, work and token traces omitted. Session verification remains unchanged.",
+      "total": 16
+    },
+    "prior-fresh.json": {
+      "artifact": "blake3:50dc0d23175183272e557a47f6ad8cb5f538f30b5185f1b372c0c3bc010b8918",
+      "elapsed_ms": 18,
+      "exact": 16,
+      "remove_intermediate_control": false,
+      "report_scope": "Lean preservation receipt: case identities, available complete inputs and expected labels, actual text/termination/actions/writes, verdicts and aggregate counts retained. Captured state, decisions, work and token traces omitted. Session verification remains unchanged.",
+      "total": 16
+    },
+    "prior-span-construction.json": {
+      "artifact": "blake3:50dc0d23175183272e557a47f6ad8cb5f538f30b5185f1b372c0c3bc010b8918",
+      "exact": 14,
+      "report_scope": "Lean preservation receipt: case identities, available complete inputs and expected labels, actual text/termination/actions/writes, verdicts and aggregate counts retained. Captured state, decisions, work and token traces omitted. Session verification remains unchanged.",
+      "total": 14
+    },
+    "prior-span-development.json": {
+      "artifact": "blake3:50dc0d23175183272e557a47f6ad8cb5f538f30b5185f1b372c0c3bc010b8918",
+      "exact": 6,
+      "report_scope": "Lean preservation receipt: case identities, available complete inputs and expected labels, actual text/termination/actions/writes, verdicts and aggregate counts retained. Captured state, decisions, work and token traces omitted. Session verification remains unchanged.",
+      "total": 6
+    },
+    "prior-span-fresh.json": {
+      "artifact": "blake3:50dc0d23175183272e557a47f6ad8cb5f538f30b5185f1b372c0c3bc010b8918",
+      "exact": 9,
+      "report_scope": "Lean preservation receipt: case identities, available complete inputs and expected labels, actual text/termination/actions/writes, verdicts and aggregate counts retained. Captured state, decisions, work and token traces omitted. Session verification remains unchanged.",
+      "total": 9
+    },
+    "prior-start-open.json": {
+      "artifact": "blake3:50dc0d23175183272e557a47f6ad8cb5f538f30b5185f1b372c0c3bc010b8918",
+      "elapsed_ns": 6569375,
+      "exact": 8,
+      "scope": "Complete prompt/expected/generated bytes, EOS, per-case whole generation elapsed time and aggregate Generation.work retained. Captured state and per-token traces omitted; training candidate/feature traces remain in fit.json.",
+      "total": 8
+    },
+    "prior.json": {
+      "artifact": "blake3:50dc0d23175183272e557a47f6ad8cb5f538f30b5185f1b372c0c3bc010b8918",
+      "exact": 24,
+      "report_scope": "Lean preservation receipt: case identities, available complete inputs and expected labels, actual text/termination/actions/writes, verdicts and aggregate counts retained. Captured state, decisions, work and token traces omitted. Session verification remains unchanged.",
+      "total": 24
+    },
+    "retained-construction.json": {
+      "artifact": "blake3:50dc0d23175183272e557a47f6ad8cb5f538f30b5185f1b372c0c3bc010b8918",
+      "exact": 663,
+      "report_scope": "Lean preservation receipt: case identities, available complete inputs and expected labels, actual text/termination/actions/writes, verdicts and aggregate counts retained. Captured state, decisions, work and token traces omitted. Session verification remains unchanged.",
+      "total": 663
+    },
+    "reverse-construction.json": {
+      "artifact": "blake3:50dc0d23175183272e557a47f6ad8cb5f538f30b5185f1b372c0c3bc010b8918",
+      "exact": 6,
+      "isolation": true,
+      "total": 6,
+      "trailing_tokens": 1056,
+      "version_counts_exact": true
+    },
+    "reverse-open.json": {
+      "artifact": "blake3:50dc0d23175183272e557a47f6ad8cb5f538f30b5185f1b372c0c3bc010b8918",
+      "exact": 6,
+      "isolation": true,
+      "total": 6,
+      "trailing_tokens": 1056,
+      "version_counts_exact": true
+    },
+    "reverse-prior-fresh.json": {
+      "artifact": "blake3:50dc0d23175183272e557a47f6ad8cb5f538f30b5185f1b372c0c3bc010b8918",
+      "exact": 6,
+      "isolation": true,
+      "total": 6,
+      "trailing_tokens": 1056,
+      "version_counts_exact": true
+    },
+    "reverse-short.json": {
+      "exact": 3,
+      "total": 3
+    },
+    "roles.json": {
+      "artifact": "blake3:50dc0d23175183272e557a47f6ad8cb5f538f30b5185f1b372c0c3bc010b8918",
+      "elapsed_ms": 54,
+      "exact": 12,
+      "remove_intermediate_control": false,
+      "report_scope": "Lean preservation receipt: case identities, available complete inputs and expected labels, actual text/termination/actions/writes, verdicts and aggregate counts retained. Captured state, decisions, work and token traces omitted. Session verification remains unchanged.",
+      "total": 12
+    },
+    "sessions.json": {
+      "artifact": "blake3:50dc0d23175183272e557a47f6ad8cb5f538f30b5185f1b372c0c3bc010b8918",
+      "complete_work": {
+        "anchor_table_reads": 10386,
+        "candidate_evaluations": 2845,
+        "candidate_offers": 5881,
+        "completion": {
+          "anchors": 0,
+          "base_steps": 0,
+          "candidate_comparisons": 0,
+          "candidate_drops": 0,
+          "candidate_evaluations": 0,
+          "candidate_writes": 0,
+          "commits": 0,
+          "feature_queries": 0,
+          "h4_reads": 0,
+          "matched_rows": 0,
+          "metadata_reads": 0,
+          "mismatches": 0,
+          "observations": 5439,
+          "orientation_reads": 0,
+          "phase_subtractions": 0,
+          "posting_offers": 0,
+          "row_comparisons": 0,
+          "score_comparisons": 0,
+          "score_lookups": 0,
+          "state_copies": 16317,
+          "step_limits": 0,
+          "stops": 0
+        },
+        "evictions": 4927,
+        "feature_queries": 520,
+        "h4_table_reads": 15293,
+        "matched_rows": 351,
+        "memory_candidates": 1356,
+        "memory_composed_candidates": 794,
+        "memory_composition_comparisons": 169464,
+        "memory_composition_duplicate_features": 5896,
+        "memory_composition_feature_moves": 44981,
+        "memory_composition_feature_offers": 24408,
+        "memory_cue_reads": 24306,
+        "memory_h4_reads": 14931,
+        "memory_index_reads": 67798,
+        "memory_index_writes": 86984,
+        "memory_phase_updates": 76056,
+        "memory_score_lookups": 18512,
+        "memory_stale_rejections": 736,
+        "mixture_gate_reads": 20,
+        "observed_tokens": 5439,
+        "orientation_table_reads": 20,
+        "phase_additions": 82928,
+        "radial_square_reads": 65268,
+        "response_entry": {
+          "anchors": 5,
+          "base_steps": 1,
+          "candidate_comparisons": 1115,
+          "candidate_drops": 0,
+          "candidate_evaluations": 104,
+          "candidate_writes": 104,
+          "commits": 38,
+          "feature_queries": 128,
+          "h4_reads": 16,
+          "matched_rows": 120,
+          "metadata_reads": 29,
+          "mismatches": 0,
+          "observations": 5439,
+          "orientation_reads": 8,
+          "phase_subtractions": 64,
+          "posting_offers": 323,
+          "row_comparisons": 1152,
+          "score_comparisons": 2925,
+          "score_lookups": 1560,
+          "state_copies": 16372,
+          "step_limits": 0,
+          "stops": 5
+        },
+        "score_lookups": 50208,
+        "values": {
+          "additions": 0,
+          "cue_comparisons": 0,
+          "derived_writes": 0,
+          "emission_commits": 0,
+          "emission_mismatches": 0,
+          "feature_comparisons": 0,
+          "feature_lookups": 0,
+          "h4_reads": 7884,
+          "input_bytes": 5447,
+          "lexical_byte_comparisons": 7,
+          "lexical_comparisons": 4,
+          "lexical_writes": 993,
+          "literal_writes": 0,
+          "numeral_steps": 0,
+          "overflow_rejections": 0,
+          "phase_updates": 43512,
+          "proposals": 0,
+          "record_evictions": 0,
+          "relations": {
+            "abstentions": 0,
+            "admission_exact_comparisons": 40449,
+            "admission_fallbacks": 31,
+            "admission_metadata_bytes": 134985,
+            "admission_queries": 993,
+            "admission_signature_writes": 8937,
+            "admission_skips": 962,
+            "candidates": 1218,
+            "conflicts": 1,
+            "dictionary_byte_comparisons": 94537,
+            "dictionary_comparisons": 47496,
+            "directory_reads": 101,
+            "directory_writes": 4,
+            "feature_queries": 23142,
+            "feature_writes": 7714,
+            "no_writes": 989,
+            "phase_subtractions": 1624,
+            "reads": 0,
+            "record_evictions": 0,
+            "record_reads": 7919,
+            "record_writes": 4,
+            "revisions": 1,
+            "role_path_comparisons": 7188,
+            "role_path_probes": 1198,
+            "role_path_steps": 918,
+            "role_phase_additions": 7344,
+            "row_comparisons": 300846,
+            "score_lookups": 22854,
+            "source_presence_checks": 0,
+            "span_edge_checks": 4,
+            "word_boundaries": 993
+          },
+          "selection_passes": 5
+        },
+        "word_copy": {
+          "bound_rejections": 0,
+          "byte_reads": 31,
+          "dictionary_byte_comparisons": 1513,
+          "dictionary_comparisons": 1024,
+          "dictionary_lookups": 128,
+          "dispatch_checks": 39,
+          "equality_byte_comparisons": 135,
+          "forced_dispatches": 19,
+          "persistent_read": {
+            "additions": 0,
+            "cue_comparisons": 0,
+            "derived_writes": 0,
+            "emission_commits": 0,
+            "emission_mismatches": 0,
+            "feature_comparisons": 0,
+            "feature_lookups": 0,
+            "h4_reads": 0,
+            "input_bytes": 0,
+            "lexical_byte_comparisons": 54,
+            "lexical_comparisons": 160,
+            "literal_writes": 0,
+            "numeral_steps": 0,
+            "overflow_rejections": 0,
+            "phase_updates": 0,
+            "proposals": 0,
+            "record_evictions": 0,
+            "relations": {
+              "abstentions": 1,
+              "candidates": 30,
+              "conflicts": 0,
+              "dictionary_byte_comparisons": 950,
+              "dictionary_comparisons": 640,
+              "directory_reads": 160,
+              "directory_writes": 0,
+              "feature_queries": 120,
+              "feature_writes": 120,
+              "no_writes": 0,
+              "phase_subtractions": 0,
+              "reads": 4,
+              "record_evictions": 0,
+              "record_reads": 170,
+              "record_writes": 0,
+              "revisions": 0,
+              "row_comparisons": 840,
+              "score_lookups": 120,
+              "source_presence_checks": 160,
+              "word_boundaries": 0
+            }
+          },
+          "routing": {
+            "code_reads": 156,
+            "comparisons": 660,
+            "context_tokens_read": 0,
+            "emission_queries": 80,
+            "logical_bytes_read": 13602,
+            "operator_executions": 0,
+            "payload_gathers": 0,
+            "predictions": 5,
+            "sources_examined": 10,
+            "table_reads": 587
+          },
+          "selector": {
+            "anchors": 0,
+            "base_steps": 0,
+            "candidate_comparisons": 2002,
+            "candidate_drops": 0,
+            "candidate_evaluations": 87,
+            "candidate_writes": 87,
+            "commits": 36,
+            "feature_queries": 288,
+            "h4_reads": 30,
+            "matched_rows": 288,
+            "metadata_reads": 165,
+            "mismatches": 0,
+            "observations": 5439,
+            "orientation_reads": 15,
+            "phase_subtractions": 120,
+            "posting_offers": 712,
+            "row_comparisons": 2496,
+            "score_comparisons": 5609,
+            "score_lookups": 2016,
+            "state_copies": 998,
+            "step_limits": 0,
+            "stops": 4
+          },
+          "word_candidates": 0,
+          "word_record_reads": 1461
+        }
+      },
+      "exact_turns": 5,
+      "isolated_no_shared_records": true,
+      "isolated_response": " Unknown.\n",
+      "isolated_restore_work": {
+        "all_other_checkpoint_fields_equal": true,
+        "original_memory_stale_rejections": 0,
+        "restored_memory_stale_rejections": 0,
+        "scope": "Existing /4 memory reconstructs stale index slots. Counts are actual work and are preserved separately; no equal-work restore claim."
+      },
+      "preserved_versions": 4,
+      "restore_and_forged_commit_checks": "PASS",
+      "retained_relation_state": {
+        "directory": [
+          4,
+          2,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "last_word_end": 5445,
+        "next_id": 5,
+        "records": [
+          {
+            "action": 1,
+            "conflict": false,
+            "id": 1,
+            "owner": {
+              "byte_end": 2,
+              "bytes": [
+                97,
+                100,
+                97,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "end": 1,
+              "len": 3,
+              "phases": [
+                20846,
+                49580,
+                42185,
+                18155,
+                23105,
+                3353,
+                8798,
+                5571
+              ],
+              "pose": 89
+            },
+            "previous": 0,
+            "value": {
+              "byte_end": 10,
+              "bytes": [
+                82,
+                111,
+                109,
+                101,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "end": 7,
+              "leading_gap": 32,
+              "len": 4,
+              "phases": [
+                21260,
+                18685,
+                59208,
+                2128,
+                51350,
+                53840,
+                3958,
+                8646
+              ],
+              "pose": 2,
+              "predecessors": [
+                {
+                  "byte_end": 5,
+                  "bytes": [
+                    105,
+                    110,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "end": 2,
+                  "len": 2
+                },
+                {
+                  "byte_end": 2,
+                  "bytes": [
+                    97,
+                    100,
+                    97,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "end": 1,
+                  "len": 3
+                },
+                {
+                  "byte_end": 0,
+                  "bytes": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "end": 0,
+                  "len": 0
+                },
+                {
+                  "byte_end": 0,
+                  "bytes": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "end": 0,
+                  "len": 0
+                }
+              ]
+            }
+          },
+          {
+            "action": 1,
+            "conflict": false,
+            "id": 2,
+            "owner": {
+              "byte_end": 16,
+              "bytes": [
+                99,
+                121,
+                114,
+                97,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "end": 9,
+              "leading_gap": 32,
+              "len": 4,
+              "phases": [
+                52704,
+                5134,
+                9481,
+                6386,
+                52048,
+                55633,
+                64309,
+                49631
+              ],
+              "pose": 117,
+              "predecessors": [
+                {
+                  "byte_end": 10,
+                  "bytes": [
+                    82,
+                    111,
+                    109,
+                    101,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "end": 7,
+                  "len": 4
+                },
+                {
+                  "byte_end": 5,
+                  "bytes": [
+                    105,
+                    110,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "end": 2,
+                  "len": 2
+                },
+                {
+                  "byte_end": 2,
+                  "bytes": [
+                    97,
+                    100,
+                    97,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "end": 1,
+                  "len": 3
+                },
+                {
+                  "byte_end": 0,
+                  "bytes": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "end": 0,
+                  "len": 0
+                }
+              ]
+            },
+            "previous": 0,
+            "value": {
+              "byte_end": 25,
+              "bytes": [
+                67,
+                97,
+                105,
+                114,
+                111,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "end": 16,
+              "leading_gap": 32,
+              "len": 5,
+              "phases": [
+                6111,
+                57316,
+                9060,
+                19096,
+                55375,
+                18401,
+                30462,
+                29780
+              ],
+              "pose": 89,
+              "predecessors": [
+                {
+                  "byte_end": 19,
+                  "bytes": [
+                    105,
+                    110,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "end": 10,
+                  "len": 2
+                },
+                {
+                  "byte_end": 16,
+                  "bytes": [
+                    99,
+                    121,
+                    114,
+                    97,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "end": 9,
+                  "len": 4
+                },
+                {
+                  "byte_end": 10,
+                  "bytes": [
+                    82,
+                    111,
+                    109,
+                    101,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "end": 7,
+                  "len": 4
+                },
+                {
+                  "byte_end": 5,
+                  "bytes": [
+                    105,
+                    110,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "end": 2,
+                  "len": 2
+                }
+              ]
+            }
+          },
+          {
+            "action": 2,
+            "conflict": false,
+            "id": 3,
+            "owner": {
+              "byte_end": 1107,
+              "bytes": [
+                97,
+                100,
+                97,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "end": 1099,
+              "len": 3,
+              "phases": [
+                19497,
+                47512,
+                4381,
+                9821,
+                56479,
+                51148,
+                33174,
+                27781
+              ],
+              "pose": 23,
+              "predecessors": [
+                {
+                  "byte_end": 1103,
+                  "bytes": [
+                    65,
+                    110,
+                    115,
+                    119,
+                    101,
+                    114,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "end": 1089,
+                  "len": 6
+                },
+                {
+                  "byte_end": 1095,
+                  "bytes": [
+                    97,
+                    100,
+                    97,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "end": 1081,
+                  "len": 3
+                },
+                {
+                  "byte_end": 1091,
+                  "bytes": [
+                    105,
+                    115,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "end": 1080,
+                  "len": 2
+                },
+                {
+                  "byte_end": 1088,
+                  "bytes": [
+                    87,
+                    104,
+                    101,
+                    114,
+                    101,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "end": 1079,
+                  "len": 5
+                }
+              ]
+            },
+            "previous": 1,
+            "value": {
+              "byte_end": 1120,
+              "bytes": [
+                80,
+                101,
+                114,
+                116,
+                104,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "end": 1107,
+              "leading_gap": 32,
+              "len": 5,
+              "phases": [
+                676,
+                28503,
+                58402,
+                55595,
+                33515,
+                35688,
+                28177,
+                34733
+              ],
+              "pose": 101,
+              "predecessors": [
+                {
+                  "byte_end": 1114,
+                  "bytes": [
+                    105,
+                    110,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "end": 1101,
+                  "len": 2
+                },
+                {
+                  "byte_end": 1111,
+                  "bytes": [
+                    110,
+                    111,
+                    119,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "end": 1100,
+                  "len": 3
+                },
+                {
+                  "byte_end": 1107,
+                  "bytes": [
+                    97,
+                    100,
+                    97,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "end": 1099,
+                  "len": 3
+                },
+                {
+                  "byte_end": 1103,
+                  "bytes": [
+                    65,
+                    110,
+                    115,
+                    119,
+                    101,
+                    114,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "end": 1089,
+                  "len": 6
+                }
+              ]
+            }
+          },
+          {
+            "action": 1,
+            "conflict": true,
+            "id": 4,
+            "owner": {
+              "byte_end": 3280,
+              "bytes": [
+                97,
+                100,
+                97,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "end": 3272,
+              "len": 3,
+              "phases": [
+                57651,
+                36909,
+                61870,
+                43251,
+                22770,
+                16115,
+                55291,
+                42016
+              ],
+              "pose": 70,
+              "predecessors": [
+                {
+                  "byte_end": 3276,
+                  "bytes": [
+                    65,
+                    110,
+                    115,
+                    119,
+                    101,
+                    114,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "end": 3261,
+                  "len": 6
+                },
+                {
+                  "byte_end": 3268,
+                  "bytes": [
+                    99,
+                    121,
+                    114,
+                    97,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "end": 3253,
+                  "len": 4
+                },
+                {
+                  "byte_end": 3263,
+                  "bytes": [
+                    105,
+                    115,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "end": 3252,
+                  "len": 2
+                },
+                {
+                  "byte_end": 3260,
+                  "bytes": [
+                    87,
+                    104,
+                    101,
+                    114,
+                    101,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "end": 3251,
+                  "len": 5
+                }
+              ]
+            },
+            "previous": 3,
+            "value": {
+              "byte_end": 3289,
+              "bytes": [
+                68,
+                111,
+                118,
+                101,
+                114,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "end": 3279,
+              "leading_gap": 32,
+              "len": 5,
+              "phases": [
+                36183,
+                60922,
+                40370,
+                44505,
+                19104,
+                45693,
+                28642,
+                33644
+              ],
+              "pose": 30,
+              "predecessors": [
+                {
+                  "byte_end": 3283,
+                  "bytes": [
+                    105,
+                    110,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "end": 3273,
+                  "len": 2
+                },
+                {
+                  "byte_end": 3280,
+                  "bytes": [
+                    97,
+                    100,
+                    97,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "end": 3272,
+                  "len": 3
+                },
+                {
+                  "byte_end": 3276,
+                  "bytes": [
+                    65,
+                    110,
+                    115,
+                    119,
+                    101,
+                    114,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "end": 3261,
+                  "len": 6
+                },
+                {
+                  "byte_end": 3268,
+                  "bytes": [
+                    99,
+                    121,
+                    114,
+                    97,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "end": 3253,
+                  "len": 4
+                }
+              ]
+            }
+          },
+          {
+            "action": 0,
+            "conflict": false,
+            "id": 0,
+            "owner": {
+              "byte_end": 0,
+              "bytes": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "end": 0,
+              "len": 0,
+              "phases": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "pose": 0
+            },
+            "previous": 0,
+            "value": {
+              "byte_end": 0,
+              "bytes": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "end": 0,
+              "len": 0,
+              "phases": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "pose": 0
+            }
+          },
+          {
+            "action": 0,
+            "conflict": false,
+            "id": 0,
+            "owner": {
+              "byte_end": 0,
+              "bytes": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "end": 0,
+              "len": 0,
+              "phases": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "pose": 0
+            },
+            "previous": 0,
+            "value": {
+              "byte_end": 0,
+              "bytes": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "end": 0,
+              "len": 0,
+              "phases": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "pose": 0
+            }
+          },
+          {
+            "action": 0,
+            "conflict": false,
+            "id": 0,
+            "owner": {
+              "byte_end": 0,
+              "bytes": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "end": 0,
+              "len": 0,
+              "phases": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "pose": 0
+            },
+            "previous": 0,
+            "value": {
+              "byte_end": 0,
+              "bytes": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "end": 0,
+              "len": 0,
+              "phases": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "pose": 0
+            }
+          },
+          {
+            "action": 0,
+            "conflict": false,
+            "id": 0,
+            "owner": {
+              "byte_end": 0,
+              "bytes": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "end": 0,
+              "len": 0,
+              "phases": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "pose": 0
+            },
+            "previous": 0,
+            "value": {
+              "byte_end": 0,
+              "bytes": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "end": 0,
+              "len": 0,
+              "phases": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "pose": 0
+            }
+          },
+          {
+            "action": 0,
+            "conflict": false,
+            "id": 0,
+            "owner": {
+              "byte_end": 0,
+              "bytes": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "end": 0,
+              "len": 0,
+              "phases": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "pose": 0
+            },
+            "previous": 0,
+            "value": {
+              "byte_end": 0,
+              "bytes": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "end": 0,
+              "len": 0,
+              "phases": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "pose": 0
+            }
+          },
+          {
+            "action": 0,
+            "conflict": false,
+            "id": 0,
+            "owner": {
+              "byte_end": 0,
+              "bytes": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "end": 0,
+              "len": 0,
+              "phases": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "pose": 0
+            },
+            "previous": 0,
+            "value": {
+              "byte_end": 0,
+              "bytes": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "end": 0,
+              "len": 0,
+              "phases": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "pose": 0
+            }
+          },
+          {
+            "action": 0,
+            "conflict": false,
+            "id": 0,
+            "owner": {
+              "byte_end": 0,
+              "bytes": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "end": 0,
+              "len": 0,
+              "phases": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "pose": 0
+            },
+            "previous": 0,
+            "value": {
+              "byte_end": 0,
+              "bytes": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "end": 0,
+              "len": 0,
+              "phases": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "pose": 0
+            }
+          },
+          {
+            "action": 0,
+            "conflict": false,
+            "id": 0,
+            "owner": {
+              "byte_end": 0,
+              "bytes": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "end": 0,
+              "len": 0,
+              "phases": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "pose": 0
+            },
+            "previous": 0,
+            "value": {
+              "byte_end": 0,
+              "bytes": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "end": 0,
+              "len": 0,
+              "phases": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "pose": 0
+            }
+          },
+          {
+            "action": 0,
+            "conflict": false,
+            "id": 0,
+            "owner": {
+              "byte_end": 0,
+              "bytes": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "end": 0,
+              "len": 0,
+              "phases": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "pose": 0
+            },
+            "previous": 0,
+            "value": {
+              "byte_end": 0,
+              "bytes": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "end": 0,
+              "len": 0,
+              "phases": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "pose": 0
+            }
+          },
+          {
+            "action": 0,
+            "conflict": false,
+            "id": 0,
+            "owner": {
+              "byte_end": 0,
+              "bytes": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "end": 0,
+              "len": 0,
+              "phases": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "pose": 0
+            },
+            "previous": 0,
+            "value": {
+              "byte_end": 0,
+              "bytes": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "end": 0,
+              "len": 0,
+              "phases": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "pose": 0
+            }
+          },
+          {
+            "action": 0,
+            "conflict": false,
+            "id": 0,
+            "owner": {
+              "byte_end": 0,
+              "bytes": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "end": 0,
+              "len": 0,
+              "phases": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "pose": 0
+            },
+            "previous": 0,
+            "value": {
+              "byte_end": 0,
+              "bytes": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "end": 0,
+              "len": 0,
+              "phases": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "pose": 0
+            }
+          },
+          {
+            "action": 0,
+            "conflict": false,
+            "id": 0,
+            "owner": {
+              "byte_end": 0,
+              "bytes": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "end": 0,
+              "len": 0,
+              "phases": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "pose": 0
+            },
+            "previous": 0,
+            "value": {
+              "byte_end": 0,
+              "bytes": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "end": 0,
+              "len": 0,
+              "phases": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "pose": 0
+            }
+          }
+        ]
+      },
+      "schema": "uor-r4.relation-session-check/1",
+      "scope": "One native session reads, revises, retains an unrelated association, records a contradiction, and re-reads the unrelated association after repeated raw-window eviction. Restore is checked after actual first-token commitment; a new session has no shared relation state. Snapshot consistency is not source authentication.",
+      "total_turns": 5
+    }
+  },
+  "negative_candidates": [
+    {
+      "directory": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-angular-v2",
+      "report": {
+        "artifact": "blake3:cc766ed9358c48d6acbc1165daa6f3a1ba80913a7ac80fec6b392883de4efb6c",
+        "construction": 30,
+        "construction_total": 30,
+        "context_disabled_construction": 22,
+        "context_disabled_development": 6,
+        "context_disabled_supplied_construction": 22,
+        "development": 7,
+        "development_total": 12,
+        "elapsed_ms": 91259,
+        "eligibility": {
+          "excluded_ids": [
+            "context-start-fit/2/0",
+            "context-start-fit/2/1"
+          ],
+          "prior_attempt": "contextual-start-angular",
+          "prior_error": "no completed reverse write in context-start-fit/2/0",
+          "reason": "The preceding contextual-start-angular attempt stopped with no completed reverse write in context-start-fit/2/0. Inspection of that attempt's parent-construction evidence established no parent record for both multiword quiet river cases /2/0 and /2/1, while the singleton cases /2/2 and /2/3 had records. This is explicit observed upstream writer eligibility, not filtering by learned correctness. The two unsupported cases remain visible in complete 32-case comparisons and upstream diagnostics.",
+          "scope": "Selection covers supported construction 30/30, OPEN 12/12 and prior preservation; it does not establish success on all 32 supplied cases. Admission and runtime are unchanged.",
+          "supplied": 32,
+          "supported_fit": 30,
+          "upstream_diagnostics": 2
+        },
+        "fresh": null,
+        "fresh_status": "NOT_RUN_SELECTION_FAILED",
+        "fresh_total": null,
+        "parent": "blake3:321e990f218899aa2668c2530caed5589c614cc58d1bb1de0b7145a64aee9563",
+        "parent_construction": 7,
+        "parent_construction_total": 32,
+        "parent_development": 3,
+        "parent_supported_construction": 7,
+        "parent_supported_construction_total": 30,
+        "preservation": false,
+        "selected": false,
+        "supplied_construction": 30,
+        "supplied_construction_total": 32
+      },
+      "open_failures": [
+        {
+          "id": "context-start-open/0/1",
+          "prompt": "soft clay holds nerri. Where is nerri? Answer:",
+          "expected": " soft clay.\n",
+          "exact": false,
+          "text": " clay.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 677000
+        },
+        {
+          "id": "context-start-open/1/0",
+          "prompt": "report notes notes cove holds kalri. Where is kalri? Answer:",
+          "expected": " notes cove.\n",
+          "exact": false,
+          "text": " report notes notes cove.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 1073042
+        },
+        {
+          "id": "context-start-open/1/2",
+          "prompt": "report notes notes holds kalri. Where is kalri? Answer:",
+          "expected": " notes.\n",
+          "exact": false,
+          "text": " report notes notes.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 877875
+        },
+        {
+          "id": "context-start-open/2/0",
+          "prompt": "log tells Silver Valley holds jovri. Where is jovri? Answer:",
+          "expected": " Silver Valley.\n",
+          "exact": false,
+          "text": " tells Silver Valley.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 834625
+        },
+        {
+          "id": "context-start-open/2/2",
+          "prompt": "log tells Silver holds jovri. Where is jovri? Answer:",
+          "expected": " Silver.\n",
+          "exact": false,
+          "text": " tells Silver.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 834125
+        }
+      ],
+      "prior_challenge_failures": [
+        {
+          "id": "start-open/0/0",
+          "prompt": "A ledger says Pearl Cove holds tesvi. Where is tesvi? Answer:",
+          "expected": " Pearl Cove.\n",
+          "exact": false,
+          "text": " says Pearl Cove.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 1298792
+        },
+        {
+          "id": "start-open/0/2",
+          "prompt": "A ledger says Pearl holds tesvi. Where is tesvi? Answer:",
+          "expected": " Pearl.\n",
+          "exact": false,
+          "text": " says Pearl.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 852292
+        },
+        {
+          "id": "start-open/1/2",
+          "prompt": "Report notes Cobalt holds vorin. Where is vorin? Answer:",
+          "expected": " Cobalt.\n",
+          "exact": false,
+          "text": " Report notes Cobalt.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 863542
+        }
+      ]
+    },
+    {
+      "directory": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-cross-owner",
+      "report": {
+        "artifact": "blake3:0e1914c4e3e8fa8f9049302a474267e40b80d07618f292514d8e982569139c81",
+        "construction": 30,
+        "construction_total": 30,
+        "context_disabled_construction": 21,
+        "context_disabled_development": 6,
+        "context_disabled_supplied_construction": 21,
+        "development": 10,
+        "development_total": 12,
+        "elapsed_ms": 91894,
+        "eligibility": {
+          "excluded_ids": [
+            "context-start-fit/2/0",
+            "context-start-fit/2/1"
+          ],
+          "prior_attempt": "contextual-start-angular",
+          "prior_error": "no completed reverse write in context-start-fit/2/0",
+          "reason": "The preceding contextual-start-angular attempt stopped with no completed reverse write in context-start-fit/2/0. Inspection of that attempt's parent-construction evidence established no parent record for both multiword quiet river cases /2/0 and /2/1, while the singleton cases /2/2 and /2/3 had records. This is explicit observed upstream writer eligibility, not filtering by learned correctness. The two unsupported cases remain visible in complete 32-case comparisons and upstream diagnostics.",
+          "scope": "Selection covers supported construction 30/30, OPEN 12/12 and prior preservation; it does not establish success on all 32 supplied cases. Admission and runtime are unchanged.",
+          "supplied": 32,
+          "supported_fit": 30,
+          "upstream_diagnostics": 2
+        },
+        "fresh": null,
+        "fresh_status": "NOT_RUN_SELECTION_FAILED",
+        "fresh_total": null,
+        "parent": "blake3:321e990f218899aa2668c2530caed5589c614cc58d1bb1de0b7145a64aee9563",
+        "parent_construction": 7,
+        "parent_construction_total": 32,
+        "parent_development": 3,
+        "parent_supported_construction": 7,
+        "parent_supported_construction_total": 30,
+        "preservation": false,
+        "selected": false,
+        "supplied_construction": 30,
+        "supplied_construction_total": 32
+      },
+      "open_failures": [
+        {
+          "id": "context-start-open/1/2",
+          "prompt": "report notes notes holds kalri. Where is kalri? Answer:",
+          "expected": " notes.\n",
+          "exact": false,
+          "text": " report notes notes.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 892500
+        },
+        {
+          "id": "context-start-open/2/2",
+          "prompt": "log tells Silver holds jovri. Where is jovri? Answer:",
+          "expected": " Silver.\n",
+          "exact": false,
+          "text": " tells Silver.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 883208
+        }
+      ],
+      "prior_challenge_failures": [
+        {
+          "id": "start-open/0/0",
+          "prompt": "A ledger says Pearl Cove holds tesvi. Where is tesvi? Answer:",
+          "expected": " Pearl Cove.\n",
+          "exact": false,
+          "text": " says Pearl Cove.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 1028333
+        },
+        {
+          "id": "start-open/0/2",
+          "prompt": "A ledger says Pearl holds tesvi. Where is tesvi? Answer:",
+          "expected": " Pearl.\n",
+          "exact": false,
+          "text": " says Pearl.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 926917
+        }
+      ]
+    },
+    {
+      "directory": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-contrasts",
+      "report": {
+        "artifact": "blake3:af997b1737b3c753cda43176f588995864573fd773804354b12da4f2e32edd5c",
+        "construction": 42,
+        "construction_total": 42,
+        "context_disabled_construction": 28,
+        "context_disabled_development": 6,
+        "context_disabled_original_construction": 21,
+        "context_disabled_supplied_construction": 28,
+        "development": 12,
+        "development_total": 12,
+        "elapsed_ms": 90322,
+        "eligibility": {
+          "added_open_feedback_construction": 12,
+          "construction_extension": "Twelve explicit OPEN-feedback construction contrasts follow the cross-owner artifact's residual singleton log tells/report notes and prior A ledger says errors. New owners and payloads use the unchanged runtime feature law; these are construction, not fresh evaluation.",
+          "excluded_ids": [
+            "context-start-fit/2/0",
+            "context-start-fit/2/1"
+          ],
+          "original_supplied": 32,
+          "prior_attempt": "contextual-start-angular",
+          "prior_error": "no completed reverse write in context-start-fit/2/0",
+          "reason": "The preceding contextual-start-angular attempt stopped with no completed reverse write in context-start-fit/2/0. Inspection of that attempt's parent-construction evidence established no parent record for both multiword quiet river cases /2/0 and /2/1, while the singleton cases /2/2 and /2/3 had records. This is explicit observed upstream writer eligibility, not filtering by learned correctness. The same two unsupported cases remain visible in complete 44-case comparisons, original32 subsets and upstream diagnostics. No additional case is excluded.",
+          "scope": "Selection covers supported construction 42/42, unchanged OPEN 12/12 and prior preservation; it does not establish success on all 44 supplied cases or all original32 cases. Admission and runtime are unchanged.",
+          "supplied": 44,
+          "supported_fit": 42,
+          "upstream_diagnostics": 2
+        },
+        "fresh": null,
+        "fresh_status": "NOT_RUN_SELECTION_FAILED",
+        "fresh_total": null,
+        "original_construction": 30,
+        "original_construction_total": 32,
+        "parent": "blake3:321e990f218899aa2668c2530caed5589c614cc58d1bb1de0b7145a64aee9563",
+        "parent_construction": 10,
+        "parent_construction_total": 44,
+        "parent_development": 3,
+        "parent_original_construction": 7,
+        "parent_supported_construction": 10,
+        "parent_supported_construction_total": 42,
+        "preservation": false,
+        "selected": false,
+        "supplied_construction": 42,
+        "supplied_construction_total": 44
+      },
+      "open_failures": [],
+      "prior_challenge_failures": [
+        {
+          "id": "start-open/1/0",
+          "prompt": "Report notes Cobalt Field holds vorin. Where is vorin? Answer:",
+          "expected": " Cobalt Field.\n",
+          "exact": false,
+          "text": " notes Cobalt Field.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 927167
+        },
+        {
+          "id": "start-open/1/2",
+          "prompt": "Report notes Cobalt holds vorin. Where is vorin? Answer:",
+          "expected": " Cobalt.\n",
+          "exact": false,
+          "text": " notes Cobalt.\n",
+          "stop": "end_of_document",
+          "generation_elapsed_ns": 792625
+        }
+      ]
+    }
+  ],
+  "preparation_stop": {
+    "directory": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-angular",
+    "elapsed_ms": 28722,
+    "error": "no completed reverse write in context-start-fit/2/0",
+    "excluded_case_ids": [
+      "context-start-fit/2/0",
+      "context-start-fit/2/1"
+    ],
+    "scope": "Both originally supplied multiword quiet river cases remain in full output comparison. No model created; all elapsed work charged."
+  },
+  "checks": {
+    "release_build": "PASS: pinned offline core example and root r4; core and actual-artifact test binaries",
+    "focused": "PASS: five relation-start and five relation-span tests; native integer-kernel source guard; architecture policy",
+    "artifact": "PASS: invalid root/parent/registry rejection, control roundtrip, short/evicted/singleton bytes and EOS, per-step restored predictions, zero allocations during ingestion and emission",
+    "cli": {
+      "artifact": "blake3:50dc0d23175183272e557a47f6ad8cb5f538f30b5185f1b372c0c3bc010b8918",
+      "text": " Cobalt Field.\n",
+      "stop": "end_of_document"
+    },
+    "legacy_cli": {
+      "artifact": "blake3:bb6b8ba41f65b0c9d5c7ddf453e765a52b5ea8b169e50141ead05b3b5cefad79",
+      "text": " Amber Meadow.\n",
+      "stop": "end_of_document"
+    },
+    "sampling": {
+      "load_ns": 14651512584,
+      "encoding_ns": [
+        26792,
+        43833,
+        6666,
+        8500,
+        42833
+      ],
+      "ingest_begin_response_ns": [
+        486375,
+        428083,
+        180833,
+        214333,
+        427875
+      ],
+      "predict_observe_samples": 67,
+      "predict_observe_median_ns": 541,
+      "predict_observe_max_ns": 175417,
+      "scope": "Warm prediction/observation excludes loading, encoding, ingestion and checkpoint host work; wall samples, no energy measurement."
+    },
+    "final_static_checks": [
+      {
+        "label": "contextual-start-final-checks",
+        "started": "2026-09-07T16:41:08.776Z",
+        "command": "node",
+        "args": [
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-final-checks.mjs"
+        ],
+        "elapsed_ms": 4073,
+        "exit_code": 0,
+        "stopped": null,
+        "peak_process_rss_sample_bytes": null,
+        "peak_sampled_known_bytes": 7629484032
+      }
+    ],
+    "not_run": [
+      "full workspace suite",
+      "Clippy",
+      "no_std",
+      "WASM",
+      "HTTP",
+      "Studio",
+      "fuzz",
+      "energy",
+      "earlier shape-candidate reserved fresh8"
+    ],
+    "ci_scope": "Protected PR/merge-group five statuses execute echo acknowledgements only; not tests."
+  },
+  "resources": {
+    "model_commands": [
+      {
+        "label": "contextual-start-fit",
+        "started": "2026-09-07T16:01:22.686Z",
+        "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+        "args": [
+          "contextual-start",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/reverse-span-angular/model.json",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-angular"
+        ],
+        "elapsed_ms": 28722,
+        "exit_code": 1,
+        "stopped": null,
+        "peak_process_rss_sample_bytes": 914423808,
+        "peak_sampled_known_bytes": 7556280320
+      },
+      {
+        "label": "contextual-start-fit-v2",
+        "started": "2026-09-07T16:06:37.610Z",
+        "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+        "args": [
+          "contextual-start",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/reverse-span-angular/model.json",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-angular-v2"
+        ],
+        "elapsed_ms": 91537,
+        "exit_code": 0,
+        "stopped": null,
+        "peak_process_rss_sample_bytes": 1514881024,
+        "peak_sampled_known_bytes": 7573843968
+      },
+      {
+        "label": "contextual-start-cross-owner-fit",
+        "started": "2026-09-07T16:20:41.523Z",
+        "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+        "args": [
+          "contextual-start",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/reverse-span-angular/model.json",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-cross-owner"
+        ],
+        "elapsed_ms": 92172,
+        "exit_code": 0,
+        "stopped": null,
+        "peak_process_rss_sample_bytes": 1500839936,
+        "peak_sampled_known_bytes": 7591751680
+      },
+      {
+        "label": "contextual-start-contrast-fit",
+        "started": "2026-09-07T16:29:19.644Z",
+        "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+        "args": [
+          "contextual-start",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/reverse-span-angular/model.json",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-contrasts"
+        ],
+        "elapsed_ms": 90584,
+        "exit_code": 0,
+        "stopped": null,
+        "peak_process_rss_sample_bytes": 1496580096,
+        "peak_sampled_known_bytes": 7610351616
+      },
+      {
+        "label": "contextual-start-title-fit",
+        "started": "2026-09-07T16:33:51.561Z",
+        "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+        "args": [
+          "contextual-start",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/reverse-span-angular/model.json",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-title-contrasts"
+        ],
+        "elapsed_ms": 90258,
+        "exit_code": 0,
+        "stopped": null,
+        "peak_process_rss_sample_bytes": 1529954304,
+        "peak_sampled_known_bytes": 7629443072
+      },
+      {
+        "label": "contextual-start-artifact-check",
+        "started": "2026-09-07T16:35:47.918Z",
+        "command": "env",
+        "args": [
+          "R4_RELATION_START_MODEL=/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-title-contrasts/model.json",
+          "/tmp/r4-native-geometric-target/release/deps/native_geometric_allocations-6c7ff1216c7e1931",
+          "native_relation_start_checkpoint_and_allocation",
+          "--exact",
+          "--ignored",
+          "--nocapture"
+        ],
+        "elapsed_ms": 60148,
+        "exit_code": 0,
+        "stopped": null,
+        "peak_process_rss_sample_bytes": 1277427712,
+        "peak_sampled_known_bytes": 7629447168
+      },
+      {
+        "label": "contextual-start-cli",
+        "started": "2026-09-07T16:37:34.177Z",
+        "command": "/tmp/r4-native-geometric-target/release/r4",
+        "args": [
+          "geometric",
+          "generate",
+          "--model",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-title-contrasts/model.json",
+          "--prompt",
+          "Report notes Cobalt Field holds vorin. Where is vorin? Answer:",
+          "--max-tokens",
+          "32",
+          "--json"
+        ],
+        "elapsed_ms": 15078,
+        "exit_code": 0,
+        "stopped": null,
+        "peak_process_rss_sample_bytes": 965378048,
+        "peak_sampled_known_bytes": 7629463552
+      },
+      {
+        "label": "contextual-start-legacy-cli",
+        "started": "2026-09-07T16:42:45.842Z",
+        "command": "/tmp/r4-native-geometric-target/release/r4",
+        "args": [
+          "geometric",
+          "generate",
+          "--model",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/relation-start-angular/model.json",
+          "--prompt",
+          "Notes say Amber Meadow holds telra. Where is telra? Answer:",
+          "--max-tokens",
+          "32",
+          "--json"
+        ],
+        "elapsed_ms": 14708,
+        "exit_code": 0,
+        "stopped": null,
+        "peak_process_rss_sample_bytes": 957726720,
+        "peak_sampled_known_bytes": 7629496320
+      }
+    ],
+    "engineering_commands": [
+      {
+        "label": "contextual-start-format",
+        "started": "2026-09-07T15:55:07.935Z",
+        "command": "/Users/casey.allard/.cargo/bin/cargo",
+        "args": [
+          "fmt",
+          "--all"
+        ],
+        "elapsed_ms": 3605,
+        "exit_code": 0,
+        "stopped": null,
+        "peak_process_rss_sample_bytes": null,
+        "peak_sampled_known_bytes": 7529545728
+      },
+      {
+        "label": "contextual-start-build",
+        "started": "2026-09-07T15:55:11.767Z",
+        "command": "env",
+        "args": [
+          "CARGO_TARGET_DIR=/tmp/r4-native-geometric-target",
+          "CARGO_INCREMENTAL=0",
+          "CARGO_BUILD_JOBS=1",
+          "/Users/casey.allard/.cargo/bin/cargo",
+          "build",
+          "--release",
+          "--offline",
+          "-p",
+          "uor-r4-core",
+          "--example",
+          "native_geometric_value_probe",
+          "-p",
+          "uor-r4-wasm-router",
+          "--bin",
+          "r4"
+        ],
+        "elapsed_ms": 354202,
+        "exit_code": 0,
+        "stopped": null,
+        "peak_process_rss_sample_bytes": null,
+        "peak_sampled_known_bytes": 7559180288
+      },
+      {
+        "label": "contextual-start-test-build",
+        "started": "2026-09-07T16:01:22.686Z",
+        "command": "env",
+        "args": [
+          "CARGO_TARGET_DIR=/tmp/r4-native-geometric-target",
+          "CARGO_INCREMENTAL=0",
+          "CARGO_BUILD_JOBS=1",
+          "/Users/casey.allard/.cargo/bin/cargo",
+          "test",
+          "--release",
+          "--offline",
+          "-p",
+          "uor-r4-core",
+          "--lib",
+          "--test",
+          "native_geometric_allocations",
+          "--no-run"
+        ],
+        "elapsed_ms": 253228,
+        "exit_code": 0,
+        "stopped": null,
+        "peak_process_rss_sample_bytes": null,
+        "peak_sampled_known_bytes": 7576915968
+      },
+      {
+        "label": "contextual-start-focused-checks",
+        "started": "2026-09-07T16:05:53.805Z",
+        "command": "/bin/zsh",
+        "args": [
+          "-c",
+          "set -e\n/tmp/r4-native-geometric-target/release/deps/uor_r4_core-ab236c9b0d8b158f relation_start --nocapture\n/tmp/r4-native-geometric-target/release/deps/uor_r4_core-ab236c9b0d8b158f relation_span::tests --nocapture\n/tmp/r4-native-geometric-target/release/deps/native_geometric_allocations-6c7ff1216c7e1931 native_kernel_source_has_no_forbidden_arithmetic_or_float_types --exact --nocapture\n/tmp/r4-native-geometric-target/release/r4-policy-check ."
+        ],
+        "elapsed_ms": 409,
+        "exit_code": 0,
+        "stopped": null,
+        "peak_process_rss_sample_bytes": null,
+        "peak_sampled_known_bytes": 7557242880
+      },
+      {
+        "label": "contextual-start-probe-v2-build",
+        "started": "2026-09-07T16:05:54.459Z",
+        "command": "env",
+        "args": [
+          "CARGO_TARGET_DIR=/tmp/r4-native-geometric-target",
+          "CARGO_INCREMENTAL=0",
+          "CARGO_BUILD_JOBS=1",
+          "/Users/casey.allard/.cargo/bin/cargo",
+          "build",
+          "--release",
+          "--offline",
+          "-p",
+          "uor-r4-core",
+          "--example",
+          "native_geometric_value_probe"
+        ],
+        "elapsed_ms": 17575,
+        "exit_code": 0,
+        "stopped": null,
+        "peak_process_rss_sample_bytes": null,
+        "peak_sampled_known_bytes": 7557292032
+      },
+      {
+        "label": "contextual-start-cross-owner-build",
+        "started": "2026-09-07T16:13:22.846Z",
+        "command": "/bin/zsh",
+        "args": [
+          "-c",
+          "set -e\nexport CARGO_TARGET_DIR=/tmp/r4-native-geometric-target CARGO_INCREMENTAL=0 CARGO_BUILD_JOBS=1\n/Users/casey.allard/.cargo/bin/cargo fmt --all\n/Users/casey.allard/.cargo/bin/cargo build --release --offline -p uor-r4-core --example native_geometric_value_probe -p uor-r4-wasm-router --bin r4\n/Users/casey.allard/.cargo/bin/cargo test --release --offline -p uor-r4-core --lib --test native_geometric_allocations --no-run\n/tmp/r4-native-geometric-target/release/deps/uor_r4_core-ab236c9b0d8b158f relation_start --nocapture\n/tmp/r4-native-geometric-target/release/deps/uor_r4_core-ab236c9b0d8b158f relation_span::tests --nocapture\n/tmp/r4-native-geometric-target/release/deps/native_geometric_allocations-6c7ff1216c7e1931 native_kernel_source_has_no_forbidden_arithmetic_or_float_types --exact --nocapture\n/tmp/r4-native-geometric-target/release/r4-policy-check ."
+        ],
+        "elapsed_ms": 611116,
+        "exit_code": 0,
+        "stopped": null,
+        "peak_process_rss_sample_bytes": null,
+        "peak_sampled_known_bytes": 7610458112
+      },
+      {
+        "label": "contextual-start-contrast-build",
+        "started": "2026-09-07T16:26:00.537Z",
+        "command": "env",
+        "args": [
+          "CARGO_TARGET_DIR=/tmp/r4-native-geometric-target",
+          "CARGO_INCREMENTAL=0",
+          "CARGO_BUILD_JOBS=1",
+          "/Users/casey.allard/.cargo/bin/cargo",
+          "build",
+          "--release",
+          "--offline",
+          "-p",
+          "uor-r4-core",
+          "--example",
+          "native_geometric_value_probe"
+        ],
+        "elapsed_ms": 17810,
+        "exit_code": 0,
+        "stopped": null,
+        "peak_process_rss_sample_bytes": null,
+        "peak_sampled_known_bytes": 7592341504
+      },
+      {
+        "label": "contextual-start-title-build",
+        "started": "2026-09-07T16:33:07.934Z",
+        "command": "env",
+        "args": [
+          "CARGO_TARGET_DIR=/tmp/r4-native-geometric-target",
+          "CARGO_INCREMENTAL=0",
+          "CARGO_BUILD_JOBS=1",
+          "/Users/casey.allard/.cargo/bin/cargo",
+          "build",
+          "--release",
+          "--offline",
+          "-p",
+          "uor-r4-core",
+          "--example",
+          "native_geometric_value_probe"
+        ],
+        "elapsed_ms": 18610,
+        "exit_code": 0,
+        "stopped": null,
+        "peak_process_rss_sample_bytes": null,
+        "peak_sampled_known_bytes": 7610363904
+      },
+      {
+        "label": "contextual-start-final-checks",
+        "started": "2026-09-07T16:41:08.776Z",
+        "command": "node",
+        "args": [
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-final-checks.mjs"
+        ],
+        "elapsed_ms": 4073,
+        "exit_code": 0,
+        "stopped": null,
+        "peak_process_rss_sample_bytes": null,
+        "peak_sampled_known_bytes": 7629484032
+      }
+    ],
+    "model_cycle_ms": 483207,
+    "model_cycle_limit_ms": 540000,
+    "engineering_command_ms": 1280628,
+    "engineering_cycle_limit_ms": 1800000,
+    "current": {
+      "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+      "at": "2026-09-07T16:43:43.836Z",
+      "inherited_precleanup_bytes": 2747199488,
+      "obsolete_target_growth_credit": 671379456,
+      "current_target_bytes": 2800447488,
+      "predecessor_artifact_root_bytes": 145760256,
+      "current_artifact_root_bytes": 2122539008,
+      "predecessor_worktree_bytes": 9875456,
+      "current_worktree_bytes": 8937472,
+      "stopped_successor_worktree_bytes": 460877824,
+      "source_metadata_reserve_bytes": 5242880,
+      "current_sampled_known_storage_bytes": 7629500416,
+      "storage_limit_bytes": 8069840896,
+      "remaining_storage_bytes": 440340480,
+      "stop_margin_bytes": 134217728,
+      "available_growth_before_stop_bytes": 252706816,
+      "model_ledger": {
+        "cumulative_ms": 4870743,
+        "limit_ms": 4950000
+      },
+      "model_remaining_ms": 79257,
+      "model_process_limit": 1,
+      "model_process_rss_target_bytes": 4294967296,
+      "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+    },
+    "peak_sampled_known_bytes": 7629496320,
+    "peak_model_rss_sample_bytes": 1529954304,
+    "new_storage_cycle_cap_bytes": 268435456,
+    "initial_known_bytes": 7529529344,
+    "known_growth_bytes": 99971072,
+    "scope": "All inherited charges retained. Source preparation/training/evaluation/checks counted in guarded model invocations. Engineering time is command elapsed time, not total conversational wall time. Periodic child RSS and conservative allocated-storage samples are not exact transient or APFS unique-extent peaks.",
+    "external_paid_compute": false,
+    "unique_material_deleted": false
+  },
+  "receipts": [
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-angular-v2/model.json",
+      "bytes": 11653004,
+      "sha256": "79b1ee27e0870106b98afef606e5c611ebfaa6fffb1f02558de3a8fa029ded29"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-angular-v2/source.json",
+      "bytes": 15675,
+      "sha256": "22de21ad6acb77c36b965595a206ead95281165f2ce835280e6cbb10ead6d134"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-angular-v2/fit.json",
+      "bytes": 148669,
+      "sha256": "21ba14d0d9044347f7e1a18d3a4bd2fac5056330ab941d8cf1094ba7c36a4bde"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-angular-v2/selection.json",
+      "bytes": 1796,
+      "sha256": "ce639654a8c174cde24f4bce4ca53f54ff4ee3ea65d8b07fdbcf16750b3365ac"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-angular-v2/report.json",
+      "bytes": 1812,
+      "sha256": "39a4ffd2db9b53befa8b8956f79b74ea5d8c087ca3e24438ea62972c548e0cab"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-angular-v2/construction.json",
+      "bytes": 261260,
+      "sha256": "b9efbe2a37964e0d26893cb964f7f04734dc912b504c2490cf385d07bdbc6cc9"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-angular-v2/development.json",
+      "bytes": 99343,
+      "sha256": "46f12800e1d5043bbf47a5abcb173b25759fcc98bae033b9650c6ea86afaf28b"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-angular-v2/context-disabled-construction.json",
+      "bytes": 259523,
+      "sha256": "13e1cbda4050d03bba99b4774421799a4204e7f1baf2d18f9acf756649f322f6"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-angular-v2/context-disabled-development.json",
+      "bytes": 98000,
+      "sha256": "c92b5e645f54784c4450e6c64a30baad08e3fb00b2c64ebe9049b73613270bbf"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-angular-v2/diagnostics-full.json",
+      "bytes": 43001,
+      "sha256": "d6068cff7d5a3f1f681b81dcc897d5a366e9f410c1cba4ddb5e49988e4c30bd0"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-cross-owner/model.json",
+      "bytes": 11641675,
+      "sha256": "0899b2e4d1a86ee7d067a057062363cfffa8c0460967764cbcc8c6c9e53ef49c"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-cross-owner/source.json",
+      "bytes": 15683,
+      "sha256": "ca12dcb670ec91078d2d627a159dcac4beaaf5409458cac60244a6f6db3ed260"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-cross-owner/fit.json",
+      "bytes": 140600,
+      "sha256": "d4007e94b236af0a1c905f9dd0be3ad3d4da12cfa8072f9dd290a1f53bbc2db9"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-cross-owner/selection.json",
+      "bytes": 1797,
+      "sha256": "7185fbe7585643886121a85f99f7f5452a7fa68a42472c33199f0586ec9c1d1b"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-cross-owner/report.json",
+      "bytes": 1813,
+      "sha256": "a42fcbcd6c0dbfe9bf4bca435b25f5cce517130a6f6e4389d65dd99187070322"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-cross-owner/construction.json",
+      "bytes": 261259,
+      "sha256": "3ded25417098559d3140a547b9f157a841203059d449f1cc4998205babcc0f95"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-cross-owner/development.json",
+      "bytes": 98915,
+      "sha256": "a86c10a2e32f51fc1e61124cdbe030e374a49668bd28e1d4aa5e28681c3ce9a0"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-cross-owner/context-disabled-construction.json",
+      "bytes": 264421,
+      "sha256": "fba898ee6ad9a6b1b7098d1082a6a2fded2c04b54b5bd58abbd61ec3b25769b6"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-cross-owner/context-disabled-development.json",
+      "bytes": 100117,
+      "sha256": "45771883f527faef4742ae299b136583f30286d549ca368a6bfcef71f87a2a4f"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-cross-owner/diagnostics-full.json",
+      "bytes": 42223,
+      "sha256": "3984057f570081c951feb3eaa38fe4ba1bd2b2832c5d6751e2d8dc933b4a9686"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-contrasts/model.json",
+      "bytes": 11643947,
+      "sha256": "a52541150d3a71e37e5b3712a50f4a0ae2f80d622f64171d4befcafbcbf9caab"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-contrasts/source.json",
+      "bytes": 27099,
+      "sha256": "b8b0d9671e9648c924ce637d675fe6136c25a66a1ddf6725467deda6397fa76d"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-contrasts/fit.json",
+      "bytes": 195906,
+      "sha256": "1867b5f69711a15ddfbd649f5d8cff87769b2320800cc07868363678144f8e11"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-contrasts/selection.json",
+      "bytes": 2332,
+      "sha256": "1c15cd4792251bdc639b5eea078e70902ce083dd388a04b37f4aa24b5b3072ca"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-contrasts/report.json",
+      "bytes": 2435,
+      "sha256": "fd4e626b86040fc299d466528a85e076f5b398176c4b7c9bfd0deac723a67372"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-contrasts/construction.json",
+      "bytes": 359616,
+      "sha256": "74d87d62e7d53083529b0ecd8d07d5026be2b1aa82514650457bc646fd3fdbbc"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-contrasts/development.json",
+      "bytes": 98320,
+      "sha256": "0a33f2c0581a57f5160c24855ecf7f9a8abe4ad7e0d795c67251516c50da5c34"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-contrasts/context-disabled-construction.json",
+      "bytes": 364578,
+      "sha256": "70eefb339f784875090558ecc1df0e5ddb23d3ceeb7720af3ba09f3f64f646b6"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-contrasts/context-disabled-development.json",
+      "bytes": 100363,
+      "sha256": "46869b3a2d0a3b5e1c238355f3169c4afc955a8f746383e3426f8a76920d799e"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-contrasts/diagnostics-full.json",
+      "bytes": 42223,
+      "sha256": "976b3abc1b63e6d5d65f4a96d64ab45f37f65b9018a701f73d6214823cc4bede"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-title-contrasts/model.json",
+      "bytes": 11645070,
+      "sha256": "021947a9ea4398077e9d2255a07e83aac641f549d19e86b3b957952ed3270146"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-title-contrasts/source.json",
+      "bytes": 31761,
+      "sha256": "15b043ea55429bbb9f5f966146af6cd9d396f7c2527fb0f3854a88c33caca6fb"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-title-contrasts/fit.json",
+      "bytes": 230264,
+      "sha256": "de337c7168894c9f06fc2c098b427364f1ec8d8c4d8b72af2462a6131c2940d9"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-title-contrasts/selection.json",
+      "bytes": 2955,
+      "sha256": "257decef20e15d889a8e6b64aa68736bc1237be540755b4b1679bf11e26cfd47"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-title-contrasts/report.json",
+      "bytes": 3032,
+      "sha256": "3600e1f88e3b803adf9d5cd876e47ceb70246854e95b28f4da5437891d1f26c9"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-title-contrasts/construction.json",
+      "bytes": 425178,
+      "sha256": "e5bac2f4fa7e51b9aa8b0f0f396793201216d934942394188a64eb5d4ecead52"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-title-contrasts/development.json",
+      "bytes": 98317,
+      "sha256": "cd1a7ae28513d7fbb9a69b974d176de00c0e32085475e3dc32bef23fbdd3bf4c"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-title-contrasts/context-disabled-construction.json",
+      "bytes": 429455,
+      "sha256": "4dde4c1abae426d654fd6721bcec9284076f0712591b20e4b8ae3cacd2407ed9"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-title-contrasts/context-disabled-development.json",
+      "bytes": 100052,
+      "sha256": "d0c045e916234b1993a411b52544586a8fbd644c75113fee71d64500731390ef"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-title-contrasts/diagnostics-full.json",
+      "bytes": 42223,
+      "sha256": "860b358966631505af71782da67478fefeed1df15c69b808f9dfea90f2a5490d"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-title-contrasts/preservation/aliases.json",
+      "bytes": 15252,
+      "sha256": "ddb134120b5401ae6c06b93ae1607570900fb6700d616f3c4a1556f528212dab"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-title-contrasts/preservation/chains.json",
+      "bytes": 18506,
+      "sha256": "0be7482361c060aadfb350641e206c8a334b37be6eefdd3627e4991d01be24d6"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-title-contrasts/preservation/computed-construction.json",
+      "bytes": 61339,
+      "sha256": "c5a15b30bb7a8b767f6cbc554462a2903918f21718a45982f03ffccbde181afd"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-title-contrasts/preservation/dependent.json",
+      "bytes": 45899,
+      "sha256": "af3f813d2bfc55b39bfdda033e8ce3d81b8a80ecd18965bcc5899a000a9ae4d7"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-title-contrasts/preservation/exposed-literals.json",
+      "bytes": 14928,
+      "sha256": "dc433c69d17a5be74977183dcee1bd4ecdc4ffd3a90e5ca15a2e94c94684df63"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-title-contrasts/preservation/exposed-roles.json",
+      "bytes": 15137,
+      "sha256": "04bdac11e06af8aa563f95ea0294a5953257ed77db279b9b386fa3ccff9b0769"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-title-contrasts/preservation/forward-construction.json",
+      "bytes": 159840,
+      "sha256": "0ee763b7e37caf13387fd9a01ed3dae8cb18d5c179a2dd2109e411ff8c1a2f1d"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-title-contrasts/preservation/forward-open.json",
+      "bytes": 159878,
+      "sha256": "62cd271d3ee51026272e873404173d3b2de50e1076b495f1deaf8c60c3c79bf3"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-title-contrasts/preservation/forward-prior-fresh.json",
+      "bytes": 160240,
+      "sha256": "cec4b789b64e1620628b2e7cf0600b37a72bfea1974022941c0d8631066bfc97"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-title-contrasts/preservation/identifiers.json",
+      "bytes": 7264,
+      "sha256": "6dbb1cc0fc38286f8232e98ac94a149d8f28dc5237f462454ceecc6986c3a5b8"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-title-contrasts/preservation/literal-construction.json",
+      "bytes": 93929,
+      "sha256": "0a51f621b18789986b3b2d06d43343b2caded1f9b46d2cb142cc76fd53b783b4"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-title-contrasts/preservation/long.json",
+      "bytes": 147372,
+      "sha256": "cbfa698c4ee71913893e3c1555e8c57fa76f084453562204499195245aa4ca9e"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-title-contrasts/preservation/names.json",
+      "bytes": 27972,
+      "sha256": "0e6bad4ab9ba6386a42b0169ccff41ab51ce7d98666689915acf9ece26ea79f0"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-title-contrasts/preservation/numeric.json",
+      "bytes": 6094,
+      "sha256": "fe853112dd0a0d28503a0dae93b3c2703b3980c329541d58d3533d2f70b6b0db"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-title-contrasts/preservation/preservation.json",
+      "bytes": 21669,
+      "sha256": "5ede0c207575358eb14f549682955de62c9ff5e9d1583b56e5b050f1dd37b650"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-title-contrasts/preservation/prior-chains.json",
+      "bytes": 18496,
+      "sha256": "6fa900dc6d9cc5038585d2e444d10d7339f667316e3a3ddd21e3208388e7bbb9"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-title-contrasts/preservation/prior-fresh.json",
+      "bytes": 14552,
+      "sha256": "43ddef3e947f07e4a4b84f68cab9b1532aca7b6911422e92d70795d60144457e"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-title-contrasts/preservation/prior-span-construction.json",
+      "bytes": 4445,
+      "sha256": "344918f7bf8c3edf5a13b5f82e2192d5e920743fc89426229c640b816f00d5ca"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-title-contrasts/preservation/prior-span-development.json",
+      "bytes": 2175,
+      "sha256": "0472ad4e2826a368ca7458a5838bfc1b58a9576b1e2eab68fec376cbae92d09b"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-title-contrasts/preservation/prior-span-fresh.json",
+      "bytes": 3102,
+      "sha256": "a82a0b1385ca6d27ee81b19f39400c9784e025d992a6deea2df6e1535dac65fe"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-title-contrasts/preservation/prior-start-open.json",
+      "bytes": 65722,
+      "sha256": "0b044a47298bba855b315215d9b3818f5cbe429e5bca3601a2c576658e4b3728"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-title-contrasts/preservation/prior.json",
+      "bytes": 7457,
+      "sha256": "35bedf6da8405502facb87acc409f1b7c4917161a3542c5892b274ba6cf7bc0d"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-title-contrasts/preservation/retained-construction.json",
+      "bytes": 214913,
+      "sha256": "94936018a92bd381226226e3e91c6a6b84b72f18a3d8df26f12d025bfaa35f79"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-title-contrasts/preservation/reverse-construction.json",
+      "bytes": 412677,
+      "sha256": "f6461eea2895d8008015bc01ef21ec34a32e7579232a6f8b53a55eb3842e6d01"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-title-contrasts/preservation/reverse-open.json",
+      "bytes": 435793,
+      "sha256": "2c98e2201ce6ac3e41b8b49cbd115a1ae626e659e548bfad5cdc1ae645fe39db"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-title-contrasts/preservation/reverse-prior-fresh.json",
+      "bytes": 413304,
+      "sha256": "4dc967d36ebfa2a9ee8c928af64779007e62240e22ac8cf77846a739348ece78"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-title-contrasts/preservation/reverse-short.json",
+      "bytes": 559,
+      "sha256": "7e9ed91a4d52b277dc6110bb8f38005a9dbbabd607fa8ad2b4c0cfd0d48166c7"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-title-contrasts/preservation/roles.json",
+      "bytes": 15264,
+      "sha256": "e9de1caa2ac4455b39d2854ec00a2b90d543101920c65a629a31d3b398d77a87"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-title-contrasts/preservation/sessions.json",
+      "bytes": 58938,
+      "sha256": "9f83e8e5c32f80e9c6c4e28cbf2e4543314006a38eeb156c40816134ea794efb"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-title-contrasts/fresh.json",
+      "bytes": 111878,
+      "sha256": "a3efe530da022217f6e372886156244ae867a5f646ad91173397ec264d0c0fd7"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-title-contrasts/fresh-source.json",
+      "bytes": 14795,
+      "sha256": "355be31eef02064c10b597205839ad837fcdeb61e18cd48ea7fc0eda19c45784"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-title-contrasts/parent-supported-construction.json",
+      "bytes": 417903,
+      "sha256": "64a12e5a99924d39a481ca93bcd2254a5a4862a56e337f79e9411a354a81aa2d"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-title-contrasts/supported-construction.json",
+      "bytes": 409539,
+      "sha256": "cf85f0e01f13c588bf8193006faf464590ca89433d6d1c22f45542d69992ed73"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-title-contrasts/context-disabled-supported-construction.json",
+      "bytes": 413817,
+      "sha256": "93dc36cebe18b07503abe8dea77656d5dfaf07c90720288b70d59acaa1e7d7d6"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-source-v2.json",
+      "bytes": 3170,
+      "sha256": "cb68650e6c2fec099fb7a9e85aa2122a43dad5989650444af76775c049eaa9de"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-source-v3.json",
+      "bytes": 3025,
+      "sha256": "5f93df8ebe64abaa1d1e9861263370bec5129b34bd3775c6f1c31f1d462dbaea"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-source-v4.json",
+      "bytes": 3025,
+      "sha256": "605ee7418ee58f332b283e3baa9414ee9878948252c1c07aca8cd0710eff93ff"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-source-v5.json",
+      "bytes": 3025,
+      "sha256": "a8fa9449983f6be9f6e10e2b6d41d76a58615222246130a540a28a3e75737fae"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-projection-before-registry-correction.json",
+      "bytes": 3695,
+      "sha256": "bb67113c8a7786dff02855c1f83a64bf76370cc41d65058b9c7a33e45db240d6"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-registry-correction-projection.json",
+      "bytes": 2910,
+      "sha256": "d580f9e36b0fdafea668f53859e7d939caaf3bff487eaf5f3201e3e46215b383"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-contrast-projection.json",
+      "bytes": 2820,
+      "sha256": "b48470e21e6042cd45ddbf0fbaa5d626799a78ed39514588eb79edc3e3a9c41c"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-title-contrast-projection.json",
+      "bytes": 2902,
+      "sha256": "6685d9eb0c32b69958ca0f1bd9dac9685f09dda46b118912e9b4ddcc59205ebc"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-artifact-check.stdout.log",
+      "bytes": 741,
+      "sha256": "dff1a49e173020469dfbceb94a7785f3191030f8bc6a64aa88fd8681e00b9fff"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-cli.stdout.log",
+      "bytes": 14441,
+      "sha256": "a204067d7dda493574f81378f7b936d566a66c7e20c00ef45831854f2538d70e"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-legacy-cli.stdout.log",
+      "bytes": 14431,
+      "sha256": "e111fcaf6cd25de77009b61a753670ea427e916fdf04e37e16980ce311260ced"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-start-cross-owner-build.log",
+      "bytes": 3568,
+      "sha256": "c03b90919b8d505a39be5488ef8d6dcfeb61422238221bcba267e1b56fc6a519"
+    }
+  ],
+  "limitations": [
+    "50/52 supplied cases: two unchanged upstream quiet river no-writes, explicitly excluded from supported writer population",
+    "Open feedback informed contrast construction; fresh12 opened only after saved selection",
+    "Writer-role and first-next prime-pair roots remain identity; no isolated pair/role advantage claim",
+    "Familiar cue wording and novel exact payload/owners; general phrase parsing, separators, prose, reasoning, coding and energy advantage unqualified"
+  ],
+  "next": "Parent-preserving contextual writer refinement for actual missing writes, rebind NoWrite admission metadata; then artifact-opt-in shared causal transitions where second operator consumes first committed write handle. References1139/1140/973; not issue closure."
+}

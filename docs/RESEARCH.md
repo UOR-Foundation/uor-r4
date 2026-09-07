@@ -9,6 +9,29 @@ implemented operations, measured behavior and proposed integration. The native
 model was d59070c2 at the review date; no model experiment was
 rerun for that review.
 
+## Contextual phrase starts — bounded positive after transfer corrections, 2026-09-07
+
+The [result](native_geometric_contextual_start_1139.md) and
+[evidence](evidence/native_geometric_contextual_start_1139.json) retain
+`50dc0d23` with unchanged complete `321e990f` parent parameters. Ten
+construction-prompt words shared across distinct exact writer-selected owners
+address contextual signed-H4 codes. Supported construction improves 12/50 to
+50/50, open development 3/12 to 12/12, and all twelve fresh answers after
+selection pass following source eviction. Removing contextual roots gives
+38/50 construction and 7/12 open. All 663 retained construction answers and
+selected prior output/write/session preservation pass, including the older
+8/8 phrase-start challenge.
+
+The stopped preparation and three rejected candidates remain preserved. Open
+feedback informed new construction contrasts; open scores are not fresh evidence.
+Complete supplied construction is 50/52 because two upstream `quiet river`
+no-write cases remain outside the selector's supported scope. Four learned
+predecessor/first prime-pair codes contribute to the fitted operator; writer-role
+roots remain identity and their individual advantage is unmeasured. This result
+qualifies bounded contextual phrase-start selection, not general phrase parsing,
+sustained language, reasoning, coding or energy advantage. Current-state records
+the actual interface/check evidence, cumulative resources and next writer repair.
+
 ## Learned relation starts — construction fit, open transfer negative, 2026-09-07
 
 The [result](native_geometric_relation_start_1140.md) implements shared signed-H4

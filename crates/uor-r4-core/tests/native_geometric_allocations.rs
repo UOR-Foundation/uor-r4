@@ -2256,16 +2256,28 @@ fn native_reverse_relation_span_checkpoint_and_allocation() {
 fn native_relation_start_checkpoint_and_allocation() {
     use uor_r4_core::native_geometric::{Control, Model};
     let bytes = std::fs::read(std::env::var("R4_RELATION_START_MODEL").unwrap()).unwrap();
+    let loading = std::time::Instant::now();
     let model = Model::from_bytes(&bytes).unwrap();
+    let load_ns = loading.elapsed().as_nanos();
     let wire: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
     let mut bad = wire.clone();
     bad["relation_start"]["codes"][0]["roots"][0] = 120.into();
     assert!(Model::from_bytes(&serde_json::to_vec(&bad).unwrap()).is_err());
-    let mut bad = wire;
+    let mut bad = wire.clone();
     bad["relation_start"]["parent_artifact"] = "wrong-parent".into();
     assert!(Model::from_bytes(&serde_json::to_vec(&bad).unwrap()).is_err());
+    let contextual = wire.get("relation_start_context").is_some();
+    if contextual {
+        let mut bad = wire.clone();
+        bad["relation_start_context"][0]["prime"] = 0.into();
+        assert!(Model::from_bytes(&serde_json::to_vec(&bad).unwrap()).is_err());
+        let control = model.without_relation_start_context().unwrap();
+        let restored = Model::from_bytes(&control.to_bytes().unwrap()).unwrap();
+        assert_eq!(control.artifact_cid(), restored.artifact_cid());
+    }
     let mut times = Vec::new();
-    for (fact, owner, expected, long) in [
+    let mut input_times = Vec::new();
+    let mut cases = vec![
         (
             "Notes say Amber Meadow holds telra.",
             "telra",
@@ -2279,7 +2291,24 @@ fn native_relation_start_checkpoint_and_allocation() {
             true,
         ),
         ("Notes say Amber holds telra.", "telra", " Amber.\n", false),
-    ] {
+    ];
+    if contextual {
+        cases.extend([
+            (
+                "notes say fine sand holds calvi.",
+                "calvi",
+                " fine sand.\n",
+                false,
+            ),
+            (
+                "notes say fine sand holds calvi.",
+                "calvi",
+                " fine sand.\n",
+                true,
+            ),
+        ]);
+    }
+    for (fact, owner, expected, long) in cases {
         let mut s = model.session(Control::Full).unwrap();
         s.observe(&model, 0).unwrap();
         let padding = if long {
@@ -2287,17 +2316,22 @@ fn native_relation_start_checkpoint_and_allocation() {
         } else {
             String::new()
         };
+        let encoding = std::time::Instant::now();
         let tokens = model
             .encode(&format!("{fact} {padding}Where is {owner}? Answer:"))
             .unwrap();
+        let encode_ns = encoding.elapsed().as_nanos();
         ALLOCATIONS.with(|v| v.set(0));
         BYTES.with(|v| v.set(0));
         MEASURING.with(|v| v.set(true));
+        let ingest = std::time::Instant::now();
         for token in tokens {
             s.observe(&model, token).unwrap();
         }
         s.begin_response(&model).unwrap();
+        let ingest_ns = ingest.elapsed().as_nanos();
         MEASURING.with(|v| v.set(false));
+        input_times.push((long, encode_ns, ingest_ns));
         let mut output = [1; 32];
         let mut used = 0;
         loop {
@@ -2322,5 +2356,6 @@ fn native_relation_start_checkpoint_and_allocation() {
         assert_eq!((ALLOCATIONS.with(Cell::get), BYTES.with(Cell::get)), (0, 0));
     }
     times.sort_unstable();
+    println!("relation-start load_ns={load_ns}; (evicted,encode_ns,ingest_begin_response_ns)={input_times:?}; ingestion includes start scoring, excludes emission/checkpoints; sampled wall times, no energy measurement");
     println!("relation-start model/root rejection, short/evicted/singleton outputs, per-step checkpoints and zero allocations PASS; samples={} median_ns={} max_ns={} (uncached predict+observe including initial selection; excludes loading/encoding/ingestion/checkpoints)",times.len(),times[times.len()/2],times[times.len()-1]);
 }

@@ -196,7 +196,9 @@ impl Model {
 
 // Construction prompts alone establish exact identities; response labels do not
 // influence membership. Unique words retain the separator-only fallback.
-fn recurring_registry(docs: &[ValueExample]) -> Result<Vec<word_copy_types::WordCopyAddress>> {
+pub(super) fn recurring_registry(
+    docs: &[ValueExample],
+) -> Result<Vec<word_copy_types::WordCopyAddress>> {
     let (mut registry, _, _) = word_copy_training::dictionary(docs)?;
     let per_doc = docs
         .iter()

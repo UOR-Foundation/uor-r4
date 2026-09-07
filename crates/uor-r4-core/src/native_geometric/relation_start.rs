@@ -6,6 +6,7 @@ use super::value_types::{ValueFeature, ValueWork};
 use super::*;
 
 pub(super) const FEATURE_COUNT: usize = 7;
+pub(super) const CONTEXT_FEATURE_COUNT: usize = 15;
 
 // NATIVE_GEOMETRIC_INTEGER_KERNEL_BEGIN
 /// 0 absent; 1 lowercase; 2 initial uppercase then lowercase; 3 uppercase;
@@ -121,11 +122,122 @@ pub(super) fn features(
     ]
 }
 
+/// Ordered occurrence identities supplement the unchanged shape metadata.
+/// The writer role and its predecessor cue are already observed at commit;
+/// they affect selection only, never endpoint, admission, or copied bytes.
+pub(super) fn contextual_features(
+    registry: Option<&[super::word_copy_types::WordCopyAddress]>,
+    words: &LexemeState,
+    owner: usize,
+    endpoint: usize,
+    candidate: ReverseCandidate,
+    action: u8,
+    work: &mut ValueWork,
+) -> ([ValueFeature; CONTEXT_FEATURE_COUNT], usize) {
+    let mut result = [ValueFeature::default(); CONTEXT_FEATURE_COUNT];
+    result[..FEATURE_COUNT].copy_from_slice(&features(words, endpoint, candidate, work));
+    let Some(registry) = registry else {
+        return (result, FEATURE_COUNT);
+    };
+    let first = &words.recent[candidate.start];
+    let prior = first.predecessors[0];
+    let linker = words.recent[owner].predecessors[0];
+    let prior = super::value_lexemes::WordAtom {
+        bytes: prior.bytes,
+        len: prior.len,
+        ..Default::default()
+    };
+    let linker = super::value_lexemes::WordAtom {
+        bytes: linker.bytes,
+        len: linker.len,
+        ..Default::default()
+    };
+    let mut lookup = super::word_copy_types::WordCopyWork::default();
+    let mut address = |word: &super::value_lexemes::WordAtom| {
+        lookup.word_record_reads = lookup.word_record_reads.saturating_add(1);
+        u64::from(super::word_copy_runtime::address_in(
+            registry,
+            word,
+            &mut lookup,
+        ))
+    };
+    let prior_prime = address(&prior);
+    let first_prime = address(first);
+    let next_prime = if candidate.start > endpoint {
+        address(&words.recent[candidate.start - 1])
+    } else {
+        0
+    };
+    let linker_prime = address(&linker);
+    result[FEATURE_COUNT..].copy_from_slice(&[
+        ValueFeature {
+            kind: 7,
+            a: prior_prime,
+            b: 0,
+        },
+        ValueFeature {
+            kind: 8,
+            a: first_prime,
+            b: 0,
+        },
+        ValueFeature {
+            kind: 9,
+            a: next_prime,
+            b: 0,
+        },
+        ValueFeature {
+            kind: 10,
+            a: prior_prime,
+            b: first_prime,
+        },
+        ValueFeature {
+            kind: 11,
+            a: first_prime,
+            b: next_prime,
+        },
+        ValueFeature {
+            kind: 12,
+            a: u64::from(action),
+            b: prior_prime,
+        },
+        ValueFeature {
+            kind: 13,
+            a: linker_prime,
+            b: prior_prime,
+        },
+        ValueFeature {
+            kind: 14,
+            a: linker_prime,
+            b: first_prime,
+        },
+    ]);
+    work.relations.feature_writes = work
+        .relations
+        .feature_writes
+        .saturating_add((CONTEXT_FEATURE_COUNT - FEATURE_COUNT) as u64);
+    work.relations.record_reads = work
+        .relations
+        .record_reads
+        .saturating_add(lookup.word_record_reads);
+    work.relations.dictionary_comparisons = work
+        .relations
+        .dictionary_comparisons
+        .saturating_add(lookup.dictionary_comparisons);
+    work.relations.dictionary_byte_comparisons = work
+        .relations
+        .dictionary_byte_comparisons
+        .saturating_add(lookup.dictionary_byte_comparisons);
+    work.relations.span_routing.add(lookup.routing);
+    (result, CONTEXT_FEATURE_COUNT)
+}
+
 pub(super) fn select(
     model: &Model,
     words: &LexemeState,
+    owner: usize,
     endpoint: usize,
     candidates: &ReverseCandidates,
+    action: u8,
     work: &mut ValueWork,
 ) -> Option<RelationSpan> {
     let Some(block) = &model.relation_start else {
@@ -137,10 +249,18 @@ pub(super) fn select(
         work.relations.span_routing.predictions.saturating_add(1);
     // Longer candidates first preserves the parent decision on an exact tie.
     for &candidate in candidates.rows[..candidates.len].iter().rev() {
-        let features = features(words, endpoint, candidate, work);
+        let (features, count) = contextual_features(
+            model.relation_start_context.as_deref(),
+            words,
+            owner,
+            endpoint,
+            candidate,
+            action,
+            work,
+        );
         let state = block.encode(
             model,
-            &features,
+            &features[..count],
             Control::Full,
             &mut work.relations.span_routing,
         );
@@ -201,6 +321,65 @@ mod tests {
             shape(b"Amber", &mut RoutingWork::default()),
             shape(b"Dawn", &mut RoutingWork::default())
         );
+    }
+
+    #[test]
+    fn contextual_relation_start_breaks_lowercase_shape_alias_with_occurrence_roles() {
+        let text = "notes say quiet field holds ada.";
+        let mut words = words(text);
+        let docs = ["first", "second"].map(|id| ValueExample {
+            id: id.into(),
+            prompt: text.into(),
+            response: " quiet field.\n".into(),
+        });
+        let registry = source_span_training::recurring_registry(&docs).unwrap();
+        let candidate = |start| ReverseCandidate { start, span: None };
+        // "quiet field" and "say quiet field" have precisely the same seven
+        // shape features, including an internal predecessor and a space gap.
+        assert_eq!(
+            features(&words, 2, candidate(3), &mut ValueWork::default()),
+            features(&words, 2, candidate(4), &mut ValueWork::default())
+        );
+        let extract = |words: &LexemeState, start, action| {
+            contextual_features(
+                Some(&registry),
+                words,
+                0,
+                2,
+                candidate(start),
+                action,
+                &mut ValueWork::default(),
+            )
+        };
+        let (short, count) = extract(&words, 3, 1);
+        let (long, _) = extract(&words, 4, 1);
+        assert_eq!(count, CONTEXT_FEATURE_COUNT);
+        assert_eq!(short[..7], long[..7]);
+        assert_ne!(short[7..], long[7..]);
+        assert_ne!(short[10], long[10]);
+        let (other_role, _) = extract(&words, 3, 2);
+        assert_eq!(short[..12], other_role[..12]);
+        assert_ne!(short[12], other_role[12]);
+        assert_eq!(short[13..], other_role[13..]);
+        // Owner spelling is a copied entity, not a semantic feature. The
+        // already observed writer predecessor is a distinct role cue.
+        words.recent[0].bytes[0] = b'e';
+        assert_eq!(extract(&words, 3, 1).0, short);
+        words.recent[0].predecessors[0] = words.recent[3].predecessors[0];
+        let changed_linker = extract(&words, 3, 1).0;
+        assert_eq!(short[..13], changed_linker[..13]);
+        assert_ne!(short[13..], changed_linker[13..]);
+        let (disabled, disabled_count) = contextual_features(
+            None,
+            &words,
+            0,
+            2,
+            candidate(3),
+            1,
+            &mut ValueWork::default(),
+        );
+        assert_eq!(disabled_count, FEATURE_COUNT);
+        assert_eq!(disabled[..disabled_count], short[..FEATURE_COUNT]);
     }
 
     #[test]

@@ -244,12 +244,12 @@ impl RelationState {
             work.relations.no_writes = work.relations.no_writes.saturating_add(1);
             return;
         };
-        // Reverse writes may inspect only source words at or before their
-        // selected value endpoint; the following linker and owner are excluded.
+        // Reverse admission and payload stay bounded by the selected endpoint.
+        // A contextual selector may read the already observed writer role cue.
         if value != 0 {
             let span = model.relation_reverse_spans.as_ref().and_then(|_| {
                 let admitted = reverse_candidates(model, words, owner, value, action, work);
-                super::relation_start::select(model, words, value, &admitted, work)
+                super::relation_start::select(model, words, owner, value, &admitted, action, work)
             });
             self.commit_span(words.recent[owner], words.recent[value], span, action, work);
             return;

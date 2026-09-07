@@ -19,6 +19,8 @@ use uor_r4_core::native_geometric::{
 };
 
 type ProbeResult<T> = Result<T, Box<dyn Error>>;
+#[path = "native_geometric_value_probe/contextual_start.rs"]
+mod contextual_start;
 #[path = "native_geometric_value_probe/joint_admission.rs"]
 mod joint_admission;
 #[path = "native_geometric_value_probe/literal_binding.rs"]
@@ -991,6 +993,9 @@ fn evaluate_binding(
 }
 
 fn main() -> ProbeResult<()> {
+    if std::env::args().nth(1).as_deref() == Some("contextual-start") {
+        return contextual_start::run(&std::env::args().skip(2).collect::<Vec<_>>());
+    }
     if std::env::args().nth(1).as_deref() == Some("relation-start") {
         return relation_start::run(&std::env::args().skip(2).collect::<Vec<_>>());
     }

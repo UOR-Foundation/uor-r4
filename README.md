@@ -22,7 +22,7 @@ The architecture uses prime-addressed ordered context, fixed zeta-zero phases, R
 
 ## Where the project goes next
 
-The immediate bottleneck is contextual phrase binding: the correct source value can be present while the selector includes introductory words. The latest shape-only candidate was not promoted. The next change adds bounded ordered lexical/prime and role context to the existing learned selector, using contrasts and successful contextual-span mechanisms already in the repository. Shared state transitions and compositional emission follow; the model must progress beyond a collection of copied-answer patterns.
+The [contextual phrase-start result](docs/native_geometric_contextual_start_1139.md) retains `50dc0d23`: 50/50 supported construction, 12/12 open development and 12/12 fresh answers after selection, with all accepted preservation passing. Exact lexical/prime context helps reject introductory words; this remains a bounded result. Two supplied multiword cases still lack an upstream writer record. The next direct repair refines contextual write support, followed by shared state transitions and compositional emission in which one committed result affects the next operator. The model must progress beyond copied-answer patterns.
 
 [The canonical plan](docs/integration/project-track.md) owns order and acceptance. [ROADMAP.md](ROADMAP.md) provides the issue navigation; [#820](https://github.com/UOR-Foundation/uor-r4/issues/820) is the live programme tracker. Priorities guide development, while actual evidence and dependencies determine the next useful step.
 
