@@ -1,5 +1,61 @@
 # Current native geometric AI work
 
+## Contextual phrase starts — bounded positive, 2026-09-07
+
+**Retain `50dc0d23` at contextual phrase-start scope.** The
+[result](../native_geometric_contextual_start_1139.md) and
+[evidence](../evidence/native_geometric_contextual_start_1139.json) record the
+existing signed-H4 start selector extended with exact ordered lexical/prime
+context. The construction-only registry admits words recurring across distinct
+exact owners chosen by the fixed parent writer. Complete `321e990f` parent
+parameters, candidate admission, endpoint, payload and version semantics are
+preserved. Four predecessor/first prime-pair codes and five unary lexical codes
+learn nonidentity roots; writer-role features are available but remain identity.
+
+Supported construction is 50/50 versus parent 12/50 and context-disabled 38/50.
+Open development is 12/12 versus parent 3/12 and context-disabled 7/12. The older
+phrase-start challenge passes 8/8. Selection was saved before all twelve fresh
+answers passed after source eviction. All 663 retained construction answers,
+forward/reverse turns, 28/28 long-window and 48/48 dependent reads, prior span
+panels and other selected preservation pass. Preserve the stopped preparation,
+`cc766ed9`, `0e1914c4` and `af997b17` negatives. Open feedback informed
+construction design; the older shape candidate's separate eight fresh cases
+remain unopened. Complete supplied construction remains 50/52 because two
+upstream `quiet river` writes are absent; they are explicitly outside the
+supported selector population.
+
+Actual-artifact malformed root/registry/parent rejection, exact parent retention,
+roundtrip, per-step checkpoints and zero-allocation ingestion/emission pass.
+The root CLI emits ` Cobalt Field.\n` with EOS for the earlier failed
+`Report notes Cobalt Field` case. Sampled load time is 14.652 seconds,
+short/evicted ingestion plus response-start is 0.181–0.486 ms, and maximum
+predict/observe is 0.175 ms across 67 samples. These are distinct scopes and no
+energy or broad latency advantage is established. Studio/WASM/HTTP integration
+of this artifact remains `NOT_RUN`.
+
+**Next: repair learned writer support, then shared causal transitions.** The
+preserved `quiet river` trace has no write before start selection. Source and
+stored weights show `quiet` moving from masked payload to preceding context
+removes three action-1 score points; this diagnosis still needs an intervention.
+Use a parent-preserving writer refinement with newly authored cross-owner
+payload/context contrasts and updated NoWrite cache binding. Keep accepted
+start/reader/emitter behavior fixed. Then implement a bounded shared transition
+where the second operator consumes the actual first committed result—for example,
+Add→Add with the first write ID in the second derivation. Do not equate unrelated
+copied text plus arithmetic with causal composition. #1139, #1140 and #973 remain
+open; this result does not establish general phrase understanding or language.
+
+This cycle charged 483.207 model seconds, including the preparation stop,
+four candidates, comparisons, controls, preservation and artifact/CLI checks.
+The current CLI also loads the older shape-only artifact and preserves its
+opened Amber Meadow output.
+Cumulative use is 4,870.743/4,950 seconds; 79.257 seconds remain. All extensions
+were recorded before use under standing owner authorization. The broad storage
+ceiling is 8,069,840,896 bytes with the 128 MiB stop margin preserved. Complete
+projections, engineering commands, storage samples and all prior charges are
+linked in the evidence. No unique material was deleted and no external paid
+compute was used. Project the entire successor before execution.
+
 ## Learned relation starts — transfer negative, 2026-09-07
 
 **Keep `321e990f` as the retained model.** The implemented

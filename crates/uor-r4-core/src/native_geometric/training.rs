@@ -179,6 +179,7 @@ impl Trainer {
             typed_routing: None,
             joint_admission: None,
             relation_start: None,
+            relation_start_context: None,
             relation_reverse_spans: None,
             relation_spans: None,
             source_span_context: None,
@@ -553,6 +554,11 @@ impl Model {
     }
     pub(super) fn validate(&self) -> Result<()> {
         self.config.validate()?;
+        if self.relation_start_context.is_some() && self.relation_start.is_none() {
+            return Err(Error(
+                "relation start context has no learned selector".into(),
+            ));
+        }
         if let Some(block) = &self.relation_start {
             if self.relation_reverse_spans.is_none() {
                 return Err(Error("relation start reverse parent absent".into()));
@@ -560,6 +566,7 @@ impl Model {
             relation_start_training::validate(block, self)?;
             let mut parent = self.clone();
             parent.relation_start = None;
+            parent.relation_start_context = None;
             parent.refresh_identity()?;
             if parent.artifact_cid != block.parent_artifact {
                 return Err(Error("relation start frozen parent differs".into()));
