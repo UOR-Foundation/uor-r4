@@ -213,10 +213,17 @@ computed-result and identifier-copy cases. The subsequent
 retains `c29ab982`: inherited computed roles are unchanged, exposed complete
 transfer improves12/16 to16/16, new complete transfer12/16 to16/16, and all prior
 preservation is restored. Eight new identifier-return functions pass24 executed
-assertions. Four abstention texts still fail. Next connect numeric NoOperation
-to the correct supported-word or abstention answer path, preserving these
-successes before broader Rust reasoning. General named-role binding remains
-unqualified.
+assertions. The [committed NoRead continuation](../native_geometric_no_read_completion_1139.md)
+then retains `e7c14c99` at literal-numeric scope: exposed answers12/16 to14/16,
+new answers14/16 to15/16, with computed, identifier and memory preservation.
+Two intermediate candidates remain recorded negatives. **Next: revise joint
+source/NoRead selection when a retained word is unsupported by the question.**
+Reuse the existing geometric source router and occurrence binding; include
+supported-word and missing-attribute cases together, with source-order/name
+changes and the current numeric/identifier/memory preservation. Do not map all
+numeric NoOperation to Unknown, add a parser for the observed question template,
+or expand model/context capacity before this selection seam is addressed.
+General named-role binding and broader Rust reasoning remain unqualified.
 No additional cache campaign is active. Follow current-state.md for artifacts
 and cumulative resources; a new issue does not reset the spent amount.
 The full handoff remains unmet.

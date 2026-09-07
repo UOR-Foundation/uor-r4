@@ -1,6 +1,22 @@
 # Research: what is measured, what is closed, what is open
 
-## Protected literal admission — current bounded checkpoint, 2026-09-06
+## Literal-context NoRead completion — current bounded checkpoint, 2026-09-06
+
+The [committed continuation](native_geometric_no_read_completion_1139.md)
+retains `e7c14c99` at literal-numeric NoRead scope, with the complete `c29ab982`
+parent unchanged. It reuses existing word-binding features and sparse lexical
+scoring after an actually observed NoRead. Exposed answers improve12/16 to14/16;
+new answers improve14/16 to15/16, with all12 numeric cases and3/4 abstentions.
+Complete computations remain16/16 and identifier returns8/8. The remaining
+failure copies `coins` as a location answer; source selection is not repaired.
+
+Two earlier candidates are preserved negatives: a smaller response-progress
+representation shortened four explanatory answers; broader application of the
+binding-conditioned table broke one relation-conflict session. Literal-only
+state eligibility restores the inherited memory and computed-result paths.
+No new angular-distance advantage or general abstention capability is claimed.
+
+## Protected literal admission — previous bounded checkpoint, 2026-09-06
 
 The [admission repair](native_geometric_literal_admission_1139.md) retains
 `c29ab982`, with the entire accepted parent unchanged and a separate bounded

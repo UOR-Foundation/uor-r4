@@ -59,15 +59,15 @@ pub struct ResponseEntryFitReport {
 }
 
 impl ResponseEntryModel {
-    pub(super) fn validate(&self, model: &Model) -> Result<()> {
+    pub(super) fn validate_shape(
+        &self,
+        model: &Model,
+        feature_kinds: u8,
+        expected_schema: &str,
+    ) -> Result<()> {
         let associations = self.rows.iter().map(|row| row.scores.len()).sum::<usize>();
         let valid_token =
             |token: u32| token != BOS && (token as usize) < model.geometry.tokens.len();
-        let expected_schema = if self.copy.is_some() {
-            super::word_copy_types::RESPONSE_COPY_SCHEMA
-        } else {
-            RESPONSE_ENTRY_SCHEMA
-        };
         if self.schema != expected_schema
             || model.completion.is_none()
             || self.rows.len() > RESPONSE_ENTRY_ROWS
@@ -84,7 +84,7 @@ impl ResponseEntryModel {
                 .windows(2)
                 .any(|pair| pair[0].feature >= pair[1].feature)
             || self.rows.iter().any(|row| {
-                row.feature.kind >= (RESPONSE_ENTRY_FEATURES * 2) as u8
+                row.feature.kind >= feature_kinds
                     || row.default_score != 0
                     || row.postings.len() > RESPONSE_ENTRY_POSTINGS
                     || row.postings.iter().collect::<BTreeSet<_>>().len() != row.postings.len()
@@ -125,6 +125,19 @@ impl ResponseEntryModel {
         {
             return Err(Error("invalid learned response-entry artifact".into()));
         }
+        Ok(())
+    }
+
+    pub(super) fn validate(&self, model: &Model) -> Result<()> {
+        self.validate_shape(
+            model,
+            (RESPONSE_ENTRY_FEATURES * 2) as u8,
+            if self.copy.is_some() {
+                super::word_copy_types::RESPONSE_COPY_SCHEMA
+            } else {
+                RESPONSE_ENTRY_SCHEMA
+            },
+        )?;
         let mut baseline = model.clone();
         baseline.response_entry = None;
         baseline.refresh_identity()?;
@@ -449,6 +462,157 @@ impl Model {
             selected_entry_epoch: entry_fit.selected_epoch, selected_continuation_epoch: continuation_fit.as_ref().map_or(0, |fit| fit.selected_epoch), config,
             tokenization_law: "Canonical frozen model.encode(response) plus EOS; an overlong response is skipped whole. Entry action is supervised separately from equal-token Base; continuation frames require actual quantized Enter selection and observation. Final shared-posting entry and free-running response checks are reported.".into(),
         };
+        Ok((model, report))
+    }
+}
+
+impl Model {
+    /// Learn literal-numeric continuation after the frozen model selects NoRead.
+    /// The first token, numeric admission, source choice and copied payloads are
+    /// never teacher-forced. Later tokens use the existing sparse entry learner.
+    pub fn fit_no_read_completion(
+        &self,
+        documents: &[ValueExample],
+        config: ResponseEntryFitConfig,
+    ) -> Result<(Model, serde_json::Value)> {
+        self.validate()?;
+        if self.no_read_completion.is_some()
+            || super::role_read::head(self).is_none()
+            || documents.is_empty()
+            || documents.len() > 1024
+            || documents
+                .iter()
+                .any(|d| d.prompt.len().saturating_add(d.response.len()) > 65536)
+            || !(1..=64).contains(&config.epochs)
+            || !config.learning_rate.is_finite()
+            || !(0.0001..=1.0).contains(&config.learning_rate)
+            || !(1..=RESPONSE_ENTRY_POSITIONS).contains(&config.max_positions)
+        {
+            return Err(Error(
+                "invalid NoRead completion source/configuration/parent".into(),
+            ));
+        }
+        let mut ids = BTreeSet::new();
+        let mut receipts = Vec::new();
+        let mut frames = Vec::new();
+        let mut admitted = Vec::new();
+        let mut skipped = Vec::new();
+        for d in documents {
+            if d.id.trim().is_empty() || !ids.insert(&d.id) {
+                return Err(Error("NoRead completion source IDs conflict".into()));
+            }
+            receipts.push(super::training::receipt(&Document {
+                id: d.id.clone(),
+                text: serde_json::to_string(&(&d.prompt, &d.response))
+                    .map_err(|e| Error(e.to_string()))?,
+            }));
+            let mut targets = self.encode(&d.response)?;
+            targets.push(EOS);
+            if targets.len() < 2
+                || targets.len() > usize::from(RESPONSE_ENTRY_STEPS)
+                || frames.len().saturating_add(targets.len() - 1) > config.max_positions
+            {
+                skipped.push(serde_json::json!({"id":d.id,"reason":"whole_response_bound"}));
+                continue;
+            }
+            let mut session = response_session(self, &d.prompt)?;
+            if session.values.as_ref().is_none_or(|v| {
+                !super::word_copy_runtime::literal_no_read_eligible(
+                    v,
+                    &mut super::word_copy_types::WordCopyWork::default(),
+                )
+            }) {
+                skipped
+                    .push(serde_json::json!({"id":d.id,"reason":"outside_literal_numeric_scope"}));
+                continue;
+            }
+            let prediction = session.predict(self)?;
+            if prediction.token != targets[0]
+                || session.word_copy_decision().is_none_or(|p| {
+                    p.action != WordCopyAction::NoRead || p.token != prediction.token
+                })
+            {
+                skipped.push(serde_json::json!({"id":d.id,"reason":"frozen_parent_did_not_select_target_NoRead"}));
+                continue;
+            }
+            session.observe(self, prediction.token)?;
+            for &target in &targets[1..] {
+                let baseline = session.predict(self)?.token;
+                if session.response_entry.as_ref().is_none_or(|s| !s.active)
+                    || session
+                        .word_copy
+                        .as_ref()
+                        .and_then(|c| c.read_commit)
+                        .is_none_or(|c| c.source.is_some())
+                {
+                    return Err(Error(
+                        "NoRead continuation lost actual committed entry".into(),
+                    ));
+                }
+                let (features, len) = super::word_copy_runtime::prefix_features(
+                    self,
+                    session
+                        .response_entry
+                        .as_ref()
+                        .ok_or_else(|| Error("NoRead entry absent".into()))?,
+                    session
+                        .values
+                        .as_ref()
+                        .ok_or_else(|| Error("NoRead values absent".into()))?,
+                    Control::Full,
+                    &mut super::word_copy_types::WordCopyWork::default(),
+                );
+                frames.push(Frame {
+                    features,
+                    len,
+                    target,
+                    baseline,
+                });
+                session.observe(self, target)?;
+            }
+            admitted.push(d.id.clone());
+        }
+        if frames.is_empty() {
+            return Err(Error(
+                "no actual NoRead continuation training frames".into(),
+            ));
+        }
+        let fit = fit_sparse_frames(
+            &frames,
+            ValueCompletionFitConfig {
+                epochs: config.epochs,
+                learning_rate: config.learning_rate,
+                max_positions: config.max_positions,
+            },
+            RESPONSE_ENTRY_ROWS,
+            RESPONSE_ENTRY_ASSOCIATIONS,
+            0,
+        )?;
+        let report = serde_json::json!({"schema":"uor-r4.no-read-completion-fit/1","parent":self.artifact_cid(),
+            "documents":documents.len(),"admitted":admitted,"skipped":skipped,"positions":frames.len(),
+            "correct_positions":fit.correct,"loss":fit.loss,"selected_epoch":fit.selected_epoch,
+            "rows":fit.rows.len(),"associations":fit.learned_associations,
+            "dropped_rows":fit.dropped_row_events,"dropped_associations":fit.dropped_association_events,
+            "scope":"Literal-numeric continuation only after actual frozen-parent NoRead. Teacher-forced token learning is not free-generation acceptance; all parent parameters preserved."});
+        let mut model = self.clone();
+        model.no_read_completion = Some(ResponseEntryModel {
+            schema: NO_READ_COMPLETION_SCHEMA.into(),
+            baseline_artifact: self.artifact_cid.clone(),
+            rows: fit.rows,
+            global_postings: fit.global_postings,
+            fit_config: [
+                config.epochs as u64,
+                config.learning_rate.to_bits(),
+                config.max_positions as u64,
+                fit.selected_epoch as u64,
+                fit.selected_epoch as u64,
+            ],
+            fit_positions: frames.len(),
+            training: receipts,
+            copy: None,
+        });
+        model.refresh_identity()?;
+        model.validate()?;
         Ok((model, report))
     }
 }

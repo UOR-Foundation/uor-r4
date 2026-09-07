@@ -313,6 +313,8 @@ pub struct TrainingProgress {
 #[serde(try_from = "ModelWire")]
 pub struct Model {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    no_read_completion: Option<response_entry_types::ResponseEntryModel>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     typed_routing: Option<typed_routing::TypedRouting>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     typed_roles: Option<typed_routing::TypedRouting>,
@@ -353,6 +355,8 @@ pub struct Model {
 #[serde(deny_unknown_fields)]
 struct ModelWire {
     #[serde(default)]
+    no_read_completion: Option<response_entry_types::ResponseEntryModel>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     typed_routing: Option<typed_routing::TypedRouting>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     typed_roles: Option<typed_routing::TypedRouting>,
@@ -392,6 +396,7 @@ impl TryFrom<ModelWire> for Model {
     type Error = Error;
     fn try_from(wire: ModelWire) -> Result<Self> {
         let model = Self {
+            no_read_completion: wire.no_read_completion,
             typed_routing: wire.typed_routing,
             typed_roles: wire.typed_roles,
             typed_literals: wire.typed_literals,

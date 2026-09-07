@@ -1,6 +1,8 @@
 //! Optional learned lexical-token entry and continuation at a response boundary.
 use super::*;
 
+pub(super) const NO_READ_COMPLETION_SCHEMA: &str =
+    "uor-r4.native-literal-no-read-binding-completion/1";
 pub(super) const RESPONSE_ENTRY_SCHEMA: &str = "uor-r4.native-response-entry/1";
 pub(super) const RESPONSE_ENTRY_FEATURES: usize = 16;
 pub(super) const RESPONSE_ENTRY_CANDIDATES: usize = 16;
