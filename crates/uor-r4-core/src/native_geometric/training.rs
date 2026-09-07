@@ -178,6 +178,7 @@ impl Trainer {
             dependent_read: None,
             typed_routing: None,
             joint_admission: None,
+            literal_routing_refinement: None,
             typed_roles: None,
             no_read_completion: None,
             typed_literals: None,
@@ -516,6 +517,47 @@ impl Model {
     }
     pub(super) fn validate(&self) -> Result<()> {
         self.config.validate()?;
+        if let Some(witness) = &self.literal_routing_refinement {
+            let block = self
+                .typed_literals
+                .as_ref()
+                .ok_or_else(|| Error("literal refinement component absent".into()))?;
+            if self.joint_admission.is_none()
+                || block.router.parent_artifact != witness.previous.parent_artifact
+                || block.router.config.role_context_only
+                    != witness.previous.config.role_context_only
+                || witness.previous.codes.iter().any(|old| {
+                    block
+                        .router
+                        .codes
+                        .binary_search_by_key(&old.feature, |c| c.feature)
+                        .is_err()
+                })
+            {
+                return Err(Error("invalid literal refinement support".into()));
+            }
+            let mut parent = self.clone();
+            parent.literal_routing_refinement = None;
+            parent
+                .typed_literals
+                .as_mut()
+                .ok_or_else(|| Error("literal refinement absent".into()))?
+                .router = witness.previous.clone();
+            parent.refresh_identity()?;
+            if parent.artifact_cid != witness.parent_artifact {
+                return Err(Error("literal refinement parent differs".into()));
+            }
+            parent.validate()?;
+            block.validate(self, true)?;
+            let mut duplicate = self.clone();
+            duplicate.refresh_identity()?;
+            if duplicate.artifact_cid != self.artifact_cid
+                || duplicate.uor_model_address != self.uor_model_address
+            {
+                return Err(Error("literal refinement identity differs".into()));
+            }
+            return Ok(());
+        }
         if let Some(gate) = &self.joint_admission {
             if self.typed_literals.is_none() || self.source_routing.is_none() {
                 return Err(Error(

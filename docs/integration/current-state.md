@@ -1,6 +1,42 @@
 # Current native geometric AI work
 
-## Literal numeric admission — #1139 / #1140, 2026-09-07 UTC
+## Order-robust literal operand selection — #1139 / #1140, 2026-09-07
+
+**Retain `e1ef0a5d` at bounded literal operand-selection scope.** The
+[result](../native_geometric_literal_binding_1139.md) and
+[evidence](../evidence/native_geometric_literal_binding_1139.json) bind the actual
+Rust continuation. The existing literal router retains its dictionary and feature
+law, adds all 52 observed missing codes to the prior 567, and learns exact
+query-to-cue binding through the same signed-H4 fold. Every other parameter is
+fixed; an explicit witness reconstructs the complete `433e3807` parent.
+
+Complete construction improves **571/631 to 630/631**, with 59 gains and no lost
+correct answer. Disabling refinement restores every parent answer. Open answers
+improve **4/8 to 8/8**; fresh name/value/place/order answers improve **8/16 to
+16/16**, versus **8/16** for matched equality. Both fits finish their schedule.
+The original 615 construction cases improve 563/615 to 614/615. The remaining
+construction error is a supported-location abstention. The previous admission
+set improves 8/12 to 10/12; its two location errors remain. All prior output,
+relation-write and session preservation passes, including both source/NoRead sets.
+
+Thirty-two repaired Rust continuations compile and execute their assertions.
+Actual parent/mutation, causal commitment, checkpoint and zero-allocation checks
+pass, and the rebuilt public CLI returns the correct reordered fresh value.
+Eighteen warm prediction/observation samples measure median 0.120 ms and maximum
+0.216 ms, excluding loading, encoding, ingestion and checkpoints. No end-to-end,
+energy, general-language or frontier capability follows. Artifact size is
+11,519,373 bytes. Model work totals 242.829 seconds and engineering 637.694
+seconds; cumulative model use is 4011.935/4170 seconds, leaving 158.065 seconds.
+Sampled storage growth is 298,889,216 bytes within the 384 MiB cap. No budget
+extension, external compute or deletion occurred. All prior material remains.
+
+**Next: order-robust supported-source/NoRead selection** using the existing source
+router and exact occurrence metadata, preserving this literal binding and memory.
+The surviving location errors provide the concrete starting point. Use new
+construction/development and fresh cases; do not tune on the just-opened sixteen.
+Refresh the full remaining resource projection before another run.
+
+## Previous checkpoint: literal numeric admission — #1139 / #1140, 2026-09-07 UTC
 
 **Retain `433e3807` as a bounded construction admission repair.** The
 [result](../native_geometric_joint_admission_1139.md) and

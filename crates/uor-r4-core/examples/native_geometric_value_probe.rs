@@ -21,6 +21,8 @@ use uor_r4_core::native_geometric::{
 type ProbeResult<T> = Result<T, Box<dyn Error>>;
 #[path = "native_geometric_value_probe/joint_admission.rs"]
 mod joint_admission;
+#[path = "native_geometric_value_probe/literal_binding.rs"]
+mod literal_binding;
 #[path = "native_geometric_value_probe/relation_memory.rs"]
 mod relation_memory;
 #[path = "native_geometric_value_probe/role_read.rs"]
@@ -977,6 +979,9 @@ fn evaluate_binding(
 }
 
 fn main() -> ProbeResult<()> {
+    if std::env::args().nth(1).as_deref() == Some("literal-binding") {
+        return literal_binding::run(&std::env::args().skip(2).collect::<Vec<_>>());
+    }
     if std::env::args().nth(1).as_deref() == Some("joint-admission") {
         return joint_admission::run(&std::env::args().skip(2).collect::<Vec<_>>());
     }
