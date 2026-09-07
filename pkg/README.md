@@ -67,8 +67,12 @@ improves new complete transfers8/16 to16/16 but regresses computed-result and
 identifier-copy cases. The [protected admission repair](docs/native_geometric_literal_admission_1139.md)
 now retains a separate literal table with inherited computed roles unchanged:
 all prior preservation is restored, new complete transfer is16/16, and eight
-identifier-return functions execute24 assertions. Four abstention texts still
-fail; routing to an appropriate word answer or abstention is next.
+identifier-return functions execute24 assertions. The subsequent
+[committed NoRead completion](docs/native_geometric_no_read_completion_1139.md)
+preserves that model and repairs looping literal-context abstentions: the exposed
+set improves12/16 to14/16 and a new set14/16 to15/16. Identifier returns remain8/8
+and complete three-turn computations16/16. The remaining failure selects a
+retained but unsupported word; joint source/NoRead selection is next.
 General prose/syntax/reasoning and frontier capability remain unqualified. Follow
 the current-state pointer for artifacts, costs and the next implementation.
 
