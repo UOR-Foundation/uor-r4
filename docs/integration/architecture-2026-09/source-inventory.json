@@ -241,13 +241,48 @@
       "scope": "Referenced source or evidence entry; exact inspection scope is in the review supplements."
     },
     {
+      "path": "crates/uor-r4-core/src/transformerless/bott_fock.rs",
+      "sha256": "b4b4dd78b1927dc36b5177130ab19f20271a5c6b9ddcaf51403a9a027bdf8223",
+      "scope": "Referenced source or evidence entry; exact inspection scope is in the review supplements."
+    },
+    {
       "path": "crates/uor-r4-core/src/transformerless/compiler.rs",
       "sha256": "65252a284403dd1b3c1a491a5c9a00904bde273ebeefbad8e1fccff2a193be60",
       "scope": "Referenced source or evidence entry; exact inspection scope is in the review supplements."
     },
     {
+      "path": "crates/uor-r4-core/src/transformerless/endomorphism.rs",
+      "sha256": "c68e161e1dcb99c2a0b41eb53a95d2d403a7a4b99a96b9e9606a3265d2c02e15",
+      "scope": "Referenced source or evidence entry; exact inspection scope is in the review supplements."
+    },
+    {
+      "path": "crates/uor-r4-core/src/transformerless/lie_jordan.rs",
+      "sha256": "d7dd47b5c1a2a2a650e31a0fb3ee9445bb7f8c8fb4f75f26dd8477c4ab5b2742",
+      "scope": "Referenced source or evidence entry; exact inspection scope is in the review supplements."
+    },
+    {
       "path": "crates/uor-r4-core/tests/prime_route_attention_958.rs",
       "sha256": "34afda915c2b4696c09e778902cae92ab19f9e63127e3c41ae6289de8325159d",
+      "scope": "Referenced source or evidence entry; exact inspection scope is in the review supplements."
+    },
+    {
+      "path": "crates/uor-r4-graph-certify/src/holographic_encoding.rs",
+      "sha256": "a0edbc1b0b780de87ecdee09785404c737c1594889e04b1b1c646f64cd0ace29",
+      "scope": "Referenced source or evidence entry; exact inspection scope is in the review supplements."
+    },
+    {
+      "path": "crates/uor-r4-graph-certify/src/predictive_sufficiency.rs",
+      "sha256": "5a0f515973101dd6ae83e9d5a1922243ee317639793faedc02153cb9d2ef7a49",
+      "scope": "Referenced source or evidence entry; exact inspection scope is in the review supplements."
+    },
+    {
+      "path": "crates/uor-r4-graph-compiler/src/quantum_cover.rs",
+      "sha256": "5377a295184b1baf3dab4d4f567bba9c984c52b2abc6927547696f04f9416077",
+      "scope": "Referenced source or evidence entry; exact inspection scope is in the review supplements."
+    },
+    {
+      "path": "crates/uor-r4-graph-compiler/src/rate_distortion_compression.rs",
+      "sha256": "90387baca36b3e14d738ca68ee3909d09a16b8fd48680f3f370fe1861bab6ede",
       "scope": "Referenced source or evidence entry; exact inspection scope is in the review supplements."
     },
     {
@@ -298,6 +333,11 @@
     {
       "path": "crates/uor-r4-naf/src/lib.rs",
       "sha256": "2e769ce4279533e5c355aea8a75dd006adc2dc13ae9077bd4c1dd790ef8763ab",
+      "scope": "Referenced source or evidence entry; exact inspection scope is in the review supplements."
+    },
+    {
+      "path": "crates/uor-r4-proof-model/src/lib.rs",
+      "sha256": "5a5f7efac73fad6bd2416a753ec29e90a5266eed7fed2b93a5620c6bab61e4c0",
       "scope": "Referenced source or evidence entry; exact inspection scope is in the review supplements."
     },
     {
