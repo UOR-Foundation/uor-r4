@@ -125,7 +125,11 @@ retain `0b12b604` with the corrected forward-only runtime. Without a new fit,
 complete values survive window eviction, repeated assertions, corrections and
 conflicts: 6/6 construction, 6/6 open and 6/6 previously exposed session turns pass.
 All prior preservation passes. Reverse statements retain their existing single-word
-behavior; role-aware endpoints and broader phrase boundaries remain the next need.
+behavior. The [reverse endpoint continuation](docs/native_geometric_reverse_spans_1140.md)
+now retains `321e990f`, reusing the selected terminal word to bound the phrase.
+Construction improves 3/6 to 6/6, open and fresh turns pass 6/6 each, and short
+reads pass 3/3 with selected preservation intact. Unfamiliar introductions and
+wider gaps still fail; learned phrase starts are the next direction.
 General prose/syntax/reasoning and frontier capability remain unqualified. Follow
 the current-state pointer for artifacts, costs and the next implementation.
 
