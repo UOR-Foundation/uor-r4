@@ -120,7 +120,12 @@ stop or continue at the same word in different source roles. Construction reache
 14/14, open 6/6 and fresh 9/9 (6/9 with the pair disabled), while preserving all
 663 earlier construction answers and the 24/24 exposed set. Unseen connectors
 and double-space gaps still fail 0/2; general phrase understanding is unqualified.
-The next step is bounded value-extent binding and retained multiword memory.
+The subsequent [retained relation spans](docs/native_geometric_retained_spans_1140.md)
+retain `0b12b604` with the corrected forward-only runtime. Without a new fit,
+complete values survive window eviction, repeated assertions, corrections and
+conflicts: 6/6 construction, 6/6 open and 6/6 previously exposed session turns pass.
+All prior preservation passes. Reverse statements retain their existing single-word
+behavior; role-aware endpoints and broader phrase boundaries remain the next need.
 General prose/syntax/reasoning and frontier capability remain unqualified. Follow
 the current-state pointer for artifacts, costs and the next implementation.
 

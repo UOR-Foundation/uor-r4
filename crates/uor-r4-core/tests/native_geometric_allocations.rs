@@ -295,6 +295,24 @@ fn native_kernel_source_has_no_forbidden_arithmetic_or_float_types() {
             "native source span",
             include_str!("../src/native_geometric/source_span.rs"),
         ),
+        (
+            "native relation memory",
+            region(
+                include_str!("../src/native_geometric/relation.rs"),
+                "// NATIVE_GEOMETRIC_INTEGER_KERNEL_BEGIN",
+                "// NATIVE_GEOMETRIC_INTEGER_KERNEL_END",
+            )
+            .1,
+        ),
+        (
+            "native retained relation extent",
+            region(
+                include_str!("../src/native_geometric/relation_span.rs"),
+                "// NATIVE_GEOMETRIC_INTEGER_KERNEL_BEGIN",
+                "// NATIVE_GEOMETRIC_INTEGER_KERNEL_END",
+            )
+            .1,
+        ),
         ("native completion seed", seed),
         ("native numeral codec", numeral),
         ("native whole-word codec", lexemes),
@@ -2102,4 +2120,64 @@ fn native_source_span_preserves_commit_checkpoints_and_zero_allocation() {
     times[..samples].sort_unstable();
     println!("span uncached warm predict+observe samples={samples} median_ns={} max_ns={} (loading, ingestion and checkpoints excluded)", times[samples/2], times[samples-1]);
     println!("parent restoration, malformed code rejection, source commitment, interrupted copy, every-byte checkpoint and zero allocations PASS");
+}
+
+#[test]
+#[ignore = "requires the retained relation span artifact; charged model work"]
+fn native_retained_relation_span_checkpoint_and_allocation() {
+    use uor_r4_core::native_geometric::{Control, Model};
+    let path = std::env::var("R4_RETAINED_SPAN_MODEL").unwrap();
+    let model = Model::from_bytes(&std::fs::read(path).unwrap()).unwrap();
+    let mut session = model.session(Control::Full).unwrap();
+    session.observe(&model, 0).unwrap();
+    for token in model.encode("ada in New ").unwrap() {
+        session.observe(&model, token).unwrap();
+    }
+    let checkpoint = session.checkpoint().unwrap();
+    let wire: serde_json::Value = serde_json::from_slice(&checkpoint).unwrap();
+    assert!(wire["values"]["relations"]["pending"].is_object());
+    assert_eq!(wire["values"]["relations"]["next_id"], 1);
+    session = model.restore_session(&checkpoint).unwrap();
+    let rest = format!("York. {}Where is ada? Answer:", "quiet sky. ".repeat(96));
+    let tokens = model.encode(&rest).unwrap();
+    ALLOCATIONS.with(|v| v.set(0));
+    BYTES.with(|v| v.set(0));
+    MEASURING.with(|v| v.set(true));
+    for token in tokens {
+        session.observe(&model, token).unwrap();
+    }
+    session.begin_response(&model).unwrap();
+    MEASURING.with(|v| v.set(false));
+    let saved = session.checkpoint().unwrap();
+    let mut bad: serde_json::Value = serde_json::from_slice(&saved).unwrap();
+    bad["values"]["relations"]["records"][0]["span"]["len"] = 29.into();
+    assert!(model
+        .restore_session(&serde_json::to_vec(&bad).unwrap())
+        .is_err());
+    let mut out = [1; 32];
+    let mut used = 0;
+    let mut times = [0u128; 32];
+    loop {
+        let mut restored = model
+            .restore_session(&session.checkpoint().unwrap())
+            .unwrap();
+        let predicted = restored.predict(&model).unwrap();
+        MEASURING.with(|v| v.set(true));
+        let start = std::time::Instant::now();
+        let actual = session.predict(&model).unwrap();
+        session.observe(&model, actual.token).unwrap();
+        times[used] = start.elapsed().as_nanos();
+        MEASURING.with(|v| v.set(false));
+        assert_eq!(actual, predicted);
+        out[used] = actual.token;
+        used += 1;
+        if actual.token == 1 || used == 32 {
+            break;
+        }
+    }
+    assert_eq!(out[used - 1], 1);
+    assert_eq!(model.decode(&out[..used]).unwrap(), b" New York.\n");
+    assert_eq!((ALLOCATIONS.with(Cell::get), BYTES.with(Cell::get)), (0, 0));
+    times[..used].sort_unstable();
+    println!("retained span pending/atomic write, malformed extent, eviction, each-step checkpoint and zero allocation PASS; uncached predict+observe samples={used} median_ns={} max_ns={} (includes initial selection; excludes load/encoding/ingestion/checkpoints)",times[used/2],times[used-1]);
 }

@@ -12,7 +12,7 @@ fn extended_length(total: u8, next: u8) -> Option<u8> {
 }
 
 /// Only frozen query occurrences have an adjacent source sequence. Persistent
-/// relation/dependency values deliberately retain their single-word behavior.
+/// extents read their separate committed payload through len/byte below.
 pub(super) fn edge(values: &ValueState, origin: u8, work: &mut WordCopyWork) -> Option<(u8, u8)> {
     let words = values.lexemes.as_ref()?;
     work.selector.metadata_reads = work.selector.metadata_reads.saturating_add(1);
@@ -41,6 +41,26 @@ pub(super) fn features(
     paired: bool,
     work: &mut WordCopyWork,
 ) -> ([ValueFeature; 3], usize) {
+    word_features(
+        model,
+        super::relation::source(values, origin),
+        super::relation::source(values, next),
+        separator,
+        contextual,
+        paired,
+        work,
+    )
+}
+
+fn word_features(
+    model: &Model,
+    original: Option<&super::value_lexemes::WordAtom>,
+    next: Option<&super::value_lexemes::WordAtom>,
+    separator: u8,
+    contextual: bool,
+    paired: bool,
+    work: &mut WordCopyWork,
+) -> ([ValueFeature; 3], usize) {
     let mut features = [
         ValueFeature {
             kind: 0,
@@ -53,11 +73,7 @@ pub(super) fn features(
     if !contextual {
         return (features, 1);
     }
-    if let Some((head, word)) = model
-        .source_span_context
-        .as_ref()
-        .zip(super::relation::source(values, next))
-    {
+    if let Some((head, word)) = model.source_span_context.as_ref().zip(next) {
         work.word_record_reads = work.word_record_reads.saturating_add(1);
         let prime = super::word_copy_runtime::address_in(head, word, work);
         if prime != 0 {
@@ -67,7 +83,7 @@ pub(super) fn features(
                 b: 0,
             };
             if paired {
-                if let Some(original) = super::relation::source(values, origin) {
+                if let Some(original) = original {
                     work.word_record_reads = work.word_record_reads.saturating_add(1);
                     let prior = original.predecessors[0];
                     let cue = super::value_lexemes::WordAtom {
@@ -90,6 +106,59 @@ pub(super) fn features(
     (features, 1)
 }
 
+/// Same learned edge law for ingestion and frozen-query copying.
+pub(super) fn learned_advance(
+    model: &Model,
+    original: &super::value_lexemes::WordAtom,
+    next: &super::value_lexemes::WordAtom,
+    separator: u8,
+    control: Control,
+    work: &mut WordCopyWork,
+) -> bool {
+    let (features, count) = word_features(
+        model,
+        Some(original),
+        Some(next),
+        separator,
+        model.source_span_context.is_some() && control != Control::SourceSpanContextDisabled,
+        control != Control::SourceSpanPairDisabled,
+        work,
+    );
+    advance_features(model, &features[..count], control, work)
+}
+
+fn advance_features(
+    model: &Model,
+    features: &[ValueFeature],
+    control: Control,
+    work: &mut WordCopyWork,
+) -> bool {
+    let Some(block) = model
+        .source_span
+        .as_ref()
+        .filter(|_| control != Control::SourceSpanDisabled)
+    else {
+        return false;
+    };
+    work.routing.emission_queries = work.routing.emission_queries.saturating_add(1);
+    if block
+        .codes
+        .binary_search_by(|c| {
+            work.routing.comparisons = work.routing.comparisons.saturating_add(1);
+            work.routing.logical_bytes_read = work.routing.logical_bytes_read.saturating_add(17);
+            c.feature.cmp(&features[0])
+        })
+        .is_err()
+    {
+        return false;
+    }
+    let state = block.encode(model, features, control, &mut work.routing);
+    let stop = block.score(model, state, 0, &mut work.routing);
+    let advance = block.score(model, state, 1, &mut work.routing);
+    work.routing.comparisons = work.routing.comparisons.saturating_add(1);
+    advance > stop
+}
+
 pub(super) fn extent(
     model: &Model,
     values: &ValueState,
@@ -97,7 +166,7 @@ pub(super) fn extent(
     control: Control,
     work: &mut WordCopyWork,
 ) -> u8 {
-    let Some(block) = model
+    let Some(_) = model
         .source_span
         .as_ref()
         .filter(|_| control != Control::SourceSpanDisabled)
@@ -125,26 +194,7 @@ pub(super) fn extent(
             control != Control::SourceSpanPairDisabled,
             work,
         );
-        let feature = features[0];
-        // Unseen transitions default to the inherited finish behavior.
-        work.routing.emission_queries = work.routing.emission_queries.saturating_add(1);
-        if block
-            .codes
-            .binary_search_by(|c| {
-                work.routing.comparisons = work.routing.comparisons.saturating_add(1);
-                work.routing.logical_bytes_read =
-                    work.routing.logical_bytes_read.saturating_add(17);
-                c.feature.cmp(&feature)
-            })
-            .is_err()
-        {
-            break;
-        }
-        let state = block.encode(model, &features[..count], control, &mut work.routing);
-        let stop = block.score(model, state, 0, &mut work.routing);
-        let advance = block.score(model, state, 1, &mut work.routing);
-        work.routing.comparisons = work.routing.comparisons.saturating_add(1);
-        if advance <= stop {
+        if !advance_features(model, &features[..count], control, work) {
             break;
         }
         let Some(word) = super::relation::source(values, next) else {
@@ -163,12 +213,28 @@ pub(super) fn extent(
     extra
 }
 
+fn retained(values: &ValueState, origin: u8) -> Option<&super::relation_span::RelationSpan> {
+    let index = origin.checked_sub(super::relation::RELATION_SOURCE)?;
+    values
+        .relations
+        .as_ref()?
+        .records
+        .get(usize::from(index))
+        .filter(|r| r.id != 0)?
+        .span
+        .as_ref()
+}
+
 pub(super) fn len(
     values: &ValueState,
     origin: u8,
     extra: u8,
     work: &mut WordCopyWork,
 ) -> Option<u8> {
+    if let Some(span) = retained(values, origin) {
+        work.word_record_reads = work.word_record_reads.saturating_add(1);
+        return (extra == 0).then_some(span.len);
+    }
     let mut total = super::relation::source(values, origin)?.len;
     work.word_record_reads = work.word_record_reads.saturating_add(1);
     let mut current = origin;
@@ -190,6 +256,10 @@ pub(super) fn byte(
     mut cursor: u8,
     work: &mut WordCopyWork,
 ) -> Option<u8> {
+    if let Some(span) = retained(values, origin) {
+        work.word_record_reads = work.word_record_reads.saturating_add(1);
+        return (extra == 0 && cursor < span.len).then(|| span.bytes[usize::from(cursor)]);
+    }
     let mut current = origin;
     for step in 0..=extra {
         let word = super::relation::source(values, current)?;

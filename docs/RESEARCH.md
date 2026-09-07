@@ -7,6 +7,21 @@ implemented operations, measured behavior and proposed integration. The native
 model was d59070c2 at the review date; no model experiment was
 rerun for that review.
 
+## Retained relation spans — bounded positive after runtime correction, 2026-09-07
+
+The [result](native_geometric_retained_spans_1140.md) retains `0b12b604` with the
+corrected forward-only runtime. It reuses the accepted geometric extent operator
+without fitting. Complete values survive eviction, repeated assertions,
+same-prefix corrections and conflicts on 6/6 construction and 6/6 open session
+turns; six previously exposed turns replay 6/6. All prior preservation passes.
+The initial runtime's reverse-statement extension regressed long-window answers
+to 26/28 and is preserved separately. Restricting deferred extent to the writer's
+forward value restores 28/28 while keeping reverse single-word behavior. Source
+identities distinguish the two runtimes sharing the same learned artifact.
+This is bounded persistent value transport, not a new angular advantage,
+broad phrase understanding, reasoning or energy result. The current-state
+pointer records remaining resources and the role-aware endpoint successor.
+
 ## Context-sensitive source extent — bounded positive, 2026-09-07
 
 The [result](native_geometric_span_context_1139.md) retains `419ba3a7` over
