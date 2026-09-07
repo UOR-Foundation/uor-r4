@@ -1,5 +1,32 @@
 # Current native geometric AI work
 
+## Reverse relation endpoints — 2026-09-07
+
+**Retain `321e990f` at bounded reverse-value scope.** The
+[result](../native_geometric_reverse_spans_1140.md) and
+[evidence](../evidence/native_geometric_reverse_spans_1140.json) record reuse of
+the existing learned writer endpoint and H4 continuation operator. The full
+`0b12b604` parent is fixed; no fit is added. Earlier starts must reach the
+selected final value word exactly. The selected word keeps its identity, with
+the earlier start retained separately; linker/owner words cannot enter the value.
+
+Construction improves 3/6 to 6/6; open turns pass 6/6, short reads 3/3 and fresh
+turns after selection 6/6. All 663 prior construction answers, all 18 earlier
+forward session turns, 28/28 long-window and 48/48 dependent reads, prior
+source-span panels and other selected preservation pass. Actual-artifact
+parent/start rejection, anchor preservation, checkpoints and zero-allocation
+checks pass. Kernel maximum 0.152 ms excludes loading/input/checkpoint host work;
+energy remains unmeasured. Root CLI and Studio are `NOT_RUN` for this artifact.
+
+**Next: learn phrase-start selection instead of longest admitted prefix.**
+The plain-introduction and two-space diagnostics remain 0/2, with no retry on
+those opened cases. Start selection and exact separator representation are
+separate missing pieces. Use new construction/open contrasts and preserve the
+opened diagnostics. The owner-directed cycle explicitly added 120 seconds to
+the cumulative ceiling (4,290 to 4,410); actual model work was 43.770 seconds.
+Cumulative use is 4,327.369/4,410, leaving 82.631 seconds. Project the complete
+successor before execution; no global timer reset or external compute occurred.
+
 ## Retained multiword relation values — 2026-09-07
 
 **Retain `0b12b604` with the corrected forward-only runtime.** The

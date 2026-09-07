@@ -7,6 +7,20 @@ implemented operations, measured behavior and proposed integration. The native
 model was d59070c2 at the review date; no model experiment was
 rerun for that review.
 
+## Reverse relation endpoints — bounded positive, 2026-09-07
+
+The [result](native_geometric_reverse_spans_1140.md) retains `321e990f` over
+`0b12b604` without fitting. The learned writer supplies a terminal endpoint;
+the existing geometric continuation operator admits earlier bounded starts.
+Construction improves 3/6 to 6/6, open passes 6/6, short reads 3/3 and fresh
+turns after selection 6/6. All selected prior outputs, writes and sessions pass.
+The exact anchor identity remains distinct from complete payload extent.
+Longest admitted prefix overextends an unfamiliar plain introduction, while a
+two-space gap truncates: diagnostics 0/2, preserved without retuning. This is
+bounded value retention, not general phrase understanding or an energy result.
+The next direction is learned start selection, with separator representation
+tracked separately. Current-state records the remaining cumulative allocation.
+
 ## Retained relation spans — bounded positive after runtime correction, 2026-09-07
 
 The [result](native_geometric_retained_spans_1140.md) retains `0b12b604` with the

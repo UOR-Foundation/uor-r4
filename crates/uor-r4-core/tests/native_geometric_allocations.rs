@@ -2181,3 +2181,63 @@ fn native_retained_relation_span_checkpoint_and_allocation() {
     times[..used].sort_unstable();
     println!("retained span pending/atomic write, malformed extent, eviction, each-step checkpoint and zero allocation PASS; uncached predict+observe samples={used} median_ns={} max_ns={} (includes initial selection; excludes load/encoding/ingestion/checkpoints)",times[used/2],times[used-1]);
 }
+
+#[test]
+#[ignore = "requires the reverse relation span artifact; charged model work"]
+fn native_reverse_relation_span_checkpoint_and_allocation() {
+    use uor_r4_core::native_geometric::{Control, Model};
+    let bytes = std::fs::read(std::env::var("R4_REVERSE_SPAN_MODEL").unwrap()).unwrap();
+    let model = Model::from_bytes(&bytes).unwrap();
+    let mut wrong: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    wrong["relation_reverse_spans"] = "wrong-parent".into();
+    assert!(Model::from_bytes(&serde_json::to_vec(&wrong).unwrap()).is_err());
+    let mut samples = Vec::new();
+    for padding in [String::new(), "quiet sky. ".repeat(96)] {
+        let mut s = model.session(Control::Full).unwrap();
+        s.observe(&model, 0).unwrap();
+        let prompt = format!("Orin Grove holds nelra. {padding}Where is nelra? Answer:");
+        let tokens = model.encode(&prompt).unwrap();
+        ALLOCATIONS.with(|v| v.set(0));
+        BYTES.with(|v| v.set(0));
+        MEASURING.with(|v| v.set(true));
+        for token in tokens {
+            s.observe(&model, token).unwrap();
+        }
+        s.begin_response(&model).unwrap();
+        MEASURING.with(|v| v.set(false));
+        let checkpoint = s.checkpoint().unwrap();
+        let wire: serde_json::Value = serde_json::from_slice(&checkpoint).unwrap();
+        let record = &wire["values"]["relations"]["records"][0];
+        assert!(record["span"]["start"].is_object());
+        assert_eq!(record["span"]["terminal"], record["value"]);
+        let mut malformed = wire.clone();
+        malformed["values"]["relations"]["records"][0]["span"]["start"]["byte_end"] = 999999.into();
+        assert!(model
+            .restore_session(&serde_json::to_vec(&malformed).unwrap())
+            .is_err());
+        let mut output = [1; 32];
+        let mut used = 0;
+        loop {
+            let mut restored = model.restore_session(&s.checkpoint().unwrap()).unwrap();
+            let expected = restored.predict(&model).unwrap();
+            MEASURING.with(|v| v.set(true));
+            let start = std::time::Instant::now();
+            let actual = s.predict(&model).unwrap();
+            s.observe(&model, actual.token).unwrap();
+            let elapsed = start.elapsed().as_nanos();
+            MEASURING.with(|v| v.set(false));
+            samples.push(elapsed);
+            assert_eq!(actual, expected);
+            output[used] = actual.token;
+            used += 1;
+            if actual.token == 1 || used == 32 {
+                break;
+            }
+        }
+        assert_eq!(output[used - 1], 1);
+        assert_eq!(model.decode(&output[..used]).unwrap(), b" Orin Grove.\n");
+        assert_eq!((ALLOCATIONS.with(Cell::get), BYTES.with(Cell::get)), (0, 0));
+    }
+    samples.sort_unstable();
+    println!("reverse span parent rejection, preserved terminal anchor, malformed start rejection, short/evicted reads, per-step checkpoints and zero allocations PASS; samples={} median_ns={} max_ns={} (uncached predict+observe includes initial selection; excludes load/encoding/ingestion/checkpoints)",samples.len(),samples[samples.len()/2],samples[samples.len()-1]);
+}
