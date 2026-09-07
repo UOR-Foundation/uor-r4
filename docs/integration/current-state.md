@@ -1,5 +1,35 @@
 # Current native geometric AI work
 
+## Literal numeric admission — #1139 / #1140, 2026-09-07 UTC
+
+**Retain `433e3807` as a bounded construction admission repair.** The
+[result](../native_geometric_joint_admission_1139.md) and
+[evidence](../evidence/native_geometric_joint_admission_1139.json) bind the actual
+Rust implementation and fitted artifact. A two-lane signed-H4 gate decides
+Numeric or DeferToLexical before literal payload execution, preserving every
+`d59070c2` parent parameter, computed-role behavior and the source/NoRead path.
+Construction improves 558/615 to 563/615 with no lost correct or changed remaining
+wrong answer. All five gains revert when the gate is disabled. Three repaired
+Rust identity completions compile and pass fifteen assertions.
+
+Open answers stay 4/6; first-use answers stay 8/12, identical to parent and matched
+equality. The fresh set exercises numeric admission but no lexical rejection;
+there is no new rejection-transfer or angular-advantage result. All prior output,
+write and session preservation passes, including the prior 20/20 source set.
+Actual parent/mutation, causal commitment, checkpoint, overflow and allocation
+checks pass. Eighteen warm prediction/observation samples have median 0.133 ms
+and maximum 0.182 ms, excluding loading, encoding, ingestion and checkpoints;
+energy and end-to-end latency remain unmeasured.
+
+**Next: repair order-sensitive entity-to-operand binding in the existing literal
+selector**, starting from retained wrong-entity copies and exact occurrence
+metadata. Keep the separate reversed-order source/NoRead negatives. Do not refit
+on the just-opened first-use set. This step consumed 163.480 seconds of model
+work; cumulative 3769.106/4170 seconds leaves 400.894 seconds, without extending
+the limit. The artifact is 11,397,442 bytes. All parents and evidence remain.
+Refresh the full resource projection before the next run. See the result for
+precise scope, engineering/storage costs and checks actually executed.
+
 ## Owner-requested architecture review — 2026-09-06
 
 The [source reconciliation](architecture-2026-09/README.md) covers discovered
@@ -12,11 +42,11 @@ training matmul remains permitted. Fibers and explicit vector-bundle/frame
 transport remain reusable mechanisms at their declared typed boundaries.
 
 PR #1160 merged at `aa841309`; its tree equals reviewed head `05f265ad`.
-Retain d59070c2 and every parent. The next concrete implementation is a joint
-numeric/word/NoRead decision before execution, preserving separate NoOperation
+At the review date, d59070c2 and every parent were retained. Its proposed next
+implementation was a joint numeric/word/NoRead decision before execution, preserving separate NoOperation
 and NoRead semantics, then reusable contextual transitions and emission. The
-review gives a preliminary bounded resource envelope; refresh and complete the
-cumulative projection before execution. Broader language and API capability
+review gave a preliminary resource envelope; the implementation above completed
+the cumulative projection before execution. Broader language and API capability
 precede the actual native-model integration into the GitHub Pages Studio.
 
 ## Supported-source versus NoRead selection — #1139 / #1140, 2026-09-06

@@ -18,6 +18,12 @@ pub enum ValueAction {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct ValueWork {
+    #[serde(default, skip_serializing_if = "is_zero_u64")]
+    pub admission_legality_checks: u64,
+    #[serde(default, skip_serializing_if = "is_zero_u64")]
+    pub admission_decisions: u64,
+    #[serde(default, skip_serializing_if = "is_zero_u64")]
+    pub admission_rejections: u64,
     #[serde(default, skip_serializing_if = "RoutingWork::is_empty")]
     pub routing: RoutingWork,
     #[serde(

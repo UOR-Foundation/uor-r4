@@ -4,10 +4,29 @@ The owner-requested [September architecture/source reconciliation](integration/a
 indexes the mathematical mechanisms, historical engines, contributor sources
 and Studio. It preserves results below and distinguishes available definitions,
 implemented operations, measured behavior and proposed integration. The native
-model remains d59070c2 at its recorded bounded scope; no model experiment was
+model was d59070c2 at the review date; no model experiment was
 rerun for that review.
 
-## Supported-source and NoRead selection — current bounded checkpoint, 2026-09-06
+## Literal numeric admission — current bounded checkpoint, 2026-09-07 UTC
+
+The [admission result](native_geometric_joint_admission_1139.md) retains
+`433e3807` with the complete d590 parent fixed. Reused signed-H4 selection
+learns Numeric versus DeferToLexical before literal execution. Construction
+improves 558/615 to 563/615 with zero lost correct or changed remaining wrong
+outputs; disabling the gate reproduces all parent answers. Three repaired Rust
+completions compile and pass fifteen assertions. All prior complete output,
+relation-write and persistent-session preservation passes.
+
+Open answers remain 4/6 and fresh answers 8/12 for parent, angular and equality.
+Fresh numeric admission executes, but none of the fresh location cases reaches
+the gate, so lexical-rejection transfer and angular advantage are unestablished.
+Actual causal/state/checkpoint and zero-allocation checks pass. Small warm-step
+measurements exclude loading and ingestion; energy remains unmeasured. Next is
+order-sensitive entity/operand binding in the existing literal selector, with
+separate reversed-order source/NoRead negatives preserved. General language and
+reasoning remain unqualified.
+
+## Supported-source and NoRead selection — previous bounded checkpoint, 2026-09-06
 
 The [source refinement](native_geometric_source_noread_1139.md) retains
 `d59070c2`, replacing the existing router while preserving every downstream

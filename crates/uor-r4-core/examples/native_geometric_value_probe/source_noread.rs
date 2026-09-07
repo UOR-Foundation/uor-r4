@@ -53,7 +53,7 @@ fn contrasts(prefix: &str, worlds: &[(&str, &str, &str, i64, i64)]) -> Vec<Value
     }
     docs
 }
-fn responses(
+pub(super) fn responses(
     model: &Model,
     docs: &[ValueExample],
     trace: bool,

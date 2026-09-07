@@ -247,13 +247,19 @@ retains `d59070c2`:20/20 new complete answers versus14/20 parent and10/20
 exact-code continuation, with all prior preservation. The existing router is
 warm-refined in place and its previous component verifies the full unchanged
 training parent. Combined construction improves545/603 to551/603 with no lost
-correct response. **Next: joint numerical-versus-word admission through existing
-selected operators.** The remaining supported-location case emits13 instead of
-Paris through inherited numeric selection; some older identifier requests also
-emit numbers. Learn that choice while protecting computed roles and the completed
-source/NoRead repair, then resume the broader routed-block and composition goals.
-Do not add another suffix head, observed-question parser, provider or generic
-capacity expansion for this identified decision boundary.
+correct response. The subsequent [literal numeric admission](../native_geometric_joint_admission_1139.md)
+retains `433e3807`: five construction numeric takeovers are repaired, moving
+558/615 to 563/615 while all prior output/write/session preservation passes.
+The complete parent is fixed beneath one geometric admission decision. Open
+4/6 and fresh 8/12 remain unchanged; equality ties angular, and fresh lexical
+rejection is unexercised. **Next: order-robust entity-to-operand binding within
+the existing literal selector.** Reuse exact occurrence/reference metadata to
+resolve the observed reversed-order wrong-entity Copy choices. Preserve this
+gate, computed roles and source/NoRead semantics, including the separate retained
+reversed-order abstention failures. Use a new construction/development split
+and fresh evaluation, not the just-opened cases as a tuning set. No suffix head,
+question parser, provider or general capacity increase is justified by this
+identified selection boundary.
 General named-role binding and broader Rust reasoning remain unqualified.
 No additional cache campaign is active. Follow current-state.md for artifacts
 and cumulative resources; a new issue does not reset the spent amount.

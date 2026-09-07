@@ -407,6 +407,31 @@ impl ValueState {
                 }
             }
             let (index, action, a, b) = selected?;
+            if model.joint_admission.is_some()
+                && routed.as_ref().is_some_and(|c| c.literal_component)
+                && control != Control::JointAdmissionDisabled
+            {
+                work.admission_legality_checks += 1;
+                if !super::joint_admission::legal(action, a.value, b.value) {
+                    work.overflow_rejections += 1;
+                    ceiling = Some((best, index));
+                    continue;
+                }
+            }
+            if let Some(context) = &routed {
+                if !super::joint_admission::permits(
+                    model,
+                    self,
+                    action,
+                    (a, b),
+                    best,
+                    context,
+                    control,
+                    work,
+                ) {
+                    return None;
+                }
+            }
             if let Some(value) = execute(action, a.value, b.value, work) {
                 break (action, a, b, value, best);
             }

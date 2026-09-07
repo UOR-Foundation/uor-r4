@@ -282,6 +282,15 @@ fn native_kernel_source_has_no_forbidden_arithmetic_or_float_types() {
             "native typed routing",
             include_str!("../src/native_geometric/typed_routing.rs"),
         ),
+        (
+            "native joint admission",
+            region(
+                include_str!("../src/native_geometric/joint_admission.rs"),
+                "// NATIVE_GEOMETRIC_INTEGER_KERNEL_BEGIN",
+                "// NATIVE_GEOMETRIC_INTEGER_KERNEL_END",
+            )
+            .1,
+        ),
         ("native completion seed", seed),
         ("native numeral codec", numeral),
         ("native whole-word codec", lexemes),
@@ -1594,4 +1603,146 @@ fn native_source_no_read_artifact_is_allocation_free_and_causal() {
         assert!(mismatch_state["word_copy"]["read_commit"].is_null());
     }
     println!("actual source/NoRead: unsupported and supported complete answers; allocations=0 bytes=0; transient/matching/mismatched commit, checkpoint restore and full parent lineage PASS");
+}
+
+#[test]
+#[ignore = "requires R4_JOINT_ADMISSION_MODEL and R4_JOINT_ADMISSION_PARENT"]
+fn native_joint_admission_preserves_parent_and_executes_only_admitted_payloads() {
+    use std::time::Instant;
+    use uor_r4_core::native_geometric::Model;
+    let bytes = std::fs::read(std::env::var("R4_JOINT_ADMISSION_MODEL").unwrap()).unwrap();
+    let parent_bytes = std::fs::read(std::env::var("R4_JOINT_ADMISSION_PARENT").unwrap()).unwrap();
+    let model = Model::from_bytes(&bytes).unwrap();
+    let parent_model = Model::from_bytes(&parent_bytes).unwrap();
+    let mut wire: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    let mut parent: serde_json::Value = serde_json::from_slice(&parent_bytes).unwrap();
+    let gate = wire
+        .as_object_mut()
+        .unwrap()
+        .remove("joint_admission")
+        .unwrap();
+    assert_eq!(gate["router"]["parent_artifact"], parent["artifact_cid"]);
+    for w in [&mut wire, &mut parent] {
+        w.as_object_mut().unwrap().remove("artifact_cid");
+        w.as_object_mut().unwrap().remove("uor_model_address");
+    }
+    assert_eq!(wire, parent, "complete inherited model equality");
+    for field in 0..4 {
+        let mut bad: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        match field {
+            0 => bad["joint_admission"]["router"]["parent_artifact"] = "wrong-parent".into(),
+            1 => bad["joint_admission"]["router"]["codes"][0]["roots"][0] = 120.into(),
+            2 => bad["joint_admission"]["router"]["config"]["role_context_only"] = true.into(),
+            _ => bad["typed_literals"]["router"]["biases"][0] = 32.into(),
+        }
+        assert!(Model::from_bytes(&serde_json::to_vec(&bad).unwrap()).is_err());
+    }
+    let cases = [
+        ("User: cyra has 13 coins. cyra lives in Paris.\nUser: Where is cyra?\nAssistant:"," Paris.\n",false),
+        ("User: ada has 13 coins. other has 7 coins. ada lives in Rome.\nUser: How many coins does ada have?\nAssistant:","13.\n",true),
+        ("User: varo has -5 coins. leni has 17 coins. tavi has 301 coins.\nUser: Where is the location of leni?\nAssistant:"," Unknown.\n",false),
+    ];
+    let mut times = Vec::with_capacity(96);
+    let mut total_rejections = 0;
+    for (prompt, expected, numeric) in cases {
+        assert_eq!(
+            model
+                .generate(prompt, 32, Control::JointAdmissionDisabled)
+                .unwrap()
+                .text,
+            parent_model
+                .generate(prompt, 32, Control::Full)
+                .unwrap()
+                .text
+        );
+        let tokens = model.encode(prompt).unwrap();
+        let mut session = model.session(Control::Full).unwrap();
+        ALLOCATIONS.with(|v| v.set(0));
+        BYTES.with(|v| v.set(0));
+        MEASURING.with(|v| v.set(true));
+        let ingest = (|| {
+            session.observe(&model, BOS)?;
+            for &t in &tokens {
+                session.observe(&model, t)?;
+            }
+            session.begin_response(&model)
+        })();
+        MEASURING.with(|v| v.set(false));
+        ingest.unwrap();
+        let boundary = session.checkpoint().unwrap();
+        MEASURING.with(|v| v.set(true));
+        let first = session.predict(&model);
+        let repeated = session.predict(&model);
+        MEASURING.with(|v| v.set(false));
+        assert_eq!(first.unwrap(), repeated.unwrap());
+        assert_eq!(session.work.values.derived_writes, 0);
+        assert_eq!(session.work.values.emission_commits, 0);
+        if !numeric {
+            assert!(session.value_decision().is_none());
+            assert_eq!(
+                session.work.values.operator_executions, 0,
+                "declined arithmetic was never executed"
+            );
+        } else {
+            assert!(session.value_decision().is_some());
+        }
+        total_rejections += session.work.values.admission_rejections;
+        // A different observation may not commit the predicted numeric value or source.
+        let mut mismatch = model.restore_session(&boundary).unwrap();
+        let p = mismatch.predict(&model).unwrap();
+        let wrong = if p.token == u32::from(b'x') + 2 {
+            u32::from(b'y') + 2
+        } else {
+            u32::from(b'x') + 2
+        };
+        mismatch.observe(&model, wrong).unwrap();
+        assert_eq!(mismatch.work.values.derived_writes, 0);
+        assert_eq!(mismatch.work.word_copy.selector.commits, 0);
+        let mut output = [EOS; 32];
+        let mut length = 0;
+        loop {
+            MEASURING.with(|v| v.set(true));
+            let started = Instant::now();
+            let step = (|| {
+                let t = session.predict(&model)?.token;
+                session.observe(&model, t)?;
+                Ok::<_, uor_r4_core::native_geometric::Error>(t)
+            })();
+            let ns = started.elapsed().as_nanos();
+            MEASURING.with(|v| v.set(false));
+            let t = step.unwrap();
+            times.push(ns);
+            output[length] = t;
+            length += 1;
+            if length == 1 {
+                let checkpoint = session.checkpoint().unwrap();
+                assert_eq!(
+                    model
+                        .restore_session(&checkpoint)
+                        .unwrap()
+                        .checkpoint()
+                        .unwrap(),
+                    checkpoint
+                );
+                if numeric {
+                    assert_eq!(session.work.values.derived_writes, 1);
+                }
+            }
+            if t == EOS || length == output.len() {
+                break;
+            }
+        }
+        assert_eq!(output[length - 1], EOS);
+        assert_eq!(
+            model.decode(&output[..length]).unwrap(),
+            expected.as_bytes()
+        );
+        assert_eq!((ALLOCATIONS.with(Cell::get), BYTES.with(Cell::get)), (0, 0));
+    }
+    assert!(
+        total_rejections > 0,
+        "actual learned declining path executed"
+    );
+    times.sort_unstable();
+    println!("joint admission: exact parent, valid/invalid load, numeric and word/NoRead outputs, observation-only commitment, checkpoint and zero allocations PASS; warm predict+observe samples={}, median_ns={}, max_ns={} (encoding/loading/ingestion/checkpoints excluded)",times.len(),times[times.len()/2],times.last().unwrap());
 }
