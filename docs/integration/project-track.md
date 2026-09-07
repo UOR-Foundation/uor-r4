@@ -268,13 +268,19 @@ codes become accessible; one fit update only improves a margin.
 The subsequent [source-span experiment](../native_geometric_source_span_1139.md)
 implements bounded learned adjacent-word transport: open 1/6 to 6/6 and fresh
 3/10 to 9/10, but sixteen construction and four exposed preservation answers
-overextend at spaces. `7e928bd2` is unpromoted; `c6a98c04` stays active.
-**Next: context-sensitive Continue/Finish using retained ordered source identity
-and query/value binding.** Include new same-separator stop/continue contrasts,
-keep first-source selection fixed, and preserve the numeric/memory boundaries.
-A separator-only refit cannot resolve this representation collision. Use new
-construction/open populations and a separate final fresh evaluation, and project
-the full run against the remaining cumulative allocation before execution. Do not restart completed order repairs or grow a
+overextend at spaces. `7e928bd2` was not promoted; `c6a98c04` remained active for that experiment.
+The [context-sensitive successor](../native_geometric_span_context_1139.md)
+now retains `419ba3a7`: construction 14/14, open 6/6, fresh 9/9 versus 6/9 with
+the original-source-cue pair removed. All 663 retained construction and 24/24
+prior answers are preserved. This fixes the observed same-word context collision;
+unseen connectors and double-space gaps remain unqualified (0/2).
+**Next: retain accepted bounded multiword values through relation writes and later
+reads**, carrying exact extent and separators with the selected value across
+raw-window eviction. Use independent construction/open session examples, keep
+the first-source and numeric paths fixed, and preserve session behavior. Broader
+connector recognition remains a separate learning need. Do not train on the opened fresh diagnostic.
+Project the full run against the remaining cumulative allocation before execution.
+Do not restart completed order repairs or grow a
 paging subsystem without a measured access bottleneck. General named-role binding
 and broader Rust reasoning remain unqualified. Follow current-state.md for
 artifacts and cumulative resources; a new issue does not reset the spent amount.

@@ -1,6 +1,42 @@
 # Current native geometric AI work
 
-## Source-span emission experiment — 2026-09-07
+## Context-sensitive source extent — 2026-09-07
+
+**Retain `419ba3a7` at bounded source-span scope.** The
+[result](../native_geometric_span_context_1139.md) and
+[evidence](../evidence/native_geometric_span_context_1139.json) record one native
+Rust fit. The same signed-H4 Continue/Finish operator consumes separator,
+next-word prime and its pair with the original source cue. A twenty-word
+construction-only prime registry and eight learned feature codes preserve every
+parent parameter and initial source commitment.
+
+Construction improves 5/14 to 14/14, open development 2/6 to 6/6 and fresh 3/9 to
+9/9. Removing the source-cue pair gives 11/14, 4/6 and 6/9, reproducing unwanted
+`CITY holds OWNER` continuation. All 663 retained construction answers and the
+earlier 24/24 set are preserved, repairing the twenty separator-only losses.
+All other output/write/session preservation passes. The new artifact is
+11,631,370 bytes; `c6a98c04` remains its parent and `7e928bd2` remains a preserved
+negative, not the active model.
+
+The unseen-connector and double-space diagnostics still fail 0/2. Qualification
+is familiar-template source-extent selection, not general phrase understanding.
+Actual parent/mutation, causal commit, checkpoint and zero-allocation checks
+pass. Warm continuation maximum is 0.146 ms, excluding first source selection,
+load, encoding, ingestion and checkpoints; energy remains unmeasured.
+
+**Next: retain bounded multiword relation values across writes, window eviction
+and later reads**, carrying the accepted exact extent and separators. Use
+independently authored construction/open session examples;
+do not fit on this fresh diagnostic. Keep the source/numeric path fixed and
+preserve prior behavior. Refresh the cumulative resource projection before
+execution. This cycle explicitly adds 120 seconds to the cumulative model ceiling
+(4,170 to 4,290), with 120-second model, 900-second engineering and 40 MiB growth
+caps. Model work is 73.059 seconds; cumulative 4,229.305/4,290 leaves 60.695
+seconds. Public CLI generation passes. Its build required a recorded storage stop
+and narrow compiler-cache cleanup; the evidence preserves the sampled overshoot
+and all engineering costs. All models, data and prior evidence remain intact.
+
+## Previous separator-only source-span experiment — 2026-09-07
 
 **Keep `c6a98c04` active; do not promote `7e928bd2`.** The
 [result](../native_geometric_source_span_1139.md) and

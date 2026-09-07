@@ -178,6 +178,7 @@ impl Trainer {
             dependent_read: None,
             typed_routing: None,
             joint_admission: None,
+            source_span_context: None,
             source_span: None,
             source_context: None,
             literal_routing_refinement: None,
@@ -519,23 +520,55 @@ impl Model {
     }
     pub(super) fn validate(&self) -> Result<()> {
         self.config.validate()?;
+        if self.source_span_context.is_some() && self.source_span.is_none() {
+            return Err(Error("source span context without operator".into()));
+        }
         if let Some(block) = &self.source_span {
             if self.source_context.is_none()
                 || !block.config.role_context_only
-                || block.config.learned_features > 16
+                || block.config.learned_features
+                    > if self.source_span_context.is_some() {
+                        64
+                    } else {
+                        16
+                    }
             {
                 return Err(Error("invalid source span parent/config".into()));
             }
-            block.validate_shape(self, 2, 1)?;
-            if block
-                .codes
-                .iter()
-                .any(|c| c.feature.a > 255 || c.feature.b != 0)
-            {
-                return Err(Error("invalid source span separator".into()));
+            block.validate_shape(
+                self,
+                2,
+                if self.source_span_context.is_some() {
+                    3
+                } else {
+                    1
+                },
+            )?;
+            if let Some(registry) = &self.source_span_context {
+                source_span_training::validate_registry(registry)?;
+            }
+            let known_prime = |prime: u64| {
+                self.source_span_context.as_ref().is_some_and(|registry| {
+                    registry.iter().any(|word| u64::from(word.prime) == prime)
+                })
+            };
+            if block.codes.iter().any(|c| match c.feature.kind {
+                0 => c.feature.a > 255 || c.feature.b != 0,
+                1 => c.feature.a == 0 || !known_prime(c.feature.a) || c.feature.b != 0,
+                2 => {
+                    c.feature.a == 0
+                        || !known_prime(c.feature.a)
+                        || (c.feature.b != 0 && !known_prime(c.feature.b))
+                }
+                _ => true,
+            }) {
+                return Err(Error(
+                    "invalid source span separator or source prime".into(),
+                ));
             }
             let mut parent = self.clone();
             parent.source_span = None;
+            parent.source_span_context = None;
             parent.refresh_identity()?;
             if parent.artifact_cid != block.parent_artifact {
                 return Err(Error("source span frozen parent differs".into()));

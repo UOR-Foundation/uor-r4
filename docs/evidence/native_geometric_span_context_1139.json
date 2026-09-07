@@ -1,0 +1,676 @@
+{
+  "schema": "uor-r4.native-span-context-evidence/1",
+  "at": "2026-09-07T12:56:45.325362+00:00",
+  "decision": "RETAIN_CONTEXTUAL_SOURCE_SPAN_AT_TESTED_SCOPE",
+  "base_commit": "c4ab214db0598e6a65785fcc3f4be2e7c89362a8",
+  "artifact": "blake3:419ba3a77f062d551909fe0739bf948094b2387843561eee601d3ed0773f2cc0",
+  "model": {
+    "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/span-context-angular/model.json",
+    "bytes": 11631370,
+    "sha256": "8174f36f722da724c820e5c8f8cdc539dab00e74598b400c5cf58849da4aa02b"
+  },
+  "parent_artifact": "blake3:c6a98c044243a045128a023aad2605cfa478ad3b469cac7b049c08adfaa7154d",
+  "parent": {
+    "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-order-angular256/model.json",
+    "bytes": 11626472,
+    "sha256": "069ffd40461ad8636f12b7576830b3a8b31cbf3c6cd146fac7118feb1f35cc4f"
+  },
+  "rejected_separator_only": {
+    "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/contextual-emission-angular/model.json",
+    "bytes": 11627817,
+    "sha256": "658d2e285c8bc57157affd603acffff72db34078351d9491b6a632ada60e855d"
+  },
+  "fit": {
+    "accepted": [
+      2,
+      0,
+      1
+    ],
+    "artifact": "blake3:419ba3a77f062d551909fe0739bf948094b2387843561eee601d3ed0773f2cc0",
+    "contextual": true,
+    "documents": 14,
+    "elapsed_ms": 12225,
+    "feature_count": 8,
+    "final_correct": 15,
+    "final_hinge": 0,
+    "frames": 15,
+    "initial_correct": 11,
+    "initial_hinge": 12,
+    "parent": "blake3:c6a98c044243a045128a023aad2605cfa478ad3b469cac7b049c08adfaa7154d",
+    "proposals": 3181,
+    "registry_policy": "Prompt-only words recurring in at least two construction documents, existing scanner and 256-word cap, lexicographic first-prime assignment; separate namespace from fixed parent copy dictionary.",
+    "scope": "Ordered H4 Continue/Finish over separator, optional exact following-source prime and its pair with original selected value preceding source cue. Fixed first-source selection and exact causal copying; query occurrences only, <=28 span bytes. Context mode is identity-bound; no unrestricted semantic phrase-boundary or prose claim.",
+    "skipped": [],
+    "stopped_at_time_limit": false
+  },
+  "registry": {
+    "words": [
+      "Answer",
+      "Assistant",
+      "Dusk",
+      "Gold",
+      "Pearl",
+      "Record",
+      "User",
+      "What",
+      "Where",
+      "adara",
+      "carries",
+      "carry",
+      "does",
+      "evrin",
+      "holds",
+      "in",
+      "is",
+      "lives",
+      "nalia",
+      "selvi"
+    ],
+    "namespace": "operator-local exact first-prime identities, parent dictionary fixed"
+  },
+  "sources": [
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/span-context-angular/source.json",
+      "bytes": 3565,
+      "sha256": "a713e89dc1a78a01dd6aa4414e5c78eca0af0b9fc4f2608938a502485e8d94e9"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/span-context-angular/fresh-source.json",
+      "bytes": 2200,
+      "sha256": "c87dd97f512af8ed33d37afdc12f769e178b1e09a8c4a4f79588c5ee8827dd7e"
+    }
+  ],
+  "design_selection": {
+    "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/span-context-design-selection.json",
+    "bytes": 1107,
+    "sha256": "e66217639c1218c2f5e943fcf9c786abbb6a226a6054a02f663f4043e66047a1"
+  },
+  "results": {
+    "admission-prior-fresh.json": {
+      "counts": {
+        "exact": 12,
+        "total": 12
+      },
+      "evidence": {
+        "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/span-context-angular/admission-prior-fresh.json",
+        "bytes": 4408,
+        "sha256": "d286245d9853b1307a78888f955dcf02a1dc7b0c4edfdd1dba0a2d0e3703e220"
+      }
+    },
+    "boundary-diagnostics.json": {
+      "counts": {
+        "exact": 0,
+        "total": 2
+      },
+      "evidence": {
+        "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/span-context-angular/boundary-diagnostics.json",
+        "bytes": 1060,
+        "sha256": "4ff1589bab25aeefecf4807903e51db8dbdcd7e18c6ac9ea89a3295bd62a1dc2"
+      }
+    },
+    "construction-no-context.json": {
+      "counts": {
+        "exact": 11,
+        "total": 14
+      },
+      "evidence": {
+        "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/span-context-angular/construction-no-context.json",
+        "bytes": 4484,
+        "sha256": "ad05617e2afb0c773ff915d3427b73c2a2a1b50b7cd075034521d9c54f2f16f6"
+      }
+    },
+    "construction-no-pair.json": {
+      "counts": {
+        "exact": 11,
+        "total": 14
+      },
+      "evidence": {
+        "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/span-context-angular/construction-no-pair.json",
+        "bytes": 4484,
+        "sha256": "ad05617e2afb0c773ff915d3427b73c2a2a1b50b7cd075034521d9c54f2f16f6"
+      }
+    },
+    "construction-parent.json": {
+      "counts": {
+        "exact": 5,
+        "total": 14
+      },
+      "evidence": {
+        "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/span-context-angular/construction-parent.json",
+        "bytes": 4393,
+        "sha256": "bb4bb88ceff7effc5ff66d3d637e8cbabc5b622953db4949ab2bbd71a31ffc78"
+      }
+    },
+    "construction.json": {
+      "counts": {
+        "exact": 14,
+        "total": 14
+      },
+      "evidence": {
+        "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/span-context-angular/construction.json",
+        "bytes": 4445,
+        "sha256": "f9aece4d29bf477ecc8ac65c0b0f4b3c3936a5c3acb184f8d8e87b5be8bf93d3"
+      }
+    },
+    "development-no-context.json": {
+      "counts": {
+        "exact": 4,
+        "total": 6
+      },
+      "evidence": {
+        "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/span-context-angular/development-no-context.json",
+        "bytes": 2201,
+        "sha256": "a9942065ab0c450007952ce9ce27e42794eb21903d52d58b5dbb803f3e6de262"
+      }
+    },
+    "development-no-pair.json": {
+      "counts": {
+        "exact": 4,
+        "total": 6
+      },
+      "evidence": {
+        "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/span-context-angular/development-no-pair.json",
+        "bytes": 2201,
+        "sha256": "a9942065ab0c450007952ce9ce27e42794eb21903d52d58b5dbb803f3e6de262"
+      }
+    },
+    "development-parent.json": {
+      "counts": {
+        "exact": 2,
+        "total": 6
+      },
+      "evidence": {
+        "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/span-context-angular/development-parent.json",
+        "bytes": 2156,
+        "sha256": "ad7ac9fb4e2b2a28d577795f3905c56791487a4c1a86d1e5aac9ab77b3579e42"
+      }
+    },
+    "development.json": {
+      "counts": {
+        "exact": 6,
+        "total": 6
+      },
+      "evidence": {
+        "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/span-context-angular/development.json",
+        "bytes": 2175,
+        "sha256": "f7235327080b026ef3d6fff9a56f9890936ffeb73bdb7b20db1fba8d8c92b679"
+      }
+    },
+    "fresh-no-context.json": {
+      "counts": {
+        "exact": 6,
+        "total": 9
+      },
+      "evidence": {
+        "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/span-context-angular/fresh-no-context.json",
+        "bytes": 3141,
+        "sha256": "7aeb12b841b3d19d03b652e8632b4b3bc7250cc72c226c4bdda8c395f7913eca"
+      }
+    },
+    "fresh-no-pair.json": {
+      "counts": {
+        "exact": 6,
+        "total": 9
+      },
+      "evidence": {
+        "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/span-context-angular/fresh-no-pair.json",
+        "bytes": 3141,
+        "sha256": "7aeb12b841b3d19d03b652e8632b4b3bc7250cc72c226c4bdda8c395f7913eca"
+      }
+    },
+    "fresh-parent.json": {
+      "counts": {
+        "exact": 3,
+        "total": 9
+      },
+      "evidence": {
+        "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/span-context-angular/fresh-parent.json",
+        "bytes": 3067,
+        "sha256": "ebfa4df78afeec893c2b03200c0291e7f0e7955050152aa1c2925d14c3108aa5"
+      }
+    },
+    "fresh.json": {
+      "counts": {
+        "exact": 9,
+        "total": 9
+      },
+      "evidence": {
+        "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/span-context-angular/fresh.json",
+        "bytes": 3102,
+        "sha256": "c772f6b0a4d5be762bd09758a514d94bf1b409ad7bc0f9109c24a49decf760ee"
+      }
+    },
+    "literal-prior-fresh.json": {
+      "counts": {
+        "exact": 16,
+        "total": 16
+      },
+      "evidence": {
+        "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/span-context-angular/literal-prior-fresh.json",
+        "bytes": 5792,
+        "sha256": "dd5f8d6158d9bb5d71e3d264dc7bb87374b159e9db2682a417d0028efb9ece4a"
+      }
+    },
+    "parent-construction.json": {
+      "counts": {
+        "exact": 5,
+        "total": 14
+      },
+      "evidence": {
+        "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/span-context-angular/parent-construction.json",
+        "bytes": 4393,
+        "sha256": "5bcf49f29c222ecba2ea9bcd8aa371e8a685a620ba3b4062bc8ab2969a954102"
+      }
+    },
+    "parent-development.json": {
+      "counts": {
+        "exact": 2,
+        "total": 6
+      },
+      "evidence": {
+        "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/span-context-angular/parent-development.json",
+        "bytes": 2156,
+        "sha256": "ea0a4129ca65c4e18f74ff8cc235033a3e3b2e997e585d06123ec0f7874ed320"
+      }
+    },
+    "preservation/aliases.json": {
+      "counts": {
+        "exact": 12,
+        "total": 12
+      },
+      "evidence": {
+        "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/span-context-angular/preservation/aliases.json",
+        "bytes": 15252,
+        "sha256": "88b078af209e0250d1c33928a6363d19b0a2335f66ef5040ac3c857cf811cf3e"
+      }
+    },
+    "preservation/chains.json": {
+      "counts": {
+        "exact": 16,
+        "total": 16
+      },
+      "evidence": {
+        "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/span-context-angular/preservation/chains.json",
+        "bytes": 18506,
+        "sha256": "62354ae0ba4b44b348ddf96d724a4caafc8f29d424fbc58265dab6757caf23ed"
+      }
+    },
+    "preservation/computed-construction.json": {
+      "counts": {
+        "exact": 58,
+        "total": 58
+      },
+      "evidence": {
+        "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/span-context-angular/preservation/computed-construction.json",
+        "bytes": 61339,
+        "sha256": "4606d46be865aa42be50d4f9d492d1be1e35ba22ff59220a7ae54a25ae6083e8"
+      }
+    },
+    "preservation/dependent.json": {
+      "counts": {
+        "exact": 48,
+        "total": 48,
+        "writes_exact": 48
+      },
+      "evidence": {
+        "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/span-context-angular/preservation/dependent.json",
+        "bytes": 45899,
+        "sha256": "96978337bfea4f2e4e06bdd1cbe1c6ba6aaeb6dad8c9a75800a6c7b42f8d05df"
+      }
+    },
+    "preservation/exposed-literals.json": {
+      "counts": {
+        "exact": 16,
+        "total": 16
+      },
+      "evidence": {
+        "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/span-context-angular/preservation/exposed-literals.json",
+        "bytes": 14928,
+        "sha256": "02ce0c0cc3fdcc88d14331d67b3840ddb4f338db637b18357061a91e315373af"
+      }
+    },
+    "preservation/exposed-roles.json": {
+      "counts": {
+        "exact": 12,
+        "total": 12
+      },
+      "evidence": {
+        "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/span-context-angular/preservation/exposed-roles.json",
+        "bytes": 15136,
+        "sha256": "4e53f62e43a22e7ad5561e79f50f342072bdc0983e0ca61f9c35e0f8f7dd500f"
+      }
+    },
+    "preservation/identifiers.json": {
+      "counts": {
+        "exact": 8,
+        "total": 8
+      },
+      "evidence": {
+        "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/span-context-angular/preservation/identifiers.json",
+        "bytes": 7263,
+        "sha256": "7f40d0272a3a5e3bec7dfb2cd49ddee6b7ac2f3a0db25255d6e8061a3dfefc4f"
+      }
+    },
+    "preservation/literal-construction.json": {
+      "counts": {
+        "exact": 103,
+        "total": 103
+      },
+      "evidence": {
+        "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/span-context-angular/preservation/literal-construction.json",
+        "bytes": 93929,
+        "sha256": "6b17a8ea63db18d9a4066d127160b855a93a6450c519d31247082d067591b1c8"
+      }
+    },
+    "preservation/long.json": {
+      "counts": {
+        "exact": 28,
+        "total": 28,
+        "writes_exact": 28
+      },
+      "evidence": {
+        "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/span-context-angular/preservation/long.json",
+        "bytes": 147372,
+        "sha256": "e0931f37f4f3159667454c2b5f2af99b9728e3d31ea22b4ea20255aba378201d"
+      }
+    },
+    "preservation/names.json": {
+      "counts": {
+        "exact": 28,
+        "total": 28,
+        "writes_exact": 28
+      },
+      "evidence": {
+        "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/span-context-angular/preservation/names.json",
+        "bytes": 27972,
+        "sha256": "abcd2f3a3154f0ca4ba6dad11fcfbb8c4d26d2da0c2b6e3c37ddbbc89c00866c"
+      }
+    },
+    "preservation/numeric.json": {
+      "counts": {
+        "exact": 6,
+        "total": 6
+      },
+      "evidence": {
+        "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/span-context-angular/preservation/numeric.json",
+        "bytes": 6094,
+        "sha256": "8b62adbffd3fde442120f5b1ae8bf7b4d1dbbd012377df2ece84873526d0fca8"
+      }
+    },
+    "preservation/preservation.json": {
+      "counts": {
+        "exact": 62,
+        "total": 62
+      },
+      "evidence": {
+        "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/span-context-angular/preservation/preservation.json",
+        "bytes": 21669,
+        "sha256": "39f17a3f7e59aabcef35e5e473e015520115be6c5b5a517d27499d2298ab703e"
+      }
+    },
+    "preservation/prior-chains.json": {
+      "counts": {
+        "exact": 16,
+        "total": 16
+      },
+      "evidence": {
+        "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/span-context-angular/preservation/prior-chains.json",
+        "bytes": 18496,
+        "sha256": "34cb82411ed6c61d943371074cb87a995cd10ff3d7ddafabb651c918bbb16788"
+      }
+    },
+    "preservation/prior-fresh.json": {
+      "counts": {
+        "exact": 16,
+        "total": 16
+      },
+      "evidence": {
+        "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/span-context-angular/preservation/prior-fresh.json",
+        "bytes": 14552,
+        "sha256": "fa10d2320378957bb6d776b201198204158e1e523ac9f3cce9c9b463d37df08a"
+      }
+    },
+    "preservation/prior.json": {
+      "counts": {
+        "exact": 24,
+        "total": 24
+      },
+      "evidence": {
+        "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/span-context-angular/preservation/prior.json",
+        "bytes": 7457,
+        "sha256": "4068d104115c1b729df05f8eb3b483f3b95fd9dae9d51c1e188a729828fad9d1"
+      }
+    },
+    "preservation/roles.json": {
+      "counts": {
+        "exact": 12,
+        "total": 12
+      },
+      "evidence": {
+        "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/span-context-angular/preservation/roles.json",
+        "bytes": 15264,
+        "sha256": "4ffd7733473a81424e6cd97e4e57734483a2c19881ed0850a71e9dbb26484b8e"
+      }
+    },
+    "preservation/sessions.json": {
+      "counts": {
+        "exact_turns": 5,
+        "isolated_no_shared_records": true,
+        "restore_and_forged_commit_checks": "PASS",
+        "total_turns": 5
+      },
+      "evidence": {
+        "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/span-context-angular/preservation/sessions.json",
+        "bytes": 58907,
+        "sha256": "abdf15382ce0b0b16052b6cd8dba6f57d2e29364bdd93dd569fb532f106254c5"
+      }
+    },
+    "prior-open.json": {
+      "counts": {
+        "exact": 6,
+        "total": 6
+      },
+      "evidence": {
+        "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/span-context-angular/prior-open.json",
+        "bytes": 2163,
+        "sha256": "142874293a6205ca06c834112a51aceb456a81f048e8c10a5503c764a8a8050e"
+      }
+    },
+    "retained-construction.json": {
+      "counts": {
+        "exact": 663,
+        "total": 663
+      },
+      "evidence": {
+        "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/span-context-angular/retained-construction.json",
+        "bytes": 214913,
+        "sha256": "6aa8dc8e076e5578c9df4980d805ecb96148968e4a9bc7b0adcfa31a42150086"
+      }
+    },
+    "source-context-prior-fresh.json": {
+      "counts": {
+        "exact": 32,
+        "total": 32
+      },
+      "evidence": {
+        "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/span-context-angular/source-context-prior-fresh.json",
+        "bytes": 11756,
+        "sha256": "eed5b4131509e8df17901275126550c21620e34929cfcc68265d372bfab7c4cd"
+      }
+    },
+    "source-prior-fresh.json": {
+      "counts": {
+        "exact": 20,
+        "total": 20
+      },
+      "evidence": {
+        "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/span-context-angular/source-prior-fresh.json",
+        "bytes": 6898,
+        "sha256": "14c5ad1c744e38ffeedce1804606fe8adc0e7b4d3f3d7f3df8abe65431211f12"
+      }
+    }
+  },
+  "checks": {
+    "focused": "Seven state/extent/snapshot/kernel tests and architecture policy pass.",
+    "actual_artifact": {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/span-context-artifact-check.stdout.log",
+      "bytes": 445,
+      "sha256": "1c832589fcd069a62c6ad7ab236c98d52da90b45e800d5947a0396654ad96cab"
+    },
+    "actual_artifact_scope": "Parent restoration, malformed code and registry rejection, source commitment, interrupted copy, every-byte checkpoint, zero allocation.",
+    "latency": {
+      "samples": 36,
+      "median_ns": 375,
+      "max_ns": 145416,
+      "scope": "Uncached warm continuation predict+observe after initially inspected source-entry prediction; loading/encoding/ingestion/checkpoints/first selection excluded. Mostly byte copying; no end-to-end or energy claim."
+    },
+    "cli": {
+      "status": "PASS",
+      "artifact": "blake3:419ba3a77f062d551909fe0739bf948094b2387843561eee601d3ed0773f2cc0",
+      "text": " Quiet River Bank.\n",
+      "stop": "end_of_document",
+      "output": {
+        "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/span-context-cli-output.stdout.log",
+        "bytes": 15919,
+        "sha256": "60bb16282f6a5138bc635c8519577f7d6f9b6c9bec54018938c358bd7d4715a3"
+      },
+      "binary": {
+        "path": "/private/tmp/r4-native-geometric-target/release/r4",
+        "bytes": 23410784,
+        "sha256": "44ad9fb18d5a570cc67e38833f6a60ee915562254b885015d83548c3624c96a4"
+      }
+    },
+    "ci": "Protected names are compatibility acknowledgements, no remote model verification implied.",
+    "format_and_claims": "cargo fmt --all --check, claim-wording gate and git diff --check pass.",
+    "source_files": {
+      "crates/uor-r4-core/examples/native_geometric_value_probe.rs": "e4d6c07783dfa6a857d59af7a625256efc36db11028fbb7b4118f68e6e1ea4dc",
+      "crates/uor-r4-core/examples/native_geometric_value_probe/source_noread.rs": "549a4c8c6981609df31c971828c6d380fcee9f200ddba7c15b202efb6ef119ad",
+      "crates/uor-r4-core/examples/native_geometric_value_probe/source_span.rs": "19b4da2edb22562c66b63183af38d005d847ffa18cd900aad611951ee6f91e8d",
+      "crates/uor-r4-core/src/native_geometric/mod.rs": "0d506740959f7cfc36b7ba000cd946d4bf27f5dfc54dc9f370cc0ac7610f7dc9",
+      "crates/uor-r4-core/src/native_geometric/source_span.rs": "09a83ce3b0875232182291998986192f1cfe09c296e039415595d509ce43305a",
+      "crates/uor-r4-core/src/native_geometric/source_span_training.rs": "658b1d2ec6a877394c422d907b8305567403d0c0987f1802f545db9ba502c1d1",
+      "crates/uor-r4-core/src/native_geometric/training.rs": "523faf4b61a90db3095625dd16b4b062b6df3761e384216128007d4436907750",
+      "crates/uor-r4-core/src/native_geometric/word_copy_runtime.rs": "5a4cc0260c2ad4d2b714c836842a7b4fa446d00879a2ea43874a14755db6b27c",
+      "crates/uor-r4-core/tests/native_geometric_allocations.rs": "ec5d7a278bc54ab8044c12bffbc71ee2561e6d364e413175d30318fe3d6175a3",
+      "crates/uor-r4-core/examples/native_geometric_value_probe/span_context.rs": "de7afa5fb3218c83c8b441c0861636d0820b69a2a37236fc0d679ecfff8849e9"
+    }
+  },
+  "projection": {
+    "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/span-context-projection.json",
+    "bytes": 4271,
+    "sha256": "7cfd9a39b93f1ed8291a67d910a18619f2734fe33ab97ec34b56318ce6eb7b44"
+  },
+  "resource": {
+    "model_ms": 73059,
+    "engineering_ms": 860057,
+    "model_commands": [
+      {
+        "label": "span-context-fit",
+        "elapsed_ms": 36409,
+        "code": 0,
+        "stopped": null,
+        "peak_process_rss_sample_bytes": 947781632
+      },
+      {
+        "label": "span-context-fresh",
+        "elapsed_ms": 11635,
+        "code": 0,
+        "stopped": null,
+        "peak_process_rss_sample_bytes": 933789696
+      },
+      {
+        "label": "span-context-artifact-check",
+        "elapsed_ms": 12915,
+        "code": 0,
+        "stopped": null,
+        "peak_process_rss_sample_bytes": 681082880
+      },
+      {
+        "label": "span-context-cli-output",
+        "elapsed_ms": 12100,
+        "code": 0,
+        "stopped": null,
+        "peak_process_rss_sample_bytes": 925712384
+      }
+    ],
+    "engineering_commands": [
+      {
+        "label": "span-context-build",
+        "elapsed_ms": 183739,
+        "code": null,
+        "stopped": "wrapper_SIGTERM"
+      },
+      {
+        "label": "span-context-build-registry",
+        "elapsed_ms": 10838,
+        "code": 101,
+        "stopped": null
+      },
+      {
+        "label": "span-context-format-supplement",
+        "elapsed_ms": 12000,
+        "code": 0,
+        "stopped": null
+      },
+      {
+        "label": "span-context-build-corrected",
+        "elapsed_ms": 260403,
+        "code": 0,
+        "stopped": null
+      },
+      {
+        "label": "span-context-focused-checks",
+        "elapsed_ms": 410,
+        "code": 0,
+        "stopped": null
+      },
+      {
+        "label": "span-context-cli-build",
+        "elapsed_ms": 300433,
+        "code": null,
+        "stopped": "storage_margin"
+      },
+      {
+        "label": "span-context-cli-resume",
+        "elapsed_ms": 88656,
+        "code": 0,
+        "stopped": null
+      },
+      {
+        "label": "span-context-doc-checks",
+        "elapsed_ms": 3578,
+        "code": 0,
+        "stopped": null
+      }
+    ],
+    "ledger": {
+      "cumulative_ms": 4229305,
+      "limit_ms": 4290000
+    },
+    "model_remaining_ms": 60695,
+    "sampled_peak_known_bytes": 7536795648,
+    "known_growth_at_verification": -8597504,
+    "cycle_growth_cap_bytes": 41943040,
+    "sampled_peak_growth_bytes": 42090496,
+    "peak_growth_overshoot_bytes": 147456,
+    "final_snapshot": {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/span-context-final-resource.json",
+      "bytes": 1475,
+      "sha256": "1f9dc1bcbca69d801f5294dbaa60617f21fbc18a4542cb6acec7319a7e41cdfb"
+    },
+    "cleanup": {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/span-context-compiler-cleanup.json",
+      "bytes": 6731,
+      "sha256": "54948c71747ac1d4e1b66e185eb4020c896ac0bde6468916d34ac79977031873"
+    },
+    "cleanup_scope": "18 named recreatable compiler files,74246126 logical bytes removed after storage guard stop; all models/data/evidence preserved."
+  },
+  "limits": [
+    "Fresh 9/9 is familiar-template transfer, not unrestricted phrase understanding.",
+    "Unseen connector overextends; double-space gap truncates (0/2 separate boundary diagnostics).",
+    "No new angular versus equality comparison, broad prose/reasoning, frontier, end-to-end latency or energy claim.",
+    "Persistent relation/dependency values remain single-word; source span operates on frozen query occurrences.",
+    "Evicted or unreconstructible snapshot fields remain declared state, not source authentication."
+  ],
+  "next": "Carry accepted bounded multiword extent and exact separators through typed relation writes, raw-window eviction and later reads. Verify causal commitment/checkpoint restoration on independently authored session construction/open/fresh cases. Preserve source/numeric behavior; broader connector recognition remains separate. Do not train on the opened diagnostics; refresh complete resource projection before execution."
+}

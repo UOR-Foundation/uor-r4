@@ -36,7 +36,14 @@ the first-source commitment and exact separators. `SourceSpanDisabled` restores
 single-word execution. The current separator-only fit regresses source boundaries
 and must not replace the active parent. Delimiter and extent snapshot validation
 preserve the same distinction between available byte evidence and declared
-evicted state. Context-sensitive extent remains the next model task.
+evicted state. The subsequent [context-sensitive fit](native_geometric_span_context_1139.md)
+adds `Model::fit_contextual_source_span` and the optional `source_span_context`
+registry. This construction-only exact prime namespace is independent of the
+fixed parent dictionary; both it and the operator must be removed to restore the
+parent. `SourceSpanContextDisabled` removes identity terms and
+`SourceSpanPairDisabled` removes only the next-word/source-cue pair. The retained
+`419ba3a7` preserves earlier behavior and qualifies the tested extent distinction.
+General phrase boundaries and durable multiword relation storage remain open.
 
 The complete lifecycle must qualify artifact loading, session boundaries,
 contextual access, generation/streaming, memory, errors/limits and capability

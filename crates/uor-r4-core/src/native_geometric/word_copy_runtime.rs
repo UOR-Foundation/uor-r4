@@ -31,7 +31,11 @@ pub(super) fn enabled(control: Control) -> bool {
 fn geometry_control(model: &Model, control: Control) -> Control {
     if matches!(
         control,
-        Control::Full | Control::WordCopyDispatchDisabled | Control::SourceSpanDisabled
+        Control::Full
+            | Control::WordCopyDispatchDisabled
+            | Control::SourceSpanDisabled
+            | Control::SourceSpanContextDisabled
+            | Control::SourceSpanPairDisabled
     ) && model
         .response_entry
         .as_ref()
@@ -65,8 +69,16 @@ pub(super) fn eligible(
 }
 
 fn address(head: &WordCopyModel, word: &WordAtom, work: &mut WordCopyWork) -> u32 {
+    address_in(&head.dictionary, word, work)
+}
+
+pub(super) fn address_in(
+    dictionary: &[WordCopyAddress],
+    word: &WordAtom,
+    work: &mut WordCopyWork,
+) -> u32 {
     work.dictionary_lookups = work.dictionary_lookups.saturating_add(1);
-    let result = head.dictionary.binary_search_by(|entry| {
+    let result = dictionary.binary_search_by(|entry| {
         work.dictionary_comparisons = work.dictionary_comparisons.saturating_add(1);
         for offset in 0..usize::from(entry.len.min(word.len)) {
             work.dictionary_byte_comparisons = work.dictionary_byte_comparisons.saturating_add(1);
@@ -77,7 +89,7 @@ fn address(head: &WordCopyModel, word: &WordAtom, work: &mut WordCopyWork) -> u3
         }
         entry.len.cmp(&word.len)
     });
-    result.map_or(0, |index| head.dictionary[index].prime)
+    result.map_or(0, |index| dictionary[index].prime)
 }
 
 pub(super) fn context(

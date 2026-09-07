@@ -29,6 +29,67 @@ pub(super) fn edge(values: &ValueState, origin: u8, work: &mut WordCopyWork) -> 
     Some((origin - 1, to.leading_gap?))
 }
 
+/// Follow exact source identity through the operator-local registry's prime address.
+/// Prime integers select learned codes; their magnitude is never a semantic metric.
+pub(super) fn features(
+    model: &Model,
+    values: &ValueState,
+    origin: u8,
+    next: u8,
+    separator: u8,
+    contextual: bool,
+    paired: bool,
+    work: &mut WordCopyWork,
+) -> ([ValueFeature; 3], usize) {
+    let mut features = [
+        ValueFeature {
+            kind: 0,
+            a: u64::from(separator),
+            b: 0,
+        },
+        ValueFeature::default(),
+        ValueFeature::default(),
+    ];
+    if !contextual {
+        return (features, 1);
+    }
+    if let Some((head, word)) = model
+        .source_span_context
+        .as_ref()
+        .zip(super::relation::source(values, next))
+    {
+        work.word_record_reads = work.word_record_reads.saturating_add(1);
+        let prime = super::word_copy_runtime::address_in(head, word, work);
+        if prime != 0 {
+            features[1] = ValueFeature {
+                kind: 1,
+                a: u64::from(prime),
+                b: 0,
+            };
+            if paired {
+                if let Some(original) = super::relation::source(values, origin) {
+                    work.word_record_reads = work.word_record_reads.saturating_add(1);
+                    let prior = original.predecessors[0];
+                    let cue = super::value_lexemes::WordAtom {
+                        bytes: prior.bytes,
+                        len: prior.len,
+                        ..Default::default()
+                    };
+                    let cue_prime = super::word_copy_runtime::address_in(head, &cue, work);
+                    features[2] = ValueFeature {
+                        kind: 2,
+                        a: u64::from(prime),
+                        b: u64::from(cue_prime),
+                    };
+                    return (features, 3);
+                }
+            }
+            return (features, 2);
+        }
+    }
+    (features, 1)
+}
+
 pub(super) fn extent(
     model: &Model,
     values: &ValueState,
@@ -54,11 +115,17 @@ pub(super) fn extent(
     let mut extra = 0;
     let mut current = origin;
     while let Some((next, separator)) = edge(values, current, work) {
-        let feature = ValueFeature {
-            kind: 0,
-            a: u64::from(separator),
-            b: 0,
-        };
+        let (features, count) = features(
+            model,
+            values,
+            origin,
+            next,
+            separator,
+            model.source_span_context.is_some() && control != Control::SourceSpanContextDisabled,
+            control != Control::SourceSpanPairDisabled,
+            work,
+        );
+        let feature = features[0];
         // Unseen transitions default to the inherited finish behavior.
         work.routing.emission_queries = work.routing.emission_queries.saturating_add(1);
         if block
@@ -73,7 +140,7 @@ pub(super) fn extent(
         {
             break;
         }
-        let state = block.encode(model, &[feature], control, &mut work.routing);
+        let state = block.encode(model, &features[..count], control, &mut work.routing);
         let stop = block.score(model, state, 0, &mut work.routing);
         let advance = block.score(model, state, 1, &mut work.routing);
         work.routing.comparisons = work.routing.comparisons.saturating_add(1);
