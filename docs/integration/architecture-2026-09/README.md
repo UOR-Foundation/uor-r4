@@ -1,5 +1,11 @@
 # Geometric language architecture reconciliation — September 2026
 
+**2026-09-07 continuation:** [source-span transport](../../native_geometric_source_span_1139.md)
+is implemented but its separator-only fit is unpromoted: multiword copying
+improves while twenty prior answers overextend. Keep `c6a98c04` active. The next
+operator needs retained source context to learn when to finish at the same
+separator. The audit below and its historical evidence remain intact.
+
 **Status:** source and retained-evidence review; owner constraints accepted; next implementation proposed. No training, inference, model benchmark or new mathematical proof was run for this review. The canonical project plan owns subsequent execution. This review answers the owner's explicit request for a broad inventory, including archived and contributor work; it does not make repeated broad audits a prerequisite for ordinary development.
 
 **Continuation update (September 7):** the proposed admission step and subsequent

@@ -1,5 +1,37 @@
 # Current native geometric AI work
 
+## Source-span emission experiment — 2026-09-07
+
+**Keep `c6a98c04` active; do not promote `7e928bd2`.** The
+[result](../native_geometric_source_span_1139.md) and
+[evidence](../evidence/native_geometric_source_span_1139.json) record the completed
+Rust source-span extension. The existing signed-H4 learner chooses Continue or
+Finish over exact separators; the causal cursor copies adjacent frozen source
+words with an extended total span capped at 28 bytes within the 32-step limit.
+All parent parameters and the initial source commitment are preserved.
+
+Construction improves 2/5 to 5/5, exposed open answers 1/6 to 6/6, and the separate
+fresh diagnostic 3/10 to 9/10 versus the disabled extension. However, retained
+construction falls from 663/663 to 647/663 and an earlier exposed set from 24/24
+to 20/24: `Rome holds ada` is copied whole instead of `Rome`. The explicit
+same-space phrase-boundary check fails 0/1; the double-space fresh value also
+truncates. Other numeric, literal, identifier, relation, dependent and session
+preservation passes. This is a useful transport implementation and a negative
+selection result, not a replacement for the active checkpoint.
+
+**Next: context-sensitive source extent.** Reuse candidate-owned ordered source
+identity and query/value binding in the same Continue/Finish operator, with new
+construction/open pairs that require both stopping and continuing at the same
+separator. Keep first-source selection fixed; a separator-only refit or a larger
+page table cannot resolve the observed feature collision. Preserve the complete
+negative and project all new work against the cumulative budget before execution.
+Do not use the just-opened fresh diagnostic to tune that successor.
+Model work is 83.477 seconds; cumulative 4156.246/4170 leaves 13.754 seconds.
+Growth at verification is 66,879,488 bytes inside 96 MiB. Actual candidate
+lineage, interruption, every-byte checkpoint and zero-allocation checks pass.
+Twenty-eight uncached continuation steps have maximum 0.146 ms, excluding first
+source selection, loading, ingestion and checkpoints; energy is unmeasured.
+
 ## Candidate-owned source context — #1139 / #1140, 2026-09-07
 
 **Retain `c6a98c04` at bounded source-owner/NoRead selection scope.** The

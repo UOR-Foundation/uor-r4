@@ -31,6 +31,8 @@ mod role_read;
 mod source_context;
 #[path = "native_geometric_value_probe/source_noread.rs"]
 mod source_noread;
+#[path = "native_geometric_value_probe/source_span.rs"]
+mod source_span;
 #[path = "native_geometric_value_probe/typed_routing.rs"]
 mod typed_routing_probe;
 #[path = "native_geometric_value_probe/wording.rs"]
@@ -981,6 +983,9 @@ fn evaluate_binding(
 }
 
 fn main() -> ProbeResult<()> {
+    if std::env::args().nth(1).as_deref() == Some("source-span") {
+        return source_span::run(&std::env::args().skip(2).collect::<Vec<_>>());
+    }
     if std::env::args().nth(1).as_deref() == Some("source-context") {
         return source_context::run(&std::env::args().skip(2).collect::<Vec<_>>());
     }

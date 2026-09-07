@@ -109,9 +109,13 @@ improve 8/16 to 16/16 versus 8/16 matched equality. All prior preservation passe
 that source boundary: four exact predecessors stay with each word candidate.
 Construction improves 654/663 to 663/663 and fresh owner/query/order answers improve
 24/32 to 32/32, versus 24/32 with context disabled. The same learned H4 selector
-reuses the recovered owner identity; all prior preservation passes. The next
-architecture step is reusable contextual transition/emission conditioned on
-selected exact values and committed operator results.
+reuses the recovered owner identity; all prior preservation passes. The subsequent
+[source-span experiment](docs/native_geometric_source_span_1139.md) implements
+learned adjacent-word transport and improves complete answers on six exposed
+cases from 1/6 to 6/6. It remains unpromoted: separator-only continuation regresses sixteen
+construction and four earlier exposed answers by copying beyond the value.
+The active checkpoint stays `c6a98c04`; the next step is context-sensitive
+Continue/Finish using retained source identity and query/value binding.
 General prose/syntax/reasoning and frontier capability remain unqualified. Follow
 the current-state pointer for artifacts, costs and the next implementation.
 

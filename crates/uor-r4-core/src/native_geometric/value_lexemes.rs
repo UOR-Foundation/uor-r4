@@ -13,6 +13,10 @@ pub(super) const WORD_QUERY: usize = 16;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
 pub(super) struct WordAtom {
+    /// Actual delimiter immediately before this word, when observed. A caller
+    /// must separately prove byte adjacency before treating it as a whole gap.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub leading_gap: Option<u8>,
     /// Four exact preceding completed words, owned by this occurrence.
     #[serde(default, skip_serializing_if = "predecessors_empty")]
     pub predecessors: [WordIdentity; 4],
@@ -44,6 +48,8 @@ fn predecessors_empty(value: &[WordIdentity; 4]) -> bool {
 pub(super) struct WordScanner {
     pub pending: WordAtom,
     pub rejected: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub separator: Option<u8>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -89,7 +95,9 @@ impl WordAtom {
 impl WordScanner {
     fn feed(&mut self, byte: u8, ordinal: u64, entry: ValueEntry) -> Option<WordAtom> {
         if !component(byte) {
-            return self.finish();
+            let word = self.finish();
+            self.separator = Some(byte);
+            return word;
         }
         if self.rejected {
             return None;
@@ -100,7 +108,11 @@ impl WordScanner {
         {
             self.pending = WordAtom::default();
             self.rejected = true;
+            self.separator = None;
             return None;
+        }
+        if self.pending.len == 0 {
+            self.pending.leading_gap = self.separator.take();
         }
         self.pending.bytes[usize::from(self.pending.len)] = byte;
         self.pending.len += 1;
@@ -239,6 +251,8 @@ impl WordAtom {
             && self.byte_end < source_bytes
             && self.byte_end >= u64::from(self.len) - 1
             && usize::from(self.pose) < geometry_len
+            && self.leading_gap.is_none_or(|byte| !component(byte))
+            && (self.leading_gap.is_none() || self.byte_end >= u64::from(self.len))
             && self.predecessors_valid()
     }
 }
@@ -273,6 +287,11 @@ impl LexemeState {
                     .count(),
             )
             && valid(&self.scanner.pending)
+            && self.scanner.separator.is_none_or(|byte| !component(byte))
+            && (self.scanner.separator.is_none()
+                || (!self.scanner.rejected
+                    && self.scanner.pending == WordAtom::default()
+                    && self.source_bytes_seen != 0))
             && (!self.scanner.rejected || self.scanner.pending == WordAtom::default())
             && (self.scanner.pending.len == 0
                 || self.scanner.pending.byte_end.checked_add(1) == Some(self.source_bytes_seen))
@@ -294,6 +313,55 @@ mod tests {
                 &mut ValueWork::default(),
             );
         }
+    }
+
+    #[test]
+    fn exact_delimiters_survive_chunking_without_claiming_wider_gap_adjacency() {
+        for separator in [b' ', b'-', b'.', b'\n'] {
+            let mut state = LexemeState::default();
+            feed(&mut state, b"New", 0);
+            feed(&mut state, &[separator], 1);
+            let mut restored: LexemeState =
+                serde_json::from_slice(&serde_json::to_vec(&state).unwrap()).unwrap();
+            feed(&mut state, b"York", 2);
+            feed(&mut restored, b"York", 2);
+            state.finish(&mut ValueWork::default());
+            restored.finish(&mut ValueWork::default());
+            assert_eq!(restored, state);
+            let word = state.recent[0];
+            assert_eq!(word.leading_gap, Some(separator));
+            assert_eq!(
+                word.byte_end - u64::from(word.len),
+                state.recent[1].byte_end + 1
+            );
+            assert_eq!(word.predecessors[0].bytes, state.recent[1].bytes);
+            assert!(state.snapshot_valid(3, 1));
+        }
+        let mut wider = LexemeState::default();
+        feed(&mut wider, b"New. York ", 0);
+        let word = wider.recent[0];
+        assert_eq!(word.leading_gap, Some(b' '));
+        assert_ne!(
+            word.byte_end - u64::from(word.len),
+            wider.recent[1].byte_end + 1
+        );
+        assert!(wider.snapshot_valid(1, 1));
+        let mut wire = serde_json::to_value(wider).unwrap();
+        for field in ["recent", "queries", "literal_cues"] {
+            for atom in wire[field].as_array_mut().unwrap() {
+                atom.as_object_mut().unwrap().remove("leading_gap");
+            }
+        }
+        wire["scanner"].as_object_mut().unwrap().remove("separator");
+        wire["scanner"]["pending"]
+            .as_object_mut()
+            .unwrap()
+            .remove("leading_gap");
+        let legacy: LexemeState = serde_json::from_value(wire).unwrap();
+        assert!(legacy.snapshot_valid(1, 1));
+        let mut bad = wider;
+        bad.recent[0].leading_gap = Some(b'x');
+        assert!(!bad.snapshot_valid(1, 1));
     }
 
     #[test]
