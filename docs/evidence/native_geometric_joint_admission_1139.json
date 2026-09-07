@@ -1,0 +1,2611 @@
+{
+  "schema": "uor-r4.native-joint-admission-evidence/1",
+  "at": "2026-09-07T03:53:52.610Z",
+  "base_commit": "4b61a9b8f505909d7b5949b5935eed947a900335",
+  "parent": "blake3:d59070c29e1cebcb12d25c2fc034083d9631b24ab04da0c57b94a007ad10ea6f",
+  "artifact": "blake3:433e380702a58f4913b163d4a4ab5964b88544a945807b1871c5b3db12241b0c",
+  "control": "blake3:6bada34cfaa702c75a483ba034506cb1eb051b94311a484240ed0826b2f8a1ab",
+  "decision": "RETAIN_BOUNDED_CONSTRUCTION_NUMERIC_ADMISSION",
+  "scope": "Numeric versus DeferToLexical before literal numeric execution; no derived-role or parent-parameter change. No fresh lexical-rejection transfer or angular advantage established.",
+  "artifacts": [
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-angular128/model.json",
+      "bytes": 11304530,
+      "sha256": "a54a98f77e65b704a4d1afa47a755a440f535bf13e993331410665fbb0c6951c"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-angular128/model.json",
+      "bytes": 11397442,
+      "sha256": "a871fe8ac8116450add13c98c01d8b43a1e3a4571dcfb1309626970ff8520a4f"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-equality128/model.json",
+      "bytes": 11397443,
+      "sha256": "5c73f87deac1fda16011338ff6ec278974b95aae10f994980a2d19081ba0e81e"
+    }
+  ],
+  "source": [
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-typed-value/uor-r4/crates/uor-r4-core/src/native_geometric/mod.rs",
+      "bytes": 20152,
+      "sha256": "9a1f04118ec61cb81fd9bdb4cc927a79c50f470d5fad34efbd2bd4897af7b727"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-typed-value/uor-r4/crates/uor-r4-core/src/native_geometric/training.rs",
+      "bytes": 48933,
+      "sha256": "615f57a1e8d88c4e8687b8550ed2b508bd3fc4ce46428920bec12c40c8453ce0"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-typed-value/uor-r4/crates/uor-r4-core/src/native_geometric/joint_admission.rs",
+      "bytes": 3415,
+      "sha256": "2cfa17482a1b9dd3f326a0f77767c79fec708303f8f7a6892a9535b634d9a0ce"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-typed-value/uor-r4/crates/uor-r4-core/src/native_geometric/joint_admission_training.rs",
+      "bytes": 8550,
+      "sha256": "6eae7c08aa359157823a6fc4c93996ecd19736c6f64e73e8faa682ebb70873e4"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-typed-value/uor-r4/crates/uor-r4-core/src/native_geometric/value_runtime.rs",
+      "bytes": 21936,
+      "sha256": "343a4a85ba9d82edd30893ad0c09f7add35a8d860a7b63fc3e5c2dde911b8cc8"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-typed-value/uor-r4/crates/uor-r4-core/src/native_geometric/value_types.rs",
+      "bytes": 7322,
+      "sha256": "72783c9f1502f7b11c3012d55520a3bcba337ef3dcaa1f576b2dfc452ba639f1"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-typed-value/uor-r4/crates/uor-r4-core/src/native_geometric/typed_routing.rs",
+      "bytes": 15933,
+      "sha256": "60b19f0f9dbe84c053645ca5f03c28e3d51086d9b5b60f6884ba56b1db295c22"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-typed-value/uor-r4/crates/uor-r4-core/src/native_geometric/source_routing.rs",
+      "bytes": 6625,
+      "sha256": "47604abbf424c7bad5660e940e8f8655f5af907e833227cac2614da8ae9baac4"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-typed-value/uor-r4/crates/uor-r4-core/src/native_geometric/source_routing_training.rs",
+      "bytes": 29731,
+      "sha256": "20ef2b9a441498ba1d5f572a2e6935bf966735e427c71242356a29fb7efc578d"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-typed-value/uor-r4/crates/uor-r4-core/examples/native_geometric_value_probe.rs",
+      "bytes": 71512,
+      "sha256": "f3c7dbc07fcb7dc49fb1f618c7d1b2d559f33dd15bd0d539477616df3c0bab2e"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-typed-value/uor-r4/crates/uor-r4-core/examples/native_geometric_value_probe/joint_admission.rs",
+      "bytes": 4702,
+      "sha256": "31d16d681fffa1ab90d935abcb1f9c3a3c56080ccd320dc769442ed9887f9964"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-typed-value/uor-r4/crates/uor-r4-core/examples/native_geometric_value_probe/source_noread.rs",
+      "bytes": 10462,
+      "sha256": "d9176d4d8e0e51d5494bdcbc950dcd4852c59afedcad92b33284e47b7561c141"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-typed-value/uor-r4/crates/uor-r4-core/tests/native_geometric_allocations.rs",
+      "bytes": 68806,
+      "sha256": "9d30a437f2e136311f58127dfdbd3c0f8c46db890be257d5c1a8897c36a3ff7c"
+    }
+  ],
+  "data": {
+    "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-source.json",
+    "bytes": 130972,
+    "sha256": "e884d471f890e18f6bd9a6f56e227f2a233ff3da055d4e8c7af4f2c12bc5e2a3"
+  },
+  "fits": {
+    "angular": {
+      "accepted": [
+        4,
+        0,
+        3
+      ],
+      "artifact": "blake3:433e380702a58f4913b163d4a4ab5964b88544a945807b1871c5b3db12241b0c",
+      "documents": 615,
+      "elapsed_ms": 10978,
+      "feature_universe": 320,
+      "final_correct": 216,
+      "final_hinge": 0,
+      "frames": 216,
+      "initial_correct": 5,
+      "initial_hinge": 633,
+      "lexical_frames": 5,
+      "numeric_frames": 211,
+      "numeric_parent_mismatches": [
+        "typed-value/fit/prose/add/0/source_names_swapped",
+        "typed-value/fit/rust/add/0/source_names_swapped",
+        "typed-value/fit/prose/add/1/source_names_swapped",
+        "typed-value/fit/rust/add/1/source_names_swapped",
+        "typed-value/fit/prose/add/2/source_names_swapped",
+        "typed-value/fit/rust/copy_current/2/source_names_swapped",
+        "typed-value/fit/rust/add/2/source_names_swapped",
+        "typed-value/fit/prose/add/3/source_names_swapped",
+        "typed-value/fit/rust/copy_current/3/source_names_swapped",
+        "typed-value/fit/rust/add/3/source_names_swapped",
+        "typed-value/fit/prose/add/4/source_names_swapped",
+        "typed-value/fit/rust/add/4/source_names_swapped",
+        "typed-value/fit/prose/add/5/source_names_swapped",
+        "typed-value/fit/rust/add/5/source_names_swapped",
+        "typed-value/fit/prose/add/6/source_names_swapped",
+        "typed-value/fit/rust/copy_current/6/source_names_swapped",
+        "typed-value/fit/rust/add/6/source_names_swapped",
+        "typed-value/fit/prose/add/7/source_names_swapped",
+        "typed-value/fit/rust/copy_current/7/source_names_swapped",
+        "typed-value/fit/rust/add/7/source_names_swapped",
+        "typed-value/fit/prose/add/8/source_names_swapped",
+        "typed-value/fit/rust/add/8/source_names_swapped",
+        "typed-value/fit/prose/add/9/source_names_swapped",
+        "typed-value/fit/rust/add/9/source_names_swapped",
+        "typed-value/fit/prose/add/10/source_names_swapped",
+        "typed-value/fit/rust/copy_current/10/source_names_swapped",
+        "typed-value/fit/rust/add/10/source_names_swapped",
+        "typed-value/fit/prose/add/11/source_names_swapped",
+        "typed-value/fit/rust/copy_current/11/source_names_swapped",
+        "typed-value/fit/rust/add/11/source_names_swapped",
+        "typed-value/fit/prose/add/12/source_names_swapped",
+        "typed-value/fit/rust/add/12/source_names_swapped",
+        "typed-value/fit/prose/add/13/source_names_swapped",
+        "typed-value/fit/rust/add/13/source_names_swapped",
+        "typed-value/fit/prose/add/14/source_names_swapped",
+        "typed-value/fit/rust/copy_current/14/source_names_swapped",
+        "typed-value/fit/rust/add/14/source_names_swapped",
+        "typed-value/fit/prose/add/15/source_names_swapped",
+        "typed-value/fit/rust/copy_current/15/source_names_swapped",
+        "typed-value/fit/rust/add/15/source_names_swapped",
+        "admission-fit/0/true/2",
+        "admission-fit/1/false/2",
+        "admission-fit/1/true/2"
+      ],
+      "parent": "blake3:d59070c29e1cebcb12d25c2fc034083d9631b24ab04da0c57b94a007ad10ea6f",
+      "proposals": 14610,
+      "schema": "uor-r4.joint-admission-fit/1",
+      "scope": "Learned binary admission before literal numeric execution; inherited operator/operand ranking, derived roles, source/NoRead and emission are unchanged. Labels are raw supplied responses. Does not unify all operand/source alternatives or establish general language.",
+      "skipped_no_literal_proposal": 399,
+      "stopped_at_time_limit": false
+    },
+    "equality": {
+      "accepted": [
+        3,
+        0,
+        1
+      ],
+      "artifact": "blake3:6bada34cfaa702c75a483ba034506cb1eb051b94311a484240ed0826b2f8a1ab",
+      "documents": 615,
+      "elapsed_ms": 11102,
+      "feature_universe": 320,
+      "final_correct": 216,
+      "final_hinge": 0,
+      "frames": 216,
+      "initial_correct": 211,
+      "initial_hinge": 216,
+      "lexical_frames": 5,
+      "numeric_frames": 211,
+      "numeric_parent_mismatches": [
+        "typed-value/fit/prose/add/0/source_names_swapped",
+        "typed-value/fit/rust/add/0/source_names_swapped",
+        "typed-value/fit/prose/add/1/source_names_swapped",
+        "typed-value/fit/rust/add/1/source_names_swapped",
+        "typed-value/fit/prose/add/2/source_names_swapped",
+        "typed-value/fit/rust/copy_current/2/source_names_swapped",
+        "typed-value/fit/rust/add/2/source_names_swapped",
+        "typed-value/fit/prose/add/3/source_names_swapped",
+        "typed-value/fit/rust/copy_current/3/source_names_swapped",
+        "typed-value/fit/rust/add/3/source_names_swapped",
+        "typed-value/fit/prose/add/4/source_names_swapped",
+        "typed-value/fit/rust/add/4/source_names_swapped",
+        "typed-value/fit/prose/add/5/source_names_swapped",
+        "typed-value/fit/rust/add/5/source_names_swapped",
+        "typed-value/fit/prose/add/6/source_names_swapped",
+        "typed-value/fit/rust/copy_current/6/source_names_swapped",
+        "typed-value/fit/rust/add/6/source_names_swapped",
+        "typed-value/fit/prose/add/7/source_names_swapped",
+        "typed-value/fit/rust/copy_current/7/source_names_swapped",
+        "typed-value/fit/rust/add/7/source_names_swapped",
+        "typed-value/fit/prose/add/8/source_names_swapped",
+        "typed-value/fit/rust/add/8/source_names_swapped",
+        "typed-value/fit/prose/add/9/source_names_swapped",
+        "typed-value/fit/rust/add/9/source_names_swapped",
+        "typed-value/fit/prose/add/10/source_names_swapped",
+        "typed-value/fit/rust/copy_current/10/source_names_swapped",
+        "typed-value/fit/rust/add/10/source_names_swapped",
+        "typed-value/fit/prose/add/11/source_names_swapped",
+        "typed-value/fit/rust/copy_current/11/source_names_swapped",
+        "typed-value/fit/rust/add/11/source_names_swapped",
+        "typed-value/fit/prose/add/12/source_names_swapped",
+        "typed-value/fit/rust/add/12/source_names_swapped",
+        "typed-value/fit/prose/add/13/source_names_swapped",
+        "typed-value/fit/rust/add/13/source_names_swapped",
+        "typed-value/fit/prose/add/14/source_names_swapped",
+        "typed-value/fit/rust/copy_current/14/source_names_swapped",
+        "typed-value/fit/rust/add/14/source_names_swapped",
+        "typed-value/fit/prose/add/15/source_names_swapped",
+        "typed-value/fit/rust/copy_current/15/source_names_swapped",
+        "typed-value/fit/rust/add/15/source_names_swapped",
+        "admission-fit/0/true/2",
+        "admission-fit/1/false/2",
+        "admission-fit/1/true/2"
+      ],
+      "parent": "blake3:d59070c29e1cebcb12d25c2fc034083d9631b24ab04da0c57b94a007ad10ea6f",
+      "proposals": 14602,
+      "schema": "uor-r4.joint-admission-fit/1",
+      "scope": "Learned binary admission before literal numeric execution; inherited operator/operand ranking, derived roles, source/NoRead and emission are unchanged. Labels are raw supplied responses. Does not unify all operand/source alternatives or establish general language.",
+      "skipped_no_literal_proposal": 399,
+      "stopped_at_time_limit": false
+    }
+  },
+  "design_selection": {
+    "decision": "Select angular admission at bounded construction/preservation scope; fresh evaluation not yet opened",
+    "artifact": "blake3:433e380702a58f4913b163d4a4ab5964b88544a945807b1871c5b3db12241b0c",
+    "parent": "blake3:d59070c29e1cebcb12d25c2fc034083d9631b24ab04da0c57b94a007ad10ea6f",
+    "construction": {
+      "parent": 558,
+      "candidate": 563,
+      "total": 615,
+      "lost_correct": 0,
+      "changed_remaining_wrong": 0
+    },
+    "angular_and_equality": "Both216/216 domain fit; both563/615 construction and4/6 open development; no angular advantage established",
+    "next": "Open predeclared fresh population for parent, candidate and matched control once; preserve 20 prior source/NoRead first-use answers; complete actual-artifact checks."
+  },
+  "reports": [
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-parent-construction.json",
+      "bytes": 13251958,
+      "sha256": "6bf0b4cc67621af128df2cf36a74071a3bc82d702294f33dde28c3e812e6ff3b",
+      "summary": {
+        "artifact": "blake3:d59070c29e1cebcb12d25c2fc034083d9631b24ab04da0c57b94a007ad10ea6f",
+        "exact": 558,
+        "total": 615
+      }
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-parent-development.json",
+      "bytes": 110977,
+      "sha256": "ee7e31a7e665efafbb8a561e64cbce606de7d711625df3b35f905423a0a9eea2",
+      "summary": {
+        "artifact": "blake3:d59070c29e1cebcb12d25c2fc034083d9631b24ab04da0c57b94a007ad10ea6f",
+        "exact": 4,
+        "total": 6
+      }
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-angular128/construction.json",
+      "bytes": 13159427,
+      "sha256": "ac18bf761cc22c5e44c4c9b807ad4961352d0997c86bcb581ffbfacb9e806390",
+      "summary": {
+        "artifact": "blake3:433e380702a58f4913b163d4a4ab5964b88544a945807b1871c5b3db12241b0c",
+        "exact": 563,
+        "total": 615
+      }
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-angular128/development.json",
+      "bytes": 111141,
+      "sha256": "705b6cacc930e123384c4a91076a868a8346b5c60279260cd31784e8b2c08648",
+      "summary": {
+        "artifact": "blake3:433e380702a58f4913b163d4a4ab5964b88544a945807b1871c5b3db12241b0c",
+        "exact": 4,
+        "total": 6
+      }
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-equality128/construction.json",
+      "bytes": 13159427,
+      "sha256": "16693bd8e3922d921a56ca5b6a0e33b7717698fae8c6eafa5f51bddaabb90f8a",
+      "summary": {
+        "artifact": "blake3:6bada34cfaa702c75a483ba034506cb1eb051b94311a484240ed0826b2f8a1ab",
+        "exact": 563,
+        "total": 615
+      }
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-equality128/development.json",
+      "bytes": 111141,
+      "sha256": "cb0f2f61cf35904e0f7fb016ca7a23b80de9c84f8e24bd2a045102885abe4764",
+      "summary": {
+        "artifact": "blake3:6bada34cfaa702c75a483ba034506cb1eb051b94311a484240ed0826b2f8a1ab",
+        "exact": 4,
+        "total": 6
+      }
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-fresh-parent.json",
+      "bytes": 261177,
+      "sha256": "396870adcd8e556ddd95980b2405247d6bc5b4208c60c19fd1b2232e30260462",
+      "summary": {
+        "artifact": "blake3:d59070c29e1cebcb12d25c2fc034083d9631b24ab04da0c57b94a007ad10ea6f",
+        "exact": 8,
+        "total": 12
+      }
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-fresh-angular.json",
+      "bytes": 261505,
+      "sha256": "ad9dedd15af948f0c36a6b2975326b6e750d37af0311a08e62d50a931e1f5824",
+      "summary": {
+        "artifact": "blake3:433e380702a58f4913b163d4a4ab5964b88544a945807b1871c5b3db12241b0c",
+        "exact": 8,
+        "total": 12
+      }
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-fresh-equality.json",
+      "bytes": 261505,
+      "sha256": "429127e5826ddd7d23c208f79ca4e2b3baf821614055bc48436cc4522934cd0a",
+      "summary": {
+        "artifact": "blake3:6bada34cfaa702c75a483ba034506cb1eb051b94311a484240ed0826b2f8a1ab",
+        "exact": 8,
+        "total": 12
+      }
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-prior-source-fresh.json",
+      "bytes": 271613,
+      "sha256": "bde0980fe07ff352b45d0af1e01715ae5a18af96051a2454b55bd9e73e2ae59f",
+      "summary": {
+        "artifact": "blake3:433e380702a58f4913b163d4a4ab5964b88544a945807b1871c5b3db12241b0c",
+        "exact": 20,
+        "total": 20
+      }
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-prior-source-open.json",
+      "bytes": 179810,
+      "sha256": "6719f8a2f5120c7b88556dab7bb92b0b618a2a7acbdfe8e77ea85c49e5190940",
+      "summary": {
+        "artifact": "blake3:433e380702a58f4913b163d4a4ab5964b88544a945807b1871c5b3db12241b0c",
+        "exact": 14,
+        "total": 14
+      }
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-disabled-construction.json",
+      "bytes": 13264258,
+      "sha256": "0c6d3c076a5902c74e1460ee21711b4ba7bc827e3a92cac964883a51b493c469",
+      "summary": {
+        "artifact": "blake3:433e380702a58f4913b163d4a4ab5964b88544a945807b1871c5b3db12241b0c",
+        "exact": 558,
+        "total": 615
+      }
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-preservation/aliases.json",
+      "bytes": 689595,
+      "sha256": "4f36aa0d532da7e2d150fd9911ebdb77cc5ff99443eb9acee0356fba6f5fdbfb",
+      "summary": {
+        "artifact": "blake3:433e380702a58f4913b163d4a4ab5964b88544a945807b1871c5b3db12241b0c",
+        "elapsed_ms": 48,
+        "exact": 12,
+        "remove_intermediate_control": false,
+        "total": 12
+      }
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-preservation/chains.json",
+      "bytes": 913333,
+      "sha256": "1220e27319f123d91c38b320bf63468b16e5b48d027d37cd37082209c12636e8",
+      "summary": {
+        "artifact": "blake3:433e380702a58f4913b163d4a4ab5964b88544a945807b1871c5b3db12241b0c",
+        "elapsed_ms": 57,
+        "exact": 16,
+        "remove_intermediate_control": false,
+        "total": 16
+      }
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-preservation/computed-construction.json",
+      "bytes": 3028318,
+      "sha256": "bfdea7ed03ba3457b9c0fbab1febd21bcc1c285c72e6dc83bc633c55f1afd242",
+      "summary": {
+        "artifact": "blake3:433e380702a58f4913b163d4a4ab5964b88544a945807b1871c5b3db12241b0c",
+        "elapsed_ms": 249,
+        "exact": 58,
+        "remove_intermediate_control": false,
+        "total": 58
+      }
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-preservation/dependent.json",
+      "bytes": 2307772,
+      "sha256": "910af159fad67de7036e2f46da8effeceb460b5c13cc6ef7cae0cea3aa980b7d",
+      "summary": {
+        "artifact": "blake3:433e380702a58f4913b163d4a4ab5964b88544a945807b1871c5b3db12241b0c",
+        "elapsed_ms": 50,
+        "exact": 48,
+        "exact_scope": "Complete bytes and EOS; writes counted separately.",
+        "total": 48,
+        "writes_exact": 48
+      }
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-preservation/exposed-literals.json",
+      "bytes": 447091,
+      "sha256": "153d34d61958c14a4cf2d76cfd650d1ddb3c6dee50f4f0ee6dc3556eb980d7df",
+      "summary": {
+        "artifact": "blake3:433e380702a58f4913b163d4a4ab5964b88544a945807b1871c5b3db12241b0c",
+        "elapsed_ms": 16,
+        "exact": 16,
+        "remove_intermediate_control": false,
+        "total": 16
+      }
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-preservation/exposed-roles.json",
+      "bytes": 689790,
+      "sha256": "ff5f8b802abce525c3af55e0c2ced14350df622b8eec03bdba7215a48093aecf",
+      "summary": {
+        "artifact": "blake3:433e380702a58f4913b163d4a4ab5964b88544a945807b1871c5b3db12241b0c",
+        "elapsed_ms": 49,
+        "exact": 12,
+        "remove_intermediate_control": false,
+        "total": 12
+      }
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-preservation/identifiers.json",
+      "bytes": 135423,
+      "sha256": "c3b62b5953cfa27443a9659dc3e71de1bbfdb4c5ff380862652ca06b4204d764",
+      "summary": {
+        "artifact": "blake3:433e380702a58f4913b163d4a4ab5964b88544a945807b1871c5b3db12241b0c",
+        "elapsed_ms": 9,
+        "exact": 8,
+        "remove_intermediate_control": false,
+        "total": 8
+      }
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-preservation/literal-construction.json",
+      "bytes": 2508066,
+      "sha256": "dbf9e79ea39a93f7d5f4778acf5be5607eeb5bbb2d1b7e96eb103f2dbb740402",
+      "summary": {
+        "artifact": "blake3:433e380702a58f4913b163d4a4ab5964b88544a945807b1871c5b3db12241b0c",
+        "elapsed_ms": 113,
+        "exact": 103,
+        "remove_intermediate_control": false,
+        "total": 103
+      }
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-preservation/long.json",
+      "bytes": 1457385,
+      "sha256": "e8dc10db9028ade94abdba168ee3477ab2a4de0a0d3f3ba99334ba6eaef3e0fe",
+      "summary": {
+        "artifact": "blake3:433e380702a58f4913b163d4a4ab5964b88544a945807b1871c5b3db12241b0c",
+        "elapsed_ms": 55,
+        "exact": 28,
+        "exact_scope": "Complete bytes and EOS; writes counted separately.",
+        "total": 28,
+        "writes_exact": 28
+      }
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-preservation/names.json",
+      "bytes": 1362406,
+      "sha256": "81788dab6ad7c61293518f330035ccdf6c67f7d9f7c711f63ad6259ee9b1b800",
+      "summary": {
+        "artifact": "blake3:433e380702a58f4913b163d4a4ab5964b88544a945807b1871c5b3db12241b0c",
+        "elapsed_ms": 30,
+        "exact": 28,
+        "exact_scope": "Complete bytes and EOS; writes counted separately.",
+        "total": 28,
+        "writes_exact": 28
+      }
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-preservation/numeric.json",
+      "bytes": 272704,
+      "sha256": "c1ed328971735745a7a1db350e42f9c0fea9087ebf42a67ca03526bc0ef1cd11",
+      "summary": {
+        "artifact": "blake3:433e380702a58f4913b163d4a4ab5964b88544a945807b1871c5b3db12241b0c",
+        "elapsed_ms": 13,
+        "exact": 6,
+        "remove_intermediate_control": false,
+        "total": 6
+      }
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-preservation/preservation.json",
+      "bytes": 1477188,
+      "sha256": "407b0feab3fe072a6bd95a27b45a49017e390b296bb916e8a527b547c7db1edb",
+      "summary": {
+        "artifact": "blake3:433e380702a58f4913b163d4a4ab5964b88544a945807b1871c5b3db12241b0c",
+        "exact": 62,
+        "total": 62
+      }
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-preservation/prior-chains.json",
+      "bytes": 913298,
+      "sha256": "13e0e195d84439c02c52b24e420026d6e2dbb2e7f53151a291c0e21ba95476ed",
+      "summary": {
+        "artifact": "blake3:433e380702a58f4913b163d4a4ab5964b88544a945807b1871c5b3db12241b0c",
+        "elapsed_ms": 55,
+        "exact": 16,
+        "remove_intermediate_control": false,
+        "total": 16
+      }
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-preservation/prior-fresh.json",
+      "bytes": 446960,
+      "sha256": "f88e95fba58adbd7ca448eebb0b416529072e473f5092a2ea8e30238fde6f3c0",
+      "summary": {
+        "artifact": "blake3:433e380702a58f4913b163d4a4ab5964b88544a945807b1871c5b3db12241b0c",
+        "elapsed_ms": 17,
+        "exact": 16,
+        "remove_intermediate_control": false,
+        "total": 16
+      }
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-preservation/prior.json",
+      "bytes": 330894,
+      "sha256": "d9d3b84fc9fa74cb1c5a641730f7b5e2a7c495ca0570b9103224efbd87c5d788",
+      "summary": {
+        "artifact": "blake3:433e380702a58f4913b163d4a4ab5964b88544a945807b1871c5b3db12241b0c",
+        "exact": 24,
+        "total": 24
+      }
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-preservation/roles.json",
+      "bytes": 689634,
+      "sha256": "2a3a4c040f99504d243605b4229f1a38771b415dae8542e9a999a739f8cb2afc",
+      "summary": {
+        "artifact": "blake3:433e380702a58f4913b163d4a4ab5964b88544a945807b1871c5b3db12241b0c",
+        "elapsed_ms": 49,
+        "exact": 12,
+        "remove_intermediate_control": false,
+        "total": 12
+      }
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-preservation/sessions.json",
+      "bytes": 37117,
+      "sha256": "286fa2a8d3d7c12c26c222c3cd28580c53cd21fcfd288954c291b1d9baba8217",
+      "summary": {
+        "artifact": "blake3:433e380702a58f4913b163d4a4ab5964b88544a945807b1871c5b3db12241b0c",
+        "exact_turns": 5,
+        "isolated_no_shared_records": true,
+        "isolated_response": " Unknown.\n",
+        "preserved_versions": 4,
+        "restore_and_forged_commit_checks": "PASS",
+        "schema": "uor-r4.relation-session-check/1",
+        "scope": "One native session reads, revises, retains an unrelated association, records a contradiction, and re-reads the unrelated association after repeated raw-window eviction. Restore is checked after actual first-token commitment; a new session has no shared relation state. Snapshot consistency is not source authentication.",
+        "total_turns": 5
+      }
+    }
+  ],
+  "comparison": {
+    "gains": [
+      {
+        "id": "role-read/fit/0/5/1",
+        "parent": "312);\n}\n",
+        "candidate": "cyra\n}\n",
+        "expected": "cyra\n}\n"
+      },
+      {
+        "id": "role-read/fit/2/5/3",
+        "parent": "11);\n}\n",
+        "candidate": "cyra\n}\n",
+        "expected": "cyra\n}\n"
+      },
+      {
+        "id": "role-read/fit/3/5/2",
+        "parent": "312);\n}\n",
+        "candidate": "cyra\n}\n",
+        "expected": "cyra\n}\n"
+      },
+      {
+        "id": "source-joint-fit/1/false/true/0",
+        "parent": "13.\n",
+        "candidate": " Paris.\n",
+        "expected": " Paris.\n"
+      },
+      {
+        "id": "admission-fit/1/false/0",
+        "parent": "4.\n",
+        "candidate": " Paris.\n",
+        "expected": " Paris.\n"
+      }
+    ],
+    "lost_correct": 0,
+    "changed_remaining_wrong": 0,
+    "disabled_parent_text_and_stop_equal": 615
+  },
+  "fresh": {
+    "exact": 8,
+    "total": 12,
+    "numeric_admission_cases": 4,
+    "lexical_rejections": 0,
+    "scope": "All arms generate identical text. New rejection transfer is unexercised.",
+    "failures": [
+      {
+        "id": "admission-fresh/0/true/1",
+        "expected": " Torsen.\n",
+        "actual": " Unknown.\n"
+      },
+      {
+        "id": "admission-fresh/0/true/2",
+        "expected": "-19.\n",
+        "actual": "26.\n"
+      },
+      {
+        "id": "admission-fresh/1/true/1",
+        "expected": " Mistra.\n",
+        "actual": " Unknown.\n"
+      },
+      {
+        "id": "admission-fresh/1/true/2",
+        "expected": "37.\n",
+        "actual": "-8.\n"
+      }
+    ]
+  },
+  "checks": {
+    "actual_artifact": {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-actual-path.stdout.log",
+      "bytes": 468,
+      "sha256": "00e4a52f07e71b563490f44f1b687aa3668228ab4c34e027c342b96e637616b4"
+    },
+    "overflow": {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-legality.log",
+      "bytes": 219,
+      "sha256": "11502123da0a04245e201e79e02d94cf94e8f1192632a83cd5f20174cf88ff71"
+    },
+    "integer_kernel": {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-kernel-source.log",
+      "bytes": 189,
+      "sha256": "0fda8b8cf3393a88f9cfc4668c2141ffe0d83e29daac231625efa9aa0b2b5725"
+    },
+    "generated_rust": {
+      "schema": "uor-r4.joint-admission-generated-rust/1",
+      "ids": [
+        "role-read/fit/0/5/1",
+        "role-read/fit/2/5/3",
+        "role-read/fit/3/5/2"
+      ],
+      "source": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-generated.rs",
+      "functions": 3,
+      "assertions": 15,
+      "status": "PASS",
+      "scope": "Exact construction prompt plus actual generated continuation; no response edits. Does not qualify general Rust generation."
+    },
+    "generated_source": {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-generated.rs",
+      "bytes": 807,
+      "sha256": "ed49e8cbe5aef86d9838a676ec0738f671f389fe94470a833a1b96a01d117ff4"
+    },
+    "format": "PASS",
+    "architecture_policy": "PASS",
+    "claim_wording": "PASS",
+    "allocation_scope": "Zero allocations in three actual-artifact cases across BOS, prompt ingestion, begin_response, repeated predict and predict/observe generation. Loading, encoding and checkpoints outside allocation census.",
+    "warm_latency": {
+      "samples": 18,
+      "median_ns": 132750,
+      "max_ns": 181667,
+      "scope": "Prediction plus observation only; loading, encoding, ingestion and checkpoint serialization excluded; diagnostic, not matched performance qualification."
+    },
+    "energy": "NOT_MEASURED",
+    "full_release_clippy_wasm": "NOT_RUN",
+    "public_cli_generation": "NOT_RUN",
+    "ci": "Required PR/merge queue statuses are compatibility acknowledgements only."
+  },
+  "resources": {
+    "projection": {
+      "schema": "uor-r4.joint-admission-projection/1",
+      "at": "2026-09-07T03:23:13.383Z",
+      "base_commit": "4b61a9b8f505909d7b5949b5935eed947a900335",
+      "parent": "blake3:d59070c29e1cebcb12d25c2fc034083d9631b24ab04da0c57b94a007ad10ea6f",
+      "scope": "Learn angular numeric-versus-lexical admission before selected execution, retaining parent numeric/source parameters and separate NoOperation/NoRead semantics.",
+      "before": {
+        "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+        "at": "2026-09-07T03:23:13.382Z",
+        "inherited_precleanup_bytes": 2747199488,
+        "obsolete_target_growth_credit": 671379456,
+        "current_target_bytes": 2585468928,
+        "predecessor_artifact_root_bytes": 145760256,
+        "current_artifact_root_bytes": 1533452288,
+        "predecessor_worktree_bytes": 9875456,
+        "current_worktree_bytes": 8937472,
+        "stopped_successor_worktree_bytes": 460877824,
+        "source_metadata_reserve_bytes": 5242880,
+        "current_sampled_known_storage_bytes": 6825435136,
+        "storage_limit_bytes": 7734296576,
+        "remaining_storage_bytes": 908861440,
+        "stop_margin_bytes": 134217728,
+        "available_growth_before_stop_bytes": 721227776,
+        "model_ledger": {
+          "cumulative_ms": 3605626,
+          "limit_ms": 4170000
+        },
+        "model_remaining_ms": 564374,
+        "model_process_limit": 1,
+        "model_process_rss_target_bytes": 4294967296,
+        "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+      },
+      "model_projection_ms": 420000,
+      "model_cycle_ms": 540000,
+      "engineering_projection_ms": 900000,
+      "engineering_cycle_ms": 1500000,
+      "growth_projection_bytes": 536870912,
+      "model_processes": 1,
+      "build_jobs": 1,
+      "rss_bytes": 4294967296,
+      "context_tokens": 512,
+      "retained_records": 16,
+      "model_work_breakdown_ms": {
+        "rust_data_and_parent_trace": 35000,
+        "angular_and_matched_control_fits": 100000,
+        "open_and_preservation": 130000,
+        "fresh_parent_candidate_control": 75000,
+        "allocation_reload_cli_and_latency": 45000,
+        "correction_reserve": 35000
+      },
+      "engineering_breakdown_ms": {
+        "release_example_and_cli": 400000,
+        "focused_tests_and_allocation_build": 250000,
+        "correction_reserve": 250000
+      },
+      "storage_breakdown_bytes": {
+        "cargo_products": 402653184,
+        "models_and_reports": 117440512,
+        "source_metadata": 16777216
+      },
+      "acceptance": "Complete bytes and EOS improve observed cross-domain failures; no lost correct construction or frozen preservation case; fresh changed-name/value/order population opened after design selection; causal commits, parent identity, bounded work and allocation checked; retain negatives if unmet.",
+      "authorization": "Current owner request; no cumulative limit extension or paid external compute. Stop/checkpoint within configured limits. Preserve all prior material."
+    },
+    "model_commands": [
+      {
+        "label": "joint-admission-prepare",
+        "started": "2026-09-07T03:37:05.884Z",
+        "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+        "args": [
+          "joint-admission",
+          "prepare",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-source-v2.json",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-source.json"
+        ],
+        "elapsed_ms": 304,
+        "code": 0,
+        "signal": null,
+        "stopped": null,
+        "engineering_only": false,
+        "run_growth_limit_bytes": 557088768,
+        "effective_run_storage_ceiling_bytes": 7362306048,
+        "peak_process_rss_sample_bytes": null,
+        "process_rss_samples": 0,
+        "peak_sampled_known_bytes": 6805348352,
+        "initial_resource_snapshot": {
+          "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+          "at": "2026-09-07T03:37:05.884Z",
+          "inherited_precleanup_bytes": 2747199488,
+          "obsolete_target_growth_credit": 671379456,
+          "current_target_bytes": 2565160960,
+          "predecessor_artifact_root_bytes": 145760256,
+          "current_artifact_root_bytes": 1533542400,
+          "predecessor_worktree_bytes": 9875456,
+          "current_worktree_bytes": 8937472,
+          "stopped_successor_worktree_bytes": 460877824,
+          "source_metadata_reserve_bytes": 5242880,
+          "current_sampled_known_storage_bytes": 6805217280,
+          "storage_limit_bytes": 7734296576,
+          "remaining_storage_bytes": 929079296,
+          "stop_margin_bytes": 134217728,
+          "available_growth_before_stop_bytes": 741445632,
+          "model_ledger": {
+            "cumulative_ms": 3605626,
+            "limit_ms": 4170000
+          },
+          "model_remaining_ms": 564374,
+          "model_process_limit": 1,
+          "model_process_rss_target_bytes": 4294967296,
+          "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+        },
+        "final_resource_snapshot": {
+          "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+          "at": "2026-09-07T03:37:06.244Z",
+          "inherited_precleanup_bytes": 2747199488,
+          "obsolete_target_growth_credit": 671379456,
+          "current_target_bytes": 2565160960,
+          "predecessor_artifact_root_bytes": 145760256,
+          "current_artifact_root_bytes": 1533673472,
+          "predecessor_worktree_bytes": 9875456,
+          "current_worktree_bytes": 8937472,
+          "stopped_successor_worktree_bytes": 460877824,
+          "source_metadata_reserve_bytes": 5242880,
+          "current_sampled_known_storage_bytes": 6805348352,
+          "storage_limit_bytes": 7734296576,
+          "remaining_storage_bytes": 928948224,
+          "stop_margin_bytes": 134217728,
+          "available_growth_before_stop_bytes": 741314560,
+          "model_ledger": {
+            "cumulative_ms": 3605930,
+            "limit_ms": 4170000
+          },
+          "model_remaining_ms": 564070,
+          "model_process_limit": 1,
+          "model_process_rss_target_bytes": 4294967296,
+          "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+        },
+        "cumulative_ms": 3605930,
+        "remaining_ms": 564070,
+        "sampling_scope": "Child-process RSS only; zero samples means unavailable. Includes current known retained storage and all inherited accounting; not exact transient peaks."
+      },
+      {
+        "label": "joint-admission-parent-construction",
+        "started": "2026-09-07T03:37:25.185Z",
+        "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+        "args": [
+          "joint-admission",
+          "evaluate",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-angular128/model.json",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-source.json",
+          "fit",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-parent-construction.json",
+          "full"
+        ],
+        "elapsed_ms": 9796,
+        "code": 0,
+        "signal": null,
+        "stopped": null,
+        "engineering_only": false,
+        "run_growth_limit_bytes": 590577664,
+        "effective_run_storage_ceiling_bytes": 7362306048,
+        "peak_process_rss_sample_bytes": 775225344,
+        "process_rss_samples": 9,
+        "peak_sampled_known_bytes": 6784987136,
+        "initial_resource_snapshot": {
+          "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+          "at": "2026-09-07T03:37:25.185Z",
+          "inherited_precleanup_bytes": 2747199488,
+          "obsolete_target_growth_credit": 671379456,
+          "current_target_bytes": 2531540992,
+          "predecessor_artifact_root_bytes": 145760256,
+          "current_artifact_root_bytes": 1533673472,
+          "predecessor_worktree_bytes": 9875456,
+          "current_worktree_bytes": 8937472,
+          "stopped_successor_worktree_bytes": 460877824,
+          "source_metadata_reserve_bytes": 5242880,
+          "current_sampled_known_storage_bytes": 6771728384,
+          "storage_limit_bytes": 7734296576,
+          "remaining_storage_bytes": 962568192,
+          "stop_margin_bytes": 134217728,
+          "available_growth_before_stop_bytes": 774934528,
+          "model_ledger": {
+            "cumulative_ms": 3605930,
+            "limit_ms": 4170000
+          },
+          "model_remaining_ms": 564070,
+          "model_process_limit": 1,
+          "model_process_rss_target_bytes": 4294967296,
+          "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+        },
+        "final_resource_snapshot": {
+          "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+          "at": "2026-09-07T03:37:35.036Z",
+          "inherited_precleanup_bytes": 2747199488,
+          "obsolete_target_growth_credit": 671379456,
+          "current_target_bytes": 2531540992,
+          "predecessor_artifact_root_bytes": 145760256,
+          "current_artifact_root_bytes": 1546932224,
+          "predecessor_worktree_bytes": 9875456,
+          "current_worktree_bytes": 8937472,
+          "stopped_successor_worktree_bytes": 460877824,
+          "source_metadata_reserve_bytes": 5242880,
+          "current_sampled_known_storage_bytes": 6784987136,
+          "storage_limit_bytes": 7734296576,
+          "remaining_storage_bytes": 949309440,
+          "stop_margin_bytes": 134217728,
+          "available_growth_before_stop_bytes": 761675776,
+          "model_ledger": {
+            "cumulative_ms": 3615726,
+            "limit_ms": 4170000
+          },
+          "model_remaining_ms": 554274,
+          "model_process_limit": 1,
+          "model_process_rss_target_bytes": 4294967296,
+          "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+        },
+        "cumulative_ms": 3615726,
+        "remaining_ms": 554274,
+        "sampling_scope": "Child-process RSS only; zero samples means unavailable. Includes current known retained storage and all inherited accounting; not exact transient peaks."
+      },
+      {
+        "label": "joint-admission-parent-development",
+        "started": "2026-09-07T03:39:05.934Z",
+        "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+        "args": [
+          "joint-admission",
+          "evaluate",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-angular128/model.json",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-source.json",
+          "development",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-parent-development.json",
+          "full"
+        ],
+        "elapsed_ms": 8666,
+        "code": 0,
+        "signal": null,
+        "stopped": null,
+        "engineering_only": false,
+        "run_growth_limit_bytes": 525246464,
+        "effective_run_storage_ceiling_bytes": 7362306048,
+        "peak_process_rss_sample_bytes": 898711552,
+        "process_rss_samples": 8,
+        "peak_sampled_known_bytes": 6840557568,
+        "initial_resource_snapshot": {
+          "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+          "at": "2026-09-07T03:39:05.934Z",
+          "inherited_precleanup_bytes": 2747199488,
+          "obsolete_target_growth_credit": 671379456,
+          "current_target_bytes": 2583613440,
+          "predecessor_artifact_root_bytes": 145760256,
+          "current_artifact_root_bytes": 1546932224,
+          "predecessor_worktree_bytes": 9875456,
+          "current_worktree_bytes": 8937472,
+          "stopped_successor_worktree_bytes": 460877824,
+          "source_metadata_reserve_bytes": 5242880,
+          "current_sampled_known_storage_bytes": 6837059584,
+          "storage_limit_bytes": 7734296576,
+          "remaining_storage_bytes": 897236992,
+          "stop_margin_bytes": 134217728,
+          "available_growth_before_stop_bytes": 709603328,
+          "model_ledger": {
+            "cumulative_ms": 3615726,
+            "limit_ms": 4170000
+          },
+          "model_remaining_ms": 554274,
+          "model_process_limit": 1,
+          "model_process_rss_target_bytes": 4294967296,
+          "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+        },
+        "final_resource_snapshot": {
+          "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+          "at": "2026-09-07T03:39:14.652Z",
+          "inherited_precleanup_bytes": 2747199488,
+          "obsolete_target_growth_credit": 671379456,
+          "current_target_bytes": 2586996736,
+          "predecessor_artifact_root_bytes": 145760256,
+          "current_artifact_root_bytes": 1547046912,
+          "predecessor_worktree_bytes": 9875456,
+          "current_worktree_bytes": 8937472,
+          "stopped_successor_worktree_bytes": 460877824,
+          "source_metadata_reserve_bytes": 5242880,
+          "current_sampled_known_storage_bytes": 6840557568,
+          "storage_limit_bytes": 7734296576,
+          "remaining_storage_bytes": 893739008,
+          "stop_margin_bytes": 134217728,
+          "available_growth_before_stop_bytes": 706105344,
+          "model_ledger": {
+            "cumulative_ms": 3624392,
+            "limit_ms": 4170000
+          },
+          "model_remaining_ms": 545608,
+          "model_process_limit": 1,
+          "model_process_rss_target_bytes": 4294967296,
+          "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+        },
+        "cumulative_ms": 3624392,
+        "remaining_ms": 545608,
+        "sampling_scope": "Child-process RSS only; zero samples means unavailable. Includes current known retained storage and all inherited accounting; not exact transient peaks."
+      },
+      {
+        "label": "joint-admission-angular-fit",
+        "started": "2026-09-07T03:40:07.775Z",
+        "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+        "args": [
+          "joint-admission",
+          "fit",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-angular128/model.json",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-source.json",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-angular128",
+          "128",
+          "angular"
+        ],
+        "elapsed_ms": 20663,
+        "code": 0,
+        "signal": null,
+        "stopped": null,
+        "engineering_only": false,
+        "run_growth_limit_bytes": 521748480,
+        "effective_run_storage_ceiling_bytes": 7362310144,
+        "peak_process_rss_sample_bytes": 903888896,
+        "process_rss_samples": 20,
+        "peak_sampled_known_bytes": 6865252352,
+        "initial_resource_snapshot": {
+          "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+          "at": "2026-09-07T03:40:07.775Z",
+          "inherited_precleanup_bytes": 2747199488,
+          "obsolete_target_growth_credit": 671379456,
+          "current_target_bytes": 2586996736,
+          "predecessor_artifact_root_bytes": 145760256,
+          "current_artifact_root_bytes": 1547051008,
+          "predecessor_worktree_bytes": 9875456,
+          "current_worktree_bytes": 8937472,
+          "stopped_successor_worktree_bytes": 460877824,
+          "source_metadata_reserve_bytes": 5242880,
+          "current_sampled_known_storage_bytes": 6840561664,
+          "storage_limit_bytes": 7734296576,
+          "remaining_storage_bytes": 893734912,
+          "stop_margin_bytes": 134217728,
+          "available_growth_before_stop_bytes": 706101248,
+          "model_ledger": {
+            "cumulative_ms": 3624392,
+            "limit_ms": 4170000
+          },
+          "model_remaining_ms": 545608,
+          "model_process_limit": 1,
+          "model_process_rss_target_bytes": 4294967296,
+          "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+        },
+        "final_resource_snapshot": {
+          "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+          "at": "2026-09-07T03:40:28.493Z",
+          "inherited_precleanup_bytes": 2747199488,
+          "obsolete_target_growth_credit": 671379456,
+          "current_target_bytes": 2587000832,
+          "predecessor_artifact_root_bytes": 145760256,
+          "current_artifact_root_bytes": 1571737600,
+          "predecessor_worktree_bytes": 9875456,
+          "current_worktree_bytes": 8937472,
+          "stopped_successor_worktree_bytes": 460877824,
+          "source_metadata_reserve_bytes": 5242880,
+          "current_sampled_known_storage_bytes": 6865252352,
+          "storage_limit_bytes": 7734296576,
+          "remaining_storage_bytes": 869044224,
+          "stop_margin_bytes": 134217728,
+          "available_growth_before_stop_bytes": 681410560,
+          "model_ledger": {
+            "cumulative_ms": 3645055,
+            "limit_ms": 4170000
+          },
+          "model_remaining_ms": 524945,
+          "model_process_limit": 1,
+          "model_process_rss_target_bytes": 4294967296,
+          "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+        },
+        "cumulative_ms": 3645055,
+        "remaining_ms": 524945,
+        "sampling_scope": "Child-process RSS only; zero samples means unavailable. Includes current known retained storage and all inherited accounting; not exact transient peaks."
+      },
+      {
+        "label": "joint-admission-equality-fit",
+        "started": "2026-09-07T03:41:31.396Z",
+        "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+        "args": [
+          "joint-admission",
+          "fit",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-angular128/model.json",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-source.json",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-equality128",
+          "128",
+          "equality"
+        ],
+        "elapsed_ms": 20734,
+        "code": 0,
+        "signal": null,
+        "stopped": null,
+        "engineering_only": false,
+        "run_growth_limit_bytes": 483557376,
+        "effective_run_storage_ceiling_bytes": 7362306048,
+        "peak_process_rss_sample_bytes": 902234112,
+        "process_rss_samples": 20,
+        "peak_sampled_known_bytes": 6899560448,
+        "initial_resource_snapshot": {
+          "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+          "at": "2026-09-07T03:41:31.396Z",
+          "inherited_precleanup_bytes": 2747199488,
+          "obsolete_target_growth_credit": 671379456,
+          "current_target_bytes": 2600497152,
+          "predecessor_artifact_root_bytes": 145760256,
+          "current_artifact_root_bytes": 1571737600,
+          "predecessor_worktree_bytes": 9875456,
+          "current_worktree_bytes": 8937472,
+          "stopped_successor_worktree_bytes": 460877824,
+          "source_metadata_reserve_bytes": 5242880,
+          "current_sampled_known_storage_bytes": 6878748672,
+          "storage_limit_bytes": 7734296576,
+          "remaining_storage_bytes": 855547904,
+          "stop_margin_bytes": 134217728,
+          "available_growth_before_stop_bytes": 667914240,
+          "model_ledger": {
+            "cumulative_ms": 3645055,
+            "limit_ms": 4170000
+          },
+          "model_remaining_ms": 524945,
+          "model_process_limit": 1,
+          "model_process_rss_target_bytes": 4294967296,
+          "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+        },
+        "final_resource_snapshot": {
+          "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+          "at": "2026-09-07T03:41:52.189Z",
+          "inherited_precleanup_bytes": 2747199488,
+          "obsolete_target_growth_credit": 671379456,
+          "current_target_bytes": 2596626432,
+          "predecessor_artifact_root_bytes": 145760256,
+          "current_artifact_root_bytes": 1596420096,
+          "predecessor_worktree_bytes": 9875456,
+          "current_worktree_bytes": 8937472,
+          "stopped_successor_worktree_bytes": 460877824,
+          "source_metadata_reserve_bytes": 5242880,
+          "current_sampled_known_storage_bytes": 6899560448,
+          "storage_limit_bytes": 7734296576,
+          "remaining_storage_bytes": 834736128,
+          "stop_margin_bytes": 134217728,
+          "available_growth_before_stop_bytes": 647102464,
+          "model_ledger": {
+            "cumulative_ms": 3665789,
+            "limit_ms": 4170000
+          },
+          "model_remaining_ms": 504211,
+          "model_process_limit": 1,
+          "model_process_rss_target_bytes": 4294967296,
+          "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+        },
+        "cumulative_ms": 3665789,
+        "remaining_ms": 504211,
+        "sampling_scope": "Child-process RSS only; zero samples means unavailable. Includes current known retained storage and all inherited accounting; not exact transient peaks."
+      },
+      {
+        "label": "joint-admission-preservation",
+        "started": "2026-09-07T03:42:40.642Z",
+        "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+        "args": [
+          "source-noread",
+          "preserve",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-angular128/model.json",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-preservation"
+        ],
+        "elapsed_ms": 10257,
+        "code": 0,
+        "signal": null,
+        "stopped": null,
+        "engineering_only": false,
+        "run_growth_limit_bytes": 462684160,
+        "effective_run_storage_ceiling_bytes": 7362306048,
+        "peak_process_rss_sample_bytes": 900595712,
+        "process_rss_samples": 10,
+        "peak_sampled_known_bytes": 6917369856,
+        "initial_resource_snapshot": {
+          "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+          "at": "2026-09-07T03:42:40.642Z",
+          "inherited_precleanup_bytes": 2747199488,
+          "obsolete_target_growth_credit": 671379456,
+          "current_target_bytes": 2596691968,
+          "predecessor_artifact_root_bytes": 145760256,
+          "current_artifact_root_bytes": 1596416000,
+          "predecessor_worktree_bytes": 9875456,
+          "current_worktree_bytes": 8937472,
+          "stopped_successor_worktree_bytes": 460877824,
+          "source_metadata_reserve_bytes": 5242880,
+          "current_sampled_known_storage_bytes": 6899621888,
+          "storage_limit_bytes": 7734296576,
+          "remaining_storage_bytes": 834674688,
+          "stop_margin_bytes": 134217728,
+          "available_growth_before_stop_bytes": 647041024,
+          "model_ledger": {
+            "cumulative_ms": 3665789,
+            "limit_ms": 4170000
+          },
+          "model_remaining_ms": 504211,
+          "model_process_limit": 1,
+          "model_process_rss_target_bytes": 4294967296,
+          "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+        },
+        "final_resource_snapshot": {
+          "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+          "at": "2026-09-07T03:42:50.951Z",
+          "inherited_precleanup_bytes": 2747199488,
+          "obsolete_target_growth_credit": 671379456,
+          "current_target_bytes": 2596691968,
+          "predecessor_artifact_root_bytes": 145760256,
+          "current_artifact_root_bytes": 1614163968,
+          "predecessor_worktree_bytes": 9875456,
+          "current_worktree_bytes": 8937472,
+          "stopped_successor_worktree_bytes": 460877824,
+          "source_metadata_reserve_bytes": 5242880,
+          "current_sampled_known_storage_bytes": 6917369856,
+          "storage_limit_bytes": 7734296576,
+          "remaining_storage_bytes": 816926720,
+          "stop_margin_bytes": 134217728,
+          "available_growth_before_stop_bytes": 629293056,
+          "model_ledger": {
+            "cumulative_ms": 3676046,
+            "limit_ms": 4170000
+          },
+          "model_remaining_ms": 493954,
+          "model_process_limit": 1,
+          "model_process_rss_target_bytes": 4294967296,
+          "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+        },
+        "cumulative_ms": 3676046,
+        "remaining_ms": 493954,
+        "sampling_scope": "Child-process RSS only; zero samples means unavailable. Includes current known retained storage and all inherited accounting; not exact transient peaks."
+      },
+      {
+        "label": "joint-admission-actual-path",
+        "started": "2026-09-07T03:43:54.035Z",
+        "command": "env",
+        "args": [
+          "R4_JOINT_ADMISSION_MODEL=/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-angular128/model.json",
+          "R4_JOINT_ADMISSION_PARENT=/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-angular128/model.json",
+          "/tmp/r4-native-geometric-target/release/deps/native_geometric_allocations-6c7ff1216c7e1931",
+          "native_joint_admission_preserves_parent_and_executes_only_admitted_payloads",
+          "--ignored",
+          "--nocapture"
+        ],
+        "elapsed_ms": 37437,
+        "code": 0,
+        "signal": null,
+        "stopped": null,
+        "engineering_only": false,
+        "run_growth_limit_bytes": 444928000,
+        "effective_run_storage_ceiling_bytes": 7362306048,
+        "peak_process_rss_sample_bytes": 977977344,
+        "process_rss_samples": 37,
+        "peak_sampled_known_bytes": 6917386240,
+        "initial_resource_snapshot": {
+          "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+          "at": "2026-09-07T03:43:54.035Z",
+          "inherited_precleanup_bytes": 2747199488,
+          "obsolete_target_growth_credit": 671379456,
+          "current_target_bytes": 2596691968,
+          "predecessor_artifact_root_bytes": 145760256,
+          "current_artifact_root_bytes": 1614172160,
+          "predecessor_worktree_bytes": 9875456,
+          "current_worktree_bytes": 8937472,
+          "stopped_successor_worktree_bytes": 460877824,
+          "source_metadata_reserve_bytes": 5242880,
+          "current_sampled_known_storage_bytes": 6917378048,
+          "storage_limit_bytes": 7734296576,
+          "remaining_storage_bytes": 816918528,
+          "stop_margin_bytes": 134217728,
+          "available_growth_before_stop_bytes": 629284864,
+          "model_ledger": {
+            "cumulative_ms": 3676046,
+            "limit_ms": 4170000
+          },
+          "model_remaining_ms": 493954,
+          "model_process_limit": 1,
+          "model_process_rss_target_bytes": 4294967296,
+          "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+        },
+        "final_resource_snapshot": {
+          "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+          "at": "2026-09-07T03:44:31.525Z",
+          "inherited_precleanup_bytes": 2747199488,
+          "obsolete_target_growth_credit": 671379456,
+          "current_target_bytes": 2596691968,
+          "predecessor_artifact_root_bytes": 145760256,
+          "current_artifact_root_bytes": 1614180352,
+          "predecessor_worktree_bytes": 9875456,
+          "current_worktree_bytes": 8937472,
+          "stopped_successor_worktree_bytes": 460877824,
+          "source_metadata_reserve_bytes": 5242880,
+          "current_sampled_known_storage_bytes": 6917386240,
+          "storage_limit_bytes": 7734296576,
+          "remaining_storage_bytes": 816910336,
+          "stop_margin_bytes": 134217728,
+          "available_growth_before_stop_bytes": 629276672,
+          "model_ledger": {
+            "cumulative_ms": 3713483,
+            "limit_ms": 4170000
+          },
+          "model_remaining_ms": 456517,
+          "model_process_limit": 1,
+          "model_process_rss_target_bytes": 4294967296,
+          "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+        },
+        "cumulative_ms": 3713483,
+        "remaining_ms": 456517,
+        "sampling_scope": "Child-process RSS only; zero samples means unavailable. Includes current known retained storage and all inherited accounting; not exact transient peaks."
+      },
+      {
+        "label": "joint-admission-fresh-parent",
+        "started": "2026-09-07T03:47:30.157Z",
+        "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+        "args": [
+          "joint-admission",
+          "evaluate",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-angular128/model.json",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-source.json",
+          "first_use",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-fresh-parent.json",
+          "full"
+        ],
+        "elapsed_ms": 8479,
+        "code": 0,
+        "signal": null,
+        "stopped": null,
+        "engineering_only": false,
+        "run_growth_limit_bytes": 444919808,
+        "effective_run_storage_ceiling_bytes": 7362306048,
+        "peak_process_rss_sample_bytes": 891043840,
+        "process_rss_samples": 8,
+        "peak_sampled_known_bytes": 6917652480,
+        "initial_resource_snapshot": {
+          "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+          "at": "2026-09-07T03:47:30.157Z",
+          "inherited_precleanup_bytes": 2747199488,
+          "obsolete_target_growth_credit": 671379456,
+          "current_target_bytes": 2596691968,
+          "predecessor_artifact_root_bytes": 145760256,
+          "current_artifact_root_bytes": 1614180352,
+          "predecessor_worktree_bytes": 9875456,
+          "current_worktree_bytes": 8937472,
+          "stopped_successor_worktree_bytes": 460877824,
+          "source_metadata_reserve_bytes": 5242880,
+          "current_sampled_known_storage_bytes": 6917386240,
+          "storage_limit_bytes": 7734296576,
+          "remaining_storage_bytes": 816910336,
+          "stop_margin_bytes": 134217728,
+          "available_growth_before_stop_bytes": 629276672,
+          "model_ledger": {
+            "cumulative_ms": 3713483,
+            "limit_ms": 4170000
+          },
+          "model_remaining_ms": 456517,
+          "model_process_limit": 1,
+          "model_process_rss_target_bytes": 4294967296,
+          "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+        },
+        "final_resource_snapshot": {
+          "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+          "at": "2026-09-07T03:47:38.687Z",
+          "inherited_precleanup_bytes": 2747199488,
+          "obsolete_target_growth_credit": 671379456,
+          "current_target_bytes": 2596691968,
+          "predecessor_artifact_root_bytes": 145760256,
+          "current_artifact_root_bytes": 1614446592,
+          "predecessor_worktree_bytes": 9875456,
+          "current_worktree_bytes": 8937472,
+          "stopped_successor_worktree_bytes": 460877824,
+          "source_metadata_reserve_bytes": 5242880,
+          "current_sampled_known_storage_bytes": 6917652480,
+          "storage_limit_bytes": 7734296576,
+          "remaining_storage_bytes": 816644096,
+          "stop_margin_bytes": 134217728,
+          "available_growth_before_stop_bytes": 629010432,
+          "model_ledger": {
+            "cumulative_ms": 3721962,
+            "limit_ms": 4170000
+          },
+          "model_remaining_ms": 448038,
+          "model_process_limit": 1,
+          "model_process_rss_target_bytes": 4294967296,
+          "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+        },
+        "cumulative_ms": 3721962,
+        "remaining_ms": 448038,
+        "sampling_scope": "Child-process RSS only; zero samples means unavailable. Includes current known retained storage and all inherited accounting; not exact transient peaks."
+      },
+      {
+        "label": "joint-admission-fresh-angular",
+        "started": "2026-09-07T03:47:44.547Z",
+        "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+        "args": [
+          "joint-admission",
+          "evaluate",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-angular128/model.json",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-source.json",
+          "first_use",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-fresh-angular.json",
+          "full"
+        ],
+        "elapsed_ms": 9256,
+        "code": 0,
+        "signal": null,
+        "stopped": null,
+        "engineering_only": false,
+        "run_growth_limit_bytes": 444653568,
+        "effective_run_storage_ceiling_bytes": 7362306048,
+        "peak_process_rss_sample_bytes": 903266304,
+        "process_rss_samples": 9,
+        "peak_sampled_known_bytes": 6917918720,
+        "initial_resource_snapshot": {
+          "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+          "at": "2026-09-07T03:47:44.547Z",
+          "inherited_precleanup_bytes": 2747199488,
+          "obsolete_target_growth_credit": 671379456,
+          "current_target_bytes": 2596691968,
+          "predecessor_artifact_root_bytes": 145760256,
+          "current_artifact_root_bytes": 1614446592,
+          "predecessor_worktree_bytes": 9875456,
+          "current_worktree_bytes": 8937472,
+          "stopped_successor_worktree_bytes": 460877824,
+          "source_metadata_reserve_bytes": 5242880,
+          "current_sampled_known_storage_bytes": 6917652480,
+          "storage_limit_bytes": 7734296576,
+          "remaining_storage_bytes": 816644096,
+          "stop_margin_bytes": 134217728,
+          "available_growth_before_stop_bytes": 629010432,
+          "model_ledger": {
+            "cumulative_ms": 3721962,
+            "limit_ms": 4170000
+          },
+          "model_remaining_ms": 448038,
+          "model_process_limit": 1,
+          "model_process_rss_target_bytes": 4294967296,
+          "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+        },
+        "final_resource_snapshot": {
+          "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+          "at": "2026-09-07T03:47:53.869Z",
+          "inherited_precleanup_bytes": 2747199488,
+          "obsolete_target_growth_credit": 671379456,
+          "current_target_bytes": 2596691968,
+          "predecessor_artifact_root_bytes": 145760256,
+          "current_artifact_root_bytes": 1614712832,
+          "predecessor_worktree_bytes": 9875456,
+          "current_worktree_bytes": 8937472,
+          "stopped_successor_worktree_bytes": 460877824,
+          "source_metadata_reserve_bytes": 5242880,
+          "current_sampled_known_storage_bytes": 6917918720,
+          "storage_limit_bytes": 7734296576,
+          "remaining_storage_bytes": 816377856,
+          "stop_margin_bytes": 134217728,
+          "available_growth_before_stop_bytes": 628744192,
+          "model_ledger": {
+            "cumulative_ms": 3731218,
+            "limit_ms": 4170000
+          },
+          "model_remaining_ms": 438782,
+          "model_process_limit": 1,
+          "model_process_rss_target_bytes": 4294967296,
+          "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+        },
+        "cumulative_ms": 3731218,
+        "remaining_ms": 438782,
+        "sampling_scope": "Child-process RSS only; zero samples means unavailable. Includes current known retained storage and all inherited accounting; not exact transient peaks."
+      },
+      {
+        "label": "joint-admission-fresh-equality",
+        "started": "2026-09-07T03:48:03.246Z",
+        "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+        "args": [
+          "joint-admission",
+          "evaluate",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-equality128/model.json",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-source.json",
+          "first_use",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-fresh-equality.json",
+          "full"
+        ],
+        "elapsed_ms": 9289,
+        "code": 0,
+        "signal": null,
+        "stopped": null,
+        "engineering_only": false,
+        "run_growth_limit_bytes": 444387328,
+        "effective_run_storage_ceiling_bytes": 7362306048,
+        "peak_process_rss_sample_bytes": 909475840,
+        "process_rss_samples": 9,
+        "peak_sampled_known_bytes": 6918184960,
+        "initial_resource_snapshot": {
+          "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+          "at": "2026-09-07T03:48:03.246Z",
+          "inherited_precleanup_bytes": 2747199488,
+          "obsolete_target_growth_credit": 671379456,
+          "current_target_bytes": 2596691968,
+          "predecessor_artifact_root_bytes": 145760256,
+          "current_artifact_root_bytes": 1614712832,
+          "predecessor_worktree_bytes": 9875456,
+          "current_worktree_bytes": 8937472,
+          "stopped_successor_worktree_bytes": 460877824,
+          "source_metadata_reserve_bytes": 5242880,
+          "current_sampled_known_storage_bytes": 6917918720,
+          "storage_limit_bytes": 7734296576,
+          "remaining_storage_bytes": 816377856,
+          "stop_margin_bytes": 134217728,
+          "available_growth_before_stop_bytes": 628744192,
+          "model_ledger": {
+            "cumulative_ms": 3731218,
+            "limit_ms": 4170000
+          },
+          "model_remaining_ms": 438782,
+          "model_process_limit": 1,
+          "model_process_rss_target_bytes": 4294967296,
+          "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+        },
+        "final_resource_snapshot": {
+          "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+          "at": "2026-09-07T03:48:12.586Z",
+          "inherited_precleanup_bytes": 2747199488,
+          "obsolete_target_growth_credit": 671379456,
+          "current_target_bytes": 2596691968,
+          "predecessor_artifact_root_bytes": 145760256,
+          "current_artifact_root_bytes": 1614979072,
+          "predecessor_worktree_bytes": 9875456,
+          "current_worktree_bytes": 8937472,
+          "stopped_successor_worktree_bytes": 460877824,
+          "source_metadata_reserve_bytes": 5242880,
+          "current_sampled_known_storage_bytes": 6918184960,
+          "storage_limit_bytes": 7734296576,
+          "remaining_storage_bytes": 816111616,
+          "stop_margin_bytes": 134217728,
+          "available_growth_before_stop_bytes": 628477952,
+          "model_ledger": {
+            "cumulative_ms": 3740507,
+            "limit_ms": 4170000
+          },
+          "model_remaining_ms": 429493,
+          "model_process_limit": 1,
+          "model_process_rss_target_bytes": 4294967296,
+          "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+        },
+        "cumulative_ms": 3740507,
+        "remaining_ms": 429493,
+        "sampling_scope": "Child-process RSS only; zero samples means unavailable. Includes current known retained storage and all inherited accounting; not exact transient peaks."
+      },
+      {
+        "label": "joint-admission-prior-source-fresh",
+        "started": "2026-09-07T03:48:21.314Z",
+        "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+        "args": [
+          "joint-admission",
+          "evaluate",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-angular128/model.json",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-source-v2.json",
+          "first_use",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-prior-source-fresh.json",
+          "full"
+        ],
+        "elapsed_ms": 9270,
+        "code": 0,
+        "signal": null,
+        "stopped": null,
+        "engineering_only": false,
+        "run_growth_limit_bytes": 444121088,
+        "effective_run_storage_ceiling_bytes": 7362306048,
+        "peak_process_rss_sample_bytes": 900956160,
+        "process_rss_samples": 9,
+        "peak_sampled_known_bytes": 6918463488,
+        "initial_resource_snapshot": {
+          "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+          "at": "2026-09-07T03:48:21.314Z",
+          "inherited_precleanup_bytes": 2747199488,
+          "obsolete_target_growth_credit": 671379456,
+          "current_target_bytes": 2596691968,
+          "predecessor_artifact_root_bytes": 145760256,
+          "current_artifact_root_bytes": 1614979072,
+          "predecessor_worktree_bytes": 9875456,
+          "current_worktree_bytes": 8937472,
+          "stopped_successor_worktree_bytes": 460877824,
+          "source_metadata_reserve_bytes": 5242880,
+          "current_sampled_known_storage_bytes": 6918184960,
+          "storage_limit_bytes": 7734296576,
+          "remaining_storage_bytes": 816111616,
+          "stop_margin_bytes": 134217728,
+          "available_growth_before_stop_bytes": 628477952,
+          "model_ledger": {
+            "cumulative_ms": 3740507,
+            "limit_ms": 4170000
+          },
+          "model_remaining_ms": 429493,
+          "model_process_limit": 1,
+          "model_process_rss_target_bytes": 4294967296,
+          "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+        },
+        "final_resource_snapshot": {
+          "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+          "at": "2026-09-07T03:48:30.636Z",
+          "inherited_precleanup_bytes": 2747199488,
+          "obsolete_target_growth_credit": 671379456,
+          "current_target_bytes": 2596691968,
+          "predecessor_artifact_root_bytes": 145760256,
+          "current_artifact_root_bytes": 1615257600,
+          "predecessor_worktree_bytes": 9875456,
+          "current_worktree_bytes": 8937472,
+          "stopped_successor_worktree_bytes": 460877824,
+          "source_metadata_reserve_bytes": 5242880,
+          "current_sampled_known_storage_bytes": 6918463488,
+          "storage_limit_bytes": 7734296576,
+          "remaining_storage_bytes": 815833088,
+          "stop_margin_bytes": 134217728,
+          "available_growth_before_stop_bytes": 628199424,
+          "model_ledger": {
+            "cumulative_ms": 3749777,
+            "limit_ms": 4170000
+          },
+          "model_remaining_ms": 420223,
+          "model_process_limit": 1,
+          "model_process_rss_target_bytes": 4294967296,
+          "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+        },
+        "cumulative_ms": 3749777,
+        "remaining_ms": 420223,
+        "sampling_scope": "Child-process RSS only; zero samples means unavailable. Includes current known retained storage and all inherited accounting; not exact transient peaks."
+      },
+      {
+        "label": "joint-admission-prior-source-open",
+        "started": "2026-09-07T03:48:45.139Z",
+        "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+        "args": [
+          "joint-admission",
+          "evaluate",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-angular128/model.json",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-source-v2.json",
+          "development",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-prior-source-open.json",
+          "full"
+        ],
+        "elapsed_ms": 9259,
+        "code": 0,
+        "signal": null,
+        "stopped": null,
+        "engineering_only": false,
+        "run_growth_limit_bytes": 443842560,
+        "effective_run_storage_ceiling_bytes": 7362306048,
+        "peak_process_rss_sample_bytes": 904642560,
+        "process_rss_samples": 9,
+        "peak_sampled_known_bytes": 6918647808,
+        "initial_resource_snapshot": {
+          "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+          "at": "2026-09-07T03:48:45.139Z",
+          "inherited_precleanup_bytes": 2747199488,
+          "obsolete_target_growth_credit": 671379456,
+          "current_target_bytes": 2596691968,
+          "predecessor_artifact_root_bytes": 145760256,
+          "current_artifact_root_bytes": 1615257600,
+          "predecessor_worktree_bytes": 9875456,
+          "current_worktree_bytes": 8937472,
+          "stopped_successor_worktree_bytes": 460877824,
+          "source_metadata_reserve_bytes": 5242880,
+          "current_sampled_known_storage_bytes": 6918463488,
+          "storage_limit_bytes": 7734296576,
+          "remaining_storage_bytes": 815833088,
+          "stop_margin_bytes": 134217728,
+          "available_growth_before_stop_bytes": 628199424,
+          "model_ledger": {
+            "cumulative_ms": 3749777,
+            "limit_ms": 4170000
+          },
+          "model_remaining_ms": 420223,
+          "model_process_limit": 1,
+          "model_process_rss_target_bytes": 4294967296,
+          "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+        },
+        "final_resource_snapshot": {
+          "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+          "at": "2026-09-07T03:48:54.454Z",
+          "inherited_precleanup_bytes": 2747199488,
+          "obsolete_target_growth_credit": 671379456,
+          "current_target_bytes": 2596691968,
+          "predecessor_artifact_root_bytes": 145760256,
+          "current_artifact_root_bytes": 1615441920,
+          "predecessor_worktree_bytes": 9875456,
+          "current_worktree_bytes": 8937472,
+          "stopped_successor_worktree_bytes": 460877824,
+          "source_metadata_reserve_bytes": 5242880,
+          "current_sampled_known_storage_bytes": 6918647808,
+          "storage_limit_bytes": 7734296576,
+          "remaining_storage_bytes": 815648768,
+          "stop_margin_bytes": 134217728,
+          "available_growth_before_stop_bytes": 628015104,
+          "model_ledger": {
+            "cumulative_ms": 3759036,
+            "limit_ms": 4170000
+          },
+          "model_remaining_ms": 410964,
+          "model_process_limit": 1,
+          "model_process_rss_target_bytes": 4294967296,
+          "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+        },
+        "cumulative_ms": 3759036,
+        "remaining_ms": 410964,
+        "sampling_scope": "Child-process RSS only; zero samples means unavailable. Includes current known retained storage and all inherited accounting; not exact transient peaks."
+      },
+      {
+        "label": "joint-admission-disabled-construction",
+        "started": "2026-09-07T03:49:51.422Z",
+        "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+        "args": [
+          "joint-admission",
+          "evaluate",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-angular128/model.json",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-source.json",
+          "fit",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-disabled-construction.json",
+          "admission-disabled"
+        ],
+        "elapsed_ms": 10070,
+        "code": 0,
+        "signal": null,
+        "stopped": null,
+        "engineering_only": false,
+        "run_growth_limit_bytes": 442613760,
+        "effective_run_storage_ceiling_bytes": 7362306048,
+        "peak_process_rss_sample_bytes": 897581056,
+        "process_rss_samples": 10,
+        "peak_sampled_known_bytes": 6932963328,
+        "initial_resource_snapshot": {
+          "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+          "at": "2026-09-07T03:49:51.422Z",
+          "inherited_precleanup_bytes": 2747199488,
+          "obsolete_target_growth_credit": 671379456,
+          "current_target_bytes": 2596691968,
+          "predecessor_artifact_root_bytes": 145760256,
+          "current_artifact_root_bytes": 1616486400,
+          "predecessor_worktree_bytes": 9875456,
+          "current_worktree_bytes": 8937472,
+          "stopped_successor_worktree_bytes": 460877824,
+          "source_metadata_reserve_bytes": 5242880,
+          "current_sampled_known_storage_bytes": 6919692288,
+          "storage_limit_bytes": 7734296576,
+          "remaining_storage_bytes": 814604288,
+          "stop_margin_bytes": 134217728,
+          "available_growth_before_stop_bytes": 626970624,
+          "model_ledger": {
+            "cumulative_ms": 3759036,
+            "limit_ms": 4170000
+          },
+          "model_remaining_ms": 410964,
+          "model_process_limit": 1,
+          "model_process_rss_target_bytes": 4294967296,
+          "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+        },
+        "final_resource_snapshot": {
+          "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+          "at": "2026-09-07T03:50:01.543Z",
+          "inherited_precleanup_bytes": 2747199488,
+          "obsolete_target_growth_credit": 671379456,
+          "current_target_bytes": 2596691968,
+          "predecessor_artifact_root_bytes": 145760256,
+          "current_artifact_root_bytes": 1629757440,
+          "predecessor_worktree_bytes": 9875456,
+          "current_worktree_bytes": 8937472,
+          "stopped_successor_worktree_bytes": 460877824,
+          "source_metadata_reserve_bytes": 5242880,
+          "current_sampled_known_storage_bytes": 6932963328,
+          "storage_limit_bytes": 7734296576,
+          "remaining_storage_bytes": 801333248,
+          "stop_margin_bytes": 134217728,
+          "available_growth_before_stop_bytes": 613699584,
+          "model_ledger": {
+            "cumulative_ms": 3769106,
+            "limit_ms": 4170000
+          },
+          "model_remaining_ms": 400894,
+          "model_process_limit": 1,
+          "model_process_rss_target_bytes": 4294967296,
+          "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+        },
+        "cumulative_ms": 3769106,
+        "remaining_ms": 400894,
+        "sampling_scope": "Child-process RSS only; zero samples means unavailable. Includes current known retained storage and all inherited accounting; not exact transient peaks."
+      }
+    ],
+    "engineering_commands": [
+      {
+        "label": "joint-admission-build",
+        "started": "2026-09-07T03:27:58.538Z",
+        "command": "env",
+        "args": [
+          "CARGO_TARGET_DIR=/tmp/r4-native-geometric-target",
+          "CARGO_INCREMENTAL=0",
+          "CARGO_BUILD_JOBS=1",
+          "/Users/casey.allard/.cargo/bin/cargo",
+          "build",
+          "--release",
+          "--offline",
+          "-p",
+          "uor-r4-core",
+          "--example",
+          "native_geometric_value_probe",
+          "-p",
+          "uor-r4-wasm-router",
+          "--bin",
+          "r4"
+        ],
+        "elapsed_ms": 11675,
+        "code": 101,
+        "signal": null,
+        "stopped": null,
+        "engineering_only": true,
+        "run_growth_limit_bytes": null,
+        "effective_run_storage_ceiling_bytes": 7546662912,
+        "peak_process_rss_sample_bytes": null,
+        "process_rss_samples": null,
+        "peak_sampled_known_bytes": 6825447424,
+        "initial_resource_snapshot": {
+          "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+          "at": "2026-09-07T03:27:58.538Z",
+          "inherited_precleanup_bytes": 2747199488,
+          "obsolete_target_growth_credit": 671379456,
+          "current_target_bytes": 2585468928,
+          "predecessor_artifact_root_bytes": 145760256,
+          "current_artifact_root_bytes": 1533464576,
+          "predecessor_worktree_bytes": 9875456,
+          "current_worktree_bytes": 8937472,
+          "stopped_successor_worktree_bytes": 460877824,
+          "source_metadata_reserve_bytes": 5242880,
+          "current_sampled_known_storage_bytes": 6825447424,
+          "storage_limit_bytes": 7734296576,
+          "remaining_storage_bytes": 908849152,
+          "stop_margin_bytes": 134217728,
+          "available_growth_before_stop_bytes": 721215488,
+          "model_ledger": {
+            "cumulative_ms": 3605626,
+            "limit_ms": 4170000
+          },
+          "model_remaining_ms": 564374,
+          "model_process_limit": 1,
+          "model_process_rss_target_bytes": 4294967296,
+          "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+        },
+        "final_resource_snapshot": {
+          "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+          "at": "2026-09-07T03:28:10.266Z",
+          "inherited_precleanup_bytes": 2747199488,
+          "obsolete_target_growth_credit": 671379456,
+          "current_target_bytes": 2530369536,
+          "predecessor_artifact_root_bytes": 145760256,
+          "current_artifact_root_bytes": 1533468672,
+          "predecessor_worktree_bytes": 9875456,
+          "current_worktree_bytes": 8937472,
+          "stopped_successor_worktree_bytes": 460877824,
+          "source_metadata_reserve_bytes": 5242880,
+          "current_sampled_known_storage_bytes": 6770352128,
+          "storage_limit_bytes": 7734296576,
+          "remaining_storage_bytes": 963944448,
+          "stop_margin_bytes": 134217728,
+          "available_growth_before_stop_bytes": 776310784,
+          "model_ledger": {
+            "cumulative_ms": 3605626,
+            "limit_ms": 4170000
+          },
+          "model_remaining_ms": 564374,
+          "model_process_limit": 1,
+          "model_process_rss_target_bytes": 4294967296,
+          "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+        },
+        "sampling_scope": "Child-process RSS only; zero samples means unavailable. Includes current known retained storage and all inherited accounting; not exact transient peaks."
+      },
+      {
+        "label": "joint-admission-build-fix",
+        "started": "2026-09-07T03:30:28.927Z",
+        "command": "env",
+        "args": [
+          "CARGO_TARGET_DIR=/tmp/r4-native-geometric-target",
+          "CARGO_INCREMENTAL=0",
+          "CARGO_BUILD_JOBS=1",
+          "/Users/casey.allard/.cargo/bin/cargo",
+          "build",
+          "--release",
+          "--offline",
+          "-p",
+          "uor-r4-core",
+          "--example",
+          "native_geometric_value_probe",
+          "-p",
+          "uor-r4-wasm-router",
+          "--bin",
+          "r4"
+        ],
+        "elapsed_ms": 335314,
+        "code": 0,
+        "signal": null,
+        "stopped": null,
+        "engineering_only": true,
+        "run_growth_limit_bytes": null,
+        "effective_run_storage_ceiling_bytes": 7546662912,
+        "peak_process_rss_sample_bytes": null,
+        "process_rss_samples": null,
+        "peak_sampled_known_bytes": 6854299648,
+        "initial_resource_snapshot": {
+          "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+          "at": "2026-09-07T03:30:28.927Z",
+          "inherited_precleanup_bytes": 2747199488,
+          "obsolete_target_growth_credit": 671379456,
+          "current_target_bytes": 2530369536,
+          "predecessor_artifact_root_bytes": 145760256,
+          "current_artifact_root_bytes": 1533534208,
+          "predecessor_worktree_bytes": 9875456,
+          "current_worktree_bytes": 8937472,
+          "stopped_successor_worktree_bytes": 460877824,
+          "source_metadata_reserve_bytes": 5242880,
+          "current_sampled_known_storage_bytes": 6770417664,
+          "storage_limit_bytes": 7734296576,
+          "remaining_storage_bytes": 963878912,
+          "stop_margin_bytes": 134217728,
+          "available_growth_before_stop_bytes": 776245248,
+          "model_ledger": {
+            "cumulative_ms": 3605626,
+            "limit_ms": 4170000
+          },
+          "model_remaining_ms": 564374,
+          "model_process_limit": 1,
+          "model_process_rss_target_bytes": 4294967296,
+          "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+        },
+        "final_resource_snapshot": {
+          "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+          "at": "2026-09-07T03:36:04.303Z",
+          "inherited_precleanup_bytes": 2747199488,
+          "obsolete_target_growth_credit": 671379456,
+          "current_target_bytes": 2586615808,
+          "predecessor_artifact_root_bytes": 145760256,
+          "current_artifact_root_bytes": 1533538304,
+          "predecessor_worktree_bytes": 9875456,
+          "current_worktree_bytes": 8937472,
+          "stopped_successor_worktree_bytes": 460877824,
+          "source_metadata_reserve_bytes": 5242880,
+          "current_sampled_known_storage_bytes": 6826668032,
+          "storage_limit_bytes": 7734296576,
+          "remaining_storage_bytes": 907628544,
+          "stop_margin_bytes": 134217728,
+          "available_growth_before_stop_bytes": 719994880,
+          "model_ledger": {
+            "cumulative_ms": 3605626,
+            "limit_ms": 4170000
+          },
+          "model_remaining_ms": 564374,
+          "model_process_limit": 1,
+          "model_process_rss_target_bytes": 4294967296,
+          "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+        },
+        "sampling_scope": "Child-process RSS only; zero samples means unavailable. Includes current known retained storage and all inherited accounting; not exact transient peaks."
+      },
+      {
+        "label": "joint-admission-example-build",
+        "started": "2026-09-07T03:36:50.858Z",
+        "command": "env",
+        "args": [
+          "CARGO_TARGET_DIR=/tmp/r4-native-geometric-target",
+          "CARGO_INCREMENTAL=0",
+          "CARGO_BUILD_JOBS=1",
+          "/Users/casey.allard/.cargo/bin/cargo",
+          "build",
+          "--release",
+          "--offline",
+          "-p",
+          "uor-r4-core",
+          "--example",
+          "native_geometric_value_probe"
+        ],
+        "elapsed_ms": 138323,
+        "code": 0,
+        "signal": null,
+        "stopped": null,
+        "engineering_only": true,
+        "run_growth_limit_bytes": 535642112,
+        "effective_run_storage_ceiling_bytes": 7362310144,
+        "peak_process_rss_sample_bytes": null,
+        "process_rss_samples": null,
+        "peak_sampled_known_bytes": 6840442880,
+        "initial_resource_snapshot": {
+          "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+          "at": "2026-09-07T03:36:50.858Z",
+          "inherited_precleanup_bytes": 2747199488,
+          "obsolete_target_growth_credit": 671379456,
+          "current_target_bytes": 2586615808,
+          "predecessor_artifact_root_bytes": 145760256,
+          "current_artifact_root_bytes": 1533538304,
+          "predecessor_worktree_bytes": 9875456,
+          "current_worktree_bytes": 8937472,
+          "stopped_successor_worktree_bytes": 460877824,
+          "source_metadata_reserve_bytes": 5242880,
+          "current_sampled_known_storage_bytes": 6826668032,
+          "storage_limit_bytes": 7734296576,
+          "remaining_storage_bytes": 907628544,
+          "stop_margin_bytes": 134217728,
+          "available_growth_before_stop_bytes": 719994880,
+          "model_ledger": {
+            "cumulative_ms": 3605626,
+            "limit_ms": 4170000
+          },
+          "model_remaining_ms": 564374,
+          "model_process_limit": 1,
+          "model_process_rss_target_bytes": 4294967296,
+          "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+        },
+        "final_resource_snapshot": {
+          "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+          "at": "2026-09-07T03:39:09.238Z",
+          "inherited_precleanup_bytes": 2747199488,
+          "obsolete_target_growth_credit": 671379456,
+          "current_target_bytes": 2586996736,
+          "predecessor_artifact_root_bytes": 145760256,
+          "current_artifact_root_bytes": 1546932224,
+          "predecessor_worktree_bytes": 9875456,
+          "current_worktree_bytes": 8937472,
+          "stopped_successor_worktree_bytes": 460877824,
+          "source_metadata_reserve_bytes": 5242880,
+          "current_sampled_known_storage_bytes": 6840442880,
+          "storage_limit_bytes": 7734296576,
+          "remaining_storage_bytes": 893853696,
+          "stop_margin_bytes": 134217728,
+          "available_growth_before_stop_bytes": 706220032,
+          "model_ledger": {
+            "cumulative_ms": 3615726,
+            "limit_ms": 4170000
+          },
+          "model_remaining_ms": 554274,
+          "model_process_limit": 1,
+          "model_process_rss_target_bytes": 4294967296,
+          "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+        },
+        "sampling_scope": "Child-process RSS only; zero samples means unavailable. Includes current known retained storage and all inherited accounting; not exact transient peaks."
+      },
+      {
+        "label": "joint-admission-test-build",
+        "started": "2026-09-07T03:40:07.775Z",
+        "command": "env",
+        "args": [
+          "CARGO_TARGET_DIR=/tmp/r4-native-geometric-target",
+          "CARGO_INCREMENTAL=0",
+          "CARGO_BUILD_JOBS=1",
+          "/Users/casey.allard/.cargo/bin/cargo",
+          "test",
+          "--release",
+          "--offline",
+          "-p",
+          "uor-r4-core",
+          "--test",
+          "native_geometric_allocations",
+          "--lib",
+          "--no-run"
+        ],
+        "elapsed_ms": 108166,
+        "code": 0,
+        "signal": null,
+        "stopped": null,
+        "engineering_only": true,
+        "run_growth_limit_bytes": 521748480,
+        "effective_run_storage_ceiling_bytes": 7362310144,
+        "peak_process_rss_sample_bytes": null,
+        "process_rss_samples": null,
+        "peak_sampled_known_bytes": 6900379648,
+        "initial_resource_snapshot": {
+          "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+          "at": "2026-09-07T03:40:07.775Z",
+          "inherited_precleanup_bytes": 2747199488,
+          "obsolete_target_growth_credit": 671379456,
+          "current_target_bytes": 2586996736,
+          "predecessor_artifact_root_bytes": 145760256,
+          "current_artifact_root_bytes": 1547051008,
+          "predecessor_worktree_bytes": 9875456,
+          "current_worktree_bytes": 8937472,
+          "stopped_successor_worktree_bytes": 460877824,
+          "source_metadata_reserve_bytes": 5242880,
+          "current_sampled_known_storage_bytes": 6840561664,
+          "storage_limit_bytes": 7734296576,
+          "remaining_storage_bytes": 893734912,
+          "stop_margin_bytes": 134217728,
+          "available_growth_before_stop_bytes": 706101248,
+          "model_ledger": {
+            "cumulative_ms": 3624392,
+            "limit_ms": 4170000
+          },
+          "model_remaining_ms": 545608,
+          "model_process_limit": 1,
+          "model_process_rss_target_bytes": 4294967296,
+          "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+        },
+        "final_resource_snapshot": {
+          "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+          "at": "2026-09-07T03:41:55.993Z",
+          "inherited_precleanup_bytes": 2747199488,
+          "obsolete_target_growth_credit": 671379456,
+          "current_target_bytes": 2596691968,
+          "predecessor_artifact_root_bytes": 145760256,
+          "current_artifact_root_bytes": 1596420096,
+          "predecessor_worktree_bytes": 9875456,
+          "current_worktree_bytes": 8937472,
+          "stopped_successor_worktree_bytes": 460877824,
+          "source_metadata_reserve_bytes": 5242880,
+          "current_sampled_known_storage_bytes": 6899625984,
+          "storage_limit_bytes": 7734296576,
+          "remaining_storage_bytes": 834670592,
+          "stop_margin_bytes": 134217728,
+          "available_growth_before_stop_bytes": 647036928,
+          "model_ledger": {
+            "cumulative_ms": 3665789,
+            "limit_ms": 4170000
+          },
+          "model_remaining_ms": 504211,
+          "model_process_limit": 1,
+          "model_process_rss_target_bytes": 4294967296,
+          "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+        },
+        "sampling_scope": "Child-process RSS only; zero samples means unavailable. Includes current known retained storage and all inherited accounting; not exact transient peaks."
+      },
+      {
+        "label": "joint-admission-legality",
+        "started": "2026-09-07T03:42:59.756Z",
+        "command": "/tmp/r4-native-geometric-target/release/deps/uor_r4_core-ab236c9b0d8b158f",
+        "args": [
+          "admission_legality_matches_exact_add_at_boundaries",
+          "--nocapture"
+        ],
+        "elapsed_ms": 290,
+        "code": 0,
+        "signal": null,
+        "stopped": null,
+        "engineering_only": true,
+        "run_growth_limit_bytes": 444936192,
+        "effective_run_storage_ceiling_bytes": 7362310144,
+        "peak_process_rss_sample_bytes": null,
+        "process_rss_samples": null,
+        "peak_sampled_known_bytes": 6917378048,
+        "initial_resource_snapshot": {
+          "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+          "at": "2026-09-07T03:42:59.756Z",
+          "inherited_precleanup_bytes": 2747199488,
+          "obsolete_target_growth_credit": 671379456,
+          "current_target_bytes": 2596691968,
+          "predecessor_artifact_root_bytes": 145760256,
+          "current_artifact_root_bytes": 1614168064,
+          "predecessor_worktree_bytes": 9875456,
+          "current_worktree_bytes": 8937472,
+          "stopped_successor_worktree_bytes": 460877824,
+          "source_metadata_reserve_bytes": 5242880,
+          "current_sampled_known_storage_bytes": 6917373952,
+          "storage_limit_bytes": 7734296576,
+          "remaining_storage_bytes": 816922624,
+          "stop_margin_bytes": 134217728,
+          "available_growth_before_stop_bytes": 629288960,
+          "model_ledger": {
+            "cumulative_ms": 3676046,
+            "limit_ms": 4170000
+          },
+          "model_remaining_ms": 493954,
+          "model_process_limit": 1,
+          "model_process_rss_target_bytes": 4294967296,
+          "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+        },
+        "final_resource_snapshot": {
+          "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+          "at": "2026-09-07T03:43:00.126Z",
+          "inherited_precleanup_bytes": 2747199488,
+          "obsolete_target_growth_credit": 671379456,
+          "current_target_bytes": 2596691968,
+          "predecessor_artifact_root_bytes": 145760256,
+          "current_artifact_root_bytes": 1614172160,
+          "predecessor_worktree_bytes": 9875456,
+          "current_worktree_bytes": 8937472,
+          "stopped_successor_worktree_bytes": 460877824,
+          "source_metadata_reserve_bytes": 5242880,
+          "current_sampled_known_storage_bytes": 6917378048,
+          "storage_limit_bytes": 7734296576,
+          "remaining_storage_bytes": 816918528,
+          "stop_margin_bytes": 134217728,
+          "available_growth_before_stop_bytes": 629284864,
+          "model_ledger": {
+            "cumulative_ms": 3676046,
+            "limit_ms": 4170000
+          },
+          "model_remaining_ms": 493954,
+          "model_process_limit": 1,
+          "model_process_rss_target_bytes": 4294967296,
+          "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+        },
+        "sampling_scope": "Child-process RSS only; zero samples means unavailable. Includes current known retained storage and all inherited accounting; not exact transient peaks."
+      },
+      {
+        "label": "joint-admission-kernel-source",
+        "started": "2026-09-07T03:43:00.279Z",
+        "command": "/tmp/r4-native-geometric-target/release/deps/native_geometric_allocations-6c7ff1216c7e1931",
+        "args": [
+          "native_kernel_source_has_no_forbidden_arithmetic_or_float_types",
+          "--nocapture"
+        ],
+        "elapsed_ms": 119,
+        "code": 0,
+        "signal": null,
+        "stopped": null,
+        "engineering_only": true,
+        "run_growth_limit_bytes": 444932096,
+        "effective_run_storage_ceiling_bytes": 7362310144,
+        "peak_process_rss_sample_bytes": null,
+        "process_rss_samples": null,
+        "peak_sampled_known_bytes": 6917382144,
+        "initial_resource_snapshot": {
+          "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+          "at": "2026-09-07T03:43:00.279Z",
+          "inherited_precleanup_bytes": 2747199488,
+          "obsolete_target_growth_credit": 671379456,
+          "current_target_bytes": 2596691968,
+          "predecessor_artifact_root_bytes": 145760256,
+          "current_artifact_root_bytes": 1614172160,
+          "predecessor_worktree_bytes": 9875456,
+          "current_worktree_bytes": 8937472,
+          "stopped_successor_worktree_bytes": 460877824,
+          "source_metadata_reserve_bytes": 5242880,
+          "current_sampled_known_storage_bytes": 6917378048,
+          "storage_limit_bytes": 7734296576,
+          "remaining_storage_bytes": 816918528,
+          "stop_margin_bytes": 134217728,
+          "available_growth_before_stop_bytes": 629284864,
+          "model_ledger": {
+            "cumulative_ms": 3676046,
+            "limit_ms": 4170000
+          },
+          "model_remaining_ms": 493954,
+          "model_process_limit": 1,
+          "model_process_rss_target_bytes": 4294967296,
+          "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+        },
+        "final_resource_snapshot": {
+          "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+          "at": "2026-09-07T03:43:00.461Z",
+          "inherited_precleanup_bytes": 2747199488,
+          "obsolete_target_growth_credit": 671379456,
+          "current_target_bytes": 2596691968,
+          "predecessor_artifact_root_bytes": 145760256,
+          "current_artifact_root_bytes": 1614176256,
+          "predecessor_worktree_bytes": 9875456,
+          "current_worktree_bytes": 8937472,
+          "stopped_successor_worktree_bytes": 460877824,
+          "source_metadata_reserve_bytes": 5242880,
+          "current_sampled_known_storage_bytes": 6917382144,
+          "storage_limit_bytes": 7734296576,
+          "remaining_storage_bytes": 816914432,
+          "stop_margin_bytes": 134217728,
+          "available_growth_before_stop_bytes": 629280768,
+          "model_ledger": {
+            "cumulative_ms": 3676046,
+            "limit_ms": 4170000
+          },
+          "model_remaining_ms": 493954,
+          "model_process_limit": 1,
+          "model_process_rss_target_bytes": 4294967296,
+          "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+        },
+        "sampling_scope": "Child-process RSS only; zero samples means unavailable. Includes current known retained storage and all inherited accounting; not exact transient peaks."
+      },
+      {
+        "label": "joint-admission-generated-rust",
+        "started": "2026-09-07T03:49:20.653Z",
+        "command": "node",
+        "args": [
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-rust-check.mjs"
+        ],
+        "elapsed_ms": 332,
+        "code": 0,
+        "signal": null,
+        "stopped": null,
+        "engineering_only": true,
+        "run_growth_limit_bytes": 443654144,
+        "effective_run_storage_ceiling_bytes": 7362310144,
+        "peak_process_rss_sample_bytes": null,
+        "process_rss_samples": null,
+        "peak_sampled_known_bytes": 6919696384,
+        "initial_resource_snapshot": {
+          "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+          "at": "2026-09-07T03:49:20.653Z",
+          "inherited_precleanup_bytes": 2747199488,
+          "obsolete_target_growth_credit": 671379456,
+          "current_target_bytes": 2596691968,
+          "predecessor_artifact_root_bytes": 145760256,
+          "current_artifact_root_bytes": 1615450112,
+          "predecessor_worktree_bytes": 9875456,
+          "current_worktree_bytes": 8937472,
+          "stopped_successor_worktree_bytes": 460877824,
+          "source_metadata_reserve_bytes": 5242880,
+          "current_sampled_known_storage_bytes": 6918656000,
+          "storage_limit_bytes": 7734296576,
+          "remaining_storage_bytes": 815640576,
+          "stop_margin_bytes": 134217728,
+          "available_growth_before_stop_bytes": 628006912,
+          "model_ledger": {
+            "cumulative_ms": 3759036,
+            "limit_ms": 4170000
+          },
+          "model_remaining_ms": 410964,
+          "model_process_limit": 1,
+          "model_process_rss_target_bytes": 4294967296,
+          "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+        },
+        "final_resource_snapshot": {
+          "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+          "at": "2026-09-07T03:49:21.058Z",
+          "inherited_precleanup_bytes": 2747199488,
+          "obsolete_target_growth_credit": 671379456,
+          "current_target_bytes": 2596691968,
+          "predecessor_artifact_root_bytes": 145760256,
+          "current_artifact_root_bytes": 1616490496,
+          "predecessor_worktree_bytes": 9875456,
+          "current_worktree_bytes": 8937472,
+          "stopped_successor_worktree_bytes": 460877824,
+          "source_metadata_reserve_bytes": 5242880,
+          "current_sampled_known_storage_bytes": 6919696384,
+          "storage_limit_bytes": 7734296576,
+          "remaining_storage_bytes": 814600192,
+          "stop_margin_bytes": 134217728,
+          "available_growth_before_stop_bytes": 626966528,
+          "model_ledger": {
+            "cumulative_ms": 3759036,
+            "limit_ms": 4170000
+          },
+          "model_remaining_ms": 410964,
+          "model_process_limit": 1,
+          "model_process_rss_target_bytes": 4294967296,
+          "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+        },
+        "sampling_scope": "Child-process RSS only; zero samples means unavailable. Includes current known retained storage and all inherited accounting; not exact transient peaks."
+      },
+      {
+        "label": "joint-admission-format",
+        "started": "2026-09-07T03:49:52.580Z",
+        "command": "/Users/casey.allard/.cargo/bin/cargo",
+        "args": [
+          "fmt",
+          "--all",
+          "--check"
+        ],
+        "elapsed_ms": 3494,
+        "code": 0,
+        "signal": null,
+        "stopped": null,
+        "engineering_only": true,
+        "run_growth_limit_bytes": 442613760,
+        "effective_run_storage_ceiling_bytes": 7362310144,
+        "peak_process_rss_sample_bytes": null,
+        "process_rss_samples": null,
+        "peak_sampled_known_bytes": 6919696384,
+        "initial_resource_snapshot": {
+          "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+          "at": "2026-09-07T03:49:52.580Z",
+          "inherited_precleanup_bytes": 2747199488,
+          "obsolete_target_growth_credit": 671379456,
+          "current_target_bytes": 2596691968,
+          "predecessor_artifact_root_bytes": 145760256,
+          "current_artifact_root_bytes": 1616490496,
+          "predecessor_worktree_bytes": 9875456,
+          "current_worktree_bytes": 8937472,
+          "stopped_successor_worktree_bytes": 460877824,
+          "source_metadata_reserve_bytes": 5242880,
+          "current_sampled_known_storage_bytes": 6919696384,
+          "storage_limit_bytes": 7734296576,
+          "remaining_storage_bytes": 814600192,
+          "stop_margin_bytes": 134217728,
+          "available_growth_before_stop_bytes": 626966528,
+          "model_ledger": {
+            "cumulative_ms": 3759036,
+            "limit_ms": 4170000
+          },
+          "model_remaining_ms": 410964,
+          "model_process_limit": 1,
+          "model_process_rss_target_bytes": 4294967296,
+          "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+        },
+        "final_resource_snapshot": {
+          "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+          "at": "2026-09-07T03:49:56.128Z",
+          "inherited_precleanup_bytes": 2747199488,
+          "obsolete_target_growth_credit": 671379456,
+          "current_target_bytes": 2596691968,
+          "predecessor_artifact_root_bytes": 145760256,
+          "current_artifact_root_bytes": 1616490496,
+          "predecessor_worktree_bytes": 9875456,
+          "current_worktree_bytes": 8937472,
+          "stopped_successor_worktree_bytes": 460877824,
+          "source_metadata_reserve_bytes": 5242880,
+          "current_sampled_known_storage_bytes": 6919696384,
+          "storage_limit_bytes": 7734296576,
+          "remaining_storage_bytes": 814600192,
+          "stop_margin_bytes": 134217728,
+          "available_growth_before_stop_bytes": 626966528,
+          "model_ledger": {
+            "cumulative_ms": 3759036,
+            "limit_ms": 4170000
+          },
+          "model_remaining_ms": 410964,
+          "model_process_limit": 1,
+          "model_process_rss_target_bytes": 4294967296,
+          "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+        },
+        "sampling_scope": "Child-process RSS only; zero samples means unavailable. Includes current known retained storage and all inherited accounting; not exact transient peaks."
+      },
+      {
+        "label": "joint-admission-policy",
+        "started": "2026-09-07T03:52:50.938Z",
+        "command": "/tmp/r4-native-geometric-target/release/r4-policy-check",
+        "args": [
+          "."
+        ],
+        "elapsed_ms": 153,
+        "code": 0,
+        "signal": null,
+        "stopped": null,
+        "engineering_only": true,
+        "run_growth_limit_bytes": 429342720,
+        "effective_run_storage_ceiling_bytes": 7362310144,
+        "peak_process_rss_sample_bytes": null,
+        "process_rss_samples": null,
+        "peak_sampled_known_bytes": 6932971520,
+        "initial_resource_snapshot": {
+          "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+          "at": "2026-09-07T03:52:50.938Z",
+          "inherited_precleanup_bytes": 2747199488,
+          "obsolete_target_growth_credit": 671379456,
+          "current_target_bytes": 2596691968,
+          "predecessor_artifact_root_bytes": 145760256,
+          "current_artifact_root_bytes": 1629761536,
+          "predecessor_worktree_bytes": 9875456,
+          "current_worktree_bytes": 8937472,
+          "stopped_successor_worktree_bytes": 460877824,
+          "source_metadata_reserve_bytes": 5242880,
+          "current_sampled_known_storage_bytes": 6932967424,
+          "storage_limit_bytes": 7734296576,
+          "remaining_storage_bytes": 801329152,
+          "stop_margin_bytes": 134217728,
+          "available_growth_before_stop_bytes": 613695488,
+          "model_ledger": {
+            "cumulative_ms": 3769106,
+            "limit_ms": 4170000
+          },
+          "model_remaining_ms": 400894,
+          "model_process_limit": 1,
+          "model_process_rss_target_bytes": 4294967296,
+          "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+        },
+        "final_resource_snapshot": {
+          "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+          "at": "2026-09-07T03:52:51.162Z",
+          "inherited_precleanup_bytes": 2747199488,
+          "obsolete_target_growth_credit": 671379456,
+          "current_target_bytes": 2596691968,
+          "predecessor_artifact_root_bytes": 145760256,
+          "current_artifact_root_bytes": 1629765632,
+          "predecessor_worktree_bytes": 9875456,
+          "current_worktree_bytes": 8937472,
+          "stopped_successor_worktree_bytes": 460877824,
+          "source_metadata_reserve_bytes": 5242880,
+          "current_sampled_known_storage_bytes": 6932971520,
+          "storage_limit_bytes": 7734296576,
+          "remaining_storage_bytes": 801325056,
+          "stop_margin_bytes": 134217728,
+          "available_growth_before_stop_bytes": 613691392,
+          "model_ledger": {
+            "cumulative_ms": 3769106,
+            "limit_ms": 4170000
+          },
+          "model_remaining_ms": 400894,
+          "model_process_limit": 1,
+          "model_process_rss_target_bytes": 4294967296,
+          "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+        },
+        "sampling_scope": "Child-process RSS only; zero samples means unavailable. Includes current known retained storage and all inherited accounting; not exact transient peaks."
+      },
+      {
+        "label": "joint-admission-claims",
+        "started": "2026-09-07T03:52:51.335Z",
+        "command": "python3",
+        "args": [
+          "scripts/check_claim_wording.py"
+        ],
+        "elapsed_ms": 210,
+        "code": 0,
+        "signal": null,
+        "stopped": null,
+        "engineering_only": true,
+        "run_growth_limit_bytes": 429338624,
+        "effective_run_storage_ceiling_bytes": 7362310144,
+        "peak_process_rss_sample_bytes": null,
+        "process_rss_samples": null,
+        "peak_sampled_known_bytes": 6932975616,
+        "initial_resource_snapshot": {
+          "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+          "at": "2026-09-07T03:52:51.335Z",
+          "inherited_precleanup_bytes": 2747199488,
+          "obsolete_target_growth_credit": 671379456,
+          "current_target_bytes": 2596691968,
+          "predecessor_artifact_root_bytes": 145760256,
+          "current_artifact_root_bytes": 1629765632,
+          "predecessor_worktree_bytes": 9875456,
+          "current_worktree_bytes": 8937472,
+          "stopped_successor_worktree_bytes": 460877824,
+          "source_metadata_reserve_bytes": 5242880,
+          "current_sampled_known_storage_bytes": 6932971520,
+          "storage_limit_bytes": 7734296576,
+          "remaining_storage_bytes": 801325056,
+          "stop_margin_bytes": 134217728,
+          "available_growth_before_stop_bytes": 613691392,
+          "model_ledger": {
+            "cumulative_ms": 3769106,
+            "limit_ms": 4170000
+          },
+          "model_remaining_ms": 400894,
+          "model_process_limit": 1,
+          "model_process_rss_target_bytes": 4294967296,
+          "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+        },
+        "final_resource_snapshot": {
+          "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+          "at": "2026-09-07T03:52:51.597Z",
+          "inherited_precleanup_bytes": 2747199488,
+          "obsolete_target_growth_credit": 671379456,
+          "current_target_bytes": 2596691968,
+          "predecessor_artifact_root_bytes": 145760256,
+          "current_artifact_root_bytes": 1629769728,
+          "predecessor_worktree_bytes": 9875456,
+          "current_worktree_bytes": 8937472,
+          "stopped_successor_worktree_bytes": 460877824,
+          "source_metadata_reserve_bytes": 5242880,
+          "current_sampled_known_storage_bytes": 6932975616,
+          "storage_limit_bytes": 7734296576,
+          "remaining_storage_bytes": 801320960,
+          "stop_margin_bytes": 134217728,
+          "available_growth_before_stop_bytes": 613687296,
+          "model_ledger": {
+            "cumulative_ms": 3769106,
+            "limit_ms": 4170000
+          },
+          "model_remaining_ms": 400894,
+          "model_process_limit": 1,
+          "model_process_rss_target_bytes": 4294967296,
+          "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+        },
+        "sampling_scope": "Child-process RSS only; zero samples means unavailable. Includes current known retained storage and all inherited accounting; not exact transient peaks."
+      }
+    ],
+    "model_ms": 163480,
+    "engineering_ms": 598076,
+    "peak_sampled_model_child_rss_bytes": 977977344,
+    "engineering_rss": "UNAVAILABLE",
+    "final_snapshot": {
+      "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+      "at": "2026-09-07T03:53:52.386Z",
+      "inherited_precleanup_bytes": 2747199488,
+      "obsolete_target_growth_credit": 671379456,
+      "current_target_bytes": 2596691968,
+      "predecessor_artifact_root_bytes": 145760256,
+      "current_artifact_root_bytes": 1629773824,
+      "predecessor_worktree_bytes": 9875456,
+      "current_worktree_bytes": 8937472,
+      "stopped_successor_worktree_bytes": 460877824,
+      "source_metadata_reserve_bytes": 5242880,
+      "current_sampled_known_storage_bytes": 6932979712,
+      "storage_limit_bytes": 7734296576,
+      "remaining_storage_bytes": 801316864,
+      "stop_margin_bytes": 134217728,
+      "available_growth_before_stop_bytes": 613683200,
+      "model_ledger": {
+        "cumulative_ms": 3769106,
+        "limit_ms": 4170000
+      },
+      "model_remaining_ms": 400894,
+      "model_process_limit": 1,
+      "model_process_rss_target_bytes": 4294967296,
+      "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+    },
+    "no_budget_extension": true,
+    "no_deletion": true,
+    "no_external_compute": true
+  },
+  "remaining": "Order-sensitive exact entity/operand binding and source/NoRead failures remain. No general prose, reasoning or frontier qualification.",
+  "reproduction_support": [
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-run.mjs",
+      "sha256": "59c531a1b1af2a71fce5d1067f10d1e4ccdd29d2524ac6ae97b8009cb35d9978"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/run-command.mjs",
+      "sha256": "29422110df63b217dde5439ae720f1315e79be7bc5c576ef3193980d0f8c6884"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/resource-accounting.mjs",
+      "sha256": "c6e9a29c861268bcad4ddbd66e1a08c799cc8e5cb105b064a0f8e3e597335d15"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-projection.json",
+      "sha256": "3e7edeb2523fd3347ecdc18ea105df6d6ccd8f68390d5f962855fc8f0a03a4a3"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-rust-check.mjs",
+      "sha256": "4d70439ee9af1880e7f7e3f311d0b85661c6a4c2d714d0190caee038f1450d39"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-evidence.mjs",
+      "sha256": "be176a006a61ea9fbbfd5188761eadd9c9ae0562ad5d1d10a3ce11cbe85fb53d"
+    }
+  ]
+}

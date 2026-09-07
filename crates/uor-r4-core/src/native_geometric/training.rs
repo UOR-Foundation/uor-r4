@@ -177,6 +177,7 @@ impl Trainer {
             relation_writer: None,
             dependent_read: None,
             typed_routing: None,
+            joint_admission: None,
             typed_roles: None,
             no_read_completion: None,
             typed_literals: None,
@@ -515,6 +516,32 @@ impl Model {
     }
     pub(super) fn validate(&self) -> Result<()> {
         self.config.validate()?;
+        if let Some(gate) = &self.joint_admission {
+            if self.typed_literals.is_none() || self.source_routing.is_none() {
+                return Err(Error(
+                    "joint admission requires literal/source components".into(),
+                ));
+            }
+            let mut parent = self.clone();
+            parent.joint_admission = None;
+            parent.refresh_identity()?;
+            if parent.artifact_cid != gate.router.parent_artifact {
+                return Err(Error("joint admission frozen parent differs".into()));
+            }
+            parent.validate()?;
+            gate.router.validate_shape(self, 2, 8)?;
+            if gate.router.config.role_context_only {
+                return Err(Error("invalid admission feature mode".into()));
+            }
+            let mut duplicate = self.clone();
+            duplicate.refresh_identity()?;
+            if duplicate.artifact_cid != self.artifact_cid
+                || duplicate.uor_model_address != self.uor_model_address
+            {
+                return Err(Error("joint admission identity differs".into()));
+            }
+            return Ok(());
+        }
         if let Some(witness) = &self.source_routing_refinement {
             let block = self
                 .source_routing
@@ -1004,6 +1031,9 @@ fn add_work(total: &mut Work, work: Work) {
     total.word_copy.word_record_reads += work.word_copy.word_record_reads;
     total.word_copy.bound_rejections += work.word_copy.bound_rejections;
     total.word_copy.byte_reads += work.word_copy.byte_reads;
+    total.values.admission_legality_checks += work.values.admission_legality_checks;
+    total.values.admission_decisions += work.values.admission_decisions;
+    total.values.admission_rejections += work.values.admission_rejections;
     total.values.input_bytes += work.values.input_bytes;
     total.values.literal_writes += work.values.literal_writes;
     total.values.record_evictions += work.values.record_evictions;
