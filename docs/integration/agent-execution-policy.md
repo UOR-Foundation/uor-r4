@@ -43,8 +43,9 @@ changing the model to satisfy an arbitrary short historical experiment.
 A failed command permits diagnosis, correction and another run or resume within
 the remaining authorized budget when that can change the outcome. There is no
 global 15-minute cutoff or one-retry quota. Avoid unchanged blind retries,
-stop/checkpoint at configured limits, and obtain explicit authorization for
-external cost or a larger cumulative budget. Reuse measurements and checkpoints
+stop/checkpoint at configured limits, and apply the standing local-extension
+authorization below before a necessary cumulative increase. External cost
+requires separate explicit authorization. Reuse measurements and checkpoints
 when their inputs remain valid.
 
 Open development evaluation is part of learning. Keep final held-out evaluation
@@ -75,3 +76,10 @@ proof package, ledger, ADR, replay dossier or duplicate status mirror.
 
 Changing the project goal or these stable invariants requires owner direction
 and protected delivery. Do not silently change them to make an experiment pass.
+
+## Discovery and presentation
+
+Use the product name **UOR-R4 Geometric Language Model**. The canonical plan owns ordered issue responsibilities, current-state owns changing evidence, and `docs/PROJECT_MAP.md` locates code/research/artifacts. Reuse `docs/integration/model-direction-2026-09.md` for the latest source-derived recommendation; it adds no model execution. Preserve historical/imported READMEs and their names; the complete README inventory records their disposition. Do not reinterpret finite contextual attention as general prose/reasoning or a transformer architecture.
+
+
+**Standing owner authorization (2026-09-06):** necessary local model/time/storage allowance extensions are already authorized. Record the complete projection, reason, increment and updated cumulative limit before using each extension; retain cumulative charges and the 128 MiB storage stop margin. Do not ask the owner to approve the same class of necessary increase again. This authorizes neither destructive deletion nor paid/external compute, and does not require spending unused allowance.

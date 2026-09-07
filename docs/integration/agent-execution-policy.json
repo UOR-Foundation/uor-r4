@@ -24,7 +24,8 @@
       "inference"
     ],
     "serving_matrix_products_allowed": false,
-    "training_matrix_multiplication_allowed": true
+    "training_matrix_multiplication_allowed": true,
+    "model_name": "UOR-R4 Geometric Language Model"
   },
   "delivery": {
     "direct_push_to_main": false,
@@ -72,7 +73,8 @@
       ],
       "external_cost": "requires_explicit_owner_authorization",
       "global_fixed_time_or_retry_quota": false,
-      "stop": "checkpoint_and_stop_at_configured_limits"
+      "stop": "checkpoint_and_stop_at_configured_limits",
+      "standing_owner_authorization": "Necessary local model/time/storage extensions preauthorized 2026-09-06; record complete projection, reason, increment and updated cumulative limits before use; preserve 128 MiB stop margin; no deletion or paid/external compute."
     },
     "prohibited": [
       "blind_unchanged_failure_retries",
@@ -90,7 +92,8 @@
     ],
     "canonical_plan": "docs/integration/project-track.md",
     "current_state": "docs/integration/current-state.md",
-    "status": "development_no_alpha_claim"
+    "status": "development_no_alpha_claim",
+    "direction": "docs/integration/model-direction-2026-09.md"
   },
   "research": {
     "broad_mapping_default": "deferred_until_release_candidate",

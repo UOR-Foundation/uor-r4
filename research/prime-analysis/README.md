@@ -1,5 +1,17 @@
 # Prime Analysis & Spectral Dynamics Research
 
+**Imported research for the UOR-R4 Geometric Language Model.** Preserve this
+source project's name, mathematical records and links as provenance. The
+[research index](../README.md), [project map](../../docs/PROJECT_MAP.md),
+[canonical plan](../../docs/integration/project-track.md),
+[current-state](../../docs/integration/current-state.md) and
+[model direction](../../docs/integration/model-direction-2026-09.md) identify
+which mechanisms the native Rust model actually uses. Prime/zeta spectral
+experiments and Lean/Riemann-hypothesis attempts remain scoped research; their
+presence is neither a proof of RH nor evidence of general language capability.
+The old project links and "AI ingestion" instructions below describe this
+import's original context.
+
 This repository contains research data, visual materials, and comprehensive study guides for the **Prime Phase / Chebyshev Psi Spectral Program**. The research investigates whether arithmetic observables derived from primes—specifically the Chebyshev residual $f(x) = \psi(x) - x$—contain recoverable spectral or phase structures related to Riemann zeta-zero frequencies.
 
 ## 🌍 Broader Research Context & Timeline

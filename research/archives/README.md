@@ -1,4 +1,11 @@
-# Archives
+# UOR-R4 Geometric Language Model — archived sandboxes
+
+Use the [research index](../README.md), [project map](../../docs/PROJECT_MAP.md),
+[canonical plan](../../docs/integration/project-track.md) and
+[current-state](../../docs/integration/current-state.md) to connect this material
+to today's native model. Historical router, Python and WASM experiments below
+retain their original scope; their names and commands do not select the active
+Rust model or establish general prose completion or general reasoning.
 
 Preserved research sandboxes and working material, brought in largely as-is.
 Build artifacts, regenerable caches, VCS metadata, and byte-duplicates of trees

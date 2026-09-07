@@ -1,4 +1,13 @@
-# uor-r4-api
+# UOR-R4 Geometric Language Model — library API
+
+See the [project map](../../docs/PROJECT_MAP.md),
+[canonical plan](../../docs/integration/project-track.md),
+[current artifact and measured behavior](../../docs/integration/current-state.md),
+and [model direction](../../docs/integration/model-direction-2026-09.md)
+for repository navigation and the consumer-laptop objective. Native bounded
+attention and inference execute today; general prose completion and general
+reasoning remain unqualified. The model API re-export is in
+[src/lib.rs](src/lib.rs) and uses [the native core](../uor-r4-core/src/native_geometric).
 
 **Current model API (September 2026):** the native geometric re-export exposes the
 same core model/session used by the CLI/service. Follow the
@@ -136,7 +145,9 @@ cargo check -p uor-r4-api --all-targets --offline
 cargo test -p uor-r4-api --lib --offline
 ```
 
-Protected CI carries the workspace library gate. An ignored end-to-end compile
+Protected PR/merge-queue statuses are compatibility acknowledgements; they do
+not run this library gate. Report actual local or manually dispatched checks.
+An ignored end-to-end compile
 + load test remains available when the change directly targets that lifecycle:
 
 ```sh

@@ -1,5 +1,7 @@
 # Model lifecycle
 
+**September 7 direction reconciliation:** the product name is **UOR-R4 Geometric Language Model**. Read the [canonical plan](integration/project-track.md), [current artifact/results](integration/current-state.md), [capability assessment](integration/model-direction-2026-09.md) and [project map](PROJECT_MAP.md) first. This document retains technical and dated experiment/reference material; earlier “active/next” sequences do not supersede those pointers. Native bounded inference and contextual/copy attention exist; general prose, general reasoning and frontier capability remain unqualified. Offline Rust training matmul is allowed; final serving has no matrix products or transformer backbone. No new model result was run for this documentation update.
+
 The current model lifecycle is documented in the
 [native geometric workflow](native_geometric_workflow.md): `r4 geometric`
 uses Rust for preparation, training, artifact construction, evaluation and
@@ -175,7 +177,7 @@ Keep their measurements and experiment-specific decisions intact.
 > history.
 
 Substantial offline jobs follow the measured backend/thread/worker selection
-rule in [AGENTS.md](../AGENTS.md#long-run-discipline-process-amendment-2026-08-06):
+rule in [AGENTS.md](https://github.com/UOR-Foundation/uor-r4/blob/bc03f2d7ffde99608da370808eca542360e54508/AGENTS.md#long-run-discipline-process-amendment-2026-08-06):
 benchmark a representative unit across scientifically eligible plans, select
 the fastest stable deterministic configuration, and record the evidence. One
 core and maximum workers are both hypotheses to measure, not defaults. This
@@ -551,7 +553,7 @@ current intelligence sequence, and their successful execution does not imply
 route-native attention or chat.
 
 For a zero-setup path that needs none of this, see the
-[current runnable surfaces](../README.md#what-you-can-run-today) in the README:
+[current runnable surfaces](../README.md#getting-started) in the README:
 the router and dashboard
 run with no model at all, and the Gate C harness runs on committed fixtures.
 

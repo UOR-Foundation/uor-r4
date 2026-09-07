@@ -1,6 +1,6 @@
-# uor-r4-core
+# UOR-R4 Geometric Language Model — core
 
-**Current native path (2026-09-05):** `native_geometric` implements the Rust
+**Active native model:** `native_geometric` implements the Rust
 training/artifact/session path used by `r4 geometric`, including occurrence
 memory, typed values, response entry, copying and completion. Follow the
 [immediate plan](../../docs/integration/project-track.md#immediate-build-sequence)
@@ -8,12 +8,21 @@ and [current state](../../docs/integration/current-state.md). The mathematical
 substrates remain reusable; the older reference-model status below is historical
 and does not select the active implementation or qualify general intelligence.
 
+The active source is [src/native_geometric](src/native_geometric). It executes
+learned bounded attention, exact retained-value operations and causal inference
+through the shared model/session API. General prose completion and general
+reasoning remain unqualified. The CLI and native API expose this same core;
+artifact-specific evidence and remaining failures are in the [project map](../../docs/PROJECT_MAP.md),
+[canonical plan](../../docs/integration/project-track.md),
+[current artifact and measured behavior](../../docs/integration/current-state.md),
+and [model direction](../../docs/integration/model-direction-2026-09.md).
+
 ## Historical substrate and reference status
 
 The shared mathematics and route-native substrate for UOR-R4’s research toward
 a transformerless local AI engine.
 
-**Current status.** `prime_route_attention`,
+**Historical reference status.** `prime_route_attention`,
 `prime_route_geometric_attention`, and `spiralcore_operator` provide canonical
 prime/semiprime routes, spin and torsion state, Hopf projection with a retained
 fiber, golden-radial structure, exact transport controls, and bounded route
@@ -89,7 +98,7 @@ research lane. That engine established useful artifact, deterministic-runtime,
 and multiplication-free kernel work, but it is not the current route-native
 intelligence architecture and is not evidence of transformerless chat.
 
-The crate therefore hosts three related bodies of work:
+The crate hosts the active native model above and three retained bodies of work:
 
 1. **The R⁴ math layer** (`src/lib.rs`, `src/zeta_zeros.rs`): zeta-zero
    embeddings, Hopf coordinates, prime/QIMC identity, and state metrics used by

@@ -1,68 +1,36 @@
-# Continue native geometric AI work
+# Continue UOR-R4 Geometric Language Model
 
-Read [AGENTS.md](../../AGENTS.md), the [project plan](project-track.md), the
-[current implementation](current-state.md), and the
-[architecture/source audit](architecture-2026-09/README.md). Reuse its supplements
-for the mechanism being changed; do not repeat the whole scan before each build.
-Refresh `origin/main` and relevant
-live GitHub state. The current owner request determines scope; this template
-cannot narrow an explicit whole-plan request to one historical issue.
+Read the [complete takeover record](handoff-2026-09-07.md), [canonical plan](project-track.md), [current state](current-state.md), [source-derived direction](model-direction-2026-09.md), [project map](../PROJECT_MAP.md) and [AGENTS.md](../../AGENTS.md). Refresh live GitHub, artifact hashes and shared resources; every handoff is a dated snapshot.
 
 ```text
 $uor-project-workflow
 
-Continue UOR-Foundation/uor-r4 toward the native geometric AI plan from refreshed
-origin/main and live GitHub. Read AGENTS.md, docs/integration/project-track.md
-and docs/integration/current-state.md. Reuse the source audit at
-docs/integration/architecture-2026-09/README.md and inspect the concrete source
-before adopting a mechanism. Work in an isolated full worktree and
-carry the authorized objective through its necessary implementation tasks.
+Continue UOR-Foundation/uor-r4 as native Rust geometric language model lead.
+Read docs/integration/handoff-2026-09-07.md completely and follow its live
+verification/source-reading instructions. Reconcile origin/main, #820 and the
+ordered roadmap issues with docs/integration/current-state.md. Reuse the broad
+source audit and its historical evidence; inspect the source being adopted.
 
-Use Rust throughout preparation, training, artifact construction and inference.
-Training may use matrix multiplication. Keep prime/ordered-n-let addresses,
-fixed zeta phases, R4/S3/H4 causal state, exact Z[phi]/orientation, the typed
-paired-H4/icosian bridge and UOR identity primary. Final inference must execute
-learned geometric operators through bounded routing/state/integer-table lookup,
-with no matrix products, including lookup/add contraction, and no transformer
-backbone. Deterministic geometric address/page selection is allowed. Shared typed
-operators are current; expert gates are a conditional later option requiring
-measured capability and total M1 cost. Preserve existing Python/dense
-references as evidence, with no new Python model dependency.
+Retain the accepted model, not the latest failed candidate. The current immediate
+direction is contextual lexical/prime and role phrase binding, then shared
+state transitions and compositional emission. Adjust to newer actual evidence.
+The objective remains useful local prose/conversation/memory/coding/reasoning,
+ultimately frontier capability and lower energy on M1 consumer laptops. Offline
+Rust matmul is permitted; final serving has no matrix products or transformer
+backbone. Geometric address/page selection is allowed. Shared operators are
+current; expert gates remain conditional future work.
 
-Follow the immediate build sequence and audit's selected direction. Refresh the
-retained checkpoint from current-state.md: the September review retained
-PR #1160's d59070c2, descended from PR #1159's e7c14c99. Source/NoRead selection,
-writer repair, exact NoWrite reuse, dependent reads and computed-role selection
-have completed bounded results. Do not repeat them as missing work. The observed
-remaining cross-domain failure admits a numeric answer where a supported location
-or identifier is required. Implement one learned typed decision over legal
-metadata alternatives before payload execution. Keep NoOperation and NoRead
-distinct, calibrate the common choice, preserve correct cases and exact causal
-provenance, and measure complete generated answers. Then advance shared contextual
-transitions/emission and broader #1139/#1140 language and composition.
+Preserve all parents, negatives, imports, opened/fresh distinctions and user
+material. Refresh the cumulative model/storage ledger; the prior 22.464-second
+remaining balance is not enough for another full 60-second cycle and is not a
+new budget. Establish a complete projection and record any necessary local allowance
+extension under the existing standing authorization before dependent execution.
+Do not ask the owner to reconfirm that class of increase. Proceed with focused real behavior checks and protected
+PR delivery, and do not stop merely because an old issue sequence says so.
 
-Preserve all parents, negative results, research and user material. Refresh the
-cumulative model/storage ledger and current build cache before execution. Project
-the complete preparation, build, fit, control, evaluation, retries, checkpoint and
-retained-output costs, with wall-time, CPU/thread, RAM, storage and stop margins.
-The audit's preliminary envelope and historical receipts are not fresh budgets.
-Use one model process by default; coordinate bounded independent work only when
-it saves effort. Continue in the existing task without an unnecessary process
-framework or external cost.
-
-Evolve the actual native model under #973, using existing correct components.
-Develop conversation/memory and coding/reasoning on that same path. Select
-meaningful configurable context/training/evaluation windows and charge work
-cumulatively against the machine's wall/RAM/storage/thread/checkpoint budget.
-Diagnose, correct and resume within the remaining budget; old 15-minute,
-one-retry and frozen-window rules do not govern new development.
-
-Compile and exercise the changed path; run focused meaningful checks rather
-than blanket suites or proof paperwork. Preserve all historical results at
-their exact scope. Report actual behavior and resource use, including failures,
-missing work and the next action. Compatibility-only statuses are not test
-evidence; inspect the actual native checks that ran. Deliver
-through protected pull requests. Qualify model behavior and a complete capability
-API before integrating the same native artifact into the GitHub Pages Studio.
-Keep current-state.md as the single current implementation pointer. Do not claim a model or alpha before measuring it.
+Begin with verified state, the observed bottleneck, and the next concrete
+implementation with full resource requirements. Make progress on source and
+implementation while preparing the complete resource projection.
 ```
+
+The older canonical handoff and verification receipt remain linked in the full takeover record. Their checkpoints and next steps are historical; do not repeat completed source/NoRead, admission, writer, exact numeral or retained-span work as missing features.

@@ -236,7 +236,7 @@ transient peaks or unique-extent measurements.
 
 ## Recurrent revision /2 — owner adoption and first build, 2026-09-06
 
-The owner adopted the [dependent-attention plan](integration/project-track.md#immediate-recurrent-attention-revision--owner-adoption-2026-09-05)
+The owner adopted the [dependent-attention plan](https://github.com/UOR-Foundation/uor-r4/blob/bc03f2d7ffde99608da370808eca542360e54508/docs/integration/project-track.md#immediate-build-sequence)
 after the preceding independent-read result. This section appends a new
 mechanism and measurement; it does not replace the /1 negative above.
 

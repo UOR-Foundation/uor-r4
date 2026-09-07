@@ -1,6 +1,6 @@
-# Research archive
+# UOR-R4 Geometric Language Model — research archive
 
-Consolidated research supporting the UOR / uor-r4 programme. This tree is
+Consolidated research supporting the UOR-R4 Geometric Language Model. This tree is
 **not** part of the Rust workspace (see `exclude` in the root `Cargo.toml`)
 and is excluded from crate build, lint, and claim-wording gates.
 
@@ -10,9 +10,10 @@ is the canonical research snapshot. The `ai-router` copies nested under
 and sometimes divergent results; do not treat three copies as independent
 replication or edit them in parallel.
 
-Research becomes active product work only through the
-[Geometric Intelligence Programme](../docs/geometric_intelligence_programme.md)
-and its live GitHub root, [#820](https://github.com/UOR-Foundation/uor-r4/issues/820).
+Research is adopted into the native model through the
+[canonical plan](../docs/integration/project-track.md) and measured implementation
+in [current-state](../docs/integration/current-state.md), under programme root
+[#820](https://github.com/UOR-Foundation/uor-r4/issues/820).
 That programme turns selected results into explicit route, serialization,
 attention, inference, correctness, or reasoning contracts. Everything else in
 this tree remains preserved research input: useful evidence and mechanism
@@ -25,6 +26,29 @@ for synthesis. Inclusion here does not promote a formula to a product guarantee;
 promotion requires a named consumer and an explicit, witnessed contract in the
 active programme.
 
+## Finding sources, artifacts and results
+
+The [project map](../docs/PROJECT_MAP.md) and
+[model direction](../docs/integration/model-direction-2026-09.md) connect this
+archive to the active Rust core. The
+[architecture audit](../docs/integration/architecture-2026-09/README.md) and
+[source inventory](../docs/integration/architecture-2026-09/source-inventory.json)
+identify original angular/prime routers, UOR standards, contributor imports,
+Spin/Hopf/fiber and mathematical tracks at their reviewed source scope.
+
+Tracked research source belongs here; append-only measurements and compact
+receipts are indexed by [docs/RESEARCH.md](../docs/RESEARCH.md). Bulk local
+training data, retained checkpoints and cumulative resource receipts live in
+the ignored `.uor-models/` store; follow the exact paths and identities in
+current-state and the named evidence record. A Git clone does not imply those
+local artifacts or LFS payloads are present. The
+[local knowledge index](../tools/uor-knowledge/README.md) supports discovery of
+source snapshots and relationships; it does not replace live source verification.
+
+Historical imports retain their own names, licenses and internal instructions.
+Their proofs, simulations, dense references and benchmark outcomes are scoped
+evidence, not a general-prose or general-reasoning claim for the native model.
+
 ## Contents
 
 - `ai-research/` — snapshot of the `Sky-Metrix/AI-Research` monorepo: the
@@ -35,6 +59,9 @@ active programme.
   `formal-math-lean/` Lean sources and the vendored `UOR-Framework/lean4`,
   routing-infrastructure prototypes, and manuscripts.
 - `prime-analysis/photos/` — supporting figure/slide images (Git LFS).
+- [archives/](archives/README.md) — preserved development sandboxes and early router sources.
+- [riemann-lean/](riemann-lean/README.md) — imported Riemann/Lean research and its stated proof boundaries.
+- [msa/](msa/README.md) — retained MSA research at its documented scope.
 
 ## Provenance and handling
 

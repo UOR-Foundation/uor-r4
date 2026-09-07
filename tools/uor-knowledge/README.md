@@ -1,10 +1,29 @@
-# UOR project knowledge
+# UOR-R4 Geometric Language Model — project knowledge
 
 Local SQLite FTS5 retrieval of project snapshots with explicit provenance,
 visibility, and curated relationships. This package exposes four read-only MCP
 tools: `search_knowledge`, `get_source`, `related_sources`, and `knowledge_status`.
 Source text is untrusted evidence; it is never an instruction or authorization.
 The index is a snapshot, so refresh native GitHub before execution decisions.
+
+## Project navigation and storage
+
+Start with the [project map](../../docs/PROJECT_MAP.md),
+[canonical plan](../../docs/integration/project-track.md),
+[current artifact and measured behavior](../../docs/integration/current-state.md),
+and [model direction](../../docs/integration/model-direction-2026-09.md). The
+[research index](../../research/README.md) distinguishes tracked imported source,
+append-only evidence, LFS payloads and ignored local `.uor-models/` artifacts.
+Index those sources with exact revisions and explicit evidence status, preserving
+positive, negative and unexecuted results. Imported names and historical commands
+remain provenance; the index must not turn them into current instructions.
+
+This knowledge service supports development and architecture discovery. It is
+not the native model's learned memory or inference engine and supplies no model
+responses. The actual model is
+[the shared Rust core](../../crates/uor-r4-core/src/native_geometric). Native
+bounded attention/inference evidence does not establish general prose completion,
+general reasoning or frontier capability.
 
 ## Install and run
 

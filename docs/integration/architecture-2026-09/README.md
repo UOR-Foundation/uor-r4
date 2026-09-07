@@ -1,5 +1,10 @@
 # Geometric language architecture reconciliation — September 2026
 
+**Superseding direction (2026-09-07):** use the [post-PR #1171 assessment](../model-direction-2026-09.md), [current state](../current-state.md) and [canonical plan](../project-track.md). Retained `321e990f` and unpromoted `bb6b8ba4` supersede the dated artifact pointers below. Contextual lexical/role phrase binding is next. The audit remains a source inventory, not an active queue. [Project map](../../PROJECT_MAP.md).
+
+<details>
+<summary>Dated audit and continuation history — preserved source and evidence scope</summary>
+
 **2026-09-07 continuation:** [source-span transport](../../native_geometric_source_span_1139.md)
 is implemented but its separator-only fit is unpromoted: multiword copying
 improves while twenty prior answers overextend. Keep `c6a98c04` active. The next
@@ -149,3 +154,5 @@ Follow-through: implement the joint typed decision, then learn reusable contextu
 The local companion `tracked-source-inventory.json` lists every tracked path by Git blob and size. A compact [source inventory](source-inventory.json) binds repository source entries referenced by these reports. Detailed supplements cover [mathematics, fibers and RH](mathematics.md), [dependencies and contributors](imports.md), and [historical engines and Studio](engines.md). The review searches all tracked text families and inspects source owners, tests and retained records for the mechanisms discussed. It does not assert a line-by-line audit of all 14,288 paths, revalidation of every theorem, execution of every test, or interpretation of every image/PDF. Unresolved source identification and missing bridges are explicitly listed in the supplements.
 
 All old fits, negative results, source imports and user changes remain. No model run was repeated, no storage cleanup occurred, and the cumulative model-time ledger was unchanged. Reports use the existing project knowledge import mechanism so a later agent can recover source, scope and proposed use without treating an old claim as current authority.
+
+</details>
