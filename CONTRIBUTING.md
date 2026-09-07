@@ -3,7 +3,10 @@
 New development follows the
 [owner-adopted immediate sequence](docs/integration/project-track.md#immediate-build-sequence).
 Check the accepted predecessor handoff before expanding scope. Use the existing
-one-task/one-agent cadence and consolidated issue owners; preserve dated results.
+task and consolidated issue owners; coordinate independent work when useful and
+preserve dated results. Reuse the
+[architecture/source audit](docs/integration/architecture-2026-09/README.md) before
+introducing a new mechanism; inspect its actual source and declared limitations.
 
 Follow [AGENTS.md](AGENTS.md), the [native geometric AI plan](docs/integration/project-track.md)
 and the [current implementation](docs/integration/current-state.md). The stable
@@ -15,8 +18,10 @@ Do not copy the current stage into another roadmap or restore old issue gates.
 Use Rust for preparation, training, artifact construction and inference.
 Training may use floating point and matrix multiplication. The serving target
 executes learned geometric operators through bounded state, routes and
-integer/table lookup; a dense transformer hidden behind a lookup interface is
-not the target.
+integer/table lookup, with no serving matrix products, including lookup/add
+contractions, and no transformer backbone. Deterministic geometric address/page
+selection is allowed. Shared typed operators are current; expert gates remain a
+conditional later option requiring capability and complete M1 cost evidence.
 
 Prime/ordered-n-let addresses, fixed zeta phases, R4/S3/H4 transport, exact
 `Z[phi]` and orientation state, typed paired-H4/icosian geometry and UOR identity

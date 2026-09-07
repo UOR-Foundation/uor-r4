@@ -12,6 +12,22 @@ geometric operators through bounded state, routing and integer/table lookup.
 Working generation or session persistence does not establish either required
 alpha capability group: conversation/memory and coding/reasoning.
 
+The [source audit](integration/architecture-2026-09/README.md) supplies the current
+architecture and capability/API sequence. Final serving excludes every matrix
+product, including lookup/add implementations; offline Rust training remains
+allowed to use them. Deterministic geometric address/page selection and shared
+typed operators are current, with expert gates only a conditional later option.
+Preserve artifact lineage and exact value/occurrence versions when learning a
+new selector. A source router, numeric NoOperation and source NoRead have distinct
+action domains; an interface must preserve their actual commit semantics.
+
+The complete lifecycle must qualify artifact loading, session boundaries,
+contextual access, generation/streaming, memory, errors/limits and capability
+identity on the same native model. Useful prose and reasoning require measured
+outputs. Browser lowering and the GitHub Pages Studio consume that accepted
+artifact after native model/API qualification. The historical compiler and dense
+reference lifecycles below retain their separate scope.
+
 The optional [typed-role selector](native_geometric_typed_roles_1139.md) uses
 `Session::end_response` to mark the start boundary for the next query's metadata.
 Continue to call the explicit begin/end response API around each generated turn;

@@ -81,6 +81,18 @@ every primary geometric role effective. Keep these distinctions in model claims.
 
 ## Immediate build sequence
 
+**September source-audit direction:** the retained source/NoRead refinement has
+completed the previous e7c14c99 selection repair. The next implementation learns
+one shared typed choice over legal numeric, source and abstention metadata before
+execution, preserving separate NoOperation/NoRead semantics and all correct
+cases. Calibrate common selection instead of concatenating independently fitted
+scores. Then learn reusable contextual transitions/emission and broader typed
+composition; add geometric paging only when measured access cost requires it.
+The [audit's decision and acceptance](architecture-2026-09/README.md#best-next-step-and-its-acceptance)
+explains the observed numeric-versus-word failure and matched check. Refresh the
+retained artifact and resources in current-state before execution. Qualify the
+native capability API before connecting the same artifact to the Pages Studio.
+
 **Owner-adopted direction, clarified after #1145.** Retain the first two
 completed bounded steps and focus the third on learned geometric routing and
 selected transformations, with language and composition in its direct check.
@@ -112,7 +124,8 @@ skip it, import a dense serving model, or treat issue closure as model quality.
 Necessary fixes to an existing interface, invariant or resource bottleneck may
 accompany a step; they do not start a competing product/research programme.
 
-**Current handoff:** #1137 was delivered through PR #1142; exact relation
+**Historical adoption handoff (through #1145):** #1137 was delivered through
+PR #1142; exact relation
 storage through #1143 and the accepted #1138 role-path repair through #1144
 (`39e35c54`). [#1139 exact NoWrite admission](../native_geometric_relation_admission_1139.md)
 now preserves 112 prior and 28 longer-context answers/write sequences and earlier
@@ -179,7 +192,8 @@ state. Broader conversation, export/forget and product integration remain #962.
 
 ### Step 3: learn semantic placement and routed computation
 
-**Current implementation checkpoint:** the first two-channel learned H4 block
+**Step 3 implementation history (earliest to latest):** the first two-channel
+learned H4 block
 is [implemented and measured](../native_geometric_learned_routing_1139.md), with
 improved small-population token prediction but failed generation/preservation
 and no angular advantage over exact-code selection. The **two dependent reads
@@ -245,7 +259,11 @@ No additional cache campaign is active. Follow current-state.md for artifacts
 and cumulative resources; a new issue does not reset the spent amount.
 The full handoff remains unmet.
 
-#### Immediate recurrent attention revision — owner adoption 2026-09-05
+#### Historical recurrent attention revision — owner adoption 2026-09-05
+
+The numbered sequence below records its original design and completed revisions.
+Its embedded next-action wording is historical; the current selection boundary
+and follow-through above govern new work.
 
 The first selected value changes the query for the second read. Retain both
 signed H4 outputs and their exact source references until the output decision;
@@ -359,16 +377,17 @@ bindings retain source detail that the summaries cannot reconstruct.
 | [NAF/GNAF slice](../../crates/uor-r4-naf/src/lib.rs) and [integration record](../gnaf_integration_653.md) | Canonical supported values, typed operation/result boundaries and scoped cost claims when a concrete adapter needs them | State/operator/plan capabilities are incomplete; the separate WASM-GEMM proof does not establish this model's correctness or optimality |
 | [Graph compiler](../../crates/uor-r4-graph-compiler/src/lib.rs), [R4G1 format](../../crates/uor-r4-graph-format/src/lib.rs) and borrowed runtime | Compile learned routes/operators into reusable packed tables, explicit references and bounded execution; deduplicate shared data | Historical teacher observations/region covers do not compile an arbitrary frontier model into a small equivalent artifact; integrate only needed lowering seams |
 | [XOR/popcount route attention](../../crates/uor-r4-graph-runtime/src/route_attention.rs) | Bounded relation comparisons, top-M selection and integer aggregation over learned or geometrically justified codes | The existing operator scans its declared candidates; no semantic meaning follows from digest-bit distance, and it is dormant in serving |
-| [Pinned uor-matmul](https://github.com/UOR-Foundation/uor-matmul/tree/b13c98449948174f590e337c4dc25dfc394a07d0) | Offline Rust learning/reference arithmetic; inspect its Atlas lookup/add kernels for a bounded selected geometric operator when useful | The float path uses coded lookup/exact accumulation but still evaluates a mathematical matrix product. Removing multiply instructions does not by itself remove dense work or establish a speed advantage |
+| [Pinned uor-matmul](https://github.com/UOR-Foundation/uor-matmul/tree/b13c98449948174f590e337c4dc25dfc394a07d0) | Offline Rust learning/reference arithmetic; reuse kernel ideas only for a separately defined serving operator that performs no matrix product | The float path uses coded lookup/exact accumulation but still evaluates a mathematical matrix product. Removing multiply instructions does not by itself remove dense work or establish a speed advantage |
 
 The library is already called by Rust training/reference code in
 [`geometric_training.rs`](../../crates/uor-r4-model-source/src/geometric_training.rs).
 This is not evidence that the current native joint learner uses it, or that a
 new kernel would improve this laptop workload. Compare actual shapes, arithmetic,
 scratch, packing, projection and accumulation cost before adoption. Necessary
-training operations may use it under the existing offline allowance. A serving
-use must be an explicit bounded operator selected by the geometric model, not
-the unchanged dense transformer routed through a differently named library.
+training operations may use it under the existing offline allowance. Final
+serving must execute no matrix product, including a small or selected product.
+Only a separately defined geometric operator that is not a matrix-product
+computation may reuse implementation ideas at that boundary.
 
 The angular/prime-router archives, uploaded project material and affiliated
 repos remain available for concrete design questions. Read original algorithms
@@ -395,19 +414,20 @@ conversation and coding qualification; it is not itself alpha.
 
 ### Cadence and resource envelope
 
-The current owner cadence is one task and one agent, with the spending goal
-"try to be as budget friendly as possible." Do not add a hard token cap,
-parallel research branches or a receipt/benchmark framework. Continue useful
-authorized work, checkpoint the result, and keep the next unmet step explicit.
+Continue the authorized objective in the existing task, with budget-friendly
+coordination of bounded independent work when useful. Use one model process by
+default. Do not add a token cap, parallel model campaigns or a receipt/benchmark
+framework without a concrete need.
 
-At adoption the cumulative model ledger is 1,081.641/1,800 seconds, leaving
-718.359 seconds. Refresh it before execution; do not reset it per issue. The
-first admitted cycle uses at most 120 seconds model work and 1,200 seconds
-engineering commands, a 4 GiB model RSS target and one model process. Charge
-preparation, fitting, evaluation, generated-code execution, retries and resumes.
-These are the current cycle envelope, not permanent global training limits or
-fresh cumulative grants for every stage. Project the complete build, fit and
-evaluation using current cache state and measured work before launching.
+Refresh the cumulative ledger, retained artifact, physical storage and build cache
+before every new execution. Project preparation, compilation, candidates and
+controls, generated evaluation, retries/resumes and checkpoint output together.
+Declare context/store limits, wall time, CPU/build threads, peak RAM, new retained
+and temporary storage, and stop margins. The audit's preliminary next-step
+envelope is a proposal requiring this refresh, not fresh execution admission.
+Historical adoption figures (1,081.641/1,800 model seconds and a 120-second first
+cycle) remain dated evidence, not current remaining resources or recurring grants.
+Use [current-state](current-state.md) and its linked live local ledgers.
 
 Necessary incremental storage increases are already owner-authorized; record
 each against cumulative accounting and retain the 128 MiB stop margin. This does

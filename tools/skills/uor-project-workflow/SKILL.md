@@ -24,7 +24,11 @@ Use Rust throughout preparation, training, artifact construction and inference.
 Training may use floating point, matrix multiplication and gradients. Final
 serving executes learned geometric operators through bounded routes, state
 transitions and integer/table lookup; dense transformer computation concealed
-behind lookup is excluded. Preserve prior Python/dense references as evidence,
+behind lookup and all serving matrix products, including lookup/add contractions,
+are excluded. Geometric address/page selection is allowed; shared typed operators
+are current and expert gates remain a conditional later option. Reuse the source
+audit in `docs/integration/architecture-2026-09/README.md` for concrete mechanism
+choices rather than rerunning the full scan. Preserve prior Python/dense references as evidence,
 with no new Python model implementation or product dependency.
 
 Prime/ordered-n-let addresses, fixed zeta phases, R4/S3/H4 state and transport,

@@ -1,28 +1,42 @@
 # Roadmap
 
-**Immediate programme (owner-adopted 2026-09-05):** follow the
-[four-step native build sequence](docs/integration/project-track.md#immediate-build-sequence)
-and its GitHub dependencies before broader capability/product/release expansion.
-The [consolidated ownership map](docs/integration/project-track.md#consolidated-issue-responsibilities)
-replaces superseded issue queues. Historical evidence below remains scoped to
-its original artifact and decision.
+The [canonical project plan](docs/integration/project-track.md) owns the current
+sequence and acceptance criteria; [current-state](docs/integration/current-state.md)
+owns the retained implementation and next unmet behavior. Live GitHub owns issue
+status. The [September source audit](docs/integration/architecture-2026-09/README.md)
+explains the mechanism choices and preserves the alternatives and negatives.
 
-The [native geometric AI plan](docs/integration/project-track.md) is the sole
-current goal and development plan. The [current implementation](docs/integration/current-state.md)
-records active work under [#973](https://github.com/UOR-Foundation/uor-r4/issues/973).
-Live GitHub owns issue status. Do not copy a changing “next stage” here.
+The destination is a learned geometric language model running on a consumer M1
+laptop, with frontier capability as the long-term objective. Rust covers data,
+training, artifacts and inference. Offline training may use matrix products;
+final serving may not, including products implemented with lookup/add kernels.
+Deterministic geometric address/page selection and shared typed operators are
+the current design. Expert gates remain a conditional later option requiring
+capability and complete laptop-cost evidence. A transformer backbone is excluded.
 
-The owner-directed destination is Rust preparation/training/artifact/inference,
-with primary prime/zeta/R4 mechanisms and learned geometric operators, serving
-through bounded state, routing and integer/table lookup. Both
-conversation/memory and coding/reasoning must earn alpha. Development may use
-matrix multiplication in Rust training and meaningful configurable learning
-windows within a cumulative machine budget. Historical fixed stage, window and
-retry rules do not govern this recovery.
+## Capability direction
 
-The completed measurements below remain evidence at their stated scope. They
-do not select a current action or imply alpha, source-free general capability,
-or a successful port of a Python reference.
+These are capability handoffs, not a second issue queue or a delivery-date promise.
+The canonical plan names the current implementation order and issue owners.
+
+| Handoff | Work toward the goal | Evidence required to advance |
+|---|---|---|
+| Learned contextual choice | Unify legal source, word, numeric and abstention decisions over exact retained values | Complete generated answers, causal source/operand identity, preserved correct cases and a matched comparator |
+| Reusable computation and language | Learn shared contextual transitions, selected operators and emission; compose committed intermediates | New prose and grounded answers, dependent reasoning, generated Rust with semantic tests, useful memory and termination |
+| Laptop scaling and serving | Introduce geometric page directories and packed operators where measured access or memory cost requires them | Complete training/build and serving cost, bounded RAM/state/storage, operation census, quality preserved under lowering |
+| Capability API | Qualify one native model/session contract across CLI and service | Versioned artifact/backend identity, limits/errors, streaming/cancellation, persistence/isolation and measured capability declarations |
+| GitHub Pages Studio | Connect the same accepted native artifact through WASM to the existing Studio | Actual browser output, matching native behavior, truthful backend identity, measured browser memory/latency and persistence |
+| Release and frontier progress | Improve both conversation/memory and coding/reasoning; complete portability and release work | Independent capability evaluation and reproducible consumer-hardware measurements; no frontier claim before evidence |
+
+Prime/n-let addresses, fixed zeta phases, signed R4/S3/H4 state, exact `Z[phi]`,
+Hopf fibers, typed transport and UOR identity supply reusable representations
+and operations. The audit distinguishes implemented operators, storage roles,
+offline references and missing bridges. It does not require every mechanism to
+enter one model or a Cartesian-product table. Reuse the audit for concrete
+implementation questions; it is not a recurring prerequisite to each change.
+
+The completed measurements below retain their original artifact, population and
+decision scope. They do not select the current action or establish native alpha.
 
 ## Historical roadmap
 
