@@ -178,6 +178,7 @@ impl Trainer {
             dependent_read: None,
             typed_routing: None,
             joint_admission: None,
+            relation_spans: None,
             source_span_context: None,
             source_span: None,
             source_context: None,
@@ -518,8 +519,45 @@ impl Model {
         self.artifact_cid = format!("blake3:{}", blake3::hash(&self.to_bytes()?).to_hex());
         Ok(())
     }
+    /// Bind retained phrase transport to the complete unchanged learned parent.
+    pub fn with_retained_relation_spans(&self) -> Result<Model> {
+        // Candidate validation below reconstructs and validates this entire parent.
+        if self.relation_spans.is_some()
+            || self.source_span_context.is_none()
+            || relation::head(self).is_none()
+        {
+            return Err(Error(
+                "retained spans require contextual span and relation parent".into(),
+            ));
+        }
+        let mut model = self.clone();
+        model.relation_spans = Some(self.artifact_cid.clone());
+        model.refresh_identity()?;
+        model.validate()?;
+        Ok(model)
+    }
     pub(super) fn validate(&self) -> Result<()> {
         self.config.validate()?;
+        if let Some(parent_cid) = &self.relation_spans {
+            if self.source_span_context.is_none() || relation::head(self).is_none() {
+                return Err(Error("retained span parent operators absent".into()));
+            }
+            let mut parent = self.clone();
+            parent.relation_spans = None;
+            parent.refresh_identity()?;
+            if &parent.artifact_cid != parent_cid {
+                return Err(Error("retained span frozen parent differs".into()));
+            }
+            parent.validate()?;
+            let mut duplicate = self.clone();
+            duplicate.refresh_identity()?;
+            if duplicate.artifact_cid != self.artifact_cid
+                || duplicate.uor_model_address != self.uor_model_address
+            {
+                return Err(Error("retained span identity differs".into()));
+            }
+            return Ok(());
+        }
         if self.source_span_context.is_some() && self.source_span.is_none() {
             return Err(Error("source span context without operator".into()));
         }

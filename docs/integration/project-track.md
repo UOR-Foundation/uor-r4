@@ -274,12 +274,17 @@ now retains `419ba3a7`: construction 14/14, open 6/6, fresh 9/9 versus 6/9 with
 the original-source-cue pair removed. All 663 retained construction and 24/24
 prior answers are preserved. This fixes the observed same-word context collision;
 unseen connectors and double-space gaps remain unqualified (0/2).
-**Next: retain accepted bounded multiword values through relation writes and later
-reads**, carrying exact extent and separators with the selected value across
-raw-window eviction. Use independent construction/open session examples, keep
-the first-source and numeric paths fixed, and preserve session behavior. Broader
-connector recognition remains a separate learning need. Do not train on the opened fresh diagnostic.
-Project the full run against the remaining cumulative allocation before execution.
+The [retained-value continuation](../native_geometric_retained_spans_1140.md)
+retains `0b12b604` with the corrected forward-only runtime, reusing all parent
+parameters without fitting. Complete multiword values survive window eviction,
+conflicts and corrections on all 18 session turns, with all prior preservation.
+The initial reverse-statement overextension is preserved as a runtime negative;
+reverse writes now keep their established single-word scope.
+**Next: learn role-aware value endpoints in both source orders**, using the
+existing owner/value binding and geometric continuation operator. Source-cue
+lookup alone still lacks general connector and spacing behavior. New learning
+needs independently authored construction/open cases, fixed earlier panels as
+preservation, and a complete projection against the remaining cumulative budget.
 Do not restart completed order repairs or grow a
 paging subsystem without a measured access bottleneck. General named-role binding
 and broader Rust reasoning remain unqualified. Follow current-state.md for

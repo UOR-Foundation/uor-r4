@@ -32,6 +32,9 @@ pub(super) struct RelationRecord {
     pub id: u64,
     pub owner: WordAtom,
     pub value: WordAtom,
+    /// Exact bounded value payload; the original WordAtom remains its anchor.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub span: Option<super::relation_span::RelationSpan>,
     pub previous: u64,
     /// 1=assert, 2=explicit revision, 3=contradiction. Learned choice.
     pub action: u8,
@@ -46,6 +49,8 @@ pub(super) struct RelationState {
     pub directory: [u64; RELATIONS],
     pub next_id: u64,
     pub last_word_end: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pending: Option<super::relation_span::PendingRelation>,
 }
 impl Default for RelationState {
     fn default() -> Self {
@@ -54,12 +59,19 @@ impl Default for RelationState {
             directory: [0; RELATIONS],
             next_id: 1,
             last_word_end: None,
+            pending: None,
         }
     }
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RelationWork {
+    #[serde(default, skip_serializing_if = "RoutingWork::is_empty")]
+    pub span_routing: RoutingWork,
+    #[serde(default, skip_serializing_if = "relation_count_zero")]
+    pub span_edge_checks: u64,
+    #[serde(default, skip_serializing_if = "relation_count_zero")]
+    pub span_byte_writes: u64,
     pub word_boundaries: u64,
     pub feature_queries: u64,
     pub row_comparisons: u64,
@@ -415,6 +427,16 @@ impl RelationState {
         action: u8,
         work: &mut ValueWork,
     ) {
+        self.commit_span(owner, value, None, action, work);
+    }
+    pub(super) fn commit_span(
+        &mut self,
+        owner: WordAtom,
+        value: WordAtom,
+        span: Option<super::relation_span::RelationSpan>,
+        action: u8,
+        work: &mut ValueWork,
+    ) {
         let Some(next) = self.next_id.checked_add(1) else {
             return;
         };
@@ -431,7 +453,16 @@ impl RelationState {
         }
         let conflict = action == 3
             || (action == 1
-                && previous.is_some_and(|(_, r)| r.conflict || !r.value.matches(&value, work)));
+                && previous.is_some_and(|(_, r)| {
+                    r.conflict
+                        || !super::relation_span::same_value(
+                            &r.value,
+                            r.span.as_ref(),
+                            &value,
+                            span.as_ref(),
+                            work,
+                        )
+                }));
         let slot = ((self.next_id - 1) & 15) as usize;
         let evicted = self.records[slot].id;
         if evicted != 0 {
@@ -457,6 +488,7 @@ impl RelationState {
             id: self.next_id,
             owner,
             value,
+            span,
             previous: previous.map_or(0, |(_, r)| r.id),
             action,
             conflict,
@@ -477,6 +509,10 @@ impl RelationState {
         }
         self.last_word_end = Some(words.recent[0].byte_end);
         work.relations.word_boundaries = work.relations.word_boundaries.saturating_add(1);
+        if model.relation_spans.is_some() {
+            self.observe_span(model, words, work);
+            return;
+        }
         if let Some((o, v, a)) = write_choice(model, &words.recent[..words.recent_len], work) {
             self.commit(words.recent[o], words.recent[v], a, work);
         } else {
@@ -549,7 +585,13 @@ pub(super) fn read_choice(
         let (f, n) = read_features(model, record, words, &addr, work);
         for (ai, action) in role.actions.iter().enumerate() {
             if action.copy
-                && (usize::from(record.value.len) + 1 + usize::from(action.prefix.is_some())
+                && (usize::from(
+                    record
+                        .span
+                        .as_ref()
+                        .map_or(record.value.len, |span| span.len),
+                ) + 1
+                    + usize::from(action.prefix.is_some())
                     > usize::from(super::response_entry_types::RESPONSE_ENTRY_STEPS))
             {
                 continue;
@@ -584,6 +626,7 @@ impl RelationState {
     pub(super) fn validate(&self, values: &ValueState, model: &Model) -> Result<()> {
         let fail = || Error("invalid relation snapshot identity, directory or version".into());
         let words = values.lexemes.as_ref().ok_or_else(fail)?;
+        self.validate_spans(values, model)?;
         if self.next_id == 0
             || self
                 .last_word_end
@@ -629,7 +672,13 @@ impl RelationState {
                 let conflict = r.action == 3
                     || (r.action == 1
                         && (prior.conflict
-                            || !r.value.matches(&prior.value, &mut ValueWork::default())));
+                            || !super::relation_span::same_value(
+                                &r.value,
+                                r.span.as_ref(),
+                                &prior.value,
+                                prior.span.as_ref(),
+                                &mut ValueWork::default(),
+                            )));
                 if conflict != r.conflict {
                     return Err(fail());
                 }

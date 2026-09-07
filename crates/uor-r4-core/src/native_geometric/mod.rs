@@ -52,6 +52,7 @@ mod mixture;
 mod numeral;
 mod relation;
 mod relation_admission;
+mod relation_span;
 #[cfg(test)]
 mod relation_tests;
 mod relation_training;
@@ -338,6 +339,8 @@ pub struct TrainingProgress {
 #[serde(try_from = "ModelWire")]
 pub struct Model {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    relation_spans: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     source_span_context: Option<Vec<word_copy_types::WordCopyAddress>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     source_span: Option<source_routing::SourceRouting>,
@@ -392,6 +395,8 @@ pub struct Model {
 #[serde(deny_unknown_fields)]
 struct ModelWire {
     #[serde(default)]
+    relation_spans: Option<String>,
+    #[serde(default)]
     source_span_context: Option<Vec<word_copy_types::WordCopyAddress>>,
     #[serde(default)]
     source_span: Option<source_routing::SourceRouting>,
@@ -445,6 +450,7 @@ impl TryFrom<ModelWire> for Model {
     type Error = Error;
     fn try_from(wire: ModelWire) -> Result<Self> {
         let model = Self {
+            relation_spans: wire.relation_spans,
             source_span_context: wire.source_span_context,
             source_span: wire.source_span,
             source_context: wire.source_context,

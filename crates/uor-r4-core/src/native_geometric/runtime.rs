@@ -218,6 +218,9 @@ impl Session {
         if let Some(state) = &mut self.values {
             state.begin(&mut self.work.values);
             state.observe_relation(model, &mut self.work.values);
+            if let Some(relations) = &mut state.relations {
+                relations.finish_span(&mut self.work.values);
+            }
         }
         if let (Some(entry), Some(values)) = (&mut self.response_entry, &self.values) {
             entry.begin(model, values, self.control, &mut self.work.response_entry);

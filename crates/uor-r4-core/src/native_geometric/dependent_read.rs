@@ -85,7 +85,7 @@ pub(super) fn follow<'a>(
     first: &RelationRecord,
     work: &mut ValueWork,
 ) -> Option<&'a RelationRecord> {
-    if first.conflict {
+    if first.conflict || first.span.is_some() {
         return None;
     }
     for &id in &state.directory {
@@ -110,7 +110,10 @@ pub(super) fn valid(values: &ValueState, ids: [u64; 2], work: &mut ValueWork) ->
     work.relations.record_reads += 2;
     match (state.record(ids[0]), state.record(ids[1])) {
         (Some(first), Some(last)) => {
-            !first.conflict && !last.conflict && first.value.matches(&last.owner, work)
+            !first.conflict
+                && first.span.is_none()
+                && !last.conflict
+                && first.value.matches(&last.owner, work)
         }
         _ => false,
     }

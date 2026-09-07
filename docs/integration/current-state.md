@@ -1,5 +1,38 @@
 # Current native geometric AI work
 
+## Retained multiword relation values — 2026-09-07
+
+**Retain `0b12b604` with the corrected forward-only runtime.** The
+[result](../native_geometric_retained_spans_1140.md) and
+[evidence](../evidence/native_geometric_retained_spans_1140.json) bind the runtime
+source and artifact separately. All `419ba3a7` parameters remain unchanged; no fit
+was needed. The accepted H4 Continue/Finish operator now accumulates a bounded
+forward value during input and commits its complete bytes as one immutable
+relation version. Later reads survive raw-window eviction. Same-prefix values
+conflict correctly; explicit revision clears the conflict.
+
+Parent construction is 0/6; corrected construction and open sessions are 6/6
+each, and all six previously exposed fresh turns replay correctly. Exact
+write/version counts and isolation pass. All 663 retained construction answers,
+14/14, 6/6 and 9/9 prior span panels, 28/28 long-window answers and all other
+preservation pass. The initial runtime overextended two reverse statements and
+was rejected at 26/28 long-window preservation. That negative is preserved.
+Reverse writes now commit their earlier single-word anchor immediately; no
+unobserved endpoint is inferred. Both runs use the same artifact bytes, with
+different source identities. Initial allocation/checkpoint evidence covers the
+unchanged forward path; final behavior is checked on the corrected runtime.
+
+**Next: learn role-aware value endpoints in both source orders**, including
+connector/spacing distinctions, with the existing geometric operator and typed
+owner/value binding. Reverse multiword values, broad phrase understanding and
+general reasoning remain unqualified. Do not tune on the opened fresh panels.
+The cycle used 54.294 seconds of model work. Cumulative use is
+4,283.599/4,290 seconds, leaving 6.401 seconds with no ceiling increase. A new
+model campaign needs a complete resource projection and sufficient authorized
+allocation. Root CLI and Studio execution of this artifact are `NOT_RUN`;
+this delivery qualifies the native library/probe path. See the evidence for
+engineering/storage totals, source hashes and exact execution boundaries.
+
 ## Context-sensitive source extent — 2026-09-07
 
 **Retain `419ba3a7` at bounded source-span scope.** The
