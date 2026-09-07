@@ -60,7 +60,7 @@ fn variant(d: &RelationExample) -> ProbeResult<RelationExample> {
         .replacen(&format!("Now {owner} in"), &format!("{owner} now in"), 1);
     labeled(next)
 }
-fn evaluate(model: &Model, docs: &[RelationExample]) -> ProbeResult<Value> {
+pub(super) fn evaluate(model: &Model, docs: &[RelationExample]) -> ProbeResult<Value> {
     let start = Instant::now();
     let mut rows = Vec::new();
     for d in docs {

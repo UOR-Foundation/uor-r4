@@ -23,6 +23,8 @@ type ProbeResult<T> = Result<T, Box<dyn Error>>;
 mod relation_memory;
 #[path = "native_geometric_value_probe/role_read.rs"]
 mod role_read;
+#[path = "native_geometric_value_probe/source_noread.rs"]
+mod source_noread;
 #[path = "native_geometric_value_probe/typed_routing.rs"]
 mod typed_routing_probe;
 #[path = "native_geometric_value_probe/wording.rs"]
@@ -973,6 +975,9 @@ fn evaluate_binding(
 }
 
 fn main() -> ProbeResult<()> {
+    if std::env::args().nth(1).as_deref() == Some("source-noread") {
+        return source_noread::run(&std::env::args().skip(2).collect::<Vec<_>>());
+    }
     if std::env::args().nth(1).as_deref() == Some("typed-routing") {
         return typed_routing_probe::run(&std::env::args().skip(2).collect::<Vec<_>>());
     }

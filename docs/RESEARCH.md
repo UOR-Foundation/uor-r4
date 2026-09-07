@@ -1,6 +1,27 @@
 # Research: what is measured, what is closed, what is open
 
-## Literal-context NoRead completion — current bounded checkpoint, 2026-09-06
+## Supported-source and NoRead selection — current bounded checkpoint, 2026-09-06
+
+The [source refinement](native_geometric_source_noread_1139.md) retains
+`d59070c2`, replacing the existing router while preserving every downstream
+parameter and the exact `e7c14c99` training parent through a nonexecuting witness.
+Warm continuation with128 features reaches384/384 eligible construction choices
+and20/20 new complete source/abstention answers, versus14/20 parent and10/20
+matched exact-code continuation. All20 new cases use the direct source router.
+Earlier literal answers improve to16/16 on both sets and103/103 construction;
+computed, identifier, durable-memory and long-context preservation passes.
+
+Combined construction is551/603 versus545/603, with no lost correct answer;
+all52 remaining wrong outputs equal the parent. Inherited numeric admission
+still takes over some word/identifier requests, including a supported location
+that emits13 instead of Paris. Four focused tests and actual zero-allocation
+source/NoRead and three-turn computation checks pass. Added routing work and
+shorter corrected outputs are accounted separately. This is bounded evidence
+for the selected angular continuation, not general abstention, syntax, prose,
+reasoning or whole-model laptop advantage. Next: joint numerical/word admission
+feeding the existing selected operators, then broader #1139/#1140 composition.
+
+## Literal-context NoRead completion — previous bounded checkpoint, 2026-09-06
 
 The [committed continuation](native_geometric_no_read_completion_1139.md)
 retains `e7c14c99` at literal-numeric NoRead scope, with the complete `c29ab982`

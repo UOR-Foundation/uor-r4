@@ -15,6 +15,8 @@ mod dependent_read_training;
 pub use dependent_read_training::DependentReadExample;
 #[cfg(test)]
 mod dependent_read_tests;
+#[cfg(test)]
+mod source_refinement_tests;
 mod source_routing;
 #[cfg(test)]
 mod source_routing_tests;
@@ -327,6 +329,8 @@ pub struct Model {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     source_routing: Option<source_routing::SourceRouting>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    source_routing_refinement: Option<source_routing::SourceRoutingRefinement>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     learned_routing: Option<learned_routing::RoutingBlock>,
     schema: String,
     artifact_cid: String,
@@ -368,6 +372,8 @@ struct ModelWire {
     dependent_read: Option<dependent_read::DependentRead>,
     #[serde(default)]
     source_routing: Option<source_routing::SourceRouting>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    source_routing_refinement: Option<source_routing::SourceRoutingRefinement>,
     #[serde(default)]
     learned_routing: Option<learned_routing::RoutingBlock>,
     schema: String,
@@ -403,6 +409,7 @@ impl TryFrom<ModelWire> for Model {
             relation_writer: wire.relation_writer,
             dependent_read: wire.dependent_read,
             source_routing: wire.source_routing,
+            source_routing_refinement: wire.source_routing_refinement,
             learned_routing: wire.learned_routing,
             schema: wire.schema,
             artifact_cid: wire.artifact_cid,

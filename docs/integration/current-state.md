@@ -1,6 +1,51 @@
 # Current native geometric AI work
 
-## Committed NoRead completion in literal contexts — #1139 / #1140, 2026-09-06
+## Supported-source versus NoRead selection — #1139 / #1140, 2026-09-06
+
+**Retain `d59070c2` at bounded joint source/action selection scope.** The
+[result](../native_geometric_source_noread_1139.md) and
+[evidence](../evidence/native_geometric_source_noread_1139.json) bind the executed
+Rust refinement. It replaces the existing router, warm-starting64 inherited
+codes and admitting64 construction features. Eight code updates achieve384/384
+eligible selection targets. A nonexecuting previous-router witness reconstructs
+exact `e7c14c99`; all descendant parameters and original parent CIDs remain
+unchanged. No extra serving head, session state, query parser or provider is added.
+
+Fresh complete generation improves14/20 to20/20 versus10/20 matched exact-code;
+all20 cases use the direct router. Open generation is14/14. Combined construction
+improves545/603 to551/603 with no lost correct case, and all52 remaining wrong
+outputs equal the parent. Both earlier literal sets are16/16 and their103-case
+construction now passes. Both16-case computation sets,8 identifiers,58 computed
+construction,6 numerics,three12-case role sets,48 dependent answers/writes,
+62 prior responses,24 transfers,28 exposed-name answers/writes,28 long-context
+answers/writes and5 persistent turns remain correct.
+
+Four focused tests and actual source/NoRead plus three-turn zero-allocation
+checks pass, including observation-only commit, mutation rejection and checkpoint
+restoration. Actual CLI abstention and supported copying are recorded in the
+result. Prior generated-Rust assertions were not rerun; identifier output bytes
+are preserved. The artifact grows91,677 bytes to11,304,530. Routing work increases;
+correct termination reduces complete-population work. No per-token speedup or
+general syntax/prose/reasoning/frontier capability follows.
+
+**Next: joint numerical-versus-word admission at the existing operator boundary.**
+A supported-location construction case about cyra still emits13 instead of Paris
+through inherited numeric selection; three earlier identifier prompts also emit
+numbers. Preserve computed roles and this source/NoRead repair while learning
+that choice, then resume broader #1139 routed-block/#1140 composition requirements.
+Both issues remain open. No new suffix-head or cache campaign is justified.
+
+PR #1159 merged at `be32b410`; this successor uses its identical source tree.
+The shared model ceiling was extended600s to4170s and storage640MiB under standing
+owner authorization before execution. Point projections420s model/900s engineering,
+cycle ceilings540s/1500s, one model process,4GiB child RSS target and128MiB storage
+margin remain enforced. Model work155.350s and engineering524.036s stay below
+projection. Cumulative model use3605.626/4170s leaves564.374s. Peak sampled known
+storage6,837,837,824 bytes and child RSS1,141,374,976 bytes remain within limits.
+All corrections and retained material are charged; no deletion or external model
+compute occurred.
+
+## Previous checkpoint: committed NoRead completion in literal contexts — #1139 / #1140, 2026-09-06
 
 **Retain `e7c14c99` at literal-numeric NoRead-completion scope.** The
 [result](../native_geometric_no_read_completion_1139.md) and

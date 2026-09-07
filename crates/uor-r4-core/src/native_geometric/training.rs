@@ -181,6 +181,7 @@ impl Trainer {
             no_read_completion: None,
             typed_literals: None,
             source_routing: None,
+            source_routing_refinement: None,
             learned_routing: None,
             schema: SCHEMA.into(),
             artifact_cid: String::new(),
@@ -514,6 +515,45 @@ impl Model {
     }
     pub(super) fn validate(&self) -> Result<()> {
         self.config.validate()?;
+        if let Some(witness) = &self.source_routing_refinement {
+            let block = self
+                .source_routing
+                .as_ref()
+                .ok_or_else(|| Error("source refinement router absent".into()))?;
+            if self.learned_routing.is_some()
+                || block.parent_artifact != witness.parent_artifact
+                || block.config.role_context_only != witness.previous.config.role_context_only
+                || block.codes.len() < witness.previous.codes.len()
+                || witness.previous.codes.iter().any(|old| {
+                    block
+                        .codes
+                        .binary_search_by_key(&old.feature, |c| c.feature)
+                        .is_err()
+                })
+            {
+                return Err(Error("invalid source refinement composition".into()));
+            }
+            // The witness is load-time provenance, never another executing head.
+            // Restoring the only replaced component must recover the entire
+            // exact training parent, including every descendant's original CID.
+            let mut parent = self.clone();
+            parent.source_routing_refinement = None;
+            parent.source_routing = Some(witness.previous.clone());
+            parent.refresh_identity()?;
+            if parent.artifact_cid != witness.parent_artifact {
+                return Err(Error("source refinement frozen parent differs".into()));
+            }
+            parent.validate()?;
+            block.validate(self)?;
+            let mut duplicate = self.clone();
+            duplicate.refresh_identity()?;
+            if duplicate.artifact_cid != self.artifact_cid
+                || duplicate.uor_model_address != self.uor_model_address
+            {
+                return Err(Error("source refinement identity differs".into()));
+            }
+            return Ok(());
+        }
         if let Some(head) = &self.no_read_completion {
             if head.copy.is_some() || super::role_read::head(self).is_none() {
                 return Err(Error(
