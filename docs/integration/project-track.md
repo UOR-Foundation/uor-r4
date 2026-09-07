@@ -216,13 +216,19 @@ preservation is restored. Eight new identifier-return functions pass24 executed
 assertions. The [committed NoRead continuation](../native_geometric_no_read_completion_1139.md)
 then retains `e7c14c99` at literal-numeric scope: exposed answers12/16 to14/16,
 new answers14/16 to15/16, with computed, identifier and memory preservation.
-Two intermediate candidates remain recorded negatives. **Next: revise joint
-source/NoRead selection when a retained word is unsupported by the question.**
-Reuse the existing geometric source router and occurrence binding; include
-supported-word and missing-attribute cases together, with source-order/name
-changes and the current numeric/identifier/memory preservation. Do not map all
-numeric NoOperation to Unknown, add a parser for the observed question template,
-or expand model/context capacity before this selection seam is addressed.
+Two intermediate candidates remain recorded negatives. The subsequent
+[joint source/NoRead refinement](../native_geometric_source_noread_1139.md)
+retains `d59070c2`:20/20 new complete answers versus14/20 parent and10/20
+exact-code continuation, with all prior preservation. The existing router is
+warm-refined in place and its previous component verifies the full unchanged
+training parent. Combined construction improves545/603 to551/603 with no lost
+correct response. **Next: joint numerical-versus-word admission through existing
+selected operators.** The remaining supported-location case emits13 instead of
+Paris through inherited numeric selection; some older identifier requests also
+emit numbers. Learn that choice while protecting computed roles and the completed
+source/NoRead repair, then resume the broader routed-block and composition goals.
+Do not add another suffix head, observed-question parser, provider or generic
+capacity expansion for this identified decision boundary.
 General named-role binding and broader Rust reasoning remain unqualified.
 No additional cache campaign is active. Follow current-state.md for artifacts
 and cumulative resources; a new issue does not reset the spent amount.

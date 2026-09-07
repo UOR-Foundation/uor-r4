@@ -121,6 +121,30 @@ impl Objective {
     }
 }
 
+// A feature-sequence alias is descriptive: it need not make the entire frame
+// impossible if another positive alternative remains distinguishable.
+fn feature_alias_frames(frames: &[Frame], codes: &[SourceCode]) -> usize {
+    frames
+        .iter()
+        .filter(|frame| {
+            let mut seen = BTreeMap::new();
+            frame.alternatives.iter().any(|alternative| {
+                let sequence: Vec<_> = alternative
+                    .features
+                    .iter()
+                    .filter_map(|feature| {
+                        codes
+                            .binary_search_by_key(feature, |code| code.feature)
+                            .ok()
+                    })
+                    .collect();
+                seen.insert((alternative.action, sequence), alternative.correct)
+                    .is_some_and(|prior| prior != alternative.correct)
+            })
+        })
+        .count()
+}
+
 fn objective(model: &Model, block: &SourceRouting, frames: &[Frame]) -> Objective {
     let mut result = Objective {
         correct: 0,
@@ -183,9 +207,29 @@ impl Model {
         docs: &[ValueExample],
         config: SourceRoutingConfig,
     ) -> Result<(Model, serde_json::Value)> {
+        self.fit_source_routing_mode(docs, config, false)
+    }
+
+    /// Refine the existing source/action router in place. Only one refinement
+    /// is supported; the exact frozen parent is retained as a load-time witness.
+    pub fn refine_source_routing(
+        &self,
+        docs: &[ValueExample],
+        config: SourceRoutingConfig,
+    ) -> Result<(Model, serde_json::Value)> {
+        self.fit_source_routing_mode(docs, config, true)
+    }
+
+    fn fit_source_routing_mode(
+        &self,
+        docs: &[ValueExample],
+        config: SourceRoutingConfig,
+        refine: bool,
+    ) -> Result<(Model, serde_json::Value)> {
         config.validate()?;
         self.validate()?;
-        if self.source_routing.is_some()
+        if self.source_routing.is_some() != refine
+            || self.source_routing_refinement.is_some()
             || self.learned_routing.is_some()
             || docs.is_empty()
             || docs.len() > 1024
@@ -194,6 +238,19 @@ impl Model {
                 .any(|d| d.prompt.len() + d.response.len() > 65536)
         {
             return Err(Error("source routing parent/source bound invalid".into()));
+        }
+        let previous = if refine {
+            self.source_routing.as_ref()
+        } else {
+            None
+        };
+        if previous.is_some_and(|old| {
+            old.codes.len() > config.learned_features
+                || old.config.role_context_only != config.role_context_only
+        }) {
+            return Err(Error(
+                "source refinement must retain feature vocabulary/context".into(),
+            ));
         }
         let read = role_read::head(self)
             .ok_or_else(|| Error("source routing needs accepted reader".into()))?;
@@ -204,6 +261,7 @@ impl Model {
         let mut ids = BTreeSet::new();
         let mut skipped = 0;
         let mut persistent = 0;
+        let mut dependent = 0;
         let mut unreachable = Vec::new();
         for doc in docs {
             if doc.id.trim().is_empty() || !ids.insert(&doc.id) {
@@ -233,6 +291,18 @@ impl Model {
                 .ok_or_else(|| Error("missing entry state".into()))?;
             if !super::word_copy_runtime::eligible(self, entry, values, Control::Full) {
                 skipped += 1;
+                continue;
+            }
+            if refine
+                && super::dependent_read::choose(
+                    self,
+                    values,
+                    Control::Full,
+                    &mut WordCopyWork::default(),
+                )
+                .is_some()
+            {
+                dependent += 1;
                 continue;
             }
             if super::relation::read_choice(self, values, &mut ValueWork::default()).is_some() {
@@ -330,7 +400,44 @@ impl Model {
             .map(|(f, n)| (*f, salience.get(f).copied().unwrap_or(0), *n))
             .collect();
         vocabulary.sort_by(|a, b| b.1.cmp(&a.1).then(b.2.cmp(&a.2)).then(a.0.cmp(&b.0)));
-        vocabulary.truncate(config.learned_features);
+        if let Some(old) = previous {
+            let retained: BTreeSet<_> = old.codes.iter().map(|c| c.feature).collect();
+            let mut contrast = BTreeMap::<ValueFeature, usize>::new();
+            for frame in &frames {
+                let mut counts = BTreeMap::<ValueFeature, (usize, usize)>::new();
+                let positives = frame.alternatives.iter().filter(|a| a.correct).count();
+                let negatives = frame.alternatives.len() - positives;
+                for a in &frame.alternatives {
+                    for feature in a.features.iter().copied().collect::<BTreeSet<_>>() {
+                        let count = counts.entry(feature).or_default();
+                        if a.correct {
+                            count.0 += 1;
+                        } else {
+                            count.1 += 1;
+                        }
+                    }
+                }
+                for (feature, (positive, negative)) in counts {
+                    if positive * negatives != negative * positives {
+                        *contrast.entry(feature).or_default() += 1;
+                    }
+                }
+            }
+            vocabulary.retain(|v| !retained.contains(&v.0));
+            vocabulary.sort_by(|a, b| {
+                contrast
+                    .get(&b.0)
+                    .copied()
+                    .unwrap_or(0)
+                    .cmp(&contrast.get(&a.0).copied().unwrap_or(0))
+                    .then(b.2.cmp(&a.2))
+                    .then(a.0.cmp(&b.0))
+            });
+            vocabulary.truncate(config.learned_features - old.codes.len());
+            vocabulary.extend(old.codes.iter().map(|c| (c.feature, 0, 0)));
+        } else {
+            vocabulary.truncate(config.learned_features);
+        }
         vocabulary.sort_by_key(|v| v.0);
         let mut rng = config.seed;
         let mut block = SourceRouting {
@@ -340,7 +447,14 @@ impl Model {
                 .iter()
                 .map(|v| SourceCode {
                     feature: v.0,
-                    roots: [self.geometry.identity; LANES],
+                    roots: previous
+                        .and_then(|old| {
+                            old.codes
+                                .binary_search_by_key(&v.0, |c| c.feature)
+                                .ok()
+                                .map(|index| old.codes[index].roots)
+                        })
+                        .unwrap_or([self.geometry.identity; LANES]),
                 })
                 .collect(),
             landmarks: (0..read.actions.len())
@@ -355,15 +469,55 @@ impl Model {
             training: receipts,
             config: config.clone(),
         };
+        if let Some(old) = previous {
+            block.landmarks.clone_from(&old.landmarks);
+            block.biases.clone_from(&old.biases);
+        }
+        let warm_initialization_preserved = previous.is_none_or(|old| {
+            block.landmarks == old.landmarks
+                && block.biases == old.biases
+                && old.codes.iter().all(|code| {
+                    block
+                        .codes
+                        .binary_search_by_key(&code.feature, |c| c.feature)
+                        .is_ok_and(|index| block.codes[index] == *code)
+                })
+        });
+        let warm_feature_alias_frames =
+            previous.map(|old| feature_alias_frames(&frames, &old.codes));
+        let expanded_feature_alias_frames = feature_alias_frames(&frames, &block.codes);
         let learned = learn(self, &mut block, &mut frames, start);
         let block_bytes = serde_json::to_vec(&block)
             .map_err(|e| Error(e.to_string()))?
             .len();
         let mut model = self.clone();
         model.source_routing = Some(block);
+        if let Some(old) = previous {
+            model.source_routing_refinement =
+                Some(super::source_routing::SourceRoutingRefinement {
+                    parent_artifact: self.artifact_cid.clone(),
+                    previous: old.clone(),
+                });
+        }
         model.refresh_identity()?;
         model.validate()?;
         let mut report = serde_json::json!({"schema":"uor-r4.source-routing-fit/1","parent":self.artifact_cid(),"artifact":model.artifact_cid(),"config":config,"documents":docs.len(),"frames":frames.len(),"skipped_upstream":skipped,"preserved_persistent_dispatch":persistent,"unreachable_targets":unreachable,"feature_universe":frequency.len(),"features":vocabulary.len(),"elapsed_ms":start.elapsed().as_millis(),"block_bytes":block_bytes,"scope":"Source/action labels from supplied construction responses; accepted reader weights select feature vocabulary only. Ordered two-channel H4 composition and action landmarks learned with hard serving decisions. Persistent-reader dispatch and numeric eligibility are unchanged. Construction selection is not generation/transfer."});
+        report["refinement"] = serde_json::json!(refine);
+        report["warm_feature_alias_frames"] = serde_json::json!(warm_feature_alias_frames);
+        report["expanded_feature_alias_frames"] = serde_json::json!(expanded_feature_alias_frames);
+        if refine {
+            report["scope"] = serde_json::json!("One warm in-place source/action refinement on exact assembled-parent sessions; all inherited code features retained, added vocabulary ranked by construction label contrasts and frequency. Descendant parameters and original training parent CIDs remain unchanged, verified by exact parent reconstruction. Feature alias counts are descriptive, not frame solvability or generation acceptance.");
+        }
+        report["warm_initialization_preserved"] = serde_json::json!(warm_initialization_preserved);
+        report["preserved_dependent_dispatch"] = serde_json::json!(dependent);
+        report["warm_features"] = serde_json::json!(previous.map_or(0, |old| old.codes.len()));
+        report["added_features"] =
+            serde_json::json!(vocabulary.len() - previous.map_or(0, |old| old.codes.len()));
+        report["parent_reconstruction"] = serde_json::json!(if refine {
+            "EXACT_FROZEN_PARENT"
+        } else {
+            "INITIAL_FIT"
+        });
         if let (Some(r), Some(l)) = (report.as_object_mut(), learned.as_object()) {
             r.extend(l.clone());
         }
@@ -445,4 +599,103 @@ pub(super) fn learn(
     }
 
     serde_json::json!({"initial_correct":initial.correct,"final_correct":best.correct,"initial_hinge":initial.hinge,"final_hinge":best.hinge,"proposals":proposals,"accepted":accepted,"stopped_at_time_limit":stopped})
+}
+
+impl Model {
+    /// Offline, allocating inspection of the existing first source decision.
+    /// Candidate scores are joint action scores, not calibrated language scores.
+    /// This does not alter the model, session cache, or serving feature law.
+    pub fn source_routing_trace(&self, prompt: &str) -> Result<serde_json::Value> {
+        let block = self
+            .source_routing
+            .as_ref()
+            .ok_or_else(|| Error("source trace requires source router".into()))?;
+        if prompt.len() > 65536 {
+            return Err(Error("source trace prompt exceeds bound".into()));
+        }
+        let mut session = self.session(Control::Full)?;
+        session.observe(self, BOS)?;
+        for token in self.encode(prompt)? {
+            session.observe(self, token)?;
+        }
+        session.begin_response(self)?;
+        let prediction = session.predict(self)?;
+        let values = session
+            .values
+            .as_ref()
+            .ok_or_else(|| Error("source trace retained values absent".into()))?;
+        let words = values
+            .lexemes
+            .as_ref()
+            .ok_or_else(|| Error("source trace retained words absent".into()))?;
+        let read =
+            role_read::head(self).ok_or_else(|| Error("source trace role reader absent".into()))?;
+        let entry = session
+            .response_entry
+            .as_ref()
+            .ok_or_else(|| Error("source trace response entry absent".into()))?;
+        let eligible = super::word_copy_runtime::eligible(self, entry, values, Control::Full);
+        let dependent = super::dependent_read::choose(
+            self,
+            values,
+            Control::Full,
+            &mut WordCopyWork::default(),
+        );
+        let persistent = super::relation::read_choice(self, values, &mut ValueWork::default());
+        let feature_control = if block.config.role_context_only {
+            Control::WordCopyGeometryDisabled
+        } else {
+            Control::Full
+        };
+        let mut work = WordCopyWork::default();
+        let ctx = role_read::context(self, values, feature_control, &mut work);
+        let mut candidates = Vec::new();
+        for index in 0..=words.query_len {
+            let source = if index == words.query_len {
+                NO_SOURCE
+            } else {
+                index as u8
+            };
+            let (features, n) =
+                role_read::features(self, values, &ctx, index, feature_control, &mut work);
+            let state = block.encode(self, &features[..n], Control::Full, &mut work.routing);
+            let mapped: Vec<_> =
+                features[..n]
+                    .iter()
+                    .filter_map(|feature| {
+                        block.codes.binary_search_by_key(feature, |c| c.feature).ok().map(|i| {
+                    serde_json::json!({"feature":feature,"roots":block.codes[i].roots})
+                })
+                    })
+                    .collect();
+            let mut scores = Vec::new();
+            for action in 0..read.actions.len() {
+                if super::source_routing::allowed(self, values, source, action) {
+                    scores.push(serde_json::json!({
+                        "action":action,"copy":read.actions[action].copy,
+                        "prefix":read.actions[action].prefix,
+                        "score":block.score(self, state, action, &mut work.routing)
+                    }));
+                }
+            }
+            let word = (index < words.query_len).then(|| &words.queries[index]);
+            candidates.push(serde_json::json!({
+                "source":source,
+                "word":word.map(|w| String::from_utf8_lossy(&w.bytes[..usize::from(w.len)]).into_owned()),
+                "address":if index < words.query_len {ctx.addresses[index]} else {0},
+                "source_end":word.map(|w| w.end),"source_byte_end":word.map(|w| w.byte_end),
+                "features":&features[..n],"mapped_codes":mapped,"state":state,"scores":scores
+            }));
+        }
+        Ok(serde_json::json!({
+            "schema":"uor-r4.source-routing-trace/1", "artifact":self.artifact_cid(),
+            "prompt":prompt,"prediction_token":prediction.token,
+            "actual_word_copy_decision":session.word_copy_decision(),
+            "direct_source_dispatch":eligible && dependent.is_none() && persistent.is_none(),
+            "word_copy_eligible":eligible,"dependent_choice":dependent,"persistent_choice":persistent,
+            "direct_choice":super::source_routing::choose(self, values, Control::Full, &mut WordCopyWork::default()),
+            "candidates":candidates,
+            "scope":"Allocating offline inspection; counterfactual direct candidates are marked when upstream dispatch bypasses this router."
+        }))
+    }
 }

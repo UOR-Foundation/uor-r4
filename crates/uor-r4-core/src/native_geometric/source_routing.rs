@@ -26,6 +26,14 @@ pub(super) struct SourceRouting {
     pub training: Vec<DocumentReceipt>,
     pub config: SourceRoutingConfig,
 }
+/// A single, nonexecuting replacement witness. Descendant components remain
+/// exactly as trained; restoring `previous` reconstructs their frozen parent.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct SourceRoutingRefinement {
+    pub parent_artifact: String,
+    pub previous: SourceRouting,
+}
 impl SourceRouting {
     pub(super) fn encode(
         &self,

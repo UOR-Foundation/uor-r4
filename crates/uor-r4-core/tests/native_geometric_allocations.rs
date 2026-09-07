@@ -1347,6 +1347,15 @@ fn native_independent_artifact_is_allocation_free() {
             parent["artifact_cid"]
         );
         let mut protected = wire.clone();
+        // A source-only refinement retains the exact earlier router as its
+        // provenance witness; restore it before checking the literal parent.
+        if let Some(witness) = protected
+            .as_object_mut()
+            .unwrap()
+            .remove("source_routing_refinement")
+        {
+            protected["source_routing"] = witness["previous"].clone();
+        }
         protected.as_object_mut().unwrap().remove("typed_literals");
         protected
             .as_object_mut()
@@ -1430,4 +1439,159 @@ fn native_no_read_artifact_is_allocation_free() {
         checkpoint
     );
     println!("actual NoRead answer: exact bytes and EOS; allocations=0 bytes=0; complete parent equality and checkpoint roundtrip PASS");
+}
+
+/// Exercises the fitted replacement router itself, including the observation
+/// boundary that turns a transient source choice into a committed copy/NoRead.
+#[test]
+#[ignore = "requires R4_SOURCE_NO_READ_MODEL and R4_SOURCE_NO_READ_PARENT artifacts"]
+fn native_source_no_read_artifact_is_allocation_free_and_causal() {
+    use uor_r4_core::native_geometric::Model;
+    let bytes = std::fs::read(std::env::var("R4_SOURCE_NO_READ_MODEL").unwrap()).unwrap();
+    let model = Model::from_bytes(&bytes).unwrap();
+    let mut wire: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    let mut parent: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(std::env::var("R4_SOURCE_NO_READ_PARENT").unwrap()).unwrap(),
+    )
+    .unwrap();
+    let witness = wire
+        .as_object_mut()
+        .unwrap()
+        .remove("source_routing_refinement")
+        .expect("actual replacement-router provenance");
+    assert_eq!(witness["parent_artifact"], parent["artifact_cid"]);
+    assert_eq!(witness["previous"], parent["source_routing"]);
+    wire["source_routing"] = witness["previous"].clone();
+    for document in [&mut wire, &mut parent] {
+        for key in ["artifact_cid", "uor_model_address"] {
+            document.as_object_mut().unwrap().remove(key);
+        }
+    }
+    assert_eq!(
+        wire, parent,
+        "all fields outside the replaced router are unchanged"
+    );
+
+    let cases = [
+        (
+            "User: varo has -5 coins. leni has 17 coins. tavi has 301 coins.\nUser: Where is the location of leni?\nAssistant:",
+            b" Unknown.\n".as_slice(),
+            false,
+        ),
+        (
+            "User: varo has stones. leni has coins.\nUser: What does leni have?\nAssistant:",
+            b" coins.\n".as_slice(),
+            true,
+        ),
+    ];
+    for (prompt, expected, supported) in cases {
+        let tokens = model.encode(prompt).unwrap();
+        let mut session = model.session(Control::Full).unwrap();
+        ALLOCATIONS.with(|v| v.set(0));
+        BYTES.with(|v| v.set(0));
+        MEASURING.with(|v| v.set(true));
+        let ingest = (|| {
+            session.observe(&model, BOS)?;
+            for &token in &tokens {
+                session.observe(&model, token)?;
+            }
+            session.begin_response(&model)
+        })();
+        MEASURING.with(|v| v.set(false));
+        ingest.unwrap();
+        let boundary = session.checkpoint().unwrap();
+        let before: serde_json::Value = serde_json::from_slice(&boundary).unwrap();
+        assert!(before["word_copy"]["read_commit"].is_null());
+        let commits = session.work.word_copy.selector.commits;
+
+        MEASURING.with(|v| v.set(true));
+        let first = session.predict(&model);
+        let selected = session.word_copy_decision();
+        let repeated = session.predict(&model);
+        let repeated_choice = session.word_copy_decision();
+        MEASURING.with(|v| v.set(false));
+        let first = first.unwrap();
+        assert_eq!(first, repeated.unwrap());
+        let selected = selected.expect("joint source or NoRead selection exercised");
+        assert_eq!(Some(selected), repeated_choice);
+        assert_eq!(session.work.word_copy.selector.commits, commits);
+        assert_eq!(selected.action == WordCopyAction::NoRead, !supported);
+        if supported {
+            assert!(matches!(
+                selected.action,
+                WordCopyAction::Read | WordCopyAction::Prepare
+            ));
+        }
+        let transient: serde_json::Value =
+            serde_json::from_slice(&session.checkpoint().unwrap()).unwrap();
+        assert_eq!(
+            transient["word_copy"], before["word_copy"],
+            "prediction cannot commit a source"
+        );
+
+        MEASURING.with(|v| v.set(true));
+        let observed = session.observe(&model, first.token);
+        MEASURING.with(|v| v.set(false));
+        observed.unwrap();
+        assert_eq!(session.work.word_copy.selector.commits, commits + 1);
+        let committed = session.checkpoint().unwrap();
+        let state: serde_json::Value = serde_json::from_slice(&committed).unwrap();
+        let read = &state["word_copy"]["read_commit"];
+        assert!(read.is_object());
+        assert_eq!(read["token"], serde_json::json!(first.token));
+        assert_eq!(read["source_end"], serde_json::json!(selected.source_end));
+        assert_eq!(
+            read["source_byte_end"],
+            serde_json::json!(selected.source_byte_end)
+        );
+        if supported {
+            assert_eq!(read["source"], serde_json::json!(selected.word_index));
+        } else {
+            assert!(read["source"].is_null());
+        }
+        assert_eq!(
+            model
+                .restore_session(&committed)
+                .unwrap()
+                .checkpoint()
+                .unwrap(),
+            committed
+        );
+
+        let mut output = [EOS; 32];
+        output[0] = first.token;
+        let mut length = 1;
+        MEASURING.with(|v| v.set(true));
+        let generated = (|| {
+            while output[length - 1] != EOS && length < output.len() {
+                let token = session.predict(&model)?.token;
+                session.observe(&model, token)?;
+                output[length] = token;
+                length += 1;
+            }
+            session.end_response(&model)
+        })();
+        MEASURING.with(|v| v.set(false));
+        generated.unwrap();
+        assert_eq!((ALLOCATIONS.with(Cell::get), BYTES.with(Cell::get)), (0, 0));
+        assert_eq!(output[length - 1], EOS, "complete answer must terminate");
+        assert_eq!(model.decode(&output[..length]).unwrap(), expected);
+
+        // Restore an uncommitted boundary and observe a different legal byte.
+        // Checkpoint parsing/serialization are deliberately outside the census.
+        let mut mismatch = model.restore_session(&boundary).unwrap();
+        let predicted = mismatch.predict(&model).unwrap();
+        let mismatch_commits = mismatch.work.word_copy.selector.commits;
+        let other = if predicted.token == u32::from(b'x') + 2 {
+            u32::from(b'y') + 2
+        } else {
+            u32::from(b'x') + 2
+        };
+        mismatch.observe(&model, other).unwrap();
+        assert_eq!(mismatch.work.word_copy.selector.commits, mismatch_commits);
+        let mismatch_state: serde_json::Value =
+            serde_json::from_slice(&mismatch.checkpoint().unwrap()).unwrap();
+        assert!(mismatch_state["word_copy"]["read_commit"].is_null());
+    }
+    println!("actual source/NoRead: unsupported and supported complete answers; allocations=0 bytes=0; transient/matching/mismatched commit, checkpoint restore and full parent lineage PASS");
 }
