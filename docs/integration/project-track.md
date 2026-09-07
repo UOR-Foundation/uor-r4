@@ -8,15 +8,26 @@ and fixed experiment windows are historical, not instructions for new work.
 
 ## Goal
 
-**Owner clarification after #1145:** the intended model is a learned
-**geo-transformer LLM**: geometric routing replaces the expensive dense
-implementation of contextual selection and transformation. Preserve language
-learning, context combination and compositional processing while learning
-where information belongs, which sources to access and which operators to
-execute. Frontier-model capability on normal laptops is the ambition; current
-capability and complete serving cost must be demonstrated. A small recall
-system, a router around an external LLM, or a dense transformer re-encoded into
-lookup tables does not complete this goal.
+**Owner clarification (2026-09-06):** build a learned **geometric language
+model** whose state, contextual access, transport and selected operations replace
+transformer serving. Deterministic geometric address and page-table selection
+may select bounded work. Prioritize shared typed operators; learned sparse/MoE
+expert gating is not the current design, while the owner's later clarification
+retains expert gates as a conditional option if demonstrated need and complete
+M1 cost justify them. Final serving must execute no matrix products, including
+matrix products implemented through lookup/add contraction. Offline Rust
+training may use matmul. Frontier capability on normal laptops remains the
+objective, not current evidence.
+
+The [comprehensive architecture reconciliation](architecture-2026-09/README.md)
+and its mathematics/import/engine supplements map actual sources and retained
+results, including trigonometric charts, fibers and vector bundles, prime/spin
+and RH histories. Adapt useful pieces rather than importing whole engines by
+name. S3 Hopf observation on S2 and its S1 fiber are distinct from an invertible
+S3→S2→S1 conversion. Exact typed maps and preserved information govern reuse.
+Historical “geo-transformer” wording describes the earlier objective; it does
+not authorize retaining a transformer backbone. The complete native model/API
+then supplies the separate GitHub Pages Studio.
 
 Build a useful local geometric AI in **Rust throughout preparation, training,
 artifact construction, and inference**. Prime addresses, ordered prime context,
@@ -85,7 +96,7 @@ not a claim that these mechanisms already work.
 |---|---|---|
 | 1 | [#1137: role-aware source selection and causal response commitment](https://github.com/UOR-Foundation/uor-r4/issues/1137) | Learned source/NoRead choice transfers across wording and roles, stays attached to exact occurrence evidence, and drives complete generated answers |
 | 2 | [#1138: exact relations with learned writes and updates](https://github.com/UOR-Foundation/uor-r4/issues/1138) | Useful facts and revisions survive raw-window eviction with exact recoverable values, bounded state and isolated causal persistence |
-| 3 | [#1139: learned geo-transformer routing and selected computation](https://github.com/UOR-Foundation/uor-r4/issues/1139) | A jointly trained geometric block connects semantic placement, source admission and selected transformation to useful language/composition transfer, with its complete capability/work tradeoff compared to a matched sparse alternative |
+| 3 | [#1139: learned geo-transformer routing and selected computation](https://github.com/UOR-Foundation/uor-r4/issues/1139) | A jointly trained geometric block connects semantic placement, source admission and selected transformation to useful language/composition transfer, with its complete capability/work tradeoff compared to a matched exact-address/code alternative |
 | 4 | [#1140: typed operator composition for conversation and Rust reasoning](https://github.com/UOR-Foundation/uor-r4/issues/1140) | Learned operand/operator selection produces causally used intermediate values, correct grounded outputs and semantically verified generated Rust |
 
 Native dependencies remain #1137 -> #1138 -> #1139 -> #1140, with #1137 and

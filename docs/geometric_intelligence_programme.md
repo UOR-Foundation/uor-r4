@@ -27,9 +27,14 @@ scope; consult the plan for practical iteration and both alpha capabilities.
 
 UOR-R4 is building geometric intelligence for ordinary local machines. The
 serving engine is intended to generate, infer, and reason through learned
-geometric routes, state and bounded lookup. Learned sparse geometric gates are
-permitted; a dense transformer or dense expert stack behind a routing/lookup
-interface is outside the target.
+geometric routes, state and bounded lookup. The 2026-09-06 owner clarification
+prioritizes deterministic geometric address/page selection and shared typed
+operators with no serving matrix products. Expert gates remain a conditional
+future option, requiring a concrete capability/cost rationale; a dense
+transformer hidden behind routing remains outside the target. The
+[architecture reconciliation](integration/architecture-2026-09/README.md) maps
+trigonometry, fibers/bundles, spin, zeta/prime and contributor mechanisms to their
+actual implemented roles and missing connections.
 
 The research goal is frontier-like useful capability on a local CPU without
 the power, heat, and accelerator dependence of contemporary dense models.

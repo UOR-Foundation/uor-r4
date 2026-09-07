@@ -1,7 +1,10 @@
 {
   "architecture": {
+    "current_serving_design": "deterministic_geometric_addressing_and_shared_typed_operators",
     "dense_transformer_disguised_as_lookup_allowed": false,
+    "expert_gating": "conditional_future_option_not_current_design",
     "final_inference": "learned_geometric_operators_with_bounded_routing_state_transitions_and_integer_table_lookup",
+    "geometric_address_page_selection_allowed": true,
     "historical_references": "preserve_existing_python_and_dense_comparators_as_evidence",
     "implementation_language": "rust",
     "primary_mechanisms": [
@@ -20,6 +23,7 @@
       "artifact_construction",
       "inference"
     ],
+    "serving_matrix_products_allowed": false,
     "training_matrix_multiplication_allowed": true
   },
   "delivery": {

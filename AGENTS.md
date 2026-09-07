@@ -1,18 +1,24 @@
 # AGENTS.md — uor-r4
 
-**Immediate owner plan (2026-09-05, clarified after #1145):** build a learned
-geo-transformer that replaces dense transformer computation with geometric
-routing and selected integer/table operators. Follow the
-[ordered native build steps](docs/integration/project-track.md#immediate-build-sequence)
-and [consolidated issue ownership](docs/integration/project-track.md#consolidated-issue-responsibilities)
-before broader programme expansion. The current cadence is one task and one
-agent, with cumulative budgets and preauthorized necessary storage increases.
-The next model work is learned semantic placement and routed computation in
-#1139, with composition exercised during development. More NoWrite caching or
-score-bound optimization is secondary. Preserve the completed binding/memory
-work and inspect compatible UOR/addr, GNAF, compiler, bitwise and uor-matmul
-mechanisms at the actual source and operation boundary. Historical evidence
-and the offline-training versus serving distinction remain intact.
+**Owner clarification and architecture reconciliation (2026-09-06):** build a
+learned geometric language model with no serving matrix products or transformer
+backbone. Offline Rust learning may use matmul. Geometric address/page selection
+is allowed; prioritize shared typed operators over learned sparse/MoE gating.
+The owner allows expert gates as a conditional future option when a concrete
+capability and complete-cost comparison justify them. Combine useful existing
+mechanisms, including signed S3/H4 state, Hopf S2 observation with S1 fiber,
+explicit vector-bundle/frame transport, fixed zeta phases, ordered primes and
+exact UOR identity. Preserve the distinction between source, implemented
+operation and measured capability. The requested broad
+[architecture review](docs/integration/architecture-2026-09/README.md) is available
+for reuse; it is not a prerequisite to repeat before each implementation.
+Follow the [native plan](docs/integration/project-track.md) and
+[current state](docs/integration/current-state.md). The next concrete model
+work is shared numeric/word/NoRead selection at the existing operator boundary,
+then reusable contextual transitions and language emission. Preserve d59070c2,
+its parents and all negative results. Configure cumulative resources before
+execution and deliver through protected pull requests. The complete model/API
+precedes integration into the separate GitHub Pages Studio.
 
 **Owner-directed recovery (2026-09-04):** Build native geometric AI in Rust.
 The [project plan](docs/integration/project-track.md) is the canonical goal and

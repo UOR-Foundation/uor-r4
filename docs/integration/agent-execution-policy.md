@@ -13,7 +13,12 @@ use floating point and matrix multiplication. Final inference executes learned
 geometric operators through bounded routes, state transitions and integer/table
 lookup; a dense transformer stored behind a lookup interface does not satisfy
 that target. Keep prior Python/dense artifacts as comparison evidence and do
-not add a Python model dependency.
+not add a Python model dependency. Final serving executes no matrix products,
+including tabulated matrix contraction. Deterministic geometric address/page
+selection is permitted. The current design prioritizes shared typed operators;
+the owner retains expert gates as a conditional future option if a concrete
+capability need and complete laptop-cost comparison justify adoption. See the
+[owner-requested architecture review](architecture-2026-09/README.md).
 
 Primes and ordered prime context, fixed zeta-zero phases, R4/S3/H4 transport,
 exact `Z[phi]` and orientation state, the typed paired-H4/icosian bridge and UOR

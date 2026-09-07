@@ -1,5 +1,24 @@
 # Current native geometric AI work
 
+## Owner-requested architecture review — 2026-09-06
+
+The [source reconciliation](architecture-2026-09/README.md) covers discovered
+engine families, original angular/prime routing, mathematical and RH histories,
+UOR/Prism/matmul, NEMESIS, W33, GoldSnnail, GNAF, SpiralCore and the separate
+Studio. It is a read-only model/evidence review, with no new fit or capability
+result. It records allowed geometric address/page lookup, no serving matrix
+products, and the later conditional allowance for expert gates. Offline Rust
+training matmul remains permitted. Fibers and explicit vector-bundle/frame
+transport remain reusable mechanisms at their declared typed boundaries.
+
+PR #1160 merged at `aa841309`; its tree equals reviewed head `05f265ad`.
+Retain d59070c2 and every parent. The next concrete implementation is a joint
+numeric/word/NoRead decision before execution, preserving separate NoOperation
+and NoRead semantics, then reusable contextual transitions and emission. The
+review gives a preliminary bounded resource envelope; refresh and complete the
+cumulative projection before execution. Broader language and API capability
+precede the actual native-model integration into the GitHub Pages Studio.
+
 ## Supported-source versus NoRead selection — #1139 / #1140, 2026-09-06
 
 **Retain `d59070c2` at bounded joint source/action selection scope.** The

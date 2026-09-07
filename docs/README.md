@@ -4,9 +4,13 @@
 
 UOR-R4 develops geometric-only native intelligence in Rust. Offline training may
 use matrix multiplication; the serving target uses learned bounded geometric
-routing, state and integer/table operators. Sparse learned geometric routing is permitted.
+routing, state and integer/table operators, with no serving matrix products.
+Deterministic geometric address/page selection is permitted. Shared typed
+operators are the current priority; expert gates remain a conditional future
+option under the owner's later clarification.
 Neither a hidden dense transformer nor a response provider supplies the model.
 
+- [Complete architecture/source reconciliation](integration/architecture-2026-09/README.md)
 - [Canonical goal and immediate build sequence](integration/project-track.md#immediate-build-sequence)
 - [Current implemented state and remaining failure](integration/current-state.md)
 - [Research direction and reusable mechanisms](native_geometric_direction_review_973.md)
@@ -25,9 +29,10 @@ invariants remain applicable to their declared component.
 
 ## Historical research map
 
-The text below is retained from the earlier reference-model programme. In
-particular, its V5 terminal, ban on sparse learned routers, Python-first stage
-orders and unimplemented-native wording are not present project instructions.
+The text below is retained from the earlier reference-model programme. Its V5
+terminal, historical routing permissions/bans, Python-first stage orders
+and unimplemented-native wording retain their original scope. The current
+owner clarification above governs routing choices.
 
 This is the map for understanding the repository without having to reconstruct
 its history first.
