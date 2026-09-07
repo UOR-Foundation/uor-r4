@@ -1,18 +1,24 @@
 # uor-r4-api
 
-**Current model API (2026-09-05):** the native geometric re-export exposes the
+**Current model API (September 2026):** the native geometric re-export exposes the
 same core model/session used by the CLI/service. Follow the
 [current implementation](../../docs/integration/current-state.md) and
 [immediate plan](../../docs/integration/project-track.md#immediate-build-sequence).
 The compiler/engine APIs documented below remain supported scoped components;
 their teacher/reference measurements do not qualify native model behavior.
 
-**Preserved research API, not the current intelligence façade.** This crate
-wraps the earlier teacher-compiled R4G1 graph stack. It remains useful for
-reproduction and downstream experiments, but the active transformerless local
-AI programme is building a route-native lexical/serialization contract and
-recursive geometric attention before it defines the replacement serving API.
-See the [Geometric Intelligence Programme](../../docs/geometric_intelligence_programme.md).
+**Native capability direction:** qualify the existing model/session façade for
+artifact/backend identity, context use, generation/streaming, limits/errors,
+session isolation, persistence and declared capabilities. Attention, prose,
+reasoning and coding are measured model behaviors; naming API methods does not
+implement them. See the [audit's capability map](../../docs/integration/architecture-2026-09/README.md#capabilityapi-sequence-toward-the-studio).
+The same accepted native artifact should later serve the WASM/GitHub Pages Studio.
+Final inference executes no matrix products or transformer backbone; offline
+Rust training may use matmul. This is a direction, not a completed API claim.
+
+**Preserved graph API:** the compiler/graph-engine sections below document the
+earlier teacher-compiled R4G1 stack. They remain useful for reproduction and
+downstream experiments at that separate scope.
 
 Typed library façade over the uor-r4 transformerless graph stack, for
 downstream consumers (e.g. hologram-ai) that embed uor-r4 as a **library**

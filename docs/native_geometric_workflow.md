@@ -20,6 +20,21 @@ version-1 writer-transfer negative remains preserved. The
 `Model::fit_relations_with_role_paths`; its bounded handoff passes. Version 1
 artifacts retain their behavior. Do not rerun frozen fits by default.
 
+Use the [architecture/source audit](integration/architecture-2026-09/README.md)
+for mechanism selection and the [continuation instructions](integration/CONTINUE.md)
+for current execution. The target forbids serving matrix products even if an
+implementation replaces multiply instructions with lookup/add. Offline Rust
+training may use matmul. Preserve signed state, exact occurrence/version identity
+and typed transport; do not substitute a Hopf base observation for its fiber.
+Geometric page selection is allowed. Shared operators are current; later expert
+gates need demonstrated need and a complete laptop-cost comparison.
+
+Before a new fit, refresh cumulative model/storage receipts, cache state and
+checkpoint lineage. Project preparation, compilation, all candidates/controls,
+evaluation, retries, final artifact and temporary storage together. The audit's
+preliminary envelope is not an admission receipt. Reuse existing drivers and
+preservation populations; validate the changed decision through real generation.
+
 The native path is `r4 geometric`. Data preparation, fitting, artifacts,
 evaluation, sessions and generation use Rust. Its initial learner estimates
 conditional score tables over prime lexical identities and geometric context.

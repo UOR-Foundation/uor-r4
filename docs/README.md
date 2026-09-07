@@ -1,6 +1,6 @@
 # R⁴ documentation
 
-## Current documentation entry points — 2026-09-05
+## Current documentation entry points — 2026-09-06
 
 UOR-R4 develops geometric-only native intelligence in Rust. Offline training may
 use matrix multiplication; the serving target uses learned bounded geometric
@@ -10,6 +10,7 @@ operators are the current priority; expert gates remain a conditional future
 option under the owner's later clarification.
 Neither a hidden dense transformer nor a response provider supplies the model.
 
+- [Capability roadmap and Studio handoffs](../ROADMAP.md#capability-direction)
 - [Complete architecture/source reconciliation](integration/architecture-2026-09/README.md)
 - [Canonical goal and immediate build sequence](integration/project-track.md#immediate-build-sequence)
 - [Current implemented state and remaining failure](integration/current-state.md)

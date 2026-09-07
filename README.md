@@ -31,6 +31,19 @@ unavailable results and [CONTINUE.md](docs/integration/CONTINUE.md) for resuming
 work. New development uses configurable learning windows and cumulative machine
 budgets, focused checks and protected pull requests.
 
+## Development direction
+
+Build learned contextual choices over exact geometric memory, then reusable
+state transitions, selected computation and emission. Qualify useful prose,
+conversation, reasoning and Rust generation on that same native path. Scale
+geometric page access and packed operators against measured M1 bottlenecks,
+complete the capability API, then connect the accepted native artifact to the
+GitHub Pages Studio. The existing Studio interface and contributor engines are
+reusable components; their separate backends do not establish this model's quality.
+See the [capability roadmap](ROADMAP.md#capability-direction),
+[audit's mechanism decisions](docs/integration/architecture-2026-09/README.md#architecture-assembled-from-the-available-mechanisms)
+and [current next implementation](docs/integration/current-state.md).
+
 ## Native geometric model
 
 The primary implementation is `r4 geometric`: Rust preparation, training,
