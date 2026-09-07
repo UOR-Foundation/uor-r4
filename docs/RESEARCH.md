@@ -7,6 +7,20 @@ implemented operations, measured behavior and proposed integration. The native
 model was d59070c2 at the review date; no model experiment was
 rerun for that review.
 
+## Context-sensitive source extent — bounded positive, 2026-09-07
+
+The [result](native_geometric_span_context_1139.md) retains `419ba3a7` over
+`c6a98c04`. The existing H4 learner uses a construction-only exact prime registry
+and a next-word/original-source-cue pair. Construction improves 5/14 to 14/14,
+open 2/6 to 6/6 and fresh 3/9 to 9/9; pair removal gives 11/14, 4/6 and 6/9.
+All 663 earlier construction and 24/24 exposed preservation answers pass, along
+with other numeric, literal, relation and session checks. This repairs the
+separator-only regression with fixed parent parameters and initial source choice.
+Unseen connectors and double-space gaps remain 0/2. There is no new angular versus
+equality comparison, general phrase understanding, broad language/reasoning or
+energy result. The next direction is retained multiword relation values across writes, window
+eviction and later reads, with new data and a refreshed projection.
+
 ## Source-span transport — implemented, candidate rejected, 2026-09-07
 
 The [result](native_geometric_source_span_1139.md) preserves the active

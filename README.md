@@ -114,8 +114,13 @@ reuses the recovered owner identity; all prior preservation passes. The subseque
 learned adjacent-word transport and improves complete answers on six exposed
 cases from 1/6 to 6/6. It remains unpromoted: separator-only continuation regresses sixteen
 construction and four earlier exposed answers by copying beyond the value.
-The active checkpoint stays `c6a98c04`; the next step is context-sensitive
-Continue/Finish using retained source identity and query/value binding.
+The subsequent [context-sensitive continuation](docs/native_geometric_span_context_1139.md)
+retains `419ba3a7`: an exact next-word/source-cue prime pair lets the H4 operator
+stop or continue at the same word in different source roles. Construction reaches
+14/14, open 6/6 and fresh 9/9 (6/9 with the pair disabled), while preserving all
+663 earlier construction answers and the 24/24 exposed set. Unseen connectors
+and double-space gaps still fail 0/2; general phrase understanding is unqualified.
+The next step is bounded value-extent binding and retained multiword memory.
 General prose/syntax/reasoning and frontier capability remain unqualified. Follow
 the current-state pointer for artifacts, costs and the next implementation.
 

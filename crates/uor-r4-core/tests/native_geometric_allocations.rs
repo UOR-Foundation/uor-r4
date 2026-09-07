@@ -1963,6 +1963,8 @@ fn native_source_span_preserves_commit_checkpoints_and_zero_allocation() {
     let model = Model::from_bytes(&bytes).unwrap();
     let mut wire: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
     let mut parent: serde_json::Value = serde_json::from_slice(&parent_bytes).unwrap();
+    let contextual = wire["source_span_context"].is_array();
+    wire.as_object_mut().unwrap().remove("source_span_context");
     let block = wire.as_object_mut().unwrap().remove("source_span").unwrap();
     assert_eq!(block["parent_artifact"], parent["artifact_cid"]);
     for j in [&mut wire, &mut parent] {
@@ -1978,7 +1980,7 @@ fn native_source_span_preserves_commit_checkpoints_and_zero_allocation() {
     assert!(Model::from_bytes(&serde_json::to_vec(&invalid).unwrap()).is_err());
     let mut times = [0_u128; 96];
     let mut samples = 0;
-    for (prompt, expected, extra) in [
+    let mut cases = vec![
         (
             "User: ada lives in New York.\nUser: Where is ada?\nAssistant:",
             " New York.\n",
@@ -1989,7 +1991,27 @@ fn native_source_span_preserves_commit_checkpoints_and_zero_allocation() {
             " Rio de Janeiro.\n",
             2,
         ),
-    ] {
+    ];
+    if contextual {
+        cases.push((
+            "Record: Dover holds cyra. Where is cyra? Answer:",
+            " Dover.\n",
+            0,
+        ));
+        let mut bad: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        bad["source_span_context"] = false.into();
+        assert!(Model::from_bytes(&serde_json::to_vec(&bad).unwrap()).is_err());
+        let mut bad: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        bad["source_span_context"][0]["prime"] = 0.into();
+        assert!(Model::from_bytes(&serde_json::to_vec(&bad).unwrap()).is_err());
+        let mut bad: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        bad["source_span_context"]
+            .as_array_mut()
+            .unwrap()
+            .swap(0, 1);
+        assert!(Model::from_bytes(&serde_json::to_vec(&bad).unwrap()).is_err());
+    }
+    for (prompt, expected, extra) in cases {
         let tokens = model.encode(prompt).unwrap();
         let mut session = model.session(Control::Full).unwrap();
         ALLOCATIONS.with(|v| v.set(0));
@@ -2058,14 +2080,24 @@ fn native_source_span_preserves_commit_checkpoints_and_zero_allocation() {
                 .unwrap(),
             checkpoint
         );
-        assert!(
-            model
-                .generate(prompt, 32, Control::SourceSpanDisabled)
-                .unwrap()
-                .text
-                .len()
-                < expected.len()
-        );
+        if extra > 0 {
+            assert!(
+                model
+                    .generate(prompt, 32, Control::SourceSpanDisabled)
+                    .unwrap()
+                    .text
+                    .len()
+                    < expected.len()
+            );
+        } else if contextual {
+            assert_ne!(
+                model
+                    .generate(prompt, 32, Control::SourceSpanContextDisabled)
+                    .unwrap()
+                    .text,
+                expected
+            );
+        }
     }
     times[..samples].sort_unstable();
     println!("span uncached warm predict+observe samples={samples} median_ns={} max_ns={} (loading, ingestion and checkpoints excluded)", times[samples/2], times[samples-1]);

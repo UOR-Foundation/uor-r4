@@ -149,18 +149,28 @@ pub(super) fn run(args: &[String]) -> ProbeResult<()> {
 }
 
 pub(super) fn preserve_model(model: Model, root: &Path, out: &Path) -> ProbeResult<()> {
-    preserve_model_mode(model, root, out, false)
+    preserve_model_mode(model, root, out, ReportMode::Full)
 }
 pub(super) fn preserve_model_compact(model: Model, root: &Path, out: &Path) -> ProbeResult<()> {
-    preserve_model_mode(model, root, out, true)
+    preserve_model_mode(model, root, out, ReportMode::Compact)
 }
-fn preserve_model_mode(model: Model, root: &Path, out: &Path, compact: bool) -> ProbeResult<()> {
-    let save = |out: &Path, name: &str, report: &Value| {
-        if compact {
-            save(out, name, &source_span::compact(report.clone()))
-        } else {
-            save(out, name, report)
-        }
+pub(super) fn preserve_model_lean(model: Model, root: &Path, out: &Path) -> ProbeResult<()> {
+    preserve_model_mode(model, root, out, ReportMode::Lean)
+}
+pub(super) fn lean(report: Value) -> Value {
+    source_span::lean(report)
+}
+#[derive(Clone, Copy)]
+enum ReportMode {
+    Full,
+    Compact,
+    Lean,
+}
+fn preserve_model_mode(model: Model, root: &Path, out: &Path, mode: ReportMode) -> ProbeResult<()> {
+    let save = |out: &Path, name: &str, report: &Value| match mode {
+        ReportMode::Full => save(out, name, report),
+        ReportMode::Compact => save(out, name, &source_span::compact(report.clone())),
+        ReportMode::Lean => save(out, name, &lean(report.clone())),
     };
     for (file, split, label) in [
         ("answer-entry-source.json", "fit", "literal-construction"),
@@ -201,7 +211,28 @@ fn preserve_model_mode(model: Model, root: &Path, out: &Path, compact: bool) -> 
     ] {
         let source: Value = serde_json::from_slice(&fs::read(root.join(file))?)?;
         let docs: Vec<TypedRoutingExample> = serde_json::from_value(source[split].clone())?;
-        save(out, label, &model.evaluate_typed_routing(&docs, false)?)?;
+        let mut report = model.evaluate_typed_routing(&docs, false)?;
+        if matches!(mode, ReportMode::Lean) {
+            let rows = report["cases"]
+                .as_array_mut()
+                .ok_or("typed preservation cases absent")?;
+            if rows.len() != docs.len() {
+                return Err("typed preservation case count differs".into());
+            }
+            for (row, doc) in rows.iter_mut().zip(&docs) {
+                if row["id"] != doc.id {
+                    return Err("typed preservation case identity differs".into());
+                }
+                // The core report omits the supplied initial/continuation turns.
+                // Bind them here, including when initial generation failed.
+                row["input"] = serde_json::to_value(doc)?;
+                row["query"] = json!(doc.query);
+                row["expected"] = json!(doc.response);
+                row["expected_action"] = json!(doc.action);
+                row["expected_operands"] = json!(doc.operands);
+            }
+        }
+        save(out, label, &report)?;
     }
     let source: Value = serde_json::from_slice(&fs::read(
         root.join("writer-binding-continuation-source.json"),
