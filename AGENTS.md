@@ -145,15 +145,24 @@ Do not repeat broad workspace, BDD, no_std, fuzz, WASM, conformance or release
 checks unless their boundary is affected. Run the claim-wording check when
 changing claims. Record actual commands and outcomes, including unrun checks.
 
-The protected queue retains five historical required names. In the
-[current workflow](.github/workflows/ci.yml), pull requests and merge groups
-run `fmt / clippy / tests / no_std / κ` as formatting, the
-Rust architecture-policy check and focused native model, context, allocation,
-CLI/service tests. It does not run every check named in that historical label.
-The other four statuses explicitly acknowledge compatibility only; they do not
-run audit, fuzzing, WASM or Gate C. The broader legacy verification jobs remain
-available through manual `release_qa` dispatch. Their retention is not evidence
-that they ran or that they certify the new model. Report actual job steps.
+The protected queue retains five historical required names. By owner direction
+on 2026-09-06, the [current workflow](.github/workflows/ci.yml) emits all five as
+explicit compatibility acknowledgements on pull requests and merge groups.
+The `fmt / clippy / tests / no_std / κ` job performs no checkout, compilation,
+formatting, linting, tests or architecture-policy evaluation. No automatic
+native suite is repeated on the PR and again in the merge queue.
+
+Run the retained native formatting, architecture-policy, model, context,
+allocation and CLI checks explicitly when needed:
+
+```bash
+gh workflow run ci.yml --ref <branch-or-commit> -f qa_scope=native_checks -f decision_reason="<why this verification is needed>"
+```
+
+The existing manual `product_path` and `release_qa` scopes remain available;
+actual workspace Clippy is part of `release_qa`. Local focused compilation and
+behavior checks remain required for changed Rust paths. A successful transport
+acknowledgement is not verification or model evidence; report actual job steps.
 
 The toolchain is pinned in `rust-toolchain.toml`. Use rustup-managed cargo
 (`~/.cargo/bin/cargo`); a Homebrew binary earlier in PATH can ignore the pin.
