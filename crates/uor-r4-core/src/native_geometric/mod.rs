@@ -339,6 +339,8 @@ pub struct TrainingProgress {
 #[serde(try_from = "ModelWire")]
 pub struct Model {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    relation_reverse_spans: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     relation_spans: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     source_span_context: Option<Vec<word_copy_types::WordCopyAddress>>,
@@ -395,6 +397,8 @@ pub struct Model {
 #[serde(deny_unknown_fields)]
 struct ModelWire {
     #[serde(default)]
+    relation_reverse_spans: Option<String>,
+    #[serde(default)]
     relation_spans: Option<String>,
     #[serde(default)]
     source_span_context: Option<Vec<word_copy_types::WordCopyAddress>>,
@@ -450,6 +454,7 @@ impl TryFrom<ModelWire> for Model {
     type Error = Error;
     fn try_from(wire: ModelWire) -> Result<Self> {
         let model = Self {
+            relation_reverse_spans: wire.relation_reverse_spans,
             relation_spans: wire.relation_spans,
             source_span_context: wire.source_span_context,
             source_span: wire.source_span,

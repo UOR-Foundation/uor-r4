@@ -178,6 +178,7 @@ impl Trainer {
             dependent_read: None,
             typed_routing: None,
             joint_admission: None,
+            relation_reverse_spans: None,
             relation_spans: None,
             source_span_context: None,
             source_span: None,
@@ -536,8 +537,41 @@ impl Model {
         model.validate()?;
         Ok(model)
     }
+    /// Bind endpoint-bounded reverse extents to the unchanged retained-span parent.
+    pub fn with_reverse_relation_spans(&self) -> Result<Model> {
+        if self.relation_reverse_spans.is_some() || self.relation_spans.is_none() {
+            return Err(Error(
+                "reverse spans require a retained relation span parent".into(),
+            ));
+        }
+        let mut model = self.clone();
+        model.relation_reverse_spans = Some(self.artifact_cid.clone());
+        model.refresh_identity()?;
+        model.validate()?;
+        Ok(model)
+    }
     pub(super) fn validate(&self) -> Result<()> {
         self.config.validate()?;
+        if let Some(parent_cid) = &self.relation_reverse_spans {
+            if self.relation_spans.is_none() {
+                return Err(Error("reverse span retained parent absent".into()));
+            }
+            let mut parent = self.clone();
+            parent.relation_reverse_spans = None;
+            parent.refresh_identity()?;
+            if &parent.artifact_cid != parent_cid {
+                return Err(Error("reverse span frozen parent differs".into()));
+            }
+            parent.validate()?;
+            let mut duplicate = self.clone();
+            duplicate.refresh_identity()?;
+            if duplicate.artifact_cid != self.artifact_cid
+                || duplicate.uor_model_address != self.uor_model_address
+            {
+                return Err(Error("reverse span identity differs".into()));
+            }
+            return Ok(());
+        }
         if let Some(parent_cid) = &self.relation_spans {
             if self.source_span_context.is_none() || relation::head(self).is_none() {
                 return Err(Error("retained span parent operators absent".into()));

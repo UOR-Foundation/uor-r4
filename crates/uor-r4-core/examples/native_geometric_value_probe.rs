@@ -27,6 +27,8 @@ mod literal_binding;
 mod relation_memory;
 #[path = "native_geometric_value_probe/retained_span.rs"]
 mod retained_span;
+#[path = "native_geometric_value_probe/reverse_span.rs"]
+mod reverse_span;
 #[path = "native_geometric_value_probe/role_read.rs"]
 mod role_read;
 #[path = "native_geometric_value_probe/source_context.rs"]
@@ -987,6 +989,9 @@ fn evaluate_binding(
 }
 
 fn main() -> ProbeResult<()> {
+    if std::env::args().nth(1).as_deref() == Some("reverse-span") {
+        return reverse_span::run(&std::env::args().skip(2).collect::<Vec<_>>());
+    }
     if std::env::args().nth(1).as_deref() == Some("retained-span") {
         return retained_span::run(&std::env::args().skip(2).collect::<Vec<_>>());
     }

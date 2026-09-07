@@ -25,7 +25,14 @@ fn emit(s: &mut Session, m: &Model) -> ProbeResult<String> {
     }
     Err("retained span did not terminate".into())
 }
-fn turns(m: &Model, a: &str, b: &str, first: &str, second: &str, tail: &str) -> ProbeResult<Value> {
+pub(super) fn turns(
+    m: &Model,
+    a: &str,
+    b: &str,
+    first: &str,
+    second: &str,
+    tail: &str,
+) -> ProbeResult<Value> {
     let mut s = m.session(Control::Full)?;
     s.observe(m, 0)?;
     let padding = "quiet sky. ".repeat(96);

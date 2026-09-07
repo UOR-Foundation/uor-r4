@@ -280,11 +280,16 @@ parameters without fitting. Complete multiword values survive window eviction,
 conflicts and corrections on all 18 session turns, with all prior preservation.
 The initial reverse-statement overextension is preserved as a runtime negative;
 reverse writes now keep their established single-word scope.
-**Next: learn role-aware value endpoints in both source orders**, using the
-existing owner/value binding and geometric continuation operator. Source-cue
-lookup alone still lacks general connector and spacing behavior. New learning
-needs independently authored construction/open cases, fixed earlier panels as
-preservation, and a complete projection against the remaining cumulative budget.
+The [reverse endpoint continuation](../native_geometric_reverse_spans_1140.md)
+retains `321e990f` without fitting: existing writer-selected endpoints bound
+reverse spans, yielding construction 3/6 to 6/6, open 6/6, short 3/3 and fresh
+6/6 with selected preservation intact. The earlier start is retained separately
+from the unchanged terminal anchor.
+**Next: learn phrase-start selection over admitted candidates.** Longest passing
+prefix still includes unfamiliar introductory text; wider gaps remain a separate
+exact-separator representation limitation. New construction/open contrasts must
+remain separate from the opened diagnostics. Project the complete work against
+the current cumulative balance before execution.
 Do not restart completed order repairs or grow a
 paging subsystem without a measured access bottleneck. General named-role binding
 and broader Rust reasoning remain unqualified. Follow current-state.md for

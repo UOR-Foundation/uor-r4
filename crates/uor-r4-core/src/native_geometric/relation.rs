@@ -556,7 +556,8 @@ pub(super) fn read_features(
 }
 
 /// Return a persistent source/action, or defer to the unchanged recent reader.
-/// Values still present in the recent capture retain the #1137 selection law.
+/// Values still present in the recent capture retain the #1137 selection law,
+/// except reverse payloads whose terminal anchor cannot replay their earlier bytes.
 pub(super) fn read_choice(
     model: &Model,
     values: &ValueState,
@@ -575,11 +576,13 @@ pub(super) fn read_choice(
             continue;
         };
         work.relations.record_reads = work.relations.record_reads.saturating_add(1);
-        if words.queries[..words.query_len].iter().any(|w| {
-            work.relations.source_presence_checks =
-                work.relations.source_presence_checks.saturating_add(1);
-            *w == record.value
-        }) {
+        if record.span.as_ref().is_none_or(|span| span.start.is_none())
+            && words.queries[..words.query_len].iter().any(|w| {
+                work.relations.source_presence_checks =
+                    work.relations.source_presence_checks.saturating_add(1);
+                *w == record.value
+            })
+        {
             continue;
         }
         let (f, n) = read_features(model, record, words, &addr, work);

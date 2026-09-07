@@ -1,0 +1,783 @@
+{
+  "schema": "uor-r4.reverse-relation-span-evidence/1",
+  "at": "2026-09-07T14:22:30.839Z",
+  "base_commit": "218e11292385ed2f980bf9a884e5b47ecea5350f",
+  "decision": "RETAIN_BOUNDED_REVERSE_RELATION_SPANS",
+  "selection": {
+    "artifact": "blake3:321e990f218899aa2668c2530caed5589c614cc58d1bb1de0b7145a64aee9563",
+    "construction": 6,
+    "development": 6,
+    "fit": "NOT_RUN_NO_FIT_REQUIRED",
+    "fresh": "NOT_RUN_AT_SELECTION",
+    "parent": "blake3:0b12b6044e4a04124fa07a69496d9c5da65fc6a9d6ad95072fc46a9590916762",
+    "parent_parameters_equal": true,
+    "preservation": true,
+    "selected_before_fresh": true
+  },
+  "model": {
+    "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/reverse-span-angular/model.json",
+    "bytes": 11631560,
+    "sha256": "e094a0b511bba8747cee49867997e908940a85c9147b0537ecbdc1e297ea56ab"
+  },
+  "parent": {
+    "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/retained-span-angular/model.json",
+    "bytes": 11631461,
+    "sha256": "39b2e2435b588695ac8fcf37b4f1a70ebe6e130aab0014557d5530f7874c1e25"
+  },
+  "source": [
+    {
+      "path": "crates/uor-r4-core/src/native_geometric/mod.rs",
+      "bytes": 22574,
+      "sha256": "7cb6065bca81ba88891e12c46355ee3e6d8583443e524a8405252654b4139907"
+    },
+    {
+      "path": "crates/uor-r4-core/src/native_geometric/relation.rs",
+      "bytes": 26028,
+      "sha256": "d770cfd4338c53451487f7f5c235a3ce3c4919b9b4908df40892e02170c77b13"
+    },
+    {
+      "path": "crates/uor-r4-core/src/native_geometric/relation_span.rs",
+      "bytes": 21878,
+      "sha256": "d08dc308af81af60009278d206a0a91e4475c34b3616912ef92aad7a4740ccc1"
+    },
+    {
+      "path": "crates/uor-r4-core/src/native_geometric/training.rs",
+      "bytes": 58186,
+      "sha256": "f613a38d35135c8b448005e48686cf2494793b981b325173c2334e45fcc30b9a"
+    },
+    {
+      "path": "crates/uor-r4-core/src/native_geometric/source_span.rs",
+      "bytes": 11576,
+      "sha256": "cb8b630bfc930eea8e4a71915e4e3914390b67b6f406191f5c7049e38a9d0942"
+    },
+    {
+      "path": "crates/uor-r4-core/examples/native_geometric_value_probe.rs",
+      "bytes": 72912,
+      "sha256": "e1827f262c7b052bd34944d106e6f93865aecb41947000b809ec3526c032036d"
+    },
+    {
+      "path": "crates/uor-r4-core/examples/native_geometric_value_probe/reverse_span.rs",
+      "bytes": 10425,
+      "sha256": "919a035c70510185e0ed10527883d4d7d51a1a14f01e154d11a669f09e34d593"
+    },
+    {
+      "path": "crates/uor-r4-core/examples/native_geometric_value_probe/retained_span.rs",
+      "bytes": 9105,
+      "sha256": "87650389282cce86ed93318ac514ce5b0821477f3a621a32b6575c98363275d6"
+    },
+    {
+      "path": "crates/uor-r4-core/tests/native_geometric_allocations.rs",
+      "bytes": 91720,
+      "sha256": "fb6fce2d090ae24f61590278425e8c4fe1a2b65d967fe6b7467e6d486d8e7a72"
+    }
+  ],
+  "panels": {
+    "parent": {
+      "exact": 3,
+      "total": 6,
+      "version_counts_exact": true,
+      "isolation": true,
+      "trailing_tokens": 1056,
+      "turns": [
+        {
+          "input": "Orin Grove holds nelra. Silver Cape holds vesk. ",
+          "query": "Where is nelra? Answer:",
+          "expected": " Orin Grove.\n",
+          "text": " Grove.\n",
+          "exact": false,
+          "version_count_exact": true,
+          "expected_versions": 2,
+          "checkpoint_predictions_equal": true
+        },
+        {
+          "input": "Orin Grove holds nelra. ",
+          "query": "Where is nelra? Answer:",
+          "expected": " Orin Grove.\n",
+          "text": " Grove.\n",
+          "exact": false,
+          "version_count_exact": true,
+          "expected_versions": 3,
+          "checkpoint_predictions_equal": true
+        },
+        {
+          "input": "nelra now in Amber Grove. ",
+          "query": "Where is nelra? Answer:",
+          "expected": " Amber Grove.\n",
+          "text": " Amber Grove.\n",
+          "exact": true,
+          "version_count_exact": true,
+          "expected_versions": 4,
+          "checkpoint_predictions_equal": true
+        },
+        {
+          "input": "",
+          "query": "Where is vesk? Answer:",
+          "expected": " Silver Cape.\n",
+          "text": " Cape.\n",
+          "exact": false,
+          "version_count_exact": true,
+          "expected_versions": 4,
+          "checkpoint_predictions_equal": true
+        },
+        {
+          "input": "Orin Grove holds nelra. ",
+          "query": "Where is nelra? Answer:",
+          "expected": " Unknown.\n",
+          "text": " Unknown.\n",
+          "exact": true,
+          "version_count_exact": true,
+          "expected_versions": 5,
+          "checkpoint_predictions_equal": true
+        },
+        {
+          "input": "nelra now in Orin Grove. ",
+          "query": "Where is nelra? Answer:",
+          "expected": " Orin Grove.\n",
+          "text": " Orin Grove.\n",
+          "exact": true,
+          "version_count_exact": true,
+          "expected_versions": 6,
+          "checkpoint_predictions_equal": true
+        }
+      ]
+    },
+    "construction": {
+      "exact": 6,
+      "total": 6,
+      "version_counts_exact": true,
+      "isolation": true,
+      "trailing_tokens": 1056,
+      "turns": [
+        {
+          "input": "Orin Grove holds nelra. Silver Cape holds vesk. ",
+          "query": "Where is nelra? Answer:",
+          "expected": " Orin Grove.\n",
+          "text": " Orin Grove.\n",
+          "exact": true,
+          "version_count_exact": true,
+          "expected_versions": 2,
+          "checkpoint_predictions_equal": true
+        },
+        {
+          "input": "Orin Grove holds nelra. ",
+          "query": "Where is nelra? Answer:",
+          "expected": " Orin Grove.\n",
+          "text": " Orin Grove.\n",
+          "exact": true,
+          "version_count_exact": true,
+          "expected_versions": 3,
+          "checkpoint_predictions_equal": true
+        },
+        {
+          "input": "nelra now in Amber Grove. ",
+          "query": "Where is nelra? Answer:",
+          "expected": " Amber Grove.\n",
+          "text": " Amber Grove.\n",
+          "exact": true,
+          "version_count_exact": true,
+          "expected_versions": 4,
+          "checkpoint_predictions_equal": true
+        },
+        {
+          "input": "",
+          "query": "Where is vesk? Answer:",
+          "expected": " Silver Cape.\n",
+          "text": " Silver Cape.\n",
+          "exact": true,
+          "version_count_exact": true,
+          "expected_versions": 4,
+          "checkpoint_predictions_equal": true
+        },
+        {
+          "input": "Orin Grove holds nelra. ",
+          "query": "Where is nelra? Answer:",
+          "expected": " Unknown.\n",
+          "text": " Unknown.\n",
+          "exact": true,
+          "version_count_exact": true,
+          "expected_versions": 5,
+          "checkpoint_predictions_equal": true
+        },
+        {
+          "input": "nelra now in Orin Grove. ",
+          "query": "Where is nelra? Answer:",
+          "expected": " Orin Grove.\n",
+          "text": " Orin Grove.\n",
+          "exact": true,
+          "version_count_exact": true,
+          "expected_versions": 6,
+          "checkpoint_predictions_equal": true
+        }
+      ]
+    },
+    "development": {
+      "exact": 6,
+      "total": 6,
+      "version_counts_exact": true,
+      "isolation": true,
+      "trailing_tokens": 1056,
+      "turns": [
+        {
+          "input": "Record: Copper Vale holds serin. Record: Ivory Pier holds mavra. ",
+          "query": "Where is serin? Answer:",
+          "expected": " Copper Vale.\n",
+          "text": " Copper Vale.\n",
+          "exact": true,
+          "version_count_exact": true,
+          "expected_versions": 2,
+          "checkpoint_predictions_equal": true
+        },
+        {
+          "input": "Record: Copper Vale holds serin. ",
+          "query": "Where is serin? Answer:",
+          "expected": " Copper Vale.\n",
+          "text": " Copper Vale.\n",
+          "exact": true,
+          "version_count_exact": true,
+          "expected_versions": 3,
+          "checkpoint_predictions_equal": true
+        },
+        {
+          "input": "serin now in Cobalt Vale. ",
+          "query": "Where is serin? Answer:",
+          "expected": " Cobalt Vale.\n",
+          "text": " Cobalt Vale.\n",
+          "exact": true,
+          "version_count_exact": true,
+          "expected_versions": 4,
+          "checkpoint_predictions_equal": true
+        },
+        {
+          "input": "",
+          "query": "Where is mavra? Answer:",
+          "expected": " Ivory Pier.\n",
+          "text": " Ivory Pier.\n",
+          "exact": true,
+          "version_count_exact": true,
+          "expected_versions": 4,
+          "checkpoint_predictions_equal": true
+        },
+        {
+          "input": "Record: Copper Vale holds serin. ",
+          "query": "Where is serin? Answer:",
+          "expected": " Unknown.\n",
+          "text": " Unknown.\n",
+          "exact": true,
+          "version_count_exact": true,
+          "expected_versions": 5,
+          "checkpoint_predictions_equal": true
+        },
+        {
+          "input": "serin now in Copper Vale. ",
+          "query": "Where is serin? Answer:",
+          "expected": " Copper Vale.\n",
+          "text": " Copper Vale.\n",
+          "exact": true,
+          "version_count_exact": true,
+          "expected_versions": 6,
+          "checkpoint_predictions_equal": true
+        }
+      ]
+    },
+    "fresh": {
+      "exact": 6,
+      "total": 6,
+      "version_counts_exact": true,
+      "isolation": true,
+      "trailing_tokens": 1056,
+      "turns": [
+        {
+          "input": "Quiet River Bend holds belvi. Violet Quay holds norvi. ",
+          "query": "Where is belvi? Answer:",
+          "expected": " Quiet River Bend.\n",
+          "text": " Quiet River Bend.\n",
+          "exact": true,
+          "version_count_exact": true,
+          "expected_versions": 2,
+          "checkpoint_predictions_equal": true
+        },
+        {
+          "input": "Quiet River Bend holds belvi. ",
+          "query": "Where is belvi? Answer:",
+          "expected": " Quiet River Bend.\n",
+          "text": " Quiet River Bend.\n",
+          "exact": true,
+          "version_count_exact": true,
+          "expected_versions": 3,
+          "checkpoint_predictions_equal": true
+        },
+        {
+          "input": "belvi now in Silver River Bend. ",
+          "query": "Where is belvi? Answer:",
+          "expected": " Silver River Bend.\n",
+          "text": " Silver River Bend.\n",
+          "exact": true,
+          "version_count_exact": true,
+          "expected_versions": 4,
+          "checkpoint_predictions_equal": true
+        },
+        {
+          "input": "",
+          "query": "Where is norvi? Answer:",
+          "expected": " Violet Quay.\n",
+          "text": " Violet Quay.\n",
+          "exact": true,
+          "version_count_exact": true,
+          "expected_versions": 4,
+          "checkpoint_predictions_equal": true
+        },
+        {
+          "input": "Quiet River Bend holds belvi. ",
+          "query": "Where is belvi? Answer:",
+          "expected": " Unknown.\n",
+          "text": " Unknown.\n",
+          "exact": true,
+          "version_count_exact": true,
+          "expected_versions": 5,
+          "checkpoint_predictions_equal": true
+        },
+        {
+          "input": "belvi now in Quiet River Bend. ",
+          "query": "Where is belvi? Answer:",
+          "expected": " Quiet River Bend.\n",
+          "text": " Quiet River Bend.\n",
+          "exact": true,
+          "version_count_exact": true,
+          "expected_versions": 6,
+          "checkpoint_predictions_equal": true
+        }
+      ]
+    }
+  },
+  "short": {
+    "cases": [
+      {
+        "exact": true,
+        "expected": " Orin Grove.\n",
+        "prompt": "Orin Grove holds nelra. Where is nelra? Answer:",
+        "text": " Orin Grove.\n"
+      },
+      {
+        "exact": true,
+        "expected": " Copper Vale.\n",
+        "prompt": "Record: Copper Vale holds serin. Where is serin? Answer:",
+        "text": " Copper Vale.\n"
+      },
+      {
+        "exact": true,
+        "expected": " Ash Field.\n",
+        "prompt": "Ash Field holds merla. Where is merla? Answer:",
+        "text": " Ash Field.\n"
+      }
+    ],
+    "exact": 3,
+    "total": 3
+  },
+  "boundaries": {
+    "cases": [
+      {
+        "exact": false,
+        "expected": " Orin Grove.\n",
+        "input": "Records show Orin Grove holds nelra.",
+        "text": " Records show Orin Grove.\n"
+      },
+      {
+        "exact": false,
+        "expected": " Orin  Grove.\n",
+        "input": "Orin  Grove holds nelra.",
+        "text": " Grove.\n"
+      }
+    ],
+    "scope": "Post-selection diagnostics only: unseen plain intro and two-space gap; no fitting or tuning"
+  },
+  "preservation": {
+    "aliases.json": {
+      "exact": 12,
+      "total": 12
+    },
+    "chains.json": {
+      "exact": 16,
+      "total": 16
+    },
+    "computed-construction.json": {
+      "exact": 58,
+      "total": 58
+    },
+    "dependent.json": {
+      "exact": 48,
+      "total": 48,
+      "writes_exact": 48
+    },
+    "exposed-literals.json": {
+      "exact": 16,
+      "total": 16
+    },
+    "exposed-roles.json": {
+      "exact": 12,
+      "total": 12
+    },
+    "forward-construction.json": {
+      "exact": 6,
+      "total": 6,
+      "writes_exact": true,
+      "isolation_pass": true
+    },
+    "forward-open.json": {
+      "exact": 6,
+      "total": 6,
+      "writes_exact": true,
+      "isolation_pass": true
+    },
+    "forward-prior-fresh.json": {
+      "exact": 6,
+      "total": 6,
+      "writes_exact": true,
+      "isolation_pass": true
+    },
+    "identifiers.json": {
+      "exact": 8,
+      "total": 8
+    },
+    "literal-construction.json": {
+      "exact": 103,
+      "total": 103
+    },
+    "long.json": {
+      "exact": 28,
+      "total": 28,
+      "writes_exact": 28
+    },
+    "names.json": {
+      "exact": 28,
+      "total": 28,
+      "writes_exact": 28
+    },
+    "numeric.json": {
+      "exact": 6,
+      "total": 6
+    },
+    "preservation.json": {
+      "exact": 62,
+      "total": 62
+    },
+    "prior-chains.json": {
+      "exact": 16,
+      "total": 16
+    },
+    "prior-fresh.json": {
+      "exact": 16,
+      "total": 16
+    },
+    "prior-span-construction.json": {
+      "exact": 14,
+      "total": 14
+    },
+    "prior-span-development.json": {
+      "exact": 6,
+      "total": 6
+    },
+    "prior-span-fresh.json": {
+      "exact": 9,
+      "total": 9
+    },
+    "prior.json": {
+      "exact": 24,
+      "total": 24
+    },
+    "retained-construction.json": {
+      "exact": 663,
+      "total": 663
+    },
+    "roles.json": {
+      "exact": 12,
+      "total": 12
+    },
+    "sessions.json": {
+      "exact_turns": 5,
+      "total_turns": 5,
+      "isolated_no_shared_records": true
+    }
+  },
+  "checks": {
+    "release_probe_and_test_binaries": "PASS",
+    "focused_relation_span_tests": 5,
+    "integer_kernel_source_guard": "PASS; scoped source-token scan, not transitive/machine-code proof",
+    "architecture_policy": "PASS; no model behavior claim",
+    "format": "PASS",
+    "claim_wording": "PASS",
+    "actual_artifact": "PASS: short and evicted complete output, terminal identity, parent/start mutation rejection, every-step checkpoints, zero measured allocations",
+    "timing": {
+      "samples": 28,
+      "median_ns": 375,
+      "max_ns": 151916,
+      "scope": "Uncached predict+observe including first selection; excludes loading, encoding, ingestion, checkpoints. Energy unmeasured."
+    },
+    "root_cli": "NOT_RUN_FOR_NEW_ARTIFACT",
+    "studio": "NOT_RUN",
+    "broad_release_qa": "NOT_RUN",
+    "warning": "Existing unused NUMERIC_PROMPT test fixture warning; compilation succeeded"
+  },
+  "resources": {
+    "projection": {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/reverse-span-projection.json",
+      "bytes": 3040,
+      "sha256": "587806b5bb4b036e659f606cb9e2e72ec6a9a4181166f766fc1a67b5d0909874"
+    },
+    "cycle_model_ms": 43770,
+    "cycle_engineering_ms": 269887,
+    "previous_cumulative_ceiling_ms": 4290000,
+    "current_cumulative": {
+      "cumulative_ms": 4327369,
+      "limit_ms": 4410000
+    },
+    "remaining_model_ms": 82631,
+    "final_sampled_growth_bytes": 14749696,
+    "peak_sampled_growth_bytes": 17833984,
+    "peak_sampled_model_rss_bytes": 967245824,
+    "cleanup": "NONE",
+    "external_compute": "NONE",
+    "scope": "Cumulative command-wall accounting includes artifact construction, validation, behavior, builds and focused tests; interactive review/docs wall time is not model execution. Storage/RSS are samples, not exact peaks.",
+    "commands": [
+      {
+        "label": "reverse-span-evaluate",
+        "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+        "args": [
+          "reverse-span",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/retained-span-angular/model.json",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/reverse-span-angular"
+        ],
+        "elapsed_ms": 29272,
+        "exit_code": 0,
+        "stopped": null,
+        "engineering_only": false,
+        "peak_sampled_known_bytes": 7516405760,
+        "peak_process_rss_sample_bytes": 967245824,
+        "process_rss_samples": 29
+      },
+      {
+        "label": "reverse-span-artifact-check",
+        "command": "/usr/bin/env",
+        "args": [
+          "R4_REVERSE_SPAN_MODEL=/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/reverse-span-angular/model.json",
+          "/tmp/r4-native-geometric-target/release/deps/native_geometric_allocations-6c7ff1216c7e1931",
+          "native_reverse_relation_span_checkpoint_and_allocation",
+          "--ignored",
+          "--exact",
+          "--nocapture"
+        ],
+        "elapsed_ms": 14498,
+        "exit_code": 0,
+        "stopped": null,
+        "engineering_only": false,
+        "peak_sampled_known_bytes": 7516409856,
+        "peak_process_rss_sample_bytes": 499810304,
+        "process_rss_samples": 14
+      },
+      {
+        "label": "reverse-span-build",
+        "command": "/bin/zsh",
+        "args": [
+          "-c",
+          "set -e\nexport CARGO_TARGET_DIR=/tmp/r4-native-geometric-target CARGO_INCREMENTAL=0 CARGO_BUILD_JOBS=1\n/Users/casey.allard/.cargo/bin/cargo fmt --all\n/Users/casey.allard/.cargo/bin/cargo build --release --offline -p uor-r4-core --example native_geometric_value_probe\n/Users/casey.allard/.cargo/bin/cargo test --release --offline -p uor-r4-core --lib --test native_geometric_allocations --no-run\n/tmp/r4-native-geometric-target/release/deps/uor_r4_core-ab236c9b0d8b158f relation_span::tests --nocapture\n/tmp/r4-native-geometric-target/release/deps/native_geometric_allocations-6c7ff1216c7e1931 native_kernel_source_has_no_forbidden_arithmetic_or_float_types --exact --nocapture\n/tmp/r4-native-geometric-target/release/r4-policy-check ."
+        ],
+        "elapsed_ms": 265816,
+        "exit_code": 0,
+        "stopped": null,
+        "engineering_only": true,
+        "peak_sampled_known_bytes": 7519498240,
+        "peak_process_rss_sample_bytes": null,
+        "process_rss_samples": null
+      },
+      {
+        "label": "reverse-span-final-checks",
+        "command": "/bin/zsh",
+        "args": [
+          "-c",
+          "set -e\n/Users/casey.allard/.cargo/bin/cargo fmt --all --check\npython3 scripts/check_claim_wording.py\ngit diff --check"
+        ],
+        "elapsed_ms": 4071,
+        "exit_code": 0,
+        "stopped": null,
+        "engineering_only": true,
+        "peak_sampled_known_bytes": 7516418048,
+        "peak_process_rss_sample_bytes": null,
+        "process_rss_samples": null
+      }
+    ]
+  },
+  "receipts": [
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/reverse-span-angular/parent.json",
+      "bytes": 241739,
+      "sha256": "02a5fe02f2bec7b982b1b8cbc6c3005f739e40f0de7081f7a557f4c4cd01be7f"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/reverse-span-angular/construction.json",
+      "bytes": 412677,
+      "sha256": "7e463859134250573ca898f932194cba825a68e5b12f7bf46bce92bdc5381054"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/reverse-span-angular/development.json",
+      "bytes": 435793,
+      "sha256": "b6d416a456cda46bbed84d88785553600be3f95a3874ae30616ec779534f2e11"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/reverse-span-angular/selection.json",
+      "bytes": 382,
+      "sha256": "e71da81b98afacd73481a2af669661ab41a6eb92c4d57ad8eb10531937c6ed6b"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/reverse-span-angular/short.json",
+      "bytes": 559,
+      "sha256": "7e9ed91a4d52b277dc6110bb8f38005a9dbbabd607fa8ad2b4c0cfd0d48166c7"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/reverse-span-angular/fresh.json",
+      "bytes": 413304,
+      "sha256": "d01b9f9261248a0218c984a24dcbb3ebbb6e411ec07a4a970f04c3ce30ebcac6"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/reverse-span-angular/boundaries.json",
+      "bytes": 436,
+      "sha256": "0ba3627eaf6a9b18d5c411fdcf523c42a5a0a44e988a58dfaea3aecfa117591a"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/reverse-span-angular/preservation/aliases.json",
+      "bytes": 15252,
+      "sha256": "cb05a5db673311fb7fe501146990099b22f11c8970670c73a03db38e712caead"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/reverse-span-angular/preservation/chains.json",
+      "bytes": 18506,
+      "sha256": "213d6886d3d833ecbad64e1f38be140ceec3ce14f48c337a0826d43aeb1492b7"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/reverse-span-angular/preservation/computed-construction.json",
+      "bytes": 61339,
+      "sha256": "b050c723ab399a4c40243828c3f31f3e02a67a0a00781eb1acf3fdcad1903f69"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/reverse-span-angular/preservation/dependent.json",
+      "bytes": 45899,
+      "sha256": "e736fc71114aabb4223243fe49470414178a36d173289480c7d8fe4c2c82ce0b"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/reverse-span-angular/preservation/exposed-literals.json",
+      "bytes": 14928,
+      "sha256": "d61ec7ee4d196bb31dcf1869486ff0b801b54b7200c1592d818f35488dfc7103"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/reverse-span-angular/preservation/exposed-roles.json",
+      "bytes": 15136,
+      "sha256": "d0f328265018131d347d3b886e2a095a4e79469b11e9a9c15c1478e35e563c00"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/reverse-span-angular/preservation/forward-construction.json",
+      "bytes": 159840,
+      "sha256": "5bd31ee1c5b2848225918cbb04445414f2a40aee1d87583995e4c695abf62127"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/reverse-span-angular/preservation/forward-open.json",
+      "bytes": 159878,
+      "sha256": "941b8b665dc658d8c2d8d50964aae7b7bdc499a33e6a8af4df0bc63d815c96de"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/reverse-span-angular/preservation/forward-prior-fresh.json",
+      "bytes": 160240,
+      "sha256": "e1faf5cff54f3909084d6fe702b3e9281bf91fa442bf1a1d90b4ef638389969e"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/reverse-span-angular/preservation/identifiers.json",
+      "bytes": 7264,
+      "sha256": "b4480d726ed3f72b65aa5ac0238314dc651b1374d6cd2d781a9df2e4a9e48c26"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/reverse-span-angular/preservation/literal-construction.json",
+      "bytes": 93929,
+      "sha256": "a009360ab354e778e112f6dc69eaba9e24321efb18c656b5de9206fdb715cb37"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/reverse-span-angular/preservation/long.json",
+      "bytes": 147372,
+      "sha256": "ddbb22ac91dbe289654b9b9c209046a0bbe23623ec2fad56a782a92c8ae74841"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/reverse-span-angular/preservation/names.json",
+      "bytes": 27972,
+      "sha256": "ba2092c77b9c2991d6ee79657fd0804148cc19f062fd72b62987b70a5850eede"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/reverse-span-angular/preservation/numeric.json",
+      "bytes": 6094,
+      "sha256": "3c7dd3f5ec0e34caa705d136c33d4dd39b057a437428a5fb897683634c544983"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/reverse-span-angular/preservation/preservation.json",
+      "bytes": 21669,
+      "sha256": "4df9c73489cdad2f8d47cb73b0ad77a6d2a4a86f690a23b94f574d5a4beaf823"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/reverse-span-angular/preservation/prior-chains.json",
+      "bytes": 18496,
+      "sha256": "ea909649bbd27b6972f1d1c71e7600ff49d3a3a16dfb51885fef2f4dac97a5b8"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/reverse-span-angular/preservation/prior-fresh.json",
+      "bytes": 14552,
+      "sha256": "9d49306056cf56af6491228327a8a487e406cdaa2ee88243b120e6d0bebe25df"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/reverse-span-angular/preservation/prior-span-construction.json",
+      "bytes": 4445,
+      "sha256": "2928a06119d649eab7c44398f97f8dd5723b0b9b75a2efb644e84945d47d4d26"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/reverse-span-angular/preservation/prior-span-development.json",
+      "bytes": 2175,
+      "sha256": "a550e83b503499f196ec49b5470d21e3fa20730bb9e1b5387afe912a6273b538"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/reverse-span-angular/preservation/prior-span-fresh.json",
+      "bytes": 3102,
+      "sha256": "163ff413e14d7b4cd1805fe966e76da1bd8e9b2191d6b2c55bd87f7f6be29acf"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/reverse-span-angular/preservation/prior.json",
+      "bytes": 7457,
+      "sha256": "1a93ee60fe60360ab0a3910ffb26e1885b4dd31b4a559e0eed120756c1680005"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/reverse-span-angular/preservation/retained-construction.json",
+      "bytes": 214913,
+      "sha256": "c6668466a048d8e439eeea4c0cc9d942d0c00cb544fa7198d19c77970298aaeb"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/reverse-span-angular/preservation/roles.json",
+      "bytes": 15264,
+      "sha256": "9f6d3c3feb07a0263bdd506d96acbe459ed2c76d93cb5608c25dfcc12c4ef1e8"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/reverse-span-angular/preservation/sessions.json",
+      "bytes": 58938,
+      "sha256": "ac942d00ffdcacfba45bcb977f71fa9865fe651cec2512aea77f4749ec65c937"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/reverse-span-artifact-check.stdout.log",
+      "bytes": 474,
+      "sha256": "1e59f154da05400ed359055441404eb930ad094f069f146561929b6d42c3b158"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/reverse-span-build.log",
+      "bytes": 1993,
+      "sha256": "6c06ca8a34efac8794eed1b1dce6d4e48eaa12643e68b1d7d58b1d8c9262f153"
+    }
+  ],
+  "limitations": [
+    "Familiar-template bounded memory, not broad language/reasoning/frontier capability.",
+    "No new fit or angular-versus-equality advantage experiment; same learned geometry with typed endpoint.",
+    "Longest admitted start overextends unknown plain introductions; wider gaps remain unrepresented.",
+    "Complete parent is the control; query-span ablations do not disable full-control persistent ingestion."
+  ],
+  "next": "Learn phrase-start selection over admitted starts using new construction/open contrasts; preserve opened diagnostics. Exact wider separators remain a separate representation task. Project all work against the cumulative balance."
+}
