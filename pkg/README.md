@@ -95,8 +95,12 @@ repairs unsupported retained-word selection:20/20 new complete answers versus
 14/20 parent and10/20 matched exact-code continuation, with earlier numeric,
 identifier and memory behavior preserved. The existing router is refined in
 place; exact parent reconstruction preserves all downstream training provenance.
-A supported location can still be taken over by numerical admission; joint
-numeric-versus-word selection is the next observed boundary.
+The subsequent [literal numeric admission](docs/native_geometric_joint_admission_1139.md)
+repairs five numeric takeovers of word/identifier responses: construction improves
+558/615 to 563/615 with prior behavior preserved. Its twelve fresh cases remain
+8/12, identical to parent and equality control, so lexical-rejection transfer and
+angular advantage are unestablished. Three repaired Rust functions pass fifteen
+assertions. The next observed boundary is order-sensitive entity/operand binding.
 General prose/syntax/reasoning and frontier capability remain unqualified. Follow
 the current-state pointer for artifacts, costs and the next implementation.
 
