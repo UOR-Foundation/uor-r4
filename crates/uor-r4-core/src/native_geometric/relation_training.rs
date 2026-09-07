@@ -22,13 +22,13 @@ pub struct RelationExample {
 }
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
-struct Alternative {
-    keys: Vec<ValueFeature>,
-    correct: bool,
+pub(super) struct Alternative {
+    pub(super) keys: Vec<ValueFeature>,
+    pub(super) correct: bool,
 }
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
-struct Frame {
-    alternatives: Vec<Alternative>,
+pub(super) struct Frame {
+    pub(super) alternatives: Vec<Alternative>,
 }
 
 fn fit(frames: &[Frame], epochs: usize) -> Result<(Vec<ValueRow>, usize)> {
@@ -107,7 +107,7 @@ fn fit(frames: &[Frame], epochs: usize) -> Result<(Vec<ValueRow>, usize)> {
     ))
 }
 
-fn writer_frame(
+pub(super) fn writer_frame(
     model: &Model,
     words: &super::value_lexemes::LexemeState,
     label: Option<&RelationLabel>,

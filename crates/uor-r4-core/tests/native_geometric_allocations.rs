@@ -2359,3 +2359,107 @@ fn native_relation_start_checkpoint_and_allocation() {
     println!("relation-start load_ns={load_ns}; (evicted,encode_ns,ingest_begin_response_ns)={input_times:?}; ingestion includes start scoring, excludes emission/checkpoints; sampled wall times, no energy measurement");
     println!("relation-start model/root rejection, short/evicted/singleton outputs, per-step checkpoints and zero allocations PASS; samples={} median_ns={} max_ns={} (uncached predict+observe including initial selection; excludes loading/encoding/ingestion/checkpoints)",times.len(),times[times.len()/2],times[times.len()-1]);
 }
+
+#[test]
+#[ignore = "requires refined writer artifact; charged model execution"]
+fn native_writer_refinement_checkpoint_and_allocation() {
+    use uor_r4_core::native_geometric::Model;
+    let bytes = std::fs::read(std::env::var("R4_WRITER_REFINEMENT_MODEL").unwrap()).unwrap();
+    let load = std::time::Instant::now();
+    let model = Model::from_bytes(&bytes).unwrap();
+    let load_ns = load.elapsed().as_nanos();
+    let wire: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_ne!(
+        wire["relation_writer"]["rows"],
+        wire["relation_writer_refinement"]["previous"]["rows"]
+    );
+    let mut bad = wire.clone();
+    bad["relation_writer_refinement"]["parent_artifact"] = "wrong-parent".into();
+    assert!(Model::from_bytes(&serde_json::to_vec(&bad).unwrap()).is_err());
+    let mut bad = wire.clone();
+    bad["relation_writer"]["dictionary"][0]["prime"] = 0.into();
+    assert!(Model::from_bytes(&serde_json::to_vec(&bad).unwrap()).is_err());
+    let mut bad = wire.clone();
+    bad["relation_writer"]["admission"] =
+        wire["relation_writer_refinement"]["previous"]["admission"].clone();
+    assert!(Model::from_bytes(&serde_json::to_vec(&bad).unwrap()).is_err());
+    let mut emission_ns = Vec::new();
+    let mut inputs = Vec::new();
+    for (fact, owner, expected, writes, evicted) in [
+        (
+            "notes say quiet harbor holds ranvi.",
+            "ranvi",
+            " quiet harbor.\n",
+            1,
+            false,
+        ),
+        (
+            "notes say quiet harbor holds ranvi.",
+            "ranvi",
+            " quiet harbor.\n",
+            1,
+            true,
+        ),
+        ("notes say quiet harbor.", "ranvi", " Unknown.\n", 0, false),
+        (
+            "Report notes Cobalt Field holds vorin.",
+            "vorin",
+            " Cobalt Field.\n",
+            1,
+            false,
+        ),
+    ] {
+        let padding = if evicted {
+            "quiet sky. ".repeat(96)
+        } else {
+            String::new()
+        };
+        let prompt = format!("{fact} {padding}Where is {owner}? Answer:");
+        let encoding = std::time::Instant::now();
+        let tokens = model.encode(&prompt).unwrap();
+        let encode_ns = encoding.elapsed().as_nanos();
+        let mut session = model.session(Control::Full).unwrap();
+        ALLOCATIONS.with(|v| v.set(0));
+        BYTES.with(|v| v.set(0));
+        MEASURING.with(|v| v.set(true));
+        let ingest = std::time::Instant::now();
+        session.observe(&model, BOS).unwrap();
+        for token in tokens {
+            session.observe(&model, token).unwrap();
+        }
+        session.begin_response(&model).unwrap();
+        let ingest_ns = ingest.elapsed().as_nanos();
+        MEASURING.with(|v| v.set(false));
+        assert_eq!(session.work.values.relations.record_writes, writes);
+        inputs.push((evicted, encode_ns, ingest_ns));
+        let mut output = [EOS; 32];
+        let mut used = 0;
+        loop {
+            let mut restored = model
+                .restore_session(&session.checkpoint().unwrap())
+                .unwrap();
+            let expected_prediction = restored.predict(&model).unwrap();
+            assert_eq!(expected_prediction, restored.predict(&model).unwrap());
+            MEASURING.with(|v| v.set(true));
+            let start = std::time::Instant::now();
+            let actual = session.predict(&model).unwrap();
+            session.observe(&model, actual.token).unwrap();
+            let elapsed = start.elapsed().as_nanos();
+            MEASURING.with(|v| v.set(false));
+            assert_eq!(actual, expected_prediction);
+            emission_ns.push(elapsed);
+            output[used] = actual.token;
+            used += 1;
+            if actual.token == EOS || used == 32 {
+                break;
+            }
+        }
+        assert_eq!(output[used - 1], EOS);
+        assert_eq!(model.decode(&output[..used]).unwrap(), expected.as_bytes());
+        assert_eq!(session.work.values.relations.record_writes, writes);
+        assert_eq!((ALLOCATIONS.with(Cell::get), BYTES.with(Cell::get)), (0, 0));
+    }
+    emission_ns.sort_unstable();
+    println!("writer-refinement load_ns={load_ns}; (evicted,encode_ns,ingest_begin_response_ns)={inputs:?}; ingestion includes changed writer/cache and phrase selection; measured wall samples, no energy result");
+    println!("writer-refinement parent/dictionary/stale-cache rejection, exact assertion/nonassertion writes and output, evicted reads, every-step checkpoints and zero allocations PASS; predict_observe samples={} median_ns={} max_ns={} (loading, encoding, ingestion and checkpoints excluded)",emission_ns.len(),emission_ns[emission_ns.len()/2],emission_ns.last().unwrap());
+}

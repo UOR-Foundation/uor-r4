@@ -74,6 +74,7 @@ mod value_types;
 mod word_copy_runtime;
 mod word_copy_training;
 mod word_copy_types;
+mod writer_refinement;
 
 use serde::{Deserialize, Serialize};
 
@@ -341,6 +342,8 @@ pub struct TrainingProgress {
 #[serde(try_from = "ModelWire")]
 pub struct Model {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    relation_writer_refinement: Option<writer_refinement::WriterRefinement>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     relation_start_context: Option<Vec<word_copy_types::WordCopyAddress>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     relation_start: Option<source_routing::SourceRouting>,
@@ -403,6 +406,8 @@ pub struct Model {
 #[serde(deny_unknown_fields)]
 struct ModelWire {
     #[serde(default)]
+    relation_writer_refinement: Option<writer_refinement::WriterRefinement>,
+    #[serde(default)]
     relation_start_context: Option<Vec<word_copy_types::WordCopyAddress>>,
     #[serde(default)]
     relation_start: Option<source_routing::SourceRouting>,
@@ -464,6 +469,7 @@ impl TryFrom<ModelWire> for Model {
     type Error = Error;
     fn try_from(wire: ModelWire) -> Result<Self> {
         let model = Self {
+            relation_writer_refinement: wire.relation_writer_refinement,
             relation_start_context: wire.relation_start_context,
             relation_start: wire.relation_start,
             relation_reverse_spans: wire.relation_reverse_spans,
