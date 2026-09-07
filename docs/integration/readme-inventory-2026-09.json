@@ -1,0 +1,1047 @@
+{
+  "schema": "uor-r4.readme-disposition-inventory/1",
+  "recorded_at": "2026-09-07",
+  "project_name": "UOR-R4 Geometric Language Model",
+  "source_revision": "bc03f2d7ffde99608da370808eca542360e54508",
+  "source_blob_semantics": "source_blob is the original Git blob at source_revision, before this documentation update; it does not claim to hash revised front-door content. The final PR diff records those edits.",
+  "enumeration": "git ls-tree -rz --full-tree SOURCE_REVISION; select every tracked path whose basename contains readme case-insensitively",
+  "coverage": {
+    "tracked_readme_paths": 127,
+    "classification_counts": {
+      "first_party_current_front_door": 18,
+      "imported_formal_contract": 4,
+      "vendored_or_legacy_dependency": 51,
+      "imported_or_archived_research": 51,
+      "historical_research_record": 3
+    },
+    "current_front_doors": 18,
+    "other_active_first_party_front_doors_needing_update": [],
+    "inventory_only_not_line_by_line_audit": true,
+    "untracked_readmes_and_external_cache_readmes": "Excluded from tracked-repository enumeration; consult audit source catalogs.",
+    "workflow_skill": "tools/skills/uor-project-workflow/SKILL.md is an active instruction entrypoint, not a README; maintained separately by the lead."
+  },
+  "disposition_policy": {
+    "current_front_doors": "Update name, native-core and capability boundaries, canonical navigation, and artifact/research discovery. Keep technical contracts and historical evidence scoped.",
+    "historical_import_vendor": "Preserve source names, licenses, commands and mathematical/proof statuses; use current research/audit wrappers to explain relevance. No bulk search-and-replace inside imported source.",
+    "authority": "docs/integration/project-track.md owns the owner-directed plan; docs/integration/current-state.md owns accepted implementation and evidence pointers; live GitHub owns delivery state.",
+    "verification": "Path/blob/classification census only. No build, model execution, proof checking or remote link validation performed by this inventory."
+  },
+  "entries": [
+    {
+      "path": "README.md",
+      "source_blob": "33aac97bfa2d7a4de85ab07d449feddf2e744eee",
+      "source_mode": "100644",
+      "classification": "first_party_current_front_door",
+      "action": "update_current_name_scope_and_navigation_preserve_history",
+      "provenance_or_navigation_entrypoint": "docs/PROJECT_MAP.md"
+    },
+    {
+      "path": "crates/uor-r4-api/README.md",
+      "source_blob": "1330c687947179b9084f1c3f88efaf2e285d1c04",
+      "source_mode": "100644",
+      "classification": "first_party_current_front_door",
+      "action": "update_current_name_scope_and_navigation_preserve_history",
+      "provenance_or_navigation_entrypoint": "docs/PROJECT_MAP.md"
+    },
+    {
+      "path": "crates/uor-r4-core/README.md",
+      "source_blob": "e2006e4195c14acda4fc72daf7572ed7af351a7f",
+      "source_mode": "100644",
+      "classification": "first_party_current_front_door",
+      "action": "update_current_name_scope_and_navigation_preserve_history",
+      "provenance_or_navigation_entrypoint": "docs/PROJECT_MAP.md"
+    },
+    {
+      "path": "crates/uor-r4-graph-compiler/README.md",
+      "source_blob": "33df957edcbdd0ec325db279b38e3ae958862440",
+      "source_mode": "100644",
+      "classification": "first_party_current_front_door",
+      "action": "update_current_name_scope_and_navigation_preserve_history",
+      "provenance_or_navigation_entrypoint": "docs/PROJECT_MAP.md"
+    },
+    {
+      "path": "crates/uor-r4-graph-format/README.md",
+      "source_blob": "0918539b425eb7b05fa4e590ca40bb8b8334b751",
+      "source_mode": "100644",
+      "classification": "first_party_current_front_door",
+      "action": "update_current_name_scope_and_navigation_preserve_history",
+      "provenance_or_navigation_entrypoint": "docs/PROJECT_MAP.md"
+    },
+    {
+      "path": "crates/uor-r4-proof-model/README.md",
+      "source_blob": "9e5ed09fa10a55e3ab10cf56c786343babd43bc6",
+      "source_mode": "100644",
+      "classification": "first_party_current_front_door",
+      "action": "update_current_name_scope_and_navigation_preserve_history",
+      "provenance_or_navigation_entrypoint": "docs/PROJECT_MAP.md"
+    },
+    {
+      "path": "crates/uor-r4-router/README.md",
+      "source_blob": "4e93f6feb7931aaeb6bc732bfa51592e3c927063",
+      "source_mode": "100644",
+      "classification": "first_party_current_front_door",
+      "action": "update_current_name_scope_and_navigation_preserve_history",
+      "provenance_or_navigation_entrypoint": "docs/PROJECT_MAP.md"
+    },
+    {
+      "path": "docs/README.md",
+      "source_blob": "3b1eb109071763cf5045ea739a449b96eae35625",
+      "source_mode": "100644",
+      "classification": "first_party_current_front_door",
+      "action": "update_current_name_scope_and_navigation_preserve_history",
+      "provenance_or_navigation_entrypoint": "docs/PROJECT_MAP.md"
+    },
+    {
+      "path": "docs/integration/README.md",
+      "source_blob": "5a74aba7b28e871a10d02b1650e5e42a484d695f",
+      "source_mode": "100644",
+      "classification": "first_party_current_front_door",
+      "action": "update_current_name_scope_and_navigation_preserve_history",
+      "provenance_or_navigation_entrypoint": "docs/PROJECT_MAP.md"
+    },
+    {
+      "path": "docs/integration/architecture-2026-09/README.md",
+      "source_blob": "7f73bdd88602dbf0a95833b2e93cccbdd6e533c1",
+      "source_mode": "100644",
+      "classification": "first_party_current_front_door",
+      "action": "update_current_name_scope_and_navigation_preserve_history",
+      "provenance_or_navigation_entrypoint": "docs/PROJECT_MAP.md"
+    },
+    {
+      "path": "features/suites/README.md",
+      "source_blob": "0a50f154f37380f1ef721a3be4ac0bb4b7244336",
+      "source_mode": "100644",
+      "classification": "first_party_current_front_door",
+      "action": "update_current_name_scope_and_navigation_preserve_history",
+      "provenance_or_navigation_entrypoint": "docs/PROJECT_MAP.md"
+    },
+    {
+      "path": "profiles/openai/README.md",
+      "source_blob": "e5987e4b588d95829f008d1b6688cb8d4ff67c30",
+      "source_mode": "100644",
+      "classification": "first_party_current_front_door",
+      "action": "update_current_name_scope_and_navigation_preserve_history",
+      "provenance_or_navigation_entrypoint": "docs/PROJECT_MAP.md"
+    },
+    {
+      "path": "proofs/wasm-gemm-gnaf/README.md",
+      "source_blob": "4282bc586330dad73aaaaf7c211f02bcefd50a3f",
+      "source_mode": "100644",
+      "classification": "imported_formal_contract",
+      "action": "preserve_original_bytes_and_obligation_status",
+      "provenance_or_navigation_entrypoint": "docs/gnaf_import_provenance.md"
+    },
+    {
+      "path": "proofs/wasm-gemm-gnaf/Tests/README.md",
+      "source_blob": "fc767fc62179b6b632efb08c101aa897cd473cff",
+      "source_mode": "100644",
+      "classification": "imported_formal_contract",
+      "action": "preserve_original_bytes_and_obligation_status",
+      "provenance_or_navigation_entrypoint": "docs/gnaf_import_provenance.md"
+    },
+    {
+      "path": "proofs/wasm-gemm-gnaf/artifacts/README.md",
+      "source_blob": "1bf8a55f324bff53a2a2ba699ed40f07892ea05a",
+      "source_mode": "100644",
+      "classification": "imported_formal_contract",
+      "action": "preserve_original_bytes_and_obligation_status",
+      "provenance_or_navigation_entrypoint": "docs/gnaf_import_provenance.md"
+    },
+    {
+      "path": "proofs/wasm-gemm-gnaf/fixtures/README.md",
+      "source_blob": "b7e8c21485a8d67a16c29eecf36591c9b9ee459f",
+      "source_mode": "100644",
+      "classification": "imported_formal_contract",
+      "action": "preserve_original_bytes_and_obligation_status",
+      "provenance_or_navigation_entrypoint": "docs/gnaf_import_provenance.md"
+    },
+    {
+      "path": "proofs/wasm-gemm-gnaf/vendor/wasm-spec/README.md",
+      "source_blob": "ecda53c8bb0a3f0c157cfe898c1635d3267d9d91",
+      "source_mode": "100644",
+      "classification": "vendored_or_legacy_dependency",
+      "action": "preserve_original_bytes_and_attribution",
+      "provenance_or_navigation_entrypoint": "docs/integration/architecture-2026-09/imports.md"
+    },
+    {
+      "path": "research/README.md",
+      "source_blob": "e66b2bc76d2a610009c674fb10f85ed2b36e75e7",
+      "source_mode": "100644",
+      "classification": "first_party_current_front_door",
+      "action": "update_current_name_scope_and_navigation_preserve_history",
+      "provenance_or_navigation_entrypoint": "docs/PROJECT_MAP.md"
+    },
+    {
+      "path": "research/ai-research/MUDBench/README.md",
+      "source_blob": "466d2545d2c976facede5e820d03183431eb2836",
+      "source_mode": "100644",
+      "classification": "imported_or_archived_research",
+      "action": "preserve_original_bytes_and_source_names",
+      "provenance_or_navigation_entrypoint": "research/README.md"
+    },
+    {
+      "path": "research/ai-research/MUDBench/examples/agents/README.md",
+      "source_blob": "9fda27d2f651317cd5742a8e160c656070262076",
+      "source_mode": "100644",
+      "classification": "imported_or_archived_research",
+      "action": "preserve_original_bytes_and_source_names",
+      "provenance_or_navigation_entrypoint": "research/README.md"
+    },
+    {
+      "path": "research/ai-research/MUDBench/examples/agents/baselines/README.md",
+      "source_blob": "11663916e73a19beb1a11f4cb43c7ece8dbff7e1",
+      "source_mode": "100644",
+      "classification": "imported_or_archived_research",
+      "action": "preserve_original_bytes_and_source_names",
+      "provenance_or_navigation_entrypoint": "research/README.md"
+    },
+    {
+      "path": "research/ai-research/MUDBench/tools/observer/README.md",
+      "source_blob": "ee5a257f4e67479dec176347a7f9e1624b3d8fbe",
+      "source_mode": "100644",
+      "classification": "imported_or_archived_research",
+      "action": "preserve_original_bytes_and_source_names",
+      "provenance_or_navigation_entrypoint": "research/README.md"
+    },
+    {
+      "path": "research/ai-research/README.md",
+      "source_blob": "e5297e59429c63e94d4ac480e52b0e1e1d7289df",
+      "source_mode": "100644",
+      "classification": "first_party_current_front_door",
+      "action": "update_current_name_scope_and_navigation_preserve_history",
+      "provenance_or_navigation_entrypoint": "docs/PROJECT_MAP.md"
+    },
+    {
+      "path": "research/ai-research/ai-router/router-research/README.md",
+      "source_blob": "70f86914b53800d04755d3c0221b8fad66ff6e75",
+      "source_mode": "100644",
+      "classification": "imported_or_archived_research",
+      "action": "preserve_original_bytes_and_source_names",
+      "provenance_or_navigation_entrypoint": "research/README.md"
+    },
+    {
+      "path": "research/ai-research/ai-router/router-research/papers/release_bundle/README.md",
+      "source_blob": "20414020928bb5d46a3a6836250346b3adcdc113",
+      "source_mode": "100644",
+      "classification": "imported_or_archived_research",
+      "action": "preserve_original_bytes_and_source_names",
+      "provenance_or_navigation_entrypoint": "research/README.md"
+    },
+    {
+      "path": "research/ai-research/ai-router/router-research/results/prime_transport_grouped_packets/README.md",
+      "source_blob": "bfee7e6137b619d53131142be92932d7bf6e6d76",
+      "source_mode": "100644",
+      "classification": "imported_or_archived_research",
+      "action": "preserve_original_bytes_and_source_names",
+      "provenance_or_navigation_entrypoint": "research/README.md"
+    },
+    {
+      "path": "research/archives/README.md",
+      "source_blob": "89ab48f46aaa5af4d43f6f98a6589e769496d654",
+      "source_mode": "100644",
+      "classification": "first_party_current_front_door",
+      "action": "update_current_name_scope_and_navigation_preserve_history",
+      "provenance_or_navigation_entrypoint": "docs/PROJECT_MAP.md"
+    },
+    {
+      "path": "research/archives/gemini-dev/prime-router/README.md",
+      "source_blob": "fbdcd8a2a9a4937f9da37316abbffbd5946b2e05",
+      "source_mode": "100644",
+      "classification": "imported_or_archived_research",
+      "action": "preserve_original_bytes_and_source_names",
+      "provenance_or_navigation_entrypoint": "research/README.md"
+    },
+    {
+      "path": "research/archives/gemini-dev/rust/uor-r4-wasm-router/README.md",
+      "source_blob": "8f14a26fdba8412266aabf22ded6a6429d6a802b",
+      "source_mode": "100644",
+      "classification": "imported_or_archived_research",
+      "action": "preserve_original_bytes_and_source_names",
+      "provenance_or_navigation_entrypoint": "research/README.md"
+    },
+    {
+      "path": "research/msa/README.md",
+      "source_blob": "42106a1b52c817f298ab15246e17ddb0bb350246",
+      "source_mode": "100644",
+      "classification": "historical_research_record",
+      "action": "preserve_original_bytes_and_scope",
+      "provenance_or_navigation_entrypoint": "research/README.md"
+    },
+    {
+      "path": "research/prime-analysis/README.md",
+      "source_blob": "1691d3db67d1e45106158103832614ac66acf5ec",
+      "source_mode": "100644",
+      "classification": "first_party_current_front_door",
+      "action": "update_current_name_scope_and_navigation_preserve_history",
+      "provenance_or_navigation_entrypoint": "docs/PROJECT_MAP.md"
+    },
+    {
+      "path": "research/prime-analysis/research/ai-benchmarking/README.md",
+      "source_blob": "bbc8ee991447e375bbc8cf51de26d16ecdc8a6a8",
+      "source_mode": "100755",
+      "classification": "imported_or_archived_research",
+      "action": "preserve_original_bytes_and_source_names",
+      "provenance_or_navigation_entrypoint": "research/README.md"
+    },
+    {
+      "path": "research/prime-analysis/research/ai-benchmarking/agent-world-models/README.md",
+      "source_blob": "fa2dcc4618ad9f393d70e86cf56e0f72f07e03a3",
+      "source_mode": "100755",
+      "classification": "imported_or_archived_research",
+      "action": "preserve_original_bytes_and_source_names",
+      "provenance_or_navigation_entrypoint": "research/README.md"
+    },
+    {
+      "path": "research/prime-analysis/research/ai-benchmarking/mudbench-core/README.md",
+      "source_blob": "466d2545d2c976facede5e820d03183431eb2836",
+      "source_mode": "100755",
+      "classification": "imported_or_archived_research",
+      "action": "preserve_original_bytes_and_source_names",
+      "provenance_or_navigation_entrypoint": "research/README.md"
+    },
+    {
+      "path": "research/prime-analysis/research/ai-benchmarking/mudbench-core/examples/agents/README.md",
+      "source_blob": "9fda27d2f651317cd5742a8e160c656070262076",
+      "source_mode": "100755",
+      "classification": "imported_or_archived_research",
+      "action": "preserve_original_bytes_and_source_names",
+      "provenance_or_navigation_entrypoint": "research/README.md"
+    },
+    {
+      "path": "research/prime-analysis/research/ai-benchmarking/mudbench-core/examples/agents/baselines/README.md",
+      "source_blob": "11663916e73a19beb1a11f4cb43c7ece8dbff7e1",
+      "source_mode": "100755",
+      "classification": "imported_or_archived_research",
+      "action": "preserve_original_bytes_and_source_names",
+      "provenance_or_navigation_entrypoint": "research/README.md"
+    },
+    {
+      "path": "research/prime-analysis/research/ai-benchmarking/mudbench-core/tools/observer/README.md",
+      "source_blob": "ee5a257f4e67479dec176347a7f9e1624b3d8fbe",
+      "source_mode": "100755",
+      "classification": "imported_or_archived_research",
+      "action": "preserve_original_bytes_and_source_names",
+      "provenance_or_navigation_entrypoint": "research/README.md"
+    },
+    {
+      "path": "research/prime-analysis/research/published-manuscripts/Download README.md",
+      "source_blob": "fe7cfae5417a089385348bb9d1708c5164ec96ba",
+      "source_mode": "100755",
+      "classification": "imported_or_archived_research",
+      "action": "preserve_original_bytes_and_source_names",
+      "provenance_or_navigation_entrypoint": "research/README.md"
+    },
+    {
+      "path": "research/prime-analysis/research/published-manuscripts/README.md",
+      "source_blob": "bd5b27d1d43fbe5d98b5f8369af75924bf5af432",
+      "source_mode": "100755",
+      "classification": "imported_or_archived_research",
+      "action": "preserve_original_bytes_and_source_names",
+      "provenance_or_navigation_entrypoint": "research/README.md"
+    },
+    {
+      "path": "research/prime-analysis/research/published-manuscripts/README_1.md",
+      "source_blob": "ebf37560d71720f2a2a725ceb44330ca72c01480",
+      "source_mode": "100755",
+      "classification": "imported_or_archived_research",
+      "action": "preserve_original_bytes_and_source_names",
+      "provenance_or_navigation_entrypoint": "research/README.md"
+    },
+    {
+      "path": "research/prime-analysis/research/published-manuscripts/README_2.md",
+      "source_blob": "fe7cfae5417a089385348bb9d1708c5164ec96ba",
+      "source_mode": "100755",
+      "classification": "imported_or_archived_research",
+      "action": "preserve_original_bytes_and_source_names",
+      "provenance_or_navigation_entrypoint": "research/README.md"
+    },
+    {
+      "path": "research/prime-analysis/research/routing-infrastructure/README.md",
+      "source_blob": "ba626f537287e6034270ad9f0f7920d18b0aa974",
+      "source_mode": "100755",
+      "classification": "imported_or_archived_research",
+      "action": "preserve_original_bytes_and_source_names",
+      "provenance_or_navigation_entrypoint": "research/README.md"
+    },
+    {
+      "path": "research/prime-analysis/research/routing-infrastructure/ai-router/README.md",
+      "source_blob": "800c4d18edc18d1d7b656fa33d0ae8b95233f517",
+      "source_mode": "100755",
+      "classification": "imported_or_archived_research",
+      "action": "preserve_original_bytes_and_source_names",
+      "provenance_or_navigation_entrypoint": "research/README.md"
+    },
+    {
+      "path": "research/prime-analysis/research/routing-infrastructure/ai-router/router-research/README.md",
+      "source_blob": "b4c7a85d893f0ad5109c0b9f36787ab1fa0204ec",
+      "source_mode": "100755",
+      "classification": "imported_or_archived_research",
+      "action": "preserve_original_bytes_and_source_names",
+      "provenance_or_navigation_entrypoint": "research/README.md"
+    },
+    {
+      "path": "research/prime-analysis/research/routing-infrastructure/ai-router/router-research/papers/release_bundle/README.md",
+      "source_blob": "20414020928bb5d46a3a6836250346b3adcdc113",
+      "source_mode": "100755",
+      "classification": "imported_or_archived_research",
+      "action": "preserve_original_bytes_and_source_names",
+      "provenance_or_navigation_entrypoint": "research/README.md"
+    },
+    {
+      "path": "research/prime-analysis/research/routing-infrastructure/ai-router/router-research/results/prime_transport_grouped_packets/README.md",
+      "source_blob": "bfee7e6137b619d53131142be92932d7bf6e6d76",
+      "source_mode": "100755",
+      "classification": "imported_or_archived_research",
+      "action": "preserve_original_bytes_and_source_names",
+      "provenance_or_navigation_entrypoint": "research/README.md"
+    },
+    {
+      "path": "research/prime-analysis/research/routing-infrastructure/r4-prime-router-wasm/README.md",
+      "source_blob": "8f14a26fdba8412266aabf22ded6a6429d6a802b",
+      "source_mode": "100755",
+      "classification": "imported_or_archived_research",
+      "action": "preserve_original_bytes_and_source_names",
+      "provenance_or_navigation_entrypoint": "research/README.md"
+    },
+    {
+      "path": "research/prime-analysis/research/theoretical-mathematics/README.md",
+      "source_blob": "d0a5ae1fe31d3a72c7682f7da67a38b98337c39f",
+      "source_mode": "100755",
+      "classification": "imported_or_archived_research",
+      "action": "preserve_original_bytes_and_source_names",
+      "provenance_or_navigation_entrypoint": "research/README.md"
+    },
+    {
+      "path": "research/prime-analysis/research/theoretical-mathematics/formal-math-lean/external/Lean-RH/README.md",
+      "source_blob": "bf62edfef28ec32adc021fe6bf9805f0076b36e6",
+      "source_mode": "100755",
+      "classification": "imported_or_archived_research",
+      "action": "preserve_original_bytes_and_source_names",
+      "provenance_or_navigation_entrypoint": "research/README.md"
+    },
+    {
+      "path": "research/prime-analysis/research/theoretical-mathematics/formal-math-lean/external/riemann/README.md",
+      "source_blob": "7de05e22b89d9ba92ac7171c2c2e6e3367f9c5d2",
+      "source_mode": "100755",
+      "classification": "imported_or_archived_research",
+      "action": "preserve_original_bytes_and_source_names",
+      "provenance_or_navigation_entrypoint": "research/README.md"
+    },
+    {
+      "path": "research/prime-analysis/research/theoretical-mathematics/formal-math-lean/external/riemann/Riemann/academic_framework/README.md",
+      "source_blob": "be190fc09bad564b8c3443ca43eef7c2198bbde9",
+      "source_mode": "100755",
+      "classification": "imported_or_archived_research",
+      "action": "preserve_original_bytes_and_source_names",
+      "provenance_or_navigation_entrypoint": "research/README.md"
+    },
+    {
+      "path": "research/prime-analysis/research/theoretical-mathematics/formal-math-lean/external/riemann/VD/MathlibPending/README.md",
+      "source_blob": "b646ae902bd325acb70eed478efe2baa0b2cb02c",
+      "source_mode": "100755",
+      "classification": "imported_or_archived_research",
+      "action": "preserve_original_bytes_and_source_names",
+      "provenance_or_navigation_entrypoint": "research/README.md"
+    },
+    {
+      "path": "research/prime-analysis/research/theoretical-mathematics/formal-math-lean/external/riemann/VD/MathlibSubmitted/README.md",
+      "source_blob": "98b29f2f3cb993a13b9d21631426e7d4d469f611",
+      "source_mode": "100755",
+      "classification": "imported_or_archived_research",
+      "action": "preserve_original_bytes_and_source_names",
+      "provenance_or_navigation_entrypoint": "research/README.md"
+    },
+    {
+      "path": "research/prime-analysis/research/theoretical-mathematics/formal-math-lean/external/riemann/VD/leftovers/README.md",
+      "source_blob": "c4e574d95e9f1b53dfd21c8a25ea233b07b7341c",
+      "source_mode": "100755",
+      "classification": "imported_or_archived_research",
+      "action": "preserve_original_bytes_and_source_names",
+      "provenance_or_navigation_entrypoint": "research/README.md"
+    },
+    {
+      "path": "research/prime-analysis/research/theoretical-mathematics/formal-math-lean/external/riemann/paper1_handoff_2026-01-22/meta/README.md",
+      "source_blob": "7de05e22b89d9ba92ac7171c2c2e6e3367f9c5d2",
+      "source_mode": "100755",
+      "classification": "imported_or_archived_research",
+      "action": "preserve_original_bytes_and_source_names",
+      "provenance_or_navigation_entrypoint": "research/README.md"
+    },
+    {
+      "path": "research/prime-analysis/research/theoretical-mathematics/formal-math-lean/external/riemann/paper1_handoff_v2_2026-01-22/README_HANDOFF.md",
+      "source_blob": "33abf5730846b6bb31f58992a3df2e3659e00e45",
+      "source_mode": "100755",
+      "classification": "imported_or_archived_research",
+      "action": "preserve_original_bytes_and_source_names",
+      "provenance_or_navigation_entrypoint": "research/README.md"
+    },
+    {
+      "path": "research/prime-analysis/research/theoretical-mathematics/formal-math-lean/external/riemann/paper1_handoff_v2_2026-01-22/meta/README.md",
+      "source_blob": "7de05e22b89d9ba92ac7171c2c2e6e3367f9c5d2",
+      "source_mode": "100755",
+      "classification": "imported_or_archived_research",
+      "action": "preserve_original_bytes_and_source_names",
+      "provenance_or_navigation_entrypoint": "research/README.md"
+    },
+    {
+      "path": "research/prime-analysis/research/theoretical-mathematics/formal-math-lean/external/riemann/riemann_handoff_2026-01-29 2/README_HANDOFF.md",
+      "source_blob": "7d7c16280cbf90bc15daa61e4787625df81567aa",
+      "source_mode": "100755",
+      "classification": "imported_or_archived_research",
+      "action": "preserve_original_bytes_and_source_names",
+      "provenance_or_navigation_entrypoint": "research/README.md"
+    },
+    {
+      "path": "research/prime-analysis/research/theoretical-mathematics/formal-math-lean/external/riemann/riemann_handoff_2026-01-29 2/meta/README.md",
+      "source_blob": "7de05e22b89d9ba92ac7171c2c2e6e3367f9c5d2",
+      "source_mode": "100755",
+      "classification": "imported_or_archived_research",
+      "action": "preserve_original_bytes_and_source_names",
+      "provenance_or_navigation_entrypoint": "research/README.md"
+    },
+    {
+      "path": "research/prime-analysis/research/theoretical-mathematics/formal-math-lean/external/riemann/riemann_handoff_2026-01-29/README_HANDOFF.md",
+      "source_blob": "7d7c16280cbf90bc15daa61e4787625df81567aa",
+      "source_mode": "100755",
+      "classification": "imported_or_archived_research",
+      "action": "preserve_original_bytes_and_source_names",
+      "provenance_or_navigation_entrypoint": "research/README.md"
+    },
+    {
+      "path": "research/prime-analysis/research/theoretical-mathematics/formal-math-lean/external/riemann/riemann_handoff_2026-01-29/meta/README.md",
+      "source_blob": "7de05e22b89d9ba92ac7171c2c2e6e3367f9c5d2",
+      "source_mode": "100755",
+      "classification": "imported_or_archived_research",
+      "action": "preserve_original_bytes_and_source_names",
+      "provenance_or_navigation_entrypoint": "research/README.md"
+    },
+    {
+      "path": "research/prime-analysis/research/theoretical-mathematics/formal-math-lean/external/riemann/riemann_proof_backup_2026-01-08 2/meta/README.md",
+      "source_blob": "7de05e22b89d9ba92ac7171c2c2e6e3367f9c5d2",
+      "source_mode": "100755",
+      "classification": "imported_or_archived_research",
+      "action": "preserve_original_bytes_and_source_names",
+      "provenance_or_navigation_entrypoint": "research/README.md"
+    },
+    {
+      "path": "research/prime-analysis/research/theoretical-mathematics/formal-math-lean/external/riemann/riemann_proof_backup_2026-01-08/meta/README.md",
+      "source_blob": "7de05e22b89d9ba92ac7171c2c2e6e3367f9c5d2",
+      "source_mode": "100755",
+      "classification": "imported_or_archived_research",
+      "action": "preserve_original_bytes_and_source_names",
+      "provenance_or_navigation_entrypoint": "research/README.md"
+    },
+    {
+      "path": "research/prime-analysis/research/theoretical-mathematics/formal-math-lean/formal/lean/.lake/packages/Cli/README.md",
+      "source_blob": "099320fb70647c8d4cb43256538c86bc2a68faec",
+      "source_mode": "100755",
+      "classification": "vendored_or_legacy_dependency",
+      "action": "preserve_original_bytes_and_attribution",
+      "provenance_or_navigation_entrypoint": "docs/integration/architecture-2026-09/imports.md"
+    },
+    {
+      "path": "research/prime-analysis/research/theoretical-mathematics/formal-math-lean/formal/lean/.lake/packages/LeanSearchClient/README.md",
+      "source_blob": "a28438e9d84c87713b549539dfbb863c1e921c5e",
+      "source_mode": "100755",
+      "classification": "vendored_or_legacy_dependency",
+      "action": "preserve_original_bytes_and_attribution",
+      "provenance_or_navigation_entrypoint": "docs/integration/architecture-2026-09/imports.md"
+    },
+    {
+      "path": "research/prime-analysis/research/theoretical-mathematics/formal-math-lean/formal/lean/.lake/packages/Qq/README.md",
+      "source_blob": "5b61a364b5fe27c5c9508e8c95a81b44b4ff6187",
+      "source_mode": "100755",
+      "classification": "vendored_or_legacy_dependency",
+      "action": "preserve_original_bytes_and_attribution",
+      "provenance_or_navigation_entrypoint": "docs/integration/architecture-2026-09/imports.md"
+    },
+    {
+      "path": "research/prime-analysis/research/theoretical-mathematics/formal-math-lean/formal/lean/.lake/packages/aesop/README.md",
+      "source_blob": "f75ec1f8bebcf6d857fc3954cf91cf99f323a758",
+      "source_mode": "100755",
+      "classification": "vendored_or_legacy_dependency",
+      "action": "preserve_original_bytes_and_attribution",
+      "provenance_or_navigation_entrypoint": "docs/integration/architecture-2026-09/imports.md"
+    },
+    {
+      "path": "research/prime-analysis/research/theoretical-mathematics/formal-math-lean/formal/lean/.lake/packages/batteries/README.md",
+      "source_blob": "1ceba0bfd858afe622825e095735ac6404d7353e",
+      "source_mode": "100755",
+      "classification": "vendored_or_legacy_dependency",
+      "action": "preserve_original_bytes_and_attribution",
+      "provenance_or_navigation_entrypoint": "docs/integration/architecture-2026-09/imports.md"
+    },
+    {
+      "path": "research/prime-analysis/research/theoretical-mathematics/formal-math-lean/formal/lean/.lake/packages/importGraph/README.md",
+      "source_blob": "08870d0f530ec56a446609f7b40520c57edd3dd8",
+      "source_mode": "100755",
+      "classification": "vendored_or_legacy_dependency",
+      "action": "preserve_original_bytes_and_attribution",
+      "provenance_or_navigation_entrypoint": "docs/integration/architecture-2026-09/imports.md"
+    },
+    {
+      "path": "research/prime-analysis/research/theoretical-mathematics/formal-math-lean/formal/lean/.lake/packages/importGraph/html-template/README.md",
+      "source_blob": "34f6f507a664b93040149f8d7de17b7739c9da40",
+      "source_mode": "100755",
+      "classification": "vendored_or_legacy_dependency",
+      "action": "preserve_original_bytes_and_attribution",
+      "provenance_or_navigation_entrypoint": "docs/integration/architecture-2026-09/imports.md"
+    },
+    {
+      "path": "research/prime-analysis/research/theoretical-mathematics/formal-math-lean/formal/lean/.lake/packages/mathlib/Archive/Imo/README.md",
+      "source_blob": "b074bc1d77b578a9ab20bfb803fefdb4a53ff7fb",
+      "source_mode": "100755",
+      "classification": "vendored_or_legacy_dependency",
+      "action": "preserve_original_bytes_and_attribution",
+      "provenance_or_navigation_entrypoint": "docs/integration/architecture-2026-09/imports.md"
+    },
+    {
+      "path": "research/prime-analysis/research/theoretical-mathematics/formal-math-lean/formal/lean/.lake/packages/mathlib/Archive/README.md",
+      "source_blob": "a3ece60c567cfa3247e8e93aecc5ad38c7279a97",
+      "source_mode": "100755",
+      "classification": "vendored_or_legacy_dependency",
+      "action": "preserve_original_bytes_and_attribution",
+      "provenance_or_navigation_entrypoint": "docs/integration/architecture-2026-09/imports.md"
+    },
+    {
+      "path": "research/prime-analysis/research/theoretical-mathematics/formal-math-lean/formal/lean/.lake/packages/mathlib/Archive/Wiedijk100Theorems/README.md",
+      "source_blob": "2cdebcd71c99d0fed058b3df7ce9d55e2a2ff1e7",
+      "source_mode": "100755",
+      "classification": "vendored_or_legacy_dependency",
+      "action": "preserve_original_bytes_and_attribution",
+      "provenance_or_navigation_entrypoint": "docs/integration/architecture-2026-09/imports.md"
+    },
+    {
+      "path": "research/prime-analysis/research/theoretical-mathematics/formal-math-lean/formal/lean/.lake/packages/mathlib/Cache/README.md",
+      "source_blob": "1fa18332742013a9b0862f59d33101ec78af381f",
+      "source_mode": "100755",
+      "classification": "vendored_or_legacy_dependency",
+      "action": "preserve_original_bytes_and_attribution",
+      "provenance_or_navigation_entrypoint": "docs/integration/architecture-2026-09/imports.md"
+    },
+    {
+      "path": "research/prime-analysis/research/theoretical-mathematics/formal-math-lean/formal/lean/.lake/packages/mathlib/DownstreamTest/README.md",
+      "source_blob": "c9037e7cda1b6e632935b54c6c4c1bba6e0e9000",
+      "source_mode": "100755",
+      "classification": "vendored_or_legacy_dependency",
+      "action": "preserve_original_bytes_and_attribution",
+      "provenance_or_navigation_entrypoint": "docs/integration/architecture-2026-09/imports.md"
+    },
+    {
+      "path": "research/prime-analysis/research/theoretical-mathematics/formal-math-lean/formal/lean/.lake/packages/mathlib/Mathlib/Algebra/Notation/README.md",
+      "source_blob": "b9217a80228a65ab4a776ba627115d2418046eaa",
+      "source_mode": "100755",
+      "classification": "vendored_or_legacy_dependency",
+      "action": "preserve_original_bytes_and_attribution",
+      "provenance_or_navigation_entrypoint": "docs/integration/architecture-2026-09/imports.md"
+    },
+    {
+      "path": "research/prime-analysis/research/theoretical-mathematics/formal-math-lean/formal/lean/.lake/packages/mathlib/Mathlib/Algebra/README.md",
+      "source_blob": "3d7d194e0df0d3a31bb50a85077d23253702b3b6",
+      "source_mode": "100755",
+      "classification": "vendored_or_legacy_dependency",
+      "action": "preserve_original_bytes_and_attribution",
+      "provenance_or_navigation_entrypoint": "docs/integration/architecture-2026-09/imports.md"
+    },
+    {
+      "path": "research/prime-analysis/research/theoretical-mathematics/formal-math-lean/formal/lean/.lake/packages/mathlib/Mathlib/Analysis/Convex/Cone/README.md",
+      "source_blob": "b24e565df1abc6a2f1a0be990761ce182bca2401",
+      "source_mode": "100755",
+      "classification": "vendored_or_legacy_dependency",
+      "action": "preserve_original_bytes_and_attribution",
+      "provenance_or_navigation_entrypoint": "docs/integration/architecture-2026-09/imports.md"
+    },
+    {
+      "path": "research/prime-analysis/research/theoretical-mathematics/formal-math-lean/formal/lean/.lake/packages/mathlib/Mathlib/Analysis/Convex/README.md",
+      "source_blob": "52e5561d4db665e7a8672ccb8be6854e1aa3b92c",
+      "source_mode": "100755",
+      "classification": "vendored_or_legacy_dependency",
+      "action": "preserve_original_bytes_and_attribution",
+      "provenance_or_navigation_entrypoint": "docs/integration/architecture-2026-09/imports.md"
+    },
+    {
+      "path": "research/prime-analysis/research/theoretical-mathematics/formal-math-lean/formal/lean/.lake/packages/mathlib/Mathlib/Geometry/Convex/Cone/README.md",
+      "source_blob": "916480252c586e7709f957843b00782f406d10ab",
+      "source_mode": "100755",
+      "classification": "vendored_or_legacy_dependency",
+      "action": "preserve_original_bytes_and_attribution",
+      "provenance_or_navigation_entrypoint": "docs/integration/architecture-2026-09/imports.md"
+    },
+    {
+      "path": "research/prime-analysis/research/theoretical-mathematics/formal-math-lean/formal/lean/.lake/packages/mathlib/Mathlib/Geometry/Convex/README.md",
+      "source_blob": "5a9636d2acde95d85c877b6ba77646515e451c59",
+      "source_mode": "100755",
+      "classification": "vendored_or_legacy_dependency",
+      "action": "preserve_original_bytes_and_attribution",
+      "provenance_or_navigation_entrypoint": "docs/integration/architecture-2026-09/imports.md"
+    },
+    {
+      "path": "research/prime-analysis/research/theoretical-mathematics/formal-math-lean/formal/lean/.lake/packages/mathlib/Mathlib/Geometry/Group/Growth/README.md",
+      "source_blob": "41906654ee16b964a7709774e9da6760ab95a6a9",
+      "source_mode": "100755",
+      "classification": "vendored_or_legacy_dependency",
+      "action": "preserve_original_bytes_and_attribution",
+      "provenance_or_navigation_entrypoint": "docs/integration/architecture-2026-09/imports.md"
+    },
+    {
+      "path": "research/prime-analysis/research/theoretical-mathematics/formal-math-lean/formal/lean/.lake/packages/mathlib/Mathlib/Geometry/Group/README.md",
+      "source_blob": "19d79aff6e2661fab0037853132a9beae124befa",
+      "source_mode": "100755",
+      "classification": "vendored_or_legacy_dependency",
+      "action": "preserve_original_bytes_and_attribution",
+      "provenance_or_navigation_entrypoint": "docs/integration/architecture-2026-09/imports.md"
+    },
+    {
+      "path": "research/prime-analysis/research/theoretical-mathematics/formal-math-lean/formal/lean/.lake/packages/mathlib/Mathlib/Mathport/README.md",
+      "source_blob": "59db89b9c66654a77c6b61561cbc314fea644168",
+      "source_mode": "100755",
+      "classification": "vendored_or_legacy_dependency",
+      "action": "preserve_original_bytes_and_attribution",
+      "provenance_or_navigation_entrypoint": "docs/integration/architecture-2026-09/imports.md"
+    },
+    {
+      "path": "research/prime-analysis/research/theoretical-mathematics/formal-math-lean/formal/lean/.lake/packages/mathlib/Mathlib/Order/README.md",
+      "source_blob": "985de51ea6ccdebd4dab7ce6012aed1689428977",
+      "source_mode": "100755",
+      "classification": "vendored_or_legacy_dependency",
+      "action": "preserve_original_bytes_and_attribution",
+      "provenance_or_navigation_entrypoint": "docs/integration/architecture-2026-09/imports.md"
+    },
+    {
+      "path": "research/prime-analysis/research/theoretical-mathematics/formal-math-lean/formal/lean/.lake/packages/mathlib/Mathlib/Probability/Combinatorics/README.md",
+      "source_blob": "da4e324eccbdb28b8f9f2a7812117f36f75c0d77",
+      "source_mode": "100755",
+      "classification": "vendored_or_legacy_dependency",
+      "action": "preserve_original_bytes_and_attribution",
+      "provenance_or_navigation_entrypoint": "docs/integration/architecture-2026-09/imports.md"
+    },
+    {
+      "path": "research/prime-analysis/research/theoretical-mathematics/formal-math-lean/formal/lean/.lake/packages/mathlib/README.md",
+      "source_blob": "c217dd62621f4eceabd048aa23cceb665faae531",
+      "source_mode": "100755",
+      "classification": "vendored_or_legacy_dependency",
+      "action": "preserve_original_bytes_and_attribution",
+      "provenance_or_navigation_entrypoint": "docs/integration/architecture-2026-09/imports.md"
+    },
+    {
+      "path": "research/prime-analysis/research/theoretical-mathematics/formal-math-lean/formal/lean/.lake/packages/mathlib/scripts/README.md",
+      "source_blob": "2bd5db277417eb39c3a7aa239b912ad65bbdae9d",
+      "source_mode": "100755",
+      "classification": "vendored_or_legacy_dependency",
+      "action": "preserve_original_bytes_and_attribution",
+      "provenance_or_navigation_entrypoint": "docs/integration/architecture-2026-09/imports.md"
+    },
+    {
+      "path": "research/prime-analysis/research/theoretical-mathematics/formal-math-lean/formal/lean/.lake/packages/mathlib/scripts/bench/README.md",
+      "source_blob": "e682435a81d6da7c079a5769f4912c344f895742",
+      "source_mode": "100755",
+      "classification": "vendored_or_legacy_dependency",
+      "action": "preserve_original_bytes_and_attribution",
+      "provenance_or_navigation_entrypoint": "docs/integration/architecture-2026-09/imports.md"
+    },
+    {
+      "path": "research/prime-analysis/research/theoretical-mathematics/formal-math-lean/formal/lean/.lake/packages/mathlib/scripts/bench/build/README.md",
+      "source_blob": "014b5db75556fd6a2ed944914b3defd20b0b7019",
+      "source_mode": "100755",
+      "classification": "vendored_or_legacy_dependency",
+      "action": "preserve_original_bytes_and_attribution",
+      "provenance_or_navigation_entrypoint": "docs/integration/architecture-2026-09/imports.md"
+    },
+    {
+      "path": "research/prime-analysis/research/theoretical-mathematics/formal-math-lean/formal/lean/.lake/packages/mathlib/scripts/bench/lint/README.md",
+      "source_blob": "5b5e181a970fac81f7a68ab154fc27dbeebcf44c",
+      "source_mode": "100755",
+      "classification": "vendored_or_legacy_dependency",
+      "action": "preserve_original_bytes_and_attribution",
+      "provenance_or_navigation_entrypoint": "docs/integration/architecture-2026-09/imports.md"
+    },
+    {
+      "path": "research/prime-analysis/research/theoretical-mathematics/formal-math-lean/formal/lean/.lake/packages/mathlib/scripts/bench/open-mathlib/README.md",
+      "source_blob": "326e4802c4ac29121d241c5a2e22311bf87ee638",
+      "source_mode": "100755",
+      "classification": "vendored_or_legacy_dependency",
+      "action": "preserve_original_bytes_and_attribution",
+      "provenance_or_navigation_entrypoint": "docs/integration/architecture-2026-09/imports.md"
+    },
+    {
+      "path": "research/prime-analysis/research/theoretical-mathematics/formal-math-lean/formal/lean/.lake/packages/mathlib/scripts/bench/size/README.md",
+      "source_blob": "40ace6f14a91b990da0436d7f629e5cb3f73eb21",
+      "source_mode": "100755",
+      "classification": "vendored_or_legacy_dependency",
+      "action": "preserve_original_bytes_and_attribution",
+      "provenance_or_navigation_entrypoint": "docs/integration/architecture-2026-09/imports.md"
+    },
+    {
+      "path": "research/prime-analysis/research/theoretical-mathematics/formal-math-lean/formal/lean/.lake/packages/mathlib/widget/src/penrose/README.md",
+      "source_blob": "13d4379bf958e9c2d5470e513cab3cacfc5b7076",
+      "source_mode": "100755",
+      "classification": "vendored_or_legacy_dependency",
+      "action": "preserve_original_bytes_and_attribution",
+      "provenance_or_navigation_entrypoint": "docs/integration/architecture-2026-09/imports.md"
+    },
+    {
+      "path": "research/prime-analysis/research/theoretical-mathematics/formal-math-lean/formal/lean/.lake/packages/plausible/README.md",
+      "source_blob": "10bdd17647a31b5f181abc562dd80a602ec43fcf",
+      "source_mode": "100755",
+      "classification": "vendored_or_legacy_dependency",
+      "action": "preserve_original_bytes_and_attribution",
+      "provenance_or_navigation_entrypoint": "docs/integration/architecture-2026-09/imports.md"
+    },
+    {
+      "path": "research/prime-analysis/research/theoretical-mathematics/formal-math-lean/formal/lean/.lake/packages/proofwidgets/README.md",
+      "source_blob": "6ca1fb4d674905ac5e02d0b488a9f5e440c9cf35",
+      "source_mode": "100755",
+      "classification": "vendored_or_legacy_dependency",
+      "action": "preserve_original_bytes_and_attribution",
+      "provenance_or_navigation_entrypoint": "docs/integration/architecture-2026-09/imports.md"
+    },
+    {
+      "path": "research/prime-analysis/research/theoretical-mathematics/formal-math-lean/formal/lean/README.md",
+      "source_blob": "8f997bddad1ca44ebc84e24ce72a1611067043a3",
+      "source_mode": "100755",
+      "classification": "imported_or_archived_research",
+      "action": "preserve_original_bytes_and_source_names",
+      "provenance_or_navigation_entrypoint": "research/README.md"
+    },
+    {
+      "path": "research/prime-analysis/research/theoretical-mathematics/geometric-routing-hopf/MUDBench/README.md",
+      "source_blob": "466d2545d2c976facede5e820d03183431eb2836",
+      "source_mode": "100755",
+      "classification": "imported_or_archived_research",
+      "action": "preserve_original_bytes_and_source_names",
+      "provenance_or_navigation_entrypoint": "research/README.md"
+    },
+    {
+      "path": "research/prime-analysis/research/theoretical-mathematics/geometric-routing-hopf/MUDBench/examples/agents/README.md",
+      "source_blob": "9fda27d2f651317cd5742a8e160c656070262076",
+      "source_mode": "100755",
+      "classification": "imported_or_archived_research",
+      "action": "preserve_original_bytes_and_source_names",
+      "provenance_or_navigation_entrypoint": "research/README.md"
+    },
+    {
+      "path": "research/prime-analysis/research/theoretical-mathematics/geometric-routing-hopf/MUDBench/examples/agents/baselines/README.md",
+      "source_blob": "11663916e73a19beb1a11f4cb43c7ece8dbff7e1",
+      "source_mode": "100755",
+      "classification": "imported_or_archived_research",
+      "action": "preserve_original_bytes_and_source_names",
+      "provenance_or_navigation_entrypoint": "research/README.md"
+    },
+    {
+      "path": "research/prime-analysis/research/theoretical-mathematics/geometric-routing-hopf/MUDBench/tools/observer/README.md",
+      "source_blob": "ee5a257f4e67479dec176347a7f9e1624b3d8fbe",
+      "source_mode": "100755",
+      "classification": "imported_or_archived_research",
+      "action": "preserve_original_bytes_and_source_names",
+      "provenance_or_navigation_entrypoint": "research/README.md"
+    },
+    {
+      "path": "research/prime-analysis/research/theoretical-mathematics/geometric-routing-hopf/README.md",
+      "source_blob": "32d3e88ecbc429f2f721536f1614104436970b76",
+      "source_mode": "100755",
+      "classification": "imported_or_archived_research",
+      "action": "preserve_original_bytes_and_source_names",
+      "provenance_or_navigation_entrypoint": "research/README.md"
+    },
+    {
+      "path": "research/prime-analysis/research/theoretical-mathematics/prime-number-theory/README.md",
+      "source_blob": "d0569dc0929fd344d967970f76b1a8716a3b57cb",
+      "source_mode": "100755",
+      "classification": "imported_or_archived_research",
+      "action": "preserve_original_bytes_and_source_names",
+      "provenance_or_navigation_entrypoint": "research/README.md"
+    },
+    {
+      "path": "research/prime-analysis/research/theoretical-mathematics/prime-number-theory/ai-router/router-research/README.md",
+      "source_blob": "e349190b9262f78d7fdddc0cf511b448f3b9f81d",
+      "source_mode": "100755",
+      "classification": "imported_or_archived_research",
+      "action": "preserve_original_bytes_and_source_names",
+      "provenance_or_navigation_entrypoint": "research/README.md"
+    },
+    {
+      "path": "research/prime-analysis/research/theoretical-mathematics/prime-number-theory/ai-router/router-research/papers/release_bundle/README.md",
+      "source_blob": "20414020928bb5d46a3a6836250346b3adcdc113",
+      "source_mode": "100755",
+      "classification": "imported_or_archived_research",
+      "action": "preserve_original_bytes_and_source_names",
+      "provenance_or_navigation_entrypoint": "research/README.md"
+    },
+    {
+      "path": "research/prime-analysis/research/theoretical-mathematics/ramsey-divisor-study/README.md",
+      "source_blob": "0c106b9a162df3ff7344d62d37540c8c60075e54",
+      "source_mode": "100755",
+      "classification": "imported_or_archived_research",
+      "action": "preserve_original_bytes_and_source_names",
+      "provenance_or_navigation_entrypoint": "research/README.md"
+    },
+    {
+      "path": "research/riemann-lean/README.md",
+      "source_blob": "63daefe8043a3cee84c658cd18eea4ae6aae179e",
+      "source_mode": "100644",
+      "classification": "historical_research_record",
+      "action": "preserve_original_bytes_and_scope",
+      "provenance_or_navigation_entrypoint": "research/README.md"
+    },
+    {
+      "path": "research/riemann-lean/formal/lean/README.md",
+      "source_blob": "8f997bddad1ca44ebc84e24ce72a1611067043a3",
+      "source_mode": "100644",
+      "classification": "historical_research_record",
+      "action": "preserve_original_bytes_and_scope",
+      "provenance_or_navigation_entrypoint": "research/README.md"
+    },
+    {
+      "path": "third_party/arrayref/README.md",
+      "source_blob": "845b0114cd4a224efeb0e3c67846720b1d860639",
+      "source_mode": "100644",
+      "classification": "vendored_or_legacy_dependency",
+      "action": "preserve_original_bytes_and_attribution",
+      "provenance_or_navigation_entrypoint": "docs/integration/architecture-2026-09/imports.md"
+    },
+    {
+      "path": "third_party/helm-d-reference/README.md",
+      "source_blob": "b8701dbbe222c1733afd744b685d283c0c9cc090",
+      "source_mode": "100644",
+      "classification": "vendored_or_legacy_dependency",
+      "action": "preserve_original_bytes_and_attribution",
+      "provenance_or_navigation_entrypoint": "docs/integration/architecture-2026-09/imports.md"
+    },
+    {
+      "path": "tools/r4-softmax-trainer/README.md",
+      "source_blob": "dae6d82a2a3018a86d6d46200b6aa19c5d9be92d",
+      "source_mode": "100644",
+      "classification": "first_party_current_front_door",
+      "action": "update_current_name_scope_and_navigation_preserve_history",
+      "provenance_or_navigation_entrypoint": "docs/PROJECT_MAP.md"
+    },
+    {
+      "path": "tools/uor-knowledge/README.md",
+      "source_blob": "b6228f55e61801bbdee3e5f41886d1fe40e4b263",
+      "source_mode": "100644",
+      "classification": "first_party_current_front_door",
+      "action": "update_current_name_scope_and_navigation_preserve_history",
+      "provenance_or_navigation_entrypoint": "docs/PROJECT_MAP.md"
+    },
+    {
+      "path": "uor_standards/UOR-Framework/README.md",
+      "source_blob": "753b3266d80690ac8aa6a3ad225aab116931450d",
+      "source_mode": "100644",
+      "classification": "vendored_or_legacy_dependency",
+      "action": "preserve_original_bytes_and_attribution",
+      "provenance_or_navigation_entrypoint": "docs/integration/architecture-2026-09/imports.md"
+    },
+    {
+      "path": "uor_standards/UOR-Framework/cargo-uor/README.md",
+      "source_blob": "0761cc45c5a1b25e566b547cc5f6409a123f925a",
+      "source_mode": "100644",
+      "classification": "vendored_or_legacy_dependency",
+      "action": "preserve_original_bytes_and_attribution",
+      "provenance_or_navigation_entrypoint": "docs/integration/architecture-2026-09/imports.md"
+    },
+    {
+      "path": "uor_standards/UOR-Framework/foundation/README.md",
+      "source_blob": "d2e01d65b57c36a9af0789c858199edaa28b3e92",
+      "source_mode": "100644",
+      "classification": "vendored_or_legacy_dependency",
+      "action": "preserve_original_bytes_and_attribution",
+      "provenance_or_navigation_entrypoint": "docs/integration/architecture-2026-09/imports.md"
+    },
+    {
+      "path": "uor_standards/UOR-Framework/lean4/README.md",
+      "source_blob": "21fea49086aa068a03a4e204a3c7a8038423d7a6",
+      "source_mode": "100644",
+      "classification": "vendored_or_legacy_dependency",
+      "action": "preserve_original_bytes_and_attribution",
+      "provenance_or_navigation_entrypoint": "docs/integration/architecture-2026-09/imports.md"
+    },
+    {
+      "path": "uor_standards/UOR-Framework/spec/README.md",
+      "source_blob": "ea112d2650a05b6bd9b3ac37209879e6bb6f864e",
+      "source_mode": "100644",
+      "classification": "vendored_or_legacy_dependency",
+      "action": "preserve_original_bytes_and_attribution",
+      "provenance_or_navigation_entrypoint": "docs/integration/architecture-2026-09/imports.md"
+    },
+    {
+      "path": "uor_standards/UOR-Framework/uor-foundation-sdk/README.md",
+      "source_blob": "a38d2b933b7798cb546343f0d1ecae864b7194db",
+      "source_mode": "100644",
+      "classification": "vendored_or_legacy_dependency",
+      "action": "preserve_original_bytes_and_attribution",
+      "provenance_or_navigation_entrypoint": "docs/integration/architecture-2026-09/imports.md"
+    },
+    {
+      "path": "uor_standards/UOR-Framework/uor-foundation-verify/README.md",
+      "source_blob": "8890ba1b743ac6623ded9296faea70d22af0f8c5",
+      "source_mode": "100644",
+      "classification": "vendored_or_legacy_dependency",
+      "action": "preserve_original_bytes_and_attribution",
+      "provenance_or_navigation_entrypoint": "docs/integration/architecture-2026-09/imports.md"
+    },
+    {
+      "path": "uor_standards/prism/README.md",
+      "source_blob": "c550b51ee2ba31425ae9bf060d7ce9c36d3319ec",
+      "source_mode": "100644",
+      "classification": "vendored_or_legacy_dependency",
+      "action": "preserve_original_bytes_and_attribution",
+      "provenance_or_navigation_entrypoint": "docs/integration/architecture-2026-09/imports.md"
+    },
+    {
+      "path": "uor_standards/prism/docs/README.md",
+      "source_blob": "34f3541d557ada04c88d717284b80ba041b0d654",
+      "source_mode": "100644",
+      "classification": "vendored_or_legacy_dependency",
+      "action": "preserve_original_bytes_and_attribution",
+      "provenance_or_navigation_entrypoint": "docs/integration/architecture-2026-09/imports.md"
+    },
+    {
+      "path": "uor_standards/uor-addr/README.md",
+      "source_blob": "3e6f89d9607b5dda208924dbf6095609c64c164b",
+      "source_mode": "100644",
+      "classification": "vendored_or_legacy_dependency",
+      "action": "preserve_original_bytes_and_attribution",
+      "provenance_or_navigation_entrypoint": "docs/integration/architecture-2026-09/imports.md"
+    },
+    {
+      "path": "uor_standards/uor-addr/bindings/npm/README.md",
+      "source_blob": "a903dfb67ec28c097b355ddb08bbb6146aef8f59",
+      "source_mode": "100644",
+      "classification": "vendored_or_legacy_dependency",
+      "action": "preserve_original_bytes_and_attribution",
+      "provenance_or_navigation_entrypoint": "docs/integration/architecture-2026-09/imports.md"
+    },
+    {
+      "path": "uor_standards/uor-addr/bindings/python/README.md",
+      "source_blob": "bd1427ef1e616aaf653c3f60250cfd8baf1d1bbd",
+      "source_mode": "100644",
+      "classification": "vendored_or_legacy_dependency",
+      "action": "preserve_original_bytes_and_attribution",
+      "provenance_or_navigation_entrypoint": "docs/integration/architecture-2026-09/imports.md"
+    },
+    {
+      "path": "uor_standards/uor-addr/crates/uor-addr-c/README.md",
+      "source_blob": "51eb465718bc8f47390220438203458af6941893",
+      "source_mode": "100644",
+      "classification": "vendored_or_legacy_dependency",
+      "action": "preserve_original_bytes_and_attribution",
+      "provenance_or_navigation_entrypoint": "docs/integration/architecture-2026-09/imports.md"
+    },
+    {
+      "path": "uor_standards/uor-addr/crates/uor-addr-wasm/README.md",
+      "source_blob": "ef9b3f37e64ddf519d1a8934d1480e4a01892460",
+      "source_mode": "100644",
+      "classification": "vendored_or_legacy_dependency",
+      "action": "preserve_original_bytes_and_attribution",
+      "provenance_or_navigation_entrypoint": "docs/integration/architecture-2026-09/imports.md"
+    },
+    {
+      "path": "uor_standards/uor-addr/crates/uor-addr/README.md",
+      "source_blob": "67f04284234d6d9a8a583cbc5488e5f96bdd18a2",
+      "source_mode": "100644",
+      "classification": "vendored_or_legacy_dependency",
+      "action": "preserve_original_bytes_and_attribution",
+      "provenance_or_navigation_entrypoint": "docs/integration/architecture-2026-09/imports.md"
+    }
+  ]
+}

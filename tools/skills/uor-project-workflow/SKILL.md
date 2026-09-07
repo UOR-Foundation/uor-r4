@@ -51,8 +51,9 @@ wall time, RAM and new storage for the machine. Charge cumulative work across
 warmup, training, evaluation, retries and resumes. Inspect failures and correct
 or resume within the remaining budget when that can advance the result. There
 is no global 15-minute cutoff or one-retry quota. Avoid blind unchanged retries,
-checkpoint/stop at configured limits, and obtain authorization before
-expanding the cumulative budget or incurring external cost.
+checkpoint/stop at configured limits, and use the standing local-extension
+authorization below for necessary cumulative increases. External cost requires
+separate explicit authorization.
 
 Use open development evaluation during learning and final held-out evaluation
 after design selection. Preserve old results at their exact configuration and
@@ -68,3 +69,10 @@ Report the implementation, actual commands/results, resource use, limitations
 and remaining work. Update the current implementation pointer instead of
 copying current-stage prose into other roadmaps. Do not claim alpha from a
 mechanical checkpoint or stop short of the owner's authorized objective.
+
+## Discovery and presentation
+
+Use the product name **UOR-R4 Geometric Language Model**. The canonical plan owns ordered issue responsibilities, current-state owns changing evidence, and `docs/PROJECT_MAP.md` locates code/research/artifacts. Reuse `docs/integration/model-direction-2026-09.md` for the latest source-derived recommendation; it adds no model execution. Preserve historical/imported READMEs and their names; the complete README inventory records their disposition. Do not reinterpret finite contextual attention as general prose/reasoning or a transformer architecture.
+
+
+**Standing owner authorization (2026-09-06):** necessary local model/time/storage allowance extensions are already authorized. Record the complete projection, reason, increment and updated cumulative limit before using each extension; retain cumulative charges and the 128 MiB storage stop margin. Do not ask the owner to approve the same class of necessary increase again. This authorizes neither destructive deletion nor paid/external compute, and does not require spending unused allowance.

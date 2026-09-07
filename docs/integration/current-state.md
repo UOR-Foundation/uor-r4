@@ -19,18 +19,11 @@ that shortcut. This is a learned representation-use failure, with the correct
 value still admitted; it is not missing value storage or evidence against the
 whole geometric architecture.
 
-**Next: break the predecessor-only shortcut with construction contrasts.**
-Use newly authored multiword introductions and candidate starts sharing the
-same predecessor shape, including lowercase-value contrasts. Reuse the existing
-ordered first/next/predecessor pair features and H4 learner before adding a new
-mechanism. Keep current open failures available for development; do not relabel
-them as fresh. The authored fresh panel remains unexecuted. Wider separators
-remain a separate representation limitation. See the result/evidence for actual
-checks and cumulative resources. The cycle used 60.167 seconds of model work;
+**Next: extend phrase-start selection with bounded ordered lexical/prime and role context plus contrasting construction data.** The [post-result direction review](model-direction-2026-09.md) identifies both a learned predecessor-shape shortcut and a source-derived conditional feature alias for lowercase multiword starts. Better contrasts alone cannot separate identical shape features. Reuse the successful original-source-cue pair mechanism from `419ba3a7`, exact predecessor records, writer context and the existing H4 learner. Preserve endpoint/admission/payload/version behavior and parent parameters. Open failures remain development evidence; the authored fresh panel remains unexecuted. Measure complete answers, preservation and a context-disabled control. This is the immediate #1139 slice before reusable shared transitions/emission under #1140; general language integration remains #973. No new model execution accompanies this recommendation. Wider separators remain a separate representation limitation. The cycle used 60.167 seconds of model work;
 cumulative use is 4,387.536/4,410 seconds, leaving 22.464 seconds with no
 ceiling increase. A complete repeat of this 60-second cycle does not fit that
 balance; project the full next work and sufficient authorized resources before
-execution. No external compute or cleanup occurred.
+execution. Necessary local extensions remain preauthorized by the owner: record the complete projection, reason, increment and updated cumulative limit before use, preserving the storage stop margin. Do not ask to reconfirm that standing authorization. No external compute or cleanup occurred.
 
 ## Reverse relation endpoints — 2026-09-07
 

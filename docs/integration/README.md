@@ -1,8 +1,8 @@
-# Integration archive and optional tools
+# UOR-R4 Geometric Language Model — direction and integration
 
 The [immediate build sequence](project-track.md#immediate-build-sequence) and
 [consolidated issue ownership](project-track.md#consolidated-issue-responsibilities)
-are adopted as of 2026-09-05. The [research direction review](../native_geometric_direction_review_973.md)
+are reconciled in the September 7 owner-directed plan. See the [model assessment](model-direction-2026-09.md), [project map](../PROJECT_MAP.md) and [takeover record](handoff-2026-09-07.md). The [research direction review](../native_geometric_direction_review_973.md)
 explains the decision. `roadmap-state.json`, `adopted-issues.json`,
 `roadmap-issues-raw.json`, `source-catalog.json` and `planning-docs/` are dated
 historical snapshots; they are preserved inputs, not current issue status.
@@ -33,7 +33,7 @@ index tooling is optional repository tooling, not the native model lifecycle.
 
 ```bash
 uor-knowledge status
-uor-knowledge search '1079 token'
+uor-knowledge search '1139 context'
 uor-knowledge search 'kappa composition'
 uor-knowledge search 'memory_dimension'
 uor-knowledge search 'Antigravity' --scope private

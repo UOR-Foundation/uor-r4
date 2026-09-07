@@ -515,7 +515,7 @@ operator and complete cost; no new multiscale capability is asserted here.
 | Preserved piece | Reusable function | Established limit |
 |---|---|---|
 | [Ordered-summary #967](associative_ordered_route_summaries_a1r_967.md) and [heatmap #970](candidate_relative_identifiability_a1p_970.md) | Exact noncommutative folding and diagnostics for information lost by a readout. | Ordered states separated while the scalar readout tied; heatmap classes later failed transfer/identifiability. These reject those readouts, not all ordered or geometric state. |
-| [Recurrent/sparse/nonlinear checkpoints](integration/project-track.md#historical-mechanical-checkpoints-through-pr-1124-2026-09-04) | Fixed recent records plus age-banked summaries, metadata selection before value gathering, and finite H4-indexed nonlinear R4 action. | Mechanical bounded-state/operation results; no fitted useful assembled model. The old continuous/dense/Python path is reference evidence, not the native product or a required next rung. |
+| [Recurrent/sparse/nonlinear checkpoints](https://github.com/UOR-Foundation/uor-r4/blob/bc03f2d7ffde99608da370808eca542360e54508/docs/integration/project-track.md#historical-mechanical-checkpoints-through-pr-1124-2026-09-04) | Fixed recent records plus age-banked summaries, metadata selection before value gathering, and finite H4-indexed nonlinear R4 action. | Mechanical bounded-state/operation results; no fitted useful assembled model. The old continuous/dense/Python path is reference evidence, not the native product or a required next rung. |
 | [Retained-language and write/read experiments](r4_retained_language_path_v1_973.md) | Causal retention, matched state interventions and separation of write, binding and readout causes. | Useful retained state did not ensure prompt coherence; later write/read laws had scoped capacity or attribution negatives. Importing their numeric results does not validate a new native law. |
 | [R4G1 route attention](MODEL_LIFECYCLE.md#r4routeattentionv1-604), packed graph format/runtime and compiler | Bounded masked-XOR/popcount selection, fixed-point score aggregation, borrowed immutable data, validation and deterministic serialization. | Dormant operator/synthetic fitting evidence and historical compiled-model contracts; no automatic language, geometric-only intelligence or alpha claim transfers. |
 
@@ -585,6 +585,6 @@ latest measured result and artifact decision.
 The original prime/zeta/H4 features, exact relations, typed values and committed
 copy operators still execute. This is a versioned development block, not
 replacement of the entire model or a geometric-superiority claim. The
-[adopted plan](integration/project-track.md#immediate-recurrent-attention-revision--owner-adoption-2026-09-05)
+[adopted plan](https://github.com/UOR-Foundation/uor-r4/blob/bc03f2d7ffde99608da370808eca542360e54508/docs/integration/project-track.md#immediate-build-sequence)
 keeps directional-cost learning, bounded alternative paths, richer signed
 operators and multiscale access conditional on an observed need.

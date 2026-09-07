@@ -1,125 +1,52 @@
 name: Implementation
-description: Propose one runnable product change with acceptance criteria and focused verification.
-title: "[impl] <concrete work item>"
+description: Advance the native geometric language model with a concrete result and focused evidence.
+title: "[impl] <concrete outcome>"
 body:
   - type: markdown
     attributes:
       value: |
-        Scoped implementation intake. Current sequencing lives in
-        `docs/geometric_intelligence_programme.md`; the active mechanism is
-        defined in `docs/adr/0005-predictive-geometric-connection-memory.md`.
-        Experimental memory/decoder work ends in a runnable vertical result and
-        uses focused verification. Add the
-        `model/ids.toml` → Gherkin → test → implementation → generated
-        `CONFORMANCE.md` sequence only when an issue actually promotes a
-        conformance/release capability. `CONFORMANCE.md` is never hand-edited.
+        Follow docs/integration/project-track.md, current-state.md and AGENTS.md.
+        #820 owns the ordered roadmap. Reuse an existing responsibility before creating another tracker.
+        Rust training may use matmul; final serving has no matrix products or transformer backbone.
   - type: input
-    id: parent
+    id: owner
     attributes:
-      label: Parent tracker / stage
-      description: Native parent. Active intelligence work names its current #820 child; documentation, administration, and frozen-lane maintenance name their actual owner.
-      placeholder: "#820 / <active child>, or #940 — CI administration"
+      label: Roadmap issue and next action
+      description: Name the responsibility this advances and any real dependency.
     validations:
       required: true
   - type: textarea
-    id: problem
+    id: rationale
     attributes:
-      label: Problem and intended outcome
-      description: Current state and the concrete outcome this delivers.
-    validations:
-      required: true
-  - type: dropdown
-    id: execution-scope
-    attributes:
-      label: Execution scope
-      description: The surface this work changes. Evidence outside this scope is not credited as a deployed-serving result.
-      options:
-        - Documentation / governance
-        - Experimental predictive geometric memory (active, off-serving)
-        - Reference / exploratory (out of the migration path)
-        - Offline / compiler
-        - Certifier / measurement (never participates in inference)
-        - Dormant portable runtime (ledger-gated, no serving path)
-        - Normative runtime / serving path
-        - Deployed-serving (release binaries + reachable production call graph)
+      label: Observed problem, evidence and why this change
+      description: Link actual source and prior positive/negative results. Explain the causal limitation.
     validations:
       required: true
   - type: textarea
-    id: scope
+    id: implementation
     attributes:
-      label: Exact scope and non-goals
-      description: What is in scope as a checklist, and an explicit non-goals list. Do not silently omit difficult acceptance criteria.
-      value: |
-        Scope:
-        - [ ]
-
-        Non-goals:
-        -
+      label: Concrete implementation and compatibility
+      description: Name affected Rust path, reused mechanism, learned versus fixed behavior, artifact/state effects and preservation.
     validations:
       required: true
   - type: textarea
-    id: dependencies
+    id: resources
     attributes:
-      label: Dependencies / blockers
-      description: Native blockers (blockedBy), branches, or PRs this depends on. "None" is a valid answer.
+      label: Complete resource projection
+      description: Include prep/build/fit/controls/evaluation/retries/checkpoints, shared cumulative balance, CPU/threads, RAM, storage and stop margin. Use zero model work for documentation-only changes.
     validations:
       required: true
   - type: textarea
     id: acceptance
     attributes:
-      label: Acceptance criteria
-      description: Checkable conditions for done. Each maps to a verification step below.
-      value: |
-        - [ ]
+      label: Acceptance, direct verification and next decision
+      description: Name complete generated behavior and relevant focused checks, controls, open/final separation and positive/negative decisions. CI acknowledgements are not tests.
     validations:
       required: true
   - type: textarea
-    id: compatibility
+    id: records
     attributes:
-      label: Compatibility and migration
-      description: Preserve compatibility or document an explicit versioned migration. Note any artifact-format, CLI, or serving-identity effect.
-    validations:
-      required: true
-  - type: textarea
-    id: conformance
-    attributes:
-      label: Conformance mapping, if applicable
-      description: Experimental decoder work normally says "not promoted; no RF change." For an actual production/release capability, map existing RF IDs or justify a new one and follow the generated-register order.
-      placeholder: "Not promoted; no RF change."
-    validations:
-      required: false
-  - type: textarea
-    id: verification
-    attributes:
-      label: Verification
-      description: Name the smallest focused checks that exercise the changed behavior. Add κ, no_std, WASM, allocation/P-4, Kani/Lean, fuzz, conformance, or claim checks only when that contract is directly affected.
-      value: |
-        - [ ] python3 scripts/check_claim_wording.py (claims/docs only)
-        - [ ] cargo fmt --check (Rust/build only)
-        - [ ] cargo check -p <touched-package> --all-targets --offline (Rust/build only)
-        - [ ] cargo test -p <touched-package> --lib <focused-test> --offline (behavior change only)
-        - [ ] bounded operator report or product transcript (decoder behavior only)
-        - [ ] applicable contract-specific check, if any
-    validations:
-      required: true
-  - type: textarea
-    id: documentation
-    attributes:
-      label: Documentation reconciliation
-      description: Which of the geometric intelligence programme, ADR-0005, README, ROADMAP, RESEARCH, MODEL_LIFECYCLE, CONFIGURATION, glossary, ledger, and per-issue records this updates. Records are append-only; live summaries are reconciled.
-    validations:
-      required: true
-  - type: dropdown
-    id: claim-status
-    attributes:
-      label: Claim status (docs/formal_vocabulary.md §2)
-      description: The strongest claim this work may assert on merge.
-      options:
-        - Structural (construction / machine-checked test / fuzz / CI proof artifact)
-        - Witnessed (per-execution replayable witness)
-        - Empirical (measured, pinned, with CIs + provenance)
-        - Assumed (required by a proof/certificate, not established here)
-        - Unproven (goal only, no evidence yet)
-        - Not applicable (documentation / governance only)
+      label: Documentation and claim boundary
+      description: Update current-state and the owning issue, preserve dated records, distinguish measured behavior/proof/hypothesis. Partial PRs reference rather than close the parent. No automatic broad QA or conformance programme.
     validations:
       required: true
