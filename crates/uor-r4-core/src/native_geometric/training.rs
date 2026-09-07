@@ -178,6 +178,7 @@ impl Trainer {
             dependent_read: None,
             typed_routing: None,
             joint_admission: None,
+            source_context: None,
             literal_routing_refinement: None,
             typed_roles: None,
             no_read_completion: None,
@@ -517,6 +518,41 @@ impl Model {
     }
     pub(super) fn validate(&self) -> Result<()> {
         self.config.validate()?;
+        if let Some(witness) = &self.source_context {
+            let block = self
+                .source_routing
+                .as_ref()
+                .ok_or_else(|| Error("source context router absent".into()))?;
+            if self.literal_routing_refinement.is_none()
+                || block.parent_artifact != witness.parent_artifact
+                || block.config.role_context_only != witness.previous.config.role_context_only
+                || witness.previous.codes.iter().any(|old| {
+                    block
+                        .codes
+                        .binary_search_by_key(&old.feature, |c| c.feature)
+                        .is_err()
+                })
+            {
+                return Err(Error("invalid retained source context support".into()));
+            }
+            block.validate(self)?;
+            let mut parent = self.clone();
+            parent.source_context = None;
+            parent.source_routing = Some(witness.previous.clone());
+            parent.refresh_identity()?;
+            if parent.artifact_cid != witness.parent_artifact {
+                return Err(Error("source context frozen parent differs".into()));
+            }
+            parent.validate()?;
+            let mut duplicate = self.clone();
+            duplicate.refresh_identity()?;
+            if duplicate.artifact_cid != self.artifact_cid
+                || duplicate.uor_model_address != self.uor_model_address
+            {
+                return Err(Error("source context identity differs".into()));
+            }
+            return Ok(());
+        }
         if let Some(witness) = &self.literal_routing_refinement {
             let block = self
                 .typed_literals

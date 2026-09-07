@@ -125,7 +125,20 @@ pub(super) fn choose(
     control: Control,
     work: &mut WordCopyWork,
 ) -> Option<(u8, usize, i64)> {
-    let block = model.source_routing.as_ref()?;
+    let block = if control == Control::SourceContextDisabled {
+        model
+            .source_context
+            .as_ref()
+            .map(|w| &w.previous)
+            .or(model.source_routing.as_ref())?
+    } else {
+        model.source_routing.as_ref()?
+    };
+    let retained = model.source_context.is_some()
+        && !matches!(
+            control,
+            Control::SourceContextDisabled | Control::SourceContextWindowOnly
+        );
     let read = role_read::head(model)?;
     let words = values.lexemes.as_ref()?;
     let feature_control = if block.config.role_context_only {
@@ -142,7 +155,15 @@ pub(super) fn choose(
         } else {
             index as u8
         };
-        let (features, n) = role_read::features(model, values, &ctx, index, feature_control, work);
+        let (features, n) = role_read::features_with_context(
+            model,
+            values,
+            &ctx,
+            index,
+            feature_control,
+            retained,
+            work,
+        );
         let state = block.encode(model, &features[..n], control, &mut work.routing);
         work.routing.sources_examined = work.routing.sources_examined.saturating_add(1);
         work.word_candidates = work

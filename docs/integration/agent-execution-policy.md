@@ -59,11 +59,12 @@ when the change or release needs them. Neither a blanket full-suite ritual nor
 an echo-only queue status substitutes for the behavior check. Report actual
 commands, outcomes and remaining limitations.
 
-PR and merge-group CI run formatting, the Rust architecture-policy check and
-focused native model/context/allocation/CLI-service tests under one historical
-required status name. Four other required names are explicit compatibility
-acknowledgements. Broader legacy verification remains manually available for
-relevant release work; neither those names nor unrun jobs certify capability.
+Following the owner-directed CI change in PR #1163, PR and merge-group CI
+provide five explicit compatibility acknowledgements for the historical required
+status names. They execute no formatting, Clippy or model tests. Actual focused
+Rust/model validation is local; the native suite and broader legacy verification
+remain available through manual workflow dispatch. Neither status names nor
+unrun jobs certify capability.
 Protected pull-request and merge-queue delivery remain in force.
 
 Preserve source, unique artifacts and all earlier evidence. A negative retains

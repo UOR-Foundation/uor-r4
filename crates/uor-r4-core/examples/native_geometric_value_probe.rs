@@ -27,6 +27,8 @@ mod literal_binding;
 mod relation_memory;
 #[path = "native_geometric_value_probe/role_read.rs"]
 mod role_read;
+#[path = "native_geometric_value_probe/source_context.rs"]
+mod source_context;
 #[path = "native_geometric_value_probe/source_noread.rs"]
 mod source_noread;
 #[path = "native_geometric_value_probe/typed_routing.rs"]
@@ -979,6 +981,9 @@ fn evaluate_binding(
 }
 
 fn main() -> ProbeResult<()> {
+    if std::env::args().nth(1).as_deref() == Some("source-context") {
+        return source_context::run(&std::env::args().skip(2).collect::<Vec<_>>());
+    }
     if std::env::args().nth(1).as_deref() == Some("literal-binding") {
         return literal_binding::run(&std::env::args().skip(2).collect::<Vec<_>>());
     }

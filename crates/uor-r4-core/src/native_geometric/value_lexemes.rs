@@ -13,6 +13,9 @@ pub(super) const WORD_QUERY: usize = 16;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
 pub(super) struct WordAtom {
+    /// Four exact preceding completed words, owned by this occurrence.
+    #[serde(default, skip_serializing_if = "predecessors_empty")]
+    pub predecessors: [WordIdentity; 4],
     pub bytes: [u8; WORD_BYTES],
     pub len: u8,
     /// Inclusive token sequence of the final byte.
@@ -21,6 +24,19 @@ pub(super) struct WordAtom {
     pub byte_end: u64,
     pub pose: u16,
     pub phases: [u16; PHASE_CHANNELS],
+}
+
+/// Nonrecursive source identity; no payload or geometry is inferred from a hash.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+pub(super) struct WordIdentity {
+    pub bytes: [u8; WORD_BYTES],
+    pub len: u8,
+    pub end: u64,
+    pub byte_end: u64,
+}
+fn predecessors_empty(value: &[WordIdentity; 4]) -> bool {
+    *value == [WordIdentity::default(); 4]
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -103,7 +119,15 @@ impl WordScanner {
 }
 
 impl LexemeState {
-    fn append(&mut self, word: WordAtom, work: &mut ValueWork) {
+    fn append(&mut self, mut word: WordAtom, work: &mut ValueWork) {
+        for (prior, source) in word.predecessors.iter_mut().zip(&self.recent[..4]) {
+            *prior = WordIdentity {
+                bytes: source.bytes,
+                len: source.len,
+                end: source.end,
+                byte_end: source.byte_end,
+            };
+        }
         for index in (1..WORD_QUERY).rev() {
             self.recent[index] = self.recent[index - 1];
         }
@@ -154,6 +178,52 @@ impl LexemeState {
 // NATIVE_GEOMETRIC_INTEGER_KERNEL_END
 
 impl WordAtom {
+    /// Older checkpoints omit this metadata. When present, copies of identities
+    /// still in the same window must agree with those original occurrences.
+    pub(super) fn predecessors_match_window(&self, older: &[WordAtom]) -> bool {
+        predecessors_empty(&self.predecessors)
+            || self.predecessors.iter().zip(older).all(|(prior, word)| {
+                prior.bytes == word.bytes
+                    && prior.len == word.len
+                    && prior.end == word.end
+                    && prior.byte_end == word.byte_end
+            })
+    }
+
+    fn predecessors_valid(&self) -> bool {
+        let mut later_end = self.end;
+        let mut later_byte = self.byte_end;
+        let mut later_len = self.len;
+        let mut empty = false;
+        for prior in &self.predecessors {
+            if prior.len == 0 {
+                if *prior != WordIdentity::default() {
+                    return false;
+                }
+                empty = true;
+                continue;
+            }
+            let len = usize::from(prior.len);
+            if empty
+                || len > WORD_BYTES
+                || !initial(prior.bytes[0])
+                || !prior.bytes[..len]
+                    .iter()
+                    .all(|&b| initial(b) || b.is_ascii_digit())
+                || prior.bytes[len..].iter().any(|&b| b != 0)
+                || prior.end > later_end
+                || later_byte < u64::from(later_len)
+                || prior.byte_end > later_byte - u64::from(later_len)
+                || prior.byte_end < u64::from(prior.len) - 1
+            {
+                return false;
+            }
+            later_end = prior.end;
+            later_byte = prior.byte_end;
+            later_len = prior.len;
+        }
+        true
+    }
     pub(super) fn snapshot_valid(&self, seen: u64, source_bytes: u64, geometry_len: usize) -> bool {
         if self.len == 0 {
             return *self == Self::default();
@@ -169,6 +239,7 @@ impl WordAtom {
             && self.byte_end < source_bytes
             && self.byte_end >= u64::from(self.len) - 1
             && usize::from(self.pose) < geometry_len
+            && self.predecessors_valid()
     }
 }
 
@@ -180,6 +251,10 @@ impl LexemeState {
             len <= words.len()
                 && words[..len].iter().all(|word| word.len != 0 && valid(word))
                 && words[len..].iter().all(|word| *word == WordAtom::default())
+                && words[..len]
+                    .iter()
+                    .enumerate()
+                    .all(|(index, word)| word.predecessors_match_window(&words[index + 1..len]))
                 && words[..len].windows(2).all(|pair| {
                     pair[0].byte_end >= u64::from(pair[0].len)
                         && pair[1].byte_end <= pair[0].byte_end - u64::from(pair[0].len)
@@ -219,6 +294,49 @@ mod tests {
                 &mut ValueWork::default(),
             );
         }
+    }
+
+    #[test]
+    fn candidate_predecessors_survive_window_eviction_and_bind_snapshot() {
+        let mut a = LexemeState::default();
+        let mut b = LexemeState::default();
+        feed(&mut a, b"User: ada lives in Rome. ada has 13 coins. other has 7 coins. User: Where is the location of ada? Assistant: ", 0);
+        feed(&mut b, b"User: cyra lives in Rome. ada has 13 coins. other has 7 coins. User: Where is the location of ada? Assistant: ", 0);
+        a.begin();
+        b.begin();
+        assert_eq!(a.query_len, WORD_QUERY);
+        for (left, right) in a.queries.iter().zip(&b.queries) {
+            assert!(left.matches(right, &mut ValueWork::default()));
+        }
+        let rome = a
+            .queries
+            .iter()
+            .position(|w| &w.bytes[..usize::from(w.len)] == b"Rome")
+            .unwrap();
+        assert_eq!(rome, 14);
+        assert_eq!(&a.queries[rome].predecessors[2].bytes[..3], b"ada");
+        assert_eq!(&b.queries[rome].predecessors[2].bytes[..4], b"cyra");
+        assert!(a.snapshot_valid(1, 1));
+        assert!(b.snapshot_valid(1, 1));
+        let bytes = serde_json::to_vec(&a).unwrap();
+        let restored: LexemeState = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(restored, a);
+        let mut forged = a;
+        // Keep the copied identity's length and ordinals valid while changing
+        // a byte. The original predecessor still exists in the same window.
+        forged.queries[0].predecessors[0].bytes[0] = b'x';
+        assert!(forged.queries[0].snapshot_valid(1, forged.source_bytes_seen, 1));
+        assert!(!forged.snapshot_valid(1, 1));
+        let mut legacy = a;
+        for word in legacy.recent.iter_mut().chain(&mut legacy.queries) {
+            word.predecessors = [WordIdentity::default(); 4];
+        }
+        let bytes = serde_json::to_vec(&legacy).unwrap();
+        assert!(!String::from_utf8_lossy(&bytes).contains("predecessors"));
+        let legacy: LexemeState = serde_json::from_slice(&bytes).unwrap();
+        assert!(legacy.snapshot_valid(1, 1));
+        a.queries[rome].predecessors[2].byte_end = a.queries[rome].byte_end;
+        assert!(!a.snapshot_valid(1, 1));
     }
 
     #[test]
