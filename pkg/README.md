@@ -71,8 +71,14 @@ identifier-return functions execute24 assertions. The subsequent
 [committed NoRead completion](docs/native_geometric_no_read_completion_1139.md)
 preserves that model and repairs looping literal-context abstentions: the exposed
 set improves12/16 to14/16 and a new set14/16 to15/16. Identifier returns remain8/8
-and complete three-turn computations16/16. The remaining failure selects a
-retained but unsupported word; joint source/NoRead selection is next.
+and complete three-turn computations16/16. The subsequent
+[joint source/NoRead refinement](docs/native_geometric_source_noread_1139.md)
+repairs unsupported retained-word selection:20/20 new complete answers versus
+14/20 parent and10/20 matched exact-code continuation, with earlier numeric,
+identifier and memory behavior preserved. The existing router is refined in
+place; exact parent reconstruction preserves all downstream training provenance.
+A supported location can still be taken over by numerical admission; joint
+numeric-versus-word selection is the next observed boundary.
 General prose/syntax/reasoning and frontier capability remain unqualified. Follow
 the current-state pointer for artifacts, costs and the next implementation.
 
