@@ -1,5 +1,12 @@
 # Research: what is measured, what is closed, what is open
 
+The owner-requested [September architecture/source reconciliation](integration/architecture-2026-09/README.md)
+indexes the mathematical mechanisms, historical engines, contributor sources
+and Studio. It preserves results below and distinguishes available definitions,
+implemented operations, measured behavior and proposed integration. The native
+model remains d59070c2 at its recorded bounded scope; no model experiment was
+rerun for that review.
+
 ## Supported-source and NoRead selection — current bounded checkpoint, 2026-09-06
 
 The [source refinement](native_geometric_source_noread_1139.md) retains
