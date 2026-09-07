@@ -141,38 +141,70 @@ pub(super) fn run(args: &[String]) -> ProbeResult<()> {
         Some("preserve") if args.len()==4 => {
             let model=Model::from_bytes(&fs::read(&args[1])?)?;
             let root=Path::new(&args[2]);let out=Path::new(&args[3]);fs::create_dir(out)?;
-            for (file,split,label) in [
-                ("answer-entry-source.json","fit","literal-construction"),
-                ("answer-entry-source.json","first_use","prior-fresh"),
-                ("literal-admission-source.json","first_use","exposed-literals"),
-                ("literal-admission-source.json","transfer","chains"),
-                ("literal-admission-source.json","identifiers","identifiers"),
-                ("independent-reachable-source.json","first_use","prior-chains"),
-                ("independent-reachable-source.json","fit","computed-construction"),
-                ("typed-routing-case-source.json","first_use","numeric"),
-                ("typed-roles-query-source.json","first_use","roles"),
-                ("typed-roles-query-source.json","exposed_first_use","exposed-roles"),
-                ("typed-roles-query-source.json","exposed_alias_first_use","aliases")
-            ] {
-                let source:Value=serde_json::from_slice(&fs::read(root.join(file))?)?;
-                let docs:Vec<TypedRoutingExample>=serde_json::from_value(source[split].clone())?;
-                save(out,label,&model.evaluate_typed_routing(&docs,false)?)?;
-            }
-            let source:Value=serde_json::from_slice(&fs::read(root.join("writer-binding-continuation-source.json"))?)?;
-            for (split,label) in [("development","dependent"),("fresh","names")] {
-                let docs:Vec<RelationExample>=serde_json::from_value(source[split].clone())?;
-                save(out,label,&relation_responses(&model,&docs)?)?;
-            }
-            for split in ["preservation","prior"] {
-                let docs:Vec<ValueExample>=serde_json::from_value(source[split].clone())?;
-                save(out,split,&responses(&model,&docs,false,Control::Full)?)?;
-            }
-            let source:Value=serde_json::from_slice(&fs::read(root.join("relation-admission-source.json"))?)?;
-            let docs:Vec<RelationExample>=serde_json::from_value(source["first_use"].clone())?;
-            save(out,"long",&relation_responses(&model,&docs)?)?;
-            relation_memory::verify_model(model,&out.join("sessions.json"))?;
+            preserve_model(model,root,out)?;
         }
         _=>return Err("source-noread prepare PRIOR LITERAL OUTPUT | fit MODEL SOURCE NEW_DIR FEATURES angular|equality | evaluate MODEL SOURCE SPLIT REPORT full|codes-disabled | preserve MODEL ROOT NEW_DIR".into())
     }
+    Ok(())
+}
+
+pub(super) fn preserve_model(model: Model, root: &Path, out: &Path) -> ProbeResult<()> {
+    for (file, split, label) in [
+        ("answer-entry-source.json", "fit", "literal-construction"),
+        ("answer-entry-source.json", "first_use", "prior-fresh"),
+        (
+            "literal-admission-source.json",
+            "first_use",
+            "exposed-literals",
+        ),
+        ("literal-admission-source.json", "transfer", "chains"),
+        (
+            "literal-admission-source.json",
+            "identifiers",
+            "identifiers",
+        ),
+        (
+            "independent-reachable-source.json",
+            "first_use",
+            "prior-chains",
+        ),
+        (
+            "independent-reachable-source.json",
+            "fit",
+            "computed-construction",
+        ),
+        ("typed-routing-case-source.json", "first_use", "numeric"),
+        ("typed-roles-query-source.json", "first_use", "roles"),
+        (
+            "typed-roles-query-source.json",
+            "exposed_first_use",
+            "exposed-roles",
+        ),
+        (
+            "typed-roles-query-source.json",
+            "exposed_alias_first_use",
+            "aliases",
+        ),
+    ] {
+        let source: Value = serde_json::from_slice(&fs::read(root.join(file))?)?;
+        let docs: Vec<TypedRoutingExample> = serde_json::from_value(source[split].clone())?;
+        save(out, label, &model.evaluate_typed_routing(&docs, false)?)?;
+    }
+    let source: Value = serde_json::from_slice(&fs::read(
+        root.join("writer-binding-continuation-source.json"),
+    )?)?;
+    for (split, label) in [("development", "dependent"), ("fresh", "names")] {
+        let docs: Vec<RelationExample> = serde_json::from_value(source[split].clone())?;
+        save(out, label, &relation_responses(&model, &docs)?)?;
+    }
+    for split in ["preservation", "prior"] {
+        let docs: Vec<ValueExample> = serde_json::from_value(source[split].clone())?;
+        save(out, split, &responses(&model, &docs, false, Control::Full)?)?;
+    }
+    let source: Value =
+        serde_json::from_slice(&fs::read(root.join("relation-admission-source.json"))?)?;
+    let docs: Vec<RelationExample> = serde_json::from_value(source["first_use"].clone())?;
+    save(out, "long", &relation_responses(&model, &docs)?)?;
+    relation_memory::verify_model(model, &out.join("sessions.json"))?;
     Ok(())
 }

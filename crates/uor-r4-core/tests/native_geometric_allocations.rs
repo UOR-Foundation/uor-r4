@@ -1852,3 +1852,100 @@ fn native_literal_refinement_preserves_parent_and_binds_operands() {
     println!("warm predict+observe samples={}, median_ns={}, max_ns={} (loading/encoding/ingestion/checkpoints excluded)",time_len,times[time_len/2],times[time_len-1]);
     println!("literal refinement: exact parent restoration, malformed-artifact rejection, disabled-parent behavior, changed-order operands, source preservation, observation-only writes, checkpoints and zero allocations PASS");
 }
+
+#[test]
+#[ignore = "requires R4_SOURCE_CONTEXT_MODEL and R4_SOURCE_CONTEXT_PARENT"]
+fn native_source_context_retains_owner_and_preserves_causal_copy() {
+    use uor_r4_core::native_geometric::Model;
+    let bytes = std::fs::read(std::env::var("R4_SOURCE_CONTEXT_MODEL").unwrap()).unwrap();
+    let parent_bytes = std::fs::read(std::env::var("R4_SOURCE_CONTEXT_PARENT").unwrap()).unwrap();
+    let model = Model::from_bytes(&bytes).unwrap();
+    let mut wire: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    let mut parent: serde_json::Value = serde_json::from_slice(&parent_bytes).unwrap();
+    let witness = wire
+        .as_object_mut()
+        .unwrap()
+        .remove("source_context")
+        .unwrap();
+    assert_eq!(witness["parent_artifact"], parent["artifact_cid"]);
+    wire["source_routing"] = witness["previous"].clone();
+    for j in [&mut wire, &mut parent] {
+        j.as_object_mut().unwrap().remove("artifact_cid");
+        j.as_object_mut().unwrap().remove("uor_model_address");
+    }
+    assert_eq!(
+        wire, parent,
+        "all other parameters, dictionary and parent lineage are fixed"
+    );
+    for k in 0..3 {
+        let mut bad: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        match k {
+            0 => bad["source_context"]["parent_artifact"] = "wrong-parent".into(),
+            1 => bad["source_routing"]["codes"][0]["roots"][0] = 120.into(),
+            _ => bad["joint_admission"]["router"]["biases"][0] = 1000.into(),
+        }
+        assert!(Model::from_bytes(&serde_json::to_vec(&bad).unwrap()).is_err());
+    }
+    let cases = [
+        ("User: ada lives in Rome. ada has 13 coins. other has 7 coins.\nUser: Where is the location of ada?\nAssistant:"," Rome.\n",false),
+        ("User: cyra lives in Rome. ada has 13 coins. other has 7 coins.\nUser: Where is the location of ada?\nAssistant:"," Unknown.\n",false),
+        ("User: adara lives in Rome. adara has 13 coins. cyris has 7 coins.\nUser: How many coins does adara have?\nAssistant:","13.\n",true),
+    ];
+    let mut times = [0_u128; 96];
+    let mut time_len = 0;
+    for (prompt, expected, numeric) in cases {
+        let tokens = model.encode(prompt).unwrap();
+        let mut session = model.session(Control::Full).unwrap();
+        ALLOCATIONS.with(|v| v.set(0));
+        BYTES.with(|v| v.set(0));
+        MEASURING.with(|v| v.set(true));
+        session.observe(&model, BOS).unwrap();
+        for t in tokens {
+            session.observe(&model, t).unwrap();
+        }
+        session.begin_response(&model).unwrap();
+        let first = session.predict(&model).unwrap();
+        assert_eq!(first, session.predict(&model).unwrap());
+        assert_eq!(session.work.values.derived_writes, 0);
+        MEASURING.with(|v| v.set(false));
+        let checkpoint = session.checkpoint().unwrap();
+        let mut wrong = model.restore_session(&checkpoint).unwrap();
+        let p = wrong.predict(&model).unwrap();
+        wrong
+            .observe(&model, if p.token == 2 { 3 } else { 2 })
+            .unwrap();
+        assert_eq!(wrong.work.values.derived_writes, 0);
+        let mut out = [EOS; 32];
+        let mut len = 0;
+        MEASURING.with(|v| v.set(true));
+        loop {
+            let started = std::time::Instant::now();
+            let t = session.predict(&model).unwrap().token;
+            session.observe(&model, t).unwrap();
+            times[time_len] = started.elapsed().as_nanos();
+            time_len += 1;
+            out[len] = t;
+            len += 1;
+            if t == EOS || len == 32 {
+                break;
+            }
+        }
+        MEASURING.with(|v| v.set(false));
+        assert_eq!(out[len - 1], EOS);
+        assert_eq!(model.decode(&out[..len]).unwrap(), expected.as_bytes());
+        assert_eq!(session.work.values.derived_writes, u64::from(numeric));
+        assert_eq!((ALLOCATIONS.with(Cell::get), BYTES.with(Cell::get)), (0, 0));
+        let checkpoint = session.checkpoint().unwrap();
+        assert_eq!(
+            model
+                .restore_session(&checkpoint)
+                .unwrap()
+                .checkpoint()
+                .unwrap(),
+            checkpoint
+        );
+    }
+    times[..time_len].sort_unstable();
+    println!("warm predict+observe samples={}, median_ns={}, max_ns={} (loading/encoding/ingestion/checkpoints excluded)",time_len,times[time_len/2],times[time_len-1]);
+    println!("source context: exact parent restoration, malformed-artifact rejection, evicted-owner contrast, numeric binding, source preservation, observation-only writes, checkpoints and zero allocations PASS");
+}

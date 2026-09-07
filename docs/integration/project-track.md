@@ -258,15 +258,21 @@ retains `e1ef0a5d`: the existing dictionary/feature law is fixed while missing
 provenance codes are admitted and learned. Construction improves 571/631 to
 630/631 with no lost correct answer; fresh identity/value/order transfer is
 16/16 versus 8/16 parent and 8/16 matched equality. Prior outputs, writes and
-sessions are preserved. **Next: supported-source/NoRead selection independent
-of irrelevant numeric-fact order**, through the existing source router and exact
-occurrence metadata. Preserve the now-working literal selection and keep a new
-construction/development split and fresh evaluation. The remaining location
-abstentions are concrete evidence; they do not justify a question parser,
-completion head or general capacity expansion.
-General named-role binding and broader Rust reasoning remain unqualified.
-No additional cache campaign is active. Follow current-state.md for artifacts
-and cumulative resources; a new issue does not reset the spent amount.
+sessions are preserved. The subsequent
+[retained source context](../native_geometric_source_context_1139.md) retains
+`c6a98c04`: candidate-owned exact predecessors repair information loss at the
+sixteen-word window edge. Construction improves 654/663 to 663/663, open 12/16
+to 16/16 and fresh owner/query/order 24/32 to 32/32 (24/32 context-disabled), with
+all prior output/write/session preservation. Existing learned H4 owner-binding
+codes become accessible; one fit update only improves a margin.
+**Next: reusable contextual transition/emission conditioned on the selected exact
+entity/value and committed operator result.** Preserve the successful source and
+numeric boundaries, use fresh construction/open populations and a separate final
+fresh evaluation, and project the full run against the remaining cumulative
+allocation before execution. Do not restart completed order repairs or grow a
+paging subsystem without a measured access bottleneck. General named-role binding
+and broader Rust reasoning remain unqualified. Follow current-state.md for
+artifacts and cumulative resources; a new issue does not reset the spent amount.
 The full handoff remains unmet.
 
 #### Historical recurrent attention revision — owner adoption 2026-09-05

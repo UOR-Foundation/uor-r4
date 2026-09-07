@@ -2,6 +2,15 @@
 
 **Status:** source and retained-evidence review; owner constraints accepted; next implementation proposed. No training, inference, model benchmark or new mathematical proof was run for this review. The canonical project plan owns subsequent execution. This review answers the owner's explicit request for a broad inventory, including archived and contributor work; it does not make repeated broad audits a prerequisite for ordinary development.
 
+**Continuation update (September 7):** the proposed admission step and subsequent
+literal/source order repairs have completed. The current
+[source-context result](../../native_geometric_source_context_1139.md) retains
+`c6a98c04`, preserves evicted owner context for the existing learned H4 selector,
+and passes 32/32 fresh bounded answers versus 24/32 parent/context-disabled.
+The next direction is reusable contextual transitions and emission conditioned
+on exact selected values/results. The review below preserves its original dated
+source/evidence scope; [current state](../current-state.md) owns live continuation.
+
 ## Decision
 
 Continue the native Rust model as a **learned geometric state machine with exact addressed memory and shared typed operators**. Learn semantic placement and state transitions offline. At serving time, derive access from explicit geometric coordinates and page/address tables, preserve exact occurrence/version references, execute the selected operation and commit its result causally. Develop learned language emission together with those transitions.

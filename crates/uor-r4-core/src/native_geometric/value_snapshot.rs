@@ -3,7 +3,7 @@
 //! checked where available; evicted literal payloads remain explicit state.
 use super::*;
 use crate::native_geometric::numeral::{Numeral, Scanner};
-use crate::native_geometric::value_lexemes::{LexemeState, WordAtom, WordScanner};
+use crate::native_geometric::value_lexemes::{LexemeState, WordAtom, WordIdentity, WordScanner};
 use crate::native_geometric::value_types::{
     ValueAction, ValueDerivation, ValueEntry, ValueRecord, ValueWork, LEXEME_VALUE_SCHEMA, QUERY,
     VALUES,
@@ -87,6 +87,72 @@ fn bytes(model: &Model, token: u32, mut consume: impl FnMut(u8)) {
         for &byte in &model.lexical_pieces[(token - LEXICAL_BASE) as usize] {
             consume(byte);
         }
+    }
+}
+
+/// Check only evidence still available in the token window. Earlier identity
+/// bytes remain declared checkpoint state, just like earlier word payloads.
+fn predecessor_matches_tokens(
+    prior: &WordIdentity,
+    oldest: u64,
+    mut feed_token: impl FnMut(u64, &mut LexemeState, &mut ValueWork),
+) -> bool {
+    if prior.len == 0 {
+        return true;
+    }
+    let span = u64::from(prior.len) - 1;
+    if prior.end < oldest || (oldest != 0 && prior.end - oldest < span) {
+        return true;
+    }
+    for start in prior.end.saturating_sub(span).max(oldest)..=prior.end {
+        let mut replay = LexemeState::default();
+        let mut work = ValueWork::default();
+        for sequence in start..=prior.end {
+            feed_token(sequence, &mut replay, &mut work);
+        }
+        replay.finish(&mut work);
+        if replay.recent[..replay.recent_len]
+            .iter()
+            .any(|word| word.bytes == prior.bytes && word.len == prior.len && word.end == prior.end)
+        {
+            return true;
+        }
+    }
+    false
+}
+
+#[cfg(test)]
+mod predecessor_tests {
+    use super::*;
+
+    #[test]
+    fn retained_predecessor_payload_tampering_is_rejected_without_authenticating_eviction() {
+        let source = b"ada lives";
+        let mut prior = WordIdentity {
+            len: 3,
+            end: 2,
+            byte_end: 2,
+            ..WordIdentity::default()
+        };
+        prior.bytes[..3].copy_from_slice(b"ada");
+        let check = |identity: &WordIdentity, oldest| {
+            predecessor_matches_tokens(identity, oldest, |sequence, replay, work| {
+                replay.feed(
+                    source[sequence as usize],
+                    ValueEntry {
+                        sequence,
+                        ..ValueEntry::default()
+                    },
+                    work,
+                );
+            })
+        };
+        assert!(check(&prior, 0));
+        prior.bytes[..3].copy_from_slice(b"ava");
+        assert!(!check(&prior, 0));
+        // With the complete word evicted, truth is explicitly unauthenticated.
+        assert!(check(&prior, 3));
+        assert!(check(&WordIdentity::default(), 0));
     }
 }
 
@@ -198,6 +264,16 @@ impl Session {
             if atom.len == 0 {
                 return Ok(());
             }
+            for prior in &atom.predecessors {
+                if !predecessor_matches_tokens(prior, oldest, |sequence, replay, work| {
+                    let entry = saved.recent[(sequence & 31) as usize];
+                    bytes(model, entry.token, |byte| replay.feed(byte, entry, work));
+                }) {
+                    return Err(invalid(
+                        "word predecessor differs from retained source bytes",
+                    ));
+                }
+            }
             if recent(atom.end)
                 .is_some_and(|entry| entry.pose != atom.pose || entry.phases != atom.phases)
             {
@@ -247,6 +323,10 @@ impl Session {
                 validate_atom(atom)?;
             }
             if atoms[len..].iter().any(|atom| *atom != WordAtom::default())
+                || atoms[..len]
+                    .iter()
+                    .enumerate()
+                    .any(|(index, atom)| !atom.predecessors_match_window(&atoms[index + 1..len]))
                 || atoms[..len].windows(2).any(|pair| {
                     pair[0].byte_end < u64::from(pair[0].len)
                         || pair[1].byte_end > pair[0].byte_end - u64::from(pair[0].len)

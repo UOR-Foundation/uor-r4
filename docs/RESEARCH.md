@@ -7,7 +7,24 @@ implemented operations, measured behavior and proposed integration. The native
 model was d59070c2 at the review date; no model experiment was
 rerun for that review.
 
-## Literal operand binding — current bounded checkpoint, 2026-09-07
+## Retained source context — current bounded checkpoint, 2026-09-07
+
+The [source-context result](native_geometric_source_context_1139.md) retains
+`c6a98c04`. Four exact predecessor identities stay with each word candidate.
+The existing H4 selector can then see an owner that has left its shared query
+window. Construction improves 654/663 to 663/663, open 12/16 to 16/16 and fresh
+owner/query/order answers24/32 to 32/32; context-disabled fresh remains 24/32.
+No correct construction answer is lost, and exact-parent control reproduces all
+663 parent texts/stops. Earlier admission becomes 12/12; all numeric, source,
+relation and session preservation passes. Actual artifact/state/allocation checks
+pass. Initial retained-context selection already gets 428/428 eligible choices
+right; fitting makes one margin update, with no new nonidentity codes. This
+supports information retention feeding existing learned geometry. It does not
+establish a new angular-versus-equality advantage or broad language capability.
+Next is reusable contextual transition/emission conditioned on exact selected
+identity and committed results; native API/model quality precedes Studio lowering.
+
+## Literal operand binding — previous bounded checkpoint, 2026-09-07
 
 The [literal continuation](native_geometric_literal_binding_1139.md) retains
 `e1ef0a5d`. Exact entity bytes already survive capture; the learned literal
@@ -53,7 +70,7 @@ parameter and the exact `e7c14c99` training parent through a nonexecuting witnes
 Warm continuation with128 features reaches384/384 eligible construction choices
 and20/20 new complete source/abstention answers, versus14/20 parent and10/20
 matched exact-code continuation. All20 new cases use the direct source router.
-Earlier literal answers improve to16/16 on both sets and103/103 construction;
+Earlier literal answers improve to 16/16 on both sets and103/103 construction;
 computed, identifier, durable-memory and long-context preservation passes.
 
 Combined construction is551/603 versus545/603, with no lost correct answer;
@@ -86,7 +103,7 @@ No new angular-distance advantage or general abstention capability is claimed.
 
 The [admission repair](native_geometric_literal_admission_1139.md) retains
 `c29ab982`, with the entire accepted parent unchanged and a separate bounded
-literal table. New complete transfer improves12/16 to16/16; new identifier
+literal table. New complete transfer improves12/16 to 16/16; new identifier
 answers stay8/8 and their functions pass24 executed assertions. Earlier
 preservation is restored, including the62/62 and24/24 sets. Exact-code matches
 new transfer scores, so there is no additional angular advantage. Four
@@ -96,7 +113,7 @@ next. The preceding shared-fit candidates remain unpromoted historical evidence.
 ## Literal selection — previous preservation negative, 2026-09-06
 
 The [literal extension](native_geometric_literal_selection_1139.md) improves
-new three-turn generation8/16 to16/16 and literal answers7/16 to12/16, with the
+new three-turn generation8/16 to 16/16 and literal answers7/16 to12/16, with the
 same results for angular and exact-code. Four abstention texts fail. Shared
 fitting also regresses computed-result and identifier-copy cases; neither new
 artifact was promoted; `af337c28` remained the accepted parent for the later repair. Truncation and missing

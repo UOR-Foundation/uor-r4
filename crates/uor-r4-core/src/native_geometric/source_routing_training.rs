@@ -207,7 +207,7 @@ impl Model {
         docs: &[ValueExample],
         config: SourceRoutingConfig,
     ) -> Result<(Model, serde_json::Value)> {
-        self.fit_source_routing_mode(docs, config, false)
+        self.fit_source_routing_mode(docs, config, false, false)
     }
 
     /// Refine the existing source/action router in place. Only one refinement
@@ -217,7 +217,17 @@ impl Model {
         docs: &[ValueExample],
         config: SourceRoutingConfig,
     ) -> Result<(Model, serde_json::Value)> {
-        self.fit_source_routing_mode(docs, config, true)
+        self.fit_source_routing_mode(docs, config, true, false)
+    }
+
+    /// Warm continuation with four candidate-owned predecessor identities.
+    /// The prior assembled artifact is reconstructed exactly by its witness.
+    pub fn fit_retained_source_context(
+        &self,
+        docs: &[ValueExample],
+        config: SourceRoutingConfig,
+    ) -> Result<(Model, serde_json::Value)> {
+        self.fit_source_routing_mode(docs, config, true, true)
     }
 
     fn fit_source_routing_mode(
@@ -225,11 +235,14 @@ impl Model {
         docs: &[ValueExample],
         config: SourceRoutingConfig,
         refine: bool,
+        retained: bool,
     ) -> Result<(Model, serde_json::Value)> {
         config.validate()?;
         self.validate()?;
         if self.source_routing.is_some() != refine
-            || self.source_routing_refinement.is_some()
+            || (self.source_routing_refinement.is_some() && !retained)
+            || self.source_context.is_some()
+            || (retained && self.literal_routing_refinement.is_none())
             || self.learned_routing.is_some()
             || docs.is_empty()
             || docs.len() > 1024
@@ -329,12 +342,13 @@ impl Model {
                 } else {
                     index as u8
                 };
-                let (features, n) = role_read::features(
+                let (features, n) = role_read::features_with_context(
                     self,
                     values,
                     &ctx,
                     index,
                     source_control,
+                    retained,
                     &mut WordCopyWork::default(),
                 );
                 for action in 0..read.actions.len() {
@@ -493,15 +507,20 @@ impl Model {
         let mut model = self.clone();
         model.source_routing = Some(block);
         if let Some(old) = previous {
-            model.source_routing_refinement =
-                Some(super::source_routing::SourceRoutingRefinement {
-                    parent_artifact: self.artifact_cid.clone(),
-                    previous: old.clone(),
-                });
+            let witness = Some(super::source_routing::SourceRoutingRefinement {
+                parent_artifact: self.artifact_cid.clone(),
+                previous: old.clone(),
+            });
+            if retained {
+                model.source_context = witness;
+            } else {
+                model.source_routing_refinement = witness;
+            }
         }
         model.refresh_identity()?;
         model.validate()?;
         let mut report = serde_json::json!({"schema":"uor-r4.source-routing-fit/1","parent":self.artifact_cid(),"artifact":model.artifact_cid(),"config":config,"documents":docs.len(),"frames":frames.len(),"skipped_upstream":skipped,"preserved_persistent_dispatch":persistent,"unreachable_targets":unreachable,"feature_universe":frequency.len(),"features":vocabulary.len(),"elapsed_ms":start.elapsed().as_millis(),"block_bytes":block_bytes,"scope":"Source/action labels from supplied construction responses; accepted reader weights select feature vocabulary only. Ordered two-channel H4 composition and action landmarks learned with hard serving decisions. Persistent-reader dispatch and numeric eligibility are unchanged. Construction selection is not generation/transfer."});
+        report["retained_source_predecessors"] = serde_json::json!(if retained { 4 } else { 0 });
         report["refinement"] = serde_json::json!(refine);
         report["warm_feature_alias_frames"] = serde_json::json!(warm_feature_alias_frames);
         report["expanded_feature_alias_frames"] = serde_json::json!(expanded_feature_alias_frames);
@@ -656,8 +675,15 @@ impl Model {
             } else {
                 index as u8
             };
-            let (features, n) =
-                role_read::features(self, values, &ctx, index, feature_control, &mut work);
+            let (features, n) = role_read::features_with_context(
+                self,
+                values,
+                &ctx,
+                index,
+                feature_control,
+                self.source_context.is_some(),
+                &mut work,
+            );
             let state = block.encode(self, &features[..n], Control::Full, &mut work.routing);
             let mapped: Vec<_> =
                 features[..n]

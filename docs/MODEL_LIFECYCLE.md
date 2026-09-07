@@ -21,6 +21,14 @@ Preserve artifact lineage and exact value/occurrence versions when learning a
 new selector. A source router, numeric NoOperation and source NoRead have distinct
 action domains; an interface must preserve their actual commit semantics.
 
+The optional [source-context continuation](native_geometric_source_context_1139.md)
+binds four predecessor identities per word to the existing source selector.
+`Model::fit_retained_source_context` learns offline; the serving artifact's
+`source_context` witness activates retained-context features and reconstructs
+its exact parent. Candidate support stays at sixteen words. Legacy snapshots
+without predecessor metadata remain readable; available overlapping words and
+source tokens validate new metadata, while evicted bytes remain declared state.
+
 The complete lifecycle must qualify artifact loading, session boundaries,
 contextual access, generation/streaming, memory, errors/limits and capability
 identity on the same native model. Useful prose and reasoning require measured

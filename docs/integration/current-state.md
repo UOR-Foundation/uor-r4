@@ -1,6 +1,44 @@
 # Current native geometric AI work
 
-## Order-robust literal operand selection — #1139 / #1140, 2026-09-07
+## Candidate-owned source context — #1139 / #1140, 2026-09-07
+
+**Retain `c6a98c04` at bounded source-owner/NoRead selection scope.** The
+[result](../native_geometric_source_context_1139.md) and
+[evidence](../evidence/native_geometric_source_context_1139.json) bind the actual
+Rust implementation. Four exact predecessor identities travel with each retained
+word, preserving owner context after it leaves the shared sixteen-word window.
+The same learned signed-H4 source selector consumes that information. An outer
+witness reconstructs the complete `e1ef0a5d` parent; numeric, admission, relation,
+dependent-read and emission parameters are fixed.
+
+Complete construction improves **654/663 to 663/663**, with nine gains and no
+lost correct answer; the original 631 now pass 631/631. Open answers improve
+**12/16 to 16/16**. Fresh owner/query/name/place/order answers improve **24/32 to
+32/32**, versus 24/32 with retained context disabled. The exact-parent control
+restores every parent construction text/stop. Both earlier admission location
+errors are repaired (12/12), and all prior literal, source, computation, relation
+and session preservation passes. The question family remains familiar.
+
+Initial retained-context selection already passes 428/428 eligible choices before
+one margin-improving code update. Existing learned owner-binding codes were
+unreachable from the old feature window; they now receive preserved identity.
+This is not a new angular-versus-equality, broad language or frontier result.
+Actual artifact lineage/mutation, causal commitment, checkpoint and zero-allocation
+checks pass, along with focused state tests and native kernel/policy checks.
+Seventeen warm steps measure median 0.136 ms/max 0.184 ms, excluding load, encoding,
+ingestion and checkpoints; no end-to-end or energy claim follows.
+
+Model work consumes 60.834 seconds; cumulative 4072.769/4170 seconds leaves 97.231 seconds.
+Artifact JSON is 11,626,472 bytes; total sampled growth remains inside 256 MiB.
+No extension, external compute or deletion occurred. All earlier material remains.
+
+**Next: reusable contextual transitions and emission conditioned on the selected
+exact entity/value and committed operator result**, through the same native path.
+Preserve these source/numeric boundaries and use new construction/open/fresh
+populations; do not tune on the just-opened 32 cases. Refresh a complete resource
+projection against the remaining time/storage before executing that successor.
+
+## Previous checkpoint: order-robust literal operand selection — #1139 / #1140, 2026-09-07
 
 **Retain `e1ef0a5d` at bounded literal operand-selection scope.** The
 [result](../native_geometric_literal_binding_1139.md) and
@@ -185,10 +223,10 @@ all inherited `af337c28` fields verbatim. Structural state eligibility selects
 which table runs; operator/operand and numeric admission are learned. Serving
 continues through integer/table operations without matmul or LLM correction.
 
-New complete three-turn transfer improves12/16 to16/16, new literal answers8/16
+New complete three-turn transfer improves12/16 to 16/16, new literal answers8/16
 to12/16, and new identifier answers stay8/8. Exact-code matches these new scores:
 no new angular advantage. The exposed earlier independent-result set improves
-12/16 to16/16 with no lost correct cases. Prior62/62 and24/24 sets are restored,
+12/16 to 16/16 with no lost correct cases. Prior62/62 and24/24 sets are restored,
 with all listed dependent, memory, numeric and role checks preserved. Eight
 new identifier-return functions execute24 assertions; this is bounded copying
 in familiar Rust forms. Seven focused tests and actual zero-allocation,
@@ -214,7 +252,7 @@ compute. Exact engineering, storage/RSS and all commands are in the evidence.
 extension is [implemented and measured](../native_geometric_literal_selection_1139.md),
 with [bound evidence](../evidence/native_geometric_literal_selection_1139.json).
 Angular `51788aef` and matched exact-code `3f31e998` improve new complete
-three-turn transfers from8/16 to16/16 and new literal answers from7/16 to12/16.
+three-turn transfers from8/16 to 16/16 and new literal answers from7/16 to12/16.
 The four remaining literal failures are abstention text. Neither candidate is
 promoted: both lose a previously correct computed-result case. Angular also
 loses three identifier-copy responses, dropping prior sets to60/62 and23/24.

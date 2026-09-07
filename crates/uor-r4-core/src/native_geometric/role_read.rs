@@ -106,6 +106,18 @@ pub(super) fn features(
     control: Control,
     work: &mut WordCopyWork,
 ) -> ([ValueFeature; READ_FEATURES], usize) {
+    features_with_context(model, values, ctx, index, control, false, work)
+}
+
+pub(super) fn features_with_context(
+    model: &Model,
+    values: &ValueState,
+    ctx: &WordCopyContext,
+    index: usize,
+    control: Control,
+    retained: bool,
+    work: &mut WordCopyWork,
+) -> ([ValueFeature; READ_FEATURES], usize) {
     let mut out = [ValueFeature::default(); READ_FEATURES];
     let Some(words) = &values.lexemes else {
         return (out, 0);
@@ -133,9 +145,38 @@ pub(super) fn features(
         }
     }
     if index < words.query_len {
+        let mut prior_addresses = [0_u64; 4];
+        // Only identities outside the shared window need extra dictionary work.
+        if retained {
+            if let Some(read) = head(model) {
+                for (offset, prior) in words.queries[index].predecessors.iter().enumerate() {
+                    if index + offset + 1 < words.query_len || prior.len == 0 {
+                        continue;
+                    }
+                    work.word_record_reads = work.word_record_reads.saturating_add(1);
+                    work.dictionary_lookups = work.dictionary_lookups.saturating_add(1);
+                    let found = read.dictionary.binary_search_by(|item| {
+                        work.dictionary_comparisons = work.dictionary_comparisons.saturating_add(1);
+                        for j in 0..usize::from(item.len.min(prior.len)) {
+                            work.dictionary_byte_comparisons =
+                                work.dictionary_byte_comparisons.saturating_add(1);
+                            let order = item.bytes[j].cmp(&prior.bytes[j]);
+                            if !order.is_eq() {
+                                return order;
+                            }
+                        }
+                        item.len.cmp(&prior.len)
+                    });
+                    prior_addresses[offset] =
+                        found.map_or(0, |j| u64::from(read.dictionary[j].prime));
+                }
+            }
+        }
         let at = |i: usize| {
             if i < words.query_len {
                 u64::from(ctx.addresses[i])
+            } else if retained && i > index && i <= index + 4 {
+                prior_addresses[i - index - 1]
             } else {
                 0
             }
@@ -151,20 +192,29 @@ pub(super) fn features(
         for q in 0..index {
             for offset in [-3_i32, -2, -1, 1, 2, 3, 4] {
                 let source = index as i32 + offset;
-                if source <= q as i32 || source < 0 || source as usize >= words.query_len {
+                if source <= q as i32
+                    || source < 0
+                    || (source as usize >= words.query_len && !retained)
+                {
                     continue;
                 }
                 let a = &words.queries[q];
-                let b = &words.queries[source as usize];
+                let (bytes, len) = if source as usize >= words.query_len {
+                    let prior = &words.queries[index].predecessors[(offset - 1) as usize];
+                    (&prior.bytes, prior.len)
+                } else {
+                    let b = &words.queries[source as usize];
+                    (&b.bytes, b.len)
+                };
                 work.word_record_reads = work.word_record_reads.saturating_add(2);
-                if a.len == 0 || a.len != b.len {
+                if a.len == 0 || a.len != len {
                     continue;
                 }
                 let mut equal = true;
                 for j in 0..usize::from(a.len) {
                     work.equality_byte_comparisons =
                         work.equality_byte_comparisons.saturating_add(1);
-                    if a.bytes[j] != b.bytes[j] {
+                    if a.bytes[j] != bytes[j] {
                         equal = false;
                         break;
                     }
