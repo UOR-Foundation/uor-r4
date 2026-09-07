@@ -149,6 +149,19 @@ pub(super) fn run(args: &[String]) -> ProbeResult<()> {
 }
 
 pub(super) fn preserve_model(model: Model, root: &Path, out: &Path) -> ProbeResult<()> {
+    preserve_model_mode(model, root, out, false)
+}
+pub(super) fn preserve_model_compact(model: Model, root: &Path, out: &Path) -> ProbeResult<()> {
+    preserve_model_mode(model, root, out, true)
+}
+fn preserve_model_mode(model: Model, root: &Path, out: &Path, compact: bool) -> ProbeResult<()> {
+    let save = |out: &Path, name: &str, report: &Value| {
+        if compact {
+            save(out, name, &source_span::compact(report.clone()))
+        } else {
+            save(out, name, report)
+        }
+    };
     for (file, split, label) in [
         ("answer-entry-source.json", "fit", "literal-construction"),
         ("answer-entry-source.json", "first_use", "prior-fresh"),

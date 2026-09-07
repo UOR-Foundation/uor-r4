@@ -349,6 +349,14 @@ pub(super) fn offer(
         WordCopyAction::Read
     };
     copy.pending = Some(WordCopyDecision {
+        span_words: if source < NO_SOURCE
+            && dependency.is_none()
+            && action != WordCopyAction::NoRead
+        {
+            super::source_span::extent(model, values, source, control, work)
+        } else {
+            0
+        },
         dependency,
         token,
         score,

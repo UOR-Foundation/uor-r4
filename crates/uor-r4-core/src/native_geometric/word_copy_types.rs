@@ -101,6 +101,8 @@ pub enum WordCopyAction {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct WordCopyDecision {
+    #[serde(default, skip_serializing_if = "copy_start_zero")]
+    pub span_words: u8,
     /// First and final current relation IDs for a dependent read.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dependency: Option<[u64; 2]>,
@@ -130,6 +132,9 @@ pub enum WordCopyProgress {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
 pub(super) struct WordCopyState {
+    /// Additional frozen query words in the committed source extent.
+    #[serde(default, skip_serializing_if = "copy_start_zero")]
+    pub span_words: u8,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub read_commit: Option<super::role_read::ReadCommit>,
     /// Immutable selected first-entry occurrence until the entry ends.

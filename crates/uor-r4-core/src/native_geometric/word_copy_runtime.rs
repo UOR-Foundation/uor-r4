@@ -29,12 +29,14 @@ pub(super) fn enabled(control: Control) -> bool {
 }
 
 fn geometry_control(model: &Model, control: Control) -> Control {
-    if matches!(control, Control::Full | Control::WordCopyDispatchDisabled)
-        && model
-            .response_entry
-            .as_ref()
-            .and_then(|h| h.copy.as_ref())
-            .is_some_and(|h| h.binding_geometry_disabled)
+    if matches!(
+        control,
+        Control::Full | Control::WordCopyDispatchDisabled | Control::SourceSpanDisabled
+    ) && model
+        .response_entry
+        .as_ref()
+        .and_then(|h| h.copy.as_ref())
+        .is_some_and(|h| h.binding_geometry_disabled)
     {
         Control::WordCopyGeometryDisabled
     } else {
@@ -313,11 +315,14 @@ impl WordCopyState {
         let Some(origin) = self.origin else {
             return absent;
         };
-        let Some(word) = super::relation::source(values, origin) else {
+        let Some(_word) = super::relation::source(values, origin) else {
             return absent;
         };
         work.word_record_reads = work.word_record_reads.saturating_add(1);
-        if word.len == 0 || word.len >= RESPONSE_ENTRY_STEPS {
+        let Some(length) = super::source_span::len(values, origin, self.span_words, work) else {
+            return absent;
+        };
+        if length == 0 || length >= RESPONSE_ENTRY_STEPS {
             return absent;
         }
         let Some(anchor) = entry.boundary else {
@@ -329,13 +334,13 @@ impl WordCopyState {
         let Some(steps) = entry
             .steps
             .checked_sub(self.start_step)
-            .and_then(|steps| steps.checked_sub(word.len))
+            .and_then(|steps| steps.checked_sub(length))
         else {
             return absent;
         };
         let Some(final_seen) = anchor
             .at_seen
-            .checked_add(u64::from(self.start_step) + u64::from(word.len))
+            .checked_add(u64::from(self.start_step) + u64::from(length))
         else {
             return absent;
         };
@@ -350,7 +355,11 @@ impl WordCopyState {
         };
         work.byte_reads = work.byte_reads.saturating_add(1);
         if usize::from(endpoint.pose) >= model.geometry.inverses.len()
-            || endpoint.token != u32::from(word.bytes[usize::from(word.len) - 1]) + 2
+            || endpoint.token
+                != u32::from(
+                    super::source_span::byte(values, origin, self.span_words, length - 1, work)
+                        .unwrap_or(0),
+                ) + 2
         {
             return absent;
         }
@@ -537,18 +546,28 @@ impl WordCopyState {
                 }
             }
         } else if entry.active {
-            if let Some((index, word)) = self
+            if let Some((index, _word)) = self
                 .origin
                 .and_then(|index| super::relation::source(values, index).map(|word| (index, word)))
             {
                 work.word_record_reads = work.word_record_reads.saturating_add(1);
+                let Some(length) = super::source_span::len(values, index, self.span_words, work)
+                else {
+                    return lexical;
+                };
                 match self.progress {
-                    WordCopyProgress::Emitting { cursor } if cursor < word.len => {
+                    WordCopyProgress::Emitting { cursor } if cursor < length => {
                         work.byte_reads = work.byte_reads.saturating_add(1);
                         chosen = Some((
                             index,
                             cursor,
-                            u32::from(word.bytes[usize::from(cursor)]) + 2,
+                            u32::from(super::source_span::byte(
+                                values,
+                                index,
+                                self.span_words,
+                                cursor,
+                                work,
+                            )?) + 2,
                             baseline.score + 1,
                             WordCopyAction::Byte,
                         ));
@@ -586,7 +605,7 @@ impl WordCopyState {
                         if let Some(token) = best {
                             chosen = Some((
                                 index,
-                                word.len,
+                                length,
                                 token,
                                 baseline.score + best_score,
                                 if token == EOS {
@@ -607,6 +626,7 @@ impl WordCopyState {
         let word = super::relation::source(values, index)?;
         work.word_record_reads = work.word_record_reads.saturating_add(1);
         self.pending = Some(WordCopyDecision {
+            span_words: self.span_words,
             dependency: self.read_commit.and_then(|c| c.dependency),
             token,
             score,
@@ -695,6 +715,7 @@ impl WordCopyState {
                 decision.action,
                 WordCopyAction::Prepare | WordCopyAction::NoRead | WordCopyAction::Read
             ) {
+                self.span_words = decision.span_words;
                 // The committed identity is the actually selected occurrence,
                 // not a later matching spelling or an output-derived pointer.
                 let source = (decision.word_index != super::role_read::NO_SOURCE)
@@ -729,7 +750,8 @@ impl WordCopyState {
                 self.start_step = decision.step;
                 work.word_record_reads = work.word_record_reads.saturating_add(1);
                 let len =
-                    super::relation::source(values, decision.word_index).map_or(0, |word| word.len);
+                    super::source_span::len(values, decision.word_index, self.span_words, work)
+                        .unwrap_or(0);
                 self.progress = if len == 1 {
                     WordCopyProgress::Complete
                 } else {
@@ -739,7 +761,8 @@ impl WordCopyState {
                 let cursor = decision.cursor.saturating_add(1);
                 work.word_record_reads = work.word_record_reads.saturating_add(1);
                 let len =
-                    super::relation::source(values, decision.word_index).map_or(0, |word| word.len);
+                    super::source_span::len(values, decision.word_index, self.span_words, work)
+                        .unwrap_or(0);
                 self.progress = if cursor == len {
                     WordCopyProgress::Complete
                 } else {

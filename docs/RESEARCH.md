@@ -7,6 +7,19 @@ implemented operations, measured behavior and proposed integration. The native
 model was d59070c2 at the review date; no model experiment was
 rerun for that review.
 
+## Source-span transport — implemented, candidate rejected, 2026-09-07
+
+The [result](native_geometric_source_span_1139.md) preserves the active
+`c6a98c04` parent. Experimental `7e928bd2` uses the existing signed-H4 learner
+for separator-conditioned Continue/Finish and exact bounded adjacent-word copying.
+Open complete answers improve 1/6 to 6/6 and fresh 3/10 to 9/10, but construction
+regresses 663/663 to 647/663 and an earlier exposed set 24/24 to 20/24. All twenty
+failures copy past a value into `holds OWNER`. The separate same-space phrase
+boundary is 0/1; a two-space value is also unsupported. Thus source transport is
+implemented, while the separator-only extent readout is rejected for promotion.
+Use retained contextual identity/binding to learn the boundary next; do not
+repeat the same feature-only fit or infer general language/energy capability.
+
 ## Retained source context — current bounded checkpoint, 2026-09-07
 
 The [source-context result](native_geometric_source_context_1139.md) retains

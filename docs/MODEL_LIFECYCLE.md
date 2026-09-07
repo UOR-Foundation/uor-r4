@@ -29,6 +29,15 @@ its exact parent. Candidate support stays at sixteen words. Legacy snapshots
 without predecessor metadata remain readable; available overlapping words and
 source tokens validate new metadata, while evicted bytes remain declared state.
 
+The experimental [source-span extension](native_geometric_source_span_1139.md)
+adds `Model::fit_source_span` and an optional `source_span` component bound to
+its complete parent. It learns a bounded Continue/Finish operator, preserving
+the first-source commitment and exact separators. `SourceSpanDisabled` restores
+single-word execution. The current separator-only fit regresses source boundaries
+and must not replace the active parent. Delimiter and extent snapshot validation
+preserve the same distinction between available byte evidence and declared
+evicted state. Context-sensitive extent remains the next model task.
+
 The complete lifecycle must qualify artifact loading, session boundaries,
 contextual access, generation/streaming, memory, errors/limits and capability
 identity on the same native model. Useful prose and reasoning require measured

@@ -24,6 +24,8 @@ mod source_routing;
 #[cfg(test)]
 mod source_routing_tests;
 mod source_routing_training;
+mod source_span;
+mod source_span_training;
 pub use source_routing_training::SourceRoutingConfig;
 mod typed_routing;
 mod typed_routing_training;
@@ -174,6 +176,7 @@ pub struct DocumentReceipt {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum Control {
+    SourceSpanDisabled,
     /// Restore the exact source router and feature law preceding context retention.
     SourceContextDisabled,
     /// Keep the fitted router but remove retained predecessors from its features.
@@ -240,6 +243,7 @@ impl Feature {
     fn admitted(self, control: Control) -> bool {
         match control {
             Control::Full
+            | Control::SourceSpanDisabled
             | Control::SourceContextDisabled
             | Control::SourceContextWindowOnly
             | Control::JointAdmissionDisabled
@@ -328,6 +332,8 @@ pub struct TrainingProgress {
 #[serde(try_from = "ModelWire")]
 pub struct Model {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    source_span: Option<source_routing::SourceRouting>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     source_context: Option<source_routing::SourceRoutingRefinement>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     literal_routing_refinement: Option<source_routing::SourceRoutingRefinement>,
@@ -378,6 +384,8 @@ pub struct Model {
 #[serde(deny_unknown_fields)]
 struct ModelWire {
     #[serde(default)]
+    source_span: Option<source_routing::SourceRouting>,
+    #[serde(default)]
     source_context: Option<source_routing::SourceRoutingRefinement>,
     #[serde(default)]
     literal_routing_refinement: Option<source_routing::SourceRoutingRefinement>,
@@ -427,6 +435,7 @@ impl TryFrom<ModelWire> for Model {
     type Error = Error;
     fn try_from(wire: ModelWire) -> Result<Self> {
         let model = Self {
+            source_span: wire.source_span,
             source_context: wire.source_context,
             literal_routing_refinement: wire.literal_routing_refinement,
             joint_admission: wire.joint_admission,

@@ -46,7 +46,10 @@ impl Session {
             .lexemes
             .as_ref()
             .ok_or_else(|| invalid("requires captured words"))?;
-        if saved.pending.is_some()
+        if saved.span_words > 15
+            || (saved.span_words != 0
+                && (model.source_span.is_none() || self.control == Control::SourceSpanDisabled))
+            || saved.pending.is_some()
             || saved.origin.is_none() != (saved.progress == WordCopyProgress::Idle)
         {
             return Err(invalid("origin and progress shape differ"));
@@ -116,6 +119,7 @@ impl Session {
                     != source.and_then(|i| super::relation::source_version(values, i))
                 || source != commit.source
                 || saved.origin != source
+                || saved.span_words != decision.span_words
                 || decision.source_end != commit.source_end
                 || decision.source_byte_end != commit.source_byte_end
                 || decision.token != commit.token
@@ -124,28 +128,44 @@ impl Session {
                 return Err(invalid("committed source differs from joint selection"));
             }
             if let Some(index) = source {
-                let word = super::relation::source(values, index)
+                let _word = super::relation::source(values, index)
                     .ok_or_else(|| invalid("read source outside capture"))?;
                 if saved.start_step != u8::from(commit.prepare) {
                     return Err(invalid("read start differs"));
                 }
+                let length = super::source_span::len(
+                    values,
+                    index,
+                    saved.span_words,
+                    &mut WordCopyWork::default(),
+                )
+                .ok_or_else(|| invalid("span extent invalid"))?;
                 let observed = entry
                     .steps
                     .checked_sub(saved.start_step)
                     .ok_or_else(|| invalid("read prefix not observed"))?;
                 let prefix = match saved.progress {
                     WordCopyProgress::Emitting { cursor }
-                        if cursor == observed && cursor < word.len =>
+                        if cursor == observed && cursor < length =>
                     {
                         usize::from(cursor)
                     }
-                    WordCopyProgress::Complete if observed >= word.len => usize::from(word.len),
+                    WordCopyProgress::Complete if observed >= length => usize::from(length),
                     WordCopyProgress::Aborted if observed >= 1 => usize::from(!commit.prepare),
                     _ => return Err(invalid("read cursor differs from observations")),
                 };
                 for offset in 0..prefix {
                     if token_at(anchor.at_seen + u64::from(saved.start_step) + offset as u64)?
-                        != u32::from(word.bytes[offset]) + 2
+                        != u32::from(
+                            super::source_span::byte(
+                                values,
+                                index,
+                                saved.span_words,
+                                offset as u8,
+                                &mut WordCopyWork::default(),
+                            )
+                            .ok_or_else(|| invalid("span byte absent"))?,
+                        ) + 2
                     {
                         return Err(invalid("read bytes differ from committed source"));
                     }

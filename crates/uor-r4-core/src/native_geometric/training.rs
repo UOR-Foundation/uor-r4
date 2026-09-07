@@ -178,6 +178,7 @@ impl Trainer {
             dependent_read: None,
             typed_routing: None,
             joint_admission: None,
+            source_span: None,
             source_context: None,
             literal_routing_refinement: None,
             typed_roles: None,
@@ -518,6 +519,37 @@ impl Model {
     }
     pub(super) fn validate(&self) -> Result<()> {
         self.config.validate()?;
+        if let Some(block) = &self.source_span {
+            if self.source_context.is_none()
+                || !block.config.role_context_only
+                || block.config.learned_features > 16
+            {
+                return Err(Error("invalid source span parent/config".into()));
+            }
+            block.validate_shape(self, 2, 1)?;
+            if block
+                .codes
+                .iter()
+                .any(|c| c.feature.a > 255 || c.feature.b != 0)
+            {
+                return Err(Error("invalid source span separator".into()));
+            }
+            let mut parent = self.clone();
+            parent.source_span = None;
+            parent.refresh_identity()?;
+            if parent.artifact_cid != block.parent_artifact {
+                return Err(Error("source span frozen parent differs".into()));
+            }
+            parent.validate()?;
+            let mut duplicate = self.clone();
+            duplicate.refresh_identity()?;
+            if duplicate.artifact_cid != self.artifact_cid
+                || duplicate.uor_model_address != self.uor_model_address
+            {
+                return Err(Error("source span identity differs".into()));
+            }
+            return Ok(());
+        }
         if let Some(witness) = &self.source_context {
             let block = self
                 .source_routing

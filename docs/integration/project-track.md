@@ -265,11 +265,16 @@ sixteen-word window edge. Construction improves 654/663 to 663/663, open 12/16
 to 16/16 and fresh owner/query/order 24/32 to 32/32 (24/32 context-disabled), with
 all prior output/write/session preservation. Existing learned H4 owner-binding
 codes become accessible; one fit update only improves a margin.
-**Next: reusable contextual transition/emission conditioned on the selected exact
-entity/value and committed operator result.** Preserve the successful source and
-numeric boundaries, use fresh construction/open populations and a separate final
-fresh evaluation, and project the full run against the remaining cumulative
-allocation before execution. Do not restart completed order repairs or grow a
+The subsequent [source-span experiment](../native_geometric_source_span_1139.md)
+implements bounded learned adjacent-word transport: open 1/6 to 6/6 and fresh
+3/10 to 9/10, but sixteen construction and four exposed preservation answers
+overextend at spaces. `7e928bd2` is unpromoted; `c6a98c04` stays active.
+**Next: context-sensitive Continue/Finish using retained ordered source identity
+and query/value binding.** Include new same-separator stop/continue contrasts,
+keep first-source selection fixed, and preserve the numeric/memory boundaries.
+A separator-only refit cannot resolve this representation collision. Use new
+construction/open populations and a separate final fresh evaluation, and project
+the full run against the remaining cumulative allocation before execution. Do not restart completed order repairs or grow a
 paging subsystem without a measured access bottleneck. General named-role binding
 and broader Rust reasoning remain unqualified. Follow current-state.md for
 artifacts and cumulative resources; a new issue does not reset the spent amount.

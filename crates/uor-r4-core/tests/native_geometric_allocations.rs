@@ -291,6 +291,10 @@ fn native_kernel_source_has_no_forbidden_arithmetic_or_float_types() {
             )
             .1,
         ),
+        (
+            "native source span",
+            include_str!("../src/native_geometric/source_span.rs"),
+        ),
         ("native completion seed", seed),
         ("native numeral codec", numeral),
         ("native whole-word codec", lexemes),
@@ -1948,4 +1952,122 @@ fn native_source_context_retains_owner_and_preserves_causal_copy() {
     times[..time_len].sort_unstable();
     println!("warm predict+observe samples={}, median_ns={}, max_ns={} (loading/encoding/ingestion/checkpoints excluded)",time_len,times[time_len/2],times[time_len-1]);
     println!("source context: exact parent restoration, malformed-artifact rejection, evicted-owner contrast, numeric binding, source preservation, observation-only writes, checkpoints and zero allocations PASS");
+}
+
+#[test]
+#[ignore = "requires R4_SOURCE_SPAN_MODEL and R4_SOURCE_SPAN_PARENT"]
+fn native_source_span_preserves_commit_checkpoints_and_zero_allocation() {
+    use uor_r4_core::native_geometric::Model;
+    let bytes = std::fs::read(std::env::var("R4_SOURCE_SPAN_MODEL").unwrap()).unwrap();
+    let parent_bytes = std::fs::read(std::env::var("R4_SOURCE_SPAN_PARENT").unwrap()).unwrap();
+    let model = Model::from_bytes(&bytes).unwrap();
+    let mut wire: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    let mut parent: serde_json::Value = serde_json::from_slice(&parent_bytes).unwrap();
+    let block = wire.as_object_mut().unwrap().remove("source_span").unwrap();
+    assert_eq!(block["parent_artifact"], parent["artifact_cid"]);
+    for j in [&mut wire, &mut parent] {
+        j.as_object_mut().unwrap().remove("artifact_cid");
+        j.as_object_mut().unwrap().remove("uor_model_address");
+    }
+    assert_eq!(
+        wire, parent,
+        "the complete selector and parent parameters are unchanged"
+    );
+    let mut invalid: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    invalid["source_span"]["codes"][0]["roots"][0] = 120.into();
+    assert!(Model::from_bytes(&serde_json::to_vec(&invalid).unwrap()).is_err());
+    let mut times = [0_u128; 96];
+    let mut samples = 0;
+    for (prompt, expected, extra) in [
+        (
+            "User: ada lives in New York.\nUser: Where is ada?\nAssistant:",
+            " New York.\n",
+            1,
+        ),
+        (
+            "User: ada lives in Rio de Janeiro.\nUser: Where is ada?\nAssistant:",
+            " Rio de Janeiro.\n",
+            2,
+        ),
+    ] {
+        let tokens = model.encode(prompt).unwrap();
+        let mut session = model.session(Control::Full).unwrap();
+        ALLOCATIONS.with(|v| v.set(0));
+        BYTES.with(|v| v.set(0));
+        MEASURING.with(|v| v.set(true));
+        session.observe(&model, BOS).unwrap();
+        for t in tokens {
+            session.observe(&model, t).unwrap();
+        }
+        session.begin_response(&model).unwrap();
+        let first = session.predict(&model).unwrap();
+        assert_eq!(first, session.predict(&model).unwrap());
+        assert_eq!(session.word_copy_decision().unwrap().span_words, extra);
+        assert_eq!(session.work.word_copy.selector.commits, 0);
+        MEASURING.with(|v| v.set(false));
+        let mut out = [EOS; 32];
+        let mut len = 0;
+        loop {
+            // Pending predictions are omitted and reconstructed by checkpoints.
+            let checkpoint = session.checkpoint().unwrap();
+            let mut restored = model.restore_session(&checkpoint).unwrap();
+            let replay_prediction = restored.predict(&model).unwrap();
+            if len == 5 {
+                let mut bad: serde_json::Value = serde_json::from_slice(&checkpoint).unwrap();
+                bad["word_copy"]["span_words"] = 15.into();
+                assert!(model
+                    .restore_session(&serde_json::to_vec(&bad).unwrap())
+                    .is_err());
+                let commits = restored.work.word_copy.selector.commits;
+                let p = restored.predict(&model).unwrap();
+                restored
+                    .observe(&model, if p.token == 2 { 3 } else { 2 })
+                    .unwrap();
+                assert_eq!(restored.work.word_copy.selector.commits, commits);
+                assert!(restored.work.word_copy.selector.mismatches > 0);
+            }
+            MEASURING.with(|v| v.set(true));
+            let start = std::time::Instant::now();
+            let prediction = session.predict(&model).unwrap();
+            let t = prediction.token;
+            session.observe(&model, t).unwrap();
+            let elapsed = start.elapsed().as_nanos();
+            // The first step was predicted above to inspect its pending source.
+            // Subsequent steps start without a pending prediction.
+            if len != 0 {
+                times[samples] = elapsed;
+                samples += 1;
+            }
+            MEASURING.with(|v| v.set(false));
+            assert_eq!(prediction, replay_prediction);
+            out[len] = t;
+            len += 1;
+            if t == EOS || len == 32 {
+                break;
+            }
+        }
+        assert_eq!(out[len - 1], EOS);
+        assert_eq!(model.decode(&out[..len]).unwrap(), expected.as_bytes());
+        assert_eq!((ALLOCATIONS.with(Cell::get), BYTES.with(Cell::get)), (0, 0));
+        let checkpoint = session.checkpoint().unwrap();
+        assert_eq!(
+            model
+                .restore_session(&checkpoint)
+                .unwrap()
+                .checkpoint()
+                .unwrap(),
+            checkpoint
+        );
+        assert!(
+            model
+                .generate(prompt, 32, Control::SourceSpanDisabled)
+                .unwrap()
+                .text
+                .len()
+                < expected.len()
+        );
+    }
+    times[..samples].sort_unstable();
+    println!("span uncached warm predict+observe samples={samples} median_ns={} max_ns={} (loading, ingestion and checkpoints excluded)", times[samples/2], times[samples-1]);
+    println!("parent restoration, malformed code rejection, source commitment, interrupted copy, every-byte checkpoint and zero allocations PASS");
 }
