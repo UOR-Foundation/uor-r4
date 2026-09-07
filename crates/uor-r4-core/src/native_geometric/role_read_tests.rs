@@ -165,3 +165,104 @@ fn native_role_read_validates_quantized_rows_and_parent_identity() {
         changed
     );
 }
+
+#[test]
+fn native_no_read_completion_preserves_parent_and_requires_committed_no_read() {
+    let parent = fitted();
+    let docs: Vec<_> = ["alpha", "bravo", "cedar", "delta"]
+        .into_iter()
+        .enumerate()
+        .map(|(i, name)| ValueExample {
+            id: format!("no-read-suffix-{i}"),
+            prompt: format!("13; {name} in city. Where is missing? Answer:"),
+            response: " Unknown.\n".into(),
+        })
+        .collect();
+    let (model, report) = parent
+        .fit_no_read_completion(&docs, ResponseEntryFitConfig::default())
+        .unwrap();
+    assert_eq!(report["admitted"].as_array().unwrap().len(), docs.len());
+    let mut inherited = model.clone();
+    inherited.no_read_completion = None;
+    inherited.refresh_identity().unwrap();
+    assert_eq!(&inherited, parent);
+    let model = Model::from_bytes(&model.to_bytes().unwrap()).unwrap();
+    let mut no_offer = model.clone();
+    let head = no_offer.no_read_completion.as_mut().unwrap();
+    head.rows.clear();
+    head.global_postings.clear();
+    no_offer.refresh_identity().unwrap();
+    no_offer.validate().unwrap();
+    let unchanged = no_offer
+        .generate(&docs[0].prompt, 32, Control::Full)
+        .unwrap();
+    let original = parent.generate(&docs[0].prompt, 32, Control::Full).unwrap();
+    assert_eq!(unchanged.text, original.text);
+    assert_eq!(
+        unchanged.response_entry_trace, original.response_entry_trace,
+        "no learned offer must preserve inherited pending decisions and prefix fallback"
+    );
+    for d in &docs {
+        let g = model.generate(&d.prompt, 32, Control::Full).unwrap();
+        assert_eq!(g.text, d.response);
+        assert_eq!(g.stop, "end_of_document");
+    }
+    for prompt in [
+        fixture::COPY_PROMPT,
+        "holder in alpha. Where is holder? Answer:",
+        "alpha in city. Where is missing? Answer:",
+    ] {
+        assert_eq!(
+            model.generate(prompt, 32, Control::Full).unwrap().text,
+            parent.generate(prompt, 32, Control::Full).unwrap().text
+        );
+    }
+    let mut s = begin(&model, &docs[0].prompt);
+    let mut scope_values = s.values.as_ref().unwrap().clone();
+    assert!(super::word_copy_runtime::literal_no_read_eligible(
+        &scope_values,
+        &mut Default::default()
+    ));
+    scope_values.sources[0].derived = true;
+    assert!(!super::word_copy_runtime::literal_no_read_eligible(
+        &scope_values,
+        &mut Default::default()
+    ));
+    scope_values.sources.clear();
+    assert!(!super::word_copy_runtime::literal_no_read_eligible(
+        &scope_values,
+        &mut Default::default()
+    ));
+    let p = s.predict(&model).unwrap();
+    assert_eq!(
+        s.word_copy_decision().unwrap().action,
+        WordCopyAction::NoRead
+    );
+    let before = s.checkpoint().unwrap();
+    s.observe(&model, p.token).unwrap();
+    let cp = s.checkpoint().unwrap();
+    let mut restored = model.restore_session(&cp).unwrap();
+    assert_eq!(
+        s.predict(&model).unwrap(),
+        restored.predict(&model).unwrap()
+    );
+    let mut mismatch = model.restore_session(&before).unwrap();
+    mismatch.predict(&model).unwrap();
+    mismatch.observe(&model, u32::from(b'?') + 2).unwrap();
+    assert!(mismatch.word_copy.as_ref().unwrap().read_commit.is_none());
+    for change in 0..4 {
+        let mut bad = model.clone();
+        let h = bad.no_read_completion.as_mut().unwrap();
+        match change {
+            0 => h.baseline_artifact = "bad".into(),
+            1 => h.rows[0].scores[0].token = BOS,
+            2 => h.rows[0].scores[0].score = 1_000_001,
+            _ => h.schema = super::response_entry_types::RESPONSE_ENTRY_SCHEMA.into(),
+        }
+        bad.refresh_identity().unwrap();
+        assert!(bad.validate().is_err());
+    }
+    assert!(model
+        .fit_no_read_completion(&docs, ResponseEntryFitConfig::default())
+        .is_err());
+}

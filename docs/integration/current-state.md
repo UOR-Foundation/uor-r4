@@ -1,6 +1,51 @@
 # Current native geometric AI work
 
-## Protected computed roles and literal admission — #1139 / #1140, 2026-09-06
+## Committed NoRead completion in literal contexts — #1139 / #1140, 2026-09-06
+
+**Retain `e7c14c99` at literal-numeric NoRead-completion scope.** The
+[result](../native_geometric_no_read_completion_1139.md) and
+[evidence](../evidence/native_geometric_no_read_completion_1139.json) bind the
+actual native Rust path. A36,763-byte continuation table reuses existing
+word-binding prefix features and integer token scoring after selected NoRead
+commits. It applies only with retained literal numeric records and no derived
+record. The complete `c29ab982` parent and all learned numeric/source parameters
+remain unchanged; no session-state field or response provider is added.
+
+Exposed complete answers improve12/16 to14/16 and reserved changed-name/value
+answers14/16 to15/16. All12 new numeric answers and3/4 abstentions pass. The
+remaining new failure copies `coins` as a location answer. Complete three-turn
+computations stay16/16, identifier returns8/8, and the earlier independent set
+16/16. Preservation passes48/48 dependent cases,62/62 earlier responses,24/24
+prior transfer,28/28 exposed names,28/28 long-context,5/5 persistent turns,
+6/6 earlier numeric, all three12-case role sets and58/58 computed construction.
+Thirteen focused tests, actual NoRead and three-turn zero allocations, complete
+parent equality, checkpoint and mutation checks pass. Construction is99/103;
+four construction cases still choose an unsupported source.
+
+Two intermediate candidates are retained negatives: `760fc57b` shortened four
+required explanatory responses; `235fad68` restored62/62 but broke a
+relation-conflict session. Their first-use evaluation remained unopened during
+revision. The final state-scope correction restores memory behavior without
+changing the second candidate's learned table. No new angular-distance
+advantage or general abstention capability is established.
+
+**Next: repair joint source/NoRead selection for unsupported retained words.**
+Reuse the existing geometric source router and occurrence binding, training
+supported-word and missing-attribute cases together. Keep numeric admission,
+computed results, copied identifiers and memory preservation. Do not replace
+NoOperation with a universal Unknown or add an observed-question parser.
+General prose, syntax, reasoning, frontier capability and whole-model laptop
+advantage remain unqualified. #1139/#1140 remain open.
+
+The rebuilt actual CLI returns the repaired abstention and the preserved
+identifier with EOS. Model work282.150s brings cumulative use to3450.276/3570s,
+leaving119.724s. The scoped storage-growth allowance increased160MiB after the
+CLI-only build reached its guard; the broad ceiling stays7,063,207,936 bytes.
+All build/model failures, corrections and retries remain charged. Exact costs
+and the revised engineering projections are in the evidence. No deletions or
+external model compute.
+
+## Previous checkpoint: protected computed roles and literal admission — #1139 / #1140, 2026-09-06
 
 **Retain `c29ab982` at bounded literal-admission scope.** The
 [result](../native_geometric_literal_admission_1139.md) and

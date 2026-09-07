@@ -30,7 +30,15 @@ preservation and are not promoted. Literal-only offline frames cannot supply
 a preceding answer. The [protected admission repair](native_geometric_literal_admission_1139.md)
 now adds optional `typed_literals` while preserving its entire accepted parent.
 It restores prior behavior and is retained at bounded numeric/identifier scope;
-answer routing after NoOperation remains incomplete.
+answer routing after NoOperation remains incomplete. The subsequent
+[NoRead continuation](native_geometric_no_read_completion_1139.md) adds optional
+`no_read_completion`, bound to its entire unchanged parent and an explicit
+literal-numeric binding-completion schema. It reuses the word-copy prefix
+features and entry scorer only after selected NoRead commits, with literal
+numeric records and no derived record. Relation-only and computed-result states
+retain inherited continuation. It adds no session-state fields or provider.
+Runtime copying and numeric admission are still learned upstream decisions;
+the new table cannot correct an unsupported source chosen for copying.
 
 ## Historical and retained reference lifecycles
 

@@ -1348,6 +1348,10 @@ fn native_independent_artifact_is_allocation_free() {
         );
         let mut protected = wire.clone();
         protected.as_object_mut().unwrap().remove("typed_literals");
+        protected
+            .as_object_mut()
+            .unwrap()
+            .remove("no_read_completion");
         for key in ["artifact_cid", "uor_model_address"] {
             protected.as_object_mut().unwrap().remove(key);
             parent.as_object_mut().unwrap().remove(key);
@@ -1367,4 +1371,63 @@ fn native_independent_artifact_is_allocation_free() {
         .remove("operand_provenance");
     assert!(Model::from_bytes(&serde_json::to_vec(&wire).unwrap()).is_err());
     println!("actual independent sums and named Copy: all bytes and EOS correct; allocations=0 bytes=0; checkpoint roundtrip and unbound flag rejection PASS");
+}
+
+#[test]
+#[ignore = "requires the explicitly supplied accepted NoRead completion artifact"]
+fn native_no_read_artifact_is_allocation_free() {
+    use uor_r4_core::native_geometric::Model;
+    let bytes = std::fs::read(std::env::var("R4_NO_READ_MODEL").unwrap()).unwrap();
+    let model = Model::from_bytes(&bytes).unwrap();
+    let mut outer: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert!(outer
+        .as_object_mut()
+        .unwrap()
+        .remove("no_read_completion")
+        .is_some());
+    let mut parent: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(std::env::var("R4_NO_READ_PARENT").unwrap()).unwrap(),
+    )
+    .unwrap();
+    for doc in [&mut outer, &mut parent] {
+        for k in ["artifact_cid", "uor_model_address"] {
+            doc.as_object_mut().unwrap().remove(k);
+        }
+    }
+    assert_eq!(outer, parent, "every parent parameter must be unchanged");
+    let prompt=model.encode("User: leni has 17 coins. varo has -5 coins. tavi has 301 coins.\nUser: Where is the location of leni?\nAssistant:").unwrap();
+    let mut s = model.session(Control::Full).unwrap();
+    let mut out = [EOS; 32];
+    let mut n = 0;
+    ALLOCATIONS.with(|v| v.set(0));
+    BYTES.with(|v| v.set(0));
+    MEASURING.with(|v| v.set(true));
+    s.observe(&model, BOS).unwrap();
+    for t in prompt {
+        s.observe(&model, t).unwrap();
+    }
+    s.begin_response(&model).unwrap();
+    for slot in &mut out {
+        let p = s.predict(&model).unwrap();
+        *slot = p.token;
+        n += 1;
+        s.observe(&model, p.token).unwrap();
+        if p.token == EOS {
+            break;
+        }
+    }
+    MEASURING.with(|v| v.set(false));
+    assert_eq!((ALLOCATIONS.with(Cell::get), BYTES.with(Cell::get)), (0, 0));
+    assert_eq!(out[n - 1], EOS);
+    assert_eq!(model.decode(&out[..n]).unwrap(), b" Unknown.\n");
+    let checkpoint = s.checkpoint().unwrap();
+    assert_eq!(
+        model
+            .restore_session(&checkpoint)
+            .unwrap()
+            .checkpoint()
+            .unwrap(),
+        checkpoint
+    );
+    println!("actual NoRead answer: exact bytes and EOS; allocations=0 bytes=0; complete parent equality and checkpoint roundtrip PASS");
 }

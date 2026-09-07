@@ -1,0 +1,2339 @@
+{
+  "schema": "uor-r4.literal-no-read-completion-result/1",
+  "decision": "RETAIN_E7C14C99_LITERAL_NUMERIC_NOREAD_COMPLETION",
+  "execution_base": "5256f8d9982c361151743a5b6c516fb0ca2c51cb",
+  "source_files": [
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-typed-value/uor-r4/crates/uor-r4-core/src/native_geometric/mod.rs",
+      "bytes": 19368,
+      "sha256": "ed950ccaf50b094987fa01c61c573109b1b75165f2de0293a30287db7ce94323"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-typed-value/uor-r4/crates/uor-r4-core/src/native_geometric/training.rs",
+      "bytes": 45547,
+      "sha256": "191fd7ab9782dbaae2cc53fbf94759ed80b17caa8b72389e6f0a84187941f42e"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-typed-value/uor-r4/crates/uor-r4-core/src/native_geometric/response_entry_types.rs",
+      "bytes": 2897,
+      "sha256": "bf79f9c3418f773ab45b9679d9a651ea6fa2ad213d5a53445b1fe97e0749f0dd"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-typed-value/uor-r4/crates/uor-r4-core/src/native_geometric/response_entry_runtime.rs",
+      "bytes": 11680,
+      "sha256": "5466a9ba80ac08202e3e5ccfdf27f3e5911a1e530a7ce89bc87fe8db320619f5"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-typed-value/uor-r4/crates/uor-r4-core/src/native_geometric/response_entry_training.rs",
+      "bytes": 26274,
+      "sha256": "f391fbc8d6abc2d254455bac0f09769d3aab9d5a7d7257bf61ad371786cf9274"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-typed-value/uor-r4/crates/uor-r4-core/src/native_geometric/word_copy_runtime.rs",
+      "bytes": 36752,
+      "sha256": "2bb83480428b01f24d116c2463d1b0befd8e0024481d64c2e33b8a90fdb149df"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-typed-value/uor-r4/crates/uor-r4-core/src/native_geometric/role_read_tests.rs",
+      "bytes": 9764,
+      "sha256": "017d9cd966f908736b98a555cd0a09e95d69b78900eb11c962eba657ccaa4042"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-typed-value/uor-r4/crates/uor-r4-core/examples/native_geometric_value_probe/typed_routing.rs",
+      "bytes": 33042,
+      "sha256": "2c2468e8846b5e214eac739698a98aa6b1170233471d95eac8d922583323afed"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-typed-value/uor-r4/crates/uor-r4-core/tests/native_geometric_allocations.rs",
+      "bytes": 55121,
+      "sha256": "3779aa6eeba6d0f1e71f38d25f0506643738271446c2d2677a4c1581b98ce487"
+    }
+  ],
+  "source": {
+    "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/answer-entry-source.json",
+    "bytes": 87060,
+    "sha256": "15801cf49bd3c2f860546da430eed0afa73916fc06d3a6a11d050d207004d508"
+  },
+  "parent": {
+    "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-admission-angular/model.json",
+    "bytes": 11176068,
+    "sha256": "1b8e9da3f3b29cf2fe3228d35979c8a03192fd6c3b36e9d398d42ad151010e72"
+  },
+  "fits": [
+    {
+      "status": "REJECT_PRESERVATION",
+      "model": {
+        "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/answer-entry-candidate/model.json",
+        "bytes": 11207204,
+        "sha256": "f3e1470ebc222111007b088f8cf25cf28356df0f5847aa90d1a0571e68ecaeba"
+      },
+      "artifact": "blake3:760fc57bfa1c51eba6efca1ad89b429a26869bd3049bc12ab9235053d8e66642",
+      "operator_schema": "uor-r4.native-response-entry/1",
+      "fit": {
+        "admitted": [
+          "literal-preserve/typed-value/fit/prose/no_write/0",
+          "literal-preserve/typed-value/fit/prose/no_write/1",
+          "literal-preserve/typed-value/fit/prose/no_write/2",
+          "literal-preserve/typed-value/fit/prose/no_write/3",
+          "literal-fit/0/false/3",
+          "literal-fit/1/false/3",
+          "literal-fit/2/false/3",
+          "literal-fit/3/false/3"
+        ],
+        "associations": 192,
+        "correct_positions": 52,
+        "documents": 103,
+        "dropped_associations": 0,
+        "dropped_rows": 0,
+        "loss": 0.1670632643605214,
+        "parent": "blake3:c29ab9826e3beddae71f1ba5c189c602cfa2686b652da3b7d78e93d927254ad8",
+        "positions": 56,
+        "rows": 130,
+        "schema": "uor-r4.no-read-completion-fit/1",
+        "scope": "Continuation only after actual frozen-parent NoRead. Teacher-forced token learning is not free-generation acceptance; all parent parameters preserved.",
+        "selected_epoch": 24,
+        "skipped": [
+          {
+            "id": "literal-preserve/typed-value/fit/prose/copy_current/0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/prose/add/0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/prose/dependency_before_update/0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/rust/copy_current/0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/rust/add/0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/rust/dependency_before_update/0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/rust/no_write/0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/prose/copy_current/1",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/prose/add/1",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/prose/dependency_before_update/1",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/rust/copy_current/1",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/rust/add/1",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/rust/dependency_before_update/1",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/rust/no_write/1",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/prose/copy_current/2",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/prose/add/2",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/prose/dependency_before_update/2",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/rust/copy_current/2",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/rust/add/2",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/rust/dependency_before_update/2",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/rust/no_write/2",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/prose/copy_current/3",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/prose/add/3",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/prose/dependency_before_update/3",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/rust/copy_current/3",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/rust/add/3",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/rust/dependency_before_update/3",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/rust/no_write/3",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/prefix/roles-fit/0/0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/prefix/roles-fit/1/0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/prefix/roles-fit/2/0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/prefix/roles-fit/3/0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/prefix/roles-fit/4/0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/prefix/roles-fit/5/0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/prefix/independent-fit/1/false/0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/0/false/0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/0/false/1",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/0/false/2",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/0/true/0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/0/true/1",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/0/true/2",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/0/true/3",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/1/false/0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/1/false/1",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/1/false/2",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/1/true/0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/1/true/1",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/1/true/2",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/1/true/3",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/2/false/0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/2/false/1",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/2/false/2",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/2/true/0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/2/true/1",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/2/true/2",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/2/true/3",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/3/false/0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/3/false/1",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/3/false/2",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/3/true/0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/3/true/1",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/3/true/2",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/3/true/3",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-0/name-0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-0/name-1",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-0/name-2",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-0/name-3",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-0/name-4",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-0/name-5",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-0/name-6",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-0/name-7",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-1/name-0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-1/name-1",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-1/name-2",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-1/name-3",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-1/name-4",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-1/name-5",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-1/name-6",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-1/name-7",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-2/name-0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-2/name-1",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-2/name-2",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-2/name-3",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-2/name-4",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-2/name-5",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-2/name-6",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-2/name-7",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-3/name-0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-3/name-1",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-3/name-2",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-3/name-3",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-3/name-4",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-3/name-5",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-3/name-6",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-3/name-7",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          }
+        ]
+      }
+    },
+    {
+      "status": "REJECT_PRESERVATION",
+      "model": {
+        "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/answer-entry-binding/model.json",
+        "bytes": 11212845,
+        "sha256": "b0e5cbaac7097e9efae410a39de0134fb742f1032fcafad3ef71489d61d5350d"
+      },
+      "artifact": "blake3:235fad685bfbeef5d657fc9947c379c46ee304116b716b3ea06d70853bf3ac58",
+      "operator_schema": "uor-r4.native-no-read-binding-completion/1",
+      "fit": {
+        "admitted": [
+          "literal-preserve/typed-value/fit/prose/no_write/0",
+          "literal-preserve/typed-value/fit/prose/no_write/1",
+          "literal-preserve/typed-value/fit/prose/no_write/2",
+          "literal-preserve/typed-value/fit/prose/no_write/3",
+          "literal-fit/0/false/3",
+          "literal-fit/1/false/3",
+          "literal-fit/2/false/3",
+          "literal-fit/3/false/3"
+        ],
+        "associations": 354,
+        "correct_positions": 56,
+        "documents": 103,
+        "dropped_associations": 0,
+        "dropped_rows": 0,
+        "loss": 0.03872279702854314,
+        "parent": "blake3:c29ab9826e3beddae71f1ba5c189c602cfa2686b652da3b7d78e93d927254ad8",
+        "positions": 56,
+        "rows": 149,
+        "schema": "uor-r4.no-read-completion-fit/1",
+        "scope": "Continuation only after actual frozen-parent NoRead. Teacher-forced token learning is not free-generation acceptance; all parent parameters preserved.",
+        "selected_epoch": 24,
+        "skipped": [
+          {
+            "id": "literal-preserve/typed-value/fit/prose/copy_current/0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/prose/add/0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/prose/dependency_before_update/0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/rust/copy_current/0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/rust/add/0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/rust/dependency_before_update/0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/rust/no_write/0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/prose/copy_current/1",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/prose/add/1",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/prose/dependency_before_update/1",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/rust/copy_current/1",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/rust/add/1",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/rust/dependency_before_update/1",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/rust/no_write/1",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/prose/copy_current/2",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/prose/add/2",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/prose/dependency_before_update/2",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/rust/copy_current/2",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/rust/add/2",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/rust/dependency_before_update/2",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/rust/no_write/2",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/prose/copy_current/3",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/prose/add/3",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/prose/dependency_before_update/3",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/rust/copy_current/3",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/rust/add/3",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/rust/dependency_before_update/3",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/rust/no_write/3",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/prefix/roles-fit/0/0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/prefix/roles-fit/1/0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/prefix/roles-fit/2/0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/prefix/roles-fit/3/0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/prefix/roles-fit/4/0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/prefix/roles-fit/5/0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/prefix/independent-fit/1/false/0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/0/false/0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/0/false/1",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/0/false/2",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/0/true/0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/0/true/1",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/0/true/2",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/0/true/3",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/1/false/0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/1/false/1",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/1/false/2",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/1/true/0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/1/true/1",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/1/true/2",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/1/true/3",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/2/false/0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/2/false/1",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/2/false/2",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/2/true/0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/2/true/1",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/2/true/2",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/2/true/3",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/3/false/0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/3/false/1",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/3/false/2",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/3/true/0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/3/true/1",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/3/true/2",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/3/true/3",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-0/name-0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-0/name-1",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-0/name-2",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-0/name-3",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-0/name-4",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-0/name-5",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-0/name-6",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-0/name-7",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-1/name-0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-1/name-1",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-1/name-2",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-1/name-3",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-1/name-4",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-1/name-5",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-1/name-6",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-1/name-7",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-2/name-0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-2/name-1",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-2/name-2",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-2/name-3",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-2/name-4",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-2/name-5",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-2/name-6",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-2/name-7",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-3/name-0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-3/name-1",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-3/name-2",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-3/name-3",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-3/name-4",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-3/name-5",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-3/name-6",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-3/name-7",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          }
+        ]
+      }
+    },
+    {
+      "status": "RETAIN_BOUNDED_SCOPE",
+      "model": {
+        "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/answer-entry-final/model.json",
+        "bytes": 11212853,
+        "sha256": "d8b54a54966dfc4c7d5d1fc0a2bc3de371eb4f5cd5a78508958a8e7873c9916e"
+      },
+      "artifact": "blake3:e7c14c994c57eaad6c9a765c71e7699c0f7f0c88a225aea71e6e84c8b7da0e11",
+      "operator_schema": "uor-r4.native-literal-no-read-binding-completion/1",
+      "fit": {
+        "admitted": [
+          "literal-preserve/typed-value/fit/prose/no_write/0",
+          "literal-preserve/typed-value/fit/prose/no_write/1",
+          "literal-preserve/typed-value/fit/prose/no_write/2",
+          "literal-preserve/typed-value/fit/prose/no_write/3",
+          "literal-fit/0/false/3",
+          "literal-fit/1/false/3",
+          "literal-fit/2/false/3",
+          "literal-fit/3/false/3"
+        ],
+        "associations": 354,
+        "correct_positions": 56,
+        "documents": 103,
+        "dropped_associations": 0,
+        "dropped_rows": 0,
+        "loss": 0.03872279702854314,
+        "parent": "blake3:c29ab9826e3beddae71f1ba5c189c602cfa2686b652da3b7d78e93d927254ad8",
+        "positions": 56,
+        "rows": 149,
+        "schema": "uor-r4.no-read-completion-fit/1",
+        "scope": "Literal-numeric continuation only after actual frozen-parent NoRead. Teacher-forced token learning is not free-generation acceptance; all parent parameters preserved.",
+        "selected_epoch": 24,
+        "skipped": [
+          {
+            "id": "literal-preserve/typed-value/fit/prose/copy_current/0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/prose/add/0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/prose/dependency_before_update/0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/rust/copy_current/0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/rust/add/0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/rust/dependency_before_update/0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/rust/no_write/0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/prose/copy_current/1",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/prose/add/1",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/prose/dependency_before_update/1",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/rust/copy_current/1",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/rust/add/1",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/rust/dependency_before_update/1",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/rust/no_write/1",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/prose/copy_current/2",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/prose/add/2",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/prose/dependency_before_update/2",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/rust/copy_current/2",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/rust/add/2",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/rust/dependency_before_update/2",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/rust/no_write/2",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/prose/copy_current/3",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/prose/add/3",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/prose/dependency_before_update/3",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/rust/copy_current/3",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/rust/add/3",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/rust/dependency_before_update/3",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/typed-value/fit/rust/no_write/3",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/prefix/roles-fit/0/0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/prefix/roles-fit/1/0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/prefix/roles-fit/2/0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/prefix/roles-fit/3/0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/prefix/roles-fit/4/0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/prefix/roles-fit/5/0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-preserve/prefix/independent-fit/1/false/0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/0/false/0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/0/false/1",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/0/false/2",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/0/true/0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/0/true/1",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/0/true/2",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/0/true/3",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/1/false/0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/1/false/1",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/1/false/2",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/1/true/0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/1/true/1",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/1/true/2",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/1/true/3",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/2/false/0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/2/false/1",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/2/false/2",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/2/true/0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/2/true/1",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/2/true/2",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/2/true/3",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/3/false/0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/3/false/1",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/3/false/2",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/3/true/0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/3/true/1",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/3/true/2",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-fit/3/true/3",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-0/name-0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-0/name-1",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-0/name-2",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-0/name-3",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-0/name-4",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-0/name-5",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-0/name-6",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-0/name-7",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-1/name-0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-1/name-1",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-1/name-2",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-1/name-3",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-1/name-4",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-1/name-5",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-1/name-6",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-1/name-7",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-2/name-0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-2/name-1",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-2/name-2",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-2/name-3",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-2/name-4",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-2/name-5",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-2/name-6",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-2/name-7",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-3/name-0",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-3/name-1",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-3/name-2",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-3/name-3",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-3/name-4",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-3/name-5",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-3/name-6",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          },
+          {
+            "id": "literal-admission/word-copy/fit/context-3/name-7",
+            "reason": "frozen_parent_did_not_select_target_NoRead"
+          }
+        ]
+      }
+    }
+  ],
+  "reports": [
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/answer-entry-exposed.json",
+      "bytes": 446101,
+      "sha256": "c3f6fdda9f52f2f6dad8575b8cc79a24484138d453ea19803990764609928c8f",
+      "artifact": "blake3:760fc57bfa1c51eba6efca1ad89b429a26869bd3049bc12ab9235053d8e66642",
+      "exact": 14,
+      "total": 16,
+      "elapsed_ms": 17,
+      "failures": [
+        {
+          "id": "admission-new-literal/0/true/3",
+          "text": " coins.\n",
+          "expected": " Unknown.\n"
+        },
+        {
+          "id": "admission-new-literal/1/true/3",
+          "text": " coins.\n",
+          "expected": " Unknown.\n"
+        }
+      ]
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/answer-entry-exposed-final.json",
+      "bytes": 446105,
+      "sha256": "2a2f3842bd680ebf428444ca4b1917eb6bee00f0839db413b43c3f6528b3c298",
+      "artifact": "blake3:e7c14c994c57eaad6c9a765c71e7699c0f7f0c88a225aea71e6e84c8b7da0e11",
+      "exact": 14,
+      "total": 16,
+      "elapsed_ms": 20,
+      "failures": [
+        {
+          "id": "admission-new-literal/0/true/3",
+          "text": " coins.\n",
+          "expected": " Unknown.\n"
+        },
+        {
+          "id": "admission-new-literal/1/true/3",
+          "text": " coins.\n",
+          "expected": " Unknown.\n"
+        }
+      ]
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/answer-entry-fresh.json",
+      "bytes": 445991,
+      "sha256": "aa5d50caca426d516334440b660194a4bbd045b55eefc55d92dd6315d1e80ffa",
+      "artifact": "blake3:e7c14c994c57eaad6c9a765c71e7699c0f7f0c88a225aea71e6e84c8b7da0e11",
+      "exact": 15,
+      "total": 16,
+      "elapsed_ms": 18,
+      "failures": [
+        {
+          "id": "answer-new/0/true/3",
+          "text": " coins.\n",
+          "expected": " Unknown.\n"
+        }
+      ]
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/answer-entry-parent-fresh.json",
+      "bytes": 446150,
+      "sha256": "a38e5e34c446e5439f4b5c787f27336295660d24573956732be47a5c1a11e036",
+      "artifact": "blake3:c29ab9826e3beddae71f1ba5c189c602cfa2686b652da3b7d78e93d927254ad8",
+      "exact": 14,
+      "total": 16,
+      "elapsed_ms": 22,
+      "failures": [
+        {
+          "id": "answer-new/0/false/3",
+          "text": " Unknown. The conversation does not give a:. The conversation does not give a:. The conversation does not give a:.2121. The conversation does",
+          "expected": " Unknown.\n"
+        },
+        {
+          "id": "answer-new/0/true/3",
+          "text": " coins.\n",
+          "expected": " Unknown.\n"
+        }
+      ]
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/answer-entry-construction.json",
+      "bytes": 2503650,
+      "sha256": "a2465135ffbcd43921c25cc49a3f949fb3ef9ba981da5c9a1cd5150dac967a20",
+      "artifact": "blake3:e7c14c994c57eaad6c9a765c71e7699c0f7f0c88a225aea71e6e84c8b7da0e11",
+      "exact": 99,
+      "total": 103,
+      "elapsed_ms": 122,
+      "failures": [
+        {
+          "id": "literal-fit/0/true/3",
+          "text": " coins.\n",
+          "expected": " Unknown.\n"
+        },
+        {
+          "id": "literal-fit/1/true/3",
+          "text": " coins.\n",
+          "expected": " Unknown.\n"
+        },
+        {
+          "id": "literal-fit/2/true/3",
+          "text": " coins.\n",
+          "expected": " Unknown.\n"
+        },
+        {
+          "id": "literal-fit/3/true/3",
+          "text": " coins.\n",
+          "expected": " Unknown.\n"
+        }
+      ]
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/answer-entry-chain.json",
+      "bytes": 912085,
+      "sha256": "956f7af4daacde739604a70d30f67597116e25e531db7edb247e24df5417a13f",
+      "artifact": "blake3:e7c14c994c57eaad6c9a765c71e7699c0f7f0c88a225aea71e6e84c8b7da0e11",
+      "exact": 16,
+      "total": 16,
+      "elapsed_ms": 63,
+      "failures": []
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/answer-entry-identifiers.json",
+      "bytes": 135414,
+      "sha256": "714ae4ba072dde10a6e6430e2246b55a34ae4b70db9cba4912539afa0469bd95",
+      "artifact": "blake3:e7c14c994c57eaad6c9a765c71e7699c0f7f0c88a225aea71e6e84c8b7da0e11",
+      "exact": 8,
+      "total": 8,
+      "elapsed_ms": 10,
+      "failures": []
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/answer-entry-old-chain-retry.json",
+      "bytes": 912050,
+      "sha256": "8f6ea7962142522f2db302ca6bbeabfb60ac2b3c6864c35e986b51711bc65730",
+      "artifact": "blake3:e7c14c994c57eaad6c9a765c71e7699c0f7f0c88a225aea71e6e84c8b7da0e11",
+      "exact": 16,
+      "total": 16,
+      "elapsed_ms": 61,
+      "failures": []
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/answer-entry-computed-construction.json",
+      "bytes": 3023794,
+      "sha256": "eff36c9c773913125bf07c2122a4d2b2876950aa29038f21e9305b0332b1602e",
+      "artifact": "blake3:e7c14c994c57eaad6c9a765c71e7699c0f7f0c88a225aea71e6e84c8b7da0e11",
+      "exact": 58,
+      "total": 58,
+      "elapsed_ms": 198,
+      "failures": []
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/answer-entry-prior-numeric.json",
+      "bytes": 272236,
+      "sha256": "9057a17c3257ce9d0febf2012d47491af99e028e2a647ac40ccfd7b5d05ca3cd",
+      "artifact": "blake3:e7c14c994c57eaad6c9a765c71e7699c0f7f0c88a225aea71e6e84c8b7da0e11",
+      "exact": 6,
+      "total": 6,
+      "elapsed_ms": 15,
+      "failures": []
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/answer-entry-prior-roles.json",
+      "bytes": 688698,
+      "sha256": "52c9a664f16a369ea3837ad2f4af63d4e092892cd5ff89e47de3a54ee72e6909",
+      "artifact": "blake3:e7c14c994c57eaad6c9a765c71e7699c0f7f0c88a225aea71e6e84c8b7da0e11",
+      "exact": 12,
+      "total": 12,
+      "elapsed_ms": 52,
+      "failures": []
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/answer-entry-prior-exposed.json",
+      "bytes": 688854,
+      "sha256": "42c83e136f4729d0ec2ffb64fe197316e04460e59f55aed27aa19092d309d2e4",
+      "artifact": "blake3:e7c14c994c57eaad6c9a765c71e7699c0f7f0c88a225aea71e6e84c8b7da0e11",
+      "exact": 12,
+      "total": 12,
+      "elapsed_ms": 52,
+      "failures": []
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/answer-entry-prior-aliases.json",
+      "bytes": 688659,
+      "sha256": "2c435385261fe3a8c3b110f501f12c518e838328462292a9c35fead8a804d8a5",
+      "artifact": "blake3:e7c14c994c57eaad6c9a765c71e7699c0f7f0c88a225aea71e6e84c8b7da0e11",
+      "exact": 12,
+      "total": 12,
+      "elapsed_ms": 60,
+      "failures": []
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/answer-entry-long.json",
+      "bytes": 1453184,
+      "sha256": "237003f4a5755621812e4c0c9138c5edddb7dd6b269d58f38c54559807d7e67b",
+      "artifact": "blake3:e7c14c994c57eaad6c9a765c71e7699c0f7f0c88a225aea71e6e84c8b7da0e11",
+      "exact": 28,
+      "total": 28,
+      "elapsed_ms": 79,
+      "failures": []
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/answer-entry-preservation/development.json",
+      "bytes": 2307747,
+      "sha256": "9eae7918dda8e642038972c25ed978bce0e6f8f84b7aeb49ae67ae491c6a6721",
+      "artifact": "blake3:760fc57bfa1c51eba6efca1ad89b429a26869bd3049bc12ab9235053d8e66642",
+      "exact": 48,
+      "total": 48,
+      "elapsed_ms": 48,
+      "failures": []
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/answer-entry-preservation/preservation.json",
+      "bytes": 1460320,
+      "sha256": "dc8ca5bc2c43c68d5266d8f34662f53cd82a6f4a5999f0240cff316f70949b35",
+      "artifact": "blake3:760fc57bfa1c51eba6efca1ad89b429a26869bd3049bc12ab9235053d8e66642",
+      "exact": 58,
+      "total": 62,
+      "failures": [
+        {
+          "id": "typed-value/development/prose/no_write/100000",
+          "text": " Unknown.\n",
+          "expected": " Unknown. The conversation does not give a city.\n"
+        },
+        {
+          "id": "typed-value/development/prose/no_write/100001",
+          "text": " Unknown.\n",
+          "expected": " Unknown. The conversation does not give a city.\n"
+        },
+        {
+          "id": "typed-value/development/prose/no_write/100002",
+          "text": " Unknown.\n",
+          "expected": " Unknown. The conversation does not give a city.\n"
+        },
+        {
+          "id": "typed-value/development/prose/no_write/100003",
+          "text": " Unknown.\n",
+          "expected": " Unknown. The conversation does not give a city.\n"
+        }
+      ]
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/answer-entry-preservation/prior.json",
+      "bytes": 328002,
+      "sha256": "57ba817e41f39f1bc1ac112c2aecaa429728a4152732b8fd26f7dabe22faea33",
+      "artifact": "blake3:760fc57bfa1c51eba6efca1ad89b429a26869bd3049bc12ab9235053d8e66642",
+      "exact": 24,
+      "total": 24,
+      "failures": []
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/answer-entry-preservation/exposed-names.json",
+      "bytes": 1362358,
+      "sha256": "a7d50b7d7a0ff4902e73f0881b24fc88de6d675c81761c054177543d85ffd734",
+      "artifact": "blake3:760fc57bfa1c51eba6efca1ad89b429a26869bd3049bc12ab9235053d8e66642",
+      "exact": 28,
+      "total": 28,
+      "elapsed_ms": 27,
+      "failures": []
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/answer-entry-preservation/sessions.json",
+      "bytes": 37116,
+      "sha256": "f1aedf339c1087cbfbb61cd16b3e8a1317f7a9cf56ee420e74d54197ad55bc2c",
+      "artifact": "blake3:760fc57bfa1c51eba6efca1ad89b429a26869bd3049bc12ab9235053d8e66642",
+      "exact": 5,
+      "total": 5,
+      "failures": []
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/answer-entry-binding-preservation/development.json",
+      "bytes": 2307795,
+      "sha256": "f990a839fdd0e8ad97e8cc5bbf29ff5489bcdf07584bb86f869c54d73ba59748",
+      "artifact": "blake3:235fad685bfbeef5d657fc9947c379c46ee304116b716b3ea06d70853bf3ac58",
+      "exact": 48,
+      "total": 48,
+      "elapsed_ms": 49,
+      "failures": []
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/answer-entry-binding-preservation/preservation.json",
+      "bytes": 1465643,
+      "sha256": "b80b21d67a0563e2dd6a00c1ffa50129cf187198f0470273d919f385f1b0bb12",
+      "artifact": "blake3:235fad685bfbeef5d657fc9947c379c46ee304116b716b3ea06d70853bf3ac58",
+      "exact": 62,
+      "total": 62,
+      "failures": []
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/answer-entry-binding-preservation/prior.json",
+      "bytes": 328014,
+      "sha256": "31e9c48cbf920d047c05b3d93af8f33da05a3c88127d98ac158c3148f83201e3",
+      "artifact": "blake3:235fad685bfbeef5d657fc9947c379c46ee304116b716b3ea06d70853bf3ac58",
+      "exact": 24,
+      "total": 24,
+      "failures": []
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/answer-entry-binding-preservation/exposed-names.json",
+      "bytes": 1362383,
+      "sha256": "5a19efc793019b621f002466a0faa0f9ac0f5fcaf4cebd8cb907b9bd1bbdf199",
+      "artifact": "blake3:235fad685bfbeef5d657fc9947c379c46ee304116b716b3ea06d70853bf3ac58",
+      "exact": 28,
+      "total": 28,
+      "elapsed_ms": 28,
+      "failures": []
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/answer-entry-binding-preservation/sessions.json",
+      "bytes": 37197,
+      "sha256": "31fc1e3b655f6602892e1ed1ad05b57766cac40fe396d7e4b3244c4abd59727a",
+      "artifact": "blake3:235fad685bfbeef5d657fc9947c379c46ee304116b716b3ea06d70853bf3ac58",
+      "exact": 4,
+      "total": 5,
+      "failures": [
+        {
+          "id": "Where is ada? Answer:",
+          "text": " Unknown\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+          "expected": " Unknown.\n"
+        }
+      ]
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/answer-entry-final-preservation/development.json",
+      "bytes": 2307697,
+      "sha256": "3a5240436b2326712e39b7cb6c0153e8823b275bff61594d373d31740f098add",
+      "artifact": "blake3:e7c14c994c57eaad6c9a765c71e7699c0f7f0c88a225aea71e6e84c8b7da0e11",
+      "exact": 48,
+      "total": 48,
+      "elapsed_ms": 50,
+      "failures": []
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/answer-entry-final-preservation/preservation.json",
+      "bytes": 1465614,
+      "sha256": "ff5bf05413c47b7149bdea8cd885191312e9282526e86c49655397e15815d2c3",
+      "artifact": "blake3:e7c14c994c57eaad6c9a765c71e7699c0f7f0c88a225aea71e6e84c8b7da0e11",
+      "exact": 62,
+      "total": 62,
+      "failures": []
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/answer-entry-final-preservation/prior.json",
+      "bytes": 327993,
+      "sha256": "4f13db6811373828434c6d0eb662443c3de645e725d03f520344471766e019a5",
+      "artifact": "blake3:e7c14c994c57eaad6c9a765c71e7699c0f7f0c88a225aea71e6e84c8b7da0e11",
+      "exact": 24,
+      "total": 24,
+      "failures": []
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/answer-entry-final-preservation/exposed-names.json",
+      "bytes": 1362333,
+      "sha256": "625ef7a1bf591e1773ced2570172513fb5fb18d22875f28dcc5a5d7fffd8d1c8",
+      "artifact": "blake3:e7c14c994c57eaad6c9a765c71e7699c0f7f0c88a225aea71e6e84c8b7da0e11",
+      "exact": 28,
+      "total": 28,
+      "elapsed_ms": 29,
+      "failures": []
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/answer-entry-final-preservation/sessions.json",
+      "bytes": 37117,
+      "sha256": "42904207bc16ff5fe90807e82c3010cd565f518be95aec091a7ee58f9dfa94d0",
+      "artifact": "blake3:e7c14c994c57eaad6c9a765c71e7699c0f7f0c88a225aea71e6e84c8b7da0e11",
+      "exact": 5,
+      "total": 5,
+      "failures": []
+    }
+  ],
+  "parent_trace": {
+    "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/answer-entry-parent-trace.json",
+    "bytes": 55065,
+    "sha256": "744d676c208179a9c6f3e9eb2f29c171172bef9b8e1b37e3aec80b11cecf51fd"
+  },
+  "cost": {
+    "scope": "Same two exposed literal cases, same32-token ceiling, complete input plus generated path; shorter output changes work",
+    "cases": [
+      {
+        "id": "admission-new-literal/0/false/3",
+        "parent_text": " Unknown. The conversation does not give a:. The 95: What color is.. User:: What color is.. User:: User::",
+        "text": " Unknown.\n",
+        "terminated": true
+      },
+      {
+        "id": "admission-new-literal/1/false/3",
+        "parent_text": " Unknown. The conversation does not give a:. The conversation does not give a:. The conversation does not give a:. The conversation does not give a",
+        "text": " Unknown.\n",
+        "terminated": true
+      }
+    ],
+    "work": {
+      "observed_tokens": {
+        "parent": 192,
+        "candidate": 136
+      },
+      "candidate_evaluations": {
+        "parent": 16871,
+        "candidate": 2162
+      },
+      "h4_table_reads": {
+        "parent": 192,
+        "candidate": 136
+      },
+      "memory_composition_comparisons": {
+        "parent": 592402,
+        "candidate": 74064
+      },
+      "word_copy.selector.row_comparisons": {
+        "parent": 19840,
+        "candidate": 3008
+      },
+      "word_copy.selector.score_lookups": {
+        "parent": 21008,
+        "candidate": 3532
+      },
+      "word_copy.selector.metadata_reads": {
+        "parent": 780,
+        "candidate": 648
+      },
+      "word_copy.dictionary_byte_comparisons": {
+        "parent": 17289,
+        "candidate": 4081
+      },
+      "word_copy.routing.table_reads": {
+        "parent": 1092,
+        "candidate": 1092
+      }
+    }
+  },
+  "checks": [
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/answer-entry-focused-final.stdout.log",
+      "bytes": 236,
+      "sha256": "67fcc1f2d268673189f46cf5da959360de064c8f6eef28750a5d9d4973036a27"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/answer-entry-entry-tests.stdout.log",
+      "bytes": 1782,
+      "sha256": "8a06d8c3e51f4a527143ea73a42e117c3eafdb9d66f2ed6abd22571a88026b80"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/answer-entry-allocation-final.stdout.log",
+      "bytes": 289,
+      "sha256": "35740e0fc52ab8c4b33fd64b56ca34bfd86cc46f9f5c1974b57c89a18cd5ee93"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/answer-entry-numeric-allocation.stdout.log",
+      "bytes": 390,
+      "sha256": "53247a4f50bdcba18de7a397c0a5c976f4d9d85d78a6ee4bac6b528103f49b2f"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/answer-entry-kernel.stdout.log",
+      "bytes": 189,
+      "sha256": "d75275b7fba94eb727e44bf134fc0e5a473bd1e8d08e762e06c5afaec60e7b83"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/answer-entry-cli.stdout.log",
+      "bytes": 9318,
+      "sha256": "c3be2ed42255896f398c2e575fd124a45fedb9b4252ba7572683f2dbcecabe2d"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/answer-entry-cli-identifier.stdout.log",
+      "bytes": 11135,
+      "sha256": "2bb5e098337a67fc0a2b1b73165becd00e699d50980aa303fb3687d4d3876141"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/answer-entry-fmt.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/answer-entry-policy.log",
+      "bytes": 73,
+      "sha256": "58dd9c24c33ba5ff6519ed3f5bea924d8fd10d93bcfaba529e2d8b0101be6ae7"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/answer-entry-claims.log",
+      "bytes": 83,
+      "sha256": "78d71cb97c00d606a9a909d89a2f4f4e3b4be6b84af390f20c9fc50ec449922f"
+    }
+  ],
+  "boundaries": {
+    "entire_parent_unchanged": "PASS_ACTUAL_ARTIFACT",
+    "literal_numerics_without_derived_records": "STRUCTURAL_ELIGIBILITY",
+    "no_read_entry": "LEARNED_PARENT_SELECTION_AND_ACTUAL_OBSERVATION_REQUIRED",
+    "new_state_fields": 0,
+    "new_table_bytes": 36763,
+    "rows": 149,
+    "associations": 354,
+    "serving_matmul": false,
+    "serving_provider": false,
+    "angular_advantage": "NOT_ESTABLISHED",
+    "supported_source_selection": "INCOMPLETE_1_OF_4_NEW_ABSTENTIONS_COPIES_COINS",
+    "generated_rust_assertions": "PRIOR24_NOT_RERUN_THIS_CYCLE;8_COMPLETE_IDENTIFIER_OUTPUTS_PRESERVED",
+    "general_language_or_frontier": "NOT_ESTABLISHED",
+    "broad_release_qa": "NOT_RUN"
+  },
+  "resources": {
+    "projection": {
+      "at": "2026-09-07T00:08:10.063Z",
+      "authority": "standing owner authorization for necessary allowances; no external model cost",
+      "before": {
+        "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+        "at": "2026-09-07T00:07:24.258Z",
+        "inherited_precleanup_bytes": 2747199488,
+        "obsolete_target_growth_credit": 671379456,
+        "current_target_bytes": 2486935552,
+        "predecessor_artifact_root_bytes": 145760256,
+        "current_artifact_root_bytes": 1364320256,
+        "predecessor_worktree_bytes": 9875456,
+        "current_worktree_bytes": 8937472,
+        "stopped_successor_worktree_bytes": 460877824,
+        "source_metadata_reserve_bytes": 5242880,
+        "current_sampled_known_storage_bytes": 6557769728,
+        "storage_limit_bytes": 7063207936,
+        "remaining_storage_bytes": 505438208,
+        "stop_margin_bytes": 134217728,
+        "available_growth_before_stop_bytes": 150032384,
+        "model_ledger": {
+          "cumulative_ms": 3168126,
+          "limit_ms": 3210000
+        },
+        "model_remaining_ms": 41874,
+        "model_process_limit": 1,
+        "model_process_rss_target_bytes": 4294967296,
+        "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+      },
+      "model_increment_ms": 360000,
+      "model_cycle_ms": 360000,
+      "engineering_cycle_ms": 1560000,
+      "model_projection_ms": 300000,
+      "engineering_projection_ms": 500000,
+      "growth_projection_bytes": 134217728,
+      "storage_increment_bytes": 0,
+      "model_processes": 1,
+      "rss_bytes": 4294967296,
+      "scope": "Trace actual NoRead/source decisions, reuse existing geometric answer selector and lexical continuation, preserve computed/literal/identifier paths, bounded fresh transfer and protected delivery.",
+      "revisions": [
+        {
+          "at": "2026-09-07T00:23:57.172Z",
+          "old_engineering_cycle_ms": 720000,
+          "new_engineering_cycle_ms": 900000,
+          "remaining_engineering_projection_ms": 180000,
+          "remaining_model_projection_ms": 200000,
+          "reason": "First candidate repairs loops but regresses four explanatory abstentions; reuse existing32-feature word-binding prefix for context-conditioned continuation. Parent weights remain fixed; no fresh cases opened."
+        },
+        {
+          "at": "2026-09-07T00:32:43.478Z",
+          "old_engineering_cycle_ms": 900000,
+          "new_engineering_cycle_ms": 1140000,
+          "remaining_engineering_projection_ms": 180000,
+          "remaining_model_projection_ms": 200000,
+          "reason": "Binding continuation restores62/62 but regresses one relation-conflict session. Restrict new completion to its literal-numeric state scope; verify unchanged memory/derived continuations and new generated answers."
+        },
+        {
+          "at": "2026-09-07T00:39:30.113Z",
+          "old_engineering_cycle_ms": 1140000,
+          "new_engineering_cycle_ms": 1380000,
+          "remaining_engineering_projection_ms": 340000,
+          "remaining_model_projection_ms": 180000,
+          "reason": "Final scoped candidate preserves all initial sets. Rebuild actual CLI against final artifact schema; finish allocation and complete generated comparisons."
+        },
+        {
+          "at": "2026-09-07T00:42:11.724Z",
+          "authority": "standing owner approval of all necessary incremental storage and resource allowances",
+          "before": {
+            "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+            "at": "2026-09-07T00:41:17.071Z",
+            "inherited_precleanup_bytes": 2747199488,
+            "obsolete_target_growth_credit": 671379456,
+            "current_target_bytes": 2584911872,
+            "predecessor_artifact_root_bytes": 145760256,
+            "current_artifact_root_bytes": 1420288000,
+            "predecessor_worktree_bytes": 9875456,
+            "current_worktree_bytes": 8937472,
+            "stopped_successor_worktree_bytes": 460877824,
+            "source_metadata_reserve_bytes": 5242880,
+            "current_sampled_known_storage_bytes": 6711713792,
+            "storage_limit_bytes": 7063207936,
+            "remaining_storage_bytes": 351494144,
+            "stop_margin_bytes": 134217728,
+            "available_growth_before_stop_bytes": -3911680,
+            "model_ledger": {
+              "cumulative_ms": 3343369,
+              "limit_ms": 3570000
+            },
+            "model_remaining_ms": 226631,
+            "model_process_limit": 1,
+            "model_process_rss_target_bytes": 4294967296,
+            "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+          },
+          "scoped_growth_increment_bytes": 167772160,
+          "broad_storage_increment_bytes": 0,
+          "remaining_growth_projection_bytes": 134217728,
+          "remaining_model_projection_ms": 130000,
+          "remaining_engineering_projection_ms": 360000,
+          "reason": "CLI-only dependency feature variants exceeded tighter cumulative growth ceiling. Preserve compiler products and retry established core-example plus CLI feature union; finish remaining evaluation.",
+          "old_engineering_cycle_ms": 1380000,
+          "new_engineering_cycle_ms": 1560000
+        }
+      ],
+      "scoped_storage_increment_bytes": 167772160
+    },
+    "final": {
+      "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+      "at": "2026-09-07T00:49:17.265Z",
+      "inherited_precleanup_bytes": 2747199488,
+      "obsolete_target_growth_credit": 671379456,
+      "current_target_bytes": 2584907776,
+      "predecessor_artifact_root_bytes": 145760256,
+      "current_artifact_root_bytes": 1428135936,
+      "predecessor_worktree_bytes": 9875456,
+      "current_worktree_bytes": 8937472,
+      "stopped_successor_worktree_bytes": 460877824,
+      "source_metadata_reserve_bytes": 5242880,
+      "current_sampled_known_storage_bytes": 6719557632,
+      "storage_limit_bytes": 7063207936,
+      "remaining_storage_bytes": 343650304,
+      "stop_margin_bytes": 134217728,
+      "available_growth_before_stop_bytes": 156016640,
+      "model_ledger": {
+        "cumulative_ms": 3450276,
+        "limit_ms": 3570000
+      },
+      "model_remaining_ms": 119724,
+      "model_process_limit": 1,
+      "model_process_rss_target_bytes": 4294967296,
+      "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+    },
+    "model_ms": 282150,
+    "engineering_ms": 1364981,
+    "peak_sampled_known_bytes": 6746660864,
+    "peak_sampled_child_rss_bytes": 1109098496,
+    "scoped_storage_extension": {
+      "at": "2026-09-07T00:42:11.724Z",
+      "authority": "standing owner approval of all necessary incremental storage and resource allowances",
+      "before": {
+        "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+        "at": "2026-09-07T00:41:17.071Z",
+        "inherited_precleanup_bytes": 2747199488,
+        "obsolete_target_growth_credit": 671379456,
+        "current_target_bytes": 2584911872,
+        "predecessor_artifact_root_bytes": 145760256,
+        "current_artifact_root_bytes": 1420288000,
+        "predecessor_worktree_bytes": 9875456,
+        "current_worktree_bytes": 8937472,
+        "stopped_successor_worktree_bytes": 460877824,
+        "source_metadata_reserve_bytes": 5242880,
+        "current_sampled_known_storage_bytes": 6711713792,
+        "storage_limit_bytes": 7063207936,
+        "remaining_storage_bytes": 351494144,
+        "stop_margin_bytes": 134217728,
+        "available_growth_before_stop_bytes": -3911680,
+        "model_ledger": {
+          "cumulative_ms": 3343369,
+          "limit_ms": 3570000
+        },
+        "model_remaining_ms": 226631,
+        "model_process_limit": 1,
+        "model_process_rss_target_bytes": 4294967296,
+        "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+      },
+      "scoped_growth_increment_bytes": 167772160,
+      "broad_storage_increment_bytes": 0,
+      "remaining_growth_projection_bytes": 134217728,
+      "remaining_model_projection_ms": 130000,
+      "remaining_engineering_projection_ms": 360000,
+      "reason": "CLI-only dependency feature variants exceeded tighter cumulative growth ceiling. Preserve compiler products and retry established core-example plus CLI feature union; finish remaining evaluation."
+    },
+    "broader_storage_limit_unchanged": true,
+    "deleted_material": [],
+    "external_model_compute": 0
+  },
+  "command_receipts": {
+    "paths": [
+      "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/commands.jsonl",
+      "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/engineering-commands.jsonl"
+    ],
+    "selector": "append-only rows starting answer-entry-; includes all executed failed/stopped attempts",
+    "zero_execution_refusal": "Remaining evaluation refused before child creation at storage guard; allowance extended before retry"
+  },
+  "commands": [
+    {
+      "label": "answer-entry-parent-trace",
+      "elapsed_ms": 7318,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "answer-entry-source",
+      "elapsed_ms": 11,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "answer-entry-fit",
+      "elapsed_ms": 22920,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "answer-entry-exposed",
+      "elapsed_ms": 8014,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "answer-entry-preserve",
+      "elapsed_ms": 7874,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "answer-entry-binding-fit",
+      "elapsed_ms": 22752,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "answer-entry-binding-preserve",
+      "elapsed_ms": 8197,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "answer-entry-focused",
+      "elapsed_ms": 10171,
+      "code": 101,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "answer-entry-scoped-fit",
+      "elapsed_ms": 23762,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "answer-entry-final-preserve",
+      "elapsed_ms": 8272,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "answer-entry-exposed-final",
+      "elapsed_ms": 8087,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "answer-entry-fresh",
+      "elapsed_ms": 8182,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "answer-entry-parent-fresh",
+      "elapsed_ms": 7296,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "answer-entry-construction",
+      "elapsed_ms": 8172,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "answer-entry-chain",
+      "elapsed_ms": 8077,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "answer-entry-identifiers",
+      "elapsed_ms": 8068,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "answer-entry-old-chain",
+      "elapsed_ms": 8070,
+      "code": 1,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "answer-entry-old-chain-retry",
+      "elapsed_ms": 8071,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "answer-entry-computed-construction",
+      "elapsed_ms": 8303,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "answer-entry-prior-numeric",
+      "elapsed_ms": 8071,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "answer-entry-prior-roles",
+      "elapsed_ms": 8067,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "answer-entry-prior-exposed",
+      "elapsed_ms": 8064,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "answer-entry-prior-aliases",
+      "elapsed_ms": 8442,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "answer-entry-focused-final",
+      "elapsed_ms": 11780,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "answer-entry-entry-tests",
+      "elapsed_ms": 4709,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "answer-entry-allocation-final",
+      "elapsed_ms": 8322,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "answer-entry-numeric-allocation",
+      "elapsed_ms": 9310,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "answer-entry-kernel",
+      "elapsed_ms": 9,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "answer-entry-long",
+      "elapsed_ms": 8074,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "answer-entry-cli",
+      "elapsed_ms": 8084,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "answer-entry-cli-identifier",
+      "elapsed_ms": 7601,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "answer-entry-trace-build",
+      "elapsed_ms": 119337,
+      "code": 101,
+      "stopped": null,
+      "engineering_only": true
+    },
+    {
+      "label": "answer-entry-build",
+      "elapsed_ms": 309763,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": true
+    },
+    {
+      "label": "answer-entry-final-probe-build",
+      "elapsed_ms": 131045,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": true
+    },
+    {
+      "label": "answer-entry-test-build",
+      "elapsed_ms": 21250,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": true
+    },
+    {
+      "label": "answer-entry-allocation-build",
+      "elapsed_ms": 6397,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": true
+    },
+    {
+      "label": "answer-entry-context-build",
+      "elapsed_ms": 50229,
+      "code": null,
+      "stopped": "wrapper_SIGINT",
+      "engineering_only": true
+    },
+    {
+      "label": "answer-entry-binding-build",
+      "elapsed_ms": 128979,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": true
+    },
+    {
+      "label": "answer-entry-binding-test-build",
+      "elapsed_ms": 20931,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": true
+    },
+    {
+      "label": "answer-entry-binding-allocation-build",
+      "elapsed_ms": 6378,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": true
+    },
+    {
+      "label": "answer-entry-scoped-test-build",
+      "elapsed_ms": 21191,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": true
+    },
+    {
+      "label": "answer-entry-scoped-build",
+      "elapsed_ms": 138820,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": true
+    },
+    {
+      "label": "answer-entry-final-test-build",
+      "elapsed_ms": 23463,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": true
+    },
+    {
+      "label": "answer-entry-final-allocation-build",
+      "elapsed_ms": 6592,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": true
+    },
+    {
+      "label": "answer-entry-final-cli-build",
+      "elapsed_ms": 57116,
+      "code": null,
+      "stopped": "storage_margin",
+      "engineering_only": true
+    },
+    {
+      "label": "answer-entry-cli-retry",
+      "elapsed_ms": 319693,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": true
+    },
+    {
+      "label": "answer-entry-fmt",
+      "elapsed_ms": 3364,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": true
+    },
+    {
+      "label": "answer-entry-policy",
+      "elapsed_ms": 146,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": true
+    },
+    {
+      "label": "answer-entry-claims",
+      "elapsed_ms": 287,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": true
+    }
+  ]
+}

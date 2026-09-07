@@ -204,6 +204,47 @@ fn literal_example(
 
 pub(super) fn run(args: &[String]) -> ProbeResult<()> {
     match args.first().map(String::as_str) {
+        Some("answer-fit") if args.len() == 4 => {
+            let model = Model::from_bytes(&fs::read(&args[1])?)?;
+            let source: Value = serde_json::from_slice(&fs::read(&args[2])?)?;
+            let docs: Vec<TypedRoutingExample> = serde_json::from_value(source["fit"].clone())?;
+            let docs: Vec<ValueExample> = docs.into_iter().filter(|d| d.literal_only)
+                .map(|d| ValueExample { id:d.id, prompt:d.query, response:d.response }).collect();
+            let (fitted, report) = model.fit_no_read_completion(&docs, ResponseEntryFitConfig::default())?;
+            let root = Path::new(&args[3]); fs::create_dir(root)?;
+            write_new(&root.join("model.json"), &fitted.to_bytes()?)?;
+            write_json(&root.join("fit.json"), &report)?;
+            println!("{}", json!({"artifact":fitted.artifact_cid(),"report":report}));
+        }
+        Some("answer-source") if args.len() == 3 => {
+            let mut source: Value = serde_json::from_slice(&fs::read(&args[1])?)?;
+            let mut first = Vec::new();
+            // New names/numbers and one new short query form, saved before fit.
+            for (i,(names,numbers)) in [(["feni","mavo"],[23,-8]),(["daro","nesa"],[-13,41])].into_iter().enumerate() {
+                for reverse in [false,true] { for kind in 0..4 {
+                    let mut d = literal_example(format!("answer-new/{i}/{reverse}/{kind}"), names,numbers,reverse,kind);
+                    if kind == 3 && i == 1 { d.query=d.query.replace("Where is the location of", "Where is"); }
+                    first.push(d);
+                }}
+            }
+            source["exposed_answers"] = source["first_use"].clone();
+            source["first_use"] = serde_json::to_value(first)?;
+            source["scope"] = json!("Construction unchanged:103 earlier literal/identifier examples. Only actual selected NoRead continuations fitted. Four prior failed location outputs exposed; new16 cases prepared before fit, including one shorter query form. No full held-out capability claim.");
+            write_json(Path::new(&args[2]), &source)?;
+        }
+
+        Some("answer-trace") if args.len() == 4 => {
+            let model = Model::from_bytes(&fs::read(&args[1])?)?;
+            let source: Value = serde_json::from_slice(&fs::read(&args[2])?)?;
+            let docs: Vec<TypedRoutingExample> = serde_json::from_value(source["first_use"].clone())?;
+            let mut rows = Vec::new();
+            for d in docs.into_iter().filter(|d| d.action.is_none()) {
+                let generated = model.generate(&d.query, 48, Control::Full)?;
+                rows.push(json!({"id":d.id,"prompt":d.query,"expected":d.response,"generated":generated}));
+            }
+            write_json(Path::new(&args[3]), &rows)?;
+        }
+
         Some("admission-source") if args.len()==4 => {
             let prior:Value=serde_json::from_slice(&fs::read(&args[1])?)?;
             let old:Source=serde_json::from_slice(&fs::read(&args[2])?)?;

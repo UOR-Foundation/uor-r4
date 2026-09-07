@@ -8,6 +8,22 @@ use super::value_types::{ValueFeature, ValueState};
 use super::word_copy_types::*;
 use super::*;
 
+/// The learned continuation is fitted on literal numeric frames only. Keep
+/// relation-only and computed-result responses on their inherited path.
+pub(super) fn literal_no_read_eligible(values: &ValueState, work: &mut WordCopyWork) -> bool {
+    work.selector.metadata_reads = work.selector.metadata_reads.saturating_add(1);
+    if values.sources.is_empty() {
+        return false;
+    }
+    for source in &values.sources {
+        work.selector.metadata_reads = work.selector.metadata_reads.saturating_add(1);
+        if source.derived {
+            return false;
+        }
+    }
+    true
+}
+
 pub(super) fn enabled(control: Control) -> bool {
     control != Control::WordCopyDisabled
 }
@@ -425,6 +441,33 @@ impl WordCopyState {
             && eligible(model, entry, values, control)
         {
             return super::role_read::offer(self, model, entry, values, baseline, control, work);
+        }
+        // A selected and observed NoRead commits a lexical response, not a
+        // word occurrence. Reuse entry features and the sparse token operator;
+        // never apply this continuation to numeric NoOperation alone or copying.
+        if entry.active && self.read_commit.is_some_and(|c| c.source.is_none()) {
+            if let Some(head) = model
+                .no_read_completion
+                .as_ref()
+                .filter(|_| literal_no_read_eligible(values, work))
+            {
+                let inherited_pending = entry.pending;
+                let (features, len) = prefix_features(model, entry, values, control, work);
+                if let Some(candidate) = entry.offer_features::<WORD_COPY_PREFIX_FEATURES>(
+                    model,
+                    values,
+                    baseline,
+                    control,
+                    &mut work.selector,
+                    head,
+                    &features[..len],
+                ) {
+                    return Some(candidate);
+                }
+                // Base means the whole inherited continuation, including its
+                // pending selection and composed prefix scorer, stays intact.
+                entry.pending = inherited_pending;
+            }
         }
         if let Some(commit) = self.read_commit.filter(|c| c.source.is_some()) {
             work.word_record_reads = work.word_record_reads.saturating_add(1);

@@ -1,7 +1,7 @@
 //! Integer/table response transitions anchored to an actual query boundary.
 //! Entry commits only when its selected token is observed; no answer buffer,
 //! numeric write or target-derived state is synthesized.
-use super::completion_runtime::{candidate_rows, score_rows};
+use super::completion_runtime::{candidate_rows_bounded, score_rows};
 use super::completion_types::CompletionWork;
 use super::response_entry_types::*;
 use super::value_types::ValueState;
@@ -216,6 +216,25 @@ impl ResponseEntryState {
         control: Control,
         work: &mut CompletionWork,
     ) -> Option<Candidate> {
+        self.offer_head(
+            model,
+            values,
+            baseline,
+            control,
+            work,
+            model.response_entry.as_ref()?,
+        )
+    }
+
+    pub(super) fn offer_head(
+        &mut self,
+        model: &Model,
+        values: &ValueState,
+        baseline: Candidate,
+        control: Control,
+        work: &mut CompletionWork,
+        head: &ResponseEntryModel,
+    ) -> Option<Candidate> {
         self.pending = None;
         if !eligible(model, values, control)
             || values.pending.is_some()
@@ -224,7 +243,6 @@ impl ResponseEntryState {
         {
             return None;
         }
-        let head = model.response_entry.as_ref()?;
         let anchor = self.boundary?;
         if anchor.at_seen != values.started_at
             || (!self.active && (self.steps != 0 || self.seen != anchor.at_seen))
@@ -232,8 +250,43 @@ impl ResponseEntryState {
             return None;
         }
         let (features, len) = self.features(model, values, control, work);
+        self.offer_features::<RESPONSE_ENTRY_FEATURES>(
+            model,
+            values,
+            baseline,
+            control,
+            work,
+            head,
+            &features[..len],
+        )
+    }
+
+    pub(super) fn offer_features<const N: usize>(
+        &mut self,
+        model: &Model,
+        values: &ValueState,
+        baseline: Candidate,
+        control: Control,
+        work: &mut CompletionWork,
+        head: &ResponseEntryModel,
+        features: &[Feature],
+    ) -> Option<Candidate> {
+        self.pending = None;
+        if !eligible(model, values, control)
+            || values.pending.is_some()
+            || self.steps >= RESPONSE_ENTRY_STEPS
+            || self.seen != values.seen
+        {
+            return None;
+        }
+        let anchor = self.boundary?;
+        if anchor.at_seen != values.started_at
+            || (!self.active && (self.steps != 0 || self.seen != anchor.at_seen))
+        {
+            return None;
+        }
         let (tokens, count, rows, row_count) =
-            candidate_rows(&head.rows, &head.global_postings, &features[..len], work);
+            candidate_rows_bounded::<N>(&head.rows, &head.global_postings, features, work);
         let mut best = None;
         let mut best_score = 0_i64;
         for token in tokens[..count].iter().copied() {

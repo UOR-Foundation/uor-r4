@@ -178,6 +178,7 @@ impl Trainer {
             dependent_read: None,
             typed_routing: None,
             typed_roles: None,
+            no_read_completion: None,
             typed_literals: None,
             source_routing: None,
             learned_routing: None,
@@ -513,6 +514,33 @@ impl Model {
     }
     pub(super) fn validate(&self) -> Result<()> {
         self.config.validate()?;
+        if let Some(head) = &self.no_read_completion {
+            if head.copy.is_some() || super::role_read::head(self).is_none() {
+                return Err(Error(
+                    "NoRead completion requires the committed role reader".into(),
+                ));
+            }
+            head.validate_shape(
+                self,
+                33,
+                super::response_entry_types::NO_READ_COMPLETION_SCHEMA,
+            )?;
+            let mut parent = self.clone();
+            parent.no_read_completion = None;
+            parent.refresh_identity()?;
+            if parent.artifact_cid != head.baseline_artifact {
+                return Err(Error("NoRead completion parent differs".into()));
+            }
+            parent.validate()?;
+            let mut duplicate = self.clone();
+            duplicate.refresh_identity()?;
+            if duplicate.artifact_cid != self.artifact_cid
+                || duplicate.uor_model_address != self.uor_model_address
+            {
+                return Err(Error("NoRead completion identity differs".into()));
+            }
+            return Ok(());
+        }
         if let Some(block) = &self.typed_literals {
             if !block.literal_answers
                 || self
