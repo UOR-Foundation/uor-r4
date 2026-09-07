@@ -313,6 +313,15 @@ fn native_kernel_source_has_no_forbidden_arithmetic_or_float_types() {
             )
             .1,
         ),
+        (
+            "native learned relation start",
+            region(
+                include_str!("../src/native_geometric/relation_start.rs"),
+                "// NATIVE_GEOMETRIC_INTEGER_KERNEL_BEGIN",
+                "// NATIVE_GEOMETRIC_INTEGER_KERNEL_END",
+            )
+            .1,
+        ),
         ("native completion seed", seed),
         ("native numeral codec", numeral),
         ("native whole-word codec", lexemes),
@@ -2240,4 +2249,78 @@ fn native_reverse_relation_span_checkpoint_and_allocation() {
     }
     samples.sort_unstable();
     println!("reverse span parent rejection, preserved terminal anchor, malformed start rejection, short/evicted reads, per-step checkpoints and zero allocations PASS; samples={} median_ns={} max_ns={} (uncached predict+observe includes initial selection; excludes load/encoding/ingestion/checkpoints)",samples.len(),samples[samples.len()/2],samples[samples.len()-1]);
+}
+
+#[test]
+#[ignore = "requires learned relation-start artifact; charged model execution"]
+fn native_relation_start_checkpoint_and_allocation() {
+    use uor_r4_core::native_geometric::{Control, Model};
+    let bytes = std::fs::read(std::env::var("R4_RELATION_START_MODEL").unwrap()).unwrap();
+    let model = Model::from_bytes(&bytes).unwrap();
+    let wire: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    let mut bad = wire.clone();
+    bad["relation_start"]["codes"][0]["roots"][0] = 120.into();
+    assert!(Model::from_bytes(&serde_json::to_vec(&bad).unwrap()).is_err());
+    let mut bad = wire;
+    bad["relation_start"]["parent_artifact"] = "wrong-parent".into();
+    assert!(Model::from_bytes(&serde_json::to_vec(&bad).unwrap()).is_err());
+    let mut times = Vec::new();
+    for (fact, owner, expected, long) in [
+        (
+            "Notes say Amber Meadow holds telra.",
+            "telra",
+            " Amber Meadow.\n",
+            false,
+        ),
+        (
+            "Notes say Amber Meadow holds telra.",
+            "telra",
+            " Amber Meadow.\n",
+            true,
+        ),
+        ("Notes say Amber holds telra.", "telra", " Amber.\n", false),
+    ] {
+        let mut s = model.session(Control::Full).unwrap();
+        s.observe(&model, 0).unwrap();
+        let padding = if long {
+            "quiet sky. ".repeat(96)
+        } else {
+            String::new()
+        };
+        let tokens = model
+            .encode(&format!("{fact} {padding}Where is {owner}? Answer:"))
+            .unwrap();
+        ALLOCATIONS.with(|v| v.set(0));
+        BYTES.with(|v| v.set(0));
+        MEASURING.with(|v| v.set(true));
+        for token in tokens {
+            s.observe(&model, token).unwrap();
+        }
+        s.begin_response(&model).unwrap();
+        MEASURING.with(|v| v.set(false));
+        let mut output = [1; 32];
+        let mut used = 0;
+        loop {
+            let mut restored = model.restore_session(&s.checkpoint().unwrap()).unwrap();
+            let predicted = restored.predict(&model).unwrap();
+            MEASURING.with(|v| v.set(true));
+            let start = std::time::Instant::now();
+            let actual = s.predict(&model).unwrap();
+            s.observe(&model, actual.token).unwrap();
+            let elapsed = start.elapsed().as_nanos();
+            MEASURING.with(|v| v.set(false));
+            assert_eq!(actual, predicted);
+            times.push(elapsed);
+            output[used] = actual.token;
+            used += 1;
+            if actual.token == 1 || used == 32 {
+                break;
+            }
+        }
+        assert_eq!(output[used - 1], 1);
+        assert_eq!(model.decode(&output[..used]).unwrap(), expected.as_bytes());
+        assert_eq!((ALLOCATIONS.with(Cell::get), BYTES.with(Cell::get)), (0, 0));
+    }
+    times.sort_unstable();
+    println!("relation-start model/root rejection, short/evicted/singleton outputs, per-step checkpoints and zero allocations PASS; samples={} median_ns={} max_ns={} (uncached predict+observe including initial selection; excludes loading/encoding/ingestion/checkpoints)",times.len(),times[times.len()/2],times[times.len()-1]);
 }

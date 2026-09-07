@@ -25,6 +25,8 @@ mod joint_admission;
 mod literal_binding;
 #[path = "native_geometric_value_probe/relation_memory.rs"]
 mod relation_memory;
+#[path = "native_geometric_value_probe/relation_start.rs"]
+mod relation_start;
 #[path = "native_geometric_value_probe/retained_span.rs"]
 mod retained_span;
 #[path = "native_geometric_value_probe/reverse_span.rs"]
@@ -989,6 +991,9 @@ fn evaluate_binding(
 }
 
 fn main() -> ProbeResult<()> {
+    if std::env::args().nth(1).as_deref() == Some("relation-start") {
+        return relation_start::run(&std::env::args().skip(2).collect::<Vec<_>>());
+    }
     if std::env::args().nth(1).as_deref() == Some("reverse-span") {
         return reverse_span::run(&std::env::args().skip(2).collect::<Vec<_>>());
     }

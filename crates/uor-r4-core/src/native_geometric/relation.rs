@@ -576,7 +576,8 @@ pub(super) fn read_choice(
             continue;
         };
         work.relations.record_reads = work.relations.record_reads.saturating_add(1);
-        if record.span.as_ref().is_none_or(|span| span.start.is_none())
+        if !(model.relation_start.is_some() && record.owner.byte_end > record.value.byte_end)
+            && record.span.as_ref().is_none_or(|span| span.start.is_none())
             && words.queries[..words.query_len].iter().any(|w| {
                 work.relations.source_presence_checks =
                     work.relations.source_presence_checks.saturating_add(1);

@@ -285,11 +285,15 @@ retains `321e990f` without fitting: existing writer-selected endpoints bound
 reverse spans, yielding construction 3/6 to 6/6, open 6/6, short 3/3 and fresh
 6/6 with selected preservation intact. The earlier start is retained separately
 from the unchanged terminal anchor.
-**Next: learn phrase-start selection over admitted candidates.** Longest passing
-prefix still includes unfamiliar introductory text; wider gaps remain a separate
-exact-separator representation limitation. New construction/open contrasts must
-remain separate from the opened diagnostics. Project the complete work against
-the current cumulative balance before execution.
+The [learned start candidate](../native_geometric_relation_start_1140.md) is
+implemented but not promoted: construction 2/8 to 8/8, open 2/8 to 6/8 and
+selected preservation intact. Its fit uses predecessor shape alone, leaving
+an extra introductory word when two candidate starts share that shape.
+**Next: construction contrasts that break this shortcut**, using the existing
+ordered shape-pair features and H4 learner. Include multiword introductions and
+lowercase values; fresh evaluation remains unexecuted. Wider gaps remain a
+separate exact-separator limitation. Project the complete next work against the
+current cumulative balance before execution.
 Do not restart completed order repairs or grow a
 paging subsystem without a measured access bottleneck. General named-role binding
 and broader Rust reasoning remain unqualified. Follow current-state.md for

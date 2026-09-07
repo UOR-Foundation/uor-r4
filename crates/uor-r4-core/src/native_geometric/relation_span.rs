@@ -19,6 +19,18 @@ pub(super) struct RelationSpan {
     pub start: Option<WordAtom>,
 }
 
+#[derive(Clone, Copy, Default)]
+pub(super) struct ReverseCandidate {
+    pub start: usize,
+    pub span: Option<RelationSpan>,
+}
+
+pub(super) struct ReverseCandidates {
+    /// Singleton first, followed by admitted starts in increasing source extent.
+    pub rows: [ReverseCandidate; 16],
+    pub len: usize,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct PendingRelation {
@@ -147,15 +159,19 @@ impl PendingRelation {
 
 /// The writer-selected word is a hard endpoint. Each possible earlier start
 /// supplies one fixed source cue for the entire existing learned edge law.
-fn reverse_extent(
+pub(super) fn reverse_candidates(
     model: &Model,
     words: &LexemeState,
     owner: usize,
     endpoint: usize,
     action: u8,
     work: &mut ValueWork,
-) -> Option<RelationSpan> {
-    let mut best = None;
+) -> ReverseCandidates {
+    let mut admitted = ReverseCandidates {
+        rows: [ReverseCandidate::default(); 16],
+        len: 1,
+    };
+    admitted.rows[0].start = endpoint;
     let terminal = words.recent[endpoint];
     work.relations.record_reads = work.relations.record_reads.saturating_add(1);
     for start in endpoint + 1..words.recent_len {
@@ -185,11 +201,15 @@ fn reverse_extent(
         if complete {
             if let Some(mut span) = candidate.span {
                 span.start = Some(first);
-                best = Some(span);
+                admitted.rows[admitted.len] = ReverseCandidate {
+                    start,
+                    span: Some(span),
+                };
+                admitted.len += 1;
             }
         }
     }
-    best
+    admitted
 }
 
 impl RelationState {
@@ -227,10 +247,10 @@ impl RelationState {
         // Reverse writes may inspect only source words at or before their
         // selected value endpoint; the following linker and owner are excluded.
         if value != 0 {
-            let span = model
-                .relation_reverse_spans
-                .as_ref()
-                .and_then(|_| reverse_extent(model, words, owner, value, action, work));
+            let span = model.relation_reverse_spans.as_ref().and_then(|_| {
+                let admitted = reverse_candidates(model, words, owner, value, action, work);
+                super::relation_start::select(model, words, value, &admitted, work)
+            });
             self.commit_span(words.recent[owner], words.recent[value], span, action, work);
             return;
         }
