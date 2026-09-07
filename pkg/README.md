@@ -10,10 +10,15 @@ typed paired-H4/icosian geometry and UOR identity preserved. The model is meant
 to learn useful conversation, memory, reasoning and coding on ordinary local
 hardware.
 
-Rust training may use matrix multiplication. The final serving path executes
-learned geometric operators through bounded routes, state transitions and
-integer/table lookup. It must not hide dense transformer computation behind a
-lookup interface or depend on a Python model or external response provider.
+Rust training may use matrix multiplication. Final serving executes no matrix
+products and uses learned geometric state/operators with deterministic geometric
+address and page-table selection. The current design prioritizes shared typed
+operators; expert gates remain a conditional future option if capability and
+complete laptop cost justify them. It must not hide dense transformer computation
+behind lookup or depend on a Python model or external response provider.
+The owner-requested [architecture reconciliation](docs/integration/architecture-2026-09/README.md)
+maps the native model, all discovered engine families, mathematical mechanisms,
+contributor sources and Studio to their actual evidence and missing bridges.
 
 This is the project goal, not a claim of current alpha or frontier capability.
 The [canonical plan](docs/integration/project-track.md) defines the work and
