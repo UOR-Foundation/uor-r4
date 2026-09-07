@@ -109,7 +109,7 @@ jobs:
     if: ${{ always() && (github.event_name == 'pull_request' || github.event_name == 'merge_group') }}
     runs-on: ubuntu-latest
     steps:
-      - name: Acknowledge explicitly requested native verification
+      - name: Acknowledge deferred native verification
         run: echo "Ruleset transport only; no formatting, Clippy, native tests, no_std, kappa or architecture-policy checks ran. Use workflow_dispatch qa_scope=native_checks for the native suite."
 
   native-checks:

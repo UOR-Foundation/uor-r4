@@ -156,7 +156,7 @@ Run the retained native formatting, architecture-policy, model, context,
 allocation and CLI checks explicitly when needed:
 
 ```bash
-gh workflow run ci.yml --ref <branch-or-commit> -f qa_scope=native_checks -f decision_reason="<why this verification is needed>"
+gh workflow run ci.yml --ref <branch-or-tag> -f qa_scope=native_checks -f decision_reason="<why this verification is needed>"
 ```
 
 The existing manual `product_path` and `release_qa` scopes remain available;
