@@ -252,14 +252,18 @@ retains `433e3807`: five construction numeric takeovers are repaired, moving
 558/615 to 563/615 while all prior output/write/session preservation passes.
 The complete parent is fixed beneath one geometric admission decision. Open
 4/6 and fresh 8/12 remain unchanged; equality ties angular, and fresh lexical
-rejection is unexercised. **Next: order-robust entity-to-operand binding within
-the existing literal selector.** Reuse exact occurrence/reference metadata to
-resolve the observed reversed-order wrong-entity Copy choices. Preserve this
-gate, computed roles and source/NoRead semantics, including the separate retained
-reversed-order abstention failures. Use a new construction/development split
-and fresh evaluation, not the just-opened cases as a tuning set. No suffix head,
-question parser, provider or general capacity increase is justified by this
-identified selection boundary.
+rejection is unexercised. The subsequent
+[literal operand continuation](../native_geometric_literal_binding_1139.md)
+retains `e1ef0a5d`: the existing dictionary/feature law is fixed while missing
+provenance codes are admitted and learned. Construction improves 571/631 to
+630/631 with no lost correct answer; fresh identity/value/order transfer is
+16/16 versus 8/16 parent and 8/16 matched equality. Prior outputs, writes and
+sessions are preserved. **Next: supported-source/NoRead selection independent
+of irrelevant numeric-fact order**, through the existing source router and exact
+occurrence metadata. Preserve the now-working literal selection and keep a new
+construction/development split and fresh evaluation. The remaining location
+abstentions are concrete evidence; they do not justify a question parser,
+completion head or general capacity expansion.
 General named-role binding and broader Rust reasoning remain unqualified.
 No additional cache campaign is active. Follow current-state.md for artifacts
 and cumulative resources; a new issue does not reset the spent amount.

@@ -100,7 +100,12 @@ repairs five numeric takeovers of word/identifier responses: construction improv
 558/615 to 563/615 with prior behavior preserved. Its twelve fresh cases remain
 8/12, identical to parent and equality control, so lexical-rejection transfer and
 angular advantage are unestablished. Three repaired Rust functions pass fifteen
-assertions. The next observed boundary is order-sensitive entity/operand binding.
+assertions. The subsequent [literal operand continuation](docs/native_geometric_literal_binding_1139.md)
+repairs that binding through missing exact-provenance codes: construction improves
+571/631 to 630/631 with no lost correct answer, and fresh name/value/order answers
+improve 8/16 to 16/16 versus 8/16 matched equality. All prior preservation passes;
+32 repaired Rust continuations execute their assertions. The remaining observed
+boundary is order-sensitive supported-source/NoRead selection.
 General prose/syntax/reasoning and frontier capability remain unqualified. Follow
 the current-state pointer for artifacts, costs and the next implementation.
 

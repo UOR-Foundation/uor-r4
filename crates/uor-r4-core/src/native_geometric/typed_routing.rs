@@ -487,9 +487,15 @@ pub(super) fn score(
         context.provenance.as_ref(),
         work,
     );
-    let state = block
-        .router
-        .encode(model, &f[..n], control, &mut work.routing);
-    block.router.score(model, state, action, &mut work.routing)
+    let router = if context.literal_component && control == Control::LiteralRefinementDisabled {
+        model
+            .literal_routing_refinement
+            .as_ref()
+            .map_or(&block.router, |w| &w.previous)
+    } else {
+        &block.router
+    };
+    let state = router.encode(model, &f[..n], control, &mut work.routing);
+    router.score(model, state, action, &mut work.routing)
 }
 // NATIVE_GEOMETRIC_INTEGER_KERNEL_END

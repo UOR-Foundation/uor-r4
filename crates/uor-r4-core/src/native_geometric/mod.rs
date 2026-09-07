@@ -17,6 +17,7 @@ pub use dependent_read_training::DependentReadExample;
 mod dependent_read_tests;
 mod joint_admission;
 mod joint_admission_training;
+mod literal_refinement;
 #[cfg(test)]
 mod source_refinement_tests;
 mod source_routing;
@@ -174,6 +175,7 @@ pub struct DocumentReceipt {
 #[serde(rename_all = "snake_case")]
 pub enum Control {
     JointAdmissionDisabled,
+    LiteralRefinementDisabled,
     #[default]
     Full,
     GeometryDisabled,
@@ -235,6 +237,7 @@ impl Feature {
         match control {
             Control::Full
             | Control::JointAdmissionDisabled
+            | Control::LiteralRefinementDisabled
             | Control::MemoryDisabled
             | Control::ResponseStateDisabled
             | Control::ValuesDisabled
@@ -319,6 +322,8 @@ pub struct TrainingProgress {
 #[serde(try_from = "ModelWire")]
 pub struct Model {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    literal_routing_refinement: Option<source_routing::SourceRoutingRefinement>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     joint_admission: Option<joint_admission::JointAdmission>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     no_read_completion: Option<response_entry_types::ResponseEntryModel>,
@@ -365,6 +370,8 @@ pub struct Model {
 #[serde(deny_unknown_fields)]
 struct ModelWire {
     #[serde(default)]
+    literal_routing_refinement: Option<source_routing::SourceRoutingRefinement>,
+    #[serde(default)]
     joint_admission: Option<joint_admission::JointAdmission>,
     #[serde(default)]
     no_read_completion: Option<response_entry_types::ResponseEntryModel>,
@@ -410,6 +417,7 @@ impl TryFrom<ModelWire> for Model {
     type Error = Error;
     fn try_from(wire: ModelWire) -> Result<Self> {
         let model = Self {
+            literal_routing_refinement: wire.literal_routing_refinement,
             joint_admission: wire.joint_admission,
             no_read_completion: wire.no_read_completion,
             typed_routing: wire.typed_routing,

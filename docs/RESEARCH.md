@@ -7,7 +7,26 @@ implemented operations, measured behavior and proposed integration. The native
 model was d59070c2 at the review date; no model experiment was
 rerun for that review.
 
-## Literal numeric admission — current bounded checkpoint, 2026-09-07 UTC
+## Literal operand binding — current bounded checkpoint, 2026-09-07
+
+The [literal continuation](native_geometric_literal_binding_1139.md) retains
+`e1ef0a5d`. Exact entity bytes already survive capture; the learned literal
+router omitted a relevant query/cue provenance code. It now retains all 567
+old codes, admits all 52 newly observed codes, and continues the same signed-H4
+selector with fixed dictionary and feature law. An outer witness restores the
+complete `433e3807` parent. No serving head or persistent state is added.
+
+Construction improves 571/631 to 630/631 with zero lost correct answers; disabling
+refinement restores all 631 parent texts/stops. Open answers improve 4/8 to 8/8,
+and fresh name/value/place/order answers improve 8/16 to 16/16, versus 8/16 for
+matched equality. Both fits complete the same schedule. All prior preservation
+passes; the earlier admission set's numeric errors are repaired, leaving its two
+location abstentions. Thirty-two repaired Rust continuations execute assertions,
+and actual state/identity/checkpoint/allocation and public CLI checks pass.
+This qualifies bounded literal selection, not general language/reasoning or a
+whole-model laptop advantage. Next is order-sensitive source/NoRead selection.
+
+## Literal numeric admission — previous bounded checkpoint, 2026-09-07 UTC
 
 The [admission result](native_geometric_joint_admission_1139.md) retains
 `433e3807` with the complete d590 parent fixed. Reused signed-H4 selection
