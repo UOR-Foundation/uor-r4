@@ -9,7 +9,7 @@ use uor_r4_api::native_capability_api::{
 use uor_r4_core::native_geometric::{Control, Model, Session, BOS, EOS};
 
 type CheckResult<T> = Result<T, Box<dyn Error>>;
-const LIMIT: usize = 24;
+const LIMIT: usize = 96;
 const QUIET_RIVER: &str = "the report says quiet river holds selra. Where is selra? Answer:";
 const SUM_13: &str = "User: suri has 13 coins. orin has 4 coins.\nUser: What is the sum of suri's and orin's coins?\nAssistant:";
 const SUM_14: &str = "User: suri has 14 coins. orin has 4 coins.\nUser: What is the sum of suri's and orin's coins?\nAssistant:";
@@ -365,6 +365,9 @@ fn run(
                 checks,
             )?;
         }
+        let composed_parent = document
+            .get("composed_output")
+            .is_some_and(Value::is_object);
         // Legal scalar mutations isolate identity boundaries from shape errors.
         // Witness changes must fail at parent reconstruction, while a changed
         // current router must preserve that parent and fail at current identity.
@@ -385,6 +388,11 @@ fn run(
                 "instruction binding identity differs",
             ),
         ] {
+            let boundary = if composed_parent {
+                "composed output frozen parent differs"
+            } else {
+                boundary
+            };
             let mut changed = document.clone();
             let bias = changed
                 .pointer_mut(pointer)
@@ -405,6 +413,11 @@ fn run(
                 json!({"field":pointer,"old":old,"new":new,"expected_boundary":boundary,"error":error}),
             )?;
         }
+        let parent_boundary = if composed_parent {
+            "composed output frozen parent differs"
+        } else {
+            "instruction binding frozen parent differs"
+        };
         let mut changed = document.clone();
         let wrong_parent = format!("blake3:{}", "0".repeat(64));
         changed["instruction_binding"]["parent_artifact"] = json!(wrong_parent);
@@ -415,8 +428,8 @@ fn run(
             rejected
                 && error
                     .as_deref()
-                    .is_some_and(|e| e.contains("instruction binding frozen parent differs")),
-            json!({"old":witness["parent_artifact"],"new":wrong_parent,"expected_boundary":"instruction binding frozen parent differs","error":error}),
+                    .is_some_and(|e| e.contains(parent_boundary)),
+            json!({"old":witness["parent_artifact"],"new":wrong_parent,"expected_boundary":parent_boundary,"error":error}),
         )?;
         let mut changed = document.clone();
         changed["instruction_binding"]["unexpected_witness_field"] = json!(true);
@@ -432,6 +445,129 @@ fn run(
         )?;
     } else {
         checks.push(json!({"name":"instruction_binding_checks","status":"NOT_APPLICABLE","reason":"supplied artifact has no instruction_binding witness"}));
+    }
+    if let Some(witness) = document.get("composed_output").filter(|v| !v.is_null()) {
+        for (label, request, target) in [
+            (
+                "sentence",
+                " Explain in a sentence.",
+                "20 is 3 plus 17.\n23 is 3 plus 20.\n",
+            ),
+            (
+                "rust",
+                " Write a Rust equality.",
+                "20 == 3 + 17\n23 == 3 + 20\n",
+            ),
+        ] {
+            let config = SessionConfig {
+                session_id: format!("composed-output-{label}"),
+                ..SessionConfig::default()
+            };
+            let mut direct = model.session(Control::Full)?;
+            let mut api = api_model.create_session(config.clone())?;
+            compare_turn(
+                &model,
+                &mut direct,
+                &mut api,
+                SUM_13,
+                "17.\n",
+                &format!("composed_{label}_actual_history"),
+                checks,
+            )?;
+            let history = api.export_state()?;
+            api.import_state(&history)?;
+            direct = model.restore_session(&direct.checkpoint()?)?;
+            let prompt = format!("User: There are 3 extra coins. Add the extra coins to the original total. Again.{request}\nAssistant:");
+            compare_turn(
+                &model,
+                &mut direct,
+                &mut api,
+                &prompt,
+                target,
+                &format!("composed_{label}_api_direct_parity_after_history_checkpoint"),
+                checks,
+            )?;
+            let exported = api.export_state()?;
+            let mut imported = api_model.create_session(config)?;
+            imported.import_state(&exported)?;
+            direct = model.restore_session(&direct.checkpoint()?)?;
+            record(
+                checks,
+                &format!("composed_{label}_checkpoint_import"),
+                imported.identity_scope() == api.identity_scope(),
+                json!({"checkpoint_bytes":exported.len(),"scope":imported.identity_scope(),"development_case":true}),
+            )?;
+            compare_turn(
+                &model,
+                &mut direct,
+                &mut imported,
+                SUM_13,
+                "17.\n",
+                &format!("composed_{label}_checkpoint_next_independent_sum"),
+                checks,
+            )?;
+        }
+        // Legal parameter changes must fail at the stated reconstruction layer.
+        // The successful loads above already validate the complete parent chain.
+        for (name, pointer, boundary) in [
+            (
+                "composed_previous_operation_frozen_parent_rejected",
+                "/composed_output/previous_operation/biases/0",
+                "composed output frozen parent differs",
+            ),
+            (
+                "composed_current_operation_identity_rejected",
+                "/operation_transition/router/biases/0",
+                "composed output identity differs",
+            ),
+        ] {
+            let mut changed = document.clone();
+            let bias = changed
+                .pointer_mut(pointer)
+                .ok_or("composed router bias absent")?;
+            let old = bias
+                .as_i64()
+                .ok_or("composed router bias is not an integer")?;
+            if !(-32..=32).contains(&old) {
+                return Err("composed router bias outside documented range".into());
+            }
+            let new = if old == 32 { old - 1 } else { old + 1 };
+            *bias = json!(new);
+            let (rejected, error) = rejection(&serde_json::to_vec(&changed)?);
+            record(
+                checks,
+                name,
+                rejected && error.as_deref().is_some_and(|e| e.contains(boundary)),
+                json!({"field":pointer,"old":old,"new":new,"expected_boundary":boundary,"error":error}),
+            )?;
+        }
+        let mut changed = document.clone();
+        let wrong_parent = format!("blake3:{}", "0".repeat(64));
+        changed["composed_output"]["parent_artifact"] = json!(wrong_parent);
+        let (rejected, error) = rejection(&serde_json::to_vec(&changed)?);
+        record(
+            checks,
+            "composed_wrong_parent_cid_rejected",
+            rejected
+                && error
+                    .as_deref()
+                    .is_some_and(|e| e.contains("composed output frozen parent differs")),
+            json!({"old":witness["parent_artifact"],"new":wrong_parent,"expected_boundary":"composed output frozen parent differs","error":error}),
+        )?;
+        let mut changed = document.clone();
+        changed["composed_output"]["unexpected_witness_field"] = json!(true);
+        let (rejected, error) = rejection(&serde_json::to_vec(&changed)?);
+        record(
+            checks,
+            "composed_unknown_witness_field_rejected",
+            rejected
+                && error.as_deref().is_some_and(|e| {
+                    e.contains("unknown field") && e.contains("unexpected_witness_field")
+                }),
+            json!({"expected_boundary":"witness deserialization denies unknown fields","error":error}),
+        )?;
+    } else {
+        checks.push(json!({"name":"composed_output_checks","status":"NOT_APPLICABLE","reason":"supplied artifact has no composed_output witness"}));
     }
     if document
         .get("typed_role_refinement")

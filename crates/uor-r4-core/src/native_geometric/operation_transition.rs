@@ -180,7 +180,7 @@ fn features(
     n += 1;
     (f, n)
 }
-fn prepare(
+pub(super) fn prepare(
     values: &mut ValueState,
     action: ValueAction,
     operands: [ValueRecord; 2],
@@ -235,11 +235,17 @@ pub(super) fn offer(
     {
         return None;
     }
+    let router = if control == Control::ComposedOutputDisabled {
+        model
+            .composed_output
+            .as_ref()
+            .map_or(&block.router, |w| &w.previous_operation)
+    } else {
+        &block.router
+    };
     let (f, n) = features(block, values, None, &mut work.routing);
-    let state = block
-        .router
-        .encode(model, &f[..n], control, &mut work.routing);
-    let mut best = block.router.score(model, state, 0, &mut work.routing);
+    let state = router.encode(model, &f[..n], control, &mut work.routing);
+    let mut best = router.score(model, state, 0, &mut work.routing);
     let mut selected = None;
     for index in 0..272 {
         if let Some((action, pair)) = proposal(values, index) {
@@ -252,10 +258,8 @@ pub(super) fn offer(
                 continue;
             }
             let (f, n) = features(block, values, Some(pair), &mut work.routing);
-            let state = block
-                .router
-                .encode(model, &f[..n], control, &mut work.routing);
-            let score = block.router.score(
+            let state = router.encode(model, &f[..n], control, &mut work.routing);
+            let score = router.score(
                 model,
                 state,
                 if action == ValueAction::Copy { 1 } else { 2 },
@@ -283,7 +287,7 @@ pub struct OperationTransitionExample {
     /// Supervised next operator and literal operand. None labels Stop.
     pub next: Option<(ValueAction, i64)>,
 }
-fn prefix(model: &Model, d: &OperationTransitionExample) -> Result<Session> {
+pub(super) fn prefix(model: &Model, d: &OperationTransitionExample) -> Result<Session> {
     let mut s = model.session(Control::Full)?;
     s.observe(model, BOS)?;
     for turn in &d.history {
@@ -304,7 +308,7 @@ fn prefix(model: &Model, d: &OperationTransitionExample) -> Result<Session> {
     s.begin_response(model)?;
     Ok(s)
 }
-fn until_stop(model: &Model, s: &mut Session) -> Result<String> {
+pub(super) fn until_stop(model: &Model, s: &mut Session) -> Result<String> {
     let mut tokens = Vec::new();
     for _ in 0..64 {
         let p = s.predict(model)?;
@@ -316,7 +320,7 @@ fn until_stop(model: &Model, s: &mut Session) -> Result<String> {
     }
     Err(Error("operation response exceeded64 tokens".into()))
 }
-fn frame(
+pub(super) fn frame(
     block: &OperationTransition,
     s: &Session,
     target: Option<(ValueAction, i64)>,
