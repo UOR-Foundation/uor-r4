@@ -1,4 +1,14 @@
-# uor-r4-graph-compiler
+# UOR-R4 Geometric Language Model — historical graph compiler
+
+This component preserves its declared graph/formal contracts. The accepted
+native model is [uor-r4-core/src/native_geometric](../uor-r4-core/src/native_geometric),
+shared by the CLI and native API. Its bounded attention and inference evidence
+does not establish general prose completion or general reasoning; graph
+compilation and proof status do not qualify those capabilities either. Use the
+[project map](../../docs/PROJECT_MAP.md),
+[canonical plan](../../docs/integration/project-track.md),
+[current artifact and measured behavior](../../docs/integration/current-state.md),
+and [model direction](../../docs/integration/model-direction-2026-09.md).
 
 **Preserved research lane.** This is the earlier offline R4G1 graph-compiler
 pipeline, retained for its observations, artifacts, measurements, and reusable

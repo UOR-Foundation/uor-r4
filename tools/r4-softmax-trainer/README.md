@@ -1,4 +1,26 @@
-# R4 offline trainers
+# UOR-R4 Geometric Language Model — historical offline trainers
+
+The active implementation is
+[the Rust native core](../../crates/uor-r4-core/src/native_geometric), shared
+by the CLI and API. Use the [project map](../../docs/PROJECT_MAP.md),
+[canonical plan](../../docs/integration/project-track.md),
+[current artifact and measured behavior](../../docs/integration/current-state.md),
+and [model direction](../../docs/integration/model-direction-2026-09.md).
+[Research storage](../../research/README.md) and the
+[local knowledge index](../uor-knowledge/README.md) locate preserved experiments,
+checkpoints and negative results. Bounded native attention and inference have
+artifact-scoped evidence; general prose completion and general reasoning remain
+unqualified. This Python/dense reference package is not the accepted main model.
+
+**Preserved reference package:** new model preparation, learning,
+artifacts and serving use Rust under the
+[immediate native plan](../../docs/integration/project-track.md#immediate-build-sequence).
+This Python package remains historical evidence and source material for specific
+mechanisms, including #1073/#1077's controlled binding/role objectives. Its old
+current/next instructions do not schedule new training or introduce a product
+dependency. See [current-state](../../docs/integration/current-state.md).
+
+## Historical offline experiments
 
 This package contains the bounded offline training paths authorized by issues
 [#1014](https://github.com/UOR-Foundation/uor-r4/issues/1014) and
@@ -599,7 +621,7 @@ freeze learned associative binding/readout. There is no gain tuning, `g=2`,
 third normalization variant, retry, widened readout, generation, reasoning,
 CUDA path, or lowering run from this result; #954 remains blocked.
 
-## Current measured boundary
+## Historical measured boundary
 
 #1014 established load-bearing ordinary causal attention at this learned
 R4/Spin scope, but failed its complete quality Definition of Done. #1017 then

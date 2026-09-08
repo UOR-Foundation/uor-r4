@@ -1,0 +1,1898 @@
+{
+  "schema": "uor-r4.literal-binding-evidence/1",
+  "at": "2026-09-07T04:25:17.488Z",
+  "base_commit": "8ffd04e5dcd1ac19bf6f6dcfd46229a4d7349124",
+  "parent": "blake3:433e380702a58f4913b163d4a4ab5964b88544a945807b1871c5b3db12241b0c",
+  "artifact": "blake3:e1ef0a5dab8f96212773752a5628d2e9e650ce7797331fa8297aaaeaf0825b53",
+  "control": "blake3:ad57b880eae748e9c0cb002bdeb47c4f93886a0d050f356acc9d3f1e6629a5c4",
+  "decision": "RETAIN_BOUNDED_LITERAL_OPERAND_BINDING",
+  "artifacts": [
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-angular128/model.json",
+      "bytes": 11397442,
+      "sha256": "a871fe8ac8116450add13c98c01d8b43a1e3a4571dcfb1309626970ff8520a4f"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-angular768/model.json",
+      "bytes": 11519373,
+      "sha256": "8a3b19c7495d77947aa51159536e8a3b6237bc486cd08caa5d6316b36599707c"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-equality768/model.json",
+      "bytes": 11519330,
+      "sha256": "59ec0ce4002f273ef6e4931e1d3ff3dd307b00623ff74324451d81bce0298826"
+    }
+  ],
+  "source": [
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-typed-value/uor-r4/crates/uor-r4-core/examples/native_geometric_value_probe.rs",
+      "bytes": 71754,
+      "sha256": "1a6d501a22e1189f29310e593f58c209538ac89d6ce84237def7619e1da47c7e"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-typed-value/uor-r4/crates/uor-r4-core/src/native_geometric/mod.rs",
+      "bytes": 20576,
+      "sha256": "a85dae93b2dcdceeeecf09b62a2bebf2e23e3063931ba88949bd273a847d60bb"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-typed-value/uor-r4/crates/uor-r4-core/src/native_geometric/training.rs",
+      "bytes": 50794,
+      "sha256": "f8a54b7c203303d71322045d09a0bd6e2759b489844dc2dfcbc6469ac45df27d"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-typed-value/uor-r4/crates/uor-r4-core/src/native_geometric/typed_routing.rs",
+      "bytes": 16170,
+      "sha256": "da8ff6d95d18c80ec7aaef7034659de19c9235e028756c5a05505ac8103c919a"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-typed-value/uor-r4/crates/uor-r4-core/tests/native_geometric_allocations.rs",
+      "bytes": 73764,
+      "sha256": "809faa35d5c54633b15b83ef2085d5aca367bf62e6aa871f361f389791b967da"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-typed-value/uor-r4/crates/uor-r4-core/examples/native_geometric_value_probe/literal_binding.rs",
+      "bytes": 4702,
+      "sha256": "2575479d60449cd23cdb83d5f21276e263a2dcb4e2f798484a14694eb52bb831"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-typed-value/uor-r4/crates/uor-r4-core/src/native_geometric/literal_refinement.rs",
+      "bytes": 9020,
+      "sha256": "1dac9f196786a46d450f00dc6ad41d25c6236e8f4b2c15512b0c920634608e51"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-typed-value/uor-r4/crates/uor-r4-core/src/native_geometric/source_routing_training.rs",
+      "bytes": 29731,
+      "sha256": "20ef2b9a441498ba1d5f572a2e6935bf966735e427c71242356a29fb7efc578d"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-typed-value/uor-r4/crates/uor-r4-core/src/native_geometric/source_routing.rs",
+      "bytes": 6625,
+      "sha256": "47604abbf424c7bad5660e940e8f8655f5af907e833227cac2614da8ae9baac4"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-typed-value/uor-r4/crates/uor-r4-core/src/native_geometric/value_lexemes.rs",
+      "bytes": 12896,
+      "sha256": "dc79fa8e1c4f0fadb14af0d8153155b4e874a3178f8d33042b3515460467f5e9"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-typed-value/uor-r4/crates/uor-r4-core/src/native_geometric/joint_admission.rs",
+      "bytes": 3415,
+      "sha256": "2cfa17482a1b9dd3f326a0f77767c79fec708303f8f7a6892a9535b634d9a0ce"
+    }
+  ],
+  "data": {
+    "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-source.json",
+    "bytes": 135916,
+    "sha256": "4ca0430ae0d13656a261707eeb8bcb57529f453ebddde2674afc10470de194dd"
+  },
+  "fits": {
+    "angular": {
+      "accepted": [
+        36,
+        0,
+        0
+      ],
+      "artifact": "blake3:e1ef0a5dab8f96212773752a5628d2e9e650ce7797331fa8297aaaeaf0825b53",
+      "binding_after": {
+        "feature": {
+          "a": 2,
+          "b": 66,
+          "kind": 5
+        },
+        "roots": [
+          36,
+          58
+        ]
+      },
+      "binding_before": {
+        "feature": {
+          "a": 2,
+          "b": 66,
+          "kind": 5
+        },
+        "roots": [
+          119,
+          119
+        ]
+      },
+      "documents": 631,
+      "elapsed_ms": 35618,
+      "final_correct": 387,
+      "final_hinge": 0,
+      "frames": 387,
+      "initial_correct": 323,
+      "initial_hinge": 312,
+      "old_features": 567,
+      "parent": "blake3:433e380702a58f4913b163d4a4ab5964b88544a945807b1871c5b3db12241b0c",
+      "proposals": 62801,
+      "schema": "uor-r4.literal-refinement-fit/1",
+      "scope": "Fixed dictionary/feature law and exact parent witness; supervised numeric result prefix or NoOperation. Equal numeric values do not establish occurrence identity. No derived-role fitting.",
+      "skipped": [
+        "fact/fit/0/0/0",
+        "fact/fit/0/0/1",
+        "fact/fit/0/1/0",
+        "fact/fit/0/1/1",
+        "fact/fit/0/2/0",
+        "fact/fit/0/2/1",
+        "fact/fit/0/3/0",
+        "fact/fit/0/3/1",
+        "fact/fit/1/0/0",
+        "fact/fit/1/0/1",
+        "fact/fit/1/1/0",
+        "fact/fit/1/1/1",
+        "fact/fit/1/2/0",
+        "fact/fit/1/2/1",
+        "fact/fit/1/3/0",
+        "fact/fit/1/3/1",
+        "fact/fit/2/0/0",
+        "fact/fit/2/0/1",
+        "fact/fit/2/1/0",
+        "fact/fit/2/1/1",
+        "fact/fit/2/2/0",
+        "fact/fit/2/2/1",
+        "fact/fit/2/3/0",
+        "fact/fit/2/3/1",
+        "fact/fit/3/0/0",
+        "fact/fit/3/0/1",
+        "fact/fit/3/1/0",
+        "fact/fit/3/1/1",
+        "fact/fit/3/2/0",
+        "fact/fit/3/2/1",
+        "fact/fit/3/3/0",
+        "fact/fit/3/3/1",
+        "fact/fit/4/0/0",
+        "fact/fit/4/0/1",
+        "fact/fit/4/1/0",
+        "fact/fit/4/1/1",
+        "fact/fit/4/2/0",
+        "fact/fit/4/2/1",
+        "fact/fit/4/3/0",
+        "fact/fit/4/3/1",
+        "fact/fit/5/0/0",
+        "fact/fit/5/0/1",
+        "fact/fit/5/1/0",
+        "fact/fit/5/1/1",
+        "fact/fit/5/2/0",
+        "fact/fit/5/2/1",
+        "fact/fit/5/3/0",
+        "fact/fit/5/3/1",
+        "fact/fit/6/0/0",
+        "fact/fit/6/0/1",
+        "fact/fit/6/1/0",
+        "fact/fit/6/1/1",
+        "fact/fit/6/2/0",
+        "fact/fit/6/2/1",
+        "fact/fit/6/3/0",
+        "fact/fit/6/3/1",
+        "fact/fit/7/0/0",
+        "fact/fit/7/0/1",
+        "fact/fit/7/1/0",
+        "fact/fit/7/1/1",
+        "fact/fit/7/2/0",
+        "fact/fit/7/2/1",
+        "fact/fit/7/3/0",
+        "fact/fit/7/3/1",
+        "wording/fit/0/0/0/0",
+        "wording/fit/0/0/0/1",
+        "wording/fit/0/0/1/0",
+        "wording/fit/0/0/1/1",
+        "wording/fit/0/0/2/0",
+        "wording/fit/0/0/2/1",
+        "wording/fit/0/1/0/0",
+        "wording/fit/0/1/0/1",
+        "wording/fit/0/1/1/0",
+        "wording/fit/0/1/1/1",
+        "wording/fit/0/1/2/0",
+        "wording/fit/0/1/2/1",
+        "wording/fit/0/2/0/0",
+        "wording/fit/0/2/0/1",
+        "wording/fit/0/2/1/0",
+        "wording/fit/0/2/1/1",
+        "wording/fit/0/2/2/0",
+        "wording/fit/0/2/2/1",
+        "wording/fit/0/3/0/0",
+        "wording/fit/0/3/0/1",
+        "wording/fit/0/3/1/0",
+        "wording/fit/0/3/1/1",
+        "wording/fit/0/3/2/0",
+        "wording/fit/0/3/2/1",
+        "wording/fit/1/0/0/0",
+        "wording/fit/1/0/0/1",
+        "wording/fit/1/0/1/0",
+        "wording/fit/1/0/1/1",
+        "wording/fit/1/0/2/0",
+        "wording/fit/1/0/2/1",
+        "wording/fit/1/1/0/0",
+        "wording/fit/1/1/0/1",
+        "wording/fit/1/1/1/0",
+        "wording/fit/1/1/1/1",
+        "wording/fit/1/1/2/0",
+        "wording/fit/1/1/2/1",
+        "wording/fit/1/2/0/0",
+        "wording/fit/1/2/0/1",
+        "wording/fit/1/2/1/0",
+        "wording/fit/1/2/1/1",
+        "wording/fit/1/2/2/0",
+        "wording/fit/1/2/2/1",
+        "wording/fit/1/3/0/0",
+        "wording/fit/1/3/0/1",
+        "wording/fit/1/3/1/0",
+        "wording/fit/1/3/1/1",
+        "wording/fit/1/3/2/0",
+        "wording/fit/1/3/2/1",
+        "wording/fit/2/0/0/0",
+        "wording/fit/2/0/0/1",
+        "wording/fit/2/0/1/0",
+        "wording/fit/2/0/1/1",
+        "wording/fit/2/0/2/0",
+        "wording/fit/2/0/2/1",
+        "wording/fit/2/1/0/0",
+        "wording/fit/2/1/0/1",
+        "wording/fit/2/1/1/0",
+        "wording/fit/2/1/1/1",
+        "wording/fit/2/1/2/0",
+        "wording/fit/2/1/2/1",
+        "wording/fit/2/2/0/0",
+        "wording/fit/2/2/0/1",
+        "wording/fit/2/2/1/0",
+        "wording/fit/2/2/1/1",
+        "wording/fit/2/2/2/0",
+        "wording/fit/2/2/2/1",
+        "wording/fit/2/3/0/0",
+        "wording/fit/2/3/0/1",
+        "wording/fit/2/3/1/0",
+        "wording/fit/2/3/1/1",
+        "wording/fit/2/3/2/0",
+        "wording/fit/2/3/2/1",
+        "wording/fit/3/0/0/0",
+        "wording/fit/3/0/0/1",
+        "wording/fit/3/0/1/0",
+        "wording/fit/3/0/1/1",
+        "wording/fit/3/0/2/0",
+        "wording/fit/3/0/2/1",
+        "wording/fit/3/1/0/0",
+        "wording/fit/3/1/0/1",
+        "wording/fit/3/1/1/0",
+        "wording/fit/3/1/1/1",
+        "wording/fit/3/1/2/0",
+        "wording/fit/3/1/2/1",
+        "wording/fit/3/2/0/0",
+        "wording/fit/3/2/0/1",
+        "wording/fit/3/2/1/0",
+        "wording/fit/3/2/1/1",
+        "wording/fit/3/2/2/0",
+        "wording/fit/3/2/2/1",
+        "wording/fit/3/3/0/0",
+        "wording/fit/3/3/0/1",
+        "wording/fit/3/3/1/0",
+        "wording/fit/3/3/1/1",
+        "wording/fit/3/3/2/0",
+        "wording/fit/3/3/2/1",
+        "role-read/fit/0/0/0",
+        "role-read/fit/0/0/1",
+        "role-read/fit/0/0/2",
+        "role-read/fit/0/0/3",
+        "role-read/fit/0/1/0",
+        "role-read/fit/0/1/1",
+        "role-read/fit/0/1/2",
+        "role-read/fit/0/1/3",
+        "role-read/fit/0/2/0",
+        "role-read/fit/0/2/1",
+        "role-read/fit/0/2/2",
+        "role-read/fit/0/2/3",
+        "role-read/fit/0/3/0",
+        "role-read/fit/0/3/1",
+        "role-read/fit/0/3/2",
+        "role-read/fit/0/3/3",
+        "role-read/fit/0/4/0",
+        "role-read/fit/0/4/1",
+        "role-read/fit/0/4/2",
+        "role-read/fit/0/4/3",
+        "role-read/fit/1/0/0",
+        "role-read/fit/1/0/1",
+        "role-read/fit/1/0/2",
+        "role-read/fit/1/0/3",
+        "role-read/fit/1/1/0",
+        "role-read/fit/1/1/1",
+        "role-read/fit/1/1/2",
+        "role-read/fit/1/1/3",
+        "role-read/fit/1/2/0",
+        "role-read/fit/1/2/1",
+        "role-read/fit/1/2/2",
+        "role-read/fit/1/2/3",
+        "role-read/fit/1/3/0",
+        "role-read/fit/1/3/1",
+        "role-read/fit/1/3/2",
+        "role-read/fit/1/3/3",
+        "role-read/fit/1/4/0",
+        "role-read/fit/1/4/1",
+        "role-read/fit/1/4/2",
+        "role-read/fit/1/4/3",
+        "role-read/fit/2/0/0",
+        "role-read/fit/2/0/1",
+        "role-read/fit/2/0/2",
+        "role-read/fit/2/0/3",
+        "role-read/fit/2/1/0",
+        "role-read/fit/2/1/1",
+        "role-read/fit/2/1/2",
+        "role-read/fit/2/1/3",
+        "role-read/fit/2/2/0",
+        "role-read/fit/2/2/1",
+        "role-read/fit/2/2/2",
+        "role-read/fit/2/2/3",
+        "role-read/fit/2/3/0",
+        "role-read/fit/2/3/1",
+        "role-read/fit/2/3/2",
+        "role-read/fit/2/3/3",
+        "role-read/fit/2/4/0",
+        "role-read/fit/2/4/1",
+        "role-read/fit/2/4/2",
+        "role-read/fit/2/4/3",
+        "role-read/fit/3/0/0",
+        "role-read/fit/3/0/1",
+        "role-read/fit/3/0/2",
+        "role-read/fit/3/0/3",
+        "role-read/fit/3/1/0",
+        "role-read/fit/3/1/1",
+        "role-read/fit/3/1/2",
+        "role-read/fit/3/1/3",
+        "role-read/fit/3/2/0",
+        "role-read/fit/3/2/1",
+        "role-read/fit/3/2/2",
+        "role-read/fit/3/2/3",
+        "role-read/fit/3/3/0",
+        "role-read/fit/3/3/1",
+        "role-read/fit/3/3/2",
+        "role-read/fit/3/3/3",
+        "role-read/fit/3/4/0",
+        "role-read/fit/3/4/1",
+        "role-read/fit/3/4/2",
+        "role-read/fit/3/4/3",
+        "source-joint-fit/0/false/supported-object",
+        "source-joint-fit/0/true/supported-object",
+        "source-joint-fit/1/false/supported-object",
+        "source-joint-fit/1/true/supported-object"
+      ],
+      "stopped_at_time_limit": false,
+      "unreachable": [],
+      "unseen_features": 52
+    },
+    "equality": {
+      "accepted": [
+        105,
+        0,
+        69
+      ],
+      "artifact": "blake3:ad57b880eae748e9c0cb002bdeb47c4f93886a0d050f356acc9d3f1e6629a5c4",
+      "binding_after": {
+        "feature": {
+          "a": 2,
+          "b": 66,
+          "kind": 5
+        },
+        "roots": [
+          119,
+          119
+        ]
+      },
+      "binding_before": {
+        "feature": {
+          "a": 2,
+          "b": 66,
+          "kind": 5
+        },
+        "roots": [
+          119,
+          119
+        ]
+      },
+      "documents": 631,
+      "elapsed_ms": 37648,
+      "final_correct": 374,
+      "final_hinge": 76,
+      "frames": 387,
+      "initial_correct": 39,
+      "initial_hinge": 795,
+      "old_features": 567,
+      "parent": "blake3:433e380702a58f4913b163d4a4ab5964b88544a945807b1871c5b3db12241b0c",
+      "proposals": 62943,
+      "schema": "uor-r4.literal-refinement-fit/1",
+      "scope": "Fixed dictionary/feature law and exact parent witness; supervised numeric result prefix or NoOperation. Equal numeric values do not establish occurrence identity. No derived-role fitting.",
+      "skipped": [
+        "fact/fit/0/0/0",
+        "fact/fit/0/0/1",
+        "fact/fit/0/1/0",
+        "fact/fit/0/1/1",
+        "fact/fit/0/2/0",
+        "fact/fit/0/2/1",
+        "fact/fit/0/3/0",
+        "fact/fit/0/3/1",
+        "fact/fit/1/0/0",
+        "fact/fit/1/0/1",
+        "fact/fit/1/1/0",
+        "fact/fit/1/1/1",
+        "fact/fit/1/2/0",
+        "fact/fit/1/2/1",
+        "fact/fit/1/3/0",
+        "fact/fit/1/3/1",
+        "fact/fit/2/0/0",
+        "fact/fit/2/0/1",
+        "fact/fit/2/1/0",
+        "fact/fit/2/1/1",
+        "fact/fit/2/2/0",
+        "fact/fit/2/2/1",
+        "fact/fit/2/3/0",
+        "fact/fit/2/3/1",
+        "fact/fit/3/0/0",
+        "fact/fit/3/0/1",
+        "fact/fit/3/1/0",
+        "fact/fit/3/1/1",
+        "fact/fit/3/2/0",
+        "fact/fit/3/2/1",
+        "fact/fit/3/3/0",
+        "fact/fit/3/3/1",
+        "fact/fit/4/0/0",
+        "fact/fit/4/0/1",
+        "fact/fit/4/1/0",
+        "fact/fit/4/1/1",
+        "fact/fit/4/2/0",
+        "fact/fit/4/2/1",
+        "fact/fit/4/3/0",
+        "fact/fit/4/3/1",
+        "fact/fit/5/0/0",
+        "fact/fit/5/0/1",
+        "fact/fit/5/1/0",
+        "fact/fit/5/1/1",
+        "fact/fit/5/2/0",
+        "fact/fit/5/2/1",
+        "fact/fit/5/3/0",
+        "fact/fit/5/3/1",
+        "fact/fit/6/0/0",
+        "fact/fit/6/0/1",
+        "fact/fit/6/1/0",
+        "fact/fit/6/1/1",
+        "fact/fit/6/2/0",
+        "fact/fit/6/2/1",
+        "fact/fit/6/3/0",
+        "fact/fit/6/3/1",
+        "fact/fit/7/0/0",
+        "fact/fit/7/0/1",
+        "fact/fit/7/1/0",
+        "fact/fit/7/1/1",
+        "fact/fit/7/2/0",
+        "fact/fit/7/2/1",
+        "fact/fit/7/3/0",
+        "fact/fit/7/3/1",
+        "wording/fit/0/0/0/0",
+        "wording/fit/0/0/0/1",
+        "wording/fit/0/0/1/0",
+        "wording/fit/0/0/1/1",
+        "wording/fit/0/0/2/0",
+        "wording/fit/0/0/2/1",
+        "wording/fit/0/1/0/0",
+        "wording/fit/0/1/0/1",
+        "wording/fit/0/1/1/0",
+        "wording/fit/0/1/1/1",
+        "wording/fit/0/1/2/0",
+        "wording/fit/0/1/2/1",
+        "wording/fit/0/2/0/0",
+        "wording/fit/0/2/0/1",
+        "wording/fit/0/2/1/0",
+        "wording/fit/0/2/1/1",
+        "wording/fit/0/2/2/0",
+        "wording/fit/0/2/2/1",
+        "wording/fit/0/3/0/0",
+        "wording/fit/0/3/0/1",
+        "wording/fit/0/3/1/0",
+        "wording/fit/0/3/1/1",
+        "wording/fit/0/3/2/0",
+        "wording/fit/0/3/2/1",
+        "wording/fit/1/0/0/0",
+        "wording/fit/1/0/0/1",
+        "wording/fit/1/0/1/0",
+        "wording/fit/1/0/1/1",
+        "wording/fit/1/0/2/0",
+        "wording/fit/1/0/2/1",
+        "wording/fit/1/1/0/0",
+        "wording/fit/1/1/0/1",
+        "wording/fit/1/1/1/0",
+        "wording/fit/1/1/1/1",
+        "wording/fit/1/1/2/0",
+        "wording/fit/1/1/2/1",
+        "wording/fit/1/2/0/0",
+        "wording/fit/1/2/0/1",
+        "wording/fit/1/2/1/0",
+        "wording/fit/1/2/1/1",
+        "wording/fit/1/2/2/0",
+        "wording/fit/1/2/2/1",
+        "wording/fit/1/3/0/0",
+        "wording/fit/1/3/0/1",
+        "wording/fit/1/3/1/0",
+        "wording/fit/1/3/1/1",
+        "wording/fit/1/3/2/0",
+        "wording/fit/1/3/2/1",
+        "wording/fit/2/0/0/0",
+        "wording/fit/2/0/0/1",
+        "wording/fit/2/0/1/0",
+        "wording/fit/2/0/1/1",
+        "wording/fit/2/0/2/0",
+        "wording/fit/2/0/2/1",
+        "wording/fit/2/1/0/0",
+        "wording/fit/2/1/0/1",
+        "wording/fit/2/1/1/0",
+        "wording/fit/2/1/1/1",
+        "wording/fit/2/1/2/0",
+        "wording/fit/2/1/2/1",
+        "wording/fit/2/2/0/0",
+        "wording/fit/2/2/0/1",
+        "wording/fit/2/2/1/0",
+        "wording/fit/2/2/1/1",
+        "wording/fit/2/2/2/0",
+        "wording/fit/2/2/2/1",
+        "wording/fit/2/3/0/0",
+        "wording/fit/2/3/0/1",
+        "wording/fit/2/3/1/0",
+        "wording/fit/2/3/1/1",
+        "wording/fit/2/3/2/0",
+        "wording/fit/2/3/2/1",
+        "wording/fit/3/0/0/0",
+        "wording/fit/3/0/0/1",
+        "wording/fit/3/0/1/0",
+        "wording/fit/3/0/1/1",
+        "wording/fit/3/0/2/0",
+        "wording/fit/3/0/2/1",
+        "wording/fit/3/1/0/0",
+        "wording/fit/3/1/0/1",
+        "wording/fit/3/1/1/0",
+        "wording/fit/3/1/1/1",
+        "wording/fit/3/1/2/0",
+        "wording/fit/3/1/2/1",
+        "wording/fit/3/2/0/0",
+        "wording/fit/3/2/0/1",
+        "wording/fit/3/2/1/0",
+        "wording/fit/3/2/1/1",
+        "wording/fit/3/2/2/0",
+        "wording/fit/3/2/2/1",
+        "wording/fit/3/3/0/0",
+        "wording/fit/3/3/0/1",
+        "wording/fit/3/3/1/0",
+        "wording/fit/3/3/1/1",
+        "wording/fit/3/3/2/0",
+        "wording/fit/3/3/2/1",
+        "role-read/fit/0/0/0",
+        "role-read/fit/0/0/1",
+        "role-read/fit/0/0/2",
+        "role-read/fit/0/0/3",
+        "role-read/fit/0/1/0",
+        "role-read/fit/0/1/1",
+        "role-read/fit/0/1/2",
+        "role-read/fit/0/1/3",
+        "role-read/fit/0/2/0",
+        "role-read/fit/0/2/1",
+        "role-read/fit/0/2/2",
+        "role-read/fit/0/2/3",
+        "role-read/fit/0/3/0",
+        "role-read/fit/0/3/1",
+        "role-read/fit/0/3/2",
+        "role-read/fit/0/3/3",
+        "role-read/fit/0/4/0",
+        "role-read/fit/0/4/1",
+        "role-read/fit/0/4/2",
+        "role-read/fit/0/4/3",
+        "role-read/fit/1/0/0",
+        "role-read/fit/1/0/1",
+        "role-read/fit/1/0/2",
+        "role-read/fit/1/0/3",
+        "role-read/fit/1/1/0",
+        "role-read/fit/1/1/1",
+        "role-read/fit/1/1/2",
+        "role-read/fit/1/1/3",
+        "role-read/fit/1/2/0",
+        "role-read/fit/1/2/1",
+        "role-read/fit/1/2/2",
+        "role-read/fit/1/2/3",
+        "role-read/fit/1/3/0",
+        "role-read/fit/1/3/1",
+        "role-read/fit/1/3/2",
+        "role-read/fit/1/3/3",
+        "role-read/fit/1/4/0",
+        "role-read/fit/1/4/1",
+        "role-read/fit/1/4/2",
+        "role-read/fit/1/4/3",
+        "role-read/fit/2/0/0",
+        "role-read/fit/2/0/1",
+        "role-read/fit/2/0/2",
+        "role-read/fit/2/0/3",
+        "role-read/fit/2/1/0",
+        "role-read/fit/2/1/1",
+        "role-read/fit/2/1/2",
+        "role-read/fit/2/1/3",
+        "role-read/fit/2/2/0",
+        "role-read/fit/2/2/1",
+        "role-read/fit/2/2/2",
+        "role-read/fit/2/2/3",
+        "role-read/fit/2/3/0",
+        "role-read/fit/2/3/1",
+        "role-read/fit/2/3/2",
+        "role-read/fit/2/3/3",
+        "role-read/fit/2/4/0",
+        "role-read/fit/2/4/1",
+        "role-read/fit/2/4/2",
+        "role-read/fit/2/4/3",
+        "role-read/fit/3/0/0",
+        "role-read/fit/3/0/1",
+        "role-read/fit/3/0/2",
+        "role-read/fit/3/0/3",
+        "role-read/fit/3/1/0",
+        "role-read/fit/3/1/1",
+        "role-read/fit/3/1/2",
+        "role-read/fit/3/1/3",
+        "role-read/fit/3/2/0",
+        "role-read/fit/3/2/1",
+        "role-read/fit/3/2/2",
+        "role-read/fit/3/2/3",
+        "role-read/fit/3/3/0",
+        "role-read/fit/3/3/1",
+        "role-read/fit/3/3/2",
+        "role-read/fit/3/3/3",
+        "role-read/fit/3/4/0",
+        "role-read/fit/3/4/1",
+        "role-read/fit/3/4/2",
+        "role-read/fit/3/4/3",
+        "source-joint-fit/0/false/supported-object",
+        "source-joint-fit/0/true/supported-object",
+        "source-joint-fit/1/false/supported-object",
+        "source-joint-fit/1/true/supported-object"
+      ],
+      "stopped_at_time_limit": false,
+      "unreachable": [],
+      "unseen_features": 52
+    }
+  },
+  "selection": {
+    "at": "2026-09-07T04:16:16.055Z",
+    "selected": "blake3:e1ef0a5dab8f96212773752a5628d2e9e650ce7797331fa8297aaaeaf0825b53",
+    "decision": "SELECT_BEFORE_FIRST_USE",
+    "construction": [
+      630,
+      631
+    ],
+    "parent_construction": [
+      571,
+      631
+    ],
+    "control_construction": [
+      617,
+      631
+    ],
+    "open": [
+      8,
+      8
+    ],
+    "control_open": [
+      4,
+      8
+    ],
+    "fresh": "NOT_RUN;16 cases unopened",
+    "preservation": "Prior literal, computed, word, memory, session sets pass; source20/20 and14/14, previous exposed admission set10/12 improves two numeric copies with two source abstentions remaining.",
+    "no_further_fit_after_fresh": true
+  },
+  "reports": [
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-parent-construction.json",
+      "bytes": 13671448,
+      "sha256": "a0f2e74fac5bd984bb9d3bd7d895517a832f62abc22f23f580ba9f9c6f02d76b",
+      "summary": {
+        "artifact": "blake3:433e380702a58f4913b163d4a4ab5964b88544a945807b1871c5b3db12241b0c",
+        "exact": 571,
+        "total": 631
+      }
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-parent-open.json",
+      "bytes": 268346,
+      "sha256": "668d76fdf9bcf723b0552861e83f09ea246c1b28cbc351c2845eb828103f9a5b",
+      "summary": {
+        "artifact": "blake3:433e380702a58f4913b163d4a4ab5964b88544a945807b1871c5b3db12241b0c",
+        "exact": 4,
+        "total": 8
+      }
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-angular768/construction.json",
+      "bytes": 14251943,
+      "sha256": "03bb3567ec8344cdd55f706cc0dd5b181c0fc5b0d085f38de30489b1cb5b007c",
+      "summary": {
+        "artifact": "blake3:e1ef0a5dab8f96212773752a5628d2e9e650ce7797331fa8297aaaeaf0825b53",
+        "exact": 630,
+        "total": 631
+      }
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-angular768/development.json",
+      "bytes": 268366,
+      "sha256": "190cdef42a4a2e3227671ff5239559fc06e723978c131d49d57b689aa8f8c302",
+      "summary": {
+        "artifact": "blake3:e1ef0a5dab8f96212773752a5628d2e9e650ce7797331fa8297aaaeaf0825b53",
+        "exact": 8,
+        "total": 8
+      }
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-equality768/construction.json",
+      "bytes": 14206411,
+      "sha256": "724f725e7e295ea930a8b4a2e53579aa20ee7b9b06dbd2471fa08949745f8a03",
+      "summary": {
+        "artifact": "blake3:ad57b880eae748e9c0cb002bdeb47c4f93886a0d050f356acc9d3f1e6629a5c4",
+        "exact": 617,
+        "total": 631
+      }
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-equality768/development.json",
+      "bytes": 268017,
+      "sha256": "16700801fcd856f6c8031fffa622d6cf983042c96f62b5a399d44545b0b1790c",
+      "summary": {
+        "artifact": "blake3:ad57b880eae748e9c0cb002bdeb47c4f93886a0d050f356acc9d3f1e6629a5c4",
+        "exact": 4,
+        "total": 8
+      }
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-fresh-parent.json",
+      "bytes": 609148,
+      "sha256": "5b9e7326d5cb097a519e4e46a8b37fe9c6cc21694b30f85fc0368cb2e4b1b043",
+      "summary": {
+        "artifact": "blake3:433e380702a58f4913b163d4a4ab5964b88544a945807b1871c5b3db12241b0c",
+        "exact": 8,
+        "total": 16
+      }
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-fresh-angular.json",
+      "bytes": 585052,
+      "sha256": "3389d6269db73d67bde41e15618354ce5b0cb62851e29f8acefdbcf8673a06a3",
+      "summary": {
+        "artifact": "blake3:e1ef0a5dab8f96212773752a5628d2e9e650ce7797331fa8297aaaeaf0825b53",
+        "exact": 16,
+        "total": 16
+      }
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-fresh-equality.json",
+      "bytes": 584200,
+      "sha256": "11c2b121f24d71966b4b35a533459aa00f25ee5761233474b8f07b376078ca09",
+      "summary": {
+        "artifact": "blake3:ad57b880eae748e9c0cb002bdeb47c4f93886a0d050f356acc9d3f1e6629a5c4",
+        "exact": 8,
+        "total": 16
+      }
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-disabled-construction.json",
+      "bytes": 13685961,
+      "sha256": "9955f679ce5be18590876a1b4cd9a08a01c5974150a3a960186b41bcb757acc9",
+      "summary": {
+        "artifact": "blake3:e1ef0a5dab8f96212773752a5628d2e9e650ce7797331fa8297aaaeaf0825b53",
+        "exact": 571,
+        "total": 631
+      }
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-prior-source-fresh.json",
+      "bytes": 271613,
+      "sha256": "f3e97958caed8b861b3ce5e2b63c53dade7d5545c3b3fdc4f26bb685a670988a",
+      "summary": {
+        "artifact": "blake3:e1ef0a5dab8f96212773752a5628d2e9e650ce7797331fa8297aaaeaf0825b53",
+        "exact": 20,
+        "total": 20
+      }
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-prior-source-open.json",
+      "bytes": 179810,
+      "sha256": "d6d4de68bcac7e73f7e7bfb5a733d0a42bd05c89051483773023473bebb2e002",
+      "summary": {
+        "artifact": "blake3:e1ef0a5dab8f96212773752a5628d2e9e650ce7797331fa8297aaaeaf0825b53",
+        "exact": 14,
+        "total": 14
+      }
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-prior-admission-fresh.json",
+      "bytes": 273656,
+      "sha256": "d91e88f759553e2f62ccadcd620dd19ec54b6ef678ee790ee9cb11d9f0f8c8df",
+      "summary": {
+        "artifact": "blake3:e1ef0a5dab8f96212773752a5628d2e9e650ce7797331fa8297aaaeaf0825b53",
+        "exact": 10,
+        "total": 12
+      }
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-preservation/aliases.json",
+      "bytes": 689595,
+      "sha256": "6dc2f07a979677bd6a194338c533c7947fbc633208b969b6ba0b92a41f97a59e",
+      "summary": {
+        "artifact": "blake3:e1ef0a5dab8f96212773752a5628d2e9e650ce7797331fa8297aaaeaf0825b53",
+        "elapsed_ms": 51,
+        "exact": 12,
+        "remove_intermediate_control": false,
+        "total": 12
+      }
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-preservation/chains.json",
+      "bytes": 913333,
+      "sha256": "39777cf55e8bae880c8dcfec661f31e07d04e709a62217e4a858a710a6e40727",
+      "summary": {
+        "artifact": "blake3:e1ef0a5dab8f96212773752a5628d2e9e650ce7797331fa8297aaaeaf0825b53",
+        "elapsed_ms": 60,
+        "exact": 16,
+        "remove_intermediate_control": false,
+        "total": 16
+      }
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-preservation/computed-construction.json",
+      "bytes": 3028318,
+      "sha256": "955151208b7b2e861e6d4c488df19ba256f799d084194c9b2f215eb944ab9b6c",
+      "summary": {
+        "artifact": "blake3:e1ef0a5dab8f96212773752a5628d2e9e650ce7797331fa8297aaaeaf0825b53",
+        "elapsed_ms": 198,
+        "exact": 58,
+        "remove_intermediate_control": false,
+        "total": 58
+      }
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-preservation/dependent.json",
+      "bytes": 2307772,
+      "sha256": "12345de11b8b6d77bd4e8f5fab757768c910f954cd4079f6db1ce7b08352293f",
+      "summary": {
+        "artifact": "blake3:e1ef0a5dab8f96212773752a5628d2e9e650ce7797331fa8297aaaeaf0825b53",
+        "elapsed_ms": 51,
+        "exact": 48,
+        "exact_scope": "Complete bytes and EOS; writes counted separately.",
+        "total": 48,
+        "writes_exact": 48
+      }
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-preservation/exposed-literals.json",
+      "bytes": 447091,
+      "sha256": "4328517fa377acf7f6aa80063b4558d919ff267bbcc0db75a5de7959b41569ba",
+      "summary": {
+        "artifact": "blake3:e1ef0a5dab8f96212773752a5628d2e9e650ce7797331fa8297aaaeaf0825b53",
+        "elapsed_ms": 19,
+        "exact": 16,
+        "remove_intermediate_control": false,
+        "total": 16
+      }
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-preservation/exposed-roles.json",
+      "bytes": 689790,
+      "sha256": "fcfe6ecb2cf46645a10801065ba4d2ef8515bec9c9b8353b86f6a437ec5c6029",
+      "summary": {
+        "artifact": "blake3:e1ef0a5dab8f96212773752a5628d2e9e650ce7797331fa8297aaaeaf0825b53",
+        "elapsed_ms": 55,
+        "exact": 12,
+        "remove_intermediate_control": false,
+        "total": 12
+      }
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-preservation/identifiers.json",
+      "bytes": 135423,
+      "sha256": "96a40d758e0b453669a7617725d9b08009065ccd96fc14041c853e21d9c865fa",
+      "summary": {
+        "artifact": "blake3:e1ef0a5dab8f96212773752a5628d2e9e650ce7797331fa8297aaaeaf0825b53",
+        "elapsed_ms": 9,
+        "exact": 8,
+        "remove_intermediate_control": false,
+        "total": 8
+      }
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-preservation/literal-construction.json",
+      "bytes": 2508066,
+      "sha256": "ac62973afa0362ac9ab39b5f31bc52125720f0d0e03e647db0df947de092ca3b",
+      "summary": {
+        "artifact": "blake3:e1ef0a5dab8f96212773752a5628d2e9e650ce7797331fa8297aaaeaf0825b53",
+        "elapsed_ms": 121,
+        "exact": 103,
+        "remove_intermediate_control": false,
+        "total": 103
+      }
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-preservation/long.json",
+      "bytes": 1457385,
+      "sha256": "3f9d8c276074152b3811847423c80cab1f39c8505910f04ca53037f0647ff3a1",
+      "summary": {
+        "artifact": "blake3:e1ef0a5dab8f96212773752a5628d2e9e650ce7797331fa8297aaaeaf0825b53",
+        "elapsed_ms": 58,
+        "exact": 28,
+        "exact_scope": "Complete bytes and EOS; writes counted separately.",
+        "total": 28,
+        "writes_exact": 28
+      }
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-preservation/names.json",
+      "bytes": 1362406,
+      "sha256": "5fb1786cfa4df3b7ef63967f2e5a7c37a3aa2fef144c3a5dc99534d396bb81fa",
+      "summary": {
+        "artifact": "blake3:e1ef0a5dab8f96212773752a5628d2e9e650ce7797331fa8297aaaeaf0825b53",
+        "elapsed_ms": 30,
+        "exact": 28,
+        "exact_scope": "Complete bytes and EOS; writes counted separately.",
+        "total": 28,
+        "writes_exact": 28
+      }
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-preservation/numeric.json",
+      "bytes": 272704,
+      "sha256": "2b2a7627337a63bce91f8ae1f92fcf1ce290ff83260b9d2ae2645bde481012e1",
+      "summary": {
+        "artifact": "blake3:e1ef0a5dab8f96212773752a5628d2e9e650ce7797331fa8297aaaeaf0825b53",
+        "elapsed_ms": 14,
+        "exact": 6,
+        "remove_intermediate_control": false,
+        "total": 6
+      }
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-preservation/preservation.json",
+      "bytes": 1477554,
+      "sha256": "cacdcddbc4bdb9ed6a79a5ae7d50c5350904a8b43f3633ae2a241f4e1d9f2fce",
+      "summary": {
+        "artifact": "blake3:e1ef0a5dab8f96212773752a5628d2e9e650ce7797331fa8297aaaeaf0825b53",
+        "exact": 62,
+        "total": 62
+      }
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-preservation/prior-chains.json",
+      "bytes": 913298,
+      "sha256": "678f53af605cd29581eb831225aa89c98a1709b944d8298ed050139634dafb51",
+      "summary": {
+        "artifact": "blake3:e1ef0a5dab8f96212773752a5628d2e9e650ce7797331fa8297aaaeaf0825b53",
+        "elapsed_ms": 58,
+        "exact": 16,
+        "remove_intermediate_control": false,
+        "total": 16
+      }
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-preservation/prior-fresh.json",
+      "bytes": 446960,
+      "sha256": "f1eeec48b0213088cd59aba65a35b9bdb2d5f6e777bec891943ebf04e7e3be80",
+      "summary": {
+        "artifact": "blake3:e1ef0a5dab8f96212773752a5628d2e9e650ce7797331fa8297aaaeaf0825b53",
+        "elapsed_ms": 19,
+        "exact": 16,
+        "remove_intermediate_control": false,
+        "total": 16
+      }
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-preservation/prior.json",
+      "bytes": 330894,
+      "sha256": "6b3ee72e8ab9039a6ca833e160fb508afff58202b5c2128cc3da342dfd91fcdc",
+      "summary": {
+        "artifact": "blake3:e1ef0a5dab8f96212773752a5628d2e9e650ce7797331fa8297aaaeaf0825b53",
+        "exact": 24,
+        "total": 24
+      }
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-preservation/roles.json",
+      "bytes": 689634,
+      "sha256": "db942eff55922ee18389551d57a68b702a481a061ee8dd1334ac262ddd3dc7b6",
+      "summary": {
+        "artifact": "blake3:e1ef0a5dab8f96212773752a5628d2e9e650ce7797331fa8297aaaeaf0825b53",
+        "elapsed_ms": 52,
+        "exact": 12,
+        "remove_intermediate_control": false,
+        "total": 12
+      }
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-preservation/sessions.json",
+      "bytes": 37117,
+      "sha256": "ac1f3b62f6a1e31bc8c8858106024d049f214565ef4f2ea72cec7533f5963cb4",
+      "summary": {
+        "artifact": "blake3:e1ef0a5dab8f96212773752a5628d2e9e650ce7797331fa8297aaaeaf0825b53",
+        "exact_turns": 5,
+        "isolated_no_shared_records": true,
+        "isolated_response": " Unknown.\n",
+        "preserved_versions": 4,
+        "restore_and_forged_commit_checks": "PASS",
+        "schema": "uor-r4.relation-session-check/1",
+        "scope": "One native session reads, revises, retains an unrelated association, records a contradiction, and re-reads the unrelated association after repeated raw-window eviction. Restore is checked after actual first-token commitment; a new session has no shared relation state. Snapshot consistency is not source authentication.",
+        "total_turns": 5
+      }
+    }
+  ],
+  "comparison": {
+    "gains": [
+      "typed-value/fit/prose/add/0/source_names_swapped",
+      "typed-value/fit/rust/copy_current/0/source_names_swapped",
+      "typed-value/fit/rust/add/0/source_names_swapped",
+      "typed-value/fit/prose/add/1/source_names_swapped",
+      "typed-value/fit/rust/copy_current/1/source_names_swapped",
+      "typed-value/fit/rust/add/1/source_names_swapped",
+      "typed-value/fit/prose/add/2/source_names_swapped",
+      "typed-value/fit/rust/copy_current/2/source_names_swapped",
+      "typed-value/fit/rust/add/2/source_names_swapped",
+      "typed-value/fit/prose/add/3/source_names_swapped",
+      "typed-value/fit/rust/copy_current/3/source_names_swapped",
+      "typed-value/fit/rust/add/3/source_names_swapped",
+      "typed-value/fit/prose/add/4/source_names_swapped",
+      "typed-value/fit/rust/copy_current/4/source_names_swapped",
+      "typed-value/fit/rust/add/4/source_names_swapped",
+      "typed-value/fit/prose/add/5/source_names_swapped",
+      "typed-value/fit/rust/copy_current/5/source_names_swapped",
+      "typed-value/fit/rust/add/5/source_names_swapped",
+      "typed-value/fit/prose/add/6/source_names_swapped",
+      "typed-value/fit/rust/copy_current/6/source_names_swapped",
+      "typed-value/fit/rust/add/6/source_names_swapped",
+      "typed-value/fit/prose/add/7/source_names_swapped",
+      "typed-value/fit/rust/copy_current/7/source_names_swapped",
+      "typed-value/fit/rust/add/7/source_names_swapped",
+      "typed-value/fit/prose/add/8/source_names_swapped",
+      "typed-value/fit/rust/copy_current/8/source_names_swapped",
+      "typed-value/fit/rust/add/8/source_names_swapped",
+      "typed-value/fit/prose/add/9/source_names_swapped",
+      "typed-value/fit/rust/copy_current/9/source_names_swapped",
+      "typed-value/fit/rust/add/9/source_names_swapped",
+      "typed-value/fit/prose/add/10/source_names_swapped",
+      "typed-value/fit/rust/copy_current/10/source_names_swapped",
+      "typed-value/fit/rust/add/10/source_names_swapped",
+      "typed-value/fit/prose/add/11/source_names_swapped",
+      "typed-value/fit/rust/copy_current/11/source_names_swapped",
+      "typed-value/fit/rust/add/11/source_names_swapped",
+      "typed-value/fit/prose/add/12/source_names_swapped",
+      "typed-value/fit/rust/copy_current/12/source_names_swapped",
+      "typed-value/fit/rust/add/12/source_names_swapped",
+      "typed-value/fit/prose/add/13/source_names_swapped",
+      "typed-value/fit/rust/copy_current/13/source_names_swapped",
+      "typed-value/fit/rust/add/13/source_names_swapped",
+      "typed-value/fit/prose/add/14/source_names_swapped",
+      "typed-value/fit/rust/copy_current/14/source_names_swapped",
+      "typed-value/fit/rust/add/14/source_names_swapped",
+      "typed-value/fit/prose/add/15/source_names_swapped",
+      "typed-value/fit/rust/copy_current/15/source_names_swapped",
+      "typed-value/fit/rust/add/15/source_names_swapped",
+      "admission-fit/0/true/2",
+      "admission-fit/1/false/2",
+      "admission-fit/1/true/2",
+      "binding-fit/0/false/false/1",
+      "binding-fit/0/false/true/0",
+      "binding-fit/0/true/false/1",
+      "binding-fit/0/true/true/1",
+      "binding-fit/1/false/false/1",
+      "binding-fit/1/false/true/0",
+      "binding-fit/1/true/false/1",
+      "binding-fit/1/true/true/1"
+    ],
+    "lost_correct": 0,
+    "remaining_wrong": [
+      {
+        "id": "admission-fit/0/true/1",
+        "expected": " Rome.\n",
+        "actual": " Unknown.\n"
+      }
+    ],
+    "disabled_parent_text_and_stop_equal": 631
+  },
+  "fresh": {
+    "parent": [
+      8,
+      16
+    ],
+    "angular": [
+      16,
+      16
+    ],
+    "equality": [
+      8,
+      16
+    ],
+    "all_16_copy_and_commit_one_value": true,
+    "scope": "Known question family, changed names/place/signed values/numeric fact order/queried entity/location placement after design selection. No subsequent fit."
+  },
+  "checks": {
+    "logs": [
+      {
+        "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-actual-path.stdout.log",
+        "bytes": 513,
+        "sha256": "91a6c21e6c510fa6e0d20fc65f42154f1d1c88322c1f01fdb0164498cd4cab43"
+      },
+      {
+        "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-kernel-source-correct.log",
+        "bytes": 189,
+        "sha256": "1522a1da0e577d57af55750809cfeb9ca6b61ccff5aff225bd371826f0e86853"
+      },
+      {
+        "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-generated-rust.log",
+        "bytes": 1417,
+        "sha256": "27d1d04b6216f4af9abe7dd774bdf9533b1cc01afd550332a36246ebd83c2b1d"
+      },
+      {
+        "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-format.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-policy.log",
+        "bytes": 73,
+        "sha256": "58dd9c24c33ba5ff6519ed3f5bea924d8fd10d93bcfaba529e2d8b0101be6ae7"
+      },
+      {
+        "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-claims.log",
+        "bytes": 83,
+        "sha256": "78d71cb97c00d606a9a909d89a2f4f4e3b4be6b84af390f20c9fc50ec449922f"
+      },
+      {
+        "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-cli.stdout.log",
+        "bytes": 26227,
+        "sha256": "e5cd6c4fcdcc42ec1d784929e1f486ac011df28d2b0cc53e25d654ec2746cb02"
+      }
+    ],
+    "actual_test": "PASS: exact parent, malformed artifacts, disabled parent, changed-order operands, source answer, observation-only commitment, mismatched observation, checkpoints, zero allocation in3cases",
+    "generated_rust": {
+      "status": "PASS",
+      "cases": [
+        "typed-value/fit/rust/copy_current/0/source_names_swapped",
+        "typed-value/fit/rust/add/0/source_names_swapped",
+        "typed-value/fit/rust/copy_current/1/source_names_swapped",
+        "typed-value/fit/rust/add/1/source_names_swapped",
+        "typed-value/fit/rust/copy_current/2/source_names_swapped",
+        "typed-value/fit/rust/add/2/source_names_swapped",
+        "typed-value/fit/rust/copy_current/3/source_names_swapped",
+        "typed-value/fit/rust/add/3/source_names_swapped",
+        "typed-value/fit/rust/copy_current/4/source_names_swapped",
+        "typed-value/fit/rust/add/4/source_names_swapped",
+        "typed-value/fit/rust/copy_current/5/source_names_swapped",
+        "typed-value/fit/rust/add/5/source_names_swapped",
+        "typed-value/fit/rust/copy_current/6/source_names_swapped",
+        "typed-value/fit/rust/add/6/source_names_swapped",
+        "typed-value/fit/rust/copy_current/7/source_names_swapped",
+        "typed-value/fit/rust/add/7/source_names_swapped",
+        "typed-value/fit/rust/copy_current/8/source_names_swapped",
+        "typed-value/fit/rust/add/8/source_names_swapped",
+        "typed-value/fit/rust/copy_current/9/source_names_swapped",
+        "typed-value/fit/rust/add/9/source_names_swapped",
+        "typed-value/fit/rust/copy_current/10/source_names_swapped",
+        "typed-value/fit/rust/add/10/source_names_swapped",
+        "typed-value/fit/rust/copy_current/11/source_names_swapped",
+        "typed-value/fit/rust/add/11/source_names_swapped",
+        "typed-value/fit/rust/copy_current/12/source_names_swapped",
+        "typed-value/fit/rust/add/12/source_names_swapped",
+        "typed-value/fit/rust/copy_current/13/source_names_swapped",
+        "typed-value/fit/rust/add/13/source_names_swapped",
+        "typed-value/fit/rust/copy_current/14/source_names_swapped",
+        "typed-value/fit/rust/add/14/source_names_swapped",
+        "typed-value/fit/rust/copy_current/15/source_names_swapped",
+        "typed-value/fit/rust/add/15/source_names_swapped"
+      ],
+      "programs": 32,
+      "assertions": 32,
+      "source": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-generated.rs",
+      "scope": "Exact construction prompts plus actual generated continuations inside test modules; each original main executes its assertion. No generated text edits."
+    },
+    "generated_source": {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-generated.rs",
+      "bytes": 5179,
+      "sha256": "a05021ff84d33d5f1f30c70c4829b4fdf3441412bc1b34e13bf32e269fbcf888"
+    },
+    "first_kernel_filter": "NOT_RUN: 0 tests selected; corrected exact named test passes1/1",
+    "warm_latency": {
+      "samples": 18,
+      "median_ns": 120000,
+      "max_ns": 215542,
+      "scope": "Predict+observe only; no loading/encoding/prompt ingestion/checkpoints. Small diagnostic, not matched speedup or end-to-end SLA."
+    },
+    "public_cli": {
+      "text": "31.\n",
+      "stop": "end_of_document"
+    },
+    "energy": "NOT_MEASURED",
+    "full_release_clippy_wasm": "NOT_RUN",
+    "ci": "Protected compatibility acknowledgements, not validation runs"
+  },
+  "resources": {
+    "projection": {
+      "schema": "uor-r4.literal-binding-projection/1",
+      "at": "2026-09-07T04:01:42.280Z",
+      "base_commit": "8ffd04e5dcd1ac19bf6f6dcfd46229a4d7349124",
+      "parent": "433e3807",
+      "before": {
+        "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+        "at": "2026-09-07T04:01:42.279Z",
+        "inherited_precleanup_bytes": 2747199488,
+        "obsolete_target_growth_credit": 671379456,
+        "current_target_bytes": 2596691968,
+        "predecessor_artifact_root_bytes": 145760256,
+        "current_artifact_root_bytes": 1630076928,
+        "predecessor_worktree_bytes": 9875456,
+        "current_worktree_bytes": 8937472,
+        "stopped_successor_worktree_bytes": 460877824,
+        "source_metadata_reserve_bytes": 5242880,
+        "current_sampled_known_storage_bytes": 6933282816,
+        "storage_limit_bytes": 7734296576,
+        "remaining_storage_bytes": 801013760,
+        "stop_margin_bytes": 134217728,
+        "available_growth_before_stop_bytes": 613380096,
+        "model_ledger": {
+          "cumulative_ms": 3769106,
+          "limit_ms": 4170000
+        },
+        "model_remaining_ms": 400894,
+        "model_process_limit": 1,
+        "model_process_rss_target_bytes": 4294967296,
+        "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+      },
+      "model_projection_ms": 320000,
+      "model_cycle_ms": 390000,
+      "engineering_projection_ms": 900000,
+      "engineering_cycle_ms": 1200000,
+      "growth_projection_bytes": 402653184,
+      "model_processes": 1,
+      "build_jobs": 1,
+      "rss_bytes": 4294967296,
+      "context_tokens": 512,
+      "retained_records": 16,
+      "model_breakdown_ms": {
+        "preparation_baseline": 30000,
+        "fits": 120000,
+        "construction_open_preservation": 60000,
+        "fresh_controls": 40000,
+        "artifact_tests": 40000,
+        "correction": 30000
+      },
+      "storage_breakdown_bytes": {
+        "cargo": 268435456,
+        "models_reports": 117440512,
+        "metadata": 16777216
+      },
+      "scope": "Warm-refine existing literal router with exact provenance code support; fixed dictionary and feature law, exact parent reconstruction, matched control and fresh generation.",
+      "stop": "No cumulative budget extension; stop/checkpoint inside existing limit.",
+      "acceptance": "Fix order-sensitive numeric copies without losing parent correct construction and broad preservation. Keep fresh evaluation unopened until selection. Retain negatives if no candidate qualifies."
+    },
+    "model_ms": 242829,
+    "engineering_ms": 637694,
+    "peak_sampled_known_bytes": 7232167936,
+    "peak_model_child_rss_bytes": 986988544,
+    "engineering_rss": "UNAVAILABLE: guard excludes compiler descendants",
+    "final_snapshot": {
+      "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+      "at": "2026-09-07T04:25:17.069Z",
+      "inherited_precleanup_bytes": 2747199488,
+      "obsolete_target_growth_credit": 671379456,
+      "current_target_bytes": 2792587264,
+      "predecessor_artifact_root_bytes": 145760256,
+      "current_artifact_root_bytes": 1733070848,
+      "predecessor_worktree_bytes": 9875456,
+      "current_worktree_bytes": 8937472,
+      "stopped_successor_worktree_bytes": 460877824,
+      "source_metadata_reserve_bytes": 5242880,
+      "current_sampled_known_storage_bytes": 7232172032,
+      "storage_limit_bytes": 7734296576,
+      "remaining_storage_bytes": 502124544,
+      "stop_margin_bytes": 134217728,
+      "available_growth_before_stop_bytes": 314490880,
+      "model_ledger": {
+        "cumulative_ms": 4011935,
+        "limit_ms": 4170000
+      },
+      "model_remaining_ms": 158065,
+      "model_process_limit": 1,
+      "model_process_rss_target_bytes": 4294967296,
+      "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+    },
+    "model_commands": [
+      {
+        "label": "literal-binding-prepare",
+        "started": "2026-09-07T04:07:26.687Z",
+        "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+        "args": [
+          "literal-binding",
+          "prepare",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-source.json",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-source.json"
+        ],
+        "elapsed_ms": 238,
+        "code": 0,
+        "signal": null,
+        "stopped": null,
+        "engineering_only": false,
+        "peak_process_rss_sample_bytes": null,
+        "peak_sampled_known_bytes": 6932746240
+      },
+      {
+        "label": "literal-binding-parent-construction",
+        "started": "2026-09-07T04:07:28.362Z",
+        "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+        "args": [
+          "literal-binding",
+          "evaluate",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-angular128/model.json",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-source.json",
+          "fit",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-parent-construction.json",
+          "full"
+        ],
+        "elapsed_ms": 11113,
+        "code": 0,
+        "signal": null,
+        "stopped": null,
+        "engineering_only": false,
+        "peak_process_rss_sample_bytes": 757465088,
+        "peak_sampled_known_bytes": 6892134400
+      },
+      {
+        "label": "literal-binding-parent-open",
+        "started": "2026-09-07T04:08:01.589Z",
+        "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+        "args": [
+          "literal-binding",
+          "evaluate",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-angular128/model.json",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-source.json",
+          "development",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-parent-open.json",
+          "full"
+        ],
+        "elapsed_ms": 10275,
+        "code": 0,
+        "signal": null,
+        "stopped": null,
+        "engineering_only": false,
+        "peak_process_rss_sample_bytes": 778092544,
+        "peak_sampled_known_bytes": 6892408832
+      },
+      {
+        "label": "literal-binding-angular-fit",
+        "started": "2026-09-07T04:10:17.565Z",
+        "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+        "args": [
+          "literal-binding",
+          "fit",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-angular128/model.json",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-source.json",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-angular768",
+          "768",
+          "angular"
+        ],
+        "elapsed_ms": 46267,
+        "code": 0,
+        "signal": null,
+        "stopped": null,
+        "engineering_only": false,
+        "peak_process_rss_sample_bytes": 919715840,
+        "peak_sampled_known_bytes": 6973837312
+      },
+      {
+        "label": "literal-binding-equality-fit",
+        "started": "2026-09-07T04:11:51.538Z",
+        "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+        "args": [
+          "literal-binding",
+          "fit",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-angular128/model.json",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-source.json",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-equality768",
+          "768",
+          "equality"
+        ],
+        "elapsed_ms": 48267,
+        "code": 0,
+        "signal": null,
+        "stopped": null,
+        "engineering_only": false,
+        "peak_process_rss_sample_bytes": 861405184,
+        "peak_sampled_known_bytes": 7036878848
+      },
+      {
+        "label": "literal-binding-preservation",
+        "started": "2026-09-07T04:13:36.698Z",
+        "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+        "args": [
+          "source-noread",
+          "preserve",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-angular768/model.json",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-preservation"
+        ],
+        "elapsed_ms": 11673,
+        "code": 0,
+        "signal": null,
+        "stopped": null,
+        "engineering_only": false,
+        "peak_process_rss_sample_bytes": 909983744,
+        "peak_sampled_known_bytes": 7072829440
+      },
+      {
+        "label": "literal-binding-prior-source-fresh",
+        "started": "2026-09-07T04:14:16.157Z",
+        "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+        "args": [
+          "literal-binding",
+          "evaluate",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-angular768/model.json",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-source-v2.json",
+          "first_use",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-prior-source-fresh.json",
+          "full"
+        ],
+        "elapsed_ms": 10420,
+        "code": 0,
+        "signal": null,
+        "stopped": null,
+        "engineering_only": false,
+        "peak_process_rss_sample_bytes": 910163968,
+        "peak_sampled_known_bytes": 7122440192
+      },
+      {
+        "label": "literal-binding-prior-source-open",
+        "started": "2026-09-07T04:14:51.443Z",
+        "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+        "args": [
+          "literal-binding",
+          "evaluate",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-angular768/model.json",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-source-v2.json",
+          "development",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-prior-source-open.json",
+          "full"
+        ],
+        "elapsed_ms": 10508,
+        "code": 0,
+        "signal": null,
+        "stopped": null,
+        "engineering_only": false,
+        "peak_process_rss_sample_bytes": 903544832,
+        "peak_sampled_known_bytes": 7142244352
+      },
+      {
+        "label": "literal-binding-prior-admission-fresh",
+        "started": "2026-09-07T04:15:21.330Z",
+        "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+        "args": [
+          "literal-binding",
+          "evaluate",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-angular768/model.json",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-source.json",
+          "first_use",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-prior-admission-fresh.json",
+          "full"
+        ],
+        "elapsed_ms": 10548,
+        "code": 0,
+        "signal": null,
+        "stopped": null,
+        "engineering_only": false,
+        "peak_process_rss_sample_bytes": 905412608,
+        "peak_sampled_known_bytes": 7168757760
+      },
+      {
+        "label": "literal-binding-fresh-parent",
+        "started": "2026-09-07T04:16:34.138Z",
+        "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+        "args": [
+          "literal-binding",
+          "evaluate",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-angular128/model.json",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-source.json",
+          "first_use",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-fresh-parent.json",
+          "full"
+        ],
+        "elapsed_ms": 9833,
+        "code": 0,
+        "signal": null,
+        "stopped": null,
+        "engineering_only": false,
+        "peak_process_rss_sample_bytes": 909737984,
+        "peak_sampled_known_bytes": 7213080576
+      },
+      {
+        "label": "literal-binding-fresh-angular",
+        "started": "2026-09-07T04:17:12.292Z",
+        "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+        "args": [
+          "literal-binding",
+          "evaluate",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-angular768/model.json",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-source.json",
+          "first_use",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-fresh-angular.json",
+          "full"
+        ],
+        "elapsed_ms": 10683,
+        "code": 0,
+        "signal": null,
+        "stopped": null,
+        "engineering_only": false,
+        "peak_process_rss_sample_bytes": 907788288,
+        "peak_sampled_known_bytes": 7195205632
+      },
+      {
+        "label": "literal-binding-fresh-equality",
+        "started": "2026-09-07T04:17:35.439Z",
+        "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+        "args": [
+          "literal-binding",
+          "evaluate",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-equality768/model.json",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-source.json",
+          "first_use",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-fresh-equality.json",
+          "full"
+        ],
+        "elapsed_ms": 10292,
+        "code": 0,
+        "signal": null,
+        "stopped": null,
+        "engineering_only": false,
+        "peak_process_rss_sample_bytes": 914554880,
+        "peak_sampled_known_bytes": 7216275456
+      },
+      {
+        "label": "literal-binding-disabled-construction",
+        "started": "2026-09-07T04:18:16.970Z",
+        "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+        "args": [
+          "literal-binding",
+          "evaluate",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-angular768/model.json",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-source.json",
+          "fit",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-disabled-construction.json",
+          "disabled"
+        ],
+        "elapsed_ms": 10861,
+        "code": 0,
+        "signal": null,
+        "stopped": null,
+        "engineering_only": false,
+        "peak_process_rss_sample_bytes": 905478144,
+        "peak_sampled_known_bytes": 7229976576
+      },
+      {
+        "label": "literal-binding-actual-path",
+        "started": "2026-09-07T04:19:17.320Z",
+        "command": "env",
+        "args": [
+          "R4_LITERAL_REFINEMENT_MODEL=/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-angular768/model.json",
+          "R4_LITERAL_REFINEMENT_PARENT=/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/joint-admission-angular128/model.json",
+          "/tmp/r4-native-geometric-target/release/deps/native_geometric_allocations-6c7ff1216c7e1931",
+          "native_literal_refinement_preserves_parent_and_binds_operands",
+          "--ignored",
+          "--nocapture"
+        ],
+        "elapsed_ms": 31268,
+        "code": 0,
+        "signal": null,
+        "stopped": null,
+        "engineering_only": false,
+        "peak_process_rss_sample_bytes": 986988544,
+        "peak_sampled_known_bytes": 7231074304
+      },
+      {
+        "label": "literal-binding-cli",
+        "started": "2026-09-07T04:20:14.556Z",
+        "command": "/tmp/r4-native-geometric-target/release/r4",
+        "args": [
+          "geometric",
+          "generate",
+          "--model",
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-angular768/model.json",
+          "--prompt",
+          "User: morva lives in Kestral. morva has 31 coins. seldri has -9 coins.\nUser: How many coins does morva have?\nAssistant:",
+          "--max-tokens",
+          "32",
+          "--json"
+        ],
+        "elapsed_ms": 10583,
+        "code": 0,
+        "signal": null,
+        "stopped": null,
+        "engineering_only": false,
+        "peak_process_rss_sample_bytes": 914030592,
+        "peak_sampled_known_bytes": 7231107072
+      }
+    ],
+    "engineering_commands": [
+      {
+        "label": "literal-binding-build",
+        "started": "2026-09-07T04:04:37.966Z",
+        "command": "env",
+        "args": [
+          "CARGO_TARGET_DIR=/tmp/r4-native-geometric-target",
+          "CARGO_INCREMENTAL=0",
+          "CARGO_BUILD_JOBS=1",
+          "/Users/casey.allard/.cargo/bin/cargo",
+          "build",
+          "--release",
+          "--offline",
+          "-p",
+          "uor-r4-core",
+          "--example",
+          "native_geometric_value_probe"
+        ],
+        "elapsed_ms": 141640,
+        "code": 0,
+        "signal": null,
+        "stopped": null,
+        "engineering_only": true,
+        "peak_process_rss_sample_bytes": null,
+        "peak_sampled_known_bytes": 6932611072
+      },
+      {
+        "label": "literal-binding-contrast-build",
+        "started": "2026-09-07T04:07:27.189Z",
+        "command": "env",
+        "args": [
+          "CARGO_TARGET_DIR=/tmp/r4-native-geometric-target",
+          "CARGO_INCREMENTAL=0",
+          "CARGO_BUILD_JOBS=1",
+          "/Users/casey.allard/.cargo/bin/cargo",
+          "build",
+          "--release",
+          "--offline",
+          "-p",
+          "uor-r4-core",
+          "--example",
+          "native_geometric_value_probe"
+        ],
+        "elapsed_ms": 146727,
+        "code": 0,
+        "signal": null,
+        "stopped": null,
+        "engineering_only": true,
+        "peak_process_rss_sample_bytes": null,
+        "peak_sampled_known_bytes": 6947831808
+      },
+      {
+        "label": "literal-binding-test-build",
+        "started": "2026-09-07T04:10:18.706Z",
+        "command": "env",
+        "args": [
+          "CARGO_TARGET_DIR=/tmp/r4-native-geometric-target",
+          "CARGO_INCREMENTAL=0",
+          "CARGO_BUILD_JOBS=1",
+          "/Users/casey.allard/.cargo/bin/cargo",
+          "test",
+          "--release",
+          "--offline",
+          "-p",
+          "uor-r4-core",
+          "--test",
+          "native_geometric_allocations",
+          "--no-run"
+        ],
+        "elapsed_ms": 6853,
+        "code": 0,
+        "signal": null,
+        "stopped": null,
+        "engineering_only": true,
+        "peak_process_rss_sample_bytes": null,
+        "peak_sampled_known_bytes": 6948827136
+      },
+      {
+        "label": "literal-binding-cli-build",
+        "started": "2026-09-07T04:11:52.681Z",
+        "command": "env",
+        "args": [
+          "CARGO_TARGET_DIR=/tmp/r4-native-geometric-target",
+          "CARGO_INCREMENTAL=0",
+          "CARGO_BUILD_JOBS=1",
+          "/Users/casey.allard/.cargo/bin/cargo",
+          "build",
+          "--release",
+          "--offline",
+          "-p",
+          "uor-r4-wasm-router",
+          "--bin",
+          "r4"
+        ],
+        "elapsed_ms": 333620,
+        "code": 0,
+        "signal": null,
+        "stopped": null,
+        "engineering_only": true,
+        "peak_process_rss_sample_bytes": null,
+        "peak_sampled_known_bytes": 7218311168
+      },
+      {
+        "label": "literal-binding-test-timing-build",
+        "started": "2026-09-07T04:17:51.538Z",
+        "command": "env",
+        "args": [
+          "CARGO_TARGET_DIR=/tmp/r4-native-geometric-target",
+          "CARGO_INCREMENTAL=0",
+          "CARGO_BUILD_JOBS=1",
+          "/Users/casey.allard/.cargo/bin/cargo",
+          "test",
+          "--release",
+          "--offline",
+          "-p",
+          "uor-r4-core",
+          "--test",
+          "native_geometric_allocations",
+          "--no-run"
+        ],
+        "elapsed_ms": 4695,
+        "code": 0,
+        "signal": null,
+        "stopped": null,
+        "engineering_only": true,
+        "peak_process_rss_sample_bytes": null,
+        "peak_sampled_known_bytes": 7217102848
+      },
+      {
+        "label": "literal-binding-generated-rust",
+        "started": "2026-09-07T04:18:52.860Z",
+        "command": "node",
+        "args": [
+          "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-rust-check.mjs"
+        ],
+        "elapsed_ms": 361,
+        "code": 0,
+        "signal": null,
+        "stopped": null,
+        "engineering_only": true,
+        "peak_process_rss_sample_bytes": null,
+        "peak_sampled_known_bytes": 7231070208
+      },
+      {
+        "label": "literal-binding-kernel-source",
+        "started": "2026-09-07T04:19:18.476Z",
+        "command": "/tmp/r4-native-geometric-target/release/deps/native_geometric_allocations-6c7ff1216c7e1931",
+        "args": [
+          "native_integer_kernel_has_no_float_or_multiply",
+          "--nocapture"
+        ],
+        "elapsed_ms": 6,
+        "code": 0,
+        "signal": null,
+        "stopped": null,
+        "engineering_only": true,
+        "peak_process_rss_sample_bytes": null,
+        "peak_sampled_known_bytes": 7231078400
+      },
+      {
+        "label": "literal-binding-kernel-source-correct",
+        "started": "2026-09-07T04:19:51.137Z",
+        "command": "/tmp/r4-native-geometric-target/release/deps/native_geometric_allocations-6c7ff1216c7e1931",
+        "args": [
+          "native_kernel_source_has_no_forbidden_arithmetic_or_float_types",
+          "--exact",
+          "--nocapture"
+        ],
+        "elapsed_ms": 8,
+        "code": 0,
+        "signal": null,
+        "stopped": null,
+        "engineering_only": true,
+        "peak_process_rss_sample_bytes": null,
+        "peak_sampled_known_bytes": 7231082496
+      },
+      {
+        "label": "literal-binding-format",
+        "started": "2026-09-07T04:23:39.172Z",
+        "command": "/Users/casey.allard/.cargo/bin/cargo",
+        "args": [
+          "fmt",
+          "--all",
+          "--check"
+        ],
+        "elapsed_ms": 3429,
+        "code": 0,
+        "signal": null,
+        "stopped": null,
+        "engineering_only": true,
+        "peak_process_rss_sample_bytes": null,
+        "peak_sampled_known_bytes": 7231111168
+      },
+      {
+        "label": "literal-binding-policy",
+        "started": "2026-09-07T04:24:14.268Z",
+        "command": "/tmp/r4-native-geometric-target/release/r4-policy-check",
+        "args": [
+          "."
+        ],
+        "elapsed_ms": 117,
+        "code": 0,
+        "signal": null,
+        "stopped": null,
+        "engineering_only": true,
+        "peak_process_rss_sample_bytes": null,
+        "peak_sampled_known_bytes": 7231115264
+      },
+      {
+        "label": "literal-binding-claims",
+        "started": "2026-09-07T04:24:14.632Z",
+        "command": "python3",
+        "args": [
+          "scripts/check_claim_wording.py"
+        ],
+        "elapsed_ms": 238,
+        "code": 0,
+        "signal": null,
+        "stopped": null,
+        "engineering_only": true,
+        "peak_process_rss_sample_bytes": null,
+        "peak_sampled_known_bytes": 7232167936
+      }
+    ],
+    "preworker_refusal": {
+      "at": "2026-09-07T04:18:18.015Z",
+      "attempt": "literal-binding-generated-rust",
+      "status": "NOT_STARTED_ENGINEERING_SLOT_BUSY",
+      "reason": "Existing timing-test build held engineering.active; guard refused second worker before source generation/compile. Retry sequentially after build completion.",
+      "worker_time_ms": 0
+    },
+    "no_budget_extension": true,
+    "no_deletion": true,
+    "no_external_compute": true
+  },
+  "reproduction_support": [
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-run.mjs",
+      "bytes": 1480,
+      "sha256": "df819608779bd8cee4571d771f47aee0b2babc3e4912df7d856b5dffd31a51b6"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/run-command.mjs",
+      "bytes": 5975,
+      "sha256": "29422110df63b217dde5439ae720f1315e79be7bc5c576ef3193980d0f8c6884"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/resource-accounting.mjs",
+      "bytes": 4139,
+      "sha256": "c6e9a29c861268bcad4ddbd66e1a08c799cc8e5cb105b064a0f8e3e597335d15"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-projection.json",
+      "bytes": 2826,
+      "sha256": "fdde181981f0dcd606f9ea1c15fba65a62445dd854c80961a1ae5b307f166136"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-rust-check.mjs",
+      "bytes": 1432,
+      "sha256": "3497a629c45639f40e62a08f30060026617108811685302f730073a69328fbe2"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-binding-evidence.mjs",
+      "bytes": 6885,
+      "sha256": "b6d98fc8c0953036b1f2cc1f1515fe576dc907f17482f86c0fb7f06548b7238c"
+    }
+  ],
+  "next": "Refine supported-source/NoRead order sensitivity using existing occurrence selection; preserve literal binding; new construction/development and fresh cases within refreshed cumulative budget."
+}

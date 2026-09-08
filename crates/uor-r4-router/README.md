@@ -1,4 +1,23 @@
-# uor-r4-router
+# UOR-R4 Geometric Language Model — exploratory router
+
+**Component scope:** this crate supplies reusable memory/router and
+legacy dashboard components. The active learned native model is
+`uor-r4-core::native_geometric`, exposed as `r4 geometric`; see
+[current-state](../../docs/integration/current-state.md) and the
+[immediate build plan](../../docs/integration/project-track.md#immediate-build-sequence).
+The HELM/softmax, Markov and dashboard status below describes retained references,
+not the current model's serving architecture or work queue.
+
+Use the [project map](../../docs/PROJECT_MAP.md),
+[canonical plan](../../docs/integration/project-track.md),
+[current artifact and measured behavior](../../docs/integration/current-state.md),
+and [model direction](../../docs/integration/model-direction-2026-09.md). This exploratory floating-point router is preserved as research
+and reusable mechanism source. Accepted native bounded attention and inference
+run in [the native core](../uor-r4-core/src/native_geometric); neither this
+router's dashboard nor its dense references establish general prose completion
+or general reasoning for that model.
+
+## Historical component evidence
 
 The R⁴ geometric memory/router and manifold dashboard backend.
 
@@ -18,8 +37,8 @@ valid non-D3 construction-validation negative: learned Lorentz failed donor
 retention and matched Euclidean parity although all destructive controls
 separated. The 8/8-contract localization attempt stopped at its two-document
 preflight and rejected tangent readout. Ordinary
-dot-product/stable-softmax causal attention in coherent R4/Spin frames is the
-accepted baseline. Provider-free autonomous
+dot-product/stable-softmax causal attention in coherent R4/Spin frames was the
+accepted baseline within this historical reference lane. Provider-free autonomous
 `R4SoftmaxReferenceGeneratorV1` (`HELM-D-R4`) native CLI generation now passes,
 and its explicit opt-in native HTTP/dashboard bridge is active. This router
 supplies substrate and

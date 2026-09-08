@@ -1,216 +1,71 @@
-# Native geometric AI project plan
-
-This is the canonical project goal and development plan, restored by owner
-instruction on 2026-09-04. The [current state](current-state.md) names the actual
-implementation and remaining work; live GitHub owns issue status. Other
-roadmaps link here instead of copying a changing stage list. Earlier sequencing
-and fixed experiment windows are historical, not instructions for new work.
+# UOR-R4 Geometric Language Model — canonical project plan
 
 ## Goal
 
-Build a useful local geometric AI in **Rust throughout preparation, training,
-artifact construction, and inference**. Prime addresses, ordered prime context,
-the fixed zeta-zero spectral grid, and R4/S3/H4 geometry are primary model
-mechanisms. Typed paired-H4/icosian geometry, exact `Z[phi]` state, and UOR
-identity remain part of the architecture, with their roles and implemented
-boundaries explicit.
+Develop a learned local language model that uses geometric addressing, state, transport and selected operators for useful prose, conversation, memory, reasoning and Rust coding. Ultimately target frontier capability on consumer M1-class laptops with lower energy and wasted compute. The current model is experimental and pre-alpha, not a frontier or general-language result.
 
-The model must learn and use these mechanisms to support both conversation with
-memory and coding/reasoning. Their architectural priority is an owner decision;
-their predictive contribution is an empirical question. An unsuccessful
-operator or experiment does not demote the architecture to optional research.
-A geometric trace or correct mathematical identity does not establish useful AI.
+Use the product name **UOR-R4 Geometric Language Model** and the technical description **experimental autoregressive geometric state model with exact addressed memory and learned typed operators**. Preserve Cargo/CLI/schema names for compatibility. This native design is not a transformer; historical dense R4/Spin references still are.
 
-Rust training may use floating point, matrix multiplication, gradients, and
-CPU libraries. The final inference path uses learned geometric operators,
-bounded routing, state transitions, and integer/table lookup. Training may
-learn coefficients, operator choices, and read/write behavior; inference must
-execute the resulting geometric model. Storing dense transformer weights in a
-table and continuing its dense attention/MLP computation is not this target.
-Existing Python/dense references remain preserved comparison evidence, not the
-primary implementation or a product dependency.
+The [direction review](model-direction-2026-09.md) codifies the source investigation and capability assessment. [Current state](current-state.md) owns changing artifacts/results; live [#820](https://github.com/UOR-Foundation/uor-r4/issues/820) owns programme status. This document owns ordered responsibilities and acceptance. [The project map](../PROJECT_MAP.md) locates code, research/imports, historical engines and retained evidence.
 
 ## Required mechanism roles
 
-| Mechanism | Role in the model | Evidence needed when that role changes |
+Prepare data, train, construct artifacts and infer in Rust. Offline floating point, gradients and matrix multiplication, including uor-matmul, are permitted. Final serving executes no mathematical matrix products, even if implemented as lookup/add contractions, and no transformer backbone or runtime teacher/provider responses. Deterministic geometric address/page selection is allowed. Shared typed operators are current; expert gates remain conditional future work requiring capability need and measured complete laptop cost.
+
+Prime identities and ordered n-lets address lexical/context records; fixed zeta phases provide explicit structured channels; R4/S3/H4 and exact Z[phi] carry typed ordered state and transport. Preserve signed orientation, chirality/polarity, Hopf observation versus retained fiber/torsion and paired-H4/icosian identity/inverse witnesses. UOR/kappa identify and serialize; they do not tokenize or supply semantic distance. Structural roles and measured predictive contributions remain distinct. Do not attach every researched coordinate to every token without a computational purpose.
+
+Reuse the [engine](architecture-2026-09/engines.md), [mathematics](architecture-2026-09/mathematics.md) and [import](architecture-2026-09/imports.md) audits. Angular/prime routers, page tables, exact group actions, vector bundles, spin, calculus, triangulation and zeta/prime research supply specific lessons and possible mechanisms, not an imported complete model. Finite fixed phases do not require a classical RH proof. Preserve unresolved source identities, including the recalled “softmax tree,” as unresolved.
+
+## Immediate build sequence
+
+**#1139: contextual phrase/role binding → #1140: shared state transitions and compositional emission → #973: integrated broad language learning.**
+
+The latest shape-only phrase-start candidate overextends some values even though the correct support is present. It is not promoted. Start with bounded ordered lexical/prime and role features at the existing start selector, reusing exact predecessor records, writer owner/value context and the successful original-source-cue pair mechanism. Author same-shape/lowercase/intro/order/owner/distractor contrasts and a context-disabled control. Keep endpoints, admission, exact payloads, versions and parent behavior fixed. Inspect the actual feature alias cheaply in this implementation; do not build another proof or benchmark framework.
+
+Evaluate complete generated responses and EOS, preserve prior answers and state/artifact guarantees, then use fresh evaluation only after selection. Open failures remain development data. Exact separator/byte coverage is a separate representation limitation to handle when that decision is active. Progress toward shared semantic transitions and lexical emission instead of indefinitely adding narrowly specialized answer heads. A better concrete step is appropriate if newer actual evidence identifies a different cause; document the rationale and retain the prior result.
+
+## Consolidated issue responsibilities
+
+| Order | Responsibility / live issue | Why it belongs here |
 |---|---|---|
-| Prime registry, semiprimes, ordered n-lets | Reversible lexical identity, factor overlap, ordered transition/context address | Roundtrip and order preservation; distinguish identity assignment from learned predictive relations |
-| Fixed zeta zeros and phase channels | Artifact-bound spectral coordinates and local relative phase updates used by a learned geometric operator | Report the consumed channels; compare with the same operator with phase influence disabled or changed |
-| R4/S3/H4, Hopf/fiber/torsion | Typed causal state, transport, bounded geometric memory and selection | State/update correctness and a useful behavioral comparison after learning |
-| Exact `Z[phi]`, chirality and cosine polarity | Preserve radial and orientation information that scalar collapse would erase | Exact representation/reconstruction checks at the touched boundary |
-| Paired H4/icosian bridge | Explicitly typed golden-coupled structural/storage or operator state | Declare the actual forward/inverse map; do not identify R4, H4, and E8 as the same space |
-| Learned geometric operators | Learn how admitted state influences memory, selection and output | Improvement on open development tasks and measured resource use; preserve negative results |
-| UOR identity and artifact format | Canonical serialization, integrity, versioning and reproducible loading | Existing typed identity APIs and artifact reload; digest bytes are not a semantic score |
+| 01 | [#1139](https://github.com/UOR-Foundation/uor-r4/issues/1139) — Learn contextual phrase and role binding | The retained model admits correct values but can choose the wrong phrase start. This is the nearest observed cause; adding unrelated geometry or more shape-only fits cannot distinguish genuine feature aliases. |
+| 02 | [#1140](https://github.com/UOR-Foundation/uor-r4/issues/1140) — Learn shared state transitions and compositional emission | Reliable binding must become reusable computation and language construction. A growing list of answer-family heads cannot establish a general model. |
+| 03 | [#973](https://github.com/UOR-Foundation/uor-r4/issues/973) — Integrate the geometric model and learn general prose | Bounded copy attention and correct short answers do not establish a language model capable of sustained original prose. This issue owns both the integrated native architecture and the missing broad linguistic learner. |
+| 04 | [#962](https://github.com/UOR-Foundation/uor-r4/issues/962) — Develop conversation and identity-scoped durable memory | Useful local assistance needs meaning to survive turns, corrections and restarts, with explicit user/project isolation. |
+| 05 | [#954](https://github.com/UOR-Foundation/uor-r4/issues/954) — Qualify grounded correctness, conflict handling and abstention | Fluent output must distinguish supported claims from missing or contradictory evidence before it can support reliable reasoning. |
+| 06 | [#955](https://github.com/UOR-Foundation/uor-r4/issues/955) — Qualify generalized multi-step reasoning | Executing a familiar arithmetic operator is not flexible reasoning. The model must compose accepted operations and preserve constraints on genuinely changed problems. |
+| 07 | [#1088](https://github.com/UOR-Foundation/uor-r4/issues/1088) — Develop executable Rust coding and controlled workspace use | The coding goal requires working programs and repairs in real context, beyond familiar code-shaped responses. |
+| 08 | [#963](https://github.com/UOR-Foundation/uor-r4/issues/963) — Scale quality with complete-path M1 latency, energy and memory | The project exists to reduce energy and wasted compute. Eliminating matrix products is an architectural constraint, not itself evidence of lower energy or useful speed. |
+| 09 | [#964](https://github.com/UOR-Foundation/uor-r4/issues/964) — Establish scoped serving, geometry and artifact guarantees | Serving claims need contracts for the operations actually executed, while mathematical proof must remain separate from language capability. |
+| 10 | [#1172](https://github.com/UOR-Foundation/uor-r4/issues/1172) — Complete the native capability API and WASM model runtime | One coherent model must expose its actual abilities to applications before Studio integration can be meaningful. |
+| 11 | [#1173](https://github.com/UOR-Foundation/uor-r4/issues/1173) — Run the native geometric model in GitHub Pages AI Studio | The final user-facing goal is the already developed Studio running our own local geometric model in the browser. |
+| 12 | [#965](https://github.com/UOR-Foundation/uor-r4/issues/965) — Qualify, release and iteratively improve the local model | Alpha requires integrated conversation/memory and coding/reasoning on the delivered model; frontier capability is a longer-term evidence-driven objective. |
 
-The detailed architectural vocabulary remains in
-[the geometric programme](../geometric_intelligence_programme.md#architecture-invariants).
-Every model artifact declares which roles it actually implements. Missing roles
-stay visible as missing work; an unrelated dense comparator cannot fill them.
-An existing table/metric may be reused only when it computes the intended
-operator at the declared fidelity and cost.
+The issue order is the default priority and qualification progression, not a rigid serial gate. #973 integrates architecture throughout. Correctness, memory, interface, resource and invariant work can proceed when the current path requires it. Avoid duplicate trackers; #820 is the programme map. Every issue contains reasoned implementation and acceptance instructions. Refresh live issue state before execution.
 
-In particular, rewriting one H4 root into the eight integral coefficients of
-its four `Z[phi]` coordinates and a golden/Galois companion is an invertible
-representation, not two independently variable H4 factors or an orthogonal
-Euclidean E8 isometry. A
-unit-root norm is constant; a variable radial carrier must come from actual
-state accumulation or a declared scale operator. Learned readout coefficients
-are useful operator work, but do not by themselves learn memory writes or make
-every primary geometric role effective. Keep these distinctions in model claims.
+Scope transfers are explicit: #973 keeps the native integrated learning/artifact/serving lifecycle while owning general prose; #1140 keeps at least two causally composed operations and meaningful generated Rust, even while adding shared emission; #962 keeps semantic durable memory while #1172 owns API integration. Original #954 performance belongs to #963 and original #955 release/lowering belongs to #965. #1083 identity and #1087 serving obligations span model/API plus #963 cost and #964 guarantees; #1084 integration/workspace obligations span #962/#1088/#1172/#1173; #1089 theorem-to-code/publication belongs to #964; #1090 scorecard and #940 governance remain #965. Closed #1091 scheduling is preserved as history, not revived as a one-task stop.
 
-## Go-forward work
-
-1. **Restore one native model path.** Evolve the existing Rust prime-route,
-   fixed-zeta and geometric state components under #973. Connect text ingestion,
-   causal updates, a learned geometric read/write/selection operator, artifact
-   reload and decoded output. Reuse existing correct pieces before adding new
-   geometry. A mechanical vertical slice is useful progress, not alpha.
-2. **Learn useful behavior on the real path.** Train the Rust model on open
-   development examples. Include retention across context changes, variable
-   history lengths, prompt-dependent continuation, composition and small code
-   tasks. Select meaningful configurable training/context/evaluation windows
-   from the machine budget. Profile a measured bottleneck before inventing a
-   replacement mechanism or changing the mathematical objective.
-3. **Develop both alpha capabilities.** Conversation/memory and coding/reasoning
-   progress against the same model and artifact. Add grounded answers,
-   contradiction handling and abstention; add bounded multi-step composition
-   and code repair with actual execution feedback. Increase task variety and
-   context deliberately. Do not substitute canned replies, corpus recall alone,
-   or a hidden provider for those behaviors.
-4. **Integrate one Rust product.** Expose the actual model through the native
-   CLI/service and local workbench. Exercise load, generate, cancel, memory
-   persistence/isolation and controlled workspace operations. Product examples
-   may develop alongside model work; a narrow four-fact reference or polished
-   shell does not establish the broader alpha capabilities.
-5. **Compile and optimize the learned geometric path.** Develop integer/table
-   realization alongside native operators, with measured encode/operate/decode
-   fidelity. Remove remaining inference-time dense transformer operations and
-   unbounded work; measure the complete path, not only its K/V ledger. Rust is
-   already the implementation language, not a final porting stage.
-6. **Qualify a release.** Reconcile claims and preserved evidence, run relevant
-   broader portability/security/resource checks, and complete installation,
-   reproducibility and rollback. Formal proofs and publication support the
-   implemented model when useful; they are not a serial prerequisite to building
-   or training it.
-
-These are dependent deliverables, not a hardcoded sequence of frozen research
-rungs. Work may overlap when interfaces allow it. An explicit request to carry
-out the whole plan authorizes continued progress across its necessary tasks;
-there is no automatic one-task stop. Keep one coherent active objective and
-coordinate independent subtasks without competing changes to the same model.
+The [reconciliation record](issue-reconciliation-2026-09.json) preserves all 422 original issue records and the full prior 11 open bodies. Their real remaining obligations remain open, with two new interface/Studio issues. No closed capability was silently reopened and no unfinished capability was closed to shorten the list.
 
 ## Alpha acceptance
 
-Both capability groups are required. Agree on representative examples before
-claiming alpha, then retain the actual inputs, outputs and limitations:
+Qualify both conversation/memory and coding/reasoning on the same native artifact through actual novel generated behavior. Require useful coherent prose/instruction following; causal contextual attention; correct grounded answers and appropriate abstention/conflict handling; durable isolated memory; novel compositional reasoning; and meaningful executed coding tasks. Report task-level failures, coverage, independent truth/semantic checks and open versus final evaluation. Do not infer capability from compilation, schema/API completeness, a proof of geometry, known-template success or a UI shell.
 
-- **Conversation and memory:** prompt-dependent multi-turn answers; retaining
-  and updating supplied facts across the chosen context window; surfacing
-  contradictions; explicit unsupported-answer behavior; isolated persistent
-  user/session memory.
-- **Coding and reasoning:** compose multiple supported steps, use selected
-  workspace context, propose a bounded code change, run the relevant check,
-  and consume real execution feedback. Report success and failure on fresh
-  examples separately from training examples.
+Measure quality alongside full-path M1 cost: cold load, input encoding/ingestion, lookup, state/operator work, token emission and persistence, with RAM/storage/memory traffic and energy per useful task. Define whether submillisecond targets concern a step, token or response. A warm kernel result is not end-to-end speed; fewer multiplies is not an energy measurement. Broader frontier capability remains a long-term evidence-driven objective after alpha.
 
-For each group report task coverage, successful/failed examples, context length,
-latency, peak RAM, artifact/state sizes and backend. A few toy successes,
-source-free output, Rust compilation, or preservation of an old comparator does
-not alone meet alpha. Final held-out evaluation follows design selection;
-development evaluation is allowed throughout learning.
+Expose the accepted native artifact through one complete capability API and WASM runtime, then integrate it with the existing [Pages Studio project](https://github.com/Casey-allard/uor-r4-wasm-chat). Verify the actual browser/backend/artifact and output. A reference backend or static UI does not qualify native deployment.
 
 ## Practical iteration and machine budget
 
-The run configuration declares context/window lengths, training dose,
-checkpoint and evaluation intervals, thread count, wall time, RAM and new-storage
-limits. Account for their **cumulative** use across warmup, training, evaluation,
-retries and resumed segments. Choose these values for the question and available
-machine; the old 120-token, 128-update and 840-second experiment is not a global
-limit. A projection informs scheduling and checkpointing; it is not evidence
-that a model cannot learn.
+Before execution, establish complete preparation/build/fit/control/evaluation/retry/checkpoint requirements with context windows, CPU/threads, wall-time, peak RAM, new/temporary/retained storage and stop margin. Refresh the shared cumulative ledger and storage receipts; no session/issue reset or silent ceiling expansion is permitted. Training duration is secondary to serving quality/energy, but machine authorization still applies. Continue source/implementation work that does not depend on unavailable execution resources. No external GPU/CUDA or paid compute is authorized by this plan.
 
-Within the remaining authorized budget, inspect failures, correct a concrete
-cause and rerun or resume when that can advance the decision. There is no
-universal 15-minute cutoff or one-retry quota. Do not blindly repeat an unchanged
-failure, silently increase the cumulative budget, or incur unauthorized external
-cost. Save useful checkpoints and stop cleanly at the configured limits. Before
-lengthy work, use a representative timing sample or existing measurements to
-select a feasible run; do not build an elaborate supervision system for a short
-experiment.
+Use one model process by default, valid warm caches and existing drivers/preservation populations. Coordinate independent bounded review when it saves work. Diagnose and revise within authorized limits; avoid unchanged retries or endless sidecar probes. Stop/checkpoint at configured limits. No global 15-minute or one-retry rule governs new native work.
 
 ## Verification and preservation
 
-Compile and exercise the changed Rust path. Use focused tests for its causal
-state, arithmetic, serialization and interface risks, plus a representative
-end-to-end behavior check when behavior changes. Broad workspace/release suites
-run only when relevant. A compatibility status from the protected merge queue is
-not a test result; report which commands actually ran.
+Follow [AGENTS.md](../../AGENTS.md) and [the stable policy](agent-execution-policy.json). Compile and exercise changed Rust behavior with relevant focused tests and actual model output. Documentation-only changes require proportionate link/claim/policy checks, not model runs. PR/merge-group statuses are compatibility acknowledgements, not QA. Deliver named paths through protected PRs and verify actual merge; partial scope references its issue without auto-closing it.
 
-Preserve unique artifacts, source changes, old Python references and all
-positive, negative and unavailable evidence. A negative binds the exact
-artifact, population, operator, controls, budget and decision that produced it.
-A changed operator or a longer/different development window is a new declared
-experiment, never a rewrite of the old verdict. Distinguish mathematical proof,
-measured behavior and hypothesis. There is no requirement to add a new ledger,
-ADR, proof dossier or exhaustive control matrix for every edit.
+Preserve every unique parent, negative candidate, opened/fresh split, artifact/source identity, receipt, import and user change. Result records remain append-only. The [pre-reconciliation plan](https://github.com/UOR-Foundation/uor-r4/blob/bc03f2d7ffde99608da370808eca542360e54508/docs/integration/project-track.md) preserves historical milestones and the old four-step sequence; its dated next actions have been superseded. [The takeover record](handoff-2026-09-07.md) supplies the exact stopping point and host-specific preservation/resource paths.
 
-External programmes such as HELM, W33, NEMESIS and SpiralCore are optional
-sources for specific questions. Core prime/zeta/R4/UOR architecture is not an
-external donor. Import external claims only after source inspection and direct
-measurement in this model. Deliver changes through protected pull requests and
-keep the actual current task in [current-state.md](current-state.md).
 
-## Historical mechanical checkpoints through PR #1124 (2026-09-04)
-
-The full-cache checkpoint delivered by #1119 remains the accepted comparator:
-ordinary learned Q/K/V/O and softmax execute through exact H4 frame transport
-with one chronological K/V record per observed token.
-
-`R4FixedRecurrentCausalKVBindingV1` now provides an unfitted mechanical
-successor: eight exact live K/V records plus four chronological binary-age H4
-summary banks. Persistent K/V storage is 2,304 f32 values (9,216 bytes), versus
-23,040 values (92,160 bytes) in the 120-token comparator. The first eviction is
-committed after its causal decision, and later decisions read the summaries.
-
-In the frozen full-prompt, seed-9738, 16-token comparison,
-`A purple turtle found a clock in the garden` and
-`Albert Einstein was born in` each shared 12 generated tokens with the
-comparator before diverging. Both recurrent runs evicted records, read summary
-banks, stayed within 13 attention sources, and made zero teacher, provider,
-future, or forbidden reads.
-This is measured mechanism behavior. It does not establish better language,
-long-context retention, geometric advantage, architectural alpha, or
-table-native execution. The trained RoPE limit remains 120 positions.
-
-`R4SparseGeometricCandidateSoftmaxKVBindingV1` now ranks the fixed twelve-slot
-metadata directory with exact H4 inverse/product/root witnesses, admits at most
-eight persistent records plus current, and only then gathers K/V for unchanged
-learned Q/K softmax. On the same two no-fit prompts, peak attention sources fell
-from 13 to 9 and aggregate materialized scores fell from 3,824 to 3,240. The
-geometric set differed from age-only on 33/35 sparse decisions and admitted 55
-summary records. Common generated prefixes against the fixed recurrent path
-were 12 and 3 tokens. This completes the sparse mechanical checkpoint while
-leaving useful retrieval and geometric advantage unestablished.
-
-`R4H4FrameQuaternionCubeResidualV1` now replaces each executed dense SwiGLU
-residual with twelve ordered R4 cells and a current-H4-frame-indexed
-quaternion-cube map. The 120 signed frame indices form antipodal pairs for this
-odd map, leaving at most 60 distinct operators. It keeps continuous f32 hidden state, adds no
-parameter or persistent state, and retains the dense tensors only so the
-accepted artifact remains a byte-identical comparator. Across the two no-fit
-prompts it executed 1,272 R4 blocks and zero dense-MLP calls while preserving
-the nine-source attention ceiling and all causal prohibitions. Its largest f32
-block-norm error was `7.152557373046875e-07`; both continuations diverged from
-the fitted dense comparator at the first generated token and were visibly
-degraded. This completes a mechanical nonlinear checkpoint, not useful
-language or a selected training architecture.
-
-The subsequent bounded fit task returned
-`RESOURCE_UNAVAILABLE_FULL_CONTEXT_CUBE_FIT`. The full 120-token recurrent graph
-completed backward and reached update 8 in both admitted launches. The sole
-resource correction was followed by an elapsed-to-update-one reduction from
-`78.177` to `25.757` seconds, but the fixed 128-update dose still missed the
-840-second completion projection. No fitted artifact, model-quality result,
-validation read, shorter dose, or additional retry followed. The then-next Python action was a lean training forward that omits unused attention-weight outputs
-and precomputes the metadata-only selector while preserving the current
-recurrent computation graph and inference semantics.
+**Standing owner authorization (2026-09-06):** necessary local model/time/storage allowance extensions are already authorized. Record the complete projection, reason, increment and updated cumulative limit before using each extension; retain cumulative charges and the 128 MiB storage stop margin. Do not ask the owner to approve the same class of necessary increase again. This authorizes neither destructive deletion nor paid/external compute, and does not require spending unused allowance.

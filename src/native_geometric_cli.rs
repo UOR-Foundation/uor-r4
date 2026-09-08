@@ -264,6 +264,11 @@ enum ControlArg {
     ResponseEntryGeometryDisabled,
     WordCopyDisabled,
     WordCopyGeometryDisabled,
+    WordCopyDispatchDisabled,
+    LearnedRoutingDisabled,
+    LearnedRoutingSelectionDisabled,
+    LearnedRoutingTransformDisabled,
+    LearnedRoutingChainDisabled,
 }
 impl From<ControlArg> for Control {
     fn from(value: ControlArg) -> Self {
@@ -286,6 +291,11 @@ impl From<ControlArg> for Control {
             ControlArg::ResponseEntryGeometryDisabled => Self::ResponseEntryGeometryDisabled,
             ControlArg::WordCopyDisabled => Self::WordCopyDisabled,
             ControlArg::WordCopyGeometryDisabled => Self::WordCopyGeometryDisabled,
+            ControlArg::WordCopyDispatchDisabled => Self::WordCopyDispatchDisabled,
+            ControlArg::LearnedRoutingDisabled => Self::LearnedRoutingDisabled,
+            ControlArg::LearnedRoutingSelectionDisabled => Self::LearnedRoutingSelectionDisabled,
+            ControlArg::LearnedRoutingTransformDisabled => Self::LearnedRoutingTransformDisabled,
+            ControlArg::LearnedRoutingChainDisabled => Self::LearnedRoutingChainDisabled,
         }
     }
 }
@@ -1278,6 +1288,11 @@ mod tests {
                 "word-copy-geometry-disabled",
                 Control::WordCopyGeometryDisabled,
                 "word_copy_geometry_disabled",
+            ),
+            (
+                "word-copy-dispatch-disabled",
+                Control::WordCopyDispatchDisabled,
+                "word_copy_dispatch_disabled",
             ),
         ] {
             let control: Control = ControlArg::from_str(argument, false).unwrap().into();

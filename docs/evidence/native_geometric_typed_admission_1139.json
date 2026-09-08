@@ -1,0 +1,521 @@
+{
+  "schema": "uor-r4.typed-admission-evidence/1",
+  "source_commit": "cab1ba4b87244cc0c9853def3bd8392d6b9ec2d8",
+  "artifact_cid": "blake3:2600b95bbb160dd70a14b7ae05306e3b6b9607377919db0414fc529519eb9635",
+  "runtime_decision": "RETAIN_SELECTED_EXECUTION_AT_PRESERVATION_SCOPE",
+  "learning_decision": "FAIL_FOLLOWUP_COMPOSITION_ADVANCE_QUERY_CONDITIONED_OPERATOR_OPERAND_LEARNING",
+  "diagnostic": {
+    "scope": "OPEN new follow-up wording; frozen artifact, no refit. Exact full text/EOS/operator/provenance/control acceptance. Not a sealed or general-language evaluation.",
+    "first_sums_exact": 3,
+    "first_sums_total": 3,
+    "followups_exact": 0,
+    "followups_total": 6,
+    "all_intermediate_values_captured": true,
+    "observations": [
+      {
+        "operands": [
+          13,
+          4,
+          5
+        ],
+        "required_action": "copy",
+        "first_text": "17.\n",
+        "second_text": "21.\n",
+        "first_correct": true,
+        "second_correct": false,
+        "uses_intermediate": true,
+        "remove_intermediate_control": false,
+        "record_removed": false
+      },
+      {
+        "operands": [
+          13,
+          4,
+          5
+        ],
+        "required_action": "copy",
+        "first_text": "17.\n",
+        "second_text": " the.\n",
+        "first_correct": true,
+        "second_correct": false,
+        "uses_intermediate": false,
+        "remove_intermediate_control": true,
+        "record_removed": true
+      },
+      {
+        "operands": [
+          13,
+          4,
+          5
+        ],
+        "required_action": "add",
+        "first_text": "17.\n",
+        "second_text": " Unknown.\n",
+        "first_correct": true,
+        "second_correct": false,
+        "uses_intermediate": false,
+        "remove_intermediate_control": false,
+        "record_removed": false
+      },
+      {
+        "operands": [
+          13,
+          4,
+          5
+        ],
+        "required_action": "add",
+        "first_text": "17.\n",
+        "second_text": " Unknown.\n",
+        "first_correct": true,
+        "second_correct": false,
+        "uses_intermediate": false,
+        "remove_intermediate_control": true,
+        "record_removed": true
+      },
+      {
+        "operands": [
+          14,
+          4,
+          5
+        ],
+        "required_action": "copy",
+        "first_text": "18.\n",
+        "second_text": "22.\n",
+        "first_correct": true,
+        "second_correct": false,
+        "uses_intermediate": true,
+        "remove_intermediate_control": false,
+        "record_removed": false
+      },
+      {
+        "operands": [
+          14,
+          4,
+          5
+        ],
+        "required_action": "copy",
+        "first_text": "18.\n",
+        "second_text": " the.\n",
+        "first_correct": true,
+        "second_correct": false,
+        "uses_intermediate": false,
+        "remove_intermediate_control": true,
+        "record_removed": true
+      },
+      {
+        "operands": [
+          14,
+          4,
+          5
+        ],
+        "required_action": "add",
+        "first_text": "18.\n",
+        "second_text": " Unknown.\n",
+        "first_correct": true,
+        "second_correct": false,
+        "uses_intermediate": false,
+        "remove_intermediate_control": false,
+        "record_removed": false
+      },
+      {
+        "operands": [
+          14,
+          4,
+          5
+        ],
+        "required_action": "add",
+        "first_text": "18.\n",
+        "second_text": " Unknown.\n",
+        "first_correct": true,
+        "second_correct": false,
+        "uses_intermediate": false,
+        "remove_intermediate_control": true,
+        "record_removed": true
+      },
+      {
+        "operands": [
+          -3,
+          8,
+          4
+        ],
+        "required_action": "copy",
+        "first_text": "5.\n",
+        "second_text": "13.\n",
+        "first_correct": true,
+        "second_correct": false,
+        "uses_intermediate": true,
+        "remove_intermediate_control": false,
+        "record_removed": false
+      },
+      {
+        "operands": [
+          -3,
+          8,
+          4
+        ],
+        "required_action": "copy",
+        "first_text": "5.\n",
+        "second_text": " the.\n",
+        "first_correct": true,
+        "second_correct": false,
+        "uses_intermediate": false,
+        "remove_intermediate_control": true,
+        "record_removed": true
+      },
+      {
+        "operands": [
+          -3,
+          8,
+          4
+        ],
+        "required_action": "add",
+        "first_text": "5.\n",
+        "second_text": " Unknown.\n",
+        "first_correct": true,
+        "second_correct": false,
+        "uses_intermediate": false,
+        "remove_intermediate_control": false,
+        "record_removed": false
+      },
+      {
+        "operands": [
+          -3,
+          8,
+          4
+        ],
+        "required_action": "add",
+        "first_text": "5.\n",
+        "second_text": " Unknown.\n",
+        "first_correct": true,
+        "second_correct": false,
+        "uses_intermediate": false,
+        "remove_intermediate_control": true,
+        "record_removed": true
+      }
+    ]
+  },
+  "preservation": {
+    "sessions.json": {
+      "complete_behavior_equal_excluding_work_and_wall": true,
+      "exact_turns": 5
+    },
+    "exposed-names.json": {
+      "complete_behavior_equal_excluding_work_and_wall": true,
+      "total": 28,
+      "before": {
+        "proposals": 0,
+        "additions": 0,
+        "operator_executions": 0,
+        "feature_comparisons": 0,
+        "selection_comparisons": 0,
+        "selection_passes": 0
+      },
+      "after": {
+        "proposals": 0,
+        "additions": 0,
+        "operator_executions": 0,
+        "feature_comparisons": 0,
+        "selection_comparisons": 0,
+        "selection_passes": 28
+      }
+    },
+    "development.json": {
+      "complete_behavior_equal_excluding_work_and_wall": true,
+      "total": 48,
+      "before": {
+        "proposals": 0,
+        "additions": 0,
+        "operator_executions": 0,
+        "feature_comparisons": 0,
+        "selection_comparisons": 0,
+        "selection_passes": 0
+      },
+      "after": {
+        "proposals": 0,
+        "additions": 0,
+        "operator_executions": 0,
+        "feature_comparisons": 0,
+        "selection_comparisons": 0,
+        "selection_passes": 48
+      }
+    },
+    "preservation.json": {
+      "complete_behavior_equal_excluding_work_and_wall": true,
+      "total": 62,
+      "before": {
+        "proposals": 360,
+        "additions": 236,
+        "operator_executions": 0,
+        "feature_comparisons": 272116,
+        "selection_comparisons": 0,
+        "selection_passes": 0
+      },
+      "after": {
+        "proposals": 360,
+        "additions": 16,
+        "operator_executions": 24,
+        "feature_comparisons": 272116,
+        "selection_comparisons": 360,
+        "selection_passes": 62
+      }
+    },
+    "prior.json": {
+      "complete_behavior_equal_excluding_work_and_wall": true,
+      "total": 24,
+      "before": {
+        "proposals": 16,
+        "additions": 8,
+        "operator_executions": 0,
+        "feature_comparisons": 12376,
+        "selection_comparisons": 0,
+        "selection_passes": 0
+      },
+      "after": {
+        "proposals": 16,
+        "additions": 0,
+        "operator_executions": 0,
+        "feature_comparisons": 12376,
+        "selection_comparisons": 16,
+        "selection_passes": 24
+      }
+    }
+  },
+  "long_context": {
+    "total": 28,
+    "exact": 28,
+    "writes_exact": 28,
+    "complete_generation_equal_except_work": true,
+    "outer_report_schema_equal": false
+  },
+  "verification": {
+    "selected_causal_tests_passed": 4,
+    "response_cache_passed": true,
+    "nested_counter_aggregation_passed": true,
+    "numeric_allocation_passed": true,
+    "actual_artifact_dependent_allocations": 0,
+    "actual_artifact_dependent_allocated_bytes": 0,
+    "cli_response": " Zurich.\n",
+    "generated_rust_functions": 4,
+    "generated_rust_semantic_assertions_passed": 12,
+    "compilation_format_policy_wording": "PASS",
+    "CI": "Separate protected check results; compatibility acknowledgements are not audits."
+  },
+  "resources": {
+    "model_ms": 74262,
+    "engineering_build_ms": 382586,
+    "cumulative_model_ms": 1871006,
+    "model_limit_ms": 1890000,
+    "model_increments_ms": [
+      60000,
+      30000
+    ],
+    "storage": {
+      "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+      "at": "2026-09-06T19:00:36.385Z",
+      "inherited_precleanup_bytes": 2747199488,
+      "obsolete_target_growth_credit": 671379456,
+      "current_target_bytes": 2480775168,
+      "predecessor_artifact_root_bytes": 145760256,
+      "current_artifact_root_bytes": 1035124736,
+      "predecessor_worktree_bytes": 9875456,
+      "current_worktree_bytes": 8937472,
+      "stopped_successor_worktree_bytes": 460877824,
+      "source_metadata_reserve_bytes": 5242880,
+      "current_sampled_known_storage_bytes": 6222413824,
+      "storage_limit_bytes": 6727663616,
+      "remaining_storage_bytes": 505249792,
+      "stop_margin_bytes": 134217728,
+      "available_growth_before_stop_bytes": 149843968,
+      "model_ledger": {
+        "cumulative_ms": 1871006,
+        "limit_ms": 1890000
+      },
+      "model_remaining_ms": 18994,
+      "model_process_limit": 1,
+      "model_process_rss_target_bytes": 4294967296,
+      "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+    },
+    "authorization_receipts": [
+      "typed-admission-allowance-authorization.json",
+      "typed-admission-allowance-extension-02.json"
+    ],
+    "external_compute_cost": 0
+  },
+  "commands": [
+    {
+      "label": "typed-admission-causal-tests",
+      "command": "/tmp/r4-native-geometric-target/debug/deps/uor_r4_core-8d8deefa7a2a5da5",
+      "args": [
+        "native_value_selected_execution",
+        "--nocapture"
+      ],
+      "elapsed_ms": 1279,
+      "code": 0,
+      "stopped": null
+    },
+    {
+      "label": "typed-admission-learned-composition",
+      "command": "env",
+      "args": [
+        "R4_TYPED_ADMISSION_MODEL=writer-admission-periodic-model.json",
+        "/tmp/r4-native-geometric-target/debug/deps/uor_r4_core-8d8deefa7a2a5da5",
+        "native_value_selected_execution_learned_chain_diagnostic",
+        "--ignored",
+        "--nocapture"
+      ],
+      "elapsed_ms": 45682,
+      "code": 101,
+      "stopped": null
+    },
+    {
+      "label": "typed-admission-candidate-preservation",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "writer-binding",
+        "preserve",
+        "writer-admission-periodic-model.json",
+        "writer-binding-continuation-source.json",
+        "typed-admission-candidate-preservation"
+      ],
+      "elapsed_ms": 5129,
+      "code": 0,
+      "stopped": null
+    },
+    {
+      "label": "typed-admission-reference-preservation",
+      "command": "./typed-admission-reference-probe",
+      "args": [
+        "writer-binding",
+        "preserve",
+        "writer-admission-periodic-model.json",
+        "writer-binding-continuation-source.json",
+        "typed-admission-reference-preservation"
+      ],
+      "elapsed_ms": 5061,
+      "code": 0,
+      "stopped": null
+    },
+    {
+      "label": "typed-admission-long",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "evaluate-relations",
+        "writer-admission-periodic-model.json",
+        "relation-admission-source.json",
+        "first_use",
+        "typed-admission-long.json"
+      ],
+      "elapsed_ms": 4886,
+      "code": 0,
+      "stopped": null
+    },
+    {
+      "label": "typed-admission-allocation",
+      "command": "env",
+      "args": [
+        "R4_DEPENDENT_READ_MODEL=writer-admission-periodic-model.json",
+        "/tmp/r4-native-geometric-target/release/deps/native_geometric_allocations-68a49c874fa101f2",
+        "native_dependent_artifact_copy_is_allocation_free",
+        "--ignored",
+        "--exact",
+        "--nocapture"
+      ],
+      "elapsed_ms": 4930,
+      "code": 0,
+      "stopped": null
+    },
+    {
+      "label": "typed-admission-cli",
+      "command": "/tmp/r4-native-geometric-target/release/r4",
+      "args": [
+        "geometric",
+        "generate",
+        "--model",
+        "writer-admission-periodic-model.json",
+        "--prompt",
+        "casket in elvin. elvin in Bremen. Now elvin in Zurich. Question: Where is the location of casket? Answer:",
+        "--max-tokens",
+        "32",
+        "--json"
+      ],
+      "elapsed_ms": 5065,
+      "code": 0,
+      "stopped": null
+    },
+    {
+      "label": "typed-admission-response-cache",
+      "command": "/tmp/r4-native-geometric-target/debug/deps/uor_r4_core-8d8deefa7a2a5da5",
+      "args": [
+        "native_response_entry_reuses_no_write_only_during_committed_response",
+        "--nocapture"
+      ],
+      "elapsed_ms": 1230,
+      "code": 0,
+      "stopped": null
+    },
+    {
+      "label": "typed-admission-work-counters",
+      "command": "/tmp/r4-native-geometric-target/debug/deps/uor_r4_core-8d8deefa7a2a5da5",
+      "args": [
+        "native_evaluation_adds_every_nested_work_counter",
+        "--nocapture"
+      ],
+      "elapsed_ms": 8,
+      "code": 0,
+      "stopped": null
+    },
+    {
+      "label": "typed-admission-numeric-allocation",
+      "command": "/tmp/r4-native-geometric-target/release/deps/native_geometric_allocations-68a49c874fa101f2",
+      "args": [
+        "native_typed_value_ingest_write_emission_and_eviction_are_allocation_free",
+        "--exact",
+        "--nocapture"
+      ],
+      "elapsed_ms": 297,
+      "code": 0,
+      "stopped": null
+    },
+    {
+      "label": "typed-admission-rust-compile",
+      "command": "/Users/casey.allard/.cargo/bin/rustc",
+      "args": [
+        "--edition=2021",
+        "dependent-read-generated.rs",
+        "-o",
+        "typed-admission-generated-check"
+      ],
+      "elapsed_ms": 516,
+      "code": 0,
+      "stopped": null
+    },
+    {
+      "label": "typed-admission-rust-execute",
+      "command": "./typed-admission-generated-check",
+      "args": [],
+      "elapsed_ms": 179,
+      "code": 0,
+      "stopped": null
+    }
+  ],
+  "artifact_root": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05",
+  "files": {
+    "typed-admission-learned-composition.stdout.log": {
+      "sha256": "9eacc0e00aa62c1048b5bab7e82596374cc9386434d87b0c12f52e41ec24d592",
+      "bytes": 166086
+    },
+    "typed-admission-learned-composition.stderr.log": {
+      "sha256": "9fa652e9682c2a04e382211daeb8f3fbd17fde6731c89e723dcc04131ca308ef",
+      "bytes": 459
+    },
+    "typed-admission-preservation-comparison.json": {
+      "sha256": "58a356c47bf3cbcaabe4f76f4e75e8efa2aaaf1ae7fe22d463d25c2fc8d480b8",
+      "bytes": 2107
+    },
+    "typed-admission-long-comparison.json": {
+      "sha256": "13bbdea570eda3ea5c00912154e3837b45a03aa5e30faa7aa25fcb0d1c012f39",
+      "bytes": 4087
+    }
+  },
+  "next_mechanism_status": "NOT_IMPLEMENTED: learned geometric typed operator/operand selection; full #1139/#1140 handoffs unmet"
+}

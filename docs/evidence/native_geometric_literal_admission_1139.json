@@ -1,0 +1,878 @@
+{
+  "schema": "uor-r4.literal-admission-result/1",
+  "decision": "RETAIN_C29AB982_BOUNDED_LITERAL_ADMISSION",
+  "execution_base": "3266bd7bf75556f30004b595a33da6438fe424eb",
+  "source_files": [
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-typed-value/uor-r4/crates/uor-r4-core/src/native_geometric/mod.rs",
+      "bytes": 19037,
+      "sha256": "471b30fc7bf4e2b30c70d5bac7630a8d6c00acf4cb78fb2e16ff2eeb8b0d03df"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-typed-value/uor-r4/crates/uor-r4-core/src/native_geometric/training.rs",
+      "bytes": 44379,
+      "sha256": "dc4f1c4707666d5a645393f7fe923a1c1821fc77fe5a811b524801b8b87dce15"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-typed-value/uor-r4/crates/uor-r4-core/src/native_geometric/typed_routing.rs",
+      "bytes": 15933,
+      "sha256": "60b19f0f9dbe84c053645ca5f03c28e3d51086d9b5b60f6884ba56b1db295c22"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-typed-value/uor-r4/crates/uor-r4-core/src/native_geometric/typed_routing_training.rs",
+      "bytes": 27813,
+      "sha256": "cfc80535bec5b61305dcfe197e0cb38f605f0ff29d604ec1d1f0b600de29dd43"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-typed-value/uor-r4/crates/uor-r4-core/src/native_geometric/value_runtime_tests.rs",
+      "bytes": 39230,
+      "sha256": "6da04af283615cc444926de8315ead4a60697e52f9240bf6af356dbfd14f639f"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-typed-value/uor-r4/crates/uor-r4-core/examples/native_geometric_value_probe/typed_routing.rs",
+      "bytes": 30245,
+      "sha256": "265f887df61528aa138accf962e52fdc4080aeba0317e7c3d5488e81fab636a7"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-typed-value/uor-r4/crates/uor-r4-core/tests/native_geometric_allocations.rs",
+      "bytes": 52785,
+      "sha256": "ea5334428e3d395fd122b0d38d197c0af29fcd9b66085db6ed946dd999c6ba5e"
+    }
+  ],
+  "fits": [
+    {
+      "model": {
+        "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-admission-angular/model.json",
+        "bytes": 11176068,
+        "sha256": "1b8e9da3f3b29cf2fe3228d35979c8a03192fd6c3b36e9d398d42ad151010e72"
+      },
+      "fit": {
+        "artifact": "blake3:c29ab9826e3beddae71f1ba5c189c602cfa2686b652da3b7d78e93d927254ad8",
+        "block_bytes": 53653,
+        "component_training_parent": "blake3:bb79456b2dd7187005a3501d437fdc17215429bd4fff0671c31a44583d2918c7",
+        "computed_role_parameters_unchanged": true,
+        "config": {
+          "learned_features": 768,
+          "max_seconds": 30,
+          "mode": "angular",
+          "passes": 4,
+          "proposals": 12,
+          "seed": 1139
+        },
+        "construction_ms": 51,
+        "dictionary_words": 65,
+        "effective_query_classes": 81,
+        "feature_universe": 567,
+        "features": 567,
+        "fit": {
+          "accepted": [
+            4,
+            0,
+            2
+          ],
+          "final_correct": 103,
+          "final_hinge": 0,
+          "initial_correct": 95,
+          "initial_hinge": 32,
+          "proposals": 57780,
+          "stopped_at_time_limit": false
+        },
+        "frames": 103,
+        "incompatible_feature_classes": 0,
+        "parent": "blake3:af337c28ade71ae4ef01a888c8f3ddb9b240096ff2155d79d37de0773d6ece1a",
+        "scope": "Joint typed operator/operand labels over actual generated intermediates or explicit literal-only input frames; source values and numeric query words are not encoded as geometric scoring features. Construction fit is not generated transfer."
+      }
+    },
+    {
+      "model": {
+        "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-admission-equality/model.json",
+        "bytes": 11176050,
+        "sha256": "87fa9740b765abcb962d047f4b96c206f9fa4679d683de62fcc6a57441fabdd9"
+      },
+      "fit": {
+        "artifact": "blake3:c4bfd53b0f6f758055441c0137067bed6560655f8075573dd157336bf4f9f4a3",
+        "block_bytes": 53635,
+        "component_training_parent": "blake3:bb79456b2dd7187005a3501d437fdc17215429bd4fff0671c31a44583d2918c7",
+        "computed_role_parameters_unchanged": true,
+        "config": {
+          "learned_features": 768,
+          "max_seconds": 30,
+          "mode": "equality",
+          "passes": 4,
+          "proposals": 12,
+          "seed": 1139
+        },
+        "construction_ms": 52,
+        "dictionary_words": 65,
+        "effective_query_classes": 81,
+        "feature_universe": 567,
+        "features": 567,
+        "fit": {
+          "accepted": [
+            28,
+            0,
+            69
+          ],
+          "final_correct": 103,
+          "final_hinge": 0,
+          "initial_correct": 17,
+          "initial_hinge": 308,
+          "proposals": 57823,
+          "stopped_at_time_limit": false
+        },
+        "frames": 103,
+        "incompatible_feature_classes": 0,
+        "parent": "blake3:af337c28ade71ae4ef01a888c8f3ddb9b240096ff2155d79d37de0773d6ece1a",
+        "scope": "Joint typed operator/operand labels over actual generated intermediates or explicit literal-only input frames; source values and numeric query words are not encoded as geometric scoring features. Construction fit is not generated transfer."
+      }
+    }
+  ],
+  "source": {
+    "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-admission-source.json",
+    "bytes": 81188,
+    "sha256": "9a3f162401986b66dd388ea2c843023319b7d6ba42f1702e01777e0ab766b951"
+  },
+  "reports": [
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-admission-construction.json",
+      "bytes": 2504220,
+      "sha256": "e61a37d2e9e620eee41c520d38bd2e6bd6136008abc242a59b12c2fe5feb89fd",
+      "artifact": "blake3:c29ab9826e3beddae71f1ba5c189c602cfa2686b652da3b7d78e93d927254ad8",
+      "exact": 95,
+      "total": 103,
+      "elapsed_ms": 129,
+      "failures": [
+        {
+          "id": "literal-fit/0/false/3",
+          "text": " Unknown. The conversation does not give a:. The conversation does not give a:. The88. The conversation does not give a: The. 100."
+        },
+        {
+          "id": "literal-fit/0/true/3",
+          "text": " coins.\n"
+        },
+        {
+          "id": "literal-fit/1/false/3",
+          "text": " Unknown. The conversation does not give a:. The conversation does not give a:. The conversation does not give a:. The conversation does not give a"
+        },
+        {
+          "id": "literal-fit/1/true/3",
+          "text": " coins.\n"
+        },
+        {
+          "id": "literal-fit/2/false/3",
+          "text": " Unknown. The conversation does not give a:. The conversation does not give a:. The conversation does not give a:. The conversation does not give a"
+        },
+        {
+          "id": "literal-fit/2/true/3",
+          "text": " coins.\n"
+        },
+        {
+          "id": "literal-fit/3/false/3",
+          "text": " Unknown. The conversation does not give a coins.\n"
+        },
+        {
+          "id": "literal-fit/3/true/3",
+          "text": " coins.\n"
+        }
+      ],
+      "numeric_operator_executions": 55
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-admission-old-transfer.json",
+      "bytes": 912050,
+      "sha256": "e0443fefd031a94e060c5e99700e4af64f6077e8e83b61a9a4484589bebd13a1",
+      "artifact": "blake3:c29ab9826e3beddae71f1ba5c189c602cfa2686b652da3b7d78e93d927254ad8",
+      "exact": 16,
+      "total": 16,
+      "elapsed_ms": 58,
+      "failures": [],
+      "numeric_operator_executions": 48
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-admission-prior-construction.json",
+      "bytes": 3023794,
+      "sha256": "bb30cd3aeaccc0a5a701c108212243c6e87a86667b1dd3f5d4803021d9c3f5d5",
+      "artifact": "blake3:c29ab9826e3beddae71f1ba5c189c602cfa2686b652da3b7d78e93d927254ad8",
+      "exact": 58,
+      "total": 58,
+      "elapsed_ms": 183,
+      "failures": [],
+      "numeric_operator_executions": 168
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-admission-prior-numeric.json",
+      "bytes": 272236,
+      "sha256": "a368f8d06ac5d61b6b5eaef9134bc46e607ca87443d40d30105b294306e69c21",
+      "artifact": "blake3:c29ab9826e3beddae71f1ba5c189c602cfa2686b652da3b7d78e93d927254ad8",
+      "exact": 6,
+      "total": 6,
+      "elapsed_ms": 13,
+      "failures": [],
+      "numeric_operator_executions": 12
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-admission-prior-roles.json",
+      "bytes": 688698,
+      "sha256": "68aaac0e9078eac655f9a62df59c9954d48a91de32e9009d644fce71efed9de0",
+      "artifact": "blake3:c29ab9826e3beddae71f1ba5c189c602cfa2686b652da3b7d78e93d927254ad8",
+      "exact": 12,
+      "total": 12,
+      "elapsed_ms": 51,
+      "failures": [],
+      "numeric_operator_executions": 48
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-admission-prior-exposed.json",
+      "bytes": 688854,
+      "sha256": "891456fb6c51098cb1d88626bad2e3c50dea82b404d3e579c815e9fba93407dd",
+      "artifact": "blake3:c29ab9826e3beddae71f1ba5c189c602cfa2686b652da3b7d78e93d927254ad8",
+      "exact": 12,
+      "total": 12,
+      "elapsed_ms": 51,
+      "failures": [],
+      "numeric_operator_executions": 48
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-admission-prior-aliases.json",
+      "bytes": 688659,
+      "sha256": "58365d623b2f931caeeedfb93e0e3aaffd8d17fcda4af5888003b9dcc482e9c9",
+      "artifact": "blake3:c29ab9826e3beddae71f1ba5c189c602cfa2686b652da3b7d78e93d927254ad8",
+      "exact": 12,
+      "total": 12,
+      "elapsed_ms": 49,
+      "failures": [],
+      "numeric_operator_executions": 48
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-admission-long.json",
+      "bytes": 1453176,
+      "sha256": "a2b36857e1667630a9c78cf608437446621a8ae3684cc24fef2c112ccf456631",
+      "artifact": "blake3:c29ab9826e3beddae71f1ba5c189c602cfa2686b652da3b7d78e93d927254ad8",
+      "exact": 28,
+      "total": 28,
+      "elapsed_ms": 77,
+      "failures": [],
+      "numeric_operator_executions": 0
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-admission-new-literal.json",
+      "bytes": 446414,
+      "sha256": "3df149d26d16f2fd25ffbbe776f289cc43c7e925b10810a7ed96645142311a10",
+      "artifact": "blake3:c29ab9826e3beddae71f1ba5c189c602cfa2686b652da3b7d78e93d927254ad8",
+      "exact": 12,
+      "total": 16,
+      "elapsed_ms": 27,
+      "failures": [
+        {
+          "id": "admission-new-literal/0/false/3",
+          "text": " Unknown. The conversation does not give a:. The 95: What color is.. User:: What color is.. User:: User::"
+        },
+        {
+          "id": "admission-new-literal/0/true/3",
+          "text": " coins.\n"
+        },
+        {
+          "id": "admission-new-literal/1/false/3",
+          "text": " Unknown. The conversation does not give a:. The conversation does not give a:. The conversation does not give a:. The conversation does not give a"
+        },
+        {
+          "id": "admission-new-literal/1/true/3",
+          "text": " coins.\n"
+        }
+      ],
+      "numeric_operator_executions": 12
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-admission-new-chain.json",
+      "bytes": 912085,
+      "sha256": "5ea4e388b36cfb52a6199da329171406fa8eac61738a7dd4ba366b31a1c14cc5",
+      "artifact": "blake3:c29ab9826e3beddae71f1ba5c189c602cfa2686b652da3b7d78e93d927254ad8",
+      "exact": 16,
+      "total": 16,
+      "elapsed_ms": 60,
+      "failures": [],
+      "numeric_operator_executions": 48
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-admission-new-identifiers.json",
+      "bytes": 135413,
+      "sha256": "c0a55cead33c25e0a5ef42b6598d27f356e27209a3534de583f7c3b726d44f32",
+      "artifact": "blake3:c29ab9826e3beddae71f1ba5c189c602cfa2686b652da3b7d78e93d927254ad8",
+      "exact": 8,
+      "total": 8,
+      "elapsed_ms": 9,
+      "failures": [],
+      "numeric_operator_executions": 0
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-admission-parent-literal.json",
+      "bytes": 446623,
+      "sha256": "bede1cc94a2d561d536679a94432399ad5ba9f8318c5a454961882fdd6eb0635",
+      "artifact": "blake3:af337c28ade71ae4ef01a888c8f3ddb9b240096ff2155d79d37de0773d6ece1a",
+      "exact": 8,
+      "total": 16,
+      "elapsed_ms": 26,
+      "failures": [
+        {
+          "id": "admission-new-literal/0/false/0",
+          "text": "-5.\n"
+        },
+        {
+          "id": "admission-new-literal/0/false/3",
+          "text": " Unknown. The conversation does not give a:. The 95: What color is.. User:: What color is.. User:: User::"
+        },
+        {
+          "id": "admission-new-literal/0/true/1",
+          "text": "17.\n"
+        },
+        {
+          "id": "admission-new-literal/0/true/3",
+          "text": " coins.\n"
+        },
+        {
+          "id": "admission-new-literal/1/false/0",
+          "text": "28.\n"
+        },
+        {
+          "id": "admission-new-literal/1/false/3",
+          "text": " Unknown. The conversation does not give a:. The conversation does not give a:. The conversation does not give a:. The conversation does not give a"
+        },
+        {
+          "id": "admission-new-literal/1/true/1",
+          "text": "-6.\n"
+        },
+        {
+          "id": "admission-new-literal/1/true/3",
+          "text": " coins.\n"
+        }
+      ],
+      "numeric_operator_executions": 12
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-admission-parent-chain.json",
+      "bytes": 685051,
+      "sha256": "e83029f4a20f021b31b5bbc344a1636a34d9c7b19e18fe4eac619e8958f4cfcf",
+      "artifact": "blake3:af337c28ade71ae4ef01a888c8f3ddb9b240096ff2155d79d37de0773d6ece1a",
+      "exact": 12,
+      "total": 16,
+      "elapsed_ms": 48,
+      "failures": [
+        {
+          "id": "admission-new-chain/1/true/0",
+          "initial": "initial generated response failed: admission-new-chain/1/true/0:  Unknown.\n"
+        },
+        {
+          "id": "admission-new-chain/1/true/1",
+          "initial": "initial generated response failed: admission-new-chain/1/true/1:  Unknown.\n"
+        },
+        {
+          "id": "admission-new-chain/1/true/2",
+          "initial": "initial generated response failed: admission-new-chain/1/true/2:  Unknown.\n"
+        },
+        {
+          "id": "admission-new-chain/1/true/3",
+          "initial": "initial generated response failed: admission-new-chain/1/true/3:  Unknown.\n"
+        }
+      ],
+      "numeric_operator_executions": 36
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-admission-parent-identifiers.json",
+      "bytes": 135345,
+      "sha256": "eff5e7ad3f197387eb44aec7a69b4e3cd6e46fb276f8f40455fc314d5712bcc9",
+      "artifact": "blake3:af337c28ade71ae4ef01a888c8f3ddb9b240096ff2155d79d37de0773d6ece1a",
+      "exact": 8,
+      "total": 8,
+      "elapsed_ms": 9,
+      "failures": [],
+      "numeric_operator_executions": 0
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-admission-equality-literal.json",
+      "bytes": 446414,
+      "sha256": "d63529d8986639d8e85a3f7b37c2ce6243f89b92681b4102680bd0c7cefe7828",
+      "artifact": "blake3:c4bfd53b0f6f758055441c0137067bed6560655f8075573dd157336bf4f9f4a3",
+      "exact": 12,
+      "total": 16,
+      "elapsed_ms": 27,
+      "failures": [
+        {
+          "id": "admission-new-literal/0/false/3",
+          "text": " Unknown. The conversation does not give a:. The 95: What color is.. User:: What color is.. User:: User::"
+        },
+        {
+          "id": "admission-new-literal/0/true/3",
+          "text": " coins.\n"
+        },
+        {
+          "id": "admission-new-literal/1/false/3",
+          "text": " Unknown. The conversation does not give a:. The conversation does not give a:. The conversation does not give a:. The conversation does not give a"
+        },
+        {
+          "id": "admission-new-literal/1/true/3",
+          "text": " coins.\n"
+        }
+      ],
+      "numeric_operator_executions": 12
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-admission-equality-chain.json",
+      "bytes": 912085,
+      "sha256": "5dcc626caf67c317d071a10a58fcc6574837ac2f95f5eb8ee6f7a46cc4eff779",
+      "artifact": "blake3:c4bfd53b0f6f758055441c0137067bed6560655f8075573dd157336bf4f9f4a3",
+      "exact": 16,
+      "total": 16,
+      "elapsed_ms": 59,
+      "failures": [],
+      "numeric_operator_executions": 48
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-admission-equality-identifiers.json",
+      "bytes": 135413,
+      "sha256": "14ee0daca0a6a0fe696aa8fb9a14de1a2348addd3a07725d0ee58dbf8f9c4a08",
+      "artifact": "blake3:c4bfd53b0f6f758055441c0137067bed6560655f8075573dd157336bf4f9f4a3",
+      "exact": 8,
+      "total": 8,
+      "elapsed_ms": 9,
+      "failures": [],
+      "numeric_operator_executions": 0
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-admission-preservation/development.json",
+      "bytes": 2307685,
+      "sha256": "14d7f73fc150c6b199427ba224fb6d201d43e579d69d66d2b2b1f5c787be8ad5",
+      "artifact": "blake3:c29ab9826e3beddae71f1ba5c189c602cfa2686b652da3b7d78e93d927254ad8",
+      "exact": 48,
+      "total": 48,
+      "elapsed_ms": 50,
+      "failures": [],
+      "numeric_operator_executions": 0
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-admission-preservation/preservation.json",
+      "bytes": 1465606,
+      "sha256": "ab519a0f3b5826913c30f9d378babdbd12ecd7babd5792dc131a3a2e542473ae",
+      "artifact": "blake3:c29ab9826e3beddae71f1ba5c189c602cfa2686b652da3b7d78e93d927254ad8",
+      "exact": 62,
+      "total": 62,
+      "failures": [],
+      "numeric_operator_executions": 0
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-admission-preservation/prior.json",
+      "bytes": 327993,
+      "sha256": "4e1ede56a5b3236834da7cc40e4b8e12c52c63e35f9c2324f6707c4a6fc497cf",
+      "artifact": "blake3:c29ab9826e3beddae71f1ba5c189c602cfa2686b652da3b7d78e93d927254ad8",
+      "exact": 24,
+      "total": 24,
+      "failures": [],
+      "numeric_operator_executions": 0
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-admission-preservation/exposed-names.json",
+      "bytes": 1362327,
+      "sha256": "d522cbcec9e2ead60f6469f8daf665900516d4eb2a79e097434a9f5bcde03e17",
+      "artifact": "blake3:c29ab9826e3beddae71f1ba5c189c602cfa2686b652da3b7d78e93d927254ad8",
+      "exact": 28,
+      "total": 28,
+      "elapsed_ms": 28,
+      "failures": [],
+      "numeric_operator_executions": 0
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-admission-preservation/sessions.json",
+      "bytes": 37117,
+      "sha256": "65eafeb7ea2e2481cbf50aba5cbb1cb11e55c4b33095b995847efdccda09cd28",
+      "artifact": "blake3:c29ab9826e3beddae71f1ba5c189c602cfa2686b652da3b7d78e93d927254ad8",
+      "exact": 5,
+      "total": 5
+    }
+  ],
+  "checks": [
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-admission-focused.stdout.log",
+      "bytes": 910,
+      "sha256": "619533001cd26930763d22dc23e6e9757c5db6e8b5b47e314571801a8d46fd71"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-admission-allocations.stdout.log",
+      "bytes": 390,
+      "sha256": "95d68e3d44abee27a95f89ed4f3fa412402d74db3c7f72b8d98baac386b82e2b"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-admission-kernel.stdout.log",
+      "bytes": 189,
+      "sha256": "bd2647a391188817cf5a21011168f04590412a52b142fdcc82489725cec7b4d0"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-admission-rust-execution.stdout.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-admission-cli.stdout.log",
+      "bytes": 11135,
+      "sha256": "13a2449c324dac229ecc2c7933c56b724f9c7c555b96f1bed40baac9ec45d8d0"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-admission-fmt.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-admission-policy.log",
+      "bytes": 73,
+      "sha256": "58dd9c24c33ba5ff6519ed3f5bea924d8fd10d93bcfaba529e2d8b0101be6ae7"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-admission-claims.log",
+      "bytes": 83,
+      "sha256": "78d71cb97c00d606a9a909d89a2f4f4e3b4be6b84af390f20c9fc50ec449922f"
+    }
+  ],
+  "generated_rust": {
+    "source": {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/literal-admission-generated.rs",
+      "bytes": 2189,
+      "sha256": "2ea0c3f8e75c01d59e511337c10637a0f9f71cf73dd423499d383920270561a9"
+    },
+    "functions": 8,
+    "executed_assertions": 24,
+    "scope": "Actual generated identifier returns in existing function forms; numeric distractors changed; no new general algorithm synthesis."
+  },
+  "boundaries": {
+    "entire_parent_unchanged": "PASS_ACTUAL_ARTIFACT_TEST",
+    "serving_matmul": false,
+    "serving_provider": false,
+    "angular_advantage": "NOT_ESTABLISHED",
+    "abstention_text": "FAIL_4_OF_16_NEW_LITERAL",
+    "mixed_arithmetic_to_prose": "NOT_RUN",
+    "broad_release_qa": "NOT_RUN",
+    "full_equality_preservation": "NOT_RUN",
+    "general_language_or_frontier": "NOT_ESTABLISHED"
+  },
+  "resources": {
+    "projection": {
+      "at": "2026-09-06T23:07:04.410Z",
+      "authority": "standing owner authorization; typed-admission-allowance-authorization.json",
+      "before": {
+        "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+        "at": "2026-09-06T23:07:04.409Z",
+        "inherited_precleanup_bytes": 2747199488,
+        "obsolete_target_growth_credit": 671379456,
+        "current_target_bytes": 2486837248,
+        "predecessor_artifact_root_bytes": 145760256,
+        "current_artifact_root_bytes": 1321140224,
+        "predecessor_worktree_bytes": 9875456,
+        "current_worktree_bytes": 8937472,
+        "stopped_successor_worktree_bytes": 460877824,
+        "source_metadata_reserve_bytes": 5242880,
+        "current_sampled_known_storage_bytes": 6514491392,
+        "storage_limit_bytes": 7063207936,
+        "remaining_storage_bytes": 548716544,
+        "stop_margin_bytes": 134217728,
+        "available_growth_before_stop_bytes": 193310720,
+        "model_ledger": {
+          "cumulative_ms": 2921586,
+          "limit_ms": 2970000
+        },
+        "model_remaining_ms": 48414,
+        "model_process_limit": 1,
+        "model_process_rss_target_bytes": 4294967296,
+        "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+      },
+      "model_increment_ms": 240000,
+      "model_cycle_ms": 280000,
+      "engineering_cycle_ms": 720000,
+      "model_projection_ms": 200000,
+      "engineering_projection_ms": 500000,
+      "growth_projection_bytes": 134217728,
+      "storage_increment_bytes": 0,
+      "scope": "Freeze computed-role parameters; fit bounded literal selector including nonnumeric answer admission; complete generated comparison and preservation.",
+      "model_processes": 1,
+      "rss_bytes": 4294967296,
+      "revisions": [
+        {
+          "at": "2026-09-06T23:18:49.282Z",
+          "previous_cycle_ms": 240000,
+          "model_cycle_ms": 280000,
+          "remaining_projection_ms": 200000,
+          "reason": "Fit process51.898s and7s evaluator startup; reserve complete preservation and matched transfers within existing3210s cumulative allowance."
+        }
+      ]
+    },
+    "final": {
+      "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+      "at": "2026-09-06T23:29:27.533Z",
+      "inherited_precleanup_bytes": 2747199488,
+      "obsolete_target_growth_credit": 671379456,
+      "current_target_bytes": 2486935552,
+      "predecessor_artifact_root_bytes": 145760256,
+      "current_artifact_root_bytes": 1364234240,
+      "predecessor_worktree_bytes": 9875456,
+      "current_worktree_bytes": 8937472,
+      "stopped_successor_worktree_bytes": 460877824,
+      "source_metadata_reserve_bytes": 5242880,
+      "current_sampled_known_storage_bytes": 6557683712,
+      "storage_limit_bytes": 7063207936,
+      "remaining_storage_bytes": 505524224,
+      "stop_margin_bytes": 134217728,
+      "available_growth_before_stop_bytes": 150118400,
+      "model_ledger": {
+        "cumulative_ms": 3168126,
+        "limit_ms": 3210000
+      },
+      "model_remaining_ms": 41874,
+      "model_process_limit": 1,
+      "model_process_rss_target_bytes": 4294967296,
+      "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+    },
+    "model_ms": 246540,
+    "engineering_ms": 359332,
+    "peak_sampled_known_bytes": 6557683712,
+    "peak_sampled_child_rss_bytes": 1103675392,
+    "new_storage_allowance": 0,
+    "deleted_material": [],
+    "external_model_compute": 0
+  },
+  "command_receipts": {
+    "paths": [
+      "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/commands.jsonl",
+      "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/engineering-commands.jsonl"
+    ],
+    "selector": "append-only rows whose label begins literal-admission-; complete arguments, snapshots and log paths retained"
+  },
+  "commands": [
+    {
+      "label": "literal-admission-source",
+      "elapsed_ms": 174,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "literal-admission-fit",
+      "elapsed_ms": 51898,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "literal-admission-construction",
+      "elapsed_ms": 7181,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "literal-admission-old-transfer",
+      "elapsed_ms": 7186,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "literal-admission-preservation",
+      "elapsed_ms": 7184,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "literal-admission-prior-numeric",
+      "elapsed_ms": 7005,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "literal-admission-prior-roles",
+      "elapsed_ms": 7069,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "literal-admission-long",
+      "elapsed_ms": 7077,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "literal-admission-new-literal",
+      "elapsed_ms": 7069,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "literal-admission-new-chain",
+      "elapsed_ms": 7084,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "literal-admission-new-identifiers",
+      "elapsed_ms": 7069,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "literal-admission-equality-fit",
+      "elapsed_ms": 51455,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "literal-admission-equality-chain",
+      "elapsed_ms": 7110,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "literal-admission-equality-identifiers",
+      "elapsed_ms": 7085,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "literal-admission-equality-literal",
+      "elapsed_ms": 7074,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "literal-admission-focused",
+      "elapsed_ms": 1515,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "literal-admission-parent-literal",
+      "elapsed_ms": 6400,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "literal-admission-parent-chain",
+      "elapsed_ms": 6309,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "literal-admission-parent-identifiers",
+      "elapsed_ms": 6306,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "literal-admission-prior-exposed",
+      "elapsed_ms": 7108,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "literal-admission-prior-aliases",
+      "elapsed_ms": 7106,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "literal-admission-allocations",
+      "elapsed_ms": 8248,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "literal-admission-kernel",
+      "elapsed_ms": 8,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "literal-admission-rust-execution",
+      "elapsed_ms": 82,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "literal-admission-cli",
+      "elapsed_ms": 7391,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "literal-admission-prior-construction",
+      "elapsed_ms": 7347,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "literal-admission-build",
+      "elapsed_ms": 326808,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": true
+    },
+    {
+      "label": "literal-admission-tests-build",
+      "elapsed_ms": 22105,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": true
+    },
+    {
+      "label": "literal-admission-allocation-build",
+      "elapsed_ms": 6348,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": true
+    },
+    {
+      "label": "literal-admission-rust-build",
+      "elapsed_ms": 120,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": true
+    },
+    {
+      "label": "literal-admission-fmt",
+      "elapsed_ms": 3616,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": true
+    },
+    {
+      "label": "literal-admission-policy",
+      "elapsed_ms": 118,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": true
+    },
+    {
+      "label": "literal-admission-claims",
+      "elapsed_ms": 217,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": true
+    }
+  ]
+}

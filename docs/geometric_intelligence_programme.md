@@ -1,5 +1,7 @@
 # Geometric Intelligence Programme
 
+**September 7 direction reconciliation:** the product name is **UOR-R4 Geometric Language Model**. Read the [canonical plan](integration/project-track.md), [current artifact/results](integration/current-state.md), [capability assessment](integration/model-direction-2026-09.md) and [project map](PROJECT_MAP.md) first. This document retains technical and dated experiment/reference material; earlier “active/next” sequences do not supersede those pointers. Native bounded inference and contextual/copy attention exist; general prose, general reasoning and frontier capability remain unqualified. Offline Rust training matmul is allowed; final serving has no matrix products or transformer backbone. No new model result was run for this documentation update.
+
 **Owner-directed architecture recovery (2026-09-04):** The
 [native geometric AI plan](integration/project-track.md) owns current goals and
 development. The [current implementation](integration/current-state.md) is the
@@ -27,9 +29,14 @@ scope; consult the plan for practical iteration and both alpha capabilities.
 
 UOR-R4 is building geometric intelligence for ordinary local machines. The
 serving engine is intended to generate, infer, and reason through learned
-geometric routes, state and bounded lookup. Learned sparse geometric gates are
-permitted; a dense transformer or dense expert stack behind a routing/lookup
-interface is outside the target.
+geometric routes, state and bounded lookup. The 2026-09-06 owner clarification
+prioritizes deterministic geometric address/page selection and shared typed
+operators with no serving matrix products. Expert gates remain a conditional
+future option, requiring a concrete capability/cost rationale; a dense
+transformer hidden behind routing remains outside the target. The
+[architecture reconciliation](integration/architecture-2026-09/README.md) maps
+trigonometry, fibers/bundles, spin, zeta/prime and contributor mechanisms to their
+actual implemented roles and missing connections.
 
 The research goal is frontier-like useful capability on a local CPU without
 the power, heat, and accelerator dependence of contemporary dense models.

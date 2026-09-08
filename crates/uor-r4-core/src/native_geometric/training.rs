@@ -89,7 +89,7 @@ fn build_codec(
     Ok((pieces, receipts))
 }
 
-fn exact_sign([a, b]: [i64; 2]) -> i8 {
+pub(super) fn exact_sign([a, b]: [i64; 2]) -> i8 {
     let p = i128::from(a) * 2 + i128::from(b);
     let q = i128::from(b);
     if q == 0 {
@@ -174,6 +174,25 @@ impl Trainer {
         let (lexical_pieces, receipts) = build_codec(&config, construction)?;
         let token_count = LEXICAL_BASE as usize + lexical_pieces.len();
         let mut template = Model {
+            relation_writer_refinement: None,
+            relation_writer: None,
+            dependent_read: None,
+            typed_routing: None,
+            joint_admission: None,
+            relation_start: None,
+            relation_start_context: None,
+            relation_reverse_spans: None,
+            relation_spans: None,
+            source_span_context: None,
+            source_span: None,
+            source_context: None,
+            literal_routing_refinement: None,
+            typed_roles: None,
+            no_read_completion: None,
+            typed_literals: None,
+            source_routing: None,
+            source_routing_refinement: None,
+            learned_routing: None,
             schema: SCHEMA.into(),
             artifact_cid: String::new(),
             uor_model_address: String::new(),
@@ -504,20 +523,485 @@ impl Model {
         self.artifact_cid = format!("blake3:{}", blake3::hash(&self.to_bytes()?).to_hex());
         Ok(())
     }
+    /// Bind retained phrase transport to the complete unchanged learned parent.
+    pub fn with_retained_relation_spans(&self) -> Result<Model> {
+        // Candidate validation below reconstructs and validates this entire parent.
+        if self.relation_spans.is_some()
+            || self.source_span_context.is_none()
+            || relation::head(self).is_none()
+        {
+            return Err(Error(
+                "retained spans require contextual span and relation parent".into(),
+            ));
+        }
+        let mut model = self.clone();
+        model.relation_spans = Some(self.artifact_cid.clone());
+        model.refresh_identity()?;
+        model.validate()?;
+        Ok(model)
+    }
+    /// Bind endpoint-bounded reverse extents to the unchanged retained-span parent.
+    pub fn with_reverse_relation_spans(&self) -> Result<Model> {
+        if self.relation_reverse_spans.is_some() || self.relation_spans.is_none() {
+            return Err(Error(
+                "reverse spans require a retained relation span parent".into(),
+            ));
+        }
+        let mut model = self.clone();
+        model.relation_reverse_spans = Some(self.artifact_cid.clone());
+        model.refresh_identity()?;
+        model.validate()?;
+        Ok(model)
+    }
     pub(super) fn validate(&self) -> Result<()> {
         self.config.validate()?;
+        // Restore the complete accepted model before peeling its earlier layers.
+        // A writer refinement changes the active writer beneath those layers.
+        if let Some(witness) = &self.relation_writer_refinement {
+            return witness.validate(self);
+        }
+        if self.relation_start_context.is_some() && self.relation_start.is_none() {
+            return Err(Error(
+                "relation start context has no learned selector".into(),
+            ));
+        }
+        if let Some(block) = &self.relation_start {
+            if self.relation_reverse_spans.is_none() {
+                return Err(Error("relation start reverse parent absent".into()));
+            }
+            relation_start_training::validate(block, self)?;
+            let mut parent = self.clone();
+            parent.relation_start = None;
+            parent.relation_start_context = None;
+            parent.refresh_identity()?;
+            if parent.artifact_cid != block.parent_artifact {
+                return Err(Error("relation start frozen parent differs".into()));
+            }
+            parent.validate()?;
+            let mut duplicate = self.clone();
+            duplicate.refresh_identity()?;
+            if duplicate.artifact_cid != self.artifact_cid
+                || duplicate.uor_model_address != self.uor_model_address
+            {
+                return Err(Error("relation start identity differs".into()));
+            }
+            return Ok(());
+        }
+        if let Some(parent_cid) = &self.relation_reverse_spans {
+            if self.relation_spans.is_none() {
+                return Err(Error("reverse span retained parent absent".into()));
+            }
+            let mut parent = self.clone();
+            parent.relation_reverse_spans = None;
+            parent.refresh_identity()?;
+            if &parent.artifact_cid != parent_cid {
+                return Err(Error("reverse span frozen parent differs".into()));
+            }
+            parent.validate()?;
+            let mut duplicate = self.clone();
+            duplicate.refresh_identity()?;
+            if duplicate.artifact_cid != self.artifact_cid
+                || duplicate.uor_model_address != self.uor_model_address
+            {
+                return Err(Error("reverse span identity differs".into()));
+            }
+            return Ok(());
+        }
+        if let Some(parent_cid) = &self.relation_spans {
+            if self.source_span_context.is_none() || relation::head(self).is_none() {
+                return Err(Error("retained span parent operators absent".into()));
+            }
+            let mut parent = self.clone();
+            parent.relation_spans = None;
+            parent.refresh_identity()?;
+            if &parent.artifact_cid != parent_cid {
+                return Err(Error("retained span frozen parent differs".into()));
+            }
+            parent.validate()?;
+            let mut duplicate = self.clone();
+            duplicate.refresh_identity()?;
+            if duplicate.artifact_cid != self.artifact_cid
+                || duplicate.uor_model_address != self.uor_model_address
+            {
+                return Err(Error("retained span identity differs".into()));
+            }
+            return Ok(());
+        }
+        if self.source_span_context.is_some() && self.source_span.is_none() {
+            return Err(Error("source span context without operator".into()));
+        }
+        if let Some(block) = &self.source_span {
+            if self.source_context.is_none()
+                || !block.config.role_context_only
+                || block.config.learned_features
+                    > if self.source_span_context.is_some() {
+                        64
+                    } else {
+                        16
+                    }
+            {
+                return Err(Error("invalid source span parent/config".into()));
+            }
+            block.validate_shape(
+                self,
+                2,
+                if self.source_span_context.is_some() {
+                    3
+                } else {
+                    1
+                },
+            )?;
+            if let Some(registry) = &self.source_span_context {
+                source_span_training::validate_registry(registry)?;
+            }
+            let known_prime = |prime: u64| {
+                self.source_span_context.as_ref().is_some_and(|registry| {
+                    registry.iter().any(|word| u64::from(word.prime) == prime)
+                })
+            };
+            if block.codes.iter().any(|c| match c.feature.kind {
+                0 => c.feature.a > 255 || c.feature.b != 0,
+                1 => c.feature.a == 0 || !known_prime(c.feature.a) || c.feature.b != 0,
+                2 => {
+                    c.feature.a == 0
+                        || !known_prime(c.feature.a)
+                        || (c.feature.b != 0 && !known_prime(c.feature.b))
+                }
+                _ => true,
+            }) {
+                return Err(Error(
+                    "invalid source span separator or source prime".into(),
+                ));
+            }
+            let mut parent = self.clone();
+            parent.source_span = None;
+            parent.source_span_context = None;
+            parent.refresh_identity()?;
+            if parent.artifact_cid != block.parent_artifact {
+                return Err(Error("source span frozen parent differs".into()));
+            }
+            parent.validate()?;
+            let mut duplicate = self.clone();
+            duplicate.refresh_identity()?;
+            if duplicate.artifact_cid != self.artifact_cid
+                || duplicate.uor_model_address != self.uor_model_address
+            {
+                return Err(Error("source span identity differs".into()));
+            }
+            return Ok(());
+        }
+        if let Some(witness) = &self.source_context {
+            let block = self
+                .source_routing
+                .as_ref()
+                .ok_or_else(|| Error("source context router absent".into()))?;
+            if self.literal_routing_refinement.is_none()
+                || block.parent_artifact != witness.parent_artifact
+                || block.config.role_context_only != witness.previous.config.role_context_only
+                || witness.previous.codes.iter().any(|old| {
+                    block
+                        .codes
+                        .binary_search_by_key(&old.feature, |c| c.feature)
+                        .is_err()
+                })
+            {
+                return Err(Error("invalid retained source context support".into()));
+            }
+            block.validate(self)?;
+            let mut parent = self.clone();
+            parent.source_context = None;
+            parent.source_routing = Some(witness.previous.clone());
+            parent.refresh_identity()?;
+            if parent.artifact_cid != witness.parent_artifact {
+                return Err(Error("source context frozen parent differs".into()));
+            }
+            parent.validate()?;
+            let mut duplicate = self.clone();
+            duplicate.refresh_identity()?;
+            if duplicate.artifact_cid != self.artifact_cid
+                || duplicate.uor_model_address != self.uor_model_address
+            {
+                return Err(Error("source context identity differs".into()));
+            }
+            return Ok(());
+        }
+        if let Some(witness) = &self.literal_routing_refinement {
+            let block = self
+                .typed_literals
+                .as_ref()
+                .ok_or_else(|| Error("literal refinement component absent".into()))?;
+            if self.joint_admission.is_none()
+                || block.router.parent_artifact != witness.previous.parent_artifact
+                || block.router.config.role_context_only
+                    != witness.previous.config.role_context_only
+                || witness.previous.codes.iter().any(|old| {
+                    block
+                        .router
+                        .codes
+                        .binary_search_by_key(&old.feature, |c| c.feature)
+                        .is_err()
+                })
+            {
+                return Err(Error("invalid literal refinement support".into()));
+            }
+            let mut parent = self.clone();
+            parent.literal_routing_refinement = None;
+            parent
+                .typed_literals
+                .as_mut()
+                .ok_or_else(|| Error("literal refinement absent".into()))?
+                .router = witness.previous.clone();
+            parent.refresh_identity()?;
+            if parent.artifact_cid != witness.parent_artifact {
+                return Err(Error("literal refinement parent differs".into()));
+            }
+            parent.validate()?;
+            block.validate(self, true)?;
+            let mut duplicate = self.clone();
+            duplicate.refresh_identity()?;
+            if duplicate.artifact_cid != self.artifact_cid
+                || duplicate.uor_model_address != self.uor_model_address
+            {
+                return Err(Error("literal refinement identity differs".into()));
+            }
+            return Ok(());
+        }
+        if let Some(gate) = &self.joint_admission {
+            if self.typed_literals.is_none() || self.source_routing.is_none() {
+                return Err(Error(
+                    "joint admission requires literal/source components".into(),
+                ));
+            }
+            let mut parent = self.clone();
+            parent.joint_admission = None;
+            parent.refresh_identity()?;
+            if parent.artifact_cid != gate.router.parent_artifact {
+                return Err(Error("joint admission frozen parent differs".into()));
+            }
+            parent.validate()?;
+            gate.router.validate_shape(self, 2, 8)?;
+            if gate.router.config.role_context_only {
+                return Err(Error("invalid admission feature mode".into()));
+            }
+            let mut duplicate = self.clone();
+            duplicate.refresh_identity()?;
+            if duplicate.artifact_cid != self.artifact_cid
+                || duplicate.uor_model_address != self.uor_model_address
+            {
+                return Err(Error("joint admission identity differs".into()));
+            }
+            return Ok(());
+        }
+        if let Some(witness) = &self.source_routing_refinement {
+            let block = self
+                .source_routing
+                .as_ref()
+                .ok_or_else(|| Error("source refinement router absent".into()))?;
+            if self.learned_routing.is_some()
+                || block.parent_artifact != witness.parent_artifact
+                || block.config.role_context_only != witness.previous.config.role_context_only
+                || block.codes.len() < witness.previous.codes.len()
+                || witness.previous.codes.iter().any(|old| {
+                    block
+                        .codes
+                        .binary_search_by_key(&old.feature, |c| c.feature)
+                        .is_err()
+                })
+            {
+                return Err(Error("invalid source refinement composition".into()));
+            }
+            // The witness is load-time provenance, never another executing head.
+            // Restoring the only replaced component must recover the entire
+            // exact training parent, including every descendant's original CID.
+            let mut parent = self.clone();
+            parent.source_routing_refinement = None;
+            parent.source_routing = Some(witness.previous.clone());
+            parent.refresh_identity()?;
+            if parent.artifact_cid != witness.parent_artifact {
+                return Err(Error("source refinement frozen parent differs".into()));
+            }
+            parent.validate()?;
+            block.validate(self)?;
+            let mut duplicate = self.clone();
+            duplicate.refresh_identity()?;
+            if duplicate.artifact_cid != self.artifact_cid
+                || duplicate.uor_model_address != self.uor_model_address
+            {
+                return Err(Error("source refinement identity differs".into()));
+            }
+            return Ok(());
+        }
+        if let Some(head) = &self.no_read_completion {
+            if head.copy.is_some() || super::role_read::head(self).is_none() {
+                return Err(Error(
+                    "NoRead completion requires the committed role reader".into(),
+                ));
+            }
+            head.validate_shape(
+                self,
+                33,
+                super::response_entry_types::NO_READ_COMPLETION_SCHEMA,
+            )?;
+            let mut parent = self.clone();
+            parent.no_read_completion = None;
+            parent.refresh_identity()?;
+            if parent.artifact_cid != head.baseline_artifact {
+                return Err(Error("NoRead completion parent differs".into()));
+            }
+            parent.validate()?;
+            let mut duplicate = self.clone();
+            duplicate.refresh_identity()?;
+            if duplicate.artifact_cid != self.artifact_cid
+                || duplicate.uor_model_address != self.uor_model_address
+            {
+                return Err(Error("NoRead completion identity differs".into()));
+            }
+            return Ok(());
+        }
+        if let Some(block) = &self.typed_literals {
+            if !block.literal_answers
+                || self
+                    .typed_roles
+                    .as_ref()
+                    .is_none_or(|r| r.literal_answers || !r.local_query)
+            {
+                return Err(Error(
+                    "literal routing requires protected local computed roles".into(),
+                ));
+            }
+            let mut parent = self.clone();
+            parent.typed_literals = None;
+            parent.refresh_identity()?;
+            if parent.artifact_cid != block.router.parent_artifact {
+                return Err(Error("literal routing parent differs".into()));
+            }
+            parent.validate()?;
+            block.validate(self, true)?;
+            let mut duplicate = self.clone();
+            duplicate.refresh_identity()?;
+            if duplicate.artifact_cid != self.artifact_cid
+                || duplicate.uor_model_address != self.uor_model_address
+            {
+                return Err(Error("literal routing identity differs".into()));
+            }
+            return Ok(());
+        }
+        if let Some(block) = &self.typed_roles {
+            let mut parent = self.clone();
+            parent.typed_roles = None;
+            parent.refresh_identity()?;
+            if parent.artifact_cid != block.router.parent_artifact {
+                return Err(Error("typed routing parent differs".into()));
+            }
+            parent.validate()?;
+            block.validate(self, true)?;
+            let mut duplicate = self.clone();
+            duplicate.refresh_identity()?;
+            if duplicate.artifact_cid != self.artifact_cid
+                || duplicate.uor_model_address != self.uor_model_address
+            {
+                return Err(Error("typed routing identity differs".into()));
+            }
+            return Ok(());
+        }
+        if let Some(block) = &self.typed_routing {
+            let mut parent = self.clone();
+            parent.typed_routing = None;
+            parent.refresh_identity()?;
+            if parent.artifact_cid != block.router.parent_artifact {
+                return Err(Error("typed routing parent differs".into()));
+            }
+            parent.validate()?;
+            block.validate(self, false)?;
+            let mut duplicate = self.clone();
+            duplicate.refresh_identity()?;
+            if duplicate.artifact_cid != self.artifact_cid
+                || duplicate.uor_model_address != self.uor_model_address
+            {
+                return Err(Error("typed routing identity differs".into()));
+            }
+            return Ok(());
+        }
+        if let Some(writer) = &self.relation_writer {
+            let mut parent = self.clone();
+            parent.relation_writer = None;
+            parent.refresh_identity()?;
+            if parent.artifact_cid != writer.parent {
+                return Err(Error("writer revision parent differs".into()));
+            }
+            parent.validate()?;
+            writer.validate(self)?;
+            let mut duplicate = self.clone();
+            duplicate.refresh_identity()?;
+            if duplicate.artifact_cid != self.artifact_cid
+                || duplicate.uor_model_address != self.uor_model_address
+            {
+                return Err(Error("writer revision identity differs".into()));
+            }
+            return Ok(());
+        }
+        if let Some(block) = &self.dependent_read {
+            let mut parent = self.clone();
+            parent.dependent_read = None;
+            parent.refresh_identity()?;
+            if parent.artifact_cid != block.router.parent_artifact {
+                return Err(Error("dependent read parent differs".into()));
+            }
+            parent.validate()?;
+            block.validate(self)?;
+            let mut duplicate = self.clone();
+            duplicate.refresh_identity()?;
+            if duplicate.artifact_cid != self.artifact_cid
+                || duplicate.uor_model_address != self.uor_model_address
+            {
+                return Err(Error("dependent read identity differs".into()));
+            }
+            return Ok(());
+        }
+        // The routing residual is fitted last. Inherited response heads remain
+        // bound to the exact model on which they were trained, including all
+        // of their original nested provenance checks.
+        if self.source_routing.is_some() && self.learned_routing.is_some() {
+            return Err(Error(
+                "source and residual routing cannot be stacked in this version".into(),
+            ));
+        }
+        let parent_id = self
+            .learned_routing
+            .as_ref()
+            .map(|b| b.parent_artifact.as_str())
+            .or_else(|| {
+                self.source_routing
+                    .as_ref()
+                    .map(|b| b.parent_artifact.as_str())
+            });
+        let inherited = if let Some(parent_id) = parent_id {
+            let mut parent = self.clone();
+            parent.learned_routing = None;
+            parent.source_routing = None;
+            parent.refresh_identity()?;
+            if parent.artifact_cid != parent_id {
+                return Err(Error(
+                    "learned routing frozen parent identity differs".into(),
+                ));
+            }
+            Some(parent)
+        } else {
+            None
+        };
+        let parent = inherited.as_ref().unwrap_or(self);
         if let Some(values) = &self.values {
             values.validate()?;
         }
         if let Some(completion) = &self.completion {
-            completion.validate(self)?;
+            completion.validate(parent)?;
         }
         if let Some(entry) = &self.response_entry {
-            entry.validate(self)?;
+            entry.validate(parent)?;
         }
-        self.readout.validate(self)?;
+        self.readout.validate(parent)?;
         if let Some(memory) = &self.memory_read {
-            memory.validate(self)?;
+            memory.validate(parent)?;
         }
         if self.schema != SCHEMA
             || self.lexical_pieces.is_empty()
@@ -548,6 +1032,12 @@ impl Model {
         }
         if geometry(self.prior_scores.len(), self.config.context_tokens)? != self.geometry {
             return Err(Error("native artifact prime, H4, orientation or fixed-zeta tables differ from the named construction".into()));
+        }
+        if let Some(block) = &self.learned_routing {
+            block.validate(self)?;
+        }
+        if let Some(block) = &self.source_routing {
+            block.validate(self)?;
         }
         let mut ids = BTreeSet::new();
         if self.construction.is_empty()
@@ -729,6 +1219,13 @@ impl Model {
                     .chain(self.value_completion_training())
                     .chain(self.response_entry_training())
                     .chain(self.word_copy_training())
+                    .chain(self.role_read_training())
+                    .chain(self.relation_training())
+                    .chain(
+                        self.learned_routing
+                            .iter()
+                            .flat_map(|block| &block.training),
+                    )
                     .any(|known| known.id == candidate.id || known.text_cid == candidate.text_cid)
             {
                 return Err(Error(format!(
@@ -774,6 +1271,8 @@ impl Model {
 }
 
 fn add_work(total: &mut Work, work: Work) {
+    total.learned_routing.add(work.learned_routing);
+    total.word_copy.routing.add(work.word_copy.routing);
     add_completion_work(&mut total.word_copy.selector, work.word_copy.selector);
     total.word_copy.dictionary_lookups += work.word_copy.dictionary_lookups;
     total.word_copy.dictionary_comparisons += work.word_copy.dictionary_comparisons;
@@ -782,10 +1281,18 @@ fn add_work(total: &mut Work, work: Work) {
     total.word_copy.word_record_reads += work.word_copy.word_record_reads;
     total.word_copy.bound_rejections += work.word_copy.bound_rejections;
     total.word_copy.byte_reads += work.word_copy.byte_reads;
+    total.values.admission_legality_checks += work.values.admission_legality_checks;
+    total.values.admission_decisions += work.values.admission_decisions;
+    total.values.admission_rejections += work.values.admission_rejections;
     total.values.input_bytes += work.values.input_bytes;
     total.values.literal_writes += work.values.literal_writes;
     total.values.record_evictions += work.values.record_evictions;
     total.values.proposals += work.values.proposals;
+    total.values.alias_self_add_rejections += work.values.alias_self_add_rejections;
+    total.values.routing.add(work.values.routing);
+    total.values.operator_executions += work.values.operator_executions;
+    total.values.selection_comparisons += work.values.selection_comparisons;
+    total.values.selection_passes += work.values.selection_passes;
     total.values.additions += work.values.additions;
     total.values.overflow_rejections += work.values.overflow_rejections;
     total.values.feature_lookups += work.values.feature_lookups;
@@ -874,6 +1381,14 @@ mod work_tests {
         // so the independent JSON oracle covers every current counter.
         let seed = Work {
             values: ValueWork {
+                routing: RoutingWork {
+                    predictions: 1,
+                    ..RoutingWork::default()
+                },
+                alias_self_add_rejections: 1,
+                operator_executions: 1,
+                selection_comparisons: 1,
+                selection_passes: 1,
                 lexical_comparisons: 1,
                 lexical_byte_comparisons: 1,
                 lexical_writes: 1,

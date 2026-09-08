@@ -1,0 +1,2576 @@
+{
+  "schema": "uor-r4.operand-provenance-evidence/1",
+  "at": "2026-09-06T22:13:59.921Z",
+  "source_parent": "bfb04325f8e514daf6d8ad6247e36f103e3a6c0c",
+  "artifact_root": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05",
+  "decision": "RETAIN_OPERAND_PROVENANCE_AT_REACHED_SELECTION_SCOPE_ADVANCE_LITERAL_BINDING",
+  "selected_artifact": "blake3:af337c28ade71ae4ef01a888c8f3ddb9b240096ff2155d79d37de0773d6ece1a",
+  "complete_transfer": {
+    "full": 12,
+    "parent": 3,
+    "equality": 12,
+    "total": 16,
+    "unavailable_selection_after_failed_initial_response": 4
+  },
+  "source_files": {
+    "crates/uor-r4-core/src/native_geometric/typed_routing.rs": {
+      "bytes": 15305,
+      "sha256": "f951d32bb53caedaf512473309994635b9aa377512683a4ba4b2a35be3101aba"
+    },
+    "crates/uor-r4-core/src/native_geometric/typed_routing_training.rs": {
+      "bytes": 22799,
+      "sha256": "2ecf19ac30fee789dfac74bacb4c632acfba5b557b4b7cf2543766d3310bd4ba"
+    },
+    "crates/uor-r4-core/src/native_geometric/value_runtime_tests.rs": {
+      "bytes": 36860,
+      "sha256": "3a9ed38984e6f7421965acedd8560ef92847d7d8848a97047ffe437bd1255ed1"
+    },
+    "crates/uor-r4-core/examples/native_geometric_value_probe/typed_routing.rs": {
+      "bytes": 21002,
+      "sha256": "0edcada25923b2d6745ae481553b8e28a1ea1e4d279b5316f2e6ad184dc24b39"
+    },
+    "crates/uor-r4-core/tests/native_geometric_allocations.rs": {
+      "bytes": 51689,
+      "sha256": "7350d4efbebaa1c267f5042865a84565eacd9df425c741e308a58820f623f215"
+    }
+  },
+  "inputs": [
+    {
+      "path": "independent-source.json",
+      "bytes": 63581,
+      "sha256": "73299b4e7e643ec59f3829cf366195607ae4c4b3315466e5ecc60a6f32e15f63",
+      "scope": "74 construction including42 prior dependent roles;16 open development;16 predeclared changed name/number/order transfers opened after selection. Both intermediate responses generated. No broad language qualification."
+    },
+    {
+      "path": "independent-chain-source.json",
+      "bytes": 63593,
+      "sha256": "273c15577fa686e6d72d1d6dbc51571f25257e5bf2aeeccbccfe214192576dfc",
+      "scope": "74 construction including42 prior dependent roles;16 open development;16 predeclared changed name/number/computation-order transfers opened after selection. Both intermediate responses generated. No broad language qualification."
+    },
+    {
+      "path": "independent-reachable-source.json",
+      "bytes": 63802,
+      "sha256": "ec1c538d7abf0d5860d5ef5f6eeaef5518e236b53b95290610ac812920432245",
+      "scope": "58 reachable construction (42 prior roles +16 named independent);8 reachable OPEN development. Reversed computation-prefix failures are exposed and preserved, not repaired or counted as selector errors. Original16 first-use name/number/order trajectories remain unchanged and may fail before selection. No broad language or first-answer qualification."
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "independent-reachable-angular/model.json",
+      "bytes": 11121600,
+      "sha256": "d0f51044bb2676ba1b5b0f942dbfcac8acc456416f662d1fad81dae34d23dc18",
+      "fit": {
+        "artifact": "blake3:5644594f4bc418b1044e3186f675155c6142beee26966c4fdb89c55ee2dbd33b",
+        "block_bytes": 20961,
+        "config": {
+          "learned_features": 192,
+          "max_seconds": 30,
+          "mode": "angular",
+          "passes": 4,
+          "proposals": 12,
+          "seed": 1139
+        },
+        "construction_ms": 143,
+        "dictionary_words": 27,
+        "effective_query_classes": 11,
+        "feature_universe": 205,
+        "features": 192,
+        "fit": {
+          "accepted": [
+            9,
+            2,
+            4
+          ],
+          "final_correct": 40,
+          "final_hinge": 36,
+          "initial_correct": 6,
+          "initial_hinge": 168,
+          "proposals": 21917,
+          "stopped_at_time_limit": false
+        },
+        "frames": 58,
+        "incompatible_feature_classes": 0,
+        "parent": "blake3:bb79456b2dd7187005a3501d437fdc17215429bd4fff0671c31a44583d2918c7",
+        "scope": "Joint typed operator/operand labels over actual generated intermediates; source values and numeric query words are not encoded as geometric scoring features. Construction fit is not generated transfer."
+      },
+      "initialization_artifact": null
+    },
+    {
+      "path": "independent-complete-angular/model.json",
+      "bytes": 11122303,
+      "sha256": "c47bedbefdc7145c6caadbccd8724bbdf2f99955117e74316f1aeb21133f7e8e",
+      "fit": {
+        "artifact": "blake3:4413d0da7e9b3e244087cbe09f6a42d6990c97ec665159cba0c92cc8f4523c75",
+        "block_bytes": 21664,
+        "config": {
+          "learned_features": 256,
+          "max_seconds": 30,
+          "mode": "angular",
+          "passes": 4,
+          "proposals": 12,
+          "seed": 1139
+        },
+        "construction_ms": 144,
+        "dictionary_words": 27,
+        "effective_query_classes": 11,
+        "feature_universe": 205,
+        "features": 205,
+        "fit": {
+          "accepted": [
+            8,
+            0,
+            4
+          ],
+          "final_correct": 40,
+          "final_hinge": 36,
+          "initial_correct": 6,
+          "initial_hinge": 168,
+          "proposals": 23159,
+          "stopped_at_time_limit": false
+        },
+        "frames": 58,
+        "incompatible_feature_classes": 0,
+        "parent": "blake3:bb79456b2dd7187005a3501d437fdc17215429bd4fff0671c31a44583d2918c7",
+        "scope": "Joint typed operator/operand labels over actual generated intermediates; source values and numeric query words are not encoded as geometric scoring features. Construction fit is not generated transfer."
+      },
+      "initialization_artifact": null
+    },
+    {
+      "path": "independent-warm-angular/model.json",
+      "bytes": 11122397,
+      "sha256": "9b999dbb74fdb1234b1405d6d6bde52c6058f22592ec122129fb95daeb0096ac",
+      "fit": {
+        "artifact": "blake3:af337c28ade71ae4ef01a888c8f3ddb9b240096ff2155d79d37de0773d6ece1a",
+        "block_bytes": 21758,
+        "config": {
+          "learned_features": 256,
+          "max_seconds": 30,
+          "mode": "angular",
+          "passes": 4,
+          "proposals": 12,
+          "seed": 1139
+        },
+        "construction_ms": 147,
+        "dictionary_words": 27,
+        "effective_query_classes": 11,
+        "feature_universe": 205,
+        "features": 205,
+        "fit": {
+          "accepted": [
+            5,
+            0,
+            2
+          ],
+          "final_correct": 58,
+          "final_hinge": 0,
+          "initial_correct": 46,
+          "initial_hinge": 32,
+          "proposals": 23207,
+          "stopped_at_time_limit": false
+        },
+        "frames": 58,
+        "incompatible_feature_classes": 0,
+        "parent": "blake3:bb79456b2dd7187005a3501d437fdc17215429bd4fff0671c31a44583d2918c7",
+        "scope": "Joint typed operator/operand labels over actual generated intermediates; source values and numeric query words are not encoded as geometric scoring features. Construction fit is not generated transfer."
+      },
+      "initialization_artifact": "blake3:43c54db3c7addcca7eaf82e975969968d031fba7ef6ba7b0e0628dc5b9779b76"
+    },
+    {
+      "path": "independent-warm-equality/model.json",
+      "bytes": 11122390,
+      "sha256": "e43bc262fabfdd234b4d02e11c932057bfd6dd61ed6d051da0b1f61001014abf",
+      "fit": {
+        "artifact": "blake3:a60e8a9068a73f93275eb720474f14f213079c8d0b66e063b69e52b3a159c0bf",
+        "block_bytes": 21751,
+        "config": {
+          "learned_features": 256,
+          "max_seconds": 30,
+          "mode": "equality",
+          "passes": 4,
+          "proposals": 12,
+          "seed": 1139
+        },
+        "construction_ms": 156,
+        "dictionary_words": 27,
+        "effective_query_classes": 11,
+        "feature_universe": 205,
+        "features": 205,
+        "fit": {
+          "accepted": [
+            12,
+            0,
+            2
+          ],
+          "final_correct": 58,
+          "final_hinge": 6,
+          "initial_correct": 10,
+          "initial_hinge": 82,
+          "proposals": 23231,
+          "stopped_at_time_limit": false
+        },
+        "frames": 58,
+        "incompatible_feature_classes": 0,
+        "parent": "blake3:bb79456b2dd7187005a3501d437fdc17215429bd4fff0671c31a44583d2918c7",
+        "scope": "Joint typed operator/operand labels over actual generated intermediates; source values and numeric query words are not encoded as geometric scoring features. Construction fit is not generated transfer."
+      },
+      "initialization_artifact": "blake3:43c54db3c7addcca7eaf82e975969968d031fba7ef6ba7b0e0628dc5b9779b76"
+    }
+  ],
+  "reports": [
+    {
+      "path": "independent-parent-diagnostic.json",
+      "bytes": 520298,
+      "sha256": "a27d34c3ab123a476b837be4a6b48d1ee3d8299811451a96c1822652e7f86ea9",
+      "summary": {
+        "artifact": "blake3:43c54db3c7addcca7eaf82e975969968d031fba7ef6ba7b0e0628dc5b9779b76",
+        "scope": "OPEN actual three-turn independent generation. No expected intermediate is inserted."
+      }
+    },
+    {
+      "path": "independent-parent-open.json",
+      "bytes": 457903,
+      "sha256": "ddf34eaec58d1b5ac3ccac47e64e2d68a7b25eaac8f64f448be3958b2db99a81",
+      "summary": {
+        "artifact": "blake3:43c54db3c7addcca7eaf82e975969968d031fba7ef6ba7b0e0628dc5b9779b76",
+        "elapsed_ms": 37,
+        "exact": 2,
+        "remove_intermediate_control": false,
+        "total": 16
+      }
+    },
+    {
+      "path": "independent-prior-role-check.json",
+      "bytes": 2111801,
+      "sha256": "f0a79fc27cb4cba9c6e64c16ec5a76bf187774e14ee92bca0c4de7f6d8a13408",
+      "summary": {
+        "artifact": "blake3:5644594f4bc418b1044e3186f675155c6142beee26966c4fdb89c55ee2dbd33b",
+        "elapsed_ms": 137,
+        "exact": 24,
+        "remove_intermediate_control": false,
+        "total": 42
+      }
+    },
+    {
+      "path": "independent-reachable-open.json",
+      "bytes": 456228,
+      "sha256": "b467106badbc964e1bb6c02f8acb20826ab877921617408bf88ab4405c20931f",
+      "summary": {
+        "artifact": "blake3:5644594f4bc418b1044e3186f675155c6142beee26966c4fdb89c55ee2dbd33b",
+        "elapsed_ms": 29,
+        "exact": 8,
+        "remove_intermediate_control": false,
+        "total": 8
+      }
+    },
+    {
+      "path": "independent-complete-construction.json",
+      "bytes": 3023587,
+      "sha256": "c57f2385ea8c60dc24eab213897b3ec997d6a9fd798da6b6f8a0bcad9427ce3f",
+      "summary": {
+        "artifact": "blake3:4413d0da7e9b3e244087cbe09f6a42d6990c97ec665159cba0c92cc8f4523c75",
+        "elapsed_ms": 185,
+        "exact": 40,
+        "remove_intermediate_control": false,
+        "total": 58
+      }
+    },
+    {
+      "path": "independent-complete-open.json",
+      "bytes": 456228,
+      "sha256": "446d9c20e0b6bf1c06ea47525ed3687315ac73ae35123f49e73a2ba165b9a95f",
+      "summary": {
+        "artifact": "blake3:4413d0da7e9b3e244087cbe09f6a42d6990c97ec665159cba0c92cc8f4523c75",
+        "elapsed_ms": 28,
+        "exact": 8,
+        "remove_intermediate_control": false,
+        "total": 8
+      }
+    },
+    {
+      "path": "independent-warm-construction.json",
+      "bytes": 3024126,
+      "sha256": "ea0bf4f5ed5485849f43c38215ab74d11486fb2f331b25818d91e3ef58e5a654",
+      "summary": {
+        "artifact": "blake3:af337c28ade71ae4ef01a888c8f3ddb9b240096ff2155d79d37de0773d6ece1a",
+        "elapsed_ms": 193,
+        "exact": 58,
+        "remove_intermediate_control": false,
+        "total": 58
+      }
+    },
+    {
+      "path": "independent-warm-open.json",
+      "bytes": 456228,
+      "sha256": "88058e03b71ab98630be1a583b6e09869aa27c846873be24fb71aef343e60a36",
+      "summary": {
+        "artifact": "blake3:af337c28ade71ae4ef01a888c8f3ddb9b240096ff2155d79d37de0773d6ece1a",
+        "elapsed_ms": 28,
+        "exact": 8,
+        "remove_intermediate_control": false,
+        "total": 8
+      }
+    },
+    {
+      "path": "independent-transfer.json",
+      "bytes": 685040,
+      "sha256": "f851cfa341c2ee42bc0b1d97e11c529a85334a72283403be82ff354fba9cfc85",
+      "summary": {
+        "artifact": "blake3:af337c28ade71ae4ef01a888c8f3ddb9b240096ff2155d79d37de0773d6ece1a",
+        "elapsed_ms": 51,
+        "exact": 12,
+        "remove_intermediate_control": false,
+        "total": 16
+      }
+    },
+    {
+      "path": "independent-remove.json",
+      "bytes": 416293,
+      "sha256": "40aa0de4a1a45a3cbf083158eb94fbc0a295fc3e352c079ae1171a51f7481cd4",
+      "summary": {
+        "artifact": "blake3:af337c28ade71ae4ef01a888c8f3ddb9b240096ff2155d79d37de0773d6ece1a",
+        "elapsed_ms": 30,
+        "exact": 0,
+        "remove_intermediate_control": true,
+        "total": 8
+      }
+    },
+    {
+      "path": "independent-equality-open.json",
+      "bytes": 456228,
+      "sha256": "f2298bc26992d532eae751f5f746508b4fa1cb2eb7758afca390f800f19a5319",
+      "summary": {
+        "artifact": "blake3:a60e8a9068a73f93275eb720474f14f213079c8d0b66e063b69e52b3a159c0bf",
+        "elapsed_ms": 30,
+        "exact": 8,
+        "remove_intermediate_control": false,
+        "total": 8
+      }
+    },
+    {
+      "path": "independent-equality-transfer.json",
+      "bytes": 685040,
+      "sha256": "58cea44741870016aeb1e2209f6653157243a28c542a45f02cbde747fd624605",
+      "summary": {
+        "artifact": "blake3:a60e8a9068a73f93275eb720474f14f213079c8d0b66e063b69e52b3a159c0bf",
+        "elapsed_ms": 50,
+        "exact": 12,
+        "remove_intermediate_control": false,
+        "total": 16
+      }
+    },
+    {
+      "path": "independent-parent-transfer.json",
+      "bytes": 685011,
+      "sha256": "a84d49ff45059089fa5ed346b86a9639c2825df4321dd9fae39007688022f911",
+      "summary": {
+        "artifact": "blake3:43c54db3c7addcca7eaf82e975969968d031fba7ef6ba7b0e0628dc5b9779b76",
+        "elapsed_ms": 50,
+        "exact": 3,
+        "remove_intermediate_control": false,
+        "total": 16
+      }
+    },
+    {
+      "path": "independent-prior-transfer.json",
+      "bytes": 688782,
+      "sha256": "72ffbced6a9e0eee62c9f616ec73c895d8899e949d9197c06c4034da60893ad3",
+      "summary": {
+        "artifact": "blake3:af337c28ade71ae4ef01a888c8f3ddb9b240096ff2155d79d37de0773d6ece1a",
+        "elapsed_ms": 52,
+        "exact": 12,
+        "remove_intermediate_control": false,
+        "total": 12
+      }
+    },
+    {
+      "path": "independent-prior-exposed.json",
+      "bytes": 688938,
+      "sha256": "fbbac11dd776642c05e4f3e44255236241c6bbe6442f245328393a10b3e89839",
+      "summary": {
+        "artifact": "blake3:af337c28ade71ae4ef01a888c8f3ddb9b240096ff2155d79d37de0773d6ece1a",
+        "elapsed_ms": 53,
+        "exact": 12,
+        "remove_intermediate_control": false,
+        "total": 12
+      }
+    },
+    {
+      "path": "independent-prior-alias.json",
+      "bytes": 688743,
+      "sha256": "fba5be79f2115ebb143d5a2f07266932fd432a9fab2b07d8ef59f2023f095edd",
+      "summary": {
+        "artifact": "blake3:af337c28ade71ae4ef01a888c8f3ddb9b240096ff2155d79d37de0773d6ece1a",
+        "elapsed_ms": 52,
+        "exact": 12,
+        "remove_intermediate_control": false,
+        "total": 12
+      }
+    },
+    {
+      "path": "independent-numeric-preservation.json",
+      "bytes": 272263,
+      "sha256": "9d2cc363460a90015bd2c5ed4437ccf52e542896f2e1602eecfa4aec92f91926",
+      "summary": {
+        "artifact": "blake3:af337c28ade71ae4ef01a888c8f3ddb9b240096ff2155d79d37de0773d6ece1a",
+        "elapsed_ms": 14,
+        "exact": 6,
+        "remove_intermediate_control": false,
+        "total": 6
+      }
+    },
+    {
+      "path": "independent-relation-preservation.json",
+      "bytes": 1453176,
+      "sha256": "a96dbe3c83894086bcadeea8d3f6ddf1f4f9c12ac1968f775c9b87b8a9f32537",
+      "summary": {
+        "artifact": "blake3:af337c28ade71ae4ef01a888c8f3ddb9b240096ff2155d79d37de0773d6ece1a",
+        "elapsed_ms": 79,
+        "exact": 28,
+        "schema": "uor-r4.relation-evaluation/1",
+        "scope": "Actual assembled learned write/read and ordinary native generation. A second source ingestion/checkpoint restore supplies eviction and state evidence; its cost is in total elapsed/parent monitor, outside generation subtotals. No semantic labels enter serving.",
+        "split": "first_use",
+        "total": 28,
+        "writes_exact": 28
+      }
+    },
+    {
+      "path": "independent-preservation/sessions.json",
+      "bytes": 37117,
+      "sha256": "af3d7ef54235f9b85ed8c56765104074bf0d242f8045d230bbd4e4c231adc321",
+      "summary": {
+        "artifact": "blake3:af337c28ade71ae4ef01a888c8f3ddb9b240096ff2155d79d37de0773d6ece1a",
+        "exact_turns": 5,
+        "isolated_no_shared_records": true,
+        "isolated_response": " Unknown.\n",
+        "preserved_versions": 4,
+        "restore_and_forged_commit_checks": "PASS",
+        "schema": "uor-r4.relation-session-check/1",
+        "scope": "One native session reads, revises, retains an unrelated association, records a contradiction, and re-reads the unrelated association after repeated raw-window eviction. Restore is checked after actual first-token commitment; a new session has no shared relation state. Snapshot consistency is not source authentication.",
+        "total_turns": 5
+      }
+    },
+    {
+      "path": "independent-preservation/development.json",
+      "bytes": 2307685,
+      "sha256": "50f087d3deb1df9e4b80d1d9af224a8dda8f868dc5ba732a685e03da6f4f6e45",
+      "summary": {
+        "artifact": "blake3:af337c28ade71ae4ef01a888c8f3ddb9b240096ff2155d79d37de0773d6ece1a",
+        "elapsed_ms": 53,
+        "exact": 48,
+        "total": 48,
+        "writes_exact": 48
+      }
+    },
+    {
+      "path": "independent-preservation/preservation.json",
+      "bytes": 1465162,
+      "sha256": "a4253dff8fa4506407c957dcebb31bf68135b3133bc394405e64b324881a09e4",
+      "summary": {
+        "artifact": "blake3:af337c28ade71ae4ef01a888c8f3ddb9b240096ff2155d79d37de0773d6ece1a",
+        "exact": 62,
+        "total": 62
+      }
+    },
+    {
+      "path": "independent-preservation/prior.json",
+      "bytes": 327959,
+      "sha256": "92bd0340af25d93879478badc49d6a07d186c0b430caae8daa8293313da0b4e9",
+      "summary": {
+        "artifact": "blake3:af337c28ade71ae4ef01a888c8f3ddb9b240096ff2155d79d37de0773d6ece1a",
+        "exact": 24,
+        "total": 24
+      }
+    },
+    {
+      "path": "independent-preservation/exposed-names.json",
+      "bytes": 1362327,
+      "sha256": "9e2e3a014fdae5bfb4bc45553b449ebb36c56592c448fb5c1981c60b6c551440",
+      "summary": {
+        "artifact": "blake3:af337c28ade71ae4ef01a888c8f3ddb9b240096ff2155d79d37de0773d6ece1a",
+        "elapsed_ms": 30,
+        "exact": 28,
+        "total": 28,
+        "writes_exact": 28
+      }
+    }
+  ],
+  "transfer_cases": [
+    {
+      "id": "independent-transfer/0/false/0",
+      "exact": true,
+      "text": "23.\n",
+      "expected": "23.\n",
+      "used_intermediate": true,
+      "decision": {
+        "action": "copy",
+        "value": 23,
+        "operand_ids": [
+          2,
+          2
+        ],
+        "operand_values": [
+          23,
+          23
+        ]
+      }
+    },
+    {
+      "id": "independent-transfer/0/false/1",
+      "exact": true,
+      "text": "15.\n",
+      "expected": "15.\n",
+      "used_intermediate": true,
+      "decision": {
+        "action": "copy",
+        "value": 15,
+        "operand_ids": [
+          5,
+          5
+        ],
+        "operand_values": [
+          15,
+          15
+        ]
+      }
+    },
+    {
+      "id": "independent-transfer/0/false/2",
+      "exact": true,
+      "text": "27.\n",
+      "expected": "27.\n",
+      "used_intermediate": true,
+      "decision": {
+        "action": "add",
+        "value": 27,
+        "operand_ids": [
+          6,
+          2
+        ],
+        "operand_values": [
+          4,
+          23
+        ]
+      }
+    },
+    {
+      "id": "independent-transfer/0/false/3",
+      "exact": true,
+      "text": "19.\n",
+      "expected": "19.\n",
+      "used_intermediate": true,
+      "decision": {
+        "action": "add",
+        "value": 19,
+        "operand_ids": [
+          6,
+          5
+        ],
+        "operand_values": [
+          4,
+          15
+        ]
+      }
+    },
+    {
+      "id": "independent-transfer/0/true/0",
+      "exact": true,
+      "text": "23.\n",
+      "expected": "23.\n",
+      "used_intermediate": true,
+      "decision": {
+        "action": "copy",
+        "value": 23,
+        "operand_ids": [
+          5,
+          5
+        ],
+        "operand_values": [
+          23,
+          23
+        ]
+      }
+    },
+    {
+      "id": "independent-transfer/0/true/1",
+      "exact": true,
+      "text": "15.\n",
+      "expected": "15.\n",
+      "used_intermediate": true,
+      "decision": {
+        "action": "copy",
+        "value": 15,
+        "operand_ids": [
+          2,
+          2
+        ],
+        "operand_values": [
+          15,
+          15
+        ]
+      }
+    },
+    {
+      "id": "independent-transfer/0/true/2",
+      "exact": true,
+      "text": "27.\n",
+      "expected": "27.\n",
+      "used_intermediate": true,
+      "decision": {
+        "action": "add",
+        "value": 27,
+        "operand_ids": [
+          6,
+          5
+        ],
+        "operand_values": [
+          4,
+          23
+        ]
+      }
+    },
+    {
+      "id": "independent-transfer/0/true/3",
+      "exact": true,
+      "text": "19.\n",
+      "expected": "19.\n",
+      "used_intermediate": true,
+      "decision": {
+        "action": "add",
+        "value": 19,
+        "operand_ids": [
+          6,
+          2
+        ],
+        "operand_values": [
+          4,
+          15
+        ]
+      }
+    },
+    {
+      "id": "independent-transfer/1/false/0",
+      "exact": true,
+      "text": "10.\n",
+      "expected": "10.\n",
+      "used_intermediate": true,
+      "decision": {
+        "action": "copy",
+        "value": 10,
+        "operand_ids": [
+          2,
+          2
+        ],
+        "operand_values": [
+          10,
+          10
+        ]
+      }
+    },
+    {
+      "id": "independent-transfer/1/false/1",
+      "exact": true,
+      "text": "7.\n",
+      "expected": "7.\n",
+      "used_intermediate": true,
+      "decision": {
+        "action": "copy",
+        "value": 7,
+        "operand_ids": [
+          5,
+          5
+        ],
+        "operand_values": [
+          7,
+          7
+        ]
+      }
+    },
+    {
+      "id": "independent-transfer/1/false/2",
+      "exact": true,
+      "text": "13.\n",
+      "expected": "13.\n",
+      "used_intermediate": true,
+      "decision": {
+        "action": "add",
+        "value": 13,
+        "operand_ids": [
+          6,
+          2
+        ],
+        "operand_values": [
+          3,
+          10
+        ]
+      }
+    },
+    {
+      "id": "independent-transfer/1/false/3",
+      "exact": true,
+      "text": "10.\n",
+      "expected": "10.\n",
+      "used_intermediate": true,
+      "decision": {
+        "action": "add",
+        "value": 10,
+        "operand_ids": [
+          6,
+          5
+        ],
+        "operand_values": [
+          3,
+          7
+        ]
+      }
+    },
+    {
+      "id": "independent-transfer/1/true/0",
+      "exact": false,
+      "used_intermediate": false,
+      "initial_generation_failed": "initial generated response failed: independent-transfer/1/true/0:  Unknown.\n",
+      "decision": null
+    },
+    {
+      "id": "independent-transfer/1/true/1",
+      "exact": false,
+      "used_intermediate": false,
+      "initial_generation_failed": "initial generated response failed: independent-transfer/1/true/1:  Unknown.\n",
+      "decision": null
+    },
+    {
+      "id": "independent-transfer/1/true/2",
+      "exact": false,
+      "used_intermediate": false,
+      "initial_generation_failed": "initial generated response failed: independent-transfer/1/true/2:  Unknown.\n",
+      "decision": null
+    },
+    {
+      "id": "independent-transfer/1/true/3",
+      "exact": false,
+      "used_intermediate": false,
+      "initial_generation_failed": "initial generated response failed: independent-transfer/1/true/3:  Unknown.\n",
+      "decision": null
+    }
+  ],
+  "successful_transfer_complete_work": {
+    "anchor_table_reads": 2112,
+    "candidate_evaluations": 25175,
+    "candidate_offers": 66300,
+    "completion": {
+      "anchors": 36,
+      "base_steps": 0,
+      "candidate_comparisons": 9737,
+      "candidate_drops": 0,
+      "candidate_evaluations": 648,
+      "candidate_writes": 648,
+      "commits": 108,
+      "feature_queries": 1728,
+      "h4_reads": 216,
+      "matched_rows": 1715,
+      "metadata_reads": 396,
+      "mismatches": 0,
+      "observations": 1937,
+      "orientation_reads": 108,
+      "phase_subtractions": 864,
+      "posting_offers": 3862,
+      "row_comparisons": 15552,
+      "score_comparisons": 19284,
+      "score_lookups": 10290,
+      "state_copies": 6279,
+      "step_limits": 0,
+      "stops": 36
+    },
+    "evictions": 0,
+    "feature_queries": 4550,
+    "h4_table_reads": 1937,
+    "matched_rows": 4014,
+    "memory_candidates": 13350,
+    "memory_composed_candidates": 7955,
+    "memory_composition_comparisons": 1864441,
+    "memory_composition_duplicate_features": 68530,
+    "memory_composition_feature_moves": 316329,
+    "memory_composition_feature_offers": 240300,
+    "memory_cue_reads": 30028,
+    "memory_h4_reads": 95387,
+    "memory_index_reads": 45284,
+    "memory_index_writes": 30512,
+    "memory_phase_updates": 335896,
+    "memory_score_lookups": 171770,
+    "memory_stale_rejections": 0,
+    "mixture_gate_reads": 175,
+    "observed_tokens": 1937,
+    "orientation_table_reads": 175,
+    "phase_additions": 15496,
+    "radial_square_reads": 23244,
+    "response_entry": {
+      "anchors": 36,
+      "base_steps": 0,
+      "candidate_comparisons": 0,
+      "candidate_drops": 0,
+      "candidate_evaluations": 0,
+      "candidate_writes": 0,
+      "commits": 0,
+      "feature_queries": 0,
+      "h4_reads": 0,
+      "matched_rows": 0,
+      "metadata_reads": 36,
+      "mismatches": 0,
+      "observations": 1937,
+      "orientation_reads": 0,
+      "phase_subtractions": 0,
+      "posting_offers": 0,
+      "row_comparisons": 0,
+      "score_comparisons": 0,
+      "score_lookups": 0,
+      "state_copies": 6207,
+      "step_limits": 0,
+      "stops": 0
+    },
+    "score_lookups": 588921,
+    "values": {
+      "additions": 30,
+      "cue_comparisons": 3072,
+      "derived_writes": 36,
+      "emission_commits": 67,
+      "emission_mismatches": 0,
+      "feature_comparisons": 37440,
+      "feature_lookups": 2880,
+      "h4_reads": 24053,
+      "input_bytes": 3334,
+      "lexical_byte_comparisons": 7836,
+      "lexical_comparisons": 8928,
+      "lexical_writes": 636,
+      "literal_writes": 54,
+      "numeral_steps": 13680,
+      "operator_executions": 36,
+      "overflow_rejections": 0,
+      "phase_updates": 16264,
+      "proposals": 858,
+      "record_evictions": 0,
+      "relations": {
+        "abstentions": 0,
+        "admission_exact_comparisons": 13062,
+        "admission_fallbacks": 636,
+        "admission_metadata_bytes": 35076,
+        "admission_queries": 636,
+        "admission_signature_writes": 5724,
+        "candidates": 24696,
+        "conflicts": 0,
+        "dictionary_byte_comparisons": 37804,
+        "dictionary_comparisons": 28512,
+        "directory_reads": 0,
+        "directory_writes": 0,
+        "feature_queries": 469224,
+        "feature_writes": 156408,
+        "no_writes": 636,
+        "phase_subtractions": 32928,
+        "reads": 0,
+        "record_evictions": 0,
+        "record_reads": 4752,
+        "record_writes": 0,
+        "revisions": 0,
+        "role_path_comparisons": 144144,
+        "role_path_probes": 24024,
+        "role_path_steps": 4788,
+        "role_phase_additions": 38304,
+        "row_comparisons": 6099912,
+        "score_lookups": 462276,
+        "source_presence_checks": 0,
+        "word_boundaries": 636
+      },
+      "routing": {
+        "code_reads": 52620,
+        "comparisons": 280584,
+        "context_tokens_read": 1248,
+        "emission_queries": 28290,
+        "logical_bytes_read": 5107614,
+        "operator_executions": 0,
+        "payload_gathers": 0,
+        "predictions": 24,
+        "sources_examined": 15642,
+        "table_reads": 114414
+      },
+      "selection_comparisons": 858,
+      "selection_passes": 36
+    },
+    "word_copy": {
+      "bound_rejections": 0,
+      "byte_reads": 0,
+      "dictionary_byte_comparisons": 0,
+      "dictionary_comparisons": 0,
+      "dictionary_lookups": 0,
+      "dispatch_checks": 175,
+      "equality_byte_comparisons": 0,
+      "forced_dispatches": 0,
+      "selector": {
+        "anchors": 0,
+        "base_steps": 0,
+        "candidate_comparisons": 0,
+        "candidate_drops": 0,
+        "candidate_evaluations": 0,
+        "candidate_writes": 0,
+        "commits": 0,
+        "feature_queries": 0,
+        "h4_reads": 0,
+        "matched_rows": 0,
+        "metadata_reads": 0,
+        "mismatches": 0,
+        "observations": 1937,
+        "orientation_reads": 0,
+        "phase_subtractions": 0,
+        "posting_offers": 0,
+        "row_comparisons": 0,
+        "score_comparisons": 0,
+        "score_lookups": 0,
+        "state_copies": 0,
+        "step_limits": 0,
+        "stops": 0
+      },
+      "word_candidates": 0,
+      "word_record_reads": 0
+    }
+  },
+  "successful_transfer_work_cases": 12,
+  "failed_prefix_detailed_work": "UNAVAILABLE in early error return; entire command wall is charged",
+  "open_complete_work": {
+    "anchor_table_reads": 1412,
+    "candidate_evaluations": 15965,
+    "candidate_offers": 43565,
+    "completion": {
+      "anchors": 24,
+      "base_steps": 0,
+      "candidate_comparisons": 6503,
+      "candidate_drops": 0,
+      "candidate_evaluations": 432,
+      "candidate_writes": 432,
+      "commits": 72,
+      "feature_queries": 1152,
+      "h4_reads": 144,
+      "matched_rows": 1145,
+      "metadata_reads": 264,
+      "mismatches": 0,
+      "observations": 1292,
+      "orientation_reads": 72,
+      "phase_subtractions": 576,
+      "posting_offers": 2578,
+      "row_comparisons": 10368,
+      "score_comparisons": 12876,
+      "score_lookups": 6870,
+      "state_copies": 4188,
+      "step_limits": 0,
+      "stops": 24
+    },
+    "evictions": 0,
+    "feature_queries": 3120,
+    "h4_table_reads": 1292,
+    "matched_rows": 2622,
+    "memory_candidates": 9731,
+    "memory_composed_candidates": 5642,
+    "memory_composition_comparisons": 1395070,
+    "memory_composition_duplicate_features": 50011,
+    "memory_composition_feature_moves": 252263,
+    "memory_composition_feature_offers": 175158,
+    "memory_cue_reads": 20448,
+    "memory_h4_reads": 69409,
+    "memory_index_reads": 30624,
+    "memory_index_writes": 20352,
+    "memory_phase_updates": 243880,
+    "memory_score_lookups": 125147,
+    "memory_stale_rejections": 0,
+    "mixture_gate_reads": 120,
+    "observed_tokens": 1292,
+    "orientation_table_reads": 120,
+    "phase_additions": 10336,
+    "radial_square_reads": 15504,
+    "response_entry": {
+      "anchors": 24,
+      "base_steps": 0,
+      "candidate_comparisons": 0,
+      "candidate_drops": 0,
+      "candidate_evaluations": 0,
+      "candidate_writes": 0,
+      "commits": 0,
+      "feature_queries": 0,
+      "h4_reads": 0,
+      "matched_rows": 0,
+      "metadata_reads": 24,
+      "mismatches": 0,
+      "observations": 1292,
+      "orientation_reads": 0,
+      "phase_subtractions": 0,
+      "posting_offers": 0,
+      "row_comparisons": 0,
+      "score_comparisons": 0,
+      "score_lookups": 0,
+      "state_copies": 4140,
+      "step_limits": 0,
+      "stops": 0
+    },
+    "score_lookups": 357571,
+    "values": {
+      "additions": 20,
+      "cue_comparisons": 2048,
+      "derived_writes": 24,
+      "emission_commits": 48,
+      "emission_mismatches": 0,
+      "feature_comparisons": 24960,
+      "feature_lookups": 1920,
+      "h4_reads": 16036,
+      "input_bytes": 2216,
+      "lexical_byte_comparisons": 5368,
+      "lexical_comparisons": 5952,
+      "lexical_writes": 424,
+      "literal_writes": 36,
+      "numeral_steps": 9120,
+      "operator_executions": 24,
+      "overflow_rejections": 0,
+      "phase_updates": 10848,
+      "proposals": 572,
+      "record_evictions": 0,
+      "relations": {
+        "abstentions": 0,
+        "admission_exact_comparisons": 8708,
+        "admission_fallbacks": 424,
+        "admission_metadata_bytes": 23384,
+        "admission_queries": 424,
+        "admission_signature_writes": 3816,
+        "candidates": 16464,
+        "conflicts": 0,
+        "dictionary_byte_comparisons": 25248,
+        "dictionary_comparisons": 19008,
+        "directory_reads": 0,
+        "directory_writes": 0,
+        "feature_queries": 312816,
+        "feature_writes": 104272,
+        "no_writes": 424,
+        "phase_subtractions": 21952,
+        "reads": 0,
+        "record_evictions": 0,
+        "record_reads": 3168,
+        "record_writes": 0,
+        "revisions": 0,
+        "role_path_comparisons": 96096,
+        "role_path_probes": 16016,
+        "role_path_steps": 3192,
+        "role_phase_additions": 25536,
+        "row_comparisons": 4066608,
+        "score_lookups": 308184,
+        "source_presence_checks": 0,
+        "word_boundaries": 424
+      },
+      "routing": {
+        "code_reads": 37864,
+        "comparisons": 199584,
+        "context_tokens_read": 832,
+        "emission_queries": 20252,
+        "logical_bytes_read": 3651748,
+        "operator_executions": 0,
+        "payload_gathers": 0,
+        "predictions": 16,
+        "sources_examined": 10428,
+        "table_reads": 81844
+      },
+      "selection_comparisons": 572,
+      "selection_passes": 24
+    },
+    "word_copy": {
+      "bound_rejections": 0,
+      "byte_reads": 0,
+      "dictionary_byte_comparisons": 0,
+      "dictionary_comparisons": 0,
+      "dictionary_lookups": 0,
+      "dispatch_checks": 120,
+      "equality_byte_comparisons": 0,
+      "forced_dispatches": 0,
+      "selector": {
+        "anchors": 0,
+        "base_steps": 0,
+        "candidate_comparisons": 0,
+        "candidate_drops": 0,
+        "candidate_evaluations": 0,
+        "candidate_writes": 0,
+        "commits": 0,
+        "feature_queries": 0,
+        "h4_reads": 0,
+        "matched_rows": 0,
+        "metadata_reads": 0,
+        "mismatches": 0,
+        "observations": 1292,
+        "orientation_reads": 0,
+        "phase_subtractions": 0,
+        "posting_offers": 0,
+        "row_comparisons": 0,
+        "score_comparisons": 0,
+        "score_lookups": 0,
+        "state_copies": 0,
+        "step_limits": 0,
+        "stops": 0
+      },
+      "word_candidates": 0,
+      "word_record_reads": 0
+    }
+  },
+  "equality_transfer_complete_work": {
+    "anchor_table_reads": 2112,
+    "candidate_evaluations": 25175,
+    "candidate_offers": 66300,
+    "completion": {
+      "anchors": 36,
+      "base_steps": 0,
+      "candidate_comparisons": 9737,
+      "candidate_drops": 0,
+      "candidate_evaluations": 648,
+      "candidate_writes": 648,
+      "commits": 108,
+      "feature_queries": 1728,
+      "h4_reads": 216,
+      "matched_rows": 1715,
+      "metadata_reads": 396,
+      "mismatches": 0,
+      "observations": 1937,
+      "orientation_reads": 108,
+      "phase_subtractions": 864,
+      "posting_offers": 3862,
+      "row_comparisons": 15552,
+      "score_comparisons": 19284,
+      "score_lookups": 10290,
+      "state_copies": 6279,
+      "step_limits": 0,
+      "stops": 36
+    },
+    "evictions": 0,
+    "feature_queries": 4550,
+    "h4_table_reads": 1937,
+    "matched_rows": 4014,
+    "memory_candidates": 13350,
+    "memory_composed_candidates": 7955,
+    "memory_composition_comparisons": 1864441,
+    "memory_composition_duplicate_features": 68530,
+    "memory_composition_feature_moves": 316329,
+    "memory_composition_feature_offers": 240300,
+    "memory_cue_reads": 30028,
+    "memory_h4_reads": 95387,
+    "memory_index_reads": 45284,
+    "memory_index_writes": 30512,
+    "memory_phase_updates": 335896,
+    "memory_score_lookups": 171770,
+    "memory_stale_rejections": 0,
+    "mixture_gate_reads": 175,
+    "observed_tokens": 1937,
+    "orientation_table_reads": 175,
+    "phase_additions": 15496,
+    "radial_square_reads": 23244,
+    "response_entry": {
+      "anchors": 36,
+      "base_steps": 0,
+      "candidate_comparisons": 0,
+      "candidate_drops": 0,
+      "candidate_evaluations": 0,
+      "candidate_writes": 0,
+      "commits": 0,
+      "feature_queries": 0,
+      "h4_reads": 0,
+      "matched_rows": 0,
+      "metadata_reads": 36,
+      "mismatches": 0,
+      "observations": 1937,
+      "orientation_reads": 0,
+      "phase_subtractions": 0,
+      "posting_offers": 0,
+      "row_comparisons": 0,
+      "score_comparisons": 0,
+      "score_lookups": 0,
+      "state_copies": 6207,
+      "step_limits": 0,
+      "stops": 0
+    },
+    "score_lookups": 588921,
+    "values": {
+      "additions": 30,
+      "cue_comparisons": 3072,
+      "derived_writes": 36,
+      "emission_commits": 67,
+      "emission_mismatches": 0,
+      "feature_comparisons": 37440,
+      "feature_lookups": 2880,
+      "h4_reads": 24053,
+      "input_bytes": 3334,
+      "lexical_byte_comparisons": 7836,
+      "lexical_comparisons": 8928,
+      "lexical_writes": 636,
+      "literal_writes": 54,
+      "numeral_steps": 13680,
+      "operator_executions": 36,
+      "overflow_rejections": 0,
+      "phase_updates": 16264,
+      "proposals": 858,
+      "record_evictions": 0,
+      "relations": {
+        "abstentions": 0,
+        "admission_exact_comparisons": 13062,
+        "admission_fallbacks": 636,
+        "admission_metadata_bytes": 35076,
+        "admission_queries": 636,
+        "admission_signature_writes": 5724,
+        "candidates": 24696,
+        "conflicts": 0,
+        "dictionary_byte_comparisons": 37804,
+        "dictionary_comparisons": 28512,
+        "directory_reads": 0,
+        "directory_writes": 0,
+        "feature_queries": 469224,
+        "feature_writes": 156408,
+        "no_writes": 636,
+        "phase_subtractions": 32928,
+        "reads": 0,
+        "record_evictions": 0,
+        "record_reads": 4752,
+        "record_writes": 0,
+        "revisions": 0,
+        "role_path_comparisons": 144144,
+        "role_path_probes": 24024,
+        "role_path_steps": 4788,
+        "role_phase_additions": 38304,
+        "row_comparisons": 6099912,
+        "score_lookups": 462276,
+        "source_presence_checks": 0,
+        "word_boundaries": 636
+      },
+      "routing": {
+        "code_reads": 52620,
+        "comparisons": 281628,
+        "context_tokens_read": 1248,
+        "emission_queries": 28290,
+        "logical_bytes_read": 5105550,
+        "operator_executions": 0,
+        "payload_gathers": 0,
+        "predictions": 24,
+        "sources_examined": 15642,
+        "table_reads": 113382
+      },
+      "selection_comparisons": 858,
+      "selection_passes": 36
+    },
+    "word_copy": {
+      "bound_rejections": 0,
+      "byte_reads": 0,
+      "dictionary_byte_comparisons": 0,
+      "dictionary_comparisons": 0,
+      "dictionary_lookups": 0,
+      "dispatch_checks": 175,
+      "equality_byte_comparisons": 0,
+      "forced_dispatches": 0,
+      "selector": {
+        "anchors": 0,
+        "base_steps": 0,
+        "candidate_comparisons": 0,
+        "candidate_drops": 0,
+        "candidate_evaluations": 0,
+        "candidate_writes": 0,
+        "commits": 0,
+        "feature_queries": 0,
+        "h4_reads": 0,
+        "matched_rows": 0,
+        "metadata_reads": 0,
+        "mismatches": 0,
+        "observations": 1937,
+        "orientation_reads": 0,
+        "phase_subtractions": 0,
+        "posting_offers": 0,
+        "row_comparisons": 0,
+        "score_comparisons": 0,
+        "score_lookups": 0,
+        "state_copies": 0,
+        "step_limits": 0,
+        "stops": 0
+      },
+      "word_candidates": 0,
+      "word_record_reads": 0
+    }
+  },
+  "parent_transfer_complete_work": {
+    "anchor_table_reads": 2114,
+    "candidate_evaluations": 25316,
+    "candidate_offers": 66714,
+    "completion": {
+      "anchors": 36,
+      "base_steps": 0,
+      "candidate_comparisons": 9716,
+      "candidate_drops": 0,
+      "candidate_evaluations": 648,
+      "candidate_writes": 648,
+      "commits": 108,
+      "feature_queries": 1728,
+      "h4_reads": 216,
+      "matched_rows": 1712,
+      "metadata_reads": 396,
+      "mismatches": 0,
+      "observations": 1938,
+      "orientation_reads": 108,
+      "phase_subtractions": 864,
+      "posting_offers": 3856,
+      "row_comparisons": 15552,
+      "score_comparisons": 19248,
+      "score_lookups": 10272,
+      "state_copies": 6282,
+      "step_limits": 0,
+      "stops": 36
+    },
+    "evictions": 0,
+    "feature_queries": 4576,
+    "h4_table_reads": 1938,
+    "matched_rows": 4041,
+    "memory_candidates": 13372,
+    "memory_composed_candidates": 8006,
+    "memory_composition_comparisons": 1866416,
+    "memory_composition_duplicate_features": 67425,
+    "memory_composition_feature_moves": 320764,
+    "memory_composition_feature_offers": 240696,
+    "memory_cue_reads": 30160,
+    "memory_h4_reads": 95542,
+    "memory_index_reads": 45424,
+    "memory_index_writes": 30528,
+    "memory_phase_updates": 336432,
+    "memory_score_lookups": 173271,
+    "memory_stale_rejections": 0,
+    "mixture_gate_reads": 176,
+    "observed_tokens": 1938,
+    "orientation_table_reads": 176,
+    "phase_additions": 15504,
+    "radial_square_reads": 23256,
+    "response_entry": {
+      "anchors": 36,
+      "base_steps": 0,
+      "candidate_comparisons": 0,
+      "candidate_drops": 0,
+      "candidate_evaluations": 0,
+      "candidate_writes": 0,
+      "commits": 0,
+      "feature_queries": 0,
+      "h4_reads": 0,
+      "matched_rows": 0,
+      "metadata_reads": 36,
+      "mismatches": 0,
+      "observations": 1938,
+      "orientation_reads": 0,
+      "phase_subtractions": 0,
+      "posting_offers": 0,
+      "row_comparisons": 0,
+      "score_comparisons": 0,
+      "score_lookups": 0,
+      "state_copies": 6210,
+      "step_limits": 0,
+      "stops": 0
+    },
+    "score_lookups": 592470,
+    "values": {
+      "additions": 36,
+      "cue_comparisons": 3072,
+      "derived_writes": 36,
+      "emission_commits": 68,
+      "emission_mismatches": 0,
+      "feature_comparisons": 37440,
+      "feature_lookups": 2880,
+      "h4_reads": 24054,
+      "input_bytes": 3334,
+      "lexical_byte_comparisons": 6696,
+      "lexical_comparisons": 6144,
+      "lexical_writes": 636,
+      "literal_writes": 54,
+      "numeral_steps": 13680,
+      "operator_executions": 36,
+      "overflow_rejections": 0,
+      "phase_updates": 16272,
+      "proposals": 858,
+      "record_evictions": 0,
+      "relations": {
+        "abstentions": 0,
+        "admission_exact_comparisons": 13062,
+        "admission_fallbacks": 636,
+        "admission_metadata_bytes": 35076,
+        "admission_queries": 636,
+        "admission_signature_writes": 5724,
+        "candidates": 24696,
+        "conflicts": 0,
+        "dictionary_byte_comparisons": 37804,
+        "dictionary_comparisons": 28512,
+        "directory_reads": 0,
+        "directory_writes": 0,
+        "feature_queries": 469224,
+        "feature_writes": 156408,
+        "no_writes": 636,
+        "phase_subtractions": 32928,
+        "reads": 0,
+        "record_evictions": 0,
+        "record_reads": 4752,
+        "record_writes": 0,
+        "revisions": 0,
+        "role_path_comparisons": 144144,
+        "role_path_probes": 24024,
+        "role_path_steps": 4788,
+        "role_phase_additions": 38304,
+        "row_comparisons": 6099912,
+        "score_lookups": 462276,
+        "source_presence_checks": 0,
+        "word_boundaries": 636
+      },
+      "routing": {
+        "code_reads": 25620,
+        "comparisons": 167754,
+        "context_tokens_read": 384,
+        "emission_queries": 17850,
+        "logical_bytes_read": 2875284,
+        "operator_executions": 0,
+        "payload_gathers": 0,
+        "predictions": 24,
+        "sources_examined": 11898,
+        "table_reads": 60414
+      },
+      "selection_comparisons": 858,
+      "selection_passes": 36
+    },
+    "word_copy": {
+      "bound_rejections": 0,
+      "byte_reads": 0,
+      "dictionary_byte_comparisons": 0,
+      "dictionary_comparisons": 0,
+      "dictionary_lookups": 0,
+      "dispatch_checks": 176,
+      "equality_byte_comparisons": 0,
+      "forced_dispatches": 0,
+      "selector": {
+        "anchors": 0,
+        "base_steps": 0,
+        "candidate_comparisons": 0,
+        "candidate_drops": 0,
+        "candidate_evaluations": 0,
+        "candidate_writes": 0,
+        "commits": 0,
+        "feature_queries": 0,
+        "h4_reads": 0,
+        "matched_rows": 0,
+        "metadata_reads": 0,
+        "mismatches": 0,
+        "observations": 1938,
+        "orientation_reads": 0,
+        "phase_subtractions": 0,
+        "posting_offers": 0,
+        "row_comparisons": 0,
+        "score_comparisons": 0,
+        "score_lookups": 0,
+        "state_copies": 0,
+        "step_limits": 0,
+        "stops": 0
+      },
+      "word_candidates": 0,
+      "word_record_reads": 0
+    }
+  },
+  "boundaries": {
+    "actual_integer_kernel": true,
+    "provider_or_teacher_at_serving": false,
+    "new_general_rust_reasoning": "NOT_RUN",
+    "broad_release_qa": "NOT_RUN",
+    "whole_model_transformer_speed_advantage": "NOT_ESTABLISHED",
+    "angular_over_exact_code_advantage_here": "NOT_ESTABLISHED"
+  },
+  "resource": {
+    "projection": {
+      "at": "2026-09-06T21:36:31.844Z",
+      "authority": "typed-admission-allowance-authorization.json",
+      "scope": "Independent computation in retained context, then equal-depth provenance selection if upstream succeeds. Actual generation, targeted native implementation, matched control and preservation.",
+      "before": {
+        "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+        "at": "2026-09-06T21:36:31.844Z",
+        "inherited_precleanup_bytes": 2747199488,
+        "obsolete_target_growth_credit": 671379456,
+        "current_target_bytes": 2484101120,
+        "predecessor_artifact_root_bytes": 145760256,
+        "current_artifact_root_bytes": 1195720704,
+        "predecessor_worktree_bytes": 9875456,
+        "current_worktree_bytes": 8937472,
+        "stopped_successor_worktree_bytes": 460877824,
+        "source_metadata_reserve_bytes": 5242880,
+        "current_sampled_known_storage_bytes": 6386335744,
+        "storage_limit_bytes": 6861881344,
+        "remaining_storage_bytes": 475545600,
+        "stop_margin_bytes": 134217728,
+        "available_growth_before_stop_bytes": 120139776,
+        "model_ledger": {
+          "cumulative_ms": 2316511,
+          "limit_ms": 2370000
+        },
+        "model_remaining_ms": 53489,
+        "model_process_limit": 1,
+        "model_process_rss_target_bytes": 4294967296,
+        "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+      },
+      "model_increment_ms": 360000,
+      "model_cycle_ms": 360000,
+      "model_projection_ms": 240000,
+      "engineering_cycle_ms": 900000,
+      "engineering_projection_ms": 600000,
+      "growth_projection_bytes": 268435456,
+      "storage_increment_bytes": 201326592,
+      "model_processes": 1,
+      "rss_bytes": 4294967296
+    },
+    "final": {
+      "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+      "at": "2026-09-06T22:14:00.278Z",
+      "inherited_precleanup_bytes": 2747199488,
+      "obsolete_target_growth_credit": 671379456,
+      "current_target_bytes": 2486534144,
+      "predecessor_artifact_root_bytes": 145760256,
+      "current_artifact_root_bytes": 1264005120,
+      "predecessor_worktree_bytes": 9875456,
+      "current_worktree_bytes": 8937472,
+      "stopped_successor_worktree_bytes": 460877824,
+      "source_metadata_reserve_bytes": 5242880,
+      "current_sampled_known_storage_bytes": 6457053184,
+      "storage_limit_bytes": 7063207936,
+      "remaining_storage_bytes": 606154752,
+      "stop_margin_bytes": 134217728,
+      "available_growth_before_stop_bytes": 250748928,
+      "model_ledger": {
+        "cumulative_ms": 2604356,
+        "limit_ms": 2730000
+      },
+      "model_remaining_ms": 125644,
+      "model_process_limit": 1,
+      "model_process_rss_target_bytes": 4294967296,
+      "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+    },
+    "model_cycle_ms": 287845,
+    "engineering_cycle_ms": 842999,
+    "peak_sampled_known_bytes": 6484525056,
+    "peak_model_child_rss_bytes": 881786880,
+    "deletions": [],
+    "external_model_compute": false
+  },
+  "commands": [
+    {
+      "label": "independent-parent-diagnostic",
+      "started": "2026-09-06T21:40:22.280Z",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "typed-routing",
+        "independent",
+        "typed-roles-query-angular/model.json",
+        "independent-parent-diagnostic.json"
+      ],
+      "elapsed_ms": 6490,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "independent-source",
+      "started": "2026-09-06T21:45:54.747Z",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "typed-routing",
+        "independent-source",
+        "typed-roles-query-source.json",
+        "independent-source.json"
+      ],
+      "elapsed_ms": 211,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "independent-parent-open",
+      "started": "2026-09-06T21:46:11.913Z",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "typed-routing",
+        "evaluate",
+        "typed-roles-query-angular/model.json",
+        "independent-source.json",
+        "development",
+        "independent-parent-open.json",
+        "full"
+      ],
+      "elapsed_ms": 6474,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "independent-fit-angular",
+      "started": "2026-09-06T21:46:18.555Z",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "typed-routing",
+        "roles-fit-provenance",
+        "typed-routing-case-angular/model.json",
+        "independent-source.json",
+        "independent-angular",
+        "angular"
+      ],
+      "elapsed_ms": 11447,
+      "code": 1,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "independent-focused-tests",
+      "started": "2026-09-06T21:48:15.092Z",
+      "command": "/tmp/r4-native-geometric-target/debug/deps/uor_r4_core-8d8deefa7a2a5da5",
+      "args": [
+        "native_typed_",
+        "--nocapture"
+      ],
+      "elapsed_ms": 1456,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "independent-chain-source",
+      "started": "2026-09-06T21:48:55.343Z",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "typed-routing",
+        "independent-chain-source",
+        "typed-roles-query-source.json",
+        "independent-chain-source.json"
+      ],
+      "elapsed_ms": 195,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "independent-chain-fit",
+      "started": "2026-09-06T21:48:55.775Z",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "typed-routing",
+        "roles-fit-provenance",
+        "typed-routing-case-angular/model.json",
+        "independent-chain-source.json",
+        "independent-chain-angular",
+        "angular"
+      ],
+      "elapsed_ms": 10983,
+      "code": 1,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "independent-reachable-source",
+      "started": "2026-09-06T21:51:49.472Z",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "typed-routing",
+        "independent-reachable-source",
+        "independent-chain-source.json",
+        "independent-reachable-source.json"
+      ],
+      "elapsed_ms": 228,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "independent-reachable-fit",
+      "started": "2026-09-06T21:51:49.874Z",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "typed-routing",
+        "roles-fit-provenance",
+        "typed-routing-case-angular/model.json",
+        "independent-reachable-source.json",
+        "independent-reachable-angular",
+        "angular"
+      ],
+      "elapsed_ms": 21539,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "independent-reachable-open",
+      "started": "2026-09-06T21:52:11.558Z",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "typed-routing",
+        "evaluate",
+        "independent-reachable-angular/model.json",
+        "independent-reachable-source.json",
+        "development",
+        "independent-reachable-open.json",
+        "full"
+      ],
+      "elapsed_ms": 6295,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "independent-prior-role-check",
+      "started": "2026-09-06T21:53:04.437Z",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "typed-routing",
+        "evaluate",
+        "independent-reachable-angular/model.json",
+        "typed-roles-query-source.json",
+        "fit",
+        "independent-prior-role-check.json",
+        "full"
+      ],
+      "elapsed_ms": 6560,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "independent-complete-fit",
+      "started": "2026-09-06T21:54:10.034Z",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "typed-routing",
+        "roles-fit-provenance",
+        "typed-routing-case-angular/model.json",
+        "independent-reachable-source.json",
+        "independent-complete-angular",
+        "angular"
+      ],
+      "elapsed_ms": 22125,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "independent-complete-construction",
+      "started": "2026-09-06T21:54:32.307Z",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "typed-routing",
+        "evaluate",
+        "independent-complete-angular/model.json",
+        "independent-reachable-source.json",
+        "fit",
+        "independent-complete-construction.json",
+        "full"
+      ],
+      "elapsed_ms": 6373,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "independent-complete-open",
+      "started": "2026-09-06T21:54:38.829Z",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "typed-routing",
+        "evaluate",
+        "independent-complete-angular/model.json",
+        "independent-reachable-source.json",
+        "development",
+        "independent-complete-open.json",
+        "full"
+      ],
+      "elapsed_ms": 6223,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "independent-warm-fit",
+      "started": "2026-09-06T21:58:19.999Z",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "typed-routing",
+        "roles-fit-provenance",
+        "typed-roles-query-angular/model.json",
+        "independent-reachable-source.json",
+        "independent-warm-angular",
+        "angular"
+      ],
+      "elapsed_ms": 30204,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "independent-warm-construction",
+      "started": "2026-09-06T21:58:50.364Z",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "typed-routing",
+        "evaluate",
+        "independent-warm-angular/model.json",
+        "independent-reachable-source.json",
+        "fit",
+        "independent-warm-construction.json",
+        "full"
+      ],
+      "elapsed_ms": 6457,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "independent-warm-open",
+      "started": "2026-09-06T21:58:57.034Z",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "typed-routing",
+        "evaluate",
+        "independent-warm-angular/model.json",
+        "independent-reachable-source.json",
+        "development",
+        "independent-warm-open.json",
+        "full"
+      ],
+      "elapsed_ms": 6308,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "independent-transfer",
+      "started": "2026-09-06T21:59:39.894Z",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "typed-routing",
+        "evaluate",
+        "independent-warm-angular/model.json",
+        "independent-reachable-source.json",
+        "first_use",
+        "independent-transfer.json",
+        "full"
+      ],
+      "elapsed_ms": 6594,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "independent-remove",
+      "started": "2026-09-06T21:59:46.652Z",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "typed-routing",
+        "evaluate",
+        "independent-warm-angular/model.json",
+        "independent-reachable-source.json",
+        "development",
+        "independent-remove.json",
+        "remove-intermediate"
+      ],
+      "elapsed_ms": 6524,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "independent-equality-fit",
+      "started": "2026-09-06T21:59:53.344Z",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "typed-routing",
+        "roles-fit-provenance",
+        "typed-roles-query-angular/model.json",
+        "independent-reachable-source.json",
+        "independent-warm-equality",
+        "equality"
+      ],
+      "elapsed_ms": 30826,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "independent-equality-open",
+      "started": "2026-09-06T22:00:24.345Z",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "typed-routing",
+        "evaluate",
+        "independent-warm-equality/model.json",
+        "independent-reachable-source.json",
+        "development",
+        "independent-equality-open.json",
+        "full"
+      ],
+      "elapsed_ms": 6528,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "independent-prior-transfer",
+      "started": "2026-09-06T22:00:31.044Z",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "typed-routing",
+        "evaluate",
+        "independent-warm-angular/model.json",
+        "typed-roles-query-source.json",
+        "first_use",
+        "independent-prior-transfer.json",
+        "full"
+      ],
+      "elapsed_ms": 6560,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "independent-parent-transfer",
+      "started": "2026-09-06T22:01:24.738Z",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "typed-routing",
+        "evaluate",
+        "typed-roles-query-angular/model.json",
+        "independent-reachable-source.json",
+        "first_use",
+        "independent-parent-transfer.json",
+        "full"
+      ],
+      "elapsed_ms": 6553,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "independent-equality-transfer",
+      "started": "2026-09-06T22:01:31.454Z",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "typed-routing",
+        "evaluate",
+        "independent-warm-equality/model.json",
+        "independent-reachable-source.json",
+        "first_use",
+        "independent-equality-transfer.json",
+        "full"
+      ],
+      "elapsed_ms": 6555,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "independent-preservation",
+      "started": "2026-09-06T22:01:38.172Z",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "writer-binding",
+        "preserve",
+        "independent-warm-angular/model.json",
+        "writer-binding-continuation-source.json",
+        "independent-preservation"
+      ],
+      "elapsed_ms": 6800,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "independent-numeric-preservation",
+      "started": "2026-09-06T22:01:45.134Z",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "typed-routing",
+        "evaluate",
+        "independent-warm-angular/model.json",
+        "typed-routing-case-source.json",
+        "first_use",
+        "independent-numeric-preservation.json",
+        "full"
+      ],
+      "elapsed_ms": 6521,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "independent-relation-preservation",
+      "started": "2026-09-06T22:01:51.816Z",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "evaluate-relations",
+        "independent-warm-angular/model.json",
+        "relation-admission-source.json",
+        "first_use",
+        "independent-relation-preservation.json"
+      ],
+      "elapsed_ms": 6568,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "independent-rust-build",
+      "started": "2026-09-06T22:03:04.165Z",
+      "command": "/Users/casey.allard/.cargo/bin/rustc",
+      "args": [
+        "--edition=2021",
+        "independent-generated.rs",
+        "-o",
+        "independent-generated"
+      ],
+      "elapsed_ms": 156,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "independent-rust-execution",
+      "started": "2026-09-06T22:04:00.258Z",
+      "command": "./independent-generated",
+      "args": [],
+      "elapsed_ms": 157,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "independent-focused-final",
+      "started": "2026-09-06T22:04:00.578Z",
+      "command": "/tmp/r4-native-geometric-target/debug/deps/uor_r4_core-8d8deefa7a2a5da5",
+      "args": [
+        "native_typed_",
+        "--nocapture"
+      ],
+      "elapsed_ms": 1527,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "independent-selected-execution",
+      "started": "2026-09-06T22:04:02.268Z",
+      "command": "/tmp/r4-native-geometric-target/debug/deps/uor_r4_core-8d8deefa7a2a5da5",
+      "args": [
+        "native_value_selected_execution",
+        "--nocapture"
+      ],
+      "elapsed_ms": 981,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "independent-prior-exposed",
+      "started": "2026-09-06T22:04:03.415Z",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "typed-routing",
+        "evaluate",
+        "independent-warm-angular/model.json",
+        "typed-roles-query-source.json",
+        "exposed_first_use",
+        "independent-prior-exposed.json",
+        "full"
+      ],
+      "elapsed_ms": 6555,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "independent-prior-alias",
+      "started": "2026-09-06T22:04:10.133Z",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "typed-routing",
+        "evaluate",
+        "independent-warm-angular/model.json",
+        "typed-roles-query-source.json",
+        "exposed_alias_first_use",
+        "independent-prior-alias.json",
+        "full"
+      ],
+      "elapsed_ms": 6542,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "independent-cli",
+      "started": "2026-09-06T22:07:29.815Z",
+      "command": "/tmp/r4-native-geometric-target/release/r4",
+      "args": [
+        "geometric",
+        "generate",
+        "--model",
+        "independent-warm-angular/model.json",
+        "--prompt",
+        "casket in elvin. elvin in Bremen. Now elvin in Zurich. Question: Where is the location of casket? Answer:",
+        "--max-tokens",
+        "32",
+        "--json"
+      ],
+      "elapsed_ms": 6740,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "independent-allocation",
+      "started": "2026-09-06T22:08:36.690Z",
+      "command": "env",
+      "args": [
+        "R4_INDEPENDENT_MODEL=independent-warm-angular/model.json",
+        "/tmp/r4-native-geometric-target/release/deps/native_geometric_allocations-68a49c874fa101f2",
+        "native_independent_artifact_is_allocation_free",
+        "--exact",
+        "--ignored",
+        "--nocapture"
+      ],
+      "elapsed_ms": 6605,
+      "code": 101,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "independent-allocation-bytes",
+      "started": "2026-09-06T22:10:22.887Z",
+      "command": "env",
+      "args": [
+        "R4_INDEPENDENT_MODEL=independent-warm-angular/model.json",
+        "/tmp/r4-native-geometric-target/release/deps/native_geometric_allocations-68a49c874fa101f2",
+        "native_independent_artifact_is_allocation_free",
+        "--exact",
+        "--ignored",
+        "--nocapture"
+      ],
+      "elapsed_ms": 12620,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "independent-prior-allocation",
+      "started": "2026-09-06T22:10:35.662Z",
+      "command": "env",
+      "args": [
+        "R4_TYPED_ROLES_MODEL=independent-warm-angular/model.json",
+        "/tmp/r4-native-geometric-target/release/deps/native_geometric_allocations-68a49c874fa101f2",
+        "native_typed_role_artifact_is_allocation_free",
+        "--exact",
+        "--ignored",
+        "--nocapture"
+      ],
+      "elapsed_ms": 6356,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "independent-kernel",
+      "started": "2026-09-06T22:10:42.169Z",
+      "command": "/tmp/r4-native-geometric-target/release/deps/native_geometric_allocations-68a49c874fa101f2",
+      "args": [
+        "native_kernel_source_has_no_forbidden_arithmetic_or_float_types",
+        "--exact",
+        "--nocapture"
+      ],
+      "elapsed_ms": 9,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": false
+    },
+    {
+      "label": "independent-probe-build",
+      "started": "2026-09-06T21:36:53.674Z",
+      "command": "env",
+      "args": [
+        "CARGO_TARGET_DIR=/tmp/r4-native-geometric-target",
+        "CARGO_INCREMENTAL=0",
+        "CARGO_BUILD_JOBS=1",
+        "/Users/casey.allard/.cargo/bin/cargo",
+        "build",
+        "--release",
+        "--offline",
+        "-p",
+        "uor-r4-core",
+        "--example",
+        "native_geometric_value_probe"
+      ],
+      "elapsed_ms": 136845,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": true
+    },
+    {
+      "label": "independent-binding-build",
+      "started": "2026-09-06T21:43:09.852Z",
+      "command": "env",
+      "args": [
+        "CARGO_TARGET_DIR=/tmp/r4-native-geometric-target",
+        "CARGO_INCREMENTAL=0",
+        "CARGO_BUILD_JOBS=1",
+        "/Users/casey.allard/.cargo/bin/cargo",
+        "build",
+        "--release",
+        "--offline",
+        "-p",
+        "uor-r4-core",
+        "--example",
+        "native_geometric_value_probe"
+      ],
+      "elapsed_ms": 135674,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": true
+    },
+    {
+      "label": "independent-tests-build",
+      "started": "2026-09-06T21:46:13.020Z",
+      "command": "env",
+      "args": [
+        "CARGO_TARGET_DIR=/tmp/r4-native-geometric-target",
+        "CARGO_INCREMENTAL=0",
+        "CARGO_BUILD_JOBS=1",
+        "CARGO_PROFILE_DEV_DEBUG=0",
+        "CARGO_PROFILE_TEST_DEBUG=0",
+        "/Users/casey.allard/.cargo/bin/cargo",
+        "test",
+        "--offline",
+        "-p",
+        "uor-r4-core",
+        "--lib",
+        "native_typed_",
+        "--config",
+        "profile.test.package.uor-r4-core.opt-level=0",
+        "--no-run"
+      ],
+      "elapsed_ms": 22247,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": true
+    },
+    {
+      "label": "independent-chain-build",
+      "started": "2026-09-06T21:48:07.018Z",
+      "command": "env",
+      "args": [
+        "CARGO_TARGET_DIR=/tmp/r4-native-geometric-target",
+        "CARGO_INCREMENTAL=0",
+        "CARGO_BUILD_JOBS=1",
+        "/Users/casey.allard/.cargo/bin/cargo",
+        "build",
+        "--release",
+        "--offline",
+        "-p",
+        "uor-r4-core",
+        "--example",
+        "native_geometric_value_probe"
+      ],
+      "elapsed_ms": 11967,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": true
+    },
+    {
+      "label": "independent-reachable-build",
+      "started": "2026-09-06T21:51:05.178Z",
+      "command": "env",
+      "args": [
+        "CARGO_TARGET_DIR=/tmp/r4-native-geometric-target",
+        "CARGO_INCREMENTAL=0",
+        "CARGO_BUILD_JOBS=1",
+        "/Users/casey.allard/.cargo/bin/cargo",
+        "build",
+        "--release",
+        "--offline",
+        "-p",
+        "uor-r4-core",
+        "--example",
+        "native_geometric_value_probe"
+      ],
+      "elapsed_ms": 11136,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": true
+    },
+    {
+      "label": "independent-allocation-build",
+      "started": "2026-09-06T21:51:50.570Z",
+      "command": "env",
+      "args": [
+        "CARGO_TARGET_DIR=/tmp/r4-native-geometric-target",
+        "CARGO_INCREMENTAL=0",
+        "CARGO_BUILD_JOBS=1",
+        "/Users/casey.allard/.cargo/bin/cargo",
+        "test",
+        "--release",
+        "--offline",
+        "-p",
+        "uor-r4-core",
+        "--test",
+        "native_geometric_allocations",
+        "--no-run"
+      ],
+      "elapsed_ms": 421,
+      "code": 101,
+      "stopped": null,
+      "engineering_only": true
+    },
+    {
+      "label": "independent-allocation-build-corrected",
+      "started": "2026-09-06T21:52:18.069Z",
+      "command": "env",
+      "args": [
+        "CARGO_TARGET_DIR=/tmp/r4-native-geometric-target",
+        "CARGO_INCREMENTAL=0",
+        "CARGO_BUILD_JOBS=1",
+        "/Users/casey.allard/.cargo/bin/cargo",
+        "test",
+        "--release",
+        "--offline",
+        "-p",
+        "uor-r4-core",
+        "--test",
+        "native_geometric_allocations",
+        "--no-run"
+      ],
+      "elapsed_ms": 5634,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": true
+    },
+    {
+      "label": "independent-complete-features-build",
+      "started": "2026-09-06T21:53:08.920Z",
+      "command": "env",
+      "args": [
+        "CARGO_TARGET_DIR=/tmp/r4-native-geometric-target",
+        "CARGO_INCREMENTAL=0",
+        "CARGO_BUILD_JOBS=1",
+        "/Users/casey.allard/.cargo/bin/cargo",
+        "build",
+        "--release",
+        "--offline",
+        "-p",
+        "uor-r4-core",
+        "--example",
+        "native_geometric_value_probe"
+      ],
+      "elapsed_ms": 11209,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": true
+    },
+    {
+      "label": "independent-continuation-build",
+      "started": "2026-09-06T21:55:41.572Z",
+      "command": "env",
+      "args": [
+        "CARGO_TARGET_DIR=/tmp/r4-native-geometric-target",
+        "CARGO_INCREMENTAL=0",
+        "CARGO_BUILD_JOBS=1",
+        "/Users/casey.allard/.cargo/bin/cargo",
+        "build",
+        "--release",
+        "--offline",
+        "-p",
+        "uor-r4-core",
+        "--example",
+        "native_geometric_value_probe"
+      ],
+      "elapsed_ms": 135467,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": true
+    },
+    {
+      "label": "independent-tests-final-build",
+      "started": "2026-09-06T21:58:21.098Z",
+      "command": "env",
+      "args": [
+        "CARGO_TARGET_DIR=/tmp/r4-native-geometric-target",
+        "CARGO_INCREMENTAL=0",
+        "CARGO_BUILD_JOBS=1",
+        "CARGO_PROFILE_DEV_DEBUG=0",
+        "CARGO_PROFILE_TEST_DEBUG=0",
+        "/Users/casey.allard/.cargo/bin/cargo",
+        "test",
+        "--offline",
+        "-p",
+        "uor-r4-core",
+        "--lib",
+        "native_typed_",
+        "--config",
+        "profile.test.package.uor-r4-core.opt-level=0",
+        "--no-run"
+      ],
+      "elapsed_ms": 21381,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": true
+    },
+    {
+      "label": "independent-final-surface-build",
+      "started": "2026-09-06T21:59:40.997Z",
+      "command": "env",
+      "args": [
+        "CARGO_TARGET_DIR=/tmp/r4-native-geometric-target",
+        "CARGO_INCREMENTAL=0",
+        "CARGO_BUILD_JOBS=1",
+        "/Users/casey.allard/.cargo/bin/cargo",
+        "build",
+        "--release",
+        "--offline",
+        "-p",
+        "uor-r4-core",
+        "--example",
+        "native_geometric_value_probe",
+        "-p",
+        "uor-r4-wasm-router",
+        "--bin",
+        "r4"
+      ],
+      "elapsed_ms": 334560,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": true
+    },
+    {
+      "label": "independent-final-allocation-build",
+      "started": "2026-09-06T22:07:28.666Z",
+      "command": "env",
+      "args": [
+        "CARGO_TARGET_DIR=/tmp/r4-native-geometric-target",
+        "CARGO_INCREMENTAL=0",
+        "CARGO_BUILD_JOBS=1",
+        "/Users/casey.allard/.cargo/bin/cargo",
+        "test",
+        "--release",
+        "--offline",
+        "-p",
+        "uor-r4-core",
+        "-p",
+        "uor-r4-wasm-router",
+        "--test",
+        "native_geometric_allocations",
+        "--no-run"
+      ],
+      "elapsed_ms": 6081,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": true
+    },
+    {
+      "label": "independent-fmt",
+      "started": "2026-09-06T22:08:37.836Z",
+      "command": "/Users/casey.allard/.cargo/bin/cargo",
+      "args": [
+        "fmt",
+        "--all",
+        "--check"
+      ],
+      "elapsed_ms": 3398,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": true
+    },
+    {
+      "label": "independent-policy",
+      "started": "2026-09-06T22:08:41.389Z",
+      "command": "/tmp/r4-native-geometric-target/release/r4-policy-check",
+      "args": [
+        "."
+      ],
+      "elapsed_ms": 66,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": true
+    },
+    {
+      "label": "independent-claims",
+      "started": "2026-09-06T22:08:41.603Z",
+      "command": "python3",
+      "args": [
+        "scripts/check_claim_wording.py"
+      ],
+      "elapsed_ms": 226,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": true
+    },
+    {
+      "label": "independent-allocation-byte-contract-build",
+      "started": "2026-09-06T22:09:33.664Z",
+      "command": "env",
+      "args": [
+        "CARGO_TARGET_DIR=/tmp/r4-native-geometric-target",
+        "CARGO_INCREMENTAL=0",
+        "CARGO_BUILD_JOBS=1",
+        "/Users/casey.allard/.cargo/bin/cargo",
+        "test",
+        "--release",
+        "--offline",
+        "-p",
+        "uor-r4-core",
+        "-p",
+        "uor-r4-wasm-router",
+        "--test",
+        "native_geometric_allocations",
+        "--no-run"
+      ],
+      "elapsed_ms": 3282,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": true
+    },
+    {
+      "label": "independent-fmt-final",
+      "started": "2026-09-06T22:12:45.976Z",
+      "command": "/Users/casey.allard/.cargo/bin/cargo",
+      "args": [
+        "fmt",
+        "--all",
+        "--check"
+      ],
+      "elapsed_ms": 3236,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": true
+    },
+    {
+      "label": "independent-claims-final",
+      "started": "2026-09-06T22:12:49.366Z",
+      "command": "python3",
+      "args": [
+        "scripts/check_claim_wording.py"
+      ],
+      "elapsed_ms": 169,
+      "code": 0,
+      "stopped": null,
+      "engineering_only": true
+    }
+  ],
+  "retained_negative_logs": [
+    {
+      "path": "independent-fit-angular.stderr.log",
+      "bytes": 82,
+      "sha256": "00e7884685a5256587507748478f6fa634c3e476325972e071685e0872c4a4e3"
+    },
+    {
+      "path": "independent-chain-fit.stderr.log",
+      "bytes": 82,
+      "sha256": "e42b7cde78b1de9f9987417344f8f38c80a883a7c7ddc8508709e6acccd475ae"
+    },
+    {
+      "path": "independent-allocation-build.log",
+      "bytes": 848,
+      "sha256": "6ce5f2a49c0122407f90f63c1b43ab6e836e15d6fe086b2123a594b8376f5132"
+    },
+    {
+      "path": "independent-allocation.stderr.log",
+      "bytes": 304,
+      "sha256": "de2d9bd06a087e570fe3eb7a8e567e1cb2a31998f231df3a8729f520ef92a446"
+    }
+  ]
+}

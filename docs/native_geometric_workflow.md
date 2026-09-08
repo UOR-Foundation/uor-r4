@@ -1,5 +1,42 @@
 # Native geometric development workflow
 
+**September 7 direction reconciliation:** the product name is **UOR-R4 Geometric Language Model**. Read the [canonical plan](integration/project-track.md), [current artifact/results](integration/current-state.md), [capability assessment](integration/model-direction-2026-09.md) and [project map](PROJECT_MAP.md) first. This document retains technical and dated experiment/reference material; earlier “active/next” sequences do not supersede those pointers. Native bounded inference and contextual/copy attention exist; general prose, general reasoning and frontier capability remain unqualified. Offline Rust training matmul is allowed; final serving has no matrix products or transformer backbone. No new model result was run for this documentation update.
+
+Follow the [immediate build sequence](integration/project-track.md#immediate-build-sequence)
+for new work and [current-state](integration/current-state.md) for artifact
+selection. The delivered optional path also includes retained-word copying,
+composed prefix-to-copy entry, completion and committed-copy dispatch. Examples
+below are command/API references, not permission to rerun an earlier fit or a
+claim that a later capability handoff has passed.
+The optional [#1137 role reader](native_geometric_role_read_1137.md) now implements
+one learned source/NoRead and entry choice, reused through observed commitment.
+Its Rust preparation/fitting commands and bounded transfer result are in that
+record; ordinary native generation and checkpoint loading execute the artifact.
+The optional [#1138 relation extension](native_geometric_relation_memory_1138.md)
+adds Rust `prepare-relations`, `fit-relations`, `evaluate-relations` and
+`verify-relations` example modes and `Model::fit_relations`. Its versioned exact
+store/read path executes through ordinary generation and snapshots, but its
+version-1 writer-transfer negative remains preserved. The
+[version-2 role-path correction](native_geometric_relation_role_path_1138.md) uses
+`role-relations-source`, `fit-role-relations` and
+`Model::fit_relations_with_role_paths`; its bounded handoff passes. Version 1
+artifacts retain their behavior. Do not rerun frozen fits by default.
+
+Use the [architecture/source audit](integration/architecture-2026-09/README.md)
+for mechanism selection and the [continuation instructions](integration/CONTINUE.md)
+for current execution. The target forbids serving matrix products even if an
+implementation replaces multiply instructions with lookup/add. Offline Rust
+training may use matmul. Preserve signed state, exact occurrence/version identity
+and typed transport; do not substitute a Hopf base observation for its fiber.
+Geometric page selection is allowed. Shared operators are current; later expert
+gates need demonstrated need and a complete laptop-cost comparison.
+
+Before a new fit, refresh cumulative model/storage receipts, cache state and
+checkpoint lineage. Project preparation, compilation, all candidates/controls,
+evaluation, retries, final artifact and temporary storage together. The audit's
+preliminary envelope is not an admission receipt. Reuse existing drivers and
+preservation populations; validate the changed decision through real generation.
+
 The native path is `r4 geometric`. Data preparation, fitting, artifacts,
 evaluation, sessions and generation use Rust. Its initial learner estimates
 conditional score tables over prime lexical identities and geometric context.
@@ -643,3 +680,27 @@ actually ran and their measured effect.
 The current evidence and unresolved model work live in
 [current-state.md](integration/current-state.md). This workflow does not turn a
 successful build, a fitted count table, or a working workbench into alpha.
+
+## Exact NoWrite admission development
+
+The #1139 [admission record](native_geometric_relation_admission_1139.md) describes
+the optional exact shortcut compiler for the learned /2 relation writer. The
+current selected artifact is in
+`.uor-models/native-typed-value-2026-09-05/relation-admission-models/sparse.json`.
+It retains existing prime/H4/zeta writer and reader operators. Its additional
+admission index is sparse; geometric routing superiority is not established.
+
+The existing `native_geometric_value_probe` example accepts:
+
+```text
+prepare-admission-source SOURCE NEW_SOURCE
+compile-admission PARENT SOURCE NEW_DIRECTORY NEW_REPORT
+time-admission PARENT MODEL_DIRECTORY SOURCE NEW_REPORT
+```
+
+Compilation produces geometric, sparse and collapsed-partition artifacts with
+identical exact NoWrite entries and unchanged learned weights. Use the existing
+`evaluate-relations` command for actual answer/write checks. The timing command
+uses the prepared longer source after design selection; it is not a training
+step. Read the record and refresh cumulative resources before rerunning any
+preparation, compilation or evaluation.

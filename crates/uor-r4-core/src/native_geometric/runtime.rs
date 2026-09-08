@@ -3,7 +3,10 @@
 //! external model calls occur in observe/predict. Buffers are allocated once
 //! when a session is created; candidate work is bounded by artifact postings.
 
-use super::{Candidate, Control, Error, Feature, Model, Prediction, Result, Work, PHASE_CHANNELS};
+use super::{
+    Candidate, Control, Error, Feature, Model, Prediction, Result, WordCopyProgress, Work, BOS,
+    PHASE_CHANNELS,
+};
 use serde::{Deserialize, Serialize};
 
 pub(super) const FEATURE_COUNT: usize = 26;
@@ -39,6 +42,7 @@ pub struct StateView {
 
 #[derive(Debug, Clone)]
 pub struct Session {
+    pub(super) routing_decision: Option<super::RoutingDecision>,
     pub(super) word_copy: Option<super::word_copy_types::WordCopyState>,
     pub(super) response_entry: Option<super::response_entry_types::ResponseEntryState>,
     pub(super) completion: Option<super::completion_types::CompletionState>,
@@ -70,6 +74,7 @@ impl Session {
             .capacity()
             .saturating_mul(std::mem::size_of::<Candidate>());
         Self {
+            routing_decision: None,
             word_copy: model
                 .response_entry
                 .as_ref()
@@ -167,6 +172,10 @@ impl Session {
     // NATIVE_GEOMETRIC_INTEGER_KERNEL_BEGIN
     // The source guard covers this region through gate_eighths, plus the
     // Feature methods called here. Keep new kernel helpers in a scanned region.
+    pub fn routing_decision(&self) -> Option<super::RoutingDecision> {
+        self.routing_decision
+    }
+
     /// Most recently predicted response action. This is transient; only an
     /// observation can commit the selected occurrence to response state.
     pub fn response_decision(&self) -> Option<super::ResponseDecision> {
@@ -208,9 +217,13 @@ impl Session {
         }
         if let Some(state) = &mut self.values {
             state.begin(&mut self.work.values);
+            state.observe_relation(model, &mut self.work.values);
+            if let Some(relations) = &mut state.relations {
+                relations.finish_span(&mut self.work.values);
+            }
         }
         if let (Some(entry), Some(values)) = (&mut self.response_entry, &self.values) {
-            entry.begin(values, self.control, &mut self.work.response_entry);
+            entry.begin(model, values, self.control, &mut self.work.response_entry);
         }
         if self.control != Control::MemoryDisabled && self.control != Control::ResponseStateDisabled
         {
@@ -237,6 +250,14 @@ impl Session {
         }
         if let Some(state) = &mut self.memory {
             state.end_response();
+        }
+        Ok(())
+    }
+
+    pub fn refresh_value_sources(&mut self, model: &Model) -> Result<()> {
+        self.check_model(model)?;
+        if let Some(state) = &mut self.values {
+            state.refresh_sources(&mut self.work.values);
         }
         Ok(())
     }
@@ -439,6 +460,9 @@ impl Session {
         for (value, &gate) in groups.into_iter().zip(gates) {
             score += gate_eighths(value, gate);
         }
+        if let (Some(block), Some(decision)) = (&model.learned_routing, self.routing_decision) {
+            score += block.score(model, decision, token, &mut self.work.learned_routing);
+        }
         self.work.candidate_evaluations = self.work.candidate_evaluations.saturating_add(1);
         Candidate { token, score }
     }
@@ -467,6 +491,84 @@ impl Session {
     /// evaluation. The model never scans the vocabulary or retained prefix.
     pub fn predict(&mut self, model: &Model) -> Result<Prediction> {
         self.check_model(model)?;
+        self.routing_decision = None;
+        self.work.word_copy.dispatch_checks = self
+            .work
+            .word_copy
+            .dispatch_checks
+            .saturating_add(u64::from(super::word_copy_runtime::composed(model)));
+        if super::word_copy_runtime::composed(model)
+            && self.control != Control::WordCopyDispatchDisabled
+            && self
+                .word_copy
+                .as_ref()
+                .is_some_and(|c| matches!(c.progress, WordCopyProgress::Emitting { .. }))
+        {
+            if let (Some(copy), Some(entry), Some(values)) =
+                (&mut self.word_copy, &mut self.response_entry, &self.values)
+            {
+                // /4 has no causal response writer. No ordinary collection or
+                // scoring is required for an immutable committed byte. Score1
+                // is a dispatch marker, not a comparable model likelihood.
+                entry.pending = None;
+                if let Some(best) = copy.offer(
+                    model,
+                    entry,
+                    values,
+                    Candidate {
+                        token: BOS,
+                        score: 0,
+                    },
+                    None,
+                    self.control,
+                    &mut self.work.word_copy,
+                ) {
+                    self.candidates.clear();
+                    if let Some(memory) = &mut self.memory {
+                        memory.select_response(model, best, &mut self.work);
+                    }
+                    if let Some(values) = &mut self.values {
+                        values.selected(best);
+                    }
+                    if let Some(completion) = &mut self.completion {
+                        completion.selected(best);
+                    }
+                    entry.selected(best);
+                    copy.selected(best);
+                    self.work.word_copy.forced_dispatches =
+                        self.work.word_copy.forced_dispatches.saturating_add(1);
+                    return Ok(Prediction {
+                        token: best.token,
+                        score: best.score,
+                        candidate_count: 1,
+                        geometric_rows: 0,
+                    });
+                }
+            }
+        }
+        if let Some(block) = &model.learned_routing {
+            if !matches!(
+                self.control,
+                Control::LearnedRoutingDisabled | Control::GeometryDisabled
+            ) {
+                let mut context = [BOS; super::learned_routing::WINDOW];
+                let count = self.length.min(context.len());
+                let mut cursor = self.cursor;
+                for token in context.iter_mut().take(count) {
+                    if cursor == 0 {
+                        cursor = self.ring.len();
+                    }
+                    cursor -= 1;
+                    *token = self.ring[cursor];
+                }
+                self.routing_decision = Some(block.route(
+                    model,
+                    &context[..count],
+                    self.control,
+                    &mut self.work.learned_routing,
+                ));
+            }
+        }
         let features = self.features(model);
         let gates = match model
             .readout
@@ -502,6 +604,15 @@ impl Session {
         for &index in rows {
             for &token in &model.rows[index].postings {
                 self.offer(model, token, rows, &gates);
+            }
+        }
+        if let (Some(block), Some(decision)) = (&model.learned_routing, self.routing_decision) {
+            if block.joint.is_none() {
+                for (head, selected) in block.heads.iter().zip(decision.heads) {
+                    for token in &head.emissions[usize::from(selected.output)].postings {
+                        self.offer(model, *token, rows, &gates);
+                    }
+                }
             }
         }
         if self.control != Control::MemoryDisabled {
@@ -620,10 +731,38 @@ impl Session {
                 self.offer_memory(model, candidate);
             }
         }
-        let best = *self
+        let mut best = *self
             .candidates
             .first()
             .ok_or_else(|| Error("artifact offers no output candidates".into()))?;
+        if let (Some(joint), Some(decision)) = (
+            model
+                .learned_routing
+                .as_ref()
+                .and_then(|b| b.joint.as_ref()),
+            self.routing_decision,
+        ) {
+            // The joint decision sees the actual assembled parent winner,
+            // including typed/copy/entry/EOS competition. It does not alter the
+            // frozen parent parameters or unconditionally force an entry token.
+            let flags = self.recurrent_flags();
+            let keys = super::recurrent_routing::features(
+                model,
+                decision,
+                best.token,
+                flags,
+                &mut self.work.learned_routing,
+            );
+            let (action, score, base_score) =
+                joint.choose(keys, best.token, &mut self.work.learned_routing);
+            if action != BOS {
+                best = Candidate {
+                    token: action,
+                    score: best.score + score - base_score,
+                };
+                self.offer_memory(model, best);
+            }
+        }
         if let Some(state) = &mut self.memory {
             state.select_response(model, best, &mut self.work);
         }
@@ -645,6 +784,33 @@ impl Session {
             candidate_count: self.candidates.len(),
             geometric_rows,
         })
+    }
+
+    pub(super) fn recurrent_flags(&self) -> u32 {
+        u32::from(
+            self.response_entry
+                .as_ref()
+                .is_some_and(|s| s.boundary.is_some()),
+        ) | (u32::from(self.response_entry.as_ref().is_some_and(|s| s.active)) << 1)
+            | (u32::from(
+                self.word_copy
+                    .as_ref()
+                    .is_some_and(|s| matches!(s.progress, WordCopyProgress::Complete)),
+            ) << 2)
+    }
+
+    pub(super) fn recurrent_context(&self) -> ([u32; super::learned_routing::WINDOW], usize) {
+        let mut context = [BOS; super::learned_routing::WINDOW];
+        let count = self.length.min(context.len());
+        let mut cursor = self.cursor;
+        for token in context.iter_mut().take(count) {
+            if cursor == 0 {
+                cursor = self.ring.len();
+            }
+            cursor -= 1;
+            *token = self.ring[cursor];
+        }
+        (context, count)
     }
 
     fn offer_memory(&mut self, model: &Model, candidate: Candidate) {

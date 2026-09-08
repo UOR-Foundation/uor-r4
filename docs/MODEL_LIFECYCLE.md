@@ -1,5 +1,7 @@
 # Model lifecycle
 
+**September 7 direction reconciliation:** the product name is **UOR-R4 Geometric Language Model**. Read the [canonical plan](integration/project-track.md), [current artifact/results](integration/current-state.md), [capability assessment](integration/model-direction-2026-09.md) and [project map](PROJECT_MAP.md) first. This document retains technical and dated experiment/reference material; earlier “active/next” sequences do not supersede those pointers. Native bounded inference and contextual/copy attention exist; general prose, general reasoning and frontier capability remain unqualified. Offline Rust training matmul is allowed; final serving has no matrix products or transformer backbone. No new model result was run for this documentation update.
+
 The current model lifecycle is documented in the
 [native geometric workflow](native_geometric_workflow.md): `r4 geometric`
 uses Rust for preparation, training, artifact construction, evaluation and
@@ -11,6 +13,74 @@ Rust training may use matrix operations; the final model executes learned
 geometric operators through bounded state, routing and integer/table lookup.
 Working generation or session persistence does not establish either required
 alpha capability group: conversation/memory and coding/reasoning.
+
+The [source audit](integration/architecture-2026-09/README.md) supplies the current
+architecture and capability/API sequence. Final serving excludes every matrix
+product, including lookup/add implementations; offline Rust training remains
+allowed to use them. Deterministic geometric address/page selection and shared
+typed operators are current, with expert gates only a conditional later option.
+Preserve artifact lineage and exact value/occurrence versions when learning a
+new selector. A source router, numeric NoOperation and source NoRead have distinct
+action domains; an interface must preserve their actual commit semantics.
+
+The optional [source-context continuation](native_geometric_source_context_1139.md)
+binds four predecessor identities per word to the existing source selector.
+`Model::fit_retained_source_context` learns offline; the serving artifact's
+`source_context` witness activates retained-context features and reconstructs
+its exact parent. Candidate support stays at sixteen words. Legacy snapshots
+without predecessor metadata remain readable; available overlapping words and
+source tokens validate new metadata, while evicted bytes remain declared state.
+
+The experimental [source-span extension](native_geometric_source_span_1139.md)
+adds `Model::fit_source_span` and an optional `source_span` component bound to
+its complete parent. It learns a bounded Continue/Finish operator, preserving
+the first-source commitment and exact separators. `SourceSpanDisabled` restores
+single-word execution. The current separator-only fit regresses source boundaries
+and must not replace the active parent. Delimiter and extent snapshot validation
+preserve the same distinction between available byte evidence and declared
+evicted state. The subsequent [context-sensitive fit](native_geometric_span_context_1139.md)
+adds `Model::fit_contextual_source_span` and the optional `source_span_context`
+registry. This construction-only exact prime namespace is independent of the
+fixed parent dictionary; both it and the operator must be removed to restore the
+parent. `SourceSpanContextDisabled` removes identity terms and
+`SourceSpanPairDisabled` removes only the next-word/source-cue pair. The retained
+`419ba3a7` preserves earlier behavior and qualifies the tested extent distinction.
+General phrase boundaries and durable multiword relation storage remain open.
+
+The complete lifecycle must qualify artifact loading, session boundaries,
+contextual access, generation/streaming, memory, errors/limits and capability
+identity on the same native model. Useful prose and reasoning require measured
+outputs. Browser lowering and the GitHub Pages Studio consume that accepted
+artifact after native model/API qualification. The historical compiler and dense
+reference lifecycles below retain their separate scope.
+
+The optional [typed-role selector](native_geometric_typed_roles_1139.md) uses
+`Session::end_response` to mark the start boundary for the next query's metadata.
+Continue to call the explicit begin/end response API around each generated turn;
+a raw concatenated transcript does not supply the same boundary contract.
+Exact retained values and derivations remain available across that boundary.
+Artifacts enabling this behavior require the boundary in restored checkpoints.
+The [operand-provenance continuation](native_geometric_operand_provenance_1139.md)
+propagates bounded lexical matches through exact operand IDs. Its offline
+initializer remaps learned prime-addressed codes by exact word identity when
+expanding the dictionary; the donor CID and new parameters are artifact-bound.
+Serving needs only the resulting artifact. It does not load a donor/provider.
+Accepted `af337c28` retains the earlier literal selector. The optional
+[literal extension](native_geometric_literal_selection_1139.md) enables the same
+role component before a derived value exists, but its fitted candidates fail
+preservation and are not promoted. Literal-only offline frames cannot supply
+a preceding answer. The [protected admission repair](native_geometric_literal_admission_1139.md)
+now adds optional `typed_literals` while preserving its entire accepted parent.
+It restores prior behavior and is retained at bounded numeric/identifier scope;
+answer routing after NoOperation remains incomplete. The subsequent
+[NoRead continuation](native_geometric_no_read_completion_1139.md) adds optional
+`no_read_completion`, bound to its entire unchanged parent and an explicit
+literal-numeric binding-completion schema. It reuses the word-copy prefix
+features and entry scorer only after selected NoRead commits, with literal
+numeric records and no derived record. Relation-only and computed-result states
+retain inherited continuation. It adds no session-state fields or provider.
+Runtime copying and numeric admission are still learned upstream decisions;
+the new table cannot correct an unsupported source chosen for copying.
 
 ## Historical and retained reference lifecycles
 
@@ -107,7 +177,7 @@ Keep their measurements and experiment-specific decisions intact.
 > history.
 
 Substantial offline jobs follow the measured backend/thread/worker selection
-rule in [AGENTS.md](../AGENTS.md#long-run-discipline-process-amendment-2026-08-06):
+rule in [AGENTS.md](https://github.com/UOR-Foundation/uor-r4/blob/bc03f2d7ffde99608da370808eca542360e54508/AGENTS.md#long-run-discipline-process-amendment-2026-08-06):
 benchmark a representative unit across scientifically eligible plans, select
 the fastest stable deterministic configuration, and record the evidence. One
 core and maximum workers are both hypotheses to measure, not defaults. This
@@ -483,7 +553,7 @@ current intelligence sequence, and their successful execution does not imply
 route-native attention or chat.
 
 For a zero-setup path that needs none of this, see the
-[current runnable surfaces](../README.md#what-you-can-run-today) in the README:
+[current runnable surfaces](../README.md#getting-started) in the README:
 the router and dashboard
 run with no model at all, and the Gate C harness runs on committed fixtures.
 

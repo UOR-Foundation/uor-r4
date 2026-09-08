@@ -1,11 +1,33 @@
-# uor-r4-api
+# UOR-R4 Geometric Language Model — library API
 
-**Preserved research API, not the current intelligence façade.** This crate
-wraps the earlier teacher-compiled R4G1 graph stack. It remains useful for
-reproduction and downstream experiments, but the active transformerless local
-AI programme is building a route-native lexical/serialization contract and
-recursive geometric attention before it defines the replacement serving API.
-See the [Geometric Intelligence Programme](../../docs/geometric_intelligence_programme.md).
+See the [project map](../../docs/PROJECT_MAP.md),
+[canonical plan](../../docs/integration/project-track.md),
+[current artifact and measured behavior](../../docs/integration/current-state.md),
+and [model direction](../../docs/integration/model-direction-2026-09.md)
+for repository navigation and the consumer-laptop objective. Native bounded
+attention and inference execute today; general prose completion and general
+reasoning remain unqualified. The model API re-export is in
+[src/lib.rs](src/lib.rs) and uses [the native core](../uor-r4-core/src/native_geometric).
+
+**Current model API (September 2026):** the native geometric re-export exposes the
+same core model/session used by the CLI/service. Follow the
+[current implementation](../../docs/integration/current-state.md) and
+[immediate plan](../../docs/integration/project-track.md#immediate-build-sequence).
+The compiler/engine APIs documented below remain supported scoped components;
+their teacher/reference measurements do not qualify native model behavior.
+
+**Native capability direction:** qualify the existing model/session façade for
+artifact/backend identity, context use, generation/streaming, limits/errors,
+session isolation, persistence and declared capabilities. Attention, prose,
+reasoning and coding are measured model behaviors; naming API methods does not
+implement them. See the [audit's capability map](../../docs/integration/architecture-2026-09/README.md#capabilityapi-sequence-toward-the-studio).
+The same accepted native artifact should later serve the WASM/GitHub Pages Studio.
+Final inference executes no matrix products or transformer backbone; offline
+Rust training may use matmul. This is a direction, not a completed API claim.
+
+**Preserved graph API:** the compiler/graph-engine sections below document the
+earlier teacher-compiled R4G1 stack. They remain useful for reproduction and
+downstream experiments at that separate scope.
 
 Typed library façade over the uor-r4 transformerless graph stack, for
 downstream consumers (e.g. hologram-ai) that embed uor-r4 as a **library**
@@ -123,7 +145,9 @@ cargo check -p uor-r4-api --all-targets --offline
 cargo test -p uor-r4-api --lib --offline
 ```
 
-Protected CI carries the workspace library gate. An ignored end-to-end compile
+Protected PR/merge-queue statuses are compatibility acknowledgements; they do
+not run this library gate. Report actual local or manually dispatched checks.
+An ignored end-to-end compile
 + load test remains available when the change directly targets that lifecycle:
 
 ```sh

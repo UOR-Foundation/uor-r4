@@ -1,12 +1,20 @@
-# Suites
+# UOR-R4 Geometric Language Model — historical conformance suites
 
 **Dormant historical conformance inventory.** These suites preserve the
 earlier R4G1 programme’s contracts and evidence. They are not an automatic
 development gate for the active geometric-intelligence research programme.
-Run a suite only when a live issue names it as the smallest decision-relevant
-check; the full conformance and release ladder returns when the product enters
-release QA. `CONFORMANCE.md` remains generated history and is not edited by
+Use focused checks required by the changed behavior under the
+[canonical plan](../../docs/integration/project-track.md) and current agent
+policy; broader conformance and release checks apply when their boundaries are
+affected. PR/merge-queue statuses are compatibility acknowledgements, not suite
+execution. `CONFORMANCE.md` remains generated history and is not edited by
 hand.
+
+The [project map](../../docs/PROJECT_MAP.md),
+[current-state](../../docs/integration/current-state.md) and
+[model direction](../../docs/integration/model-direction-2026-09.md) distinguish
+accepted native bounded attention/inference from these historical contracts.
+A conformance marker does not establish general prose completion or reasoning.
 
 One Gherkin file per suite, one scenario per conformance ID (R3).
 
@@ -39,6 +47,6 @@ fixtures absent is `UNAVAILABLE`, never a `PASS` (see RF-29 and
 `crates/repo-model/src/empirical.rs`).
 
 The register currently carries the 29 `RF-*` feature-capability suites migrated
-under #273. A new capability still starts with a row in `model/ids.toml`, then a
-scenario here, then a failing marker test — in that order, because the order is
-the discipline (`AGENTS.md`).
+under #273. Within this historical register, new conformance entries start with a row in
+`model/ids.toml`, then a scenario and marker test. That register procedure does
+not impose a new conformance campaign on every native model change.

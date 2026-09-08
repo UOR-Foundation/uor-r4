@@ -1,4 +1,50 @@
-# R⁴ documentation
+# UOR-R4 Geometric Language Model — documentation
+
+## Current documentation entry points — 2026-09-07
+
+UOR-R4 Geometric Language Model develops geometric-only native intelligence in Rust. Offline training may
+use matrix multiplication; the serving target uses learned bounded geometric
+routing, state and integer/table operators, with no serving matrix products.
+Deterministic geometric address/page selection is permitted. Shared typed
+operators are the current priority; expert gates remain a conditional future
+option under the owner's later clarification.
+Neither a hidden dense transformer nor a response provider supplies the model.
+
+The active implementation is
+[crates/uor-r4-core/src/native_geometric](../crates/uor-r4-core/src/native_geometric),
+shared by the native CLI and API. Bounded attention and causal inference are
+implemented and measured at the artifact scopes below. General prose completion,
+general reasoning, frontier capability and the completed native-model Studio
+remain goals.
+
+- [Project map: code, interfaces, research and stored artifacts](PROJECT_MAP.md)
+- [Current model direction and development instructions](integration/model-direction-2026-09.md)
+- [Research storage and imported history](../research/README.md)
+- [Local project knowledge index](../tools/uor-knowledge/README.md)
+- [Capability roadmap and Studio handoffs](../ROADMAP.md#capability-direction)
+- [Complete architecture/source reconciliation](integration/architecture-2026-09/README.md)
+- [Canonical goal and immediate build sequence](integration/project-track.md#immediate-build-sequence)
+- [Current implemented state and remaining failure](integration/current-state.md)
+- [Research direction and reusable mechanisms](native_geometric_direction_review_973.md)
+- [Source-level mechanism map](native_geometric_mechanism_map_973.md)
+- [Native model lifecycle and commands](native_geometric_workflow.md)
+- [Continuation instructions](integration/CONTINUE.md)
+
+**Documentation authority:** the plan owns goals/dependencies; current-state owns
+executed capability. Per-issue measurement records, ADRs, proofs, research archives
+and dated JSON snapshots retain their original scope and must not be read as the
+current global work queue. Historical “current”, “next” and “not authorized”
+wording applies to its recorded experiment. A superseded issue's open obligations
+move through the [consolidation map](integration/project-track.md#consolidated-issue-responsibilities),
+not through an assumption of completion. Source contracts and technical runtime
+invariants remain applicable to their declared component.
+
+## Historical research map
+
+The text below is retained from the earlier reference-model programme. Its V5
+terminal, historical routing permissions/bans, Python-first stage orders
+and unimplemented-native wording retain their original scope. The current
+owner clarification above governs routing choices.
 
 This is the map for understanding the repository without having to reconstruct
 its history first.
@@ -256,7 +302,7 @@ suffix-distillation result and its nonclaim boundary are recorded in the
 observability result and direct-training pivot are recorded in the
 [#1012 record](r4_softmax_trace_observability_1012.md).
 
-## Start here
+## Historical programme entry points
 
 Choose the shortest path that matches what you need:
 
@@ -296,7 +342,7 @@ Choose the shortest path that matches what you need:
 - **Audit a result or claim:** use the [research ledger](RESEARCH.md), then open
   the exact issue-numbered evidence record it names.
 - **Run the existing interface:** return to the root
-  [README](../README.md#try-the-project).
+  [README](../README.md#getting-started).
 
 If an older roadmap disagrees with the R4 Intelligence Completion Plan or live
 GitHub dependency graph, the completion plan and live dependency graph win.
@@ -333,9 +379,10 @@ lowered compiled artifact. Its failure is a separate integration boundary, not
 evidence against the accepted reference or the completed source-free research
 ladder.
 
-## Current authority
+## Historical reference authority
 
-These are the small set of living documents that define the present work:
+The following list records the earlier reference programme authority. The
+canonical plan and current-state links at the top govern present work:
 
 1. [R4 Intelligence Completion Plan](r4_intelligence_completion_plan.md) —
    authoritative post-v0.1 work order and readable mirror of programme root
@@ -405,7 +452,7 @@ does not independently promote a capability. Storage is not attention;
 attention is not inference; readable text is not correctness; correctness is
 not reasoning.
 
-## Programme at a glance
+## Historical programme at a glance
 
 ```text
 reversible lexical geometry
@@ -488,9 +535,11 @@ For exact definitions, use the [formal vocabulary](formal_vocabulary.md).
 
 ## Documentation maintenance
 
-Keep the root README approachable. Put sequencing in the completion plan,
-architecture here under the current programme, and exact measurements in the research ledger and their named
-records. Preserve historical evidence; add a clear superseded or historical
+Keep the root README approachable. Put sequencing in the canonical
+[project plan](integration/project-track.md), current behavior in
+[current-state](integration/current-state.md), navigation in the
+[project map](PROJECT_MAP.md), and exact measurements in the research ledger
+and their named records. Preserve historical evidence; add a clear superseded or historical
 banner when old present-tense language could confuse readers.
 
 Prefer linking to one current authority over copying the same mechanism into

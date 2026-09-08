@@ -1,0 +1,589 @@
+{
+  "schema": "uor-r4.dependent-source-evidence/1",
+  "at": "2026-09-06T15:56:35.335Z",
+  "base": "a730dd6d27d7dab372d2b8010e1406690fcea322",
+  "scope": "Authored OPEN operator/source development; exact owner keys, one dependent read. No sealed or broad natural-language qualification.",
+  "artifact_root": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05",
+  "decision": "RETAIN_ANGULAR_DEPENDENT_READ_REPAIR_WRITER_BINDING",
+  "artifacts": {
+    "comparison": {
+      "path": "dependent-read-comparison/model.json",
+      "artifact": "blake3:54ee94f9530893a18f08893f02ec12929db6019e20b8957fbd266734c1d7b5ce",
+      "artifact_bytes": 10884841,
+      "counts": [
+        {
+          "elapsed_ms": 41.351082999999996,
+          "exact": 32,
+          "label": "development",
+          "total": 40
+        },
+        {
+          "elapsed_ms": 72.127375,
+          "exact": 62,
+          "label": "preservation",
+          "total": 62
+        },
+        {
+          "elapsed_ms": 22.29525,
+          "exact": 24,
+          "label": "prior",
+          "total": 24
+        },
+        {
+          "elapsed_ms": 41.118125,
+          "exact": 20,
+          "label": "defer-control",
+          "total": 40
+        },
+        {
+          "elapsed_ms": 41.613125000000004,
+          "exact": 20,
+          "label": "chain-disabled",
+          "total": 40
+        },
+        {
+          "elapsed_ms": 40.893833,
+          "exact": 16,
+          "label": "codes-disabled",
+          "total": 40
+        }
+      ],
+      "decision": "DEVELOPMENT_PENDING_REVIEW",
+      "fit": {
+        "artifact": "blake3:54ee94f9530893a18f08893f02ec12929db6019e20b8957fbd266734c1d7b5ce",
+        "block_bytes": 87808,
+        "dictionary_omitted": 0,
+        "documents": 520,
+        "elapsed_ms": 4480,
+        "feature_universe": 189,
+        "fit": {
+          "accepted": [
+            3,
+            0,
+            5
+          ],
+          "final_correct": 359,
+          "final_hinge": 0,
+          "initial_correct": 97,
+          "initial_hinge": 1051,
+          "proposals": 5879,
+          "stopped_at_time_limit": false
+        },
+        "frames": 359,
+        "parent": "blake3:55e602a026238f12c8e9026569c1d1e06239a83efa3ff0ca23b48d4e5242c001",
+        "schema": "uor-r4.dependent-read-fit/1",
+        "unreachable": [
+          "dependent/fit/3/3"
+        ],
+        "upstream_skipped": 160
+      }
+    },
+    "angular": {
+      "path": "dependent-read-angular/model.json",
+      "artifact": "blake3:8070c006cf924e4a55007b6c1114ecad99ef6d1f3be2f0d08fc5f137ff89b2c1",
+      "artifact_bytes": 10885836,
+      "counts": [
+        {
+          "elapsed_ms": 52.781083,
+          "exact": 40,
+          "label": "development",
+          "total": 48
+        },
+        {
+          "elapsed_ms": 82.735416,
+          "exact": 62,
+          "label": "preservation",
+          "total": 62
+        },
+        {
+          "elapsed_ms": 27.218791999999997,
+          "exact": 24,
+          "label": "prior",
+          "total": 24
+        },
+        {
+          "elapsed_ms": 54.400166999999996,
+          "exact": 20,
+          "label": "defer-control",
+          "total": 48
+        },
+        {
+          "elapsed_ms": 51.783708,
+          "exact": 20,
+          "label": "chain-disabled",
+          "total": 48
+        },
+        {
+          "elapsed_ms": 55.999708000000005,
+          "exact": 16,
+          "label": "codes-disabled",
+          "total": 48
+        }
+      ],
+      "decision": "DEVELOPMENT_PENDING_REVIEW",
+      "fit": {
+        "artifact": "blake3:8070c006cf924e4a55007b6c1114ecad99ef6d1f3be2f0d08fc5f137ff89b2c1",
+        "block_bytes": 88803,
+        "dictionary_omitted": 0,
+        "documents": 528,
+        "elapsed_ms": 4684,
+        "feature_universe": 194,
+        "fit": {
+          "accepted": [
+            2,
+            0,
+            5
+          ],
+          "final_correct": 356,
+          "final_hinge": 0,
+          "initial_correct": 94,
+          "initial_hinge": 1048,
+          "proposals": 5878,
+          "stopped_at_time_limit": false
+        },
+        "frames": 356,
+        "parent": "blake3:55e602a026238f12c8e9026569c1d1e06239a83efa3ff0ca23b48d4e5242c001",
+        "schema": "uor-r4.dependent-read-fit/1",
+        "unreachable": [
+          "dependent/fit/0/0",
+          "dependent/fit/0/7",
+          "dependent/fit/0/9",
+          "dependent/fit/0/10",
+          "dependent/fit/0/rust",
+          "dependent/fit/1/3",
+          "dependent/fit/1/7",
+          "dependent/fit/2/3",
+          "dependent/fit/2/7",
+          "dependent/fit/2/10",
+          "dependent/fit/3/3",
+          "dependent/fit/3/7"
+        ],
+        "upstream_skipped": 160
+      }
+    },
+    "equality": {
+      "path": "dependent-read-equality/model.json",
+      "artifact": "blake3:a18ec7d0a70286b6c3b9ebc53419f57828d5ac3098580706e8cc7358bc733751",
+      "artifact_bytes": 10885827,
+      "counts": [
+        {
+          "elapsed_ms": 51.849332999999994,
+          "exact": 32,
+          "label": "development",
+          "total": 48
+        },
+        {
+          "elapsed_ms": 78.639917,
+          "exact": 62,
+          "label": "preservation",
+          "total": 62
+        },
+        {
+          "elapsed_ms": 24.359875,
+          "exact": 24,
+          "label": "prior",
+          "total": 24
+        },
+        {
+          "elapsed_ms": 52.958375000000004,
+          "exact": 20,
+          "label": "defer-control",
+          "total": 48
+        },
+        {
+          "elapsed_ms": 51.609207999999995,
+          "exact": 20,
+          "label": "chain-disabled",
+          "total": 48
+        },
+        {
+          "elapsed_ms": 53.204292,
+          "exact": 16,
+          "label": "codes-disabled",
+          "total": 48
+        }
+      ],
+      "decision": "DEVELOPMENT_PENDING_REVIEW",
+      "fit": {
+        "artifact": "blake3:a18ec7d0a70286b6c3b9ebc53419f57828d5ac3098580706e8cc7358bc733751",
+        "block_bytes": 88794,
+        "dictionary_omitted": 0,
+        "documents": 528,
+        "elapsed_ms": 4979,
+        "feature_universe": 194,
+        "fit": {
+          "accepted": [
+            15,
+            2,
+            39
+          ],
+          "final_correct": 350,
+          "final_hinge": 32,
+          "initial_correct": 328,
+          "initial_hinge": 283,
+          "proposals": 5886,
+          "stopped_at_time_limit": false
+        },
+        "frames": 356,
+        "parent": "blake3:55e602a026238f12c8e9026569c1d1e06239a83efa3ff0ca23b48d4e5242c001",
+        "schema": "uor-r4.dependent-read-fit/1",
+        "unreachable": [
+          "dependent/fit/0/0",
+          "dependent/fit/0/7",
+          "dependent/fit/0/9",
+          "dependent/fit/0/10",
+          "dependent/fit/0/rust",
+          "dependent/fit/1/3",
+          "dependent/fit/1/7",
+          "dependent/fit/2/3",
+          "dependent/fit/2/7",
+          "dependent/fit/2/10",
+          "dependent/fit/3/3",
+          "dependent/fit/3/7"
+        ],
+        "upstream_skipped": 160
+      }
+    }
+  },
+  "controls": {
+    "complete_parent_objects_except_control_label": 48,
+    "intermediate_disabled": 20,
+    "codes_disabled": 16,
+    "total": 48,
+    "codes_disabled_scope": "Both new head and inherited recent-source codes; not an isolated new-head code intervention."
+  },
+  "name_scope": {
+    "owner_and_intermediate_names_absent_from_head_fit": 8,
+    "places_absent": 7,
+    "reused_place": "Bath",
+    "original_source_metadata_correction": "Original disjoint-development-names label was too broad; Bath occurs in inherited480 construction. Sources remain unchanged; probe wording corrected."
+  },
+  "preservation": {
+    "earlier": 62,
+    "earlier_total": 62,
+    "prior": 24,
+    "prior_total": 24,
+    "relations": 28,
+    "relations_total": 28,
+    "relation_writes_exact": 28,
+    "persistent_turns": 5,
+    "persistent_total": 5,
+    "isolation": true
+  },
+  "verification": {
+    "existing_native_model_tests": 126,
+    "new_mechanical_test": "PASS after untrained fixture correction; opt-level0 focused rerun",
+    "standard_allocation_tests": 9,
+    "standard_ignored_artifact_case": 1,
+    "explicit_actual_artifact_allocation": "PASS allocations0 bytes0; loading outside measured region; complete cold test wall30.494s",
+    "generated_rust_functions": 4,
+    "semantic_assertions": 12,
+    "cli_response": " Bremen.\n",
+    "broader_owner_question": " Unknown.\n",
+    "format": "PASS",
+    "native_architecture_policy": "PASS",
+    "claim_wording": "PASS",
+    "protected_CI": "Live PR owns actual protected results; this receipt freezes local verification only."
+  },
+  "cost": {
+    "scope": "Complete generated-answer counters including ingestion and inherited heads. Different outputs imply different work; timings are single warm samples, not a speedup comparison.",
+    "arms": {
+      "parent": {
+        "exact": 20,
+        "total": 48,
+        "elapsed_ms": 64.268375,
+        "work": {
+          "observed_tokens": 4306,
+          "candidate_evaluations": 44650,
+          "score_lookups": 1095887,
+          "memory_composition_comparisons": 2184817,
+          "values.relations.row_comparisons": 4603092,
+          "values.relations.record_writes": 161,
+          "word_copy.routing.comparisons": 42960,
+          "word_copy.routing.table_reads": 24104,
+          "word_copy.routing.code_reads": 4770,
+          "word_copy.routing.logical_bytes_read": 810068,
+          "word_copy.dictionary_comparisons": 24544,
+          "word_copy.dictionary_byte_comparisons": 37605,
+          "word_copy.persistent_read.relations.directory_reads": 768,
+          "word_copy.persistent_read.relations.record_reads": 856,
+          "word_copy.persistent_read.lexical_byte_comparisons": 28,
+          "word_copy.byte_reads": 64
+        }
+      },
+      "angular": {
+        "exact": 40,
+        "total": 48,
+        "elapsed_ms": 52.781083,
+        "work": {
+          "observed_tokens": 4422,
+          "candidate_evaluations": 41071,
+          "score_lookups": 998957,
+          "memory_composition_comparisons": 2505913,
+          "values.relations.row_comparisons": 4603092,
+          "values.relations.record_writes": 161,
+          "word_copy.routing.comparisons": 23064,
+          "word_copy.routing.table_reads": 15692,
+          "word_copy.routing.code_reads": 4766,
+          "word_copy.routing.logical_bytes_read": 459616,
+          "word_copy.dictionary_comparisons": 13088,
+          "word_copy.dictionary_byte_comparisons": 21434,
+          "word_copy.persistent_read.relations.directory_reads": 2398,
+          "word_copy.persistent_read.relations.record_reads": 1886,
+          "word_copy.persistent_read.lexical_byte_comparisons": 3119,
+          "word_copy.byte_reads": 253
+        }
+      },
+      "equality": {
+        "exact": 32,
+        "total": 48,
+        "elapsed_ms": 51.849332999999994,
+        "work": {
+          "observed_tokens": 4406,
+          "candidate_evaluations": 41613,
+          "score_lookups": 1012942,
+          "memory_composition_comparisons": 2442806,
+          "values.relations.row_comparisons": 4603092,
+          "values.relations.record_writes": 161,
+          "word_copy.routing.comparisons": 23768,
+          "word_copy.routing.table_reads": 15265,
+          "word_copy.routing.code_reads": 4766,
+          "word_copy.routing.logical_bytes_read": 458762,
+          "word_copy.dictionary_comparisons": 14432,
+          "word_copy.dictionary_byte_comparisons": 23498,
+          "word_copy.persistent_read.relations.directory_reads": 2290,
+          "word_copy.persistent_read.relations.record_reads": 1834,
+          "word_copy.persistent_read.lexical_byte_comparisons": 2822,
+          "word_copy.byte_reads": 221
+        }
+      }
+    }
+  },
+  "resources": {
+    "model_cycle_ms": 93658,
+    "model_cycle_limit_ms": 120000,
+    "engineering_cycle_ms": 1141476,
+    "engineering_cycle_limit_ms": 1200000,
+    "additional_storage_authorization_bytes": 67108864,
+    "resource": {
+      "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+      "at": "2026-09-06T15:56:35.334Z",
+      "inherited_precleanup_bytes": 2747199488,
+      "obsolete_target_growth_credit": 671379456,
+      "current_target_bytes": 2461888512,
+      "predecessor_artifact_root_bytes": 145760256,
+      "current_artifact_root_bytes": 898363392,
+      "predecessor_worktree_bytes": 9875456,
+      "current_worktree_bytes": 8937472,
+      "stopped_successor_worktree_bytes": 460877824,
+      "source_metadata_reserve_bytes": 5242880,
+      "current_sampled_known_storage_bytes": 6066765824,
+      "storage_limit_bytes": 6526337024,
+      "remaining_storage_bytes": 459571200,
+      "stop_margin_bytes": 134217728,
+      "available_growth_before_stop_bytes": 104165376,
+      "model_ledger": {
+        "cumulative_ms": 1607670,
+        "limit_ms": 1800000
+      },
+      "model_remaining_ms": 192330,
+      "model_process_limit": 1,
+      "model_process_rss_target_bytes": 4294967296,
+      "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+    }
+  },
+  "commands": [
+    {
+      "label": "dependent-read-build",
+      "elapsed_ms": 304049,
+      "exit": 0,
+      "stopped": null,
+      "peak_model_rss_bytes": null
+    },
+    {
+      "label": "dependent-read-probe-refresh",
+      "elapsed_ms": 123992,
+      "exit": 0,
+      "stopped": null,
+      "peak_model_rss_bytes": null
+    },
+    {
+      "label": "dependent-read-corrected-build",
+      "elapsed_ms": 4363,
+      "exit": 0,
+      "stopped": null,
+      "peak_model_rss_bytes": null
+    },
+    {
+      "label": "dependent-read-final-build",
+      "elapsed_ms": 360487,
+      "exit": 0,
+      "stopped": null,
+      "peak_model_rss_bytes": null
+    },
+    {
+      "label": "dependent-read-unit-tests",
+      "elapsed_ms": 145199,
+      "exit": 101,
+      "stopped": null,
+      "peak_model_rss_bytes": null
+    },
+    {
+      "label": "dependent-read-focused-fix",
+      "elapsed_ms": 28989,
+      "exit": 0,
+      "stopped": null,
+      "peak_model_rss_bytes": null
+    },
+    {
+      "label": "dependent-read-allocation-tests",
+      "elapsed_ms": 156894,
+      "exit": 0,
+      "stopped": null,
+      "peak_model_rss_bytes": null
+    },
+    {
+      "label": "dependent-read-evaluation-build",
+      "elapsed_ms": 13683,
+      "exit": 0,
+      "stopped": null,
+      "peak_model_rss_bytes": null
+    },
+    {
+      "label": "dependent-read-format",
+      "elapsed_ms": 3450,
+      "exit": 0,
+      "stopped": null,
+      "peak_model_rss_bytes": null
+    },
+    {
+      "label": "dependent-read-policy",
+      "elapsed_ms": 147,
+      "exit": 0,
+      "stopped": null,
+      "peak_model_rss_bytes": null
+    },
+    {
+      "label": "dependent-read-claims",
+      "elapsed_ms": 223,
+      "exit": 0,
+      "stopped": null,
+      "peak_model_rss_bytes": null
+    },
+    {
+      "label": "dependent-read-parent-chain",
+      "elapsed_ms": 2914,
+      "exit": 0,
+      "stopped": null,
+      "peak_model_rss_bytes": 317194240
+    },
+    {
+      "label": "dependent-read-comparison",
+      "elapsed_ms": 14137,
+      "exit": 0,
+      "stopped": null,
+      "peak_model_rss_bytes": 860012544
+    },
+    {
+      "label": "dependent-read-final-angular",
+      "elapsed_ms": 15081,
+      "exit": 0,
+      "stopped": null,
+      "peak_model_rss_bytes": 858914816
+    },
+    {
+      "label": "dependent-read-final-equality",
+      "elapsed_ms": 15472,
+      "exit": 0,
+      "stopped": null,
+      "peak_model_rss_bytes": 868237312
+    },
+    {
+      "label": "dependent-read-actual-allocation",
+      "elapsed_ms": 30494,
+      "exit": 0,
+      "stopped": null,
+      "peak_model_rss_bytes": 116424704
+    },
+    {
+      "label": "dependent-read-relations",
+      "elapsed_ms": 4079,
+      "exit": 0,
+      "stopped": null,
+      "peak_model_rss_bytes": 537264128
+    },
+    {
+      "label": "dependent-read-sessions",
+      "elapsed_ms": 3656,
+      "exit": 0,
+      "stopped": null,
+      "peak_model_rss_bytes": 452935680
+    },
+    {
+      "label": "dependent-read-rust-compile",
+      "elapsed_ms": 120,
+      "exit": 0,
+      "stopped": null,
+      "peak_model_rss_bytes": null
+    },
+    {
+      "label": "dependent-read-rust-execute",
+      "elapsed_ms": 134,
+      "exit": 0,
+      "stopped": null,
+      "peak_model_rss_bytes": null
+    },
+    {
+      "label": "dependent-read-cli",
+      "elapsed_ms": 3939,
+      "exit": 0,
+      "stopped": null,
+      "peak_model_rss_bytes": 412778496
+    },
+    {
+      "label": "dependent-read-broader-boundary",
+      "elapsed_ms": 3632,
+      "exit": 0,
+      "stopped": null,
+      "peak_model_rss_bytes": 456343552
+    }
+  ],
+  "report_hashes": {
+    "dependent-read-projection.json": {
+      "bytes": 2389,
+      "sha256": "dfd1f370a7291e72cdb9d1ca66e835be8cfeed9b726efbe4aadef4127eb1307d"
+    },
+    "dependent-read-storage-increment.json": {
+      "bytes": 3377,
+      "sha256": "3fb02682c69e979d9183cbd4a4c0dfc6a9756a43fc6666281889a57dbbc63331"
+    },
+    "dependent-read-relations.json": {
+      "bytes": 1452204,
+      "sha256": "0cb45b3b9280220043f9d765a730703d28ef32d8d82d1c03b3e21ae777e140f2"
+    },
+    "dependent-read-sessions.json": {
+      "bytes": 37091,
+      "sha256": "4332888a9a18ecdad1eb0dec67fd955668b11537985cb8f592b18836bd88652e"
+    },
+    "dependent-read-generated.rs": {
+      "bytes": 1149,
+      "sha256": "d3679179801871a40ab864a62b8b1ccfdb9d10a76851a1be09e43e64dbe9f2d5"
+    },
+    "dependent-read-angular/source.json": {
+      "bytes": 161546,
+      "sha256": "50f778d3eb48040dc300876e42dfbacf47fe2b4e4f5d30a1be9091fdaace966c"
+    },
+    "dependent-read-angular/development.json": {
+      "bytes": 651021,
+      "sha256": "6f9c11b81b4fff9c5945c8316634635f62947413964e3895562e85161a60f113"
+    },
+    "dependent-read-angular/retained-inputs.json": {
+      "bytes": 4635704,
+      "sha256": "596769cbb07099c16d0f948d85bc236e3ec82852c6235ff71a127f3e757a8c1e"
+    },
+    "dependent-read-equality/development.json": {
+      "bytes": 637487,
+      "sha256": "5819fccebd49b721c85efb2c933cedb9425a13e19f1e3fd1b07cae24f8a963de"
+    }
+  }
+}

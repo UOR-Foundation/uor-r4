@@ -1,0 +1,1549 @@
+{
+  "schema": "uor-r4.native-source-noread-evidence/1",
+  "at": "2026-09-07T01:47:03.729447+00:00",
+  "base_pr": 1159,
+  "base_merged_commit": "be32b4103d8f870f8b1f81057c451a609156172e",
+  "artifact": "blake3:d59070c29e1cebcb12d25c2fc034083d9631b24ab04da0c57b94a007ad10ea6f",
+  "parent": "blake3:e7c14c994c57eaad6c9a765c71e7699c0f7f0c88a225aea71e6e84c8b7da0e11",
+  "control": "blake3:369c97f136fd71b919e0086e6f8d2e6b336dd4b401b9bbea22aa5764932a3f06",
+  "decision": "RETAIN_BOUNDED_SUPPORTED_SOURCE_NO_READ",
+  "artifacts": [
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/answer-entry-final/model.json",
+      "bytes": 11212853,
+      "sha256": "d8b54a54966dfc4c7d5d1fc0a2bc3de371eb4f5cd5a78508958a8e7873c9916e"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-angular128/model.json",
+      "bytes": 11304530,
+      "sha256": "a54a98f77e65b704a4d1afa47a755a440f535bf13e993331410665fbb0c6951c"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-equality128/model.json",
+      "bytes": 11304514,
+      "sha256": "30c3d3f515eb530b66dcdf7b51b4de26adbb7fddb57148a0ad95eaf0cdfebfaa"
+    }
+  ],
+  "source": [
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-typed-value/uor-r4/crates/uor-r4-core/src/native_geometric/mod.rs",
+      "bytes": 19767,
+      "sha256": "b462bcc21046e47da2f66fa61204e28ffb26852723ca60dd27e763bf96b40431"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-typed-value/uor-r4/crates/uor-r4-core/src/native_geometric/training.rs",
+      "bytes": 47500,
+      "sha256": "3874338d156a9a3240bbeda3615042e3b68820055edffa79e7cc29a55394e440"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-typed-value/uor-r4/crates/uor-r4-core/src/native_geometric/source_routing.rs",
+      "bytes": 6625,
+      "sha256": "47604abbf424c7bad5660e940e8f8655f5af907e833227cac2614da8ae9baac4"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-typed-value/uor-r4/crates/uor-r4-core/src/native_geometric/source_routing_training.rs",
+      "bytes": 29731,
+      "sha256": "20ef2b9a441498ba1d5f572a2e6935bf966735e427c71242356a29fb7efc578d"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-typed-value/uor-r4/crates/uor-r4-core/src/native_geometric/source_refinement_tests.rs",
+      "bytes": 4969,
+      "sha256": "4135f723a9bd1fcde296068234fcd8f2227dcd7b7372d4643a7361fb4b240574"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-typed-value/uor-r4/crates/uor-r4-core/examples/native_geometric_value_probe.rs",
+      "bytes": 71270,
+      "sha256": "d4876e05a0d166ff4590c5ba4311f76046bd78df68091328286198dc4b0c1014"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-typed-value/uor-r4/crates/uor-r4-core/examples/native_geometric_value_probe/source_noread.rs",
+      "bytes": 10451,
+      "sha256": "477f1ca80203d9c1b8bbe1d900622a19dc2b1325caa41bd0201e5a61a68c7549"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-typed-value/uor-r4/crates/uor-r4-core/examples/native_geometric_value_probe/writer_binding.rs",
+      "bytes": 17298,
+      "sha256": "21db433e5f7bbeb2aa002cb5d839e560e17733b1650be4cf3eef2a0f2fe0856c"
+    },
+    {
+      "path": "/Users/casey.allard/.codex/worktrees/r4-typed-value/uor-r4/crates/uor-r4-core/tests/native_geometric_allocations.rs",
+      "bytes": 62199,
+      "sha256": "edf29711eb0b6ebcf518cd5784a3baecf154341b9d1a216a1a8ee71eb174edde"
+    }
+  ],
+  "fits": {
+    "angular": {
+      "accepted": [
+        8,
+        0,
+        0
+      ],
+      "added_features": 64,
+      "artifact": "blake3:d59070c29e1cebcb12d25c2fc034083d9631b24ab04da0c57b94a007ad10ea6f",
+      "block_bytes": 91543,
+      "config": {
+        "learned_features": 128,
+        "max_seconds": 45,
+        "mode": "angular",
+        "passes": 4,
+        "proposals": 12,
+        "role_context_only": true,
+        "seed": 1139
+      },
+      "documents": 603,
+      "elapsed_ms": 10860,
+      "expanded_feature_alias_frames": 0,
+      "feature_universe": 1921,
+      "features": 128,
+      "final_correct": 384,
+      "final_hinge": 0,
+      "frames": 384,
+      "initial_correct": 378,
+      "initial_hinge": 14,
+      "parent": "blake3:e7c14c994c57eaad6c9a765c71e7699c0f7f0c88a225aea71e6e84c8b7da0e11",
+      "parent_reconstruction": "EXACT_FROZEN_PARENT",
+      "preserved_dependent_dispatch": 0,
+      "preserved_persistent_dispatch": 0,
+      "proposals": 15867,
+      "refinement": true,
+      "schema": "uor-r4.source-routing-fit/1",
+      "scope": "One warm in-place source/action refinement on exact assembled-parent sessions; all inherited code features retained, added vocabulary ranked by construction label contrasts and frequency. Descendant parameters and original training parent CIDs remain unchanged, verified by exact parent reconstruction. Feature alias counts are descriptive, not frame solvability or generation acceptance.",
+      "skipped_upstream": 211,
+      "stopped_at_time_limit": false,
+      "unreachable_targets": [
+        "typed-value/fit/rust/copy_current/0/source_names_swapped",
+        "typed-value/fit/rust/copy_current/1/source_names_swapped",
+        "typed-value/fit/rust/copy_current/4/source_names_swapped",
+        "typed-value/fit/rust/copy_current/5/source_names_swapped",
+        "typed-value/fit/rust/copy_current/8/source_names_swapped",
+        "typed-value/fit/rust/copy_current/9/source_names_swapped",
+        "typed-value/fit/rust/copy_current/12/source_names_swapped",
+        "typed-value/fit/rust/copy_current/13/source_names_swapped"
+      ],
+      "warm_feature_alias_frames": 20,
+      "warm_features": 64,
+      "warm_initialization_preserved": true
+    },
+    "equality": {
+      "accepted": [
+        26,
+        2,
+        2
+      ],
+      "added_features": 64,
+      "artifact": "blake3:369c97f136fd71b919e0086e6f8d2e6b336dd4b401b9bbea22aa5764932a3f06",
+      "block_bytes": 91527,
+      "config": {
+        "learned_features": 128,
+        "max_seconds": 45,
+        "mode": "equality",
+        "passes": 4,
+        "proposals": 12,
+        "role_context_only": true,
+        "seed": 1139
+      },
+      "documents": 603,
+      "elapsed_ms": 10701,
+      "expanded_feature_alias_frames": 0,
+      "feature_universe": 1921,
+      "features": 128,
+      "final_correct": 333,
+      "final_hinge": 151,
+      "frames": 384,
+      "initial_correct": 92,
+      "initial_hinge": 1557,
+      "parent": "blake3:e7c14c994c57eaad6c9a765c71e7699c0f7f0c88a225aea71e6e84c8b7da0e11",
+      "parent_reconstruction": "EXACT_FROZEN_PARENT",
+      "preserved_dependent_dispatch": 0,
+      "preserved_persistent_dispatch": 0,
+      "proposals": 15921,
+      "refinement": true,
+      "schema": "uor-r4.source-routing-fit/1",
+      "scope": "One warm in-place source/action refinement on exact assembled-parent sessions; all inherited code features retained, added vocabulary ranked by construction label contrasts and frequency. Descendant parameters and original training parent CIDs remain unchanged, verified by exact parent reconstruction. Feature alias counts are descriptive, not frame solvability or generation acceptance.",
+      "skipped_upstream": 211,
+      "stopped_at_time_limit": false,
+      "unreachable_targets": [
+        "typed-value/fit/rust/copy_current/0/source_names_swapped",
+        "typed-value/fit/rust/copy_current/1/source_names_swapped",
+        "typed-value/fit/rust/copy_current/4/source_names_swapped",
+        "typed-value/fit/rust/copy_current/5/source_names_swapped",
+        "typed-value/fit/rust/copy_current/8/source_names_swapped",
+        "typed-value/fit/rust/copy_current/9/source_names_swapped",
+        "typed-value/fit/rust/copy_current/12/source_names_swapped",
+        "typed-value/fit/rust/copy_current/13/source_names_swapped"
+      ],
+      "warm_feature_alias_frames": 20,
+      "warm_features": 64,
+      "warm_initialization_preserved": true
+    }
+  },
+  "reports": {
+    "source-noread-angular128/construction.json": {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-angular128/construction.json",
+      "bytes": 13033980,
+      "sha256": "2b3b746e393cedd53a8112e4207962f51d4a45f33cd014c4ea64dfc892513fc6",
+      "artifact": "blake3:d59070c29e1cebcb12d25c2fc034083d9631b24ab04da0c57b94a007ad10ea6f",
+      "exact": 551,
+      "total": 603,
+      "writes_exact": null,
+      "failed_ids": [
+        "typed-value/fit/prose/add/0/source_names_swapped",
+        "typed-value/fit/rust/copy_current/0/source_names_swapped",
+        "typed-value/fit/rust/add/0/source_names_swapped",
+        "typed-value/fit/prose/add/1/source_names_swapped",
+        "typed-value/fit/rust/copy_current/1/source_names_swapped",
+        "typed-value/fit/rust/add/1/source_names_swapped",
+        "typed-value/fit/prose/add/2/source_names_swapped",
+        "typed-value/fit/rust/copy_current/2/source_names_swapped",
+        "typed-value/fit/rust/add/2/source_names_swapped",
+        "typed-value/fit/prose/add/3/source_names_swapped",
+        "typed-value/fit/rust/copy_current/3/source_names_swapped",
+        "typed-value/fit/rust/add/3/source_names_swapped",
+        "typed-value/fit/prose/add/4/source_names_swapped",
+        "typed-value/fit/rust/copy_current/4/source_names_swapped",
+        "typed-value/fit/rust/add/4/source_names_swapped",
+        "typed-value/fit/prose/add/5/source_names_swapped",
+        "typed-value/fit/rust/copy_current/5/source_names_swapped",
+        "typed-value/fit/rust/add/5/source_names_swapped",
+        "typed-value/fit/prose/add/6/source_names_swapped",
+        "typed-value/fit/rust/copy_current/6/source_names_swapped",
+        "typed-value/fit/rust/add/6/source_names_swapped",
+        "typed-value/fit/prose/add/7/source_names_swapped",
+        "typed-value/fit/rust/copy_current/7/source_names_swapped",
+        "typed-value/fit/rust/add/7/source_names_swapped",
+        "typed-value/fit/prose/add/8/source_names_swapped",
+        "typed-value/fit/rust/copy_current/8/source_names_swapped",
+        "typed-value/fit/rust/add/8/source_names_swapped",
+        "typed-value/fit/prose/add/9/source_names_swapped",
+        "typed-value/fit/rust/copy_current/9/source_names_swapped",
+        "typed-value/fit/rust/add/9/source_names_swapped",
+        "typed-value/fit/prose/add/10/source_names_swapped",
+        "typed-value/fit/rust/copy_current/10/source_names_swapped",
+        "typed-value/fit/rust/add/10/source_names_swapped",
+        "typed-value/fit/prose/add/11/source_names_swapped",
+        "typed-value/fit/rust/copy_current/11/source_names_swapped",
+        "typed-value/fit/rust/add/11/source_names_swapped",
+        "typed-value/fit/prose/add/12/source_names_swapped",
+        "typed-value/fit/rust/copy_current/12/source_names_swapped",
+        "typed-value/fit/rust/add/12/source_names_swapped",
+        "typed-value/fit/prose/add/13/source_names_swapped",
+        "typed-value/fit/rust/copy_current/13/source_names_swapped",
+        "typed-value/fit/rust/add/13/source_names_swapped",
+        "typed-value/fit/prose/add/14/source_names_swapped",
+        "typed-value/fit/rust/copy_current/14/source_names_swapped",
+        "typed-value/fit/rust/add/14/source_names_swapped",
+        "typed-value/fit/prose/add/15/source_names_swapped",
+        "typed-value/fit/rust/copy_current/15/source_names_swapped",
+        "typed-value/fit/rust/add/15/source_names_swapped",
+        "role-read/fit/0/5/1",
+        "role-read/fit/2/5/3",
+        "role-read/fit/3/5/2",
+        "source-joint-fit/1/false/true/0"
+      ]
+    },
+    "source-noread-angular128/development.json": {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-angular128/development.json",
+      "bytes": 801081,
+      "sha256": "575fe9699fbe16f575e3a7f01d6715656e196614b3ce8b76f307aba69d6f0db9",
+      "artifact": "blake3:d59070c29e1cebcb12d25c2fc034083d9631b24ab04da0c57b94a007ad10ea6f",
+      "exact": 14,
+      "total": 14,
+      "writes_exact": null,
+      "failed_ids": []
+    },
+    "source-noread-equality128/construction.json": {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-equality128/construction.json",
+      "bytes": 12968214,
+      "sha256": "2cb61747a56007c72ef7f876e65ad9b5ebaf5ec33ed0ac36d197161769a96dc4",
+      "artifact": "blake3:369c97f136fd71b919e0086e6f8d2e6b336dd4b401b9bbea22aa5764932a3f06",
+      "exact": 500,
+      "total": 603,
+      "writes_exact": null,
+      "failed_ids": [
+        "typed-value/fit/prose/add/0/source_names_swapped",
+        "typed-value/fit/rust/copy_current/0/source_names_swapped",
+        "typed-value/fit/rust/add/0/source_names_swapped",
+        "typed-value/fit/prose/add/1/source_names_swapped",
+        "typed-value/fit/rust/copy_current/1/source_names_swapped",
+        "typed-value/fit/rust/add/1/source_names_swapped",
+        "typed-value/fit/prose/add/2/source_names_swapped",
+        "typed-value/fit/rust/copy_current/2/source_names_swapped",
+        "typed-value/fit/rust/add/2/source_names_swapped",
+        "typed-value/fit/prose/add/3/source_names_swapped",
+        "typed-value/fit/rust/copy_current/3/source_names_swapped",
+        "typed-value/fit/rust/add/3/source_names_swapped",
+        "typed-value/fit/prose/add/4/source_names_swapped",
+        "typed-value/fit/rust/copy_current/4/source_names_swapped",
+        "typed-value/fit/rust/add/4/source_names_swapped",
+        "typed-value/fit/prose/add/5/source_names_swapped",
+        "typed-value/fit/rust/copy_current/5/source_names_swapped",
+        "typed-value/fit/rust/add/5/source_names_swapped",
+        "typed-value/fit/prose/add/6/source_names_swapped",
+        "typed-value/fit/rust/copy_current/6/source_names_swapped",
+        "typed-value/fit/rust/add/6/source_names_swapped",
+        "typed-value/fit/prose/add/7/source_names_swapped",
+        "typed-value/fit/rust/copy_current/7/source_names_swapped",
+        "typed-value/fit/rust/add/7/source_names_swapped",
+        "typed-value/fit/prose/add/8/source_names_swapped",
+        "typed-value/fit/rust/copy_current/8/source_names_swapped",
+        "typed-value/fit/rust/add/8/source_names_swapped",
+        "typed-value/fit/prose/add/9/source_names_swapped",
+        "typed-value/fit/rust/copy_current/9/source_names_swapped",
+        "typed-value/fit/rust/add/9/source_names_swapped",
+        "typed-value/fit/prose/add/10/source_names_swapped",
+        "typed-value/fit/rust/copy_current/10/source_names_swapped",
+        "typed-value/fit/rust/add/10/source_names_swapped",
+        "typed-value/fit/prose/add/11/source_names_swapped",
+        "typed-value/fit/rust/copy_current/11/source_names_swapped",
+        "typed-value/fit/rust/add/11/source_names_swapped",
+        "typed-value/fit/prose/add/12/source_names_swapped",
+        "typed-value/fit/rust/copy_current/12/source_names_swapped",
+        "typed-value/fit/rust/add/12/source_names_swapped",
+        "typed-value/fit/prose/add/13/source_names_swapped",
+        "typed-value/fit/rust/copy_current/13/source_names_swapped",
+        "typed-value/fit/rust/add/13/source_names_swapped",
+        "typed-value/fit/prose/add/14/source_names_swapped",
+        "typed-value/fit/rust/copy_current/14/source_names_swapped",
+        "typed-value/fit/rust/add/14/source_names_swapped",
+        "typed-value/fit/prose/add/15/source_names_swapped",
+        "typed-value/fit/rust/copy_current/15/source_names_swapped",
+        "typed-value/fit/rust/add/15/source_names_swapped",
+        "fact/fit/0/1/0",
+        "fact/fit/1/0/0",
+        "fact/fit/1/0/1",
+        "fact/fit/1/1/0",
+        "fact/fit/1/1/1",
+        "fact/fit/1/2/0",
+        "fact/fit/2/1/0",
+        "fact/fit/3/0/0",
+        "fact/fit/3/0/1",
+        "fact/fit/3/1/0",
+        "fact/fit/3/1/1",
+        "fact/fit/3/2/0",
+        "fact/fit/3/2/1",
+        "fact/fit/4/1/0",
+        "fact/fit/5/0/0",
+        "fact/fit/5/0/1",
+        "fact/fit/5/1/0",
+        "fact/fit/5/1/1",
+        "fact/fit/5/2/0",
+        "fact/fit/5/2/1",
+        "fact/fit/6/1/0",
+        "fact/fit/7/0/0",
+        "fact/fit/7/0/1",
+        "fact/fit/7/1/0",
+        "fact/fit/7/1/1",
+        "fact/fit/7/2/0",
+        "fact/fit/7/2/1",
+        "role-read/fit/0/1/0",
+        "role-read/fit/0/1/1",
+        "role-read/fit/0/1/3",
+        "role-read/fit/0/3/1",
+        "role-read/fit/0/5/1",
+        "role-read/fit/1/1/0",
+        "role-read/fit/1/1/1",
+        "role-read/fit/1/1/3",
+        "role-read/fit/1/3/1",
+        "role-read/fit/2/1/0",
+        "role-read/fit/2/1/1",
+        "role-read/fit/2/1/3",
+        "role-read/fit/2/3/1",
+        "role-read/fit/2/5/3",
+        "role-read/fit/3/1/0",
+        "role-read/fit/3/1/1",
+        "role-read/fit/3/1/3",
+        "role-read/fit/3/3/1",
+        "role-read/fit/3/5/2",
+        "source-joint-fit/0/false/true/1",
+        "source-joint-fit/0/false/supported-object",
+        "source-joint-fit/0/true/true/1",
+        "source-joint-fit/0/true/supported-object",
+        "source-joint-fit/1/false/true/0",
+        "source-joint-fit/1/false/true/1",
+        "source-joint-fit/1/false/supported-object",
+        "source-joint-fit/1/true/true/1",
+        "source-joint-fit/1/true/supported-object"
+      ]
+    },
+    "source-noread-equality128/development.json": {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-equality128/development.json",
+      "bytes": 803194,
+      "sha256": "64a70b6fd12c14994f76bd0e5fc20c4f64f502d802e0b3936b577c36a2f82188",
+      "artifact": "blake3:369c97f136fd71b919e0086e6f8d2e6b336dd4b401b9bbea22aa5764932a3f06",
+      "exact": 9,
+      "total": 14,
+      "writes_exact": null,
+      "failed_ids": [
+        "source-joint-open/0/false/true/1",
+        "source-joint-open/0/false/supported-object",
+        "source-joint-open/0/true/true/0",
+        "source-joint-open/0/true/true/1",
+        "source-joint-open/0/true/supported-object"
+      ]
+    },
+    "source-noread-fresh128.json": {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-fresh128.json",
+      "bytes": 1122022,
+      "sha256": "40b78ecae27c86b61509be5af87d513e3729f5db0a15cd1a1e72a406842f281b",
+      "artifact": "blake3:d59070c29e1cebcb12d25c2fc034083d9631b24ab04da0c57b94a007ad10ea6f",
+      "exact": 20,
+      "total": 20,
+      "writes_exact": null,
+      "failed_ids": []
+    },
+    "source-noread-parent-fresh.json": {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-parent-fresh.json",
+      "bytes": 1024684,
+      "sha256": "37341fc72cc245d0baae7bb8aa1e2624c9ea102c72422ccedee4f3ad2a5ac25d",
+      "artifact": "blake3:e7c14c994c57eaad6c9a765c71e7699c0f7f0c88a225aea71e6e84c8b7da0e11",
+      "exact": 14,
+      "total": 20,
+      "writes_exact": null,
+      "failed_ids": [
+        "source-joint-reserved/0/false/false/1",
+        "source-joint-reserved/0/false/true/1",
+        "source-joint-reserved/0/true/true/0",
+        "source-joint-reserved/1/false/false/1",
+        "source-joint-reserved/1/false/true/1",
+        "source-joint-reserved/1/true/true/0"
+      ]
+    },
+    "source-noread-equality-fresh.json": {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-equality-fresh.json",
+      "bytes": 1123502,
+      "sha256": "e9eadffd39b3dcc34fb891281f5f4950aaa65c0787c9a44fd0b7466b41387cf1",
+      "artifact": "blake3:369c97f136fd71b919e0086e6f8d2e6b336dd4b401b9bbea22aa5764932a3f06",
+      "exact": 10,
+      "total": 20,
+      "writes_exact": null,
+      "failed_ids": [
+        "source-joint-reserved/0/false/true/1",
+        "source-joint-reserved/0/false/supported-object",
+        "source-joint-reserved/0/true/true/0",
+        "source-joint-reserved/0/true/true/1",
+        "source-joint-reserved/0/true/supported-object",
+        "source-joint-reserved/1/false/true/1",
+        "source-joint-reserved/1/false/supported-object",
+        "source-joint-reserved/1/true/true/0",
+        "source-joint-reserved/1/true/true/1",
+        "source-joint-reserved/1/true/supported-object"
+      ]
+    },
+    "source-noread-preserve128/aliases.json": {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-preserve128/aliases.json",
+      "bytes": 688659,
+      "sha256": "91d965ec649c20df611816eb0ff6d13d42697f6b6aaaba295bd8e4f6f9ff61d2",
+      "artifact": "blake3:d59070c29e1cebcb12d25c2fc034083d9631b24ab04da0c57b94a007ad10ea6f",
+      "exact": 12,
+      "total": 12,
+      "writes_exact": null,
+      "failed_ids": []
+    },
+    "source-noread-preserve128/chains.json": {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-preserve128/chains.json",
+      "bytes": 912085,
+      "sha256": "15ee38850ce19650d1f3e0b7ab88fe8b371845e8ee6b87f4157e9212231e1d57",
+      "artifact": "blake3:d59070c29e1cebcb12d25c2fc034083d9631b24ab04da0c57b94a007ad10ea6f",
+      "exact": 16,
+      "total": 16,
+      "writes_exact": null,
+      "failed_ids": []
+    },
+    "source-noread-preserve128/computed-construction.json": {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-preserve128/computed-construction.json",
+      "bytes": 3023794,
+      "sha256": "aa3e4483abe46de188e0d59777b2e7383ae6b1f32cc31e86f40cb47413479172",
+      "artifact": "blake3:d59070c29e1cebcb12d25c2fc034083d9631b24ab04da0c57b94a007ad10ea6f",
+      "exact": 58,
+      "total": 58,
+      "writes_exact": null,
+      "failed_ids": []
+    },
+    "source-noread-preserve128/dependent.json": {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-preserve128/dependent.json",
+      "bytes": 2307772,
+      "sha256": "da70b7d0616ae9bacfd8e52b25e682b535f0ec8add3ed6d94a67ed2a7d50e590",
+      "artifact": "blake3:d59070c29e1cebcb12d25c2fc034083d9631b24ab04da0c57b94a007ad10ea6f",
+      "exact": 48,
+      "total": 48,
+      "writes_exact": 48,
+      "failed_ids": []
+    },
+    "source-noread-preserve128/exposed-literals.json": {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-preserve128/exposed-literals.json",
+      "bytes": 446143,
+      "sha256": "3bd520bd2809ec95737fba9039782b577220b1d2adffa94a8caf48281e96872c",
+      "artifact": "blake3:d59070c29e1cebcb12d25c2fc034083d9631b24ab04da0c57b94a007ad10ea6f",
+      "exact": 16,
+      "total": 16,
+      "writes_exact": null,
+      "failed_ids": []
+    },
+    "source-noread-preserve128/exposed-roles.json": {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-preserve128/exposed-roles.json",
+      "bytes": 688854,
+      "sha256": "2f0d853ec59bbfcb0b5909c7a139b5d7d7c904daec1cfa04a27a732e13b5889a",
+      "artifact": "blake3:d59070c29e1cebcb12d25c2fc034083d9631b24ab04da0c57b94a007ad10ea6f",
+      "exact": 12,
+      "total": 12,
+      "writes_exact": null,
+      "failed_ids": []
+    },
+    "source-noread-preserve128/identifiers.json": {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-preserve128/identifiers.json",
+      "bytes": 135423,
+      "sha256": "232f9da5328f118b88949026c6ef7562dd88c5d229539afcee692df2719083fa",
+      "artifact": "blake3:d59070c29e1cebcb12d25c2fc034083d9631b24ab04da0c57b94a007ad10ea6f",
+      "exact": 8,
+      "total": 8,
+      "writes_exact": null,
+      "failed_ids": []
+    },
+    "source-noread-preserve128/literal-construction.json": {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-preserve128/literal-construction.json",
+      "bytes": 2503776,
+      "sha256": "aa0712dd2dd15a831fb0b91a5467251ab1dee4129b4fd5056c96a59e9864e4af",
+      "artifact": "blake3:d59070c29e1cebcb12d25c2fc034083d9631b24ab04da0c57b94a007ad10ea6f",
+      "exact": 103,
+      "total": 103,
+      "writes_exact": null,
+      "failed_ids": []
+    },
+    "source-noread-preserve128/long.json": {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-preserve128/long.json",
+      "bytes": 1457385,
+      "sha256": "af02e349763c9941d4d46607684ebca1469d846dbed28db0bbf00f0fa56745b2",
+      "artifact": "blake3:d59070c29e1cebcb12d25c2fc034083d9631b24ab04da0c57b94a007ad10ea6f",
+      "exact": 28,
+      "total": 28,
+      "writes_exact": 28,
+      "failed_ids": []
+    },
+    "source-noread-preserve128/names.json": {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-preserve128/names.json",
+      "bytes": 1362406,
+      "sha256": "ba335220894aca958b448d470d6c928710ddd23a7728eea22e63304863cce463",
+      "artifact": "blake3:d59070c29e1cebcb12d25c2fc034083d9631b24ab04da0c57b94a007ad10ea6f",
+      "exact": 28,
+      "total": 28,
+      "writes_exact": 28,
+      "failed_ids": []
+    },
+    "source-noread-preserve128/numeric.json": {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-preserve128/numeric.json",
+      "bytes": 272236,
+      "sha256": "e35190b9f4bbc6a301bbca88a7e04e6f69167a2e4467074f5d7011abcb59c86c",
+      "artifact": "blake3:d59070c29e1cebcb12d25c2fc034083d9631b24ab04da0c57b94a007ad10ea6f",
+      "exact": 6,
+      "total": 6,
+      "writes_exact": null,
+      "failed_ids": []
+    },
+    "source-noread-preserve128/preservation.json": {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-preserve128/preservation.json",
+      "bytes": 1475220,
+      "sha256": "7c63d9ba242fb8b22354f39627aba44af11ff411c474c032c407251f9b4c0c86",
+      "artifact": "blake3:d59070c29e1cebcb12d25c2fc034083d9631b24ab04da0c57b94a007ad10ea6f",
+      "exact": 62,
+      "total": 62,
+      "writes_exact": null,
+      "failed_ids": []
+    },
+    "source-noread-preserve128/prior-chains.json": {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-preserve128/prior-chains.json",
+      "bytes": 912050,
+      "sha256": "5d75f8c95643edc55f4b679464997c5af6ee5cedb65b7d02086ef497ab182c4b",
+      "artifact": "blake3:d59070c29e1cebcb12d25c2fc034083d9631b24ab04da0c57b94a007ad10ea6f",
+      "exact": 16,
+      "total": 16,
+      "writes_exact": null,
+      "failed_ids": []
+    },
+    "source-noread-preserve128/prior-fresh.json": {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-preserve128/prior-fresh.json",
+      "bytes": 446012,
+      "sha256": "8e4cd348e36512265ef77d4edb0234758e6269d9cd11d2d479541786d02b4ae0",
+      "artifact": "blake3:d59070c29e1cebcb12d25c2fc034083d9631b24ab04da0c57b94a007ad10ea6f",
+      "exact": 16,
+      "total": 16,
+      "writes_exact": null,
+      "failed_ids": []
+    },
+    "source-noread-preserve128/prior.json": {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-preserve128/prior.json",
+      "bytes": 330894,
+      "sha256": "57314452e2378647bdaffe4cc010ad0c389ffb792cc7b6c0522f2aaa0fe87568",
+      "artifact": "blake3:d59070c29e1cebcb12d25c2fc034083d9631b24ab04da0c57b94a007ad10ea6f",
+      "exact": 24,
+      "total": 24,
+      "writes_exact": null,
+      "failed_ids": []
+    },
+    "source-noread-preserve128/roles.json": {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-preserve128/roles.json",
+      "bytes": 688698,
+      "sha256": "0c639475f68ddbcb8ee5572299469782c9cc441ff71cf8e7276cf6bcd7bed34e",
+      "artifact": "blake3:d59070c29e1cebcb12d25c2fc034083d9631b24ab04da0c57b94a007ad10ea6f",
+      "exact": 12,
+      "total": 12,
+      "writes_exact": null,
+      "failed_ids": []
+    },
+    "source-noread-preserve128/sessions.json": {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-preserve128/sessions.json",
+      "bytes": 37117,
+      "sha256": "6c58654a0589b8e42ca0b35417a688f5e1bcb9a8268a8140a1f6f4bdf78eac13",
+      "artifact": "blake3:d59070c29e1cebcb12d25c2fc034083d9631b24ab04da0c57b94a007ad10ea6f",
+      "exact": 5,
+      "total": 5,
+      "writes_exact": null,
+      "failed_ids": []
+    }
+  },
+  "construction_comparison": {
+    "parent_exact": 545,
+    "candidate_exact": 551,
+    "total": 603,
+    "lost_correct_ids": [],
+    "remaining_wrong_texts_unchanged": true
+  },
+  "checks": {
+    "focused_units": "4 PASS",
+    "actual_source_no_read_allocation_commit_checkpoint": "PASS; zero allocations/bytes",
+    "actual_three_turn_numeric_allocation_checkpoint": "PASS; zero allocations/bytes",
+    "actual_cli_unknown": " Unknown.\n",
+    "actual_cli_supported": " Norvik.\n",
+    "kernel_source": "PASS",
+    "format": "PASS",
+    "architecture_policy": "PASS",
+    "claim_wording": "PASS",
+    "generated_rust_assertions": "NOT_RUN; eight identifier outputs preserved",
+    "broad_release_qa": "NOT_RUN",
+    "protected_successor_ci": "PENDING at evidence construction"
+  },
+  "resource": {
+    "model_cycle_ms": 155350,
+    "engineering_cycle_ms": 524036,
+    "model_peak_sampled_child_rss_bytes": 1141374976,
+    "peak_sampled_known_storage_bytes": 6837837824,
+    "snapshot": {
+      "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+      "at": "2026-09-07T01:44:18.760Z",
+      "inherited_precleanup_bytes": 2747199488,
+      "obsolete_target_growth_credit": 671379456,
+      "current_target_bytes": 2586329088,
+      "predecessor_artifact_root_bytes": 145760256,
+      "current_artifact_root_bytes": 1533480960,
+      "predecessor_worktree_bytes": 9875456,
+      "current_worktree_bytes": 8937472,
+      "stopped_successor_worktree_bytes": 460877824,
+      "source_metadata_reserve_bytes": 5242880,
+      "current_sampled_known_storage_bytes": 6826323968,
+      "storage_limit_bytes": 7734296576,
+      "remaining_storage_bytes": 907972608,
+      "stop_margin_bytes": 134217728,
+      "available_growth_before_stop_bytes": 720338944,
+      "model_ledger": {
+        "cumulative_ms": 3605626,
+        "limit_ms": 4170000
+      },
+      "model_remaining_ms": 564374,
+      "model_process_limit": 1,
+      "model_process_rss_target_bytes": 4294967296,
+      "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+    },
+    "projection": {
+      "at": "2026-09-07T01:15:40.045Z",
+      "authority": "2026-09-06 canonical handoff and current owner standing authorization for necessary local resource extensions; no external cost",
+      "before": {
+        "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+        "at": "2026-09-07T01:15:40.044Z",
+        "inherited_precleanup_bytes": 2747199488,
+        "obsolete_target_growth_credit": 671379456,
+        "current_target_bytes": 2584907776,
+        "predecessor_artifact_root_bytes": 145760256,
+        "current_artifact_root_bytes": 1428213760,
+        "predecessor_worktree_bytes": 9875456,
+        "current_worktree_bytes": 8937472,
+        "stopped_successor_worktree_bytes": 460877824,
+        "source_metadata_reserve_bytes": 5242880,
+        "current_sampled_known_storage_bytes": 6719635456,
+        "storage_limit_bytes": 7063207936,
+        "remaining_storage_bytes": 343572480,
+        "stop_margin_bytes": 134217728,
+        "available_growth_before_stop_bytes": 155938816,
+        "model_ledger": {
+          "cumulative_ms": 3450276,
+          "limit_ms": 3570000
+        },
+        "model_remaining_ms": 119724,
+        "model_process_limit": 1,
+        "model_process_rss_target_bytes": 4294967296,
+        "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+      },
+      "scope": "In-place warm source-router refinement with supported/NoRead contrasts; preserve complete e7 parent provenance and unchanged downstream components.",
+      "model_increment_ms": 600000,
+      "model_cycle_ms": 540000,
+      "engineering_cycle_ms": 1500000,
+      "model_projection_ms": 420000,
+      "engineering_projection_ms": 900000,
+      "growth_projection_bytes": 536870912,
+      "storage_increment_bytes": 671088640,
+      "model_processes": 1,
+      "rss_bytes": 4294967296,
+      "build_jobs": 1,
+      "model_work_breakdown_ms": {
+        "rust_preparation_and_trace": 45000,
+        "two_bounded_fits": 120000,
+        "open_generation_and_preservation": 130000,
+        "fresh_parent_candidate_control": 80000,
+        "allocation_cli_checkpoint": 45000
+      },
+      "engineering_breakdown_ms": {
+        "coherent_combined_release_build": 400000,
+        "focused_test_build_and_checks": 200000,
+        "correction_and_final_build_reserve": 300000
+      },
+      "storage_breakdown_bytes": {
+        "cargo_variants_and_test_products": 402653184,
+        "retained_models_reports": 117440512,
+        "source_metadata": 16777216
+      },
+      "limits_scope": "Charge all retries, failed and resumed work. Preserve128MiB stop margin. Same isolated full worktree reused; all branches/user material retained."
+    },
+    "deletions": false,
+    "paid_external_model_compute": false,
+    "sampling_limit": "periodic child RSS and conservative du-accounted storage, not exact transient peaks or APFS unique extents"
+  },
+  "files": [
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-source.json",
+      "bytes": 130905,
+      "sha256": "8958fd1a4dac20108dfafebb8e2c038551573862a48f9ab5aece153c3aa15ae0"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-source-v2.json",
+      "bytes": 131825,
+      "sha256": "3a9e0ac477323432e2c30651ca8a79372bdd0d74317b1549aec8e0d7ce4b1024"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-parent-open.json",
+      "bytes": 550153,
+      "sha256": "593953b0d0ba96f08f17995f4064cc49ca3f792de8f2e08a2018023d3225ebd8"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-parent-construction.json",
+      "bytes": 32972872,
+      "sha256": "49cd0d9393072474a1f805af2bf8b0aaa742d9bbfa00dc77098c8c900ad3e5d9"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-live-recovery.json",
+      "bytes": 1237,
+      "sha256": "789c805c2c61e1b34bf3065848e49cf7e2bc49f2b94f8465a39a07587ca32d6a"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-design-selection.json",
+      "bytes": 2266,
+      "sha256": "51e66df0df230579c004248ab4513d4ae5c1a8a0c491ee900ad2021c6631734b"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-projection.json",
+      "bytes": 2951,
+      "sha256": "045e93941190ea284dc09e55ab22adc4988b98845d30f5d24cda25a8ea9b0a04"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-inherited-storage-authorization.json",
+      "bytes": 1412,
+      "sha256": "3f7efc656bb22211c302aca855f3562af8a74376ebc0d8d37710e4975dd2f879"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-effective-storage-authorization.json",
+      "bytes": 1478,
+      "sha256": "90f4bade3651a6a5cd08613b1211d29d3a3c9a65aaf305bcf394ef088663b17b"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-delivery-resource.json",
+      "bytes": 1477,
+      "sha256": "eb486f60257cdafceba8cb06bbbd5a536552f67a573d29a97f8eb2895358693e"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-work-comparison.json",
+      "bytes": 37018,
+      "sha256": "c49d9dad9f32c445440224e71e27683fa47417c5363cd6c7f01744c37b3bf6e5"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-run.mjs",
+      "bytes": 968,
+      "sha256": "9eed5bdc4f53d7252b126b234ed9afcec28e45f4ef81b525784dd6f5106496af"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/run-command.mjs",
+      "bytes": 5975,
+      "sha256": "29422110df63b217dde5439ae720f1315e79be7bc5c576ef3193980d0f8c6884"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/resource-accounting.mjs",
+      "bytes": 4139,
+      "sha256": "c6e9a29c861268bcad4ddbd66e1a08c799cc8e5cb105b064a0f8e3e597335d15"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-allocation-build.log",
+      "bytes": 707,
+      "sha256": "7d4ef1e50362828565b1ea212f5d3db7652fff35e22ab0b8150cb6c1bc683102"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-allocation.stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-allocation.stdout.log",
+      "bytes": 361,
+      "sha256": "bddbb1604fd611c306b499d940c5208a03986ef9650ee632db9b356a504f678a"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-build.log",
+      "bytes": 1437,
+      "sha256": "77cf1b50280e7c9adfb2771f093c51a090eea86eb1427e222e0960fc01ba3d4b"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-claims.log",
+      "bytes": 83,
+      "sha256": "78d71cb97c00d606a9a909d89a2f4f4e3b4be6b84af390f20c9fc50ec449922f"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-cli-supported.stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-cli-supported.stdout.log",
+      "bytes": 12249,
+      "sha256": "24c66abe75f1c79247db87f1fc332ee17f785e0b5b7e303c0e5fe288476e5b02"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-cli-unknown.stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-cli-unknown.stdout.log",
+      "bytes": 9320,
+      "sha256": "26fd7406fd3e07eaec6517c503102e1109fcefd8bfb128a8398bb7f957856620"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-control-correction.log",
+      "bytes": 175,
+      "sha256": "da2260f5b003202beecb562aad6d873d83122c09a44c6d506417c9801d3e60d1"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-equality-fresh.stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-equality-fresh.stdout.log",
+      "bytes": 24,
+      "sha256": "242d30a6864c73cd0478e118cac7c87ff09ee3132a357d29f99e098fd3a6a02c"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-equality128.stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-equality128.stdout.log",
+      "bytes": 1924,
+      "sha256": "43163d3ae36411a3c931c7c8c978a4da437f6d164a7fc82938610f61e4f31d33"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-final-claims.log",
+      "bytes": 83,
+      "sha256": "78d71cb97c00d606a9a909d89a2f4f4e3b4be6b84af390f20c9fc50ec449922f"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-final-format.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-fit128.stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-fit128.stdout.log",
+      "bytes": 1920,
+      "sha256": "08b75ff779cfe866253a58d33ceccc439a009d9531ccfe9312206424f101bb5b"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-format.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-fresh128.stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-fresh128.stdout.log",
+      "bytes": 24,
+      "sha256": "0cfaf191d11438121e8660205b9743e41ab142a9f749149915b25a606cc90e5f"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-kernel.stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-kernel.stdout.log",
+      "bytes": 189,
+      "sha256": "ef649bbd766e40db8ff1ebeb042eb4710d01fe2d361f1c222c49312d5dcc5908"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-numeric-allocation.stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-numeric-allocation.stdout.log",
+      "bytes": 390,
+      "sha256": "f44f432b569d4961f7394280a99adbc9972bdf4408385e4db07db4498c820a16"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-parent-construction.stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-parent-construction.stdout.log",
+      "bytes": 26,
+      "sha256": "73281bd0c823fb172f5e91c060431a8ee5e7d4cf60c5bce6c869c35ac2ff7ad0"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-parent-fresh.stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-parent-fresh.stdout.log",
+      "bytes": 24,
+      "sha256": "a72eeddb7e3e74490abc7292cc45331a6c7daca6a018aa4774d2a1786a25a448"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-parent-open.stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-parent-open.stdout.log",
+      "bytes": 23,
+      "sha256": "de1b9f24968fb1edc12edb553cb61f1d2b567fb228cd86b96fc0286ec63a46de"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-policy.log",
+      "bytes": 73,
+      "sha256": "58dd9c24c33ba5ff6519ed3f5bea924d8fd10d93bcfaba529e2d8b0101be6ae7"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-prepare-v2.stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-prepare-v2.stdout.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-prepare.stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-prepare.stdout.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-preserve128.stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-preserve128.stdout.log",
+      "bytes": 832,
+      "sha256": "7eb0cb3c1f02a54be9c30c94ccb3a1dbbe533eb4c3780cae54b01484a83e00e9"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-probe-correction.log",
+      "bytes": 175,
+      "sha256": "5e3560a9d4dac639db41e67580793d8b770be86e82b70ff30a59426b2454f605"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-test-build.log",
+      "bytes": 282,
+      "sha256": "30360b8655add507a6724e62a2836bc8a105821cefa8888f24837138eb8676fd"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-unit.stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/source-noread-unit.stdout.log",
+      "bytes": 577,
+      "sha256": "4b54795a23b1c57e492dfdc8a0f71dbd9d0369140c8a8b48af5e2bf2629a67f0"
+    }
+  ],
+  "commands": [
+    {
+      "label": "source-noread-prepare",
+      "started": "2026-09-07T01:27:52.705Z",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "source-noread",
+        "prepare",
+        "source-routing-role-comparison/source.json",
+        "answer-entry-source.json",
+        "source-noread-source.json"
+      ],
+      "elapsed_ms": 204,
+      "engineering_only": false,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_process_rss_sample_bytes": null,
+      "peak_sampled_known_bytes": 6720458752
+    },
+    {
+      "label": "source-noread-parent-open",
+      "started": "2026-09-07T01:27:59.773Z",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "source-noread",
+        "evaluate",
+        "answer-entry-final/model.json",
+        "source-noread-source.json",
+        "development",
+        "source-noread-parent-open.json",
+        "full"
+      ],
+      "elapsed_ms": 8061,
+      "engineering_only": false,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_process_rss_sample_bytes": 881360896,
+      "peak_sampled_known_bytes": 6721015808
+    },
+    {
+      "label": "source-noread-prepare-v2",
+      "started": "2026-09-07T01:29:24.957Z",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "source-noread",
+        "prepare",
+        "source-routing-role-comparison/source.json",
+        "answer-entry-source.json",
+        "source-noread-source-v2.json"
+      ],
+      "elapsed_ms": 186,
+      "engineering_only": false,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_process_rss_sample_bytes": null,
+      "peak_sampled_known_bytes": 6721155072
+    },
+    {
+      "label": "source-noread-fit128",
+      "started": "2026-09-07T01:29:34.531Z",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "source-noread",
+        "fit",
+        "answer-entry-final/model.json",
+        "source-noread-source-v2.json",
+        "source-noread-angular128",
+        "128",
+        "angular"
+      ],
+      "elapsed_ms": 27145,
+      "engineering_only": false,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_process_rss_sample_bytes": 903806976,
+      "peak_sampled_known_bytes": 6746308608
+    },
+    {
+      "label": "source-noread-preserve128",
+      "started": "2026-09-07T01:31:04.995Z",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "source-noread",
+        "preserve",
+        "source-noread-angular128/model.json",
+        ".",
+        "source-noread-preserve128"
+      ],
+      "elapsed_ms": 9523,
+      "engineering_only": false,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_process_rss_sample_bytes": 885686272,
+      "peak_sampled_known_bytes": 6764040192
+    },
+    {
+      "label": "source-noread-parent-construction",
+      "started": "2026-09-07T01:31:48.621Z",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "source-noread",
+        "evaluate",
+        "answer-entry-final/model.json",
+        "source-noread-source-v2.json",
+        "fit",
+        "source-noread-parent-construction.json",
+        "full"
+      ],
+      "elapsed_ms": 9068,
+      "engineering_only": false,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_process_rss_sample_bytes": 878575616,
+      "peak_sampled_known_bytes": 6797021184
+    },
+    {
+      "label": "source-noread-unit",
+      "started": "2026-09-07T01:33:10.111Z",
+      "command": "/tmp/r4-native-geometric-target/debug/deps/uor_r4_core-8d8deefa7a2a5da5",
+      "args": [
+        "source_refinement",
+        "--nocapture"
+      ],
+      "elapsed_ms": 13069,
+      "engineering_only": false,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_process_rss_sample_bytes": 30916608,
+      "peak_sampled_known_bytes": 6797438976
+    },
+    {
+      "label": "source-noread-fresh128",
+      "started": "2026-09-07T01:33:30.059Z",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "source-noread",
+        "evaluate",
+        "source-noread-angular128/model.json",
+        "source-noread-source-v2.json",
+        "first_use",
+        "source-noread-fresh128.json",
+        "full"
+      ],
+      "elapsed_ms": 8520,
+      "engineering_only": false,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_process_rss_sample_bytes": 890126336,
+      "peak_sampled_known_bytes": 6798565376
+    },
+    {
+      "label": "source-noread-parent-fresh",
+      "started": "2026-09-07T01:34:03.294Z",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "source-noread",
+        "evaluate",
+        "answer-entry-final/model.json",
+        "source-noread-source-v2.json",
+        "first_use",
+        "source-noread-parent-fresh.json",
+        "full"
+      ],
+      "elapsed_ms": 7698,
+      "engineering_only": false,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_process_rss_sample_bytes": 883703808,
+      "peak_sampled_known_bytes": 6799597568
+    },
+    {
+      "label": "source-noread-equality128",
+      "started": "2026-09-07T01:37:00.055Z",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "source-noread",
+        "fit",
+        "answer-entry-final/model.json",
+        "source-noread-source-v2.json",
+        "source-noread-equality128",
+        "128",
+        "equality"
+      ],
+      "elapsed_ms": 27026,
+      "engineering_only": false,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_process_rss_sample_bytes": 909131776,
+      "peak_sampled_known_bytes": 6825041920
+    },
+    {
+      "label": "source-noread-equality-fresh",
+      "started": "2026-09-07T01:37:40.891Z",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "source-noread",
+        "evaluate",
+        "source-noread-equality128/model.json",
+        "source-noread-source-v2.json",
+        "first_use",
+        "source-noread-equality-fresh.json",
+        "full"
+      ],
+      "elapsed_ms": 8580,
+      "engineering_only": false,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_process_rss_sample_bytes": 888602624,
+      "peak_sampled_known_bytes": 6826172416
+    },
+    {
+      "label": "source-noread-allocation",
+      "started": "2026-09-07T01:38:05.606Z",
+      "command": "env",
+      "args": [
+        "R4_SOURCE_NO_READ_MODEL=source-noread-angular128/model.json",
+        "R4_SOURCE_NO_READ_PARENT=answer-entry-final/model.json",
+        "/tmp/r4-native-geometric-target/release/deps/native_geometric_allocations-6c7ff1216c7e1931",
+        "native_source_no_read_artifact_is_allocation_free_and_causal",
+        "--ignored",
+        "--nocapture"
+      ],
+      "elapsed_ms": 8973,
+      "engineering_only": false,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_process_rss_sample_bytes": 160071680,
+      "peak_sampled_known_bytes": 6826176512
+    },
+    {
+      "label": "source-noread-numeric-allocation",
+      "started": "2026-09-07T01:38:58.807Z",
+      "command": "env",
+      "args": [
+        "R4_INDEPENDENT_MODEL=source-noread-angular128/model.json",
+        "R4_LITERAL_PARENT=independent-warm-angular/model.json",
+        "/tmp/r4-native-geometric-target/release/deps/native_geometric_allocations-6c7ff1216c7e1931",
+        "native_independent_artifact_is_allocation_free",
+        "--ignored",
+        "--nocapture"
+      ],
+      "elapsed_ms": 9842,
+      "engineering_only": false,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_process_rss_sample_bytes": 1141374976,
+      "peak_sampled_known_bytes": 6826180608
+    },
+    {
+      "label": "source-noread-cli-unknown",
+      "started": "2026-09-07T01:39:53.051Z",
+      "command": "/tmp/r4-native-geometric-target/release/r4",
+      "args": [
+        "geometric",
+        "generate",
+        "--model",
+        "source-noread-angular128/model.json",
+        "--prompt",
+        "User: varo has -5 coins. leni has 17 coins. tavi has 301 coins.\nUser: Where is the location of leni?\nAssistant:",
+        "--max-tokens",
+        "32",
+        "--json"
+      ],
+      "elapsed_ms": 8935,
+      "engineering_only": false,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_process_rss_sample_bytes": 894697472,
+      "peak_sampled_known_bytes": 6826233856
+    },
+    {
+      "label": "source-noread-cli-supported",
+      "started": "2026-09-07T01:41:51.329Z",
+      "command": "/tmp/r4-native-geometric-target/release/r4",
+      "args": [
+        "geometric",
+        "generate",
+        "--model",
+        "source-noread-angular128/model.json",
+        "--prompt",
+        "User: selvi has -9 coins. selvi lives in Norvik.\nUser: Where is the location of selvi?\nAssistant:",
+        "--max-tokens",
+        "32",
+        "--json"
+      ],
+      "elapsed_ms": 8511,
+      "engineering_only": false,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_process_rss_sample_bytes": 892846080,
+      "peak_sampled_known_bytes": 6826246144
+    },
+    {
+      "label": "source-noread-kernel",
+      "started": "2026-09-07T01:43:18.860Z",
+      "command": "/tmp/r4-native-geometric-target/release/deps/native_geometric_allocations-6c7ff1216c7e1931",
+      "args": [
+        "native_kernel_source_has_no_forbidden_arithmetic_or_float_types",
+        "--nocapture"
+      ],
+      "elapsed_ms": 9,
+      "engineering_only": false,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_process_rss_sample_bytes": null,
+      "peak_sampled_known_bytes": 6826250240
+    },
+    {
+      "label": "source-noread-format",
+      "started": "2026-09-07T01:21:17.024Z",
+      "command": "/Users/casey.allard/.cargo/bin/cargo",
+      "args": [
+        "fmt"
+      ],
+      "elapsed_ms": 3476,
+      "engineering_only": true,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_process_rss_sample_bytes": null,
+      "peak_sampled_known_bytes": 6719651840
+    },
+    {
+      "label": "source-noread-build",
+      "started": "2026-09-07T01:21:20.660Z",
+      "command": "env",
+      "args": [
+        "CARGO_TARGET_DIR=/tmp/r4-native-geometric-target",
+        "CARGO_INCREMENTAL=0",
+        "CARGO_BUILD_JOBS=1",
+        "/Users/casey.allard/.cargo/bin/cargo",
+        "build",
+        "--release",
+        "--offline",
+        "-p",
+        "uor-r4-core",
+        "--example",
+        "native_geometric_value_probe",
+        "-p",
+        "uor-r4-wasm-router",
+        "--bin",
+        "r4"
+      ],
+      "elapsed_ms": 337350,
+      "engineering_only": true,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_process_rss_sample_bytes": null,
+      "peak_sampled_known_bytes": 6747414528
+    },
+    {
+      "label": "source-noread-probe-correction",
+      "started": "2026-09-07T01:27:30.446Z",
+      "command": "env",
+      "args": [
+        "CARGO_TARGET_DIR=/tmp/r4-native-geometric-target",
+        "CARGO_INCREMENTAL=0",
+        "CARGO_BUILD_JOBS=1",
+        "/Users/casey.allard/.cargo/bin/cargo",
+        "build",
+        "--release",
+        "--offline",
+        "-p",
+        "uor-r4-core",
+        "--example",
+        "native_geometric_value_probe",
+        "-p",
+        "uor-r4-wasm-router",
+        "--bin",
+        "r4"
+      ],
+      "elapsed_ms": 13156,
+      "engineering_only": true,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_process_rss_sample_bytes": null,
+      "peak_sampled_known_bytes": 6720331776
+    },
+    {
+      "label": "source-noread-control-correction",
+      "started": "2026-09-07T01:28:54.274Z",
+      "command": "env",
+      "args": [
+        "CARGO_TARGET_DIR=/tmp/r4-native-geometric-target",
+        "CARGO_INCREMENTAL=0",
+        "CARGO_BUILD_JOBS=1",
+        "/Users/casey.allard/.cargo/bin/cargo",
+        "build",
+        "--release",
+        "--offline",
+        "-p",
+        "uor-r4-core",
+        "--example",
+        "native_geometric_value_probe",
+        "-p",
+        "uor-r4-wasm-router",
+        "--bin",
+        "r4"
+      ],
+      "elapsed_ms": 13355,
+      "engineering_only": true,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_process_rss_sample_bytes": null,
+      "peak_sampled_known_bytes": 6721024000
+    },
+    {
+      "label": "source-noread-test-build",
+      "started": "2026-09-07T01:32:30.107Z",
+      "command": "env",
+      "args": [
+        "CARGO_TARGET_DIR=/tmp/r4-native-geometric-target",
+        "CARGO_INCREMENTAL=0",
+        "CARGO_BUILD_JOBS=1",
+        "CARGO_PROFILE_DEV_DEBUG=0",
+        "CARGO_PROFILE_TEST_DEBUG=0",
+        "/Users/casey.allard/.cargo/bin/cargo",
+        "test",
+        "--offline",
+        "-p",
+        "uor-r4-core",
+        "--lib",
+        "source_refinement",
+        "--config",
+        "profile.test.package.uor-r4-core.opt-level=0",
+        "--no-run"
+      ],
+      "elapsed_ms": 22812,
+      "engineering_only": true,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_process_rss_sample_bytes": null,
+      "peak_sampled_known_bytes": 6837837824
+    },
+    {
+      "label": "source-noread-allocation-build",
+      "started": "2026-09-07T01:34:43.730Z",
+      "command": "env",
+      "args": [
+        "CARGO_TARGET_DIR=/tmp/r4-native-geometric-target",
+        "CARGO_INCREMENTAL=0",
+        "CARGO_BUILD_JOBS=1",
+        "/Users/casey.allard/.cargo/bin/cargo",
+        "test",
+        "--release",
+        "--offline",
+        "-p",
+        "uor-r4-core",
+        "--test",
+        "native_geometric_allocations",
+        "--no-run"
+      ],
+      "elapsed_ms": 129955,
+      "engineering_only": true,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_process_rss_sample_bytes": null,
+      "peak_sampled_known_bytes": 6800699392
+    },
+    {
+      "label": "source-noread-final-format",
+      "started": "2026-09-07T01:42:49.025Z",
+      "command": "/Users/casey.allard/.cargo/bin/cargo",
+      "args": [
+        "fmt",
+        "--check"
+      ],
+      "elapsed_ms": 3415,
+      "engineering_only": true,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_process_rss_sample_bytes": null,
+      "peak_sampled_known_bytes": 6826250240
+    },
+    {
+      "label": "source-noread-policy",
+      "started": "2026-09-07T01:43:34.454Z",
+      "command": "/tmp/r4-native-geometric-target/release/r4-policy-check",
+      "args": [
+        "."
+      ],
+      "elapsed_ms": 130,
+      "engineering_only": true,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_process_rss_sample_bytes": null,
+      "peak_sampled_known_bytes": 6826258432
+    },
+    {
+      "label": "source-noread-claims",
+      "started": "2026-09-07T01:43:34.745Z",
+      "command": "python3",
+      "args": [
+        "scripts/check_claim_wording.py"
+      ],
+      "elapsed_ms": 215,
+      "engineering_only": true,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_process_rss_sample_bytes": null,
+      "peak_sampled_known_bytes": 6826262528
+    },
+    {
+      "label": "source-noread-final-claims",
+      "started": "2026-09-07T01:47:02.859Z",
+      "command": "python3",
+      "args": [
+        "scripts/check_claim_wording.py"
+      ],
+      "elapsed_ms": 172,
+      "engineering_only": true,
+      "code": 0,
+      "signal": null,
+      "stopped": null,
+      "peak_process_rss_sample_bytes": null,
+      "peak_sampled_known_bytes": 6826340352
+    }
+  ],
+  "limits": [
+    "Single optional nonexecuting refinement witness; original router restored to validate exact training parent. Only one refinement supported.",
+    "All new twenty cases use direct source dispatch, with known query forms and authored worlds.",
+    "Copy labels accept equal payload occurrences; coins success does not establish owner-specific occurrence binding.",
+    "Combined construction has52 unchanged failures, including inherited numeric admission taking a supported location and older identifier queries.",
+    "No general syntax/prose/reasoning, frontier capability or whole-model laptop speedup."
+  ]
+}

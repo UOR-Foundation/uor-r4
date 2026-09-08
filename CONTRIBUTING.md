@@ -1,4 +1,12 @@
-# Contributing to R⁴
+# Contributing to UOR-R4 Geometric Language Model
+
+New development follows the
+[owner-adopted immediate sequence](docs/integration/project-track.md#immediate-build-sequence).
+Read the [project map](docs/PROJECT_MAP.md) and [capability/direction assessment](docs/integration/model-direction-2026-09.md). Treat roadmap order as priority and evidence dependencies, not an automatic one-task stop. Use the existing
+task and consolidated issue owners; coordinate independent work when useful and
+preserve dated results. Reuse the
+[architecture/source audit](docs/integration/architecture-2026-09/README.md) before
+introducing a new mechanism; inspect its actual source and declared limitations.
 
 Follow [AGENTS.md](AGENTS.md), the [native geometric AI plan](docs/integration/project-track.md)
 and the [current implementation](docs/integration/current-state.md). The stable
@@ -10,8 +18,10 @@ Do not copy the current stage into another roadmap or restore old issue gates.
 Use Rust for preparation, training, artifact construction and inference.
 Training may use floating point and matrix multiplication. The serving target
 executes learned geometric operators through bounded state, routes and
-integer/table lookup; a dense transformer hidden behind a lookup interface is
-not the target.
+integer/table lookup, with no serving matrix products, including lookup/add
+contractions, and no transformer backbone. Deterministic geometric address/page
+selection is allowed. Shared typed operators are current; expert gates remain a
+conditional later option requiring capability and complete M1 cost evidence.
 
 Prime/ordered-n-let addresses, fixed zeta phases, R4/S3/H4 transport, exact
 `Z[phi]` and orientation state, typed paired-H4/icosian geometry and UOR identity
@@ -48,10 +58,13 @@ wall-time, RAM, new-storage and checkpoint limits. Account cumulatively across
 warmup, training, evaluation, retries and resumes. Diagnose and correct failures
 within the remaining authorized budget; there is no global 15-minute cutoff or
 one-retry quota. Stop/checkpoint at limits, avoid unchanged blind retries, and
-obtain authorization before increasing the cumulative budget or external cost.
+apply the standing local-extension authorization below before increasing a limit. External cost still requires separate explicit authorization.
 
 Open development evaluation is part of learning; final held-out evaluation
 follows design selection. Keep prior results at their exact scope, and report
 resource unavailability separately from model quality. Preserve proof, measured
 behavior and hypothesis distinctions without creating a proof dossier or new
 ledger for every edit.
+
+
+**Standing owner authorization (2026-09-06):** necessary local model/time/storage allowance extensions are already authorized. Record the complete projection, reason, increment and updated cumulative limit before using each extension; retain cumulative charges and the 128 MiB storage stop margin. Do not ask the owner to approve the same class of necessary increase again. This authorizes neither destructive deletion nor paid/external compute, and does not require spending unused allowance.

@@ -1,5 +1,45 @@
 # Native geometric mechanism map — #973
 
+**Role-path update (2026-09-05):** optional relation schema `/2` masks candidate
+payload identities and composes ordered interior word-local H4/zeta transports.
+Its 82-row exact prime-keyed context table is compiled from the existing tokenizer
+and fixed geometry, then reconstructed at load. Stored payload witnesses and
+reader weights remain unchanged. The [bounded handoff now passes](native_geometric_relation_role_path_1138.md);
+writer scoring still dominates new cost and selective geometric admission/routing
+remains the unimplemented next step. Version-1 negatives below stay preserved.
+
+**Relation-memory implementation update (2026-09-05):**
+[`relation.rs`](../crates/uor-r4-core/src/native_geometric/relation.rs) and
+[`relation_training.rs`](../crates/uor-r4-core/src/native_geometric/relation_training.rs)
+add learned local prime/H4/zeta association writes and integer current-record
+reads. Sixteen exact versions and a current directory retain participant bytes,
+source endpoints and geometry after raw-window eviction; they do not retain
+full old syntax or independent predicates. NoWrite/assert/revise/contradict is
+learned; FIFO retention and conflict/version laws are fixed. The current reader
+scans sixteen directory entries and reuses committed copy. Writer scoring, not
+that small read directory, dominates the exposed new cost. This optional path
+is implemented with an unmet transfer handoff; see the
+[complete relation record](native_geometric_relation_memory_1138.md). Historical
+mechanism statements below retain their original artifact scope.
+
+**Direction update (2026-09-05):** the
+[owner-adopted sequence](integration/project-track.md#immediate-build-sequence)
+selects learned role-aware source choice, exact relational memory, selective
+geometric access and typed operator composition. The table and appendices below
+map implemented mechanisms and dated interventions; proposed roles remain
+unimplemented until their issue supplies evidence. See
+[current-state](integration/current-state.md) for the latest artifact and
+[research synthesis](native_geometric_direction_review_973.md) for reuse decisions.
+
+**Implemented #1137 successor:**
+[`role_read.rs`](../crates/uor-r4-core/src/native_geometric/role_read.rs) learns
+one candidate-relative source/NoRead and lexical-entry choice, with the exact
+source committed on observation and reused by copying. Its
+[implementation record](native_geometric_role_read_1137.md) gives the retained
+information, quantized fitting, complete work and 24/24 bounded first-use result.
+It preserves the sixteen-word capture and does not yet implement persistent
+relation memory or selective geometric access.
+
 This source map connects the native model to reusable mathematical and runtime
 components. Its baseline is the implementation delivered through PR #1127 at
 `3abf9d7e85f70416c95161863b4413cc42a6912c`; the versioned occurrence-selection,
@@ -475,7 +515,7 @@ operator and complete cost; no new multiscale capability is asserted here.
 | Preserved piece | Reusable function | Established limit |
 |---|---|---|
 | [Ordered-summary #967](associative_ordered_route_summaries_a1r_967.md) and [heatmap #970](candidate_relative_identifiability_a1p_970.md) | Exact noncommutative folding and diagnostics for information lost by a readout. | Ordered states separated while the scalar readout tied; heatmap classes later failed transfer/identifiability. These reject those readouts, not all ordered or geometric state. |
-| [Recurrent/sparse/nonlinear checkpoints](integration/project-track.md#historical-mechanical-checkpoints-through-pr-1124-2026-09-04) | Fixed recent records plus age-banked summaries, metadata selection before value gathering, and finite H4-indexed nonlinear R4 action. | Mechanical bounded-state/operation results; no fitted useful assembled model. The old continuous/dense/Python path is reference evidence, not the native product or a required next rung. |
+| [Recurrent/sparse/nonlinear checkpoints](https://github.com/UOR-Foundation/uor-r4/blob/bc03f2d7ffde99608da370808eca542360e54508/docs/integration/project-track.md#historical-mechanical-checkpoints-through-pr-1124-2026-09-04) | Fixed recent records plus age-banked summaries, metadata selection before value gathering, and finite H4-indexed nonlinear R4 action. | Mechanical bounded-state/operation results; no fitted useful assembled model. The old continuous/dense/Python path is reference evidence, not the native product or a required next rung. |
 | [Retained-language and write/read experiments](r4_retained_language_path_v1_973.md) | Causal retention, matched state interventions and separation of write, binding and readout causes. | Useful retained state did not ensure prompt coherence; later write/read laws had scoped capacity or attribution negatives. Importing their numeric results does not validate a new native law. |
 | [R4G1 route attention](MODEL_LIFECYCLE.md#r4routeattentionv1-604), packed graph format/runtime and compiler | Bounded masked-XOR/popcount selection, fixed-point score aggregation, borrowed immutable data, validation and deterministic serialization. | Dormant operator/synthetic fitting evidence and historical compiled-model contracts; no automatic language, geometric-only intelligence or alpha claim transfers. |
 
@@ -516,3 +556,35 @@ passed. Broader streaming variants reached 6/32 or 7/32 prose and 0/32 Rust
 exact outputs, with failed compilation/repair examples retained. These results
 separate useful bounded retrieval, reachable-but-misselected answers and
 missing value computation; they do not qualify either alpha capability group.
+
+## Exact NoWrite execution reuse — #1139
+
+[The admission record](native_geometric_relation_admission_1139.md) adds a bounded
+shortcut before relation writer scoring. Learned writer outcomes choose the
+negative entries; construction frequency chooses the retained 64 signatures.
+The H4/zeta partition shortlists exact prime-signature guards, with capped
+fallback. The same-entry sparse comparison is retained as an execution
+optimization; learned geometric routing advantage remains unestablished. Exact
+relation contents and the inherited prime/zeta/R4 model are unchanged.
+
+## Learned independent and recurrent H4 reads — #1139
+
+[The routing record](native_geometric_learned_routing_1139.md) retains both
+versions. `/1` learns two independent token-code/source/action channels and
+adds independent residual scores. `/2` makes the first selected output act on
+the second query and retains both signed decisions until a shared output
+decision after the inherited predictor. The current-state pointer owns the
+latest measured result and artifact decision.
+
+| Mechanism | Learned or retained information | Boundary |
+|---|---|---|
+| Two dependent reads in `learned_routing.rs` | Learned token Q/K/V codes and query-conditioned actions; exact selected token/offset/key/value/action and signed H4 outputs | Eight recent token sources, two-token initial query, finite 120-state products; no new persistent intermediate-value store |
+| Shared `recurrent_routing.rs` output | First root, second root, ordered relative root, parent winner token and existing response-state flags; learned Base/Emit/EOS scores | Five factorized features, eight postings per row, at most 42 stack candidates; exact source metadata is traced but not an additional output feature |
+| `recurrent_routing_training.rs` | Joint hard-coordinate placement/action search and four-pass additive output fitting, using complete response supervision including EOS | Parent teacher-forced histories are cached; actual candidate teacher forcing measures the approximation, and free generation is separate |
+
+The original prime/zeta/H4 features, exact relations, typed values and committed
+copy operators still execute. This is a versioned development block, not
+replacement of the entire model or a geometric-superiority claim. The
+[adopted plan](https://github.com/UOR-Foundation/uor-r4/blob/bc03f2d7ffde99608da370808eca542360e54508/docs/integration/project-track.md#immediate-build-sequence)
+keeps directional-cost learning, bounded alternative paths, richer signed
+operators and multiscale access conditional on an observed need.

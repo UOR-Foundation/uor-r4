@@ -18,10 +18,33 @@ pub enum ValueAction {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct ValueWork {
+    #[serde(default, skip_serializing_if = "is_zero_u64")]
+    pub admission_legality_checks: u64,
+    #[serde(default, skip_serializing_if = "is_zero_u64")]
+    pub admission_decisions: u64,
+    #[serde(default, skip_serializing_if = "is_zero_u64")]
+    pub admission_rejections: u64,
+    #[serde(default, skip_serializing_if = "RoutingWork::is_empty")]
+    pub routing: RoutingWork,
+    #[serde(
+        default,
+        skip_serializing_if = "super::relation::RelationWork::is_empty"
+    )]
+    pub relations: super::relation::RelationWork,
     pub input_bytes: u64,
     pub literal_writes: u64,
     pub record_evictions: u64,
     pub proposals: u64,
+    #[serde(default, skip_serializing_if = "is_zero_u64")]
+    pub alias_self_add_rejections: u64,
+    /// Exact Copy/Add calls, including rejected overflow attempts.
+    #[serde(default, skip_serializing_if = "is_zero_u64")]
+    pub operator_executions: u64,
+    #[serde(default, skip_serializing_if = "is_zero_u64")]
+    pub selection_comparisons: u64,
+    /// Scoring passes, including reselection after an invalid exact operation.
+    #[serde(default, skip_serializing_if = "is_zero_u64")]
+    pub selection_passes: u64,
     pub additions: u64,
     pub overflow_rejections: u64,
     pub feature_lookups: u64,
@@ -33,6 +56,8 @@ pub struct ValueWork {
     pub lexical_byte_comparisons: u64,
     #[serde(default, skip_serializing_if = "is_zero_u64")]
     pub lexical_writes: u64,
+    #[serde(default, skip_serializing_if = "is_zero_u64")]
+    pub source_refreshes: u64,
     pub h4_reads: u64,
     pub phase_updates: u64,
     pub numeral_steps: u64,
@@ -41,6 +66,9 @@ pub struct ValueWork {
     pub emission_mismatches: u64,
 }
 fn is_zero_u64(value: &u64) -> bool {
+    *value == 0
+}
+fn is_zero_u8(value: &u8) -> bool {
     *value == 0
 }
 impl ValueWork {
@@ -127,6 +155,8 @@ pub(super) struct ValueEmission {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct ValueState {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relations: Option<super::relation::RelationState>,
     pub scanner: Scanner,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lexemes: Option<LexemeState>,
@@ -141,7 +171,11 @@ pub(super) struct ValueState {
     pub phases: [u16; PHASE_CHANNELS],
     pub active: bool,
     pub consumed: bool,
+    #[serde(default, skip_serializing_if = "is_zero_u8")]
+    pub operations_committed: u8,
     pub started_at: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub query_boundary: Option<u64>,
     pub queries: [ValueEntry; QUERY],
     pub query_len: usize,
     pub emission: Option<ValueEmission>,
@@ -151,6 +185,8 @@ pub(super) struct ValueState {
 impl ValueState {
     pub fn new(model: &Model) -> Self {
         Self {
+            relations: super::relation::head(model)
+                .map(|_| super::relation::RelationState::default()),
             scanner: Scanner::default(),
             lexemes: model
                 .values
@@ -168,7 +204,13 @@ impl ValueState {
             phases: [0; PHASE_CHANNELS],
             active: false,
             consumed: false,
+            operations_committed: 0,
             started_at: 0,
+            query_boundary: model
+                .typed_roles
+                .as_ref()
+                .filter(|b| b.local_query)
+                .map(|_| 0),
             queries: [ValueEntry::default(); QUERY],
             query_len: 0,
             emission: None,

@@ -9,6 +9,52 @@ mod fixture {
     include!("../../tests/support/native_word_copy_fixture.rs");
 }
 
+#[test]
+fn native_word_copy_zero_binding_ablation_preserves_admission_and_other_parameters() {
+    let parent = fixture::fitted_shared_binding();
+    let changed = parent.neutralize_copy_zero_binding().unwrap();
+    let mut expected = parent.clone();
+    let row = expected
+        .response_entry
+        .as_mut()
+        .unwrap()
+        .copy
+        .as_mut()
+        .unwrap()
+        .prefix_rows
+        .iter_mut()
+        .find(|r| r.feature == Feature { kind: 32, value: 0 })
+        .unwrap();
+    assert!(row.default_score != 0 || row.scores.iter().any(|s| s.score != 0));
+    row.default_score = 0;
+    for score in &mut row.scores {
+        score.score = 0;
+    }
+    expected.refresh_identity().unwrap();
+    assert_eq!(changed, expected);
+    assert_ne!(changed.artifact_cid(), parent.artifact_cid());
+    assert_eq!(
+        Model::from_bytes(&changed.to_bytes().unwrap()).unwrap(),
+        changed
+    );
+    assert_eq!(changed.neutralize_copy_zero_binding().unwrap(), changed);
+    assert!(fixture::fitted_composed()
+        .neutralize_copy_zero_binding()
+        .is_err());
+    let mut absent = parent.clone();
+    absent
+        .response_entry
+        .as_mut()
+        .unwrap()
+        .copy
+        .as_mut()
+        .unwrap()
+        .prefix_rows
+        .retain(|r| r.feature != Feature { kind: 32, value: 0 });
+    absent.refresh_identity().unwrap();
+    assert!(absent.neutralize_copy_zero_binding().is_err());
+}
+
 fn prefix(model: &Model, prompt: &str, control: Control) -> Session {
     let mut session = model.session(control).unwrap();
     session.observe(model, BOS).unwrap();
@@ -578,75 +624,205 @@ fn native_word_copy_preserves_parent_and_respects_typed_precedence_and_controls(
 }
 
 #[test]
-fn native_word_copy_learned_lexical_prefix_to_copy_transition() {
-    let (parent, _) = fixture::fitted();
-    let prompt = "left = 13; right = 4; alpha ignored; reply:";
-    let mut sess = prefix(parent, prompt, Control::Full);
-    let pred = sess.predict(parent).unwrap();
-    eprintln!(
-        "parent predict token: {} (expected space is 34)",
-        pred.token
+fn native_word_copy_shared_binding_matches_selector_and_preserves_old_identity() {
+    let old = fixture::fitted_completed_word();
+    let bytes = old.to_bytes().unwrap();
+    assert!(!String::from_utf8_lossy(&bytes).contains("shared_binding"));
+    assert_eq!(
+        Model::from_bytes(&bytes).unwrap().artifact_cid(),
+        old.artifact_cid()
     );
-    let mut examples = Vec::new();
-    for (index, name) in ["alpha", "bravo", "cedar", "delta"].into_iter().enumerate() {
-        examples.push(ValueExample {
-            id: format!("prefix-copy-fit-{index}"),
-            prompt: format!("left = 13; right = 4; {name} ignored; reply:"),
-            response: format!(" {name}.\n"),
-        });
+    let mut model = old.clone();
+    let head = model
+        .response_entry
+        .as_mut()
+        .unwrap()
+        .copy
+        .as_mut()
+        .unwrap();
+    head.composed_entry = true;
+    head.shared_binding = true;
+    model.refresh_identity().unwrap();
+    for prompt in [
+        "orin lives in Oslo. What city does orin live in? Answer:",
+        "User: orin lives in Oslo. User: What city does orin live in? Assistant:",
+        "User: orin in Oslo. orin now in Lima. User: What city does orin live in? Assistant:",
+    ] {
+        let session = prefix(&model, prompt, Control::Full);
+        let values = session.values.as_ref().unwrap();
+        let entry = session.response_entry.as_ref().unwrap();
+        let mut work = WordCopyWork::default();
+        let (shared, len) =
+            word_copy_runtime::prefix_features(&model, entry, values, Control::Full, &mut work);
+        let words = values.lexemes.as_ref().unwrap();
+        assert_eq!(len, 16 + words.query_len);
+        assert!(len <= word_copy_types::WORD_COPY_PREFIX_FEATURES);
+        let context = word_copy_runtime::context(&model, values, Control::Full, &mut work);
+        for index in 0..words.query_len {
+            let (features, n) = word_copy_runtime::features(
+                &model,
+                values,
+                &context,
+                index,
+                Control::Full,
+                &mut work,
+            );
+            let binding = features[..n].iter().find(|f| f.kind == 23).unwrap();
+            assert_eq!(
+                shared[16 + index],
+                Feature {
+                    kind: 32,
+                    value: (binding.a << 32) | binding.b
+                }
+            );
+        }
+        assert!(work.equality_byte_comparisons > 0);
+        let mut controlled = model.clone();
+        controlled
+            .response_entry
+            .as_mut()
+            .unwrap()
+            .copy
+            .as_mut()
+            .unwrap()
+            .binding_geometry_disabled = true;
+        controlled.refresh_identity().unwrap();
+        let (plain, n) = word_copy_runtime::prefix_features(
+            &controlled,
+            entry,
+            values,
+            Control::Full,
+            &mut work,
+        );
+        assert!(plain[..n].iter().all(|f| f.kind < 6 || f.kind == 32));
+        let context = word_copy_runtime::context(&controlled, values, Control::Full, &mut work);
+        assert!(context.query_path.is_none() && context.query_phases.is_none());
     }
-    examples.push(ValueExample {
-        id: "prefix-copy-fit-abstain".into(),
-        prompt: "left = 13; right = 4; value ignored; reply:".into(),
-        response: " Unknown.\n".into(),
-    });
-
-    let mut baseline = parent.clone();
-    baseline.response_entry = None;
-    baseline.refresh_identity().unwrap();
-
-    let (entry_model, _) = baseline
-        .fit_response_entry(&examples, ResponseEntryFitConfig::default())
+    let head = model
+        .response_entry
+        .as_mut()
+        .unwrap()
+        .copy
+        .as_mut()
         .unwrap();
+    head.shared_binding = false;
+    head.binding_geometry_disabled = true;
+    model.refresh_identity().unwrap();
+    assert!(Model::from_bytes(&model.to_bytes().unwrap()).is_err());
+}
 
-    let (model, report) = entry_model
-        .fit_response_entry_copy_completed_word(&examples, ResponseEntryFitConfig::default())
+#[test]
+fn native_word_copy_composed_prefix_dispatch_and_restore() {
+    use super::value_types::{ValueFeature, ValueRow};
+    let mut model = fixture::fitted_completed_word().clone();
+    let head = model
+        .response_entry
+        .as_mut()
+        .unwrap()
+        .copy
+        .as_mut()
         .unwrap();
-
-    eprintln!(
-        "REPORT: copy_targets={}, reachable={}, no_copy={}, unreachable={}, upstream={}",
-        report.copy_targets,
-        report.reachable_copy_targets,
-        report.no_copy_targets,
-        report.unreachable_targets,
-        report.upstream_failures
+    head.composed_entry = true;
+    model.refresh_identity().unwrap();
+    let prompt = "alpha remains. reply:";
+    let session = prefix(&model, prompt, Control::Full);
+    assert!(session.values.as_ref().unwrap().sources.is_empty());
+    assert!(session.response_entry.as_ref().unwrap().boundary.is_some());
+    let words = session.values.as_ref().unwrap().lexemes.as_ref().unwrap();
+    let index = words.queries[..words.query_len]
+        .iter()
+        .position(|w| &w.bytes[..usize::from(w.len)] == b"alpha")
+        .unwrap();
+    // Explicit weights test the operator contract, not predictive learning.
+    let head = model
+        .response_entry
+        .as_mut()
+        .unwrap()
+        .copy
+        .as_mut()
+        .unwrap();
+    head.rows = vec![
+        ValueRow {
+            feature: ValueFeature {
+                kind: 0,
+                a: 0,
+                b: 0,
+            },
+            weight: -100000,
+        },
+        ValueRow {
+            feature: ValueFeature {
+                kind: 3,
+                a: index as u64,
+                b: 0,
+            },
+            weight: 50000,
+        },
+        ValueRow {
+            feature: ValueFeature {
+                kind: 22,
+                a: u64::from(b' ') + 2,
+                b: 1,
+            },
+            weight: 200000,
+        },
+    ];
+    head.prefix_rows = vec![ScoreRow {
+        feature: Feature { kind: 5, value: 0 },
+        default_score: 0,
+        scores: vec![TokenScore {
+            token: u32::from(b' ') + 2,
+            score: 10000,
+        }],
+        postings: vec![u32::from(b' ') + 2],
+    }];
+    head.prefix_postings = vec![u32::from(b' ') + 2];
+    model.refresh_identity().unwrap();
+    let model = Model::from_bytes(&model.to_bytes().unwrap()).unwrap();
+    let mut fast = prefix(&model, prompt, Control::Full);
+    let mut ordinary = prefix(&model, prompt, Control::WordCopyDispatchDisabled);
+    for (step, byte) in b" alpha".iter().enumerate() {
+        let before = fast.work.clone();
+        let next = fast.predict(&model).unwrap();
+        assert_eq!(next.token, u32::from(*byte) + 2);
+        assert_eq!(ordinary.predict(&model).unwrap().token, next.token);
+        if step > 1 {
+            assert_eq!(next.score, 1);
+            assert_eq!(next.candidate_count, 1);
+            assert_eq!(fast.work.feature_queries, before.feature_queries);
+            assert_eq!(fast.work.score_lookups, before.score_lookups);
+            assert_eq!(fast.work.memory_score_lookups, before.memory_score_lookups);
+            assert_eq!(fast.work.memory_index_reads, before.memory_index_reads);
+        }
+        fast.observe(&model, next.token).unwrap();
+        ordinary.observe(&model, next.token).unwrap();
+        let snapshot = fast.checkpoint().unwrap();
+        let mut restored = model.restore_session(&snapshot).unwrap();
+        assert_eq!(restored.state(), fast.state());
+        assert_eq!(
+            restored.predict(&model).unwrap(),
+            fast.predict(&model).unwrap()
+        );
+        let mut a: serde_json::Value = serde_json::from_slice(&snapshot).unwrap();
+        let mut b: serde_json::Value =
+            serde_json::from_slice(&ordinary.checkpoint().unwrap()).unwrap();
+        for key in ["work", "control"] {
+            a.as_object_mut().unwrap().remove(key);
+            b.as_object_mut().unwrap().remove(key);
+        }
+        assert_eq!(a, b, "required causal state at step{step}");
+        if step > 0 {
+            a = serde_json::from_slice(&snapshot).unwrap();
+            a["word_copy"]["start_step"] = json!(0);
+            assert!(model
+                .restore_session(&serde_json::to_vec(&a).unwrap())
+                .is_err());
+        }
+    }
+    assert_eq!(
+        fast.word_copy.as_ref().unwrap().progress,
+        WordCopyProgress::Complete
     );
-    assert_eq!(report.copy_targets, 4);
-    assert_eq!(report.reachable_copy_targets, 4);
-    assert_eq!(report.no_copy_targets, 1);
-    assert_eq!(report.selected_copies, 4);
-    assert_eq!(report.committed_complete_copies, 4);
-
-    let prompt = "left = 13; right = 4; alpha ignored; reply:";
-    let mut session = prefix(&model, prompt, Control::Full);
-
-    // Step 0: predicts prefix (' ')
-    let first = session.predict(&model).unwrap();
-    assert_eq!(first.token, u32::from(b' ') + 2);
-    session.observe(&model, first.token).unwrap();
-
-    // Step 1: at step 1 with space observed, word copy triggers
-    let second = session.predict(&model).unwrap();
-    let decision = session
-        .word_copy_decision()
-        .expect("word copy starts at step 1");
-    assert_eq!(decision.action, WordCopyAction::Start);
-    assert_eq!(decision.step, 1);
-    assert_eq!(second.token, u32::from(b'a') + 2);
-    session.observe(&model, second.token).unwrap();
-    assert_eq!(session.word_copy.as_ref().unwrap().start_step, 1);
-
-    // Full generation produces exact answer with prefix
-    let generated = model.generate(prompt, 32, Control::Full).unwrap();
-    assert_eq!(std::str::from_utf8(&generated.bytes).unwrap(), " alpha.\n");
+    assert_eq!(fast.word_copy.as_ref().unwrap().start_step, 1);
+    assert!(!suffix_features(&model, &fast).is_empty());
 }

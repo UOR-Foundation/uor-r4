@@ -1,13 +1,14 @@
 name: Research / experiment
-description: Propose a measurement with a pre-registered contract (hypothesis, nulls, cheap instrument, thresholds, outcome branches).
+description: Propose a scoped decision-bearing measurement; open development and final held-out evaluation remain distinct.
 title: "[research] <one-line hypothesis>"
 body:
   - type: markdown
     attributes:
       value: |
         Product-decision research intake. Current sequencing lives in
-        `docs/geometric_intelligence_programme.md`; the active mechanism is
-        defined in `docs/adr/0005-predictive-geometric-connection-memory.md`.
+        `docs/integration/project-track.md`; current implementation and next action
+        live in `docs/integration/current-state.md`. Reuse the source-linked
+        direction and architecture audit before introducing a mechanism.
         Start with the smallest falsifier, prove causal-path reachability,
         compare non-degenerate geometry and equal-size non-geometric controls,
         and include student-prefix output when generation is in scope. Required
@@ -20,7 +21,7 @@ body:
     id: parent
     attributes:
       label: Parent tracker / stage
-      description: Native #820 child whose next decision this experiment can change.
+      description: Ordered #820 roadmap responsibility whose implementation decision this changes.
       placeholder: "#820 / <active predictive-memory child>"
     validations:
       required: true
@@ -95,7 +96,7 @@ body:
     attributes:
       label: Cost estimate
       description: Wall-clock, resources, and what else the run blocks.
-      placeholder: "~30 min on the named Mac; blocks the G1 fitting lane while running"
+      placeholder: "Complete prep/build/fit/controls/evaluation/retries/checkpoint wall time, threads, RAM, storage and shared cumulative balance"
     validations:
       required: false
   - type: textarea

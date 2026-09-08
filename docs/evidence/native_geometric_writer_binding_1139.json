@@ -1,0 +1,797 @@
+{
+  "schema": "uor-r4.writer-binding-evidence/1",
+  "at": "2026-09-06T17:09:05.667Z",
+  "base": "fae76313dac3dd3c173a30426a3e44fbcbc1ae66",
+  "artifact_root": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05",
+  "decision": "RETAIN_FUNCTIONAL_WRITER_REPAIR_NOWRITE_REUSE_BEFORE_COMPOSITION",
+  "artifact": "blake3:8dbf136752b6b5f2e52a528dfff300a703503cd5d49fd78b4e66910c16efcc84",
+  "artifact_path": "writer-binding-continuation-model.json",
+  "artifact_bytes": 11045747,
+  "writer_json_bytes": 159892,
+  "fit": {
+    "artifact": "blake3:8dbf136752b6b5f2e52a528dfff300a703503cd5d49fd78b4e66910c16efcc84",
+    "dictionary": 23,
+    "documents": 200,
+    "epochs": 64,
+    "parent": "blake3:8070c006cf924e4a55007b6c1114ecad99ef6d1f3be2f0d08fc5f137ff89b2c1",
+    "reader_parameters_unchanged": true,
+    "reuse_admission": true,
+    "schema": "uor-r4.writer-refit/1",
+    "writer_correct": 128,
+    "writer_frames": 128,
+    "writer_rows": 2505
+  },
+  "source": {
+    "path": "writer-binding-continuation-source.json",
+    "sha256": "f63bb2cb0a0173461679272fc38c4817ecb86cb2536ed1c40e8cacbacd4e7de7"
+  },
+  "selection": {
+    "at": "2026-09-06T17:00:54.735Z",
+    "artifact": "blake3:8dbf136752b6b5f2e52a528dfff300a703503cd5d49fd78b4e66910c16efcc84",
+    "decision": "SELECT_BEFORE_REPLACEMENT_RESERVED_NAMES",
+    "development": "48/48 answers and exact writes",
+    "preservation": [
+      62,
+      24,
+      28,
+      5
+    ],
+    "fresh": "NOT_RUN",
+    "source": "writer-binding-continuation-source.json",
+    "no_parameter_changes_after_fresh": true
+  },
+  "first_use_boundary": {
+    "at": "2026-09-06T16:50:58.271Z",
+    "status": "OPEN_NOT_POST_SELECTION",
+    "reason": "Session preservation check found4/5; the shell continued to fresh evaluation after the Node selection guard failed. No selection receipt was written. This set is now OPEN and is not a post-selection result."
+  },
+  "results": [
+    {
+      "path": "writer-binding-continuation-development/development.json",
+      "exact": 48,
+      "writes_exact": 48,
+      "total": 48
+    },
+    {
+      "path": "writer-binding-continuation-development/preservation.json",
+      "exact": 62,
+      "total": 62
+    },
+    {
+      "path": "writer-binding-continuation-development/prior.json",
+      "exact": 24,
+      "total": 24
+    },
+    {
+      "path": "writer-binding-continuation-long.json",
+      "exact": 28,
+      "writes_exact": 28,
+      "total": 28
+    },
+    {
+      "path": "writer-binding-reserved/fresh.json",
+      "exact": 28,
+      "writes_exact": 28,
+      "total": 28
+    }
+  ],
+  "sessions": {
+    "path": "writer-binding-continuation-session.json",
+    "exact": 5,
+    "total": 5,
+    "restore_and_isolation": true
+  },
+  "cli": {
+    "path": "writer-binding-cli.stdout.log",
+    "text": " Zurich.\n"
+  },
+  "broader_language": {
+    "path": "writer-binding-language-boundary.stdout.log",
+    "text": " Unknown.\n"
+  },
+  "rust": {
+    "at": "2026-09-06T17:05:52.171Z",
+    "artifact": "blake3:8dbf136752b6b5f2e52a528dfff300a703503cd5d49fd78b4e66910c16efcc84",
+    "unchanged_generated_functions": 4,
+    "source": "dependent-read-generated.rs",
+    "check": "Every full prompt plus generated response is present unchanged in the previously retained four-function semantic test source."
+  },
+  "cost": {
+    "parent": {
+      "generation_us": 34500,
+      "evaluation_elapsed_ms": 81,
+      "work": {
+        "abstentions": 0,
+        "admission_exact_comparisons": 1126484,
+        "admission_fallbacks": 112,
+        "admission_metadata_bytes": 4045889,
+        "admission_queries": 21907,
+        "admission_signature_writes": 197163,
+        "admission_skips": 21795,
+        "candidates": 2352,
+        "conflicts": 12,
+        "dictionary_byte_comparisons": 1836668,
+        "dictionary_comparisons": 1395776,
+        "directory_reads": 2284,
+        "directory_writes": 80,
+        "feature_queries": 44688,
+        "feature_writes": 14896,
+        "no_writes": 21827,
+        "phase_subtractions": 3136,
+        "reads": 0,
+        "record_evictions": 0,
+        "record_reads": 174524,
+        "record_writes": 80,
+        "revisions": 12,
+        "role_path_comparisons": 14336,
+        "role_path_probes": 1792,
+        "role_path_steps": 880,
+        "role_phase_additions": 7040,
+        "row_comparisons": 580944,
+        "score_lookups": 44688,
+        "source_presence_checks": 0,
+        "word_boundaries": 21907
+      }
+    },
+    "writer": {
+      "generation_us": 767387,
+      "evaluation_elapsed_ms": 1632,
+      "work": {
+        "abstentions": 0,
+        "admission_exact_comparisons": 306152,
+        "admission_fallbacks": 21907,
+        "admission_metadata_bytes": 764561,
+        "admission_queries": 21907,
+        "admission_signature_writes": 197163,
+        "candidates": 915390,
+        "conflicts": 12,
+        "dictionary_byte_comparisons": 2086930,
+        "dictionary_comparisons": 1046832,
+        "directory_reads": 2284,
+        "directory_writes": 80,
+        "feature_queries": 17392410,
+        "feature_writes": 5797470,
+        "no_writes": 21827,
+        "phase_subtractions": 1220520,
+        "reads": 0,
+        "record_evictions": 0,
+        "record_reads": 174524,
+        "record_writes": 80,
+        "revisions": 12,
+        "role_path_comparisons": 5482932,
+        "role_path_probes": 913822,
+        "role_path_steps": 908698,
+        "role_phase_additions": 7269584,
+        "row_comparisons": 226101330,
+        "score_lookups": 17392410,
+        "source_presence_checks": 0,
+        "word_boundaries": 21907
+      }
+    },
+    "scope": "Same28 prompts and same80 writes/answers; recorded descriptive timing, no controlled wall-time speed claim. Full traces/counters include other model processing."
+  },
+  "attempts": [
+    {
+      "artifact": "blake3:212dba628d1b08659fd0b2ef6a2021e25bc10816ba689ba775a806d5ed5728b8",
+      "dictionary": 127,
+      "documents": 172,
+      "epochs": 64,
+      "parent": "blake3:8070c006cf924e4a55007b6c1114ecad99ef6d1f3be2f0d08fc5f137ff89b2c1",
+      "reader_parameters_unchanged": true,
+      "reuse_admission": false,
+      "schema": "uor-r4.writer-refit/1",
+      "writer_correct": 1112,
+      "writer_frames": 1118,
+      "writer_rows": 9552
+    },
+    {
+      "artifact": "blake3:e1e66e2d264e7d0c36d1f110c1f4b147cd298fcc557b7cddc0a98ec3f1db707d",
+      "dictionary": 90,
+      "documents": 172,
+      "epochs": 64,
+      "parent": "blake3:8070c006cf924e4a55007b6c1114ecad99ef6d1f3be2f0d08fc5f137ff89b2c1",
+      "reader_parameters_unchanged": true,
+      "reuse_admission": false,
+      "schema": "uor-r4.writer-refit/1",
+      "writer_correct": 551,
+      "writer_frames": 551,
+      "writer_rows": 4164
+    },
+    {
+      "artifact": "blake3:f9a2a2730d5a28a938aa8a832b0d7c5de1e8b53f19fe24102f4e81159bf11e98",
+      "dictionary": 23,
+      "documents": 172,
+      "epochs": 64,
+      "parent": "blake3:8070c006cf924e4a55007b6c1114ecad99ef6d1f3be2f0d08fc5f137ff89b2c1",
+      "reader_parameters_unchanged": true,
+      "reuse_admission": true,
+      "schema": "uor-r4.writer-refit/1",
+      "writer_correct": 106,
+      "writer_frames": 106,
+      "writer_rows": 2343
+    }
+  ],
+  "verification": {
+    "focused_relation_tests": 5,
+    "actual_artifact_allocations": 0,
+    "actual_artifact_allocated_bytes": 0,
+    "allocation_scope": "release ingest/select/observe/copy, excludes startup",
+    "rust_functions": 4,
+    "rust_assertions": 12,
+    "ci": "PENDING_PROTECTED_PR",
+    "format": "PASS",
+    "architecture_policy": "PASS",
+    "claim_wording": "PASS"
+  },
+  "resources": {
+    "cycle_model_ms": 123484,
+    "cycle_model_limit_ms": 150000,
+    "engineering_ms": 1048088,
+    "engineering_limit_ms": 1200000,
+    "model_peak_rss_sample_bytes": 880656384,
+    "storage_increment_bytes": 134217728,
+    "snapshot": {
+      "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+      "at": "2026-09-06T17:10:32.173Z",
+      "inherited_precleanup_bytes": 2747199488,
+      "obsolete_target_growth_credit": 671379456,
+      "current_target_bytes": 2473988096,
+      "predecessor_artifact_root_bytes": 145760256,
+      "current_artifact_root_bytes": 964505600,
+      "predecessor_worktree_bytes": 9875456,
+      "current_worktree_bytes": 8937472,
+      "stopped_successor_worktree_bytes": 460877824,
+      "source_metadata_reserve_bytes": 5242880,
+      "current_sampled_known_storage_bytes": 6145007616,
+      "storage_limit_bytes": 6660554752,
+      "remaining_storage_bytes": 515547136,
+      "stop_margin_bytes": 134217728,
+      "available_growth_before_stop_bytes": 160141312,
+      "model_ledger": {
+        "cumulative_ms": 1731154,
+        "limit_ms": 1800000
+      },
+      "model_remaining_ms": 68846,
+      "model_process_limit": 1,
+      "model_process_rss_target_bytes": 4294967296,
+      "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+    }
+  },
+  "commands": [
+    {
+      "label": "writer-binding-prepare",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "writer-binding",
+        "prepare",
+        "relation-admission-source.json",
+        "dependent-read-angular/source.json",
+        "writer-binding-source.json"
+      ],
+      "elapsed_ms": 369,
+      "code": 0,
+      "stopped": null
+    },
+    {
+      "label": "writer-binding-fit",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "writer-binding",
+        "fit",
+        "dependent-read-angular/model.json",
+        "writer-binding-source.json",
+        "writer-binding-model.json",
+        "writer-binding-fit.json"
+      ],
+      "elapsed_ms": 16220,
+      "code": 0,
+      "stopped": null
+    },
+    {
+      "label": "writer-binding-development",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "writer-binding",
+        "evaluate",
+        "writer-binding-model.json",
+        "writer-binding-source.json",
+        "writer-binding-development"
+      ],
+      "elapsed_ms": 4790,
+      "code": 0,
+      "stopped": null
+    },
+    {
+      "label": "writer-binding-corrected-fit",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "writer-binding",
+        "fit",
+        "dependent-read-angular/model.json",
+        "writer-binding-source.json",
+        "writer-binding-corrected-model.json",
+        "writer-binding-corrected-fit.json"
+      ],
+      "elapsed_ms": 14466,
+      "code": 0,
+      "stopped": null
+    },
+    {
+      "label": "writer-binding-corrected-development",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "writer-binding",
+        "evaluate",
+        "writer-binding-corrected-model.json",
+        "writer-binding-source.json",
+        "writer-binding-corrected-development"
+      ],
+      "elapsed_ms": 4817,
+      "code": 0,
+      "stopped": null
+    },
+    {
+      "label": "writer-binding-final-fit",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "writer-binding",
+        "fit",
+        "dependent-read-angular/model.json",
+        "writer-binding-source.json",
+        "writer-binding-final-model.json",
+        "writer-binding-final-fit.json"
+      ],
+      "elapsed_ms": 12583,
+      "code": 0,
+      "stopped": null
+    },
+    {
+      "label": "writer-binding-final-development",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "writer-binding",
+        "evaluate",
+        "writer-binding-final-model.json",
+        "writer-binding-source.json",
+        "writer-binding-final-development"
+      ],
+      "elapsed_ms": 4788,
+      "code": 0,
+      "stopped": null
+    },
+    {
+      "label": "writer-binding-long-context",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "evaluate-relations",
+        "writer-binding-final-model.json",
+        "relation-admission-source.json",
+        "first_use",
+        "writer-binding-long-context.json"
+      ],
+      "elapsed_ms": 6210,
+      "code": 0,
+      "stopped": null
+    },
+    {
+      "label": "writer-binding-session",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "verify-relations",
+        "writer-binding-final-model.json",
+        "writer-binding-session.json"
+      ],
+      "elapsed_ms": 4852,
+      "code": 0,
+      "stopped": null
+    },
+    {
+      "label": "writer-binding-fresh",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "writer-binding",
+        "fresh",
+        "writer-binding-final-model.json",
+        "writer-binding-source.json",
+        "writer-binding-fresh"
+      ],
+      "elapsed_ms": 4511,
+      "code": 0,
+      "stopped": null
+    },
+    {
+      "label": "writer-binding-continuation-prepare",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "writer-binding",
+        "continue-source",
+        "writer-binding-source.json",
+        "writer-binding-continuation-source.json"
+      ],
+      "elapsed_ms": 153,
+      "code": 0,
+      "stopped": null
+    },
+    {
+      "label": "writer-binding-continuation-fit",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "writer-binding",
+        "fit",
+        "dependent-read-angular/model.json",
+        "writer-binding-continuation-source.json",
+        "writer-binding-continuation-model.json",
+        "writer-binding-continuation-fit.json"
+      ],
+      "elapsed_ms": 12512,
+      "code": 0,
+      "stopped": null
+    },
+    {
+      "label": "writer-binding-continuation-session",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "verify-relations",
+        "writer-binding-continuation-model.json",
+        "writer-binding-continuation-session.json"
+      ],
+      "elapsed_ms": 4742,
+      "code": 0,
+      "stopped": null
+    },
+    {
+      "label": "writer-binding-continuation-development",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "writer-binding",
+        "evaluate",
+        "writer-binding-continuation-model.json",
+        "writer-binding-continuation-source.json",
+        "writer-binding-continuation-development"
+      ],
+      "elapsed_ms": 4740,
+      "code": 0,
+      "stopped": null
+    },
+    {
+      "label": "writer-binding-continuation-long",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "evaluate-relations",
+        "writer-binding-continuation-model.json",
+        "relation-admission-source.json",
+        "first_use",
+        "writer-binding-continuation-long.json"
+      ],
+      "elapsed_ms": 6113,
+      "code": 0,
+      "stopped": null
+    },
+    {
+      "label": "writer-binding-reserved",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "writer-binding",
+        "fresh",
+        "writer-binding-continuation-model.json",
+        "writer-binding-continuation-source.json",
+        "writer-binding-reserved"
+      ],
+      "elapsed_ms": 5061,
+      "code": 0,
+      "stopped": null
+    },
+    {
+      "label": "writer-binding-unit",
+      "command": "/tmp/r4-native-geometric-target/debug/deps/uor_r4_core-8d8deefa7a2a5da5",
+      "args": [
+        "native_geometric::relation_tests",
+        "--nocapture"
+      ],
+      "elapsed_ms": 1149,
+      "code": 0,
+      "stopped": null
+    },
+    {
+      "label": "writer-binding-allocation",
+      "command": "env",
+      "args": [
+        "R4_DEPENDENT_READ_MODEL=/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/writer-binding-continuation-model.json",
+        "/tmp/r4-native-geometric-target/release/deps/native_geometric_allocations-6c7ff1216c7e1931",
+        "native_dependent_artifact_copy_is_allocation_free",
+        "--ignored",
+        "--exact",
+        "--nocapture"
+      ],
+      "elapsed_ms": 5319,
+      "code": 0,
+      "stopped": null
+    },
+    {
+      "label": "writer-binding-cli",
+      "command": "/tmp/r4-native-geometric-target/release/r4",
+      "args": [
+        "geometric",
+        "generate",
+        "--model",
+        "writer-binding-continuation-model.json",
+        "--prompt",
+        "casket in elvin. elvin in Bremen. Now elvin in Zurich. Question: Where is the location of casket? Answer:",
+        "--max-tokens",
+        "32",
+        "--json"
+      ],
+      "elapsed_ms": 4860,
+      "code": 0,
+      "stopped": null
+    },
+    {
+      "label": "writer-binding-rust-check",
+      "command": "/Users/casey.allard/.cargo/bin/rustc",
+      "args": [
+        "--edition=2021",
+        "dependent-read-generated.rs",
+        "-o",
+        "writer-binding-generated-check"
+      ],
+      "elapsed_ms": 576,
+      "code": 0,
+      "stopped": null
+    },
+    {
+      "label": "writer-binding-rust-execute",
+      "command": "./writer-binding-generated-check",
+      "args": [],
+      "elapsed_ms": 111,
+      "code": 0,
+      "stopped": null
+    },
+    {
+      "label": "writer-binding-language-boundary",
+      "command": "/tmp/r4-native-geometric-target/release/r4",
+      "args": [
+        "geometric",
+        "generate",
+        "--model",
+        "writer-binding-continuation-model.json",
+        "--prompt",
+        "The red box belongs to Alice. Alice lives in Rome. Where does the owner of the red box live? Answer:",
+        "--max-tokens",
+        "32",
+        "--json"
+      ],
+      "elapsed_ms": 4542,
+      "code": 0,
+      "stopped": null
+    },
+    {
+      "label": "writer-binding-build",
+      "command": "env",
+      "args": [
+        "CARGO_TARGET_DIR=/tmp/r4-native-geometric-target",
+        "CARGO_INCREMENTAL=0",
+        "CARGO_BUILD_JOBS=1",
+        "CARGO_PROFILE_DEV_DEBUG=0",
+        "CARGO_PROFILE_TEST_DEBUG=0",
+        "/Users/casey.allard/.cargo/bin/cargo",
+        "build",
+        "--release",
+        "--offline",
+        "-p",
+        "uor-r4-core",
+        "--example",
+        "native_geometric_value_probe",
+        "-p",
+        "uor-r4-wasm-router",
+        "--bin",
+        "r4"
+      ],
+      "elapsed_ms": 357201,
+      "code": 0,
+      "stopped": null
+    },
+    {
+      "label": "writer-binding-format",
+      "command": "/Users/casey.allard/.cargo/bin/cargo",
+      "args": [
+        "fmt",
+        "--all"
+      ],
+      "elapsed_ms": 4138,
+      "code": 0,
+      "stopped": null
+    },
+    {
+      "label": "writer-binding-format-fix",
+      "command": "/Users/casey.allard/.cargo/bin/cargo",
+      "args": [
+        "fmt",
+        "--all"
+      ],
+      "elapsed_ms": 3708,
+      "code": 0,
+      "stopped": null
+    },
+    {
+      "label": "writer-binding-corrected-build",
+      "command": "env",
+      "args": [
+        "CARGO_TARGET_DIR=/tmp/r4-native-geometric-target",
+        "CARGO_INCREMENTAL=0",
+        "CARGO_BUILD_JOBS=1",
+        "CARGO_PROFILE_DEV_DEBUG=0",
+        "CARGO_PROFILE_TEST_DEBUG=0",
+        "/Users/casey.allard/.cargo/bin/cargo",
+        "build",
+        "--release",
+        "--offline",
+        "-p",
+        "uor-r4-core",
+        "--example",
+        "native_geometric_value_probe"
+      ],
+      "elapsed_ms": 145422,
+      "code": 0,
+      "stopped": null
+    },
+    {
+      "label": "writer-binding-policy",
+      "command": "/tmp/r4-native-geometric-target/debug/r4-policy-check",
+      "args": [
+        "."
+      ],
+      "elapsed_ms": 14,
+      "code": 0,
+      "stopped": null
+    },
+    {
+      "label": "writer-binding-final-format",
+      "command": "/Users/casey.allard/.cargo/bin/cargo",
+      "args": [
+        "fmt",
+        "--all"
+      ],
+      "elapsed_ms": 3671,
+      "code": 0,
+      "stopped": null
+    },
+    {
+      "label": "writer-binding-final-probe-build",
+      "command": "env",
+      "args": [
+        "CARGO_TARGET_DIR=/tmp/r4-native-geometric-target",
+        "CARGO_INCREMENTAL=0",
+        "CARGO_BUILD_JOBS=1",
+        "CARGO_PROFILE_DEV_DEBUG=0",
+        "CARGO_PROFILE_TEST_DEBUG=0",
+        "/Users/casey.allard/.cargo/bin/cargo",
+        "build",
+        "--release",
+        "--offline",
+        "-p",
+        "uor-r4-core",
+        "--example",
+        "native_geometric_value_probe"
+      ],
+      "elapsed_ms": 144292,
+      "code": 0,
+      "stopped": null
+    },
+    {
+      "label": "writer-binding-continuation-format",
+      "command": "/Users/casey.allard/.cargo/bin/cargo",
+      "args": [
+        "fmt",
+        "--all"
+      ],
+      "elapsed_ms": 3435,
+      "code": 0,
+      "stopped": null
+    },
+    {
+      "label": "writer-binding-continuation-build",
+      "command": "env",
+      "args": [
+        "CARGO_TARGET_DIR=/tmp/r4-native-geometric-target",
+        "CARGO_INCREMENTAL=0",
+        "CARGO_BUILD_JOBS=1",
+        "CARGO_PROFILE_DEV_DEBUG=0",
+        "CARGO_PROFILE_TEST_DEBUG=0",
+        "/Users/casey.allard/.cargo/bin/cargo",
+        "build",
+        "--release",
+        "--offline",
+        "-p",
+        "uor-r4-core",
+        "--example",
+        "native_geometric_value_probe",
+        "-p",
+        "uor-r4-wasm-router",
+        "--bin",
+        "r4"
+      ],
+      "elapsed_ms": 353942,
+      "code": 0,
+      "stopped": null
+    },
+    {
+      "label": "writer-binding-unit-build",
+      "command": "env",
+      "args": [
+        "CARGO_TARGET_DIR=/tmp/r4-native-geometric-target",
+        "CARGO_INCREMENTAL=0",
+        "CARGO_BUILD_JOBS=1",
+        "CARGO_PROFILE_DEV_DEBUG=0",
+        "CARGO_PROFILE_TEST_DEBUG=0",
+        "/Users/casey.allard/.cargo/bin/cargo",
+        "test",
+        "--offline",
+        "-p",
+        "uor-r4-core",
+        "--lib",
+        "native_geometric::relation_tests",
+        "--config",
+        "profile.test.package.uor-r4-core.opt-level=0",
+        "--no-run"
+      ],
+      "elapsed_ms": 22709,
+      "code": 0,
+      "stopped": null
+    },
+    {
+      "label": "writer-binding-allocation-build",
+      "command": "env",
+      "args": [
+        "CARGO_TARGET_DIR=/tmp/r4-native-geometric-target",
+        "CARGO_INCREMENTAL=0",
+        "CARGO_BUILD_JOBS=1",
+        "CARGO_PROFILE_DEV_DEBUG=0",
+        "CARGO_PROFILE_TEST_DEBUG=0",
+        "/Users/casey.allard/.cargo/bin/cargo",
+        "test",
+        "--release",
+        "--offline",
+        "-p",
+        "uor-r4-core",
+        "--test",
+        "native_geometric_allocations",
+        "--no-run"
+      ],
+      "elapsed_ms": 5713,
+      "code": 0,
+      "stopped": null
+    },
+    {
+      "label": "writer-binding-format-check",
+      "command": "/Users/casey.allard/.cargo/bin/cargo",
+      "args": [
+        "fmt",
+        "--all",
+        "--check"
+      ],
+      "elapsed_ms": 3582,
+      "code": 0,
+      "stopped": null
+    },
+    {
+      "label": "writer-binding-final-policy",
+      "command": "/tmp/r4-native-geometric-target/debug/r4-policy-check",
+      "args": [
+        "."
+      ],
+      "elapsed_ms": 6,
+      "code": 0,
+      "stopped": null
+    },
+    {
+      "label": "writer-binding-claims",
+      "command": "python3",
+      "args": [
+        "scripts/check_claim_wording.py"
+      ],
+      "elapsed_ms": 255,
+      "code": 0,
+      "stopped": null
+    }
+  ]
+}

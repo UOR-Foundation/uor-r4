@@ -19,6 +19,38 @@ use uor_r4_core::native_geometric::{
 };
 
 type ProbeResult<T> = Result<T, Box<dyn Error>>;
+#[path = "native_geometric_value_probe/contextual_start.rs"]
+mod contextual_start;
+#[path = "native_geometric_value_probe/joint_admission.rs"]
+mod joint_admission;
+#[path = "native_geometric_value_probe/literal_binding.rs"]
+mod literal_binding;
+#[path = "native_geometric_value_probe/relation_memory.rs"]
+mod relation_memory;
+#[path = "native_geometric_value_probe/relation_start.rs"]
+mod relation_start;
+#[path = "native_geometric_value_probe/retained_span.rs"]
+mod retained_span;
+#[path = "native_geometric_value_probe/reverse_span.rs"]
+mod reverse_span;
+#[path = "native_geometric_value_probe/role_read.rs"]
+mod role_read;
+#[path = "native_geometric_value_probe/source_context.rs"]
+mod source_context;
+#[path = "native_geometric_value_probe/source_noread.rs"]
+mod source_noread;
+#[path = "native_geometric_value_probe/source_span.rs"]
+mod source_span;
+#[path = "native_geometric_value_probe/span_context.rs"]
+mod span_context;
+#[path = "native_geometric_value_probe/typed_routing.rs"]
+mod typed_routing_probe;
+#[path = "native_geometric_value_probe/wording.rs"]
+mod wording;
+#[path = "native_geometric_value_probe/writer_binding.rs"]
+mod writer_binding;
+#[path = "native_geometric_value_probe/writer_refinement.rs"]
+mod writer_refinement;
 const SOURCE_SCHEMA: &str = "uor-r4.native-typed-value-source/1";
 const LEXEME_SOURCE_SCHEMA: &str = "uor-r4.native-typed-value-source/2";
 const WORD_COPY_SOURCE_SCHEMA: &str = "uor-r4.native-typed-value-source/3";
@@ -72,7 +104,11 @@ impl Options {
         while let Some(flag) = arguments.next() {
             if flag == "--help" || flag == "-h" {
                 println!(
-                    "native_geometric_value_probe [prepare|prepare-copy|fit|completion|entry|copy|copy-completed|evaluate] --output-dir NEW_DIRECTORY\n\
+                    "prepare-role-read SOURCE_V3 NEW_DIRECTORY (construction and reserved24, checks before writing)\n\
+                     fit-role-read MODEL SOURCE NEW_MODEL NEW_REPORT (joint source/entry selection)\n\
+                     neutralize-zero-binding INPUT_MODEL NEW_OUTPUT_MODEL (no refit; scores only)\n\
+                     prepare-entry-check SOURCE_V3 NEW_OUTPUT_SOURCE (sixteen raw cases)\n\
+                     native_geometric_value_probe [prepare|prepare-copy|prepare-facts|prepare-wording|fit|completion|entry|copy|copy-completed|copy-composed|copy-binding|copy-binding-plain|evaluate] --output-dir NEW_DIRECTORY\n\
                      prepare-copy: --source SOURCE_V2 --lexeme-cues true\n\
                      copy: --model ENTRY_MODEL --source SOURCE_V3 --lexeme-cues true --generated-tokens 64\n\
                      copy-completed: same source/parent, suffix frame starts after the observed copied word\n\
@@ -121,37 +157,58 @@ impl Options {
         if ![
             "prepare",
             "prepare-copy",
+            "prepare-facts",
             "fit",
             "completion",
             "entry",
             "copy",
             "copy-completed",
+            "copy-composed",
+            "copy-binding",
+            "copy-binding-plain",
             "evaluate",
         ]
         .contains(&result.mode.as_str())
             || result.output_dir.as_os_str().is_empty()
-            || (!["prepare", "prepare-copy"].contains(&result.mode.as_str())
+            || (!["prepare", "prepare-copy", "prepare-facts"].contains(&result.mode.as_str())
                 && result.model.as_os_str().is_empty())
             || ([
                 "prepare-copy",
+                "prepare-facts",
                 "completion",
                 "entry",
                 "copy",
                 "copy-completed",
+                "copy-composed",
+                "copy-binding",
+                "copy-binding-plain",
                 "evaluate",
             ]
             .contains(&result.mode.as_str())
                 && result.source.is_none())
             || ([
                 "prepare-copy",
+                "prepare-facts",
                 "completion",
                 "entry",
                 "copy",
                 "copy-completed",
+                "copy-composed",
+                "copy-binding",
+                "copy-binding-plain",
             ]
             .contains(&result.mode.as_str())
                 && !result.lexeme_cues)
-            || (["completion", "entry", "copy", "copy-completed"].contains(&result.mode.as_str())
+            || ([
+                "completion",
+                "entry",
+                "copy",
+                "copy-completed",
+                "copy-composed",
+                "copy-binding",
+                "copy-binding-plain",
+            ]
+            .contains(&result.mode.as_str())
                 && result.epochs > 64)
             || !(1..=4096).contains(&result.completion_max_positions)
             || !["all", "full"].contains(&result.controls.as_str())
@@ -197,7 +254,7 @@ impl Case {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Source {
     schema: String,
@@ -496,13 +553,23 @@ fn source(options: &Options) -> ProbeResult<Source> {
     if options.mode == "prepare-copy" {
         append_word_copy_cases(&mut result)?;
     }
+    if options.mode == "prepare-facts" {
+        append_fact_cases(&mut result)?;
+    }
     validate_source(&result)?;
     if (result.schema != SOURCE_SCHEMA) != options.lexeme_cues {
         return Err(
             "source schema must match --lexeme-cues; prepare a new /2 source with true".into(),
         );
     }
-    if ["copy", "copy-completed"].contains(&options.mode.as_str())
+    if [
+        "copy",
+        "copy-completed",
+        "copy-composed",
+        "copy-binding",
+        "copy-binding-plain",
+    ]
+    .contains(&options.mode.as_str())
         && result.schema != WORD_COPY_SOURCE_SCHEMA
     {
         return Err("copy fitting requires the prepared /3 source".into());
@@ -726,6 +793,8 @@ fn reject_training_overlap(model: &Model, cases: &[Case]) -> ProbeResult<()> {
             .chain(model.value_completion_training())
             .chain(model.response_entry_training())
             .chain(model.word_copy_training())
+            .chain(model.role_read_training())
+            .chain(model.relation_training())
             .any(|known| {
                 known.id == case.id || known.text_cid == pair_cid || known.text_cid == whole_cid
             })
@@ -758,6 +827,7 @@ fn evaluate(
             Control::Full,
             Control::WordCopyDisabled,
             Control::WordCopyGeometryDisabled,
+            Control::WordCopyDispatchDisabled,
         ]
     } else if entry {
         vec![
@@ -792,7 +862,9 @@ fn evaluate(
         let mut pairs: BTreeMap<&str, Vec<(bool, Option<Vec<u8>>)>> = BTreeMap::new();
         for (index, case) in source.development.iter().enumerate() {
             within_limit(start, options)?;
+            let generation_start = Instant::now();
             let generation = model.generate(&case.prompt, options.generated_tokens, control)?;
+            let generation_elapsed_us = generation_start.elapsed().as_micros();
             let expected = leading_numeral(case.response.as_bytes());
             let actual = leading_numeral(&generation.bytes);
             let numeral_correct = expected.map(|value| actual == Some(value));
@@ -838,6 +910,7 @@ fn evaluate(
                 "exact_response":exact,
                 "generated_source":generated_source,
                 "generation":generation,
+                "generation_elapsed_us":generation_elapsed_us,
             }));
         }
         let pair_rows: Vec<_> = pairs.into_iter().map(|(id, values)| json!({
@@ -951,15 +1024,130 @@ fn evaluate_binding(
 }
 
 fn main() -> ProbeResult<()> {
+    if std::env::args().nth(1).as_deref() == Some("writer-refinement") {
+        return writer_refinement::run(&std::env::args().skip(2).collect::<Vec<_>>());
+    }
+    if std::env::args().nth(1).as_deref() == Some("contextual-start") {
+        return contextual_start::run(&std::env::args().skip(2).collect::<Vec<_>>());
+    }
+    if std::env::args().nth(1).as_deref() == Some("relation-start") {
+        return relation_start::run(&std::env::args().skip(2).collect::<Vec<_>>());
+    }
+    if std::env::args().nth(1).as_deref() == Some("reverse-span") {
+        return reverse_span::run(&std::env::args().skip(2).collect::<Vec<_>>());
+    }
+    if std::env::args().nth(1).as_deref() == Some("retained-span") {
+        return retained_span::run(&std::env::args().skip(2).collect::<Vec<_>>());
+    }
+    if std::env::args().nth(1).as_deref() == Some("span-context") {
+        return span_context::run(&std::env::args().skip(2).collect::<Vec<_>>());
+    }
+    if std::env::args().nth(1).as_deref() == Some("source-span") {
+        return source_span::run(&std::env::args().skip(2).collect::<Vec<_>>());
+    }
+    if std::env::args().nth(1).as_deref() == Some("source-context") {
+        return source_context::run(&std::env::args().skip(2).collect::<Vec<_>>());
+    }
+    if std::env::args().nth(1).as_deref() == Some("literal-binding") {
+        return literal_binding::run(&std::env::args().skip(2).collect::<Vec<_>>());
+    }
+    if std::env::args().nth(1).as_deref() == Some("joint-admission") {
+        return joint_admission::run(&std::env::args().skip(2).collect::<Vec<_>>());
+    }
+    if std::env::args().nth(1).as_deref() == Some("source-noread") {
+        return source_noread::run(&std::env::args().skip(2).collect::<Vec<_>>());
+    }
+    if std::env::args().nth(1).as_deref() == Some("typed-routing") {
+        return typed_routing_probe::run(&std::env::args().skip(2).collect::<Vec<_>>());
+    }
+    if std::env::args().nth(1).as_deref() == Some("writer-binding") {
+        return writer_binding::run(&std::env::args().skip(2).collect::<Vec<_>>());
+    }
+    if std::env::args().nth(1).as_deref() == Some("verify-relations") {
+        return relation_memory::verify(&std::env::args().skip(2).collect::<Vec<_>>());
+    }
+    if let Some(mode) = std::env::args().nth(1).filter(|m| {
+        matches!(
+            m.as_str(),
+            "prepare-relations"
+                | "repair-relations-source"
+                | "role-relations-source"
+                | "fit-role-relations"
+                | "prepare-admission-source"
+                | "compile-admission"
+                | "time-admission"
+                | "broaden-relations-source"
+                | "fit-relations"
+                | "evaluate-relations"
+        )
+    }) {
+        return relation_memory::run(&mode);
+    }
+    if std::env::args().nth(1).as_deref() == Some("prepare-role-read") {
+        return role_read::prepare();
+    }
+    if std::env::args().nth(1).as_deref() == Some("fit-role-read") {
+        let args: Vec<_> = std::env::args().skip(2).collect();
+        if args.len() != 4 {
+            return Err("fit-role-read MODEL SOURCE NEW_MODEL NEW_REPORT".into());
+        }
+        let parent = Model::from_bytes(&fs::read(&args[0])?)?;
+        let source: Source = serde_json::from_slice(&fs::read(&args[1])?)?;
+        validate_source(&source)?;
+        let documents: Vec<_> = source
+            .fit
+            .iter()
+            .map(|c| ValueExample {
+                id: c.id.clone(),
+                prompt: c.prompt.clone(),
+                response: c.response.clone(),
+            })
+            .collect();
+        let (model, report) =
+            parent.fit_role_read(&documents, ResponseEntryFitConfig::default())?;
+        write_new(Path::new(&args[2]), &model.to_bytes()?)?;
+        write_json(Path::new(&args[3]), &report)?;
+        println!("{report}");
+        return Ok(());
+    }
+    if std::env::args().nth(1).as_deref() == Some("prepare-entry-check") {
+        return wording::prepare_entry_check();
+    }
+    if std::env::args().nth(1).as_deref() == Some("neutralize-zero-binding") {
+        let args: Vec<_> = std::env::args().skip(2).collect();
+        if args.len() != 2 {
+            return Err("neutralize-zero-binding INPUT_MODEL NEW_OUTPUT_MODEL".into());
+        }
+        let parent = Model::from_bytes(&fs::read(&args[0])?)?;
+        let model = parent.neutralize_copy_zero_binding()?;
+        write_new(Path::new(&args[1]), &model.to_bytes()?)?;
+        println!(
+            "{}",
+            json!({"parent":parent.artifact_cid(),"artifact":model.artifact_cid(),"intervention":"zero scores only in prefix feature32/value0; postings unchanged; no fit"})
+        );
+        return Ok(());
+    }
+    if std::env::args().nth(1).as_deref() == Some("prepare-wording") {
+        return wording::prepare();
+    }
     let options = Options::parse()?;
-    let output_limit =
-        if ["completion", "entry", "copy", "copy-completed"].contains(&options.mode.as_str()) {
-            Some(COMPLETION_OUTPUT_BYTES)
-        } else if options.controls == "full" {
-            Some(PRESERVATION_OUTPUT_BYTES)
-        } else {
-            None
-        };
+    let output_limit = if [
+        "completion",
+        "entry",
+        "copy",
+        "copy-completed",
+        "copy-composed",
+        "copy-binding",
+        "copy-binding-plain",
+    ]
+    .contains(&options.mode.as_str())
+    {
+        Some(COMPLETION_OUTPUT_BYTES)
+    } else if options.controls == "full" {
+        Some(PRESERVATION_OUTPUT_BYTES)
+    } else {
+        None
+    };
     OUTPUT_BYTES_REMAINING.store(output_limit.unwrap_or(usize::MAX), Ordering::Relaxed);
     let start = Instant::now();
     let source = source(&options)?;
@@ -991,7 +1179,7 @@ fn main() -> ProbeResult<()> {
         &options.output_dir.join("binding-controls-source.json"),
         &binding_bytes,
     )?;
-    if ["prepare", "prepare-copy"].contains(&options.mode.as_str()) {
+    if ["prepare", "prepare-copy", "prepare-facts"].contains(&options.mode.as_str()) {
         println!(
             "{}",
             json!({"status":"prepared","fit_cases":source.fit.len(),"development_cases":source.development.len(),"source_blake3":blake3::hash(&source_bytes).to_hex().to_string(),"elapsed_ms":start.elapsed().as_millis()})
@@ -1001,21 +1189,47 @@ fn main() -> ProbeResult<()> {
     within_limit(start, &options)?;
     let baseline = Model::from_bytes(&fs::read(&options.model)?)?;
     let input_artifact = baseline.artifact_cid().to_owned();
-    let (model, fit_report) = if ["fit", "completion", "entry", "copy", "copy-completed"]
-        .contains(&options.mode.as_str())
+    let (model, fit_report) = if [
+        "fit",
+        "completion",
+        "entry",
+        "copy",
+        "copy-completed",
+        "copy-composed",
+        "copy-binding",
+        "copy-binding-plain",
+    ]
+    .contains(&options.mode.as_str())
     {
         let examples: Vec<_> = source.fit.iter().map(Case::example).collect();
-        let (fitted, report) = if ["copy", "copy-completed"].contains(&options.mode.as_str()) {
+        let (fitted, report) = if [
+            "copy",
+            "copy-completed",
+            "copy-composed",
+            "copy-binding",
+            "copy-binding-plain",
+        ]
+        .contains(&options.mode.as_str())
+        {
             let config = ResponseEntryFitConfig {
                 epochs: options.epochs,
                 learning_rate: options.learning_rate,
                 max_positions: options.completion_max_positions,
             };
-            let (fitted, report) = if options.mode == "copy-completed" {
-                baseline.fit_response_entry_copy_completed_word(&examples, config)?
-            } else {
-                baseline.fit_response_entry_copy(&examples, config)?
-            };
+            let (fitted, report) =
+                if matches!(options.mode.as_str(), "copy-binding" | "copy-binding-plain") {
+                    baseline.fit_response_entry_copy_binding(
+                        &examples,
+                        config,
+                        options.mode == "copy-binding-plain",
+                    )?
+                } else if options.mode == "copy-composed" {
+                    baseline.fit_response_entry_copy_composed(&examples, config)?
+                } else if options.mode == "copy-completed" {
+                    baseline.fit_response_entry_copy_completed_word(&examples, config)?
+                } else {
+                    baseline.fit_response_entry_copy(&examples, config)?
+                };
             write_json(&options.output_dir.join("fit-report.json"), &report)?;
             (fitted, serde_json::to_value(report)?)
         } else if options.mode == "entry" {
@@ -1106,6 +1320,20 @@ fn main() -> ProbeResult<()> {
     }
     if options.controls != "all" {
         report["controls_selection"] = json!(options.controls);
+    }
+    if !model.role_read_training().is_empty() {
+        report["response_entry_scope"] = json!("Joint role-aware occurrence/NoRead and entry action. The selected occurrence/version commits only on the observed entry token and is reused for byte copying; historical pooled prefix/copy choice is bypassed at entry. Relative local lexical/equality and signed H4/zeta features learn sparse quantized scores; no supplied semantic roles or answer buffer enter serving. The inherited suffix, numeric operators and /4 memory remain fixed. Geometry-disabled is a same-artifact sensitivity control, not a matched-refit advantage.");
+        report["role_read_training_documents"] = json!(model.role_read_training().len());
+    }
+    if options.mode == "copy-composed" {
+        report["response_entry_scope"] = json!("Composed /2 extension: first response word after at most one learned lexical prefix token; exact source/query equality plus relative H4/phase features select a retained occurrence. No numeric-source requirement. NoCopy lexical continuation learns after an actually selected first transition. Forced interior copy bytes dispatch before ordinary scoring with score1 marker; observation/memory updates remain.64new construction and16fresh cases augment the unchanged source; no template or target buffer enters inference.");
+    }
+    if matches!(options.mode.as_str(), "copy-binding" | "copy-binding-plain") {
+        report["response_entry_scope"] = json!({
+            "operator": "Composed copy with the existing candidate binding-mask/preceding-word address supplied to lexical entry as one sparse feature per retained occurrence. At most32entry features,16lexical candidates and16retained words. Source payloads and copy selection remain unchanged. No candidate rank or answer bytes enter the new entry feature; repeated features retain multiplicity.",
+            "copy_geometry_disabled_during_fit_and_serving": options.mode == "copy-binding-plain",
+            "control_scope": "Matched parent, source, dose, caps and nongeometric features. This flag removes H4/orientation/zeta features from the copy extension only; inherited ordinary/memory/typed paths remain. Reserved cases are evaluated separately after design selection."
+        });
     }
     if let Some(limit) = output_limit {
         report["resources"]["output_bytes_limit"] = json!(limit);
@@ -1282,5 +1510,97 @@ mod tests {
             assert_eq!(pair.original.prompt, original.prompt);
             assert_eq!(pair.original.response, original.response);
         }
+    }
+}
+
+/// Authored before fitting; labels remain probe-only. All prompts fit the
+/// sixteen retained-word bound, including both entities in update cases.
+fn append_fact_cases(source: &mut Source) -> ProbeResult<()> {
+    if source.schema != WORD_COPY_SOURCE_SCHEMA {
+        return Err("prepare-facts requires /3".into());
+    }
+    let names = ["ada", "bea", "cyra", "dara", "elin", "faye", "gita", "hana"];
+    let places = [
+        "Rome", "Paris", "Dover", "York", "Bath", "Perth", "Cairo", "Tokyo",
+    ];
+    for world in 0..8 {
+        for task in 0..4 {
+            for variant in 0..2 {
+                source.fit.push(fact_case(
+                    "fit",
+                    world,
+                    task,
+                    variant,
+                    names[world % 8],
+                    names[(world + 1) % 8],
+                    places[(world + variant) % 8],
+                    places[(world + variant + 2) % 8],
+                ));
+            }
+        }
+    }
+    for task in 0..4 {
+        for world in 0..2 {
+            for variant in 0..2 {
+                let names = [["mira", "theo"], ["nora", "kian"]][world];
+                let cities = [["Oslo", "Lima"], ["Bern", "Pune"]][world];
+                source.development.push(fact_case(
+                    "fresh",
+                    world,
+                    task,
+                    variant,
+                    names[0],
+                    names[1],
+                    cities[variant],
+                    cities[1 - variant],
+                ));
+            }
+        }
+    }
+    source.scope.push_str(" Fact composition:64additional construction cases,16fresh cases fixed before fit (four each simple,distractor,update,unsupported), no numeric decoys. Fresh names and values are absent from added construction. Existing46development remain open. All sixteen fresh results must be reported, without tuning on them.");
+    validate_source(source)
+}
+fn fact_case(
+    split: &str,
+    world: usize,
+    task: usize,
+    variant: usize,
+    a: &str,
+    b: &str,
+    x: &str,
+    y: &str,
+) -> Case {
+    let style = world % 2;
+    let (verb, query) = if style == 0 {
+        ("lives", format!("Where is {a}?"))
+    } else {
+        ("stays", format!("Where does {a} stay?"))
+    };
+    let (facts, answer) = match task {
+        0 => (format!("{a} {verb} in {x}."), x),
+        1 if variant == 0 => (format!("{a} {verb} in {x}. {b} {verb} in {y}."), x),
+        1 => (format!("{b} {verb} in {y}. {a} {verb} in {x}."), x),
+        2 => (format!("{a} in {x}. {b} in Bath. {a} now in {y}."), y),
+        _ => (format!("{b} {verb} in {x}."), "Unknown"),
+    };
+    Case {
+        id: format!("fact/{split}/{world}/{task}/{variant}"),
+        family: "prose".into(),
+        task: [
+            "fact_simple",
+            "fact_distractor",
+            "fact_update",
+            "fact_unsupported",
+        ][task]
+            .into(),
+        world: if split == "fit" {
+            400000 + world
+        } else {
+            500000 + world
+        },
+        pair_id: format!("fact/{split}/{world}/{task}"),
+        variant,
+        prompt: format!("{facts} {query} Answer:"),
+        response: format!(" {answer}.\n"),
     }
 }

@@ -3,7 +3,7 @@
 //! checked where available; evicted literal payloads remain explicit state.
 use super::*;
 use crate::native_geometric::numeral::{Numeral, Scanner};
-use crate::native_geometric::value_lexemes::{LexemeState, WordAtom, WordScanner};
+use crate::native_geometric::value_lexemes::{LexemeState, WordAtom, WordIdentity, WordScanner};
 use crate::native_geometric::value_types::{
     ValueAction, ValueDerivation, ValueEntry, ValueRecord, ValueWork, LEXEME_VALUE_SCHEMA, QUERY,
     VALUES,
@@ -24,6 +24,13 @@ pub(super) fn validate_lexeme_field_presence(
     let Some(values) = wire.get("values").and_then(serde_json::Value::as_object) else {
         return Ok(());
     };
+    if super::relation::head(model).is_some()
+        != values
+            .get("relations")
+            .is_some_and(serde_json::Value::is_object)
+    {
+        return Err(invalid("relation fields differ from artifact"));
+    }
     let lexical = head.schema == LEXEME_VALUE_SCHEMA;
     if if lexical {
         !values
@@ -83,6 +90,186 @@ fn bytes(model: &Model, token: u32, mut consume: impl FnMut(u8)) {
     }
 }
 
+/// Check only evidence still available in the token window. Earlier identity
+/// bytes remain declared checkpoint state, just like earlier word payloads.
+fn predecessor_matches_tokens(
+    prior: &WordIdentity,
+    oldest: u64,
+    mut feed_token: impl FnMut(u64, &mut LexemeState, &mut ValueWork),
+) -> bool {
+    if prior.len == 0 {
+        return true;
+    }
+    let span = u64::from(prior.len) - 1;
+    if prior.end < oldest || (oldest != 0 && prior.end - oldest < span) {
+        return true;
+    }
+    for start in prior.end.saturating_sub(span).max(oldest)..=prior.end {
+        let mut replay = LexemeState::default();
+        let mut work = ValueWork::default();
+        for sequence in start..=prior.end {
+            feed_token(sequence, &mut replay, &mut work);
+        }
+        replay.finish(&mut work);
+        if replay.recent[..replay.recent_len]
+            .iter()
+            .any(|word| word.bytes == prior.bytes && word.len == prior.len && word.end == prior.end)
+        {
+            return true;
+        }
+    }
+    false
+}
+
+/// The extra byte bound includes the delimiter. Missing legacy metadata and
+/// evicted delimiter evidence remain explicitly unauthenticated state.
+fn leading_gap_matches_tokens(
+    atom: &WordAtom,
+    oldest: u64,
+    token_byte_start: impl Fn(u64) -> Option<u64>,
+    mut feed_token: impl FnMut(u64, &mut LexemeState, &mut ValueWork),
+) -> bool {
+    if atom.leading_gap.is_none() || atom.len == 0 {
+        return true;
+    }
+    let span = u64::from(atom.len);
+    if atom.end < oldest
+        || (oldest != 0 && atom.end - oldest < span)
+        || token_byte_start(atom.end).is_none()
+    {
+        return true;
+    }
+    for start in atom.end.saturating_sub(span).max(oldest)..=atom.end {
+        let Some(source_bytes_seen) = token_byte_start(start) else {
+            continue;
+        };
+        let mut replay = LexemeState {
+            source_bytes_seen,
+            ..Default::default()
+        };
+        let mut work = ValueWork::default();
+        for sequence in start..=atom.end {
+            feed_token(sequence, &mut replay, &mut work);
+        }
+        replay.finish(&mut work);
+        if replay.recent[..replay.recent_len].iter().any(|word| {
+            word.bytes == atom.bytes
+                && word.len == atom.len
+                && word.end == atom.end
+                && word.byte_end == atom.byte_end
+                && word.leading_gap == atom.leading_gap
+        }) {
+            return true;
+        }
+    }
+    false
+}
+
+#[cfg(test)]
+mod predecessor_tests {
+    use super::*;
+
+    #[test]
+    fn retained_word_delimiter_tampering_rejects_but_eviction_is_not_authenticated() {
+        let source = b"New York";
+        let mut atom = WordAtom {
+            len: 4,
+            end: 7,
+            byte_end: 7,
+            leading_gap: Some(b' '),
+            ..WordAtom::default()
+        };
+        atom.bytes[..4].copy_from_slice(b"York");
+        let check = |word: &WordAtom, oldest| {
+            leading_gap_matches_tokens(word, oldest, Some, |sequence, replay, work| {
+                replay.feed(
+                    source[sequence as usize],
+                    ValueEntry {
+                        sequence,
+                        ..ValueEntry::default()
+                    },
+                    work,
+                );
+            })
+        };
+        assert!(check(&atom, 0));
+        atom.leading_gap = Some(b'-');
+        assert!(!check(&atom, 0));
+        assert!(check(&atom, 4));
+        atom.leading_gap = None;
+        assert!(check(&atom, 0));
+    }
+
+    #[test]
+    fn identical_words_inside_one_token_keep_distinct_delimiters() {
+        let source = b"New-York New York";
+        let mut atom = WordAtom {
+            len: 4,
+            end: 0,
+            byte_end: 7,
+            leading_gap: Some(b'-'),
+            ..Default::default()
+        };
+        atom.bytes[..4].copy_from_slice(b"York");
+        let check = |word: &WordAtom| {
+            leading_gap_matches_tokens(
+                word,
+                0,
+                |_| Some(0),
+                |sequence, replay, work| {
+                    for &byte in source {
+                        replay.feed(
+                            byte,
+                            ValueEntry {
+                                sequence,
+                                ..Default::default()
+                            },
+                            work,
+                        );
+                    }
+                },
+            )
+        };
+        assert!(check(&atom));
+        atom.leading_gap = Some(b' ');
+        assert!(!check(&atom));
+        atom.byte_end = 16;
+        assert!(check(&atom));
+        atom.leading_gap = Some(b'-');
+        assert!(!check(&atom));
+    }
+
+    #[test]
+    fn retained_predecessor_payload_tampering_is_rejected_without_authenticating_eviction() {
+        let source = b"ada lives";
+        let mut prior = WordIdentity {
+            len: 3,
+            end: 2,
+            byte_end: 2,
+            ..WordIdentity::default()
+        };
+        prior.bytes[..3].copy_from_slice(b"ada");
+        let check = |identity: &WordIdentity, oldest| {
+            predecessor_matches_tokens(identity, oldest, |sequence, replay, work| {
+                replay.feed(
+                    source[sequence as usize],
+                    ValueEntry {
+                        sequence,
+                        ..ValueEntry::default()
+                    },
+                    work,
+                );
+            })
+        };
+        assert!(check(&prior, 0));
+        prior.bytes[..3].copy_from_slice(b"ava");
+        assert!(!check(&prior, 0));
+        // With the complete word evicted, truth is explicitly unauthenticated.
+        assert!(check(&prior, 3));
+        assert!(check(&WordIdentity::default(), 0));
+    }
+}
+
 impl Session {
     pub(super) fn restore_value_state(
         &mut self,
@@ -96,7 +283,10 @@ impl Session {
             .values
             .as_ref()
             .is_some_and(|head| head.schema == LEXEME_VALUE_SCHEMA);
-        if saved.seen != observed
+        if saved.query_boundary.is_some()
+            != model.typed_roles.as_ref().is_some_and(|b| b.local_query)
+            || saved.query_boundary.is_some_and(|start| start > observed)
+            || saved.seen != observed
             || saved.lexemes.is_some() != lexical
             || saved.recent_len != observed.min(32) as usize
             || saved.recent_cursor != (observed & 31) as usize
@@ -113,6 +303,12 @@ impl Session {
             || saved.pending.is_some()
         {
             return Err(invalid("shape, scanner or counters are invalid"));
+        }
+        if saved.relations.is_some() != super::relation::head(model).is_some() {
+            return Err(invalid("relation state differs from artifact"));
+        }
+        if let Some(relations) = &saved.relations {
+            relations.validate(&saved, model)?;
         }
         let oldest = observed - saved.recent_len as u64;
         let ring_oldest = observed - retained.len() as u64;
@@ -182,6 +378,57 @@ impl Session {
             if atom.len == 0 {
                 return Ok(());
             }
+            for prior in &atom.predecessors {
+                if !predecessor_matches_tokens(prior, oldest, |sequence, replay, work| {
+                    let entry = saved.recent[(sequence & 31) as usize];
+                    bytes(model, entry.token, |byte| replay.feed(byte, entry, work));
+                }) {
+                    return Err(invalid(
+                        "word predecessor differs from retained source bytes",
+                    ));
+                }
+            }
+            // Only the current source interval has a known response-exclusion
+            // boundary. Anchor its retained token offsets to the source-byte
+            // counter; older response/source mixtures remain unavailable.
+            let source_end = if saved.active {
+                saved.started_at
+            } else {
+                observed
+            };
+            let source_start = if !saved.active && saved.query_len != 0 {
+                // EOS can close active inference before end_response clears
+                // its queries; that interval still contains generated bytes.
+                None
+            } else {
+                saved
+                    .query_boundary
+                    .or((saved.started_at == 0).then_some(0))
+            };
+            if !leading_gap_matches_tokens(
+                atom,
+                oldest,
+                |start| {
+                    if start < oldest || start >= source_end || start < source_start? {
+                        return None;
+                    }
+                    let mut offset = source_bytes;
+                    for sequence in start..source_end {
+                        let mut count = 0_u64;
+                        bytes(model, saved.recent[(sequence & 31) as usize].token, |_| {
+                            count += 1
+                        });
+                        offset = offset.checked_sub(count)?;
+                    }
+                    Some(offset)
+                },
+                |sequence, replay, work| {
+                    let entry = saved.recent[(sequence & 31) as usize];
+                    bytes(model, entry.token, |byte| replay.feed(byte, entry, work));
+                },
+            ) {
+                return Err(invalid("word delimiter differs from retained source bytes"));
+            }
             if recent(atom.end)
                 .is_some_and(|entry| entry.pose != atom.pose || entry.phases != atom.phases)
             {
@@ -231,6 +478,10 @@ impl Session {
                 validate_atom(atom)?;
             }
             if atoms[len..].iter().any(|atom| *atom != WordAtom::default())
+                || atoms[..len]
+                    .iter()
+                    .enumerate()
+                    .any(|(index, atom)| !atom.predecessors_match_window(&atoms[index + 1..len]))
                 || atoms[..len].windows(2).any(|pair| {
                     pair[0].byte_end < u64::from(pair[0].len)
                         || pair[1].byte_end > pair[0].byte_end - u64::from(pair[0].len)
@@ -273,6 +524,18 @@ impl Session {
             validate_word_array(&words.queries)?;
             validate_word_array(&words.literal_cues)?;
             validate_atom(&words.scanner.pending)?;
+            if let Some(separator) = words.scanner.separator {
+                let mut last_byte = None;
+                if observed > oldest {
+                    let entry = saved.recent[((observed - 1) & 31) as usize];
+                    bytes(model, entry.token, |byte| last_byte = Some(byte));
+                }
+                if last_byte.is_some_and(|byte| byte != separator) {
+                    return Err(invalid(
+                        "word scanner delimiter differs from retained bytes",
+                    ));
+                }
+            }
             if words.scanner.pending.len != 0 {
                 let pending = words.scanner.pending;
                 // Unlike completed atoms, a pending word must end at the

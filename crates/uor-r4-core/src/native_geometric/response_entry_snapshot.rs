@@ -102,7 +102,7 @@ impl Session {
             return Err(invalid("last tokens differ from actual observations"));
         }
         if let Some(anchor) = saved.boundary {
-            if !eligible(values, self.control)
+            if !eligible(model, values, self.control)
                 || values.pending.is_some()
                 || anchor.at_seen == 0
                 || anchor.at_seen != values.started_at
@@ -182,17 +182,29 @@ impl Session {
                     seen: anchor.at_seen,
                     ..ResponseEntryState::default()
                 };
-                let selection = origin.offer(
+                let inherited = origin.offer(
                     model,
                     &boundary_values,
                     baseline,
                     self.control,
                     &mut CompletionWork::default(),
                 );
+                let selection = super::word_copy_runtime::prefix_offer(
+                    model,
+                    &mut origin,
+                    &boundary_values,
+                    baseline,
+                    inherited,
+                    self.control,
+                    &mut WordCopyWork::default(),
+                );
+                // Joint NoRead entries also belong to the mandatory copy
+                // validator below: their learned token need not match the
+                // older independent lexical entry proposal.
                 let copy_origin = self
                     .word_copy
                     .as_ref()
-                    .is_some_and(|copy| copy.origin.is_some());
+                    .is_some_and(|copy| copy.origin.is_some() || copy.read_commit.is_some());
                 if !copy_origin
                     && (!selection.is_some_and(|candidate| {
                         token_at(anchor.at_seen).is_ok_and(|token| token == candidate.token)

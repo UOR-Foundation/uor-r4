@@ -63,6 +63,11 @@ impl ValueState {
         self.append_record(record, work);
         work.literal_writes = work.literal_writes.saturating_add(1);
     }
+    pub(super) fn observe_relation(&mut self, model: &Model, work: &mut ValueWork) {
+        if let (Some(state), Some(words)) = (&mut self.relations, &self.lexemes) {
+            state.observe(model, words, work);
+        }
+    }
     pub(super) fn observe(&mut self, model: &Model, token: u32, work: &mut ValueWork) {
         let sequence = self.seen;
         if self.active {
@@ -100,6 +105,7 @@ impl ValueState {
             if let Some(words) = &mut self.lexemes {
                 words.finish(work);
             }
+            self.observe_relation(model, work);
             if let Some(literal) = self.scanner.finish() {
                 self.literal(literal, work);
             }
@@ -120,6 +126,7 @@ impl ValueState {
             if let Some(words) = &mut self.lexemes {
                 words.feed(value, self.recent[(self.recent_cursor + 31) & 31], work);
             }
+            self.observe_relation(model, work);
             let was_open = self.scanner.snapshot_needs_suffix();
             let literal = self.scanner.feed(value, sequence);
             if let Some(literal) = literal {
@@ -152,6 +159,7 @@ impl ValueState {
         self.pending = None;
         self.emission = None;
         self.consumed = false;
+        self.operations_committed = 0;
         self.active = true;
         self.started_at = self.seen;
         self.sources.clear();
@@ -163,11 +171,23 @@ impl ValueState {
             }
         }
     }
+    pub(super) fn refresh_sources(&mut self, work: &mut ValueWork) {
+        self.sources.clear();
+        self.sources.extend_from_slice(&self.records);
+        self.consumed = false;
+        self.pending = None;
+        self.emission = None;
+        work.source_refreshes = work.source_refreshes.saturating_add(1);
+    }
     pub(super) fn end(&mut self) {
+        if self.query_boundary.is_some() {
+            self.query_boundary = Some(self.seen);
+        }
         self.active = false;
         self.pending = None;
         self.emission = None;
         self.consumed = false;
+        self.operations_committed = 0;
         self.sources.clear();
         self.query_len = 0;
         self.scanner = super::numeral::Scanner::default();
@@ -319,33 +339,114 @@ impl ValueState {
         if self.consumed || self.query_len == 0 || self.next_id == u64::MAX {
             return None;
         }
-        let mut selected = None;
-        let mut best = 0_i64;
-        for index in 0..272 {
-            let Some((action, a, b)) = self.proposal(index) else {
-                continue;
-            };
-            work.proposals = work.proposals.saturating_add(1);
-            let Some(value) = execute(action, a.value, b.value, work) else {
-                continue;
-            };
-            let (features, len) = self.features(model, action, a, b, control, work);
-            let mut score = 0_i64;
-            for feature in &features[..len] {
-                work.feature_lookups = work.feature_lookups.saturating_add(1);
-                if let Ok(index) = head.rows.binary_search_by(|row| {
-                    work.feature_comparisons = work.feature_comparisons.saturating_add(1);
-                    row.feature.cmp(feature)
-                }) {
-                    score += i64::from(head.rows[index].weight);
+        // Score geometry/cues before materializing a result. Only exact failure
+        // causes another pass, below the last rejected (score, proposal-order)
+        // choice. This preserves first-valid ties without a score buffer.
+        let mut ceiling: Option<(i64, usize)> = None;
+        let routed = super::typed_routing::context(model, self, control, work);
+        let no_op = routed
+            .as_ref()
+            .map(|addr| {
+                work.routing.predictions += 1;
+                super::typed_routing::score(model, self, None, 2, addr, control, work)
+            })
+            .unwrap_or(0);
+        let (action, a, b, value, best) = loop {
+            work.selection_passes = work.selection_passes.saturating_add(1);
+            let mut selected = None;
+            let mut best = 0_i64;
+            for index in 0..272 {
+                let Some((action, a, b)) = self.proposal(index) else {
+                    continue;
+                };
+                work.proposals = work.proposals.saturating_add(1);
+                if action == ValueAction::Add
+                    && super::typed_routing::alias_self_add(
+                        self,
+                        a,
+                        b,
+                        routed.as_ref().and_then(|c| c.origins.as_ref()),
+                        work,
+                    )
+                {
+                    work.alias_self_add_rejections += 1;
+                    continue;
+                }
+                let mut score = 0_i64;
+                if let Some(addr) = &routed {
+                    let action_index = if action == ValueAction::Copy { 0 } else { 1 };
+                    score = super::typed_routing::score(
+                        model,
+                        self,
+                        Some((a, b)),
+                        action_index,
+                        addr,
+                        control,
+                        work,
+                    ) - no_op;
+                } else {
+                    let (features, len) = self.features(model, action, a, b, control, work);
+                    for feature in &features[..len] {
+                        work.feature_lookups = work.feature_lookups.saturating_add(1);
+                        if let Ok(index) = head.rows.binary_search_by(|row| {
+                            work.feature_comparisons = work.feature_comparisons.saturating_add(1);
+                            row.feature.cmp(feature)
+                        }) {
+                            score += i64::from(head.rows[index].weight);
+                        }
+                    }
+                }
+                if let Some((limit, rejected)) = ceiling {
+                    work.selection_comparisons = work.selection_comparisons.saturating_add(1);
+                    match score.cmp(&limit) {
+                        std::cmp::Ordering::Greater => continue,
+                        std::cmp::Ordering::Equal => {
+                            work.selection_comparisons =
+                                work.selection_comparisons.saturating_add(1);
+                            if index <= rejected {
+                                continue;
+                            }
+                        }
+                        std::cmp::Ordering::Less => {}
+                    }
+                }
+                work.selection_comparisons = work.selection_comparisons.saturating_add(1);
+                if score > best {
+                    best = score;
+                    selected = Some((index, action, a, b));
                 }
             }
-            if score > best {
-                best = score;
-                selected = Some((action, a, b, value));
+            let (index, action, a, b) = selected?;
+            if model.joint_admission.is_some()
+                && routed.as_ref().is_some_and(|c| c.literal_component)
+                && control != Control::JointAdmissionDisabled
+            {
+                work.admission_legality_checks += 1;
+                if !super::joint_admission::legal(action, a.value, b.value) {
+                    work.overflow_rejections += 1;
+                    ceiling = Some((best, index));
+                    continue;
+                }
             }
-        }
-        let (action, a, b, value) = selected?;
+            if let Some(context) = &routed {
+                if !super::joint_admission::permits(
+                    model,
+                    self,
+                    action,
+                    (a, b),
+                    best,
+                    context,
+                    control,
+                    work,
+                ) {
+                    return None;
+                }
+            }
+            if let Some(value) = execute(action, a.value, b.value, work) {
+                break (action, a, b, value, best);
+            }
+            ceiling = Some((best, index));
+        };
         let numeral = Numeral::from_zphi(ZPhi::new(value, 0))?;
         // Exact spelling has nineteen place visits plus one subtraction per
         // digit value; this counter is the fixed worst-case visit bound.
@@ -431,6 +532,7 @@ impl ValueState {
                 cursor: 1,
             });
             self.consumed = true;
+            self.operations_committed = self.operations_committed.saturating_add(1);
             work.derived_writes = work.derived_writes.saturating_add(1);
         } else if let Some(emission) = &mut self.emission {
             emission.cursor = emission.cursor.saturating_add(1);
@@ -442,6 +544,7 @@ impl ValueState {
     }
 }
 pub(super) fn execute(action: ValueAction, a: i64, b: i64, work: &mut ValueWork) -> Option<i64> {
+    work.operator_executions = work.operator_executions.saturating_add(1);
     match action {
         ValueAction::Copy => Some(a),
         ValueAction::Add => {

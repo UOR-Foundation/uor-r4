@@ -7,7 +7,41 @@
 //! `runtime::{Session::observe, Session::predict}` is the integer/table kernel;
 //! tokenization, serialization, fitting and diagnostic rendering are host work.
 
+pub use relation::RelationWork;
+pub use relation_admission::RelationAdmissionMode;
+pub use relation_training::{RelationExample, RelationLabel};
+mod dependent_read;
+mod dependent_read_training;
+pub use dependent_read_training::DependentReadExample;
+#[cfg(test)]
+mod dependent_read_tests;
+mod joint_admission;
+mod joint_admission_training;
+mod literal_refinement;
+#[cfg(test)]
+mod source_refinement_tests;
+mod source_routing;
+#[cfg(test)]
+mod source_routing_tests;
+mod source_routing_training;
+mod source_span;
+mod source_span_training;
+pub use source_routing_training::SourceRoutingConfig;
+mod typed_routing;
+mod typed_routing_training;
+pub use typed_routing_training::{TypedRoutingExample, TypedRoutingTurn};
 mod anchors;
+mod learned_routing;
+#[cfg(test)]
+mod learned_routing_tests;
+mod learned_routing_training;
+mod recurrent_routing;
+#[cfg(test)]
+mod recurrent_routing_tests;
+mod recurrent_routing_training;
+pub use learned_routing::{RoutingDecision, RoutingHeadDecision, RoutingMode, RoutingWork};
+pub use learned_routing_training::{RoutingFitConfig, RoutingFitReport};
+pub use recurrent_routing_training::RecurrentRoutingFitReport;
 mod completion_runtime;
 mod completion_training;
 mod completion_types;
@@ -16,10 +50,20 @@ mod memory_training;
 mod memory_types;
 mod mixture;
 mod numeral;
+mod relation;
+mod relation_admission;
+mod relation_span;
+mod relation_start;
+mod relation_start_training;
+#[cfg(test)]
+mod relation_tests;
+mod relation_training;
 mod response_entry_runtime;
 mod response_entry_training;
 mod response_entry_types;
 mod response_runtime;
+mod role_read;
+mod role_read_training;
 mod runtime;
 mod snapshot;
 mod training;
@@ -30,6 +74,7 @@ mod value_types;
 mod word_copy_runtime;
 mod word_copy_training;
 mod word_copy_types;
+mod writer_refinement;
 
 use serde::{Deserialize, Serialize};
 
@@ -135,6 +180,17 @@ pub struct DocumentReceipt {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum Control {
+    SourceSpanDisabled,
+    /// Remove following source identity from the fitted extent operator.
+    SourceSpanContextDisabled,
+    /// Keep next-word identity but remove its pair with the original source cue.
+    SourceSpanPairDisabled,
+    /// Restore the exact source router and feature law preceding context retention.
+    SourceContextDisabled,
+    /// Keep the fitted router but remove retained predecessors from its features.
+    SourceContextWindowOnly,
+    JointAdmissionDisabled,
+    LiteralRefinementDisabled,
     #[default]
     Full,
     GeometryDisabled,
@@ -154,6 +210,11 @@ pub enum Control {
     ResponseEntryGeometryDisabled,
     WordCopyDisabled,
     WordCopyGeometryDisabled,
+    WordCopyDispatchDisabled,
+    LearnedRoutingDisabled,
+    LearnedRoutingSelectionDisabled,
+    LearnedRoutingTransformDisabled,
+    LearnedRoutingChainDisabled,
 }
 
 /// Explicit feature addresses, never content digests. Kinds 0/1 are full
@@ -190,6 +251,13 @@ impl Feature {
     fn admitted(self, control: Control) -> bool {
         match control {
             Control::Full
+            | Control::SourceSpanDisabled
+            | Control::SourceSpanContextDisabled
+            | Control::SourceSpanPairDisabled
+            | Control::SourceContextDisabled
+            | Control::SourceContextWindowOnly
+            | Control::JointAdmissionDisabled
+            | Control::LiteralRefinementDisabled
             | Control::MemoryDisabled
             | Control::ResponseStateDisabled
             | Control::ValuesDisabled
@@ -199,7 +267,12 @@ impl Feature {
             | Control::ResponseEntryDisabled
             | Control::ResponseEntryGeometryDisabled
             | Control::WordCopyDisabled
-            | Control::WordCopyGeometryDisabled => true,
+            | Control::WordCopyGeometryDisabled
+            | Control::LearnedRoutingDisabled
+            | Control::LearnedRoutingSelectionDisabled
+            | Control::LearnedRoutingTransformDisabled
+            | Control::LearnedRoutingChainDisabled
+            | Control::WordCopyDispatchDisabled => true,
             Control::GeometryDisabled => self.kind < 2,
             Control::ZetaDisabled => !(8..=15).contains(&self.kind) && self.kind != 5,
             Control::H4Disabled => self.kind < 2 || (8..=15).contains(&self.kind),
@@ -268,6 +341,44 @@ pub struct TrainingProgress {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(try_from = "ModelWire")]
 pub struct Model {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    relation_writer_refinement: Option<writer_refinement::WriterRefinement>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    relation_start_context: Option<Vec<word_copy_types::WordCopyAddress>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    relation_start: Option<source_routing::SourceRouting>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    relation_reverse_spans: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    relation_spans: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    source_span_context: Option<Vec<word_copy_types::WordCopyAddress>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    source_span: Option<source_routing::SourceRouting>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    source_context: Option<source_routing::SourceRoutingRefinement>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    literal_routing_refinement: Option<source_routing::SourceRoutingRefinement>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    joint_admission: Option<joint_admission::JointAdmission>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    no_read_completion: Option<response_entry_types::ResponseEntryModel>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    typed_routing: Option<typed_routing::TypedRouting>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    typed_roles: Option<typed_routing::TypedRouting>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    typed_literals: Option<typed_routing::TypedRouting>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    relation_writer: Option<relation_training::WriterRevision>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    dependent_read: Option<dependent_read::DependentRead>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    source_routing: Option<source_routing::SourceRouting>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    source_routing_refinement: Option<source_routing::SourceRoutingRefinement>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    learned_routing: Option<learned_routing::RoutingBlock>,
     schema: String,
     artifact_cid: String,
     uor_model_address: String,
@@ -294,6 +405,44 @@ pub struct Model {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ModelWire {
+    #[serde(default)]
+    relation_writer_refinement: Option<writer_refinement::WriterRefinement>,
+    #[serde(default)]
+    relation_start_context: Option<Vec<word_copy_types::WordCopyAddress>>,
+    #[serde(default)]
+    relation_start: Option<source_routing::SourceRouting>,
+    #[serde(default)]
+    relation_reverse_spans: Option<String>,
+    #[serde(default)]
+    relation_spans: Option<String>,
+    #[serde(default)]
+    source_span_context: Option<Vec<word_copy_types::WordCopyAddress>>,
+    #[serde(default)]
+    source_span: Option<source_routing::SourceRouting>,
+    #[serde(default)]
+    source_context: Option<source_routing::SourceRoutingRefinement>,
+    #[serde(default)]
+    literal_routing_refinement: Option<source_routing::SourceRoutingRefinement>,
+    #[serde(default)]
+    joint_admission: Option<joint_admission::JointAdmission>,
+    #[serde(default)]
+    no_read_completion: Option<response_entry_types::ResponseEntryModel>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    typed_routing: Option<typed_routing::TypedRouting>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    typed_roles: Option<typed_routing::TypedRouting>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    typed_literals: Option<typed_routing::TypedRouting>,
+    #[serde(default)]
+    relation_writer: Option<relation_training::WriterRevision>,
+    #[serde(default)]
+    dependent_read: Option<dependent_read::DependentRead>,
+    #[serde(default)]
+    source_routing: Option<source_routing::SourceRouting>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    source_routing_refinement: Option<source_routing::SourceRoutingRefinement>,
+    #[serde(default)]
+    learned_routing: Option<learned_routing::RoutingBlock>,
     schema: String,
     artifact_cid: String,
     uor_model_address: String,
@@ -320,6 +469,25 @@ impl TryFrom<ModelWire> for Model {
     type Error = Error;
     fn try_from(wire: ModelWire) -> Result<Self> {
         let model = Self {
+            relation_writer_refinement: wire.relation_writer_refinement,
+            relation_start_context: wire.relation_start_context,
+            relation_start: wire.relation_start,
+            relation_reverse_spans: wire.relation_reverse_spans,
+            relation_spans: wire.relation_spans,
+            source_span_context: wire.source_span_context,
+            source_span: wire.source_span,
+            source_context: wire.source_context,
+            literal_routing_refinement: wire.literal_routing_refinement,
+            joint_admission: wire.joint_admission,
+            no_read_completion: wire.no_read_completion,
+            typed_routing: wire.typed_routing,
+            typed_roles: wire.typed_roles,
+            typed_literals: wire.typed_literals,
+            relation_writer: wire.relation_writer,
+            dependent_read: wire.dependent_read,
+            source_routing: wire.source_routing,
+            source_routing_refinement: wire.source_routing_refinement,
+            learned_routing: wire.learned_routing,
             schema: wire.schema,
             artifact_cid: wire.artifact_cid,
             uor_model_address: wire.uor_model_address,
@@ -345,6 +513,8 @@ impl TryFrom<ModelWire> for Model {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct Work {
+    #[serde(default, skip_serializing_if = "RoutingWork::is_empty")]
+    pub learned_routing: RoutingWork,
     #[serde(default, skip_serializing_if = "WordCopyWork::is_empty")]
     pub word_copy: WordCopyWork,
     #[serde(default, skip_serializing_if = "CompletionWork::is_empty")]
@@ -478,5 +648,7 @@ mod completion_runtime_tests;
 mod response_entry_runtime_tests;
 #[cfg(test)]
 mod response_entry_training_tests;
+#[cfg(test)]
+mod role_read_tests;
 #[cfg(test)]
 mod word_copy_tests;

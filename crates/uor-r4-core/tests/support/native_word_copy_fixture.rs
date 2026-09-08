@@ -111,3 +111,27 @@ pub fn fitted_completed_word() -> &'static Model {
         Model::from_bytes(&model.to_bytes().unwrap()).unwrap()
     })
 }
+
+#[allow(dead_code)]
+pub fn fitted_composed() -> &'static Model {
+    static MODEL: OnceLock<Model> = OnceLock::new();
+    MODEL.get_or_init(|| {
+        let (entry, _) = fitted();
+        let (model, _) = entry.fit_response_entry_copy_composed(
+            CONSTRUCTION.get().unwrap(), ResponseEntryFitConfig::default()
+        ).unwrap();
+        Model::from_bytes(&model.to_bytes().unwrap()).unwrap()
+    })
+}
+
+#[allow(dead_code)]
+pub fn fitted_shared_binding() -> &'static Model {
+    static MODEL: OnceLock<Model> = OnceLock::new();
+    MODEL.get_or_init(|| {
+        let (entry, _) = fitted();
+        let (model, _) = entry.fit_response_entry_copy_binding(
+            CONSTRUCTION.get().unwrap(), ResponseEntryFitConfig::default(), false
+        ).unwrap();
+        Model::from_bytes(&model.to_bytes().unwrap()).unwrap()
+    })
+}

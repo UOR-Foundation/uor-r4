@@ -1,5 +1,441 @@
 # Research: what is measured, what is closed, what is open
 
+**September 7 direction reconciliation:** the product name is **UOR-R4 Geometric Language Model**. Read the [canonical plan](integration/project-track.md), [current artifact/results](integration/current-state.md), [capability assessment](integration/model-direction-2026-09.md) and [project map](PROJECT_MAP.md) first. This document retains technical and dated experiment/reference material; earlier “active/next” sequences do not supersede those pointers. Native bounded inference and contextual/copy attention exist; general prose, general reasoning and frontier capability remain unqualified. Offline Rust training matmul is allowed; final serving has no matrix products or transformer backbone. No new model result was run for this documentation update.
+
+The owner-requested [September architecture/source reconciliation](integration/architecture-2026-09/README.md)
+indexes the mathematical mechanisms, historical engines, contributor sources
+and Studio. It preserves results below and distinguishes available definitions,
+implemented operations, measured behavior and proposed integration. The native
+model was d59070c2 at the review date; no model experiment was
+rerun for that review.
+
+## Contextual writer boundaries — bounded positive, 2026-09-07
+
+The [result](native_geometric_writer_refinement_1139.md) and
+[evidence](evidence/native_geometric_writer_refinement_1139.json) select
+`79710468`. It refines the existing writer with learned separator/adjacency
+features and a complete exact NoWrite cache signature. All 232 construction
+writer labels, 32 new answers, twelve open answers and 76 prior phrases pass.
+After selection, twelve evicted phrases and four short boundary-object cases
+pass with exact writes. All 663 retained answers and selected preservation pass.
+The coefficient-only `990ccbce` negative and its eight span regressions remain
+preserved. A matched diagnostic identifies 41 preexisting reader failures among
+200 historical writer anchors; all 200 actual outputs and writes remain unchanged.
+This is bounded contextual writing, not general correctness, object persistence
+outside the raw window, arbitrary punctuation understanding or an energy result.
+Shared causal state transitions and compositional emission are the next model work.
+
+## Contextual phrase starts — bounded positive after transfer corrections, 2026-09-07
+
+The [result](native_geometric_contextual_start_1139.md) and
+[evidence](evidence/native_geometric_contextual_start_1139.json) retain
+`50dc0d23` with unchanged complete `321e990f` parent parameters. Ten
+construction-prompt words shared across distinct exact writer-selected owners
+address contextual signed-H4 codes. Supported construction improves 12/50 to
+50/50, open development 3/12 to 12/12, and all twelve fresh answers after
+selection pass following source eviction. Removing contextual roots gives
+38/50 construction and 7/12 open. All 663 retained construction answers and
+selected prior output/write/session preservation pass, including the older
+8/8 phrase-start challenge.
+
+The stopped preparation and three rejected candidates remain preserved. Open
+feedback informed new construction contrasts; open scores are not fresh evidence.
+Complete supplied construction is 50/52 because two upstream `quiet river`
+no-write cases remain outside the selector's supported scope. Four learned
+predecessor/first prime-pair codes contribute to the fitted operator; writer-role
+roots remain identity and their individual advantage is unmeasured. This result
+qualifies bounded contextual phrase-start selection, not general phrase parsing,
+sustained language, reasoning, coding or energy advantage. Current-state records
+the actual interface/check evidence, cumulative resources and next writer repair.
+
+## Learned relation starts — construction fit, open transfer negative, 2026-09-07
+
+The [result](native_geometric_relation_start_1140.md) implements shared signed-H4
+ranking over unchanged admitted reverse starts plus the singleton endpoint.
+Candidate `bb6b8ba4` binds the complete `321e990f` parent. Construction
+improves 2/8 to 8/8 and open answers 2/8 to 6/8; all selected prior preservation
+passes. The two failures retain `says` before the intended value. Only
+predecessor-shape codes changed during fitting, so a longer candidate sharing
+that shape wins the exact score tie. The current construction lacks a contrast
+that would reject this shortcut, although ordered pair features are available.
+
+Selection failed; the fresh panel and subsequent diagnostics were not executed.
+Keep `321e990f` active and preserve this candidate as a bounded negative.
+This result does not establish general phrase understanding, an advantage of
+angular scoring over another scorer, energy savings or frontier capability.
+The next change is contrastive construction for the existing operator, with a
+complete resource projection. See current-state for the cumulative balance.
+
+## Reverse relation endpoints — bounded positive, 2026-09-07
+
+The [result](native_geometric_reverse_spans_1140.md) retains `321e990f` over
+`0b12b604` without fitting. The learned writer supplies a terminal endpoint;
+the existing geometric continuation operator admits earlier bounded starts.
+Construction improves 3/6 to 6/6, open passes 6/6, short reads 3/3 and fresh
+turns after selection 6/6. All selected prior outputs, writes and sessions pass.
+The exact anchor identity remains distinct from complete payload extent.
+Longest admitted prefix overextends an unfamiliar plain introduction, while a
+two-space gap truncates: diagnostics 0/2, preserved without retuning. This is
+bounded value retention, not general phrase understanding or an energy result.
+The next direction is learned start selection, with separator representation
+tracked separately. Current-state records the remaining cumulative allocation.
+
+## Retained relation spans — bounded positive after runtime correction, 2026-09-07
+
+The [result](native_geometric_retained_spans_1140.md) retains `0b12b604` with the
+corrected forward-only runtime. It reuses the accepted geometric extent operator
+without fitting. Complete values survive eviction, repeated assertions,
+same-prefix corrections and conflicts on 6/6 construction and 6/6 open session
+turns; six previously exposed turns replay 6/6. All prior preservation passes.
+The initial runtime's reverse-statement extension regressed long-window answers
+to 26/28 and is preserved separately. Restricting deferred extent to the writer's
+forward value restores 28/28 while keeping reverse single-word behavior. Source
+identities distinguish the two runtimes sharing the same learned artifact.
+This is bounded persistent value transport, not a new angular advantage,
+broad phrase understanding, reasoning or energy result. The current-state
+pointer records remaining resources and the role-aware endpoint successor.
+
+## Context-sensitive source extent — bounded positive, 2026-09-07
+
+The [result](native_geometric_span_context_1139.md) retains `419ba3a7` over
+`c6a98c04`. The existing H4 learner uses a construction-only exact prime registry
+and a next-word/original-source-cue pair. Construction improves 5/14 to 14/14,
+open 2/6 to 6/6 and fresh 3/9 to 9/9; pair removal gives 11/14, 4/6 and 6/9.
+All 663 earlier construction and 24/24 exposed preservation answers pass, along
+with other numeric, literal, relation and session checks. This repairs the
+separator-only regression with fixed parent parameters and initial source choice.
+Unseen connectors and double-space gaps remain 0/2. There is no new angular versus
+equality comparison, general phrase understanding, broad language/reasoning or
+energy result. The next direction is retained multiword relation values across writes, window
+eviction and later reads, with new data and a refreshed projection.
+
+## Source-span transport — implemented, candidate rejected, 2026-09-07
+
+The [result](native_geometric_source_span_1139.md) preserves the active
+`c6a98c04` parent. Experimental `7e928bd2` uses the existing signed-H4 learner
+for separator-conditioned Continue/Finish and exact bounded adjacent-word copying.
+Open complete answers improve 1/6 to 6/6 and fresh 3/10 to 9/10, but construction
+regresses 663/663 to 647/663 and an earlier exposed set 24/24 to 20/24. All twenty
+failures copy past a value into `holds OWNER`. The separate same-space phrase
+boundary is 0/1; a two-space value is also unsupported. Thus source transport is
+implemented, while the separator-only extent readout is rejected for promotion.
+Use retained contextual identity/binding to learn the boundary next; do not
+repeat the same feature-only fit or infer general language/energy capability.
+
+## Retained source context — current bounded checkpoint, 2026-09-07
+
+The [source-context result](native_geometric_source_context_1139.md) retains
+`c6a98c04`. Four exact predecessor identities stay with each word candidate.
+The existing H4 selector can then see an owner that has left its shared query
+window. Construction improves 654/663 to 663/663, open 12/16 to 16/16 and fresh
+owner/query/order answers24/32 to 32/32; context-disabled fresh remains 24/32.
+No correct construction answer is lost, and exact-parent control reproduces all
+663 parent texts/stops. Earlier admission becomes 12/12; all numeric, source,
+relation and session preservation passes. Actual artifact/state/allocation checks
+pass. Initial retained-context selection already gets 428/428 eligible choices
+right; fitting makes one margin update, with no new nonidentity codes. This
+supports information retention feeding existing learned geometry. It does not
+establish a new angular-versus-equality advantage or broad language capability.
+Next is reusable contextual transition/emission conditioned on exact selected
+identity and committed results; native API/model quality precedes Studio lowering.
+
+## Literal operand binding — previous bounded checkpoint, 2026-09-07
+
+The [literal continuation](native_geometric_literal_binding_1139.md) retains
+`e1ef0a5d`. Exact entity bytes already survive capture; the learned literal
+router omitted a relevant query/cue provenance code. It now retains all 567
+old codes, admits all 52 newly observed codes, and continues the same signed-H4
+selector with fixed dictionary and feature law. An outer witness restores the
+complete `433e3807` parent. No serving head or persistent state is added.
+
+Construction improves 571/631 to 630/631 with zero lost correct answers; disabling
+refinement restores all 631 parent texts/stops. Open answers improve 4/8 to 8/8,
+and fresh name/value/place/order answers improve 8/16 to 16/16, versus 8/16 for
+matched equality. Both fits complete the same schedule. All prior preservation
+passes; the earlier admission set's numeric errors are repaired, leaving its two
+location abstentions. Thirty-two repaired Rust continuations execute assertions,
+and actual state/identity/checkpoint/allocation and public CLI checks pass.
+This qualifies bounded literal selection, not general language/reasoning or a
+whole-model laptop advantage. Next is order-sensitive source/NoRead selection.
+
+## Literal numeric admission — previous bounded checkpoint, 2026-09-07 UTC
+
+The [admission result](native_geometric_joint_admission_1139.md) retains
+`433e3807` with the complete d590 parent fixed. Reused signed-H4 selection
+learns Numeric versus DeferToLexical before literal execution. Construction
+improves 558/615 to 563/615 with zero lost correct or changed remaining wrong
+outputs; disabling the gate reproduces all parent answers. Three repaired Rust
+completions compile and pass fifteen assertions. All prior complete output,
+relation-write and persistent-session preservation passes.
+
+Open answers remain 4/6 and fresh answers 8/12 for parent, angular and equality.
+Fresh numeric admission executes, but none of the fresh location cases reaches
+the gate, so lexical-rejection transfer and angular advantage are unestablished.
+Actual causal/state/checkpoint and zero-allocation checks pass. Small warm-step
+measurements exclude loading and ingestion; energy remains unmeasured. Next is
+order-sensitive entity/operand binding in the existing literal selector, with
+separate reversed-order source/NoRead negatives preserved. General language and
+reasoning remain unqualified.
+
+## Supported-source and NoRead selection — previous bounded checkpoint, 2026-09-06
+
+The [source refinement](native_geometric_source_noread_1139.md) retains
+`d59070c2`, replacing the existing router while preserving every downstream
+parameter and the exact `e7c14c99` training parent through a nonexecuting witness.
+Warm continuation with128 features reaches384/384 eligible construction choices
+and20/20 new complete source/abstention answers, versus14/20 parent and10/20
+matched exact-code continuation. All20 new cases use the direct source router.
+Earlier literal answers improve to 16/16 on both sets and103/103 construction;
+computed, identifier, durable-memory and long-context preservation passes.
+
+Combined construction is551/603 versus545/603, with no lost correct answer;
+all52 remaining wrong outputs equal the parent. Inherited numeric admission
+still takes over some word/identifier requests, including a supported location
+that emits13 instead of Paris. Four focused tests and actual zero-allocation
+source/NoRead and three-turn computation checks pass. Added routing work and
+shorter corrected outputs are accounted separately. This is bounded evidence
+for the selected angular continuation, not general abstention, syntax, prose,
+reasoning or whole-model laptop advantage. Next: joint numerical/word admission
+feeding the existing selected operators, then broader #1139/#1140 composition.
+
+## Literal-context NoRead completion — previous bounded checkpoint, 2026-09-06
+
+The [committed continuation](native_geometric_no_read_completion_1139.md)
+retains `e7c14c99` at literal-numeric NoRead scope, with the complete `c29ab982`
+parent unchanged. It reuses existing word-binding features and sparse lexical
+scoring after an actually observed NoRead. Exposed answers improve12/16 to14/16;
+new answers improve14/16 to15/16, with all12 numeric cases and3/4 abstentions.
+Complete computations remain16/16 and identifier returns8/8. The remaining
+failure copies `coins` as a location answer; source selection is not repaired.
+
+Two earlier candidates are preserved negatives: a smaller response-progress
+representation shortened four explanatory answers; broader application of the
+binding-conditioned table broke one relation-conflict session. Literal-only
+state eligibility restores the inherited memory and computed-result paths.
+No new angular-distance advantage or general abstention capability is claimed.
+
+## Protected literal admission — previous bounded checkpoint, 2026-09-06
+
+The [admission repair](native_geometric_literal_admission_1139.md) retains
+`c29ab982`, with the entire accepted parent unchanged and a separate bounded
+literal table. New complete transfer improves12/16 to 16/16; new identifier
+answers stay8/8 and their functions pass24 executed assertions. Earlier
+preservation is restored, including the62/62 and24/24 sets. Exact-code matches
+new transfer scores, so there is no additional angular advantage. Four
+abstention texts still fail; supported-word versus abstention answer routing is
+next. The preceding shared-fit candidates remain unpromoted historical evidence.
+
+## Literal selection — previous preservation negative, 2026-09-06
+
+The [literal extension](native_geometric_literal_selection_1139.md) improves
+new three-turn generation8/16 to 16/16 and literal answers7/16 to12/16, with the
+same results for angular and exact-code. Four abstention texts fail. Shared
+fitting also regresses computed-result and identifier-copy cases; neither new
+artifact was promoted; `af337c28` remained the accepted parent for the later repair. Truncation and missing
+first-prefix training were corrected, with their failures preserved. The next
+change protects working computed roles while learning literal admission against
+word-answer alternatives. The record binds complete costs and limitations.
+
+## Independent-result provenance — retained checkpoint, 2026-09-06
+
+The [operand-provenance record](native_geometric_operand_provenance_1139.md)
+retains `af337c28`:58/58 construction,8/8 reachable development and 12/16 complete
+changed-name/computation-order transfers versus 3/16 parent. Exact-code also
+gets 12/16; this is no new angular-distance advantage. All 12 reached selections
+pass; four first-literal responses fail. Exact ancestry-propagated cue matches
+and word-identity remapping of existing learned parameters solve the bounded
+selection seam. Two random fits lose18 old updated-total cases and remain
+negative. Its prior checks remain the preservation baseline for the later literal extension.
+
+## Competing derived values — previous checkpoint, 2026-09-06
+
+The [typed-role record](native_geometric_typed_roles_1139.md) retains `43c54db3`
+at bounded causal-depth scope: 12/12 complete new four-turn operand/refresh
+transfers versus 2/12 for the matched exact-code fit. Exact derivation depth,
+Copy-alias admission and query metadata cut at explicit response boundaries
+address the observed failures. Earlier 9/12 and 8/12 transfers remain exposed
+negatives. Removal gives 0/12 full operator/provenance successes but 2/12 matching
+texts through recomputation. Existing conversation, memory and familiar Rust
+checks pass; no general named-role, prose, syntax, reasoning or frontier claim.
+The [current state](integration/current-state.md) carries cumulative resources
+and the later operand-provenance implementation.
+
+## NoWrite reuse — previous checkpoint, 2026-09-06
+
+The [corrected-writer cache](native_geometric_writer_admission_1139.md) retains
+`2600b95b`. All learned parameters remain fixed; construction contributes 140
+certified NoWrite signatures and one exactly certified periodic phase. On the
+same 28 long-context prompts, skips are 21,799/21,907 and writer row comparisons
+fall 226,101,330 → 539,448, with identical text, tokens, state and copy/entry
+traces. All 48 dependent, 62 earlier, 24 transfer, 28 exposed-name, 28 long-context
+and five session checks pass. The record preserves both partial repairs and
+separates the 140-entry allocation check from the final artifact's NOT_RUN
+allocation/CLI reruns. This qualifies exact reuse, not general geometric
+semantic advantage. Next: selected typed operator execution and derived-value
+use, subject to the remaining cumulative allowance in current-state.md.
+
+## Writer binding — previous checkpoint, 2026-09-06
+
+The [writer repair](native_geometric_writer_binding_1139.md) retains `8dbf1367`
+as a functional development artifact, preserving `8070c006` as the reader/cost
+comparator. It gets 48/48 dependent answers and exact writes, preserves 62/62
+earlier answers, 24/24 transfer, 28/28 long-context answers/writes and 5/5
+persistent turns, and passes 28/28 replacement reserved-name cases after design
+selection. The writer learns sparse integer weights over 23 construction cues
+and existing signed-H4/zeta context, while exact payloads and reader parameters
+remain unchanged. The broader owner-of-box question still returns Unknown.
+
+This is not an efficiency promotion: old NoWrite signatures no longer hit the
+new cue namespace. Long-context writer row comparisons rise from 580,944 to
+226,101,330. That successor is now completed in the cache repair above. Earlier failures and the accidentally
+opened first reserve remain explicitly OPEN evidence. The record and
+[current state](integration/current-state.md) preserve full limits and costs.
+
+## Dependent source result — previous checkpoint, 2026-09-06
+
+The [native dependent-source read](native_geometric_dependent_source_1139.md)
+connects a learned H4 first-source/operator choice to one exact dependent owner
+lookup and committed copy. Angular `8070c006` gets **40/48** complete changed-name
+answers versus exact-code **32/48** and parent **20/48**, preserving **62/62**
+earlier responses and **24/24** transfer. Intermediate lookup disabled gets
+20/48; both variants use the same bounded search schedule. Four first-edge pairs
+change the final value correctly and four dependent Rust completion texts are
+exact, compiling unchanged and passing 12 semantic assertions. The final artifact
+also preserves 28/28 longer-context answers/writes and 5/5 persistent-session
+turns; its actual dependent copy path measures zero allocations.
+This is authored OPEN evidence, not general composition or frontier
+qualification. The eight remaining development failures expose revision-owner
+binding in the unchanged writer; spurious writes from question text are also
+observed. That writer repair is now recorded above. Full artifacts,
+controls, checks and resource limits are in the record and
+[current state](integration/current-state.md).
+
+
+## Latest native result — 2026-09-06
+
+[#1139 retained-source routing](native_geometric_source_routing_1139.md) now
+selects an exact recent-word source and Copy/NoRead action through two learned
+signed H4 states. Its role-context revision fits 320/320 reachable construction
+choices and preserves 62/62 earlier responses, 24/24 earlier transfer and 24/24
+changed-name cases; matched exact-code selection gets 36/62, 10/24 and 10/24.
+Disabling the learned codes gets 4/24 changed-name cases. The original fit and
+its 61/62, 21/24, 21/24 negative remain recorded. A first-source control identified
+interference from inherited word-path/zeta features; those states are preserved
+elsewhere while learned H4 binding uses role context.
+
+Final angular `55e602a0` also preserves 28/28 relation answers/writes and 5/5
+restored persistent-session turns. A fresh Rust identifier copies, compiles and
+passes three semantic checks. General two-link and two-operation prompts still
+return Unknown. This is bounded OPEN geometric source-selection evidence,
+with no full-model speedup, sealed language qualification or frontier claim.
+Retain it for the next dependent-source development, preserving comparator
+`067adbf0`. See the [current state](integration/current-state.md) for the next step.
+
+## Dependent-read result — prior checkpoint, 2026-09-06
+
+[#1139 dependent reads and shared output](native_geometric_learned_routing_1139.md#dependent-read-result--2026-09-06)
+are implemented and exercised, with a generation/preservation negative. On the
+same 735 authored OPEN positions, parent gets 45 correct, recurrent angular
+120 and exact-code selection 144. Angular gets 53 with its intermediate
+connection disabled and 118 with selected actions disabled. All eight target
+continuations fail, and preservation is 6/62 angular versus 0/62 exact-code.
+Both generated Rust continuations fail compilation. Retain parent `067adbf0`.
+The connection affects prediction but does not establish useful composition or
+geometric advantage. Next reuse exact retained words/relations as routed sources
+with exact payload operators; the recent-token-only source pool is an explicit
+limitation, not the sole established cause of all failures. No wider fit, beam,
+directional metric or new memory subsystem is justified by this result alone.
+A first-decision check confirms identical new-block inputs for three prompts
+requiring different answers; those distinctions are absent from this feature
+map. The [evidence](evidence/native_geometric_recurrent_routing_1139.json) preserves
+the failed first fit, correction, complete costs and replay boundaries.
+
+## First learned routing result — prior checkpoint, 2026-09-05
+
+[#1139's first learned H4 routing block](native_geometric_learned_routing_1139.md)
+is implemented and exercised but remains development only. On 735 authored
+OPEN prose/Rust next-token positions: parent 45 correct, learned angular 182,
+matched exact-code selector 223, fixed placement 177. The corpus substantially
+uses byte fallback; all eight target continuations fail. Both fitted selectors
+retain only 38/62 earlier correct responses. They retain 28/28 relation writes,
+but angular answers 16/28 and exact-code selection 28/28. The unchanged parent
+reproduces 62/62 complete generations. Keep parent `067adbf0`; angular
+superiority and the complete #1139 handoff remain unmet. Next integrate learned
+routing with response dispatch and stopping against actual final output.
+All prior evidence remains at its original scope.
+
+## Prior native admission result — 2026-09-05
+
+[#1139 exact NoWrite admission](native_geometric_relation_admission_1139.md)
+preserves 112/112 prior and 28/28 longer-context answers and exact writes.
+Both useful arms preserve 62+24 earlier responses, eight binding outputs and
+five restored/isolated session reads. A 64-entry exact shortcut table removes
+most repeated writer scoring. The geometric and plain sparse arms share exact
+entries and capacity; collapsing the geometric partition restores full fallback.
+Repeated complete timing, startup cost and provenance are in the record. Retain
+the sparse artifact `067adbf0`; geometric superiority is not established. This
+is an execution improvement without a writer refit, a new capability claim or
+the complete #1139 handoff. Learned geometric routing remains immediate before
+#1140. All previous results retain their original artifact/population scope.
+
+## Prior native relation transfer — 2026-09-05
+
+[#1138 participant-independent role paths](native_geometric_relation_role_path_1138.md)
+pass the bounded relation handoff with unchanged 112-document construction:
+84/84 OPEN answers/write sequences, then 28/28 reserved answers/writes against
+24/28 answers and 14/28 writes for the preceding relation artifact. All 62+24
+prior responses, eight binding outputs and five restored/isolated session reads
+pass. Only the writer representation and its refitted scores change; exact
+storage, reader and copying remain. The combined role-mask/ordered H4/zeta path
+is the intervention, without independent geometric attribution or a speed claim.
+After protected delivery, #1139 targets complete admission/routing work; repeated
+writer NoWrite scoring dominates the new cost. General memory and alpha remain
+unqualified. All earlier negatives below retain their artifact scope.
+
+## Prior exact-relation transfer negative — 2026-09-05
+
+[#1138 exact relation memory](native_geometric_relation_memory_1138.md) is a
+working development extension with an unmet transfer handoff. The final fit
+reaches 56/56 OPEN answers and exact write sequences, preserves 62+24 prior
+responses and eight binding outputs, and passes five isolated/restored session
+reads. Reserved names yield 26/28 answers versus 12/28 parent, but only 21/28
+write sequences. Missing initial writes corrupt later contradiction handling.
+The first 16/28 first-use failure and intermediate 50/56 OPEN result remain
+preserved. Correct storage/copy cannot repair a fact the writer never retained.
+Participant-independent local role representation is the next hypothesis;
+#1138 remains open and #1139 remains blocked. Full cost exposes writer scoring
+as the dominant new work; no geometric efficiency advantage is established.
+
+## Prior bounded role-selection result — 2026-09-05
+
+[#1137 role-aware source/entry selection](native_geometric_role_read_1137.md)
+passes its bounded handoff: 62/62 preserved responses, 8/8 binding, 24/24 first-use
+answers versus 13/24 parent, and four generated Rust functions passing 28 assertions.
+Earlier OPEN sets improve to 16/16 and 30/32; two cases still abstain incorrectly.
+The first 61/62 fit is retained as a negative. Local role features and one causal
+source commitment are useful here; no standalone role codebook, general language
+or matched geometric superiority is qualified. PR #1142 delivered this handoff; #1138 development follows above. See [current-state](integration/current-state.md).
+
+## Plan-adoption and prior #1136 checkpoint — 2026-09-05
+
+The owner-adopted [immediate sequence](integration/project-track.md#immediate-build-sequence)
+now governs development. Its [research synthesis](native_geometric_direction_review_973.md)
+recovers the controlled role-learning positives, exact-association losses and
+archival routing evidence limits. The latest executed change is PR #1136's
+zero-match entry correction: 16/16 wording diagnostic, 16/32 open transfer
+(8/24 supported), all 62 preservation responses and eight binding outputs;
+13/16 first-use answers with the documented non-sealed/vocabulary-overlap limits.
+The two older city answers are repaired and committed-copy dispatch is already
+implemented. These results do not establish alpha or a new geometric advantage.
+[current-state.md](integration/current-state.md) carries exact artifacts,
+provenance, complete work counts and remaining failures.
+
+At that checkpoint the next implementation was #1137's learned role-aware source choice shared with
+entry and copying. Historical sections below retain their original statements
+about missing prefix-to-copy transitions, byte rescoring and failed city answers;
+those describe their dated artifacts and are superseded as current status by
+this checkpoint. No old result is relabeled or erased.
+
 The [native geometric AI plan](integration/project-track.md) defines current
 architecture and development; [current-state.md](integration/current-state.md)
 is the sole current implementation pointer. Primary prime/zeta/R4 mechanisms
@@ -2165,7 +2601,7 @@ are token-identical to suffix-only (2-token) rollouts** — generation, like sco
 cycles** (vs 110‰ under teacher prefixes); and **no step of any trajectory abstained** —
 the #811 always-servable finding at trajectory scale. Sampled mode and judge metrics are
 UNAVAILABLE in run-1 (no pinned identities). No coherence is claimed and no corrective
-mechanism is prescribed; #840's improvement bar is frozen (median +≥2 steps, at0 −≥100‰,
+mechanism is prescribed; #840's improvement bar is frozen (median +≥2 steps, at 0 −≥100‰,
 ≤3 rounds else GENERATION-NOT-ESTABLISHED) and S3 stage closure remains gated on the
 #822/#823 stage verdicts *(both recorded REVISE on 2026-08-21 — not promotions, so the
 gate holds; #840 is additionally held for the approved S1 redesign direction, per the
@@ -2217,9 +2653,9 @@ cause). **Empirical Criterion. Status: Empirical.** It reproduces #841 exactly (
 **0/100 state-starvation** cases (survived 0 · single-step-at-0 59 · candidate-gap 16 ·
 rank-limit 25). Two representation-independent bounds cap any trajectory-state mechanism
 against the frozen §6 bar: **step-0 invariance** (diverged-at-0 is a step-0 metric,
-unreachable by state — reachable at0-drop 0‰ vs the 100‰ bar; and the 590‰ > 500‰ step-0
+unreachable by state — reachable at 0-drop 0‰ vs the 100‰ bar; and the 590‰ > 500‰ step-0
 fraction pins the median at 0) and the **teacher-prefix upper bound** (the drift-free
-reference is itself at median 0 / at0 590‰, clearing neither prong). The disposition is
+reference is itself at median 0 / at 0 590‰, clearing neither prong). The disposition is
 therefore **`NOT TRIGGERED`** (no runtime/format/compiler change) and, for the stage,
 **`GENERATION-NOT-ESTABLISHED`** — consistent with #840 and meeting the programme global
 falsifier (no bounded correction or state reduces the frozen free-running gap → the

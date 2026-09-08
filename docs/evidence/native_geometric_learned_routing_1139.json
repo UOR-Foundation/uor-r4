@@ -1,0 +1,1418 @@
+{
+  "schema": "uor-r4.native-learned-routing-evidence/1",
+  "decision": "DEVELOPMENT_ONLY_GENERATION_AND_PRESERVATION_FAIL; ANGULAR_ADVANTAGE_NOT_ESTABLISHED",
+  "selected_parent": "blake3:067adbf0a14d931d2ad98ca28a06a92aa1b963d0587183bf70b8085ffb7a4df6",
+  "source_cid": "85ebbe1e071c30f972367e1d3b11f7a17824af942bdd9a7aa7f9a6d8143abea3",
+  "scope": "Authored OPEN synthetic prose/Rust development; not broad natural-language or sealed qualification",
+  "source_root": "/Users/casey.allard/uor-r4/.uor-models/native-typed-value-2026-09-05/learned-routing-corrected-comparison",
+  "token_exposure": {
+    "fit": {
+      "byte_fallback_tokens": 1902,
+      "document_end_targets": 24,
+      "lexical_tokens": 415
+    },
+    "prose": {
+      "byte_fallback_tokens": 383,
+      "document_end_targets": 4,
+      "lexical_tokens": 48
+    },
+    "rust": {
+      "byte_fallback_tokens": 176,
+      "document_end_targets": 4,
+      "lexical_tokens": 120
+    },
+    "vocabulary": 611
+  },
+  "parent_read_and_validate_ms": 2497.554417,
+  "parent": {
+    "control": "full",
+    "prose": {
+      "correct": 6,
+      "positions": 435,
+      "coverage": 0.08735632183908046,
+      "work": {
+        "observed_tokens": 439,
+        "evictions": 0,
+        "candidate_offers": 165698,
+        "candidate_evaluations": 49342,
+        "score_lookups": 1163757,
+        "feature_queries": 11310,
+        "memory_candidates": 32739
+      }
+    },
+    "rust": {
+      "correct": 39,
+      "positions": 300,
+      "coverage": 0.3233333333333333,
+      "work": {
+        "observed_tokens": 304,
+        "evictions": 0,
+        "candidate_offers": 114253,
+        "candidate_evaluations": 43165,
+        "score_lookups": 1037192,
+        "feature_queries": 7800,
+        "memory_candidates": 16078
+      }
+    },
+    "next_token_ms": 87.881417,
+    "generation": [
+      {
+        "id": "prose-continuation",
+        "prompt": "A useful answer selects the relevant information and",
+        "expected": " combines",
+        "text": " Unknown.\n",
+        "stop": "end_of_document",
+        "exact": false
+      },
+      {
+        "id": "rust-continuation",
+        "prompt": "fn sum(a: i32, b: i32) -> i32 {",
+        "expected": " a + b }",
+        "text": " Unknown.\n",
+        "stop": "end_of_document",
+        "exact": false
+      },
+      {
+        "id": "prose-two-operations",
+        "prompt": "Start with five. Add two, then double the result. Answer:",
+        "expected": "14",
+        "text": " Unknown.\n",
+        "stop": "end_of_document",
+        "exact": false
+      },
+      {
+        "id": "rust-two-operations",
+        "prompt": "fn main() { let x = 5 + 2; let y = x + x; assert_eq!(y,",
+        "expected": "14); }",
+        "text": "5);\n}\n",
+        "stop": "end_of_document",
+        "exact": false
+      },
+      {
+        "id": "prose-binding",
+        "prompt": "The red box belongs to Alice. Alice lives in Rome. Where does the owner of the red box live? Answer:",
+        "expected": "Rome",
+        "text": " Unknown.\n",
+        "stop": "end_of_document",
+        "exact": false
+      },
+      {
+        "id": "rust-binding",
+        "prompt": "let first = 5; let second = first + 2; let third = second + 3; // third =",
+        "expected": "10",
+        "text": " Unknown.\n",
+        "stop": "end_of_document",
+        "exact": false
+      },
+      {
+        "id": "known-copy-shape",
+        "prompt": "the orb is red. the cube is green. Now the orb is blue. Question: What color is the orb? Answer:",
+        "expected": "blue",
+        "text": " Unknown.\n",
+        "stop": "end_of_document",
+        "exact": false
+      },
+      {
+        "id": "known-number-shape",
+        "prompt": "left = 13; right = 4; total:",
+        "expected": "17",
+        "text": "13.\n",
+        "stop": "end_of_document",
+        "exact": false
+      }
+    ]
+  },
+  "arms": [
+    {
+      "name": "angular",
+      "cid": "blake3:09f9991cf769e3008d78a487c5115502f06cbca681577a81278401714a8edc2b",
+      "bytes": 10807631,
+      "deserialize_and_validate_ms": 2830.332791,
+      "fit": {
+        "accepted_key_moves": 25,
+        "accepted_operator_moves": 198,
+        "accepted_query_moves": 32,
+        "accepted_value_moves": 28,
+        "block_bytes": 79329,
+        "config": {
+          "learn_placement": true,
+          "learned_tokens": 24,
+          "max_positions": 2048,
+          "max_seconds": 15,
+          "mode": "angular",
+          "passes": 2,
+          "seed": 1139
+        },
+        "documents": 24,
+        "elapsed_ms": 531,
+        "final_conditional_nll": [
+          4.465000313529829,
+          4.402497688343417
+        ],
+        "initial_conditional_nll": [
+          4.755921602593922,
+          4.739500366346807
+        ],
+        "positions": 1890,
+        "proposals": 2304,
+        "schema": "uor-r4.learned-h4-routing/1",
+        "stopped_at_time_limit": false
+      },
+      "full": {
+        "control": "full",
+        "prose": {
+          "correct": 103,
+          "positions": 435,
+          "coverage": 0.7149425287356321,
+          "work": {
+            "observed_tokens": 439,
+            "evictions": 0,
+            "candidate_offers": 171850,
+            "candidate_evaluations": 81456,
+            "score_lookups": 1916531,
+            "feature_queries": 11310,
+            "memory_candidates": 32739,
+            "learned_routing": {
+              "code_reads": 11086,
+              "comparisons": 775003,
+              "context_tokens_read": 3368,
+              "emission_queries": 162912,
+              "logical_bytes_read": 4525332,
+              "operator_executions": 870,
+              "payload_gathers": 870,
+              "predictions": 435,
+              "sources_examined": 6736,
+              "table_reads": 356218
+            }
+          }
+        },
+        "rust": {
+          "correct": 79,
+          "positions": 300,
+          "coverage": 0.7666666666666667,
+          "work": {
+            "observed_tokens": 304,
+            "evictions": 0,
+            "candidate_offers": 118367,
+            "candidate_evaluations": 60577,
+            "score_lookups": 1447943,
+            "feature_queries": 7800,
+            "memory_candidates": 16078,
+            "learned_routing": {
+              "code_reads": 7576,
+              "comparisons": 546151,
+              "context_tokens_read": 2288,
+              "emission_queries": 121154,
+              "logical_bytes_read": 3231500,
+              "operator_executions": 600,
+              "payload_gathers": 600,
+              "predictions": 300,
+              "sources_examined": 4576,
+              "table_reads": 261612
+            }
+          }
+        },
+        "next_token_ms": 102.005417,
+        "generation": [
+          {
+            "id": "prose-continuation",
+            "prompt": "A useful answer selects the relevant information and",
+            "expected": " combines",
+            "text": " Unknown.\nstorom et an  rightor",
+            "stop": "token_budget",
+            "exact": false
+          },
+          {
+            "id": "rust-continuation",
+            "prompt": "fn sum(a: i32, b: i32) -> i32 {",
+            "expected": " a + b }",
+            "text": " Unknown.\nss  (r (leftl a (r (l",
+            "stop": "token_budget",
+            "exact": false
+          },
+          {
+            "id": "prose-two-operations",
+            "prompt": "Start with five. Add two, then double the result. Answer:",
+            "expected": "14",
+            "text": " Unknown.\nse  ,,n  ,rightorgeg:",
+            "stop": "token_budget",
+            "exact": false
+          },
+          {
+            "id": "rust-two-operations",
+            "prompt": "fn main() { let x = 5 + 2; let y = x + x; assert_eq!(y,",
+            "expected": "14); }",
+            "text": "5);\n}\n",
+            "stop": "end_of_document",
+            "exact": false
+          },
+          {
+            "id": "prose-binding",
+            "prompt": "The red box belongs to Alice. Alice lives in Rome. Where does the owner of the red box live? Answer:",
+            "expected": "Rome",
+            "text": " Unknown.\nse                   ",
+            "stop": "token_budget",
+            "exact": false
+          },
+          {
+            "id": "rust-binding",
+            "prompt": "let first = 5; let second = first + 2; let third = second + 3; // third =",
+            "expected": "10",
+            "text": " Unknown.\nstonte               ",
+            "stop": "token_budget",
+            "exact": false
+          },
+          {
+            "id": "known-copy-shape",
+            "prompt": "the orb is red. the cube is green. Now the orb is blue. Question: What color is the orb? Answer:",
+            "expected": "blue",
+            "text": " Unknown.\nse                   ",
+            "stop": "token_budget",
+            "exact": false
+          },
+          {
+            "id": "known-number-shape",
+            "prompt": "left = 13; right = 4; total:",
+            "expected": "17",
+            "text": "13.\n",
+            "stop": "end_of_document",
+            "exact": false
+          }
+        ]
+      },
+      "controls": [
+        {
+          "control": "learned_routing_disabled",
+          "prose": {
+            "correct": 6,
+            "positions": 435,
+            "coverage": 0.08735632183908046,
+            "work": {
+              "observed_tokens": 439,
+              "evictions": 0,
+              "candidate_offers": 165698,
+              "candidate_evaluations": 49342,
+              "score_lookups": 1163757,
+              "feature_queries": 11310,
+              "memory_candidates": 32739
+            }
+          },
+          "rust": {
+            "correct": 39,
+            "positions": 300,
+            "coverage": 0.3233333333333333,
+            "work": {
+              "observed_tokens": 304,
+              "evictions": 0,
+              "candidate_offers": 114253,
+              "candidate_evaluations": 43165,
+              "score_lookups": 1037192,
+              "feature_queries": 7800,
+              "memory_candidates": 16078
+            }
+          },
+          "next_token_ms": 87.522375,
+          "generation": [
+            {
+              "id": "prose-continuation",
+              "prompt": "A useful answer selects the relevant information and",
+              "expected": " combines",
+              "text": " Unknown.\n",
+              "stop": "end_of_document",
+              "exact": false
+            },
+            {
+              "id": "rust-continuation",
+              "prompt": "fn sum(a: i32, b: i32) -> i32 {",
+              "expected": " a + b }",
+              "text": " Unknown.\n",
+              "stop": "end_of_document",
+              "exact": false
+            },
+            {
+              "id": "prose-two-operations",
+              "prompt": "Start with five. Add two, then double the result. Answer:",
+              "expected": "14",
+              "text": " Unknown.\n",
+              "stop": "end_of_document",
+              "exact": false
+            },
+            {
+              "id": "rust-two-operations",
+              "prompt": "fn main() { let x = 5 + 2; let y = x + x; assert_eq!(y,",
+              "expected": "14); }",
+              "text": "5);\n}\n",
+              "stop": "end_of_document",
+              "exact": false
+            },
+            {
+              "id": "prose-binding",
+              "prompt": "The red box belongs to Alice. Alice lives in Rome. Where does the owner of the red box live? Answer:",
+              "expected": "Rome",
+              "text": " Unknown.\n",
+              "stop": "end_of_document",
+              "exact": false
+            },
+            {
+              "id": "rust-binding",
+              "prompt": "let first = 5; let second = first + 2; let third = second + 3; // third =",
+              "expected": "10",
+              "text": " Unknown.\n",
+              "stop": "end_of_document",
+              "exact": false
+            },
+            {
+              "id": "known-copy-shape",
+              "prompt": "the orb is red. the cube is green. Now the orb is blue. Question: What color is the orb? Answer:",
+              "expected": "blue",
+              "text": " Unknown.\n",
+              "stop": "end_of_document",
+              "exact": false
+            },
+            {
+              "id": "known-number-shape",
+              "prompt": "left = 13; right = 4; total:",
+              "expected": "17",
+              "text": "13.\n",
+              "stop": "end_of_document",
+              "exact": false
+            }
+          ]
+        },
+        {
+          "control": "learned_routing_selection_disabled",
+          "prose": {
+            "correct": 43,
+            "positions": 435,
+            "coverage": 0.5494252873563218,
+            "work": {
+              "observed_tokens": 439,
+              "evictions": 0,
+              "candidate_offers": 170965,
+              "candidate_evaluations": 81835,
+              "score_lookups": 1925365,
+              "feature_queries": 11310,
+              "memory_candidates": 32739,
+              "learned_routing": {
+                "code_reads": 11086,
+                "comparisons": 682850,
+                "context_tokens_read": 3368,
+                "emission_queries": 163670,
+                "logical_bytes_read": 4161896,
+                "operator_executions": 870,
+                "payload_gathers": 870,
+                "predictions": 435,
+                "sources_examined": 6736,
+                "table_reads": 357512
+              }
+            }
+          },
+          "rust": {
+            "correct": 42,
+            "positions": 300,
+            "coverage": 0.6433333333333333,
+            "work": {
+              "observed_tokens": 304,
+              "evictions": 0,
+              "candidate_offers": 117752,
+              "candidate_evaluations": 60705,
+              "score_lookups": 1450893,
+              "feature_queries": 7800,
+              "memory_candidates": 16078,
+              "learned_routing": {
+                "code_reads": 7576,
+                "comparisons": 487373,
+                "context_tokens_read": 2288,
+                "emission_queries": 121410,
+                "logical_bytes_read": 2999388,
+                "operator_executions": 600,
+                "payload_gathers": 600,
+                "predictions": 300,
+                "sources_examined": 4576,
+                "table_reads": 262362
+              }
+            }
+          },
+          "next_token_ms": 100.653334,
+          "generation": [
+            {
+              "id": "prose-continuation",
+              "prompt": "A useful answer selects the relevant information and",
+              "expected": " combines",
+              "text": " Unknown.\nir[ age tnes tn theor ri",
+              "stop": "token_budget",
+              "exact": false
+            },
+            {
+              "id": "rust-continuation",
+              "prompt": "fn sum(a: i32, b: i32) -> i32 {",
+              "expected": " a + b }",
+              "text": " Unknown.\nir i32tdrg tnes tnes tne",
+              "stop": "token_budget",
+              "exact": false
+            },
+            {
+              "id": "prose-two-operations",
+              "prompt": "Start with five. Add two, then double the result. Answer:",
+              "expected": "14",
+              "text": " Unknown.\nir:ln tnes tnes tnes ",
+              "stop": "token_budget",
+              "exact": false
+            },
+            {
+              "id": "rust-two-operations",
+              "prompt": "fn main() { let x = 5 + 2; let y = x + x; assert_eq!(y,",
+              "expected": "14); }",
+              "text": "5);\n}\n",
+              "stop": "end_of_document",
+              "exact": false
+            },
+            {
+              "id": "prose-binding",
+              "prompt": "The red box belongs to Alice. Alice lives in Rome. Where does the owner of the red box live? Answer:",
+              "expected": "Rome",
+              "text": " Unknown.\nir[ age tnes tnes tne",
+              "stop": "token_budget",
+              "exact": false
+            },
+            {
+              "id": "rust-binding",
+              "prompt": "let first = 5; let second = first + 2; let third = second + 3; // third =",
+              "expected": "10",
+              "text": " Unknown.\nir[ ag. nes tnes tnes",
+              "stop": "token_budget",
+              "exact": false
+            },
+            {
+              "id": "known-copy-shape",
+              "prompt": "the orb is red. the cube is green. Now the orb is blue. Question: What color is the orb? Answer:",
+              "expected": "blue",
+              "text": " Unknown.\nir[ age tne is[:a.poe is[",
+              "stop": "token_budget",
+              "exact": false
+            },
+            {
+              "id": "known-number-shape",
+              "prompt": "left = 13; right = 4; total:",
+              "expected": "17",
+              "text": "13.\n",
+              "stop": "end_of_document",
+              "exact": false
+            }
+          ]
+        },
+        {
+          "control": "learned_routing_transform_disabled",
+          "prose": {
+            "correct": 66,
+            "positions": 435,
+            "coverage": 0.6252873563218391,
+            "work": {
+              "observed_tokens": 439,
+              "evictions": 0,
+              "candidate_offers": 171245,
+              "candidate_evaluations": 81345,
+              "score_lookups": 1913846,
+              "feature_queries": 11310,
+              "memory_candidates": 32739,
+              "learned_routing": {
+                "code_reads": 11086,
+                "comparisons": 706604,
+                "context_tokens_read": 3368,
+                "emission_queries": 162690,
+                "logical_bytes_read": 4242576,
+                "operator_executions": 870,
+                "payload_gathers": 870,
+                "predictions": 435,
+                "sources_examined": 6736,
+                "table_reads": 353928
+              }
+            }
+          },
+          "rust": {
+            "correct": 53,
+            "positions": 300,
+            "coverage": 0.6733333333333333,
+            "work": {
+              "observed_tokens": 304,
+              "evictions": 0,
+              "candidate_offers": 117957,
+              "candidate_evaluations": 60737,
+              "score_lookups": 1451720,
+              "feature_queries": 7800,
+              "memory_candidates": 16078,
+              "learned_routing": {
+                "code_reads": 7576,
+                "comparisons": 504751,
+                "context_tokens_read": 2288,
+                "emission_queries": 121474,
+                "logical_bytes_read": 3066828,
+                "operator_executions": 600,
+                "payload_gathers": 600,
+                "predictions": 300,
+                "sources_examined": 4576,
+                "table_reads": 261844
+              }
+            }
+          },
+          "next_token_ms": 100.781042,
+          "generation": [
+            {
+              "id": "prose-continuation",
+              "prompt": "A useful answer selects the relevant information and",
+              "expected": " combines",
+              "text": " Unknown.\nrni tes an  etosot st",
+              "stop": "token_budget",
+              "exact": false
+            },
+            {
+              "id": "rust-continuation",
+              "prompt": "fn sum(a: i32, b: i32) -> i32 {",
+              "expected": " a + b }",
+              "text": " Unknown.\nrrq smnuiirpis ang )m",
+              "stop": "token_budget",
+              "exact": false
+            },
+            {
+              "id": "prose-two-operations",
+              "prompt": "Start with five. Add two, then double the result. Answer:",
+              "expected": "14",
+              "text": " Unknown.\nrrqc: :etar. sm\ntiont",
+              "stop": "token_budget",
+              "exact": false
+            },
+            {
+              "id": "rust-two-operations",
+              "prompt": "fn main() { let x = 5 + 2; let y = x + x; assert_eq!(y,",
+              "expected": "14); }",
+              "text": "5);\n}\n",
+              "stop": "end_of_document",
+              "exact": false
+            },
+            {
+              "id": "prose-binding",
+              "prompt": "The red box belongs to Alice. Alice lives in Rome. Where does the owner of the red box live? Answer:",
+              "expected": "Rome",
+              "text": " Unknown.\nrrqc: :etarm tes :e a",
+              "stop": "token_budget",
+              "exact": false
+            },
+            {
+              "id": "rust-binding",
+              "prompt": "let first = 5; let second = first + 2; let third = second + 3; // third =",
+              "expected": "10",
+              "text": " Unknown.\nr bran  / / es a/ /na",
+              "stop": "token_budget",
+              "exact": false
+            },
+            {
+              "id": "known-copy-shape",
+              "prompt": "the orb is red. the cube is green. Now the orb is blue. Question: What color is the orb? Answer:",
+              "expected": "blue",
+              "text": " Unknown.\nrrqc: :etarm tes :e a",
+              "stop": "token_budget",
+              "exact": false
+            },
+            {
+              "id": "known-number-shape",
+              "prompt": "left = 13; right = 4; total:",
+              "expected": "17",
+              "text": "13.\n",
+              "stop": "end_of_document",
+              "exact": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "equality",
+      "cid": "blake3:c6d3739db83e60f4e0f5d1ed25e261fb205fbca784fbf2bdfc3981aaebea85ad",
+      "bytes": 10803043,
+      "deserialize_and_validate_ms": 2843.435958,
+      "fit": {
+        "accepted_key_moves": 39,
+        "accepted_operator_moves": 183,
+        "accepted_query_moves": 27,
+        "accepted_value_moves": 22,
+        "block_bytes": 74741,
+        "config": {
+          "learn_placement": true,
+          "learned_tokens": 24,
+          "max_positions": 2048,
+          "max_seconds": 15,
+          "mode": "equality",
+          "passes": 2,
+          "seed": 1139
+        },
+        "documents": 24,
+        "elapsed_ms": 470,
+        "final_conditional_nll": [
+          4.33085460881351,
+          4.36158039441036
+        ],
+        "initial_conditional_nll": [
+          4.593070247262543,
+          4.59125370305555
+        ],
+        "positions": 1890,
+        "proposals": 2304,
+        "schema": "uor-r4.learned-h4-routing/1",
+        "stopped_at_time_limit": false
+      },
+      "full": {
+        "control": "full",
+        "prose": {
+          "correct": 127,
+          "positions": 435,
+          "coverage": 0.7793103448275862,
+          "work": {
+            "observed_tokens": 439,
+            "evictions": 0,
+            "candidate_offers": 171775,
+            "candidate_evaluations": 81382,
+            "score_lookups": 1914979,
+            "feature_queries": 11310,
+            "memory_candidates": 32739,
+            "learned_routing": {
+              "code_reads": 11086,
+              "comparisons": 756612,
+              "context_tokens_read": 3368,
+              "emission_queries": 162764,
+              "logical_bytes_read": 4356304,
+              "operator_executions": 870,
+              "payload_gathers": 870,
+              "predictions": 435,
+              "sources_examined": 6736,
+              "table_reads": 328984
+            }
+          }
+        },
+        "rust": {
+          "correct": 96,
+          "positions": 300,
+          "coverage": 0.8166666666666667,
+          "work": {
+            "observed_tokens": 304,
+            "evictions": 0,
+            "candidate_offers": 118368,
+            "candidate_evaluations": 61143,
+            "score_lookups": 1460747,
+            "feature_queries": 7800,
+            "memory_candidates": 16078,
+            "learned_routing": {
+              "code_reads": 7576,
+              "comparisons": 552639,
+              "context_tokens_read": 2288,
+              "emission_queries": 122286,
+              "logical_bytes_read": 3212844,
+              "operator_executions": 600,
+              "payload_gathers": 600,
+              "predictions": 300,
+              "sources_examined": 4576,
+              "table_reads": 248172
+            }
+          }
+        },
+        "next_token_ms": 101.193333,
+        "generation": [
+          {
+            "id": "prose-continuation",
+            "prompt": "A useful answer selects the relevant information and",
+            "expected": " combines",
+            "text": " Unknown.\ne strasser t ther3eoe3ce",
+            "stop": "token_budget",
+            "exact": false
+          },
+          {
+            "id": "rust-continuation",
+            "prompt": "fn sum(a: i32, b: i32) -> i32 {",
+            "expected": " a + b }",
+            "text": " Unknown.\ne it strasser thre st",
+            "stop": "token_budget",
+            "exact": false
+          },
+          {
+            "id": "prose-two-operations",
+            "prompt": "Start with five. Add two, then double the result. Answer:",
+            "expected": "14",
+            "text": " Unknown.\ne strasser: &[i32] ri",
+            "stop": "token_budget",
+            "exact": false
+          },
+          {
+            "id": "rust-two-operations",
+            "prompt": "fn main() { let x = 5 + 2; let y = x + x; assert_eq!(y,",
+            "expected": "14); }",
+            "text": "5);\n}\n",
+            "stop": "end_of_document",
+            "exact": false
+          },
+          {
+            "id": "prose-binding",
+            "prompt": "The red box belongs to Alice. Alice lives in Rome. Where does the owner of the red box live? Answer:",
+            "expected": "Rome",
+            "text": " Unknown.\ne strasser: &: &::ttn",
+            "stop": "token_budget",
+            "exact": false
+          },
+          {
+            "id": "rust-binding",
+            "prompt": "let first = 5; let second = first + 2; let third = second + 3; // third =",
+            "expected": "10",
+            "text": " Unknown.\ne strasser thre st st",
+            "stop": "token_budget",
+            "exact": false
+          },
+          {
+            "id": "known-copy-shape",
+            "prompt": "the orb is red. the cube is green. Now the orb is blue. Question: What color is the orb? Answer:",
+            "expected": "blue",
+            "text": " Unknown.\ne strasser: &: &::ttn",
+            "stop": "token_budget",
+            "exact": false
+          },
+          {
+            "id": "known-number-shape",
+            "prompt": "left = 13; right = 4; total:",
+            "expected": "17",
+            "text": "13.\n",
+            "stop": "end_of_document",
+            "exact": false
+          }
+        ]
+      },
+      "controls": []
+    },
+    {
+      "name": "fixed-placement",
+      "cid": "blake3:f7702f024ad505b2e1c08931907e94d49942aff4f17ec50d5e009087183e15e5",
+      "bytes": 10812953,
+      "deserialize_and_validate_ms": 2845.591958,
+      "fit": {
+        "accepted_key_moves": 0,
+        "accepted_operator_moves": 226,
+        "accepted_query_moves": 0,
+        "accepted_value_moves": 0,
+        "block_bytes": 84651,
+        "config": {
+          "learn_placement": false,
+          "learned_tokens": 24,
+          "max_positions": 2048,
+          "max_seconds": 15,
+          "mode": "angular",
+          "passes": 2,
+          "seed": 1139
+        },
+        "documents": 24,
+        "elapsed_ms": 471,
+        "final_conditional_nll": [
+          4.587485940493411,
+          4.5615394003318
+        ],
+        "initial_conditional_nll": [
+          4.755921602593922,
+          4.739500366346807
+        ],
+        "positions": 1890,
+        "proposals": 1440,
+        "schema": "uor-r4.learned-h4-routing/1",
+        "stopped_at_time_limit": false
+      },
+      "full": {
+        "control": "full",
+        "prose": {
+          "correct": 103,
+          "positions": 435,
+          "coverage": 0.7218390804597701,
+          "work": {
+            "observed_tokens": 439,
+            "evictions": 0,
+            "candidate_offers": 171939,
+            "candidate_evaluations": 81520,
+            "score_lookups": 1917937,
+            "feature_queries": 11310,
+            "memory_candidates": 32739,
+            "learned_routing": {
+              "code_reads": 11086,
+              "comparisons": 774006,
+              "context_tokens_read": 3368,
+              "emission_queries": 163040,
+              "logical_bytes_read": 4528200,
+              "operator_executions": 870,
+              "payload_gathers": 870,
+              "predictions": 435,
+              "sources_examined": 6736,
+              "table_reads": 357932
+            }
+          }
+        },
+        "rust": {
+          "correct": 74,
+          "positions": 300,
+          "coverage": 0.7933333333333333,
+          "work": {
+            "observed_tokens": 304,
+            "evictions": 0,
+            "candidate_offers": 118429,
+            "candidate_evaluations": 60967,
+            "score_lookups": 1457235,
+            "feature_queries": 7800,
+            "memory_candidates": 16078,
+            "learned_routing": {
+              "code_reads": 7576,
+              "comparisons": 564721,
+              "context_tokens_read": 2288,
+              "emission_queries": 121934,
+              "logical_bytes_read": 3322420,
+              "operator_executions": 600,
+              "payload_gathers": 600,
+              "predictions": 300,
+              "sources_examined": 4576,
+              "table_reads": 265772
+            }
+          }
+        },
+        "next_token_ms": 101.078791,
+        "generation": [
+          {
+            "id": "prose-continuation",
+            "prompt": "A useful answer selects the relevant information and",
+            "expected": " combines",
+            "text": " Unknown.\n    am a  tont gtat n",
+            "stop": "token_budget",
+            "exact": false
+          },
+          {
+            "id": "rust-continuation",
+            "prompt": "fn sum(a: i32, b: i32) -> i32 {",
+            "expected": " a + b }",
+            "text": " Unknown.\n     (  (  (  (  (  (",
+            "stop": "token_budget",
+            "exact": false
+          },
+          {
+            "id": "prose-two-operations",
+            "prompt": "Start with five. Add two, then double the result. Answer:",
+            "expected": "14",
+            "text": " Unknown.\n  eeeee ch right     ",
+            "stop": "token_budget",
+            "exact": false
+          },
+          {
+            "id": "rust-two-operations",
+            "prompt": "fn main() { let x = 5 + 2; let y = x + x; assert_eq!(y,",
+            "expected": "14); }",
+            "text": "5);\n}\n",
+            "stop": "end_of_document",
+            "exact": false
+          },
+          {
+            "id": "prose-binding",
+            "prompt": "The red box belongs to Alice. Alice lives in Rome. Where does the owner of the red box live? Answer:",
+            "expected": "Rome",
+            "text": " Unknown.\n  eeeee ch right     ",
+            "stop": "token_budget",
+            "exact": false
+          },
+          {
+            "id": "rust-binding",
+            "prompt": "let first = 5; let second = first + 2; let third = second + 3; // third =",
+            "expected": "10",
+            "text": " Unknown.\n   ing eetat nes eveo",
+            "stop": "token_budget",
+            "exact": false
+          },
+          {
+            "id": "known-copy-shape",
+            "prompt": "the orb is red. the cube is green. Now the orb is blue. Question: What color is the orb? Answer:",
+            "expected": "blue",
+            "text": " Unknown.\n  eeeee ch right     ",
+            "stop": "token_budget",
+            "exact": false
+          },
+          {
+            "id": "known-number-shape",
+            "prompt": "left = 13; right = 4; total:",
+            "expected": "17",
+            "text": "13.\n",
+            "stop": "end_of_document",
+            "exact": false
+          }
+        ]
+      },
+      "controls": []
+    }
+  ],
+  "preservation": {
+    "parent_exact_generation_objects": 62,
+    "total": 62,
+    "angular": {
+      "correct_responses": 38,
+      "total": 62,
+      "relation_answers": 16,
+      "relation_writes": 28,
+      "relation_total": 28,
+      "restore_state_equal": 28
+    },
+    "equality": {
+      "correct_responses": 38,
+      "total": 62,
+      "relation_answers": 28,
+      "relation_writes": 28,
+      "relation_total": 28,
+      "restore_state_equal": 28
+    }
+  },
+  "reload": {
+    "exact_generation_work_state": true
+  },
+  "correction": {
+    "initial_failed_command_ms": 4124,
+    "parameters_identical_except_parent_binding": true
+  },
+  "cli": {
+    "angular-full": {
+      "text": " Unknown.\nss  (r (leftl a (r (l",
+      "stop": "token_budget",
+      "work": {
+        "observed_tokens": 44,
+        "evictions": 0,
+        "candidate_offers": 9678,
+        "candidate_evaluations": 4700,
+        "score_lookups": 114746,
+        "feature_queries": 624,
+        "memory_candidates": 1432,
+        "learned_routing": {
+          "code_reads": 624,
+          "comparisons": 44780,
+          "context_tokens_read": 192,
+          "emission_queries": 9400,
+          "logical_bytes_read": 261616,
+          "operator_executions": 48,
+          "payload_gathers": 48,
+          "predictions": 24,
+          "sources_examined": 384,
+          "table_reads": 20624
+        }
+      }
+    },
+    "angular-no-entry": {
+      "text": " a)rt: i32] n) )c ))l3e i32eo i32",
+      "stop": "token_budget",
+      "work": {
+        "observed_tokens": 44,
+        "evictions": 0,
+        "candidate_offers": 9590,
+        "candidate_evaluations": 4593,
+        "score_lookups": 110092,
+        "feature_queries": 624,
+        "memory_candidates": 1626,
+        "learned_routing": {
+          "code_reads": 624,
+          "comparisons": 38703,
+          "context_tokens_read": 192,
+          "emission_queries": 9186,
+          "logical_bytes_read": 235596,
+          "operator_executions": 48,
+          "payload_gathers": 48,
+          "predictions": 24,
+          "sources_examined": 384,
+          "table_reads": 20196
+        }
+      }
+    },
+    "parent-no-entry": {
+      "text": "\n    let shifted =);\n}\n",
+      "stop": "end_of_document",
+      "work": {
+        "observed_tokens": 28,
+        "evictions": 0,
+        "candidate_offers": 3171,
+        "candidate_evaluations": 1769,
+        "score_lookups": 45667,
+        "feature_queries": 208,
+        "memory_candidates": 274
+      }
+    }
+  },
+  "resources": {
+    "model_used_ms": 46768,
+    "engineering_used_ms": 862744,
+    "model_cycle_limit_ms": 120000,
+    "engineering_cycle_limit_ms": 1200000,
+    "cumulative": {
+      "cumulative_ms": 1410652,
+      "limit_ms": 1800000
+    },
+    "peak_sampled_rss_bytes": 834306048,
+    "storage": {
+      "schema": "uor-r4.native-typed-value-resource-snapshot/1",
+      "at": "2026-09-06T03:12:40.640Z",
+      "inherited_precleanup_bytes": 2747199488,
+      "obsolete_target_growth_credit": 671379456,
+      "current_target_bytes": 2416254976,
+      "predecessor_artifact_root_bytes": 145760256,
+      "current_artifact_root_bytes": 729673728,
+      "predecessor_worktree_bytes": 9875456,
+      "current_worktree_bytes": 8937472,
+      "stopped_successor_worktree_bytes": 460877824,
+      "source_metadata_reserve_bytes": 5242880,
+      "current_sampled_known_storage_bytes": 5852442624,
+      "storage_limit_bytes": 6459228160,
+      "remaining_storage_bytes": 606785536,
+      "stop_margin_bytes": 134217728,
+      "available_growth_before_stop_bytes": 251379712,
+      "model_ledger": {
+        "cumulative_ms": 1410652,
+        "limit_ms": 1800000
+      },
+      "model_remaining_ms": 389348,
+      "model_process_limit": 1,
+      "model_process_rss_target_bytes": 4294967296,
+      "scope": "Same inherited conservative accounting. Only the previously audited obsolete target-growth credit is applied. Charge all current target bytes, both artifact roots, both measured new-worktree costs and a 5MiB source/metadata reserve. No broad clone/free-disk credits or reset of historical overages. The earlier typed-value cycle removed only its documented failed compiler outputs. The owner-authorized response-entry cycle removes no material and preserves all newly generated compiler products. Periodic du/RSS samples are not exact peak or unique-extent guarantees."
+    }
+  },
+  "commands": [
+    {
+      "label": "learned-routing-comparison",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_routing_probe",
+      "args": [
+        "relation-admission-models/sparse.json",
+        "learned-routing-comparison"
+      ],
+      "elapsed_ms": 4124,
+      "code": 1,
+      "stopped": null
+    },
+    {
+      "label": "learned-routing-unit",
+      "command": "/tmp/r4-native-geometric-target/debug/deps/uor_r4_core-b6cb98449c5266f9",
+      "args": [
+        "native_geometric::learned_routing_tests",
+        "--test-threads=1"
+      ],
+      "elapsed_ms": 4771,
+      "code": 0,
+      "stopped": null
+    },
+    {
+      "label": "learned-routing-allocation",
+      "command": "/tmp/r4-native-geometric-target/debug/deps/native_geometric_allocations-4cb90a603bd3f445",
+      "args": [
+        "native_learned_routing_selection_and_transformation_are_allocation_free",
+        "--exact",
+        "--test-threads=1"
+      ],
+      "elapsed_ms": 666,
+      "code": 0,
+      "stopped": null
+    },
+    {
+      "label": "learned-routing-source-guard",
+      "command": "/tmp/r4-native-geometric-target/debug/deps/native_geometric_allocations-4cb90a603bd3f445",
+      "args": [
+        "native_kernel_source_has_no_forbidden_arithmetic_or_float_types",
+        "--exact",
+        "--test-threads=1"
+      ],
+      "elapsed_ms": 9,
+      "code": 0,
+      "stopped": null
+    },
+    {
+      "label": "learned-routing-corrected-comparison",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_routing_probe",
+      "args": [
+        "relation-admission-models/sparse.json",
+        "learned-routing-corrected-comparison"
+      ],
+      "elapsed_ms": 13546,
+      "code": 0,
+      "stopped": null
+    },
+    {
+      "label": "learned-routing-preserve-parent",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "evaluate",
+        "--model",
+        "relation-admission-models/sparse.json",
+        "--source",
+        "role-read-source/development.json",
+        "--output-dir",
+        "learned-routing-preserve-parent",
+        "--controls",
+        "full",
+        "--generated-tokens",
+        "64",
+        "--max-seconds",
+        "30",
+        "--lexeme-cues",
+        "true"
+      ],
+      "elapsed_ms": 2666,
+      "code": 0,
+      "stopped": null
+    },
+    {
+      "label": "learned-routing-preserve-angular",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "evaluate",
+        "--model",
+        "learned-routing-corrected-comparison/angular-model.json",
+        "--source",
+        "role-read-source/development.json",
+        "--output-dir",
+        "learned-routing-preserve-angular",
+        "--controls",
+        "full",
+        "--generated-tokens",
+        "64",
+        "--max-seconds",
+        "30",
+        "--lexeme-cues",
+        "true"
+      ],
+      "elapsed_ms": 3268,
+      "code": 0,
+      "stopped": null
+    },
+    {
+      "label": "learned-routing-preserve-equality",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "evaluate",
+        "--model",
+        "learned-routing-corrected-comparison/equality-model.json",
+        "--source",
+        "role-read-source/development.json",
+        "--output-dir",
+        "learned-routing-preserve-equality",
+        "--controls",
+        "full",
+        "--generated-tokens",
+        "64",
+        "--max-seconds",
+        "30",
+        "--lexeme-cues",
+        "true"
+      ],
+      "elapsed_ms": 3180,
+      "code": 0,
+      "stopped": null
+    },
+    {
+      "label": "learned-routing-relations-angular",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "evaluate-relations",
+        "learned-routing-corrected-comparison/angular-model.json",
+        "relation-admission-source.json",
+        "first_use",
+        "learned-routing-relations-angular.json"
+      ],
+      "elapsed_ms": 3078,
+      "code": 0,
+      "stopped": null
+    },
+    {
+      "label": "learned-routing-relations-equality",
+      "command": "/tmp/r4-native-geometric-target/release/examples/native_geometric_value_probe",
+      "args": [
+        "evaluate-relations",
+        "learned-routing-corrected-comparison/equality-model.json",
+        "relation-admission-source.json",
+        "first_use",
+        "learned-routing-relations-equality.json"
+      ],
+      "elapsed_ms": 2910,
+      "code": 0,
+      "stopped": null
+    },
+    {
+      "label": "learned-routing-cli-angular-full",
+      "command": "/tmp/r4-native-geometric-target/release/r4",
+      "args": [
+        "geometric",
+        "generate",
+        "--model",
+        "learned-routing-corrected-comparison/angular-model.json",
+        "--prompt",
+        "fn sum(a: i32, b: i32) -> i32 {",
+        "--max-tokens",
+        "24",
+        "--control",
+        "full",
+        "--json"
+      ],
+      "elapsed_ms": 3261,
+      "code": 0,
+      "stopped": null
+    },
+    {
+      "label": "learned-routing-cli-angular-no-entry",
+      "command": "/tmp/r4-native-geometric-target/release/r4",
+      "args": [
+        "geometric",
+        "generate",
+        "--model",
+        "learned-routing-corrected-comparison/angular-model.json",
+        "--prompt",
+        "fn sum(a: i32, b: i32) -> i32 {",
+        "--max-tokens",
+        "24",
+        "--control",
+        "response-entry-disabled",
+        "--json"
+      ],
+      "elapsed_ms": 2824,
+      "code": 0,
+      "stopped": null
+    },
+    {
+      "label": "learned-routing-cli-parent-no-entry",
+      "command": "/tmp/r4-native-geometric-target/release/r4",
+      "args": [
+        "geometric",
+        "generate",
+        "--model",
+        "relation-admission-models/sparse.json",
+        "--prompt",
+        "fn sum(a: i32, b: i32) -> i32 {",
+        "--max-tokens",
+        "24",
+        "--control",
+        "response-entry-disabled",
+        "--json"
+      ],
+      "elapsed_ms": 2465,
+      "code": 0,
+      "stopped": null
+    },
+    {
+      "label": "learned-routing-format",
+      "command": "/Users/casey.allard/.cargo/bin/cargo",
+      "args": [
+        "fmt"
+      ],
+      "elapsed_ms": 3367,
+      "code": 0,
+      "stopped": null
+    },
+    {
+      "label": "learned-routing-release",
+      "command": "env",
+      "args": [
+        "CARGO_TARGET_DIR=/tmp/r4-native-geometric-target",
+        "CARGO_INCREMENTAL=0",
+        "CARGO_BUILD_JOBS=1",
+        "CARGO_PROFILE_DEV_DEBUG=0",
+        "CARGO_PROFILE_TEST_DEBUG=0",
+        "/Users/casey.allard/.cargo/bin/cargo",
+        "build",
+        "--release",
+        "--offline",
+        "-p",
+        "uor-r4-wasm-router",
+        "--bin",
+        "r4",
+        "-p",
+        "uor-r4-core",
+        "--example",
+        "native_geometric_routing_probe",
+        "--example",
+        "native_geometric_value_probe"
+      ],
+      "elapsed_ms": 312129,
+      "code": 0,
+      "stopped": null
+    },
+    {
+      "label": "learned-routing-format-correction",
+      "command": "/Users/casey.allard/.cargo/bin/cargo",
+      "args": [
+        "fmt"
+      ],
+      "elapsed_ms": 3193,
+      "code": 0,
+      "stopped": null
+    },
+    {
+      "label": "learned-routing-test-build",
+      "command": "env",
+      "args": [
+        "CARGO_TARGET_DIR=/tmp/r4-native-geometric-target",
+        "CARGO_INCREMENTAL=0",
+        "CARGO_BUILD_JOBS=1",
+        "CARGO_PROFILE_DEV_DEBUG=0",
+        "CARGO_PROFILE_TEST_DEBUG=0",
+        "/Users/casey.allard/.cargo/bin/cargo",
+        "test",
+        "--offline",
+        "-p",
+        "uor-r4-core",
+        "--lib",
+        "--test",
+        "native_geometric_allocations",
+        "--no-run"
+      ],
+      "elapsed_ms": 229361,
+      "code": 0,
+      "stopped": null
+    },
+    {
+      "label": "learned-routing-final-format",
+      "command": "/Users/casey.allard/.cargo/bin/cargo",
+      "args": [
+        "fmt"
+      ],
+      "elapsed_ms": 3236,
+      "code": 0,
+      "stopped": null
+    },
+    {
+      "label": "learned-routing-corrected-release",
+      "command": "env",
+      "args": [
+        "CARGO_TARGET_DIR=/tmp/r4-native-geometric-target",
+        "CARGO_INCREMENTAL=0",
+        "CARGO_BUILD_JOBS=1",
+        "CARGO_PROFILE_DEV_DEBUG=0",
+        "CARGO_PROFILE_TEST_DEBUG=0",
+        "/Users/casey.allard/.cargo/bin/cargo",
+        "build",
+        "--release",
+        "--offline",
+        "-p",
+        "uor-r4-wasm-router",
+        "--bin",
+        "r4",
+        "-p",
+        "uor-r4-core",
+        "--example",
+        "native_geometric_routing_probe",
+        "--example",
+        "native_geometric_value_probe"
+      ],
+      "elapsed_ms": 311274,
+      "code": 0,
+      "stopped": null
+    },
+    {
+      "label": "learned-routing-policy",
+      "command": "/tmp/r4-native-geometric-target/debug/r4-policy-check",
+      "args": [
+        "."
+      ],
+      "elapsed_ms": 184,
+      "code": 0,
+      "stopped": null
+    }
+  ],
+  "rust_compilation": "NOT_RUN for new generated snippets; previous Rust checks retain their earlier scope",
+  "next": "Train complete response dispatch and stopping with the routed predictor against final decoded continuation while retaining known memory behavior; do not expand route tables or context first.",
+  "raw_report_sha256": "cf560b4eb6f851b3d2943f3a0e4da5eefc43e88c56ea592021e44f1fc02a08be",
+  "counter_scope": "Compact selected counters here; every native work field remains in the bound full report at source_root/result.json."
+}

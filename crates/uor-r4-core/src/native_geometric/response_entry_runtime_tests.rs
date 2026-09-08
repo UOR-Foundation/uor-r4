@@ -369,7 +369,9 @@ fn native_response_entry_reuses_no_write_only_during_committed_response() {
     assert_eq!(session.values.as_ref().unwrap().sources.len(), 2);
     let first = session.predict(&model).unwrap();
     assert!(session.work.values.proposals > 0);
-    assert!(session.work.values.additions > 0);
+    assert_eq!(session.work.values.additions, 0);
+    assert_eq!(session.work.values.operator_executions, 0);
+    assert!(session.work.values.selection_comparisons > 0);
     assert!(session.work.values.feature_lookups > 0);
     session.observe(&model, first.token).unwrap();
     assert!(session.response_entry.as_ref().unwrap().active);
@@ -395,7 +397,9 @@ fn native_response_entry_reuses_no_write_only_during_committed_response() {
             )
             .is_none());
         assert!(hypothetical_work.proposals > 0);
-        assert!(hypothetical_work.additions > 0);
+        assert_eq!(hypothetical_work.additions, 0);
+        assert_eq!(hypothetical_work.operator_executions, 0);
+        assert!(hypothetical_work.selection_comparisons > 0);
         assert!(hypothetical_work.feature_lookups > 0);
 
         let before = session.work.values;
@@ -426,7 +430,8 @@ fn native_response_entry_reuses_no_write_only_during_committed_response() {
     let after_cap = session.work.values;
     session.predict(&model).unwrap();
     assert!(session.work.values.proposals > after_cap.proposals);
-    assert!(session.work.values.additions > after_cap.additions);
+    assert_eq!(session.work.values.operator_executions, 0);
+    assert!(session.work.values.selection_comparisons > after_cap.selection_comparisons);
     assert!(session.work.values.feature_lookups > after_cap.feature_lookups);
     assert!(session.response_entry_decision().is_none());
 
@@ -439,7 +444,8 @@ fn native_response_entry_reuses_no_write_only_during_committed_response() {
     let before_new_query = session.work.values;
     let first = session.predict(&model).unwrap();
     assert!(session.work.values.proposals > before_new_query.proposals);
-    assert!(session.work.values.additions > before_new_query.additions);
+    assert_eq!(session.work.values.operator_executions, 0);
+    assert!(session.work.values.selection_comparisons > before_new_query.selection_comparisons);
     assert!(session.work.values.feature_lookups > before_new_query.feature_lookups);
     assert_eq!(
         session.response_entry_decision().unwrap().action,

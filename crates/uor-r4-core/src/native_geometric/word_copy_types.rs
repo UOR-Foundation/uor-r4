@@ -4,6 +4,7 @@ use super::*;
 
 pub(super) const RESPONSE_COPY_SCHEMA: &str = "uor-r4.native-response-entry/2";
 pub(super) const WORD_COPY_FEATURES: usize = 24;
+pub(super) const WORD_COPY_PREFIX_FEATURES: usize = 32;
 pub(super) const WORD_COPY_ROWS: usize = 4096;
 pub(super) const WORD_COPY_DICTIONARY: usize = 256;
 
@@ -18,6 +19,8 @@ pub(super) struct WordCopyAddress {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct WordCopyModel {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub role_read: Option<super::role_read::RoleReadModel>,
     pub baseline_artifact: String,
     pub dictionary: Vec<WordCopyAddress>,
     pub rows: Vec<ValueRow>,
@@ -30,6 +33,19 @@ pub(super) struct WordCopyModel {
     /// byte. False preserves the first /2 artifact's entry-boundary frame.
     #[serde(default, skip_serializing_if = "copy_suffix_disabled")]
     pub completed_word_suffix: bool,
+    /// General entry composition and committed-copy dispatch. Omission keeps /2 behavior.
+    #[serde(default, skip_serializing_if = "copy_suffix_disabled")]
+    pub composed_entry: bool,
+    /// Add each candidate's existing mask/preceding-address evidence at entry.
+    #[serde(default, skip_serializing_if = "copy_suffix_disabled")]
+    pub shared_binding: bool,
+    /// Matched offline fit and serving control, scoped to this copy extension.
+    #[serde(default, skip_serializing_if = "copy_suffix_disabled")]
+    pub binding_geometry_disabled: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub prefix_rows: Vec<ScoreRow>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub prefix_postings: Vec<u32>,
 }
 
 fn copy_suffix_disabled(value: &bool) -> bool {
@@ -38,6 +54,13 @@ fn copy_suffix_disabled(value: &bool) -> bool {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct WordCopyWork {
+    #[serde(default, skip_serializing_if = "RoutingWork::is_empty")]
+    pub routing: RoutingWork,
+    #[serde(
+        default,
+        skip_serializing_if = "super::value_types::ValueWork::is_empty"
+    )]
+    pub persistent_read: super::value_types::ValueWork,
     pub selector: CompletionWork,
     pub dictionary_lookups: u64,
     pub dictionary_comparisons: u64,
@@ -47,6 +70,12 @@ pub struct WordCopyWork {
     pub word_record_reads: u64,
     pub bound_rejections: u64,
     pub byte_reads: u64,
+    #[serde(default)]
+    pub equality_byte_comparisons: u64,
+    #[serde(default)]
+    pub dispatch_checks: u64,
+    #[serde(default)]
+    pub forced_dispatches: u64,
 }
 impl WordCopyWork {
     pub fn is_empty(&self) -> bool {
@@ -57,6 +86,12 @@ impl WordCopyWork {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum WordCopyAction {
+    /// Direct byte-zero entry from the joint source/entry selector.
+    Read,
+    /// Commit a source on an observed learned lexical prefix, before byte zero.
+    Prepare,
+    /// Commit a learned lexical entry without a retained source.
+    NoRead,
     Start,
     Byte,
     Emit,
@@ -66,6 +101,11 @@ pub enum WordCopyAction {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct WordCopyDecision {
+    #[serde(default, skip_serializing_if = "copy_start_zero")]
+    pub span_words: u8,
+    /// First and final current relation IDs for a dependent read.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dependency: Option<[u64; 2]>,
     pub token: u32,
     pub score: i64,
     pub word_index: u8,
@@ -92,10 +132,15 @@ pub enum WordCopyProgress {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
 pub(super) struct WordCopyState {
+    /// Additional frozen query words in the committed source extent.
+    #[serde(default, skip_serializing_if = "copy_start_zero")]
+    pub span_words: u8,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub read_commit: Option<super::role_read::ReadCommit>,
     /// Immutable selected first-entry occurrence until the entry ends.
     pub origin: Option<u8>,
     pub progress: WordCopyProgress,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "copy_start_zero")]
     pub start_step: u8,
     #[serde(skip)]
     pub pending: Option<WordCopyDecision>,
@@ -115,3 +160,7 @@ pub(super) struct WordCopyContext {
 }
 
 pub(super) type CopyFeatures = ([ValueFeature; WORD_COPY_FEATURES], usize);
+
+fn copy_start_zero(value: &u8) -> bool {
+    *value == 0
+}
