@@ -2544,13 +2544,30 @@ fn native_lexical_emission_actual_checkpoint_and_allocation() {
     assert!(wire["lexical_emission"].is_object());
     let mut times = Vec::new();
     let mut positions = 0;
+    let mut cases = 0;
     for (a, b) in [(13, 4), (-19, 4)] {
-        for (request, expected) in [
-            ("sentence. ", format!("{} is {b} plus {a}.\n", a + b)),
-            ("Rust. ", format!("{} == {b} + {a}\n", a + b)),
-        ] {
+        let mut requests = vec![
+            ("sentence. ", "", format!("{} is {b} plus {a}.\n", a + b)),
+            ("Rust. ", "", format!("{} == {b} + {a}\n", a + b)),
+        ];
+        if wire["instruction_binding"].is_object() {
+            requests.extend([
+                (
+                    "In a sentence, ",
+                    "",
+                    format!("{} is {b} plus {a}.\n", a + b),
+                ),
+                (
+                    "",
+                    " Write a Rust equality.",
+                    format!("{} == {b} + {a}\n", a + b),
+                ),
+            ]);
+        }
+        for (request, after, expected) in requests {
+            cases += 1;
             // These are declared development examples, not the sealed fresh panel.
-            let prompt = format!("User: suri has {a} coins. orin has {b} coins.\nUser: {request}What is the sum of suri's and orin's coins?\nAssistant:");
+            let prompt = format!("User: suri has {a} coins. orin has {b} coins.\nUser: {request}What is the sum of suri's and orin's coins?{after}\nAssistant:");
             let tokens = model.encode(&prompt).unwrap();
             let mut session = model.session(Control::Full).unwrap();
             ALLOCATIONS.with(|v| v.set(0));
@@ -2609,5 +2626,5 @@ fn native_lexical_emission_actual_checkpoint_and_allocation() {
         }
     }
     times.sort_unstable();
-    println!("actual learned lexical artifact={}; load_ns={load_ns}; development_cases=4; checkpoint_positions={positions}; exactly one derived write per response; allocations=0 bytes=0 for ingestion/begin/predict/observe; predict_observe median_ns={} max_ns={} (load/encode/session/checkpoint/report excluded; no energy claim)", model.artifact_cid(), times[times.len() / 2], times[times.len() - 1]);
+    println!("actual learned lexical artifact={}; load_ns={load_ns}; development_cases={cases}; checkpoint_positions={positions}; exactly one derived write per response; allocations=0 bytes=0 for ingestion/begin/predict/observe; predict_observe median_ns={} max_ns={} (load/encode/session/checkpoint/report excluded; no energy claim)", model.artifact_cid(), times[times.len() / 2], times[times.len() - 1]);
 }
