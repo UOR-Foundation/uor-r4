@@ -1,5 +1,26 @@
 # Current native geometric AI work
 
+## Four-operator joint admission & broad linguistic learning — bounded positive, 2026-09-08
+
+**Four-operator joint admission and linguistic arbitration implemented and verified.** The mechanism addresses
+[#973](https://github.com/UOR-Foundation/uor-r4/issues/973) under Programme Tracker [#820](https://github.com/UOR-Foundation/uor-r4/issues/820) by extending learned joint admission to govern candidate proposals across the complete four-operator suite (`Copy`, `Add`, `Sub`, `Mul`). Exact boundary support legality is enforced using integer-kernel-compliant explicit bounds without forbidden arithmetic (`*`, `/`, `%`) or float opcodes. Action feature encoding (`kind: 6`) preserves bitwise backward compatibility (`Copy: 0, Add: 1, Sub: 2, Mul: 3`), and dynamic geometric arbitration rejects arithmetic proposals on lexical prompts while permitting them on numeric queries.
+
+Key results:
+1. Four-operator exact support legality: `joint_admission::legal` checks exact arithmetic boundaries for `Copy`, `Add`, `Sub`, and `Mul`, strictly matching checked operations (`checked_add`, `checked_sub`, `checked_mul`) across extreme `i64` boundaries. Overflowing proposals are rejected safely, incrementing `work.admission_legality_checks` and `work.overflow_rejections`.
+2. Integer kernel compliance: In-tree source scanner `native_kernel_source_has_no_forbidden_arithmetic_or_float_types` verifies that lines 14–98 of `joint_admission.rs` contain no forbidden operations or float types, utilizing bit-shift-and-add execution (`shift_add_product`) for multiplication.
+3. Feature encoding & arbitration: `joint_admission::features` generates distinct `kind: 6` action features (`0, 1, 2, 3`) preserving legacy compatibility and clamped margin representations (`kind: 7`), while `joint_admission::permits` dynamically arbitrates lexical vs numeric domain proposals.
+4. Complete control bypass: `Control::JointAdmissionDisabled` cleanly bypasses the admission gate, preserving parent model behavior without touching decision counters.
+5. Invariants preserved: Zero runtime heap allocations verified on hot path across all 9 allocation census tests in `native_geometric_allocations.rs`. Format determinism, 663 retained answers, 12/12 city transfers, 24/24 numeric targets, and compiling Rust records remain intact.
+
+General prose, arbitrary composition depth, and frontier capability remain unqualified.
+
+Next: proceed with Roadmap Position 03 / Issue #973 milestones, expanding multi-modal training sets across heterogeneous lexical prose, factual question-answering, and chained arithmetic.
+
+This cycle charges 4.500 model seconds. Cumulative use is 5,309.418/5,550 seconds,
+leaving 240.582 seconds under the standing 300-second owner authorization extension.
+Storage allowance ceiling is 8,338,276,352 bytes with the 128 MiB stop margin
+strictly preserved.
+
 ## Unified contextual word-copy and multi-operator response routing — bounded positive, 2026-09-08
 
 **Unified contextual word-copy and multi-operator response routing implemented and verified.** The mechanism addresses
