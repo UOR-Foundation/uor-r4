@@ -680,6 +680,10 @@ impl Session {
                         .checked_add(ZPhi::new(right, 0))
                         .ok()
                         .map(|value| value.a),
+                    ValueAction::Sub if left_id != right_id => ZPhi::new(left, 0)
+                        .checked_sub(ZPhi::new(right, 0))
+                        .ok()
+                        .map(|value| value.a),
                     _ => None,
                 };
                 if left_id >= record.id || right_id >= record.id || computed != Some(record.value) {
@@ -771,6 +775,10 @@ impl Session {
                 ValueAction::Copy if a == b => Some(a.value),
                 ValueAction::Add if a.id != b.id => ZPhi::new(a.value, 0)
                     .checked_add(ZPhi::new(b.value, 0))
+                    .ok()
+                    .map(|value| value.a),
+                ValueAction::Sub if a.id != b.id => ZPhi::new(a.value, 0)
+                    .checked_sub(ZPhi::new(b.value, 0))
                     .ok()
                     .map(|value| value.a),
                 _ => None,

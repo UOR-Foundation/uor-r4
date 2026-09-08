@@ -14,6 +14,7 @@ pub(super) const VALUE_FEATURES: usize = 64;
 pub enum ValueAction {
     Copy,
     Add,
+    Sub,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -37,7 +38,7 @@ pub struct ValueWork {
     pub proposals: u64,
     #[serde(default, skip_serializing_if = "is_zero_u64")]
     pub alias_self_add_rejections: u64,
-    /// Exact Copy/Add calls, including rejected overflow attempts.
+    /// Exact Copy/Add/Sub calls, including rejected overflow attempts.
     #[serde(default, skip_serializing_if = "is_zero_u64")]
     pub operator_executions: u64,
     #[serde(default, skip_serializing_if = "is_zero_u64")]
@@ -46,6 +47,8 @@ pub struct ValueWork {
     #[serde(default, skip_serializing_if = "is_zero_u64")]
     pub selection_passes: u64,
     pub additions: u64,
+    #[serde(default, skip_serializing_if = "is_zero_u64")]
+    pub subtractions: u64,
     pub overflow_rejections: u64,
     pub feature_lookups: u64,
     pub feature_comparisons: u64,

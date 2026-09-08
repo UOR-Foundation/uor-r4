@@ -15,7 +15,11 @@ pub(super) struct JointAdmission {
 /// Exact support predicate, without constructing a result or numeral. This
 /// preserves the parent's first-valid proposal before applying learned admission.
 pub(super) fn legal(action: ValueAction, a: i64, b: i64) -> bool {
-    action == ValueAction::Copy || !((b > 0 && a > i64::MAX - b) || (b < 0 && a < i64::MIN - b))
+    match action {
+        ValueAction::Copy => true,
+        ValueAction::Add => !((b > 0 && a > i64::MAX - b) || (b < 0 && a < i64::MIN - b)),
+        ValueAction::Sub => a.checked_sub(b).is_some(),
+    }
 }
 
 pub(super) fn features(
@@ -38,7 +42,11 @@ pub(super) fn features(
     out[..n].copy_from_slice(&base[..n]);
     out[n] = ValueFeature {
         kind: 6,
-        a: u64::from(action == ValueAction::Add),
+        a: match action {
+            ValueAction::Copy => 0,
+            ValueAction::Add => 1,
+            ValueAction::Sub => 2,
+        },
         b: 0,
     };
     // A categorical margin from the frozen numeric selector, not a comparison
@@ -91,10 +99,11 @@ pub(super) fn permits(
 mod tests {
     use super::*;
     #[test]
-    fn admission_legality_matches_exact_add_at_boundaries() {
+    fn admission_legality_matches_exact_add_and_sub_at_boundaries() {
         for a in [i64::MIN, i64::MIN + 1, -1, 0, 1, i64::MAX - 1, i64::MAX] {
             for b in [i64::MIN, i64::MIN + 1, -1, 0, 1, i64::MAX - 1, i64::MAX] {
                 assert_eq!(legal(ValueAction::Add, a, b), a.checked_add(b).is_some());
+                assert_eq!(legal(ValueAction::Sub, a, b), a.checked_sub(b).is_some());
                 assert!(legal(ValueAction::Copy, a, b));
             }
         }
