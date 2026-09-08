@@ -261,6 +261,15 @@ fn native_kernel_source_has_no_forbidden_arithmetic_or_float_types() {
     );
     for (name, source) in [
         ("native operation transition", operation_transition),
+        (
+            "native lexical emission",
+            region(
+                include_str!("../src/native_geometric/lexical_emission.rs"),
+                "// NATIVE_GEOMETRIC_INTEGER_KERNEL_BEGIN",
+                "// NATIVE_GEOMETRIC_INTEGER_KERNEL_END",
+            )
+            .1,
+        ),
         ("native runtime", kernel),
         ("native Feature helpers", features),
         ("native memory runtime", memory),
@@ -2521,4 +2530,84 @@ fn native_operation_transition_actual_checkpoint_and_allocation() {
     }
     times.sort_unstable();
     println!("actual learned operation artifact={}; load_ns={load_ns}; checkpoint_positions={positions}; allocations=0 bytes=0 for ingestion/begin/predict/observe; predict_observe median_ns={} max_ns={} (load/encode/session/checkpoint/report excluded; no energy claim)",model.artifact_cid(),times[times.len()/2],times[times.len()-1]);
+}
+
+#[test]
+#[ignore = "requires lexical emission artifact; charged actual-model development cases"]
+fn native_lexical_emission_actual_checkpoint_and_allocation() {
+    use uor_r4_core::native_geometric::Model;
+    let bytes = std::fs::read(std::env::var("R4_LEXICAL_EMISSION_MODEL").unwrap()).unwrap();
+    let load = std::time::Instant::now();
+    let model = Model::from_bytes(&bytes).unwrap();
+    let load_ns = load.elapsed().as_nanos();
+    let wire: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert!(wire["lexical_emission"].is_object());
+    let mut times = Vec::new();
+    let mut positions = 0;
+    for (a, b) in [(13, 4), (-19, 4)] {
+        for (request, expected) in [
+            ("sentence. ", format!("{} is {b} plus {a}.\n", a + b)),
+            ("Rust. ", format!("{} == {b} + {a}\n", a + b)),
+        ] {
+            // These are declared development examples, not the sealed fresh panel.
+            let prompt = format!("User: suri has {a} coins. orin has {b} coins.\nUser: {request}What is the sum of suri's and orin's coins?\nAssistant:");
+            let tokens = model.encode(&prompt).unwrap();
+            let mut session = model.session(Control::Full).unwrap();
+            ALLOCATIONS.with(|v| v.set(0));
+            BYTES.with(|v| v.set(0));
+            MEASURING.with(|v| v.set(true));
+            session.observe(&model, BOS).unwrap();
+            for &token in &tokens {
+                session.observe(&model, token).unwrap();
+            }
+            session.begin_response(&model).unwrap();
+            MEASURING.with(|v| v.set(false));
+            let mut output = [EOS; 64];
+            let mut used = 0;
+            loop {
+                let mut restored = model
+                    .restore_session(&session.checkpoint().unwrap())
+                    .unwrap();
+                let prediction = restored.predict(&model).unwrap();
+                let completion = restored.completion_decision();
+                let value = restored.value_decision();
+                assert_eq!(restored.predict(&model).unwrap(), prediction);
+                assert_eq!(restored.completion_decision(), completion);
+                assert_eq!(restored.value_decision(), value);
+                MEASURING.with(|v| v.set(true));
+                let start = std::time::Instant::now();
+                let actual = session.predict(&model).unwrap();
+                let actual_completion = session.completion_decision();
+                let actual_value = session.value_decision();
+                session.observe(&model, actual.token).unwrap();
+                let elapsed = start.elapsed().as_nanos();
+                MEASURING.with(|v| v.set(false));
+                assert_eq!(actual, prediction);
+                assert_eq!(actual_completion, completion);
+                assert_eq!(actual_value, value);
+                restored.observe(&model, prediction.token).unwrap();
+                // Byte equality alone cannot distinguish equal-valued record IDs.
+                // Compare committed read and typed state after observation too.
+                let actual_state: serde_json::Value =
+                    serde_json::from_slice(&session.checkpoint().unwrap()).unwrap();
+                let restored_state: serde_json::Value =
+                    serde_json::from_slice(&restored.checkpoint().unwrap()).unwrap();
+                assert_eq!(actual_state["completion"], restored_state["completion"]);
+                assert_eq!(actual_state["values"], restored_state["values"]);
+                times.push(elapsed);
+                positions += 1;
+                output[used] = actual.token;
+                used += 1;
+                if actual.token == EOS || used == output.len() {
+                    break;
+                }
+            }
+            assert_eq!(output[used - 1], EOS);
+            assert_eq!(model.decode(&output[..used]).unwrap(), expected.as_bytes());
+            assert_eq!(session.work.values.derived_writes, 1);
+            assert_eq!((ALLOCATIONS.with(Cell::get), BYTES.with(Cell::get)), (0, 0));
+        }
+    }
+    times.sort_unstable();
+    println!("actual learned lexical artifact={}; load_ns={load_ns}; development_cases=4; checkpoint_positions={positions}; exactly one derived write per response; allocations=0 bytes=0 for ingestion/begin/predict/observe; predict_observe median_ns={} max_ns={} (load/encode/session/checkpoint/report excluded; no energy claim)", model.artifact_cid(), times[times.len() / 2], times[times.len() - 1]);
 }

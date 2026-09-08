@@ -238,6 +238,53 @@ fn run(
         compare_turn(&model, &mut direct, &mut api, "User: There are 3 extra coins. Add the extra coins to the original total. Again.\nAssistant:", "20.\n23.\n", "same_query_add_add_api_after_checkpoint", checks)?;
     }
     if document
+        .get("lexical_emission")
+        .is_some_and(|v| !v.is_null())
+    {
+        // Open development interface cases. Expected text is checked only here;
+        // the direct and API sessions generate entirely from the supplied artifact.
+        for (label, request, target) in [
+            ("sentence", "sentence. ", "17 is 4 plus 13.\n"),
+            ("rust", "Rust. ", "17 == 4 + 13\n"),
+        ] {
+            let prompt = format!("User: suri has 13 coins. orin has 4 coins.\nUser: {request}What is the sum of suri's and orin's coins?\nAssistant:");
+            let config = SessionConfig {
+                session_id: format!("lexical-emission-{label}"),
+                ..SessionConfig::default()
+            };
+            let mut direct = model.session(Control::Full)?;
+            let mut api = api_model.create_session(config.clone())?;
+            compare_turn(
+                &model,
+                &mut direct,
+                &mut api,
+                &prompt,
+                target,
+                &format!("lexical_{label}_api_direct_parity"),
+                checks,
+            )?;
+            let exported = api.export_state()?;
+            let mut imported = api_model.create_session(config)?;
+            imported.import_state(&exported)?;
+            direct = model.restore_session(&direct.checkpoint()?)?;
+            record(
+                checks,
+                &format!("lexical_{label}_checkpoint_import"),
+                imported.identity_scope() == api.identity_scope(),
+                json!({"checkpoint_bytes":exported.len(),"scope":imported.identity_scope(),"development_case":true}),
+            )?;
+            compare_turn(
+                &model,
+                &mut direct,
+                &mut imported,
+                SUM_13,
+                "17.\n",
+                &format!("lexical_{label}_checkpoint_next_independent_sum"),
+                checks,
+            )?;
+        }
+    }
+    if document
         .get("typed_role_refinement")
         .is_some_and(|v| !v.is_null())
     {

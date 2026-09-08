@@ -5,7 +5,7 @@ use super::source_routing::{SourceCode, SourceRouting};
 use super::value_types::*;
 use super::*;
 
-fn mechanical_model(next: ValueAction) -> Model {
+pub(super) fn mechanical_model(next: ValueAction) -> Model {
     let documents = [Document {
         id: "operation-transition-mechanical-catalog".into(),
         text: "source query copy total 17 34 answer ; : .\n".into(),
@@ -99,7 +99,7 @@ fn mechanical_model(next: ValueAction) -> Model {
     model
 }
 
-fn first_completed(model: &Model) -> Session {
+pub(super) fn first_completed(model: &Model) -> Session {
     let mut session = model.session(Control::Full).unwrap();
     session.observe(model, BOS).unwrap();
     for token in model.encode("source 17; query:").unwrap() {
