@@ -330,3 +330,84 @@ fn native_durable_memory_turn_execution_flow() {
     assert!(!gen2.token_ids.is_empty() || gen2.stop == "end_of_document");
     assert!(session.session.work.observed_tokens > gen1.token_ids.len() as u64);
 }
+
+#[test]
+fn native_durable_memory_rejects_truncating_fact_identity() {
+    let model = fixture_model();
+    let mut session = DurableSession::new(
+        &model,
+        IdentityScope::new("u", "p", "s").unwrap(),
+        Control::Full,
+    )
+    .unwrap();
+    let prefix = "a".repeat(super::value_lexemes::WORD_BYTES);
+    session.assert_fact(&prefix, "value").unwrap();
+    let overlong = format!("{prefix}x");
+    assert!(session.assert_fact(&overlong, "other").is_err());
+    assert_eq!(session.get_fact(&overlong), None);
+    assert!(session.revise_fact(&prefix, &overlong).is_err());
+    assert_eq!(session.get_fact(&prefix).as_deref(), Some("value"));
+    assert!(session.forget(Some(&overlong)).is_err());
+}
+
+#[test]
+#[ignore = "requires explicit retained artifact to verify learned relation persistence"]
+fn native_durable_memory_learned_relations_are_authoritative() {
+    let path = std::env::var("UOR_R4_MODEL").expect("UOR_R4_MODEL required");
+    let model = Model::from_bytes(&std::fs::read(path).unwrap()).unwrap();
+    let scope = IdentityScope::new("user", "project", "session").unwrap();
+    let mut session = DurableSession::new(&model, scope, Control::Full).unwrap();
+    session
+        .execute_turn(
+            &model,
+            "the report says quiet river holds selra. Where is selra? Answer:",
+            24,
+        )
+        .unwrap();
+    let learned = session
+        .session
+        .values
+        .as_ref()
+        .and_then(|v| v.relations.as_ref())
+        .expect("artifact has learned relations")
+        .clone();
+    assert!(
+        learned.directory.iter().any(|&id| id != 0),
+        "prompt must produce actual learned writes"
+    );
+    let count = learned.directory.iter().filter(|&&id| id != 0).count();
+    assert_eq!(session.fact_count(), count);
+    // Checkpoint must include the current core state, not the stale initial copy.
+    let bytes = session.checkpoint().unwrap();
+    let restored = DurableSession::from_checkpoint(&model, &bytes).unwrap();
+    assert_eq!(restored.fact_count(), count);
+    assert_eq!(
+        restored
+            .session
+            .values
+            .as_ref()
+            .unwrap()
+            .relations
+            .as_ref()
+            .unwrap(),
+        &learned
+    );
+    session.restart(&model).unwrap();
+    assert_eq!(
+        session
+            .session
+            .values
+            .as_ref()
+            .unwrap()
+            .relations
+            .as_ref()
+            .unwrap(),
+        &learned
+    );
+    // An envelope cannot replace the learned core state with another store.
+    let mut corrupted: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    corrupted["relations"]["next_id"] = serde_json::json!(999999);
+    assert!(
+        DurableSession::from_checkpoint(&model, &serde_json::to_vec(&corrupted).unwrap()).is_err()
+    );
+}

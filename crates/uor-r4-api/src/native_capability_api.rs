@@ -7,7 +7,8 @@
 //! 1. Truthful capability metadata distinguishing implemented primitives from unproven claims.
 //! 2. Thread-safe model container with byte-slice artifact loading.
 //! 3. Unified session management with streaming, cancellation, and identity isolation.
-//! 4. Filesystem-free browser/WASM memory runtime with bit-exact parity.
+//! 4. Filesystem-free byte loading and bounded incremental generation.
+//! Cross-target parity and model capability require separate executed evidence.
 
 use blake3;
 use serde::{Deserialize, Serialize};
@@ -17,16 +18,12 @@ use std::sync::{Arc, Mutex};
 #[cfg(not(target_arch = "wasm32"))]
 use std::time::Instant;
 
-use std::sync::OnceLock;
 use uor_r4_core::native_geometric::durable_memory::{
     DurableFactRecord, DurableSession, IdentityScope,
 };
-use uor_r4_core::native_geometric::{
-    Config, Control, Document, Model, ResponseEntryFitConfig, Trainer, ValueCompletionFitConfig,
-    ValueExample, ValueFitConfig, BOS, EOS, SCHEMA,
-};
+use uor_r4_core::native_geometric::{Control, Model, BOS, EOS, SCHEMA};
 
-pub const NATIVE_API_SCHEMA: &str = "uor-r4.native-capability-api/1";
+pub const NATIVE_API_SCHEMA: &str = "uor-r4.native-capability-api/2";
 pub const BACKEND_IDENTIFIER: &str = "native-geometric-language-v1";
 
 // ============================================================================
@@ -98,14 +95,14 @@ pub struct CapabilityTruthMatrix {
 impl Default for CapabilityTruthMatrix {
     fn default() -> Self {
         Self {
-            language_prose: "qualified: bounded general prose & curriculum learning (#973)".into(),
-            causal_attention: "qualified: causal H4 zeta phase routing & source span pointers (#1139, #1140)".into(),
-            multi_step_reasoning: "qualified: multi-step DAG composition & constraint preservation (#955)".into(),
-            executable_coding: "qualified: standalone Rust synthesis & workspace compiler repair (#1088)".into(),
-            durable_memory: "qualified: identity-scoped persistence across eviction & restarts (#962)".into(),
-            serving_guarantees: "qualified: integer operation census, exact Z[phi] & icosian inverse witness (#964)".into(),
-            m1_performance_profile: "qualified: submillisecond decision latency & bounded memory footprint (#963)".into(),
-            general_ai_disavowal: "Open-domain human-level reasoning, arbitrary depth planning, and frontier capability remain pre-alpha and unproven.".into(),
+            language_prose: "UNQUALIFIED: general prose is not established".into(),
+            causal_attention: "Artifact-dependent bounded context and exact retained copying; consult artifact evidence".into(),
+            multi_step_reasoning: "UNQUALIFIED: generalized multi-step reasoning".into(),
+            executable_coding: "UNQUALIFIED: general Rust synthesis and workspace repair".into(),
+            durable_memory: "Explicit scoped checkpoint API; learned memory depends on the supplied artifact".into(),
+            serving_guarantees: "Native geometric model path; wrapper allocates and has no blanket proof claim".into(),
+            m1_performance_profile: "NOT_MEASURED: no complete-path energy or comparative performance qualification".into(),
+            general_ai_disavowal: "Pre-alpha; general prose, general reasoning and frontier capability remain unproven".into(),
         }
     }
 }
@@ -113,6 +110,8 @@ impl Default for CapabilityTruthMatrix {
 /// Metadata describing the loaded native model, its identity, and supported capabilities.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NativeModelMetadata {
+    /// Version of the API wire contract; separate from the artifact schema.
+    pub api_schema_version: String,
     pub schema_version: String,
     pub model_cid: String,
     pub canonical_uor_address: String,
@@ -180,8 +179,10 @@ pub struct CompletionResponse {
     pub text: String,
     pub token_count: usize,
     pub stopped_by: String, // "eos", "length", "stop_sequence", "cancelled"
-    pub elapsed_us: u64,
-    pub memory_facts_read: usize,
+    /// None on targets without an implemented monotonic host timer.
+    pub elapsed_us: Option<u64>,
+    /// None: the wrapper does not measure actual causal memory reads.
+    pub memory_facts_read: Option<usize>,
 }
 
 /// Receipt confirming text ingestion.
@@ -204,141 +205,11 @@ pub struct NativeModel {
 }
 
 impl NativeModel {
-    /// Create the default baseline model.
-
-    fn compile_default_baseline_model() -> Result<Model, NativeApiError> {
-        let catalog = vec![
-        Document {
-            id: "doc-system-identity".into(),
-            text: "I am UOR-R4, an experimental autoregressive geometric state language model. Status: online and operational.\n".into(),
-        },
-        Document {
-            id: "doc-narrative-1".into(),
-            text: "The forest was quiet. Sunlight filtered through the green leaves. Birds sang in the tall branches. The river flowed gently toward the sea.\n".into(),
-        },
-        Document {
-            id: "doc-narrative-2".into(),
-            text: "In the morning, Elena packed her supplies. She carried a leather map and a brass compass. The mountain road was steep and winding.\n".into(),
-        },
-        Document {
-            id: "doc-technical-exposition".into(),
-            text: "Geometric language models map prime coordinates to invariant algebraic addresses. State transitions follow bounded routes on four-dimensional manifolds without matrix multiplications.\n".into(),
-        },
-        Document {
-            id: "doc-procedural-dialogue".into(),
-            text: "Question: How does the navigator find the path? Answer: The navigator observes the fixed reference stars and calculates the shortest bearing.\n".into(),
-        },
-        Document {
-            id: "doc-code-synthesis".into(),
-            text: "fn verify_bounds(value: i64, limit: i64) -> bool {\n    value <= limit\n}\n".into(),
-        },
-        Document {
-            id: "doc-contract-catalog".into(),
-            text: "left = 13; right = 4; total: 17.\nreply: Unknown.\n Unknown.\nfn identity(value: i32) -> i32 {\n    value\n}\n".into(),
-        },
-        Document {
-            id: "doc-dialogue-alpha".into(),
-            text: "Subject: Alpha. Role: Coordinator. Identify Subject: Alpha. Next state: complete. System acknowledges: OK.\n".into(),
-        },
-        Document {
-            id: "doc-reasoning-sum".into(),
-            text: "Given a = 7, b = 9, sum = a + b. Calculate sum: 16.\n".into(),
-        },
-    ];
-
-        let mut trainer = Trainer::new(
-            Config {
-                context_tokens: 128,
-                candidate_limit: 32,
-                max_lexical_pieces: 256,
-                ..Config::default()
-            },
-            &catalog,
-        )
-        .map_err(|e| NativeApiError::ModelLoad(e.0))?;
-
-        trainer
-            .train_documents(&catalog)
-            .map_err(|e| NativeApiError::ModelLoad(e.0))?;
-
-        let compiled = trainer
-            .compile()
-            .map_err(|e| NativeApiError::ModelLoad(e.0))?;
-
-        let mut examples = Vec::new();
-        // 1. Chained and single arithmetic examples with no-write reply contrasts
-        for index in 0..4 {
-            for (label, tail, response) in [
-                ("numeric", "total:", format!("{}.\n", 17 + index)),
-                ("unknown", "reply:", " Unknown.\n".into()),
-                (
-                    "identity",
-                    "fn identity(value: i32) -> i32 {\n    ",
-                    "value\n}\n".into(),
-                ),
-            ] {
-                examples.push(ValueExample {
-                    id: format!("curriculum-parent-{label}-{index}"),
-                    prompt: format!("left = {}; right = 4; {tail}", 13 + index),
-                    response,
-                });
-            }
-        }
-
-        // 2. Code and entity word-copy examples
-        for (index, name) in ["alpha", "bravo", "cedar", "delta"].into_iter().enumerate() {
-            examples.push(ValueExample {
-                id: format!("curriculum-copy-name-{index}"),
-                prompt: format!("left = 13; right = 4; fn identity({name}: i32) -> i32 {{\n    "),
-                response: format!("{name}\n}}\n"),
-            });
-        }
-
-        // 3. Procedural question answering examples
-        examples.push(ValueExample {
-            id: "curriculum-qa-navigator".into(),
-            prompt: "Question: How does the navigator find the path? Answer: ".into(),
-            response: "The navigator observes the fixed reference stars.\n".into(),
-        });
-
-        // 4. Narrative continuation examples
-        examples.push(ValueExample {
-            id: "curriculum-narrative-elena".into(),
-            prompt: "The mountain road was steep and winding. Elena ".into(),
-            response: "carried a leather map and a brass compass.\n".into(),
-        });
-
-        let (typed, _) = compiled
-            .fit_values_with_lexeme_cues(
-                &examples,
-                ValueFitConfig {
-                    epochs: 32,
-                    learning_rate: 0.25,
-                    max_features: 4096,
-                },
-            )
-            .map_err(|e| NativeApiError::ModelLoad(e.0))?;
-
-        let (completion, _) = typed
-            .fit_value_completion(&examples, ValueCompletionFitConfig::default())
-            .map_err(|e| NativeApiError::ModelLoad(e.0))?;
-
-        let (entry, _) = completion
-            .fit_response_entry(&examples, ResponseEntryFitConfig::default())
-            .map_err(|e| NativeApiError::ModelLoad(e.0))?;
-
-        let (copy, _) = entry
-            .fit_response_entry_copy(&examples, ResponseEntryFitConfig::default())
-            .map_err(|e| NativeApiError::ModelLoad(e.0))?;
-
-        let serialized = copy
-            .to_bytes()
-            .map_err(|e| NativeApiError::Serialization(e.0))?;
-        Model::from_bytes(&serialized).map_err(|e| NativeApiError::ModelLoad(e.0))
-    }
-
+    /// Kept for source compatibility; serving requires an explicit artifact.
     pub fn default_baseline() -> Result<Self, NativeApiError> {
-        Self::load_from_bytes(&[])
+        Err(NativeApiError::InvalidRequest(
+            "an explicit native model artifact is required".into(),
+        ))
     }
 
     /// Canonical UOR address of the model.
@@ -353,84 +224,34 @@ impl NativeModel {
 
     /// Load a native model from bytes.
     pub fn load_from_bytes(bytes: &[u8]) -> Result<Self, NativeApiError> {
-        let cid = blake3::hash(bytes).to_hex().to_string();
-
-        let model = if bytes.is_empty() {
-            static DEFAULT_BASELINE_MODEL: OnceLock<Model> = OnceLock::new();
-            if let Some(m) = DEFAULT_BASELINE_MODEL.get() {
-                m.clone()
-            } else {
-                let compiled = Self::compile_default_baseline_model()?;
-                let _ = DEFAULT_BASELINE_MODEL.set(compiled.clone());
-                compiled
-            }
-        } else {
-            Model::from_bytes(bytes).map_err(|e| NativeApiError::ModelLoad(e.0))?
-        };
-
-        model
-            .config()
-            .validate()
-            .map_err(|e| NativeApiError::ModelLoad(e.0))?;
-
-        let metadata = NativeModelMetadata {
-            schema_version: SCHEMA.into(),
-            model_cid: cid,
-            canonical_uor_address: "uor:native-geometric/r4/1".into(),
-            backend_name: BACKEND_IDENTIFIER.into(),
-            max_context_tokens: model.config().context_tokens,
-            max_sessions: 32,
-            is_provider_free: true,
-            zero_matmul_serving: true,
-            zero_heap_alloc_hot_path: true,
-            supported_modalities: vec![
-                "prose".into(),
-                "dialogue".into(),
-                "reasoning".into(),
-                "rust_code".into(),
-                "durable_memory".into(),
-            ],
-            truth_matrix: CapabilityTruthMatrix::default(),
-        };
-
-        Ok(Self {
-            model: Arc::new(model),
-            metadata,
-        })
+        if bytes.is_empty() {
+            return Err(NativeApiError::InvalidRequest(
+                "an explicit native model artifact is required; empty bytes are not a model".into(),
+            ));
+        }
+        let model = Model::from_bytes(bytes).map_err(|e| NativeApiError::ModelLoad(e.0))?;
+        Self::from_model(Arc::new(model))
     }
 
-    /// Create from an existing in-memory Arc<Model>.
     pub fn from_model(model: Arc<Model>) -> Result<Self, NativeApiError> {
         model
             .config()
             .validate()
             .map_err(|e| NativeApiError::ModelLoad(e.0))?;
-
-        let serialized = model
-            .to_bytes()
-            .map_err(|e| NativeApiError::Serialization(e.0))?;
-        let cid = blake3::hash(&serialized).to_hex().to_string();
-
         let metadata = NativeModelMetadata {
+            api_schema_version: NATIVE_API_SCHEMA.into(),
             schema_version: SCHEMA.into(),
-            model_cid: cid,
-            canonical_uor_address: "uor:native-geometric/r4/1".into(),
+            model_cid: model.artifact_cid().into(),
+            canonical_uor_address: model.uor_model_address().into(),
             backend_name: BACKEND_IDENTIFIER.into(),
             max_context_tokens: model.config().context_tokens,
             max_sessions: 32,
             is_provider_free: true,
             zero_matmul_serving: true,
-            zero_heap_alloc_hot_path: true,
-            supported_modalities: vec![
-                "prose".into(),
-                "dialogue".into(),
-                "reasoning".into(),
-                "rust_code".into(),
-                "durable_memory".into(),
-            ],
+            zero_heap_alloc_hot_path: false,
+            supported_modalities: vec!["text".into()],
             truth_matrix: CapabilityTruthMatrix::default(),
         };
-
         Ok(Self { model, metadata })
     }
 
@@ -444,6 +265,8 @@ impl NativeModel {
 
     /// Create an isolated native session with the specified configuration.
     pub fn create_session(&self, config: SessionConfig) -> Result<NativeSession, NativeApiError> {
+        validate_budget(config.max_output_tokens)?;
+        validate_temperature(config.temperature)?;
         let scope = IdentityScope::new(&config.user_id, &config.project_id, &config.session_id)
             .map_err(|e| NativeApiError::IdentityViolation(e.0))?;
 
@@ -457,7 +280,7 @@ impl NativeModel {
             durable_session,
             cancelled: Arc::new(AtomicBool::new(false)),
             active: Arc::new(AtomicBool::new(false)),
-            last_input: String::new(),
+            generation: GenerationState::default(),
         })
     }
 }
@@ -474,7 +297,47 @@ pub struct NativeSession {
     durable_session: DurableSession,
     cancelled: Arc<AtomicBool>,
     active: Arc<AtomicBool>,
-    last_input: String,
+    generation: GenerationState,
+}
+
+const MAX_OUTPUT_TOKENS: usize = 4096;
+const MAX_INGEST_BYTES: usize = 1024 * 1024;
+
+fn validate_budget(tokens: usize) -> Result<(), NativeApiError> {
+    if !(1..=MAX_OUTPUT_TOKENS).contains(&tokens) {
+        return Err(NativeApiError::TokenLimitExceeded {
+            tokens,
+            limit: MAX_OUTPUT_TOKENS,
+        });
+    }
+    Ok(())
+}
+fn validate_temperature(temperature: f64) -> Result<(), NativeApiError> {
+    if temperature != 0.0 {
+        return Err(NativeApiError::InvalidRequest(
+            "only deterministic temperature 0 is implemented".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn utf8_prefix(bytes: &[u8], terminal: bool) -> Result<usize, NativeApiError> {
+    match std::str::from_utf8(bytes) {
+        Ok(_) => Ok(bytes.len()),
+        Err(e) if e.error_len().is_none() && !terminal => Ok(e.valid_up_to()),
+        Err(_) => Err(NativeApiError::Serialization(
+            "model emitted invalid or incomplete UTF-8".into(),
+        )),
+    }
+}
+
+#[derive(Default)]
+struct GenerationState {
+    started: bool,
+    finished: bool,
+    pending: Vec<u8>,
+    stop_sequences: Vec<String>,
+    total_tokens: usize,
 }
 
 impl NativeSession {
@@ -490,7 +353,21 @@ impl NativeSession {
     pub fn ingest(&mut self, text: &str) -> Result<IngestReceipt, NativeApiError> {
         let bytes_len = text.len();
         let cid = blake3::hash(text.as_bytes()).to_hex().to_string();
-        self.last_input = text.to_string();
+        if text.len() > MAX_INGEST_BYTES {
+            return Err(NativeApiError::ResourceLimit(
+                "ingest exceeds 1 MiB request limit".into(),
+            ));
+        }
+        // Input capture is disabled while the core is in response mode. End it
+        // even after restoring a checkpoint whose wrapper state is not present.
+        if self.generation.started || self.durable_session.session.is_response_active() {
+            self.durable_session
+                .session
+                .end_response(&self.model)
+                .map_err(|e| NativeApiError::ModelLoad(e.0))?;
+        }
+        self.generation = GenerationState::default();
+        self.cancelled.store(false, Ordering::SeqCst);
 
         if self.durable_session.session.work.observed_tokens == 0 {
             self.durable_session
@@ -526,219 +403,226 @@ impl NativeSession {
         self.complete_stream(request, |_| true)
     }
 
-    /// Stream completion tokens with cooperative cancellation.
+    /// Generate directly through the loaded model. The callback receives valid UTF-8
+    /// chunks, which may span multiple model tokens. No canned replies are added.
     pub fn complete_stream<F: FnMut(&str) -> bool>(
         &mut self,
         request: CompletionRequest,
         mut callback: F,
     ) -> Result<CompletionResponse, NativeApiError> {
-        if self.active.swap(true, Ordering::SeqCst) {
-            return Err(NativeApiError::SessionBusy(
-                "Session is already executing another request".into(),
+        let max_tokens = request.max_tokens.unwrap_or(self.config.max_output_tokens);
+        validate_budget(max_tokens)?;
+        validate_temperature(request.temperature.unwrap_or(self.config.temperature))?;
+        if request.stop_sequences.len() > 16
+            || request
+                .stop_sequences
+                .iter()
+                .any(|s| s.is_empty() || s.len() > 256)
+        {
+            return Err(NativeApiError::InvalidRequest(
+                "stop sequences must be 1..=256 bytes, at most 16".into(),
             ));
         }
-
-        self.cancelled.store(false, Ordering::SeqCst);
-
-        #[cfg(not(target_arch = "wasm32"))]
-        let start = Instant::now();
-        let max_tokens = request.max_tokens.unwrap_or(self.config.max_output_tokens);
-
         if !request.prompt.is_empty() {
             self.ingest(&request.prompt)?;
         }
-
-        self.durable_session
-            .session
-            .begin_response(&self.model)
-            .map_err(|e| NativeApiError::ModelLoad(e.0))?;
-
-        let mut output = String::new();
-        let mut tokens_emitted = 0;
-        let mut stopped_by = "eos".to_string();
-        let initial_facts_len = self.durable_session.fact_count();
-
-        let mut recent_tokens: Vec<u32> = Vec::with_capacity(32);
-
-        let is_typed_dispatch = self.durable_session.session.value_decision().is_some()
-            || self.durable_session.session.completion_decision().is_some()
-            || self
-                .durable_session
-                .session
-                .response_entry_decision()
-                .is_some()
-            || self.durable_session.session.word_copy_decision().is_some()
-            || self.last_input.contains("total:")
-            || self.last_input.contains("identity(")
-            || self.last_input.contains("fn ");
-
-        if !is_typed_dispatch {
-            let lower = self.last_input.trim().to_lowercase();
-
-            // Check memory query
-            let mut memory_fact = None;
-            for word in lower.split_whitespace() {
-                let clean_word = word.trim_matches(|c: char| !c.is_alphanumeric());
-                if let Some(fact) = self.durable_session.get_fact(clean_word) {
-                    memory_fact = Some((clean_word.to_string(), fact));
-                    break;
+        self.generation = GenerationState {
+            stop_sequences: request.stop_sequences,
+            ..Default::default()
+        };
+        self.cancelled.store(false, Ordering::SeqCst);
+        let mut result = self.generate_chunk(max_tokens, &mut callback)?;
+        if result.stopped_by == "length" {
+            // A complete request ends at its budget; a possible stop prefix is
+            // ordinary output if the stop was not completed.
+            let tail = std::str::from_utf8(&self.generation.pending).map_err(|_| {
+                NativeApiError::Serialization("token budget ended within a UTF-8 scalar".into())
+            })?;
+            if !tail.is_empty() {
+                result.text.push_str(tail);
+                if !callback(tail) {
+                    result.stopped_by = "cancelled".into();
                 }
             }
-
-            let response_text = if let Some((entity, val)) = memory_fact {
-                format!("Durable Memory Fact: {} = {}\n", entity, val)
-            } else if lower.is_empty() {
-                "Ready.\n".to_string()
-            } else if lower.contains("who are you")
-                || lower.contains("what is this")
-                || lower == "hello"
-                || lower == "hi"
-                || lower.contains("status")
-            {
-                "Hello! I am UOR-R4, an experimental autoregressive geometric state language model operating on a continuous R4/S3/H4 geometric manifold over the Z[phi] golden integer ring with zero matrix multiplications and zero floating-point serving.\n".to_string()
-            } else if lower.contains("manifold") || lower.contains("r4") {
-                "The R4 geometric manifold maps token streams into four-dimensional spacetime coordinates (t, x, y, z). Unlike dense transformers that use all-to-all softmax attention matrices, UOR-R4 uses bounded geometric routing over 14 Riemann zeta-zero phase clocks and paired-H4 icosian rotations in exact ring arithmetic Z[phi].\n".to_string()
-            } else if lower.contains("serving")
-                || lower.contains("zero matmul")
-                || lower.contains("zero-matmul")
-            {
-                "In serving, UOR-R4 executes zero mathematical matrix multiplications, zero floating-point operations, and zero steady-state heap allocations. Forward state transitions and vocabulary projections execute entirely via integer addition, bitwise operations, and table lookups.\n".to_string()
-            } else {
-                format!("UOR-R4 state ungrounded: \"{}\" is outside the active geometric transition manifold.\n\nCurrent verified capabilities:\n1. Exact arithmetic: `left = 14; right = 4; total: `\n2. Variable completion: `left = 13; right = 4; fn identity(param: i32) -> i32 {{ `\n3. Isolated durable memory facts.\n", self.last_input.trim())
-            };
-
-            for chunk in response_text.split_inclusive(' ') {
-                output.push_str(chunk);
-                tokens_emitted += 1;
-                if !callback(chunk) {
-                    stopped_by = "cancelled".into();
-                    break;
-                }
-            }
-            if stopped_by != "cancelled" {
-                stopped_by = "eos".into();
-            }
-
-            #[cfg(not(target_arch = "wasm32"))]
-            let elapsed = start.elapsed().as_micros() as u64;
-            #[cfg(target_arch = "wasm32")]
-            let elapsed = 42;
-
-            self.active.store(false, Ordering::SeqCst);
-            let final_facts_len = self.durable_session.fact_count();
-            return Ok(CompletionResponse {
-                text: output,
-                token_count: tokens_emitted,
-                stopped_by,
-                elapsed_us: elapsed,
-                memory_facts_read: initial_facts_len.max(final_facts_len),
-            });
+            self.generation.pending.clear();
+            self.generation.finished = true;
         }
+        Ok(result)
+    }
 
-        while tokens_emitted < max_tokens {
+    /// Continue a bounded response across host event-loop yields. `length` is
+    /// resumable; `eos`, `cancelled`, and `stop_sequence` are terminal.
+    fn generate_chunk<F: FnMut(&str) -> bool>(
+        &mut self,
+        max_tokens: usize,
+        mut callback: F,
+    ) -> Result<CompletionResponse, NativeApiError> {
+        validate_budget(max_tokens)?;
+        if self.active.swap(true, Ordering::SeqCst) {
+            return Err(NativeApiError::SessionBusy("session is executing".into()));
+        }
+        let result = self.generate_chunk_inner(max_tokens, &mut callback);
+        // Recoverable model/UTF-8 errors must not permanently mark a session busy.
+        self.active.store(false, Ordering::SeqCst);
+        result
+    }
+
+    fn generate_chunk_inner<F: FnMut(&str) -> bool>(
+        &mut self,
+        max_tokens: usize,
+        callback: &mut F,
+    ) -> Result<CompletionResponse, NativeApiError> {
+        #[cfg(not(target_arch = "wasm32"))]
+        let start = Instant::now();
+        let mut text = String::new();
+        let mut token_count = 0;
+        let mut stopped_by = "length";
+        if !self.generation.started && !self.generation.finished {
+            self.durable_session
+                .session
+                .begin_response(&self.model)
+                .map_err(|e| NativeApiError::ModelLoad(e.0))?;
+            self.generation.started = true;
+        }
+        if self.generation.finished {
+            stopped_by = "eos";
+        }
+        while token_count < max_tokens && !self.generation.finished {
             if self.cancelled.load(Ordering::Relaxed) {
-                stopped_by = "cancelled".into();
+                stopped_by = "cancelled";
+                self.generation.finished = true;
                 break;
             }
-
+            if self.generation.total_tokens >= MAX_OUTPUT_TOKENS {
+                stopped_by = "token_limit";
+                self.generation.finished = true;
+                break;
+            }
             let pred = self
                 .durable_session
                 .session
                 .predict(&self.model)
                 .map_err(|e| NativeApiError::ModelLoad(e.0))?;
-
-            if pred.token == EOS || pred.token == BOS {
-                stopped_by = "eos".into();
-                break;
-            }
-
-            // Repetition prevention: break immediately if same token repeats consecutively
-            if recent_tokens.len() >= 2
-                && recent_tokens[recent_tokens.len() - 1] == pred.token
-                && recent_tokens[recent_tokens.len() - 2] == pred.token
-            {
-                stopped_by = "repetition_guard".into();
-                break;
-            }
-            if recent_tokens.len() >= 6 {
-                let n = recent_tokens.len();
-                if recent_tokens[n - 3..n]
-                    == [
-                        recent_tokens[n - 6],
-                        recent_tokens[n - 5],
-                        recent_tokens[n - 4],
-                    ]
-                {
-                    stopped_by = "repetition_guard".into();
-                    break;
-                }
-            }
-            recent_tokens.push(pred.token);
-
-            let piece_bytes = self.model.decode(&[pred.token]).unwrap_or_default();
-            let piece = String::from_utf8_lossy(&piece_bytes).into_owned();
-
-            output.push_str(&piece);
-            tokens_emitted += 1;
-
-            let mut matched_stop = false;
-            for stop in &request.stop_sequences {
-                if output.ends_with(stop) {
-                    stopped_by = "stop_sequence".into();
-                    matched_stop = true;
-                    break;
-                }
-            }
-
-            // Conclude when complete statement, block, or terminal period-newline finishes
-            if output.ends_with(".\n") || output.ends_with("}\n") || output.ends_with("\n\n") {
-                matched_stop = true;
-                stopped_by = "eos".into();
-            }
-
-            if !callback(&piece) || matched_stop {
-                if !matched_stop {
-                    stopped_by = "cancelled".into();
-                }
-                break;
-            }
-
+            // Observe every chosen token, including EOS, before exposing the result.
             self.durable_session
                 .session
                 .observe(&self.model, pred.token)
                 .map_err(|e| NativeApiError::ModelLoad(e.0))?;
+            if pred.token == EOS {
+                stopped_by = "eos";
+                self.generation.finished = true;
+            } else {
+                let bytes = self
+                    .model
+                    .decode(&[pred.token])
+                    .map_err(|e| NativeApiError::ModelLoad(e.0))?;
+                self.generation.pending.extend_from_slice(&bytes);
+                token_count += 1;
+                self.generation.total_tokens += 1;
+            }
+            let mut emit_len = self.generation.pending.len();
+            if let Some(pos) = self
+                .generation
+                .stop_sequences
+                .iter()
+                .filter_map(|s| {
+                    self.generation
+                        .pending
+                        .windows(s.len())
+                        .position(|w| w == s.as_bytes())
+                })
+                .min()
+            {
+                emit_len = pos;
+                stopped_by = "stop_sequence";
+                self.generation.finished = true;
+            } else if !self.generation.finished {
+                // Keep possible stop prefixes until a later token disambiguates them.
+                let mut withheld = 0;
+                for stop in &self.generation.stop_sequences {
+                    for n in 1..stop.len() {
+                        if self.generation.pending.ends_with(&stop.as_bytes()[..n]) {
+                            withheld = withheld.max(n);
+                        }
+                    }
+                }
+                emit_len -= withheld;
+            }
+            let valid_len = utf8_prefix(
+                &self.generation.pending[..emit_len],
+                self.generation.finished,
+            )?;
+            if valid_len != 0 {
+                let piece = std::str::from_utf8(&self.generation.pending[..valid_len])
+                    .map_err(|e| NativeApiError::Serialization(e.to_string()))?;
+                text.push_str(piece);
+                let keep_going = callback(piece);
+                self.generation.pending.drain(..valid_len);
+                if !keep_going {
+                    stopped_by = "cancelled";
+                    self.generation.finished = true;
+                }
+            }
+            if self.generation.finished {
+                self.generation.pending.clear();
+            }
         }
-
-        // Calibrated Grounding: If no tokens were emitted or output is empty
-        if output.trim().is_empty() && tokens_emitted == 0 {
-            let fallback_msg = "UOR-R4 state ungrounded: Query is outside the currently trained geometric channels (identity, R4 manifold architecture, zero-matmul serving, Riemann zeta clocks, and Rust code synthesis).\n";
-            output.push_str(fallback_msg);
-            callback(fallback_msg);
-            tokens_emitted = 1;
-            stopped_by = "ungrounded_abstention".into();
-        }
-
-        if tokens_emitted >= max_tokens
-            && stopped_by != "stop_sequence"
-            && stopped_by != "cancelled"
-        {
-            stopped_by = "length".into();
-        }
-
         #[cfg(not(target_arch = "wasm32"))]
-        let elapsed = start.elapsed().as_micros() as u64;
+        let elapsed_us = Some(start.elapsed().as_micros().min(u64::MAX as u128) as u64);
         #[cfg(target_arch = "wasm32")]
-        let elapsed = 42;
-        self.active.store(false, Ordering::SeqCst);
-        let final_facts_len = self.durable_session.fact_count();
-
+        let elapsed_us = None;
         Ok(CompletionResponse {
-            text: output,
-            token_count: tokens_emitted,
-            stopped_by,
-            elapsed_us: elapsed,
-            memory_facts_read: initial_facts_len.max(final_facts_len),
+            text,
+            token_count,
+            stopped_by: stopped_by.into(),
+            elapsed_us,
+            memory_facts_read: None,
         })
+    }
+
+    /// Finish a host-bounded incremental response without predicting another token.
+    /// Any already selected UTF-8 tail is returned once; an incomplete scalar is
+    /// a typed error rather than silently rewritten or dropped. A successful
+    /// finish permits checkpoint export, including after a cancellation signal.
+    pub fn finish_generation(&mut self) -> Result<CompletionResponse, NativeApiError> {
+        if self.active.load(Ordering::SeqCst) {
+            return Err(NativeApiError::SessionBusy(
+                "generation is executing".into(),
+            ));
+        }
+        let text = std::str::from_utf8(&self.generation.pending)
+            .map_err(|_| {
+                NativeApiError::Serialization("cannot finish response inside a UTF-8 scalar".into())
+            })?
+            .to_owned();
+        let stopped_by = if self.cancelled.load(Ordering::SeqCst) {
+            "cancelled"
+        } else {
+            "finished"
+        };
+        self.generation.pending.clear();
+        self.generation.finished = true;
+        if self.generation.started || self.durable_session.session.is_response_active() {
+            self.durable_session
+                .session
+                .end_response(&self.model)
+                .map_err(|e| NativeApiError::ModelLoad(e.0))?;
+        }
+        // end_response has already consumed the boundary; do not reset a later
+        // input chunk a second time merely because this wrapper generated earlier.
+        self.generation.started = false;
+        Ok(CompletionResponse {
+            text,
+            token_count: 0,
+            stopped_by: stopped_by.into(),
+            elapsed_us: None,
+            memory_facts_read: None,
+        })
+    }
+
+    /// A cancellation token can be retained by the host without locking the session.
+    pub fn cancellation_handle(&self) -> Arc<AtomicBool> {
+        Arc::clone(&self.cancelled)
     }
 
     /// Cooperatively signal session cancellation.
@@ -746,13 +630,14 @@ impl NativeSession {
         self.cancelled.store(true, Ordering::Relaxed);
     }
 
-    /// Reset session context while preserving identity and durable relation memory.
+    /// Reset session context and memory, preserving the identity scope.
     pub fn reset(&mut self) -> Result<(), NativeApiError> {
         self.durable_session
             .reset(&self.model)
             .map_err(|e| NativeApiError::ModelLoad(e.0))?;
         self.cancelled.store(false, Ordering::SeqCst);
         self.active.store(false, Ordering::SeqCst);
+        self.generation = GenerationState::default();
         Ok(())
     }
 
@@ -778,6 +663,11 @@ impl NativeSession {
 
     /// Export serialized session state.
     pub fn export_state(&self) -> Result<Vec<u8>, NativeApiError> {
+        if self.generation.started && !self.generation.finished {
+            return Err(NativeApiError::InvalidRequest(
+                "finish or cancel generation before exporting a checkpoint".into(),
+            ));
+        }
         self.durable_session
             .checkpoint()
             .map_err(|e| NativeApiError::Serialization(e.0))
@@ -787,7 +677,14 @@ impl NativeSession {
     pub fn import_state(&mut self, bytes: &[u8]) -> Result<(), NativeApiError> {
         let restored = DurableSession::from_checkpoint(&self.model, bytes)
             .map_err(|e| NativeApiError::Serialization(e.0))?;
+        if restored.scope != self.scope {
+            return Err(NativeApiError::IdentityViolation(
+                "checkpoint scope differs from target session".into(),
+            ));
+        }
         self.durable_session = restored;
+        self.generation = GenerationState::default();
+        self.cancelled.store(false, Ordering::SeqCst);
         Ok(())
     }
 }
@@ -801,11 +698,13 @@ impl NativeSession {
 pub struct WasmSessionHandle(pub u32);
 
 /// Filesystem-free, browser-compatible WASM runtime bridge.
-/// Employs handle-based session routing with byte-slice serialization and bit-exact parity.
+/// Employs bounded handle routing and byte-slice serialization. WASM parity is
+/// not inferred from this Rust interface.
 pub struct WasmModelRuntime {
     model: NativeModel,
     sessions: Arc<Mutex<HashMap<u32, NativeSession>>>,
     next_handle: AtomicU32,
+    cancellations: Mutex<HashMap<u32, Arc<AtomicBool>>>,
 }
 
 impl WasmModelRuntime {
@@ -814,6 +713,7 @@ impl WasmModelRuntime {
             model,
             sessions: Arc::new(Mutex::new(HashMap::new())),
             next_handle: AtomicU32::new(1),
+            cancellations: Mutex::new(HashMap::new()),
         }
     }
 
@@ -833,17 +733,34 @@ impl WasmModelRuntime {
             temperature: 0.0,
         };
 
+        let mut lock = self
+            .sessions
+            .lock()
+            .map_err(|_| NativeApiError::ResourceLimit("session lock poisoned".into()))?;
+        if lock.len() >= self.model.metadata.max_sessions {
+            return Err(NativeApiError::ResourceLimit(
+                "maximum live sessions reached".into(),
+            ));
+        }
         let session = self.model.create_session(config)?;
-        let handle = self.next_handle.fetch_add(1, Ordering::SeqCst);
-
-        let mut lock = self.sessions.lock().unwrap();
+        let handle = self
+            .next_handle
+            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| n.checked_add(1))
+            .map_err(|_| NativeApiError::ResourceLimit("session handles exhausted".into()))?;
+        self.cancellations
+            .lock()
+            .map_err(|_| NativeApiError::ResourceLimit("cancellation lock poisoned".into()))?
+            .insert(handle, session.cancellation_handle());
         lock.insert(handle, session);
         Ok(handle)
     }
 
     /// Ingest UTF-8 text into a WASM session.
     pub fn wasm_ingest(&self, handle: u32, text: &str) -> Result<String, NativeApiError> {
-        let mut lock = self.sessions.lock().unwrap();
+        let mut lock = self
+            .sessions
+            .lock()
+            .map_err(|_| NativeApiError::ResourceLimit("session lock poisoned".into()))?;
         let session = lock
             .get_mut(&handle)
             .ok_or(NativeApiError::SessionNotFound(handle))?;
@@ -858,35 +775,50 @@ impl WasmModelRuntime {
         handle: u32,
         max_tokens: usize,
     ) -> Result<String, NativeApiError> {
-        let mut lock = self.sessions.lock().unwrap();
+        let mut lock = self
+            .sessions
+            .lock()
+            .map_err(|_| NativeApiError::ResourceLimit("session lock poisoned".into()))?;
         let session = lock
             .get_mut(&handle)
             .ok_or(NativeApiError::SessionNotFound(handle))?;
 
-        let req = CompletionRequest {
-            prompt: String::new(),
-            max_tokens: Some(max_tokens),
-            temperature: Some(0.0),
-            stop_sequences: Vec::new(),
-        };
-
-        let resp = session.complete(req)?;
+        let resp = session.generate_chunk(max_tokens, |_| true)?;
         serde_json::to_string(&resp).map_err(|e| NativeApiError::Serialization(e.to_string()))
+    }
+
+    /// Close incremental generation before checkpointing a host budget or stop.
+    pub fn wasm_finish_generation(&self, handle: u32) -> Result<String, NativeApiError> {
+        let mut lock = self
+            .sessions
+            .lock()
+            .map_err(|_| NativeApiError::ResourceLimit("session lock poisoned".into()))?;
+        let session = lock
+            .get_mut(&handle)
+            .ok_or(NativeApiError::SessionNotFound(handle))?;
+        let response = session.finish_generation()?;
+        serde_json::to_string(&response).map_err(|e| NativeApiError::Serialization(e.to_string()))
     }
 
     /// Cancel a running WASM session.
     pub fn wasm_cancel(&self, handle: u32) -> Result<(), NativeApiError> {
-        let lock = self.sessions.lock().unwrap();
-        let session = lock
+        let lock = self
+            .cancellations
+            .lock()
+            .map_err(|_| NativeApiError::ResourceLimit("cancellation lock poisoned".into()))?;
+        let token = lock
             .get(&handle)
             .ok_or(NativeApiError::SessionNotFound(handle))?;
-        session.cancel();
+        token.store(true, Ordering::SeqCst);
         Ok(())
     }
 
     /// Export WASM session state to byte array.
     pub fn wasm_export_session(&self, handle: u32) -> Result<Vec<u8>, NativeApiError> {
-        let lock = self.sessions.lock().unwrap();
+        let lock = self
+            .sessions
+            .lock()
+            .map_err(|_| NativeApiError::ResourceLimit("session lock poisoned".into()))?;
         let session = lock
             .get(&handle)
             .ok_or(NativeApiError::SessionNotFound(handle))?;
@@ -895,7 +827,10 @@ impl WasmModelRuntime {
 
     /// Import WASM session state from byte array.
     pub fn wasm_import_session(&self, handle: u32, bytes: &[u8]) -> Result<(), NativeApiError> {
-        let mut lock = self.sessions.lock().unwrap();
+        let mut lock = self
+            .sessions
+            .lock()
+            .map_err(|_| NativeApiError::ResourceLimit("session lock poisoned".into()))?;
         let session = lock
             .get_mut(&handle)
             .ok_or(NativeApiError::SessionNotFound(handle))?;
@@ -904,12 +839,37 @@ impl WasmModelRuntime {
 
     /// Free a WASM session handle and release memory.
     pub fn wasm_free_session(&self, handle: u32) {
-        let mut lock = self.sessions.lock().unwrap();
-        lock.remove(&handle);
+        if let Ok(mut lock) = self.sessions.lock() {
+            lock.remove(&handle);
+        }
+        if let Ok(mut lock) = self.cancellations.lock() {
+            lock.remove(&handle);
+        }
     }
 
     /// Introspect model metadata and capabilities as JSON string.
     pub fn wasm_get_capabilities(&self) -> String {
         serde_json::to_string(self.model.metadata()).unwrap_or_default()
+    }
+}
+
+#[cfg(test)]
+mod recovery_utf8_tests {
+    use super::utf8_prefix;
+
+    #[test]
+    fn streaming_preserves_split_multibyte_scalars_and_rejects_invalid_bytes() {
+        // Three model byte tokens must be emitted as one valid euro scalar.
+        let mut pending = Vec::new();
+        for byte in [0xe2, 0x82] {
+            pending.push(byte);
+            assert_eq!(utf8_prefix(&pending, false).unwrap(), 0);
+            assert!(utf8_prefix(&pending, true).is_err());
+        }
+        pending.push(0xac);
+        assert_eq!(utf8_prefix(&pending, true).unwrap(), 3);
+        assert_eq!(std::str::from_utf8(&pending).unwrap(), "€");
+        assert_eq!(utf8_prefix(b"hello\xe2", false).unwrap(), 5);
+        assert!(utf8_prefix(&[0xff], false).is_err());
     }
 }

@@ -23,6 +23,42 @@ pub(super) struct TypedRouting {
     pub initialization_artifact: Option<String>,
 }
 
+/// Offline witness for continuing the shared typed-role router beneath frozen descendants.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct TypedRoleRefinement {
+    pub parent_artifact: String,
+    pub previous: TypedRouting,
+}
+impl TypedRoleRefinement {
+    pub(super) fn validate(&self, model: &Model) -> Result<()> {
+        let active = model
+            .typed_roles
+            .as_ref()
+            .ok_or_else(|| Error("refined typed roles absent".into()))?;
+        active.validate(model, true)?;
+        if active.router.parent_artifact != self.parent_artifact {
+            return Err(Error("typed role refinement parent differs".into()));
+        }
+        let mut parent = model.clone();
+        parent.typed_role_refinement = None;
+        parent.typed_roles = Some(self.previous.clone());
+        parent.refresh_identity()?;
+        if parent.artifact_cid() != self.parent_artifact {
+            return Err(Error("typed role refinement frozen parent differs".into()));
+        }
+        parent.validate()?;
+        let mut identity = model.clone();
+        identity.refresh_identity()?;
+        if identity.artifact_cid != model.artifact_cid
+            || identity.uor_model_address != model.uor_model_address
+        {
+            return Err(Error("typed role refinement identity differs".into()));
+        }
+        Ok(())
+    }
+}
+
 pub(super) struct TypedContext {
     pub literal_component: bool,
     pub addresses: [u32; 16],
@@ -265,14 +301,15 @@ pub(super) fn context(
     if derived == 0 && !literal {
         return None;
     }
-    let depths = if derived >= 2 || literal {
-        roles.as_ref().map(|roles| {
-            block = roles;
-            lineage_depths(values, work)
-        })
-    } else {
-        None
-    };
+    let depths =
+        if derived >= 2 || (derived >= 1 && model.typed_role_refinement.is_some()) || literal {
+            roles.as_ref().map(|roles| {
+                block = roles;
+                lineage_depths(values, work)
+            })
+        } else {
+            None
+        };
     let origins =
         (depths.is_some() && block.canonical_copy_aliases).then(|| copy_origins(values, work));
     Some(TypedContext {

@@ -1,43 +1,18 @@
 ---
 name: uor-research-architect
-description: >-
-  Lead AI Research Architect workflow for UOR-R4: executing native geometric LM training,
-  running focused verification tests, checking resource ledgers, and recording BLAKE3 empirical receipts.
+description: Develop and assess the native UOR-R4 geometric model using current source, artifact-bound behavior, cumulative resources and protected delivery.
 ---
 
-# UOR-R4 Research Architect Workflow
+# UOR-R4 research architect
 
-Use this skill when developing, training, benchmarking, or validating native geometric LM components in UOR-R4 under owner-directed recovery mode `#973`.
+Read the current `AGENTS.md`, canonical plan, current state and execution policy. Owner instructions and these live authorities override dated experiment schedules. Preserve the Rust-native geometric goals and distinction between offline learning and final serving.
 
-## 1. Preflight Verification & Resource Audit
+Before builds or model execution, read the live shared model ledger at `.uor-models/native-joint-learning-2026-09-04/model-time.json` in the owner's checkout and the active storage receipts. Record complete preparation/build/training/controls/evaluation/retry projections, CPU/threads, wall time, RAM, new/temporary/retained storage and the 128 MiB storage stop margin. Measure storage with the established accounting tool; `git status` only inventories tracked/untracked changes. Never embed a historical balance as current allowance. Necessary local extensions are already owner-authorized; record reason, increment and updated cumulative limits before use, preserving every prior charge. No destructive deletion or paid external compute follows from that authorization.
 
-Before executing any build or training cycle:
-1. **Check Storage Margin:**
-   Verify accounted storage does not violate the active cap (+128 MiB stop margin):
-   ```bash
-   # Verify current storage against the approved cap (4,445,962,240 bytes)
-   git status
-   ```
-2. **Project Model Time:**
-   Ensure projected training and test execution stays well within the remaining model budget (852.938 seconds remaining of 1,800s).
+Use an isolated full worktree. Inspect the specific mechanism source and implement a concrete change tied to observed behavior. Rust training may use floats and matmul; final serving must execute no mathematical matrix products or transformer backbone. Deterministic geometry/addressing and shared typed operators are current; additional gates require evidence and cost justification.
 
-## 2. Focused Development Checks
+Compile and exercise the touched Rust path with meaningful focused checks. Use actual generated complete answers and executed generated programs where relevant. Separate construction/development data from fresh evaluation after selection. A fixture or deterministic parser is not learned language; nonempty output is not prose or coding success. Preserve exact artifact/data/source identities and positive, negative, NOT_RUN and UNAVAILABLE results. Never infer performance from an invented power value, infer proof from a returned boolean, or qualify alpha from metadata.
 
-Adhere to the focused verification policy in `AGENTS.md`:
-* **Formatting:** `cargo fmt --check`
-* **Typecheck Touched Package:** `cargo check -p <touched-package> --all-targets --offline`
-* **Focused Unit Test:** `cargo test -p <touched-package> <focused-test> --offline`
-* **Zero-Allocation Verification:** For `uor-r4-graph-runtime`, verify `#![no_std]` and zero-allocation proofs in `uor-r4-proof-model`.
+Document what was actually measured and the exclusions. Existing frozen R4G1/no_std contracts apply only to their declared runtime; they do not prove the native model's whole path. The five historical PR/merge status names acknowledge queue compatibility and execute no tests. The wording script catches selected phrases and does not validate scientific claims.
 
-## 3. Empirical Sealing & Receipt Protocol
-
-When a training or verification run completes:
-1. Compute and record BLAKE3 hashes for all generated model artifacts and test outputs:
-   ```bash
-   b3sum path/to/model.json
-   ```
-2. Update the corresponding issue record in `docs/` and `docs/integration/current-state.md` with:
-   - Exact input/output CID
-   - Number of training examples and validation outcomes
-   - Exact elapsed wall time and peak memory consumption
-3. If a negative result is observed, preserve the artifact and mark the outcome truthfully (never delete or retroactively adjust criteria).
+Stage named paths and deliver through protected PRs. Preserve unique research, intentional checkout changes, source freezes and negative candidates. Close issues only when their full acceptance is met; partial work references them. Confirm actual merge and source/tree identity before reporting delivery.

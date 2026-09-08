@@ -323,3 +323,69 @@ fn main() {
     let iter1 = &report.iterations[1];
     assert!(iter1.compile_success);
 }
+
+#[test]
+fn workspace_rejects_absolute_paths_and_oversized_files() {
+    let (_guard, env) = setup_temp_workspace("limits");
+    assert!(env
+        .write_file(&env.root().join("absolute.rs"), "x")
+        .is_err());
+    assert!(env.read_file(Path::new("/etc/hosts")).is_err());
+    let oversized = "x".repeat(MAX_WORKSPACE_FILE_BYTES + 1);
+    assert!(env.write_file(Path::new("too-large"), &oversized).is_err());
+    std::fs::write(env.root().join("existing-large"), oversized).unwrap();
+    assert!(env.read_file(Path::new("existing-large")).is_err());
+    assert!(env.compute_revision().is_err());
+}
+
+#[cfg(unix)]
+#[test]
+fn workspace_rejects_symlink_escape() {
+    let (_inside, env) = setup_temp_workspace("symlink_inside");
+    let (_outside, outside) = setup_temp_workspace("symlink_outside");
+    outside.write_file(Path::new("secret"), "preserve").unwrap();
+    std::os::unix::fs::symlink(outside.root(), env.root().join("alias")).unwrap();
+    assert!(env.read_file(Path::new("alias/secret")).is_err());
+    assert!(env
+        .write_file(Path::new("alias/new"), "must not write")
+        .is_err());
+    assert!(env.list_files().is_err());
+    assert!(!outside.root().join("new").exists());
+    assert_eq!(outside.read_file(Path::new("secret")).unwrap(), "preserve");
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn workspace_host_program_has_a_deadline() {
+    let (_guard, env) = setup_temp_workspace("deadline");
+    env.write_file(
+        Path::new("main.rs"),
+        "fn main() { std::thread::sleep(std::time::Duration::from_secs(60)); }",
+    )
+    .unwrap();
+    let binary = env.root().join("program");
+    assert!(
+        WorkspaceCodingEngine::compile_single(&env.root().join("main.rs"), &binary)
+            .unwrap()
+            .success
+    );
+    let start = std::time::Instant::now();
+    let error = WorkspaceCodingEngine::execute_binary(&binary).unwrap_err();
+    assert!(error.0.contains("deadline"));
+    assert!(start.elapsed() < PROCESS_TIMEOUT + std::time::Duration::from_secs(3));
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn workspace_host_program_output_is_bounded() {
+    let (_guard, env) = setup_temp_workspace("output_limit");
+    env.write_file(Path::new("main.rs"), "fn main() { use std::io::Write; let _ = std::io::stdout().write_all(&vec![b'x'; 2 * 1024 * 1024]); }").unwrap();
+    let binary = env.root().join("program");
+    assert!(
+        WorkspaceCodingEngine::compile_single(&env.root().join("main.rs"), &binary)
+            .unwrap()
+            .success
+    );
+    let error = WorkspaceCodingEngine::execute_binary(&binary).unwrap_err();
+    assert!(error.0.contains("output limit"));
+}

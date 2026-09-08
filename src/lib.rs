@@ -244,10 +244,9 @@ mod facade_smoke_tests {
 
     #[test]
     fn static_wasm_r4g1_is_complete_envelope_only_and_fail_closed() {
-        let frontends = [
-            ("worker", include_str!("../r4_worker.js")),
-            ("dashboard", include_str!("../index.html")),
-        ];
+        // The strict historical R4G1 worker retains its own scoped contract;
+        // the current Studio uses the artifact-bound native worker below.
+        let frontends = [("worker", include_str!("../r4_worker.js"))];
         for (label, source) in frontends {
             assert!(
                 source.contains("set_r4g1_production_bundle"),
@@ -290,58 +289,17 @@ mod facade_smoke_tests {
     }
 
     #[test]
-    fn static_wasm_cannot_masquerade_as_native_r4_softmax_engines() {
-        let dashboard = include_str!("../index.html");
-        let worker = include_str!("../r4_worker.js");
-        assert!(dashboard.contains("id=\"r4SoftmaxReferenceOption\" hidden disabled"));
-        assert!(dashboard.contains("serverR4SoftmaxReferenceReady = !localWasmMode"));
-        assert!(dashboard.contains(
-            "The R4/Spin softmax reference is native-only and was not exposed by this static/WASM session"
-        ));
-        assert!(dashboard.contains("fetch(\"/uor/v1/r4-softmax-reference/generate\""));
-        assert!(dashboard.contains("referenceRequest ? \"R4/Spin Softmax Reference\" : null"));
-        assert!(!worker.contains("r4-softmax-reference"));
-
-        assert!(dashboard.contains("id=\"r4SoftmaxLocalOption\" hidden disabled"));
-        assert!(dashboard.contains("serverR4SoftmaxLocalReady = !localWasmMode"));
-        assert!(dashboard.contains("Boolean(status.checkpoint_preflight_ready)"));
-        assert!(dashboard.contains("status.attention_on === true"));
-        assert!(dashboard.contains("status.greedy === true"));
-        assert!(dashboard.contains("status.static_wasm === false"));
-        assert!(dashboard.contains(
-            "R4/Spin Local #1017 is native-only and was not exposed by this static/WASM session"
-        ));
-        assert!(dashboard.contains(
-            "body: JSON.stringify({ prompt: text, max_tokens: localCheckpointMaxTokens })"
-        ));
-        assert!(dashboard.contains("fetch(serverR4SoftmaxLocalEndpoint"));
-        assert!(!worker.contains("r4-softmax-local"));
+    fn active_studio_worker_has_no_implicit_model_or_provider_fallback() {
+        let worker = include_str!("../assets/js/uor_model_worker.js");
+        assert!(!worker.contains("native_geometric_init(new Uint8Array())"));
+        assert!(!worker.contains("UorR4Router"));
+        assert!(!worker.contains("@huggingface/transformers"));
+        assert!(!worker.contains("computeHopfTelemetry"));
     }
 
     #[test]
-    fn static_wasm_native_geometric_model_is_connected_and_honest() {
-        let caps_json = crate::native_wasm::init(&[]).expect("native geometric WASM init succeeds");
-        assert!(caps_json.contains("native-geometric-language-v1"));
-        assert!(caps_json.contains("uor:native-geometric/r4/1"));
-
-        let handle = crate::native_wasm::create_session("smoke-test", "user-web", "proj-web")
-            .expect("session created");
-        assert!(handle > 0);
-
-        let ingest_res = crate::native_wasm::ingest(handle, "Hello native geometric language")
-            .expect("ingest succeeds");
-        assert!(ingest_res.contains("ingested_bytes"));
-
-        let gen_res = crate::native_wasm::generate_step(handle, 5).expect("generation succeeds");
-        assert!(gen_res.contains("token_count"));
-
-        let dashboard = include_str!("../index.html");
-        let worker = include_str!("../r4_worker.js");
-
-        assert!(dashboard.contains("id=\"nativeGeometricOption\""));
-        assert!(dashboard.contains("native-geometric-wasm"));
-        assert!(worker.contains("native-geometric"));
-        assert!(worker.contains("native_geometric_init"));
-        assert!(worker.contains("native_geometric_create_session"));
+    fn native_wasm_requires_an_explicit_valid_artifact() {
+        assert!(crate::native_wasm::init(&[]).is_err());
+        assert!(crate::native_wasm::init(b"{invalid}").is_err());
     }
 }

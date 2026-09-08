@@ -20,10 +20,10 @@ fn test_serving_operation_census_allowed_ops() {
 
     let report = census.audit().expect("Census audit should succeed");
     assert_eq!(report.total_allowed_ops, 7);
-    assert!(report.is_kernel_pure);
-    assert!(report.no_std_compliant);
-    assert!(report.zero_float_verified);
-    assert!(report.zero_matrix_product_verified);
+    assert!(!report.is_kernel_pure);
+    assert!(!report.no_std_compliant);
+    assert!(!report.zero_float_verified);
+    assert!(!report.zero_matrix_product_verified);
     assert!(report.forbidden_detected.is_empty());
 }
 
@@ -114,7 +114,7 @@ fn test_icosian_quaternion_inverse_witness() {
     // Identity quaternion
     let q_id = IcosianQuaternion::IDENTITY;
     assert!(q_id.is_unit());
-    assert!(q_id.verify_inverse_witness().is_ok());
+    assert!(q_id.verify_inverse_witness().is_err());
 
     // Basic basis quaternions i, j, k
     let q_i = IcosianQuaternion::new(ZPhi::ZERO, ZPhi::ONE, ZPhi::ZERO, ZPhi::ZERO);
@@ -122,11 +122,11 @@ fn test_icosian_quaternion_inverse_witness() {
     let q_k = IcosianQuaternion::new(ZPhi::ZERO, ZPhi::ZERO, ZPhi::ZERO, ZPhi::ONE);
 
     assert!(q_i.is_unit());
-    assert!(q_i.verify_inverse_witness().is_ok());
+    assert!(q_i.verify_inverse_witness().is_err());
     assert!(q_j.is_unit());
-    assert!(q_j.verify_inverse_witness().is_ok());
+    assert!(q_j.verify_inverse_witness().is_err());
     assert!(q_k.is_unit());
-    assert!(q_k.verify_inverse_witness().is_ok());
+    assert!(q_k.verify_inverse_witness().is_err());
 
     // Check Hamiltonian quaternion multiplication: i * j = k
     let ij = q_i.mul(&q_j);
@@ -146,7 +146,7 @@ fn test_icosian_quaternion_inverse_witness() {
 
     // Paired-H4 Icosian representation (E8 = H4 x H4)
     let paired = PairedH4Icosian::new(q_i, q_j);
-    assert!(paired.verify_paired_witnesses().is_ok());
+    assert!(paired.verify_paired_witnesses().is_err());
 }
 
 #[test]
@@ -174,13 +174,14 @@ fn test_euler_hopf_bridge_and_chart_adapters() {
     // Chart adapters
     let witness_euc = ChartAdapter::select_least_cost(false);
     assert_eq!(witness_euc.chart, ChartKind::EuclideanSqrt2);
-    assert_eq!(witness_euc.error_bound_ppm, 0);
-    assert!(witness_euc.preserves_orientation);
-    assert!(witness_euc.has_inverse_witness);
+    assert!(witness_euc.error_bound_ppm.is_none());
+    assert!(witness_euc.cost_rating.is_none());
+    assert!(!witness_euc.preserves_orientation);
+    assert!(!witness_euc.has_inverse_witness);
 
     let witness_riem = ChartAdapter::select_least_cost(true);
     assert_eq!(witness_riem.chart, ChartKind::RiemannianInterval);
-    assert_eq!(witness_riem.error_bound_ppm, 0);
+    assert!(witness_riem.error_bound_ppm.is_none());
 }
 
 #[test]
@@ -209,11 +210,11 @@ fn test_formal_claim_dossier_vocabulary_and_statuses() {
         .expect("Dossier verification should pass");
 
     assert_eq!(report.total_claims, 9);
-    assert_eq!(report.guarantee_count, 6);
-    assert_eq!(report.witnessed_count, 2);
-    assert_eq!(report.structural_count, 5);
-    assert_eq!(report.empirical_count, 1);
-    assert_eq!(report.assumed_count, 1);
+    assert_eq!(report.guarantee_count, 0);
+    assert_eq!(report.witnessed_count, 0);
+    assert_eq!(report.structural_count, 0);
+    assert_eq!(report.empirical_count, 0);
+    assert_eq!(report.assumed_count, 0);
     assert!(report.is_valid);
     assert!(report.prohibited_phrases_found.is_empty());
 }
@@ -234,4 +235,28 @@ fn test_prohibited_wording_scanner() {
 
     let err = dossier.verify_dossier().unwrap_err();
     assert!(err.0.contains("prohibited wording"));
+}
+
+#[test]
+fn diagnostics_cannot_certify_unobserved_serving_or_saturated_arithmetic() {
+    let empty = ServingOperationCensus::new()
+        .audit()
+        .expect("empty caller log");
+    assert!(!empty.zero_matrix_product_verified);
+    assert!(!empty.no_std_compliant);
+    let x = ZPhi::new(i64::MAX, 0);
+    assert_ne!(x.add(&ZPhi::ONE).sub(&ZPhi::ONE), x);
+    // Diagnostic overflow must not panic, and must never produce an exact witness.
+    let q = IcosianQuaternion::new(
+        ZPhi::ZERO,
+        ZPhi::new(i64::MIN, i64::MIN),
+        ZPhi::ZERO,
+        ZPhi::ZERO,
+    );
+    let _ = q.conjugate();
+    assert!(q.verify_inverse_witness().is_err());
+    let artifact = ArtifactIntegrityWitness::create("caller-text", "caller-config");
+    assert!(!artifact.zero_matmul_serving);
+    assert!(!artifact.zero_heap_alloc_hot_path);
+    assert!(!artifact.is_provider_free);
 }

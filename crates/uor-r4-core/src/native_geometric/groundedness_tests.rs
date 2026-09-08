@@ -163,10 +163,10 @@ fn native_groundedness_distinct_refusal_modes() {
         other => panic!("expected NoAdmissibleSource, got {:?}", other),
     }
 
-    // Mode 4: Clarification for ambiguous query
-    let clarify_outcome =
+    // A literal fixture word cannot manufacture ambiguity or nonexistent cities.
+    let outcome =
         GroundednessEvaluator::evaluate_query(&mut session, &model, "Where is ambiguous?");
-    assert!(clarify_outcome.is_clarify());
+    assert!(matches!(outcome, GroundedOutcome::Abstain(_)));
 }
 
 #[test]
@@ -263,4 +263,33 @@ fn native_groundedness_dual_denominator_metrics() {
 
     // Conflict detection accuracy: 1 / 1 = 1.0
     assert_eq!(report.conflict_detection_accuracy, 1.0);
+}
+
+#[test]
+fn explicit_calculator_preserves_integer_grammar() {
+    // Parser tests exercise the explicit utility, not model quality.
+    for (expression, expected) in [("-3 + 2", "-1"), ("13-4=", "9"), ("3 * -2", "-6")] {
+        let outcome = GroundednessEvaluator::try_evaluate_arithmetic(expression).unwrap();
+        match outcome {
+            GroundedOutcome::Answer(answer) => assert_eq!(answer.text, expected),
+            other => panic!("{other:?}"),
+        }
+    }
+    for expression in [
+        "1.5 + 2",
+        "1e3 + 2",
+        "user1 has 3 + 2",
+        "3 + 2 words",
+        "3+2=5",
+        "3+2==",
+        "3+2+1",
+    ] {
+        assert!(
+            matches!(
+                GroundednessEvaluator::try_evaluate_arithmetic(expression),
+                Some(GroundedOutcome::Abstain(_))
+            ),
+            "{expression}"
+        );
+    }
 }

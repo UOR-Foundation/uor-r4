@@ -1,13 +1,108 @@
-//! Executable Rust coding and controlled workspace use (#1088).
-//!
-//! Provides controlled workspace interaction, bounded file reading/writing/patching,
-//! iterative compiler feedback loops via `rustc`, multi-file context tracking,
-//! and cryptographic revision/provenance binding.
+//! Explicit host workspace and compiler utilities; these functions do not learn,
+//! synthesize, or repair code without a caller-supplied program or patch strategy.
+//! They are not a sandbox for untrusted programs. Paths reject absolute paths,
+//! traversal and symlinks; input/output limits and process deadlines bound work.
 
 use super::{Error, Result};
 use serde::{Deserialize, Serialize};
+use std::io::{self, Read};
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Output, Stdio};
+
+pub const MAX_WORKSPACE_FILE_BYTES: usize = 1024 * 1024;
+pub const MAX_WORKSPACE_FILES: usize = 1024;
+pub const MAX_WORKSPACE_TOTAL_BYTES: u64 = 16 * 1024 * 1024;
+pub const MAX_PROCESS_OUTPUT_BYTES: u64 = 1024 * 1024;
+pub const PROCESS_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+
+trait BoundedCommandOutput {
+    fn bounded_output(&mut self) -> io::Result<Output>;
+}
+impl BoundedCommandOutput for Command {
+    #[cfg(target_arch = "wasm32")]
+    fn bounded_output(&mut self) -> io::Result<Output> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "Host process execution is unavailable in WASM",
+        ))
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    fn bounded_output(&mut self) -> io::Result<Output> {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static SERIAL: AtomicU64 = AtomicU64::new(0);
+        struct Capture(std::path::PathBuf);
+        impl Drop for Capture {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_file(&self.0);
+            }
+        }
+        let serial = SERIAL.fetch_add(1, Ordering::Relaxed);
+        let stem = format!("uor-process-{}-{serial}", std::process::id());
+        let out_path = std::env::temp_dir().join(format!("{stem}.stdout"));
+        let err_path = std::env::temp_dir().join(format!("{stem}.stderr"));
+        let create = |path: &Path| {
+            std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(path)
+        };
+        let out_file = create(&out_path)?;
+        let out = Capture(out_path);
+        let err_file = create(&err_path)?;
+        let err = Capture(err_path);
+        self.stdin(Stdio::null()).stdout(out_file).stderr(err_file);
+        let mut child = self.spawn()?;
+        let started = std::time::Instant::now();
+        let status = loop {
+            let oversized = [&out.0, &err.0]
+                .iter()
+                .any(|p| std::fs::metadata(p).is_ok_and(|m| m.len() > MAX_PROCESS_OUTPUT_BYTES));
+            if oversized || started.elapsed() >= PROCESS_TIMEOUT {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(io::Error::new(
+                    if oversized {
+                        io::ErrorKind::InvalidData
+                    } else {
+                        io::ErrorKind::TimedOut
+                    },
+                    if oversized {
+                        "process output limit exceeded"
+                    } else {
+                        "process deadline exceeded"
+                    },
+                ));
+            }
+            match child.try_wait() {
+                Ok(Some(status)) => break status,
+                Ok(None) => std::thread::sleep(std::time::Duration::from_millis(10)),
+                Err(error) => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err(error);
+                }
+            }
+        };
+        let read = |path: &Path| -> io::Result<Vec<u8>> {
+            let mut bytes = Vec::new();
+            std::fs::File::open(path)?
+                .take(MAX_PROCESS_OUTPUT_BYTES + 1)
+                .read_to_end(&mut bytes)?;
+            if bytes.len() as u64 > MAX_PROCESS_OUTPUT_BYTES {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "process output limit exceeded",
+                ));
+            }
+            Ok(bytes)
+        };
+        Ok(Output {
+            status,
+            stdout: read(&out.0)?,
+            stderr: read(&err.0)?,
+        })
+    }
+}
 
 /// Canonical schema for workspace coding evaluations.
 pub const WORKSPACE_CODING_SCHEMA: &str = "uor-r4.workspace-coding/1";
@@ -41,42 +136,84 @@ impl WorkspaceEnvironment {
         &self.root_dir
     }
 
-    /// Canonicalize and verify that a relative path stays within the workspace root.
+    /// Reject absolute paths, traversal and symlink components before file access.
+    /// This is path hygiene for a trusted local workspace, not race-proof isolation.
     fn resolve_path(&self, relative_path: &Path) -> Result<PathBuf> {
-        let joined = self.root_dir.join(relative_path);
-        // Ensure no path traversal escapes root
-        if relative_path
-            .components()
-            .any(|c| c == std::path::Component::ParentDir)
+        if relative_path.as_os_str().is_empty()
+            || relative_path.is_absolute()
+            || relative_path.components().any(|c| {
+                matches!(
+                    c,
+                    std::path::Component::ParentDir
+                        | std::path::Component::RootDir
+                        | std::path::Component::Prefix(_)
+                )
+            })
         {
             return Err(Error(format!(
-                "Path traversal rejected: {:?}",
-                relative_path
+                "Path traversal or absolute path rejected: {relative_path:?}"
             )));
+        }
+        let mut joined = self.root_dir.clone();
+        for component in relative_path.components() {
+            joined.push(component);
+            match std::fs::symlink_metadata(&joined) {
+                Ok(metadata) if metadata.file_type().is_symlink() => {
+                    return Err(Error(format!("Symlink path rejected: {relative_path:?}")))
+                }
+                Ok(_) => {}
+                Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+                Err(error) => return Err(Error(format!("Path inspection failed: {error}"))),
+            }
         }
         Ok(joined)
     }
 
-    /// Bounded read of a file within the workspace.
     pub fn read_file(&self, relative_path: &Path) -> Result<String> {
         let path = self.resolve_path(relative_path)?;
-        std::fs::read_to_string(&path)
-            .map_err(|e| Error(format!("Failed to read {:?}: {}", relative_path, e)))
+        let mut bytes = Vec::new();
+        std::fs::File::open(&path)
+            .and_then(|f| {
+                f.take(MAX_WORKSPACE_FILE_BYTES as u64 + 1)
+                    .read_to_end(&mut bytes)
+            })
+            .map_err(|e| Error(format!("Failed to read {relative_path:?}: {e}")))?;
+        if bytes.len() > MAX_WORKSPACE_FILE_BYTES {
+            return Err(Error("Workspace file byte limit exceeded".into()));
+        }
+        String::from_utf8(bytes).map_err(|e| Error(format!("Workspace file is not UTF-8: {e}")))
     }
 
-    /// Bounded write of a file within the workspace, creating parents as necessary.
     pub fn write_file(&self, relative_path: &Path, content: &str) -> Result<()> {
-        let path = self.resolve_path(relative_path)?;
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).map_err(|e| {
-                Error(format!(
-                    "Failed to create parent dir for {:?}: {}",
-                    relative_path, e
-                ))
-            })?;
+        if content.len() > MAX_WORKSPACE_FILE_BYTES {
+            return Err(Error("Workspace file byte limit exceeded".into()));
         }
-        std::fs::write(&path, content)
-            .map_err(|e| Error(format!("Failed to write {:?}: {}", relative_path, e)))
+        let path = self.resolve_path(relative_path)?;
+        let files = self.list_files()?;
+        if !path.exists() && files.len() >= MAX_WORKSPACE_FILES {
+            return Err(Error("Workspace file count limit exceeded".into()));
+        }
+        let mut resulting_bytes = content.len() as u64;
+        for existing in files {
+            let existing_path = self.resolve_path(&existing)?;
+            if existing_path != path {
+                let size = std::fs::metadata(&existing_path)
+                    .map_err(|e| Error(e.to_string()))?
+                    .len();
+                resulting_bytes = resulting_bytes
+                    .checked_add(size)
+                    .ok_or_else(|| Error("Workspace size overflow".into()))?;
+            }
+        }
+        if resulting_bytes > MAX_WORKSPACE_TOTAL_BYTES {
+            return Err(Error("Workspace total byte limit exceeded".into()));
+        }
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| Error(format!("Failed to create parent: {e}")))?;
+        }
+        std::fs::write(path, content)
+            .map_err(|e| Error(format!("Failed to write {relative_path:?}: {e}")))
     }
 
     /// Apply a surgical patch replacing an exact unique occurrence of `search` with `replacement`.
@@ -111,12 +248,28 @@ impl WorkspaceEnvironment {
         if !dir.exists() {
             return Ok(());
         }
+        if dir
+            .strip_prefix(&self.root_dir)
+            .map_or(true, |p| p.components().count() > 32)
+        {
+            return Err(Error("Workspace directory depth limit exceeded".into()));
+        }
         let entries = std::fs::read_dir(dir)
             .map_err(|e| Error(format!("Failed to read dir {:?}: {}", dir, e)))?;
 
         for entry in entries {
             let entry = entry.map_err(|e| Error(format!("Dir entry error: {}", e)))?;
             let path = entry.path();
+            if entry
+                .file_type()
+                .map_err(|e| Error(e.to_string()))?
+                .is_symlink()
+            {
+                return Err(Error(format!("Symlink path rejected: {path:?}")));
+            }
+            if acc.len() >= MAX_WORKSPACE_FILES {
+                return Err(Error("Workspace file count limit exceeded".into()));
+            }
             if path.is_dir() {
                 self.collect_files(&path, acc)?;
             } else if path.is_file() {
@@ -136,9 +289,20 @@ impl WorkspaceEnvironment {
 
         for rel in &files {
             let path = self.resolve_path(rel)?;
-            let bytes = std::fs::read(&path)
-                .map_err(|e| Error(format!("Failed to read bytes for {:?}: {}", rel, e)))?;
+            let mut bytes = Vec::new();
+            std::fs::File::open(&path)
+                .and_then(|f| {
+                    f.take(MAX_WORKSPACE_FILE_BYTES as u64 + 1)
+                        .read_to_end(&mut bytes)
+                })
+                .map_err(|e| Error(format!("Failed to read bytes for {rel:?}: {e}")))?;
+            if bytes.len() > MAX_WORKSPACE_FILE_BYTES {
+                return Err(Error("Workspace file byte limit exceeded".into()));
+            }
             total_bytes += bytes.len() as u64;
+            if total_bytes > MAX_WORKSPACE_TOTAL_BYTES {
+                return Err(Error("Workspace total byte limit exceeded".into()));
+            }
             hasher.update(rel.to_string_lossy().as_bytes());
             hasher.update(b":");
             hasher.update(&bytes);
@@ -284,7 +448,7 @@ impl WorkspaceCodingEngine {
                     .to_str()
                     .ok_or_else(|| Error("Invalid bin path".into()))?,
             ])
-            .output()
+            .bounded_output()
             .map_err(|e| Error(format!("Failed to execute rustc: {}", e)))?;
 
         let success = output.status.success();
@@ -325,7 +489,7 @@ impl WorkspaceCodingEngine {
                     .to_str()
                     .ok_or_else(|| Error("Invalid rlib path".into()))?,
             ])
-            .output()
+            .bounded_output()
             .map_err(|e| Error(format!("Failed to execute rustc for lib: {}", e)))?;
 
         if !lib_output.status.success() {
@@ -345,7 +509,13 @@ impl WorkspaceCodingEngine {
             .args([
                 "--edition=2021",
                 "--extern",
-                &format!("{}={}", crate_name, lib_rlib.to_str().unwrap()),
+                &format!(
+                    "{}={}",
+                    crate_name,
+                    lib_rlib
+                        .to_str()
+                        .ok_or_else(|| Error("Invalid library output path".into()))?
+                ),
                 bin_src
                     .to_str()
                     .ok_or_else(|| Error("Invalid bin src path".into()))?,
@@ -354,7 +524,7 @@ impl WorkspaceCodingEngine {
                     .to_str()
                     .ok_or_else(|| Error("Invalid bin out path".into()))?,
             ])
-            .output()
+            .bounded_output()
             .map_err(|e| Error(format!("Failed to execute rustc for bin: {}", e)))?;
 
         let success = bin_output.status.success();
@@ -375,7 +545,7 @@ impl WorkspaceCodingEngine {
     /// Execute a compiled binary and verify that it exits successfully with code 0.
     pub fn execute_binary(bin_path: &Path) -> Result<String> {
         let output = Command::new(bin_path)
-            .output()
+            .bounded_output()
             .map_err(|e| Error(format!("Failed to run binary {:?}: {}", bin_path, e)))?;
 
         if !output.status.success() {
@@ -402,6 +572,9 @@ impl WorkspaceCodingEngine {
     where
         F: FnMut(&CompilerDiagnostic, &str) -> Option<PatchOperation>,
     {
+        if max_iterations > 16 {
+            return Err(Error("Repair iteration limit is 16".into()));
+        }
         let initial_revision = workspace.compute_revision()?;
         let mut source_context = Vec::new();
         source_context.push(target_file.to_string_lossy().to_string());
