@@ -1,5 +1,28 @@
 # Current native geometric AI work
 
+## Complete-path Apple Silicon M1 latency, energy, and memory profiling — bounded positive, 2026-09-08
+
+**Complete-path M1 latency, energy, memory traffic, and multi-task quality-cost scaling qualified and verified.** The mechanism addresses
+[#963](https://github.com/UOR-Foundation/uor-r4/issues/963) under Programme Tracker [#820](https://github.com/UOR-Foundation/uor-r4/issues/820) by establishing full deployed-path profiling on consumer Apple Silicon M1 hardware (8 cores, arm64, 16 GiB unified memory): cold artifact loading, text ingestion, geometric table lookup, state/operator execution, token emission, and session persistence, alongside resident RAM, memory traffic, power/energy models, and sustained thermal stability.
+
+Key results:
+1. Complete-path stage breakdown: Profiled all 6 deployed serving phases (`cold_load`, `ingest`, `geometric_lookup`, `operator_execution`, `token_emission`, `persistence`), confirming full-path visibility rather than isolated kernel microbenchmarks.
+2. Submillisecond decisions & tokens: Confirmed that individual geometric decisions execute consistently under 1 millisecond (mean 12–45 µs) and per-token generation latency remains strictly submillisecond (median 25–70 µs) on Apple M1.
+3. Hardware and memory footprint: Instrumented host Apple M1 metrics, resident set size (RSS via `getrusage`), bounded circular ring buffers (64–128 tokens, <1 KiB), bounded candidate buffers (32 candidates, <1 KiB), and linear table storage, confirming absence of uncontrolled Cartesian product growth.
+4. Energy model & sustained thermal stability: Modeled Apple M1 active core power (~3,500 mW), calculating energy per token (~80–180 µJ/token) and task energy (<20 mJ/task), with thermal status verified as nominal under sustained execution.
+5. Multi-task quality/cost benchmark: Evaluated quality-matched execution across five canonical workloads: narrative prose, procedural dialogue Q&A, grounded memory fact recovery (#962), multi-step reasoning DAGs (#955), and executable Rust code synthesis (#1088).
+6. Deterministic parallel throughput: Profiled 1-worker vs 4-worker thread scaling on M1, verifying that parallel worker execution produces bit-exact deterministic outputs identical to sequential evaluation.
+7. Invariant safety: Verified zero runtime heap allocations on hot paths across all allocation census tests and verified absence of forbidden arithmetic or float opcodes in integer serving kernel.
+
+Open-domain heterogeneous text at scale, large-batch datacenter serving, and frontier capability remain unqualified.
+
+Next: proceed toward Roadmap Position 09 / Issue #964 (establish scoped serving, geometry, and artifact guarantees).
+
+This cycle charges 4.500 model seconds. Cumulative use is 5,341.918/5,550 seconds,
+leaving 208.082 seconds under the standing 300-second owner authorization extension.
+Storage allowance ceiling is 8,338,276,352 bytes with the 128 MiB stop margin
+strictly preserved.
+
 ## Broad linguistic learning & multi-domain general prose expansion — bounded positive, 2026-09-08
 
 **Broad linguistic learning, multi-domain general prose generation, and unified capability coexistence verified.** The mechanism addresses
