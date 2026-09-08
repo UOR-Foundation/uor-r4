@@ -203,15 +203,22 @@ impl ValueState {
     }
     pub(super) fn proposal(&self, index: usize) -> Option<(ValueAction, ValueRecord, ValueRecord)> {
         // Fixed address space: low four bits address the first operand;
-        // upper bits select Copy (0), or one of sixteen second operands.
+        // upper bits select Copy (0), Add (1..=16), or Sub (17..=32).
         let left = index & 15;
         let right = index >> 4;
         let a = *self.sources.get(left)?;
         if right == 0 {
             return Some((ValueAction::Copy, a, a));
         }
-        let b = *self.sources.get(right - 1)?;
-        (a.id != b.id).then_some((ValueAction::Add, a, b))
+        if right <= 16 {
+            let b = *self.sources.get(right - 1)?;
+            return (a.id != b.id).then_some((ValueAction::Add, a, b));
+        }
+        if right <= 32 {
+            let b = *self.sources.get(right - 17)?;
+            return (a.id != b.id).then_some((ValueAction::Sub, a, b));
+        }
+        None
     }
     pub(super) fn features(
         &self,
@@ -227,6 +234,7 @@ impl ValueState {
         let op = match action {
             ValueAction::Copy => 0,
             ValueAction::Add => 1,
+            ValueAction::Sub => 2,
         };
         let rank_a = self
             .sources
@@ -361,7 +369,7 @@ impl ValueState {
             work.selection_passes = work.selection_passes.saturating_add(1);
             let mut selected = None;
             let mut best = 0_i64;
-            for index in 0..272 {
+            for index in 0..528 {
                 let Some((action, a, b)) = self.proposal(index) else {
                     continue;
                 };
@@ -556,6 +564,16 @@ pub(super) fn execute(action: ValueAction, a: i64, b: i64, work: &mut ValueWork)
         ValueAction::Add => {
             work.additions = work.additions.saturating_add(1);
             match ZPhi::new(a, 0).checked_add(ZPhi::new(b, 0)) {
+                Ok(value) => Some(value.a),
+                Err(_) => {
+                    work.overflow_rejections = work.overflow_rejections.saturating_add(1);
+                    None
+                }
+            }
+        }
+        ValueAction::Sub => {
+            work.subtractions = work.subtractions.saturating_add(1);
+            match ZPhi::new(a, 0).checked_sub(ZPhi::new(b, 0)) {
                 Ok(value) => Some(value.a),
                 Err(_) => {
                     work.overflow_rejections = work.overflow_rejections.saturating_add(1);

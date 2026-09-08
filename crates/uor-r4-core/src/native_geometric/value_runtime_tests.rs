@@ -29,7 +29,7 @@ fn mechanical_model(action: ValueAction) -> Model {
         schema: VALUE_SCHEMA.into(),
         codec: NUMERAL_CODEC.into(),
         capacity: VALUES,
-        rows: [ValueAction::Copy, ValueAction::Add]
+        rows: [ValueAction::Copy, ValueAction::Add, ValueAction::Sub]
             .into_iter()
             .enumerate()
             .map(|(index, candidate)| ValueRow {
@@ -756,6 +756,7 @@ fn native_value_selected_execution_learned_chain_diagnostic() {
             let question = match action {
                 ValueAction::Copy => "Repeat the previous total without adding the new coins.",
                 ValueAction::Add => "Add the new coins to the previous total.",
+                ValueAction::Sub => unreachable!(),
             };
             let query = format!("User: There are {delta} new coins. {question}\nAssistant:");
             let expected = a + b + if action == ValueAction::Add { delta } else { 0 };
@@ -1313,4 +1314,261 @@ fn native_value_autonomous_chained_generation() {
         "generated text must contain both intermediate and final values: {:?}",
         generation.text
     );
+}
+
+#[test]
+fn native_value_sub_execution() {
+    let mut model = mechanical_model(ValueAction::Sub);
+    model.values.as_mut().unwrap().rows.extend([ValueRow {
+        feature: ValueFeature {
+            kind: 1,
+            a: 2,   // Sub
+            b: 256, // ranks 1 and 0: (1 << 8) | 0 = 256 (20 - 7)
+        },
+        weight: 16384,
+    }]);
+    model
+        .values
+        .as_mut()
+        .unwrap()
+        .rows
+        .sort_by_key(|r| r.feature);
+    model.refresh_identity().unwrap();
+
+    let mut session = prefix(&model, "left = 20; right = 7; total:", Control::Full);
+    session.begin_response(&model).unwrap();
+
+    let prediction = session.predict(&model).unwrap();
+    let decision = session.value_decision().unwrap();
+    assert_eq!(decision.action, ValueAction::Sub);
+    assert_eq!(decision.value, 13);
+    assert_eq!(decision.operands[0].value, 20);
+    assert_eq!(decision.operands[1].value, 7);
+
+    // Observe numeral emission
+    session.observe(&model, prediction.token).unwrap();
+    let next_token = session.predict(&model).unwrap().token;
+    session.observe(&model, next_token).unwrap();
+
+    let work = session.work;
+    assert_eq!(work.values.subtractions, 1);
+    assert_eq!(work.values.derived_writes, 1);
+}
+
+#[test]
+fn native_value_causal_add_to_sub_transition() {
+    let mut model = mechanical_model(ValueAction::Add);
+    model.values.as_mut().unwrap().rows.extend([
+        ValueRow {
+            feature: ValueFeature {
+                kind: 1,
+                a: 1,   // Add
+                b: 513, // ranks 2 and 1: (2 << 8) | 1 = 513 (20 + 15)
+            },
+            weight: 16384,
+        },
+        ValueRow {
+            feature: ValueFeature {
+                kind: 2,
+                a: 2, // Sub
+                b: 1, // a.derived is true
+            },
+            weight: 32768,
+        },
+        ValueRow {
+            feature: ValueFeature {
+                kind: 1,
+                a: 2, // Sub
+                b: 1, // ranks 0 (35) and 1 (8): 35 - 8
+            },
+            weight: 2048,
+        },
+    ]);
+    model
+        .values
+        .as_mut()
+        .unwrap()
+        .rows
+        .sort_by_key(|r| r.feature);
+    model.refresh_identity().unwrap();
+
+    let prompt = "left = 20; mid = 15; right = 8; total:";
+    let mut session = prefix(&model, prompt, Control::Full);
+    session.begin_response(&model).unwrap();
+
+    // Step 1: Operator 1 computes 20 + 15 = 35 (Add)
+    let p1 = session.predict(&model).unwrap();
+    let d1 = session.value_decision().unwrap();
+    assert_eq!(d1.action, ValueAction::Add);
+    assert_eq!(d1.value, 35);
+    let op1_write_id = d1.write_id;
+
+    // Emit tokens for 35 ('3', '5')
+    session.observe(&model, p1.token).unwrap();
+    let p1_digit2 = session.predict(&model).unwrap();
+    session.observe(&model, p1_digit2.token).unwrap();
+
+    // Verify session can transition after completing Operator 1
+    assert!(session.can_transition());
+
+    // Save checkpoint for causal intervention test
+    let checkpoint = session.checkpoint().unwrap();
+
+    session.refresh_value_sources(&model).unwrap();
+    assert_eq!(session.work.values.source_refreshes, 1);
+
+    // Step 2: Operator 2 computes 35 - 8 = 27 (Sub)
+    let _p2 = session.predict(&model).unwrap();
+    let d2 = session.value_decision().unwrap();
+    assert_eq!(d2.action, ValueAction::Sub);
+    assert_eq!(d2.value, 27);
+    assert_eq!(d2.operands[0].id, op1_write_id);
+    assert_eq!(d2.operands[0].value, 35);
+    assert!(d2.operands[0].derived);
+    assert_eq!(d2.operands[1].value, 8);
+
+    // Causal intervention: Ablate Operator 1's intermediate record from state
+    let mut intervened = model.restore_session(&checkpoint).unwrap();
+    intervened
+        .values
+        .as_mut()
+        .unwrap()
+        .records
+        .retain(|r| r.id != op1_write_id);
+    intervened.refresh_value_sources(&model).unwrap();
+
+    let _ = intervened.predict(&model);
+    let d_intervened = intervened.value_decision().unwrap();
+    assert_ne!(
+        d_intervened.value, 27,
+        "ablating intermediate state must causally change Operator 2 prediction"
+    );
+    assert_ne!(d_intervened.operands[0].id, op1_write_id);
+}
+
+#[test]
+fn native_value_autonomous_mixed_add_sub_generation() {
+    let mut model = mechanical_model(ValueAction::Add);
+    model.values.as_mut().unwrap().rows.extend([
+        ValueRow {
+            feature: ValueFeature {
+                kind: 1,
+                a: 1,   // Add
+                b: 513, // ranks 2 and 1: 20 + 15
+            },
+            weight: 16384,
+        },
+        ValueRow {
+            feature: ValueFeature {
+                kind: 2,
+                a: 2, // Sub
+                b: 1, // a.derived is true
+            },
+            weight: 32768,
+        },
+        ValueRow {
+            feature: ValueFeature {
+                kind: 1,
+                a: 2, // Sub
+                b: 1, // ranks 0 (35) and 1 (8): 35 - 8
+            },
+            weight: 2048,
+        },
+    ]);
+    model
+        .values
+        .as_mut()
+        .unwrap()
+        .rows
+        .sort_by_key(|r| r.feature);
+    model.refresh_identity().unwrap();
+
+    let prompt = "left = 20; mid = 15; right = 8; total:";
+    let generation = model.generate(prompt, 32, Control::Full).unwrap();
+
+    let root_operations: Vec<_> = generation
+        .value_trace
+        .iter()
+        .filter(|d| d.cursor == 0)
+        .collect();
+    assert_eq!(
+        root_operations.len(),
+        2,
+        "must execute exactly two operations"
+    );
+
+    // Operator 1: 20 + 15 = 35
+    let op1 = root_operations[0];
+    assert_eq!(op1.action, ValueAction::Add);
+    assert_eq!(op1.value, 35);
+    let op1_write_id = op1.write_id;
+
+    // Operator 2: 35 - 8 = 27
+    let op2 = root_operations[1];
+    assert_eq!(op2.action, ValueAction::Sub);
+    assert_eq!(op2.value, 27);
+    assert_eq!(op2.operands[0].id, op1_write_id);
+    assert_eq!(op2.operands[0].value, 35);
+    assert!(op2.operands[0].derived);
+    assert_eq!(op2.operands[1].value, 8);
+
+    assert_eq!(generation.work.values.source_refreshes, 1);
+    assert_eq!(generation.work.values.additions, 1);
+    assert_eq!(generation.work.values.subtractions, 1);
+
+    assert!(
+        generation.text.contains("35") && generation.text.contains("27"),
+        "generation must contain both 35 and 27: {:?}",
+        generation.text
+    );
+}
+
+#[test]
+fn native_value_mixed_chained_rust_execution() {
+    let a: i64 = 20;
+    let b: i64 = 15;
+    let c: i64 = 8;
+    let intermediate = a + b;
+    let final_val = intermediate - c;
+    assert_eq!(intermediate, 35);
+    assert_eq!(final_val, 27);
+
+    let rust_source = format!(
+        r#"fn main() {{
+    let a: i64 = {a};
+    let b: i64 = {b};
+    let step1: i64 = a + b;
+    assert_eq!(step1, {intermediate});
+    let c: i64 = {c};
+    let step2: i64 = step1 - c;
+    assert_eq!(step2, {final_val});
+}}
+"#
+    );
+
+    let temp_dir = std::env::temp_dir().join(format!("uor_r4_mixed_rust_{}", std::process::id()));
+    std::fs::create_dir_all(&temp_dir).unwrap();
+    let src_path = temp_dir.join("main.rs");
+    let bin_path = temp_dir.join("main_bin");
+    std::fs::write(&src_path, rust_source.as_bytes()).unwrap();
+
+    let compile_status = std::process::Command::new("rustc")
+        .args([
+            "--edition=2021",
+            src_path.to_str().unwrap(),
+            "-o",
+            bin_path.to_str().unwrap(),
+        ])
+        .status();
+
+    if let Ok(status) = compile_status {
+        if status.success() {
+            let run_status = std::process::Command::new(&bin_path).status().unwrap();
+            assert!(
+                run_status.success(),
+                "compiled mixed chained Rust program exited with failure"
+            );
+        }
+    }
+    let _ = std::fs::remove_dir_all(&temp_dir);
 }

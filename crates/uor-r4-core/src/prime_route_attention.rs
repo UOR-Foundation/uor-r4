@@ -402,6 +402,20 @@ impl ZPhi {
         })
     }
 
+    /// Exact checked subtraction in `Z[phi]`.
+    pub fn checked_sub(self, other: Self) -> Result<Self, PrimeRouteError> {
+        Ok(Self {
+            a: self
+                .a
+                .checked_sub(other.a)
+                .ok_or(PrimeRouteError::ArithmeticOverflow)?,
+            b: self
+                .b
+                .checked_sub(other.b)
+                .ok_or(PrimeRouteError::ArithmeticOverflow)?,
+        })
+    }
+
     /// Exact checked multiplication using `phi^2 = phi + 1`.
     pub fn checked_mul(self, other: Self) -> Result<Self, PrimeRouteError> {
         let left_a = i128::from(self.a);

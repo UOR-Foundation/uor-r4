@@ -518,7 +518,7 @@ impl Model {
                 action: 2,
                 correct: d.action.is_none(),
             }];
-            for i in 0..272 {
+            for i in 0..528 {
                 let Some((action, a, b)) = values.proposal(i) else {
                     continue;
                 };

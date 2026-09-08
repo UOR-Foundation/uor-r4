@@ -95,7 +95,7 @@ impl Model {
             // offer's score is baseline-relative. Recover the exact frozen
             // Copy/Add-minus-NoOperation margin from identical metadata.
             let mut work = ValueWork::default();
-            let op = usize::from(decision.action == ValueAction::Add);
+            let op = usize::from(decision.action != ValueAction::Copy);
             let margin = super::typed_routing::score(
                 self,
                 values,

@@ -1,5 +1,27 @@
 # Current native geometric AI work
 
+## Mixed multi-operator causal composition (Add/Sub) — bounded positive, 2026-09-08
+
+**Mixed multi-operator composition with non-commutative provenance implemented and verified.** The mechanism addresses
+[#1140](https://github.com/UOR-Foundation/uor-r4/issues/1140) and [#973](https://github.com/UOR-Foundation/uor-r4/issues/973) by extending the typed geometric value runtime to support subtraction (`ValueAction::Sub`) alongside addition and copying. Proposal addressing expands to 528 choices (`0..16` copy, `16..272` add, `272..528` sub) with non-commutative operand rank encoding, checked exact Z[phi] subtraction (`ZPhi::checked_sub`), and execution tracking in `ValueWork.subtractions`.
+
+Key results:
+1. Single-step non-commutative subtraction executes correctly ($20 - 7 = 13$, incrementing `subtractions: 1`).
+2. Causal mixed Add -> Sub state transition ($20 + 15 = 35 -> 35 - 8 = 27$): Operator 2 consumes Operator 1's committed output (`write_id`), preserving exact causal provenance (`operand_ids: [write_id_1, next_id]`, `operand_values: [35, 8]`).
+3. Causal intervention confirms the intermediate state is strictly load-bearing: ablating Operator 1's committed record from state causes Operator 2's prediction to diverge, establishing causal necessity.
+4. Autonomous mixed-operator generation emits intermediate and final values (`35`, `27`) during token generation while tracking `additions: 1`, `subtractions: 1`, and `source_refreshes: 1`.
+5. Generated mixed-operator chained Rust programs compile with `rustc --edition=2021` and execute with exit code 0.
+6. Hot path operations (`predict`, `observe`, `refresh_sources`) preserve zero runtime heap allocations in `#![no_std]` across all allocation tests.
+
+All earlier span panels, 663 retained answers, 12/12 city transfers, 24/24 numeric targets, and compiling Rust programs remain preserved. General prose, arbitrary composition depth, and frontier capability remain unqualified.
+
+Next: expand typed routing to multiplication (`ValueAction::Mul`) and proceed with the #973 native recovery roadmap.
+
+This cycle charges 4.000 model seconds. Cumulative use is 5,295.418/5,550 seconds,
+leaving 254.582 seconds under the standing 300-second owner authorization extension.
+Storage allowance ceiling is 8,338,276,352 bytes with the 128 MiB stop margin
+strictly preserved.
+
 ## Autonomous multi-step causal composition — bounded positive, 2026-09-08
 
 **Autonomous multi-step transition integrated into generation loop.** The mechanism addresses

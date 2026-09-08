@@ -99,21 +99,24 @@ impl Model {
                 });
             };
             add(None, 2, target.is_none());
-            for i in 0..272 {
+            for i in 0..528 {
                 let Some((action, a, b)) = values.proposal(i) else {
                     continue;
                 };
-                let result = if action == ValueAction::Copy {
-                    Some(a.value)
-                } else {
-                    a.value.checked_add(b.value)
+                let result = match action {
+                    ValueAction::Copy => Some(a.value),
+                    ValueAction::Add => a.value.checked_add(b.value),
+                    ValueAction::Sub => a.value.checked_sub(b.value),
                 };
                 if result.is_none() {
                     continue;
                 }
                 add(
                     Some((a, b)),
-                    usize::from(action == ValueAction::Add),
+                    match action {
+                        ValueAction::Copy => 0,
+                        ValueAction::Add | ValueAction::Sub => 1,
+                    },
                     target.is_some() && result == target,
                 );
             }
