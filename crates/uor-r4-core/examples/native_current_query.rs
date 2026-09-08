@@ -118,7 +118,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<_> = std::env::args().collect();
     if args.len() != 5 {
         return Err(
-            "usage: native_current_query <fit|evaluate|stress|fresh> MODEL PRIOR_CONSTRUCTION_JSON OUT"
+            "usage: native_current_query <fit|evaluate|controls|stress|fresh> MODEL PRIOR_CONSTRUCTION_JSON OUT"
                 .into(),
         );
     }
@@ -156,7 +156,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("{name}: {}/{}", result["exact"], result["total"]);
             save(out.join(format!("{name}-result.json")), &result)?;
         }
-    } else if ["evaluate", "stress", "fresh"].contains(&args[1].as_str()) {
+    } else if ["evaluate", "controls", "stress", "fresh"].contains(&args[1].as_str()) {
         let rows = if args[1] == "fresh" {
             let mut fresh = contrasts("fresh-positive", 2, 109);
             fresh.extend(contrasts("fresh-negative", 2, -60));
@@ -167,7 +167,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             open
         };
         save(out.join("source.json"), &rows)?;
-        let result = model.evaluate_typed_routing(&rows, false)?;
+        let result = model.evaluate_typed_routing(&rows, args[1] == "controls")?;
         println!("{}/{}", result["exact"], result["total"]);
         save(out.join("result.json"), &result)?;
     } else {

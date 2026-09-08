@@ -26,7 +26,7 @@ fn record(checks: &mut Vec<Value>, name: &str, passed: bool, evidence: Value) ->
 }
 
 fn direct_turn(model: &Model, session: &mut Session, prompt: &str) -> CheckResult<Value> {
-    if session.is_response_active() {
+    if session.needs_input_boundary() {
         session.end_response(model)?;
     }
     if session.work.observed_tokens == 0 {
@@ -177,7 +177,8 @@ fn run(
     record(
         checks,
         "checkpoint_next_response_byte_parity",
-        original_next.text == restored_next.text
+        original_next.text == "17.\n"
+            && original_next.text == restored_next.text
             && original_next.token_count == restored_next.token_count
             && original_next.stopped_by == restored_next.stopped_by,
         json!({"prompt":SUM_13,"original":original_next,"restored":restored_next}),
@@ -217,6 +218,25 @@ fn run(
     )?;
 
     let document: Value = serde_json::from_slice(&bytes)?;
+    if document
+        .get("operation_transition")
+        .is_some_and(|v| !v.is_null())
+    {
+        let mut direct = model.session(Control::Full)?;
+        let mut api = api_model.create_session(SessionConfig::default())?;
+        compare_turn(
+            &model,
+            &mut direct,
+            &mut api,
+            SUM_13,
+            "17.\n",
+            "transition_history_api",
+            checks,
+        )?;
+        let before = api.export_state()?;
+        api.import_state(&before)?;
+        compare_turn(&model, &mut direct, &mut api, "User: There are 3 extra coins. Add the extra coins to the original total. Again.\nAssistant:", "20.\n23.\n", "same_query_add_add_api_after_checkpoint", checks)?;
+    }
     if document
         .get("typed_role_refinement")
         .is_some_and(|v| !v.is_null())

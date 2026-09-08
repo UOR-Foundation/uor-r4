@@ -100,6 +100,7 @@ fn native_kernel_source_has_no_forbidden_arithmetic_or_float_types() {
         "fn observe(",
         "fn begin_response(",
         "fn end_response(",
+        "fn needs_input_boundary(",
         "fn response_decision(",
         "fn value_decision(",
         "fn completion_decision(",
@@ -253,7 +254,13 @@ fn native_kernel_source_has_no_forbidden_arithmetic_or_float_types() {
         .split_once("/// Exact checked multiplication")
         .unwrap()
         .0;
+    let (_, operation_transition, _) = region(
+        include_str!("../src/native_geometric/operation_transition.rs"),
+        "// NATIVE_GEOMETRIC_INTEGER_KERNEL_BEGIN",
+        "// NATIVE_GEOMETRIC_INTEGER_KERNEL_END",
+    );
     for (name, source) in [
+        ("native operation transition", operation_transition),
         ("native runtime", kernel),
         ("native Feature helpers", features),
         ("native memory runtime", memory),
@@ -2464,4 +2471,54 @@ fn native_writer_refinement_checkpoint_and_allocation() {
     emission_ns.sort_unstable();
     println!("writer-refinement load_ns={load_ns}; (evicted,encode_ns,ingest_begin_response_ns)={inputs:?}; ingestion includes changed writer/cache and phrase selection; measured wall samples, no energy result");
     println!("writer-refinement parent/dictionary/stale-cache rejection, exact assertion/nonassertion writes and output, evicted reads, every-step checkpoints and zero allocations PASS; predict_observe samples={} median_ns={} max_ns={} (loading, encoding, ingestion and checkpoints excluded)",emission_ns.len(),emission_ns[emission_ns.len()/2],emission_ns.last().unwrap());
+}
+
+#[test]
+#[ignore = "requires learned operation artifact; charged actual-model execution"]
+fn native_operation_transition_actual_checkpoint_and_allocation() {
+    use uor_r4_core::native_geometric::Model;
+    let bytes = std::fs::read(std::env::var("R4_OPERATION_TRANSITION_MODEL").unwrap()).unwrap();
+    let load = std::time::Instant::now();
+    let model = Model::from_bytes(&bytes).unwrap();
+    let load_ns = load.elapsed().as_nanos();
+    let wire: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert!(wire["operation_transition"].is_object());
+    let mut times = Vec::new();
+    let mut positions = 0;
+    for (a, b, extra) in [(13, 4, 3), (-19, 4, 7)] {
+        let mut session = model.session(Control::Full).unwrap();
+        session.observe(&model, BOS).unwrap();
+        for (prompt,expected) in [
+            (format!("User: suri has {a} coins. orin has {b} coins.\nUser: What is the sum of suri's and orin's coins?\nAssistant:"),format!("{}.\n",a+b)),
+            (format!("User: There are {extra} extra coins. Add the extra coins to the original total. Again.\nAssistant:"),format!("{}.\n{}.\n",a+b+extra,a+b+extra+extra)),
+        ] {
+            let tokens=model.encode(&prompt).unwrap();
+            ALLOCATIONS.with(|v|v.set(0));BYTES.with(|v|v.set(0));
+            MEASURING.with(|v|v.set(true));
+            for token in tokens {session.observe(&model,token).unwrap();}
+            session.begin_response(&model).unwrap();
+            MEASURING.with(|v|v.set(false));
+            let mut output=[EOS;64];let mut used=0;
+            loop {
+                let mut restored=model.restore_session(&session.checkpoint().unwrap()).unwrap();
+                let prediction=restored.predict(&model).unwrap();
+                assert_eq!(restored.predict(&model).unwrap(),prediction);
+                MEASURING.with(|v|v.set(true));
+                let start=std::time::Instant::now();
+                let actual=session.predict(&model).unwrap();
+                session.observe(&model,actual.token).unwrap();
+                let elapsed=start.elapsed().as_nanos();
+                MEASURING.with(|v|v.set(false));
+                assert_eq!(actual,prediction);times.push(elapsed);positions+=1;
+                output[used]=actual.token;used+=1;
+                if actual.token==EOS||used==64{break;}
+            }
+            assert_eq!(output[used-1],EOS);
+            assert_eq!(model.decode(&output[..used]).unwrap(),expected.as_bytes());
+            assert_eq!((ALLOCATIONS.with(Cell::get),BYTES.with(Cell::get)),(0,0));
+            session.end_response(&model).unwrap();
+        }
+    }
+    times.sort_unstable();
+    println!("actual learned operation artifact={}; load_ns={load_ns}; checkpoint_positions={positions}; allocations=0 bytes=0 for ingestion/begin/predict/observe; predict_observe median_ns={} max_ns={} (load/encode/session/checkpoint/report excluded; no energy claim)",model.artifact_cid(),times[times.len()/2],times[times.len()-1]);
 }

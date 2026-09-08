@@ -1,5 +1,15 @@
 # Current native geometric AI work
 
+## Learned within-response operator transition — bounded positive, September 8
+
+**Retain `6f20982c`**, CID `blake3:6f20982c52ee5e80ba64274690e1b1bd12c9db2d4c6e539c04366a081569e082`. The [result](../native_geometric_operation_transition_1140.md) and [evidence](../evidence/native_geometric_operation_transition_1140.json) supersede the artifact pointer below. A learned shared signed-H4 Stop/Copy/Add selector consumes exact committed state. After a prior 17, the tested extra-3 “Again” query emits `20.\n23.\n`; the second Add names the first result's write ID, then learned Stop ends below the three-operation cap.
+
+Construction passes 36/36, open 24/24 and post-selection fresh numeric transfers 24/24. Disabling the transition or excluding its latest result from operator proposals leaves all 16 single-operation open answers correct and loses all eight second operations. All 663 retained answers, earlier panels, prior 48 current-query cases and 16 harder histories pass. The actual API now passes the composed answer after checkpoint import; a captured-query boundary defect exposed during testing was repaired, and its failed receipt is preserved. Preserve parent `ddc943f9`, rejected Stop-only `65402ddc`, and all earlier material.
+
+The local artifact is `.uor-models/native-typed-value-2026-09-05/operation-transition/model.json`, SHA256 `6ce30a2ddbcb1a99408016b1065e9ca70ed5879d7f0f8808ec24b8e7db17bb10`. **Next: shared learned lexical choice and ordered sentence/Rust-expression emission from committed values.** Finite numeric response forms do not qualify general prose, reasoning/coding, alpha or energy advantage. New-artifact browser/WASM is NOT_RUN; the added optional block requires the updated runtime. #1140 remains open.
+
+Current cumulative model use is **7,754.223 / 9,450.000 seconds**, including this cycle's 312.644 seconds. The 900-second extension was recorded before use. Preserve the 196.620-second prior reservation; available time after it is 1,499.157 seconds. Conservative storage is 31,343,718,400 / 34,863,214,592 bytes with the 128 MiB stop margin retained. Read the new receipt before further execution. All resource values and “next” directions below are historical snapshots.
+
 ## Current-query operand refinement — bounded positive, September 8
 
 **Retain `ddc943f9`**, CID `blake3:ddc943f95901389f741b49f14dba48d2a4bae19805285bbd7cb416fca8e510c9`, at bounded current-query/shared-continuation scope. The [result](../native_geometric_current_query_1140.md) and [evidence](../evidence/native_geometric_current_query_1140.json) supersede the recovery artifact pointer below. Parent `79710468`, rejected `b2da9f9a`, and first-fit `51603beb` remain preserved. No serving code or feature representation changes; additional offline contrasts train the existing shared signed-H4 selector.

@@ -222,7 +222,10 @@ impl ValueState {
             active: false,
             consumed: false,
             operations_committed: 0,
-            max_operations: default_max_operations(),
+            max_operations: model
+                .operation_transition
+                .as_ref()
+                .map_or_else(default_max_operations, |b| b.max_operations),
             started_at: 0,
             query_boundary: model
                 .typed_roles
