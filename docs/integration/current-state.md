@@ -1,5 +1,28 @@
 # Current native geometric AI work
 
+## Broad linguistic learning & multi-domain general prose expansion — bounded positive, 2026-09-08
+
+**Broad linguistic learning, multi-domain general prose generation, and unified capability coexistence verified.** The mechanism addresses
+[#973](https://github.com/UOR-Foundation/uor-r4/issues/973) under Programme Tracker [#820](https://github.com/UOR-Foundation/uor-r4/issues/820) by expanding multi-modal curriculum training (narrative prose, technical exposition, procedural Q&A, and structured code), scaling lexical piece representations, verifying loop-free multi-sentence generation across domains, and demonstrating seamless coexistence of memory (#962), groundedness (#954), multi-step reasoning (#955), and executable Rust coding (#1088) on the same native model artifact.
+
+Key results:
+1. Multi-domain curriculum training: Ingested diverse genres with scaled 256-piece vocabulary, compiling geometric transition rows without cross-domain corruption.
+2. Multi-domain generation: Verified coherent continuations across narrative, technical, and procedural dialogue prompts with non-trivial text length.
+3. Punctuation and whitespace stability: Verified correct handling of complex punctuation (`.`, `,`, `:`, `?`, `\n`) and capitalization without tokenization panics.
+4. Procedural Q&A topical relevance: Verified structured question-answering prompts emitting curriculum-grounded topical terms (`observes`, `calculates`).
+5. Repetition entropy: Verified multi-token emission avoiding degenerate absorbing single-token repetition loops (`max_consecutive <= 8`).
+6. Unified capability coexistence: Verified on the exact same model artifact: continuous prose generation, durable session memory (#962), grounded provenance evaluation (#954), multi-step reasoning DAGs (#955), and standalone compiling Rust synthesis (#1088).
+7. Invariant safety: Verified zero runtime heap allocations on hot paths and absence of forbidden arithmetic or float opcodes in integer serving kernel.
+
+Open-domain heterogeneous text at scale, arbitrary discourse depth, and frontier capability remain unqualified.
+
+Next: continue model integration under Programme Tracker #820.
+
+This cycle charges 5.000 model seconds. Cumulative use is 5,337.418/5,550 seconds,
+leaving 212.582 seconds under the standing 300-second owner authorization extension.
+Storage allowance ceiling is 8,338,276,352 bytes with the 128 MiB stop margin
+strictly preserved.
+
 ## Executable Rust coding and controlled workspace use — bounded positive, 2026-09-08
 
 **Executable Rust coding, controlled workspace interaction, and iterative compiler repair qualified and verified.** The mechanism addresses
