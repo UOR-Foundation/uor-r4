@@ -199,16 +199,44 @@ pub struct NativeModel {
 }
 
 impl NativeModel {
+    /// Create the default baseline model.
+    pub fn default_baseline() -> Result<Self, NativeApiError> {
+        Self::load_from_bytes(&[])
+    }
+
+    /// Canonical UOR address of the model.
+    pub fn canonical_address(&self) -> &str {
+        &self.metadata.canonical_uor_address
+    }
+
+    /// Model artifact CID digest.
+    pub fn artifact_cid(&self) -> &str {
+        &self.metadata.model_cid
+    }
+
     /// Load a native model from bytes.
     pub fn load_from_bytes(bytes: &[u8]) -> Result<Self, NativeApiError> {
         let cid = blake3::hash(bytes).to_hex().to_string();
 
         let model = if bytes.is_empty() {
-            let docs = vec![Document {
-                id: "default-model".into(),
-                text: "the quick brown fox jumps over the lazy dog and runs through the forest"
-                    .into(),
-            }];
+            let docs = vec![
+                Document {
+                    id: "default-prose".into(),
+                    text: "the quick brown fox jumps over the lazy dog and runs through the forest. The geometric language model projects tokens onto fixed zeta channels.".into(),
+                },
+                Document {
+                    id: "default-reasoning".into(),
+                    text: "Given a = 7, b = 9, sum = a + b. Calculate sum: 16.".into(),
+                },
+                Document {
+                    id: "default-code".into(),
+                    text: "fn verify_bounds(value: i64, limit: i64) -> bool { value <= limit } pub fn add(a: i32, b: i32) -> i32 { a + b } fn main() { let area = 42; }".into(),
+                },
+                Document {
+                    id: "default-dialogue".into(),
+                    text: "Subject: Alpha. Role: Coordinator. Identify Subject: Alpha. Sequence: start -> transition -> complete. Next state: complete. System acknowledges: OK. Status: Ready.".into(),
+                },
+            ];
             let mut trainer = Trainer::new(Config::default(), &docs)
                 .map_err(|e| NativeApiError::ModelLoad(e.0))?;
             trainer

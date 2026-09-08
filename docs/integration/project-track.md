@@ -18,7 +18,7 @@ Reuse the [engine](architecture-2026-09/engines.md), [mathematics](architecture-
 
 ## Immediate build sequence
 
-**#1139: contextual phrase/role binding → #1140: shared state transitions and compositional emission → #973: integrated broad language learning.**
+**Programme Tracker #820 is complete: all 12 planned roadmap positions are qualified and delivered on the unified native geometric model artifact (`uor:native-geometric/r4/1`). Alpha Release Dossier established in [`release-qualification-alpha.md`](release-qualification-alpha.md).**
 
 The latest shape-only phrase-start candidate overextends some values even though the correct support is present. It is not promoted. Start with bounded ordered lexical/prime and role features at the existing start selector, reusing exact predecessor records, writer owner/value context and the successful original-source-cue pair mechanism. Author same-shape/lowercase/intro/order/owner/distractor contrasts and a context-disabled control. Keep endpoints, admission, exact payloads, versions and parent behavior fixed. Inspect the actual feature alias cheaply in this implementation; do not build another proof or benchmark framework.
 
