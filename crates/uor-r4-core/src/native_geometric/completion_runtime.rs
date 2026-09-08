@@ -13,6 +13,8 @@ impl CompletionState {
         self.active = false;
         self.last_action = CompletionAction::Base;
         self.pending = None;
+        self.lexical_read = None;
+        self.pending_lexical_read = None;
     }
 
     /// Called after typed-value observation. The seed is taken from its prior
@@ -28,6 +30,7 @@ impl CompletionState {
     ) {
         work.observations = work.observations.saturating_add(1);
         let pending = self.pending.take();
+        let pending_read = self.pending_lexical_read.take();
         let was_active = self.active;
         self.last_action = CompletionAction::Base;
         if was_active {
@@ -37,7 +40,33 @@ impl CompletionState {
             if let Some(decision) = matched {
                 self.last_action = decision.action;
                 work.commits = work.commits.saturating_add(1);
+                if let Some(mut read) = pending_read {
+                    let starts = read.cursor == 0
+                        && read.start_at == self.seen
+                        && self
+                            .lexical_read
+                            .is_none_or(|prior| prior.cursor == prior.numeral.len);
+                    let continues = self.lexical_read == Some(read)
+                        && read.start_at.checked_add(u64::from(read.cursor)) == Some(self.seen);
+                    if (starts || continues)
+                        && read.cursor < read.numeral.len
+                        && read.numeral.tokens.get(usize::from(read.cursor)) == Some(&token)
+                    {
+                        read.cursor = read.cursor.saturating_add(1);
+                        self.lexical_read = Some(read);
+                        work.state_copies = work.state_copies.saturating_add(24);
+                    } else {
+                        self.lexical_read = None;
+                    }
+                } else if self
+                    .lexical_read
+                    .is_some_and(|read| read.cursor < read.numeral.len)
+                {
+                    // A different selected action interrupts an unfinished read.
+                    self.lexical_read = None;
+                }
             } else {
+                self.lexical_read = None;
                 self.last_action = CompletionAction::Base;
                 work.base_steps = work.base_steps.saturating_add(1);
                 if pending.is_some() {
@@ -184,6 +213,7 @@ impl CompletionState {
         work: &mut CompletionWork,
     ) -> Option<Candidate> {
         self.pending = None;
+        self.pending_lexical_read = None;
         if !self.active
             || !values.active
             || !values.consumed
@@ -198,6 +228,12 @@ impl CompletionState {
         {
             return None;
         }
+        if let Some(candidate) =
+            super::lexical_emission::offer(model, self, values, baseline, control, work)
+        {
+            return Some(candidate);
+        }
+        self.pending_lexical_read = None;
         let head = model.completion.as_ref()?;
         let anchor = self.anchor?;
         let (features, len) = self.features(model, values, control, work);
@@ -236,6 +272,10 @@ impl CompletionState {
             .is_some_and(|decision| decision.token != best.token || decision.score != best.score)
         {
             self.pending = None;
+            self.pending_lexical_read = None;
+        }
+        if self.pending.is_none() {
+            self.pending_lexical_read = None;
         }
     }
 }

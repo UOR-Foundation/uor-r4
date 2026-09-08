@@ -110,6 +110,18 @@ impl From<&ValueDecision> for CompletionSeed {
     }
 }
 
+/// Exact read-only numeral emission. The cursor counts committed bytes; a
+/// pending copy carries the index of the byte it proposes. Completed reads are
+/// retained as lexical context independently of the numeral's sign or width.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct LexicalRead {
+    pub record_id: u64,
+    pub start_at: u64,
+    pub numeral: super::numeral::Numeral,
+    pub cursor: u8,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
 pub(super) struct CompletionState {
@@ -120,6 +132,10 @@ pub(super) struct CompletionState {
     pub steps: u8,
     pub active: bool,
     pub last_action: CompletionAction,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lexical_read: Option<LexicalRead>,
+    #[serde(skip)]
+    pub pending_lexical_read: Option<LexicalRead>,
     #[serde(skip)]
     pub pending: Option<CompletionDecision>,
 }

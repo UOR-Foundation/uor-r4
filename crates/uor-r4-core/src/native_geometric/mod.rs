@@ -31,6 +31,10 @@ mod source_routing_training;
 mod source_span;
 mod source_span_training;
 pub use source_routing_training::SourceRoutingConfig;
+mod lexical_emission;
+#[cfg(test)]
+mod lexical_emission_tests;
+pub use lexical_emission::{EmissionExample, EmissionPiece};
 mod operation_transition;
 #[cfg(test)]
 mod operation_transition_tests;
@@ -244,6 +248,9 @@ pub enum Control {
     SourceContextWindowOnly,
     JointAdmissionDisabled,
     LiteralRefinementDisabled,
+    LexicalEmissionDisabled,
+    LexicalRecordReadDisabled,
+    LexicalEmissionGeometryDisabled,
     OperationTransitionDisabled,
     OperationTransitionIntermediateDisabled,
     #[default]
@@ -313,6 +320,9 @@ impl Feature {
             | Control::SourceContextWindowOnly
             | Control::JointAdmissionDisabled
             | Control::OperationTransitionIntermediateDisabled
+            | Control::LexicalEmissionDisabled
+            | Control::LexicalRecordReadDisabled
+            | Control::LexicalEmissionGeometryDisabled
             | Control::OperationTransitionDisabled
             | Control::LiteralRefinementDisabled
             | Control::MemoryDisabled
@@ -399,6 +409,8 @@ pub struct TrainingProgress {
 #[serde(try_from = "ModelWire")]
 pub struct Model {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    lexical_emission: Option<lexical_emission::LexicalEmission>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     operation_transition: Option<operation_transition::OperationTransition>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     typed_role_refinement: Option<typed_routing::TypedRoleRefinement>,
@@ -467,6 +479,8 @@ pub struct Model {
 #[serde(deny_unknown_fields)]
 struct ModelWire {
     #[serde(default)]
+    lexical_emission: Option<lexical_emission::LexicalEmission>,
+    #[serde(default)]
     operation_transition: Option<operation_transition::OperationTransition>,
     #[serde(default)]
     typed_role_refinement: Option<typed_routing::TypedRoleRefinement>,
@@ -534,6 +548,7 @@ impl TryFrom<ModelWire> for Model {
     type Error = Error;
     fn try_from(wire: ModelWire) -> Result<Self> {
         let model = Self {
+            lexical_emission: wire.lexical_emission,
             operation_transition: wire.operation_transition,
             typed_role_refinement: wire.typed_role_refinement,
             relation_writer_refinement: wire.relation_writer_refinement,

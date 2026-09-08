@@ -1,5 +1,15 @@
 # Current native geometric AI work
 
+## Shared lexical and exact-record emission — bounded positive, September 8
+
+**Retain `0f0f5fe4`**, CID `blake3:0f0f5fe4d58d65fb7769ac73fe839973a3eb579cf65f327fe8a2e9a6ecd0468b`. The [result](../native_geometric_lexical_emission_1140.md) and [evidence](../evidence/native_geometric_lexical_emission_1140.json) supersede the artifact pointer below. A shared signed-H4 byte/EOS and exact-record selector now emits the tested sentence `17 is 4 plus 13.\n` or Rust equality `17 == 4 + 13\n` from actual committed values. Parent `6f20982c`, rejected `0e2c48c0` and `03bdfad1`, and all earlier material remain preserved.
+
+Construction and open pass 18/18 each, changed names/mention order 12/12, and post-selection numeric transfers 24/24. Emitter, read and learned-transform controls each preserve six plain answers and lose all twelve formatted answers. All 663 retained answers and earlier panels pass, as do prior operators 24/24, current-query 48/48 and harder histories 16/16 with their dependency controls. Actual API passes 20 checks; 18 actual generated Rust equalities compile and evaluate. Six read-state tests, six operator tests, checkpoint/allocation checks and the source guard pass. The second candidate was rejected for 72 failed preservation rows despite its construction/open gains.
+
+The artifact is `.uor-models/native-typed-value-2026-09-05/lexical-emission/model.json`, SHA256 `fb29718bd4cb0832a91ee1c1e0197baaf8d15fdabd773499a277e7067d3f3685`. These are two authored output forms with numeric and limited name/order transfer. General prose, flexible instruction following, full Rust synthesis, alpha and energy advantage remain unqualified. Combined two-operation formatted output and new-artifact browser/WASM/HTTP are NOT_RUN. **Next: shared contextual instruction binding across selection and emission**, addressing ordinary wording that currently disturbs upstream value selection, then combine operator transitions with formatted output. #1140 remains open.
+
+Cumulative model use is **8,160.980 / 10,350.000 seconds**, including this cycle's 406.757 seconds. The 900-second extension was recorded before use. Preserve the 196.620-second reservation, leaving 1,992.400 seconds after it. Conservative storage is 31,451,942,912 / 34,863,214,592 bytes with the 128 MiB stop margin retained. Read the new receipt before execution; all resource values and next directions below are historical snapshots.
+
 ## Learned within-response operator transition — bounded positive, September 8
 
 **Retain `6f20982c`**, CID `blake3:6f20982c52ee5e80ba64274690e1b1bd12c9db2d4c6e539c04366a081569e082`. The [result](../native_geometric_operation_transition_1140.md) and [evidence](../evidence/native_geometric_operation_transition_1140.json) supersede the artifact pointer below. A learned shared signed-H4 Stop/Copy/Add selector consumes exact committed state. After a prior 17, the tested extra-3 “Again” query emits `20.\n23.\n`; the second Add names the first result's write ID, then learned Stop ends below the three-operation cap.

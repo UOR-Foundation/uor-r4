@@ -21,8 +21,15 @@ pub(super) fn validate_field_presence(model: &Model, wire: &serde_json::Value) -
     } else if field.is_some() {
         return Err(invalid("state is foreign to this artifact"));
     }
-    if field.is_some_and(|state| state.get("pending").is_some()) {
+    if field.is_some_and(|state| {
+        state.get("pending").is_some() || state.get("pending_lexical_read").is_some()
+    }) {
         return Err(invalid("checkpoint contains a transient prediction"));
+    }
+    if model.lexical_emission.is_none()
+        && field.is_some_and(|state| state.get("lexical_read").is_some())
+    {
+        return Err(invalid("lexical read is foreign to this artifact"));
     }
     Ok(())
 }
@@ -48,6 +55,11 @@ impl Session {
         if saved.seen != observed
             || values.seen != observed
             || saved.pending.is_some()
+            || saved.pending_lexical_read.is_some()
+            || (saved.lexical_read.is_some()
+                && (model.lexical_emission.is_none()
+                    || !saved.active
+                    || saved.last_action != CompletionAction::Emit))
             || saved.active != saved.anchor.is_some()
             || saved.steps >= 32
             || (!saved.active && saved.steps != 0)
@@ -79,6 +91,38 @@ impl Session {
             }
             Ok(entry.token)
         };
+        if let Some(read) = saved.lexical_read {
+            let anchor = saved
+                .anchor
+                .ok_or_else(|| invalid("lexical read lacks an anchor"))?;
+            let record = values
+                .records
+                .iter()
+                .find(|record| record.id == read.record_id)
+                .ok_or_else(|| invalid("lexical read record is absent"))?;
+            let numeral = Numeral::from_zphi(ZPhi::new(record.value, 0));
+            let end = read
+                .start_at
+                .checked_add(u64::from(read.cursor))
+                .ok_or_else(|| invalid("lexical read interval overflows"))?;
+            if numeral != Some(read.numeral)
+                || read.cursor == 0
+                || read.cursor > read.numeral.len
+                || read.start_at < anchor.at_seen
+                || record.end >= read.start_at
+                || end > observed
+                || (read.cursor < read.numeral.len && end != observed)
+            {
+                return Err(invalid(
+                    "lexical read identity, cursor or interval is invalid",
+                ));
+            }
+            for offset in 0..usize::from(read.cursor) {
+                if token_at(read.start_at + offset as u64)? != read.numeral.tokens[offset] {
+                    return Err(invalid("lexical read differs from observed numeral bytes"));
+                }
+            }
+        }
         if observed == 0 {
             if saved.last != BOS
                 || saved.previous != BOS
