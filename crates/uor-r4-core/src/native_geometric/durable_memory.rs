@@ -193,7 +193,7 @@ impl DurableSession {
         if !(1..=4096).contains(&max_tokens) {
             return Err(Error("generation budget must be 1..=4096 tokens".into()));
         }
-        if self.session.is_response_active() {
+        if self.session.needs_input_boundary() {
             self.session.end_response(model)?;
         }
         if self.session.work.observed_tokens == 0 {

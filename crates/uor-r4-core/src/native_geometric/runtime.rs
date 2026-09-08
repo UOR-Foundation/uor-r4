@@ -211,6 +211,18 @@ impl Session {
                 .is_some_and(|s| s.active)
     }
 
+    /// A completed/restored response may be inactive while its captured query
+    /// still needs closing before new input. Prefill chunks have no capture.
+    pub fn needs_input_boundary(&self) -> bool {
+        self.is_response_active()
+            || self.values.as_ref().is_some_and(|s| s.query_len != 0)
+            || self
+                .memory
+                .as_ref()
+                .and_then(|s| s.response.as_ref())
+                .is_some_and(|s| !s.queries.is_empty())
+    }
+
     fn check_model(&self, model: &Model) -> Result<()> {
         if self.artifact_cid != model.artifact_cid {
             return Err(Error(
@@ -230,6 +242,9 @@ impl Session {
         }
         if let Some(state) = &mut self.values {
             state.begin(&mut self.work.values);
+            if let Some(block) = &model.operation_transition {
+                state.max_operations = block.max_operations;
+            }
             state.observe_relation(model, &mut self.work.values);
             if let Some(relations) = &mut state.relations {
                 relations.finish_span(&mut self.work.values);
@@ -284,8 +299,8 @@ impl Session {
 
     pub fn maybe_transition(&mut self, model: &Model) -> Result<bool> {
         self.check_model(model)?;
-        // No learned within-response transition policy has been delivered.
-        // Keep explicit refresh available for mechanical experiments only.
+        // Learned operation transitions are offered by predict and committed
+        // by observe. This legacy entry never advances state independently.
         Ok(false)
     }
 
@@ -361,6 +376,15 @@ impl Session {
             state.observe(model, memory, token, &mut self.work);
         }
         if let Some(state) = &mut self.values {
+            let starting_operator = model.operation_transition.is_some()
+                && state
+                    .pending
+                    .is_some_and(|d| d.cursor == 0 && d.token == token && d.at_seen == state.seen);
+            if starting_operator {
+                if let Some(completion) = &mut self.completion {
+                    completion.reset();
+                }
+            }
             let seed = state
                 .pending
                 .as_ref()
@@ -791,6 +815,19 @@ impl Session {
                     score: best.score + score - base_score,
                 };
                 self.offer_memory(model, best);
+            }
+        }
+        if let (Some(values), Some(completion)) = (&mut self.values, &self.completion) {
+            if let Some(candidate) = super::operation_transition::offer(
+                model,
+                values,
+                completion,
+                best,
+                self.control,
+                &mut self.work.values,
+            ) {
+                best = candidate;
+                self.offer_memory(model, candidate);
             }
         }
         if let Some(state) = &mut self.memory {

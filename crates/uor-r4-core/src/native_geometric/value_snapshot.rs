@@ -283,6 +283,20 @@ impl Session {
             .values
             .as_ref()
             .is_some_and(|head| head.schema == LEXEME_VALUE_SCHEMA);
+        if let Some(block) = &model.operation_transition {
+            if saved.max_operations != block.max_operations
+                || saved.operations_committed > block.max_operations
+                || (saved.active
+                    && saved.operations_committed as usize
+                        != saved
+                            .records
+                            .iter()
+                            .filter(|r| r.derived && r.start >= saved.started_at)
+                            .count())
+            {
+                return Err(invalid("operation transition counters differ"));
+            }
+        }
         if saved.query_boundary.is_some()
             != model.typed_roles.as_ref().is_some_and(|b| b.local_query)
             || saved.query_boundary.is_some_and(|start| start > observed)
@@ -804,8 +818,14 @@ impl Session {
                 || computed != Some(decision.value)
                 || numeral != Some(emission.numeral)
                 || decision.token != emission.numeral.tokens[0]
-                || !saved.sources.contains(&a)
-                || !saved.sources.contains(&b)
+                || !(saved.sources.contains(&a)
+                    || (model.operation_transition.is_some()
+                        && a.id < decision.write_id
+                        && saved.records.contains(&a)))
+                || !(saved.sources.contains(&b)
+                    || (model.operation_transition.is_some()
+                        && b.id < decision.write_id
+                        && saved.records.contains(&b)))
             {
                 return Err(invalid("committed derivation or numeral cursor is invalid"));
             }

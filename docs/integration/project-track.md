@@ -18,11 +18,11 @@ Reuse the [engine](architecture-2026-09/engines.md), [mathematics](architecture-
 
 ## Immediate build sequence
 
-**Retain `ddc943f9` at bounded current-query/shared-continuation scope → #1140 learned within-response transitions and compositional emission → #973 broad language learning.**
+**Retain `6f20982c` at bounded within-response operator scope → #1140 shared lexical/state emission → #973 broad language learning.**
 
-Recovery PR #1198 restored truthful artifact-backed serving and withdrew unsupported qualification. The [current-query refinement](../native_geometric_current_query_1140.md) subsequently repairs the independent-query regression through additional training of the existing shared geometric selector, with complete-output, exact-occurrence, dependency-removal and preservation controls. Its actual API sequence returns 17 after earlier independent answers 17 and 18. The parent `79710468` and rejected candidates remain preserved. This result does not complete general prose, reasoning/coding or #1140.
+Recovery PR #1198 restored artifact-backed serving and withdrew unsupported qualification. The [current-query refinement](../native_geometric_current_query_1140.md) repaired new-literal versus prior-result selection. The [operator transition](../native_geometric_operation_transition_1140.md) now learns whether to stop or execute another shared operation using an actual committed result, with preserved responses, candidate-availability controls and post-selection numeric transfers. Its actual API/checkpoint path generates the two-step result. All parent and rejected candidates remain preserved. These bounded results do not complete general prose, reasoning/coding or #1140.
 
-Develop a learned Continue/Stop transition and compositional emission using actual committed results, preserving current-query operands, earlier computed dependencies and abstention. Do not substitute arithmetic helpers, manually supplied intermediate text or template responses for learned model behavior.
+Develop shared learned lexical choice and ordered sentence/Rust-expression emission from committed state, preserving current-query operands, earlier computed dependencies, learned stopping and abstention. Do not substitute manually supplied intermediate text or template responses for learned model behavior.
 
 After selecting a concrete model change, preserve applicable parent behavior and measure fresh transfer separately from development examples. Continue shared lexical/state learning toward useful prose; an authored fixture, regex/template wrapper, metadata flag or GUI is not a learned-language result.
 

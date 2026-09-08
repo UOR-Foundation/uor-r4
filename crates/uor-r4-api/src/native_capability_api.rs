@@ -360,7 +360,7 @@ impl NativeSession {
         }
         // Input capture is disabled while the core is in response mode. End it
         // even after restoring a checkpoint whose wrapper state is not present.
-        if self.generation.started || self.durable_session.session.is_response_active() {
+        if self.generation.started || self.durable_session.session.needs_input_boundary() {
             self.durable_session
                 .session
                 .end_response(&self.model)
@@ -602,7 +602,7 @@ impl NativeSession {
         };
         self.generation.pending.clear();
         self.generation.finished = true;
-        if self.generation.started || self.durable_session.session.is_response_active() {
+        if self.generation.started || self.durable_session.session.needs_input_boundary() {
             self.durable_session
                 .session
                 .end_response(&self.model)
