@@ -55,6 +55,9 @@ mod durable_memory_tests;
 pub mod groundedness;
 #[cfg(test)]
 mod groundedness_tests;
+pub mod m1_profiler;
+#[cfg(test)]
+mod m1_profiler_tests;
 mod memory_runtime;
 mod memory_training;
 mod memory_types;
@@ -111,6 +114,10 @@ pub use groundedness::{
     AbstentionReason, ConflictStatus, GroundedAbstention, GroundedAnswer, GroundedCase,
     GroundedCaseResult, GroundedClarification, GroundedConflict, GroundedOutcome,
     GroundedProvenance, GroundednessEvaluator, GroundednessReport, GROUNDEDNESS_SCHEMA,
+};
+pub use m1_profiler::{
+    HardwareMetrics, LatencyDistribution, M1EnergyModel, M1Profiler, StageBreakdown,
+    TaskBenchmarkResult, TaskKind,
 };
 pub use memory_training::{
     MemoryReadDiagnostic, MemoryReadDocumentExposure, MemoryReadDocumentSupervision,
