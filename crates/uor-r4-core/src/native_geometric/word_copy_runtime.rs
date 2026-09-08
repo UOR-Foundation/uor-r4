@@ -16,11 +16,12 @@ pub(super) fn eligible(entry: &ResponseEntryState, values: &ValueState, control:
     enabled(control)
         && super::response_entry_runtime::eligible(values, control)
         && values.pending.is_none()
-        && !entry.active
-        && entry.steps == 0
+        && entry.steps < RESPONSE_ENTRY_STEPS
         && entry.seen == values.seen
         && entry.boundary.is_some_and(|anchor| {
-            anchor.at_seen == values.seen && anchor.at_seen == values.started_at
+            anchor.at_seen == values.started_at
+                && ((!entry.active && entry.steps == 0 && anchor.at_seen == values.seen)
+                    || (entry.active && entry.steps > 0))
         })
         && values
             .lexemes
@@ -108,6 +109,7 @@ pub(super) fn context(
 pub(super) fn features(
     model: &Model,
     values: &ValueState,
+    entry: &ResponseEntryState,
     context: &WordCopyContext,
     index: usize,
     control: Control,
@@ -186,6 +188,14 @@ pub(super) fn features(
             .phase_subtractions
             .saturating_add((PHASE_CHANNELS + PHASE_CHANNELS) as u64);
     }
+    add(20, u64::from(entry.steps), u64::from(entry.active));
+    let last_prime = model
+        .geometry
+        .tokens
+        .get(entry.last as usize)
+        .map_or(0, |t| t.prime);
+    work.selector.metadata_reads = work.selector.metadata_reads.saturating_add(1);
+    add(21, u64::from(last_prime), 0);
     (features, len)
 }
 
@@ -283,10 +293,13 @@ impl WordCopyState {
         if anchor.at_seen != values.started_at {
             return absent;
         }
-        let Some(steps) = entry.steps.checked_sub(word.len) else {
+        let Some(word_end_step) = self.start_step.checked_add(word.len) else {
             return absent;
         };
-        let Some(final_seen) = anchor.at_seen.checked_add(u64::from(word.len)) else {
+        let Some(steps) = entry.steps.checked_sub(word_end_step) else {
+            return absent;
+        };
+        let Some(final_seen) = anchor.at_seen.checked_add(u64::from(word_end_step)) else {
             return absent;
         };
         let Some(sequence) = final_seen.checked_sub(1) else {
@@ -386,7 +399,10 @@ impl WordCopyState {
             return lexical;
         };
         let mut chosen = None;
-        if eligible(entry, values, control) {
+        if self.origin.is_none()
+            && matches!(self.progress, WordCopyProgress::Idle)
+            && eligible(entry, values, control)
+        {
             let context = context(model, values, control, work);
             let mut threshold = lexical
                 .map_or(0, |candidate| candidate.score - baseline.score)
@@ -401,7 +417,8 @@ impl WordCopyState {
                     work.bound_rejections = work.bound_rejections.saturating_add(1);
                     continue;
                 }
-                let (features, len) = features(model, values, &context, index, control, work);
+                let (features, len) =
+                    features(model, values, entry, &context, index, control, work);
                 let increment = score(head, &features[..len], work);
                 work.selector.candidate_evaluations =
                     work.selector.candidate_evaluations.saturating_add(1);
@@ -574,6 +591,7 @@ impl WordCopyState {
             work.selector.commits = work.selector.commits.saturating_add(1);
             if decision.action == WordCopyAction::Start {
                 self.origin = Some(decision.word_index);
+                self.start_step = decision.step;
                 work.word_record_reads = work.word_record_reads.saturating_add(1);
                 let len = values.lexemes.as_ref().map_or(0, |words| {
                     words.queries[usize::from(decision.word_index)].len

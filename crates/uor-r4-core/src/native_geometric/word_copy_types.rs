@@ -3,7 +3,7 @@ use super::value_types::{ValueFeature, ValueRow};
 use super::*;
 
 pub(super) const RESPONSE_COPY_SCHEMA: &str = "uor-r4.native-response-entry/2";
-pub(super) const WORD_COPY_FEATURES: usize = 20;
+pub(super) const WORD_COPY_FEATURES: usize = 24;
 pub(super) const WORD_COPY_ROWS: usize = 4096;
 pub(super) const WORD_COPY_DICTIONARY: usize = 256;
 
@@ -95,6 +95,8 @@ pub(super) struct WordCopyState {
     /// Immutable selected first-entry occurrence until the entry ends.
     pub origin: Option<u8>,
     pub progress: WordCopyProgress,
+    #[serde(default)]
+    pub start_step: u8,
     #[serde(skip)]
     pub pending: Option<WordCopyDecision>,
 }

@@ -576,3 +576,77 @@ fn native_word_copy_preserves_parent_and_respects_typed_precedence_and_controls(
         assert!(word.len < RESPONSE_ENTRY_STEPS);
     }
 }
+
+#[test]
+fn native_word_copy_learned_lexical_prefix_to_copy_transition() {
+    let (parent, _) = fixture::fitted();
+    let prompt = "left = 13; right = 4; alpha ignored; reply:";
+    let mut sess = prefix(parent, prompt, Control::Full);
+    let pred = sess.predict(parent).unwrap();
+    eprintln!(
+        "parent predict token: {} (expected space is 34)",
+        pred.token
+    );
+    let mut examples = Vec::new();
+    for (index, name) in ["alpha", "bravo", "cedar", "delta"].into_iter().enumerate() {
+        examples.push(ValueExample {
+            id: format!("prefix-copy-fit-{index}"),
+            prompt: format!("left = 13; right = 4; {name} ignored; reply:"),
+            response: format!(" {name}.\n"),
+        });
+    }
+    examples.push(ValueExample {
+        id: "prefix-copy-fit-abstain".into(),
+        prompt: "left = 13; right = 4; value ignored; reply:".into(),
+        response: " Unknown.\n".into(),
+    });
+
+    let mut baseline = parent.clone();
+    baseline.response_entry = None;
+    baseline.refresh_identity().unwrap();
+
+    let (entry_model, _) = baseline
+        .fit_response_entry(&examples, ResponseEntryFitConfig::default())
+        .unwrap();
+
+    let (model, report) = entry_model
+        .fit_response_entry_copy_completed_word(&examples, ResponseEntryFitConfig::default())
+        .unwrap();
+
+    eprintln!(
+        "REPORT: copy_targets={}, reachable={}, no_copy={}, unreachable={}, upstream={}",
+        report.copy_targets,
+        report.reachable_copy_targets,
+        report.no_copy_targets,
+        report.unreachable_targets,
+        report.upstream_failures
+    );
+    assert_eq!(report.copy_targets, 4);
+    assert_eq!(report.reachable_copy_targets, 4);
+    assert_eq!(report.no_copy_targets, 1);
+    assert_eq!(report.selected_copies, 4);
+    assert_eq!(report.committed_complete_copies, 4);
+
+    let prompt = "left = 13; right = 4; alpha ignored; reply:";
+    let mut session = prefix(&model, prompt, Control::Full);
+
+    // Step 0: predicts prefix (' ')
+    let first = session.predict(&model).unwrap();
+    assert_eq!(first.token, u32::from(b' ') + 2);
+    session.observe(&model, first.token).unwrap();
+
+    // Step 1: at step 1 with space observed, word copy triggers
+    let second = session.predict(&model).unwrap();
+    let decision = session
+        .word_copy_decision()
+        .expect("word copy starts at step 1");
+    assert_eq!(decision.action, WordCopyAction::Start);
+    assert_eq!(decision.step, 1);
+    assert_eq!(second.token, u32::from(b'a') + 2);
+    session.observe(&model, second.token).unwrap();
+    assert_eq!(session.word_copy.as_ref().unwrap().start_step, 1);
+
+    // Full generation produces exact answer with prefix
+    let generated = model.generate(prompt, 32, Control::Full).unwrap();
+    assert_eq!(std::str::from_utf8(&generated.bytes).unwrap(), " alpha.\n");
+}
