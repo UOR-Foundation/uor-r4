@@ -316,6 +316,7 @@ mod tests {
             phases: [0; PHASE_CHANNELS],
             active: false,
             consumed: false,
+            operations_committed: 0,
             started_at: 0,
             query_boundary: None,
             queries: [ValueEntry::default(); QUERY],

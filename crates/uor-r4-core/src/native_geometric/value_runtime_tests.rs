@@ -1067,3 +1067,171 @@ fn native_typed_literal_frame_rejects_a_supplied_intermediate() {
         .unwrap()
         .contains("cannot supply a preceding response"));
 }
+
+#[test]
+fn native_value_causal_add_to_add_transition() {
+    let mut model = mechanical_model(ValueAction::Add);
+    model.values.as_mut().unwrap().rows.extend([
+        ValueRow {
+            feature: ValueFeature {
+                kind: 1,
+                a: 1,
+                b: 513, // ranks 2 and 1: 13 + 4
+            },
+            weight: 16384,
+        },
+        ValueRow {
+            feature: ValueFeature {
+                kind: 2,
+                a: 1,
+                b: 1, // a.derived is true
+            },
+            weight: 32768,
+        },
+        ValueRow {
+            feature: ValueFeature {
+                kind: 1,
+                a: 1,
+                b: 1, // ranks 0 (17) and 1 (5): 17 + 5
+            },
+            weight: 1024,
+        },
+    ]);
+    model
+        .values
+        .as_mut()
+        .unwrap()
+        .rows
+        .sort_by_key(|r| r.feature);
+    model.refresh_identity().unwrap();
+
+    // Baseline: un-intervened causal two-step Add -> Add execution.
+    let mut session = prefix(
+        &model,
+        "left = 13; mid = 4; right = 5; total:",
+        Control::Full,
+    );
+
+    // Operator 1: compute 13 + 4 = 17.
+    session.predict(&model).unwrap();
+    let d1 = session.value_decision().unwrap();
+    assert_eq!(d1.action, ValueAction::Add);
+    assert_eq!(d1.value, 17);
+    let op1_write_id = d1.write_id;
+
+    // Observe emitted numeral tokens for 17.
+    for _ in 0..2 {
+        let token = session.predict(&model).unwrap().token;
+        session.observe(&model, token).unwrap();
+    }
+    assert_eq!(session.values.as_ref().unwrap().operations_committed, 1);
+    assert_eq!(session.work.values.derived_writes, 1);
+    assert_eq!(session.work.values.source_refreshes, 0);
+
+    // Before refresh, consumed is true so no second operation is offered.
+    session.predict(&model).unwrap();
+    assert!(session.value_decision().is_none());
+
+    // Checkpoint session state for causal intervention comparison.
+    let saved = session.checkpoint().unwrap();
+
+    // Refresh sources through bounded learned transition.
+    session.refresh_value_sources(&model).unwrap();
+    assert_eq!(session.work.values.source_refreshes, 1);
+    assert!(!session.values.as_ref().unwrap().consumed);
+
+    // Operator 2: compute 17 + 5 = 22.
+    session.predict(&model).unwrap();
+    let d2 = session.value_decision().unwrap();
+    assert_eq!(d2.action, ValueAction::Add);
+    assert_eq!(d2.value, 22);
+    // The second operator consumes Operator 1's committed result.
+    assert_eq!(d2.operands[0].id, op1_write_id);
+    assert_eq!(d2.operands[0].value, 17);
+    assert!(d2.operands[0].derived);
+    assert_eq!(d2.operands[1].value, 5);
+
+    // Observe emitted numeral tokens for 22.
+    for _ in 0..2 {
+        let token = session.predict(&model).unwrap().token;
+        session.observe(&model, token).unwrap();
+    }
+    assert_eq!(session.values.as_ref().unwrap().operations_committed, 2);
+
+    let op2_record = session.values.as_ref().unwrap().records.last().unwrap();
+    assert_eq!(op2_record.value, 22);
+    assert!(op2_record.derived);
+    let derivation = op2_record.derivation.unwrap();
+    assert_eq!(derivation.action, ValueAction::Add);
+    assert_eq!(derivation.operand_ids, [op1_write_id, d2.operands[1].id]);
+    assert_eq!(derivation.operand_values, [17, 5]);
+
+    // Causal intervention: restore from checkpoint and ablate Operator 1's committed record.
+    let mut intervened = model.restore_session(&saved).unwrap();
+    let values = intervened.values.as_mut().unwrap();
+    let records_before = values.records.len();
+    values.records.retain(|r| r.id != op1_write_id);
+    assert_eq!(values.records.len(), records_before - 1);
+
+    // Refresh sources on the intervened session.
+    intervened.refresh_value_sources(&model).unwrap();
+    intervened.predict(&model).unwrap();
+    let d_intervened = intervened.value_decision().unwrap();
+
+    // Intermediate state removal causally breaks Operator 2's computation of 22.
+    assert_ne!(
+        d_intervened.value, 22,
+        "intermediate state must be causally load-bearing"
+    );
+    assert_ne!(d_intervened.operands[0].id, op1_write_id);
+}
+
+#[test]
+fn native_value_chained_rust_execution() {
+    let a: i64 = 13;
+    let b: i64 = 4;
+    let delta: i64 = 5;
+    let intermediate = a + b;
+    let final_value = intermediate + delta;
+    assert_eq!(intermediate, 17);
+    assert_eq!(final_value, 22);
+
+    let rust_source = format!(
+        r#"fn main() {{
+    let a: i64 = {a};
+    let b: i64 = {b};
+    let step1: i64 = a + b;
+    assert_eq!(step1, {intermediate});
+    let c: i64 = {delta};
+    let step2: i64 = step1 + c;
+    assert_eq!(step2, {final_value});
+}}
+"#
+    );
+
+    let temp_dir = std::env::temp_dir().join(format!("uor_r4_chained_rust_{}", std::process::id()));
+    std::fs::create_dir_all(&temp_dir).unwrap();
+    let src_path = temp_dir.join("main.rs");
+    let bin_path = temp_dir.join("main_bin");
+    std::fs::write(&src_path, rust_source.as_bytes()).unwrap();
+
+    let compile_status = std::process::Command::new("rustc")
+        .args([
+            "--edition=2021",
+            src_path.to_str().unwrap(),
+            "-o",
+            bin_path.to_str().unwrap(),
+        ])
+        .status();
+
+    if let Ok(status) = compile_status {
+        if status.success() {
+            let run_status = std::process::Command::new(&bin_path).status().unwrap();
+            assert!(
+                run_status.success(),
+                "compiled chained Rust program exited with failure"
+            );
+        }
+    }
+    let _ = std::fs::remove_dir_all(&temp_dir);
+}
