@@ -625,6 +625,29 @@ export function native_geometric_export_session(handle) {
 
 /**
  * @param {number} handle
+ * @returns {string}
+ */
+export function native_geometric_finish_generation(handle) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ret = wasm.native_geometric_finish_generation(handle);
+        var ptr1 = ret[0];
+        var len1 = ret[1];
+        if (ret[3]) {
+            ptr1 = 0; len1 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred2_0 = ptr1;
+        deferred2_1 = len1;
+        return getStringFromWasm0(ptr1, len1);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
+ * @param {number} handle
  */
 export function native_geometric_free_session(handle) {
     wasm.native_geometric_free_session(handle);

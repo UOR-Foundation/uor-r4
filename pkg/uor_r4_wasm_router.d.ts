@@ -226,6 +226,8 @@ export function native_geometric_create_session(session_id: string, user_id: str
 
 export function native_geometric_export_session(handle: number): Uint8Array;
 
+export function native_geometric_finish_generation(handle: number): string;
+
 export function native_geometric_free_session(handle: number): void;
 
 export function native_geometric_generate_step(handle: number, max_tokens: number): string;
@@ -273,6 +275,7 @@ export interface InitOutput {
     readonly native_geometric_capabilities: () => [number, number];
     readonly native_geometric_create_session: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number];
     readonly native_geometric_export_session: (a: number) => [number, number, number, number];
+    readonly native_geometric_finish_generation: (a: number) => [number, number, number, number];
     readonly native_geometric_generate_step: (a: number, b: number) => [number, number, number, number];
     readonly native_geometric_import_session: (a: number, b: number, c: number) => [number, number];
     readonly native_geometric_ingest: (a: number, b: number, c: number) => [number, number, number, number];

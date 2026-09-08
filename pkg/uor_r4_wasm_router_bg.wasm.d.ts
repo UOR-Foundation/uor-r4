@@ -5,6 +5,7 @@ export const native_geometric_cancel: (a: number) => [number, number];
 export const native_geometric_capabilities: () => [number, number];
 export const native_geometric_create_session: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number];
 export const native_geometric_export_session: (a: number) => [number, number, number, number];
+export const native_geometric_finish_generation: (a: number) => [number, number, number, number];
 export const native_geometric_generate_step: (a: number, b: number) => [number, number, number, number];
 export const native_geometric_import_session: (a: number, b: number, c: number) => [number, number];
 export const native_geometric_ingest: (a: number, b: number, c: number) => [number, number, number, number];
